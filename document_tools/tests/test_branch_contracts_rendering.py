@@ -102,6 +102,64 @@ class HtmlRendering(unittest.TestCase):
         self.assertIn("@key_one", html)
 
 
+_SCOPED_CONTRACT = {
+    "methods": {
+        "onSearchTap": {
+            "branches": [
+                {"when": {"api.search": "error_400"},
+                 "then": {"data.errorMessage": "@search_failed"},
+                 "platforms": ["android"]},
+                {"when": {"api.search": "error_400"},
+                 "then": {"data.sharedError": "@search_failed"},
+                 "platforms": ["ios", "web"]},
+                {"when": {"api.search": "success"},
+                 "then": {"transition": "results"}},
+                {"note": "offline retry is out of scope"},
+            ],
+        },
+    },
+}
+
+
+class PlatformScopedBranchRendering(unittest.TestCase):
+    """A branch that only exists on some platforms has to say so in the
+    rendered decision table — the validator and the generators honor
+    `platforms`, so a doc that hides it shows a contract the reader's
+    platform may never run."""
+
+    def test_html_adds_platform_column_and_counts_scoped_branches(self):
+        html = generate_spec_html(_spec(_SCOPED_CONTRACT))
+        self.assertIn("<th>Platforms</th>", html)
+        self.assertIn("2 branch(es) are scoped to specific platforms", html)
+        self.assertIn('platform-badge platform-android', html)
+        self.assertIn('platform-badge platform-ios', html)
+        # An unscoped branch in the same table reads as "all", not blank.
+        self.assertIn("Imported into all platforms", html)
+        # The note row still spans the full width of the widened table.
+        self.assertIn('colspan="4"', html)
+        self.assertIn("offline retry is out of scope", html)
+
+    def test_html_table_is_unchanged_without_scoped_branches(self):
+        html = generate_spec_html(_spec(_CONTRACT))
+        self.assertNotIn("<th>Platforms</th>", html)
+        self.assertNotIn("scoped to specific platforms", html)
+        self.assertIn('colspan="3"', html)
+
+    def test_markdown_adds_platform_column_and_counts_scoped_branches(self):
+        md = generate_spec_markdown(_spec(_SCOPED_CONTRACT))
+        self.assertIn("| # | When | Then | Platforms | Notes |", md)
+        self.assertIn("2 branch(es) are scoped to specific platforms", md)
+        self.assertIn("android", md)
+        self.assertIn("ios, web", md)
+        self.assertIn("offline retry is out of scope", md)
+
+    def test_markdown_table_is_unchanged_without_scoped_branches(self):
+        md = generate_spec_markdown(_spec(_CONTRACT))
+        self.assertIn("| # | When | Then | Notes |", md)
+        self.assertNotIn("| Platforms |", md)
+        self.assertNotIn("scoped to specific platforms", md)
+
+
 class MarkdownRendering(unittest.TestCase):
     def test_no_section_without_contracts(self):
         md = generate_spec_markdown(_spec())

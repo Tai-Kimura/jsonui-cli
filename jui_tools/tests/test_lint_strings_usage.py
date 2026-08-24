@@ -361,6 +361,58 @@ class IosAndroidScanTests(unittest.TestCase):
         self.assertEqual({f.site for f in report.unused},
                          {"member_list.leave_button", "member_list.title"})
 
+    def test_ios_raw_foundation_lookup_of_an_absent_key_is_reported(self):
+        # NSLocalizedString compiles whatever it is handed and returns the
+        # key when nothing resolves, so an absent key ships as a raw key on
+        # screen. Reported from a consumer project where an error toast read
+        # `subscription_usage_load_error` to real users.
+        self.ios.write("App/VM.swift",
+                       'showToast(NSLocalizedString("member_list_title", comment: ""))\n'
+                       'showToast(NSLocalizedString("member_list_load_error", comment: ""))\n')
+        report = _usage(self.GROUPS, roots={"ios": self.ios.root})
+        self.assertEqual(1, len(report.missing))
+        self.assertIn("member_list_load_error", report.missing[0].detail)
+        self.assertIn("VM.swift:2", report.missing[0].site)
+        # The declared key it did resolve counts as usage.
+        self.assertEqual([f.site for f in report.unused],
+                         ["member_list.leave_button"])
+
+    def test_ios_key_carried_by_a_platform_catalog_is_not_missing(self):
+        # A key may legitimately live in Localizable.strings rather than in
+        # the JsonUI table; that possibility is why these references used to
+        # be passed over entirely.
+        self.ios.write("App/VM.swift",
+                       'let a = NSLocalizedString("Disconnect", comment: "")\n')
+        self.ios.write("App/ja.lproj/Localizable.strings",
+                       '"Disconnect" = "切断";\n')
+        report = _usage(self.GROUPS, roots={"ios": self.ios.root})
+        self.assertEqual([], report.missing)
+
+    def test_ios_string_localized_initializer_is_covered(self):
+        self.ios.write("App/VM.swift",
+                       'let a = String(localized: "member_list_ghost")\n')
+        report = _usage(self.GROUPS, roots={"ios": self.ios.root})
+        self.assertEqual(1, len(report.missing))
+        self.assertIn("String(localized:)", report.missing[0].detail)
+
+    def test_ios_localized_suffix_stays_usage_only(self):
+        # The SwiftUI generator emits `"gone".localized()` for a
+        # visibility sentinel — reporting unresolved ones here would flag
+        # generated code that is not naming a key at all.
+        self.ios.write("App/Data.swift",
+                       'var visibility: String = "gone".localized()\n')
+        report = _usage(self.GROUPS, roots={"ios": self.ios.root})
+        self.assertEqual([], report.missing)
+
+    def test_ios_xcstrings_catalog_is_read(self):
+        self.ios.write("App/VM.swift",
+                       'let a = NSLocalizedString("catalog_only", comment: "")\n')
+        self.ios.write(
+            "App/Localizable.xcstrings",
+            '{"sourceLanguage":"en","strings":{"catalog_only":{}}}\n')
+        report = _usage(self.GROUPS, roots={"ios": self.ios.root})
+        self.assertEqual([], report.missing)
+
     def test_kotlin_string_keys_map_feeds_used(self):
         self.android.write(
             "app/src/main/kotlin/VM.kt",

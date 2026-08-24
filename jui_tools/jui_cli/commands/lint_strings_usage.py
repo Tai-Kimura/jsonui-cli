@@ -65,6 +65,8 @@ them. Dependency/build directories are skipped.
 """
 from __future__ import annotations
 
+import json
+import plistlib
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -267,6 +269,20 @@ _IOS_ACCESSOR_RE = re.compile(
 _IOS_LOCALIZED_RE = re.compile(
     r"([\"'])([a-z][a-z0-9_]*)\1\.localized\(\)"
 )
+# Hand-written Foundation lookups. Unlike `.localized()` — which the
+# SwiftUI generator also emits for sentinel vocabulary such as a
+# visibility's "gone", so an unresolved one there is usually not a key at
+# all — these two forms are only ever written by a person naming a key.
+# An absent key does not fail to compile: NSLocalizedString returns the key
+# string itself, so the raw key ships to the screen.
+_IOS_NSLOCALIZED_RE = re.compile(
+    r"\bNSLocalizedString\(\s*([\"'])([A-Za-z0-9_.]+)\1"
+)
+_IOS_STRING_LOCALIZED_RE = re.compile(
+    r"\bString\(\s*localized:\s*([\"'])([A-Za-z0-9_.]+)\1"
+)
+_IOS_CATALOG_SUFFIXES = (".strings", ".stringsdict", ".xcstrings")
+_STRINGS_ENTRY_RE = re.compile(r'^\s*"((?:[^"\\]|\\.)*)"\s*=', re.MULTILINE)
 _ANDROID_R_STRING_RE = re.compile(r"\bR\.string\.([A-Za-z_][A-Za-z0-9_]*)")
 
 _STRING_LITERAL_RE = re.compile(r"([\"'])((?:[^\"'\\\n]|\\.)*?)\1")
@@ -464,6 +480,37 @@ def _iter_source_files(root: Path, suffixes: tuple[str, ...]) -> Iterable[Path]:
                 yield child
 
 
+def collect_ios_catalog_keys(root: Path) -> set[str]:
+    """Keys carried by the platform's own string catalogs.
+
+    A key may legitimately live in Localizable.strings / .xcstrings rather
+    than in the JsonUI SSoT — that possibility is why an unresolved iOS
+    reference used to be passed over in silence. Reading the catalogs turns
+    the assumption into a measurement, so what is left over really is a
+    reference that resolves nowhere.
+    """
+    keys: set[str] = set()
+    for path in _iter_source_files(root, _IOS_CATALOG_SUFFIXES):
+        try:
+            if path.suffix == ".xcstrings":
+                data = json.loads(path.read_text(encoding="utf-8"))
+                strings = data.get("strings") if isinstance(data, dict) else None
+                if isinstance(strings, dict):
+                    keys.update(k for k in strings if isinstance(k, str))
+                continue
+            if path.suffix == ".stringsdict":
+                with open(path, "rb") as fh:
+                    data = plistlib.load(fh)
+                if isinstance(data, dict):
+                    keys.update(k for k in data if isinstance(k, str))
+                continue
+            text = path.read_text(encoding="utf-8", errors="replace")
+        except (OSError, ValueError, plistlib.InvalidFileException):
+            continue
+        keys.update(m.group(1) for m in _STRINGS_ENTRY_RE.finditer(text))
+    return keys
+
+
 def _extract_keys_map_literals(text: str) -> tuple[list[str], list[str]]:
     """``(strict, lenient)`` string literals from every ``*_STRING_KEYS``
     declaration.
@@ -562,6 +609,7 @@ def scan_vm_sources(
         "ios": _IOS_SUFFIXES,
         "android": _ANDROID_SUFFIXES,
     }[face]
+    catalog_keys = collect_ios_catalog_keys(root) if face == "ios" else set()
     for src in _iter_source_files(root, suffixes):
         try:
             text = src.read_text(encoding="utf-8", errors="replace")
@@ -687,7 +735,28 @@ def scan_vm_sources(
                 pairs = declared.by_flat.get(m.group(2))
                 if pairs:
                     used |= pairs
-                # unmatched: may live in a platform string catalog
+                # unmatched: usage only. The SwiftUI generator emits this
+                # form for sentinel vocabulary too (a visibility's "gone"),
+                # so absence here does not mean a broken key reference.
+            for regex, form in (
+                (_IOS_NSLOCALIZED_RE, "NSLocalizedString"),
+                (_IOS_STRING_LOCALIZED_RE, "String(localized:)"),
+            ):
+                for m in regex.finditer(text):
+                    key = m.group(2)
+                    pairs = declared.by_flat.get(key) or declared.by_bare.get(key)
+                    if pairs:
+                        used |= pairs
+                    elif key not in catalog_keys:
+                        report.missing.append(UsageFinding(
+                            kind="missing-key",
+                            site=f"{rel}:{_line_of(text, m.start())}",
+                            detail=(
+                                f"{form}({key!r}) resolves in neither "
+                                "strings.json nor the platform string "
+                                "catalogs — the raw key reaches the screen"
+                            ),
+                        ))
         elif face == "android":
             for m in _ANDROID_R_STRING_RE.finditer(text):
                 pairs = declared.by_flat.get(m.group(1))

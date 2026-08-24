@@ -195,6 +195,38 @@ class UnknownGroupTests(unittest.TestCase):
         self.assertEqual(blocks[0].signature, "fun onTap()")
 
 
+class SetterAccessModifierTests(unittest.TestCase):
+    """Swift's setter-only access modifiers are part of a declaration line.
+    Missing them made a marker look orphaned and failed the build with a
+    parse error, which is how a consumer first hit this."""
+
+    def test_private_set_var_is_a_declaration(self):
+        src = """class Foo {
+    // @jui:protocol var barUuid: String { get }
+    private(set) var barUuid: String
+}
+"""
+        blocks = extract_marker_blocks(src)
+        self.assertEqual(len(blocks), 1)
+        self.assertEqual(blocks[0].kind, "var")
+
+    def test_modifier_order_is_not_significant(self):
+        for decl in (
+            "public private(set) var token: String",
+            "private(set) weak var delegate: Delegate?",
+            "weak private(set) var delegate: Delegate?",
+            "package(set) var token: String",
+        ):
+            with self.subTest(decl=decl):
+                src = (
+                    "class Foo {\n"
+                    "    // @jui:protocol var token: String { get }\n"
+                    f"    {decl}\n"
+                    "}\n"
+                )
+                self.assertEqual(1, len(extract_marker_blocks(src)))
+
+
 class TwoClassesTests(unittest.TestCase):
     def test_markers_dont_cross_classes(self):
         src = """class Foo {

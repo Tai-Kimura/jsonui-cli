@@ -239,6 +239,19 @@ def _merge_members(
     return merged, override_conflicts
 
 
+# Access levels, optionally carrying Swift's setter-only form. A property
+# declared `readOnly` in the spec is most faithfully written
+# `private(set) var` (Kotlin's symmetric form is a trailing `private set`),
+# so a scanner that only knew bare `private` reported the most correct
+# implementation as missing — and the fix a consumer reaches for is to
+# weaken the encapsulation the spec asked for. `public private(set) var`
+# stacks two of them, hence the repeat.
+_ACCESS_MODIFIER = (
+    r"(?:public|internal|private|protected|fileprivate|open|package)"
+    r"(?:\(set\))?"
+)
+
+
 def _marker_member_name(blk: MarkerBlock) -> str | None:
     """Extract the identifier from a marker's raw signature."""
     import re
@@ -251,9 +264,9 @@ def _marker_member_name(blk: MarkerBlock) -> str | None:
         flat = flat[m.end():]
     # Strip leading modifiers.
     flat = re.sub(
-        r"^(?:(?:public|internal|private|protected|fileprivate|open|abstract|"
+        r"^(?:(?:" + _ACCESS_MODIFIER + r"|abstract|"
         r"override|suspend|inline|operator|infix|tailrec|static|class|final|"
-        r"lateinit)\s+)+",
+        r"lateinit|weak|unowned)\s+)+",
         "",
         flat,
     )
@@ -269,7 +282,7 @@ def list_impl_method_names(impl_source: str) -> set[str]:
     import re
     pattern = re.compile(
         r"^[ \t]*"
-        r"(?:(?:public|internal|private|protected|fileprivate|open)\s+)?"
+        r"(?:" + _ACCESS_MODIFIER + r"\s+)*"
         r"(?:override\s+)?"
         r"(?:(?:suspend|static|class|final|inline|operator|infix|tailrec)\s+)*"
         r"(?:override\s+)?"
@@ -286,13 +299,14 @@ def list_impl_var_names(impl_source: str) -> set[str]:
     Swallows property wrappers (``@Published var x``) and access modifiers.
     """
     import re
+    # Modifiers are one interleaved group: Swift accepts `weak private(set)
+    # var` and `private(set) weak var` alike, and a fixed order would refuse
+    # one of the two spellings for no reason a consumer could guess.
     pattern = re.compile(
         r"^[ \t]*"
         r"(?:@\w+(?:\([^)]*\))?\s+)*"
-        r"(?:(?:public|internal|private|protected|fileprivate|open)\s+)?"
-        r"(?:override\s+)?"
-        r"(?:(?:lateinit|abstract|open|final|static|class)\s+)*"
-        r"(?:override\s+)?"
+        r"(?:(?:" + _ACCESS_MODIFIER + r"|override|lateinit|abstract|final|"
+        r"static|class|weak|unowned)\s+)*"
         r"(?:var|val|let)\s+(\w+)",
         re.MULTILINE,
     )

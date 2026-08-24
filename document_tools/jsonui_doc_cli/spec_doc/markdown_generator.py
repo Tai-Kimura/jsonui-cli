@@ -489,12 +489,23 @@ def generate_spec_markdown(spec_data: dict, layouts_dir: Path | None = None) -> 
             for b in (c.get("branches") or [])
             if isinstance(b, dict) and "note" in b
         )
+        platform_scoped = sum(
+            1
+            for c in bc_methods.values() if isinstance(c, dict)
+            for b in (c.get("branches") or [])
+            if isinstance(b, dict) and "note" not in b and "platforms" in b
+        )
         lines.append("## Branch Contracts")
         lines.append("")
-        lines.append(
+        summary = (
             f"{len(bc_methods)} method(s) — {declared} declared branch(es), "
             f"{notes_only} note-only branch(es) outside the machine-checkable contract."
         )
+        if platform_scoped:
+            summary += (
+                f" {platform_scoped} branch(es) are scoped to specific platforms."
+            )
+        lines.append(summary)
         lines.append("")
 
         bc_conditions = branch_contracts.get("conditions") or {}
@@ -523,22 +534,41 @@ def generate_spec_markdown(spec_data: dict, layouts_dir: Path | None = None) -> 
             if isinstance(baseline, dict) and baseline:
                 lines.append(f"**Baseline:** {_pairs(baseline)}")
                 lines.append("")
-            lines.append("| # | When | Then | Notes |")
-            lines.append("|---|---|---|---|")
-            for i, branch in enumerate(contract.get("branches") or [], start=1):
+            branches = contract.get("branches") or []
+            scoped = any(
+                isinstance(b, dict) and "note" not in b and "platforms" in b
+                for b in branches
+            )
+            if scoped:
+                lines.append("| # | When | Then | Platforms | Notes |")
+                lines.append("|---|---|---|---|---|")
+            else:
+                lines.append("| # | When | Then | Notes |")
+                lines.append("|---|---|---|---|")
+            for i, branch in enumerate(branches, start=1):
                 if not isinstance(branch, dict):
                     continue
                 if "note" in branch:
+                    empty = " | |" if scoped else " |"
                     lines.append(
                         f"| {i} | *note (not machine-checked): "
-                        f"{branch.get('note', '') or ''}* | | |"
+                        f"{branch.get('note', '') or ''}* |{empty} |"
                     )
                     continue
                 when = branch.get("when")
                 then = branch.get("then")
+                platform_cell = ""
+                if scoped:
+                    raw = branch.get("platforms")
+                    platform_cell = (
+                        ", ".join(str(p) for p in raw)
+                        if isinstance(raw, list) and raw
+                        else "all"
+                    ) + " | "
                 lines.append(
                     f"| {i} | {_pairs(when) if isinstance(when, dict) else '-'} | "
                     f"{_pairs(then) if isinstance(then, dict) else '-'} | "
+                    f"{platform_cell}"
                     f"{branch.get('notes', '-') or '-'} |"
                 )
             lines.append("")

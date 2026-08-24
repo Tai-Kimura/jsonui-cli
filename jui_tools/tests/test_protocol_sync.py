@@ -177,6 +177,65 @@ class MissingInImplTests(unittest.TestCase):
         self.assertNotIn("isLoading", result.missing_vars_in_impl)
 
 
+class SetterAccessModifierTests(unittest.TestCase):
+    """`private(set) var` is the most faithful implementation of a
+    `readOnly` declaration — Kotlin writes the symmetric `private set` —
+    so the scanner must not report it as a missing implementation. Reported
+    from a consumer project where `jui build --clean` stopped with ERROR
+    [protocol-sync] and the workaround was to weaken the property to a
+    plain `var`.
+    """
+
+    def test_private_set_var_counts_as_implemented(self):
+        spec = _spec(view_model=ViewModelDef(
+            vars=[VarDef(name="barUuid", type="String", observable=False,
+                         read_only=True)]
+        ))
+        impl = "class Foo {\n    private(set) var barUuid: String\n}\n"
+        result = collect_protocol_members(
+            spec, platform="ios", impl_source=impl,
+            impl_var_names=list_impl_var_names(impl),
+        )
+        self.assertEqual([], result.missing_vars_in_impl)
+
+    def test_stacked_access_and_setter_modifiers(self):
+        # `public private(set) var` — two access modifiers on one property.
+        for decl in (
+            "public private(set) var token: String",
+            "fileprivate(set) var token: String",
+            "internal(set) var token: String",
+            "package(set) var token: String",
+            "@Published private(set) var token: String",
+            "weak private(set) var token: Delegate?",
+        ):
+            with self.subTest(decl=decl):
+                self.assertIn(
+                    "token", list_impl_var_names("class Foo {\n    %s\n}\n" % decl)
+                )
+
+    def test_plain_declarations_still_scan(self):
+        impl = (
+            "class Foo {\n"
+            "    @Published var a: Bool = false\n"
+            "    private var b: String = \"\"\n"
+            "    override var c: Int { 0 }\n"
+            "    lateinit var d: String\n"
+            "}\n"
+        )
+        self.assertEqual({"a", "b", "c", "d"}, list_impl_var_names(impl))
+
+    def test_marker_signature_with_setter_modifier(self):
+        spec = _spec(view_model=ViewModelDef())
+        impl = (
+            "class Foo {\n"
+            "    // @jui:protocol private(set) var barUuid: String { get }\n"
+            "    private(set) var barUuid: String\n"
+            "}\n"
+        )
+        result = collect_protocol_members(spec, platform="ios", impl_source=impl)
+        self.assertEqual(["barUuid"], [v.name for v in result.vars])
+
+
 class AnnotationSuffixValidatorTests(unittest.TestCase):
     def test_ui_variable_with_computed_annotation(self):
         from jui_cli.core.spec_extractor import UIVariableDef

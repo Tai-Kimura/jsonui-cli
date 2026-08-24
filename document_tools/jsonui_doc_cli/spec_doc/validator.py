@@ -103,6 +103,10 @@ class SpecValidator:
         self._spec_file_path: Path | None = None
         self._spec_type: str = "screen_spec"  # or "component_spec"
         self._spec_data: dict | None = None
+        # api_directory -> canonical route index. `validate all` walks many
+        # specs of one project; the OpenAPI documents are read once.
+        self._api_index_cache: dict[Path, dict[str, dict[str, str]]] = {}
+        self._api_yaml_skip_reported: bool = False
         self._custom_rules: CustomRules = custom_rules or CustomRules()
         self._build_effective_rules()
 
@@ -261,6 +265,9 @@ class SpecValidator:
         # Validate dataFlow
         if "dataFlow" in data and data["dataFlow"]:
             self._validate_data_flow(data["dataFlow"], result)
+            # Declared routes against the project's OpenAPI canonical
+            # (skipped when the project has no readable API documents).
+            self._validate_api_endpoint_canonical(data, result)
 
         # Validate stateManagement
         if "stateManagement" in data and data["stateManagement"]:
@@ -1936,6 +1943,228 @@ class SpecValidator:
                         ),
                         level="warning",
                     ))
+
+    # --- spec endpoint <-> API canonical (OpenAPI) -----------------------
+    #
+    # A screen spec names the transport it talks to; the OpenAPI documents
+    # under api_directory are the canonical spelling of those routes. Nothing
+    # compared the two until now, so a path that drifted (renamed resource,
+    # `{barUuid}` where the API says `{bar_uuid}`) stayed invisible until
+    # someone generated branch tests and the mock resolver refused to bind.
+    #
+    # Warnings only, and only in the direction spec -> canonical: a screen
+    # spec is not expected to cover every route the API offers.
+
+    _PATH_PARAM_RE = re.compile(r"\{[^}]*\}")
+    _COLON_PARAM_RE = re.compile(r"(?<=/):[A-Za-z_][A-Za-z0-9_]*")
+    _ENDPOINT_RE = re.compile(r"^([A-Za-z]+)\s+(\S+)$")
+
+    @classmethod
+    def _normalize_api_path(cls, path: str) -> str:
+        """Path with every parameter segment collapsed, so `{barUuid}`,
+        `{bar_uuid}` and `:barUuid` all compare equal."""
+        return cls._COLON_PARAM_RE.sub("{}", cls._PATH_PARAM_RE.sub("{}", path))
+
+    def _candidate_api_directories(self) -> list[Path]:
+        """api_directory candidates, nearest-first.
+
+        Two layouts exist in practice and neither subsumes the other: a
+        project whose jui.config.json is an ancestor of its specs, and one
+        whose specs live in a docs/ tree beside the config (there the specs'
+        own ancestors carry partial configs that never mention
+        api_directory). `jui` itself resolves the config from the working
+        directory, so that is the second source rather than a guess — the
+        first candidate that actually holds OpenAPI documents wins, and an
+        unrelated directory simply never qualifies.
+        """
+        roots: list[Path] = []
+        if self._spec_file_path:
+            roots.extend(list(self._spec_file_path.parents)[:8])
+        try:
+            cwd = Path.cwd().resolve()
+            roots.append(cwd)
+            roots.extend(list(cwd.parents)[:8])
+        except OSError:
+            pass
+
+        candidates: list[Path] = []
+        seen: set[Path] = set()
+        for root in roots:
+            config_path = root / "jui.config.json"
+            if not config_path.is_file():
+                continue
+            try:
+                with open(config_path, "r", encoding="utf-8") as f:
+                    config = json.load(f)
+            except (OSError, json.JSONDecodeError):
+                continue
+            if not isinstance(config, dict):
+                continue
+            api_dir = (root / config.get("api_directory", "docs/api")).resolve()
+            if api_dir not in seen:
+                seen.add(api_dir)
+                candidates.append(api_dir)
+        return candidates
+
+    def _load_api_canonical_index(
+        self, result: SpecValidationResult
+    ) -> dict[str, dict[str, str]] | None:
+        """{normalized path: {METHOD: canonical path}} from the OpenAPI docs
+        under api_directory. None when there is nothing to check against."""
+        for api_dir in self._candidate_api_directories():
+            index = self._index_api_directory(api_dir, result)
+            if index:
+                return index
+        return None
+
+    def _index_api_directory(
+        self, api_dir: Path, result: SpecValidationResult
+    ) -> dict[str, dict[str, str]] | None:
+        if not api_dir.is_dir():
+            return None
+
+        cached = self._api_index_cache.get(api_dir)
+        if cached is not None:
+            return cached or None
+
+        yaml_docs = list(api_dir.rglob("*.yaml")) + list(api_dir.rglob("*.yml"))
+        if yaml_docs:
+            try:
+                import yaml  # noqa: F401
+            except ImportError:
+                # Half an index is worse than none: every route that lives in
+                # the YAML documents would be reported as missing. Skip the
+                # whole check and say so once, rather than degrade quietly.
+                if not self._api_yaml_skip_reported:
+                    self._api_yaml_skip_reported = True
+                    result.warnings.append(SpecValidationMessage(
+                        path="dataFlow",
+                        message=(
+                            f"Endpoint check skipped: {len(yaml_docs)} YAML "
+                            "OpenAPI document(s) under api_directory cannot be "
+                            "read without PyYAML installed"
+                        ),
+                        level="warning",
+                    ))
+                self._api_index_cache[api_dir] = {}
+                return None
+
+        index: dict[str, dict[str, str]] = {}
+        for doc_path in sorted(api_dir.rglob("*.json")) + sorted(yaml_docs):
+            try:
+                with open(doc_path, "r", encoding="utf-8") as f:
+                    if doc_path.suffix == ".json":
+                        doc = json.load(f)
+                    else:
+                        import yaml
+                        doc = yaml.safe_load(f)
+            except Exception:
+                continue
+            if not isinstance(doc, dict) or not ("openapi" in doc or "swagger" in doc):
+                continue
+            paths = doc.get("paths")
+            if not isinstance(paths, dict):
+                continue
+            for path, operations in paths.items():
+                if not isinstance(path, str) or not isinstance(operations, dict):
+                    continue
+                for verb in operations:
+                    if isinstance(verb, str) and verb.upper() in self.VALID_HTTP_METHODS:
+                        index.setdefault(
+                            self._normalize_api_path(path), {}
+                        ).setdefault(verb.upper(), path)
+
+        self._api_index_cache[api_dir] = index
+        return index or None
+
+    def _collect_declared_endpoints(self, data_flow: dict) -> list[tuple[str, str]]:
+        """(spec path, '<VERB> <path>') for everything dataFlow declares."""
+        declared: list[tuple[str, str]] = []
+        for section in ("repositories", "useCases"):
+            for i, entry in enumerate(data_flow.get(section, []) or []):
+                if not isinstance(entry, dict):
+                    continue
+                for j, method in enumerate(entry.get("methods", []) or []):
+                    if not isinstance(method, dict):
+                        continue
+                    endpoint = method.get("endpoint")
+                    if isinstance(endpoint, str) and endpoint.strip():
+                        declared.append((
+                            f"dataFlow.{section}[{i}].methods[{j}].endpoint",
+                            endpoint.strip(),
+                        ))
+        for i, entry in enumerate(data_flow.get("apiEndpoints", []) or []):
+            if not isinstance(entry, dict):
+                continue
+            path = entry.get("path")
+            verb = entry.get("method")
+            if isinstance(path, str) and isinstance(verb, str) and path and verb:
+                declared.append((
+                    f"dataFlow.apiEndpoints[{i}]", f"{verb.upper()} {path}"
+                ))
+        return declared
+
+    def _validate_api_endpoint_canonical(
+        self, data: dict, result: SpecValidationResult
+    ):
+        data_flow = data.get("dataFlow")
+        if not isinstance(data_flow, dict):
+            return
+        declared = self._collect_declared_endpoints(data_flow)
+        if not declared:
+            return
+        index = self._load_api_canonical_index(result)
+        if not index:
+            return
+
+        for spec_path, endpoint in declared:
+            match = self._ENDPOINT_RE.match(endpoint)
+            if not match:
+                continue
+            verb = match.group(1).upper()
+            # Non-HTTP transports (WebSocket, RTDB, GraphQL …) are declared
+            # the same way and are legal — the canonical documents simply do
+            # not describe them.
+            if verb not in self.VALID_HTTP_METHODS:
+                continue
+            path = match.group(2).split("?")[0]
+            normalized = self._normalize_api_path(path)
+
+            if normalized not in index:
+                result.warnings.append(SpecValidationMessage(
+                    path=spec_path,
+                    message=(
+                        f"Endpoint '{verb} {path}' is not declared in any "
+                        "OpenAPI document under api_directory — update the "
+                        "spec to the canonical route, or document the route"
+                    ),
+                    level="warning",
+                ))
+                continue
+
+            if verb not in index[normalized]:
+                declared_verbs = ", ".join(sorted(index[normalized]))
+                result.warnings.append(SpecValidationMessage(
+                    path=spec_path,
+                    message=(
+                        f"Endpoint path '{path}' is declared in the API "
+                        f"document but not for {verb} (declared: "
+                        f"{declared_verbs})"
+                    ),
+                    level="warning",
+                ))
+                continue
+
+            canonical = index[normalized][verb]
+            if canonical != path:
+                result.warnings.append(SpecValidationMessage(
+                    path=spec_path,
+                    message=(
+                        f"Endpoint path parameters differ from the API "
+                        f"document: spec '{path}' vs canonical '{canonical}'"
+                    ),
+                    level="warning",
+                ))
 
     def _validate_related_files(self, files: list, result: SpecValidationResult):
         """Validate relatedFiles section."""

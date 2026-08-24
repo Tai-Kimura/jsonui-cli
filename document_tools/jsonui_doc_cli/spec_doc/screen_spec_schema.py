@@ -721,6 +721,20 @@ SCREEN_SPEC_SCHEMA = {
                     "default": True,
                     "description": "Whether the method is async (default: true)"
                 },
+                "endpoint": {
+                    "type": "string",
+                    "description": (
+                        "Transport this method talks to, as '<VERB> <path>' "
+                        "(e.g. 'POST /api/bottles/{bottle_id}/notes'). An HTTP "
+                        "verb makes the declaration checkable: validate "
+                        "compares path and parameter spelling against the "
+                        "OpenAPI documents under api_directory, and "
+                        "`jsonui-test generate branch-tests` binds "
+                        "`api.<method>` scenarios through it. Non-HTTP verbs "
+                        "(WebSocket / RTDB / GraphQL …) are legal and left "
+                        "unchecked."
+                    )
+                },
                 "description": {
                     "type": "string",
                     "description": "Method description"

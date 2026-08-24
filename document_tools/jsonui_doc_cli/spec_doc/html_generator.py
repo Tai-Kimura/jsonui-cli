@@ -665,6 +665,7 @@ def _generate_branch_contracts_section(branch_contracts: dict) -> list[str]:
 
     declared = 0
     notes_only = 0
+    platform_scoped = 0
     for contract in methods.values():
         if not isinstance(contract, dict):
             continue
@@ -673,14 +674,24 @@ def _generate_branch_contracts_section(branch_contracts: dict) -> list[str]:
                 notes_only += 1
             else:
                 declared += 1
+                if isinstance(branch, dict) and "platforms" in branch:
+                    platform_scoped += 1
 
     parts.append('<section id="branch-contracts">')
     parts.append('<h2>Branch Contracts</h2>')
-    parts.append(
-        f'<p class="notes">{len(methods)} method(s) — {declared} declared '
-        f'branch(es), {notes_only} note-only branch(es) outside the '
-        f'machine-checkable contract.</p>'
+    summary = (
+        f'{len(methods)} method(s) — {declared} declared branch(es), '
+        f'{notes_only} note-only branch(es) outside the machine-checkable '
+        'contract.'
     )
+    if platform_scoped:
+        # A branch that only exists on some platforms is a real difference
+        # between implementations; the table has to say so, or a reader of
+        # the generated doc sees a contract that their platform never runs.
+        summary += (
+            f' {platform_scoped} branch(es) are scoped to specific platforms.'
+        )
+    parts.append(f'<p class="notes">{summary}</p>')
 
     if conditions and isinstance(conditions, dict):
         parts.append('<h3>Named Conditions</h3>')
@@ -712,27 +723,40 @@ def _generate_branch_contracts_section(branch_contracts: dict) -> list[str]:
                 f'<p class="notes"><strong>Baseline:</strong> '
                 f'{_format_branch_pairs(baseline)}</p>'
             )
+        branches = contract.get("branches", []) or []
+        # The column appears only for methods that actually scope branches,
+        # so single-platform projects keep the table they had.
+        scoped = any(
+            isinstance(b, dict) and "note" not in b and "platforms" in b
+            for b in branches
+        )
         parts.append('<table>')
+        platform_header = '<th>Platforms</th>' if scoped else ''
         parts.append(
-            '<thead><tr><th>#</th><th>When</th><th>Then</th>'
-            '<th>Notes</th></tr></thead>'
+            f'<thead><tr><th>#</th><th>When</th><th>Then</th>'
+            f'{platform_header}<th>Notes</th></tr></thead>'
         )
         parts.append('<tbody>')
-        for i, branch in enumerate(contract.get("branches", []) or [], start=1):
+        for i, branch in enumerate(branches, start=1):
             if not isinstance(branch, dict):
                 continue
             if "note" in branch:
                 parts.append(
-                    f'<tr><td>{i}</td><td colspan="3"><em>note (not machine-'
-                    f'checked): {_e(branch.get("note", "") or "")}</em></td></tr>'
+                    f'<tr><td>{i}</td><td colspan="{4 if scoped else 3}">'
+                    f'<em>note (not machine-checked): '
+                    f'{_e(branch.get("note", "") or "")}</em></td></tr>'
                 )
                 continue
             when = branch.get("when")
             then = branch.get("then")
+            platform_cell = (
+                f'<td>{_format_member_platforms(branch)}</td>' if scoped else ''
+            )
             parts.append(
                 f'<tr><td>{i}</td>'
                 f'<td>{_format_branch_pairs(when) if isinstance(when, dict) else "-"}</td>'
                 f'<td>{_format_branch_pairs(then) if isinstance(then, dict) else "-"}</td>'
+                f'{platform_cell}'
                 f'<td>{_e(branch.get("notes", "") or "-")}</td></tr>'
             )
         parts.append('</tbody></table>')

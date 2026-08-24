@@ -62,15 +62,17 @@ CONDITIONAL_LINE_RE = re.compile(
     r"^[ \t]*(?:#if\b|#else\b|#elseif\b|#endif\b|//[ \t]*MARK:|//[ \t]*TODO:|//[ \t]*FIXME:)"
 )
 
-# Declaration starters, in order of specificity.
-# Kotlin: (public/internal/private/protected)? (override)? (suspend)? (inline/operator/infix/tailrec)? fun
-# Swift:  (public/internal/private/fileprivate/open)? (override)? (static/class/final)? func
+# Declaration starters. One interleaved group rather than a fixed order:
+# Swift accepts `weak private(set) var` and `private(set) weak var` alike,
+# and an access level can carry the setter-only form (`private(set)`,
+# `public private(set)`) — a modifier this misses turns a marker into a
+# hard "not followed by a declaration" parse error.
 _COMMON_MODS = (
-    r"(?:(?:public|internal|private|protected|fileprivate|open)\s+)?"
-    r"(?:override\s+)?"
-    r"(?:(?:suspend|static|class|final|inline|operator|infix|tailrec|lateinit|abstract|open)\s+)*"
-    r"(?:override\s+)?"
-    r"(?:(?:suspend|static|class|final|lateinit)\s+)*"
+    r"(?:(?:"
+    r"(?:public|internal|private|protected|fileprivate|open|package)(?:\(set\))?"
+    r"|override|suspend|static|class|final|inline|operator|infix|tailrec"
+    r"|lateinit|abstract|weak|unowned"
+    r")\s+)*"
 )
 
 DECL_LINE_RE = re.compile(
