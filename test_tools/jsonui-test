@@ -1,11 +1,17 @@
 #!/usr/bin/env python3
-"""Entry point for jsonui-test CLI."""
+"""JsonUI Test CLI entry point (self-contained launcher).
 
+Same pattern as jui_tools/bin/jui and document_tools/jsonui-doc: runs from
+the tool directory without pip install, so a stale console script from an
+old pip/homebrew python cannot shadow the synced toolchain. bootstrap.sh
+already probes for this file and puts test_tools on PATH when present.
+"""
 import sys
 from pathlib import Path
 
-# Add package to path
-sys.path.insert(0, str(Path(__file__).parent))
+_root = Path(__file__).resolve().parent
+if str(_root) not in sys.path:
+    sys.path.insert(0, str(_root))
 
 from jsonui_test_cli.cli import main
 

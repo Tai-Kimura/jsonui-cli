@@ -354,3 +354,21 @@ class TestGenerationHardErrors:
         root = _project(tmp_path, BASIC)
         with pytest.raises(BranchTestGenerationError, match="spec not found"):
             generate_branch_tests("ghost_screen", root)
+
+
+class TestLauncher:
+    def test_self_contained_launcher_knows_branch_tests(self):
+        # Consumer report (2026-08-24): a stale pip/homebrew `jsonui-test`
+        # console script shadowed the synced toolchain and did not know
+        # `generate branch-tests`. bootstrap.sh probes for this launcher —
+        # it must exist, be executable, and resolve the subcommand.
+        import subprocess, sys
+        from pathlib import Path
+        launcher = Path(__file__).resolve().parents[1] / "jsonui-test"
+        assert launcher.exists()
+        assert launcher.stat().st_mode & 0o111, "launcher must be executable"
+        proc = subprocess.run(
+            [sys.executable, str(launcher), "generate", "branch-tests", "--help"],
+            capture_output=True, text=True)
+        assert proc.returncode == 0, proc.stderr
+        assert "--platform" in proc.stdout
