@@ -1543,10 +1543,28 @@ class SpecValidator:
                 ))
             return
         for key in branch:
-            if key not in ("when", "then", "notes"):
+            if key not in ("when", "then", "notes", "platforms"):
                 result.errors.append(SpecValidationMessage(
                     path=f"{path}.{key}",
-                    message="Unknown branch key — allowed: 'when', 'then', 'notes' (or a lone 'note')",
+                    message=(
+                        "Unknown branch key — allowed: 'when', 'then', 'notes', "
+                        "'platforms' (or a lone 'note')"
+                    ),
+                ))
+        if "platforms" in branch:
+            # Platform-scoped branch (P3b: a data field may exist on one
+            # platform only — e.g. an Android-only alert-message var while
+            # iOS carries the same text in a shared data field). Renderers
+            # skip branches whose platforms exclude their target.
+            platforms = branch["platforms"]
+            if (not isinstance(platforms, list) or not platforms
+                    or any(p not in ("ios", "android", "web") for p in platforms)):
+                result.errors.append(SpecValidationMessage(
+                    path=f"{path}.platforms",
+                    message=(
+                        "platforms must be a non-empty array of "
+                        "['ios', 'android', 'web']"
+                    ),
                 ))
         for req in ("when", "then"):
             part = branch.get(req)

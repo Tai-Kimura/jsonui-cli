@@ -345,6 +345,14 @@ def cmd_generate_branch_tests(args):
                 out_dir = "app/src/test/java"
             if harness_dir == "tests/unit/branch-harness":
                 harness_dir = "app/src/test/java"
+        elif args.platform == "ios":
+            # Swift sources default to a Tests/ folder; with Xcode's
+            # file-system-synchronized groups, point --out-dir at the unit
+            # test target's folder instead.
+            if out_dir == "tests/unit/generated":
+                out_dir = "Tests/Generated"
+            if harness_dir == "tests/unit/branch-harness":
+                harness_dir = "Tests/Generated"
         report = generate_branch_tests(
             args.screen,
             project_root=Path.cwd(),
@@ -354,6 +362,7 @@ def cmd_generate_branch_tests(args):
             mocks_dir=args.mocks_dir,
             platform=args.platform,
             package=args.package,
+            module=args.module,
         )
     except BranchTestGenerationError as e:
         print(f"Error: {e}", file=sys.stderr)
@@ -1054,13 +1063,18 @@ def main():
         help="Directory scanned for *.mock.json scenario files"
     )
     gen_branch_parser.add_argument(
-        "-p", "--platform", choices=["web", "android"], default="web",
+        "-p", "--platform", choices=["web", "android", "ios"], default="web",
         help="Target platform: web emits vitest TS (default); android emits "
-             "Kotlin JUnit4 (Robolectric + MockWebServer)"
+             "Kotlin JUnit4 (Robolectric + MockWebServer); ios emits Swift "
+             "XCTest (URLProtocol interception)"
     )
     gen_branch_parser.add_argument(
         "--package",
         help="Kotlin package for generated test sources (required for android)"
+    )
+    gen_branch_parser.add_argument(
+        "--module",
+        help="App module name for @testable import (required for ios)"
     )
 
     # Generate description subcommand with screen/flow subcommands

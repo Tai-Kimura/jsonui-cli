@@ -120,7 +120,7 @@ class TestGenerationHappyPath:
         # arrange from when.data
         assert 'h.setState({"isAgreed": false})' in content
         # api none assertion
-        assert "expect(rec.calls).toEqual([]);" in content
+        assert "expect(rec.matchedCalls()).toEqual([]);" in content
         # scenario override for when.api
         assert 'installFetchMock(ROUTES, {"createOrder": "conflict"})' in content
         # data assertion
@@ -251,7 +251,7 @@ class TestAndroidEmission:
         assert 'h.setState(mapOf<String, Any?>("isAgreed" to false))' in content
         assert 'h.invoke("onConfirmTap")' in content
         assert "h.settle()" in content
-        assert "rec.calls.isEmpty()" in content
+        assert "rec.matchedCalls().isEmpty()" in content
         # scenario override map for when.api
         assert '"createOrder" to "conflict"' in content
         assert 'assertFieldEquals("order_error", h.readField("screenState"))' in content
@@ -372,3 +372,92 @@ class TestLauncher:
             capture_output=True, text=True)
         assert proc.returncode == 0, proc.stderr
         assert "--platform" in proc.stdout
+
+
+class TestIosEmission:
+    MODULE = "checkout_app"
+
+    def _generate(self, tmp_path, bc=None):
+        root = _project(tmp_path, bc or BASIC)
+        return generate_branch_tests(
+            "checkout", root, platform="ios", module=self.MODULE,
+            out_dir="Tests/Generated", harness_dir="Tests/Generated",
+        ), root
+
+    def test_files_and_shape(self, tmp_path):
+        report, root = self._generate(tmp_path)
+        base = root / "Tests/Generated"
+        assert report.test_file == base / "CheckoutBranchesTest.swift"
+        assert report.runtime_file == base / "JsonuiBranchRuntime.swift"
+        assert report.harness_file == base / "CheckoutBranchHarness.swift"
+        assert report.harness_created is True
+        content = report.test_file.read_text(encoding="utf-8")
+        assert "@generated" in content
+        assert f"@testable import {self.MODULE}" in content
+        assert "final class CheckoutBranchesTest: XCTestCase" in content
+        assert 'h.setState(["isAgreed": false])' in content
+        assert 'h.invoke("onConfirmTap", args: [])' in content
+        assert "h.settle()" in content
+        assert "XCTAssertTrue(rec.matchedCalls().isEmpty" in content
+        assert '"createOrder": "conflict"' in content
+        assert 'assertFieldEquals("order_error", h.readField("screenState"))' in content
+        assert "#3: polling sequence is out of scope" in content
+        assert content.count("func test_") == 2
+
+    def test_runtime_and_harness(self, tmp_path):
+        report, _root = self._generate(tmp_path)
+        runtime = report.runtime_file.read_text(encoding="utf-8")
+        assert "BranchURLProtocol" in runtime
+        assert "URLProtocol.registerClass" in runtime
+        assert "httpBodyStream" in runtime
+        assert "mirrorField" in runtime
+        assert "partialMismatches" in runtime
+        skeleton = report.harness_file.read_text(encoding="utf-8")
+        assert "createCheckoutBranchHarness" in skeleton
+        assert f"@testable import {self.MODULE}" in skeleton
+        assert "Data.update(dictionary:)" in skeleton
+
+    def test_ios_requires_module(self, tmp_path):
+        root = _project(tmp_path, BASIC)
+        with pytest.raises(BranchTestGenerationError, match="--module"):
+            generate_branch_tests("checkout", root, platform="ios")
+
+    def test_data_ref_and_request_partial(self, tmp_path):
+        bc = _contract([
+            {"when": {"api.createOrder": "success"},
+             "then": {"api.createOrder.request": {
+                 "fingerprint": "@data.fingerprint", "coupon": None}}},
+        ])
+        report, _root = self._generate(tmp_path, bc)
+        content = report.test_file.read_text(encoding="utf-8")
+        capture = content.index('let ref_fingerprint = h.readField("fingerprint")')
+        act = content.index('h.invoke("onConfirmTap", args: [])')
+        assert capture < act
+        assert '"fingerprint": Ref(value: ref_fingerprint)' in content
+        assert '"coupon": NSNull()' in content
+
+
+class TestPlatformScopedBranches:
+    def _bc(self):
+        return _contract([
+            {"when": {"data.isAgreed": False}, "then": {"api": "none"}},
+            {"when": {"data.isAgreed": True}, "then": {"api": "none"},
+             "platforms": ["android"]},
+            {"when": {"data.isAgreed": True}, "then": {"api": "none"},
+             "platforms": ["ios", "web"]},
+        ])
+
+    def test_each_platform_filters_and_counts(self, tmp_path):
+        root = _project(tmp_path, self._bc())
+        web = generate_branch_tests("checkout", root)
+        assert (web.declared_branches, web.platform_skipped) == (2, 1)
+        android = generate_branch_tests(
+            "checkout", root, platform="android", package="com.example.x",
+            out_dir="app/src/test/java", harness_dir="app/src/test/java")
+        assert (android.declared_branches, android.platform_skipped) == (2, 1)
+        ios = generate_branch_tests(
+            "checkout", root, platform="ios", module="checkout_app",
+            out_dir="Tests/Generated", harness_dir="Tests/Generated")
+        assert (ios.declared_branches, ios.platform_skipped) == (2, 1)
+        # The skip is announced in the emitted file, not silent.
+        assert "platform-scoped" in web.test_file.read_text(encoding="utf-8")

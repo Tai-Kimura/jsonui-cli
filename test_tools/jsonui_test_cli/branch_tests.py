@@ -160,8 +160,18 @@ class GenerationReport:
     harness_created: bool = False
     declared_branches: int = 0
     note_branches: int = 0
+    platform_skipped: int = 0
     methods: list[str] = field(default_factory=list)
     routes: list[str] = field(default_factory=list)
+
+
+def _branch_active(branch: dict, platform: str) -> bool:
+    """Platform-scoped branches (branch['platforms']) render only on their
+    listed platforms; unscoped branches render everywhere."""
+    platforms = branch.get("platforms")
+    if not isinstance(platforms, list) or not platforms:
+        return True
+    return platform in platforms
 
 
 def _iter_declared_api_refs(contract: dict):
@@ -347,6 +357,12 @@ def render_test_file(
         for i, branch in enumerate(branches):
             if not isinstance(branch, dict) or "note" in branch:
                 continue
+            if not _branch_active(branch, "web"):
+                report.platform_skipped += 1
+                lines.append(
+                    f"  // branch {i + 1} is platform-scoped "
+                    f"({branch.get('platforms')}) — not generated for web")
+                continue
             report.declared_branches += 1
             lines.extend(_render_branch(
                 method_name, params, contract, branch, i + 1, conditions))
@@ -418,7 +434,7 @@ def _render_branch(
 
     for key, value in then.items():
         if key == "api":
-            out.append("      expect(rec.calls).toEqual([]);")
+            out.append("      expect(rec.matchedCalls()).toEqual([]);")
         elif key == "transition":
             out.append(
                 f"      h.expectTransition({_ts(value)});"
@@ -487,6 +503,10 @@ export interface RecordedCall {
 
 export interface FetchRecorder {
   calls: RecordedCall[];
+  /** Calls bound to a declared route — the `api: "none"` surface.
+   * Unmatched traffic (third-party SDKs, undeclared endpoints) is still
+   * recorded and served a 599 for diagnostics, but does not count. */
+  matchedCalls(): RecordedCall[];
   countFor(op: string): number;
   lastBodyFor(op: string): unknown;
   restore(): void;
@@ -553,6 +573,9 @@ export function installFetchMock(
 
   return {
     calls,
+    matchedCalls() {
+      return calls.filter((c) => c.op !== "(unmatched)");
+    },
     countFor(op: string) {
       return calls.filter((c) => c.op === op).length;
     },
@@ -765,6 +788,12 @@ def render_kotlin_test_file(
         for i, branch in enumerate(branches):
             if not isinstance(branch, dict) or "note" in branch:
                 continue
+            if not _branch_active(branch, "android"):
+                report.platform_skipped += 1
+                lines.append(
+                    f"  // branch {i + 1} is platform-scoped "
+                    f"({branch.get('platforms')}) — not generated for android")
+                continue
             report.declared_branches += 1
             lines.extend(_render_kotlin_branch(
                 pascal, method_name, params, contract, branch, i + 1, conditions))
@@ -806,7 +835,7 @@ def _render_kotlin_branch(
     out.append("      h.settle()")
     for key, value in then.items():
         if key == "api":
-            out.append("      assertTrue(\"expected no API calls, got ${rec.calls}\", rec.calls.isEmpty())")
+            out.append("      assertTrue(\"expected no declared-API calls, got ${rec.matchedCalls()}\", rec.matchedCalls().isEmpty())")
         elif key == "transition":
             out.append(f"      h.expectTransition({_kt_str(value)})")
         elif key.startswith("api.") and key.endswith(".request"):
@@ -882,6 +911,8 @@ data class RecordedCall(val op: String, val method: String, val path: String, va
 
 class Recorder {
   val calls = mutableListOf<RecordedCall>()
+  /** Calls bound to a declared route — the `api: "none"` surface. */
+  fun matchedCalls(): List<RecordedCall> = calls.filter { it.op != "(unmatched)" }
   fun countFor(op: String): Int = calls.count { it.op == op }
   fun lastBodyFor(op: String): JsonElement? =
     calls.lastOrNull { it.op == op }?.body?.let { Json.parseToJsonElement(it) }
@@ -1156,6 +1187,549 @@ fun create%(pascal)sBranchHarness(baseUrl: String, dispatcher: TestDispatcher): 
 '''
 
 
+# ---------------------------------------------------------------------------
+# iOS (Swift / XCTest) renderer.
+#
+# Same HTTP-boundary principle via URLProtocol interception (the consumer
+# network stack builds sessions from URLSessionConfiguration.default, which
+# honors URLProtocol.registerClass) — repositories, Codable decoding, and
+# the ViewModel run real. Swift has no runtime reflection WRITES, so the
+# split is: READS are generic (Mirror over the VM and its `data` struct,
+# @Published unwrapped best-effort), WRITES go through the consumer harness
+# (the kjui/sjui-generated `Data.update(dictionary:)` map setter plus typed
+# event-handler routing for VM-internal state).
+# ---------------------------------------------------------------------------
+
+def _swift_str(s: str) -> str:
+    """Swift string literal (JSON escapes are Swift-compatible except the
+    \\uXXXX form, which Swift writes as \\u{XXXX})."""
+    out = json.dumps(s, ensure_ascii=False)
+    return re.sub(r"\\u([0-9a-fA-F]{4})", r"\\u{\1}", out)
+
+
+def _swift(value) -> str:
+    if value is None:
+        return "NSNull()"
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    if isinstance(value, (int, float)):
+        return json.dumps(value)
+    if isinstance(value, str):
+        return _swift_str(value)
+    if isinstance(value, dict):
+        if not value:
+            return "[:]"
+        entries = ", ".join(f"{_swift_str(str(k))}: {_swift(v)}" for k, v in value.items())
+        return f"[{entries}]"
+    if isinstance(value, list):
+        entries = ", ".join(_swift(v) for v in value)
+        return f"[{entries}]"
+    raise BranchTestGenerationError(f"cannot render value {value!r} as Swift")
+
+
+def _swift_expected(value) -> str:
+    if isinstance(value, str) and value.startswith("@data."):
+        return f"Ref(value: ref_{value[len('@data.'):]})"
+    if isinstance(value, str) and value.startswith("@"):
+        return f"h.resolveString({_swift_str(value[1:])})"
+    if isinstance(value, dict):
+        entries = ", ".join(
+            f"{_swift_str(str(k))}: {_swift_expected(v)}" for k, v in value.items()
+        )
+        return f"[{entries}]"
+    return _swift(value)
+
+
+def render_swift_test_file(
+    screen: str, spec: dict, routes: list[Route], module: str,
+) -> tuple[str, GenerationReport]:
+    bc = spec.get("branchContracts") or {}
+    conditions = bc.get("conditions") or {}
+    methods_contracts = bc.get("methods") or {}
+    report = GenerationReport(screen=screen)
+    report.routes = [r.op for r in routes]
+    pascal = _pascal(screen)
+
+    route_lines = []
+    for r in routes:
+        scen = ", ".join(
+            f"{_swift_str(name)}: ({sc.get('status', 200)}, "
+            f"{_swift_str(json.dumps(sc.get('body'), ensure_ascii=False))})"
+            for name, sc in r.scenarios.items()
+        )
+        route_lines.append(
+            f"    RouteSpec(op: {_swift_str(r.op)}, method: {_swift_str(r.method)},\n"
+            f"      pattern: {_swift_str(r.pattern)}, defaultScenario: {_swift_str(r.default_scenario)},\n"
+            f"      scenarios: [{scen}])"
+        )
+
+    lines: list[str] = []
+    lines.append(f"// @generated by `jsonui-test generate branch-tests {screen} --platform ios` — DO NOT EDIT.")
+    lines.append("// Source of truth: the screen spec's branchContracts section.")
+    lines.append("import XCTest")
+    lines.append(f"@testable import {module}")
+    lines.append("")
+    lines.append(f"final class {pascal}BranchesTest: XCTestCase {{")
+    lines.append("")
+    lines.append("  private let routes: [RouteSpec] = [")
+    lines.append(",\n".join(route_lines))
+    lines.append("  ]")
+
+    for method_name, contract in methods_contracts.items():
+        if not isinstance(contract, dict):
+            continue
+        report.methods.append(method_name)
+        params = method_params(spec, method_name)
+        branches = contract.get("branches") or []
+        notes = [(i + 1, b["note"]) for i, b in enumerate(branches)
+                 if isinstance(b, dict) and "note" in b]
+        report.note_branches += len(notes)
+        lines.append("")
+        lines.append(f"  // ===== {method_name} =====")
+        if notes:
+            lines.append("  // %d note-only branch(es) — outside the machine-checkable contract:" % len(notes))
+            for num, note in notes:
+                lines.append(f"  //   #{num}: {note}")
+        for i, branch in enumerate(branches):
+            if not isinstance(branch, dict) or "note" in branch:
+                continue
+            if not _branch_active(branch, "ios"):
+                report.platform_skipped += 1
+                lines.append(
+                    f"  // branch {i + 1} is platform-scoped "
+                    f"({branch.get('platforms')}) — not generated for ios")
+                continue
+            report.declared_branches += 1
+            lines.extend(_render_swift_branch(
+                pascal, method_name, params, contract, branch, i + 1, conditions))
+    lines.append("}")
+    return "\n".join(lines) + "\n", report
+
+
+def _render_swift_branch(
+    pascal: str, method_name: str, params: list[str], contract: dict,
+    branch: dict, number: int, conditions: dict,
+) -> list[str]:
+    when = branch.get("when") or {}
+    then = branch.get("then") or {}
+    state = _arrange_state(contract, branch, conditions)
+    overrides = {k[len("api."):]: v for k, v in when.items() if k.startswith("api.")}
+    arg_values = {k[len("arg."):]: v for k, v in when.items() if k.startswith("arg.")}
+    args = [
+        _swift(arg_values.get(p)) if p in arg_values else "NSNull()"
+        for p in params
+    ]
+    while args and args[-1] == "NSNull()":
+        args.pop()
+    data_refs = _collect_data_refs(then)
+
+    out: list[str] = []
+    out.append("")
+    out.append(f"  // {_branch_title(number, branch)}")
+    out.append(f"  func test_{method_name}_branch_{number}() {{")
+    out.append(
+        f"    runBranchTest(routes: routes, overrides: {_swift(overrides) if overrides else '[:]'},"
+    )
+    out.append(f"                      harnessFactory: create{pascal}BranchHarness) {{ h, rec in")
+    if state:
+        out.append(f"      h.setState({_swift(state)})")
+    for fname in data_refs:
+        out.append(f"      let ref_{fname} = h.readField({_swift_str(fname)})")
+    call_args = ", ".join(args)
+    out.append(f"      h.invoke({_swift_str(method_name)}, args: [{call_args}])")
+    out.append("      h.settle()")
+    for key, value in then.items():
+        if key == "api":
+            out.append("      XCTAssertTrue(rec.matchedCalls().isEmpty, \"expected no declared-API calls, got \\(rec.matchedCalls())\")")
+        elif key == "transition":
+            out.append(f"      h.expectTransition({_swift_str(value)})")
+        elif key.startswith("api.") and key.endswith(".request"):
+            op = key[len("api."):-len(".request")]
+            out.append(f"      XCTAssertGreaterThan(rec.countFor({_swift_str(op)}), 0)")
+            out.append(
+                f"      XCTAssertEqual(partialMismatches(rec.lastBodyFor({_swift_str(op)}), "
+                f"{_swift_expected(value)}), [])"
+            )
+        elif key.startswith("api."):
+            op = key[len("api."):]
+            if value == "called":
+                out.append(f"      XCTAssertGreaterThan(rec.countFor({_swift_str(op)}), 0)")
+            else:
+                out.append(f"      XCTAssertEqual(rec.countFor({_swift_str(op)}), 0)")
+        elif key.startswith("data."):
+            fname = key[len("data."):]
+            out.append(
+                f"      assertFieldEquals({_swift_expected(value)}, "
+                f"h.readField({_swift_str(fname)}))"
+            )
+    out.append("    }")
+    out.append("  }")
+    return out
+
+
+SWIFT_RUNTIME = '''// @generated by `jsonui-test generate branch-tests --platform ios` — DO NOT EDIT.
+// Shared runtime for branch-contract tests: URLProtocol scenario serving,
+// request recording, Mirror-based reads, partial matching, and run-loop
+// settling. HTTP is the ONLY mocked boundary — the consumer network stack
+// builds URLSessions from URLSessionConfiguration.default, which honors
+// URLProtocol.registerClass, so repositories and Codable decoding run real.
+import Foundation
+import XCTest
+
+struct RouteSpec {
+  let op: String
+  let method: String
+  let pattern: String
+  let defaultScenario: String
+  let scenarios: [String: (Int, String)]
+}
+
+struct RecordedCall {
+  let op: String
+  let method: String
+  let path: String
+  let body: Any?
+}
+
+final class Recorder {
+  var calls: [RecordedCall] = []
+  /// Calls bound to a declared route — the `api: "none"` surface. On iOS
+  /// the URLProtocol intercepts the whole process, so third-party SDK
+  /// traffic (analytics etc.) shows up as "(unmatched)"; it is served a
+  /// 599 and recorded for diagnostics but is not the contract surface.
+  func matchedCalls() -> [RecordedCall] { calls.filter { $0.op != "(unmatched)" } }
+  func countFor(_ op: String) -> Int { calls.filter { $0.op == op }.count }
+  func lastBodyFor(_ op: String) -> Any? { calls.last { $0.op == op }?.body }
+}
+
+/// '@data.<field>' pre-act capture marker.
+struct Ref { let value: Any? }
+
+protocol BranchHarness {
+  var vm: AnyObject { get }
+  func readField(_ name: String) -> Any?
+  func setState(_ state: [String: Any])
+  func invoke(_ name: String, args: [Any])
+  func expectTransition(_ destination: String)
+  func resolveString(_ key: String) -> String
+  func settle()
+}
+
+final class BranchURLProtocol: URLProtocol {
+  static var routes: [RouteSpec] = []
+  static var overrides: [String: String] = [:]
+  static var recorder: Recorder?
+
+  override class func canInit(with request: URLRequest) -> Bool { true }
+  override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
+  override func stopLoading() {}
+
+  private static func bodyData(of request: URLRequest) -> Data? {
+    if let body = request.httpBody { return body }
+    // URLSession hands custom protocols the body as a stream.
+    guard let stream = request.httpBodyStream else { return nil }
+    stream.open()
+    defer { stream.close() }
+    var data = Data()
+    let bufferSize = 4096
+    let buffer = UnsafeMutablePointer<UInt8>.allocate(capacity: bufferSize)
+    defer { buffer.deallocate() }
+    while stream.hasBytesAvailable {
+      let read = stream.read(buffer, maxLength: bufferSize)
+      if read <= 0 { break }
+      data.append(buffer, count: read)
+    }
+    return data
+  }
+
+  override func startLoading() {
+    let path = request.url?.path ?? "/"
+    let method = (request.httpMethod ?? "GET").uppercased()
+    let raw = Self.bodyData(of: request)
+    let body = raw.flatMap { try? JSONSerialization.jsonObject(with: $0) }
+
+    for route in Self.routes {
+      guard route.method == method,
+            let regex = try? NSRegularExpression(pattern: route.pattern),
+            regex.firstMatch(in: path, range: NSRange(path.startIndex..., in: path)) != nil
+      else { continue }
+      Self.recorder?.calls.append(RecordedCall(op: route.op, method: method, path: path, body: body))
+      let name = Self.overrides[route.op] ?? route.defaultScenario
+      guard let scenario = route.scenarios[name] else {
+        client?.urlProtocol(self, didFailWithError: NSError(
+          domain: "branch-runtime", code: 1,
+          userInfo: [NSLocalizedDescriptionKey: "scenario '\\(name)' missing for op '\\(route.op)'"]))
+        return
+      }
+      respond(status: scenario.0, body: scenario.1)
+      return
+    }
+    Self.recorder?.calls.append(RecordedCall(op: "(unmatched)", method: method, path: path, body: nil))
+    respond(status: 599, body: "{\\"error\\":{\\"code\\":\\"unmocked_endpoint\\"}}")
+  }
+
+  private func respond(status: Int, body: String) {
+    guard let url = request.url,
+          let response = HTTPURLResponse(
+            url: url, statusCode: status, httpVersion: "HTTP/1.1",
+            headerFields: ["Content-Type": "application/json"])
+    else { return }
+    client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+    client?.urlProtocol(self, didLoad: Data(body.utf8))
+    client?.urlProtocolDidFinishLoading(self)
+  }
+}
+
+/// URLProtocol.registerClass only reaches URLSession.shared — consumer
+/// network stacks that build sessions from URLSessionConfiguration.default
+/// never consult it. Swizzle the `default`/`ephemeral` getters (the
+/// OHHTTPStubs-proven approach) so every new configuration carries the
+/// branch protocol at the front of protocolClasses.
+private let installConfigurationSwizzle: Void = {
+  for selector in [#selector(getter: URLSessionConfiguration.default),
+                   #selector(getter: URLSessionConfiguration.ephemeral)] {
+    let swizzled = selector == #selector(getter: URLSessionConfiguration.default)
+      ? #selector(URLSessionConfiguration.branchTestDefault)
+      : #selector(URLSessionConfiguration.branchTestEphemeral)
+    guard let original = class_getClassMethod(URLSessionConfiguration.self, selector),
+          let replacement = class_getClassMethod(URLSessionConfiguration.self, swizzled)
+    else { continue }
+    method_exchangeImplementations(original, replacement)
+  }
+}()
+
+extension URLSessionConfiguration {
+  @objc class func branchTestDefault() -> URLSessionConfiguration {
+    let config = branchTestDefault()  // swapped: calls the original getter
+    config.protocolClasses = [BranchURLProtocol.self] + (config.protocolClasses ?? [])
+    return config
+  }
+  @objc class func branchTestEphemeral() -> URLSessionConfiguration {
+    let config = branchTestEphemeral()  // swapped: calls the original getter
+    config.protocolClasses = [BranchURLProtocol.self] + (config.protocolClasses ?? [])
+    return config
+  }
+}
+
+func runBranchTest(
+  routes: [RouteSpec],
+  overrides: [String: String],
+  harnessFactory: () -> BranchHarness,
+  block: (BranchHarness, Recorder) throws -> Void
+) rethrows {
+  _ = installConfigurationSwizzle
+  let recorder = Recorder()
+  BranchURLProtocol.routes = routes
+  BranchURLProtocol.overrides = overrides
+  BranchURLProtocol.recorder = recorder
+  URLProtocol.registerClass(BranchURLProtocol.self)
+  defer {
+    URLProtocol.unregisterClass(BranchURLProtocol.self)
+    BranchURLProtocol.routes = []
+    BranchURLProtocol.overrides = [:]
+    BranchURLProtocol.recorder = nil
+  }
+  let harness = harnessFactory()
+  defer {
+    // Deliberate retain-for-process-lifetime: deallocating @MainActor
+    // types goes through the isolated-deinit back-deploy shim on pre-26
+    // simulators, which crashes with an invalid free
+    // (swift_task_deinitOnExecutorMainActorBackDeploy ->
+    // BUG_IN_CLIENT_OF_LIBMALLOC, observed on the iOS 18.6 runtime).
+    // A handful of retained test VMs per process is harmless; a runtime
+    // crash on teardown fails every branch test at 0.000s.
+    BranchHarnessRetainer.retain(harness)
+  }
+  try block(harness, recorder)
+}
+
+enum BranchHarnessRetainer {
+  private static var retained: [BranchHarness] = []
+  static func retain(_ harness: BranchHarness) { retained.append(harness) }
+}
+
+/// Generic READ access: Mirror over the subject (labels match `name` or
+/// `_name`), unwrapping @Published best-effort. Swift cannot WRITE fields
+/// reflectively — writes go through the consumer harness.
+func mirrorField(_ subject: Any, _ name: String) -> Any? {
+  var mirror: Mirror? = Mirror(reflecting: subject)
+  while let m = mirror {
+    for child in m.children where child.label == name || child.label == "_" + name {
+      return unwrapPublished(child.value)
+    }
+    mirror = m.superclassMirror
+  }
+  return nil
+}
+
+private func unwrapPublished(_ value: Any) -> Any? {
+  let typeName = String(describing: type(of: value))
+  guard typeName.hasPrefix("Published<") else { return flattenOptional(value) }
+  // Published<T> internals are not API. Its storage enum is either
+  // .value(T) or .publisher(Publisher) — Mirror descendant paths cover both
+  // (an enum case's associated value appears under the case's label).
+  let mirror = Mirror(reflecting: value)
+  for path: [MirrorPath] in [
+    ["storage", "value"],
+    ["storage", "publisher", "subject", "currentValue", "value"],
+    ["storage", "publisher", "subject", "currentValue"],
+    ["currentValue"],
+  ] {
+    if let found = descend(mirror, path) { return flattenOptional(found) }
+  }
+  return nil
+}
+
+private func descend(_ mirror: Mirror, _ path: [MirrorPath]) -> Any? {
+  var current: Any? = nil
+  var m = mirror
+  for step in path {
+    guard let label = step as? String,
+          let child = m.children.first(where: { $0.label == label })
+    else { return nil }
+    current = child.value
+    m = Mirror(reflecting: child.value)
+  }
+  return current
+}
+
+/// Mirror hands back Optionals as containers; flatten to the wrapped value.
+private func flattenOptional(_ value: Any) -> Any? {
+  let mirror = Mirror(reflecting: value)
+  guard mirror.displayStyle == .optional else { return value }
+  return mirror.children.first.map { flattenOptional($0.value) } ?? nil
+}
+
+/// Base harness: generic reads (VM field first, then the VM's `data`
+/// struct), run-loop settling. Writes/invoke/transition/strings are the
+/// consumer's typed closed maps.
+class BaseBranchHarness: BranchHarness {
+  let vm: AnyObject
+  init(vm: AnyObject) { self.vm = vm }
+
+  func readField(_ name: String) -> Any? {
+    if let own = mirrorField(vm, name), !(own is NSNull) {
+      // Direct VM member (plain var or @Published).
+      if !isNestedContainer(own) { return own }
+    }
+    if let data = mirrorField(vm, "data") {
+      if let inner = mirrorField(data, name) { return inner }
+    }
+    return mirrorField(vm, name)
+  }
+
+  private func isNestedContainer(_ value: Any) -> Bool { false }
+
+  func setState(_ state: [String: Any]) {
+    fatalError("branch-harness must override setState (Swift has no reflective writes)")
+  }
+
+  func invoke(_ name: String, args: [Any]) {
+    fatalError("branch-harness must override invoke")
+  }
+
+  func expectTransition(_ destination: String) {
+    fatalError("branch-harness must override expectTransition")
+  }
+
+  func resolveString(_ key: String) -> String {
+    fatalError("branch-harness must override resolveString")
+  }
+
+  func settle() {
+    // Task { @MainActor } continuations land on the main queue; URLProtocol
+    // work completes on URLSession's queues. Drain the main run loop with
+    // short real-time slices until the pipeline is quiet.
+    for _ in 0..<80 {
+      RunLoop.main.run(until: Date().addingTimeInterval(0.005))
+    }
+  }
+}
+
+/// Numeric-tolerant equality (JSON 5 vs Double field) with Ref unwrap.
+func assertFieldEquals(_ expected: Any?, _ actual: Any?,
+                       file: StaticString = #filePath, line: UInt = #line) {
+  let exp = (expected as? Ref).map { $0.value } ?? expected
+  if let en = asDouble(exp), let an = asDouble(actual) {
+    XCTAssertEqual(en, an, accuracy: 0.0, file: file, line: line)
+    return
+  }
+  let e = exp.map { "\\($0)" } ?? "nil"
+  let a = actual.map { "\\($0)" } ?? "nil"
+  XCTAssertEqual(e, a, file: file, line: line)
+}
+
+private func asDouble(_ value: Any?) -> Double? {
+  if let b = value as? Bool { _ = b; return nil }
+  if let n = value as? NSNumber, CFGetTypeID(n) != CFBooleanGetTypeID() { return n.doubleValue }
+  if let d = value as? Double { return d }
+  if let i = value as? Int { return Double(i) }
+  return nil
+}
+
+/// Recursive partial match against a recorded JSON body. NSNull/nil
+/// expectations also accept absent keys (encoders drop nils).
+func partialMismatches(_ actual: Any?, _ expected: Any?, _ prefix: String = "") -> [String] {
+  let label = prefix.isEmpty ? "$" : prefix
+  let exp = (expected as? Ref).map { $0.value } ?? expected
+  if let dict = exp as? [String: Any] {
+    guard let actualDict = actual as? [String: Any] else {
+      return ["\\(label): expected object, got \\(String(describing: actual))"]
+    }
+    var out: [String] = []
+    for (k, v) in dict {
+      out += partialMismatches(actualDict[k], v, prefix.isEmpty ? k : "\\(prefix).\\(k)")
+    }
+    return out
+  }
+  if exp == nil || exp is NSNull {
+    if actual == nil || actual is NSNull { return [] }
+    return ["\\(label): expected null/absent, got \\(String(describing: actual))"]
+  }
+  guard let actualValue = actual, !(actualValue is NSNull) else {
+    return ["\\(label): expected \\(String(describing: exp)), got nil"]
+  }
+  if let en = asDouble(exp), let an = asDouble(actualValue) {
+    return en == an ? [] : ["\\(label): expected \\(en), got \\(an)"]
+  }
+  if let eb = exp as? Bool, let ab = actualValue as? Bool {
+    return eb == ab ? [] : ["\\(label): expected \\(eb), got \\(ab)"]
+  }
+  if let es = exp as? String, let asv = actualValue as? String {
+    return es == asv ? [] : ["\\(label): expected \\(es), got \\(asv)"]
+  }
+  return ["\\(label): expected \\(String(describing: exp)), got \\(String(describing: actualValue))"]
+}
+'''
+
+
+SWIFT_HARNESS_SKELETON = '''// Branch-contract test harness for `%(screen)s` — CONSUMER-OWNED.
+// Generated once as a skeleton by `jsonui-test generate branch-tests`;
+// edit freely, it will not be overwritten.
+//
+// Swift has no reflective writes, so this harness is the typed side of the
+// contract: setState routes through the generated Data.update(dictionary:)
+// (plus event-handler calls for VM-internal state), while invoke /
+// expectTransition / resolveString are closed switches — an unknown name
+// must fail loudly, never soften.
+import Foundation
+import XCTest
+@testable import %(module)s
+
+func create%(pascal)sBranchHarness() -> BranchHarness {
+  // TODO: construct the real ViewModel (repositories build their own
+  // network stack — URLProtocol interception is already active when this
+  // factory runs) and return a subclass of BaseBranchHarness overriding:
+  //   setState: vm.data.update(dictionary: state) + handler routing for
+  //             VM-internal fields (e.g. name inputs)
+  //   invoke:   switch over declared method / handler names
+  //   expectTransition: switch over the VM's navigation @Published flags
+  //   resolveString: closed key -> StringManager accessor map
+  fatalError("branch-harness for %(screen)s is not implemented yet")
+}
+'''
+
+
 def generate_branch_tests(
     screen: str,
     project_root: Path,
@@ -1165,6 +1739,7 @@ def generate_branch_tests(
     mocks_dir: str = "tests/mocks",
     platform: str = "web",
     package: str | None = None,
+    module: str | None = None,
 ) -> GenerationReport:
     spec_file = resolve_spec_path(screen, project_root, spec_path)
     if not spec_file.exists():
@@ -1189,9 +1764,17 @@ def generate_branch_tests(
             )
         return _emit_android(
             screen, spec, routes, project_root, out_dir, harness_dir, package)
+    if platform == "ios":
+        if not module:
+            raise BranchTestGenerationError(
+                "--module is required for --platform ios (the app module name "
+                "for @testable import)"
+            )
+        return _emit_ios(
+            screen, spec, routes, project_root, out_dir, harness_dir, module)
     if platform != "web":
         raise BranchTestGenerationError(
-            f"unknown platform '{platform}' — supported: web, android"
+            f"unknown platform '{platform}' — supported: web, android, ios"
         )
 
     out_path = project_root / out_dir
@@ -1213,6 +1796,44 @@ def generate_branch_tests(
         harness_file.write_text(
             HARNESS_SKELETON % {"screen": screen,
                                 "screen_const": screen.upper()},
+            encoding="utf-8",
+        )
+        created = True
+
+    report.test_file = test_file
+    report.runtime_file = runtime_file
+    report.harness_file = harness_file
+    report.harness_created = created
+    return report
+
+
+def _emit_ios(
+    screen: str, spec: dict, routes: list[Route], project_root: Path,
+    out_dir: str, harness_dir: str, module: str,
+) -> GenerationReport:
+    """iOS emission: Swift XCTest sources. With Xcode's file-system-
+    synchronized test groups, dropping the files into the test target's
+    folder is registration enough."""
+    pascal = _pascal(screen)
+    out_path = project_root / out_dir
+    out_path.mkdir(parents=True, exist_ok=True)
+    harness_path = project_root / harness_dir
+    harness_path.mkdir(parents=True, exist_ok=True)
+
+    content, report = render_swift_test_file(screen, spec, routes, module)
+
+    runtime_file = out_path / "JsonuiBranchRuntime.swift"
+    runtime_file.write_text(SWIFT_RUNTIME, encoding="utf-8")
+    test_file = out_path / f"{pascal}BranchesTest.swift"
+    test_file.write_text(content, encoding="utf-8")
+
+    harness_file = harness_path / f"{pascal}BranchHarness.swift"
+    created = False
+    if not harness_file.exists():
+        harness_file.write_text(
+            SWIFT_HARNESS_SKELETON % {
+                "screen": screen, "pascal": pascal, "module": module,
+            },
             encoding="utf-8",
         )
         created = True

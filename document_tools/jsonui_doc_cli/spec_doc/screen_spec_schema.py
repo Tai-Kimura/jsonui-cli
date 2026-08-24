@@ -1081,7 +1081,19 @@ SCREEN_SPEC_SCHEMA = {
                     "properties": {
                         "when": {"type": "object", "minProperties": 1},
                         "then": {"type": "object", "minProperties": 1},
-                        "notes": {"type": "string"}
+                        "notes": {"type": "string"},
+                        "platforms": {
+                            "type": "array",
+                            "minItems": 1,
+                            "items": {"type": "string",
+                                      "enum": ["ios", "android", "web"]},
+                            "description": (
+                                "Platform-scoped branch: renderers generate "
+                                "it only for the listed platforms (e.g. an "
+                                "outcome field that exists on one platform "
+                                "only). Omit for all platforms."
+                            )
+                        }
                     },
                     "additionalProperties": False
                 }

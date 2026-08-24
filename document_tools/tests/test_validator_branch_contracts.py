@@ -531,3 +531,33 @@ class BranchContractsPilotShape(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class BranchPlatforms(unittest.TestCase):
+    def _spec(self, branch):
+        return _base_spec(
+            {"methods": {"onConfirmTap": {"branches": [branch]}}},
+            vm_methods=["onConfirmTap"],
+            ui_vars=[_ui_var("isAgreed")],
+        )
+
+    def test_valid_platforms_pass(self):
+        result = _validate(self._spec({
+            "when": {"data.isAgreed": True}, "then": {"api": "none"},
+            "platforms": ["android", "ios"],
+        }))
+        self.assertEqual(_errors_at(result, "branchContracts"), [])
+
+    def test_invalid_platform_value_is_error(self):
+        result = _validate(self._spec({
+            "when": {"data.isAgreed": True}, "then": {"api": "none"},
+            "platforms": ["android", "desktop"],
+        }))
+        self.assertTrue(_errors_at(result, "branches[0].platforms"))
+
+    def test_empty_platforms_is_error(self):
+        result = _validate(self._spec({
+            "when": {"data.isAgreed": True}, "then": {"api": "none"},
+            "platforms": [],
+        }))
+        self.assertTrue(_errors_at(result, "branches[0].platforms"))
