@@ -1342,6 +1342,7 @@ class SpecValidator:
         condition_names = self._validate_branch_conditions(
             bc.get("conditions"), data_fields, result
         )
+        self._validate_branch_condition_usage(bc, condition_names, result)
 
         methods = bc.get("methods")
         if methods is None:
@@ -1461,7 +1462,89 @@ class SpecValidator:
                     self._validate_branch_witness(
                         cond[wkey], f"{path}.{wkey}", data_fields, result
                     )
+            # Two witnesses that arrange the same state cannot separate the
+            # branches they gate: the generated tests would set up identical
+            # state and then assert opposite outcomes.
+            true_w = cond.get("witness_true")
+            false_w = cond.get("witness_false")
+            if (
+                isinstance(true_w, dict) and isinstance(false_w, dict)
+                and true_w == false_w
+            ):
+                result.warnings.append(SpecValidationMessage(
+                    path=path,
+                    message=(
+                        "witness_true and witness_false arrange the same "
+                        "state, so they cannot tell the condition's two "
+                        "sides apart"
+                    ),
+                    level="warning",
+                ))
         return names
+
+    def _validate_branch_condition_usage(
+        self, bc: dict, condition_names: set[str],
+        result: SpecValidationResult,
+    ) -> None:
+        """Conditions against the branches that gate on them.
+
+        Two directions the reference check does not cover: a condition
+        nothing gates on is a declaration whose witnesses no generated test
+        ever arranges, and a branch gating on a condition whose witness for
+        that side is absent fails test generation outright — which validate
+        can say first.
+        """
+        conditions = bc.get("conditions")
+        if not isinstance(conditions, dict) or not conditions:
+            return
+        methods = bc.get("methods")
+        if not isinstance(methods, dict):
+            return
+
+        needed: dict[str, set[str]] = {}
+        for method_name, contract in methods.items():
+            if not isinstance(contract, dict):
+                continue
+            for i, branch in enumerate(contract.get("branches", []) or []):
+                if not isinstance(branch, dict) or "note" in branch:
+                    continue
+                when = branch.get("when")
+                if not isinstance(when, dict):
+                    continue
+                ref = when.get("cond")
+                if not isinstance(ref, str) or not ref:
+                    continue
+                negated = ref.startswith("!")
+                name = ref[1:] if negated else ref
+                wkey = "witness_false" if negated else "witness_true"
+                needed.setdefault(name, set()).add(wkey)
+                cond = conditions.get(name)
+                if not isinstance(cond, dict) or name not in condition_names:
+                    continue  # unknown cond — already an error elsewhere
+                if not isinstance(cond.get(wkey), dict):
+                    result.warnings.append(SpecValidationMessage(
+                        path=(
+                            f"branchContracts.methods.{method_name}."
+                            f"branches[{i}].when.cond"
+                        ),
+                        message=(
+                            f"Condition '{name}' has no {wkey}, so this "
+                            "branch cannot be arranged — test generation "
+                            "fails on it"
+                        ),
+                        level="warning",
+                    ))
+
+        for name in conditions:
+            if isinstance(name, str) and name not in needed:
+                result.warnings.append(SpecValidationMessage(
+                    path=f"branchContracts.conditions.{name}",
+                    message=(
+                        "Condition is declared but no branch gates on it — "
+                        "its witnesses are never exercised"
+                    ),
+                    level="warning",
+                ))
 
     def _validate_branch_witness(
         self, witness: Any, path: str, data_fields: set[str],

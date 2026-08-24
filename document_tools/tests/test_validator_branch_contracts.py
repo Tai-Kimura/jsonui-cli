@@ -128,13 +128,21 @@ class BranchConditions(unittest.TestCase):
         )
 
     def test_valid_condition_with_witnesses_passes(self):
-        spec = self._spec({
-            "needsPayment": {
-                "meaning": "there is an amount to pay now",
-                "witness_true": {"payNowAmount": 1000},
-                "witness_false": {"payNowAmount": 0},
-            }
-        })
+        spec = self._spec(
+            {
+                "needsPayment": {
+                    "meaning": "there is an amount to pay now",
+                    "witness_true": {"payNowAmount": 1000},
+                    "witness_false": {"payNowAmount": 0},
+                }
+            },
+            # Gated on, so the condition is not flagged as a declaration
+            # whose witnesses nothing ever arranges.
+            branches=[
+                {"when": {"cond": "needsPayment"}, "then": {"api": "none"}},
+                {"when": {"cond": "!needsPayment"}, "then": {"api": "none"}},
+            ],
+        )
         result = _validate(spec)
         self.assertEqual(_errors_at(result, "branchContracts"), [])
         self.assertEqual(_warnings_at(result, "branchContracts"), [])
@@ -561,6 +569,95 @@ class BranchPlatforms(unittest.TestCase):
             "platforms": [],
         }))
         self.assertTrue(_errors_at(result, "branches[0].platforms"))
+
+
+class BranchConditionUsage(unittest.TestCase):
+    """Conditions against the branches that gate on them.
+
+    A witness is only worth anything once some branch arranges state with
+    it, and a branch can only be arranged when the side it needs exists.
+    Warnings: none of this makes an otherwise valid contract invalid.
+    """
+
+    def _spec(self, conditions, branches):
+        return _base_spec(
+            {"conditions": conditions,
+             "methods": {"onConfirmTap": {"branches": branches}}},
+            vm_methods=["onConfirmTap"],
+            ui_vars=[_ui_var("isAgreed")],
+        )
+
+    _TRUE = {"isAgreed": True}
+    _FALSE = {"isAgreed": False}
+
+    def _cond(self, **kwargs):
+        cond = {"meaning": "the terms are accepted"}
+        cond.update(kwargs)
+        return cond
+
+    def _warnings_containing(self, result, needle):
+        return [w for w in result.warnings if needle in w.message]
+
+    def test_condition_gated_on_with_both_witnesses_is_clean(self):
+        result = _validate(self._spec(
+            {"agreed": self._cond(witness_true=self._TRUE,
+                                  witness_false=self._FALSE)},
+            [{"when": {"cond": "agreed"}, "then": {"api": "none"}},
+             {"when": {"cond": "!agreed"}, "then": {"api": "none"}}],
+        ))
+        self.assertEqual([], result.warnings)
+
+    def test_condition_no_branch_gates_on_is_warned(self):
+        result = _validate(self._spec(
+            {"agreed": self._cond(witness_true=self._TRUE,
+                                  witness_false=self._FALSE),
+             "unused": self._cond(witness_true=self._TRUE,
+                                  witness_false=self._FALSE)},
+            [{"when": {"cond": "agreed"}, "then": {"api": "none"}}],
+        ))
+        warnings = self._warnings_containing(result, "no branch gates on it")
+        self.assertEqual(1, len(warnings))
+        self.assertIn("conditions.unused", warnings[0].path)
+
+    def test_missing_witness_for_the_side_a_branch_needs_is_warned(self):
+        # Test generation hard-errors on this; validate says it first.
+        result = _validate(self._spec(
+            {"agreed": self._cond(witness_true=self._TRUE)},
+            [{"when": {"cond": "!agreed"}, "then": {"api": "none"}}],
+        ))
+        warnings = self._warnings_containing(result, "no witness_false")
+        self.assertEqual(1, len(warnings))
+        self.assertIn("branches[0].when.cond", warnings[0].path)
+
+    def test_only_the_needed_side_is_required(self):
+        result = _validate(self._spec(
+            {"agreed": self._cond(witness_true=self._TRUE)},
+            [{"when": {"cond": "agreed"}, "then": {"api": "none"}}],
+        ))
+        self.assertEqual([], self._warnings_containing(result, "no witness"))
+
+    def test_identical_witnesses_are_warned(self):
+        result = _validate(self._spec(
+            {"agreed": self._cond(witness_true=self._TRUE,
+                                  witness_false=self._TRUE)},
+            [{"when": {"cond": "agreed"}, "then": {"api": "none"}}],
+        ))
+        warnings = self._warnings_containing(result, "same state")
+        self.assertEqual(1, len(warnings))
+
+    def test_unknown_condition_reference_stays_a_single_error(self):
+        # The reference check already errors; usage must not pile a
+        # confusing second complaint on the same line.
+        result = _validate(self._spec(
+            {"agreed": self._cond(witness_true=self._TRUE,
+                                  witness_false=self._FALSE)},
+            [{"when": {"cond": "agreed"}, "then": {"api": "none"}},
+             {"when": {"cond": "ghost"}, "then": {"api": "none"}}],
+        ))
+        self.assertEqual(
+            [], self._warnings_containing(result, "cannot be arranged")
+        )
+        self.assertTrue(_errors_at(result, "branches[1].when.cond"))
 
 
 class BranchCrossFaces(unittest.TestCase):
