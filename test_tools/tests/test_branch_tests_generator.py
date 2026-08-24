@@ -417,6 +417,28 @@ class TestIosEmission:
         assert f"@testable import {self.MODULE}" in skeleton
         assert "Data.update(dictionary:)" in skeleton
 
+    def test_null_expectation_normalizes_against_swift_nil(self, tmp_path):
+        # A contract asserting a field returns to "unset" spells it `null`,
+        # which emits NSNull(); a harness handing an Optional property
+        # straight through returns Swift nil. Comparing their descriptions
+        # ("<null>" vs "nil") never matched, so such a branch could not be
+        # written on iOS at all — reported from a rollback contract.
+        bc = _contract([
+            {"when": {"api.createOrder": "conflict"},
+             "then": {"data.reactionType": None}},
+        ])
+        report, _root = self._generate(tmp_path, bc)
+        runtime = report.runtime_file.read_text(encoding="utf-8")
+        assert "func normalizeNull(" in runtime
+        # Applied to both sides, and before the numeric comparison so a
+        # null expectation cannot fall through it.
+        body = runtime[runtime.index("func assertFieldEquals("):]
+        body = body[:body.index("\nprivate func asDouble")]
+        assert "let exp = normalizeNull(" in body
+        assert "let act = normalizeNull(actual)" in body
+        assert "asDouble(act)" in body
+        assert report.test_file.read_text(encoding="utf-8").count("NSNull()") >= 1
+
     def test_ios_requires_module(self, tmp_path):
         root = _project(tmp_path, BASIC)
         with pytest.raises(BranchTestGenerationError, match="--module"):

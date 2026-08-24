@@ -1407,6 +1407,9 @@ struct Ref { let value: Any? }
 
 protocol BranchHarness {
   var vm: AnyObject { get }
+  /// Return the field's current value. An unset field may come back as
+  /// Swift nil or NSNull() — both compare equal to a `null` in the
+  /// contract, so an Optional property can be passed straight through.
   func readField(_ name: String) -> Any?
   func setState(_ state: [String: Any])
   func invoke(_ name: String, args: [Any])
@@ -1646,16 +1649,27 @@ class BaseBranchHarness: BranchHarness {
   }
 }
 
+/// "Absent" has two spellings here: a `null` in the contract arrives as
+/// NSNull(), while a harness returning an Optional property straight
+/// through hands back Swift nil. They mean the same thing, and comparing
+/// their descriptions ("<null>" vs "nil") never matches — so neither
+/// spelling is a convention a harness author has to remember.
+private func normalizeNull(_ value: Any?) -> Any? {
+  if value is NSNull { return nil }
+  return value
+}
+
 /// Numeric-tolerant equality (JSON 5 vs Double field) with Ref unwrap.
 func assertFieldEquals(_ expected: Any?, _ actual: Any?,
                        file: StaticString = #filePath, line: UInt = #line) {
-  let exp = (expected as? Ref).map { $0.value } ?? expected
-  if let en = asDouble(exp), let an = asDouble(actual) {
+  let exp = normalizeNull((expected as? Ref).map { $0.value } ?? expected)
+  let act = normalizeNull(actual)
+  if let en = asDouble(exp), let an = asDouble(act) {
     XCTAssertEqual(en, an, accuracy: 0.0, file: file, line: line)
     return
   }
   let e = exp.map { "\\($0)" } ?? "nil"
-  let a = actual.map { "\\($0)" } ?? "nil"
+  let a = act.map { "\\($0)" } ?? "nil"
   XCTAssertEqual(e, a, file: file, line: line)
 }
 
