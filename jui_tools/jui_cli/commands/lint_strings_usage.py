@@ -286,6 +286,8 @@ _STRINGS_ENTRY_RE = re.compile(r'^\s*"((?:[^"\\]|\\.)*)"\s*=', re.MULTILINE)
 _ANDROID_R_STRING_RE = re.compile(r"\bR\.string\.([A-Za-z_][A-Za-z0-9_]*)")
 
 _STRING_LITERAL_RE = re.compile(r"([\"'])((?:[^\"'\\\n]|\\.)*?)\1")
+_BRANCH_HARNESS_RE = re.compile(r"BranchHarness", re.IGNORECASE)
+_KEY_SHAPED_RE = re.compile(r"^[a-z][a-z0-9]*(?:_[a-z0-9]+)+$")
 
 
 def snake_to_pascal(s: str) -> str:
@@ -602,6 +604,7 @@ def scan_vm_sources(
     declared: DeclaredKeys,
     report: UsageReport,
     used: set[tuple[str, str]],
+    harness_keys: set[str] | None = None,
 ) -> None:
     """Scan one platform root; add to *used* and append findings."""
     suffixes = {
@@ -623,6 +626,18 @@ def scan_vm_sources(
         # literal that is not a declared flat key is a missing finding
         # (the map must stay honest for the closure to mean anything).
         strict_literals, lenient_literals = _extract_keys_map_literals(text)
+        if harness_keys is not None:
+            harness_keys.update(strict_literals)
+            harness_keys.update(lenient_literals)
+            # A generated branch harness IS the declaration site for the
+            # keys a contract resolves through it — the Swift and Kotlin
+            # skeletons spell that closure as a closed switch rather than
+            # a map, so the map scan above does not see it.
+            if _BRANCH_HARNESS_RE.search(src.name):
+                harness_keys.update(
+                    m.group(2) for m in _STRING_LITERAL_RE.finditer(text)
+                    if _KEY_SHAPED_RE.match(m.group(2))
+                )
         for literal in strict_literals:
             pairs = declared.by_flat.get(literal)
             if pairs:
@@ -796,12 +811,75 @@ def collect_layout_used(
     return used
 
 
+def collect_spec_branch_used(
+    spec_dir: Path,
+    declared: DeclaredKeys,
+    report: UsageReport,
+    used: set[tuple[str, str]],
+    harness_keys: set[str] | None = None,
+) -> None:
+    """`@strings_key` references declared in branchContracts.
+
+    validate checks the shape of these references but cannot check that
+    the key exists — it does not know where the strings table lives. Here
+    it is already known, and a branch asserting a key nothing declares
+    fails only when someone runs the generated test.
+
+    A branch may also assert a *pseudo* key that the test harness formats
+    into a real one (`..._step_0_of_10` for a table entry carrying
+    placeholders), which by design never appears in strings.json. Those
+    are recognised through the same closure the rest of this check relies
+    on: a harness that resolves keys dynamically declares them in a
+    `*_STRING_KEYS` map. A reference in neither place is a typo.
+    """
+    harness_keys = harness_keys or set()
+    if not spec_dir.is_dir():
+        return
+    for spec_file in sorted(spec_dir.rglob("*.spec.json")):
+        try:
+            spec = json.loads(spec_file.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            continue
+        contracts = spec.get("branchContracts") if isinstance(spec, dict) else None
+        if not isinstance(contracts, dict):
+            continue
+        seen: set[str] = set()
+
+        def walk(node: Any) -> None:
+            if isinstance(node, dict):
+                for value in node.values():
+                    walk(value)
+            elif isinstance(node, list):
+                for item in node:
+                    walk(item)
+            elif isinstance(node, str) and node.startswith("@"):
+                ref = node[1:]
+                if ref and not ref.startswith("data.") and "." not in ref:
+                    seen.add(ref)
+
+        walk(contracts)
+        for ref in sorted(seen):
+            pairs = declared.by_flat.get(ref) or declared.by_bare.get(ref)
+            if pairs:
+                used |= pairs
+            elif ref not in harness_keys:
+                report.missing.append(UsageFinding(
+                    kind="missing-key",
+                    site=spec_file.as_posix(),
+                    detail=(
+                        f"branchContracts references '@{ref}', which neither "
+                        "strings.json nor a *_STRING_KEYS map declares"
+                    ),
+                ))
+
+
 def collect_usage(
     *,
     strings_groups: dict[str, dict[str, Any]],
     trees: dict[str, Any],
     own_sections_by_layout: dict[str, tuple[str, ...]],
     platform_roots: dict[str, Path],
+    spec_dir: Path | None = None,
 ) -> UsageReport:
     """Aggregate the used set over every face, then judge both directions.
 
@@ -814,8 +892,16 @@ def collect_usage(
     report.faces = ["layout"] + sorted(platform_roots)
 
     used = collect_layout_used(trees, own_sections_by_layout, declared)
+    harness_keys: set[str] = set()
     for face in sorted(platform_roots):
-        scan_vm_sources(face, platform_roots[face], declared, report, used)
+        scan_vm_sources(
+            face, platform_roots[face], declared, report, used, harness_keys
+        )
+    if spec_dir is not None:
+        report.faces.append("spec")
+        collect_spec_branch_used(
+            spec_dir, declared, report, used, harness_keys
+        )
 
     for section, key in sorted(declared.pairs - used):
         report.unused.append(UsageFinding(

@@ -68,12 +68,13 @@ class DeclaredKeysTests(unittest.TestCase):
                          {("login", "title")})
 
 
-def _usage(groups, trees=None, own=None, roots=None):
+def _usage(groups, trees=None, own=None, roots=None, spec_dir=None):
     return collect_usage(
         strings_groups=groups,
         trees=trees or {},
         own_sections_by_layout=own or {},
         platform_roots=roots or {},
+        spec_dir=spec_dir,
     )
 
 
@@ -360,6 +361,72 @@ class IosAndroidScanTests(unittest.TestCase):
         report = _usage(self.GROUPS, roots={"ios": self.ios.root})
         self.assertEqual({f.site for f in report.unused},
                          {"member_list.leave_button", "member_list.title"})
+
+    def test_spec_branch_contract_string_refs_are_usage_and_checked(self):
+        # validate can only check the SHAPE of `@key` — it does not know
+        # where the strings table lives. Here it does, so a branch asserting
+        # a key nothing declares is caught before the generated test runs.
+        spec_dir = Path(self._tmp.name) / "specs"
+        (spec_dir).mkdir()
+        (spec_dir / "screen.spec.json").write_text(json.dumps({
+            "branchContracts": {
+                "methods": {
+                    "onTap": {
+                        "branches": [
+                            {"when": {"data.x": True},
+                             "then": {"data.msg": "@member_list_title"}},
+                            {"when": {"data.x": False},
+                             "then": {"data.msg": "@member_list_ghost"}},
+                            {"when": {"data.y": True},
+                             "then": {"data.msg": "@data.other"}},
+                        ],
+                    },
+                },
+            },
+        }), encoding="utf-8")
+        report = _usage(self.GROUPS, roots={}, spec_dir=spec_dir)
+        self.assertEqual(1, len(report.missing))
+        self.assertIn("member_list_ghost", report.missing[0].detail)
+        # The declared key counts as usage; `@data.<field>` is not a key ref.
+        self.assertEqual([f.site for f in report.unused],
+                         ["member_list.leave_button"])
+
+    def test_spec_pseudo_key_declared_by_a_harness_map_is_accepted(self):
+        # The documented pattern for a formatted string: the branch asserts
+        # a pseudo key and the harness formats the real table entry. It is
+        # legal precisely because the harness declares it in a closed map.
+        spec_dir = Path(self._tmp.name) / "specs"
+        spec_dir.mkdir()
+        (spec_dir / "screen.spec.json").write_text(json.dumps({
+            "branchContracts": {
+                "methods": {
+                    "onTap": {
+                        "branches": [
+                            {"when": {"data.x": True},
+                             "then": {"data.msg": "@member_list_step_1_of_3"}},
+                        ],
+                    },
+                },
+            },
+        }), encoding="utf-8")
+        self.ios.write(
+            "Tests/ScreenBranchHarness.swift",
+            "let SCREEN_BRANCH_STRING_KEYS: [String: String] = [\n"
+            '    "member_list_step_1_of_3": "member_list_step_x_of_y",\n'
+            "]\n")
+        report = _usage(self.GROUPS, roots={"ios": self.ios.root},
+                        spec_dir=spec_dir)
+        self.assertEqual(
+            [], [f for f in report.missing if "branchContracts" in f.detail]
+        )
+
+    def test_spec_without_branch_contracts_contributes_nothing(self):
+        spec_dir = Path(self._tmp.name) / "specs"
+        spec_dir.mkdir()
+        (spec_dir / "screen.spec.json").write_text(
+            json.dumps({"type": "screen_spec", "structure": {}}), encoding="utf-8")
+        report = _usage(self.GROUPS, roots={}, spec_dir=spec_dir)
+        self.assertEqual([], report.missing)
 
     def test_ios_raw_foundation_lookup_of_an_absent_key_is_reported(self):
         # NSLocalizedString compiles whatever it is handed and returns the

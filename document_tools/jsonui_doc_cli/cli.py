@@ -358,8 +358,15 @@ def cmd_validate_spec(args):
     """Handle 'validate spec' command - validate screen specification JSON."""
     file_path = Path(args.file)
     if not file_path.exists():
-        print(f"Error: File not found: {file_path}", file=sys.stderr)
+        print(f"Error: Path not found: {file_path}", file=sys.stderr)
         return 1
+
+    # A directory validates every spec under it, the way `generate spec`
+    # already accepts one. Without this the standing "is the whole project
+    # still clean?" check had to be a hand-written loop, and the asymmetry
+    # only announced itself as Errno 21.
+    if file_path.is_dir():
+        return cmd_validate_spec_batch(file_path)
 
     validator = SpecValidator()
     result = validator.validate_file(file_path)
@@ -389,6 +396,48 @@ def cmd_validate_spec(args):
     print(f"Errors: {result.error_count}, Warnings: {result.warning_count}")
 
     return 0 if result.is_valid else 1
+
+
+def cmd_validate_spec_batch(input_dir: Path):
+    """Validate every .spec.json under *input_dir*."""
+    spec_files = sorted(input_dir.rglob("*.spec.json"))
+    if not spec_files:
+        print(f"Error: No .spec.json files found in {input_dir}", file=sys.stderr)
+        return 1
+
+    validator = SpecValidator()
+    if not validator._custom_rules.is_empty:
+        print(f"Using custom rules: {validator._custom_rules.config_path}")
+
+    print(f"\nValidating {len(spec_files)} spec file(s) in: {input_dir}")
+    print("=" * 50)
+
+    failed: list[Path] = []
+    total_errors = 0
+    total_warnings = 0
+    for spec_file in spec_files:
+        result = validator.validate_file(spec_file)
+        total_errors += result.error_count
+        total_warnings += result.warning_count
+        if not result.is_valid:
+            failed.append(spec_file)
+        if result.errors or result.warnings:
+            print(f"\n{spec_file}")
+            for error in result.errors:
+                print(error)
+            for warning in result.warnings:
+                print(warning)
+
+    print()
+    if failed:
+        print(f"Result: FAILED ({len(failed)} of {len(spec_files)} spec file(s))")
+        for spec_file in failed:
+            print(f"  - {spec_file}")
+    else:
+        print(f"Result: PASSED ({len(spec_files)} spec file(s))")
+    print(f"Errors: {total_errors}, Warnings: {total_warnings}")
+
+    return 1 if failed else 0
 
 
 def cmd_generate_spec(args):
@@ -1182,7 +1231,10 @@ def main():
     )
     validate_spec_parser.add_argument(
         "file",
-        help="Specification file to validate (.spec.json)"
+        help=(
+            "Specification file to validate (.spec.json), or a directory to "
+            "validate every spec under it"
+        )
     )
 
     # Validate component subcommand

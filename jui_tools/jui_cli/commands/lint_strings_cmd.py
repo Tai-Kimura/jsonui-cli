@@ -797,6 +797,7 @@ def collect_findings(
             trees=trees,
             own_sections_by_layout=own_sections_by_layout,
             platform_roots=platform_roots,
+            spec_dir=config_mgr.spec_directory,
         )
 
     return report
