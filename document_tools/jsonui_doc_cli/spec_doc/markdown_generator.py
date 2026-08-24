@@ -465,6 +465,88 @@ def generate_spec_markdown(spec_data: dict, layouts_dir: Path | None = None) -> 
             lines.append(f"**Notes:** {validation['notes']}")
             lines.append("")
 
+    # Branch Contracts (opt-in decision tables)
+    branch_contracts = spec_data.get("branchContracts") or {}
+    if branch_contracts:
+        import json as _json
+
+        def _pairs(mapping: dict) -> str:
+            return "<br>".join(
+                f"`{k}` = `{_json.dumps(v, ensure_ascii=False)}`"
+                for k, v in mapping.items()
+            )
+
+        bc_methods = branch_contracts.get("methods") or {}
+        declared = sum(
+            1
+            for c in bc_methods.values() if isinstance(c, dict)
+            for b in (c.get("branches") or [])
+            if isinstance(b, dict) and "note" not in b
+        )
+        notes_only = sum(
+            1
+            for c in bc_methods.values() if isinstance(c, dict)
+            for b in (c.get("branches") or [])
+            if isinstance(b, dict) and "note" in b
+        )
+        lines.append("## Branch Contracts")
+        lines.append("")
+        lines.append(
+            f"{len(bc_methods)} method(s) — {declared} declared branch(es), "
+            f"{notes_only} note-only branch(es) outside the machine-checkable contract."
+        )
+        lines.append("")
+
+        bc_conditions = branch_contracts.get("conditions") or {}
+        if isinstance(bc_conditions, dict) and bc_conditions:
+            lines.append("### Named Conditions")
+            lines.append("")
+            lines.append("| Name | Meaning | Witness (true) | Witness (false) |")
+            lines.append("|---|---|---|---|")
+            for cname, cond in bc_conditions.items():
+                cond = cond if isinstance(cond, dict) else {}
+                wt = cond.get("witness_true")
+                wf = cond.get("witness_false")
+                lines.append(
+                    f"| `{cname}` | {cond.get('meaning', '-') or '-'} | "
+                    f"{_pairs(wt) if isinstance(wt, dict) else '-'} | "
+                    f"{_pairs(wf) if isinstance(wf, dict) else '-'} |"
+                )
+            lines.append("")
+
+        for method_name, contract in bc_methods.items():
+            if not isinstance(contract, dict):
+                continue
+            lines.append(f"### `{method_name}`")
+            lines.append("")
+            baseline = contract.get("baseline")
+            if isinstance(baseline, dict) and baseline:
+                lines.append(f"**Baseline:** {_pairs(baseline)}")
+                lines.append("")
+            lines.append("| # | When | Then | Notes |")
+            lines.append("|---|---|---|---|")
+            for i, branch in enumerate(contract.get("branches") or [], start=1):
+                if not isinstance(branch, dict):
+                    continue
+                if "note" in branch:
+                    lines.append(
+                        f"| {i} | *note (not machine-checked): "
+                        f"{branch.get('note', '') or ''}* | | |"
+                    )
+                    continue
+                when = branch.get("when")
+                then = branch.get("then")
+                lines.append(
+                    f"| {i} | {_pairs(when) if isinstance(when, dict) else '-'} | "
+                    f"{_pairs(then) if isinstance(then, dict) else '-'} | "
+                    f"{branch.get('notes', '-') or '-'} |"
+                )
+            lines.append("")
+
+        if branch_contracts.get("notes"):
+            lines.append(f"**Notes:** {branch_contracts['notes']}")
+            lines.append("")
+
     # Transitions
     if transitions:
         lines.append("## Transitions")

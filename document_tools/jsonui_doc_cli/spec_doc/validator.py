@@ -278,6 +278,10 @@ class SpecValidator:
         if "transitions" in data:
             self._validate_transitions(data["transitions"], result)
 
+        # Validate branchContracts (opt-in — absent section changes nothing)
+        if "branchContracts" in data and data["branchContracts"]:
+            self._validate_branch_contracts(data["branchContracts"], result)
+
         # Validate relatedFiles
         if "relatedFiles" in data:
             self._validate_related_files(data["relatedFiles"], result)
@@ -1287,6 +1291,534 @@ class SpecValidator:
                 f"transitions[{i}]", result
             ):
                 continue
+
+    # ========== Branch Contracts (opt-in) ==========
+    #
+    # branchContracts declares machine-checkable branch tables for VM/UseCase
+    # methods. The vocabulary is CLOSED by design (docs/plans/2026-08-24-spec-
+    # branch-declarations-feasibility.md + P0 pilot):
+    #   when : data.<field> / arg.<name> / api.<op> (named mock scenario) /
+    #          cond (named condition reference, '!' prefix allowed)
+    #   then : data.<field> (literal, '@strings_key', '@data.<field>') /
+    #          transition / api ('none') / api.<op> ('called'|'not-called') /
+    #          api.<op>.request (partial request-body object)
+    # Branches outside the vocabulary are {note} entries — allowed, counted
+    # by the doc generator, never validated as contracts.
+    #
+    # Reference checks follow the validator-wide convention: when the
+    # referenced declaration section is ABSENT we skip the existence check
+    # (cannot prove a reference dangling without a contract). Unknown KEYS in
+    # the closed sets are always errors; unknown data-field NAMES are
+    # warnings (VM-internal state may intentionally stay undeclared).
+
+    _BRANCH_THEN_API_VERDICTS = ("called", "not-called")
+
+    def _validate_branch_contracts(self, bc: Any, result: SpecValidationResult):
+        if not isinstance(bc, dict):
+            result.errors.append(SpecValidationMessage(
+                path="branchContracts",
+                message=f"branchContracts must be an object, got {type(bc).__name__}",
+            ))
+            return
+        for key in bc:
+            if key not in ("conditions", "methods", "notes"):
+                result.errors.append(SpecValidationMessage(
+                    path=f"branchContracts.{key}",
+                    message=(
+                        "Unknown branchContracts key — allowed: "
+                        "'conditions', 'methods', 'notes'"
+                    ),
+                ))
+
+        data_fields = self._collect_branch_data_fields()
+        condition_names = self._validate_branch_conditions(
+            bc.get("conditions"), data_fields, result
+        )
+
+        methods = bc.get("methods")
+        if methods is None:
+            return
+        if not isinstance(methods, dict):
+            result.errors.append(SpecValidationMessage(
+                path="branchContracts.methods",
+                message=f"methods must be an object, got {type(methods).__name__}",
+            ))
+            return
+        declared_methods = self._collect_vm_handler_names()
+        api_ops = self._collect_branch_api_ops()
+        transition_dests = self._collect_transition_destinations()
+        for method_name, contract in methods.items():
+            path = f"branchContracts.methods.{method_name}"
+            if declared_methods and method_name not in declared_methods:
+                result.errors.append(SpecValidationMessage(
+                    path=path,
+                    message=(
+                        f"Method '{method_name}' not found in "
+                        "dataFlow.viewModel.methods or "
+                        "stateManagement.eventHandlers"
+                    ),
+                ))
+            self._validate_branch_method_contract(
+                contract, path, data_fields, condition_names,
+                api_ops, transition_dests, result
+            )
+
+    def _collect_branch_data_fields(self) -> set[str]:
+        """Data-field names data.* / witness keys may reference.
+
+        uiVariables + viewModel.vars (same surface as @{binding} sources)
+        plus stateManagement.states[].name (state enums are data too).
+        Empty set signals callers to skip existence checks.
+        """
+        names = self._collect_vm_var_names()
+        state_mgmt = (self._spec_data or {}).get("stateManagement") or {}
+        for state in state_mgmt.get("states", []) or []:
+            if isinstance(state, dict) and isinstance(state.get("name"), str):
+                names.add(state["name"])
+        return names
+
+    def _collect_branch_api_ops(self) -> set[str]:
+        """Method names declared under dataFlow repositories/useCases.
+
+        api.<op> references are checked against these (warning-level —
+        an op may legitimately be an operation id the spec never lists).
+        """
+        names: set[str] = set()
+        data_flow = (self._spec_data or {}).get("dataFlow") or {}
+        for section in ("repositories", "useCases"):
+            for entry in data_flow.get(section, []) or []:
+                if not isinstance(entry, dict):
+                    continue
+                for method in entry.get("methods", []) or []:
+                    if isinstance(method, str):
+                        # Free-text signature — take the leading identifier.
+                        m = re.match(r"^\s*([A-Za-z_][A-Za-z0-9_]*)", method)
+                        if m:
+                            names.add(m.group(1))
+                    elif isinstance(method, dict) and isinstance(method.get("name"), str):
+                        names.add(method["name"])
+        return names
+
+    def _collect_transition_destinations(self) -> set[str]:
+        names: set[str] = set()
+        for trans in (self._spec_data or {}).get("transitions", []) or []:
+            if isinstance(trans, dict) and isinstance(trans.get("destination"), str):
+                names.add(trans["destination"])
+        return names
+
+    def _validate_branch_conditions(
+        self, conditions: Any, data_fields: set[str], result: SpecValidationResult
+    ) -> set[str]:
+        """Validate branchContracts.conditions. Returns declared names."""
+        names: set[str] = set()
+        if conditions is None:
+            return names
+        if not isinstance(conditions, dict):
+            result.errors.append(SpecValidationMessage(
+                path="branchContracts.conditions",
+                message=f"conditions must be an object, got {type(conditions).__name__}",
+            ))
+            return names
+        for name, cond in conditions.items():
+            path = f"branchContracts.conditions.{name}"
+            if not self._matches_variable_name(name):
+                result.errors.append(SpecValidationMessage(
+                    path=path,
+                    message=f"Condition name must be camelCase: '{name}'",
+                ))
+            names.add(name)
+            if not isinstance(cond, dict):
+                result.errors.append(SpecValidationMessage(
+                    path=path,
+                    message=f"Condition must be an object, got {type(cond).__name__}",
+                ))
+                continue
+            for key in cond:
+                if key not in ("meaning", "witness_true", "witness_false"):
+                    result.errors.append(SpecValidationMessage(
+                        path=f"{path}.{key}",
+                        message=(
+                            "Unknown condition key — allowed: 'meaning', "
+                            "'witness_true', 'witness_false'"
+                        ),
+                    ))
+            meaning = cond.get("meaning")
+            if not isinstance(meaning, str) or not meaning:
+                result.errors.append(SpecValidationMessage(
+                    path=f"{path}.meaning",
+                    message="Condition requires a non-empty 'meaning' string",
+                ))
+            for wkey in ("witness_true", "witness_false"):
+                if wkey in cond:
+                    self._validate_branch_witness(
+                        cond[wkey], f"{path}.{wkey}", data_fields, result
+                    )
+        return names
+
+    def _validate_branch_witness(
+        self, witness: Any, path: str, data_fields: set[str],
+        result: SpecValidationResult,
+    ) -> None:
+        """Witness / baseline object: {field: any JSON value}."""
+        if not isinstance(witness, dict):
+            result.errors.append(SpecValidationMessage(
+                path=path,
+                message=f"Witness must be an object, got {type(witness).__name__}",
+            ))
+            return
+        for field_name in witness:
+            if data_fields and field_name not in data_fields:
+                result.warnings.append(SpecValidationMessage(
+                    path=f"{path}.{field_name}",
+                    message=(
+                        f"Witness field '{field_name}' is not declared in "
+                        "stateManagement.uiVariables / dataFlow.viewModel.vars "
+                        "/ stateManagement.states"
+                    ),
+                    level="warning",
+                ))
+
+    def _validate_branch_method_contract(
+        self, contract: Any, path: str, data_fields: set[str],
+        condition_names: set[str], api_ops: set[str],
+        transition_dests: set[str], result: SpecValidationResult,
+    ) -> None:
+        if not isinstance(contract, dict):
+            result.errors.append(SpecValidationMessage(
+                path=path,
+                message=f"Method contract must be an object, got {type(contract).__name__}",
+            ))
+            return
+        for key in contract:
+            if key not in ("baseline", "branches"):
+                result.errors.append(SpecValidationMessage(
+                    path=f"{path}.{key}",
+                    message="Unknown contract key — allowed: 'baseline', 'branches'",
+                ))
+        if "baseline" in contract:
+            self._validate_branch_witness(
+                contract["baseline"], f"{path}.baseline", data_fields, result
+            )
+        branches = contract.get("branches")
+        if not isinstance(branches, list) or not branches:
+            result.errors.append(SpecValidationMessage(
+                path=f"{path}.branches",
+                message="Contract requires a non-empty 'branches' array",
+            ))
+            return
+        for i, branch in enumerate(branches):
+            self._validate_branch_entry(
+                branch, f"{path}.branches[{i}]", data_fields,
+                condition_names, api_ops, transition_dests, result
+            )
+
+    def _validate_branch_entry(
+        self, branch: Any, path: str, data_fields: set[str],
+        condition_names: set[str], api_ops: set[str],
+        transition_dests: set[str], result: SpecValidationResult,
+    ) -> None:
+        if not isinstance(branch, dict):
+            result.errors.append(SpecValidationMessage(
+                path=path,
+                message=f"Branch must be an object, got {type(branch).__name__}",
+            ))
+            return
+        if "note" in branch:
+            # Escape hatch: prose-only branch. Nothing else may ride along —
+            # a note with when/then would silently drop the contract half.
+            if not isinstance(branch["note"], str) or not branch["note"]:
+                result.errors.append(SpecValidationMessage(
+                    path=f"{path}.note",
+                    message="note must be a non-empty string",
+                ))
+            extras = [k for k in branch if k != "note"]
+            if extras:
+                result.errors.append(SpecValidationMessage(
+                    path=path,
+                    message=(
+                        f"A note branch must contain only 'note' (found "
+                        f"{extras!r}). Declare the contract half as a "
+                        "separate {when, then} branch."
+                    ),
+                ))
+            return
+        for key in branch:
+            if key not in ("when", "then", "notes"):
+                result.errors.append(SpecValidationMessage(
+                    path=f"{path}.{key}",
+                    message="Unknown branch key — allowed: 'when', 'then', 'notes' (or a lone 'note')",
+                ))
+        for req in ("when", "then"):
+            part = branch.get(req)
+            if not isinstance(part, dict) or not part:
+                result.errors.append(SpecValidationMessage(
+                    path=f"{path}.{req}",
+                    message=f"Branch requires a non-empty '{req}' object",
+                ))
+        when = branch.get("when")
+        if isinstance(when, dict):
+            for key, value in when.items():
+                self._validate_branch_when_entry(
+                    key, value, f"{path}.when", data_fields,
+                    condition_names, api_ops, result
+                )
+        then = branch.get("then")
+        if isinstance(then, dict):
+            for key, value in then.items():
+                self._validate_branch_then_entry(
+                    key, value, f"{path}.then", data_fields,
+                    api_ops, transition_dests, result
+                )
+
+    @staticmethod
+    def _is_scalar(value: Any) -> bool:
+        return value is None or isinstance(value, (str, int, float, bool))
+
+    def _check_branch_data_field(
+        self, field_name: str, path: str, data_fields: set[str],
+        result: SpecValidationResult,
+    ) -> None:
+        if not self._matches_variable_name(field_name):
+            result.errors.append(SpecValidationMessage(
+                path=path,
+                message=f"Data field must be camelCase: '{field_name}'",
+            ))
+        elif data_fields and field_name not in data_fields:
+            result.warnings.append(SpecValidationMessage(
+                path=path,
+                message=(
+                    f"Data field '{field_name}' is not declared in "
+                    "stateManagement.uiVariables / dataFlow.viewModel.vars "
+                    "/ stateManagement.states"
+                ),
+                level="warning",
+            ))
+
+    def _check_branch_api_op(
+        self, op: str, path: str, api_ops: set[str],
+        result: SpecValidationResult,
+    ) -> None:
+        if not re.match(r"^[a-zA-Z_][a-zA-Z0-9_]*$", op):
+            result.errors.append(SpecValidationMessage(
+                path=path,
+                message=f"API operation name must be an identifier: '{op}'",
+            ))
+        elif api_ops and op not in api_ops:
+            result.warnings.append(SpecValidationMessage(
+                path=path,
+                message=(
+                    f"API operation '{op}' is not declared in "
+                    "dataFlow.repositories[].methods or dataFlow.useCases[].methods"
+                ),
+                level="warning",
+            ))
+
+    def _validate_branch_when_entry(
+        self, key: str, value: Any, path: str, data_fields: set[str],
+        condition_names: set[str], api_ops: set[str],
+        result: SpecValidationResult,
+    ) -> None:
+        entry_path = f"{path}.{key}"
+        if key == "cond":
+            if not isinstance(value, str) or not value:
+                result.errors.append(SpecValidationMessage(
+                    path=entry_path,
+                    message="cond must be a non-empty condition name string ('!' prefix allowed)",
+                ))
+                return
+            ref = value[1:] if value.startswith("!") else value
+            if ref not in condition_names:
+                result.errors.append(SpecValidationMessage(
+                    path=entry_path,
+                    message=(
+                        f"cond references undeclared condition '{ref}' — "
+                        "declare it in branchContracts.conditions"
+                    ),
+                ))
+            return
+        if key.startswith("data."):
+            self._check_branch_data_field(
+                key[len("data."):], entry_path, data_fields, result
+            )
+            if not self._is_scalar(value):
+                result.errors.append(SpecValidationMessage(
+                    path=entry_path,
+                    message=(
+                        "when data.* value must be a scalar literal "
+                        f"(string/number/bool/null), got {type(value).__name__}"
+                    ),
+                ))
+            return
+        if key.startswith("arg."):
+            arg = key[len("arg."):]
+            if not self._matches_variable_name(arg):
+                result.errors.append(SpecValidationMessage(
+                    path=entry_path,
+                    message=f"Argument name must be camelCase: '{arg}'",
+                ))
+            if not self._is_scalar(value):
+                result.errors.append(SpecValidationMessage(
+                    path=entry_path,
+                    message=(
+                        "when arg.* value must be a scalar literal "
+                        f"(string/number/bool/null), got {type(value).__name__}"
+                    ),
+                ))
+            return
+        if key.startswith("api."):
+            op = key[len("api."):]
+            if "." in op:
+                result.errors.append(SpecValidationMessage(
+                    path=entry_path,
+                    message=(
+                        "when api key must be 'api.<op>' (the value is the "
+                        "named mock scenario) — '.request' matching belongs in 'then'"
+                    ),
+                ))
+                return
+            self._check_branch_api_op(op, entry_path, api_ops, result)
+            if not isinstance(value, str) or not value:
+                result.errors.append(SpecValidationMessage(
+                    path=entry_path,
+                    message="when api.<op> value must be a named mock scenario string",
+                ))
+            return
+        result.errors.append(SpecValidationMessage(
+            path=entry_path,
+            message=(
+                f"Unknown when key '{key}' — allowed: 'data.<field>', "
+                "'arg.<name>', 'api.<op>', 'cond'"
+            ),
+        ))
+
+    def _validate_branch_then_entry(
+        self, key: str, value: Any, path: str, data_fields: set[str],
+        api_ops: set[str], transition_dests: set[str],
+        result: SpecValidationResult,
+    ) -> None:
+        entry_path = f"{path}.{key}"
+        if key == "transition":
+            if not isinstance(value, str) or not value:
+                result.errors.append(SpecValidationMessage(
+                    path=entry_path,
+                    message="transition must be a non-empty destination string",
+                ))
+                return
+            if transition_dests and value not in transition_dests:
+                result.warnings.append(SpecValidationMessage(
+                    path=entry_path,
+                    message=(
+                        f"Transition destination '{value}' does not match any "
+                        "transitions[].destination"
+                    ),
+                    level="warning",
+                ))
+            return
+        if key == "api":
+            if value != "none":
+                result.errors.append(SpecValidationMessage(
+                    path=entry_path,
+                    message=(
+                        "then 'api' accepts only 'none' (no API reached). For "
+                        "per-operation verdicts use 'api.<op>': "
+                        "'called'/'not-called'"
+                    ),
+                ))
+            return
+        if key.startswith("api."):
+            rest = key[len("api."):]
+            if rest.endswith(".request"):
+                op = rest[: -len(".request")]
+                self._check_branch_api_op(op, entry_path, api_ops, result)
+                self._validate_branch_request_match(
+                    value, entry_path, data_fields, result
+                )
+                return
+            if "." in rest:
+                result.errors.append(SpecValidationMessage(
+                    path=entry_path,
+                    message=(
+                        "then api key must be 'api.<op>' or 'api.<op>.request', "
+                        f"got '{key}'"
+                    ),
+                ))
+                return
+            self._check_branch_api_op(rest, entry_path, api_ops, result)
+            if value not in self._BRANCH_THEN_API_VERDICTS:
+                result.errors.append(SpecValidationMessage(
+                    path=entry_path,
+                    message=(
+                        "then api.<op> value must be 'called' or 'not-called' "
+                        f"(got {value!r})"
+                    ),
+                ))
+            return
+        if key.startswith("data."):
+            self._check_branch_data_field(
+                key[len("data."):], entry_path, data_fields, result
+            )
+            self._validate_branch_then_value(value, entry_path, data_fields, result)
+            return
+        result.errors.append(SpecValidationMessage(
+            path=entry_path,
+            message=(
+                f"Unknown then key '{key}' — allowed: 'data.<field>', "
+                "'transition', 'api', 'api.<op>', 'api.<op>.request'"
+            ),
+        ))
+
+    def _validate_branch_then_value(
+        self, value: Any, path: str, data_fields: set[str],
+        result: SpecValidationResult,
+    ) -> None:
+        """then data.* / request-leaf value: scalar literal, '@strings_key',
+        or '@data.<field>' reference."""
+        if not self._is_scalar(value):
+            result.errors.append(SpecValidationMessage(
+                path=path,
+                message=(
+                    "Value must be a scalar literal, '@strings_key', or "
+                    f"'@data.<field>', got {type(value).__name__}"
+                ),
+            ))
+            return
+        if not isinstance(value, str) or not value.startswith("@"):
+            return
+        ref = value[1:]
+        if ref.startswith("data."):
+            self._check_branch_data_field(
+                ref[len("data."):], path, data_fields, result
+            )
+        elif not re.match(r"^[a-z][a-z0-9_]*$", ref):
+            result.errors.append(SpecValidationMessage(
+                path=path,
+                message=(
+                    f"'@' reference must be a snake_case strings key or "
+                    f"'@data.<field>', got '{value}'"
+                ),
+            ))
+
+    def _validate_branch_request_match(
+        self, value: Any, path: str, data_fields: set[str],
+        result: SpecValidationResult,
+    ) -> None:
+        """api.<op>.request partial match: object whose leaves are scalars
+        or '@data.<field>' references. Nested objects allowed."""
+        if not isinstance(value, dict) or not value:
+            result.errors.append(SpecValidationMessage(
+                path=path,
+                message=(
+                    "api.<op>.request must be a non-empty partial request "
+                    f"object, got {type(value).__name__}"
+                ),
+            ))
+            return
+        for k, v in value.items():
+            leaf_path = f"{path}.{k}"
+            if isinstance(v, dict):
+                self._validate_branch_request_match(v, leaf_path, data_fields, result)
+            else:
+                self._validate_branch_then_value(v, leaf_path, data_fields, result)
 
     def _validate_related_files(self, files: list, result: SpecValidationResult):
         """Validate relatedFiles section."""

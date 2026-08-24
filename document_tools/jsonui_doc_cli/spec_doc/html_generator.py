@@ -547,6 +547,11 @@ def generate_spec_html(
 
         parts.append('</section>')
 
+    # Branch Contracts (opt-in decision tables)
+    branch_contracts = spec_data.get("branchContracts") or {}
+    if branch_contracts:
+        parts.extend(_generate_branch_contracts_section(branch_contracts))
+
     # Transitions
     if transitions:
         parts.append('<section id="transitions">')
@@ -631,6 +636,114 @@ def generate_spec_html(
     parts.append(_get_html_footer(has_sidebar))
 
     return "\n".join(parts)
+
+
+def _format_branch_value(value: Any) -> str:
+    """Compact JSON-ish rendering of a when/then value."""
+    import json as _json
+    return _json.dumps(value, ensure_ascii=False)
+
+
+def _format_branch_pairs(mapping: dict) -> str:
+    """Render a when/then object as `key = value` lines."""
+    lines = []
+    for k, v in mapping.items():
+        lines.append(f'<code>{_e(str(k))}</code> = <code>{_e(_format_branch_value(v))}</code>')
+    return '<br>'.join(lines)
+
+
+def _generate_branch_contracts_section(branch_contracts: dict) -> list[str]:
+    """Decision-table rendering of branchContracts.
+
+    Note branches (escape hatch) are rendered as distinct rows and counted
+    in the section summary — undeclared branches stay visible, never
+    silently dropped.
+    """
+    parts: list[str] = []
+    conditions = branch_contracts.get("conditions") or {}
+    methods = branch_contracts.get("methods") or {}
+
+    declared = 0
+    notes_only = 0
+    for contract in methods.values():
+        if not isinstance(contract, dict):
+            continue
+        for branch in contract.get("branches", []) or []:
+            if isinstance(branch, dict) and "note" in branch:
+                notes_only += 1
+            else:
+                declared += 1
+
+    parts.append('<section id="branch-contracts">')
+    parts.append('<h2>Branch Contracts</h2>')
+    parts.append(
+        f'<p class="notes">{len(methods)} method(s) — {declared} declared '
+        f'branch(es), {notes_only} note-only branch(es) outside the '
+        f'machine-checkable contract.</p>'
+    )
+
+    if conditions and isinstance(conditions, dict):
+        parts.append('<h3>Named Conditions</h3>')
+        parts.append('<table>')
+        parts.append(
+            '<thead><tr><th>Name</th><th>Meaning</th>'
+            '<th>Witness (true)</th><th>Witness (false)</th></tr></thead>'
+        )
+        parts.append('<tbody>')
+        for cname, cond in conditions.items():
+            cond = cond if isinstance(cond, dict) else {}
+            wt = cond.get("witness_true")
+            wf = cond.get("witness_false")
+            parts.append(
+                f'<tr><td><code>{_e(str(cname))}</code></td>'
+                f'<td>{_e(cond.get("meaning", "-") or "-")}</td>'
+                f'<td>{_format_branch_pairs(wt) if isinstance(wt, dict) else "-"}</td>'
+                f'<td>{_format_branch_pairs(wf) if isinstance(wf, dict) else "-"}</td></tr>'
+            )
+        parts.append('</tbody></table>')
+
+    for method_name, contract in methods.items():
+        if not isinstance(contract, dict):
+            continue
+        parts.append(f'<h3><code>{_e(str(method_name))}</code></h3>')
+        baseline = contract.get("baseline")
+        if isinstance(baseline, dict) and baseline:
+            parts.append(
+                f'<p class="notes"><strong>Baseline:</strong> '
+                f'{_format_branch_pairs(baseline)}</p>'
+            )
+        parts.append('<table>')
+        parts.append(
+            '<thead><tr><th>#</th><th>When</th><th>Then</th>'
+            '<th>Notes</th></tr></thead>'
+        )
+        parts.append('<tbody>')
+        for i, branch in enumerate(contract.get("branches", []) or [], start=1):
+            if not isinstance(branch, dict):
+                continue
+            if "note" in branch:
+                parts.append(
+                    f'<tr><td>{i}</td><td colspan="3"><em>note (not machine-'
+                    f'checked): {_e(branch.get("note", "") or "")}</em></td></tr>'
+                )
+                continue
+            when = branch.get("when")
+            then = branch.get("then")
+            parts.append(
+                f'<tr><td>{i}</td>'
+                f'<td>{_format_branch_pairs(when) if isinstance(when, dict) else "-"}</td>'
+                f'<td>{_format_branch_pairs(then) if isinstance(then, dict) else "-"}</td>'
+                f'<td>{_e(branch.get("notes", "") or "-")}</td></tr>'
+            )
+        parts.append('</tbody></table>')
+
+    if branch_contracts.get("notes"):
+        parts.append(
+            f'<p class="notes"><strong>Notes:</strong> '
+            f'{_e(branch_contracts["notes"])}</p>'
+        )
+    parts.append('</section>')
+    return parts
 
 
 def _format_method_params(params) -> str:

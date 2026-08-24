@@ -34,6 +34,7 @@ SCREEN_SPEC_SCHEMA = {
             "type": "array",
             "items": {"$ref": "#/$defs/transition"}
         },
+        "branchContracts": {"$ref": "#/$defs/branchContracts"},
         "relatedFiles": {
             "type": "array",
             "items": {"$ref": "#/$defs/relatedFile"}
@@ -979,6 +980,112 @@ SCREEN_SPEC_SCHEMA = {
                     "description": "Additional notes"
                 }
             }
+        },
+        "branchContracts": {
+            "type": "object",
+            "description": (
+                "Opt-in, machine-checkable branch declarations for VM/UseCase "
+                "methods. Conditions and outcomes reference ONLY already-"
+                "declared vocabulary: data fields (stateManagement.uiVariables "
+                "/ dataFlow.viewModel.vars / stateManagement.states), method "
+                "args, API operations (dataFlow) with named mock scenarios, "
+                "transitions, and strings.json keys ('@key'). Branches that "
+                "cannot be expressed in the closed vocabulary are declared as "
+                "'note' entries — counted explicitly, never silently dropped."
+            ),
+            "properties": {
+                "conditions": {
+                    "type": "object",
+                    "description": (
+                        "Named derived predicates. The expression body is NOT "
+                        "declared (it would mirror the code); instead each "
+                        "condition ships witness states that make it "
+                        "true/false, which test generation can replay."
+                    ),
+                    "additionalProperties": {"$ref": "#/$defs/branchCondition"}
+                },
+                "methods": {
+                    "type": "object",
+                    "description": (
+                        "Per-method branch tables. Keys must be method names "
+                        "declared in dataFlow.viewModel.methods or "
+                        "stateManagement.eventHandlers."
+                    ),
+                    "additionalProperties": {"$ref": "#/$defs/branchMethodContract"}
+                },
+                "notes": {"type": "string"}
+            },
+            "additionalProperties": False
+        },
+        "branchCondition": {
+            "type": "object",
+            "required": ["meaning"],
+            "properties": {
+                "meaning": {
+                    "type": "string",
+                    "description": "Human meaning of the predicate"
+                },
+                "witness_true": {
+                    "type": "object",
+                    "description": "Example data state that makes the predicate true"
+                },
+                "witness_false": {
+                    "type": "object",
+                    "description": "Example data state that makes the predicate false"
+                }
+            },
+            "additionalProperties": False
+        },
+        "branchMethodContract": {
+            "type": "object",
+            "required": ["branches"],
+            "properties": {
+                "baseline": {
+                    "type": "object",
+                    "description": (
+                        "Method-level default witness: the data state every "
+                        "branch's arrange starts from (e.g. 'all entry guards "
+                        "pass'). Individual branches override on top of it."
+                    )
+                },
+                "branches": {
+                    "type": "array",
+                    "minItems": 1,
+                    "items": {"$ref": "#/$defs/branchEntry"}
+                }
+            },
+            "additionalProperties": False
+        },
+        "branchEntry": {
+            "type": "object",
+            "description": (
+                "Either a declared branch {when, then, notes?} or an escape-"
+                "hatch {note} for branches outside the closed vocabulary. "
+                "when keys: 'data.<field>' / 'arg.<name>' / 'api.<op>' (value "
+                "= named mock scenario) / 'cond' (named condition reference, "
+                "'!' prefix allowed). then keys: 'data.<field>' (literal, "
+                "'@strings_key', or '@data.<field>') / 'transition' / 'api' "
+                "(value 'none') / 'api.<op>' ('called' | 'not-called') / "
+                "'api.<op>.request' (partial request-body match)."
+            ),
+            "oneOf": [
+                {
+                    "type": "object",
+                    "required": ["note"],
+                    "properties": {"note": {"type": "string"}},
+                    "additionalProperties": False
+                },
+                {
+                    "type": "object",
+                    "required": ["when", "then"],
+                    "properties": {
+                        "when": {"type": "object", "minProperties": 1},
+                        "then": {"type": "object", "minProperties": 1},
+                        "notes": {"type": "string"}
+                    },
+                    "additionalProperties": False
+                }
+            ]
         },
         "transition": {
             "type": "object",
