@@ -192,6 +192,41 @@ class WebScanTests(unittest.TestCase):
         self.assertEqual(len(report.missing), 1)
         self.assertIn("screen_gone", report.missing[0].detail)
 
+    def test_comment_text_is_not_code(self):
+        # The shipped incident: a swagger description mentioning Python's
+        # `str(int)` rode a generated DTO's doc comment into a dynamic
+        # finding. The prose never selects a key.
+        self.fx.write(
+            "src/dto.ts",
+            "/** backend returns the id in `str(int)` form (_shape). */\n"
+            "export interface SeriesDto { id: string }\n"
+            "// also prose: getString(anything) here is not a call\n")
+        report = self._run()
+        self.assertEqual(report.dynamic, [])
+        self.assertEqual(report.missing, [])
+
+    def test_commented_out_reference_is_not_usage(self):
+        # The quiet direction: a getString("key") in a comment must not
+        # mark the key used, or a real dead key hides forever.
+        self.fx.write(
+            "src/vm.ts",
+            '// getString("screen_title") — old call, kept for reference\n'
+            '/* StringManager.currentLanguage.screenHelp */\n')
+        report = self._run()
+        self.assertEqual({f.site for f in report.unused},
+                         {"screen.title", "screen.help"})
+
+    def test_a_url_string_does_not_open_a_comment(self):
+        # "http://x" must not swallow the rest of the line as a comment —
+        # the reference after it is real code.
+        self.fx.write(
+            "src/vm.ts",
+            'const u = "http://example.test"; '
+            "const t = StringManager.currentLanguage.screenTitle;\n"
+            'a(StringManager.getString("screen_help"));\n')
+        report = self._run()
+        self.assertEqual(report.unused, [])
+
     def test_generated_string_manager_stub_is_not_scanned(self):
         # The real stub defines getString(key) — a dynamic-looking call
         # with no *_STRING_KEYS anywhere near it — and embeds the whole

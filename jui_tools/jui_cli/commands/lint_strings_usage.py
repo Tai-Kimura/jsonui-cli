@@ -369,6 +369,72 @@ class DeclaredKeys:
         return targets
 
 
+def _strip_comments(text: str) -> str:
+    """Blank out ``//`` and ``/* */`` comments, preserving offsets.
+
+    Comment text is prose: a swagger description mentioning Python's
+    ``str(int)`` rode a generated DTO's doc comment straight into a
+    dynamic-ref finding, and a ``getString("key")`` in a comment is worse
+    — a false USED that silently hides a real unused key. Comment bytes
+    become spaces (newlines kept), so every line number and span computed
+    later stays valid.
+
+    String literals are respected while walking (``"http://x"`` is not a
+    comment) and their CONTENT is kept: template interpolations
+    (`` `${str("key")}` ``, Kotlin/Swift string templates) are genuine
+    reference sites, and a walker cannot cheaply tell those from prose —
+    the broad-used bias keeps that direction safe. Block comments nest,
+    as in Swift/Kotlin.
+    """
+    out = list(text)
+    i = 0
+    n = len(text)
+    in_str: str | None = None
+    while i < n:
+        ch = text[i]
+        if in_str is not None:
+            if ch == "\\":
+                i += 2
+                continue
+            if ch == in_str:
+                in_str = None
+            i += 1
+            continue
+        if ch in "\"'`":
+            in_str = ch
+            i += 1
+            continue
+        if ch == "/" and i + 1 < n:
+            nxt = text[i + 1]
+            if nxt == "/":
+                j = text.find("\n", i)
+                if j < 0:
+                    j = n
+                for k in range(i, j):
+                    out[k] = " "
+                i = j
+                continue
+            if nxt == "*":
+                depth = 1
+                j = i + 2
+                while j < n and depth:
+                    if text.startswith("/*", j):
+                        depth += 1
+                        j += 2
+                    elif text.startswith("*/", j):
+                        depth -= 1
+                        j += 2
+                    else:
+                        j += 1
+                for k in range(i, j):
+                    if out[k] != "\n":
+                        out[k] = " "
+                i = j
+                continue
+        i += 1
+    return "".join(out)
+
+
 def _iter_source_files(root: Path, suffixes: tuple[str, ...]) -> Iterable[Path]:
     stack = [root]
     while stack:
@@ -484,6 +550,7 @@ def scan_vm_sources(
             text = src.read_text(encoding="utf-8", errors="replace")
         except OSError:
             continue
+        text = _strip_comments(text)
         report.scanned_files += 1
         rel = src.as_posix()
 
