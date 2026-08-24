@@ -221,6 +221,95 @@ class TestGenerationHappyPath:
         assert 'h.expectTransition("order_complete");' in content
 
 
+class TestAndroidEmission:
+    PKG = "com.example.checkout"
+
+    def _generate(self, tmp_path, bc=None):
+        root = _project(tmp_path, bc or BASIC)
+        return generate_branch_tests(
+            "checkout", root, platform="android", package=self.PKG,
+            out_dir="app/src/test/java", harness_dir="app/src/test/java",
+        ), root
+
+    def test_files_land_under_package_path(self, tmp_path):
+        report, root = self._generate(tmp_path)
+        base = root / "app/src/test/java/com/example/checkout"
+        assert report.test_file == base / "CheckoutBranchesTest.kt"
+        assert report.runtime_file == base / "JsonuiBranchRuntime.kt"
+        assert report.harness_file == base / "CheckoutBranchHarness.kt"
+        assert report.harness_created is True
+        assert report.declared_branches == 2
+
+    def test_kotlin_test_content_shape(self, tmp_path):
+        report, _root = self._generate(tmp_path)
+        content = report.test_file.read_text(encoding="utf-8")
+        assert "@generated" in content
+        assert f"package {self.PKG}" in content
+        assert "@RunWith(RobolectricTestRunner::class)" in content
+        assert "class CheckoutBranchesTest" in content
+        # arrange / act / settle / asserts
+        assert 'h.setState(mapOf<String, Any?>("isAgreed" to false))' in content
+        assert 'h.invoke("onConfirmTap")' in content
+        assert "h.settle()" in content
+        assert "rec.calls.isEmpty()" in content
+        # scenario override map for when.api
+        assert '"createOrder" to "conflict"' in content
+        assert 'assertFieldEquals("order_error", h.readField("screenState"))' in content
+        # note branch listed as a comment, not a test
+        assert "#3: polling sequence is out of scope" in content
+        assert content.count("@Test") == 2
+        # scenario bodies are embedded (self-contained tests)
+        assert "sold_out" in content
+
+    def test_kotlin_runtime_and_harness(self, tmp_path):
+        report, _root = self._generate(tmp_path)
+        runtime = report.runtime_file.read_text(encoding="utf-8")
+        assert f"package {self.PKG}" in runtime
+        assert "MockWebServer" in runtime
+        assert "BaseBranchHarness" in runtime
+        assert "partialMismatches" in runtime
+        skeleton = report.harness_file.read_text(encoding="utf-8")
+        assert "createCheckoutBranchHarness" in skeleton
+        assert "NotImplementedError" in skeleton
+
+    def test_kotlin_data_ref_and_request_partial(self, tmp_path):
+        bc = _contract([
+            {"when": {"api.createOrder": "success"},
+             "then": {"api.createOrder.request": {
+                 "fingerprint": "@data.fingerprint", "coupon": None}}},
+        ])
+        report, _root = self._generate(tmp_path, bc)
+        content = report.test_file.read_text(encoding="utf-8")
+        capture = content.index('val ref_fingerprint = h.readField("fingerprint")')
+        act = content.index('h.invoke("onConfirmTap")')
+        assert capture < act
+        assert '"fingerprint" to Ref(ref_fingerprint)' in content
+        assert '"coupon" to null' in content
+
+    def test_android_requires_package(self, tmp_path):
+        root = _project(tmp_path, BASIC)
+        with pytest.raises(BranchTestGenerationError, match="--package"):
+            generate_branch_tests("checkout", root, platform="android")
+
+    def test_kotlin_harness_not_overwritten(self, tmp_path):
+        report, root = self._generate(tmp_path)
+        report.harness_file.write_text("// customized", encoding="utf-8")
+        report2, _ = (generate_branch_tests(
+            "checkout", root, platform="android", package=self.PKG,
+            out_dir="app/src/test/java", harness_dir="app/src/test/java",
+        ), root)
+        assert report2.harness_created is False
+        assert report.harness_file.read_text(encoding="utf-8") == "// customized"
+
+    def test_web_output_unchanged_by_android_support(self, tmp_path):
+        # The web path must stay byte-stable: platform defaults to web.
+        root = _project(tmp_path, BASIC)
+        report = generate_branch_tests("checkout", root)
+        assert report.test_file.name == "checkout.branches.test.ts"
+        content = report.test_file.read_text(encoding="utf-8")
+        assert "vitest" in content
+
+
 class TestGenerationHardErrors:
     def test_unknown_api_op_is_error(self, tmp_path):
         bc = _contract([

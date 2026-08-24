@@ -337,13 +337,23 @@ def cmd_generate_branch_tests(args):
     from .branch_tests import BranchTestGenerationError, generate_branch_tests
 
     try:
+        out_dir = args.out_dir
+        harness_dir = args.harness_dir
+        if args.platform == "android":
+            # Kotlin sources live under the JVM test source root by default.
+            if out_dir == "tests/unit/generated":
+                out_dir = "app/src/test/java"
+            if harness_dir == "tests/unit/branch-harness":
+                harness_dir = "app/src/test/java"
         report = generate_branch_tests(
             args.screen,
             project_root=Path.cwd(),
             spec_path=args.spec,
-            out_dir=args.out_dir,
-            harness_dir=args.harness_dir,
+            out_dir=out_dir,
+            harness_dir=harness_dir,
             mocks_dir=args.mocks_dir,
+            platform=args.platform,
+            package=args.package,
         )
     except BranchTestGenerationError as e:
         print(f"Error: {e}", file=sys.stderr)
@@ -1042,6 +1052,15 @@ def main():
     gen_branch_parser.add_argument(
         "--mocks-dir", default="tests/mocks",
         help="Directory scanned for *.mock.json scenario files"
+    )
+    gen_branch_parser.add_argument(
+        "-p", "--platform", choices=["web", "android"], default="web",
+        help="Target platform: web emits vitest TS (default); android emits "
+             "Kotlin JUnit4 (Robolectric + MockWebServer)"
+    )
+    gen_branch_parser.add_argument(
+        "--package",
+        help="Kotlin package for generated test sources (required for android)"
     )
 
     # Generate description subcommand with screen/flow subcommands
