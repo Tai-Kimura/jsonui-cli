@@ -686,6 +686,7 @@ def parse_swagger(
     for name, body in schemas_root.items():
         if not isinstance(body, dict):
             continue
+        body = _fold_const(body)
         # Skip filtered-out schemas before any parse work (lenient filter).
         if kept_schema_names is not None and name not in kept_schema_names:
             continue
@@ -913,6 +914,43 @@ def _parse_wrapper_schema(
         wrapper_field_name=field_name,
     )
     return schema, list(extra_inline), list(extra_enums)
+
+
+# Exact-type map (bool checked by identity before int via type(), so
+# ``const: true`` infers boolean, not integer).
+_CONST_INFERRED_TYPES = {str: "string", bool: "boolean",
+                         int: "integer", float: "number"}
+
+
+def _fold_const(body: dict[str, Any]) -> dict[str, Any]:
+    """OpenAPI 3.1 ``const: X`` is the single-value constraint 3.0 spells
+    ``enum: [X]``.
+
+    openapi-diff already treats the two spellings as canonically equal
+    (its normalizer folds const before comparing), so a docs author who
+    writes const gets no drift finding — the IR has to derive the same
+    types for both spellings or the checker's ruling and the generated
+    DTOs disagree. Folding BEFORE classification gives const every enum
+    behavior for free: same derived enum names, same standalone EnumDef,
+    same (ignored) treatment on types with no enum support. A bare 3.1
+    const (no ``type``) infers its type from the value instead of halting
+    with an error that never mentions const. A co-declared enum is
+    superseded — const is the narrower constraint. Values with no scalar
+    type (null, arrays) are left alone for the existing halts.
+
+    Returns a shallow copy; never mutates the caller's schema dict (the
+    discriminator tag reader looks at the raw document).
+    """
+    if "const" not in body:
+        return body
+    value = body["const"]
+    inferred = _CONST_INFERRED_TYPES.get(type(value))
+    if inferred is None:
+        return body
+    folded = {k: v for k, v in body.items() if k != "const"}
+    folded["enum"] = [value]
+    folded.setdefault("type", inferred)
+    return folded
 
 
 def _is_enum_only(body: dict[str, Any]) -> bool:
@@ -1794,6 +1832,7 @@ def _field_type(
     (transitively, since nested inline objects can themselves contain inline
     objects/enums).
     """
+    body = _fold_const(body)
     _check_polymorphic(body, source_path=source_path, pointer=pointer, at_field_level=True)
 
     # 1pre. ``oneOf`` + ``discriminator`` with explicit ``mapping`` →

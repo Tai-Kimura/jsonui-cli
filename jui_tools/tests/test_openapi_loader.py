@@ -275,6 +275,121 @@ class EnumTests(unittest.TestCase):
         self.assertEqual(e.case_names, ["value_0", "value_1", "value_2"])
 
 
+class ConstFoldingTests(unittest.TestCase):
+    """OpenAPI 3.1 ``const: X`` is the spelling 3.0 writes ``enum: [X]``.
+
+    openapi-diff rules the two spellings canonically equal, so a docs
+    author who writes const gets no drift finding — the IR must derive
+    the same types for both or the checker's ruling and the generated
+    DTOs disagree. Before the fold, a typed const silently became a bare
+    String and a bare 3.1 const halted with an error that never mentioned
+    const.
+    """
+
+    def _doc31(self, schemas: dict) -> dict:
+        return {"openapi": "3.1.0", "components": {"schemas": schemas}}
+
+    def test_typed_const_derives_the_same_inline_enum_as_enum_spelling(self):
+        const_doc = parse_swagger(self._doc31({
+            "Msg": {"type": "object", "required": ["kind"], "properties": {
+                "kind": {"type": "string", "const": "chat"}}},
+        }), "test.json")
+        enum_doc = parse_swagger(self._doc31({
+            "Msg": {"type": "object", "required": ["kind"], "properties": {
+                "kind": {"type": "string", "enum": ["chat"]}}},
+        }), "test.json")
+        # Full-IR equality, not just the field kind: the two spellings must
+        # be indistinguishable downstream (emitters are functions of the IR).
+        self.assertEqual(const_doc.schemas, enum_doc.schemas)
+        self.assertEqual(const_doc.enums, enum_doc.enums)
+        f = const_doc.schemas[0].fields[0]
+        self.assertTrue(f.type.is_enum_ref)
+        self.assertEqual(f.type.ref_name, "MsgKind")
+        self.assertEqual(const_doc.enums[0].string_values, ["chat"])
+
+    def test_bare_31_const_infers_its_type_instead_of_halting(self):
+        doc = parse_swagger(self._doc31({
+            "Msg": {"type": "object", "required": ["kind"], "properties": {
+                "kind": {"const": "chat"}}},
+        }), "test.json")
+        f = doc.schemas[0].fields[0]
+        self.assertTrue(f.type.is_enum_ref)
+        self.assertEqual(f.type.ref_name, "MsgKind")
+
+    def test_const_with_default_keeps_the_default(self):
+        doc = parse_swagger(self._doc31({
+            "Msg": {"type": "object", "required": ["kind"], "properties": {
+                "kind": {"type": "string", "const": "chat", "default": "chat"}}},
+        }), "test.json")
+        f = doc.schemas[0].fields[0]
+        self.assertTrue(f.type.is_enum_ref)
+        self.assertEqual(f.default, "chat")
+
+    def test_standalone_const_schema_becomes_an_enum_def(self):
+        doc = parse_swagger(self._doc31({
+            "Kind": {"type": "string", "const": "chat"},
+        }), "test.json")
+        self.assertEqual([s.name for s in doc.schemas], [])
+        self.assertEqual(len(doc.enums), 1)
+        self.assertEqual(doc.enums[0].name, "Kind")
+        self.assertEqual(doc.enums[0].string_values, ["chat"])
+
+    def test_integer_const_derives_an_integer_enum(self):
+        doc = parse_swagger(self._doc31({
+            "Msg": {"type": "object", "properties": {"n": {"const": 3}}},
+        }), "test.json")
+        e = next(e for e in doc.enums if e.name == "MsgN")
+        self.assertEqual(e.kind, PrimitiveKind.INTEGER)
+        self.assertEqual(e.integer_values, [3])
+
+    def test_boolean_const_matches_boolean_enum_treatment(self):
+        # Inline enums support string/integer only; a boolean enum is
+        # ignored and the field stays BOOLEAN. Const must land in exactly
+        # the same place — the invariant is spelling-equivalence, not
+        # "const always makes an enum". (bool is checked before int in the
+        # inference map: const true is boolean, never integer 1.)
+        const_doc = parse_swagger(self._doc31({
+            "Ok": {"type": "object", "properties": {"ok": {"const": True}}},
+        }), "test.json")
+        enum_doc = parse_swagger(self._doc31({
+            "Ok": {"type": "object", "properties": {
+                "ok": {"type": "boolean", "enum": [True]}}},
+        }), "test.json")
+        self.assertEqual(const_doc.schemas, enum_doc.schemas)
+        f = const_doc.schemas[0].fields[0]
+        self.assertTrue(f.type.is_primitive)
+        self.assertEqual(f.type.primitive, PrimitiveKind.BOOLEAN)
+
+    def test_union_with_const_tags_matches_enum_spelled_union(self):
+        def union(tag_schema):
+            return {
+                "Event": {"oneOf": [
+                    {"$ref": "#/components/schemas/ChatEvent"}],
+                    "discriminator": {"propertyName": "kind",
+                                      "mapping": {"chat": "#/components/schemas/ChatEvent"}}},
+                "ChatEvent": {"type": "object", "required": ["kind"],
+                              "properties": {"kind": dict(tag_schema)}},
+            }
+        const_doc = parse_swagger(self._doc31(union(
+            {"type": "string", "const": "chat"})), "test.json")
+        enum_doc = parse_swagger(self._doc31(union(
+            {"type": "string", "enum": ["chat"]})), "test.json")
+        self.assertEqual(const_doc.unions, enum_doc.unions)
+        self.assertEqual(const_doc.schemas, enum_doc.schemas)
+        self.assertEqual(const_doc.enums, enum_doc.enums)
+        self.assertEqual(const_doc.unions[0].variants[0].discriminator_value,
+                         "chat")
+
+    def test_null_const_is_left_for_the_existing_halt(self):
+        # No scalar type to infer — the fold declines and the field halts
+        # exactly as an untyped field always has.
+        with self.assertRaises(OpenAPILoadError) as ctx:
+            parse_swagger(self._doc31({
+                "Msg": {"type": "object", "properties": {"x": {"const": None}}},
+            }), "test.json")
+        self.assertEqual(ctx.exception.code, "unknown-type")
+
+
 class FieldLevelAllOfWrapperTests(unittest.TestCase):
     """Common OpenAPI 3 idiom: ``allOf: [{$ref}]`` wraps a $ref to attach
     ``nullable`` / ``default`` / ``description``. Must unwrap to a plain ref."""
