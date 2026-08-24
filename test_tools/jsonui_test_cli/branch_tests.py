@@ -190,8 +190,17 @@ def _iter_declared_api_refs(contract: dict):
             yield op, None, f"branches[{i}].then.{key}"
 
 
+def _mocks_dir_label(mocks_dir: Path | None) -> str:
+    """Absolute path when known — "the mocks directory" told an author the
+    file was missing when it existed somewhere the search never looked."""
+    if mocks_dir is None:
+        return "the mocks directory"
+    return str(mocks_dir)
+
+
 def resolve_routes(
-    spec: dict, methods_contracts: dict, mocks: list[MockFile]
+    spec: dict, methods_contracts: dict, mocks: list[MockFile],
+    mocks_dir: Path | None = None,
 ) -> list[Route]:
     """Bind every referenced api.<op> (plus every declared endpoint with a
     mock, so incidental calls get their default scenario) to a Route.
@@ -216,7 +225,9 @@ def resolve_routes(
         if mock is None:
             raise BranchTestGenerationError(
                 f"{where}: no mock file found for {endpoint['method']} "
-                f"{endpoint['path']} (op '{op}') under the mocks directory"
+                f"{endpoint['path']} (op '{op}') — searched "
+                f"{_mocks_dir_label(mocks_dir)} and found "
+                f"{len(mocks)} mock file(s)"
             )
         route = Route(
             op=op, method=endpoint["method"], path=endpoint["path"],
@@ -1954,8 +1965,9 @@ def generate_branch_tests(
             f"{spec_file.name} declares no branchContracts.methods — nothing to generate"
         )
 
-    mocks = index_mock_files(project_root / mocks_dir)
-    routes = resolve_routes(spec, bc["methods"], mocks)
+    mocks_path = (project_root / mocks_dir).resolve()
+    mocks = index_mock_files(mocks_path)
+    routes = resolve_routes(spec, bc["methods"], mocks, mocks_path)
     check_arg_bindings(spec, bc["methods"])
     resolve_response_refs(bc["methods"], routes)
 

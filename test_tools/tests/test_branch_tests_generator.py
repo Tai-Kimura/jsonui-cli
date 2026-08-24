@@ -310,6 +310,35 @@ class TestAndroidEmission:
         assert "vitest" in content
 
 
+class TestMockDirResolution:
+    """`mock.mockDir` is how a project says where its mocks live, and the
+    other mock subcommands honour it. Branch-test generation read only the
+    flag, so a project whose mocks sit outside the app directory was told
+    the file was missing when it existed somewhere never searched."""
+
+    def test_error_names_the_directory_it_searched(self, tmp_path):
+        bc = _contract([{"when": {"api.noMockOp": "whatever"},
+                         "then": {"api": "none"}}])
+        root = _project(tmp_path, bc)
+        with pytest.raises(BranchTestGenerationError) as excinfo:
+            generate_branch_tests("checkout", root, mocks_dir="tests/elsewhere")
+        message = str(excinfo.value)
+        assert str((root / "tests/elsewhere").resolve()) in message
+        assert "found 0 mock file(s)" in message
+
+    def test_generation_uses_the_directory_it_is_given(self, tmp_path):
+        root = _project(tmp_path, BASIC)
+        moved = root / "custom" / "mocks"
+        moved.parent.mkdir(parents=True, exist_ok=True)
+        (root / "tests" / "mocks").rename(moved)
+        # The default location no longer holds them...
+        with pytest.raises(BranchTestGenerationError):
+            generate_branch_tests("checkout", root)
+        # ...and naming the real one succeeds.
+        report = generate_branch_tests("checkout", root, mocks_dir="custom/mocks")
+        assert report.declared_branches == 2
+
+
 class TestDeclaredKeyGuard:
     """Arranging a data-only field used to invent a property on the
     ViewModel, and readField consults the ViewModel first — so every later

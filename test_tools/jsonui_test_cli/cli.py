@@ -353,13 +353,20 @@ def cmd_generate_branch_tests(args):
                 out_dir = "Tests/Generated"
             if harness_dir == "tests/unit/branch-harness":
                 harness_dir = "Tests/Generated"
+        # Same precedence as `mock generate` / `mock serve`: the flag, then
+        # the project's own declaration, then the default. Reading only the
+        # flag sent projects whose mocks live outside the app directory to a
+        # path they never configured, and the failure named the missing
+        # scenario rather than the directory that was searched.
+        mock_config, _ = _load_mock_config(None)
+        mocks_dir = args.mocks_dir or mock_config.get("mockDir") or "tests/mocks"
         report = generate_branch_tests(
             args.screen,
             project_root=Path.cwd(),
             spec_path=args.spec,
             out_dir=out_dir,
             harness_dir=harness_dir,
-            mocks_dir=args.mocks_dir,
+            mocks_dir=mocks_dir,
             platform=args.platform,
             package=args.package,
             module=args.module,
@@ -1059,8 +1066,9 @@ def main():
         help="Consumer-owned harness directory (skeleton emitted only if absent)"
     )
     gen_branch_parser.add_argument(
-        "--mocks-dir", default="tests/mocks",
-        help="Directory scanned for *.mock.json scenario files"
+        "--mocks-dir", default=None,
+        help="Directory scanned for *.mock.json scenario files "
+             "(default: mock.mockDir or tests/mocks)"
     )
     gen_branch_parser.add_argument(
         "-p", "--platform", choices=["web", "android", "ios"], default="web",
