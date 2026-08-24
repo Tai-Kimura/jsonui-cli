@@ -192,6 +192,60 @@ class WebScanTests(unittest.TestCase):
         self.assertEqual(len(report.missing), 1)
         self.assertIn("screen_gone", report.missing[0].detail)
 
+    def test_plural_first_argument_is_usage(self):
+        # Keys referenced only through the CLDR plural face were all
+        # reported unused (11 of 11 on the reporting consumer).
+        self.fx.write("src/vm.ts",
+                      'const a = StringManager.plural("screen_title", n);\n'
+                      'const b = StringManager.plural("screen_help", m);\n')
+        report = self._run()
+        self.assertEqual(report.unused, [])
+        self.assertEqual(report.missing, [])
+        self.assertEqual(report.dynamic, [])
+
+    def test_plural_undeclared_literal_is_a_missing_key(self):
+        self.fx.write("src/vm.ts",
+                      'StringManager.plural("screen_gone", n);\n')
+        report = self._run()
+        self.assertEqual(len(report.missing), 1)
+        self.assertIn("screen_gone", report.missing[0].detail)
+
+    def test_plural_dynamic_key_is_a_finding_unless_declared(self):
+        self.fx.write("src/vm.ts",
+                      "StringManager.plural(kind, n);\n"
+                      'const K_STRING_KEYS = { a: "screen_title" };\n'
+                      "StringManager.plural(K_STRING_KEYS[kind], n);\n")
+        report = self._run()
+        self.assertEqual(len(report.dynamic), 1)
+        self.assertTrue(report.dynamic[0].site.endswith(":1"))
+
+    def test_tpl_literal_choice_with_params_is_not_dynamic(self):
+        # tpl(expr, {params}) judged the WHOLE argument span, so a
+        # literal-choice key with trailing params read as dynamic while
+        # the same expression in str() passed. Only the first argument
+        # selects the key.
+        self.fx.write(
+            "src/vm.ts",
+            'const t = tpl(late ? "screen_title" : "screen_help", '
+            "{ n: count });\n")
+        report = self._run()
+        self.assertEqual(report.dynamic, [])
+        self.assertEqual(report.unused, [])
+
+    def test_tuple_array_string_keys_first_elements_are_not_missing(self):
+        # [[prop, key], ...] interleaves non-key strings with keys and
+        # nothing structural tells them apart: every literal may feed
+        # used, none may be judged missing.
+        self.fx.write(
+            "src/vm.ts",
+            'const ROW_STRING_KEYS = [\n'
+            '  ["title", "screen_title"],\n'
+            '  ["help", "screen_help"],\n'
+            '];\n')
+        report = self._run()
+        self.assertEqual(report.missing, [])
+        self.assertEqual(report.unused, [])
+
     def test_comment_text_is_not_code(self):
         # The shipped incident: a swagger description mentioning Python's
         # `str(int)` rode a generated DTO's doc comment into a dynamic

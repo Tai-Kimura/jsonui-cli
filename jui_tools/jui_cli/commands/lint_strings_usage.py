@@ -103,7 +103,18 @@ _GETSTRING_LITERAL_RE = re.compile(
 _WRAPPER_LITERAL_RE = re.compile(
     r"\b(?:str|tpl)\(\s*([\"'])([A-Za-z0-9_]+)\1"
 )
-_WRAPPER_DYNAMIC_RE = re.compile(r"\b(?:str|tpl|getString)\(\s*(?![\"'])")
+_WRAPPER_DYNAMIC_RE = re.compile(
+    r"\b(?:str|tpl|getString|StringManager\s*\.\s*plural)\(\s*(?![\"'])"
+)
+# StringManager.plural(key, count) — the CLDR plural face. Qualified, so
+# it is as unambiguous as getString: a literal that matches nothing is a
+# missing finding, and a bare `plural(` helper somewhere else is not
+# swept in. Keys referenced ONLY through plural() were all reported
+# unused before this pattern existed (11 of 11 on the reporting
+# consumer).
+_PLURAL_LITERAL_RE = re.compile(
+    r"\bStringManager\s*\.\s*plural\(\s*([\"'])([A-Za-z0-9_]+)\1"
+)
 # `function str(key)` / `func …` / `fun …` — a wrapper DEFINITION, not a
 # dynamic reference.
 _FUNCTION_DEF_BEFORE_RE = re.compile(r"(?:function|func|fun|def)\s+$")
@@ -453,17 +464,22 @@ def _iter_source_files(root: Path, suffixes: tuple[str, ...]) -> Iterable[Path]:
                 yield child
 
 
-def _extract_keys_map_literals(text: str) -> list[str]:
-    """String literals inside every ``*_STRING_KEYS`` declaration.
+def _extract_keys_map_literals(text: str) -> tuple[list[str], list[str]]:
+    """``(strict, lenient)`` string literals from every ``*_STRING_KEYS``
+    declaration.
 
     Walks from the declaration to the end of its balanced ``{...}`` /
-    ``[...]`` initializer (quotes respected), then collects the VALUE
-    literals. Both dict-shaped (``{"a": "key"}``) and list-shaped
-    (``["key1", "key2"]``) declarations are read; for dict shapes only
-    the value side counts (the lookup names on the key side are not
-    string keys).
+    ``[...]`` / ``mapOf(...)`` initializer (quotes respected). Dict
+    shapes contribute STRICT literals — only the value side of each
+    pair, so an unmatched one is a genuine missing key. List shapes
+    contribute LENIENT literals: a tuple array (``[[prop, key], ...]``)
+    interleaves non-key strings with keys and nothing structural tells
+    them apart, so every literal feeds the used set but none is judged
+    missing (a tuple's first element read as a missing key on a real
+    consumer before this split).
     """
-    out: list[str] = []
+    strict: list[str] = []
+    lenient: list[str] = []
     for m in _KEYS_MAP_NAME_RE.finditer(text):
         eq = text.find("=", m.end())
         if eq < 0:
@@ -505,17 +521,18 @@ def _extract_keys_map_literals(text: str) -> list[str]:
                     break
             j += 1
         body = text[i : j + 1]
-        if opener in "{(":
+        pair_values = re.findall(
+            r"(?::|=>|\bto\s)\s*([\"'])([A-Za-z0-9_]+)\1", body
+        )
+        if opener in "{(" and pair_values:
             # value side of `name: "literal"` / `"name": "literal"` /
             # `name to "literal"` (Kotlin mapOf) pairs
-            for pm in re.finditer(
-                r"(?::|=>|\bto\s)\s*([\"'])([A-Za-z0-9_]+)\1", body
-            ):
-                out.append(pm.group(2))
+            strict.extend(v for _, v in pair_values)
         else:
+            # plain list / tuple array — no structural key/value split
             for pm in _STRING_LITERAL_RE.finditer(body):
-                out.append(pm.group(2))
-    return out
+                lenient.append(pm.group(2))
+    return strict, lenient
 
 
 def _line_of(text: str, offset: int) -> int:
@@ -557,7 +574,8 @@ def scan_vm_sources(
         # *_STRING_KEYS declarations: every literal is a used key; a
         # literal that is not a declared flat key is a missing finding
         # (the map must stay honest for the closure to mean anything).
-        for literal in _extract_keys_map_literals(text):
+        strict_literals, lenient_literals = _extract_keys_map_literals(text)
+        for literal in strict_literals:
             pairs = declared.by_flat.get(literal)
             if pairs:
                 used |= pairs
@@ -567,6 +585,12 @@ def scan_vm_sources(
                     site=rel,
                     detail=f"*_STRING_KEYS map declares {literal!r}",
                 ))
+        for literal in lenient_literals:
+            pairs = declared.by_flat.get(literal)
+            if pairs:
+                used |= pairs
+            # a tuple array interleaves non-key strings — no missing
+            # judgment on the list shape
 
         if face == "web":
             for m in _WEB_PROP_RE.finditer(text):
@@ -600,6 +624,19 @@ def scan_vm_sources(
                     used |= pairs
                 # unmatched: str/tpl are ordinary identifiers elsewhere —
                 # only getString is unambiguous enough for a missing finding
+            for m in _PLURAL_LITERAL_RE.finditer(text):
+                literal = m.group(2)
+                pairs = declared.by_flat.get(literal) or declared.by_bare.get(
+                    literal
+                )
+                if pairs:
+                    used |= pairs
+                else:
+                    report.missing.append(UsageFinding(
+                        kind="missing-key",
+                        site=f"{rel}:{_line_of(text, m.start())}",
+                        detail=f"StringManager.plural({literal!r})",
+                    ))
             for m in _WEB_BRACKET_RE.finditer(text):
                 if not _statement_mentions_keys_map(text, m.start()):
                     report.dynamic.append(UsageFinding(
@@ -614,8 +651,15 @@ def scan_vm_sources(
                     continue  # the wrapper's own definition line
                 if _in_spans(m.start(), wrapper_spans):
                     continue  # sanctioned wrapper's delegation body
-                arg = _call_arg_span(text, m.start())
-                # Literals inside the argument are usage whatever the
+                # Only the FIRST argument selects the key: tpl(expr,
+                # {params}) and plural(expr, count) carry trailing
+                # arguments that made the whole span read as dynamic even
+                # when the key expression was a literal choice, and their
+                # param strings are not key references.
+                arg = _split_top_level(
+                    _call_arg_span(text, m.start()), ","
+                )[0]
+                # Literals inside the key argument are usage whatever the
                 # verdict below — a ternary branch or a map fallback still
                 # names a key.
                 for lm in _KEY_LITERAL_RE.finditer(arg):
@@ -629,8 +673,8 @@ def scan_vm_sources(
                     report.dynamic.append(UsageFinding(
                         kind="dynamic-ref",
                         site=f"{rel}:{_line_of(text, m.start())}",
-                        detail="str/tpl/getString(<expression>) with no "
-                               "*_STRING_KEYS on the statement",
+                        detail="str/tpl/getString/plural(<expression>) "
+                               "with no *_STRING_KEYS on the statement",
                     ))
         elif face == "ios":
             for m in _IOS_ACCESSOR_RE.finditer(text):
