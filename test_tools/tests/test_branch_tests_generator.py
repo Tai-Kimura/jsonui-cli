@@ -310,6 +310,53 @@ class TestAndroidEmission:
         assert "vitest" in content
 
 
+class TestArgBindings:
+    """An `arg.<name>` that binds to no declared parameter used to be
+    dropped: the method was invoked with no arguments and the branch ran a
+    different case than it declared. Reported from a screen whose method was
+    declared only in stateManagement.eventHandlers, which by design carries
+    no signature."""
+
+    def test_declared_param_is_passed_to_the_call(self, tmp_path):
+        bc = _contract([{"when": {"arg.mode": "express"},
+                         "then": {"api": "none"}}])
+        bc["methods"]["onModeSelected"] = bc["methods"].pop("onConfirmTap")
+        root = _project(tmp_path, bc)
+        report = generate_branch_tests("checkout", root)
+        content = report.test_file.read_text(encoding="utf-8")
+        assert '"express"' in content
+
+    def test_unknown_param_on_a_declared_method_is_a_hard_error(self, tmp_path):
+        bc = _contract([{"when": {"arg.ghost": "x"}, "then": {"api": "none"}}])
+        bc["methods"]["onModeSelected"] = bc["methods"].pop("onConfirmTap")
+        root = _project(tmp_path, bc)
+        with pytest.raises(BranchTestGenerationError) as excinfo:
+            generate_branch_tests("checkout", root)
+        message = str(excinfo.value)
+        assert "declares no parameter 'ghost'" in message
+        assert "mode" in message  # the params it does declare
+
+    def test_method_without_a_parameter_list_is_a_hard_error(self, tmp_path):
+        # onConfirmTap is declared, but with no params — the shape a
+        # handler-only method also produces.
+        bc = _contract([{"when": {"arg.status": "open"},
+                         "then": {"api": "none"}}])
+        root = _project(tmp_path, bc)
+        with pytest.raises(BranchTestGenerationError, match="declares no parameter"):
+            generate_branch_tests("checkout", root)
+
+    def test_undeclared_method_points_at_the_viewmodel(self, tmp_path):
+        bc = _contract([{"when": {"arg.status": "open"},
+                         "then": {"api": "none"}}])
+        bc["methods"]["onStatusTap"] = bc["methods"].pop("onConfirmTap")
+        root = _project(tmp_path, bc)
+        with pytest.raises(BranchTestGenerationError) as excinfo:
+            generate_branch_tests("checkout", root)
+        message = str(excinfo.value)
+        assert "dataFlow.viewModel.methods" in message
+        assert "eventHandlers" in message
+
+
 _PASSTHROUGH_SCENARIOS = {
     "success": {"status": 200, "body": {"order": {"id": "o1"}}},
     "declined": {"status": 402, "body": {"error": {

@@ -359,6 +359,61 @@ def method_params(spec: dict, method_name: str) -> list[str]:
     return []
 
 
+def _method_is_declared(spec: dict, method_name: str) -> bool:
+    view_model = (spec.get("dataFlow") or {}).get("viewModel") or {}
+    for method in view_model.get("methods", []) or []:
+        if isinstance(method, dict) and method.get("name") == method_name:
+            return True
+        if isinstance(method, str) and method.split("(")[0].strip() == method_name:
+            return True
+    return False
+
+
+def check_arg_bindings(spec: dict, methods_contracts: dict) -> None:
+    """Every `arg.<name>` has to name a declared parameter.
+
+    The act call is built from `dataFlow.viewModel.methods[].params`, so an
+    `arg` that matches nothing there used to be dropped on the floor: the
+    method was invoked with no arguments and the branch passed or failed for
+    reasons unrelated to what it declared. A harness with a closed switch
+    notices (it receives nil); a lenient one substitutes a default and stays
+    green while testing a different case than the contract describes.
+
+    eventHandlers are not an alternative declaration site. They are
+    View-layer handlers by design and carry no signature, which is why
+    adding params there changes nothing — a method whose arguments a
+    contract wants to pin belongs in the ViewModel's public API.
+    """
+    for method_name, contract in methods_contracts.items():
+        if not isinstance(contract, dict):
+            continue
+        params = set(method_params(spec, method_name))
+        declared = _method_is_declared(spec, method_name)
+        for i, branch in enumerate(contract.get("branches") or []):
+            if not isinstance(branch, dict) or "note" in branch:
+                continue
+            for key in (branch.get("when") or {}):
+                if not key.startswith("arg."):
+                    continue
+                name = key[len("arg."):]
+                if name in params:
+                    continue
+                where = f"methods.{method_name}.branches[{i}].when.{key}"
+                if not declared:
+                    raise BranchTestGenerationError(
+                        f"{where}: '{method_name}' is not declared in "
+                        "dataFlow.viewModel.methods, so it has no parameter "
+                        "list to bind this argument to — declare it there "
+                        "with `params` (stateManagement.eventHandlers is "
+                        "View-layer only and carries no signature)"
+                    )
+                raise BranchTestGenerationError(
+                    f"{where}: '{method_name}' declares no parameter "
+                    f"'{name}' — its params are "
+                    f"{sorted(params) if params else '(none)'}"
+                )
+
+
 # ---------------------------------------------------------------------------
 # Rendering
 # ---------------------------------------------------------------------------
@@ -1864,6 +1919,7 @@ def generate_branch_tests(
 
     mocks = index_mock_files(project_root / mocks_dir)
     routes = resolve_routes(spec, bc["methods"], mocks)
+    check_arg_bindings(spec, bc["methods"])
     resolve_response_refs(bc["methods"], routes)
 
     if platform == "android":

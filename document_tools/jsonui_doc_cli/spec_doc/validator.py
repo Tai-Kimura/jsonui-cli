@@ -1343,6 +1343,7 @@ class SpecValidator:
             bc.get("conditions"), data_fields, result
         )
         self._validate_branch_condition_usage(bc, condition_names, result)
+        self._validate_branch_arg_bindings(bc, result)
 
         methods = bc.get("methods")
         if methods is None:
@@ -1481,6 +1482,73 @@ class SpecValidator:
                     level="warning",
                 ))
         return names
+
+    def _validate_branch_arg_bindings(
+        self, bc: dict, result: SpecValidationResult,
+    ) -> None:
+        """`arg.<name>` has to name a declared parameter of the method.
+
+        The generated act call is built from
+        `dataFlow.viewModel.methods[].params`; an argument matching nothing
+        there is dropped, and the branch then runs with a different input
+        than it declares — silently, unless the harness happens to reject
+        the missing value. eventHandlers are not a second declaration site:
+        they are View-layer handlers with no signature, so a contract that
+        pins arguments needs the method on the ViewModel's public API.
+        """
+        methods = bc.get("methods")
+        if not isinstance(methods, dict) or not isinstance(self._spec_data, dict):
+            return
+        view_model = (self._spec_data.get("dataFlow") or {}).get("viewModel") or {}
+        declared: dict[str, set[str]] = {}
+        for method in view_model.get("methods", []) or []:
+            if isinstance(method, dict) and isinstance(method.get("name"), str):
+                params = method.get("params")
+                declared[method["name"]] = {
+                    p["name"] for p in params
+                    if isinstance(p, dict) and isinstance(p.get("name"), str)
+                } if isinstance(params, list) else set()
+            elif isinstance(method, str):
+                declared[method.split("(")[0].strip()] = set()
+
+        for method_name, contract in methods.items():
+            if not isinstance(contract, dict):
+                continue
+            params = declared.get(method_name)
+            for i, branch in enumerate(contract.get("branches") or []):
+                if not isinstance(branch, dict) or "note" in branch:
+                    continue
+                when = branch.get("when")
+                if not isinstance(when, dict):
+                    continue
+                for key in when:
+                    if not key.startswith("arg."):
+                        continue
+                    name = key[len("arg."):]
+                    if params is not None and name in params:
+                        continue
+                    path = (
+                        f"branchContracts.methods.{method_name}."
+                        f"branches[{i}].when.{key}"
+                    )
+                    if params is None:
+                        message = (
+                            f"'{method_name}' is not declared in "
+                            "dataFlow.viewModel.methods, so it has no "
+                            "parameter list to bind this argument to — "
+                            "declare it there with `params` "
+                            "(stateManagement.eventHandlers is View-layer "
+                            "only and carries no signature)"
+                        )
+                    else:
+                        message = (
+                            f"'{method_name}' declares no parameter "
+                            f"'{name}' — its params are "
+                            f"{sorted(params) if params else '(none)'}"
+                        )
+                    result.errors.append(SpecValidationMessage(
+                        path=path, message=message,
+                    ))
 
     def _validate_branch_condition_usage(
         self, bc: dict, condition_names: set[str],

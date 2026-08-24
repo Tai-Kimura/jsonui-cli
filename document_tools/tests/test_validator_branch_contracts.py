@@ -279,7 +279,11 @@ class BranchWhenVocabulary(unittest.TestCase):
             bc["conditions"] = conditions
         return _base_spec(
             bc,
-            vm_methods=["onConfirmTap"],
+            # Declared with its parameter, so `arg.paymentType` below is
+            # about the VALUE's shape and not about whether the argument
+            # binds to anything (that is BranchArgBindings' subject).
+            vm_methods=[{"name": "onConfirmTap",
+                         "params": [{"name": "paymentType", "type": "String"}]}],
             ui_vars=[_ui_var("isAgreed"), _ui_var("mode", "String")],
             use_cases=[{"name": "ConfirmUseCase",
                         "methods": [{"name": "confirmBooking"}]}],
@@ -569,6 +573,69 @@ class BranchPlatforms(unittest.TestCase):
             "platforms": [],
         }))
         self.assertTrue(_errors_at(result, "branches[0].platforms"))
+
+
+class BranchArgBindings(unittest.TestCase):
+    """`arg.<name>` builds the generated act call out of the method's
+    declared params. An argument that binds to nothing was accepted here and
+    then dropped by the generator, so the branch ran with a different input
+    than it declared — reported from a screen whose method lived only in
+    stateManagement.eventHandlers."""
+
+    def _spec(self, when, *, vm_methods, handlers=None):
+        spec = _base_spec(
+            {"methods": {"onStatusTap": {"branches": [
+                {"when": when, "then": {"api": "none"}},
+            ]}}},
+            vm_methods=vm_methods,
+            ui_vars=[_ui_var("isAgreed")],
+        )
+        if handlers is not None:
+            spec["stateManagement"]["eventHandlers"] = handlers
+        return spec
+
+    _METHOD_WITH_PARAM = [{
+        "name": "onStatusTap",
+        "params": [{"name": "status", "type": "String"}],
+    }]
+
+    def test_declared_param_binds(self):
+        result = _validate(self._spec(
+            {"arg.status": "open"}, vm_methods=self._METHOD_WITH_PARAM))
+        self.assertEqual(_errors_at(result, "branchContracts"), [])
+
+    def test_undeclared_param_on_a_declared_method_is_an_error(self):
+        result = _validate(self._spec(
+            {"arg.mode": "open"}, vm_methods=self._METHOD_WITH_PARAM))
+        errors = _errors_at(result, "when.arg.mode")
+        self.assertEqual(1, len(errors))
+        self.assertIn("declares no parameter", errors[0].message)
+        self.assertIn("status", errors[0].message)  # what it does declare
+
+    def test_event_handler_only_method_is_an_error_naming_the_fix(self):
+        # eventHandlers carry no signature by design, so this is not a
+        # matter of declaring params over there.
+        result = _validate(self._spec(
+            {"arg.status": "open"},
+            vm_methods=[],
+            handlers=[{"name": "onStatusTap", "description": "status tap"}],
+        ))
+        errors = _errors_at(result, "when.arg.status")
+        self.assertEqual(1, len(errors))
+        self.assertIn("dataFlow.viewModel.methods", errors[0].message)
+        self.assertIn("eventHandlers", errors[0].message)
+
+    def test_method_declared_as_a_bare_string_has_no_params(self):
+        result = _validate(self._spec(
+            {"arg.status": "open"}, vm_methods=["onStatusTap"]))
+        errors = _errors_at(result, "when.arg.status")
+        self.assertEqual(1, len(errors))
+        self.assertIn("(none)", errors[0].message)
+
+    def test_branches_without_args_are_unaffected(self):
+        result = _validate(self._spec(
+            {"data.isAgreed": True}, vm_methods=["onStatusTap"]))
+        self.assertEqual(_errors_at(result, "branchContracts"), [])
 
 
 class BranchResponsePassthrough(unittest.TestCase):
