@@ -132,6 +132,18 @@ class TestGenerationHappyPath:
         assert '"createOrder"' in content and '"fetchOrder"' in content
         assert "noMockOp" not in content
 
+    def test_harness_skeleton_uses_closed_string_keys_map(self, tmp_path):
+        # Consumer feedback (2026-08-24): a dynamic getString(`<screen>_${key}`)
+        # in the harness trips `jui lint-strings --usage` and blocks consumers
+        # running the always-on usage gate. The skeleton must teach the closed
+        # *_STRING_KEYS map form instead.
+        root = _project(tmp_path, BASIC)
+        report = generate_branch_tests("checkout", root)
+        skeleton = report.harness_file.read_text(encoding="utf-8")
+        assert "CHECKOUT_BRANCH_STRING_KEYS" in skeleton
+        assert "lint-strings --usage" in skeleton
+        assert "SCREEN_ROUTES" in skeleton
+
     def test_harness_not_overwritten(self, tmp_path):
         root = _project(tmp_path, BASIC)
         generate_branch_tests("checkout", root)

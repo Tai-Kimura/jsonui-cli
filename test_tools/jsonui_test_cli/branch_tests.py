@@ -610,6 +610,22 @@ HARNESS_SKELETON = '''// Branch-contract test harness for `%(screen)s` — CONSU
 // Generated once as a skeleton by `jsonui-test generate branch-tests`;
 // edit freely, it will not be overwritten.
 
+/** Spec '@key' expectations — bare own-section key to FULL strings key.
+ * Keep this a closed *_STRING_KEYS map (values are full keys) rather than
+ * building keys with template interpolation: `jui lint-strings --usage`
+ * counts map values into the used set, while a dynamic
+ * getString(`%(screen)s_${key}`) call is flagged as dynamic and blocks
+ * consumers running the usage gate (lint.stringsUsage: true). */
+const %(screen_const)s_BRANCH_STRING_KEYS: Record<string, string> = {
+  // "some_error": "%(screen)s_some_error",
+};
+
+/** `then.transition` destinations — screen name to URL pattern. Owned
+ * here because route shapes are this app's concern, not the spec's. */
+const SCREEN_ROUTES: Record<string, RegExp> = {
+  // some_screen: /^\\/some\\/route$/,
+};
+
 export interface BranchHarness {
   vm: unknown;
   /** VM field first, then the data store — the `data.*` read surface. */
@@ -618,14 +634,15 @@ export interface BranchHarness {
   setState(state: Record<string, unknown>): void;
   /** Assert a `then.transition` destination against recorded navigation. */
   expectTransition(destination: string): void;
-  /** Resolve an '@strings_key' expectation. */
+  /** Resolve an '@strings_key' expectation via the closed map above. */
   resolveString(key: string): string;
 }
 
 export function createHarness(): BranchHarness {
-  // TODO: construct the ViewModel with a router recorder and a data store,
-  // declare screenRoutes for every transition destination the contract
-  // uses, and wire resolveString to the project's StringManager.
+  // TODO: construct the ViewModel with a router recorder and a data store;
+  // resolveString should look the key up in %(screen_const)s_BRANCH_STRING_KEYS
+  // (throw on a missing entry — same contract as SCREEN_ROUTES) and pass the
+  // full key to the project's StringManager.
   throw new Error("branch-harness for %(screen)s is not implemented yet");
 }
 '''
@@ -670,7 +687,11 @@ def generate_branch_tests(
     harness_file = harness_path / f"{screen}.ts"
     created = False
     if not harness_file.exists():
-        harness_file.write_text(HARNESS_SKELETON % {"screen": screen}, encoding="utf-8")
+        harness_file.write_text(
+            HARNESS_SKELETON % {"screen": screen,
+                                "screen_const": screen.upper()},
+            encoding="utf-8",
+        )
         created = True
 
     report.test_file = test_file
