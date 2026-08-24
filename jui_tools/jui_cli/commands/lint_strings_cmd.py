@@ -55,13 +55,21 @@ relative path), so a duplicate compiles to a different key per platform
 and section order decides the winner. That is a forked SSoT by
 construction, so it is not allowlistable.
 
+A third, opt-in class of finding (``--usage`` / ``lint.stringsUsage``) is
+set agreement between strings.json and every referencing face: unused
+keys (prepared but wired to nothing — they never reach a screen),
+missing keys (VM references the runtime resolves to the key name
+itself), and dynamic references not routed through a ``*_STRING_KEYS``
+constant map. See ``lint_strings_usage.py`` for the convention that
+keeps its false-positive rate at zero.
+
 Exit codes:
 
     0  clean
     1  the command could not run (no jui.config.json, SSoT assets not
        found, unreadable allowlist)
     2  findings — raw literal, forked declaration, stale allowlist entry,
-       or allowlist entry with no reason
+       allowlist entry with no reason, or (opted in) a usage finding
 
 ``jui build`` runs the same scan when opted in (``--lint-strings`` or
 ``"lint": {"strings": true}`` in jui.config.json) and reports findings
@@ -80,6 +88,7 @@ from typing import Any
 
 from ..core.config_manager import ConfigManager
 from ..core.normalizer import AliasTable, Canonicalizer, StyleMerger
+from .lint_strings_usage import UsageReport, collect_usage
 
 ALLOWLIST_FILENAME = ".jui-strings-allowlist.json"
 
@@ -264,6 +273,11 @@ class StringsTable:
             return cls(json.loads(path.read_text(encoding="utf-8")))
         except (OSError, json.JSONDecodeError) as e:
             raise LintStringsSetupError(f"unreadable strings.json ({path}): {e}")
+
+    @property
+    def groups(self) -> dict[str, dict[str, Any]]:
+        """The raw section → entries mapping (usage check input)."""
+        return self._groups
 
     def resolves(self, text: str, own_sections: tuple[str, ...] = ()) -> bool:
         """Whether the builders resolve ``text`` for a layout owning
@@ -585,6 +599,9 @@ class LintReport:
     missing_reason: list[dict[str, Any]] = field(default_factory=list)
     duplicates: list[Duplicate] = field(default_factory=list)
     scanned_layouts: int = 0
+    # Set-agreement check (opt-in: --usage / lint.stringsUsage). None means
+    # it did not run; a run with no findings is a present-but-clean report.
+    usage: UsageReport | None = None
 
     @property
     def clean(self) -> bool:
@@ -593,6 +610,7 @@ class LintReport:
             or self.stale_entries
             or self.missing_reason
             or self.duplicates
+            or (self.usage is not None and not self.usage.clean)
         )
 
     def warning_lines(self) -> list[str]:
@@ -625,6 +643,8 @@ class LintReport:
                 f"resolves it to a different key and section order decides "
                 f"the winner; keep one declaration"
             )
+        if self.usage is not None:
+            lines.extend(self.usage.warning_lines())
         return lines
 
 
@@ -634,10 +654,14 @@ def collect_findings(
     *,
     definitions_path: Path | None = None,
     string_props_path: Path | None = None,
+    usage: bool | None = None,
 ) -> LintReport:
     """Run the full scan for a project. Raises LintStringsSetupError when
     a required asset is missing. The two SSoT paths are injectable for
-    tests; production callers rely on the installed-tree lookup."""
+    tests; production callers rely on the installed-tree lookup.
+
+    *usage* opts into the strings.json ⟷ referencing-sides set-agreement
+    check; ``None`` reads ``lint.stringsUsage`` from jui.config.json."""
     # AliasTable.from_file degrades to an empty table on a missing file;
     # for a lint that must not silently pass, resolve and check explicitly.
     from ..core.normalizer.alias_table import default_definitions_path
@@ -688,12 +712,13 @@ def collect_findings(
     # once here rather than per referencing layout.
     report.duplicates = strings.duplicate_declarations()
     all_findings: list[Finding] = []
+    trees: dict[str, Any] = {}
+    own_sections_by_layout: dict[str, tuple[str, ...]] = {}
     if layouts_dir.exists():
         # Pass 1: load every tree, so the include graph can be built before
         # any file is judged. Each file is still scanned once, as itself —
         # includes are NOT expanded — but bare-key scoping needs to know who
         # includes whom (see _own_sections_map).
-        trees: dict[str, Any] = {}
         for src_file in sorted(layouts_dir.rglob("*.json")):
             rel = src_file.relative_to(layouts_dir)
             if rel.parts[0] in skip_prefixes:
@@ -746,6 +771,34 @@ def collect_findings(
         if key not in matched_entries:
             report.stale_entries.append(entry)
 
+    if usage is None:
+        usage = bool(
+            lint_cfg.get("stringsUsage") if isinstance(lint_cfg, dict) else False
+        )
+    if usage:
+        platform_roots: dict[str, Path] = {}
+        for face, root in (
+            ("ios", config_mgr.ios_root),
+            ("android", config_mgr.android_root),
+            ("web", config_mgr.web_root),
+        ):
+            if root is None:
+                continue  # face not declared — its absence is the project's shape
+            if not root.exists():
+                # A declared face that cannot be scanned would silently
+                # shrink the used set and invent unused keys.
+                raise LintStringsSetupError(
+                    f"platforms.{face}.root points to {root}, which does not "
+                    f"exist — the usage check needs every declared face"
+                )
+            platform_roots[face] = root
+        report.usage = collect_usage(
+            strings_groups=strings.groups,
+            trees=trees,
+            own_sections_by_layout=own_sections_by_layout,
+            platform_roots=platform_roots,
+        )
+
     return report
 
 
@@ -779,6 +832,19 @@ def register_lint_strings_command(subparsers: argparse._SubParsersAction) -> Non
         help=f"Ledger path (default: {ALLOWLIST_FILENAME} at the project root, "
         "or lint.stringsAllowlist from jui.config.json)",
     )
+    parser.add_argument(
+        "--usage",
+        action="store_true",
+        default=None,
+        help=(
+            "Also check set agreement between strings.json and every "
+            "referencing face (layouts + ios/android/web sources): unused "
+            "keys, missing keys, and undeclared dynamic references. "
+            "Opt-in per run, or per project via lint.stringsUsage in "
+            "jui.config.json. Dynamic key selection must go through a "
+            "*_STRING_KEYS constant map."
+        ),
+    )
     parser.set_defaults(func=cmd_lint_strings)
 
 
@@ -798,7 +864,11 @@ def cmd_lint_strings(args: argparse.Namespace) -> int:
     )
 
     try:
-        report = collect_findings(config_mgr, allowlist_path=allowlist_path)
+        report = collect_findings(
+            config_mgr,
+            allowlist_path=allowlist_path,
+            usage=getattr(args, "usage", None),
+        )
     except LintStringsSetupError as e:
         print(f"ERROR [lint-strings]: {e}")
         return EXIT_SETUP
@@ -824,6 +894,23 @@ def cmd_lint_strings(args: argparse.Namespace) -> int:
                         }
                         for d in report.duplicates
                     ],
+                    "usage": (
+                        None
+                        if report.usage is None
+                        else {
+                            "faces": report.usage.faces,
+                            "scannedFiles": report.usage.scanned_files,
+                            "unusedKeys": [f.site for f in report.usage.unused],
+                            "missingKeys": [
+                                {"site": f.site, "reference": f.detail}
+                                for f in report.usage.missing
+                            ],
+                            "dynamicRefs": [
+                                {"site": f.site, "reference": f.detail}
+                                for f in report.usage.dynamic
+                            ],
+                        }
+                    ),
                     "clean": report.clean,
                 },
                 indent=2,
@@ -841,12 +928,19 @@ def cmd_lint_strings(args: argparse.Namespace) -> int:
         return EXIT_OK
     for line in report.warning_lines():
         print(f"  WARNING [lint-strings]: {line}")
-    print(
+    tail = (
         f"\nlint-strings: {len(report.findings)} raw literal(s), "
         f"{len(report.duplicates)} forked declaration(s), "
         f"{len(report.stale_entries)} stale allowlist entr(ies), "
         f"{len(report.missing_reason)} without a reason"
     )
+    if report.usage is not None:
+        tail += (
+            f", {len(report.usage.unused)} unused key(s), "
+            f"{len(report.usage.missing)} missing key(s), "
+            f"{len(report.usage.dynamic)} undeclared dynamic ref(s)"
+        )
+    print(tail)
     return EXIT_FINDINGS
 
 
