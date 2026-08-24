@@ -65,6 +65,55 @@ class VersionLockstepTests(unittest.TestCase):
         rjui = (REPO_ROOT / "rjui_tools" / "VERSION").read_text(encoding="utf-8").strip()
         self.assertEqual(rjui, self.root_version)
 
+    # The two Python CLIs read the toolchain VERSION at import time, so their
+    # `--version` names the toolchain rather than whenever the package was
+    # last touched. The literals below are the fallback for a tree installed
+    # without that file, and the distribution versions are what pip reports —
+    # both lie the moment they drift, and a lying version string is how a
+    # stale copy on PATH stayed hidden.
+
+    def _python_cli_version(self, relative: str) -> str:
+        # Execute the repo's own file rather than importing the package:
+        # a plain import answers from whatever copy is installed on this
+        # machine, which is exactly the confusion this check exists to end.
+        import importlib.util
+        path = REPO_ROOT / relative
+        spec = importlib.util.spec_from_file_location("_lockstep_probe", path)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        return module.__version__
+
+    def test_test_cli_reports_root_version(self) -> None:
+        self.assertEqual(
+            self._python_cli_version("test_tools/jsonui_test_cli/__init__.py"),
+            self.root_version,
+        )
+
+    def test_doc_cli_reports_root_version(self) -> None:
+        self.assertEqual(
+            self._python_cli_version("document_tools/jsonui_doc_cli/__init__.py"),
+            self.root_version,
+        )
+
+    def test_python_fallback_literals_match_root(self) -> None:
+        for relative in (
+            "test_tools/jsonui_test_cli/__init__.py",
+            "document_tools/jsonui_doc_cli/__init__.py",
+        ):
+            with self.subTest(relative=relative):
+                text = (REPO_ROOT / relative).read_text(encoding="utf-8")
+                match = re.search(r'_FALLBACK_VERSION\s*=\s*"([^"]+)"', text)
+                self.assertIsNotNone(match, f"no fallback literal in {relative}")
+                self.assertEqual(match.group(1), self.root_version)
+
+    def test_python_distribution_versions_match_root(self) -> None:
+        for relative in ("test_tools/pyproject.toml", "document_tools/pyproject.toml"):
+            with self.subTest(relative=relative):
+                text = (REPO_ROOT / relative).read_text(encoding="utf-8")
+                match = re.search(r'(?m)^version\s*=\s*"([^"]+)"', text)
+                self.assertIsNotNone(match, f"no version in {relative}")
+                self.assertEqual(match.group(1), self.root_version)
+
 
 class SiblingGitPinTests(unittest.TestCase):
     """The in-repo git dependency ships at the same tag as its dependent."""
