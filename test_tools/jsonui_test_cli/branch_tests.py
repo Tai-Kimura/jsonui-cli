@@ -782,6 +782,33 @@ export async function settle(turns = 10): Promise<void> {
     await new Promise((resolve) => setTimeout(resolve, 0));
   }
 }
+
+/** Write the state keys the ViewModel actually declares, and hand back the
+ * rest for the data store.
+ *
+ * A plain assignment loop cannot be used here. JavaScript creates a
+ * property on assignment, so arranging a data-only field (one the screen
+ * updates through its data store and the ViewModel never declares) invents
+ * that property on the ViewModel — and since readField consults the
+ * ViewModel first, every later read returns the arranged value no matter
+ * what the implementation did. The branch then fails against correct code,
+ * which is the worst kind of failure to debug: the harness lies about the
+ * subject.
+ *
+ * The failure only shows up once a baseline arranges the pre-state, so it
+ * waits for exactly the contracts most worth writing ("… is cleared", "…
+ * is closed"). */
+export function applyDeclaredKeys(
+  vm: object,
+  state: Record<string, unknown>
+): void {
+  const target = vm as Record<string, unknown>;
+  for (const [key, value] of Object.entries(state)) {
+    if (key in target) {
+      target[key] = value;
+    }
+  }
+}
 '''
 
 
@@ -809,7 +836,17 @@ export interface BranchHarness {
   vm: unknown;
   /** VM field first, then the data store — the `data.*` read surface. */
   readField(name: string): unknown;
-  /** Apply a witness/baseline object onto the VM + data store. */
+  /** Apply a witness/baseline object onto the VM + data store.
+   *
+   * Write the ViewModel through `applyDeclaredKeys(vm, state)` from the
+   * runtime rather than assigning in a loop, then hand the same object to
+   * the data store. Assigning every key directly invents ViewModel
+   * properties for data-only fields, and because readField consults the
+   * ViewModel first, those invented properties then shadow the store for
+   * the rest of the test — the branch fails against a correct
+   * implementation. It surfaces the moment a baseline arranges a pre-state
+   * ("visible" before asserting it closes), so it waits for exactly the
+   * contracts most worth writing. */
   setState(state: Record<string, unknown>): void;
   /** Assert a `then.transition` destination against recorded navigation. */
   expectTransition(destination: string): void;

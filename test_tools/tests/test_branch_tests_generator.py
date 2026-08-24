@@ -310,6 +310,33 @@ class TestAndroidEmission:
         assert "vitest" in content
 
 
+class TestDeclaredKeyGuard:
+    """Arranging a data-only field used to invent a property on the
+    ViewModel, and readField consults the ViewModel first — so every later
+    read returned the arranged value and the branch failed against correct
+    code. It only surfaces once a baseline arranges a pre-state, which is
+    exactly what "… is cleared" contracts need. Reported from a consumer
+    lane after following that advice."""
+
+    def test_runtime_ships_the_guard(self, tmp_path):
+        root = _project(tmp_path, BASIC)
+        report = generate_branch_tests("checkout", root)
+        runtime = report.runtime_file.read_text(encoding="utf-8")
+        assert "export function applyDeclaredKeys(" in runtime
+        body = runtime[runtime.index("export function applyDeclaredKeys("):]
+        assert "if (key in target)" in body
+
+    def test_skeleton_points_at_the_guard(self, tmp_path):
+        root = _project(tmp_path, BASIC)
+        report = generate_branch_tests("checkout", root)
+        skeleton = report.harness_file.read_text(encoding="utf-8")
+        assert "applyDeclaredKeys(vm, state)" in skeleton
+        # Says why, not just what — the guard is worthless if someone
+        # "simplifies" it back to an assignment loop.
+        assert "data-only fields" in skeleton
+        assert "rather than assigning in a loop" in skeleton
+
+
 class TestArgBindings:
     """An `arg.<name>` that binds to no declared parameter used to be
     dropped: the method was invoked with no arguments and the branch ran a
