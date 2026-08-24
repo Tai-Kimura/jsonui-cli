@@ -571,6 +571,72 @@ class BranchPlatforms(unittest.TestCase):
         self.assertTrue(_errors_at(result, "branches[0].platforms"))
 
 
+class BranchResponsePassthrough(unittest.TestCase):
+    """`@response.<path>` pins a value the server chose. Only its shape is
+    checkable here — the text lives in the mock scenario — plus the one
+    structural precondition: the branch must name a single scenario to read
+    the response from."""
+
+    def _spec(self, branch):
+        return _base_spec(
+            {"methods": {"onConfirmTap": {"branches": [branch]}}},
+            vm_methods=["onConfirmTap"],
+            ui_vars=[_ui_var("errorMessage", "String"), _ui_var("isAgreed")],
+            repositories=[{"name": "OrderRepository", "methods": [
+                {"name": "createOrder", "endpoint": "POST /api/orders"},
+                {"name": "fetchOrder", "endpoint": "GET /api/orders"},
+            ]}],
+        )
+
+    def test_response_reference_is_accepted(self):
+        result = _validate(self._spec({
+            "when": {"api.createOrder": "declined"},
+            "then": {"data.errorMessage": "@response.error.message"},
+        }))
+        self.assertEqual(_errors_at(result, "branchContracts"), [])
+        self.assertEqual(_warnings_at(result, "branches[0].then"), [])
+
+    def test_top_level_path_is_accepted(self):
+        result = _validate(self._spec({
+            "when": {"api.createOrder": "declined"},
+            "then": {"data.errorMessage": "@response.detail"},
+        }))
+        self.assertEqual(_errors_at(result, "branchContracts"), [])
+
+    def test_bare_response_without_a_path_is_an_error(self):
+        result = _validate(self._spec({
+            "when": {"api.createOrder": "declined"},
+            "then": {"data.errorMessage": "@response."},
+        }))
+        self.assertTrue(_errors_at(result, "branches[0].then"))
+
+    def test_branch_with_no_scenario_is_warned(self):
+        # Test generation hard-errors on this; validate says it first.
+        result = _validate(self._spec({
+            "when": {"data.isAgreed": False},
+            "then": {"data.errorMessage": "@response.error.message"},
+        }))
+        warnings = [w for w in result.warnings if "exactly one" in w.message]
+        self.assertEqual(1, len(warnings))
+
+    def test_branch_with_two_scenarios_is_warned(self):
+        result = _validate(self._spec({
+            "when": {"api.createOrder": "declined", "api.fetchOrder": "ok"},
+            "then": {"data.errorMessage": "@response.error.message"},
+        }))
+        warnings = [w for w in result.warnings if "exactly one" in w.message]
+        self.assertEqual(1, len(warnings))
+
+    def test_branches_without_response_refs_are_unaffected(self):
+        result = _validate(self._spec({
+            "when": {"data.isAgreed": False},
+            "then": {"data.errorMessage": "@checkout_failed"},
+        }))
+        self.assertEqual(
+            [], [w for w in result.warnings if "exactly one" in w.message]
+        )
+
+
 class BranchConditionUsage(unittest.TestCase):
     """Conditions against the branches that gate on them.
 

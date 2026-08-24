@@ -310,6 +310,84 @@ class TestAndroidEmission:
         assert "vitest" in content
 
 
+_PASSTHROUGH_SCENARIOS = {
+    "success": {"status": 200, "body": {"order": {"id": "o1"}}},
+    "declined": {"status": 402, "body": {"error": {
+        "code": "card_declined", "message": "お支払いを確認できませんでした"}}},
+}
+
+
+class TestResponsePassthrough:
+    """A screen that shows a message the server chose could not be
+    contracted: the text is neither ours to spell nor a strings key, so such
+    branches were written as prose notes. `@response.<path>` says "this field
+    shows what the server sent" and resolves against the branch's own
+    scenario at generation time."""
+
+    def _project_with(self, tmp_path, then, when=None):
+        bc = _contract([{
+            "when": when or {"api.createOrder": "declined"},
+            "then": then,
+        }])
+        return _project(tmp_path, bc, scenarios=_PASSTHROUGH_SCENARIOS)
+
+    def test_resolves_to_the_text_the_scenario_returns(self, tmp_path):
+        root = self._project_with(
+            tmp_path, {"data.errorMessage": "@response.error.message"})
+        report = generate_branch_tests("checkout", root)
+        content = report.test_file.read_text(encoding="utf-8")
+        assert "お支払いを確認できませんでした" in content
+        # Resolved to a literal, so every renderer gets it without new
+        # runtime support — no marker survives into the emitted test.
+        assert "@response" not in content
+
+    def test_resolves_for_every_platform(self, tmp_path):
+        root = self._project_with(
+            tmp_path, {"data.errorMessage": "@response.error.message"})
+        android = generate_branch_tests(
+            "checkout", root, platform="android", package="com.example.x",
+            out_dir="app/src/test/java", harness_dir="app/src/test/java")
+        ios = generate_branch_tests(
+            "checkout", root, platform="ios", module="checkout_app",
+            out_dir="Tests/Generated", harness_dir="Tests/Generated")
+        for report in (android, ios):
+            content = report.test_file.read_text(encoding="utf-8")
+            assert "お支払いを確認できませんでした" in content
+
+    def test_scalar_at_the_top_level_resolves(self, tmp_path):
+        scenarios = {
+            "success": {"status": 200, "body": {"order": {"id": "o1"}}},
+            "declined": {"status": 402, "body": {"detail": "no funds"}},
+        }
+        bc = _contract([{"when": {"api.createOrder": "declined"},
+                         "then": {"data.errorMessage": "@response.detail"}}])
+        root = _project(tmp_path, bc, scenarios=scenarios)
+        report = generate_branch_tests("checkout", root)
+        assert "no funds" in report.test_file.read_text(encoding="utf-8")
+
+    def test_absent_path_is_a_hard_error_naming_what_is_there(self, tmp_path):
+        root = self._project_with(
+            tmp_path, {"data.errorMessage": "@response.error.detail"})
+        with pytest.raises(BranchTestGenerationError) as excinfo:
+            generate_branch_tests("checkout", root)
+        message = str(excinfo.value)
+        assert "error.detail" in message
+        assert "code, message" in message  # the keys that do exist
+
+    def test_object_valued_path_is_a_hard_error(self, tmp_path):
+        root = self._project_with(
+            tmp_path, {"data.errorMessage": "@response.error"})
+        with pytest.raises(BranchTestGenerationError, match="must be a scalar"):
+            generate_branch_tests("checkout", root)
+
+    def test_branch_without_a_scenario_is_a_hard_error(self, tmp_path):
+        root = self._project_with(
+            tmp_path, {"data.errorMessage": "@response.error.message"},
+            when={"data.isAgreed": False})
+        with pytest.raises(BranchTestGenerationError, match="exactly one"):
+            generate_branch_tests("checkout", root)
+
+
 class TestGenerationHardErrors:
     def test_unknown_api_op_is_error(self, tmp_path):
         bc = _contract([

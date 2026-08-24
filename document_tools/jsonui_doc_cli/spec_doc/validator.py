@@ -1678,6 +1678,35 @@ class SpecValidator:
                     key, value, f"{path}.then", data_fields,
                     api_ops, transition_dests, result
                 )
+            self._check_response_ref_resolvable(when, then, path, result)
+
+    def _check_response_ref_resolvable(
+        self, when: Any, then: dict, path: str, result: SpecValidationResult,
+    ) -> None:
+        """`@response.<path>` reads the branch's own scenario, so the branch
+        has to name exactly one. Test generation fails on this; validate can
+        say it while the spec is being written."""
+        uses_response = any(
+            isinstance(v, str) and v.startswith("@response.")
+            for v in then.values()
+        )
+        if not uses_response:
+            return
+        scenarios = [
+            k for k, v in (when or {}).items()
+            if isinstance(when, dict) and k.startswith("api.")
+            and not k.endswith(".request") and isinstance(v, str)
+        ]
+        if len(scenarios) != 1:
+            result.warnings.append(SpecValidationMessage(
+                path=f"{path}.then",
+                message=(
+                    "'@response.<path>' reads the response of the branch's "
+                    f"own scenario, but `when` names {len(scenarios)} "
+                    "`api.<op>` scenario(s) — test generation needs exactly one"
+                ),
+                level="warning",
+            ))
 
     @staticmethod
     def _is_scalar(value: Any) -> bool:
@@ -1881,13 +1910,14 @@ class SpecValidator:
         result: SpecValidationResult,
     ) -> None:
         """then data.* / request-leaf value: scalar literal, '@strings_key',
-        or '@data.<field>' reference."""
+        '@data.<field>' or '@response.<path>' reference."""
         if not self._is_scalar(value):
             result.errors.append(SpecValidationMessage(
                 path=path,
                 message=(
-                    "Value must be a scalar literal, '@strings_key', or "
-                    f"'@data.<field>', got {type(value).__name__}"
+                    "Value must be a scalar literal, '@strings_key', "
+                    f"'@data.<field>' or '@response.<path>', got "
+                    f"{type(value).__name__}"
                 ),
             ))
             return
@@ -1898,12 +1928,25 @@ class SpecValidator:
             self._check_branch_data_field(
                 ref[len("data."):], path, data_fields, result
             )
+        elif ref.startswith("response."):
+            # A value the server chose (a passed-through API error message).
+            # The text lives in the scenario, so only the shape is checkable
+            # here; test generation reads the actual value out of the mock.
+            if not re.match(r"^response\.[A-Za-z_][A-Za-z0-9_]*"
+                            r"(\.[A-Za-z_][A-Za-z0-9_]*)*$", ref):
+                result.errors.append(SpecValidationMessage(
+                    path=path,
+                    message=(
+                        "'@response.' must be followed by a dotted field path "
+                        f"into the response body, got '{value}'"
+                    ),
+                ))
         elif not re.match(r"^[a-z][a-z0-9_]*$", ref):
             result.errors.append(SpecValidationMessage(
                 path=path,
                 message=(
-                    f"'@' reference must be a snake_case strings key or "
-                    f"'@data.<field>', got '{value}'"
+                    f"'@' reference must be a snake_case strings key, "
+                    f"'@data.<field>' or '@response.<path>', got '{value}'"
                 ),
             ))
 

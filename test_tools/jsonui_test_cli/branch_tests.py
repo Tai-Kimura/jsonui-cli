@@ -252,6 +252,101 @@ def resolve_routes(
     return list(routes.values())
 
 
+RESPONSE_REF_PREFIX = "@response."
+
+
+def resolve_response_refs(methods_contracts: dict, routes: list[Route]) -> None:
+    """Replace `@response.<path>` in `then` with the value the branch's own
+    scenario actually returns, in place.
+
+    Some screens display a string the server chose — an API error message
+    passed through to an alert. The contract cannot spell it as a literal
+    (it is not ours) nor as a strings key (it is not in the table), so those
+    branches were being written as prose notes and going untested. What the
+    contract *can* say is "this field shows what the server sent", and since
+    the branch already names the scenario, the expected text is knowable
+    here: read it out of the mock and hand the renderers a literal.
+
+    Resolution failures raise. A reference that cannot be bound is a broken
+    declaration, and quietly asserting something weaker would leave the
+    branch looking covered.
+    """
+    by_op = {route.op: route for route in routes}
+
+    for method_name, contract in methods_contracts.items():
+        if not isinstance(contract, dict):
+            continue
+        for i, branch in enumerate(contract.get("branches") or []):
+            if not isinstance(branch, dict) or "note" in branch:
+                continue
+            then = branch.get("then")
+            if not isinstance(then, dict):
+                continue
+            refs = [
+                (k, v) for k, v in then.items()
+                if isinstance(v, str) and v.startswith(RESPONSE_REF_PREFIX)
+            ]
+            if not refs:
+                continue
+            where = f"methods.{method_name}.branches[{i}]"
+            scenarios = {
+                k[len("api."):]: v
+                for k, v in (branch.get("when") or {}).items()
+                if k.startswith("api.") and isinstance(v, str)
+            }
+            if len(scenarios) != 1:
+                raise BranchTestGenerationError(
+                    f"{where}: '@response.<path>' needs exactly one "
+                    f"`api.<op>` in `when` to read the response from, found "
+                    f"{len(scenarios)}"
+                )
+            op, scenario_name = next(iter(scenarios.items()))
+            route = by_op.get(op)
+            if route is None:
+                raise BranchTestGenerationError(
+                    f"{where}: no route bound for api operation '{op}'"
+                )
+            scenario = route.scenarios.get(scenario_name)
+            if not isinstance(scenario, dict):
+                raise BranchTestGenerationError(
+                    f"{where}: scenario '{scenario_name}' of '{op}' is not an "
+                    "object, so it has no response body to read"
+                )
+            body = scenario.get("body")
+            for key, ref in refs:
+                path = ref[len(RESPONSE_REF_PREFIX):]
+                then[key] = _read_response_path(body, path, where, key, scenario_name)
+
+
+def _read_response_path(body, path: str, where: str, key: str, scenario: str):
+    if not path:
+        raise BranchTestGenerationError(
+            f"{where}.then.{key}: '@response.' needs a field path "
+            "(e.g. '@response.error.message')"
+        )
+    node = body
+    walked: list[str] = []
+    for part in path.split("."):
+        if not isinstance(node, dict) or part not in node:
+            available = (
+                ", ".join(sorted(node)) if isinstance(node, dict) else "(not an object)"
+            )
+            at = ".".join(walked) or "(root)"
+            raise BranchTestGenerationError(
+                f"{where}.then.{key}: scenario '{scenario}' has no "
+                f"'{path}' in its response body — at {at} the available "
+                f"keys are: {available}"
+            )
+        node = node[part]
+        walked.append(part)
+    if isinstance(node, (dict, list)):
+        raise BranchTestGenerationError(
+            f"{where}.then.{key}: '{path}' in scenario '{scenario}' is a "
+            f"{type(node).__name__}, and a displayed value must be a scalar"
+        )
+    return node
+
+
 def method_params(spec: dict, method_name: str) -> list[str]:
     view_model = (spec.get("dataFlow") or {}).get("viewModel") or {}
     for method in view_model.get("methods", []) or []:
@@ -1769,6 +1864,7 @@ def generate_branch_tests(
 
     mocks = index_mock_files(project_root / mocks_dir)
     routes = resolve_routes(spec, bc["methods"], mocks)
+    resolve_response_refs(bc["methods"], routes)
 
     if platform == "android":
         if not package:
