@@ -561,3 +561,127 @@ class BranchPlatforms(unittest.TestCase):
             "platforms": [],
         }))
         self.assertTrue(_errors_at(result, "branches[0].platforms"))
+
+
+class BranchCrossFaces(unittest.TestCase):
+    """Weak-phase cross-face correlation (warnings only).
+
+    Census-driven design (docs/plans/2026-08-24-spec-face-cross-consistency-
+    design.md): checks fire only when branchContracts exists, only in the
+    "prose says it, contract doesn't know it" direction — prose absence is
+    always legal (project cultures differ on writing serverSide prose)."""
+
+    def _spec(self, *, branches=None, server_side=None, user_actions=None,
+              transitions=None, states=None):
+        spec = _base_spec(
+            {"methods": {"onConfirmTap": {"branches": branches or [
+                {"when": {"api.createOrder": "sold_out"},
+                 "then": {"data.screenState": "order_error"}},
+            ]}}},
+            vm_methods=["onConfirmTap"],
+            ui_vars=[_ui_var("isAgreed"), _ui_var("screenState", "String")],
+            use_cases=[{"name": "OrderUseCase",
+                        "methods": [{"name": "createOrder"}]}],
+            transitions=transitions,
+            states=states,
+        )
+        if server_side is not None:
+            spec["validation"] = {"serverSide": server_side}
+        if user_actions is not None:
+            spec["userActions"] = user_actions
+        return spec
+
+    # --- seam 1: serverSide prose vs contract vocabulary ---
+
+    def test_prose_token_known_to_contract_is_clean(self):
+        spec = self._spec(server_side=[
+            {"condition": "order API error",
+             "handling": "409 sold_out shows the retry screen"},
+        ])
+        result = _validate(spec)
+        self.assertEqual(_warnings_at(result, "validation.serverSide"), [])
+
+    def test_prose_only_error_code_warns(self):
+        spec = self._spec(server_side=[
+            {"condition": "order API error",
+             "handling": "422 price_changed reloads the estimate"},
+        ])
+        warnings = _warnings_at(_validate(spec), "validation.serverSide[0]")
+        self.assertTrue(any("price_changed" in w.message for w in warnings))
+
+    def test_state_value_token_in_prose_is_not_drift(self):
+        spec = self._spec(
+            server_side=[{"condition": "err",
+                          "handling": "goes to order_error_stock screen"}],
+            states=[{"name": "screenState", "values": [
+                {"value": "order_error_stock", "description": "d"}]}],
+        )
+        result = _validate(spec)
+        self.assertEqual(_warnings_at(result, "validation.serverSide"), [])
+
+    def test_request_field_token_in_prose_is_not_drift(self):
+        spec = self._spec(
+            branches=[{"when": {"api.createOrder": "sold_out"},
+                       "then": {"api.createOrder.request": {
+                           "coupon_code": "@data.isAgreed"}}}],
+            server_side=[{"condition": "err",
+                          "handling": "coupon_code mismatch is rejected"}],
+        )
+        result = _validate(spec)
+        self.assertEqual(_warnings_at(result, "validation.serverSide"), [])
+
+    def test_no_server_side_prose_is_legal(self):
+        result = _validate(self._spec())
+        self.assertEqual(_warnings_at(result, "validation.serverSide"), [])
+
+    def test_without_branch_contracts_no_cross_face_checks(self):
+        spec = self._spec(server_side=[
+            {"condition": "err", "handling": "422 price_changed happens"},
+        ])
+        del spec["branchContracts"]
+        result = _validate(spec)
+        self.assertEqual(_warnings_at(result, "validation.serverSide"), [])
+
+    # --- seam 2: userActions prose vs declared transitions ---
+
+    def test_prose_destination_declared_by_branch_is_clean(self):
+        spec = self._spec(
+            branches=[{"when": {"api.createOrder": "sold_out"},
+                       "then": {"transition": "order_complete"}}],
+            transitions=[{"condition": "ok", "destination": "order_complete"}],
+            user_actions=[{"action": "tap",
+                           "processing": "onConfirmTap goes to order_complete"}],
+        )
+        result = _validate(spec)
+        self.assertEqual(_warnings_at(result, "userActions"), [])
+
+    def test_prose_only_destination_warns(self):
+        spec = self._spec(
+            transitions=[{"condition": "ok", "destination": "order_complete"}],
+            user_actions=[{"action": "tap",
+                           "processing": "onConfirmTap goes to order_complete"}],
+        )
+        warnings = _warnings_at(_validate(spec), "userActions[0]")
+        self.assertTrue(any("order_complete" in w.message for w in warnings))
+
+    def test_uncontracted_action_prose_is_skipped(self):
+        # The back action's prose routes somewhere, but it never mentions a
+        # contracted method — legacy actions stay out of scope.
+        spec = self._spec(
+            transitions=[{"condition": "back", "destination": "order_list"}],
+            user_actions=[{"action": "back tap",
+                           "processing": "onBackTap returns to order_list"}],
+        )
+        result = _validate(spec)
+        self.assertEqual(_warnings_at(result, "userActions"), [])
+
+    def test_pascal_case_destination_matches(self):
+        spec = self._spec(
+            branches=[{"when": {"api.createOrder": "sold_out"},
+                       "then": {"transition": "OrderComplete"}}],
+            transitions=[{"condition": "ok", "destination": "OrderComplete"}],
+            user_actions=[{"action": "tap",
+                           "processing": "onConfirmTap goes to OrderComplete"}],
+        )
+        result = _validate(spec)
+        self.assertEqual(_warnings_at(result, "userActions"), [])

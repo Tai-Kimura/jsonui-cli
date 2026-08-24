@@ -281,6 +281,7 @@ class SpecValidator:
         # Validate branchContracts (opt-in — absent section changes nothing)
         if "branchContracts" in data and data["branchContracts"]:
             self._validate_branch_contracts(data["branchContracts"], result)
+            self._validate_branch_cross_faces(data, result)
 
         # Validate relatedFiles
         if "relatedFiles" in data:
@@ -1837,6 +1838,104 @@ class SpecValidator:
                 self._validate_branch_request_match(v, leaf_path, data_fields, result)
             else:
                 self._validate_branch_then_value(v, leaf_path, data_fields, result)
+
+    # ---- Cross-face correlation (weak phase — warnings only) ----
+    #
+    # Once a spec declares branchContracts, branch facts can also live as
+    # prose in the legacy faces (validation.serverSide, userActions).
+    # Census over the first adopted specs (docs/plans/2026-08-24-spec-face-
+    # cross-consistency-design.md) showed drift concentrates in exactly two
+    # seams, and that prose *presence* is a project culture (some projects
+    # never write serverSide prose) — so the checks are strictly
+    # "if the prose says it, the contract must know it": absence of prose
+    # is always legal, and nothing pushes prose to be added. branchContracts
+    # is treated as the canonical side; only prose-only facts warn.
+
+    _SNAKE_TOKEN_RE = re.compile(r"[a-z][a-z0-9]*(?:_[a-z0-9]+)+")
+
+    def _validate_branch_cross_faces(self, data: dict, result: SpecValidationResult):
+        bc = data.get("branchContracts")
+        if not isinstance(bc, dict):
+            return
+        methods = bc.get("methods") or {}
+        if not isinstance(methods, dict) or not methods:
+            return
+
+        # A token counts as drift only when validation.serverSide is the
+        # ONLY place in the whole spec that knows it: component ids, UI
+        # element names, request fields, deliberately note-demoted codes
+        # etc. all appear somewhere else in the spec, while a stale/new
+        # prose-only error code by definition does not. Precision over
+        # recall — this is a warning-class net.
+        known: set[str] = set()
+
+        def collect_tokens(node):
+            if isinstance(node, dict):
+                for k, v in node.items():
+                    known.update(self._SNAKE_TOKEN_RE.findall(str(k)))
+                    collect_tokens(v)
+            elif isinstance(node, list):
+                for v in node:
+                    collect_tokens(v)
+            elif isinstance(node, str):
+                known.update(self._SNAKE_TOKEN_RE.findall(node))
+
+        rest = dict(data)
+        validation = dict(data.get("validation") or {})
+        validation.pop("serverSide", None)
+        rest["validation"] = validation
+        collect_tokens(rest)
+        transition_dests = self._collect_transition_destinations()
+
+        # Seam 1: validation.serverSide prose mentions a branch-like token
+        # (error code / outcome word) the contract does not know.
+        for i, entry in enumerate((data.get("validation") or {}).get("serverSide", []) or []):
+            if not isinstance(entry, dict):
+                continue
+            prose = f"{entry.get('condition', '')} {entry.get('handling', '')}"
+            for token in sorted(set(self._SNAKE_TOKEN_RE.findall(prose))):
+                if token not in known:
+                    result.warnings.append(SpecValidationMessage(
+                        path=f"validation.serverSide[{i}]",
+                        message=(
+                            f"Prose mentions branch-like token '{token}' that "
+                            "branchContracts does not know — declare the "
+                            "branch (or scenario) or update the stale prose"
+                        ),
+                        level="warning",
+                    ))
+
+        # Seam 2: a userActions entry that talks about a contracted method
+        # routes to a declared transition destination no branch declares.
+        declared_transitions: set[str] = set()
+        for contract in methods.values():
+            if not isinstance(contract, dict):
+                continue
+            for branch in contract.get("branches", []) or []:
+                if not isinstance(branch, dict):
+                    continue
+                value = (branch.get("then") or {}).get("transition")
+                if isinstance(value, str):
+                    declared_transitions.add(value)
+        method_names = [m for m in methods if isinstance(m, str)]
+        for i, action in enumerate(data.get("userActions", []) or []):
+            if not isinstance(action, dict):
+                continue
+            prose = f"{action.get('action', '')} {action.get('processing', '')}"
+            if not any(name in prose for name in method_names):
+                continue
+            for dest in sorted(transition_dests):
+                if dest in prose and dest not in declared_transitions:
+                    result.warnings.append(SpecValidationMessage(
+                        path=f"userActions[{i}]",
+                        message=(
+                            f"Prose routes to transition '{dest}' but no "
+                            "branch of the contracted method(s) declares "
+                            "`then.transition` to it — declare the branch or "
+                            "update the stale prose"
+                        ),
+                        level="warning",
+                    ))
 
     def _validate_related_files(self, files: list, result: SpecValidationResult):
         """Validate relatedFiles section."""
