@@ -332,6 +332,36 @@ def cmd_generate_test_flow(args):
     return 0
 
 
+def cmd_generate_branch_tests(args):
+    """Handle 'generate branch-tests' — vitest tests from branchContracts."""
+    from .branch_tests import BranchTestGenerationError, generate_branch_tests
+
+    try:
+        report = generate_branch_tests(
+            args.screen,
+            project_root=Path.cwd(),
+            spec_path=args.spec,
+            out_dir=args.out_dir,
+            harness_dir=args.harness_dir,
+            mocks_dir=args.mocks_dir,
+        )
+    except BranchTestGenerationError as e:
+        print(f"Error: {e}", file=sys.stderr)
+        return 1
+
+    print(f"Generated branch tests for '{report.screen}':")
+    print(f"  {report.test_file}  "
+          f"({report.declared_branches} declared branch(es), "
+          f"{report.note_branches} note-only listed as comments)")
+    print(f"  {report.runtime_file}  (shared runtime)")
+    if report.harness_created:
+        print(f"  {report.harness_file}  (NEW harness skeleton — implement createHarness())")
+    else:
+        print(f"  {report.harness_file}  (existing harness kept)")
+    print(f"  routes: {', '.join(report.routes) or '(none)'}")
+    return 0
+
+
 def cmd_generate_description(args):
     """Handle 'generate description' command - create description JSON file for a specific test case."""
     test_type = args.test_type  # "screen" or "flow"
@@ -988,6 +1018,32 @@ def main():
         help="Target platform"
     )
 
+    # Generate branch-tests subcommand (P2: vitest tests from branchContracts)
+    gen_branch_parser = generate_subparsers.add_parser(
+        "branch-tests",
+        help="Generate web (vitest) unit tests from the screen spec's branchContracts"
+    )
+    gen_branch_parser.add_argument(
+        "screen",
+        help="Screen name in snake_case (resolves <spec_directory>/<screen>.spec.json)"
+    )
+    gen_branch_parser.add_argument(
+        "--spec",
+        help="Explicit spec file path (overrides spec_directory resolution)"
+    )
+    gen_branch_parser.add_argument(
+        "--out-dir", default="tests/unit/generated",
+        help="Output directory for @generated test + runtime files"
+    )
+    gen_branch_parser.add_argument(
+        "--harness-dir", default="tests/unit/branch-harness",
+        help="Consumer-owned harness directory (skeleton emitted only if absent)"
+    )
+    gen_branch_parser.add_argument(
+        "--mocks-dir", default="tests/mocks",
+        help="Directory scanned for *.mock.json scenario files"
+    )
+
     # Generate description subcommand with screen/flow subcommands
     gen_desc_parser = generate_subparsers.add_parser(
         "description",
@@ -1184,6 +1240,8 @@ def main():
                         return cmd_generate_test_flow(args)
                 gen_test_parser.print_help()
                 return 0
+            elif args.generate_type == "branch-tests":
+                return cmd_generate_branch_tests(args)
             elif args.generate_type in ["description", "d", "desc"]:
                 # Check for test type subcommand
                 if hasattr(args, 'test_type') and args.test_type:
