@@ -190,6 +190,24 @@ def _iter_declared_api_refs(contract: dict):
             yield op, None, f"branches[{i}].then.{key}"
 
 
+def _scenario_body(scenario: dict) -> str:
+    """Serialized response body, empty when the scenario declares none.
+
+    A file-backed response (`contentType` + `bodyFile`) has no inline body.
+    Serializing the absent value produced the literal `null`, which is a
+    body the server never sends — the project's own mock server answers
+    with an empty payload and the declared content type, so this matches it.
+    """
+    if "body" not in scenario:
+        return ""
+    return json.dumps(scenario.get("body"), ensure_ascii=False)
+
+
+def _scenario_content_type(scenario: dict) -> str:
+    value = scenario.get("contentType")
+    return value if isinstance(value, str) and value else "application/json"
+
+
 def _mocks_dir_label(mocks_dir: Path | None) -> str:
     """Absolute path when known — "the mocks directory" told an author the
     file was missing when it existed somewhere the search never looked."""
@@ -652,7 +670,19 @@ export interface RouteSpec {
   method: string;
   pattern: string;
   scenario: string;
-  scenarios: Record<string, { status: number; body: unknown }>;
+  /** A scenario as the mock file declares it. `body` is absent for
+   * file-backed responses (a CSV/PDF export writes `contentType` +
+   * `bodyFile` instead), and the index signature keeps a mock that carries
+   * additional keys from breaking the type-check of generated output the
+   * project cannot edit. */
+  scenarios: Record<string, {
+    status: number;
+    body?: unknown;
+    contentType?: string;
+    bodyFile?: string | null;
+    delayMs?: number;
+    [key: string]: unknown;
+  }>;
 }
 
 export interface RecordedCall {
@@ -717,10 +747,16 @@ export function installFetchMock(
             `branch-runtime: scenario '${name}' missing for op '${r.op}'`
           );
         }
-        return new Response(JSON.stringify(sc.body), {
-          status: sc.status,
-          headers: { "Content-Type": "application/json" },
-        });
+        // Same shape the project's own mock server serves: the declared
+        // content type, and an empty body when the scenario has none (a
+        // file-backed response names a file this runtime cannot embed —
+        // status and headers are still faithful).
+        const contentType =
+          typeof sc.contentType === "string" ? sc.contentType : "application/json";
+        return new Response(
+          sc.body === undefined ? null : JSON.stringify(sc.body),
+          { status: sc.status, headers: { "Content-Type": contentType } }
+        );
       }
     }
     calls.push({ op: "(unmatched)", method, path, body: undefined });
@@ -940,8 +976,8 @@ def render_kotlin_test_file(
     route_lines = []
     for r in routes:
         scen = ", ".join(
-            f"{_kt_str(name)} to ({sc.get('status', 200)} to "
-            f"{_kt_str(json.dumps(sc.get('body'), ensure_ascii=False))})"
+            f"{_kt_str(name)} to Triple({sc.get('status', 200)}, "
+            f"{_kt_str(_scenario_body(sc))}, {_kt_str(_scenario_content_type(sc))})"
             for name, sc in r.scenarios.items()
         )
         route_lines.append(
@@ -1102,7 +1138,10 @@ data class RouteSpec(
   val method: String,
   val pattern: Regex,
   val defaultScenario: String,
-  val scenarios: Map<String, Pair<Int, String>>,
+  /** status, body (empty for a file-backed response) and the
+   * declared content type — the same shape the project's own mock
+   * server serves. */
+  val scenarios: Map<String, Triple<Int, String, String>>,
 )
 
 data class RecordedCall(val op: String, val method: String, val path: String, val body: String?)
@@ -1152,7 +1191,7 @@ fun runBranchTest(
             ?: error("branch-runtime: scenario '" + name + "' missing for op '" + r.op + "'")
           return MockResponse()
             .setResponseCode(sc.first)
-            .setHeader("Content-Type", "application/json")
+            .setHeader("Content-Type", sc.third)
             .setBody(sc.second)
         }
       }
@@ -1452,7 +1491,8 @@ def render_swift_test_file(
     for r in routes:
         scen = ", ".join(
             f"{_swift_str(name)}: ({sc.get('status', 200)}, "
-            f"{_swift_str(json.dumps(sc.get('body'), ensure_ascii=False))})"
+            f"{_swift_str(_scenario_body(sc))}, "
+            f"{_swift_str(_scenario_content_type(sc))})"
             for name, sc in r.scenarios.items()
         )
         route_lines.append(
@@ -1579,7 +1619,9 @@ struct RouteSpec {
   let method: String
   let pattern: String
   let defaultScenario: String
-  let scenarios: [String: (Int, String)]
+  /// status, body (empty for a file-backed response) and the declared
+  /// content type — the shape the project's own mock server serves.
+  let scenarios: [String: (Int, String, String)]
 }
 
 struct RecordedCall {
@@ -1662,18 +1704,19 @@ final class BranchURLProtocol: URLProtocol {
           userInfo: [NSLocalizedDescriptionKey: "scenario '\\(name)' missing for op '\\(route.op)'"]))
         return
       }
-      respond(status: scenario.0, body: scenario.1)
+      respond(status: scenario.0, body: scenario.1, contentType: scenario.2)
       return
     }
     Self.recorder?.calls.append(RecordedCall(op: "(unmatched)", method: method, path: path, body: nil))
-    respond(status: 599, body: "{\\"error\\":{\\"code\\":\\"unmocked_endpoint\\"}}")
+    respond(status: 599, body: "{\\"error\\":{\\"code\\":\\"unmocked_endpoint\\"}}",
+            contentType: "application/json")
   }
 
-  private func respond(status: Int, body: String) {
+  private func respond(status: Int, body: String, contentType: String) {
     guard let url = request.url,
           let response = HTTPURLResponse(
             url: url, statusCode: status, httpVersion: "HTTP/1.1",
-            headerFields: ["Content-Type": "application/json"])
+            headerFields: ["Content-Type": contentType])
     else { return }
     client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
     client?.urlProtocol(self, didLoad: Data(body.utf8))

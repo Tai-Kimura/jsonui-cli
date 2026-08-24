@@ -310,6 +310,63 @@ class TestAndroidEmission:
         assert "vitest" in content
 
 
+_FILE_RESPONSE_SCENARIOS = {
+    "success": {"status": 200, "body": {"order": {"id": "o1"}}},
+    "conflict": {"status": 409, "body": {"error": {"code": "sold_out"}}},
+    # A CSV/PDF export: the file is named, not inlined.
+    "csv": {"status": 200, "contentType": "text/csv", "bodyFile": None},
+}
+
+
+class TestFileBackedScenarios:
+    """A mock for a CSV/PDF export declares `contentType` + `bodyFile`
+    instead of an inline body. The web RouteSpec type admitted only
+    `{status, body}`, so the generated test — which cannot be hand-edited —
+    failed tsc; Kotlin and Swift compiled but served the literal `null`
+    with a JSON content type, which is a response no server sends. All
+    three now answer the way the project's own mock server does."""
+
+    def _project(self, tmp_path):
+        return _project(tmp_path, BASIC, scenarios=_FILE_RESPONSE_SCENARIOS)
+
+    def test_web_type_admits_the_declared_fields(self, tmp_path):
+        report = generate_branch_tests("checkout", self._project(tmp_path))
+        runtime = report.runtime_file.read_text(encoding="utf-8")
+        spec_type = runtime[runtime.index("export interface RouteSpec"):]
+        spec_type = spec_type[:spec_type.index("\n}")]
+        for field in ("body?:", "contentType?:", "bodyFile?:", "[key: string]:"):
+            assert field in spec_type, field
+        # The scenario is embedded verbatim, which is why the type has to
+        # admit what mock files actually carry.
+        assert '"contentType": "text/csv"' in report.test_file.read_text(encoding="utf-8")
+
+    def test_web_serves_the_declared_content_type_and_an_empty_body(self, tmp_path):
+        report = generate_branch_tests("checkout", self._project(tmp_path))
+        runtime = report.runtime_file.read_text(encoding="utf-8")
+        assert 'sc.contentType === "string" ? sc.contentType : "application/json"' in runtime
+        assert "sc.body === undefined ? null : JSON.stringify(sc.body)" in runtime
+
+    def test_kotlin_and_swift_carry_the_content_type(self, tmp_path):
+        root = self._project(tmp_path)
+        kotlin = generate_branch_tests(
+            "checkout", root, platform="android", package="com.example.x",
+            out_dir="app/src/test/java", harness_dir="app/src/test/java")
+        swift = generate_branch_tests(
+            "checkout", root, platform="ios", module="checkout_app",
+            out_dir="Tests/Generated", harness_dir="Tests/Generated")
+        kt = kotlin.test_file.read_text(encoding="utf-8")
+        sw = swift.test_file.read_text(encoding="utf-8")
+        assert '"text/csv"' in kt and '"text/csv"' in sw
+        # Body-less scenario emits an empty payload, never the string "null".
+        assert 'Triple(200, "", "text/csv")' in kt
+        assert '(200, "", "text/csv")' in sw
+        for runtime, header in (
+            (kotlin.runtime_file.read_text(encoding="utf-8"), 'setHeader("Content-Type", sc.third)'),
+            (swift.runtime_file.read_text(encoding="utf-8"), 'headerFields: ["Content-Type": contentType]'),
+        ):
+            assert header in runtime
+
+
 class TestMockDirResolution:
     """`mock.mockDir` is how a project says where its mocks live, and the
     other mock subcommands honour it. Branch-test generation read only the
