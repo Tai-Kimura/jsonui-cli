@@ -43,6 +43,22 @@ def cmd_validate(args):
         else:
             print(f"Warning: Path not found: {path}", file=sys.stderr)
 
+    # The mock directory is named in config, not on the command line, and a
+    # project's tests and its mocks are routinely different trees. The drift
+    # check has always resolved mockDir from config — file validation only saw
+    # what sat under the paths given, so `validate <testDir>` ran the contract
+    # check over mocks it never opened. A mock with a malformed `$schema` or an
+    # unknown key passed the gate a project actually runs and failed only when
+    # someone pointed the command straight at the mocks.
+    # Compared resolved: the command line may name a directory absolutely while
+    # config resolves mockDir relative to the config file, and the same file
+    # under two spellings would be validated — and counted — twice.
+    already = {p.resolve() for p in files_to_validate}
+    files_to_validate.extend(
+        p for p in _configured_mock_files(getattr(args, "config", None))
+        if p.resolve() not in already
+    )
+
     if not files_to_validate:
         print("No test or description files found")
         return 1
@@ -98,6 +114,35 @@ def cmd_validate(args):
     return 0
 
 
+def _resolve_mock_dir(config_path):
+    """Absolute mockDir from config, or None when the project has no mocks.
+
+    Relative paths resolve against the config file, not the cwd — the gate is
+    run from wherever the project's scripts happen to sit.
+    """
+    config, cfg_path = _load_mock_config(config_path)
+    mock_dir = config.get("mockDir")
+    if not mock_dir:
+        return None
+    root = cfg_path.parent if cfg_path else Path(".")
+    mock_path = Path(mock_dir)
+    if not mock_path.is_absolute():
+        mock_path = root / mock_path
+    return mock_path if mock_path.exists() else None
+
+
+def _configured_mock_files(config_path):
+    """Every `*.mock.json` under the configured mockDir.
+
+    Silent and empty when the project declares no mocks, so this costs
+    nothing for the projects that do not use them.
+    """
+    mock_path = _resolve_mock_dir(config_path)
+    if mock_path is None:
+        return []
+    return sorted(mock_path.rglob("*.mock.json"))
+
+
 def _check_mocks_against_swagger(config_path):
     """Regenerate `generated/` if needed, then check the mocks against swagger.
 
@@ -109,14 +154,12 @@ def _check_mocks_against_swagger(config_path):
     config, cfg_path = _load_mock_config(config_path)
     swaggers = config.get("swagger") or []
     mock_dir = config.get("mockDir")
-    if not swaggers or not mock_dir:
+    # One resolution shared with the file collector: two copies of this is how
+    # the drift check ended up reading a directory the validator never opened.
+    mock_path = _resolve_mock_dir(config_path)
+    if not swaggers or mock_path is None:
         return 0
     root = cfg_path.parent if cfg_path else Path(".")
-    mock_path = Path(mock_dir)
-    if not mock_path.is_absolute():
-        mock_path = root / mock_path
-    if not mock_path.exists():
-        return 0
 
     resolved = _resolve_swaggers(swaggers, root, cfg_path)
     if not resolved:
