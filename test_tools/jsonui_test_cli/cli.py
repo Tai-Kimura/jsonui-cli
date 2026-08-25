@@ -109,6 +109,9 @@ def cmd_validate(args):
     if total_errors == 0 and not getattr(args, "no_mock_check", False):
         mock_rc, orphans = _check_mocks_against_swagger(
             getattr(args, "config", None))
+        if orphans is None:
+            _warn_unchecked_mocks(getattr(args, "config", None),
+                                  files_to_validate)
 
     # Summary
     print(f"\n{'='*50}")
@@ -169,6 +172,44 @@ def _configured_mock_files(config_path):
     return sorted(mock_path.rglob("*.mock.json"))
 
 
+def _warn_unchecked_mocks(config_path, validated_files):
+    """Say so when mock files exist but nothing is declared to check them.
+
+    Fixing the orphan count only stops the false reassurance: with no
+    `Orphan mocks:` line, a project whose mocks are entirely outside the gate
+    prints exactly what a project with no mocks prints. Silence is not
+    information. One consumer carried 152 mock files for six weeks with no
+    `mock` block at all; `mock generate --check` cannot report this, because
+    it cannot start without that declaration — the absence of a check is not
+    detectable by the check. So it is asked here, on the gate that runs
+    either way.
+
+    Counted from the files this run already collected, not from `mockDir`.
+    An earlier draft asked `_configured_mock_files`, which needs `mockDir` to
+    find anything — so the one configuration that prompted this warning, a
+    project with no `mock` block whatsoever, was the single case it stayed
+    quiet for. Reported by the lane that wrote the ticket, measured against
+    the unpushed working tree. The collected list needs no discovery rule of
+    its own: these are the files the run just validated.
+
+    A warning, never the exit code: keeping mocks only to serve a dev server,
+    with no contract to check them against, is a legitimate setup. This asks;
+    it does not decide.
+    """
+    if _mock_gate_inputs(config_path) is not None:
+        return
+    mock_files = [p for p in validated_files if p.name.endswith(".mock.json")]
+    if not mock_files:
+        return
+    config, _cfg_path = _load_mock_config(config_path)
+    if not config.get("swagger"):
+        missing = "mock.swagger is not declared"
+    else:
+        missing = "no declared mock.swagger could be resolved"
+    print(f"\n[WARN] {len(mock_files)} mock file(s) were validated, but "
+          f"{missing} — the mock contract check did not run.")
+
+
 def _mock_gate_inputs(config_path):
     """(resolved swaggers, mockDir, config) for the mock gate, or None.
 
@@ -190,13 +231,22 @@ def _mock_gate_inputs(config_path):
 
 
 def _regenerate_stale_mocks(config_path):
-    """Rebuild `generated/` when it is missing or older than the swagger.
+    """Rebuild `generated/` when it is missing or older than its inputs.
 
     Runs BEFORE the files are collected. `generated/` is meant to be
     gitignorable, so it has to rebuild itself on a fresh clone or a first CI
     run — but the rebuild used to happen after the count, so `Files:` reported
     whatever the *previous* run had left behind. The same input printed 267 on
     the run that rebuilt and 306 on the next one.
+
+    The swagger is not the only input. Adding a hand-written mock for an
+    operation retires the generated copy of it, so a trigger watching only
+    the swagger left that copy in place until the schema next changed — and
+    `Files:` counted it, moving by one for a reason that has nothing to do
+    with the change the reader just made. Small on its own, but it is
+    indistinguishable from the count instability this trigger was rewritten
+    to remove, which is the part that matters: a reader cannot tell the
+    residue from the bug.
     """
     from .mock.generate import GENERATED_DIR, generate
 
@@ -207,11 +257,17 @@ def _regenerate_stale_mocks(config_path):
     scope = _load_path_scope(config_path)
 
     gen_root = mock_path / GENERATED_DIR
-    newest_swagger = max(
+    newest_input = max(
         (Path(s).stat().st_mtime for s in resolved if Path(s).exists()), default=0)
+    # Hand-written mocks are inputs too: one of them appearing is what makes a
+    # generated file redundant.
+    for p in mock_path.rglob("*.mock.json"):
+        if gen_root in p.parents:
+            continue
+        newest_input = max(newest_input, p.stat().st_mtime)
     generated_at = max(
         (p.stat().st_mtime for p in gen_root.rglob("*.mock.json")), default=0)
-    if generated_at >= newest_swagger:
+    if generated_at >= newest_input:
         return 0
     try:
         built = generate(resolved, mock_path, scope=scope)
@@ -239,14 +295,18 @@ def _check_mocks_against_swagger(config_path):
 
     inputs = _mock_gate_inputs(config_path)
     if inputs is None:
-        return 0, 0
+        # None, not 0: the caller omits the count when the gate did not run,
+        # and returning 0 made every mock-less project print the sentence a
+        # clean result prints. Same reason below — a report we cannot read is
+        # not a report of zero orphans.
+        return 0, None
     resolved, mock_path, config = inputs
     scope = _load_path_scope(config_path)
 
     report = generate(resolved, mock_path, check=True, scope=scope,
                       strict=bool(config.get("checkOptionalFields", False)))
     if not isinstance(report, CheckReport):
-        return 0, 0
+        return 0, None
     orphans = len(report.orphaned)
     if not report.has_drift:
         return 0, orphans
