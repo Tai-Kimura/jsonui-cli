@@ -7,7 +7,8 @@ Comparison policy (plan 03 + review §3-1):
 - 2xx responses: compared per declared status code, deep schema diff,
   and 2xx code sets compared in BOTH directions (an impl-only 201 matters
   for DTO generation).
-- 4xx/5xx responses: doc → impl presence check ONLY. Impl-side extras
+- 4xx/5xx responses: doc → impl presence check ONLY — the code must be
+  declared on both sides, the body is never compared. Impl-side extras
   (e.g. FastAPI auto-422) are never reported.
 - path parameter names: positional match; name difference is a warning.
 - schema names: compared BY POSITION, warning-level only (DTO generation
@@ -236,11 +237,22 @@ def _name_compared_at(loc: str, ignore_codes: set[str]) -> bool:
     """Names are compared exactly where structures are compared.
 
     Parameters and requestBody always; responses only for the 2xx codes this
-    run actually diffs. Non-2xx bodies are a presence check only (see the
-    module docstring), so a name there would be the one thing reported about
-    a position nothing else inspects — which is how the previous set-based
-    warning ended up asking projects to declare `responses={404: ...}` purely
-    to silence it, adding a declaration that no comparison would ever read.
+    run actually diffs.
+
+    Non-2xx responses get a doc-to-impl PRESENCE check and nothing more — the
+    body at that position is never compared. A name there would therefore be
+    the only thing ever said about a shape no comparison inspects, which is
+    what made the old set-based warning answerable by declaring
+    `responses={404: {"model": ErrorResponse}}`: the name appears in the impl
+    components and the warning stops, whether or not the two sides agree on
+    what a 404 body looks like. (An earlier version of this comment claimed
+    such a declaration is read by no comparison at all. Not so — it satisfies
+    the presence check above, which is a real check. The body is the part
+    nothing reads.)
+
+    A code the project silenced with `ignore_response_codes` is skipped here
+    too. Declaring "do not compare this position" and then being told only
+    about its name is the same complaint one layer down.
     """
     if not loc.startswith("→ "):
         return True
