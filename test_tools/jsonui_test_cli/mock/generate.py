@@ -106,6 +106,30 @@ def is_generated(rel) -> bool:
     return Path(rel).parts[:1] == (GENERATED_DIR,)
 
 
+def normalize_path_key(path: str) -> str:
+    """Positional path normalization: /users/{user_id} -> /users/{}
+    and trailing-slash insensitivity.
+
+    A path template's variable *names* are not part of the URL it matches, and
+    OpenAPI forbids two paths that differ only in them — so the name is
+    documentation, and two spellings of one route have to compare equal.
+
+    This is not a new rule: `builtin:openapi-diff` has paired doc-side and
+    impl-side operations this way from the start
+    (`jsonui_doc_cli/check/openapi_normalize.py`). The two tools are
+    distributed independently and cannot import each other, so this is a
+    second implementation of one decision — `test_normalize_path_key_parity`
+    is what keeps it from becoming a second decision.
+    """
+    normalized = "/".join(
+        "{}" if seg.startswith("{") and seg.endswith("}") else seg
+        for seg in (path or "").split("/")
+    )
+    if len(normalized) > 1 and normalized.endswith("/"):
+        normalized = normalized[:-1]
+    return normalized
+
+
 def route_key(method, path) -> tuple:
     """The identity of a mock: the route it serves.
 
@@ -115,8 +139,14 @@ def route_key(method, path) -> tuple:
     after the path rather than the operationId had every mock reported as
     both MISSING and ORPHAN — and the body comparison, which only runs on
     files matched to an operation, never executed at all.
+
+    Matched on the normalized path for the same reason: renaming a path
+    variable in the swagger (an edit that changes no HTTP contract) detached
+    every hand-written mock on that route, and a detached mock is not
+    reported as wrong — it is reported as ORPHAN and its body stops being
+    checked at all.
     """
-    return ((method or "GET").upper(), path or "/")
+    return ((method or "GET").upper(), normalize_path_key(path or "/"))
 
 
 def read_route(path: Path) -> tuple | None:
@@ -820,6 +850,9 @@ def _check(swagger_paths: list[str], mock_dir: Path, strict: bool = False,
            scope: PathScope | None = None) -> CheckReport:
     scope = scope or PathScope()
     expected: dict[tuple, tuple[OpenApiDoc, Operation]] = {}
+    #: normalized key -> the spelling that side wrote, for messages
+    shown_swagger: dict[tuple, str] = {}
+    shown_mock: dict[tuple, str] = {}
     excluded: dict[tuple, Operation] = {}
     for swagger in swagger_paths:
         doc = OpenApiDoc.load(swagger)
@@ -827,6 +860,11 @@ def _check(swagger_paths: list[str], mock_dir: Path, strict: bool = False,
             continue
         for op in doc.operations():
             key = route_key(op.method, op.path)
+            # Routes are matched normalized, but every message shows the
+            # spelling its own side actually wrote: a report that answers
+            # `/api/items/{}` sends the reader looking for a path that is in
+            # neither file.
+            shown_swagger[key] = f"{key[0]} {op.path}"
             if scope.covers(op.path):
                 expected[key] = (doc, op)
             else:
@@ -845,9 +883,11 @@ def _check(swagger_paths: list[str], mock_dir: Path, strict: bool = False,
             existing[key] = rel
             try:
                 with open(path, "r", encoding="utf-8") as f:
-                    op_id = (json.load(f).get("source") or {}).get("operationId")
+                    source = (json.load(f).get("source") or {})
             except (OSError, json.JSONDecodeError):
-                op_id = None
+                source = {}
+            shown_mock[key] = f"{key[0]} {source.get('path') or key[1]}"
+            op_id = source.get("operationId")
             if op_id:
                 op_ids.setdefault(op_id, key)
 
@@ -863,15 +903,15 @@ def _check(swagger_paths: list[str], mock_dir: Path, strict: bool = False,
         was = op_ids.get(op.operation_id)
         if was is not None and was in set(orphan_keys):
             drifted.append(
-                f"{existing[was]}: source {was[0]} {was[1]} "
-                f"!= swagger {key[0]} {key[1]}"
+                f"{existing[was]}: source {shown_mock[was]} "
+                f"!= swagger {shown_swagger[key]}"
             )
             paired.add(key)
             paired.add(was)
 
     warnings: list[str] = []
     missing = sorted(
-        f"{mock_relpath(expected[k][1])} ({k[0]} {k[1]})"
+        f"{mock_relpath(expected[k][1])} ({shown_swagger[k]})"
         for k in missing_keys if k not in paired
     )
     # A mock for a route the scope excludes is not an orphan — the swagger
@@ -879,7 +919,7 @@ def _check(swagger_paths: list[str], mock_dir: Path, strict: bool = False,
     # separately keeps ORPHAN meaning "no such endpoint any more", and lets
     # the file read as deletable without turning the gate red for it.
     out_of_scope = sorted(
-        f"{existing[k]} ({k[0]} {k[1]})"
+        f"{existing[k]} ({shown_mock[k]})"
         for k in orphan_keys if k not in paired and k in excluded
     )
     orphan_keys = [k for k in orphan_keys if k not in excluded]
@@ -887,11 +927,11 @@ def _check(swagger_paths: list[str], mock_dir: Path, strict: bool = False,
     # A stale entry in generated/ is fixed by regenerating, so it is reported
     # rather than failed. One outside it needs a decision.
     orphaned = sorted(
-        f"{existing[k]} ({k[0]} {k[1]})"
+        f"{existing[k]} ({shown_mock[k]})"
         for k in orphan_keys if k not in paired and not is_generated(existing[k])
     )
     warnings += sorted(
-        f"{existing[k]} ({k[0]} {k[1]}) — stale generated mock, regenerate"
+        f"{existing[k]} ({shown_mock[k]}) — stale generated mock, regenerate"
         for k in orphan_keys if k not in paired and is_generated(existing[k])
     )
 

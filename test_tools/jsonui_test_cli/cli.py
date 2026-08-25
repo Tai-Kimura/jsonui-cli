@@ -25,6 +25,15 @@ def cmd_validate(args):
     files_checked = 0
     valid_test_files = []
 
+    # Rebuild a stale `generated/` before anything is counted. Generation used
+    # to run after the summary, so `Files:` reported the tree the *previous*
+    # run had left behind — the same input printed two different totals
+    # depending on whether that run had rebuilt or not.
+    if not getattr(args, "no_mock_check", False):
+        regen_rc = _regenerate_stale_mocks(getattr(args, "config", None))
+        if regen_rc != 0:
+            return regen_rc
+
     # Collect files
     files_to_validate = []
     for path in args.files:
@@ -87,22 +96,39 @@ def cmd_validate(args):
         if result.is_valid and Path(file_path).name.endswith(".test.json"):
             valid_test_files.append(Path(file_path))
 
-    # Summary
-    print(f"\n{'='*50}")
-    status = "PASSED" if total_errors == 0 else "FAILED"
-    print(f"Result: {status}")
-    print(f"Files: {files_checked}, Errors: {total_errors}, Warnings: {total_warnings}")
-
-    if total_errors > 0:
-        return 1
-
     # Mock contract drift, on the same gate. `--check` existed but nothing
     # called it, so a mock encoding a contract the server does not have kept
     # the suite green (mock-contract-validation-does-not-run).
-    if not getattr(args, "no_mock_check", False):
-        mock_rc = _check_mocks_against_swagger(getattr(args, "config", None))
-        if mock_rc != 0:
-            return mock_rc
+    #
+    # Run before the summary so the summary can report what it found. An
+    # orphaned mock is one whose body is compared to nothing, so a rename
+    # upstream can silently retire a chunk of the contract check while every
+    # line a reader looks at still says PASSED.
+    mock_rc = 0
+    orphans = None
+    if total_errors == 0 and not getattr(args, "no_mock_check", False):
+        mock_rc, orphans = _check_mocks_against_swagger(
+            getattr(args, "config", None))
+
+    # Summary
+    print(f"\n{'='*50}")
+    # The mock gate counts toward the headline. It always counted toward the
+    # exit code, so a run could print PASSED and exit 1 — and the reporting
+    # project read the word, not the code. A headline that disagrees with the
+    # result is the same silent failure this gate exists to stop.
+    status = "PASSED" if total_errors == 0 and mock_rc == 0 else "FAILED"
+    print(f"Result: {status}")
+    summary = f"Files: {files_checked}, Errors: {total_errors}, Warnings: {total_warnings}"
+    # Omitted, not zeroed, when the check did not run: "Orphan mocks: 0" from a
+    # run that never looked would be the same sentence as a clean result.
+    if orphans is not None:
+        summary += f", Orphan mocks: {orphans}"
+    print(summary)
+
+    if total_errors > 0:
+        return 1
+    if mock_rc != 0:
+        return mock_rc
 
     # Success-gated flatten-install: distribute validated tests to the platform
     # locations declared in config (no-op when nothing is configured).
@@ -143,55 +169,87 @@ def _configured_mock_files(config_path):
     return sorted(mock_path.rglob("*.mock.json"))
 
 
-def _check_mocks_against_swagger(config_path):
-    """Regenerate `generated/` if needed, then check the mocks against swagger.
+def _mock_gate_inputs(config_path):
+    """(resolved swaggers, mockDir, config) for the mock gate, or None.
 
-    Silent no-op when the project has no mock config, so this stays free for
-    projects that do not use mocks.
+    None means the project has no mocks to check, which keeps every mock step
+    free for the projects that do not use them.
     """
-    from .mock.generate import GENERATED_DIR, generate, CheckReport
-
     config, cfg_path = _load_mock_config(config_path)
     swaggers = config.get("swagger") or []
-    mock_dir = config.get("mockDir")
     # One resolution shared with the file collector: two copies of this is how
     # the drift check ended up reading a directory the validator never opened.
     mock_path = _resolve_mock_dir(config_path)
     if not swaggers or mock_path is None:
-        return 0
+        return None
     root = cfg_path.parent if cfg_path else Path(".")
-
     resolved = _resolve_swaggers(swaggers, root, cfg_path)
     if not resolved:
-        return 0
+        return None
+    return resolved, mock_path, config
 
+
+def _regenerate_stale_mocks(config_path):
+    """Rebuild `generated/` when it is missing or older than the swagger.
+
+    Runs BEFORE the files are collected. `generated/` is meant to be
+    gitignorable, so it has to rebuild itself on a fresh clone or a first CI
+    run — but the rebuild used to happen after the count, so `Files:` reported
+    whatever the *previous* run had left behind. The same input printed 267 on
+    the run that rebuilt and 306 on the next one.
+    """
+    from .mock.generate import GENERATED_DIR, generate
+
+    inputs = _mock_gate_inputs(config_path)
+    if inputs is None:
+        return 0
+    resolved, mock_path, _config = inputs
     scope = _load_path_scope(config_path)
 
-    # generated/ is meant to be gitignorable, so it has to rebuild itself on a
-    # fresh clone or a first CI run. Rebuilding when it is missing or older
-    # than the swagger keeps `validate` the single entry point.
     gen_root = mock_path / GENERATED_DIR
     newest_swagger = max(
         (Path(s).stat().st_mtime for s in resolved if Path(s).exists()), default=0)
     generated_at = max(
         (p.stat().st_mtime for p in gen_root.rglob("*.mock.json")), default=0)
-    if generated_at < newest_swagger:
-        try:
-            built = generate(resolved, mock_path, scope=scope)
-        except (OSError, ValueError, KeyError) as e:
-            # Running the suite against an empty generated/ turns every
-            # unmocked operation into a 404 and a confusing red.
-            print(f"\n{'='*50}")
-            print(f"Mock generation failed: {e}")
-            return 1
-        if built.created:
-            print(f"\nRegenerated {len(built.created)} mock file(s) "
-                  f"into {mock_dir}/{GENERATED_DIR}/")
+    if generated_at >= newest_swagger:
+        return 0
+    try:
+        built = generate(resolved, mock_path, scope=scope)
+    except (OSError, ValueError, KeyError) as e:
+        # Running the suite against an empty generated/ turns every
+        # unmocked operation into a 404 and a confusing red.
+        print(f"\n{'='*50}")
+        print(f"Mock generation failed: {e}")
+        return 1
+    if built.created:
+        print(f"\nRegenerated {len(built.created)} mock file(s) "
+              f"into {mock_path.name}/{GENERATED_DIR}/")
+    return 0
+
+
+def _check_mocks_against_swagger(config_path):
+    """Check the mocks against swagger. Returns (exit code, orphan count).
+
+    The orphan count is returned rather than only printed: an orphaned mock is
+    a mock whose body stops being compared to anything, and a check that
+    quietly shrinks its own scope is the one failure a reader cannot see in a
+    pass/fail line.
+    """
+    from .mock.generate import generate, CheckReport
+
+    inputs = _mock_gate_inputs(config_path)
+    if inputs is None:
+        return 0, 0
+    resolved, mock_path, config = inputs
+    scope = _load_path_scope(config_path)
 
     report = generate(resolved, mock_path, check=True, scope=scope,
                       strict=bool(config.get("checkOptionalFields", False)))
-    if not isinstance(report, CheckReport) or not report.has_drift:
-        return 0
+    if not isinstance(report, CheckReport):
+        return 0, 0
+    orphans = len(report.orphaned)
+    if not report.has_drift:
+        return 0, orphans
 
     print(f"\n{'='*50}")
     print("Mock contract drift:")
@@ -205,7 +263,7 @@ def _check_mocks_against_swagger(config_path):
         print(f"  [BODY]    {drift}")
     print("Fix with `jsonui-test mock generate --update-default`, "
           "or pass --no-mock-check to skip this gate.")
-    return 1
+    return 1, orphans
 
 
 def _load_test_config(explicit_path=None):

@@ -119,13 +119,17 @@ class TestEndToEnd:
         ["../docs/api/spec.json"],
     ])
     def test_a_string_and_a_list_behave_identically(self, tmp_path, swagger_value):
-        from jsonui_test_cli.cli import _check_mocks_against_swagger
+        from jsonui_test_cli.cli import (
+            _check_mocks_against_swagger, _regenerate_stale_mocks)
 
         proj = self._project(tmp_path, swagger_value)
         cwd = os.getcwd()
         os.chdir(proj)
         try:
-            assert _check_mocks_against_swagger(None) == 0
+            # Regeneration is a separate step now: `validate` runs it before
+            # it counts files, so the two are ordered rather than nested.
+            assert _regenerate_stale_mocks(None) == 0
+            assert _check_mocks_against_swagger(None) == (0, 0)
         finally:
             os.chdir(cwd)
         generated = list((proj / "tests" / "mocks" / "generated").rglob("*.mock.json"))
