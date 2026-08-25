@@ -80,12 +80,21 @@ class SplitTreeBoundaryTests(unittest.TestCase):
 
     def test_it_does_not_reach_out_of_the_project(self):
         """The bug: a decoy outside the boundary was reported as this
-        project's unchecked mocks."""
+        project's unchecked mocks.
+
+        The in-bounds half of this assertion has moved. When it was written
+        the search started only at a test file, so nothing in `<app>/` was
+        reachable and silence was the whole outcome; a second starting point
+        at the project root now finds those three. The decoy is what this
+        regression is about, and it is still absent.
+        """
         self.put_mocks(self.app / "tests" / "mocks", 3)   # in bounds
         self.put_mocks(self.root / "mocks", 9)            # OUT of bounds
         rc, out = self.validate()
-        self.assertNotIn("Unchecked mocks", out)
         self.assertNotIn("9 mock file(s)", out)
+        self.assertNotIn(str(self.root / "mocks"), out)
+        self.assertIn("3 mock file(s)", out)
+        self.assertIn("Unchecked mocks: 3", out)
         self.assertEqual(rc, 0, out)
 
     def test_a_decoy_alone_is_not_reported_either(self):

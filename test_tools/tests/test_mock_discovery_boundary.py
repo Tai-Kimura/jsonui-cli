@@ -240,3 +240,98 @@ class TestDeclaredConfigurationIsUnaffected:
         _, output = _validate(proj, monkeypatch)
         assert "Unchecked mocks" not in output
         assert "Orphan mocks:" in output, "the gate ran, so it reports"
+
+
+class TestSplitTreeLayouts:
+    """Tests in one tree, the app (config and mocks) in another.
+
+    Walking up from a test file never passes through the app directory, so a
+    single starting point cannot see those mocks however the boundary is
+    defined. Two consumers use this layout. A second start at the project root
+    closes it; the boundary still decides what is in and out.
+    """
+
+    def _split(self, tmp_path, in_bounds=0, decoy=0, extra=None):
+        repo = tmp_path / "repo"
+        _write(repo / "tests" / "admin" / "screens" / "a.test.json", TEST_FILE)
+        app = repo / "admin"
+        _write(app / "jui.config.json", {"test": {}})
+        for i in range(in_bounds):
+            _write(app / "tests" / "mocks" / f"m{i}.mock.json", _mock(f"in{i}"))
+        for i in range(decoy):
+            _write(repo / "mocks" / f"d{i}.mock.json", _mock(f"out{i}"))
+        for rel, body in (extra or []):
+            _write(app / rel, body)
+        return app
+
+    def _run(self, app, monkeypatch):
+        return _validate(app, monkeypatch, files=("../tests/admin",))
+
+    def test_the_apps_own_mocks_are_found(self, tmp_path, monkeypatch):
+        app = self._split(tmp_path, in_bounds=3)
+        _, output = self._run(app, monkeypatch)
+        assert "Unchecked mocks: 3" in output
+
+    def test_the_decoy_outside_the_boundary_is_still_not(self, tmp_path, monkeypatch):
+        # The v1.6.53 regression, preserved: closing the detection must not
+        # reopen the false positive it was closed around.
+        app = self._split(tmp_path, in_bounds=3, decoy=9)
+        _, output = self._run(app, monkeypatch)
+        assert "Unchecked mocks: 3" in output
+        assert "9 mock file(s)" not in output
+
+    def test_a_decoy_alone_stays_silent(self, tmp_path, monkeypatch):
+        app = self._split(tmp_path, decoy=4)
+        _, output = self._run(app, monkeypatch)
+        assert "Unchecked mocks" not in output
+
+    def test_mock_json_files_kept_for_another_purpose_are_reported(self, tmp_path, monkeypatch):
+        # Adjudicated: the sentence is true of them — this many `*.mock.json`
+        # are here and nothing declares a contract to check them against.
+        # Only the project knows the intent, and both ways to silence it are
+        # its own declaration: declare `mock.swagger`, or do not use the name.
+        app = self._split(tmp_path, extra=[("mocks/other.mock.json", _mock())])
+        _, output = self._run(app, monkeypatch)
+        assert "Unchecked mocks: 1" in output
+        assert str(app / "mocks") in output, (
+            "the directory is what makes the finding actionable; the ruling "
+            "to report these depends on the reader being able to see which "
+            "directory is meant")
+
+    def test_a_directory_with_no_mock_files_is_silent(self, tmp_path, monkeypatch):
+        # The count decides, not the directory's existence. That is what keeps
+        # a `mocks/` folder used for something else quiet unless it actually
+        # holds files this check would have read.
+        app = self._split(tmp_path)
+        (app / "mocks").mkdir(parents=True)
+        (app / "mocks" / "README.md").write_text("fixtures", encoding="utf-8")
+        _, output = self._run(app, monkeypatch)
+        assert "Unchecked mocks" not in output
+
+
+class TestTheTwoStartsDoNotDoubleCount:
+    def test_one_directory_reached_from_both_starts_is_counted_once(self, tmp_path, monkeypatch):
+        # The common layout: tests and config share a tree, so both starts
+        # walk to the same `tests/mocks`. Counting it twice would put a number
+        # in the summary that matches nothing on disk.
+        proj = _project(tmp_path, test_at="tests/screens/a.test.json")
+        for i in range(3):
+            _write(proj / "tests" / "mocks" / f"m{i}.mock.json", _mock(f"op{i}"))
+        _, output = _validate(proj, monkeypatch, files=("tests/screens",))
+        assert "Unchecked mocks: 3" in output
+        assert "Unchecked mocks: 6" not in output
+
+    def test_two_directories_are_both_named(self, tmp_path, monkeypatch):
+        # The two starts land apart only when the test tree has its own mocks
+        # deeper than the project root's: the walk from the test file stops at
+        # `tests/admin/mocks`, and the walk from the root finds `mocks`
+        # because `tests/mocks` is not there. A first attempt at this test put
+        # both at the usual places and they resolved to one directory — the
+        # convention checks `tests/mocks` before `mocks` at every level.
+        proj = _project(tmp_path, test_at="tests/admin/screens/a.test.json")
+        _write(proj / "tests" / "admin" / "mocks" / "a.mock.json", _mock("a"))
+        _write(proj / "mocks" / "b.mock.json", _mock("b"))
+        _, output = _validate(proj, monkeypatch, files=("tests/admin/screens",))
+        assert "Unchecked mocks: 2" in output
+        assert str(proj / "tests" / "admin" / "mocks") in output
+        assert str(proj / "mocks") in output

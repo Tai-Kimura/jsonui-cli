@@ -304,17 +304,42 @@ def _unchecked_mocks_elsewhere(config_path, validated_files):
     """
     from .validation.mock import find_mock_dir
 
-    tests = [p for p in validated_files if p.name.endswith(".test.json")]
     boundary = _project_root(config_path)
-    if not tests or boundary is None:
+    if boundary is None:
         return None
-    mock_dir = find_mock_dir(tests[0], stop_at=boundary)
-    if mock_dir is None:
-        return None
-    found = sorted(mock_dir.rglob("*.mock.json"))
+
+    # Two starting points, both inside the boundary. A test file finds mocks
+    # kept beside the tests; the project root finds mocks kept beside the
+    # config. Neither alone covers a split tree — tests in one tree and the
+    # app (config and mocks) in another — because the walk from a test file
+    # never passes through the app directory, and that is the layout two
+    # consumers actually use.
+    starts = [p for p in validated_files if p.name.endswith(".test.json")][:1]
+    starts.append(boundary / "jui.config.json")   # walks from `boundary`
+
+    # Deduplicated on the resolved directory, then on the files: the two
+    # starts reach the same place whenever tests and config share a tree,
+    # which is the common layout, and counting it twice would put a number in
+    # the summary that matches nothing on disk.
+    found: dict = {}
+    for start in starts:
+        mock_dir = find_mock_dir(start, stop_at=boundary)
+        if mock_dir is None:
+            continue
+        for path in mock_dir.rglob("*.mock.json"):
+            found[path.resolve()] = mock_dir
     if not found:
         return None
-    print(f"\n[WARN] {len(found)} mock file(s) found under {mock_dir}, but no "
+
+    # The directory is in the sentence deliberately. A project may keep
+    # `*.mock.json` files for something other than this contract check; the
+    # warning is still true of them, and only the project knows the intent, so
+    # it says what it found and where rather than deciding. Silencing it is a
+    # declaration either way — declare `mock.swagger`, or do not name the
+    # files `*.mock.json` — and naming the directory is what makes that
+    # choice available to the reader.
+    where = ", ".join(sorted({str(d) for d in found.values()}))
+    print(f"\n[WARN] {len(found)} mock file(s) found under {where}, but no "
           f"mock.swagger is declared — the mock contract check did not run.")
     return len(found)
 
