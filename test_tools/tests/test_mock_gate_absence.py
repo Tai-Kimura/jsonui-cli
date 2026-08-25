@@ -166,6 +166,36 @@ class MockGateAbsenceTests(unittest.TestCase):
         self.assertIn("3 mock file(s) were validated", out)
         self.assertEqual(rc, 0, out)
 
+    def test_an_unresolvable_mockdir_is_reported_without_a_count(self):
+        """The rename case, and the one that actually happens.
+
+        A lane moved its mocks between trees and rewrote `mockDir` the same
+        day; one wrong character and the contract check for 190 files stops
+        with every gate still green. `mockDir` declared and not resolving
+        needs no discovery to detect — the project said where its mocks are.
+        There is nothing to count, because they are wherever they were moved
+        to, so the slot says so rather than staying empty.
+        """
+        self.add_mocks(2, )
+        # Move them out of the validated path so nothing else can find them.
+        moved = self.root / "elsewhere"
+        (self.root / "tests" / "mocks").rename(moved)
+        self.write_config({"mockDir": "tests/mocks"})
+        rc, out = self.validate()
+        self.assertIn("does not exist", out)
+        line = [l for l in out.splitlines() if l.startswith("Files:")][0]
+        self.assertIn("Unchecked mocks: unknown", line)
+        self.assertEqual(rc, 0, out)
+        self.assertIn("Result: PASSED", out)
+
+    def test_a_resolvable_mockdir_says_nothing_about_resolution(self):
+        """The false-positive boundary for the check above."""
+        swagger = self.add_swagger()
+        self.add_mocks(1)
+        self.write_config({"swagger": [str(swagger)], "mockDir": "tests/mocks"})
+        _rc, out = self.validate()
+        self.assertNotIn("does not exist", out)
+
     def test_an_unresolvable_swagger_is_reported_too(self):
         """Declared but pointing nowhere is the same blindness as undeclared."""
         self.add_mocks(2)

@@ -201,7 +201,10 @@ def _warn_unchecked_mocks(config_path, validated_files):
     with no contract to check them against, is a legitimate setup. This asks;
     it does not decide.
 
-    Returns the count so the summary line can carry it. The printed line alone
+    Returns the count for the summary line, or the string "unknown" when the
+    mocks cannot be located at all. "unknown" rather than a silent omission:
+    not knowing how many is itself the finding, and the slot has to say
+    something or the summary reads clean again. The printed line alone
     left `Files: 154, Errors: 0, Warnings: 0` byte-identical to a project with
     no mocks at all — `Warnings:` counts per-file findings and this is a
     project-level one, which is coherent but invisible to anyone reading the
@@ -212,10 +215,27 @@ def _warn_unchecked_mocks(config_path, validated_files):
     """
     if _mock_gate_inputs(config_path) is not None:
         return None
+    config, _cfg_path = _load_mock_config(config_path)
+
+    # A declared mockDir that does not resolve. No discovery and no guessing:
+    # the project said where its mocks are, and that path is not there, so the
+    # gate cannot have run. Reported before the count because there is nothing
+    # to count — the mocks are wherever they were moved to.
+    #
+    # This is the failure a rename produces, which is how it actually happens:
+    # a lane moved its mocks between trees and rewrote mockDir on the same day.
+    # One wrong character and the contract check for every one of them stops,
+    # with every gate still green.
+    if config.get("mockDir") and _resolve_mock_dir(config_path) is None:
+        print(f"\n[WARN] mock.mockDir is declared as "
+              f"{config['mockDir']!r} but that path does not exist — the mock "
+              f"contract check did not run, and how many mocks it should have "
+              f"checked cannot be determined from here.")
+        return "unknown"
+
     mock_files = [p for p in validated_files if p.name.endswith(".mock.json")]
     if not mock_files:
         return None
-    config, _cfg_path = _load_mock_config(config_path)
     if not config.get("swagger"):
         missing = "mock.swagger is not declared"
     else:
