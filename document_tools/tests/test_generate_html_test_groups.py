@@ -16,7 +16,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 
 from jsonui_doc_cli.test_doc import generate_html_directory
-from jsonui_doc_cli.test_doc.generator import _test_group
+from jsonui_doc_cli.test_doc.generator import _report_stale_pages, _test_group
 
 
 def _screen_test(name: str) -> str:
@@ -57,6 +57,12 @@ class TestGroupDerivationTests(unittest.TestCase):
 
     def test_a_test_at_the_root_has_no_app(self):
         self.assertEqual(_test_group(Path("sample.test.json")), "")
+
+    def test_an_app_without_a_type_directory_is_still_an_app(self):
+        # `tests/<app>/*.test.json` is a real layout, and a project can hold
+        # one app in each style at once — grouping only the one that uses the
+        # marker would file the other under no app at all.
+        self.assertEqual(_test_group(Path("admin/settings.test.json")), "admin")
 
     def test_nesting_under_the_type_directory_does_not_change_the_app(self):
         self.assertEqual(
@@ -116,6 +122,54 @@ class MultiAppSiteTests(unittest.TestCase):
             self.assertIn("href='../../index.html'", page)
             self.assertIn("href='../../screens/user/booking.test.html'", page)
             self.assertNotIn("href='../index.html'", page)
+
+
+class MixedLayoutTests(unittest.TestCase):
+    """One app using the type directory, one not — both must group."""
+
+    def test_both_apps_land_under_their_own_name(self):
+        with TemporaryDirectory() as td:
+            tmp = Path(td)
+            tests = tmp / "tests"
+            _write(tests / "user" / "screens" / "settings.test.json",
+                   _screen_test("Settings (user)"))
+            _write(tests / "admin" / "settings.test.json",
+                   _screen_test("Settings (admin)"))
+            out = tmp / "out"
+            generate_html_directory(tests, out, "mixed")
+
+            self.assertTrue((out / "screens" / "user" / "settings.test.html").exists())
+            self.assertTrue((out / "screens" / "admin" / "settings.test.html").exists())
+            # Neither app is left at the top level, which is what made the
+            # index read as though one of them had no app.
+            self.assertFalse((out / "screens" / "settings.test.html").exists())
+
+
+class StalePageTests(unittest.TestCase):
+    def test_a_leftover_page_is_named(self):
+        """The leftover is what made a short count look complete."""
+        with TemporaryDirectory() as td:
+            tmp = Path(td)
+            tests = tmp / "tests"
+            _write(tests / "screens" / "login.test.json", _screen_test("Login"))
+            out = tmp / "out"
+            generate_html_directory(tests, out, "stale")
+
+            orphan = out / "screens" / "removed.test.html"
+            orphan.write_text("<html></html>", encoding="utf-8")
+            generate_html_directory(tests, out, "stale")
+
+            stale = _report_stale_pages(out)
+            self.assertIn(orphan.resolve(), {p.resolve() for p in stale})
+
+    def test_a_clean_run_reports_nothing(self):
+        with TemporaryDirectory() as td:
+            tmp = Path(td)
+            tests = tmp / "tests"
+            _write(tests / "screens" / "login.test.json", _screen_test("Login"))
+            out = tmp / "out"
+            generate_html_directory(tests, out, "clean")
+            self.assertEqual(_report_stale_pages(out), [])
 
 
 class SingleAppSiteTests(unittest.TestCase):

@@ -44,14 +44,15 @@ from .mermaid import generate_mermaid_html
 # Module-level state is safe: one CLI invocation renders one site, and
 # `generate_html_directory` resets it on entry.
 _page_failures: list[dict] = []
-_pages_written = 0
+# Paths, not a tally: knowing which pages this run wrote is what lets the
+# leftovers from previous runs be named at the end.
+_pages_written: set[Path] = set()
 
 
 def reset_page_failures() -> None:
     """Start a fresh accounting run."""
-    global _pages_written
     _page_failures.clear()
-    _pages_written = 0
+    _pages_written.clear()
 
 
 def get_page_failures() -> list[dict]:
@@ -60,14 +61,23 @@ def get_page_failures() -> list[dict]:
 
 
 def get_pages_written() -> int:
-    """Number of files reported as generated since the last reset."""
-    return _pages_written
+    """Distinct files reported as generated since the last reset.
+
+    Distinct, not a tally of writes: when two sources landed on one path the
+    old counter reported both, so the number agreed with a run that had in
+    fact lost a page.
+    """
+    return len(_pages_written)
+
+
+def get_written_pages() -> set[Path]:
+    """Resolved paths of the pages written since the last reset."""
+    return set(_pages_written)
 
 
 def note_page_generated(path: Path | str, suffix: str = "", indent: str = "    ") -> None:
     """Report a successfully written page and count it."""
-    global _pages_written
-    _pages_written += 1
+    _pages_written.add(Path(path).resolve())
     print(f"{indent}Generated: {path}{suffix}")
 
 
@@ -736,12 +746,18 @@ def _test_group(rel_path: Path) -> str:
     """Return the app a test belongs to, or '' when the project has just one.
 
     *rel_path* is the test file relative to the tests input directory.
+
+    Not every app uses the type directory — ``tests/<app>/*.test.json`` is a
+    real shape, and a project can hold one app in each style at once. Taking
+    every segment when no type directory appears keeps those two apps
+    symmetrical; splitting on the marker only when there is one is what keeps
+    ``tests/screens/<area>/`` an area rather than an app.
     """
     dirs = rel_path.parts[:-1]
     for i, part in enumerate(dirs):
         if part in _TEST_TYPE_DIRS:
             return "/".join(dirs[:i])
-    return ""
+    return "/".join(dirs)
 
 
 def generate_html_directory(
@@ -1030,7 +1046,7 @@ def generate_html_directory(
             # rather than publishing a page the tab script cannot render.
             mermaid_generated = bool(diagram)
             if mermaid_generated:
-                print(f"  Generated: {mermaid_output}")
+                note_page_generated(mermaid_output, indent="  ")
             else:
                 print("  Skipped: flow diagram has no screens")
         except Exception as e:
@@ -1203,7 +1219,41 @@ def generate_html_directory(
     if spec_files_info or component_files_info or md_files_by_dir or figma_files_info or apps_nav:
         generate_index_html(output_path, generated_files, title, mermaid_generated, document_files, api_doc_categories, spec_files_info, component_files_info, md_files_by_dir, figma_files_info, apps_nav=apps_nav)
 
+    _report_stale_pages(output_path)
+
     return generated_files
+
+
+def _report_stale_pages(output_path: Path, limit: int = 20) -> list[Path]:
+    """Name the pages sitting in the output directory that this run did not write.
+
+    Generation writes over the previous run rather than replacing it, so a
+    page whose source was deleted or renamed stays behind and nothing links
+    to it. That is untidy on its own, but the real cost is that it makes the
+    page count agree: a reporting project counted one page per test and
+    concluded nothing was missing, when in fact one page was a leftover and
+    one real page had been overwritten by a same-named test in another app.
+
+    A warning rather than a deletion — `-o` may hold files the operator put
+    there, and this reports what it sees instead of acting on it.
+    """
+    if not output_path.exists():
+        return []
+    written = get_written_pages()
+    stale = sorted(
+        p for p in output_path.rglob("*.html")
+        if p.resolve() not in written
+    )
+    if not stale:
+        return []
+    print()
+    print(f"  Warning: {len(stale)} page(s) in {output_path} were not written "
+          "by this run — leftovers from a deleted or renamed source:")
+    for p in stale[:limit]:
+        print(f"    {p.relative_to(output_path)}")
+    if len(stale) > limit:
+        print(f"    … and {len(stale) - limit} more")
+    return stale
 
 
 def _generate_document_pages(
