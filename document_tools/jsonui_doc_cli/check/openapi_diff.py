@@ -10,7 +10,13 @@ Comparison policy (plan 03 + review §3-1):
 - 4xx/5xx responses: doc → impl presence check ONLY. Impl-side extras
   (e.g. FastAPI auto-422) are never reported.
 - path parameter names: positional match; name difference is a warning.
-- schema names: warning-level only (DTO generation uses doc-side names).
+- schema names: compared BY POSITION, warning-level only (DTO generation
+  uses doc-side names). A position where only one side factored the shape
+  out into a component is not drift — it is a difference in whether the
+  shape has a name at all, and the side that has none cannot be renamed
+  into agreement. Only positions where both sides named something, and the
+  names disagree, are reported; every such line is actionable and carries
+  the impl-side name, which is what a rename needs.
 
 confidence is "proof" — but this proves agreement with the *declared*
 implementation schema, not with live responses. The message string on the
@@ -28,6 +34,7 @@ from .openapi_normalize import (
     DEFAULT_IGNORE_RESPONSE_CODES,
     NormOperation,
     NormSpec,
+    component_base_name,
     normalize_spec,
 )
 from .report import CheckReport, ResultItem, compute_input_hashes
@@ -56,7 +63,6 @@ def load_doc_side(api_dir: Path) -> tuple[NormSpec, list[Path]]:
             continue
         files.append(f)
         one = normalize_spec(data, label=f.name)
-        merged.schema_names |= one.schema_names
         merged.warnings += one.warnings
         for key, op in one.operations.items():
             if key in merged.operations:
@@ -226,6 +232,22 @@ def _summ(schema) -> str:
     return str(t)
 
 
+def _name_compared_at(loc: str, ignore_codes: set[str]) -> bool:
+    """Names are compared exactly where structures are compared.
+
+    Parameters and requestBody always; responses only for the 2xx codes this
+    run actually diffs. Non-2xx bodies are a presence check only (see the
+    module docstring), so a name there would be the one thing reported about
+    a position nothing else inspects — which is how the previous set-based
+    warning ended up asking projects to declare `responses={404: ...}` purely
+    to silence it, adding a declaration that no comparison would ever read.
+    """
+    if not loc.startswith("→ "):
+        return True
+    code = loc.split(" ", 2)[1]
+    return code.startswith("2") and code not in ignore_codes
+
+
 def _compare_operation(doc_op: NormOperation, impl_op: NormOperation,
                        ignore_codes: set[str],
                        results: list[ResultItem],
@@ -378,6 +400,19 @@ def _compare_operation(doc_op: NormOperation, impl_op: NormOperation,
                 message="error response declared in doc but not in impl"))
             clean = False
 
+    # schema names, position by position
+    for loc in sorted(set(doc_op.ref_names) & set(impl_op.ref_names)):
+        if not _name_compared_at(loc, ignore_codes):
+            continue
+        doc_name, impl_name = doc_op.ref_names[loc], impl_op.ref_names[loc]
+        if component_base_name(doc_name) == component_base_name(impl_name):
+            continue
+        results.append(ResultItem(
+            f"{label} {loc}", "warning", "proof",
+            expected=doc_name, actual=impl_name,
+            message="docs and impl name this position differently "
+                    "(non-gating: DTO generation uses the doc-side name)"))
+
     return clean
 
 
@@ -422,13 +457,6 @@ def diff_specs(doc: NormSpec, impl: NormSpec,
             results.append(ResultItem(f"{doc_op.method} {doc_op.path}",
                                       "ok", "proof"))
 
-    missing_names = sorted(doc.schema_names - impl.schema_names)
-    if missing_names:
-        warnings.append(
-            "schema names in docs/api not present in impl components "
-            f"(warning only — structures are compared after $ref resolution): "
-            f"{missing_names[:20]}"
-        )
     return results, warnings
 
 

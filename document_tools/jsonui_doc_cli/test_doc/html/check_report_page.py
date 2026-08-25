@@ -22,7 +22,8 @@ _STATUS_LABELS = {
     "missing_in_impl": ("DOC ONLY", "#e37400"),
     "missing_in_doc": ("IMPL ONLY", "#b05a00"),
     "skipped": ("SKIPPED", "#888"),
-    # Declared non-gating (downgrade_to_warning) — visible, never blocking.
+    # Non-gating — visible, never blocking. Either a mismatch the project
+    # declared non-gating (downgrade_to_warning) or a schema-name difference.
     "warning": ("WARNING", "#a06800"),
     "ok": ("OK", "#188038"),
 }
