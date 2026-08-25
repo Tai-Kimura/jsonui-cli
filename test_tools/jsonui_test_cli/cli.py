@@ -68,6 +68,14 @@ def cmd_validate(args):
         if p.resolve() not in already
     )
 
+    # Tell the reference check where this run's config says the mocks are.
+    # Without it that check walks up from each test file taking the first
+    # `mocks/` it meets, which in a split tree is never the declared one — one
+    # stray `*.mock.json` in an ancestor replaced the whole operationId index
+    # and turned every mock reference in every test into an error.
+    from .validation.mock import set_declared_mock_dir
+    set_declared_mock_dir(_resolve_mock_dir(getattr(args, "config", None)))
+
     if not files_to_validate:
         print("No test or description files found")
         return 1

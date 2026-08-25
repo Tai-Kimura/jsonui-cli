@@ -20,6 +20,37 @@ VALID_METHODS = ["GET", "POST", "PUT", "DELETE", "PATCH", "HEAD", "OPTIONS"]
 
 _MOCK_INDEX_CACHE: dict = {}
 
+#: id(index) -> the directory that supplied it, for error messages.
+_INDEX_SOURCE: dict = {}
+
+#: The mockDir the running command resolved from its own config, if any.
+#: Set by the CLI before validation; None means nothing was declared.
+_DECLARED_MOCK_DIR: Path | None = None
+
+
+def set_declared_mock_dir(path) -> None:
+    """Record the mockDir this run's config declares.
+
+    Discovery walks up from a test file looking for `tests/mocks` or `mocks`.
+    That walk cannot see a config which is not an ancestor of the test file —
+    and in a split tree (tests in one tree, app and config in another) it
+    never is. So the walk kept going and took whatever `mocks/` it met first.
+
+    Measured: one stray `*.mock.json` in an ancestor directory replaced the
+    entire operationId index, and every mock reference in every test became
+    "unknown mock operationId". A consumer with a correct, declared mockDir
+    and 151 real mocks got 357 errors from one decoy file, with no way to
+    switch it off — the reference check is not the drift gate, so
+    `--no-mock-check` does not reach it.
+
+    A declaration outranks a search: the project said where its mocks are,
+    and a directory found by convention is a guess about the same question.
+    Predates the 1.6.5x mock work; found by a consumer probing the opposite
+    case, the one that was supposed to stay silent.
+    """
+    global _DECLARED_MOCK_DIR
+    _DECLARED_MOCK_DIR = Path(path).resolve() if path is not None else None
+
 
 def find_mock_dir(test_file_path, stop_at=None):
     """Locate the mock directory for a test file, or None.
@@ -46,6 +77,11 @@ def find_mock_dir(test_file_path, stop_at=None):
     """
     if test_file_path is None:
         return None
+    # A declaration outranks a search. Only when the running command declared
+    # nothing does the convention below get to guess (see
+    # set_declared_mock_dir).
+    if _DECLARED_MOCK_DIR is not None and _DECLARED_MOCK_DIR.is_dir():
+        return _DECLARED_MOCK_DIR
     start = Path(test_file_path).resolve().parent
     boundary = Path(stop_at).resolve() if stop_at is not None else None
     if boundary is not None and boundary != start and boundary not in start.parents:
@@ -96,7 +132,9 @@ def find_mock_index(test_file_path, stop_at=None):
 
     key = str(mock_dir.resolve())
     if key in _MOCK_INDEX_CACHE:
-        return _MOCK_INDEX_CACHE[key]
+        cached = _MOCK_INDEX_CACHE[key]
+        _INDEX_SOURCE[id(cached)] = key
+        return cached
 
     index: dict[str, set] = {}
     for f in mock_dir.rglob("*.mock.json"):
@@ -108,6 +146,7 @@ def find_mock_index(test_file_path, stop_at=None):
         op_id = (data.get("source", {}) or {}).get("operationId") or f.stem.replace(".mock", "")
         index[op_id] = set((data.get("scenarios", {}) or {}).keys())
     _MOCK_INDEX_CACHE[key] = index
+    _INDEX_SOURCE[id(index)] = key
     return index
 
 
@@ -125,8 +164,14 @@ def validate_mock_reference(mapping, path: str, result: ValidationResult, index)
         if index is None:
             continue  # no mock dir discoverable; skip existence check
         if op_id not in index:
+            # The resolved directory, not the literal "tests/mocks": which
+            # directory answered is the whole question when the answer is
+            # wrong, and a reporting lane needed four A/B runs to find out
+            # that a stray file two levels up had supplied the index.
+            where = _INDEX_SOURCE.get(id(index), "the mock directory")
             result.errors.append(ValidationMessage(
-                path=f"{path}.{op_id}", message=f"unknown mock operationId '{op_id}' (not in tests/mocks)"))
+                path=f"{path}.{op_id}",
+                message=f"unknown mock operationId '{op_id}' (not in {where})"))
         elif scenario not in index[op_id]:
             result.errors.append(ValidationMessage(
                 path=f"{path}.{op_id}",
