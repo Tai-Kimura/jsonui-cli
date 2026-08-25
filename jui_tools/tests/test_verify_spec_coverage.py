@@ -95,14 +95,30 @@ class SpecCoverageTests(unittest.TestCase):
         self._spec("legacy", layout_file="removed_screen")
         self.assertEqual(["removed_screen"], self._check().missing_layouts)
 
-    def test_app_owned_screens_need_no_layout(self):
+    def test_app_owned_screens_are_outside_this_check(self):
+        # A hand-written page has no layout, so it is not the failure this
+        # watches for (a Layout generating a screen nobody declared). It
+        # also could not comply: there is no layout root to carry
+        # `"role": "cell"`, and a spec for a screen with nothing to
+        # generate describes nothing. Reported by a lane whose declared
+        # static pages warned on every run with no way to clear them.
         self._layout("home")
         self._spec("home", layout_file="home")
-        config = {"test": {"appOwnedScreens": ["native_settings"]}}
-        # Declared as app-owned, so it is a screen with no layout file —
-        # and it still needs a spec like any other screen.
+        config = {"test": {"appOwnedScreens": [
+            "native_settings", {"id": "company", "group": "static"},
+        ]}}
         coverage = _check_spec_coverage(None, config, self.specs, self.layouts)
-        self.assertEqual(["native_settings"], coverage.missing_specs)
+        self.assertEqual([], coverage.missing_specs)
+        self.assertEqual([], coverage.missing_layouts)
+
+    def test_a_layout_backed_screen_still_warns_alongside_app_owned_ones(self):
+        # The exemption is for the declared ids, not a blanket off switch.
+        self._layout("home")
+        self._layout("admin_users")
+        self._spec("home", layout_file="home")
+        config = {"test": {"appOwnedScreens": ["native_settings"]}}
+        coverage = _check_spec_coverage(None, config, self.specs, self.layouts)
+        self.assertEqual(["admin_users"], coverage.missing_specs)
 
     def test_missing_layouts_directory_is_not_an_error(self):
         coverage = _check_spec_coverage(None, {}, self.specs, self.root / "nope")

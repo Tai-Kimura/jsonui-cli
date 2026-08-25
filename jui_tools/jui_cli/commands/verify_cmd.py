@@ -325,7 +325,9 @@ def _check_spec_coverage(config_mgr, config, spec_dir, layouts_root) -> SpecCove
     a list would go stale in the same silence this check exists to end.
     Sub-specs are skipped: they inherit their parent's layout and claim none.
     """
-    from ..core.screen_identity import build_screen_index, screen_id_for_path
+    from ..core.screen_identity import (
+        build_screen_index, parse_app_owned_screens, screen_id_for_path,
+    )
 
     coverage = SpecCoverage()
     if layouts_root is None or not Path(layouts_root).is_dir():
@@ -334,10 +336,18 @@ def _check_spec_coverage(config_mgr, config, spec_dir, layouts_root) -> SpecCove
     def as_id(value: str) -> str:
         return screen_id_for_path(value if value.endswith(".json") else value + ".json")
 
-    index = build_screen_index(
-        layouts_root, (config.get("test") or {}).get("appOwnedScreens")
-    )
-    screens = set(index.screen_ids)
+    declared_app_owned = (config.get("test") or {}).get("appOwnedScreens")
+    index = build_screen_index(layouts_root, declared_app_owned)
+    # An app-owned screen is written by hand and has no layout at all, so
+    # it is outside the class this check watches: the failure here is a
+    # Layout that generates a screen nobody declared. Requiring a spec for
+    # a page with no layout would also leave the project no way to comply —
+    # there is no layout root to carry `"role": "cell"`, and a spec for a
+    # screen with nothing to generate describes nothing. The declaration is
+    # already load-bearing elsewhere (the test driver verifies markers
+    # against it), so it goes stale loudly rather than quietly.
+    app_owned = {entry.screen_id for entry in parse_app_owned_screens(declared_app_owned)}
+    screens = set(index.screen_ids) - app_owned
 
     claimed: set[str] = set()
     for spec_file in sorted(Path(spec_dir).rglob("*.spec.json")):
