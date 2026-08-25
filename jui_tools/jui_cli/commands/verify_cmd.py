@@ -286,6 +286,22 @@ def cmd_verify(args: argparse.Namespace) -> int:
             "jui.config.json to make this fail `--fail-on-diff`)"
         )
 
+    # A layout edit that moves the screen id space breaks references this
+    # command does not read. Advisory, never fatal: adding a layout is
+    # normal work, and a gate that fires on normal work gets switched off.
+    moved = _screen_id_space_changes(Path(layouts_root))
+    if moved:
+        print(f"\n**NOTICE: the screen id space moved in this working tree "
+              f"({len(moved)}):**")
+        for name in moved:
+            print(f"- {name}")
+        print(
+            "  → run `jsonui-test validate` as well. Flow steps name screens "
+            "by id, and that is the only gate reading those references — "
+            "build, verify and lint-strings all stay green while one goes "
+            "stale."
+        )
+
     # API model drift — independent of Layout drift, gated by --fail-on-diff.
     api_drift = _check_api_model_drift(config_mgr, config, args)
     if api_drift:
@@ -369,6 +385,92 @@ def _check_spec_coverage(config_mgr, config, spec_dir, layouts_root) -> SpecCove
         name for name in claimed - screens if not index.is_known(name)
     )
     return coverage
+
+
+def _layout_role(text: str) -> str | None:
+    """The `role` a layout document declares, if any."""
+    try:
+        data = json.loads(text)
+    except ValueError:
+        return None
+    return data.get("role") if isinstance(data, dict) else None
+
+
+def _git(args: list[str], cwd: Path) -> str | None:
+    """Run git, returning stdout or None when git cannot answer."""
+    import subprocess
+
+    try:
+        proc = subprocess.run(
+            ["git", "-C", str(cwd), *args],
+            capture_output=True, text=True, timeout=10,
+        )
+    except (OSError, ValueError, subprocess.SubprocessError):
+        return None
+    return proc.stdout if proc.returncode == 0 else None
+
+
+def _screen_id_space_changes(layouts_root: Path) -> list[str]:
+    """Layout edits in this working tree that move the screen id space.
+
+    Adding, deleting or renaming a layout changes which ids exist; changing
+    a `role` declaration changes which of them are screens. Flow steps name
+    screens by id, and the gate that checks those references is
+    `jsonui-test validate` — which the author of a layout change has no
+    reason to run. A consumer declared one screen `"role": "cell"`, saw
+    build, verify and lint-strings stay green, and met the two resulting
+    errors later while suspecting an unrelated toolchain update.
+
+    This names that gate rather than repeating its check: the id vocabulary
+    is shared code already, but where a screen id may appear inside a test
+    file is the test tool's business, and a second implementation of that
+    would drift from the first.
+
+    git is the baseline, so nothing has to be stored and nothing goes
+    stale. Outside a repository, or with no git, this is silent.
+    """
+    top = _git(["rev-parse", "--show-toplevel"], layouts_root)
+    status = _git(["status", "--porcelain", "--", "."], layouts_root)
+    if not top or status is None:
+        return []
+    # Porcelain paths are relative to the repository root, not to -C.
+    repo_root = Path(top.strip())
+
+    try:
+        watched = layouts_root.resolve()
+    except OSError:
+        return []
+
+    changes: list[str] = []
+    for line in status.splitlines():
+        if len(line) < 4:
+            continue
+        code, path = line[:2], line[3:].strip()
+        # A rename is reported as `old -> new`; either half moves the space.
+        name = path.split(" -> ")[-1].strip('"')
+        if not name.endswith(".json"):
+            continue
+        absolute = (repo_root / name).resolve()
+        if watched not in absolute.parents:
+            continue
+        base = absolute.name[: -len(".json")]
+        if code[0] == "R" or " -> " in path:
+            changes.append(f"{base} (renamed)")
+        elif code[0] == "A" or code == "??":
+            changes.append(f"{base} (added)")
+        elif code[0] == "D" or code[1] == "D":
+            changes.append(f"{base} (deleted)")
+        elif code[0] == "M" or code[1] == "M":
+            head = _git(["show", f"HEAD:{name}"], repo_root)
+            if head is None:
+                continue
+            try:
+                now = absolute.read_text(encoding="utf-8")
+            except OSError:
+                continue
+            if _layout_role(head) != _layout_role(now):
+                changes.append(f"{base} (role changed)")
+    return sorted(set(changes))
 
 
 def _check_api_model_drift(config_mgr, config, args) -> list[str]:
