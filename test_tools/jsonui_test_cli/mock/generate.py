@@ -23,6 +23,7 @@ hand-written side are errors (a person has to decide).
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -275,7 +276,8 @@ class UpdateReport:
     needs_review: list = field(default_factory=list)
 
 
-def add_missing_required(doc: OpenApiDoc, schema, body, path: str = "", _depth: int = 0) -> list:
+def add_missing_required(doc: OpenApiDoc, schema, body, path: str = "",
+                         _depth: int = 0, keep_absent=()) -> list:
     """Fill in required fields the body lacks. Never touches a value it finds.
 
     A repair, not a regeneration. The `default` scenario is where a project
@@ -283,8 +285,14 @@ def add_missing_required(doc: OpenApiDoc, schema, body, path: str = "", _depth: 
     `default`, so there is nowhere else for that data to live — and replacing
     it with schema samples turns `"R-2026-04871"` back into `"string"` and
     reds out every assertion on it.
+
+    `keep_absent` are paths the scenario declares it omits ON PURPOSE
+    (`contractViolations.missing`). Filling those in would repair away the
+    very condition a negative scenario exists to reproduce, and the test
+    reading it would keep passing while proving nothing.
     """
     added: list = []
+    keep = [(text, _violation_matcher(text)) for text in keep_absent]
     if _depth > 12:
         return added
     schema = doc.resolve_schema(schema, _depth)
@@ -300,19 +308,24 @@ def add_missing_required(doc: OpenApiDoc, schema, body, path: str = "", _depth: 
     if stype == "object" and isinstance(body, dict):
         properties = schema.get("properties") or {}
         for name in schema.get("required") or []:
+            child_path = f"{path}.{name}"
             if name not in body and name in properties:
+                if any(rx.match(child_path) for _, rx in keep):
+                    continue  # declared as an intentional omission
                 body[name] = doc.sample_for_schema(properties[name])
-                added.append(f"{path}.{name}")
+                added.append(child_path)
         for name, child in properties.items():
             if name in body:
                 added += add_missing_required(
-                    doc, child, body[name], f"{path}.{name}", _depth + 1)
+                    doc, child, body[name], f"{path}.{name}", _depth + 1,
+                    keep_absent)
     elif stype == "array" and isinstance(body, list):
         items = schema.get("items")
         if items is not None:
             for index, element in enumerate(body):
                 added += add_missing_required(
-                    doc, items, element, f"{path}[{index}]", _depth + 1)
+                    doc, items, element, f"{path}[{index}]", _depth + 1,
+                    keep_absent)
     return added
 
 
@@ -397,8 +410,12 @@ def update_default(
                     elif (schema is not None
                           and content_type == "application/json"
                           and current.get("body") is not None):
+                        declared = ViolationDeclaration.parse(
+                            current.get("contractViolations"))
                         report_added = add_missing_required(
-                            doc, schema, current["body"])
+                            doc, schema, current["body"],
+                            keep_absent=(declared.paths["missing"]
+                                         if declared is not None else ()))
                     else:
                         report_added = []
                     if report_added:
@@ -522,6 +539,109 @@ def compare_to_schema(doc: OpenApiDoc, schema, value, path: str = "",
     return out
 
 
+#: Categories of `contractViolations`, named after the `BodyDrift` field each
+#: one subtracts from.
+_VIOLATION_CATEGORIES = ("missing", "extra", "violations")
+
+
+@dataclass
+class ViolationDeclaration:
+    """A scenario's declared, intentional contract violations.
+
+    Some scenarios exist BECAUSE the body breaks the contract: a mock that
+    omits a required field is how a test proves the client fails closed
+    when the server omits it. Without a way to say so, those scenarios
+    read as drift, the check never reaches zero, and a check that cannot
+    reach zero stops being read — the same reasoning `BodyDrift.optional`
+    already carries, applied to a violation the author put there on
+    purpose.
+
+    Declaring is deliberately narrow: name the paths, not the scenario. An
+    undeclared violation in the same scenario still fails, because a
+    negative scenario is exactly where an accidental drift hides best.
+    """
+
+    paths: dict          # category -> tuple[str, ...] as written
+    reason: str
+    errors: list = field(default_factory=list)   # malformed declaration
+
+    @classmethod
+    def parse(cls, raw) -> "ViolationDeclaration | None":
+        if raw is None:
+            return None
+        errors: list = []
+        paths: dict = {c: () for c in _VIOLATION_CATEGORIES}
+        reason = ""
+        if not isinstance(raw, dict):
+            return cls(paths, "", ["contractViolations must be an object"])
+        reason = raw.get("reason")
+        if not isinstance(reason, str) or not reason.strip():
+            # The ledger records WHY, or it is a suppression dump. A
+            # violation nobody can explain is usually one nobody fixed.
+            errors.append("contractViolations needs a non-empty 'reason'")
+            reason = ""
+        for key, value in raw.items():
+            if key == "reason":
+                continue
+            if key not in _VIOLATION_CATEGORIES:
+                errors.append(
+                    f"unknown contractViolations key {key!r} "
+                    f"(expected: {', '.join(_VIOLATION_CATEGORIES)}, reason)")
+                continue
+            if isinstance(value, str):
+                value = [value]
+            if not isinstance(value, list) or not all(
+                    isinstance(p, str) for p in value):
+                errors.append(f"contractViolations.{key} must be a list of paths")
+                continue
+            paths[key] = tuple(value)
+        if not any(paths.values()) and not errors:
+            errors.append(
+                "contractViolations declares no paths — remove it, or name "
+                "the paths this scenario violates on purpose")
+        return cls(paths, reason.strip(), errors)
+
+
+def _violation_matcher(declared: str):
+    """Compile one declared path.
+
+    `[]` matches any index at that level so a violation shared by every
+    element of an array is one line; `[0]` still pins a single element.
+    """
+    parts = declared.split("[]")
+    return re.compile("".join(
+        re.escape(part) + (r"\[\d+\]" if index < len(parts) - 1 else "")
+        for index, part in enumerate(parts)
+    ) + r"\Z")
+
+
+def _subtract_declared(found: "BodyFindings", decl: "ViolationDeclaration | None"):
+    """Split findings into (still reported, declared paths that matched).
+
+    A `violations` entry reads ``<path>: <what is wrong>``; the declared
+    path is matched against the path half, so a declaration names a place,
+    never a message the checker is free to reword.
+    """
+    if decl is None:
+        return found, set()
+    matchers = {
+        category: [(text, _violation_matcher(text)) for text in decl.paths[category]]
+        for category in _VIOLATION_CATEGORIES
+    }
+    used: set = set()
+    kept = BodyFindings(optional=list(found.optional))
+    for category in _VIOLATION_CATEGORIES:
+        for entry in getattr(found, category):
+            subject = entry.split(":", 1)[0] if category == "violations" else entry
+            hit = next(
+                (text for text, rx in matchers[category] if rx.match(subject)), None)
+            if hit is None:
+                getattr(kept, category).append(entry)
+            else:
+                used.add((category, hit))
+    return kept, used
+
+
 @dataclass
 class BodyDrift:
     """One scenario whose body no longer matches the schema it came from."""
@@ -540,11 +660,19 @@ class BodyDrift:
     #: A finding in generated/ is a warning — regenerating fixes it. One in a
     #: hand-written mock is an error: a person has to decide what it should be.
     generated: bool = False
+    #: Problems with the scenario's own `contractViolations` block: a
+    #: declaration with no reason, a malformed one, or one that no longer
+    #: matches anything. The last is the important one — when a declared
+    #: violation stops happening, a negative scenario has quietly become a
+    #: positive one and the test that reads it is no longer testing what it
+    #: says. That has to be acted on, so these count as violations.
+    declaration: list = field(default_factory=list)
 
     @property
     def is_note_only(self) -> bool:
         """True when nothing here is a contract violation."""
-        return not (self.missing or self.extra or self.violations)
+        return not (self.missing or self.extra or self.violations
+                    or self.declaration)
 
     def __str__(self) -> str:
         lines = [f"{self.rel}  {self.scenario}"]
@@ -554,6 +682,8 @@ class BodyDrift:
             lines.append(f"    mock has, swagger lacks: {', '.join(self.extra)}")
         for violation in self.violations:
             lines.append(f"    {violation}")
+        for problem in self.declaration:
+            lines.append(f"    {problem}")
         if self.optional:
             lines.append(f"    missing (optional): {', '.join(self.optional)}")
         return "\n".join(lines)
@@ -727,6 +857,17 @@ def _check_bodies(
     for name, scenario in scenarios.items():
         if not isinstance(scenario, dict):
             continue
+        decl = ViolationDeclaration.parse(scenario.get("contractViolations"))
+        decl_problems = list(decl.errors) if decl is not None else []
+        if decl is not None and generated:
+            # `generated/` is rewritten wholesale from the swagger, so a
+            # declaration here is deleted the next time anyone regenerates
+            # — silently, and the scenario goes red again with no trace of
+            # what was decided. Say so where it can still be moved.
+            decl_problems.append(
+                "contractViolations in a generated/ mock is deleted on the "
+                "next regeneration — declare it on the hand-written mock "
+                "that overlays this route")
         status = scenario.get("status")
         if status is None:
             unmatched.append(f"{rel}  {name}: no status")
@@ -735,28 +876,58 @@ def _check_bodies(
             # A deliberate edge case the spec does not describe — reported so
             # it is visible, but not drift: there is nothing to compare to.
             unmatched.append(f"{rel}  {name}: status {status} not declared")
+            _report_declaration_only(rel, name, decl_problems, bodies, generated)
             continue
 
         schema, content_type = _response_schema(op, status)
         if content_type is not None and content_type != "application/json":
+            _report_declaration_only(rel, name, decl_problems, bodies, generated)
             continue  # binary/file response — the author supplies the fixture
         if schema is None:
+            _report_declaration_only(rel, name, decl_problems, bodies, generated)
             continue  # no declared body (204 and friends)
 
         actual_body = scenario.get("body")
         if actual_body is None:
-            bodies.append(BodyDrift(rel, name, ["<body>"], [], generated=generated))
+            bodies.append(BodyDrift(rel, name, ["<body>"], [], generated=generated,
+                                    declaration=decl_problems))
             continue
 
         found = compare_to_schema(doc, schema, actual_body)
-        if found.missing or found.optional or found.extra or found.violations:
+        found, used = _subtract_declared(found, decl)
+        if decl is not None and not decl.errors:
+            # A declaration that matches nothing is the dangerous half: the
+            # body now satisfies the contract, so the scenario no longer
+            # exercises the defence it was written for.
+            decl_problems += [
+                f"contractViolations.{category} declares {text!r}, which this "
+                f"scenario no longer violates — the negative case it was "
+                f"written for is gone; remove the line or restore the case"
+                for category in _VIOLATION_CATEGORIES
+                for text in decl.paths[category]
+                if (category, text) not in used
+            ]
+        if (found.missing or found.optional or found.extra or found.violations
+                or decl_problems):
             bodies.append(
                 BodyDrift(
                     rel, name, sorted(found.missing), sorted(found.extra),
                     violations=found.violations, generated=generated,
                     optional=sorted(found.optional),
+                    declaration=decl_problems,
                 )
             )
+
+
+def _report_declaration_only(rel: str, name: str, problems: list,
+                             bodies: list, generated: bool) -> None:
+    """Surface declaration problems on a scenario whose body is not compared.
+
+    Nothing here is subtracted from, so a declaration on such a scenario is
+    always wrong — but staying silent would let it rot unseen."""
+    if problems:
+        bodies.append(BodyDrift(rel, name, [], [], generated=generated,
+                                declaration=list(problems)))
 
 
 def validate_against_schema(doc: OpenApiDoc, schema, value, path: str = "") -> list:

@@ -13,7 +13,8 @@ from .models import ValidationMessage, ValidationResult
 
 VALID_MOCK_KEYS = ["$schema", "source", "activeScenario", "scenarios"]
 VALID_SOURCE_KEYS = ["swagger", "operationId", "method", "path"]
-VALID_SCENARIO_KEYS = ["status", "headers", "body", "delayMs", "contentType", "bodyFile"]
+VALID_SCENARIO_KEYS = ["status", "headers", "body", "delayMs", "contentType",
+                       "bodyFile", "contractViolations"]
 VALID_METHODS = ["GET", "POST", "PUT", "DELETE", "PATCH", "HEAD", "OPTIONS"]
 
 
