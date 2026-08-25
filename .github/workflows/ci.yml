@@ -107,6 +107,14 @@ jobs:
       - name: Install document_tools (dev)
         working-directory: document_tools
         run: python -m pip install -e ".[dev]" --no-deps
+      # The live-reflection adapter behind `jsonui-doc check db` is only
+      # exercised when sqlalchemy is importable. Without this the one test
+      # covering it skipped here AND on every developer machine, so the
+      # adapter shipped untested — and when first run it was red on two
+      # counts (see the 1.6.45 report). An optional runtime extra, a
+      # mandatory test dependency.
+      - name: Install sqlalchemy (exercises the db-schema live adapter)
+        run: python -m pip install "sqlalchemy>=2.0"
       - name: Run unit tests
         working-directory: jui_tools
         run: python -m unittest discover -s tests -v

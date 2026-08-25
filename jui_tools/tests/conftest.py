@@ -40,14 +40,9 @@ if _loaded != _SOURCE_ROOT:
         f"test ({_SOURCE_ROOT}). The suite would report on that copy."
     )
 
-# `generate project` validates the spec through
-# `document_tools.jsonui_doc_cli.spec_doc.validator` — a top-level namespace
-# package that only resolves when the repository root is importable. CI runs
-# pytest from there, so it resolves and the wiring test runs. Run the suite the
-# documented way (`cd jui_tools && pytest tests`) and it does not, so that test
-# skipped itself — and the command under test takes its "document_tools not
-# available, skipping validation" branch. The gate was green in both places and
-# only ever exercised in one.
-_REPO_ROOT = _SOURCE_ROOT.parent
-if (_REPO_ROOT / "document_tools").is_dir() and str(_REPO_ROOT) not in sys.path:
-    sys.path.insert(1, str(_REPO_ROOT))
+# NOTE: this file is pytest-only. CI runs `python -m unittest discover`, which
+# never loads it, so nothing here can be the sole fix for anything CI must
+# also do — see the repo-root insert at the top of
+# test_spec_validation_wiring.py, which is in the test module for that reason.
+# On CI the equivalent of the check above is that jui_cli is installed
+# editable from the checkout.

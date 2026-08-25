@@ -297,6 +297,19 @@ class SqliteLiveTests(unittest.TestCase):
                 ix["columns"] == ["team_id", "email"] and ix["unique"]
                 for ix in users["indexes"]))
 
+            # Two things SQLite's reflection does not say on its own, and
+            # both of them read as drift against a correct docs side.
+            #
+            # A primary key column cannot hold NULL — that is what a primary
+            # key is. SQLite reports the literal DDL, so `id INTEGER PRIMARY
+            # KEY` (the rowid alias, which genuinely rejects NULL) comes back
+            # nullable.
+            self.assertFalse(users["columns"]["id"]["nullable"])
+            # UNIQUE written on the column creates an implicit
+            # `sqlite_autoindex_*`, which SQLAlchemy hides from get_indexes()
+            # and never reports as a unique constraint.
+            self.assertIn(["email"], users["uniques"])
+
             # end-to-end vs docs (sqlite dialect)
             doc = users_doc()
             with tempfile.TemporaryDirectory() as tmp2:
