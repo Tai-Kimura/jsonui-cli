@@ -27,7 +27,7 @@ def find_mock_dir(test_file_path, stop_at=None):
     Discovery: honor mock.mockDir in the nearest jui.config.json walking up from the
     test file; otherwise look for a 'tests/mocks' (or 'mocks') dir along the ancestry.
 
-    `stop_at` bounds the walk at that directory, inclusive. Unbounded by
+    `stop_at` confines the walk to that directory's subtree. Unbounded by
     default, which is the behaviour every existing caller has: narrowing it
     for everyone would shrink an existing check's reach, quietly, which is the
     failure this module has spent the day removing. The walk is otherwise
@@ -35,11 +35,23 @@ def find_mock_dir(test_file_path, stop_at=None):
     project sits under one directory, a single stray `mocks/` there resolves
     for every project below it, including the ones with no mocks at all. A
     caller that must not do that passes its own project root.
+
+    Confinement, not a stop marker. An earlier version broke when it reached
+    the boundary directory, which silently did nothing whenever the boundary
+    was not on the walk's path — and a project whose tests live in a
+    different tree from its config is exactly that case. Measured: tests in a
+    sibling tree, boundary never matched, the walk ran to the filesystem root
+    and reported nine mock files belonging to no project at all. The bound
+    has to be asked about every directory, not waited for.
     """
     if test_file_path is None:
         return None
     start = Path(test_file_path).resolve().parent
     boundary = Path(stop_at).resolve() if stop_at is not None else None
+    if boundary is not None and boundary != start and boundary not in start.parents:
+        # The walk would start outside the subtree it is confined to, so
+        # every directory it could reach is out of bounds.
+        return None
     mock_dir = None
     for parent in [start, *start.parents]:
         config = parent / "jui.config.json"
@@ -64,6 +76,10 @@ def find_mock_dir(test_file_path, stop_at=None):
         # Inclusive: the boundary directory is searched, its parent is not.
         if boundary is not None and parent == boundary:
             break
+    if mock_dir is not None and boundary is not None:
+        resolved = mock_dir.resolve()
+        if resolved != boundary and boundary not in resolved.parents:
+            return None
     return mock_dir
 
 
