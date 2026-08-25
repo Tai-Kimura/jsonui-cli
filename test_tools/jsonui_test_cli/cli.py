@@ -217,23 +217,41 @@ def _warn_unchecked_mocks(config_path, validated_files):
         return None
     config, _cfg_path = _load_mock_config(config_path)
 
+    mock_files = [p for p in validated_files if p.name.endswith(".mock.json")]
+
     # A declared mockDir that does not resolve. No discovery and no guessing:
     # the project said where its mocks are, and that path is not there, so the
-    # gate cannot have run. Reported before the count because there is nothing
-    # to count — the mocks are wherever they were moved to.
+    # gate cannot have run.
     #
     # This is the failure a rename produces, which is how it actually happens:
     # a lane moved its mocks between trees and rewrote mockDir on the same day.
     # One wrong character and the contract check for every one of them stops,
     # with every gate still green.
+    #
+    # How many mocks the gate SHOULD have checked is unknowable — mockDir
+    # pointed at nothing, and wherever they went is not stated anywhere. So
+    # the count stays "unknown" rather than being filled in with a number that
+    # would read as the intended set.
+    #
+    # But when the mocks happen to sit under the validated path, this run did
+    # collect and validate them, and their number is a fact it already has. An
+    # earlier version of this branch returned before counting and its comment
+    # claimed there was nothing to count; a lane whose mocks live under
+    # `tests/` measured `Files: 154` — two tests and 152 mocks — against a
+    # warning that admitted to knowing nothing. Reported as a separate
+    # sentence, not as the count: the two sets are not known to be the same
+    # one, and printing 152 in the slot would claim they are.
     if config.get("mockDir") and _resolve_mock_dir(config_path) is None:
+        collected = (f" {len(mock_files)} .mock.json file(s) were collected "
+                     f"from the validated path; whether those are the ones "
+                     f"mock.mockDir meant is not knowable from here."
+                     if mock_files else "")
         print(f"\n[WARN] mock.mockDir is declared as "
               f"{config['mockDir']!r} but that path does not exist — the mock "
               f"contract check did not run, and how many mocks it should have "
-              f"checked cannot be determined from here.")
+              f"checked cannot be determined.{collected}")
         return "unknown"
 
-    mock_files = [p for p in validated_files if p.name.endswith(".mock.json")]
     if not mock_files:
         return None
     if not config.get("swagger"):

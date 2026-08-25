@@ -187,6 +187,31 @@ class MockGateAbsenceTests(unittest.TestCase):
         self.assertIn("Unchecked mocks: unknown", line)
         self.assertEqual(rc, 0, out)
         self.assertIn("Result: PASSED", out)
+        # Nothing was collected here, so there is no second sentence to add.
+        self.assertNotIn("were collected", out)
+
+    def test_an_unresolvable_mockdir_still_reports_what_it_did_collect(self):
+        """When the mocks happen to sit under the validated path.
+
+        The run collected and validated them, so their number is a fact it
+        already has — an earlier version threw it away behind a comment
+        claiming there was nothing to count. A lane whose mocks live under
+        `tests/` measured `Files: 154` (2 tests + 152 mocks) against a warning
+        that admitted to knowing nothing.
+
+        Reported as a separate sentence, never as the count: the collected
+        set is not known to be the set `mockDir` meant, and putting 152 in the
+        slot would claim it is.
+        """
+        self.add_mocks(3)               # under tests/, i.e. inside the path
+        self.write_config({"mockDir": "somewhere/else"})
+        rc, out = self.validate()
+        self.assertIn("does not exist", out)
+        self.assertIn("3 .mock.json file(s) were collected", out)
+        line = [l for l in out.splitlines() if l.startswith("Files:")][0]
+        self.assertIn("Unchecked mocks: unknown", line)
+        self.assertNotIn("Unchecked mocks: 3", line)
+        self.assertEqual(rc, 0, out)
 
     def test_a_resolvable_mockdir_says_nothing_about_resolution(self):
         """The false-positive boundary for the check above."""
