@@ -37,12 +37,12 @@ SPEC = {
                 },
             }
         },
-        "/api/bottles": {
+        "/api/items": {
             "get": {
-                "operationId": "listBottles",
-                "tags": ["Bottles"],
+                "operationId": "listItems",
+                "tags": ["Items"],
                 "responses": {"200": {"content": {"application/json": {
-                    "schema": {"$ref": "#/components/schemas/BottleList"}}}}},
+                    "schema": {"$ref": "#/components/schemas/ItemList"}}}}},
             }
         },
     },
@@ -57,10 +57,10 @@ SPEC = {
             },
         },
         "Detail": {"type": "object", "properties": {"detail": {"type": "string"}}},
-        "BottleList": {"type": "object", "properties": {
-            "items": {"type": "array", "items": {"$ref": "#/components/schemas/Bottle"}},
+        "ItemList": {"type": "object", "properties": {
+            "items": {"type": "array", "items": {"$ref": "#/components/schemas/Item"}},
         }},
-        "Bottle": {"type": "object", "required": ["id"], "properties": {
+        "Item": {"type": "object", "required": ["id"], "properties": {
             "id": {"type": "string"}, "series": {"type": "string"},
         }},
     }},
@@ -140,7 +140,7 @@ class TestBodyDrift:
 
     def test_drift_inside_array_items_is_found(self, tmp_path):
         spec, out = _setup(tmp_path)
-        mock = out / "bottles" / "listBottles.mock.json"
+        mock = out / "items" / "listItems.mock.json"
         _write(mock, {"default": {"status": 200, "body": {
             "items": [{"id": "1", "brand": "x"}]}}})
         report = generate([spec], out, check=True)
@@ -153,7 +153,7 @@ class TestBodyDrift:
     def test_an_empty_array_is_a_valid_instance_not_drift(self, tmp_path):
         # The generator emits exactly this for its own `empty` scenario.
         spec, out = _setup(tmp_path)
-        mock = out / "bottles" / "listBottles.mock.json"
+        mock = out / "items" / "listItems.mock.json"
         _write(mock, {"default": {"status": 200, "body": {"items": []}}})
         assert not generate([spec], out, check=True).has_drift
 
@@ -246,7 +246,7 @@ class TestSchemaConformance:
 
     def test_a_wrong_type_is_reported(self, tmp_path):
         spec, out = _setup(tmp_path)
-        mock = out / "bottles" / "listBottles.mock.json"
+        mock = out / "items" / "listItems.mock.json"
         _write(mock, {"default": {"status": 200, "body": {
             "items": [{"id": "1", "series": 42}]}}})
         report = generate([spec], out, check=True)
@@ -279,7 +279,7 @@ class TestSchemaConformance:
 
     def test_a_valid_body_passes(self, tmp_path):
         spec, out = _setup(tmp_path)
-        mock = out / "bottles" / "listBottles.mock.json"
+        mock = out / "items" / "listItems.mock.json"
         _write(mock, {"default": {"status": 200, "body": {
             "items": [{"id": "1", "series": "Yamazaki"}]}}})
         assert not generate([spec], out, check=True).has_drift

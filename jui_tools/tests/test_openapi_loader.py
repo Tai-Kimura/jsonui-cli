@@ -396,25 +396,25 @@ class FieldLevelAllOfWrapperTests(unittest.TestCase):
 
     def test_all_of_single_ref_unwrapped_to_object_ref(self):
         doc = parse_swagger(_doc({
-            "TasteProfile": {
+            "UserPreference": {
                 "type": "object",
                 "properties": {"score": {"type": "integer"}},
             },
-            "TasteProfileResponse": {
+            "UserPreferenceResponse": {
                 "type": "object",
                 "properties": {
                     "profile": {
                         "nullable": True,
-                        "allOf": [{"$ref": "#/components/schemas/TasteProfile"}],
+                        "allOf": [{"$ref": "#/components/schemas/UserPreference"}],
                         "description": "profile or null",
                     },
                 },
             },
         }), "test.json")
-        resp = next(s for s in doc.schemas if s.name == "TasteProfileResponse")
+        resp = next(s for s in doc.schemas if s.name == "UserPreferenceResponse")
         f = resp.fields[0]
         self.assertTrue(f.type.is_object_ref)
-        self.assertEqual(f.type.ref_name, "TasteProfile")
+        self.assertEqual(f.type.ref_name, "UserPreference")
 
     def test_all_of_single_ref_with_default(self):
         """Field carries default + description, allOf wraps a $ref to an enum."""

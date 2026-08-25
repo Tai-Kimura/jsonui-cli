@@ -23,9 +23,9 @@ CANONICAL = {
     "openapi": "3.0.0",
     "info": {"title": "Canonical", "version": "1.0.0"},
     "paths": {
-        "/api/bottles": {"get": {}, "post": {}},
-        "/api/bottles/{bottle_id}": {"get": {}, "put": {}},
-        "/api/bottles/{bottle_id}/notes": {"post": {}},
+        "/api/items": {"get": {}, "post": {}},
+        "/api/items/{item_id}": {"get": {}, "put": {}},
+        "/api/items/{item_id}/notes": {"post": {}},
     },
 }
 
@@ -36,7 +36,7 @@ def _spec(*, methods=None, api_endpoints=None):
     }
     if methods is not None:
         data_flow["repositories"] = [{
-            "name": "BottleRepository",
+            "name": "ItemRepository",
             "methods": methods,
         }]
     if api_endpoints is not None:
@@ -45,10 +45,10 @@ def _spec(*, methods=None, api_endpoints=None):
         "type": "screen_spec",
         "version": "1.0",
         "metadata": {
-            "name": "BottleDetail",
-            "displayName": "Bottle detail",
-            "description": "Bottle detail screen.",
-            "layoutFile": "bottle_detail",
+            "name": "ItemDetail",
+            "displayName": "Item detail",
+            "description": "Item detail screen.",
+            "layoutFile": "item_detail",
         },
         "structure": {"components": [], "layout": {}},
         "dataFlow": data_flow,
@@ -57,7 +57,7 @@ def _spec(*, methods=None, api_endpoints=None):
 
 
 def _method(name, endpoint):
-    return {"name": name, "returnType": "Bottle", "endpoint": endpoint}
+    return {"name": name, "returnType": "Item", "endpoint": endpoint}
 
 
 class ApiEndpointCanonicalTests(unittest.TestCase):
@@ -84,7 +84,7 @@ class ApiEndpointCanonicalTests(unittest.TestCase):
         )
 
     def _validate(self, spec, *, validator=None):
-        path = self.root / "docs" / "screens" / "bottle_detail.spec.json"
+        path = self.root / "docs" / "screens" / "item_detail.spec.json"
         path.write_text(json.dumps(spec), encoding="utf-8")
         return (validator or SpecValidator()).validate_file(path)
 
@@ -96,29 +96,29 @@ class ApiEndpointCanonicalTests(unittest.TestCase):
 
     def test_matching_endpoint_is_clean(self):
         result = self._validate(_spec(methods=[
-            _method("fetchBottle", "GET /api/bottles/{bottle_id}"),
-            _method("addNote", "POST /api/bottles/{bottle_id}/notes"),
+            _method("fetchItem", "GET /api/items/{item_id}"),
+            _method("addNote", "POST /api/items/{item_id}/notes"),
         ]))
         self.assertEqual([], self._endpoint_warnings(result))
 
     def test_parameter_spelling_difference_warns_with_both_spellings(self):
         result = self._validate(_spec(methods=[
-            _method("fetchBottle", "GET /api/bottles/{bottleId}"),
+            _method("fetchItem", "GET /api/items/{itemId}"),
         ]))
         warnings = self._endpoint_warnings(result)
         self.assertEqual(1, len(warnings))
-        self.assertIn("{bottleId}", warnings[0].message)
-        self.assertIn("{bottle_id}", warnings[0].message)
+        self.assertIn("{itemId}", warnings[0].message)
+        self.assertIn("{item_id}", warnings[0].message)
         self.assertIn("methods[0].endpoint", warnings[0].path)
 
     def test_colon_parameter_notation_warns_against_canonical(self):
         result = self._validate(_spec(methods=[
-            _method("fetchBottle", "GET /api/bottles/:bottleId"),
+            _method("fetchItem", "GET /api/items/:itemId"),
         ]))
         warnings = self._endpoint_warnings(result)
         self.assertEqual(1, len(warnings))
-        self.assertIn(":bottleId", warnings[0].message)
-        self.assertIn("{bottle_id}", warnings[0].message)
+        self.assertIn(":itemId", warnings[0].message)
+        self.assertIn("{item_id}", warnings[0].message)
 
     def test_unknown_path_warns(self):
         result = self._validate(_spec(methods=[
@@ -130,7 +130,7 @@ class ApiEndpointCanonicalTests(unittest.TestCase):
 
     def test_known_path_with_undeclared_verb_lists_declared_verbs(self):
         result = self._validate(_spec(methods=[
-            _method("deleteBottle", "DELETE /api/bottles/{bottle_id}"),
+            _method("deleteItem", "DELETE /api/items/{item_id}"),
         ]))
         warnings = self._endpoint_warnings(result)
         self.assertEqual(1, len(warnings))
@@ -141,20 +141,20 @@ class ApiEndpointCanonicalTests(unittest.TestCase):
         # Realtime-database / socket / GraphQL declarations use the same
         # field and are legal — the OpenAPI documents do not describe them.
         result = self._validate(_spec(methods=[
-            _method("observeStates", "RTDB onValue(bottle_states/{uuid})"),
-            _method("subscribe", "WS /ws/bottles"),
+            _method("observeStates", "RTDB onValue(item_states/{uuid})"),
+            _method("subscribe", "WS /ws/items"),
         ]))
         self.assertEqual([], self._endpoint_warnings(result))
 
     def test_query_string_is_ignored_when_matching(self):
         result = self._validate(_spec(methods=[
-            _method("listBottles", "GET /api/bottles?limit=20"),
+            _method("listItems", "GET /api/items?limit=20"),
         ]))
         self.assertEqual([], self._endpoint_warnings(result))
 
     def test_api_endpoints_section_is_checked_too(self):
         result = self._validate(_spec(api_endpoints=[
-            {"path": "/api/bottles/{bottleId}", "method": "GET"},
+            {"path": "/api/items/{itemId}", "method": "GET"},
         ]))
         warnings = self._endpoint_warnings(result)
         self.assertEqual(1, len(warnings))
@@ -172,10 +172,10 @@ class ApiEndpointCanonicalTests(unittest.TestCase):
         for doc in (self.root / "docs" / "api").iterdir():
             doc.unlink()
         (self.root / "docs" / "api" / ".check-report.json").write_text(
-            json.dumps({"paths": {"/api/bottles": {"get": {}}}}), encoding="utf-8"
+            json.dumps({"paths": {"/api/items": {"get": {}}}}), encoding="utf-8"
         )
         result = self._validate(_spec(methods=[
-            _method("fetchBottle", "GET /api/bottles/{bottle_id}"),
+            _method("fetchItem", "GET /api/items/{item_id}"),
         ]))
         self.assertEqual([], self._endpoint_warnings(result))
 
@@ -187,7 +187,7 @@ class ApiEndpointCanonicalTests(unittest.TestCase):
 
     def test_canonical_index_is_cached_per_api_directory(self):
         validator = SpecValidator()
-        spec = _spec(methods=[_method("fetchBottle", "GET /api/bottles/{bottleId}")])
+        spec = _spec(methods=[_method("fetchItem", "GET /api/items/{itemId}")])
         first = self._validate(spec, validator=validator)
         # Deleting the documents must not change the second verdict: the
         # index was already read once for this api_directory.
@@ -201,15 +201,15 @@ class ApiEndpointCanonicalTests(unittest.TestCase):
         for doc in (self.root / "docs" / "api").iterdir():
             doc.unlink()
         (self.root / "docs" / "api" / "canonical.yaml").write_text(
-            "openapi: 3.0.0\npaths:\n  /api/bottles/{bottle_id}:\n    get: {}\n",
+            "openapi: 3.0.0\npaths:\n  /api/items/{item_id}:\n    get: {}\n",
             encoding="utf-8",
         )
         result = self._validate(_spec(methods=[
-            _method("fetchBottle", "GET /api/bottles/{bottleId}"),
+            _method("fetchItem", "GET /api/items/{itemId}"),
         ]))
         warnings = self._endpoint_warnings(result)
         self.assertEqual(1, len(warnings))
-        self.assertIn("{bottle_id}", warnings[0].message)
+        self.assertIn("{item_id}", warnings[0].message)
 
     def test_unreadable_yaml_skips_the_check_instead_of_reporting_absence(self):
         (self.root / "docs" / "api" / "extra.yaml").write_text(

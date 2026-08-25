@@ -725,7 +725,7 @@ SCREEN_SPEC_SCHEMA = {
                     "type": "string",
                     "description": (
                         "Transport this method talks to, as '<VERB> <path>' "
-                        "(e.g. 'POST /api/bottles/{bottle_id}/notes'). An HTTP "
+                        "(e.g. 'POST /api/items/{item_id}/notes'). An HTTP "
                         "verb makes the declaration checkable: validate "
                         "compares path and parameter spelling against the "
                         "OpenAPI documents under api_directory, and "

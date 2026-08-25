@@ -291,7 +291,7 @@ class HashableConformanceTests(unittest.TestCase):
 
     def test_map_field_schema_declares_hashable_with_explicit_body(self):
         src = self._emit({
-            "TasteProfile": {
+            "UserPreference": {
                 "type": "object",
                 "required": ["peaty"],
                 "properties": {
@@ -303,7 +303,7 @@ class HashableConformanceTests(unittest.TestCase):
                     "experience_level": {"type": "string"},
                 },
             },
-        }, "TasteProfile")
+        }, "UserPreference")
         self.assertIn(": Codable, Sendable, Equatable, Hashable {", src)
         self.assertIn("func hash(into hasher: inout Hasher) {", src)
         self.assertIn("hasher.combine(peaty)", src)
