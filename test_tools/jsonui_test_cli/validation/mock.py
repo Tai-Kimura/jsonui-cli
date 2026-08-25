@@ -21,16 +21,25 @@ VALID_METHODS = ["GET", "POST", "PUT", "DELETE", "PATCH", "HEAD", "OPTIONS"]
 _MOCK_INDEX_CACHE: dict = {}
 
 
-def find_mock_index(test_file_path):
-    """Locate the tests/mocks dir for a test file and index {operationId: {scenarios}}.
+def find_mock_dir(test_file_path, stop_at=None):
+    """Locate the mock directory for a test file, or None.
 
     Discovery: honor mock.mockDir in the nearest jui.config.json walking up from the
     test file; otherwise look for a 'tests/mocks' (or 'mocks') dir along the ancestry.
-    Returns None if no mock dir is found (existence checks are then skipped).
+
+    `stop_at` bounds the walk at that directory, inclusive. Unbounded by
+    default, which is the behaviour every existing caller has: narrowing it
+    for everyone would shrink an existing check's reach, quietly, which is the
+    failure this module has spent the day removing. The walk is otherwise
+    unbounded to the filesystem root — measured on a machine where every
+    project sits under one directory, a single stray `mocks/` there resolves
+    for every project below it, including the ones with no mocks at all. A
+    caller that must not do that passes its own project root.
     """
     if test_file_path is None:
         return None
     start = Path(test_file_path).resolve().parent
+    boundary = Path(stop_at).resolve() if stop_at is not None else None
     mock_dir = None
     for parent in [start, *start.parents]:
         config = parent / "jui.config.json"
@@ -52,6 +61,20 @@ def find_mock_index(test_file_path):
                 break
         if mock_dir:
             break
+        # Inclusive: the boundary directory is searched, its parent is not.
+        if boundary is not None and parent == boundary:
+            break
+    return mock_dir
+
+
+def find_mock_index(test_file_path, stop_at=None):
+    """`{operationId: {scenarios}}` for the mocks of a test file, or None.
+
+    The directory is located by `find_mock_dir` — one walk, exposed at two
+    granularities, so a caller that needs the location does not grow a second
+    convention for where mocks live.
+    """
+    mock_dir = find_mock_dir(test_file_path, stop_at=stop_at)
     if mock_dir is None:
         return None
 

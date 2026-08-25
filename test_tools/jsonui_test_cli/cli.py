@@ -253,7 +253,7 @@ def _warn_unchecked_mocks(config_path, validated_files):
         return "unknown"
 
     if not mock_files:
-        return None
+        return _unchecked_mocks_elsewhere(config_path, validated_files)
     if not config.get("swagger"):
         missing = "mock.swagger is not declared"
     else:
@@ -261,6 +261,62 @@ def _warn_unchecked_mocks(config_path, validated_files):
     print(f"\n[WARN] {len(mock_files)} mock file(s) were validated, but "
           f"{missing} — the mock contract check did not run.")
     return len(mock_files)
+
+
+def _project_root(config_path):
+    """The directory this run treats as the project, or None.
+
+    The config `validate` actually loaded, not the nearest one above some
+    file: the gate's inputs come from that config, so anything scoped to
+    "this project" has to mean the same directory the gate means. `.git` is
+    the fallback for a checkout with no config — a boundary definition, not a
+    second rule for where mocks live.
+    """
+    _config, cfg_path = _load_mock_config(config_path)
+    if cfg_path:
+        return cfg_path.resolve().parent
+    here = Path.cwd().resolve()
+    for parent in [here, *here.parents]:
+        if (parent / ".git").exists():
+            return parent
+    return None
+
+
+def _unchecked_mocks_elsewhere(config_path, validated_files):
+    """Mocks that exist outside the validated path, with nothing declaring them.
+
+    The counting warning above reads the collected files, so it cannot see a
+    project whose mocks live in another tree entirely and whose config says
+    nothing — the collected list is empty and the run looks like one with no
+    mocks. That is the configuration the ticket was written about.
+
+    Bounded by `_project_root`. Unbounded, the convention walks to the
+    filesystem root: measured, a single `mocks/` directory one level above a
+    workspace resolves for every project inside it, and the projects it would
+    then talk about are the ones with no mocks at all — the exact false
+    positive that gets a check switched off.
+
+    Silence stays silence. Finding nothing here is not evidence that there is
+    nothing: a project can keep its mocks somewhere this convention does not
+    reach, and this returns None then, the same as for a project with no mocks
+    at all. So it adds a way to speak, never a way to reassure — no
+    `Unchecked mocks: 0`, which would turn "did not find" into "counted none".
+    """
+    from .validation.mock import find_mock_dir
+
+    tests = [p for p in validated_files if p.name.endswith(".test.json")]
+    boundary = _project_root(config_path)
+    if not tests or boundary is None:
+        return None
+    mock_dir = find_mock_dir(tests[0], stop_at=boundary)
+    if mock_dir is None:
+        return None
+    found = sorted(mock_dir.rglob("*.mock.json"))
+    if not found:
+        return None
+    print(f"\n[WARN] {len(found)} mock file(s) found under {mock_dir}, but no "
+          f"mock.swagger is declared — the mock contract check did not run.")
+    return len(found)
 
 
 def _mock_gate_inputs(config_path):
