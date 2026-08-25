@@ -85,7 +85,7 @@
     }
   },
   "appOwnedScreens": {
-    "description": "Screens the app owns outright — a hand-written page with no JsonUI layout behind it. They are real navigation destinations (a test navigates to them and asserts there), so they must be declarable, otherwise the screen-unknown rule rejects a legitimate id.",
+    "description": "Screens the app owns outright — a hand-written page with no JsonUI layout behind it. They are real navigation destinations (a test navigates to them and asserts there), so they must be declarable, otherwise the screen-unknown rule rejects a legitimate id. Having no layout is what they ARE, not an omission: `jui verify`'s spec-coverage check looks for a layout that generates a screen nobody declared, so these fall outside it — requiring a spec would also leave no way to comply, since there is no layout root to carry a `role` and a spec for a screen with nothing to generate describes nothing.",
     "declaration": {
       "location": "jui.config.json",
       "key": "test.appOwnedScreens",
