@@ -467,7 +467,7 @@ RSpec.describe RjuiTools::React::DataModelGenerator, 'focus-state value bindings
     end
 
     it 'emits a type import resolved from the web platform entry' do
-      props = [{ 'name' => 'parkingScopeOptions', 'class' => '[SelectOption]' }]
+      props = [{ 'name' => 'regionScopeOptions', 'class' => '[SelectOption]' }]
       lines = generator.send(:collect_type_map_imports, props)
       expect(lines).to eq(["import type { SelectOption } from '@/types/SelectOption';"])
     end
@@ -483,10 +483,10 @@ RSpec.describe RjuiTools::React::DataModelGenerator, 'focus-state value bindings
     end
 
     it 'wires the import into generated TypeScript content' do
-      props = [{ 'name' => 'parkingScopeOptions', 'class' => '[SelectOption]', 'defaultValue' => nil }]
-      content = generator.send(:generate_typescript_content, 'AdminTopbar', props)
+      props = [{ 'name' => 'regionScopeOptions', 'class' => '[SelectOption]', 'defaultValue' => nil }]
+      content = generator.send(:generate_typescript_content, 'HeaderBar', props)
       expect(content).to include("import type { SelectOption } from '@/types/SelectOption';")
-      expect(content).to include('parkingScopeOptions?: SelectOption[];')
+      expect(content).to include('regionScopeOptions?: SelectOption[];')
     end
   end
   # A String defaultValue whose key the layout's OWN strings.json section
