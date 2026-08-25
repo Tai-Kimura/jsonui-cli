@@ -23,7 +23,7 @@ turning drift into a CI failure.
 ## Source provenance
 
 - Source repo: `Tai-Kimura/jsonui-test-runner`
-- Source path: `schemas/{actions,screen-test,flow-test,results,description}.schema.json`
+- Source path: `schemas/{actions,screen-test,flow-test,results,description,mock}.schema.json`
 - Vendored at commit: `43046c737adbe1511e7aa2e7aee029ac80847534`
 
 ## Re-vendor procedure
@@ -32,7 +32,7 @@ When the canonical schemas change in jsonui-test-runner:
 
 ```bash
 TR=/path/to/jsonui-test-runner
-for s in actions screen-test flow-test results description; do
+for s in actions screen-test flow-test results description mock; do
   cp "$TR/schemas/$s.schema.json" test_tools/tests/schema_fixtures/$s.schema.json
 done
 # update the "Vendored at commit" line above to `git -C "$TR" rev-parse HEAD`

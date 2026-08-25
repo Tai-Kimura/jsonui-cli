@@ -235,3 +235,44 @@ def test_results_item_keys_match():
         f"  only in schema: {sorted(keys - set(rp.VALID_RESULT_KEYS))}\n"
         f"  only in const : {sorted(set(rp.VALID_RESULT_KEYS) - keys)}"
     )
+
+
+# --- mock.schema.json <-> validation/mock.py -------------------------------
+# The mock schema was outside this guard until 2026-08-25, and it showed:
+# `bodyFile` and `contentType` reached the CLI constant and the schema
+# separately, by hand, and `contractViolations` nearly did the same. The
+# scenario object is closed in the schema, so a key the CLI accepts but the
+# schema omits is a red squiggle in the author's editor over a file the tool
+# says is fine.
+
+def test_mock_scenario_keys_match():
+    schema = _load("mock")
+    from jsonui_test_cli.validation import mock as mk
+    props = set(schema["properties"]["scenarios"]["additionalProperties"]["properties"].keys())
+    assert props == set(mk.VALID_SCENARIO_KEYS), (
+        "mock.schema.json scenario props drifted from validation.mock.VALID_SCENARIO_KEYS.\n"
+        f"  only in schema: {sorted(props - set(mk.VALID_SCENARIO_KEYS))}\n"
+        f"  only in const : {sorted(set(mk.VALID_SCENARIO_KEYS) - props)}"
+    )
+
+
+def test_mock_scenario_object_stays_closed():
+    """A closed object is what makes the key list load-bearing in an editor."""
+    schema = _load("mock")
+    scenario = schema["properties"]["scenarios"]["additionalProperties"]
+    assert scenario.get("additionalProperties") is False
+
+
+def test_mock_contract_violations_categories_match():
+    schema = _load("mock")
+    from jsonui_test_cli.mock.generate import _VIOLATION_CATEGORIES
+    declared = set(
+        schema["properties"]["scenarios"]["additionalProperties"]
+        ["properties"]["contractViolations"]["properties"].keys()
+    ) - {"reason"}
+    assert declared == set(_VIOLATION_CATEGORIES), (
+        "mock.schema.json contractViolations categories drifted from "
+        "generate._VIOLATION_CATEGORIES.\n"
+        f"  only in schema: {sorted(declared - set(_VIOLATION_CATEGORIES))}\n"
+        f"  only in const : {sorted(set(_VIOLATION_CATEGORIES) - declared)}"
+    )

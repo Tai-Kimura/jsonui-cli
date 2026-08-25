@@ -498,8 +498,8 @@ class TestOptionalFields:
                 "responses": {"200": {"content": {"application/json": {"schema": {
                     "type": "object", "required": ["id"], "properties": {
                         "id": {"type": "string"},
-                        "price_plan": {"type": "object", "required": ["plan_id"],
-                                     "properties": {"plan_id": {"type": "string"}}},
+                        "tier": {"type": "object", "required": ["tier_id"],
+                                     "properties": {"tier_id": {"type": "string"}}},
                     }}}}}},
             }}},
         }), encoding="utf-8")
@@ -512,7 +512,7 @@ class TestOptionalFields:
         # The walk stops at the absent optional parent — reporting its
         # required children would be reporting an omission that is not one.
         assert drift.missing == []
-        assert drift.optional == [".price_plan"]
+        assert drift.optional == [".tier"]
 
     def test_notes_and_violations_are_labelled_separately(self, tmp_path):
         spec, out = _setup(tmp_path)
@@ -552,20 +552,20 @@ class TestArrayElementShape:
         }}},
         "components": {"schemas": {
             "Plan": {"type": "object", "properties": {
-                "daily_rates": {"type": "array", "nullable": True,
+                "unit_rates": {"type": "array", "nullable": True,
                                 "items": {"$ref": "#/components/schemas/Rate"}},
-                "stalls": {"type": "array", "items": {"$ref": "#/components/schemas/Stall"}},
+                "shelves": {"type": "array", "items": {"$ref": "#/components/schemas/Shelf"}},
             }},
-            "Rate": {"type": "object", "required": ["apply_on_fri", "unit_price"],
-                     "properties": {"apply_on_fri": {"type": "boolean"},
+            "Rate": {"type": "object", "required": ["apply_on_peak", "unit_price"],
+                     "properties": {"apply_on_peak": {"type": "boolean"},
                                     "unit_price": {"type": "integer"}}},
-            "Stall": {"type": "object", "required": ["name"], "properties": {
+            "Shelf": {"type": "object", "required": ["name"], "properties": {
                 "name": {"type": "string"},
                 "assignments": {"type": "array",
                                 "items": {"$ref": "#/components/schemas/Assignment"}}}},
-            "Assignment": {"type": "object", "required": ["usage_mode_id"], "properties": {
-                "usage_mode_id": {"type": "string"},
-                "price_plan_name": {"type": "string", "nullable": True}}},
+            "Assignment": {"type": "object", "required": ["variant_id"], "properties": {
+                "variant_id": {"type": "string"},
+                "tier_name": {"type": "string", "nullable": True}}},
         }},
     }
 
@@ -581,13 +581,13 @@ class TestArrayElementShape:
     def test_a_nullable_array_holding_null_is_not_asked_for_element_shape(self, tmp_path):
         # null is a valid value and there are no elements — an absent array is
         # not an array of absent elements.
-        report = self._project(tmp_path, {"daily_rates": None, "stalls": []})
+        report = self._project(tmp_path, {"unit_rates": None, "shelves": []})
         assert report.bodies == [] or report.bodies[0].missing == []
 
     def test_an_empty_element_does_not_invalidate_its_siblings(self, tmp_path):
-        report = self._project(tmp_path, {"daily_rates": None, "stalls": [
+        report = self._project(tmp_path, {"unit_rates": None, "shelves": [
             {"name": "A-01", "assignments": [
-                {"usage_mode_id": "u1", "price_plan_name": "通常料金A"}]},
+                {"variant_id": "u1", "tier_name": "標準A"}]},
             {"name": "A-03", "assignments": []},
         ]})
         drift = report.bodies[0] if report.bodies else None
@@ -595,13 +595,13 @@ class TestArrayElementShape:
         assert drift is None or drift.missing == []
 
     def test_a_bad_element_is_identified_by_its_index(self, tmp_path):
-        report = self._project(tmp_path, {"daily_rates": None, "stalls": [
+        report = self._project(tmp_path, {"unit_rates": None, "shelves": [
             {"name": "A-01"},
             {"name": 42},
         ]})
         violations = report.bodies[0].violations
-        assert any(".stalls[1].name" in v for v in violations)
-        assert not any(".stalls[0].name" in v for v in violations)
+        assert any(".shelves[1].name" in v for v in violations)
+        assert not any(".shelves[0].name" in v for v in violations)
 
 
 class TestSourceIdentityIsPreserved:

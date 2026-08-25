@@ -296,7 +296,7 @@ class BranchWhenVocabulary(unittest.TestCase):
         self.assertIn("Unknown when key", errs[0].message)
 
     def test_data_scalar_values_pass(self):
-        for value in (True, "daily", 0, None):
+        for value in (True, "compact", 0, None):
             result = _validate(self._spec({"data.mode": value}))
             self.assertEqual(_errors_at(result, "when.data.mode"), [],
                              f"value {value!r} should be accepted")
@@ -416,7 +416,7 @@ class BranchThenVocabulary(unittest.TestCase):
             "api.confirmBooking.request": {
                 "payment_type": "card",
                 "payment_method_id": None,
-                "cancel_policy_fingerprint": "@data.fingerprint",
+                "return_policy_digest": "@data.fingerprint",
                 "nested": {"amount": 1000},
             }
         }))

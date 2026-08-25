@@ -28,21 +28,21 @@ from jsonui_test_cli.mock.server import MockServer, MockStore, RunManager
 SPEC = {
     "openapi": "3.0.3",
     "paths": {
-        "/api/admin/reservations": {
+        "/api/admin/orders": {
             "post": {
-                "operationId": "createReservation",
-                "tags": ["AdminReservations"],
+                "operationId": "createOrder",
+                "tags": ["AdminOrders"],
                 "requestBody": {
                     "required": True,
                     "content": {"application/json": {
-                        "schema": {"$ref": "#/components/schemas/ReservationCreate"}}},
+                        "schema": {"$ref": "#/components/schemas/OrderCreate"}}},
                 },
                 "responses": {"201": {"content": {"application/json": {
-                    "schema": {"$ref": "#/components/schemas/Reservation"}}}}},
+                    "schema": {"$ref": "#/components/schemas/Order"}}}}},
             },
             "get": {
-                "operationId": "listReservations",
-                "tags": ["AdminReservations"],
+                "operationId": "listOrders",
+                "tags": ["AdminOrders"],
                 "parameters": [
                     {"name": "page", "in": "query", "required": True,
                      "schema": {"type": "integer"}},
@@ -50,22 +50,22 @@ SPEC = {
                      "schema": {"type": "string", "enum": ["asc", "desc"]}},
                 ],
                 "responses": {"200": {"content": {"application/json": {
-                    "schema": {"$ref": "#/components/schemas/Reservation"}}}}},
+                    "schema": {"$ref": "#/components/schemas/Order"}}}}},
             },
         },
     },
     "components": {"schemas": {
-        "ReservationCreate": {
+        "OrderCreate": {
             "type": "object",
-            "required": ["usage_mode_id", "slot_id", "entry_date"],
+            "required": ["variant_id", "lot_id", "start_date"],
             "properties": {
-                "usage_mode_id": {"type": "string", "format": "uuid"},
-                "slot_id": {"type": "string"},
-                "entry_date": {"type": "string", "format": "date"},
+                "variant_id": {"type": "string", "format": "uuid"},
+                "lot_id": {"type": "string"},
+                "start_date": {"type": "string", "format": "date"},
                 "guests": {"type": "integer"},
             },
         },
-        "Reservation": {"type": "object", "properties": {"id": {"type": "string"}}},
+        "Order": {"type": "object", "properties": {"id": {"type": "string"}}},
     }},
 }
 
@@ -81,17 +81,17 @@ class TestContractIndex:
     def test_a_body_missing_required_fields_is_reported(self, spec_file):
         index = ContractIndex.load([spec_file])
         problems = index.check(
-            "POST", "/api/admin/reservations", {},
-            {"usage_mode_id": "daily", "slot_id": ""},
+            "POST", "/api/admin/orders", {},
+            {"variant_id": "compact", "lot_id": ""},
         )
-        # The F-47 shape: entry_date absent entirely.
-        assert any("entry_date" in p and "required" in p for p in problems)
+        # The F-47 shape: start_date absent entirely.
+        assert any("start_date" in p and "required" in p for p in problems)
 
     def test_a_wrong_type_in_the_body_is_reported(self, spec_file):
         index = ContractIndex.load([spec_file])
         problems = index.check(
-            "POST", "/api/admin/reservations", {},
-            {"usage_mode_id": "x", "slot_id": "s", "entry_date": "2026-01-01",
+            "POST", "/api/admin/orders", {},
+            {"variant_id": "x", "lot_id": "s", "start_date": "2026-01-01",
              "guests": "two"},
         )
         assert any("guests" in p and "contract says integer" in p for p in problems)
@@ -99,33 +99,33 @@ class TestContractIndex:
     def test_a_valid_body_is_clean(self, spec_file):
         index = ContractIndex.load([spec_file])
         assert index.check(
-            "POST", "/api/admin/reservations", {},
-            {"usage_mode_id": "x", "slot_id": "s", "entry_date": "2026-01-01"},
+            "POST", "/api/admin/orders", {},
+            {"variant_id": "x", "lot_id": "s", "start_date": "2026-01-01"},
         ) == []
 
     def test_a_missing_body_on_a_required_request_body_is_reported(self, spec_file):
         index = ContractIndex.load([spec_file])
-        problems = index.check("POST", "/api/admin/reservations", {}, None)
+        problems = index.check("POST", "/api/admin/orders", {}, None)
         assert problems == ["body: required by the contract, missing"]
 
     def test_a_missing_required_query_parameter_is_reported(self, spec_file):
         index = ContractIndex.load([spec_file])
-        problems = index.check("GET", "/api/admin/reservations", {}, None)
+        problems = index.check("GET", "/api/admin/orders", {}, None)
         assert any("page" in p and "required" in p for p in problems)
 
     def test_a_query_value_outside_an_enum_is_reported(self, spec_file):
         index = ContractIndex.load([spec_file])
         problems = index.check(
-            "GET", "/api/admin/reservations", {"page": ["1"], "sort": ["sideways"]}, None)
+            "GET", "/api/admin/orders", {"page": ["1"], "sort": ["sideways"]}, None)
         assert any("sideways" in p for p in problems)
 
     def test_a_numeric_query_string_is_read_as_its_declared_type(self, spec_file):
         # Query values always arrive as strings; "1" is a valid integer.
         index = ContractIndex.load([spec_file])
         assert index.check(
-            "GET", "/api/admin/reservations", {"page": ["1"], "sort": ["asc"]}, None) == []
+            "GET", "/api/admin/orders", {"page": ["1"], "sort": ["asc"]}, None) == []
         problems = index.check(
-            "GET", "/api/admin/reservations", {"page": ["abc"]}, None)
+            "GET", "/api/admin/orders", {"page": ["abc"]}, None)
         assert any("page" in p and "contract says integer" in p for p in problems)
 
     def test_an_unknown_route_is_not_second_guessed(self, spec_file):
@@ -179,7 +179,7 @@ class TestServing:
 
     def _post(self, server, payload):
         request = urllib.request.Request(
-            f"http://127.0.0.1:{server.port}/api/admin/reservations",
+            f"http://127.0.0.1:{server.port}/api/admin/orders",
             data=json.dumps(payload).encode("utf-8"),
             headers={"Content-Type": "application/json"},
             method="POST",
@@ -191,34 +191,34 @@ class TestServing:
         # Recorded, not enforced: a 422 here would turn "the implementation
         # is wrong" into "this screen should show an error".
         server, log = running
-        status, _body = self._post(server, {"usage_mode_id": "daily", "slot_id": ""})
+        status, _body = self._post(server, {"variant_id": "compact", "lot_id": ""})
         assert status == 201
         assert log.count() == 1
-        assert any("entry_date" in p for p in log.all()[0].problems)
+        assert any("start_date" in p for p in log.all()[0].problems)
 
     def test_a_valid_request_records_nothing(self, running):
         server, log = running
         status, _ = self._post(server, {
-            "usage_mode_id": "u", "slot_id": "s", "entry_date": "2026-01-01"})
+            "variant_id": "u", "lot_id": "s", "start_date": "2026-01-01"})
         assert status == 201
         assert log.count() == 0
 
     def test_violations_are_readable_through_the_admin_api(self, running):
         server, log = running
-        self._post(server, {"slot_id": ""})
+        self._post(server, {"lot_id": ""})
         request = urllib.request.Request(
             f"http://127.0.0.1:{server.port}/__jsonui__/contract-violations",
             headers={"X-JsonUI-Token": server.token},
         )
         with urllib.request.urlopen(request, timeout=5) as response:
             data = json.loads(response.read())
-        assert data and data[0]["operationId"] == "createReservation"
+        assert data and data[0]["operationId"] == "createOrder"
 
     def test_a_scenario_can_opt_out(self, running):
         server, log = running
-        endpoint = server.store.match("POST", "/api/admin/reservations")
+        endpoint = server.store.match("POST", "/api/admin/orders")
         endpoint.scenarios[endpoint.active_scenario]["skipRequestValidation"] = True
-        self._post(server, {"slot_id": ""})
+        self._post(server, {"lot_id": ""})
         assert log.count() == 0
 
 
@@ -235,54 +235,54 @@ class TestOverlay:
         # tests drive; `empty` / `error_*` keep coming from the generated side.
         mock_dir = self._tree(tmp_path, spec_file)
         generated = json.loads(
-            (mock_dir / "generated" / "adminreservations" / "createReservation.mock.json")
+            (mock_dir / "generated" / "adminorders" / "createOrder.mock.json")
             .read_text(encoding="utf-8"))
         assert "default" in generated["scenarios"]
 
-        thin = mock_dir / "adminreservations" / "createReservation.mock.json"
+        thin = mock_dir / "adminorders" / "createOrder.mock.json"
         thin.parent.mkdir(parents=True, exist_ok=True)
         thin.write_text(json.dumps({
-            "source": {"operationId": "createReservation",
-                       "method": "POST", "path": "/api/admin/reservations"},
+            "source": {"operationId": "createOrder",
+                       "method": "POST", "path": "/api/admin/orders"},
             "activeScenario": "real_id",
             "scenarios": {"real_id": {"status": 201, "body": {"id": "res-42"}}},
         }), encoding="utf-8")
 
         store = MockStore.load(mock_dir)
-        endpoint = store.match("POST", "/api/admin/reservations")
+        endpoint = store.match("POST", "/api/admin/orders")
         assert set(endpoint.scenarios) >= {"default", "real_id"}
         assert endpoint.active_scenario == "real_id"
         assert endpoint.scenarios["real_id"]["body"]["id"] == "res-42"
 
     def test_a_hand_written_scenario_wins_over_the_generated_one(self, tmp_path, spec_file):
         mock_dir = self._tree(tmp_path, spec_file)
-        thin = mock_dir / "adminreservations" / "createReservation.mock.json"
+        thin = mock_dir / "adminorders" / "createOrder.mock.json"
         thin.parent.mkdir(parents=True, exist_ok=True)
         thin.write_text(json.dumps({
-            "source": {"operationId": "createReservation",
-                       "method": "POST", "path": "/api/admin/reservations"},
+            "source": {"operationId": "createOrder",
+                       "method": "POST", "path": "/api/admin/orders"},
             "scenarios": {"default": {"status": 201, "body": {"id": "mine"}}},
         }), encoding="utf-8")
 
         store = MockStore.load(mock_dir)
-        endpoint = store.match("POST", "/api/admin/reservations")
+        endpoint = store.match("POST", "/api/admin/orders")
         assert endpoint.scenarios["default"]["body"] == {"id": "mine"}
 
     def test_the_overlay_is_recorded_for_the_startup_log(self, tmp_path, spec_file):
         mock_dir = self._tree(tmp_path, spec_file)
-        thin = mock_dir / "adminreservations" / "createReservation.mock.json"
+        thin = mock_dir / "adminorders" / "createOrder.mock.json"
         thin.parent.mkdir(parents=True, exist_ok=True)
         thin.write_text(json.dumps({
-            "source": {"operationId": "createReservation",
-                       "method": "POST", "path": "/api/admin/reservations"},
+            "source": {"operationId": "createOrder",
+                       "method": "POST", "path": "/api/admin/orders"},
             "scenarios": {"default": {"status": 201, "body": {}}},
         }), encoding="utf-8")
         store = MockStore.load(mock_dir)
-        assert store.overrides == ["adminreservations/createReservation.mock.json"]
+        assert store.overrides == ["adminorders/createOrder.mock.json"]
 
     def test_a_generated_only_tree_serves_normally(self, tmp_path, spec_file):
         store = MockStore.load(self._tree(tmp_path, spec_file))
-        assert store.match("POST", "/api/admin/reservations") is not None
+        assert store.match("POST", "/api/admin/orders") is not None
         assert store.overrides == []
 
 
@@ -317,7 +317,7 @@ class TestScenarioSet:
             return e.code, json.loads(e.read())
 
     def test_a_known_scenario_switches_and_answers_200(self, running):
-        status, body = self._set(running, {"createReservation": "error_default"})
+        status, body = self._set(running, {"createOrder": "error_default"})
         # The scenario name may or may not exist; what matters is the contract
         # below — a miss must not be a 200.
         assert status in (200, 422)

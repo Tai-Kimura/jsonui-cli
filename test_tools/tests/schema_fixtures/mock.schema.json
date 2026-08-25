@@ -1,0 +1,63 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://jsonui.dev/schemas/mock.schema.json",
+  "title": "JsonUI API Mock Definition",
+  "description": "Editor/documentation schema for *.mock.json. The CLI validates via validation/mock.py, not this file.",
+  "type": "object",
+  "required": ["source", "scenarios"],
+  "additionalProperties": false,
+  "definitions": {
+    "violationPaths": {
+      "description": "Paths the checker reports, e.g. '.crate.variants[].spec_digest'. A bare string is one path.",
+      "oneOf": [
+        { "type": "string", "minLength": 1 },
+        { "type": "array", "items": { "type": "string", "minLength": 1 }, "minItems": 1 }
+      ]
+    }
+  },
+  "properties": {
+    "$schema": { "type": "string" },
+    "source": {
+      "type": "object",
+      "required": ["path"],
+      "additionalProperties": false,
+      "properties": {
+        "swagger": { "type": "string" },
+        "operationId": { "type": "string" },
+        "method": { "type": "string", "enum": ["GET", "POST", "PUT", "DELETE", "PATCH", "HEAD", "OPTIONS"] },
+        "path": { "type": "string" }
+      }
+    },
+    "activeScenario": { "type": "string", "default": "default" },
+    "scenarios": {
+      "type": "object",
+      "minProperties": 1,
+      "additionalProperties": {
+        "type": "object",
+        "required": ["status"],
+        "additionalProperties": false,
+        "properties": {
+          "status": { "type": "integer", "minimum": 100, "maximum": 599 },
+          "headers": { "type": "object" },
+          "body": {},
+          "delayMs": { "type": "number", "minimum": 0 },
+          "contentType": { "type": "string" },
+          "bodyFile": { "type": ["string", "null"] },
+          "contractViolations": {
+            "description": "Contract violations this scenario makes ON PURPOSE — a mock that omits a required field is how a test proves the client fails closed when the server omits it. The contract check subtracts exactly the paths named here; an undeclared violation in the same scenario still fails, and a declaration that stops matching is reported (a negative scenario that quietly turned positive). Paths use the checker's spelling; '[]' matches every element of an array, '[0]' one.",
+            "type": "object",
+            "required": ["reason"],
+            "additionalProperties": false,
+            "minProperties": 2,
+            "properties": {
+              "missing": { "$ref": "#/definitions/violationPaths" },
+              "extra": { "$ref": "#/definitions/violationPaths" },
+              "violations": { "$ref": "#/definitions/violationPaths" },
+              "reason": { "type": "string", "minLength": 1 }
+            }
+          }
+        }
+      }
+    }
+  }
+}
