@@ -44,6 +44,62 @@ def mock_relpath(op: Operation) -> str:
 #: Subdirectory of mockDir that `mock generate` owns outright.
 GENERATED_DIR = "generated"
 
+#: Filename of the editor schema every generated mock points `$schema` at.
+#: A relative sibling is the one spelling an editor resolves with no project
+#: configuration: the schema's `$id` is an identifier, not a fetchable address
+#: (nothing serves it), and a repo-relative path would depend on where the
+#: mockDir sits. Dot-prefixed because it is tool output living among authored
+#: files.
+EDITOR_SCHEMA_FILENAME = ".mock.schema.json"
+
+#: Name the same schema ships under inside the package.
+_BUNDLED_SCHEMA = "mock.schema.json"
+
+#: The one spelling a mock's `$schema` may use. A copy is placed in *every*
+#: directory that holds mocks, so the schema is always a sibling — which makes
+#: `../.mock.schema.json` a reference to a file that is never written there.
+#: Both spellings resolved to nothing while no copy existed anywhere, so the
+#: split was invisible until the copies landed.
+EDITOR_SCHEMA_REF = f"./{EDITOR_SCHEMA_FILENAME}"
+
+
+def editor_schema_text() -> str:
+    """The packaged editor schema, read the way `static/panel.html` is read.
+
+    `static/*` ships as package-data (pyproject), so this resolves from a
+    wheel or an editable install regardless of cwd. It is not read to
+    validate anything — validation is the Python constants in
+    `validation/mock.py` — so a broken install must degrade, never fail.
+    """
+    from importlib.resources import files
+    return (files("jsonui_test_cli") / "static" / _BUNDLED_SCHEMA).read_text("utf-8")
+
+
+def place_editor_schema(mock_dir: Path) -> list[str]:
+    """Write the editor schema into every directory that holds mock files.
+
+    Each mock says `"$schema": "./.mock.schema.json"`, so the copy has to sit
+    beside the file naming it — at whatever depth, generated and hand-written
+    alike. Placing one per directory is what keeps that single spelling true
+    without the mock files having to know how deep they are, and without the
+    generator computing `../..` chains.
+
+    Returns the paths actually written (an unchanged copy is left alone, so a
+    re-run reports nothing and touches no mtimes).
+    """
+    written: list[str] = []
+    text = editor_schema_text()
+    for directory in sorted({p.parent for p in mock_dir.rglob("*.mock.json")}):
+        target = directory / EDITOR_SCHEMA_FILENAME
+        try:
+            if target.read_text(encoding="utf-8") == text:
+                continue
+        except (OSError, UnicodeDecodeError):
+            pass
+        target.write_text(text, encoding="utf-8")
+        written.append(str(target.relative_to(mock_dir)))
+    return written
+
 
 def is_generated(rel) -> bool:
     """True for a path inside the generated tree (relative to mockDir)."""
@@ -125,7 +181,7 @@ def build_mock_definition(doc: OpenApiDoc, op: Operation) -> dict:
         scenarios[f"error_{code}"] = scen
 
     return {
-        "$schema": "./.mock.schema.json",
+        "$schema": EDITOR_SCHEMA_REF,
         "source": {
             "swagger": doc.source_path,
             "operationId": op.operation_id,
@@ -184,6 +240,8 @@ class GenerateReport:
     warnings: list[str]
     #: routes the project's path scope excludes — not scaffolded
     out_of_scope: list[str] = field(default_factory=list)
+    #: editor schema copies written this run (see `place_editor_schema`)
+    schemas: list[str] = field(default_factory=list)
 
 
 def _clear_generated(gen_root: Path) -> None:
@@ -191,6 +249,11 @@ def _clear_generated(gen_root: Path) -> None:
     if not gen_root.is_dir():
         return
     for path in gen_root.rglob("*.mock.json"):
+        path.unlink()
+    # The placed editor schemas go with them: they are tool output, they are
+    # rewritten right after, and leaving one behind would keep a tag directory
+    # that no longer has any mocks from ever being pruned.
+    for path in gen_root.rglob(EDITOR_SCHEMA_FILENAME):
         path.unlink()
     # Prune the directories that emptied out, deepest first.
     for path in sorted(gen_root.rglob("*"), key=lambda p: -len(p.parts)):
@@ -261,8 +324,25 @@ def generate(
                 f.write("\n")
             created.append(rel)
 
+    schemas = _place_editor_schema_quietly(mock_dir, warnings)
     return GenerateReport(created=created, skipped=skipped, warnings=warnings,
-                          out_of_scope=sorted(out_of_scope))
+                          out_of_scope=sorted(out_of_scope), schemas=schemas)
+
+
+def _place_editor_schema_quietly(mock_dir: Path, warnings: list) -> list:
+    """Place the editor schema, downgrading any failure to a warning.
+
+    The schema is an authoring aid; the mocks it sits next to are the work.
+    A packaging fault or a read-only tree must not fail a generation that
+    otherwise succeeded — it must say so and leave the mocks in place.
+    """
+    try:
+        return place_editor_schema(mock_dir)
+    except (FileNotFoundError, ModuleNotFoundError, OSError) as exc:
+        warnings.append(
+            f"editor schema not placed ({exc}) — the mocks are fine, but the "
+            f"`$schema` line in them will not resolve in an editor")
+        return []
 
 
 @dataclass
@@ -274,6 +354,9 @@ class UpdateReport:
     added: dict = field(default_factory=dict)
     #: Findings a merge cannot fix — wrong types, undeclared fields.
     needs_review: list = field(default_factory=list)
+    #: editor schema copies written this run (see `place_editor_schema`)
+    schemas: list = field(default_factory=list)
+    warnings: list = field(default_factory=list)
 
 
 def add_missing_required(doc: OpenApiDoc, schema, body, path: str = "",
@@ -437,8 +520,14 @@ def update_default(
                     f.write("\n")
             updated.append(rel)
 
+    # `--update-default` is the other half of the same command, and it is the
+    # one a project runs after hand-writing a mock in a new directory — the
+    # directory `generate` has no reason to revisit.
+    warnings: list = []
+    schemas = [] if dry_run else _place_editor_schema_quietly(mock_dir, warnings)
     return UpdateReport(updated=updated, unchanged=unchanged, skipped=skipped,
-                        added=added, needs_review=needs_review)
+                        added=added, needs_review=needs_review,
+                        schemas=schemas, warnings=warnings)
 
 
 @dataclass

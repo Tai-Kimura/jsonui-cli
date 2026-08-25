@@ -97,6 +97,35 @@ def validate_mock_reference(mapping, path: str, result: ValidationResult, index)
 class MockValidator:
     """Validates a single mock definition file."""
 
+    def _check_schema_ref(self, data, path: str, result: ValidationResult):
+        """The `$schema` reference must be the sibling spelling, or absent.
+
+        `mock generate` places a copy of the schema in every directory that
+        holds mocks, so the reference is a sibling everywhere. A `../` form
+        points at a directory that never receives one — it resolves to
+        nothing and the editor silently stops checking the file, which is
+        indistinguishable from a file with no problems.
+
+        Only the spelling is checked, never whether the file is there: a
+        project is free to gitignore the placed copies, and a fresh CI
+        checkout would then fail on every mock it has. The spelling is the
+        tool's own convention, so it is decidable without the file and
+        reaches zero regardless of that choice.
+        """
+        if "$schema" not in data:
+            return  # generated mocks carry one; omitting it by hand is fine
+        from ..mock.generate import EDITOR_SCHEMA_REF
+        found = data["$schema"]
+        if found == EDITOR_SCHEMA_REF:
+            return
+        result.errors.append(ValidationMessage(
+            path=f"{path}.$schema",
+            message=(f"'$schema' must be '{EDITOR_SCHEMA_REF}', got: {found!r}. "
+                     "The schema is placed in every directory that holds mocks, "
+                     "so the reference is always a sibling; another spelling "
+                     "resolves to nothing and the editor stops checking this "
+                     "file without saying so.")))
+
     def validate(self, data, path: str, result: ValidationResult):
         if not isinstance(data, dict):
             result.errors.append(ValidationMessage(path=path, message="Mock file must be a JSON object"))
@@ -106,6 +135,8 @@ class MockValidator:
             if key not in VALID_MOCK_KEYS:
                 result.warnings.append(ValidationMessage(
                     path=path, message=f"Unknown mock key: {key}", level="warning"))
+
+        self._check_schema_ref(data, path, result)
 
         source = data.get("source")
         if not isinstance(source, dict):

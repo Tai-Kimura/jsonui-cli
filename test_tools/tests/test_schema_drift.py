@@ -2,11 +2,17 @@
 canonical JSON Schemas (jsonui-test-runner).
 
 Validation is driven entirely by the Python constants in
-``jsonui_test_cli.schema`` / ``jsonui_test_cli.report`` — nothing reads a schema
-file at runtime — so the constants and the canonical schemas can silently drift
-apart. These tests load the vendored copies of the schemas (see
+``jsonui_test_cli.schema`` / ``jsonui_test_cli.report`` — no schema file decides
+whether a test file is valid — so the constants and the canonical schemas can
+silently drift apart. These tests load the vendored copies of the schemas (see
 ``schema_fixtures/VENDOR.md``) and assert the two still agree. A failure means a
 real drift: fix the constants or re-vendor + reconcile, never loosen the test.
+
+``mock.schema.json`` is the one schema the CLI ships rather than vendors:
+``mock generate`` writes it next to the mocks so their ``$schema`` line
+resolves in an editor. It is still not read to validate anything, and the gate
+below reads the shipped copy, so the bytes a project receives are the bytes
+under test.
 """
 
 import json
@@ -22,6 +28,19 @@ FIXTURES = Path(__file__).parent / "schema_fixtures"
 
 def _load(name):
     return json.loads((FIXTURES / f"{name}.schema.json").read_text("utf-8"))
+
+
+def _load_mock_schema():
+    """The mock schema is read from the copy the CLI actually ships.
+
+    Unlike the other five, this one is not test-only: `mock generate` places
+    it next to the mocks so their `$schema` line resolves. Vendoring a second
+    test-only copy would leave the shipped bytes ungated — the exact hole
+    this file exists to close — so the gate is pointed at the shipped copy
+    and there are exactly two: canonical (jsonui-test-runner) and bundled.
+    """
+    from jsonui_test_cli.mock.generate import editor_schema_text
+    return json.loads(editor_schema_text())
 
 
 def _consts_from_actions(actions_schema):
@@ -246,7 +265,7 @@ def test_results_item_keys_match():
 # says is fine.
 
 def test_mock_scenario_keys_match():
-    schema = _load("mock")
+    schema = _load_mock_schema()
     from jsonui_test_cli.validation import mock as mk
     props = set(schema["properties"]["scenarios"]["additionalProperties"]["properties"].keys())
     assert props == set(mk.VALID_SCENARIO_KEYS), (
@@ -258,13 +277,13 @@ def test_mock_scenario_keys_match():
 
 def test_mock_scenario_object_stays_closed():
     """A closed object is what makes the key list load-bearing in an editor."""
-    schema = _load("mock")
+    schema = _load_mock_schema()
     scenario = schema["properties"]["scenarios"]["additionalProperties"]
     assert scenario.get("additionalProperties") is False
 
 
 def test_mock_contract_violations_categories_match():
-    schema = _load("mock")
+    schema = _load_mock_schema()
     from jsonui_test_cli.mock.generate import _VIOLATION_CATEGORIES
     declared = set(
         schema["properties"]["scenarios"]["additionalProperties"]
@@ -276,3 +295,32 @@ def test_mock_contract_violations_categories_match():
         f"  only in schema: {sorted(declared - set(_VIOLATION_CATEGORIES))}\n"
         f"  only in const : {sorted(set(_VIOLATION_CATEGORIES) - declared)}"
     )
+
+
+# --- the gate itself ---------------------------------------------------------
+# Pointing the mock assertions at the shipped copy is only worth anything if a
+# shipped copy that disagrees with the constants actually turns them red. This
+# drifts the bundled bytes on purpose and measures that it does.
+
+def test_a_drifted_bundle_turns_the_gate_red(monkeypatch):
+    from jsonui_test_cli.mock import generate as gen
+
+    drifted = _load_mock_schema()
+    scenario = drifted["properties"]["scenarios"]["additionalProperties"]
+    removed = scenario["properties"].pop("contractViolations")
+    assert removed, "fixture assumption: the key is in the shipped schema"
+    monkeypatch.setattr(gen, "editor_schema_text", lambda: json.dumps(drifted))
+
+    with pytest.raises(AssertionError, match="only in const"):
+        test_mock_scenario_keys_match()
+
+
+def test_a_bundle_that_opens_the_scenario_object_turns_the_gate_red(monkeypatch):
+    from jsonui_test_cli.mock import generate as gen
+
+    drifted = _load_mock_schema()
+    drifted["properties"]["scenarios"]["additionalProperties"]["additionalProperties"] = True
+    monkeypatch.setattr(gen, "editor_schema_text", lambda: json.dumps(drifted))
+
+    with pytest.raises(AssertionError):
+        test_mock_scenario_object_stays_closed()

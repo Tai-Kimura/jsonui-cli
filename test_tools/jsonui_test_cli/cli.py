@@ -592,6 +592,10 @@ def cmd_mock_generate(args):
               f"(run without --update-default to scaffold those).")
         print("Only missing required fields were added — no existing value was "
               "overwritten, nothing was removed, and other scenarios were not touched.")
+        for w in upd.warnings:
+            print(f"  [WARN] {w}")
+        if upd.schemas:
+            print(f"Placed the editor schema in {len(upd.schemas)} directory(ies).")
         if upd.needs_review:
             print(f"\n{len(upd.needs_review)} mock(s) have violations a merge cannot "
                   "decide — fix these by hand, keeping your test data:")
@@ -650,6 +654,9 @@ def cmd_mock_generate(args):
     if report.out_of_scope:
         print(f"{len(report.out_of_scope)} endpoint(s) outside this project's "
               "API paths were not scaffolded.")
+    if report.schemas:
+        print(f"Placed the editor schema ({len(report.schemas)} directory(ies)) "
+              "so the `$schema` line in each mock resolves while you edit it.")
     return 0
 
 

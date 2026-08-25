@@ -23,8 +23,21 @@ turning drift into a CI failure.
 ## Source provenance
 
 - Source repo: `Tai-Kimura/jsonui-test-runner`
-- Source path: `schemas/{actions,screen-test,flow-test,results,description,mock}.schema.json`
+- Source path: `schemas/{actions,screen-test,flow-test,results,description}.schema.json`
 - Vendored at commit: `f1d41272ea5219a99de1cee869fade91c74393a0`
+
+## `mock.schema.json` is not here
+
+It is the one schema the CLI **ships**: `jsonui_test_cli/static/mock.schema.json`,
+placed next to the mocks by `mock generate` so the `"$schema": "./.mock.schema.json"`
+line in each mock resolves in an editor. Its copy of the re-vendor step is
+`cp "$TR/schemas/mock.schema.json" test_tools/jsonui_test_cli/static/mock.schema.json`,
+and `test_schema_drift.py` reads it through `generate.editor_schema_text()` —
+the bytes a project receives are the bytes under test.
+
+A test-only vendored copy would make three copies of one schema with a gate
+between only two of them, which is the hole this whole directory exists to
+close. There are exactly two: canonical (jsonui-test-runner) and shipped.
 
 ## Re-vendor procedure
 
@@ -32,9 +45,10 @@ When the canonical schemas change in jsonui-test-runner:
 
 ```bash
 TR=/path/to/jsonui-test-runner
-for s in actions screen-test flow-test results description mock; do
+for s in actions screen-test flow-test results description; do
   cp "$TR/schemas/$s.schema.json" test_tools/tests/schema_fixtures/$s.schema.json
 done
+cp "$TR/schemas/mock.schema.json" test_tools/jsonui_test_cli/static/mock.schema.json
 # update the "Vendored at commit" line above to `git -C "$TR" rev-parse HEAD`
 python -m pytest test_tools/tests/test_schema_drift.py   # must pass, or a real drift exists
 ```
