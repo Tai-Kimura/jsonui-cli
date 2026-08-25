@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import time
 from pathlib import Path
 from typing import Any
 
@@ -795,6 +796,9 @@ def generate_html_directory(
 
     # One run, one tally: the CLI reads these back to decide the exit code.
     reset_page_failures()
+    # Captured before anything is written: pages touched after this
+    # belong to this run, whatever the tally says (see _report_stale_pages).
+    started_at = time.time()
 
     # Create output directory
     output_path.mkdir(parents=True, exist_ok=True)
@@ -1219,12 +1223,13 @@ def generate_html_directory(
     if spec_files_info or component_files_info or md_files_by_dir or figma_files_info or apps_nav:
         generate_index_html(output_path, generated_files, title, mermaid_generated, document_files, api_doc_categories, spec_files_info, component_files_info, md_files_by_dir, figma_files_info, apps_nav=apps_nav)
 
-    _report_stale_pages(output_path)
+    _report_stale_pages(output_path, started_at)
 
     return generated_files
 
 
-def _report_stale_pages(output_path: Path, limit: int = 20) -> list[Path]:
+def _report_stale_pages(output_path: Path, started_at: float | None = None,
+                        limit: int = 20) -> list[Path]:
     """Name the pages sitting in the output directory that this run did not write.
 
     Generation writes over the previous run rather than replacing it, so a
@@ -1236,14 +1241,33 @@ def _report_stale_pages(output_path: Path, limit: int = 20) -> list[Path]:
 
     A warning rather than a deletion — `-o` may hold files the operator put
     there, and this reports what it sees instead of acting on it.
+
+    Membership of the written set is not enough on its own. Not every writer
+    reports through `note_page_generated` — the Figma pages did not, and the
+    first version of this check called twelve pages leftovers while the same
+    run was writing them. So the run's start time is the second condition:
+    a page touched since then was produced by this run whether or not the
+    tally knows about it, and only an untouched one can be a leftover. That
+    holds for a writer nobody has noticed yet, which the tally cannot.
     """
     if not output_path.exists():
         return []
     written = get_written_pages()
-    stale = sorted(
-        p for p in output_path.rglob("*.html")
-        if p.resolve() not in written
-    )
+    # Filesystem timestamps are coarser than the call that captured the
+    # start, so a page written in the same instant must not look older.
+    cutoff = (started_at - 1) if started_at is not None else None
+
+    def is_leftover(p: Path) -> bool:
+        if p.resolve() in written:
+            return False
+        if cutoff is None:
+            return True
+        try:
+            return p.stat().st_mtime < cutoff
+        except OSError:
+            return False
+
+    stale = sorted(p for p in output_path.rglob("*.html") if is_leftover(p))
     if not stale:
         return []
     print()
@@ -2008,6 +2032,15 @@ def _generate_figma_pages(
             print(f"    {json_file.name}: {len(screens)} screens")
         except Exception as e:
             record_page_failure('figma file', json_file.name, e, source=json_file)
+
+    # Register what was written. The converter reports its own progress, so
+    # these are recorded quietly — but they have to be recorded: the page
+    # tally and the leftover check both read this set, and for a while the
+    # Figma pages were in neither while sitting in the output directory.
+    for screen in all_figma_files:
+        rel = screen.get('path')
+        if rel:
+            _pages_written.add((output_path / rel).resolve())
 
     if all_figma_files:
         print(f"  Figma pages: {len(all_figma_files)} screens generated")

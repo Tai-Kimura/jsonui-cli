@@ -11,6 +11,8 @@ missing while the index went on linking to it.
 from __future__ import annotations
 
 import json
+import os
+import time
 import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -160,6 +162,47 @@ class StalePageTests(unittest.TestCase):
             generate_html_directory(tests, out, "stale")
 
             stale = _report_stale_pages(out)
+            self.assertIn(orphan.resolve(), {p.resolve() for p in stale})
+
+    def test_a_page_this_run_wrote_is_not_a_leftover_even_if_unregistered(self):
+        """The false positive: not every writer reports through the tally.
+
+        The Figma pages did not, and twelve of them were named leftovers by
+        the same run that was writing them. Membership of the written set
+        cannot be the only condition, because the set does not know about a
+        writer nobody has noticed.
+        """
+        with TemporaryDirectory() as td:
+            tmp = Path(td)
+            tests = tmp / "tests"
+            _write(tests / "screens" / "login.test.json", _screen_test("Login"))
+            out = tmp / "out"
+            started = time.time()
+            generate_html_directory(tests, out, "unregistered")
+
+            bypassed = out / "figma" / "canvas" / "screen.html"
+            bypassed.parent.mkdir(parents=True, exist_ok=True)
+            bypassed.write_text("<html></html>", encoding="utf-8")
+
+            stale = _report_stale_pages(out, started)
+            self.assertNotIn(bypassed.resolve(), {p.resolve() for p in stale})
+
+    def test_a_page_older_than_the_run_is_still_a_leftover(self):
+        """The guard must not swallow the case the check exists for."""
+        with TemporaryDirectory() as td:
+            tmp = Path(td)
+            tests = tmp / "tests"
+            _write(tests / "screens" / "login.test.json", _screen_test("Login"))
+            out = tmp / "out"
+            started = time.time()
+            generate_html_directory(tests, out, "leftover")
+
+            orphan = out / "screens" / "removed.test.html"
+            orphan.write_text("<html></html>", encoding="utf-8")
+            old = started - 3600
+            os.utime(orphan, (old, old))
+
+            stale = _report_stale_pages(out, started)
             self.assertIn(orphan.resolve(), {p.resolve() for p in stale})
 
     def test_a_clean_run_reports_nothing(self):
