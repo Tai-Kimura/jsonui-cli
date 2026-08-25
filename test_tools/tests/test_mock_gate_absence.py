@@ -125,6 +125,40 @@ class MockGateAbsenceTests(unittest.TestCase):
         self.assertEqual(rc, 0, out)
         self.assertIn("Result: PASSED", out)
 
+    def test_the_summary_line_alone_distinguishes_the_two_states(self):
+        """A reader of the last line has to be able to tell them apart.
+
+        `[WARN]` above the summary is not enough: `Warnings:` counts per-file
+        findings, this one is project-level, so the summary printed
+        `Files: N, Errors: 0, Warnings: 0` either way — byte-identical to a
+        healthy project, and invisible to anyone grepping the last line. It
+        gets its own field rather than joining `Warnings:`, which a project
+        may be gating on.
+        """
+        self.add_mocks(2)
+        self.write_config(None)
+        _rc, out = self.validate()
+        line = [l for l in out.splitlines() if l.startswith("Files:")][0]
+        self.assertIn("Unchecked mocks: 2", line)
+        self.assertIn("Warnings: 0", line)  # per-file count is untouched
+
+        clean = MockGateAbsenceTests("test_a_project_with_no_mocks_says_nothing")
+        clean.setUp()
+        try:
+            clean.write_config(None)
+            _rc2, out2 = clean.validate()
+            line2 = [l for l in out2.splitlines() if l.startswith("Files:")][0]
+            self.assertNotIn("Unchecked mocks", line2)
+        finally:
+            clean.tearDown()
+
+    def test_the_unchecked_count_does_not_gate(self):
+        self.add_mocks(2)
+        self.write_config(None)
+        rc, out = self.validate()
+        self.assertEqual(rc, 0, out)
+        self.assertIn("Result: PASSED", out)
+
     def test_a_mockdir_without_a_swagger_is_reported(self):
         self.add_mocks(3)
         self.write_config({"mockDir": "tests/mocks"})

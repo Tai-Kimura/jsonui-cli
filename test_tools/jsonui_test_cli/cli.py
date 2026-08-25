@@ -106,12 +106,13 @@ def cmd_validate(args):
     # line a reader looks at still says PASSED.
     mock_rc = 0
     orphans = None
+    unchecked_mocks = None
     if total_errors == 0 and not getattr(args, "no_mock_check", False):
         mock_rc, orphans = _check_mocks_against_swagger(
             getattr(args, "config", None))
         if orphans is None:
-            _warn_unchecked_mocks(getattr(args, "config", None),
-                                  files_to_validate)
+            unchecked_mocks = _warn_unchecked_mocks(
+                getattr(args, "config", None), files_to_validate)
 
     # Summary
     print(f"\n{'='*50}")
@@ -126,6 +127,10 @@ def cmd_validate(args):
     # run that never looked would be the same sentence as a clean result.
     if orphans is not None:
         summary += f", Orphan mocks: {orphans}"
+    # Same rule as above, other direction: a run that could not check its
+    # mocks must not print the line a run with no mocks prints.
+    if unchecked_mocks:
+        summary += f", Unchecked mocks: {unchecked_mocks}"
     print(summary)
 
     if total_errors > 0:
@@ -195,12 +200,21 @@ def _warn_unchecked_mocks(config_path, validated_files):
     A warning, never the exit code: keeping mocks only to serve a dev server,
     with no contract to check them against, is a legitimate setup. This asks;
     it does not decide.
+
+    Returns the count so the summary line can carry it. The printed line alone
+    left `Files: 154, Errors: 0, Warnings: 0` byte-identical to a project with
+    no mocks at all — `Warnings:` counts per-file findings and this is a
+    project-level one, which is coherent but invisible to anyone reading the
+    last line or grepping it. That is the defect this release fixed one level
+    up, reappearing one level down. It gets its own field rather than joining
+    `Warnings:`, because a project gating on `Warnings: 0` would then fail on
+    a finding declared non-gating.
     """
     if _mock_gate_inputs(config_path) is not None:
-        return
+        return None
     mock_files = [p for p in validated_files if p.name.endswith(".mock.json")]
     if not mock_files:
-        return
+        return None
     config, _cfg_path = _load_mock_config(config_path)
     if not config.get("swagger"):
         missing = "mock.swagger is not declared"
@@ -208,6 +222,7 @@ def _warn_unchecked_mocks(config_path, validated_files):
         missing = "no declared mock.swagger could be resolved"
     print(f"\n[WARN] {len(mock_files)} mock file(s) were validated, but "
           f"{missing} — the mock contract check did not run.")
+    return len(mock_files)
 
 
 def _mock_gate_inputs(config_path):
