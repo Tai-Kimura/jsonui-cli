@@ -5,6 +5,7 @@ import argparse
 import json
 import re
 from collections import OrderedDict
+from dataclasses import dataclass, field
 from pathlib import Path
 
 
@@ -247,6 +248,44 @@ def cmd_verify(args: argparse.Namespace) -> int:
             "regeneration is idempotent."
         )
 
+    # Screens with no spec at all. Every other gate compares things that
+    # exist: build generates from the Layout, verify diffs declared against
+    # actual, validate checks the specs on disk. A screen shipped without a
+    # spec is absent from all three inputs, so nothing was ever in a
+    # position to notice it — one went five days unremarked.
+    coverage = _check_spec_coverage(config_mgr, config, spec_dir, layouts_root)
+    require_coverage = bool((config.get("verify") or {}).get("requireSpecPerScreen"))
+    if coverage.missing_specs:
+        print(
+            f"\n**{'ERROR' if require_coverage else 'WARNING'}: "
+            f"{len(coverage.missing_specs)} screen layout(s) have no spec:**"
+        )
+        for name in coverage.missing_specs:
+            print(f"- {name}")
+        print(
+            "  → author the spec (`jsonui-doc init spec`), or if the layout "
+            "is not a screen, declare that on the layout root with "
+            '`"role": "cell"` so the classification says so rather than a '
+            "list here having to."
+        )
+    if coverage.missing_layouts:
+        print(
+            f"\n**{'ERROR' if require_coverage else 'WARNING'}: "
+            f"{len(coverage.missing_layouts)} spec(s) name a layout that "
+            "does not exist:**"
+        )
+        for name in coverage.missing_layouts:
+            print(f"- {name}")
+        print(
+            "  → a rename that moved only one side leaves exactly this. "
+            "Fix `metadata.layoutFile` or restore the layout."
+        )
+    if (coverage.missing_specs or coverage.missing_layouts) and not require_coverage:
+        print(
+            '  (set `"verify": {"requireSpecPerScreen": true}` in '
+            "jui.config.json to make this fail `--fail-on-diff`)"
+        )
+
     # API model drift — independent of Layout drift, gated by --fail-on-diff.
     api_drift = _check_api_model_drift(config_mgr, config, args)
     if api_drift:
@@ -259,9 +298,67 @@ def cmd_verify(args: argparse.Namespace) -> int:
             "  → run `jui build` (or `jui g api` once available) to regenerate."
         )
 
-    if args.fail_on_diff and (any(r.has_diff for r in results) or data_orphans or api_drift):
+    coverage_gap = bool(coverage.missing_specs or coverage.missing_layouts)
+    if args.fail_on_diff and (
+        any(r.has_diff for r in results) or data_orphans or api_drift
+        or (require_coverage and coverage_gap)
+    ):
         return 1
     return 0
+
+
+@dataclass
+class SpecCoverage:
+    """Screens without a spec, and specs naming a layout that is not there."""
+
+    missing_specs: list[str] = field(default_factory=list)
+    missing_layouts: list[str] = field(default_factory=list)
+
+
+def _check_spec_coverage(config_mgr, config, spec_dir, layouts_root) -> SpecCoverage:
+    """Reconcile the set of screen layouts with the set of specs.
+
+    Correspondence runs through `metadata.layoutFile` rather than file
+    names, since that is what declares the link. Which layouts are screens
+    comes from the existing classification, so a fragment is excused by its
+    own `"role": "cell"` declaration rather than by an exclusion list here —
+    a list would go stale in the same silence this check exists to end.
+    Sub-specs are skipped: they inherit their parent's layout and claim none.
+    """
+    from ..core.screen_identity import build_screen_index, screen_id_for_path
+
+    coverage = SpecCoverage()
+    if layouts_root is None or not Path(layouts_root).is_dir():
+        return coverage
+
+    def as_id(value: str) -> str:
+        return screen_id_for_path(value if value.endswith(".json") else value + ".json")
+
+    index = build_screen_index(
+        layouts_root, (config.get("test") or {}).get("appOwnedScreens")
+    )
+    screens = set(index.screen_ids)
+
+    claimed: set[str] = set()
+    for spec_file in sorted(Path(spec_dir).rglob("*.spec.json")):
+        try:
+            with open(spec_file, "r", encoding="utf-8") as f:
+                data = json.load(f)
+        except (OSError, ValueError):
+            continue
+        if not isinstance(data, dict) or data.get("type") == "screen_sub_spec":
+            continue
+        layout_file = (data.get("metadata") or {}).get("layoutFile")
+        if isinstance(layout_file, str) and layout_file:
+            claimed.add(as_id(layout_file))
+        else:
+            claimed.add(as_id(spec_file.name[: -len(".spec.json")]))
+
+    coverage.missing_specs = sorted(screens - claimed)
+    coverage.missing_layouts = sorted(
+        name for name in claimed - screens if not index.is_known(name)
+    )
+    return coverage
 
 
 def _check_api_model_drift(config_mgr, config, args) -> list[str]:
