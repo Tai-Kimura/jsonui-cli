@@ -29,6 +29,73 @@ def _get_rel_root(current_path: str | None) -> str:
     return "../" * depth
 
 
+def _render_tests_sidebar_section(
+    tests: list[dict],
+    label: str,
+    section_id: str,
+    title_class: str,
+    href_prefix: str,
+    current_path: str | None = None,
+) -> list[str]:
+    """Render a Flow/Screen Tests sidebar section.
+
+    Tests carrying a group — the app they belong to — are nested one level
+    deeper under that app's name. A single-app project has no groups and comes
+    out as the flat list it always was.
+    """
+    parts: list[str] = []
+    by_group: OrderedDict[str, list[dict]] = OrderedDict()
+    ungrouped: list[dict] = []
+    for t in tests:
+        group = t.get('group', '')
+        if group:
+            by_group.setdefault(group, []).append(t)
+        else:
+            ungrouped.append(t)
+
+    def _links(items: list[dict], pad: str) -> None:
+        parts.append(f"{pad}<ul>")
+        for t in items:
+            is_current = current_path and t['path'] == current_path
+            current_class = " current" if is_current else ""
+            parts.append(
+                f"{pad}  <li><a href='{href_prefix}{t['path']}' "
+                f"class='nav-link{current_class}' "
+                f"title='{escape_html(t['name'])}'>{escape_html(t['name'])}</a></li>"
+            )
+        parts.append(f"{pad}</ul>")
+
+    classes = f"sidebar-title {title_class} collapsed" if title_class else "sidebar-title collapsed"
+    parts.append("    <div class='sidebar-section'>")
+    parts.append(
+        f"      <div class='{classes}' id='{section_id}-title' "
+        f"onclick=\"toggleSection('{section_id}')\"><span class='arrow'>▼</span> "
+        f"{label} <span class='count'>{len(tests)}</span></div>"
+    )
+    parts.append(f"      <div class='sidebar-list collapsed' id='{section_id}-list'>")
+
+    if ungrouped:
+        _links(ungrouped, "        ")
+
+    for group_name, group_tests in by_group.items():
+        safe_id = f"{section_id}-{_make_safe_id(group_name)}"
+        display = group_name.replace('_', ' ').replace('-', ' ').title()
+        parts.append("        <div class='sidebar-subsection'>")
+        parts.append(
+            f"          <div class='sidebar-subtitle collapsed' id='{safe_id}-title' "
+            f"onclick=\"toggleSection('{safe_id}')\"><span class='arrow'>▼</span> "
+            f"{escape_html(display)} <span class='count'>{len(group_tests)}</span></div>"
+        )
+        parts.append(f"          <div class='sidebar-list collapsed' id='{safe_id}-list'>")
+        _links(group_tests, "            ")
+        parts.append("          </div>")
+        parts.append("        </div>")
+
+    parts.append("      </div>")
+    parts.append("    </div>")
+    return parts
+
+
 def _render_figma_tree(
     parts: list[str],
     screens: list[dict],
@@ -251,8 +318,11 @@ def generate_screen_sidebar(
         List of HTML strings for the sidebar
     """
     parts = []
+    # Per-app grouping puts a test page one directory deeper, so the way back
+    # to the root has to be measured rather than assumed.
+    rel_root = _get_rel_root(current_test_path)
     parts.append("  <nav class='sidebar'>")
-    parts.append("    <a href='../index.html' class='back-link'>&larr; Back to Index</a>")
+    parts.append(f"    <a href='{rel_root}index.html' class='back-link'>&larr; Back to Index</a>")
     parts.append(f"    <h2>{escape_html(title)}</h2>")
 
     # Test Cases section (collapsible, expanded by default)
@@ -270,33 +340,15 @@ def generate_screen_sidebar(
 
     # Flow Tests navigation (collapsible, collapsed by default)
     if all_tests_nav and all_tests_nav.get('flows'):
-        flows = all_tests_nav['flows']
-        parts.append("    <div class='sidebar-section'>")
-        parts.append(f"      <div class='sidebar-title flow collapsed' id='flows-title' onclick=\"toggleSection('flows')\"><span class='arrow'>▼</span> Flow Tests <span class='count'>{len(flows)}</span></div>")
-        parts.append("      <div class='sidebar-list collapsed' id='flows-list'>")
-        parts.append("        <ul>")
-        for f in flows:
-            is_current = current_test_path and f['path'] == current_test_path
-            current_class = " current" if is_current else ""
-            parts.append(f"          <li><a href='../{f['path']}' class='nav-link{current_class}' title='{escape_html(f['name'])}'>{escape_html(f['name'])}</a></li>")
-        parts.append("        </ul>")
-        parts.append("      </div>")
-        parts.append("    </div>")
+        parts.extend(_render_tests_sidebar_section(
+            all_tests_nav['flows'], 'Flow Tests', 'flows', 'flow',
+            href_prefix=rel_root, current_path=current_test_path))
 
     # Screen Tests navigation (collapsible, collapsed by default)
     if all_tests_nav and all_tests_nav.get('screens'):
-        screens = all_tests_nav['screens']
-        parts.append("    <div class='sidebar-section'>")
-        parts.append(f"      <div class='sidebar-title collapsed' id='screens-title' onclick=\"toggleSection('screens')\"><span class='arrow'>▼</span> Screen Tests <span class='count'>{len(screens)}</span></div>")
-        parts.append("      <div class='sidebar-list collapsed' id='screens-list'>")
-        parts.append("        <ul>")
-        for s in screens:
-            is_current = current_test_path and s['path'] == current_test_path
-            current_class = " current" if is_current else ""
-            parts.append(f"          <li><a href='../{s['path']}' class='nav-link{current_class}' title='{escape_html(s['name'])}'>{escape_html(s['name'])}</a></li>")
-        parts.append("        </ul>")
-        parts.append("      </div>")
-        parts.append("    </div>")
+        parts.extend(_render_tests_sidebar_section(
+            all_tests_nav['screens'], 'Screen Tests', 'screens', '',
+            href_prefix=rel_root, current_path=current_test_path))
 
     # Documents navigation (collapsible, collapsed by default)
     if all_tests_nav and all_tests_nav.get('documents'):
@@ -306,7 +358,7 @@ def generate_screen_sidebar(
         parts.append("      <div class='sidebar-list collapsed' id='documents-list'>")
         parts.append("        <ul>")
         for d in documents:
-            parts.append(f"          <li><a href='../{d['path']}' class='nav-link' title='{escape_html(d['name'])}'>{escape_html(d['name'])}</a></li>")
+            parts.append(f"          <li><a href='{rel_root}{d['path']}' class='nav-link' title='{escape_html(d['name'])}'>{escape_html(d['name'])}</a></li>")
         parts.append("        </ul>")
         parts.append("      </div>")
         parts.append("    </div>")
@@ -322,11 +374,11 @@ def generate_screen_sidebar(
             has_subdirs = any(d.get('subdir') for d in category_docs)
             if has_subdirs:
                 parts.extend(_render_api_docs_with_subgroups(
-                    category_docs, href_prefix='../', current_path=current_test_path, id_prefix=cat_id))
+                    category_docs, href_prefix=rel_root, current_path=current_test_path, id_prefix=cat_id))
             else:
                 parts.append("        <ul>")
                 for d in category_docs:
-                    parts.append(f"          <li><a href='../{d['path']}' class='nav-link' title='{escape_html(d['name'])}'>{escape_html(d['name'])}</a></li>")
+                    parts.append(f"          <li><a href='{rel_root}{d['path']}' class='nav-link' title='{escape_html(d['name'])}'>{escape_html(d['name'])}</a></li>")
                 parts.append("        </ul>")
             parts.append("      </div>")
             parts.append("    </div>")
@@ -337,7 +389,7 @@ def generate_screen_sidebar(
         parts.append("      <div class='sidebar-list collapsed' id='api-docs-list'>")
         parts.append("        <ul>")
         for d in api_docs:
-            parts.append(f"          <li><a href='../{d['path']}' class='nav-link' title='{escape_html(d['name'])}'>{escape_html(d['name'])}</a></li>")
+            parts.append(f"          <li><a href='{rel_root}{d['path']}' class='nav-link' title='{escape_html(d['name'])}'>{escape_html(d['name'])}</a></li>")
         parts.append("        </ul>")
         parts.append("      </div>")
         parts.append("    </div>")
@@ -345,7 +397,7 @@ def generate_screen_sidebar(
     # Figma Screens navigation (collapsible, collapsed by default, grouped by canvas)
     if all_tests_nav and all_tests_nav.get('figma_screens'):
         parts.extend(_render_figma_sidebar_section(
-            all_tests_nav['figma_screens'], href_prefix='../', current_path=current_test_path))
+            all_tests_nav['figma_screens'], href_prefix=rel_root, current_path=current_test_path))
 
     parts.append("  </nav>")
     return parts
@@ -372,8 +424,11 @@ def generate_flow_sidebar(
         List of HTML strings for the sidebar
     """
     parts = []
+    # See generate_screen_sidebar: the depth is not fixed once tests group
+    # by app, so measure it from the page's own path.
+    rel_root = _get_rel_root(current_test_path)
     parts.append("  <nav class='sidebar'>")
-    parts.append("    <a href='../index.html' class='back-link'>&larr; Back to Index</a>")
+    parts.append(f"    <a href='{rel_root}index.html' class='back-link'>&larr; Back to Index</a>")
     parts.append(f"    <h2>{escape_html(name)}</h2>")
 
     # Steps section (collapsible, expanded by default)
@@ -414,33 +469,15 @@ def generate_flow_sidebar(
 
     # Flow Tests navigation (collapsible, collapsed by default)
     if all_tests_nav and all_tests_nav.get('flows'):
-        flows = all_tests_nav['flows']
-        parts.append("    <div class='sidebar-section'>")
-        parts.append(f"      <div class='sidebar-title collapsed' id='flows-title' onclick=\"toggleSection('flows')\"><span class='arrow'>▼</span> Flow Tests <span class='count'>{len(flows)}</span></div>")
-        parts.append("      <div class='sidebar-list collapsed' id='flows-list'>")
-        parts.append("        <ul>")
-        for f in flows:
-            is_current = current_test_path and f['path'] == current_test_path
-            current_class = " current" if is_current else ""
-            parts.append(f"          <li><a href='../{f['path']}' class='nav-link{current_class}' title='{escape_html(f['name'])}'>{escape_html(f['name'])}</a></li>")
-        parts.append("        </ul>")
-        parts.append("      </div>")
-        parts.append("    </div>")
+        parts.extend(_render_tests_sidebar_section(
+            all_tests_nav['flows'], 'Flow Tests', 'flows', '',
+            href_prefix=rel_root, current_path=current_test_path))
 
     # Screen Tests navigation (collapsible, collapsed by default)
     if all_tests_nav and all_tests_nav.get('screens'):
-        screens = all_tests_nav['screens']
-        parts.append("    <div class='sidebar-section'>")
-        parts.append(f"      <div class='sidebar-title screen collapsed' id='screens-title' onclick=\"toggleSection('screens')\"><span class='arrow'>▼</span> Screen Tests <span class='count'>{len(screens)}</span></div>")
-        parts.append("      <div class='sidebar-list collapsed' id='screens-list'>")
-        parts.append("        <ul>")
-        for s in screens:
-            is_current = current_test_path and s['path'] == current_test_path
-            current_class = " current" if is_current else ""
-            parts.append(f"          <li><a href='../{s['path']}' class='nav-link{current_class}' title='{escape_html(s['name'])}'>{escape_html(s['name'])}</a></li>")
-        parts.append("        </ul>")
-        parts.append("      </div>")
-        parts.append("    </div>")
+        parts.extend(_render_tests_sidebar_section(
+            all_tests_nav['screens'], 'Screen Tests', 'screens', 'screen',
+            href_prefix=rel_root, current_path=current_test_path))
 
     # Documents navigation (collapsible, collapsed by default)
     if all_tests_nav and all_tests_nav.get('documents'):
@@ -450,7 +487,7 @@ def generate_flow_sidebar(
         parts.append("      <div class='sidebar-list collapsed' id='documents-list'>")
         parts.append("        <ul>")
         for d in documents:
-            parts.append(f"          <li><a href='../{d['path']}' class='nav-link' title='{escape_html(d['name'])}'>{escape_html(d['name'])}</a></li>")
+            parts.append(f"          <li><a href='{rel_root}{d['path']}' class='nav-link' title='{escape_html(d['name'])}'>{escape_html(d['name'])}</a></li>")
         parts.append("        </ul>")
         parts.append("      </div>")
         parts.append("    </div>")
@@ -466,11 +503,11 @@ def generate_flow_sidebar(
             has_subdirs = any(d.get('subdir') for d in category_docs)
             if has_subdirs:
                 parts.extend(_render_api_docs_with_subgroups(
-                    category_docs, href_prefix='../', current_path=current_test_path, id_prefix=cat_id))
+                    category_docs, href_prefix=rel_root, current_path=current_test_path, id_prefix=cat_id))
             else:
                 parts.append("        <ul>")
                 for d in category_docs:
-                    parts.append(f"          <li><a href='../{d['path']}' class='nav-link' title='{escape_html(d['name'])}'>{escape_html(d['name'])}</a></li>")
+                    parts.append(f"          <li><a href='{rel_root}{d['path']}' class='nav-link' title='{escape_html(d['name'])}'>{escape_html(d['name'])}</a></li>")
                 parts.append("        </ul>")
             parts.append("      </div>")
             parts.append("    </div>")
@@ -481,7 +518,7 @@ def generate_flow_sidebar(
         parts.append("      <div class='sidebar-list collapsed' id='api-docs-list'>")
         parts.append("        <ul>")
         for d in api_docs:
-            parts.append(f"          <li><a href='../{d['path']}' class='nav-link' title='{escape_html(d['name'])}'>{escape_html(d['name'])}</a></li>")
+            parts.append(f"          <li><a href='{rel_root}{d['path']}' class='nav-link' title='{escape_html(d['name'])}'>{escape_html(d['name'])}</a></li>")
         parts.append("        </ul>")
         parts.append("      </div>")
         parts.append("    </div>")
@@ -489,7 +526,7 @@ def generate_flow_sidebar(
     # Figma Screens navigation (collapsible, collapsed by default, grouped by canvas)
     if all_tests_nav and all_tests_nav.get('figma_screens'):
         parts.extend(_render_figma_sidebar_section(
-            all_tests_nav['figma_screens'], href_prefix='../', current_path=current_test_path))
+            all_tests_nav['figma_screens'], href_prefix=rel_root, current_path=current_test_path))
 
     parts.append("  </nav>")
     return parts
@@ -616,29 +653,15 @@ def generate_spec_sidebar(
 
     # Flow Tests navigation (collapsible, collapsed by default)
     if all_tests_nav and all_tests_nav.get('flows'):
-        flows = all_tests_nav['flows']
-        parts.append("    <div class='sidebar-section'>")
-        parts.append(f"      <div class='sidebar-title flow collapsed' id='flows-title' onclick=\"toggleSection('flows')\"><span class='arrow'>▼</span> Flow Tests <span class='count'>{len(flows)}</span></div>")
-        parts.append("      <div class='sidebar-list collapsed' id='flows-list'>")
-        parts.append("        <ul>")
-        for f in flows:
-            parts.append(f"          <li><a href='{rel_root}{f['path']}' class='nav-link' title='{escape_html(f['name'])}'>{escape_html(f['name'])}</a></li>")
-        parts.append("        </ul>")
-        parts.append("      </div>")
-        parts.append("    </div>")
+        parts.extend(_render_tests_sidebar_section(
+            all_tests_nav['flows'], 'Flow Tests', 'flows', 'flow',
+            href_prefix=rel_root, current_path=current_path))
 
     # Screen Tests navigation (collapsible, collapsed by default)
     if all_tests_nav and all_tests_nav.get('screens'):
-        screens = all_tests_nav['screens']
-        parts.append("    <div class='sidebar-section'>")
-        parts.append(f"      <div class='sidebar-title collapsed' id='screens-title' onclick=\"toggleSection('screens')\"><span class='arrow'>▼</span> Screen Tests <span class='count'>{len(screens)}</span></div>")
-        parts.append("      <div class='sidebar-list collapsed' id='screens-list'>")
-        parts.append("        <ul>")
-        for s in screens:
-            parts.append(f"          <li><a href='{rel_root}{s['path']}' class='nav-link' title='{escape_html(s['name'])}'>{escape_html(s['name'])}</a></li>")
-        parts.append("        </ul>")
-        parts.append("      </div>")
-        parts.append("    </div>")
+        parts.extend(_render_tests_sidebar_section(
+            all_tests_nav['screens'], 'Screen Tests', 'screens', '',
+            href_prefix=rel_root, current_path=current_path))
 
     # Figma Screens navigation (collapsible, collapsed by default, grouped by canvas)
     if all_tests_nav and all_tests_nav.get('figma_screens'):
@@ -859,28 +882,16 @@ def generate_index_sidebar(
     # === Test files (bottom) ===
 
     # Sidebar - Flow Tests (collapsible, starts collapsed)
+    # toggleSection takes the full element id, which is what toggleSidebar
+    # built by hand — one helper can serve the index and the test pages alike.
     if flow_files:
-        parts.append("    <div class='sidebar-section'>")
-        parts.append(f"      <div class='sidebar-title flow collapsed' id='sidebar-flows-title' onclick=\"toggleSidebar('flows')\"><span class='arrow'>▼</span>Flow Tests <span class='count'>{len(flow_files)}</span></div>")
-        parts.append("      <div class='sidebar-list collapsed' id='sidebar-flows-list'>")
-        parts.append("        <ul>")
-        for f in flow_files:
-            parts.append(f"          <li><a href='{f['path']}' title='{escape_html(f['name'])}'>{escape_html(f['name'])}</a></li>")
-        parts.append("        </ul>")
-        parts.append("      </div>")
-        parts.append("    </div>")
+        parts.extend(_render_tests_sidebar_section(
+            flow_files, 'Flow Tests', 'sidebar-flows', 'flow', href_prefix=''))
 
     # Sidebar - Screen Tests (collapsible, starts collapsed)
     if screen_files:
-        parts.append("    <div class='sidebar-section'>")
-        parts.append(f"      <div class='sidebar-title collapsed' id='sidebar-screens-title' onclick=\"toggleSidebar('screens')\"><span class='arrow'>▼</span>Screen Tests <span class='count'>{len(screen_files)}</span></div>")
-        parts.append("      <div class='sidebar-list collapsed' id='sidebar-screens-list'>")
-        parts.append("        <ul>")
-        for f in screen_files:
-            parts.append(f"          <li><a href='{f['path']}' title='{escape_html(f['name'])}'>{escape_html(f['name'])}</a></li>")
-        parts.append("        </ul>")
-        parts.append("      </div>")
-        parts.append("    </div>")
+        parts.extend(_render_tests_sidebar_section(
+            screen_files, 'Screen Tests', 'sidebar-screens', '', href_prefix=''))
 
     parts.append("  </nav>")
     return parts

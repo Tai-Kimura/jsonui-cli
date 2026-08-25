@@ -722,6 +722,28 @@ def _resolve_layouts_dir_for_spec(
     return None
 
 
+# Test trees come in two shapes. A single-app project puts the type directory
+# at the top — ``tests/screens/login/…`` — while a project holding several apps
+# puts the app in front of it: ``tests/user/screens/…``. The type directory is
+# what tells them apart, so the segments ahead of it are the app and a type
+# directory in first position means there is no app to speak of. Reading the
+# group off the path keeps single-app output byte-identical and avoids asking
+# the author to declare a second time what the directory layout already says.
+_TEST_TYPE_DIRS = ("screens", "flows")
+
+
+def _test_group(rel_path: Path) -> str:
+    """Return the app a test belongs to, or '' when the project has just one.
+
+    *rel_path* is the test file relative to the tests input directory.
+    """
+    dirs = rel_path.parts[:-1]
+    for i, part in enumerate(dirs):
+        if part in _TEST_TYPE_DIRS:
+            return "/".join(dirs[:i])
+    return ""
+
+
 def generate_html_directory(
     input_dir: Path,
     output_dir: Path,
@@ -803,6 +825,7 @@ def generate_html_directory(
 
     # First pass: collect all file info
     file_infos = []
+    used_test_paths: set[Path] = set()
     for test_file in sorted(test_files):
         try:
             result = generator.validator.validate_file(test_file)
@@ -819,8 +842,24 @@ def generate_html_directory(
                 subdir = 'other'
 
             rel_path = test_file.relative_to(input_path)
+            group = _test_group(rel_path)
             html_filename = rel_path.with_suffix('.html').name
-            html_rel_path = Path(subdir) / html_filename
+            html_dir = Path(subdir) / group if group else Path(subdir)
+            html_rel_path = html_dir / html_filename
+
+            # Collision guard: only the file name survived the path above, so
+            # two tests sharing one could silently overwrite each other's page
+            # — a whole app's worth of documentation went missing that way.
+            # Grouping separates the apps; this catches what is left, two
+            # equally named tests inside one app.
+            if html_rel_path in used_test_paths:
+                safe = "_".join(rel_path.parts[:-1]).replace("/", "_") or "dup"
+                html_rel_path = html_dir / f"{safe}_{html_filename}"
+                print(
+                    f"  Warning: output name collision for {test_file} "
+                    f"— writing {html_rel_path}"
+                )
+            used_test_paths.add(html_rel_path)
 
             metadata = result.test_data.get('metadata', {})
             cases = result.test_data.get('cases', [])
@@ -833,6 +872,7 @@ def generate_html_directory(
                 'name': metadata.get('name', test_file.stem),
                 'description': metadata.get('description', ''),
                 'path': html_rel_path,
+                'group': group,
                 'type': test_type,
                 'case_count': len(cases) if cases else 0,
                 'step_count': len(steps) if steps else sum(len(c.get('steps', [])) for c in cases),
@@ -928,8 +968,8 @@ def generate_html_directory(
 
     # Build navigation data for sidebar
     all_tests_nav = {
-        'screens': [{'name': f['name'], 'path': str(f['path'])} for f in file_infos if f['type'] == 'screen'],
-        'flows': [{'name': f['name'], 'path': str(f['path'])} for f in file_infos if f['type'] == 'flow'],
+        'screens': [{'name': f['name'], 'path': f['path'].as_posix(), 'group': f['group']} for f in file_infos if f['type'] == 'screen'],
+        'flows': [{'name': f['name'], 'path': f['path'].as_posix(), 'group': f['group']} for f in file_infos if f['type'] == 'flow'],
         'documents': document_files,
         'api_docs': [{'name': d['name'], 'path': d['path'], 'subdir': d.get('subdir', '')} for d in all_api_doc_files],
         'api_doc_categories': {k: [{'name': d['name'], 'path': d['path'], 'subdir': d.get('subdir', '')} for d in v] for k, v in api_doc_categories.items()},
@@ -949,7 +989,7 @@ def generate_html_directory(
             # Generate HTML with navigation
             generator._test_file_path = test_file.resolve()
             generator._all_tests_nav = all_tests_nav
-            generator._current_test_path = str(html_rel_path)
+            generator._current_test_path = html_rel_path.as_posix()
             content = generator._generate_html(result)
 
             with open(html_path, 'w', encoding='utf-8') as f:
@@ -960,6 +1000,7 @@ def generate_html_directory(
                 'name': file_info['name'],
                 'description': file_info['description'],
                 'path': html_rel_path,
+                'group': file_info['group'],
                 'type': file_info['type'],
                 'case_count': file_info['case_count'],
                 'step_count': file_info['step_count'],

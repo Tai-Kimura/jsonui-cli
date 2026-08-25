@@ -10,6 +10,88 @@ from .styles import get_index_styles, get_index_scripts
 from .sidebar import generate_index_sidebar, escape_html
 
 
+def _render_test_items(
+    html_parts: list[str],
+    files: list[dict],
+    item_class: str,
+    meta_fn,
+    indent: int,
+) -> None:
+    """Render a flat ``<ul>`` of test entries at *indent* spaces."""
+    pad = " " * indent
+    html_parts.append(f"{pad}<ul class='test-list'>")
+    for f in files:
+        html_parts.extend([
+            f"{pad}  <li class='test-item {item_class}'>",
+            f"{pad}    <a href='{f['path']}' class='test-name'>{escape_html(f['name'])}</a>",
+            f"{pad}    <div class='test-meta'>",
+            f"{pad}      <span class='badge badge-platform'>{f['platform']}</span>",
+            f"{pad}      {meta_fn(f)}",
+            f"{pad}    </div>",
+        ])
+        if f['description']:
+            html_parts.append(f"{pad}    <div class='test-description'>{escape_html(f['description'])}</div>")
+        html_parts.append(f"{pad}  </li>")
+    html_parts.append(f"{pad}</ul>")
+
+
+def _render_test_category(
+    html_parts: list[str],
+    files: list[dict],
+    category_id: str,
+    label: str,
+    badge_class: str,
+    item_class: str,
+    meta_fn,
+) -> None:
+    """Render one test category, split into per-app subsections when the
+    project holds more than one app.
+
+    A project with a single app carries no group on its tests and renders as
+    the flat list it always did; only a multi-app tree grows the extra level.
+    """
+    by_group: OrderedDict[str, list[dict]] = OrderedDict()
+    ungrouped: list[dict] = []
+    for f in files:
+        group = f.get('group', '')
+        if group:
+            by_group.setdefault(group, []).append(f)
+        else:
+            ungrouped.append(f)
+
+    html_parts.extend([
+        "    <div class='category'>",
+        f"      <div class='category-header collapsed' id='{category_id}-header' onclick=\"toggleCategory('{category_id}')\">",
+        f"        <h2><span class='arrow'>▼</span> {label} <span class='category-badge {badge_class}'>{len(files)}</span></h2>",
+        "      </div>",
+        f"      <div class='category-content collapsed' id='{category_id}-content'>",
+    ])
+
+    if ungrouped:
+        _render_test_items(html_parts, ungrouped, item_class, meta_fn, indent=8)
+
+    for group_name, group_files in by_group.items():
+        group_display = group_name.replace('_', ' ').replace('-', ' ').title()
+        group_id = f"{category_id}-{group_name.replace('/', '-')}"
+        html_parts.extend([
+            "        <div class='subcategory'>",
+            f"          <div class='subcategory-header collapsed' id='{group_id}-header' onclick=\"toggleCategory('{group_id}')\">",
+            f"            <h3><span class='arrow'>▼</span> {escape_html(group_display)} <span class='category-badge {badge_class}'>{len(group_files)}</span></h3>",
+            "          </div>",
+            f"          <div class='category-content collapsed' id='{group_id}-content'>",
+        ])
+        _render_test_items(html_parts, group_files, item_class, meta_fn, indent=12)
+        html_parts.extend([
+            "          </div>",
+            "        </div>",
+        ])
+
+    html_parts.extend([
+        "      </div>",
+        "    </div>",
+    ])
+
+
 def generate_index_html(
     output_dir: Path,
     files: list[dict],
@@ -100,59 +182,21 @@ def generate_index_html(
 
     # Flow Tests category first (collapsible, starts collapsed)
     if flow_files:
-        html_parts.extend([
-            "    <div class='category'>",
-            "      <div class='category-header collapsed' id='flows-header' onclick=\"toggleCategory('flows')\">",
-            f"        <h2><span class='arrow'>▼</span> Flow Tests <span class='category-badge flow'>{flow_count}</span></h2>",
-            "      </div>",
-            "      <div class='category-content collapsed' id='flows-content'>",
-            "        <ul class='test-list'>",
-        ])
-        for f in flow_files:
-            html_parts.extend([
-                "          <li class='test-item flow'>",
-                f"            <a href='{f['path']}' class='test-name'>{escape_html(f['name'])}</a>",
-                "            <div class='test-meta'>",
-                f"              <span class='badge badge-platform'>{f['platform']}</span>",
-                f"              {f['step_count']} steps",
-                "            </div>",
-            ])
-            if f['description']:
-                html_parts.append(f"            <div class='test-description'>{escape_html(f['description'])}</div>")
-            html_parts.append("          </li>")
-        html_parts.extend([
-            "        </ul>",
-            "      </div>",
-            "    </div>",
-        ])
+        _render_test_category(
+            html_parts, flow_files,
+            category_id='flows', label='Flow Tests',
+            badge_class='flow', item_class='flow',
+            meta_fn=lambda f: f"{f['step_count']} steps",
+        )
 
     # Screen Tests category (collapsible, starts collapsed)
     if screen_files:
-        html_parts.extend([
-            "    <div class='category'>",
-            "      <div class='category-header collapsed' id='screens-header' onclick=\"toggleCategory('screens')\">",
-            f"        <h2><span class='arrow'>▼</span> Screen Tests <span class='category-badge screen'>{screen_count}</span></h2>",
-            "      </div>",
-            "      <div class='category-content collapsed' id='screens-content'>",
-            "        <ul class='test-list'>",
-        ])
-        for f in screen_files:
-            html_parts.extend([
-                "          <li class='test-item screen'>",
-                f"            <a href='{f['path']}' class='test-name'>{escape_html(f['name'])}</a>",
-                "            <div class='test-meta'>",
-                f"              <span class='badge badge-platform'>{f['platform']}</span>",
-                f"              {f['case_count']} cases, {f['step_count']} steps",
-                "            </div>",
-            ])
-            if f['description']:
-                html_parts.append(f"            <div class='test-description'>{escape_html(f['description'])}</div>")
-            html_parts.append("          </li>")
-        html_parts.extend([
-            "        </ul>",
-            "      </div>",
-            "    </div>",
-        ])
+        _render_test_category(
+            html_parts, screen_files,
+            category_id='screens', label='Screen Tests',
+            badge_class='screen', item_class='screen',
+            meta_fn=lambda f: f"{f['case_count']} cases, {f['step_count']} steps",
+        )
 
     # Documents category (collapsible, starts collapsed)
     if document_files:
