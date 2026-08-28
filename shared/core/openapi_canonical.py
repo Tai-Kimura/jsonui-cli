@@ -126,6 +126,11 @@ class CanonicalOperation:
     params: tuple = ()              # tuple[CanonicalParam, ...]
     wire_type: str = ""             # 200 response `$ref` name, "" if inline
     source: str = ""                # document that declared it
+    #: Properties the body schema calls `required` while the body itself is
+    #: optional. They resolve optional, correctly — a caller may omit the
+    #: whole body, so nothing inside it can be unconditionally required — but
+    #: the reason sits two levels away from the symptom.
+    muted_required: tuple = ()
 
     def spec_params(self, convention: str | None = None) -> list:
         return [p.as_spec_param(convention) for p in self.params]
@@ -182,6 +187,17 @@ def _deref(schema: dict, schemas: dict) -> dict:
 
 
 def _operation_params(op: dict, schemas: dict) -> list:
+    """Every declared argument, in document order.
+
+    `in` is deliberately not filtered: a path parameter is an argument the
+    caller supplies exactly like a query one, so `{venue_id}` becomes
+    `venueId` in the generated signature. That means **renaming a path
+    variable moves every referencing spec's signature**, which is not obvious
+    — route matching normalizes path-variable spelling away, so the same
+    rename is invisible to resolution while being load-bearing for expansion.
+    Found by a consumer lane reading this function after being told the
+    opposite.
+    """
     params: list = []
     seen: set = set()
     for p in op.get("parameters") or []:
@@ -208,6 +224,27 @@ def _operation_params(op: dict, schemas: dict) -> list:
         t = _schema_type(prop or {}, schemas)
         params.append(CanonicalParam(name, t if required else f"{t}?", required))
     return params
+
+
+def _muted_required(op: dict, schemas: dict) -> list:
+    """Body properties declared `required` under a body that is not required.
+
+    `requestBody.required` says the body may be omitted; `schema.required`
+    says which properties must be present *if it is*. A flat parameter list
+    cannot express "all or none", so these resolve optional — which is right,
+    and which reads exactly like the declaration was ignored.
+
+    Zero occurrences across every consumer canon measured (three canons,
+    81 + 76 + 119 request bodies). Carried anyway because the corpus being clean is not
+    the net working, and because schema-level `required` is the form people
+    reach for first.
+    """
+    rb = op.get("requestBody")
+    if not isinstance(rb, dict) or rb.get("required"):
+        return []
+    schema = _deref(((rb.get("content") or {}).get("application/json") or {})
+                    .get("schema") or {}, schemas)
+    return sorted(schema.get("required") or [])
 
 
 def _response_wire_type(op: dict) -> str:
@@ -257,6 +294,7 @@ def index_documents(documents) -> dict:
                     params=tuple(_operation_params(op, schemas)),
                     wire_type=_response_wire_type(op),
                     source=source,
+                    muted_required=tuple(_muted_required(op, schemas)),
                 )
     return index
 
@@ -404,11 +442,12 @@ def is_canonical_return(declared) -> bool:
 
 @dataclass
 class Resolution:
-    """What the mark expanded to, and what stopped it."""
+    """What the mark expanded to, what stopped it, and what to say about it."""
 
     params: list = field(default_factory=list)
     return_type: str = ""
     errors: list = field(default_factory=list)
+    warnings: list = field(default_factory=list)
 
 
 def resolve_params(declared, operation, convention=None) -> Resolution:
@@ -502,12 +541,13 @@ def miss_reason(reason: str, method: dict) -> str:
 def resolve_spec_marks(spec_data, index, convention=None):
     """Expand every mark in `spec_data`, in place. Returns `[(label, msg)]`.
 
-    In place and before anything else reads the document, so the doc site's
-    HTML, every other spec check, and the repository stubs `jui build` writes
-    all see one list. An unresolved mark is reported, never quietly dropped:
-    dropping would generate a method with no arguments and no complaint.
+    Returns `(errors, warnings)`. In place and before anything else reads the
+    document, so the doc site's HTML, every other spec check, and the
+    repository stubs `jui build` writes all see one list. An unresolved mark is
+    reported, never quietly dropped: dropping would generate a method with no
+    arguments and no complaint.
     """
-    errors = []
+    errors, warnings = [], []
     for label, method in list(iter_marked_methods(spec_data)):
         operation, reason = lookup(index or {}, method.get("endpoint"))
         if operation is None:
@@ -517,6 +557,14 @@ def resolve_spec_marks(spec_data, index, convention=None):
         if is_canonical_params(method.get("params")):
             res = resolve_params(method.get("params"), operation, convention)
             errors.extend((f"{label}.params", e) for e in res.errors)
+            if operation.muted_required:
+                warnings.append((f"{label}.params", (
+                    "the request body declares "
+                    f"{', '.join(operation.muted_required)} as required, but "
+                    "`requestBody.required` is not set — the caller may omit "
+                    "the body entirely, so these expand optional. Set "
+                    "`requestBody.required: true` in the API document if they "
+                    "are meant to be mandatory arguments.")))
             if not res.errors:
                 method["params"] = res.params
         if is_canonical_return(method.get("returnType")):
@@ -524,7 +572,7 @@ def resolve_spec_marks(spec_data, index, convention=None):
             errors.extend((f"{label}.returnType", e) for e in res.errors)
             if not res.errors:
                 method["returnType"] = res.return_type
-    return errors
+    return errors, warnings
 
 
 def resolve_return_type(declared, operation) -> Resolution:

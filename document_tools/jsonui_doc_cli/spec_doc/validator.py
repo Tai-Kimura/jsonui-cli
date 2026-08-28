@@ -2354,9 +2354,13 @@ class SpecValidator:
         if not marked:
             return
         index = self._load_api_canonical_index(result) or {}
-        for path, message in canon.resolve_spec_marks(
-                data, index, self._case_convention()):
+        errors, warnings = canon.resolve_spec_marks(
+            data, index, self._case_convention())
+        for path, message in errors:
             result.errors.append(SpecValidationMessage(path=path, message=message))
+        for path, message in warnings:
+            result.warnings.append(SpecValidationMessage(
+                path=path, message=message, level="warning"))
 
     def _case_convention(self):
         """`spec.canonical_param_case`, resolved by the shared reader."""

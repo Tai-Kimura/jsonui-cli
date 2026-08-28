@@ -513,7 +513,11 @@ def resolve_canonical_marks(spec_data: dict, spec_path) -> None:
             break
     convention = canon.param_case_for(spec_path)
 
-    errors = canon.resolve_spec_marks(spec_data, index, convention)
+    errors, warnings = canon.resolve_spec_marks(spec_data, index, convention)
+    for path, message in warnings:
+        # Printed, not raised: the expansion is correct, the declaration is
+        # merely surprising. `jsonui-doc` carries the same text as a warning.
+        print(f"WARNING: {path}: {message}")
     if errors:
         raise CanonicalMarkError("; ".join(f"{p}: {m}" for p, m in errors))
 

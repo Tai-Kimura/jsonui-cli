@@ -276,3 +276,112 @@ class PathNotationTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class MutedRequiredTests(_Fixture):
+    """`schema.required` under a body that is not itself required.
+
+    Zero occurrences across every consumer canon measured (81 + 76 + 119 request
+    bodies), so this fixture is fabricated on purpose — a corpus with none of
+    a case does not show that the net for it works. Reported by the backend
+    lane that read `_operation_params` after being told the wrong thing about
+    path renames, and found this on the way past.
+
+    The expansion is correct: `requestBody.required: false` means the caller
+    may omit the body, so nothing inside it can be an unconditional argument.
+    It is warned about because the reason sits two levels from the symptom —
+    "I wrote `required` and it generated `String?`".
+    """
+
+    def setUp(self):
+        super().setUp()
+        doc = json.loads(json.dumps(SWAGGER))
+        doc["paths"]["/api/user/bookmarks"]["patch"] = {
+            "requestBody": {"content": {"application/json": {
+                "schema": {"$ref": "#/components/schemas/BookmarkCreate"}}}},
+            "responses": {"200": {"description": "ok"}},
+        }
+        (self.root / "docs" / "api" / "swagger.json").write_text(
+            json.dumps(doc), encoding="utf-8")
+
+    def resolve_with_warnings(self, method):
+        data = _spec(method)
+        self.spec_path.write_text(json.dumps(data), encoding="utf-8")
+        v = SpecValidator()
+        v._spec_file_path = self.spec_path
+        result = SpecValidationResult()
+        v._resolve_canonical_marks(data, result)
+        return (data["dataFlow"]["repositories"][0]["methods"][0],
+                [m.message for m in result.errors],
+                [m.message for m in result.warnings])
+
+    def test_the_properties_expand_optional(self):
+        m, errs, _w = self.resolve_with_warnings({
+            "name": "patchBookmark", "endpoint": "PATCH /api/user/bookmarks",
+            "params": "@canonical"})
+        self.assertEqual(errs, [])
+        self.assertEqual([p["type"] for p in m["params"]], ["String?", "String?"])
+
+    def test_and_it_says_why(self):
+        _m, _e, warns = self.resolve_with_warnings({
+            "name": "patchBookmark", "endpoint": "PATCH /api/user/bookmarks",
+            "params": "@canonical"})
+        self.assertEqual(len(warns), 1)
+        self.assertIn("item_uuid", warns[0])
+        self.assertIn("requestBody.required", warns[0])
+
+    def test_it_does_not_gate(self):
+        """The declaration is legal. Saying so is the whole intervention."""
+        _m, errs, _w = self.resolve_with_warnings({
+            "name": "patchBookmark", "endpoint": "PATCH /api/user/bookmarks",
+            "params": "@canonical"})
+        self.assertEqual(errs, [])
+
+    def test_a_required_body_says_nothing(self):
+        """The false-positive boundary — 197 of the 276 measured bodies."""
+        _m, _e, warns = self.resolve_with_warnings({
+            "name": "addBookmark", "endpoint": "POST /api/user/bookmarks",
+            "params": "@canonical"})
+        self.assertEqual(warns, [])
+
+    def test_an_unmarked_method_says_nothing_either(self):
+        """The warning belongs to expansion, not to the document."""
+        _m, _e, warns = self.resolve_with_warnings({
+            "name": "patchBookmark", "endpoint": "PATCH /api/user/bookmarks",
+            "params": [{"name": "itemUuid", "type": "String"}]})
+        self.assertEqual(warns, [])
+
+
+class PathParametersAreArgumentsTests(_Fixture):
+    """A path variable is an argument the caller supplies, so it expands.
+
+    Which means **renaming a path variable moves every referencing spec's
+    signature** — and that is easy to get backwards, because route matching
+    normalizes path-variable spelling away. The same rename is invisible to
+    resolution and load-bearing for expansion. I told a lane the opposite; they
+    read the function and corrected me.
+    """
+
+    def test_a_path_parameter_is_in_the_expansion(self):
+        m, errs = self.resolve({"name": "getVenue",
+                                "endpoint": "GET /api/venues/{venue_id}",
+                                "params": "@canonical"})
+        self.assertEqual(errs, [])
+        self.assertEqual([p["name"] for p in m["params"]], ["venue_id"])
+        self.assertEqual([p["type"] for p in m["params"]], ["String"])
+
+    def test_and_the_case_convention_renames_it(self):
+        self.config({"canonical_param_case": "camelCase"})
+        m, _e = self.resolve({"name": "getVenue",
+                              "endpoint": "GET /api/venues/{venue_id}",
+                              "params": "@canonical"})
+        self.assertEqual([p["name"] for p in m["params"]], ["venueId"])
+
+    def test_route_matching_ignores_the_spelling_expansion_does_not(self):
+        """Both halves in one place, because holding only the first is what
+        produced the wrong advice."""
+        m, errs = self.resolve({"name": "getVenue",
+                                "endpoint": "GET /api/venues/{venueId}",
+                                "params": "@canonical"})
+        self.assertEqual(errs, [])                       # matched anyway
+        self.assertEqual([p["name"] for p in m["params"]], ["venue_id"])
