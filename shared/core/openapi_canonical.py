@@ -965,12 +965,13 @@ def check_divergences(spec_data, index, convention=None):
         errors.extend(_divergence_errors(
             path, renamed, canonical, declared,
             omitted=lists["omitted"], wrapped=wrapped, added=lists["added"],
-            locations=operation.params))
+            locations=operation.params, convention=convention))
     return errors
 
 
 def _divergence_errors(path, renamed, canonical, declared,
-                       omitted=(), wrapped=None, added=(), locations=None):
+                       omitted=(), wrapped=None, added=(), locations=None,
+                       convention=None):
     out = []
     wrapped = wrapped or {}
 
@@ -995,8 +996,19 @@ def _divergence_errors(path, renamed, canonical, declared,
     #
     # A path variable is different in kind: it is interpolated into the URL,
     # so no object carries it, and the id travels as its own argument.
-    outside = {p.name: p.location for p in (locations or ())
-               if p.location == "path"}
+    # Keyed by the spelling this project writes, because that is what every
+    # other clause is compared against. Keying by the document's raw name left
+    # this one lookup outside the convention — the only place in the file that
+    # was — so on any project that configures `canonical_param_case` the check
+    # matched nothing and said nothing.
+    #
+    # That also invalidated the measurement behind it: "zero false positives
+    # across four faces" was taken on four faces that all configure
+    # `camelCase`, where the check never ran. A clean result from a check that
+    # did not execute is the failure this whole report is about, arrived at
+    # while adding a check for it.
+    outside = {apply_case(p.name, convention): p.location
+               for p in (locations or ()) if p.location == "path"}
     for holder, covered in wrapped.items():
         for name in covered:
             if name in outside:

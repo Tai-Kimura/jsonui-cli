@@ -983,3 +983,70 @@ class WrappedCoversBodyFieldsTests(_Fixture):
         result = SpecValidationResult()
         v._resolve_canonical_marks(data, result)
         self.assertEqual([m.message for m in result.errors], [])
+
+
+class LocationCheckRunsUnderAConventionTests(_Fixture):
+    """The location lookup has to speak the project's spelling.
+
+    It was keyed by the API document's raw parameter name while every other
+    clause is compared against the convention-applied one — the only lookup in
+    the file left outside the v1.7.6 unification. On any project that sets
+    `canonical_param_case`, the check matched nothing and reported nothing.
+
+    Which also invalidated the measurement that justified it. "Zero false
+    positives across four faces" was taken on four faces that all configure
+    `camelCase`, so what it confirmed was that a check which never executes
+    produces no findings. Found by a lane that varied one config key and
+    nothing else.
+    """
+
+    def probe(self, convention, wrapped_names, params):
+        if convention:
+            self.config({"canonical_param_case": convention})
+        self.op_with_path()
+        data = _spec({"name": "updateVenue",
+                      "endpoint": "PUT /api/venues/{venue_id}",
+                      "params": params,
+                      "canonicalDivergence": {"wrapped": {"payload": wrapped_names},
+                                              "reason": "r"}})
+        self.spec_path.write_text(json.dumps(data), encoding="utf-8")
+        v = SpecValidator()
+        v._spec_file_path = self.spec_path
+        result = SpecValidationResult()
+        v._resolve_canonical_marks(data, result)
+        return [m.message for m in result.errors]
+
+    def op_with_path(self):
+        doc = json.loads(json.dumps(SWAGGER))
+        doc["paths"]["/api/venues/{venue_id}"]["put"] = {
+            "parameters": [{"name": "venue_id", "in": "path", "required": True,
+                            "schema": {"type": "string"}}],
+            "requestBody": {"required": True, "content": {"application/json": {
+                "schema": {"type": "object",
+                           "properties": {"note": {"type": "string"}}}}}},
+            "responses": {"200": {"description": "ok"}}}
+        (self.root / "docs" / "api" / "swagger.json").write_text(
+            json.dumps(doc), encoding="utf-8")
+
+    def test_it_fires_with_no_convention(self):
+        errs = self.probe(None, ["venue_id", "note"],
+                          [{"name": "payload", "type": "M"}])
+        self.assertTrue(any("as a path variable" in e for e in errs), errs)
+
+    def test_it_fires_under_camel_case_too(self):
+        """One config key is the only difference from the test above."""
+        errs = self.probe("camelCase", ["venueId", "note"],
+                          [{"name": "payload", "type": "M"}])
+        self.assertTrue(any("as a path variable" in e for e in errs), errs)
+
+    def test_it_fires_under_snake_case_too(self):
+        errs = self.probe("snake_case", ["venue_id", "note"],
+                          [{"name": "payload", "type": "M"}])
+        self.assertTrue(any("as a path variable" in e for e in errs), errs)
+
+    def test_a_correct_declaration_under_a_convention_still_passes(self):
+        """The boundary the previous silence was hiding on the other side."""
+        self.assertEqual(self.probe(
+            "camelCase", ["note"],
+            [{"name": "venueId", "type": "String"},
+             {"name": "payload", "type": "M"}]) , [])
