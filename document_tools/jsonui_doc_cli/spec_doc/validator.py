@@ -2377,11 +2377,18 @@ class SpecValidator:
         # release removes. Caught by the test, because the first probe for it
         # happened to carry a repository mark as well.
         if not (list(canon.iter_marked_methods(data))
-                or list(canon.iter_misplaced_marks(data))):
+                or list(canon.iter_misplaced_marks(data))
+                or list(canon.iter_divergence_declarations(data))):
             return
         index = self._load_api_canonical_index(result) or {}
-        errors, warnings = canon.resolve_spec_marks(
-            data, index, self._case_convention())
+        convention = self._case_convention()
+        # Before resolution, not after: `resolve_spec_marks` rewrites `params`
+        # in place, so a method that carried a mark stops looking like one and
+        # the "a mark has no divergence to declare" check silently never fires.
+        # Caught by the test for exactly that case.
+        errors = canon.check_divergences(data, index, convention)
+        mark_errors, warnings = canon.resolve_spec_marks(data, index, convention)
+        errors.extend(mark_errors)
         for path, message in errors:
             result.errors.append(SpecValidationMessage(path=path, message=message))
         for path, message in warnings:

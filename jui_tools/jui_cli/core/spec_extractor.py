@@ -504,7 +504,8 @@ def resolve_canonical_marks(spec_data: dict, spec_path) -> None:
     # Misplaced marks count too: a spec whose only mark sits under
     # `viewModel` would otherwise return here and never be told.
     if not (list(canon.iter_marked_methods(spec_data))
-            or list(canon.iter_misplaced_marks(spec_data))):
+            or list(canon.iter_misplaced_marks(spec_data))
+            or list(canon.iter_divergence_declarations(spec_data))):
         return
 
     index: dict = {}
@@ -516,7 +517,10 @@ def resolve_canonical_marks(spec_data: dict, spec_path) -> None:
             break
     convention = canon.param_case_for(spec_path)
 
-    errors, warnings = canon.resolve_spec_marks(spec_data, index, convention)
+    # Before resolution — see the note in jsonui-doc's validator.
+    errors = canon.check_divergences(spec_data, index, convention)
+    mark_errors, warnings = canon.resolve_spec_marks(spec_data, index, convention)
+    errors.extend(mark_errors)
     for path, message in warnings:
         # Printed, not raised: the expansion is correct, the declaration is
         # merely surprising. `jsonui-doc` carries the same text as a warning.

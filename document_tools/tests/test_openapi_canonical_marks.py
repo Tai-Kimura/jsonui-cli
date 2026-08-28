@@ -563,3 +563,113 @@ class ParentSpecMayNotDeclareTests(unittest.TestCase):
         self.assertEqual(rules.dropped_parent_declarations(
             {"type": "screen", "dataFlow": {"repositories": [{"name": "R"}]},
              "branchContracts": [{"id": "x"}]}), [])
+
+
+class DeclaredDivergenceTests(_Fixture):
+    """Written-out params can say HOW they differ, and be held to it.
+
+    Hand-written params are the way to say "this deliberately differs from the
+    canon", so a blanket warning on any difference would delete the only means
+    of saying it — 115 declarations across the corpus would go red at once,
+    and a check that cannot reach zero stops being read. The question is not
+    whether there is a difference; it is whether the difference is the one
+    that was declared.
+
+    So the declaration turns checking on for that method and nothing else
+    changes. The load-bearing case is the stale one: when the canon is renamed
+    to match, the divergence disappears and the note describing it survives —
+    which is how "we already dealt with that" outlives the thing it was about.
+    """
+
+    def check(self, method: dict):
+        data = _spec(method)
+        self.spec_path.write_text(json.dumps(data), encoding="utf-8")
+        v = SpecValidator()
+        v._spec_file_path = self.spec_path
+        result = SpecValidationResult()
+        v._resolve_canonical_marks(data, result)
+        return [m.message for m in result.errors]
+
+    def venue(self, params, divergence):
+        return {"name": "getVenue", "endpoint": "GET /api/venues/{venue_id}",
+                "params": params, "canonicalDivergence": divergence}
+
+    def test_a_declaration_that_matches_reality_is_accepted(self):
+        errs = self.check(self.venue(
+            [{"name": "venueUuid", "type": "String"}],
+            {"renamed": {"venue_id": "venueUuid"},
+             "reason": "the canon abbreviates; spec and impl both spell it out"}))
+        self.assertEqual(errs, [])
+
+    def test_a_stale_rename_is_an_error(self):
+        """THE case. The canon now says what the spec says, so there is no
+        divergence left — and the note explaining one is worse than absent."""
+        errs = self.check(self.venue(
+            [{"name": "venue_id", "type": "String"}],
+            {"renamed": {"venue_id": "venueUuid"}, "reason": "historical"}))
+        self.assertEqual(len(errs), 1)
+        self.assertIn("the divergence this describes is gone", errs[0])
+
+    def test_a_rename_of_a_parameter_the_canon_dropped_is_an_error(self):
+        errs = self.check(self.venue(
+            [{"name": "venueUuid", "type": "String"}],
+            {"renamed": {"venue_id": "venueUuid", "gone_param": "x"},
+             "reason": "r"}))
+        self.assertTrue(any("cannot exist" in e for e in errs), errs)
+
+    def test_an_unaccounted_difference_is_an_error(self):
+        """It subtracts, it does not exempt — an accidental drift hides best
+        inside a method already known to differ."""
+        errs = self.check(self.venue(
+            [{"name": "venueUuid", "type": "String"},
+             {"name": "sneakyExtra", "type": "String"}],
+            {"renamed": {"venue_id": "venueUuid"}, "reason": "r"}))
+        self.assertTrue(any("does not account for the whole" in e for e in errs),
+                        errs)
+        self.assertTrue(any("sneakyExtra" in e for e in errs), errs)
+
+    def test_a_reason_is_required(self):
+        errs = self.check(self.venue(
+            [{"name": "venueUuid", "type": "String"}],
+            {"renamed": {"venue_id": "venueUuid"}}))
+        self.assertTrue(any("non-empty 'reason'" in e for e in errs), errs)
+
+    def test_an_unknown_key_is_an_error(self):
+        errs = self.check(self.venue(
+            [{"name": "venueUuid", "type": "String"}],
+            {"renamed": {"venue_id": "venueUuid"}, "reason": "r",
+             "silence": True}))
+        self.assertTrue(any("unknown canonicalDivergence key" in e for e in errs),
+                        errs)
+
+    def test_declaring_one_on_a_marked_method_is_an_error(self):
+        """A mark follows the canon by construction; there is nothing to say."""
+        errs = self.check({
+            "name": "getVenue", "endpoint": "GET /api/venues/{venue_id}",
+            "params": "@canonical",
+            "canonicalDivergence": {"renamed": {"venue_id": "v"}, "reason": "r"}})
+        self.assertTrue(any("has no divergence to declare" in e for e in errs),
+                        errs)
+
+    def test_an_unresolvable_endpoint_says_so(self):
+        errs = self.check({
+            "name": "x", "endpoint": "GET /api/nope",
+            "params": [{"name": "a", "type": "String"}],
+            "canonicalDivergence": {"renamed": {"b": "a"}, "reason": "r"}})
+        self.assertTrue(any("cannot be checked" in e for e in errs), errs)
+
+    # ---- the false-positive boundary: nothing changes without a declaration #
+
+    def test_hand_written_params_without_a_declaration_are_not_checked(self):
+        """The 115 declarations that carry no note must stay silent, or the
+        feature makes every one of them red on the day it ships."""
+        errs = self.check({
+            "name": "getVenue", "endpoint": "GET /api/venues/{venue_id}",
+            "params": [{"name": "somethingElse", "type": "String"}]})
+        self.assertEqual(errs, [])
+
+    def test_a_marked_method_without_a_declaration_is_untouched(self):
+        errs = self.check({"name": "getVenue",
+                           "endpoint": "GET /api/venues/{venue_id}",
+                           "params": "@canonical"})
+        self.assertEqual(errs, [])

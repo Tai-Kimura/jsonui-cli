@@ -728,6 +728,29 @@ SCREEN_SPEC_SCHEMA = {
                         }
                     ]
                 },
+                "canonicalDivergence": {
+                    "type": "object",
+                    "description": (
+                        "Declares, with a reason, how this method's written-out "
+                        "params deliberately differ from the operation its "
+                        "endpoint names. Checked against the real difference: a "
+                        "note that no longer describes one is an error, which is "
+                        "how a rename in the API document stops a stale "
+                        "'we already handled that' from outliving the thing it "
+                        "was about. Only meaningful on hand-written params — a "
+                        "'@canonical' method follows the canon by construction."
+                    ),
+                    "properties": {
+                        "renamed": {
+                            "type": "object",
+                            "additionalProperties": {"type": "string"},
+                            "description": "canonical parameter name -> the name this spec uses"
+                        },
+                        "reason": {"type": "string", "minLength": 1}
+                    },
+                    "required": ["reason"],
+                    "additionalProperties": False
+                },
                 "returnType": {
                     "type": "string",
                     "description": (

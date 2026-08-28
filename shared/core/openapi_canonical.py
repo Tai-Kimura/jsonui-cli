@@ -645,3 +645,140 @@ def resolve_return_type(declared, operation) -> Resolution:
         return res
     res.return_type = operation.wire_type
     return res
+
+# --------------------------------------------------------------------------- #
+# declared divergence
+# --------------------------------------------------------------------------- #
+
+DIVERGENCE_KEY = "canonicalDivergence"
+_DIVERGENCE_FIELDS = ("renamed", "reason")
+
+
+def iter_divergence_declarations(spec_data):
+    """`(label, method)` for every method declaring a divergence."""
+    data_flow = (spec_data or {}).get("dataFlow")
+    if not isinstance(data_flow, dict):
+        return
+    for section in MARKABLE_SECTIONS:
+        items = data_flow.get(section)
+        if not isinstance(items, list):
+            continue
+        for i, item in enumerate(items):
+            if not isinstance(item, dict):
+                continue
+            methods = item.get("methods")
+            if not isinstance(methods, list):
+                continue
+            for j, method in enumerate(methods):
+                if isinstance(method, dict) and method.get(DIVERGENCE_KEY):
+                    yield f"dataFlow.{section}[{i}].methods[{j}]", method
+
+
+def check_divergences(spec_data, index, convention=None):
+    """`[(label, message)]` — a declared divergence that is not the real one.
+
+    Written-out params are the way to say "this method deliberately differs
+    from the canon", so a blanket warning on any difference would delete the
+    only means of saying it: 115 declarations across the corpus would go red
+    at once and a permanently-red check stops being read. The question is not
+    whether there is a difference, it is whether the difference is the one
+    that was declared.
+
+    So the declaration is what turns checking on for a method. Without it,
+    nothing changes — a project adopts this one method at a time. With it,
+    the method is held to the declaration exactly:
+
+    - a rename that no longer corresponds to a real difference is an error.
+      This is the point of the feature: when the canon is renamed to match,
+      the divergence disappears and the note describing it goes stale, and a
+      stale note is how "we already dealt with that" survives the thing it
+      was about.
+    - a difference the declaration does not account for is an error. It
+      subtracts, it does not exempt — an accidental drift hides best inside a
+      method already known to differ.
+    """
+    errors = []
+    for label, method in iter_divergence_declarations(spec_data):
+        raw = method.get(DIVERGENCE_KEY)
+        path = f"{label}.{DIVERGENCE_KEY}"
+
+        if not isinstance(raw, dict):
+            errors.append((path, f"{DIVERGENCE_KEY} must be an object"))
+            continue
+        for key in raw:
+            if key not in _DIVERGENCE_FIELDS:
+                errors.append((path, f"unknown {DIVERGENCE_KEY} key {key!r} "
+                                     f"(expected: {', '.join(_DIVERGENCE_FIELDS)})"))
+        reason = raw.get("reason")
+        if not isinstance(reason, str) or not reason.strip():
+            # The ledger records WHY, or it is a suppression dump.
+            errors.append((path, f"{DIVERGENCE_KEY} needs a non-empty 'reason'"))
+        renamed = raw.get("renamed") or {}
+        if not isinstance(renamed, dict) or not all(
+                isinstance(k, str) and isinstance(v, str)
+                for k, v in renamed.items()):
+            errors.append((path, "'renamed' must be an object of "
+                                 "canonical-name -> spec-name strings"))
+            continue
+
+        if is_canonical_params(method.get("params")):
+            errors.append((path, (
+                f"a method using '{CANONICAL_MARKER}' has no divergence to "
+                "declare — the mark follows the canon by construction. Remove "
+                f"the {DIVERGENCE_KEY}, or write the params out.")))
+            continue
+
+        operation, reason_code = lookup(index or {}, method.get("endpoint"))
+        if operation is None:
+            errors.append((path, f"{DIVERGENCE_KEY} cannot be checked: "
+                                 + miss_reason(reason_code, method)))
+            continue
+
+        canonical = [p["name"] for p in operation.spec_params(convention)]
+        declared = [p.get("name") for p in (method.get("params") or [])
+                    if isinstance(p, dict) and p.get("name")]
+        errors.extend(_divergence_errors(path, renamed, canonical, declared))
+    return errors
+
+
+def _divergence_errors(path, renamed, canonical, declared):
+    out = []
+    remaining = list(declared)
+    expected = []
+    for name in canonical:
+        mapped = renamed.get(name, name)
+        expected.append(mapped)
+        if name in renamed and name in declared:
+            out.append((path, (
+                f"'renamed' says the canon's '{name}' appears here as "
+                f"'{renamed[name]}', but '{name}' is what the params actually "
+                "say — the divergence this describes is gone. Update the "
+                "params, or drop the entry.")))
+
+    for name in renamed:
+        if name not in canonical:
+            out.append((path, (
+                f"'renamed' maps '{name}', which the operation does not "
+                "declare — the canon no longer has that parameter, so this "
+                "note describes a difference that cannot exist.")))
+
+    if out:
+        # The set difference below is a consequence of the entries already
+        # reported, not a second finding. Emitting both makes one defect read
+        # as two and buries the one that says what to change.
+        return out
+
+    missing = [n for n in expected if n not in remaining]
+    extra = [n for n in remaining if n not in expected]
+    if missing or extra:
+        parts = []
+        if missing:
+            parts.append("does not declare " + ", ".join(repr(n) for n in missing))
+        if extra:
+            parts.append("adds " + ", ".join(repr(n) for n in extra))
+        out.append((path, (
+            "the declared divergence does not account for the whole "
+            f"difference: after applying 'renamed', this method {' and '.join(parts)}. "
+            "A declaration subtracts from the comparison, it does not exempt "
+            "the method from it.")))
+    return out
