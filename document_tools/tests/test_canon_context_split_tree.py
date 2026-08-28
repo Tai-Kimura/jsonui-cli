@@ -375,3 +375,68 @@ class UnknownConfigKeyTests(unittest.TestCase):
         """A hint that is usually wrong trains readers to skip the message."""
         k = self.keys()
         self.assertIsNone(k._nearest(["completely_unrelated"]))
+
+
+class DiagnosticsCoverEveryConfigExaminedTests(unittest.TestCase):
+    """Which config answers, and which configs were looked at, are two questions.
+
+    The walk used to return at the first config that resolved an index, so a
+    stub further along the ancestry was never opened — its `extends` was never
+    followed and its unknown keys never seen. Short-circuiting the first
+    question silently narrowed the second.
+
+    Not reachable from either CLI when it was found: neither adapter passes an
+    explicit `config_path`, so the ancestry was always walked from the spec
+    outwards and the stub came first. A lane measured the two orderings and
+    reported the latent one. That is the shape this codebase keeps finding —
+    a second path that is correct today because nothing takes it.
+    """
+
+    def setUp(self):
+        self._tmp = TemporaryDirectory()
+        self.root = Path(self._tmp.name)
+        (self.root / "docs" / "api").mkdir(parents=True)
+        (self.root / "docs" / "api" / "s.json").write_text(
+            json.dumps(SWAGGER), encoding="utf-8")
+        # The root config resolves the canon on its own.
+        (self.root / "jui.config.json").write_text(
+            json.dumps({"api_directory": "docs/api"}), encoding="utf-8")
+        self.stub_dir = self.root / "docs" / "face"
+        self.stub_dir.mkdir(parents=True)
+        self.spec = self.stub_dir / "s.spec.json"
+        self.spec.write_text(json.dumps(_spec({"name": "a"})), encoding="utf-8")
+
+    def tearDown(self):
+        self._tmp.cleanup()
+
+    def test_a_broken_pointer_is_seen_even_when_another_config_answered(self):
+        (self.stub_dir / "jui.config.json").write_text(
+            json.dumps({"extends": "../../nowhere.json"}), encoding="utf-8")
+        ctx = canon.build_spec_canon_context(
+            self.spec, config_path=self.root / "jui.config.json")
+        self.assertTrue(ctx.index, "the explicit config still answers")
+        self.assertEqual(len(ctx.unresolved_extends), 1)
+
+    def test_an_unknown_key_is_seen_the_same_way(self):
+        (self.stub_dir / "jui.config.json").write_text(
+            json.dumps({"extend": "../../nowhere.json"}), encoding="utf-8")
+        ctx = canon.build_spec_canon_context(
+            self.spec, config_path=self.root / "jui.config.json")
+        self.assertTrue(ctx.index)
+        self.assertEqual(len(ctx.unknown_config_keys), 1)
+
+    def test_the_first_config_to_resolve_still_supplies_the_answer(self):
+        """Widening the diagnostics must not change who answers."""
+        (self.stub_dir / "jui.config.json").write_text(json.dumps(
+            {"api_directory": "../api", "spec": {"canonical_param_case": "camelCase"}}),
+            encoding="utf-8")
+        ctx = canon.build_spec_canon_context(self.spec)
+        self.assertEqual(ctx.convention, "camelCase")
+        self.assertIn("face", str(ctx.config_path))
+
+    def test_a_clean_ancestry_says_nothing(self):
+        (self.stub_dir / "jui.config.json").write_text(
+            json.dumps({"_note": "stub"}), encoding="utf-8")
+        ctx = canon.build_spec_canon_context(self.spec)
+        self.assertEqual(ctx.unresolved_extends, ())
+        self.assertEqual(ctx.unknown_config_keys, ())

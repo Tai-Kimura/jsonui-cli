@@ -539,6 +539,7 @@ def build_spec_canon_context(spec_path, *, config_path=None, extra_roots=()):
     fallback_convention = None
     problems: list = []
     unknown: list = []
+    answer = None
     for root in candidates:
         cfg = root / "jui.config.json"
         if not cfg.is_file():
@@ -558,19 +559,35 @@ def build_spec_canon_context(spec_path, *, config_path=None, extra_roots=()):
         api_dir = (root / config.get("api_directory", "docs/api")).resolve()
         documents, missing = load_documents(api_dir)
         if missing:
-            return SpecCanonContext(index={}, convention=declared,
-                                    config_path=cfg, missing_yaml=missing,
-                                    unresolved_extends=tuple(problems),
-                                    unknown_config_keys=tuple(unknown))
+            # Half an index is worse than none, so this config cannot answer —
+            # but the walk continues, because the configs after it still have
+            # `extends` pointers and keys worth looking at.
+            if answer is None:
+                answer = SpecCanonContext(index={}, convention=declared,
+                                          config_path=cfg,
+                                          missing_yaml=missing)
+            continue
         index = index_documents(documents)
-        if index:
+        if index and answer is None:
             # This config answers both. Not "this config for the routes and
             # whichever other one happened to declare a convention".
-            return SpecCanonContext(index=index, convention=declared,
-                                    config_path=cfg,
-                                    unresolved_extends=tuple(problems),
-                                    unknown_config_keys=tuple(unknown))
+            #
+            # Recorded, not returned: returning here stopped the walk, so a
+            # stub further along the ancestry was never opened and its
+            # `extends` and its unknown keys were never looked at. Which
+            # config answers and which configs were examined are two
+            # questions, and short-circuiting the first silently narrowed the
+            # second. Found by a lane that measured the two orderings.
+            answer = SpecCanonContext(index=index, convention=declared,
+                                      config_path=cfg)
 
+    if answer is not None:
+        return SpecCanonContext(index=answer.index,
+                                convention=answer.convention,
+                                config_path=answer.config_path,
+                                missing_yaml=answer.missing_yaml,
+                                unresolved_extends=tuple(problems),
+                                unknown_config_keys=tuple(unknown))
     return SpecCanonContext(index={}, convention=fallback_convention,
                             config_path=None,
                             unresolved_extends=tuple(problems),
