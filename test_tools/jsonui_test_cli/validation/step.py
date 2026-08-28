@@ -46,6 +46,24 @@ def _gated_off(step: dict, platforms) -> bool:
     return not any(p in declared for p in platforms)
 
 
+def _mobile_reach_note(step: dict) -> str:
+    """Why a web-only step still reaches a driver that cannot run it.
+
+    An ungated step reaches the mobile drivers by default, and the fix is to
+    gate it. A step gated ONTO iOS/Android reaches them on purpose, and
+    telling its author to gate it for web would be answering a question they
+    did not ask — they have said where they want it to run, and the point is
+    that it does not run there.
+    """
+    declared = (step.get("when") or {}).get("platform")
+    if declared is None:
+        return "gate it with 'when': {'platform': 'web'} in cross-platform tests"
+    if not isinstance(declared, list):
+        declared = [declared]
+    reaching = [p for p in ("ios", "android") if p in declared]
+    return (f"this step is gated onto {'/'.join(reaching)}, where it does not run")
+
+
 class StepValidator:
     """Validates test steps (actions and assertions)."""
 
@@ -789,13 +807,16 @@ class StepValidator:
                 message=f"'hookArgs' must be an array, got: {type(step['hookArgs']).__name__}"
             ))
 
-        # Web-only step in a cross-platform file: nudge toward a platform gate
-        # so the mobile drivers' no-op warning is intentional, not a surprise.
-        if "when" not in step:
+        # Web-only step: warn whenever it can still reach a mobile driver.
+        # Keying on the mere presence of `when` read a gate as the author
+        # having understood the limit, which is backwards for the one gate
+        # that matters — `{'platform': 'ios'}` says "run this on iOS", where
+        # it no-ops, and that is exactly when the warning is warranted.
+        if not _gated_off(step, ("ios", "android")):
             result.warnings.append(ValidationMessage(
                 path=path,
                 message="emitHook is web-only (no-op with a warning on iOS/Android); "
-                        "gate it with 'when': {'platform': 'web'} in cross-platform tests",
+                        + _mobile_reach_note(step),
                 level="warning"
             ))
 
@@ -844,11 +865,11 @@ class StepValidator:
                     path=path,
                     message="openedUrl assertion must have 'equals' or 'contains'"
                 ))
-            if "when" not in step:
+            if not _gated_off(step, ("ios", "android")):
                 result.warnings.append(ValidationMessage(
                     path=path,
                     message="openedUrl is web-only (the mobile drivers reject it); "
-                            "gate it with 'when': {'platform': 'web'} in cross-platform tests",
+                            + _mobile_reach_note(step),
                     level="warning"
                 ))
 
