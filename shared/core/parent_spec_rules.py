@@ -32,6 +32,14 @@ PARENT_READS_TOP_LEVEL = frozenset({
 #: `structure.notes` is carried. Lists are the ones that vanish.
 PARENT_READS_WITHIN = {"structure": frozenset({"notes"})}
 
+#: Dict-valued keys the parent must not declare either. `dataFlow.viewModel`
+#: is not a list, so the list rule below never saw it — and it was read from
+#: the parent and dropped from the sub-specs, the exact mirror of the
+#: repositories defect. Now that the sub-specs supply it, a parent declaring
+#: one would be silently ignored, which is the failure being removed rather
+#: than a new one worth keeping.
+PARENT_MUST_NOT_DECLARE = {"dataFlow": ("viewModel",)}
+
 MERGED_SECTIONS = ("structure", "stateManagement", "dataFlow")
 
 
@@ -61,8 +69,11 @@ def dropped_parent_declarations(parent_spec) -> list:
         if not isinstance(holder, dict):
             continue
         kept = PARENT_READS_WITHIN.get(section, frozenset())
+        named = PARENT_MUST_NOT_DECLARE.get(section, ())
         for key, value in holder.items():
-            if key in kept or not isinstance(value, list) or not value:
+            if key in kept or not value:
+                continue
+            if not isinstance(value, list) and key not in named:
                 continue
             out.append((f"{section}.{key}", _message(f"{section}.{key}")))
     return sorted(out)

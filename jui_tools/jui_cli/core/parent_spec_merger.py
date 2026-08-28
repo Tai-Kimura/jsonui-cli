@@ -152,7 +152,22 @@ class ParentSpecMerger:
             "repositories": [],
             "useCases": [],
             "apiEndpoints": [],
+            # Merged from the sub-specs like every other section. It used to
+            # be read from the parent only — the mirror image of the
+            # repositories defect, and between the two there was no legal
+            # place to put a `branchContracts` block: it has to sit with the
+            # viewModel methods it names, the viewModel only worked in the
+            # parent, and the parent may not declare branchContracts.
+            "viewModel": {"methods": [], "vars": [], "description": ""},
         }
+        seen_vm_methods: dict[str, tuple[str, dict]] = {}
+        seen_vm_vars: dict[str, tuple[str, dict]] = {}
+        branch_contracts: dict[str, Any] = {}
+        task_cancellation: dict[str, Any] = {}
+        error_handling: list = []
+        root_components: list = []
+        seen_branch: dict[str, str] = {}
+        seen_cancellation: dict[str, str] = {}
 
         # ---- other top-level sections collected by list concat ----
         user_actions: list = []
@@ -316,6 +331,58 @@ class ParentSpecMerger:
                 seen_use_cases[name] = (source_name, uc)
                 data_flow["useCases"].append(uc)
 
+            # viewModel — methods and vars keyed by name, like repositories.
+            sub_vm = sub_flow.get("viewModel")
+            if isinstance(sub_vm, dict):
+                for field, seen_map in (("methods", seen_vm_methods),
+                                        ("vars", seen_vm_vars)):
+                    for entry in sub_vm.get(field) or []:
+                        if not isinstance(entry, dict):
+                            continue
+                        name = entry.get("name")
+                        if not name:
+                            data_flow["viewModel"][field].append(entry)
+                            continue
+                        if name in seen_map:
+                            prev_src, prev = seen_map[name]
+                            if _stripped_equal(prev, entry):
+                                continue
+                            record_conflict(
+                                path=f"dataFlow.viewModel.{field}[name={name}]",
+                                message=(f"Defined differently in '{prev_src}' "
+                                         f"and '{source_name}'"))
+                            continue
+                        seen_map[name] = (source_name, entry)
+                        data_flow["viewModel"][field].append(entry)
+                if sub_vm.get("description") and not data_flow["viewModel"]["description"]:
+                    data_flow["viewModel"]["description"] = sub_vm["description"]
+
+            # branchContracts / task_cancellation — keyed dicts.
+            for section, target, seen_map in (
+                    ("branchContracts", branch_contracts, seen_branch),
+                    ("task_cancellation", task_cancellation, seen_cancellation)):
+                block = sub.get(section)
+                if not isinstance(block, dict):
+                    continue
+                for key, value in block.items():
+                    if key in seen_map:
+                        if _stripped_equal({"v": target[key]}, {"v": value}):
+                            continue
+                        record_conflict(
+                            path=f"{section}[{key}]",
+                            message=(f"Defined differently in "
+                                     f"'{seen_map[key]}' and '{source_name}'"))
+                        continue
+                    seen_map[key] = source_name
+                    target[key] = value
+
+            # error_handling / structure.rootComponents — list concat, the
+            # same treatment userActions and transitions already had.
+            for entry in sub.get("error_handling") or []:
+                error_handling.append(entry)
+            for entry in sub_structure.get("rootComponents") or []:
+                root_components.append(entry)
+
             # apiEndpoints
             for ep in sub_flow.get("apiEndpoints", []) or []:
                 if not isinstance(ep, dict):
@@ -367,6 +434,13 @@ class ParentSpecMerger:
             for k, v in parent_section.items():
                 if isinstance(v, list):
                     continue  # lists already handled above via sub-specs
+                if section_name == "dataFlow" and k == "viewModel":
+                    # Comes from the sub-specs now. Letting the parent fill it
+                    # when empty would restore exactly the asymmetry this
+                    # release removed: repositories read from the subs,
+                    # viewModel from the parent, and nowhere legal to declare
+                    # a branchContracts block that has to sit beside both.
+                    continue
                 # Only set if missing or empty
                 if not container.get(k):
                     container[k] = v
@@ -379,6 +453,14 @@ class ParentSpecMerger:
                 notes_parts = list(parent_notes) + notes_parts
             else:
                 notes_parts = [str(parent_notes)] + notes_parts
+
+        if root_components:
+            structure["rootComponents"] = root_components
+        vm = data_flow["viewModel"]
+        if not (vm["methods"] or vm["vars"] or vm["description"]):
+            data_flow.pop("viewModel", None)
+        elif not vm["description"]:
+            vm.pop("description", None)
 
         # Remove any structure keys that never received data (keep schema clean)
         if not structure["decorativeElements"]:
@@ -415,6 +497,12 @@ class ParentSpecMerger:
             merged["relatedFiles"] = related_files
         if notes_parts:
             merged["notes"] = notes_parts
+        if branch_contracts:
+            merged["branchContracts"] = branch_contracts
+        if task_cancellation:
+            merged["task_cancellation"] = task_cancellation
+        if error_handling:
+            merged["error_handling"] = error_handling
 
         return merged, conflicts
 
