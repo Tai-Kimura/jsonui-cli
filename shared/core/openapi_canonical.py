@@ -440,6 +440,48 @@ class SpecCanonContext:
     missing_yaml: int = 0
 
 
+def _read_config(path):
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            config = json.load(f)
+    except (OSError, json.JSONDecodeError):
+        return None
+    return config if isinstance(config, dict) else None
+
+
+def _follow_extends(root, cfg, config, _depth=0):
+    """`extends` names the config that actually owns this tree.
+
+    A face whose specs live in one tree and whose build config lives in
+    another has nothing on the specs' ancestry that identifies the owning
+    config — so the answer came from whichever directory the command happened
+    to run in, and `jui build` (run from the app) and `jsonui-doc` (run from
+    the repository root) read different configs for the same spec. Same
+    declared-config-losing-to-a-search shape as mockDir and the parameter-case
+    setting, one level further out: this time the search was over configs.
+
+    So the stub config the specs' ancestry does reach names its owner, and the
+    pointer is followed. Consumers were already writing that pointer in a
+    `_note` for humans; this reads the same fact.
+    """
+    if _depth > 4:
+        return root, cfg, config
+    target = config.get("extends")
+    if not isinstance(target, str) or not target:
+        return root, cfg, config
+    resolved = (root / target).resolve()
+    if resolved.is_dir():
+        resolved = resolved / "jui.config.json"
+    if not resolved.is_file():
+        return root, cfg, config
+    extended = _read_config(resolved)
+    if extended is None:
+        return root, cfg, config
+    # The named config replaces this one rather than layering under it: the
+    # stub exists to point, and merging would put two answers back in play.
+    return _follow_extends(resolved.parent, resolved, extended, _depth + 1)
+
+
 def build_spec_canon_context(spec_path, *, config_path=None, extra_roots=()):
     """Resolve the canon and the convention together, preferring the run's config.
 
@@ -463,27 +505,34 @@ def build_spec_canon_context(spec_path, *, config_path=None, extra_roots=()):
             candidates.append(path)
 
     add(config_path)
+    # The spec's own ancestry first, nearest outward: it identifies which face
+    # the spec belongs to, which the working directory does not — that is only
+    # where the command happened to be typed. Ordering it the other way made
+    # `jui build` (run from the app) and `jsonui-doc` (run from the repository
+    # root) read different configs for the same spec, in the same tree.
+    #
+    # This is only correct because a stub on that ancestry can name its owner
+    # through `extends`. Without it the nearest config is whatever partial one
+    # happens to sit there, which is why the working directory was tried first
+    # in the version before this.
+    if spec_path is not None:
+        for parent in list(Path(spec_path).resolve().parents)[:8]:
+            add(parent)
     for root in extra_roots:
         add(root)
         if root is not None:
             for parent in list(Path(root).resolve().parents)[:8]:
                 add(parent)
-    if spec_path is not None:
-        for parent in list(Path(spec_path).resolve().parents)[:8]:
-            add(parent)
 
     fallback_convention = None
     for root in candidates:
         cfg = root / "jui.config.json"
         if not cfg.is_file():
             continue
-        try:
-            with open(cfg, "r", encoding="utf-8") as f:
-                config = json.load(f)
-        except (OSError, json.JSONDecodeError):
+        config = _read_config(cfg)
+        if config is None:
             continue
-        if not isinstance(config, dict):
-            continue
+        root, cfg, config = _follow_extends(root, cfg, config)
         spec_cfg = config.get("spec")
         declared = (spec_cfg or {}).get("canonical_param_case") \
             if isinstance(spec_cfg, dict) else None
@@ -746,7 +795,23 @@ def resolve_return_type(declared, operation) -> Resolution:
 # --------------------------------------------------------------------------- #
 
 DIVERGENCE_KEY = "canonicalDivergence"
-_DIVERGENCE_FIELDS = ("renamed", "reason")
+_DIVERGENCE_FIELDS = ("renamed", "omitted", "wrapped", "added", "reason")
+
+#: `renamed` alone can only say "this argument has another name here", so the
+#: only declarable divergence was a one-to-one correspondence. Measured on one
+#: face: 7 of 37 hand-written declarations were that shape, and the other 30
+#: — the longest ones, wrapping twenty to thirty body fields into a request
+#: object — could not be declared at all. The feature's stated motivation was
+#: that hand-written declarations take part in no check; most of that set was
+#: still outside it.
+#:
+#: So three more shapes, each still checked against the operation:
+#:   omitted  canonical arguments this method deliberately does not take —
+#:            environment or build constants the caller never chooses
+#:   wrapped  one written argument standing in for several canonical ones;
+#:            a method with thirty parameters is a worse contract than a DTO
+#:   added    written arguments the operation does not declare — multipart
+#:            bodies, where the JSON expansion is empty by construction
 
 
 def iter_divergence_declarations(spec_data):
@@ -829,15 +894,74 @@ def check_divergences(spec_data, index, convention=None):
                                  + miss_reason(reason_code, method)))
             continue
 
+        lists = {}
+        for field in ("omitted", "added"):
+            value = raw.get(field) or []
+            if not isinstance(value, list) or not all(
+                    isinstance(x, str) for x in value):
+                errors.append((path, f"'{field}' must be a list of names"))
+                value = []
+            lists[field] = value
+        wrapped = raw.get("wrapped") or {}
+        if not isinstance(wrapped, dict) or not all(
+                isinstance(k, str) and isinstance(v, list)
+                and all(isinstance(x, str) for x in v)
+                for k, v in wrapped.items()):
+            errors.append((path, "'wrapped' must be an object of "
+                                 "spec-argument -> [canonical names]"))
+            wrapped = {}
+
         canonical = [p["name"] for p in operation.spec_params(convention)]
         declared = [p.get("name") for p in (method.get("params") or [])
                     if isinstance(p, dict) and p.get("name")]
-        errors.extend(_divergence_errors(path, renamed, canonical, declared))
+        errors.extend(_divergence_errors(
+            path, renamed, canonical, declared,
+            omitted=lists["omitted"], wrapped=wrapped, added=lists["added"]))
     return errors
 
 
-def _divergence_errors(path, renamed, canonical, declared):
+def _divergence_errors(path, renamed, canonical, declared,
+                       omitted=(), wrapped=None, added=()):
     out = []
+    wrapped = wrapped or {}
+
+    # Each clause has to still describe a real difference. A note that no
+    # longer does is the case this whole feature exists for: the canon moves,
+    # the divergence disappears, and the sentence explaining it outlives the
+    # thing it was about.
+    for name in omitted:
+        if name not in canonical:
+            out.append((path, (
+                f"'omitted' names '{name}', which the operation does not "
+                "declare — there is nothing here to leave out.")))
+    for holder, covered in wrapped.items():
+        if holder not in declared:
+            out.append((path, (
+                f"'wrapped' says '{holder}' stands in for other arguments, "
+                "but this method has no such parameter.")))
+        for name in covered:
+            if name not in canonical:
+                out.append((path, (
+                    f"'wrapped' says '{holder}' covers '{name}', which the "
+                    "operation does not declare.")))
+    for name in added:
+        if name in canonical:
+            out.append((path, (
+                f"'added' names '{name}', which the operation does declare — "
+                "it is not an addition, so it is compared like any other "
+                "argument.")))
+        if name not in declared:
+            out.append((path, (
+                f"'added' names '{name}', which this method does not take.")))
+    if out:
+        return out
+
+    canonical = [n for n in canonical
+                 if n not in omitted
+                 and not any(n in c for c in wrapped.values())]
+    declared = [n for n in declared
+                if n not in added and n not in wrapped]
+
     remaining = list(declared)
     expected = []
     for name in canonical:

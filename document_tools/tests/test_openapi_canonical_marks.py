@@ -768,3 +768,107 @@ class CrossSpecAgreementTests(unittest.TestCase):
     def test_a_single_spec_declaring_it_once_is_silent(self):
         self.assertEqual(self.check(self.spec({"name": "get", "params": []})),
                          [])
+
+
+class DivergenceVocabularyTests(_Fixture):
+    """`renamed` alone could only say "the same argument, another name".
+
+    Measured on one face: 7 of 37 hand-written declarations were that shape.
+    The other 30 — including the longest, wrapping twenty to thirty body
+    fields into a request object — could not be declared at all. The feature
+    existed because hand-written declarations take part in no check, and most
+    of that set was still outside it.
+
+    Three more shapes, each still held to the operation:
+
+    - `omitted`: arguments the caller never chooses. A platform string the
+      repository sends as a build constant is not a parameter of the method,
+      and making it one to satisfy a checker would be worse than the check.
+    - `wrapped`: one argument standing in for many. A thirty-parameter method
+      is a worse contract than a DTO, and the DTO is generated from the same
+      document, so that path is not unchecked — it is checked elsewhere.
+    - `added`: arguments the operation does not declare. A multipart body
+      expands to nothing, so every written argument was "extra".
+    """
+
+    def check(self, params, divergence, endpoint="POST /api/user/bookmarks"):
+        data = _spec({"name": "addBookmark", "endpoint": endpoint,
+                      "params": params, "canonicalDivergence": divergence})
+        self.spec_path.write_text(json.dumps(data), encoding="utf-8")
+        v = SpecValidator()
+        v._spec_file_path = self.spec_path
+        result = SpecValidationResult()
+        v._resolve_canonical_marks(data, result)
+        return [m.message for m in result.errors]
+
+    # POST /api/user/bookmarks declares item_uuid + note.
+
+    def test_wrapping_several_fields_into_one_argument(self):
+        self.assertEqual(self.check(
+            [{"name": "request", "type": "BookmarkCreate"}],
+            {"wrapped": {"request": ["item_uuid", "note"]},
+             "reason": "the VM holds one form object"}), [])
+
+    def test_omitting_an_argument_the_caller_never_chooses(self):
+        self.assertEqual(self.check(
+            [{"name": "item_uuid", "type": "String"}],
+            {"omitted": ["note"],
+             "reason": "the repository sends a build constant"}), [])
+
+    def test_adding_an_argument_the_operation_does_not_declare(self):
+        """multipart: the JSON expansion is empty by construction."""
+        self.assertEqual(self.check(
+            [{"name": "data", "type": "Data"},
+             {"name": "fileName", "type": "String"}],
+            {"omitted": ["item_uuid", "note"], "added": ["data", "fileName"],
+             "reason": "multipart upload"}), [])
+
+    def test_the_three_combine(self):
+        self.assertEqual(self.check(
+            [{"name": "request", "type": "BookmarkCreate"},
+             {"name": "onProgress", "type": "((Int) -> Void)?"}],
+            {"wrapped": {"request": ["item_uuid"]}, "omitted": ["note"],
+             "added": ["onProgress"], "reason": "all three"}), [])
+
+    # ---- each clause still has to describe a real difference ------------- #
+
+    def test_omitting_something_the_operation_does_not_have(self):
+        errs = self.check([{"name": "item_uuid", "type": "String"},
+                           {"name": "note", "type": "String?"}],
+                          {"omitted": ["gone"], "reason": "r"})
+        self.assertTrue(any("nothing here to leave out" in e for e in errs), errs)
+
+    def test_wrapping_a_field_the_operation_does_not_have(self):
+        errs = self.check([{"name": "request", "type": "R"}],
+                          {"wrapped": {"request": ["item_uuid", "note", "gone"]},
+                           "reason": "r"})
+        self.assertTrue(any("does not declare" in e for e in errs), errs)
+
+    def test_wrapping_into_an_argument_the_method_does_not_take(self):
+        errs = self.check([{"name": "item_uuid", "type": "String"},
+                           {"name": "note", "type": "String?"}],
+                          {"wrapped": {"absent": ["item_uuid"]}, "reason": "r"})
+        self.assertTrue(any("no such parameter" in e for e in errs), errs)
+
+    def test_adding_something_the_operation_does_declare(self):
+        """`added` is for arguments the canon has no opinion on. Naming one it
+        does declare would exempt it from comparison, which is the thing this
+        must never become."""
+        errs = self.check([{"name": "item_uuid", "type": "String"},
+                           {"name": "note", "type": "String?"}],
+                          {"added": ["item_uuid"], "reason": "r"})
+        self.assertTrue(any("it is not an addition" in e for e in errs), errs)
+
+    def test_an_unaccounted_difference_survives_all_three(self):
+        """It still subtracts rather than exempts."""
+        errs = self.check([{"name": "request", "type": "R"},
+                           {"name": "sneaky", "type": "String"}],
+                          {"wrapped": {"request": ["item_uuid", "note"]},
+                           "reason": "r"})
+        self.assertTrue(any("does not account for the whole" in e for e in errs),
+                        errs)
+
+    def test_a_malformed_clause_is_reported(self):
+        errs = self.check([{"name": "request", "type": "R"}],
+                          {"wrapped": {"request": "item_uuid"}, "reason": "r"})
+        self.assertTrue(any("must be an object of" in e for e in errs), errs)

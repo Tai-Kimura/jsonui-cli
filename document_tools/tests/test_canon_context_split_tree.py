@@ -76,6 +76,14 @@ class SplitTreeTests(unittest.TestCase):
                           / "f.spec.json")
         (self.root / "jui.config.json").write_text(
             json.dumps({"api_directory": "docs/api"}), encoding="utf-8")
+        # The stub on the specs' own ancestry names the config that owns this
+        # face. Without it the nearest reachable config is the repository
+        # root's, which holds the canon and declares no convention — and then
+        # the answer depends on where the command was typed, which is the
+        # defect this file is about.
+        (self.root / "docs" / "user" / "jui.config.json").write_text(
+            json.dumps({"extends": "../../user/jui.config.json"}),
+            encoding="utf-8")
         self.app = self.root / "user"
         self.app.mkdir()
         (self.app / "jui.config.json").write_text(json.dumps(
@@ -145,12 +153,27 @@ class SplitTreeTests(unittest.TestCase):
         }, cwd=self.app)
         self.assertTrue(errs)
 
-    def test_without_the_app_config_the_document_spelling_stands(self):
-        """Run from the repository root, only the root config is reachable and
-        it declares no convention. Not a bug — a different project."""
+    def test_the_answer_does_not_depend_on_where_the_command_was_typed(self):
+        """The property, not a value. The defect was that the same spec got
+        `camelCase` from the app directory and nothing from the repository
+        root — one tree, two answers, and the two tools run from different
+        places."""
+        for cwd in (self.app, self.root, self.root / "docs"):
+            m, errs = self.resolve({"name": "fetchQuotes",
+                                    "endpoint": "POST /api/quotes",
+                                    "params": "@canonical"}, cwd=cwd)
+            self.assertEqual(errs, [])
+            self.assertEqual([p["name"] for p in m["params"]],
+                             ["venueSlug", "tierId"], f"cwd={cwd.name}")
+
+    def test_without_the_stub_the_nearest_reachable_config_answers(self):
+        """The boundary. No pointer on the ancestry, so the repository root's
+        config answers — it holds the canon and declares no convention. That
+        is a project that has not adopted the pointer, not a bug."""
+        (self.root / "docs" / "user" / "jui.config.json").unlink()
         m, errs = self.resolve({"name": "fetchQuotes",
                                 "endpoint": "POST /api/quotes",
-                                "params": "@canonical"}, cwd=self.root)
+                                "params": "@canonical"}, cwd=self.app)
         self.assertEqual(errs, [])
         self.assertEqual([p["name"] for p in m["params"]],
                          ["venue_slug", "tier_id"])

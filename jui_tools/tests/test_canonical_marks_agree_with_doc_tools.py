@@ -172,3 +172,104 @@ class UnexpandedMarksAreLoudTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class BothToolsAgreeInASplitTreeTests(unittest.TestCase):
+    """The fixture above cannot see the failure this class is about.
+
+    It builds a single tree, so the two tools reach the same config no matter
+    where they are invoked from — and the claim "a fourth copy of the
+    resolution makes this red" was false for exactly the case that produced
+    one. In a split tree the specs sit in a documentation tree and the build
+    config in the app, and the two commands run from different directories:
+    `jui build` from the app, `jsonui-doc` from the repository root. Each
+    reached a different config for the same spec, and only one of them
+    declared the naming convention.
+
+    Measured on the real layout: `camelCase` from the app, nothing from the
+    root, in the same tree. Reported by the lane that adopted the feature,
+    after the release that claimed to have unified the resolution — it had
+    unified expansion, and left the config lookup with two answers.
+
+    So the specs' ancestry is what identifies the face, and a stub config on
+    that ancestry names its owner with `extends`. The consumers were already
+    writing that pointer as a human-readable `_note`.
+    """
+
+    def setUp(self):
+        self._tmp = TemporaryDirectory()
+        self.root = Path(self._tmp.name)
+        (self.root / "docs" / "api").mkdir(parents=True)
+        (self.root / "docs" / "api" / "swagger.json").write_text(
+            json.dumps(SWAGGER), encoding="utf-8")
+        # The repository root holds the canon and declares no convention.
+        (self.root / "jui.config.json").write_text(
+            json.dumps({"api_directory": "docs/api"}), encoding="utf-8")
+        # The app holds the build config, and the convention with it.
+        self.app = self.root / "web"
+        self.app.mkdir()
+        (self.app / "jui.config.json").write_text(json.dumps(
+            {"api_directory": "../docs/api",
+             "spec": {"canonical_param_case": "camelCase"}}), encoding="utf-8")
+        # The specs sit in the documentation tree, beside a stub that names
+        # the app config as its owner.
+        specs = self.root / "docs" / "web" / "screens" / "json"
+        specs.mkdir(parents=True)
+        (specs.parent.parent / "jui.config.json").write_text(
+            json.dumps({"extends": "../../web/jui.config.json"}),
+            encoding="utf-8")
+        self.spec_path = specs / "s.spec.json"
+        self.spec_path.write_text(json.dumps(SPEC), encoding="utf-8")
+
+    def tearDown(self):
+        self._tmp.cleanup()
+
+    def _in(self, cwd, fn):
+        import os
+        previous = os.getcwd()
+        os.chdir(cwd)
+        try:
+            return fn()
+        finally:
+            os.chdir(previous)
+
+    def build_side(self):
+        spec = extract_screen_spec(json.loads(self.spec_path.read_text()),
+                                   self.spec_path)
+        m = spec.repositories[0].methods[0]
+        return [(p.name, p.type) for p in m.params], m.return_type
+
+    def doc_side(self):
+        from jsonui_doc_cli.spec_doc.validator import (
+            SpecValidationResult, SpecValidator,
+        )
+        data = json.loads(self.spec_path.read_text())
+        v = SpecValidator()
+        v._spec_file_path = self.spec_path
+        result = SpecValidationResult()
+        v._resolve_canonical_marks(data, result)
+        self.assertEqual([m.message for m in result.errors], [])
+        m = data["dataFlow"]["repositories"][0]["methods"][0]
+        return [(p["name"], p["type"]) for p in m["params"]], m["returnType"]
+
+    @unittest.skipUnless(HAVE_DOC_TOOLS, "document_tools not importable here")
+    def test_the_two_tools_agree_from_their_own_directories(self):
+        """Each run from where it is actually run from. This is the failure:
+        both halves were individually defensible and disagreed."""
+        build = self._in(self.app, self.build_side)
+        doc = self._in(self.root, self.doc_side)
+        self.assertEqual(build, doc)
+
+    @unittest.skipUnless(HAVE_DOC_TOOLS, "document_tools not importable here")
+    def test_neither_tool_depends_on_where_it_was_invoked(self):
+        """The stronger property, and the one that stops the next variant:
+        the spec decides, not the shell."""
+        for cwd in (self.root, self.app, self.root / "docs"):
+            self.assertEqual(self._in(cwd, self.build_side),
+                             self._in(cwd, self.doc_side))
+            self.assertEqual(self._in(cwd, self.build_side),
+                             self._in(self.app, self.build_side))
+
+    def test_the_convention_is_the_app_config_from_anywhere(self):
+        params, _rt = self._in(self.root, self.build_side)
+        self.assertEqual([n for n, _t in params][:1], ["venueId"])
