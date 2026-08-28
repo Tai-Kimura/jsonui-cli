@@ -264,6 +264,12 @@ class SpecValidator:
             self._validate_sub_specs(data["subSpecs"], result)
 
         # Validate dataFlow
+        # A parent spec is a container: the merger builds its sections from
+        # the sub-specs, and anything declared here is discarded without a
+        # word. Refused at authoring time so it never reaches `jui build`,
+        # from the same rule the merger halts on.
+        self._reject_parent_declarations(data, result)
+
         if "dataFlow" in data and data["dataFlow"]:
             # First: every check below, and the HTML the doc site renders,
             # must see what `jui build` will generate from — not the mark.
@@ -2332,6 +2338,22 @@ class SpecValidator:
                 ))
 
     # --- @canonical marks -------------------------------------------------
+
+    def _reject_parent_declarations(self, data: dict, result):
+        """A screen_parent_spec may not declare what its sub-specs provide.
+
+        Measured on a real parent: nine repository-method declarations that
+        changed nothing when edited, with `jui build`, `jui verify`, this
+        validator and `generate project --dry-run` all green in both
+        directions, and zero merge conflicts — the parent was never a
+        participant to conflict with. `branchContracts` and `error_handling`
+        were vanishing the same way and nobody had noticed those at all.
+        """
+        rules = shared_core.load("parent_spec_rules")
+        if rules is None:
+            return
+        for path, message in rules.dropped_parent_declarations(data):
+            result.errors.append(SpecValidationMessage(path=path, message=message))
 
     def _resolve_canonical_marks(
         self, data: dict, result: SpecValidationResult

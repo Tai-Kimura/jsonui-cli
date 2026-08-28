@@ -36,6 +36,39 @@ class MergeResult:
         return bool(self.conflicts)
 
 
+
+class ParentSpecDeclarationError(ValueError):
+    """A parent spec declared something the merger discards.
+
+    An error rather than a conflict: a conflict is two sources disagreeing and
+    one winning, which is a decision. This is a declaration that is never read
+    at all — measured on a real parent whose nine repository-method
+    declarations changed nothing when edited, with every gate green in both
+    directions and zero conflicts reported, because the parent was never a
+    participant to conflict with.
+    """
+
+
+def _reject_parent_declarations(parent_data: dict, parent_path) -> None:
+    """Halt when a parent declares a section built from its sub-specs.
+
+    The rule lives in `shared/core/parent_spec_rules.py` so `jsonui-doc
+    validate spec` refuses the same documents at authoring time rather than
+    growing a second, drifting copy of "what a parent may say".
+    """
+    from . import shared_core
+    rules = shared_core.load("parent_spec_rules")
+    if rules is None:
+        return
+    dropped = rules.dropped_parent_declarations(parent_data)
+    if not dropped:
+        return
+    lines = "\n".join(f"  {path}: {message}" for path, message in dropped)
+    raise ParentSpecDeclarationError(
+        f"{getattr(parent_path, 'name', parent_path)} declares "
+        f"{len(dropped)} section(s) that a parent spec cannot declare:\n{lines}"
+    )
+
 class ParentSpecMerger:
     """Merge screen_parent_spec + sub-specs into a single spec dict."""
 
@@ -71,6 +104,8 @@ class ParentSpecMerger:
                 path = alt if alt.exists() else path
             sub_spec_paths.append(path)
             sub_specs.append(json.loads(path.read_text()))
+
+        _reject_parent_declarations(parent_data, parent_path)
 
         merged, conflicts = self.merge(parent_data, sub_specs)
         return MergeResult(spec=merged, sub_spec_paths=sub_spec_paths, conflicts=conflicts)

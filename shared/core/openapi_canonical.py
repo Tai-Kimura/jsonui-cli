@@ -49,6 +49,14 @@ CANONICAL_WIRE_MARKER = "@canonical.wire"
 
 HTTP_METHODS = ("GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS")
 
+#: Parameter locations the client's transport layer supplies, not the caller.
+#: Excluded from expansion — and the corpus shows why in the bluntest way: the
+#: only two header parameters in it are `X-Client-Latitude` / `X-Client-Longitude`,
+#: geo values a client injects, whose names are not identifiers in any target
+#: language. Measured: zero header or cookie parameters in the other two
+#: canons, so excluding them changes nothing already converted.
+TRANSPORT_PARAM_LOCATIONS = frozenset({"header", "cookie"})
+
 #: `GET /api/venues/{venue_id}` — the verb is not constrained to HTTP here.
 #: Non-HTTP transports (RTDB, WebSocket, GraphQL) are declared the same way and
 #: are legal; they simply never resolve, and asking for `@canonical` on one is
@@ -189,9 +197,10 @@ def _deref(schema: dict, schemas: dict) -> dict:
 def _operation_params(op: dict, schemas: dict) -> list:
     """Every declared argument, in document order.
 
-    `in` is deliberately not filtered: a path parameter is an argument the
-    caller supplies exactly like a query one, so `{venue_id}` becomes
-    `venueId` in the generated signature. That means **renaming a path
+    `in` is filtered only for locations the transport layer fills
+    (`TRANSPORT_PARAM_LOCATIONS`). A path parameter is an argument the caller
+    supplies exactly like a query one, so `{venue_id}` becomes `venueId` in
+    the generated signature. That means **renaming a path
     variable moves every referencing spec's signature**, which is not obvious
     — route matching normalizes path-variable spelling away, so the same
     rename is invisible to resolution while being load-bearing for expansion.
@@ -202,6 +211,8 @@ def _operation_params(op: dict, schemas: dict) -> list:
     seen: set = set()
     for p in op.get("parameters") or []:
         if not isinstance(p, dict) or not p.get("name"):
+            continue
+        if p.get("in") in TRANSPORT_PARAM_LOCATIONS:
             continue
         name = p["name"]
         if name in seen:

@@ -453,3 +453,113 @@ class MisplacedMarkTests(_Fixture):
         _d, errs = self.resolve_vm({
             "name": "load", "params": [{"name": "id", "type": "String"}]})
         self.assertEqual(errs, [])
+
+
+class TransportParametersAreNotArgumentsTests(_Fixture):
+    """Header and cookie parameters are filled by the transport, not the caller.
+
+    The corpus makes the case bluntly: its only two header parameters are
+    `X-Client-Latitude` / `X-Client-Longitude`, geo values a client injects, and
+    their names are not identifiers in any target language — expanding them
+    produced a method signature that cannot compile. Reported by the lane that
+    tried to convert the declaration.
+
+    Measured before changing it: zero header or cookie parameters in the other
+    two canons, so nothing already converted moves.
+    """
+
+    def setUp(self):
+        super().setUp()
+        doc = json.loads(json.dumps(SWAGGER))
+        doc["paths"]["/api/geo"] = {"get": {
+            "parameters": [
+                {"name": "X-Client-Latitude", "in": "header",
+                 "schema": {"type": "string"}},
+                {"name": "session", "in": "cookie",
+                 "schema": {"type": "string"}},
+                {"name": "radius", "in": "query",
+                 "schema": {"type": "integer"}},
+            ],
+            "responses": {"200": {"description": "ok"}}}}
+        (self.root / "docs" / "api" / "swagger.json").write_text(
+            json.dumps(doc), encoding="utf-8")
+
+    def test_headers_and_cookies_are_left_out(self):
+        m, errs = self.resolve({"name": "nearby", "endpoint": "GET /api/geo",
+                                "params": "@canonical"})
+        self.assertEqual(errs, [])
+        self.assertEqual([p["name"] for p in m["params"]], ["radius"])
+
+    def test_a_header_only_operation_expands_to_nothing(self):
+        """Empty, not an error: the operation genuinely takes no argument the
+        caller supplies. An error here would refuse a legal declaration."""
+        doc = json.loads((self.root / "docs" / "api" / "swagger.json").read_text())
+        doc["paths"]["/api/geo"]["get"]["parameters"] = [
+            {"name": "X-Client-Latitude", "in": "header",
+             "schema": {"type": "string"}}]
+        (self.root / "docs" / "api" / "swagger.json").write_text(
+            json.dumps(doc), encoding="utf-8")
+        m, errs = self.resolve({"name": "nearby", "endpoint": "GET /api/geo",
+                                "params": "@canonical"})
+        self.assertEqual(errs, [])
+        self.assertEqual(m["params"], [])
+
+
+class ParentSpecMayNotDeclareTests(unittest.TestCase):
+    """A parent spec is a container; the merger builds its sections from subs.
+
+    Everything else it declares is discarded silently. Measured on a real
+    parent: nine repository-method declarations that changed nothing when
+    edited, every gate green in both directions, and zero merge conflicts —
+    because the parent was never a participant to conflict with. Two further
+    sections, `branchContracts` and `error_handling`, were vanishing the same
+    way and nobody had noticed those at all.
+    """
+
+    def check(self, spec: dict):
+        rules = shared_core.load("parent_spec_rules")
+        return [p for p, _m in rules.dropped_parent_declarations(spec)]
+
+    def parent(self, **extra):
+        base = {"type": "screen_parent_spec", "version": "1.0",
+                "metadata": {"name": "P", "displayName": "P",
+                             "description": "P."},
+                "subSpecs": [{"file": "p/a.spec.json", "name": "A"}]}
+        base.update(extra)
+        return base
+
+    def test_a_dataflow_list_is_refused(self):
+        self.assertEqual(
+            self.check(self.parent(dataFlow={"repositories": [{"name": "R"}]})),
+            ["dataFlow.repositories"])
+
+    def test_sections_the_merger_never_reads_are_refused(self):
+        got = self.check(self.parent(branchContracts=[{"id": "x"}],
+                                     error_handling={"a": 1}))
+        self.assertEqual(got, ["branchContracts", "error_handling"])
+
+    def test_a_pure_container_is_accepted(self):
+        """The false-positive boundary — the shape a parent spec is for."""
+        self.assertEqual(self.check(self.parent()), [])
+
+    def test_what_the_merger_does_read_is_accepted(self):
+        self.assertEqual(
+            self.check(self.parent(
+                relatedFiles=[{"type": "layout", "path": "p.json"}],
+                notes="whatever",
+                structure={"notes": "concept-level roots"})),
+            [])
+
+    def test_an_empty_declaration_says_nothing(self):
+        """An empty list changes no output; deleting it is the author's call."""
+        self.assertEqual(
+            self.check(self.parent(dataFlow={"repositories": []},
+                                   branchContracts=[])),
+            [])
+
+    def test_an_ordinary_screen_spec_is_untouched(self):
+        """The rule is about parents. A screen spec declares all of this."""
+        rules = shared_core.load("parent_spec_rules")
+        self.assertEqual(rules.dropped_parent_declarations(
+            {"type": "screen", "dataFlow": {"repositories": [{"name": "R"}]},
+             "branchContracts": [{"id": "x"}]}), [])
