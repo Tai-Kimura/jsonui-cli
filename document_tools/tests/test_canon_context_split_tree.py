@@ -322,3 +322,56 @@ class UnresolvableExtendsTests(unittest.TestCase):
         self.assertEqual(typo.convention, absent.convention)   # still the same
         self.assertNotEqual(typo.unresolved_extends,
                             absent.unresolved_extends)          # but not silent
+
+
+class UnknownConfigKeyTests(unittest.TestCase):
+    """A misspelled key is not a broken declaration — it is no declaration.
+
+    `extends` failed twice in one day. v1.7.9 reported a value that named no
+    file; this is the key itself written `extend`, which the value check
+    cannot see because `config.get("extends")` simply returns None. The output
+    was byte-identical to deleting the key, and only A/B found it.
+
+    The general defect is that `jui.config.json` has never had an opinion about
+    keys it does not recognise, so `mockdir`, `canonicalParamCase` and every
+    other near-miss are equally silent. The known set is a declaration
+    collected from what each tool reads; the corpus check below is what keeps
+    it honest — a key added to a tool and not here shows up as a false
+    positive on a real config.
+    """
+
+    def keys(self):
+        return shared_core.load("config_keys")
+
+    def test_a_near_miss_is_reported_with_the_key_it_resembles(self):
+        k = self.keys()
+        unknown = k.unknown_keys({"extend": "../x.json"})
+        self.assertEqual(unknown, ["extend"])
+        self.assertIn("Did you mean 'extends'?", k.message("cfg", unknown))
+
+    def test_a_key_no_tool_reads_is_reported_without_a_guess(self):
+        k = self.keys()
+        unknown = k.unknown_keys({"zzz_project_thing": 1})
+        self.assertEqual(unknown, ["zzz_project_thing"])
+        self.assertNotIn("Did you mean", k.message("cfg", unknown))
+
+    def test_underscore_prefixed_keys_are_notes(self):
+        """Two consumer configs already carry `_note` / `_comment`."""
+        self.assertEqual(
+            self.keys().unknown_keys({"_note": "why", "_comment": "x"}), [])
+
+    def test_every_key_the_tools_read_is_accepted(self):
+        """The false-positive boundary, stated as the whole known set."""
+        k = self.keys()
+        self.assertEqual(k.unknown_keys({key: None for key in k.KNOWN_TOP_LEVEL}),
+                         [])
+
+    def test_a_correct_config_says_nothing(self):
+        self.assertEqual(self.keys().unknown_keys(
+            {"project_name": "x", "platforms": ["web"], "spec": {},
+             "extends": "../a.json", "_note": "n"}), [])
+
+    def test_the_suggestion_stays_quiet_when_it_would_be_a_guess(self):
+        """A hint that is usually wrong trains readers to skip the message."""
+        k = self.keys()
+        self.assertIsNone(k._nearest(["completely_unrelated"]))

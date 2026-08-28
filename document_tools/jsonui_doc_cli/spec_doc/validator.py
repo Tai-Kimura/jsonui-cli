@@ -2222,6 +2222,14 @@ class SpecValidator:
         if context is None:
             return
         self._report_yaml_shortfall(context, result)
+        for message in getattr(context, "unknown_config_keys", ()):
+            # A warning, not an error: an unrecognised key may be a setting a
+            # future version reads, or a project's own note without the
+            # underscore. A broken `extends` value is an error because it
+            # changes what is generated; a key nothing reads changes nothing
+            # by itself — the harm is that the author thinks it does.
+            result.warnings.append(SpecValidationMessage(
+                path="jui.config.json", message=message, level="warning"))
         for message in getattr(context, "unresolved_extends", ()):
             # An error, not a warning: a pointer that names nothing produced
             # byte-identical output to no pointer at all, so a typo was

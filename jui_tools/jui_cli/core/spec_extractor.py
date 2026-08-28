@@ -518,6 +518,8 @@ def resolve_canonical_marks(spec_data: dict, spec_path) -> None:
     except OSError:
         cwd = None
     context = canon.build_spec_canon_context(spec_path, extra_roots=(cwd,))
+    for message in context.unknown_config_keys:
+        print(f"WARNING: {message}")
     if context.unresolved_extends:
         raise CanonicalMarkError("; ".join(context.unresolved_extends))
     index, convention = context.index, context.convention

@@ -39,8 +39,10 @@ is — see `load_openapi_canonical()` in either tool.
 
 from __future__ import annotations
 
+import importlib.util
 import json
 import re
+import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -382,6 +384,11 @@ class SpecCanonContext:
     #: a project that has not adopted the pointer, and they used to produce
     #: byte-identical output. Reported, never absorbed.
     unresolved_extends: tuple = ()
+    #: Top-level keys no tool reads, in the configs this context read. A
+    #: misspelled key is not a broken declaration — it is no declaration — so
+    #: it produced exactly the output of a project that never configured the
+    #: thing. `extends` was found to fail this way the same day it shipped.
+    unknown_config_keys: tuple = ()
     #: YAML documents that could not be read for want of PyYAML. Half an index
     #: is worse than none — every route living in those documents would be
     #: reported as missing — so the shortfall is carried to the caller rather
@@ -407,7 +414,40 @@ def _read_config(path):
     return config if isinstance(config, dict) else None
 
 
-def _follow_extends(root, cfg, config, problems=None, _depth=0):
+def _note_unknown_keys(sink, cfg, config) -> None:
+    """Keys nothing reads, from the shared declaration in `config_keys`."""
+    if sink is None:
+        return
+    keys = _config_keys_module()
+    if keys is None:
+        return
+    unknown = keys.unknown_keys(config)
+    if unknown:
+        sink.append(keys.message(cfg, unknown))
+
+
+def _config_keys_module():
+    """Sibling module, loaded the way the tools load this one."""
+    global _CONFIG_KEYS
+    try:
+        return _CONFIG_KEYS
+    except NameError:
+        pass
+    import importlib.util
+    path = Path(__file__).resolve().parent / "config_keys.py"
+    if not path.is_file():
+        _CONFIG_KEYS = None
+        return None
+    spec = importlib.util.spec_from_file_location(
+        "_jsonui_shared_core_config_keys", path)
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+    _CONFIG_KEYS = module
+    return module
+
+
+def _follow_extends(root, cfg, config, problems=None, _depth=0, unknown=None):
     """`extends` names the config that actually owns this tree.
 
     A face whose specs live in one tree and whose build config lives in
@@ -449,8 +489,9 @@ def _follow_extends(root, cfg, config, problems=None, _depth=0):
         return root, cfg, config
     # The named config replaces this one rather than layering under it: the
     # stub exists to point, and merging would put two answers back in play.
+    _note_unknown_keys(unknown, resolved, extended)
     return _follow_extends(resolved.parent, resolved, extended, problems,
-                           _depth + 1)
+                           _depth + 1, unknown)
 
 
 def build_spec_canon_context(spec_path, *, config_path=None, extra_roots=()):
@@ -497,6 +538,7 @@ def build_spec_canon_context(spec_path, *, config_path=None, extra_roots=()):
 
     fallback_convention = None
     problems: list = []
+    unknown: list = []
     for root in candidates:
         cfg = root / "jui.config.json"
         if not cfg.is_file():
@@ -504,7 +546,9 @@ def build_spec_canon_context(spec_path, *, config_path=None, extra_roots=()):
         config = _read_config(cfg)
         if config is None:
             continue
-        root, cfg, config = _follow_extends(root, cfg, config, problems)
+        _note_unknown_keys(unknown, cfg, config)
+        root, cfg, config = _follow_extends(root, cfg, config, problems,
+                                            unknown=unknown)
         spec_cfg = config.get("spec")
         declared = (spec_cfg or {}).get("canonical_param_case") \
             if isinstance(spec_cfg, dict) else None
@@ -516,18 +560,21 @@ def build_spec_canon_context(spec_path, *, config_path=None, extra_roots=()):
         if missing:
             return SpecCanonContext(index={}, convention=declared,
                                     config_path=cfg, missing_yaml=missing,
-                                    unresolved_extends=tuple(problems))
+                                    unresolved_extends=tuple(problems),
+                                    unknown_config_keys=tuple(unknown))
         index = index_documents(documents)
         if index:
             # This config answers both. Not "this config for the routes and
             # whichever other one happened to declare a convention".
             return SpecCanonContext(index=index, convention=declared,
                                     config_path=cfg,
-                                    unresolved_extends=tuple(problems))
+                                    unresolved_extends=tuple(problems),
+                                    unknown_config_keys=tuple(unknown))
 
     return SpecCanonContext(index={}, convention=fallback_convention,
                             config_path=None,
-                            unresolved_extends=tuple(problems))
+                            unresolved_extends=tuple(problems),
+                            unknown_config_keys=tuple(unknown))
 
 
 def lookup(index: dict, endpoint: str):
