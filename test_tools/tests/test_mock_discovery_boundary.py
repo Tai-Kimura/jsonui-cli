@@ -189,8 +189,14 @@ class TestNestedProjects:
         # This costs a detection — a genuine parent-aggregated layout goes
         # unreported — and that is the acceptable direction, because the
         # feature only ever promises to speak, never that silence means none.
-        mono, child = self._monorepo(tmp_path, child_has_own_mocks=False)
-        assert find_mock_dir(child / "tests" / "screens" / "a.test.json") == mono / "mocks"
+        # Updated: this used to assert `== mono / "mocks"`, pinning the
+        # unbounded default that the class below documented as deliberate.
+        # The two halves of this test then disagreed — the CLI was silent, the
+        # direct call reached the parent — and the test's own name described
+        # the CLI half. Now the walk derives its own bound, so both halves say
+        # the same thing.
+        _mono, child = self._monorepo(tmp_path, child_has_own_mocks=False)
+        assert find_mock_dir(child / "tests" / "screens" / "a.test.json") is None
         _, output = _validate(child, monkeypatch)
         assert "Unchecked mocks" not in output
 
@@ -200,29 +206,43 @@ class TestNestedProjects:
         assert "Unchecked mocks: 1" in output
 
 
-class TestTheBoundaryArgument:
-    """`stop_at` is opt-in: every existing caller keeps the unbounded walk."""
+class TestTheBoundaryIsNotOptional:
+    """Reversed, with a measurement. This class used to read `stop_at` is
+    opt-in: every existing caller keeps the unbounded walk`, on the reasoning
+    that narrowing it for everyone would shrink an existing check silently.
 
-    def test_unbounded_by_default(self, tmp_path):
+    That reasoning was about the wrong risk. Opt-in meant the walk was bounded
+    exactly where someone remembered to bound it, and the three validators
+    running the *reference* check never did — so a project declaring no
+    mockDir had a decoy above its own root supply the entire operationId index
+    and fail the run. Same mechanism as the blocker of v1.6.55, in the case
+    v1.6.55 did not cover, found by measuring rather than by a fifth report.
+
+    The walk now derives the project it is in. There is no argument left to
+    forget.
+    """
+
+    def test_the_walk_does_not_leave_the_project(self, tmp_path):
         proj = _project(tmp_path)
         _write(tmp_path / "mocks" / "m.mock.json", _mock())
-        found = find_mock_dir(proj / "tests" / "screens" / "a.test.json")
-        assert found == tmp_path / "mocks", (
-            "the default must keep reaching what it reached before — narrowing "
-            "it for every caller would shrink an existing check silently")
+        assert find_mock_dir(proj / "tests" / "screens" / "a.test.json") is None
 
-    def test_bounded_when_asked(self, tmp_path):
-        proj = _project(tmp_path)
-        _write(tmp_path / "mocks" / "m.mock.json", _mock())
-        assert find_mock_dir(proj / "tests" / "screens" / "a.test.json",
-                             stop_at=proj) is None
-
-    def test_the_boundary_directory_itself_is_searched(self, tmp_path):
+    def test_the_project_root_itself_is_searched(self, tmp_path):
         # Inclusive: mocks at the project root are the project's own.
         proj = _project(tmp_path)
         _write(proj / "mocks" / "m.mock.json", _mock())
-        assert find_mock_dir(proj / "tests" / "screens" / "a.test.json",
-                             stop_at=proj) == proj / "mocks"
+        assert (find_mock_dir(proj / "tests" / "screens" / "a.test.json")
+                == proj / "mocks")
+
+    def test_a_checkout_with_no_config_falls_back_to_git(self, tmp_path):
+        """A boundary definition, not a second rule for where mocks live."""
+        (tmp_path / "repo" / ".git").mkdir(parents=True)
+        _write(tmp_path / "repo" / "tests" / "screens" / "a.test.json",
+               TEST_FILE)
+        _write(tmp_path / "mocks" / "m.mock.json", _mock())      # outside
+        _write(tmp_path / "repo" / "mocks" / "m.mock.json", _mock())
+        assert (find_mock_dir(tmp_path / "repo" / "tests" / "screens" / "a.test.json")
+                == tmp_path / "repo" / "mocks")
 
 
 class TestDeclaredConfigurationIsUnaffected:

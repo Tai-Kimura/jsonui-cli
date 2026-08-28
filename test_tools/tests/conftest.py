@@ -42,7 +42,8 @@ _SOURCE_ROOT = Path(__file__).resolve().parents[1]
 if sys.path[:1] != [str(_SOURCE_ROOT)]:
     sys.path.insert(0, str(_SOURCE_ROOT))
 
-import jsonui_test_cli  # noqa: E402
+import jsonui_test_cli
+import pytest  # noqa: E402
 
 _loaded = Path(jsonui_test_cli.__file__).resolve().parent.parent
 if _loaded != _SOURCE_ROOT:
@@ -50,3 +51,28 @@ if _loaded != _SOURCE_ROOT:
         f"jsonui_test_cli was imported from {_loaded}, not from the checkout "
         f"under test ({_SOURCE_ROOT}). The suite would report on that copy."
     )
+
+
+@pytest.fixture(autouse=True)
+def _fresh_mock_source():
+    """One resolved mock source per test, as there is one per CLI process.
+
+    `validate` resolves the source once at the top of a run, so a real process
+    never sees a previous run's. This suite does: modules that call the
+    validators directly run after modules that invoke `main` in-process, and
+    they inherited a boundary pointing at a deleted temp directory — every
+    mock reference then resolved to nothing, which reads exactly like a
+    project with no mocks. Two tests passed or failed on nothing but what had
+    run before them.
+
+    Reset here rather than weakened in the product: the staleness is a
+    property of running many runs in one process, and the fix that looked
+    right in the product — ignoring a boundary that does not contain the file —
+    turns "out of bounds" back into "unbounded" for split trees.
+    """
+    from jsonui_test_cli.validation import mock as _mock_mod
+    _mock_mod.set_mock_source()
+    _mock_mod._MOCK_INDEX_CACHE.clear()
+    yield
+    _mock_mod.set_mock_source()
+    _mock_mod._MOCK_INDEX_CACHE.clear()

@@ -68,13 +68,24 @@ def cmd_validate(args):
         if p.resolve() not in already
     )
 
-    # Tell the reference check where this run's config says the mocks are.
-    # Without it that check walks up from each test file taking the first
-    # `mocks/` it meets, which in a split tree is never the declared one — one
-    # stray `*.mock.json` in an ancestor replaced the whole operationId index
-    # and turned every mock reference in every test into an error.
-    from .validation.mock import set_declared_mock_dir
-    set_declared_mock_dir(_resolve_mock_dir(getattr(args, "config", None)))
+    # Tell the reference check where this run's config says the mocks are, and
+    # how far it may look if it says nothing. Without the first, that check
+    # walks up from each test file taking the first `mocks/` it meets, which in
+    # a split tree is never the declared one — one stray `*.mock.json` in an
+    # ancestor replaced the whole operationId index and turned every mock
+    # reference in every test into an error.
+    #
+    # The boundary is the half that was missing. It used to be an optional
+    # argument, passed by the unchecked-mock warning and by nothing else, so a
+    # project that declared no mockDir still had that walk run to the
+    # filesystem root: measured, a decoy above the project root supplied the
+    # index and failed the run. Declaring nothing is not a reason to search
+    # outside your own project. It is set here so no caller has to remember it.
+    from .validation.mock import set_mock_source
+    set_mock_source(
+        directory=_resolve_mock_dir(getattr(args, "config", None)),
+        boundary=_project_root(getattr(args, "config", None)),
+    )
 
     if not files_to_validate:
         print("No test or description files found")
@@ -331,7 +342,7 @@ def _unchecked_mocks_elsewhere(config_path, validated_files):
     # the summary that matches nothing on disk.
     found: dict = {}
     for start in starts:
-        mock_dir = find_mock_dir(start, stop_at=boundary)
+        mock_dir = find_mock_dir(start)
         if mock_dir is None:
             continue
         for path in mock_dir.rglob("*.mock.json"):

@@ -7,6 +7,7 @@ schemas/mock.schema.json is an editor/doc asset, not the validation mechanism.
 from __future__ import annotations
 
 import json
+from dataclasses import dataclass
 from pathlib import Path
 
 from .models import ValidationMessage, ValidationResult
@@ -23,49 +24,86 @@ _MOCK_INDEX_CACHE: dict = {}
 #: id(index) -> the directory that supplied it, for error messages.
 _INDEX_SOURCE: dict = {}
 
-#: The mockDir the running command resolved from its own config, if any.
-#: Set by the CLI before validation; None means nothing was declared.
-_DECLARED_MOCK_DIR: Path | None = None
+
+@dataclass(frozen=True)
+class MockSource:
+    """Where this run's mocks are, and how that was decided.
+
+    One value, resolved once, instead of two independent answers to the same
+    question — a declaration read by the CLI and a walk performed by the
+    validators, with the walk's bound an optional argument each caller could
+    forget. Six releases went into that argument's meaning (arrival vs
+    containment) and into how many places the walk should start; the hole was
+    the optionality, so it is gone. Every caller now gets the same bound
+    because there is nowhere to not pass it.
+
+    `boundary` is the project root. Without it the walk runs to the filesystem
+    root: on a machine where every project sits under one directory, a single
+    stray `mocks/` there answers for every project below it — including the
+    ones with no mocks at all.
+    """
+
+    directory: Path | None = None
+    provenance: str = "none"      # "declared" | "discovered" | "none"
+    boundary: Path | None = None
 
 
-def set_declared_mock_dir(path) -> None:
-    """Record the mockDir this run's config declares.
+#: This run's resolved source. Set by the CLI before validation.
+_MOCK_SOURCE = MockSource()
 
-    Discovery walks up from a test file looking for `tests/mocks` or `mocks`.
-    That walk cannot see a config which is not an ancestor of the test file —
-    and in a split tree (tests in one tree, app and config in another) it
-    never is. So the walk kept going and took whatever `mocks/` it met first.
 
-    Measured: one stray `*.mock.json` in an ancestor directory replaced the
-    entire operationId index, and every mock reference in every test became
-    "unknown mock operationId". A consumer with a correct, declared mockDir
-    and 151 real mocks got 357 errors from one decoy file, with no way to
-    switch it off — the reference check is not the drift gate, so
-    `--no-mock-check` does not reach it.
+def set_mock_source(directory=None, boundary=None) -> None:
+    """Record what this run's config says, before any file is validated.
 
     A declaration outranks a search: the project said where its mocks are,
     and a directory found by convention is a guess about the same question.
-    Predates the 1.6.5x mock work; found by a consumer probing the opposite
-    case, the one that was supposed to stay silent.
+    Measured before this existed — one stray `*.mock.json` in an ancestor
+    directory replaced the entire operationId index, and every mock reference
+    in every test became "unknown mock operationId". A consumer with a correct,
+    declared mockDir and 151 real mocks got 357 errors from one decoy file,
+    with no way to switch it off: the reference check is not the drift gate,
+    so `--no-mock-check` does not reach it.
+
+    The boundary is recorded even when nothing is declared, which is the case
+    the first version of this missed. Declaring nothing is not a reason to
+    search outside your own project.
     """
-    global _DECLARED_MOCK_DIR
-    _DECLARED_MOCK_DIR = Path(path).resolve() if path is not None else None
+    global _MOCK_SOURCE
+    _MOCK_SOURCE = MockSource(
+        directory=Path(directory).resolve() if directory is not None else None,
+        provenance="declared" if directory is not None else "none",
+        boundary=Path(boundary).resolve() if boundary is not None else None,
+    )
 
 
-def find_mock_dir(test_file_path, stop_at=None):
+def _enclosing_project(start: Path):
+    """The project a path sits in — nearest `jui.config.json`, else `.git`.
+
+    The bound the CLI computes is better (it is the config `validate` actually
+    loaded, so "this project" means the same directory the gate means), but a
+    caller that never set a source used to get no bound at all, and no bound
+    means the filesystem root. Deriving one here costs a caller nothing and
+    leaves nowhere to forget it — which is the whole defect this file has been
+    working through: the bound was an optional argument, so the walk was
+    bounded exactly where someone remembered to bound it.
+
+    A boundary definition, not a second rule for where mocks live.
+    """
+    for parent in [start, *start.parents]:
+        if (parent / "jui.config.json").exists():
+            return parent
+    for parent in [start, *start.parents]:
+        if (parent / ".git").exists():
+            return parent
+    return None
+
+
+def find_mock_dir(test_file_path):
     """Locate the mock directory for a test file, or None.
 
-    Discovery: honor mock.mockDir in the nearest jui.config.json walking up from the
-    test file; otherwise look for a 'tests/mocks' (or 'mocks') dir along the ancestry.
-
-    `stop_at` confines the walk to that directory's subtree. Unbounded by
-    default, which is the behaviour every existing caller has: narrowing it
-    for everyone would shrink an existing check's reach, quietly, which is the
-    failure this module has spent the day removing. The walk is otherwise
-    unbounded to the filesystem root — measured on a machine where every
-    project sits under one directory, a single stray `mocks/` there resolves
-    for every project below it, including the ones with no mocks at all. A
-    caller that must not do that passes its own project root.
+    A declared mockDir wins outright. Otherwise the convention: walk up from
+    the test file for a `jui.config.json` naming one, else a `tests/mocks` or
+    `mocks` directory — confined to the project.
 
     Confinement, not a stop marker. An earlier version broke when it reached
     the boundary directory, which silently did nothing whenever the boundary
@@ -77,13 +115,18 @@ def find_mock_dir(test_file_path, stop_at=None):
     """
     if test_file_path is None:
         return None
-    # A declaration outranks a search. Only when the running command declared
-    # nothing does the convention below get to guess (see
-    # set_declared_mock_dir).
-    if _DECLARED_MOCK_DIR is not None and _DECLARED_MOCK_DIR.is_dir():
-        return _DECLARED_MOCK_DIR
+    if _MOCK_SOURCE.directory is not None and _MOCK_SOURCE.directory.is_dir():
+        return _MOCK_SOURCE.directory
     start = Path(test_file_path).resolve().parent
-    boundary = Path(stop_at).resolve() if stop_at is not None else None
+    # A set boundary is authoritative, including when it does not contain
+    # `start`: that is the split-tree layout, where the walk from a test file
+    # legitimately reaches nothing and the second start point at the project
+    # root is what finds the mocks. Falling back to an intrinsic bound there
+    # would turn "out of bounds" back into "unbounded" — measured, it
+    # reintroduced the nine-foreign-mocks report v1.6.53 removed.
+    boundary = _MOCK_SOURCE.boundary
+    if boundary is None:
+        boundary = _enclosing_project(start)
     if boundary is not None and boundary != start and boundary not in start.parents:
         # The walk would start outside the subtree it is confined to, so
         # every directory it could reach is out of bounds.
@@ -119,14 +162,14 @@ def find_mock_dir(test_file_path, stop_at=None):
     return mock_dir
 
 
-def find_mock_index(test_file_path, stop_at=None):
+def find_mock_index(test_file_path):
     """`{operationId: {scenarios}}` for the mocks of a test file, or None.
 
     The directory is located by `find_mock_dir` — one walk, exposed at two
     granularities, so a caller that needs the location does not grow a second
     convention for where mocks live.
     """
-    mock_dir = find_mock_dir(test_file_path, stop_at=stop_at)
+    mock_dir = find_mock_dir(test_file_path)
     if mock_dir is None:
         return None
 
@@ -168,10 +211,23 @@ def validate_mock_reference(mapping, path: str, result: ValidationResult, index)
             # directory answered is the whole question when the answer is
             # wrong, and a reporting lane needed four A/B runs to find out
             # that a stray file two levels up had supplied the index.
+            # With how it was chosen, too: a wrong `mockDir` and a wrong guess
+            # print the same path, and they are not the same thing to fix.
             where = _INDEX_SOURCE.get(id(index), "the mock directory")
+            # Derived from the directory that answered, not from the run's
+            # declaration: a run may declare a mockDir that does not resolve
+            # and still be answered by the convention, and then saying
+            # "declared" would name the wrong thing to go and fix.
+            declared = _MOCK_SOURCE.directory
+            how = ""
+            if declared is not None and where == str(declared):
+                how = " declared by mock.mockDir"
+            elif where != "the mock directory":
+                how = " found by convention"
             result.errors.append(ValidationMessage(
                 path=f"{path}.{op_id}",
-                message=f"unknown mock operationId '{op_id}' (not in {where})"))
+                message=f"unknown mock operationId '{op_id}' "
+                        f"(not in {where}{how})"))
         elif scenario not in index[op_id]:
             result.errors.append(ValidationMessage(
                 path=f"{path}.{op_id}",
