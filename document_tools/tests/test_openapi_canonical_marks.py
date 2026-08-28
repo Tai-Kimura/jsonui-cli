@@ -385,3 +385,71 @@ class PathParametersAreArgumentsTests(_Fixture):
                                 "params": "@canonical"})
         self.assertEqual(errs, [])                       # matched anyway
         self.assertEqual([p["name"] for p in m["params"]], ["venue_id"])
+
+
+class MisplacedMarkTests(_Fixture):
+    """A mark in a section nothing expands must not pass in silence.
+
+    The schema allows the same method shape under `dataFlow.viewModel` as
+    under `repositories`, so a mark can be written there. Nothing walked it:
+    validation returned PASSED and the marker string survived as the value of
+    `params` — a spec that looked converted and was not, which is worse than
+    the empty list this module refuses to produce.
+
+    Widening the walk was the other option and is wrong: a ViewModel does not
+    call an API directly (specification-rules rule 14), so an endpoint there
+    already means a repository is missing. The design question the reporting
+    lane declined to decide had been decided; it just was not written down
+    where the code could reach it.
+    """
+
+    def resolve_vm(self, vm_method, repo_method=None):
+        data = {
+            "type": "screen",
+            "metadata": {"name": "F", "description": "F.", "screen": "f"},
+            "dataFlow": {"viewModel": {"methods": [vm_method]}},
+        }
+        if repo_method is not None:
+            data["dataFlow"]["repositories"] = [
+                {"name": "R", "methods": [repo_method]}]
+        self.spec_path.write_text(json.dumps(data), encoding="utf-8")
+        v = SpecValidator()
+        v._spec_file_path = self.spec_path
+        result = SpecValidationResult()
+        v._resolve_canonical_marks(data, result)
+        return data, [m.message for m in result.errors]
+
+    def test_a_mark_on_a_viewmodel_method_is_an_error(self):
+        data, errs = self.resolve_vm({
+            "name": "load", "endpoint": "GET /api/user/bookmarks",
+            "params": "@canonical"})
+        self.assertEqual(len(errs), 1)
+        self.assertIn("does not declare a transport", errs[0])
+        # And it is still not expanded — the mark stays visible.
+        self.assertEqual(
+            data["dataFlow"]["viewModel"]["methods"][0]["params"], "@canonical")
+
+    def test_the_wire_mark_too(self):
+        _d, errs = self.resolve_vm({
+            "name": "load", "endpoint": "GET /api/user/bookmarks",
+            "returnType": "@canonical.wire"})
+        self.assertEqual(len(errs), 1)
+
+    def test_a_repository_mark_beside_it_still_expands(self):
+        """One misplaced mark must not stop the ones that are placed right."""
+        data, errs = self.resolve_vm(
+            {"name": "load", "params": "@canonical",
+             "endpoint": "GET /api/user/bookmarks"},
+            {"name": "fetch", "endpoint": "GET /api/user/bookmarks",
+             "params": "@canonical"})
+        self.assertEqual(len(errs), 1)
+        self.assertEqual(
+            [p["name"] for p in
+             data["dataFlow"]["repositories"][0]["methods"][0]["params"]],
+            ["limit", "category_id"])
+
+    def test_a_viewmodel_method_without_a_mark_says_nothing(self):
+        """The false-positive boundary: viewModel methods are ordinary."""
+        _d, errs = self.resolve_vm({
+            "name": "load", "params": [{"name": "id", "type": "String"}]})
+        self.assertEqual(errs, [])

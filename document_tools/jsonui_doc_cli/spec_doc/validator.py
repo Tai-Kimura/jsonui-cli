@@ -2350,8 +2350,12 @@ class SpecValidator:
         canon = shared_core.openapi_canonical()
         if canon is None:
             return
-        marked = list(canon.iter_marked_methods(data))
-        if not marked:
+        # Both kinds, or a spec whose only mark is a misplaced one returns
+        # here and is never told about it — which is the exact silence this
+        # release removes. Caught by the test, because the first probe for it
+        # happened to carry a repository mark as well.
+        if not (list(canon.iter_marked_methods(data))
+                or list(canon.iter_misplaced_marks(data))):
             return
         index = self._load_api_canonical_index(result) or {}
         errors, warnings = canon.resolve_spec_marks(

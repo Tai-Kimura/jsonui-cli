@@ -4,6 +4,7 @@ from __future__ import annotations
 import argparse
 import sys
 
+from .core.spec_extractor import CanonicalMarkError
 from .version import version_label
 from .commands.init_cmd import register_init_command, cmd_init
 from .commands.generate_cmd import register_generate_command, cmd_generate
@@ -92,7 +93,15 @@ def main(argv: list[str] | None = None) -> int:
 
     handler = command_map.get(args.command)
     if handler:
-        return handler(args)
+        try:
+            return handler(args)
+        except CanonicalMarkError as exc:
+            # Formatted, not a traceback. The message was already specific
+            # enough to act on — a lane read it straight off a red run — but
+            # seven frames of Python above it read as "the tool crashed", and
+            # the next person to hit it looks at the tool instead of the spec.
+            print(f"\nERROR: {exc}", file=sys.stderr)
+            return 1
     else:
         parser.print_help()
         return 1

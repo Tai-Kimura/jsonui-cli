@@ -502,7 +502,7 @@ def iter_marked_methods(spec_data):
     data_flow = (spec_data or {}).get("dataFlow")
     if not isinstance(data_flow, dict):
         return
-    for section in ("repositories", "useCases"):
+    for section in MARKABLE_SECTIONS:
         items = data_flow.get(section)
         if not isinstance(items, list):
             continue
@@ -518,6 +518,41 @@ def iter_marked_methods(spec_data):
                 if (is_canonical_params(method.get("params"))
                         or is_canonical_return(method.get("returnType"))):
                     yield f"dataFlow.{section}[{i}].methods[{j}]", method
+
+
+#: dataFlow sections whose methods may name a transport. `viewModel` is not
+#: one of them — the architecture rule is that a ViewModel never calls an API
+#: directly, so an `endpoint` there implies a missing repository. The schema
+#: nevertheless allows the same method shape everywhere, so a mark can be
+#: written in a section that does not resolve it.
+MARKABLE_SECTIONS = ("repositories", "useCases")
+UNMARKABLE_SECTIONS = ("viewModel",)
+
+
+def iter_misplaced_marks(spec_data):
+    """`(label, method)` for marks written where nothing expands them.
+
+    Silence here was worse than the empty list this module refuses to produce:
+    the marker string survived as the value of `params`, validation said
+    PASSED, and the author saw a spec that looked converted and was not.
+    Reported by a lane that added a probe to its own spec to find out.
+    """
+    data_flow = (spec_data or {}).get("dataFlow")
+    if not isinstance(data_flow, dict):
+        return
+    for section in UNMARKABLE_SECTIONS:
+        holder = data_flow.get(section)
+        if not isinstance(holder, dict):
+            continue
+        methods = holder.get("methods")
+        if not isinstance(methods, list):
+            continue
+        for j, method in enumerate(methods):
+            if not isinstance(method, dict):
+                continue
+            if (is_canonical_params(method.get("params"))
+                    or is_canonical_return(method.get("returnType"))):
+                yield f"dataFlow.{section}.methods[{j}]", method
 
 
 def miss_reason(reason: str, method: dict) -> str:
@@ -548,6 +583,12 @@ def resolve_spec_marks(spec_data, index, convention=None):
     arguments and no complaint.
     """
     errors, warnings = [], []
+    for label, _method in list(iter_misplaced_marks(spec_data)):
+        errors.append((label, (
+            f"'{CANONICAL_MARKER}' is not expanded here. A ViewModel method "
+            "does not declare a transport — an endpoint belongs on a "
+            "repository method, and the ViewModel calls that. Move the "
+            "declaration, or write the value out.")))
     for label, method in list(iter_marked_methods(spec_data)):
         operation, reason = lookup(index or {}, method.get("endpoint"))
         if operation is None:

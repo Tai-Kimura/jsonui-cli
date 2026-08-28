@@ -501,7 +501,10 @@ def resolve_canonical_marks(spec_data: dict, spec_path) -> None:
     canon = shared_core.openapi_canonical()
     if canon is None:
         return
-    if not list(canon.iter_marked_methods(spec_data)):
+    # Misplaced marks count too: a spec whose only mark sits under
+    # `viewModel` would otherwise return here and never be told.
+    if not (list(canon.iter_marked_methods(spec_data))
+            or list(canon.iter_misplaced_marks(spec_data))):
         return
 
     index: dict = {}
