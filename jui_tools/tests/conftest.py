@@ -40,9 +40,14 @@ if _loaded != _SOURCE_ROOT:
         f"test ({_SOURCE_ROOT}). The suite would report on that copy."
     )
 
-# NOTE: this file is pytest-only. CI runs `python -m unittest discover`, which
-# never loads it, so nothing here can be the sole fix for anything CI must
-# also do — see the repo-root insert at the top of
-# test_spec_validation_wiring.py, which is in the test module for that reason.
-# On CI the equivalent of the check above is that jui_cli is installed
-# editable from the checkout.
+# NOTE: this file is pytest-only, and since 1.7.0 CI runs pytest — so the
+# check above now executes there too. It did not when it was written: CI ran
+# `python -m unittest discover`, which never loads conftest, and the note here
+# used to say so. Left as a record because the reasoning it drove is still
+# load-bearing elsewhere — the repo-root insert at the top of
+# test_spec_validation_wiring.py sits in the test module, not here, and that
+# placement was correct then and costs nothing now.
+#
+# What has NOT changed: a fix placed only in this file reaches only the
+# runners that read conftest. `python -m unittest discover` still runs by
+# hand, and still collects nothing from the pytest-style modules.

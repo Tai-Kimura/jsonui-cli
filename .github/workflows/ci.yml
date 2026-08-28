@@ -1,7 +1,7 @@
 name: ci
 
 # Per-push / PR quality gate for the renderer-SSoT verification assets:
-#   1. unit suites   — jui_tools (unittest discovery) + rspec x3 (sjui/kjui/rjui)
+#   1. unit suites   — jui_tools (pytest) + rspec x3 (sjui/kjui/rjui)
 #   2. SSoT guards   — fixture freshness + attr-bindings determinism + vendored
 #                      ruby attr tables freshness
 #   3. web conformance — full fixture suite through rjui codegen + React +
@@ -75,7 +75,9 @@ jobs:
 
   # ------------------------------------------------------------------ #
   # jui_tools unit suite + protocol-sync idempotency (folded from the
-  # old protocol-sync.yml — CI intentionally uses unittest discovery).
+  # old protocol-sync.yml). The suite runs under pytest; the one
+  # idempotency case below is named through unittest because it is a
+  # single selector, not a discovery mode.
   # ------------------------------------------------------------------ #
   python-suite:
     runs-on: ubuntu-latest

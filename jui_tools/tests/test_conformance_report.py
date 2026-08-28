@@ -20,8 +20,10 @@ try:
     # pytest collects tests as a package (relative import works)…
     from .test_conformance_generator import SYNTHETIC_DEFS, _write_defs
 except ImportError:
-    # …while CI runs `python -m unittest discover -s tests`, which loads
-    # test modules top-level with no parent package.
+    # …while `python -m unittest discover -s tests` loads test modules
+    # top-level with no parent package. CI runs pytest since 1.7.0, so this
+    # branch is now for the runs people type by hand — still real, so the
+    # fallback stays.
     from test_conformance_generator import SYNTHETIC_DEFS, _write_defs
 
 

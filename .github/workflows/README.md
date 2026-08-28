@@ -13,7 +13,7 @@ so the exact CI judgment is runnable and testable locally.
 
 | Job | What | Gate |
 |---|---|---|
-| `python-suite` | jui_tools unit tests (`python -m unittest discover -s tests`) + protocol-sync idempotency e2e | exit code |
+| `python-suite` | jui_tools unit tests (`python -m pytest`) + protocol-sync idempotency e2e | exit code |
 | `rspec (sjui_tools / kjui_tools / rjui_tools)` | Ruby codegen unit suites (Ruby 3.3; kjui/rjui via their Gemfiles, sjui plain rspec) | exit code |
 | `ssot-guards` | 1. `jui conformance generate` → zero git diff (fixtures never drift from `shared/core/attribute_definitions.json`) 2. `jui generate attr-bindings --lang all` twice → identical output 3. fresh ruby emit == vendored `rjui_tools/lib/core/generated/attributes/` (README.md excluded) | zero diff |
 | `web-conformance` | full fixture suite through rjui codegen → React → headless Chromium (`conformance/hosts/web/`) | `jui conformance gate --platform web --no-visual`: 0 fail / 0 error in `web.results.json` (screenshot checks are the mobile lane's job — the committed baselines are macOS renders, this runner is not) |

@@ -39,14 +39,15 @@ CI_WORKFLOW = REPO_ROOT / ".github/workflows/ci.yml"
 # `generate project` reaches the validator as `document_tools.jsonui_doc_cli…`
 # — a top-level namespace package that resolves only when the repository root
 # is importable. Nothing put it there: not `cd jui_tools && pytest tests`, not
-# `cd jui_tools && python -m unittest discover -s tests`, which is what CI
-# runs. So the guard below was false everywhere and this gate had never
+# `cd jui_tools && python -m unittest discover -s tests`, which is what CI ran
+# at the time. So the guard below was false everywhere and this gate had never
 # executed — measured in CI's own log for 1.6.44, where it reads
 # `skipped 'document_tools not importable here'`.
 #
-# Doing this here rather than in conftest.py is deliberate: CI's runner is
-# unittest, which never loads conftest. A fix that only works under the
-# runner we use locally would leave the gate exactly as dead as it was.
+# Doing this here rather than in conftest.py is deliberate, and stays right
+# after CI moved to pytest in 1.7.0: this insert works under every runner,
+# including the `unittest discover` people still type by hand. Placing it in
+# conftest would have made it true only where conftest is read.
 if (REPO_ROOT / "document_tools").is_dir() and str(REPO_ROOT) not in sys.path:
     sys.path.insert(1, str(REPO_ROOT))
 

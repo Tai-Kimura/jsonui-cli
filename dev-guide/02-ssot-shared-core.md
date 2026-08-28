@@ -87,7 +87,9 @@ Dynamic converters は `component.typedAttributes(ButtonAttributes.self)` で読
 5. `component_metadata.json`（エージェント向け説明が要るなら）
 6. **jsonui-mcp-server の `data/` スナップショット更新 + push、ライブサーバー再起動**
 7. jsonui-helper の `npm run sync:specs`（急ぎでなければ次回まとめてでよい）
-8. `jui_tools/tests/golden/` の更新、`python -m unittest discover -s tests`
+8. `jui_tools/tests/golden/` の更新、**`python -m pytest`**（`unittest discover` は
+   pytest 形式のモジュールを 1 本も収集せず、収集しなかったことも言わない —
+   実測 jui_tools 1331/1357、**test_tools 35/631**）
 
 ## 5. Renderer SSoT 化の現在地
 
