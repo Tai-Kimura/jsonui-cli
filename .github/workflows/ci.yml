@@ -115,9 +115,17 @@ jobs:
       # mandatory test dependency.
       - name: Install sqlalchemy (exercises the db-schema live adapter)
         run: python -m pip install "sqlalchemy>=2.0"
+      # pytest, not `unittest discover`: the two runners disagree by 26 tests
+      # here. Some modules are written pytest-style (bare asserts, `tmp_path`
+      # fixtures) and `unittest discover` collects nothing from them — it walks
+      # for TestCase subclasses and finds none, silently, so the tally looked
+      # complete. Measured on the same checkout: discover 1325, pytest 1351,
+      # both green. This is the same shape as the 1.6.44 finding, where the
+      # spec-validation gate skipped under this runner and had never executed
+      # anywhere. pytest runs the TestCase modules too, so nothing is lost.
       - name: Run unit tests
         working-directory: jui_tools
-        run: python -m unittest discover -s tests -v
+        run: python -m pytest
       - name: Protocol sync idempotency (e2e)
         # Runs the protocol sync twice against the fixture project and ensures
         # no files change the second time — the structural guard against
