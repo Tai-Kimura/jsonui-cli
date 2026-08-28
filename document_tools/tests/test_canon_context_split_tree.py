@@ -237,3 +237,88 @@ class OneConfigAnswersBothTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class UnresolvableExtendsTests(unittest.TestCase):
+    """A pointer that names nothing must not read like no pointer.
+
+    Measured before the fix: a one-character typo in `extends` produced output
+    byte-identical to deleting the key. The settings simply did not arrive, and
+    the only visible effect was that parameter names came out spelled the API
+    document's way — noticeable only by A/B. `validate spec` said
+    `Errors: 0, Warnings: 0` and `generate` exited 0.
+
+    Reported by the lane that adopted `extends` the same day it shipped, which
+    is the third time this shape has been found in a mechanism added to close
+    the previous one: `mockDir` fixed the declaration losing to a search, and
+    left the unresolvable declaration silent (v1.6.50); this added a pointer
+    to close the config-level version, and left the unresolvable pointer
+    silent in turn.
+
+    Writing `extends` is a statement of intent. Not writing it is not — so an
+    absent key stays silent, and only a broken one is reported.
+    """
+
+    def setUp(self):
+        self._tmp = TemporaryDirectory()
+        self.root = Path(self._tmp.name)
+        (self.root / "docs" / "api").mkdir(parents=True)
+        (self.root / "docs" / "api" / "s.json").write_text(
+            json.dumps(SWAGGER), encoding="utf-8")
+        (self.root / "jui.config.json").write_text(
+            json.dumps({"api_directory": "docs/api"}), encoding="utf-8")
+        (self.root / "app").mkdir()
+        (self.root / "app" / "jui.config.json").write_text(json.dumps(
+            {"api_directory": "../docs/api",
+             "spec": {"canonical_param_case": "camelCase"}}), encoding="utf-8")
+        self.stub_dir = self.root / "docs" / "face"
+        self.stub_dir.mkdir(parents=True)
+        self.spec = self.stub_dir / "s.spec.json"
+        self.spec.write_text(json.dumps(_spec({"name": "a"})), encoding="utf-8")
+
+    def tearDown(self):
+        self._tmp.cleanup()
+
+    def stub(self, body):
+        if body is None:
+            (self.stub_dir / "jui.config.json").unlink(missing_ok=True)
+        else:
+            (self.stub_dir / "jui.config.json").write_text(
+                json.dumps(body), encoding="utf-8")
+        return canon.build_spec_canon_context(self.spec)
+
+    def test_a_pointer_that_names_nothing_is_reported(self):
+        ctx = self.stub({"extends": "../../app/zzz-typo.json"})
+        self.assertEqual(len(ctx.unresolved_extends), 1)
+        self.assertIn("names no file", ctx.unresolved_extends[0])
+        self.assertIn("canonical_param_case", ctx.unresolved_extends[0])
+
+    def test_a_correct_pointer_says_nothing(self):
+        ctx = self.stub({"extends": "../../app/jui.config.json"})
+        self.assertEqual(ctx.unresolved_extends, ())
+        self.assertEqual(ctx.convention, "camelCase")
+
+    def test_no_pointer_at_all_says_nothing(self):
+        """Not writing one is not a statement of intent."""
+        ctx = self.stub(None)
+        self.assertEqual(ctx.unresolved_extends, ())
+
+    def test_an_empty_or_wrongly_typed_pointer_is_reported(self):
+        for bad in ("", "   ", 5, []):
+            ctx = self.stub({"extends": bad})
+            self.assertEqual(len(ctx.unresolved_extends), 1, f"extends={bad!r}")
+
+    def test_a_pointer_to_unreadable_json_is_reported(self):
+        (self.root / "app" / "broken.json").write_text("{ not json",
+                                                       encoding="utf-8")
+        ctx = self.stub({"extends": "../../app/broken.json"})
+        self.assertEqual(len(ctx.unresolved_extends), 1)
+        self.assertIn("not readable JSON", ctx.unresolved_extends[0])
+
+    def test_the_typo_and_the_absent_key_no_longer_look_the_same(self):
+        """The property, stated directly. This is what was false."""
+        typo = self.stub({"extends": "../../app/zzz-typo.json"})
+        absent = self.stub(None)
+        self.assertEqual(typo.convention, absent.convention)   # still the same
+        self.assertNotEqual(typo.unresolved_extends,
+                            absent.unresolved_extends)          # but not silent

@@ -343,72 +343,16 @@ def load_documents(api_dir, *, want_yaml=True):
     return pairs, 0
 
 
-def find_api_directories(start, *, extra_roots=()):
-    """`api_directory` candidates for a spec, nearest first.
-
-    Driven by `jui.config.json` (`api_directory`, defaulting to `docs/api`),
-    because that is the directory `jui` itself resolves and a second rule for
-    "where the canon lives" would let the two tools read different documents
-    and disagree about what a mark expands to.
-
-    Two layouts exist and neither subsumes the other: a project whose config
-    is an ancestor of its specs, and one whose specs sit in a `docs/` tree
-    beside the config, where the specs' own ancestors carry partial configs
-    that never mention `api_directory`. So the working directory is a second
-    source rather than a guess — the first candidate that actually holds
-    OpenAPI documents wins, and an unrelated directory never qualifies.
-    """
-    roots: list = []
-    if start is not None:
-        roots.extend(list(Path(start).resolve().parents)[:8])
-    for extra in extra_roots:
-        if extra is None:
-            continue
-        extra = Path(extra).resolve()
-        roots.append(extra)
-        roots.extend(list(extra.parents)[:8])
-
-    out: list = []
-    seen: set = set()
-    for root in roots:
-        config_path = root / "jui.config.json"
-        if not config_path.is_file():
-            continue
-        try:
-            with open(config_path, "r", encoding="utf-8") as f:
-                config = json.load(f)
-        except (OSError, json.JSONDecodeError):
-            continue
-        if not isinstance(config, dict):
-            continue
-        api_dir = (root / config.get("api_directory", "docs/api")).resolve()
-        if api_dir not in seen:
-            seen.add(api_dir)
-            out.append(api_dir)
-    return out
+#: `find_api_directories` and `param_case_for` lived here until v1.7.8. They
+#: answered "which config owns this spec" without following `extends`, so they
+#: returned a different answer than `build_spec_canon_context` — and
+#: `param_case_for` had no callers at all. A consumer lane measured the helper
+#: directly, got None, and had to switch to the real CLI to learn the
+#: behaviour was in fact correct. A dead path that answers the same question
+#: differently is how this defect returns; removed rather than fixed.
 
 
-def param_case_for(start, *, extra_roots=()):
-    """`spec.canonical_param_case` from the nearest config that declares it."""
-    roots: list = []
-    if start is not None:
-        roots.extend(list(Path(start).resolve().parents)[:8])
-    for extra in extra_roots:
-        if extra is not None:
-            roots.append(Path(extra).resolve())
-    for root in roots:
-        config_path = root / "jui.config.json"
-        if not config_path.is_file():
-            continue
-        try:
-            with open(config_path, "r", encoding="utf-8") as f:
-                config = json.load(f) or {}
-        except (OSError, json.JSONDecodeError):
-            continue
-        spec_cfg = config.get("spec")
-        if isinstance(spec_cfg, dict) and spec_cfg.get("canonical_param_case"):
-            return spec_cfg["canonical_param_case"]
-    return None
+
 
 
 @dataclass(frozen=True)
@@ -433,11 +377,25 @@ class SpecCanonContext:
     index: dict
     convention: str | None = None
     config_path: object = None
+    #: `extends` pointers that named nothing. A declaration that cannot be
+    #: resolved is not the same as no declaration: one is a typo, the other is
+    #: a project that has not adopted the pointer, and they used to produce
+    #: byte-identical output. Reported, never absorbed.
+    unresolved_extends: tuple = ()
     #: YAML documents that could not be read for want of PyYAML. Half an index
     #: is worse than none — every route living in those documents would be
     #: reported as missing — so the shortfall is carried to the caller rather
     #: than absorbed into a smaller index.
     missing_yaml: int = 0
+
+
+def _note(problems, cfg, target, what) -> None:
+    if problems is None:
+        return
+    problems.append(
+        f"{cfg}: 'extends' {what} ({target!r}) — the settings it points at, "
+        "including `spec.canonical_param_case`, are not being read. Fix the "
+        "path, or remove the key if this project does not use one.")
 
 
 def _read_config(path):
@@ -449,7 +407,7 @@ def _read_config(path):
     return config if isinstance(config, dict) else None
 
 
-def _follow_extends(root, cfg, config, _depth=0):
+def _follow_extends(root, cfg, config, problems=None, _depth=0):
     """`extends` names the config that actually owns this tree.
 
     A face whose specs live in one tree and whose build config lives in
@@ -465,21 +423,34 @@ def _follow_extends(root, cfg, config, _depth=0):
     `_note` for humans; this reads the same fact.
     """
     if _depth > 4:
+        _note(problems, cfg, config.get("extends"),
+              "follows more than four `extends` hops")
         return root, cfg, config
     target = config.get("extends")
-    if not isinstance(target, str) or not target:
+    if target is None:
+        return root, cfg, config
+    if not isinstance(target, str) or not target.strip():
+        _note(problems, cfg, target, "is not a path")
         return root, cfg, config
     resolved = (root / target).resolve()
     if resolved.is_dir():
         resolved = resolved / "jui.config.json"
     if not resolved.is_file():
+        # Silence here made a typo and an absent pointer produce byte-identical
+        # output: the settings simply did not arrive, and the only visible
+        # effect was parameter names spelled the document's way. A/B was the
+        # only way to notice. An `extends` that is written is a statement of
+        # intent; one that is absent is not.
+        _note(problems, cfg, target, "names no file")
         return root, cfg, config
     extended = _read_config(resolved)
     if extended is None:
+        _note(problems, cfg, target, "names a file that is not readable JSON")
         return root, cfg, config
     # The named config replaces this one rather than layering under it: the
     # stub exists to point, and merging would put two answers back in play.
-    return _follow_extends(resolved.parent, resolved, extended, _depth + 1)
+    return _follow_extends(resolved.parent, resolved, extended, problems,
+                           _depth + 1)
 
 
 def build_spec_canon_context(spec_path, *, config_path=None, extra_roots=()):
@@ -525,6 +496,7 @@ def build_spec_canon_context(spec_path, *, config_path=None, extra_roots=()):
                 add(parent)
 
     fallback_convention = None
+    problems: list = []
     for root in candidates:
         cfg = root / "jui.config.json"
         if not cfg.is_file():
@@ -532,7 +504,7 @@ def build_spec_canon_context(spec_path, *, config_path=None, extra_roots=()):
         config = _read_config(cfg)
         if config is None:
             continue
-        root, cfg, config = _follow_extends(root, cfg, config)
+        root, cfg, config = _follow_extends(root, cfg, config, problems)
         spec_cfg = config.get("spec")
         declared = (spec_cfg or {}).get("canonical_param_case") \
             if isinstance(spec_cfg, dict) else None
@@ -543,16 +515,19 @@ def build_spec_canon_context(spec_path, *, config_path=None, extra_roots=()):
         documents, missing = load_documents(api_dir)
         if missing:
             return SpecCanonContext(index={}, convention=declared,
-                                    config_path=cfg, missing_yaml=missing)
+                                    config_path=cfg, missing_yaml=missing,
+                                    unresolved_extends=tuple(problems))
         index = index_documents(documents)
         if index:
             # This config answers both. Not "this config for the routes and
             # whichever other one happened to declare a convention".
             return SpecCanonContext(index=index, convention=declared,
-                                    config_path=cfg)
+                                    config_path=cfg,
+                                    unresolved_extends=tuple(problems))
 
     return SpecCanonContext(index={}, convention=fallback_convention,
-                            config_path=None)
+                            config_path=None,
+                            unresolved_extends=tuple(problems))
 
 
 def lookup(index: dict, endpoint: str):

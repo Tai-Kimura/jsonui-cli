@@ -2169,83 +2169,15 @@ class SpecValidator:
         `{venue_id}` and `:venueId` all compare equal."""
         return cls._COLON_PARAM_RE.sub("{}", cls._PATH_PARAM_RE.sub("{}", path))
 
-    def _candidate_api_directories(self) -> list[Path]:
-        """Delegated to `shared/core/openapi_canonical.py`.
+    # `_candidate_api_directories` / `_load_api_canonical_index` /
+    # `_index_api_directory` lived here until v1.7.8. They answered "where is
+    # the canon" without following `extends`, so they gave a different answer
+    # than the live path — and they had no callers left, which is the worst
+    # combination: a helper that looks like the right one to reach for, and is
+    # wrong. See `_canon_context`.
 
-        `jui build` resolves the same marks and must read the same documents;
-        two rules for where the canon lives is two answers to one question.
-        """
-        canon = shared_core.openapi_canonical()
-        if canon is None:
-            return []
-        try:
-            cwd = Path.cwd().resolve()
-        except OSError:
-            cwd = None
-        return canon.find_api_directories(self._spec_file_path,
-                                          extra_roots=(cwd,))
 
-    def _load_api_canonical_index(
-        self, result: SpecValidationResult
-    ) -> dict[str, dict[str, str]] | None:
-        """{normalized path: {METHOD: canonical path}} from the OpenAPI docs
-        under api_directory. None when there is nothing to check against."""
-        for api_dir in self._candidate_api_directories():
-            index = self._index_api_directory(api_dir, result)
-            if index:
-                return index
-        return None
 
-    def _index_api_directory(self, api_dir: Path, result: SpecValidationResult):
-        """`{(normalized path, METHOD): CanonicalOperation}` for one directory.
-
-        Indexing lives in `shared/core/openapi_canonical.py`, not here. `jui
-        build` resolves the same `@canonical` marks when it generates
-        repository stubs, and two readers of one canon would answer
-        differently the first time either grew a rule the other did not.
-        """
-        if not api_dir.is_dir():
-            return None
-
-        cached = self._api_index_cache.get(api_dir)
-        if cached is not None:
-            return cached or None
-
-        canon = shared_core.openapi_canonical()
-        if canon is None:
-            if not self._api_yaml_skip_reported:
-                self._api_yaml_skip_reported = True
-                result.warnings.append(SpecValidationMessage(
-                    path="dataFlow",
-                    message=("Endpoint check skipped: shared/core is not "
-                             "present in this tool tree"),
-                    level="warning",
-                ))
-            self._api_index_cache[api_dir] = {}
-            return None
-
-        documents, missing_yaml = canon.load_documents(api_dir)
-        if missing_yaml:
-            # Half an index is worse than none: every route that lives in the
-            # YAML documents would be reported as missing. Skip the whole
-            # check and say so once, rather than degrade quietly.
-            if not self._api_yaml_skip_reported:
-                self._api_yaml_skip_reported = True
-                result.warnings.append(SpecValidationMessage(
-                    path="dataFlow",
-                    message=(
-                        f"Endpoint check skipped: {missing_yaml} YAML "
-                        "OpenAPI document(s) under api_directory cannot be "
-                        "read without PyYAML installed"
-                    ),
-                    level="warning",
-                ))
-            self._api_index_cache[api_dir] = {}
-            return None
-
-        index = canon.index_documents(documents)
-        self._api_index_cache[api_dir] = index
-        return index or None
 
     def _collect_declared_endpoints(self, data_flow: dict) -> list[tuple[str, str]]:
         """(spec path, '<VERB> <path>') for everything dataFlow declares."""
@@ -2290,6 +2222,13 @@ class SpecValidator:
         if context is None:
             return
         self._report_yaml_shortfall(context, result)
+        for message in getattr(context, "unresolved_extends", ()):
+            # An error, not a warning: a pointer that names nothing produced
+            # byte-identical output to no pointer at all, so a typo was
+            # invisible except by A/B. Writing `extends` is a statement of
+            # intent; not writing it is not.
+            result.errors.append(SpecValidationMessage(
+                path="jui.config.json", message=message))
         index = context.index
         if not index:
             return

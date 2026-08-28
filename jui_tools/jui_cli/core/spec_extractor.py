@@ -518,6 +518,8 @@ def resolve_canonical_marks(spec_data: dict, spec_path) -> None:
     except OSError:
         cwd = None
     context = canon.build_spec_canon_context(spec_path, extra_roots=(cwd,))
+    if context.unresolved_extends:
+        raise CanonicalMarkError("; ".join(context.unresolved_extends))
     index, convention = context.index, context.convention
 
     # Before resolution — see the note in jsonui-doc's validator.
