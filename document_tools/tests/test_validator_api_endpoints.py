@@ -166,7 +166,14 @@ class ApiEndpointCanonicalTests(unittest.TestCase):
         result = self._validate(_spec(methods=[
             _method("fetchCrate", "GET /api/crates/{crate_id}"),
         ]))
-        self.assertEqual([], self._endpoint_warnings(result))
+        # Updated: this used to assert silence. Silence here compared nothing
+        # and looked exactly like a project whose routes all match — the
+        # warning count simply dropped to zero. What the test is really about
+        # is that no *route* finding comes from this path, which is what it
+        # asserts now.
+        warnings = self._endpoint_warnings(result)
+        self.assertTrue(all("were not checked" in w.message for w in warnings),
+                        [w.message for w in warnings])
 
     def test_non_openapi_json_under_api_directory_is_ignored(self):
         for doc in (self.root / "docs" / "api").iterdir():
@@ -177,13 +184,27 @@ class ApiEndpointCanonicalTests(unittest.TestCase):
         result = self._validate(_spec(methods=[
             _method("fetchItem", "GET /api/items/{item_id}"),
         ]))
-        self.assertEqual([], self._endpoint_warnings(result))
+        # Updated: this used to assert silence. Silence here compared nothing
+        # and looked exactly like a project whose routes all match — the
+        # warning count simply dropped to zero. What the test is really about
+        # is that no *route* finding comes from this path, which is what it
+        # asserts now.
+        warnings = self._endpoint_warnings(result)
+        self.assertTrue(all("were not checked" in w.message for w in warnings),
+                        [w.message for w in warnings])
 
     def test_spec_validated_without_a_path_has_nothing_to_compare(self):
         result = SpecValidator().validate_data(_spec(methods=[
             _method("fetchCrate", "GET /api/crates/{crate_id}"),
         ]))
-        self.assertEqual([], self._endpoint_warnings(result))
+        # Updated: this used to assert silence. Silence here compared nothing
+        # and looked exactly like a project whose routes all match — the
+        # warning count simply dropped to zero. What the test is really about
+        # is that no *route* finding comes from this path, which is what it
+        # asserts now.
+        warnings = self._endpoint_warnings(result)
+        self.assertTrue(all("were not checked" in w.message for w in warnings),
+                        [w.message for w in warnings])
 
     def test_canonical_index_is_cached_per_api_directory(self):
         validator = SpecValidator()

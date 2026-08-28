@@ -108,6 +108,7 @@ class SpecValidator:
         # specs of one project; the OpenAPI documents are read once.
         self._api_index_cache: dict[Path, dict[str, dict[str, str]]] = {}
         self._api_yaml_skip_reported: bool = False
+        self._api_no_canon_reported: bool = False
         self._custom_rules: CustomRules = custom_rules or CustomRules()
         self._build_effective_rules()
 
@@ -2239,6 +2240,35 @@ class SpecValidator:
                 path="jui.config.json", message=message))
         index = context.index
         if not index:
+            # Silence here compared nothing and looked exactly like a project
+            # whose routes all match: the warning count simply drops to zero.
+            # Measured — deleting the OpenAPI documents took a spec from one
+            # endpoint warning to none, with nothing said about why.
+            #
+            # This is the oldest check in the file and the only one with the
+            # hole; the marks added later already fail loudly when the canon
+            # cannot be found. The lesson reached the new checks and was never
+            # applied back to this one — the same shape a consumer lane found
+            # in its own three gates on the same day, the guard present in the
+            # two it built after learning it and absent from the one it
+            # already had.
+            # Once per validator, like the YAML shortfall above: a batch run
+            # over a project with no canon should say this once, not per file.
+            # And not at all when the shortfall already said why the index is
+            # empty — two sentences for one cause reads as two problems.
+            if (not self._api_no_canon_reported
+                    and not getattr(context, "missing_yaml", 0)):
+                self._api_no_canon_reported = True
+                result.warnings.append(SpecValidationMessage(
+                    path="dataFlow",
+                    message=(
+                        f"{len(declared)} endpoint declaration(s) were not "
+                        "checked: no OpenAPI document was found under "
+                        "api_directory. This is not 'every route matches' — "
+                        "nothing was compared."
+                    ),
+                    level="warning",
+                ))
             return
 
         for spec_path, endpoint in declared:

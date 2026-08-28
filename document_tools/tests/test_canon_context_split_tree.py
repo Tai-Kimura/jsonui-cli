@@ -440,3 +440,89 @@ class DiagnosticsCoverEveryConfigExaminedTests(unittest.TestCase):
         ctx = canon.build_spec_canon_context(self.spec)
         self.assertEqual(ctx.unresolved_extends, ())
         self.assertEqual(ctx.unknown_config_keys, ())
+
+
+class ComparedNothingIsNotAMatchTests(unittest.TestCase):
+    """An endpoint check that found no canon must not read like one that passed.
+
+    Deleting the OpenAPI documents took a spec from one endpoint warning to
+    none, and said nothing about why. Zero warnings is what a project whose
+    routes all match produces, so the two were the same output.
+
+    This is the oldest check in the validator and the only one that had the
+    hole: the marks added later already fail loudly when the canon cannot be
+    found. The lesson reached the new checks and was never applied back — the
+    same shape a consumer lane found in its own three gates on the same day,
+    the guard present in the two built after learning it and absent from the
+    one that already existed. They audited theirs after reading that two of
+    this tool's measurements had been empty; this is the return pass.
+    """
+
+    def setUp(self):
+        self._tmp = TemporaryDirectory()
+        self.root = Path(self._tmp.name)
+        (self.root / "docs" / "api").mkdir(parents=True)
+        (self.root / "docs" / "screens").mkdir(parents=True)
+        (self.root / "jui.config.json").write_text(
+            json.dumps({"api_directory": "docs/api"}), encoding="utf-8")
+        self.spec = self.root / "docs" / "screens" / "s.spec.json"
+        self.spec.write_text(json.dumps({
+            "type": "screen",
+            "metadata": {"name": "S", "description": "S.", "screen": "s"},
+            "dataFlow": {"repositories": [{"name": "R", "methods": [
+                {"name": "m", "endpoint": "GET /api/nowhere", "params": []}]}]},
+        }), encoding="utf-8")
+
+    def tearDown(self):
+        self._tmp.cleanup()
+
+    def canon(self, present: bool):
+        doc = self.root / "docs" / "api" / "s.json"
+        if present:
+            doc.write_text(json.dumps(
+                {"openapi": "3.0.3", "paths": {"/api/real": {"get": {
+                    "responses": {"200": {"description": "ok"}}}}}}),
+                encoding="utf-8")
+        elif doc.exists():
+            doc.unlink()
+
+    def warnings(self):
+        v = SpecValidator()
+        v._spec_file_path = self.spec
+        result = SpecValidationResult()
+        data = json.loads(self.spec.read_text())
+        v._validate_api_endpoint_canonical(data, result)
+        return [m.message for m in result.warnings]
+
+    def test_no_canon_says_so(self):
+        self.canon(False)
+        w = self.warnings()
+        self.assertEqual(len(w), 1)
+        self.assertIn("were not checked", w[0])
+        self.assertIn("nothing was compared", w[0])
+
+    def test_it_carries_how_many_were_skipped(self):
+        """A quantity beside the verdict. Had the corpus measurement behind
+        v1.7.12 printed the directories it scanned next to its count, the two
+        faces that yielded no files would have been visible in it."""
+        self.canon(False)
+        self.assertIn("1 endpoint declaration(s)", self.warnings()[0])
+
+    def test_a_canon_that_is_present_checks_instead(self):
+        """The boundary: with a canon, the drifted route is the finding, and
+        the did-not-check notice is absent."""
+        self.canon(True)
+        w = self.warnings()
+        self.assertEqual(len(w), 1)
+        self.assertIn("/api/nowhere", w[0])
+        self.assertNotIn("were not checked", w[0])
+
+    def test_a_spec_declaring_no_endpoints_stays_quiet(self):
+        """The false-positive boundary — nothing to check is not a shortfall."""
+        self.canon(False)
+        self.spec.write_text(json.dumps({
+            "type": "screen",
+            "metadata": {"name": "S", "description": "S.", "screen": "s"},
+            "dataFlow": {"viewModel": {"methods": [{"name": "onLoad"}]}},
+        }), encoding="utf-8")
+        self.assertEqual(self.warnings(), [])
