@@ -918,11 +918,13 @@ class WrappedCoversBodyFieldsTests(_Fixture):
         return [m.message for m in result.errors]
 
     def test_a_path_variable_in_wrapped_is_refused(self):
+        # The only location refused. See the query test below for why "not
+        # body" was the wrong line to draw.
         errs = self.check(
             [{"name": "payload", "type": "M"}],
             {"wrapped": {"payload": ["venue_id", "title", "note"]},
              "reason": "one object"})
-        self.assertTrue(any("not the request body" in e for e in errs), errs)
+        self.assertTrue(any("as a path variable" in e for e in errs), errs)
 
     def test_the_same_declaration_written_correctly_passes(self):
         """The id is a separate argument, so it is a rename, not a wrap."""
@@ -949,8 +951,35 @@ class WrappedCoversBodyFieldsTests(_Fixture):
              "reason": "the repository fills the id from context"}),
             [])
 
-    def test_a_query_parameter_in_wrapped_is_refused_too(self):
-        errs = self.check(
-            [{"name": "payload", "type": "M"}],
-            {"wrapped": {"payload": ["limit"]}, "reason": "r"})
-        self.assertTrue(errs)
+    def test_a_query_parameter_in_wrapped_is_accepted(self):
+        """A filter object holding an operation's query parameters is the same
+        shape as a request object holding its body fields — one argument
+        standing for several.
+
+        The first version of this rule refused everything outside the body and
+        broke a consumer's gate with 16 findings, all of them correct
+        declarations: list endpoints put their filters in the query, and a
+        screen holds those filters in one object exactly as it holds a form.
+        Moving them to `omitted` to go green would have declared, falsely,
+        that the values are not sent.
+        """
+        self.op()
+        doc = json.loads((self.root / "docs" / "api" / "swagger.json").read_text())
+        doc["paths"]["/api/venues/{venue_id}"]["put"]["parameters"].append(
+            {"name": "status", "in": "query", "schema": {"type": "string"}})
+        (self.root / "docs" / "api" / "swagger.json").write_text(
+            json.dumps(doc), encoding="utf-8")
+        data = _spec({"name": "updateVenue",
+                      "endpoint": "PUT /api/venues/{venue_id}",
+                      "params": [{"name": "venueId", "type": "String"},
+                                 {"name": "filter", "type": "F"}],
+                      "canonicalDivergence": {
+                          "renamed": {"venue_id": "venueId"},
+                          "wrapped": {"filter": ["status", "title", "note"]},
+                          "reason": "one filter object"}})
+        self.spec_path.write_text(json.dumps(data), encoding="utf-8")
+        v = SpecValidator()
+        v._spec_file_path = self.spec_path
+        result = SpecValidationResult()
+        v._resolve_canonical_marks(data, result)
+        self.assertEqual([m.message for m in result.errors], [])

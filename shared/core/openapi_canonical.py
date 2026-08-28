@@ -122,11 +122,12 @@ class CanonicalParam:
     name: str
     type: str
     required: bool = False
-    #: `path` / `query` / `body`. A `wrapped` holder stands in for the request
-    #: body, so naming a path variable in one is structurally wrong — the id is
-    #: passed separately and the wrapper never carries it. Measured across the
-    #: corpus: all 119 fields named by a `wrapped` clause are body fields, so
-    #: the rule costs nothing and catches the one error shape it describes.
+    #: `path` / `query` / `body`. Only `path` is refused inside a `wrapped`
+    #: clause: a path variable is interpolated into the URL, so no object
+    #: carries it. Query parameters are carried by filter objects routinely —
+    #: measured, 16 across one face — and the first version of this rule
+    #: refused them, on a corpus measurement whose glob had silently matched
+    #: nothing for half the faces.
     location: str = "body"
 
     def as_spec_param(self, convention: str | None = None) -> dict:
@@ -982,18 +983,30 @@ def _divergence_errors(path, renamed, canonical, declared,
             out.append((path, (
                 f"'omitted' names '{name}', which the operation does not "
                 "declare — there is nothing here to leave out.")))
+    # `path` only, not "not body". A filter object holding an operation's
+    # query parameters is the same shape as a request object holding its body
+    # fields — one argument standing for several — and refusing it would have
+    # meant declaring, falsely, that those values are not sent.
+    #
+    # The first version refused everything outside the body, on a measurement
+    # that reported the corpus and had in fact scanned two of its four faces:
+    # the glob for the other two matched nothing and said nothing. It broke a
+    # consumer's gate with 16 findings that were all correct declarations.
+    #
+    # A path variable is different in kind: it is interpolated into the URL,
+    # so no object carries it, and the id travels as its own argument.
     outside = {p.name: p.location for p in (locations or ())
-               if p.location != "body"}
+               if p.location == "path"}
     for holder, covered in wrapped.items():
         for name in covered:
             if name in outside:
                 out.append((path, (
                     f"'wrapped' says '{holder}' covers '{name}', which the "
-                    f"operation declares in the {outside[name]}, not the "
-                    "request body. A wrapper stands in for body fields; a "
-                    f"{outside[name]} parameter is passed separately, so this "
-                    "is usually a rename or an omission rather than something "
-                    "the wrapper carries.")))
+                    "operation declares as a path variable. A path variable "
+                    "is interpolated into the URL, so no object carries it — "
+                    "the id travels as its own argument, which makes this a "
+                    "rename or an omission rather than something the wrapper "
+                    "covers.")))
         if holder not in declared:
             out.append((path, (
                 f"'wrapped' says '{holder}' stands in for other arguments, "
