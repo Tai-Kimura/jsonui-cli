@@ -87,6 +87,13 @@ def cmd_validate(args):
         boundary=_project_root(getattr(args, "config", None)),
     )
 
+    # Same shape, same reason: resolved once from the config this run read,
+    # then pushed in, so no validator searches for it from a test file.
+    from .validation.step import PLATFORM_CONSTRAINT, set_project_platforms
+    declared_platforms = _project_platforms(getattr(args, "config", None))
+    set_project_platforms(declared_platforms)
+    platform_warnings = 0
+
     if not files_to_validate:
         print("No test or description files found")
         return 1
@@ -103,6 +110,9 @@ def cmd_validate(args):
             for error in result.errors:
                 print(error)
             total_errors += len(result.errors)
+
+        platform_warnings += sum(1 for w in result.warnings
+                                 if w.kind == PLATFORM_CONSTRAINT)
 
         if result.warnings and not args.quiet:
             for warning in result.warnings:
@@ -132,6 +142,21 @@ def cmd_validate(args):
         if orphans is None:
             unchecked_mocks = _warn_unchecked_mocks(
                 getattr(args, "config", None), files_to_validate)
+
+    # A project that builds for one platform can silence the other platforms'
+    # warnings by declaring `platforms`. Say so only when there is something to
+    # silence: a run with no such warnings has nothing to explain, and a note
+    # on every run would be the thing this whole gate exists to avoid — a
+    # constant line that a new one hides behind.
+    #
+    # Worded as "not found, so nothing was suppressed" rather than "not read":
+    # the failure this has to catch is a project that HAS the declaration and
+    # is being validated from somewhere the config is not.
+    if declared_platforms is None and platform_warnings and not args.quiet:
+        print(f"\n[WARN] {platform_warnings} platform-specific warning(s) "
+              f"above. No 'platforms' declaration was found in the config this "
+              f"run read, so none were suppressed — a project that targets one "
+              f"platform can declare it to silence the others.")
 
     # Summary
     print(f"\n{'='*50}")
@@ -827,6 +852,31 @@ def _read_config_doc(explicit_path=None):
             except (OSError, json.JSONDecodeError):
                 pass
     return {}, None
+
+
+def _project_platforms(explicit_path=None):
+    """Platforms the project targets, from the config this run loaded.
+
+    `None` when the config is absent or declares no `platforms`, which leaves
+    every platform warning exactly as it was before the key was consulted —
+    absence has to mean "warn", never "assume web".
+
+    Read from the config the run was pointed at (`--config`, else
+    `jui.config.json` beside the invocation) rather than searched for from a
+    test file. A tests-in-the-parent-repository layout puts the app's config
+    off the ancestor path of its own tests, so a walk-up finds a config that
+    declares no platforms and the declaration silently does nothing. That
+    shape has already produced two defects in this tool.
+    """
+    data, config_path = _read_config_doc(explicit_path)
+    if config_path is None:
+        return None
+    platforms = data.get("platforms")
+    if isinstance(platforms, dict):
+        platforms = list(platforms)
+    if not isinstance(platforms, list) or not platforms:
+        return None
+    return [p for p in platforms if isinstance(p, str)] or None
 
 
 def _load_mock_config(explicit_path=None):

@@ -76,8 +76,15 @@ def _fresh_mock_source():
     turns "out of bounds" back into "unbounded" for split trees.
     """
     from jsonui_test_cli.validation import mock as _mock_mod
+    from jsonui_test_cli.validation import step as _step_mod
     _mock_mod.set_mock_source()
     _mock_mod._MOCK_INDEX_CACHE.clear()
+    # The project's declared platforms are resolved once per run and held the
+    # same way, so they go stale the same way: a module that sets them would
+    # otherwise decide what later modules' warnings mean. Undeclared is the
+    # default a fresh process starts from.
+    _step_mod.set_project_platforms()
     yield
     _mock_mod.set_mock_source()
     _mock_mod._MOCK_INDEX_CACHE.clear()
+    _step_mod.set_project_platforms()

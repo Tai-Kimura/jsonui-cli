@@ -26,8 +26,38 @@ from ..schema import (
 ARG_PLACEHOLDER_PATTERN = re.compile(r'@\{([^}]+)\}')
 
 
+#: Platforms the project under validation targets, from the `platforms` key of
+#: the config this run actually loaded. `None` means undeclared, which must
+#: behave exactly as before this existed.
+#:
+#: Resolved once per run and pushed in, rather than searched for from each test
+#: file: the two layouts in the corpus include one whose tests live in a parent
+#: repository and whose config sits in the app directory, so walking up from a
+#: test file reaches a config that never declared any platforms. The same shape
+#: has now produced three defects (mockDir, canonical_param_case, and this
+#: would have been the third), and the settled rule is that the config the run
+#: read is the authority.
+_PROJECT_PLATFORMS: set | None = None
+
+PLATFORM_CONSTRAINT = "platform-constraint"
+
+
+def set_project_platforms(platforms=None):
+    """Declare the run's target platforms (`None` restores the default)."""
+    global _PROJECT_PLATFORMS
+    _PROJECT_PLATFORMS = set(platforms) if platforms else None
+
+
+def _step_platforms(step: dict) -> set | None:
+    """Platforms `when.platform` limits this step to, or `None` for all."""
+    declared = (step.get("when") or {}).get("platform")
+    if declared is None:
+        return None
+    return set(declared if isinstance(declared, list) else [declared])
+
+
 def _gated_off(step: dict, platforms) -> bool:
-    """Does `when.platform` put this step out of reach of every `platform`?
+    """Can no platform in `platforms` reach this step?
 
     Warnings about a driver's limits should be silent on steps that never
     reach that driver, and only those. Each caller passes the platforms its
@@ -36,14 +66,19 @@ def _gated_off(step: dict, platforms) -> bool:
     step escapes it but an Android-gated one does not, while the flat-bundle
     path rule is iOS alone.
 
-    An absent gate means "runs everywhere", so nothing is suppressed.
+    Two independent narrowings apply, and a platform must survive both to keep
+    a warning alive: the step's own gate, and the project's declared targets.
+    Either being absent means "no limit from that side", so a project that
+    declares nothing behaves exactly as it did before the declaration existed.
     """
-    declared = (step.get("when") or {}).get("platform")
-    if declared is None:
+    reach = _step_platforms(step)
+    for platform in platforms:
+        if reach is not None and platform not in reach:
+            continue
+        if _PROJECT_PLATFORMS is not None and platform not in _PROJECT_PLATFORMS:
+            continue
         return False
-    if not isinstance(declared, list):
-        declared = [declared]
-    return not any(p in declared for p in platforms)
+    return True
 
 
 def _mobile_reach_note(step: dict) -> str:
@@ -177,6 +212,36 @@ class StepValidator:
 
         if "when" in step:
             self.validate_condition(step["when"], f"{path}.when", result)
+            self._check_platform_is_reachable(step, path, result)
+
+    def _check_platform_is_reachable(self, step: dict, path: str,
+                                     result: ValidationResult):
+        """Warn when a step's gate and the project's targets do not overlap.
+
+        A step gated onto a platform the project does not build runs nowhere.
+        Staying quiet about it would be the same mistake the web-only warnings
+        used to make — reading a gate as evidence the author knew what they
+        were doing, and so saying nothing in the one case worth saying
+        something about. That the step is dead is precisely the fact its
+        author would want.
+
+        Lives here rather than beside each platform warning so that a step
+        carrying two of them (addMedia has both) reports it once.
+        """
+        if _PROJECT_PLATFORMS is None:
+            return
+        reach = _step_platforms(step)
+        if reach is None or (reach & _PROJECT_PLATFORMS):
+            return
+        gated = "/".join(sorted(reach))
+        targets = "/".join(sorted(_PROJECT_PLATFORMS))
+        result.warnings.append(ValidationMessage(
+            path=path,
+            message=f"this step is gated onto {gated}, which the project does "
+                    f"not target (it builds {targets}) — the step runs nowhere",
+            level="warning",
+            kind=PLATFORM_CONSTRAINT,
+        ))
 
     def validate_condition(self, condition, path: str, result: ValidationResult):
         """Validate a condition object (used by 'when' and 'repeat.while')."""
@@ -773,7 +838,8 @@ class StepValidator:
                         path=path,
                         message=f"addMedia path '{p}' has an unsupported type for "
                                 f"iOS/Android drivers (supported: png/jpg/jpeg/gif/mp4)",
-                        level="warning"
+                        level="warning",
+                        kind=PLATFORM_CONSTRAINT,
                     ))
 
         # The iOS bundle is flat: a subdirectory path silently falls back to
@@ -789,7 +855,8 @@ class StepValidator:
                         message=f"addMedia path '{p}' contains a directory; on iOS it "
                                 f"resolves by basename only — prefer basenames (or gate "
                                 f"the step with 'when': {{'platform': ...}})",
-                        level="warning"
+                        level="warning",
+                        kind=PLATFORM_CONSTRAINT,
                     ))
 
     def _validate_emit_hook_action(self, step: dict, path: str, result: ValidationResult):
@@ -817,7 +884,8 @@ class StepValidator:
                 path=path,
                 message="emitHook is web-only (no-op with a warning on iOS/Android); "
                         + _mobile_reach_note(step),
-                level="warning"
+                level="warning",
+                kind=PLATFORM_CONSTRAINT,
             ))
 
     def _validate_assertion(self, step: dict, path: str, result: ValidationResult):
@@ -870,7 +938,8 @@ class StepValidator:
                     path=path,
                     message="openedUrl is web-only (the mobile drivers reject it); "
                             + _mobile_reach_note(step),
-                    level="warning"
+                    level="warning",
+                    kind=PLATFORM_CONSTRAINT,
                 ))
 
         # For count assertion, equals must be a non-negative integer

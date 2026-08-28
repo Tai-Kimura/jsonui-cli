@@ -12,6 +12,12 @@ class ValidationMessage:
     path: str
     message: str
     level: str = "error"  # "error" or "warning"
+    #: Optional machine-readable tag, for callers that must act on a class of
+    #: message rather than display it. Set on the platform-constraint warnings
+    #: so the CLI can say "a project-level declaration would have silenced
+    #: these" without matching on wording — the message text is for humans and
+    #: is expected to change.
+    kind: str = ""
 
     def __str__(self):
         prefix = "ERROR" if self.level == "error" else "WARN"
