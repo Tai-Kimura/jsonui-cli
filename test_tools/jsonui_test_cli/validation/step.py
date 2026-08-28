@@ -26,6 +26,26 @@ from ..schema import (
 ARG_PLACEHOLDER_PATTERN = re.compile(r'@\{([^}]+)\}')
 
 
+def _gated_off(step: dict, platforms) -> bool:
+    """Does `when.platform` put this step out of reach of every `platform`?
+
+    Warnings about a driver's limits should be silent on steps that never
+    reach that driver, and only those. Each caller passes the platforms its
+    own warning is about, because the answer differs per constraint: the
+    addMedia extension matrix is shared by iOS and Android, so a web-gated
+    step escapes it but an Android-gated one does not, while the flat-bundle
+    path rule is iOS alone.
+
+    An absent gate means "runs everywhere", so nothing is suppressed.
+    """
+    declared = (step.get("when") or {}).get("platform")
+    if declared is None:
+        return False
+    if not isinstance(declared, list):
+        declared = [declared]
+    return not any(p in declared for p in platforms)
+
+
 class StepValidator:
     """Validates test steps (actions and assertions)."""
 
@@ -723,26 +743,27 @@ class StepValidator:
             return
 
         # Extension matrix shared by the Android and iOS drivers; anything
-        # else fails at runtime, so surface it at validate time.
+        # else fails at runtime, so surface it at validate time. Shared by
+        # both, so only a step gated off BOTH can skip it — a step that still
+        # runs on Android hits the same matrix.
         supported = {"png", "jpg", "jpeg", "gif", "mp4"}
-        for p in paths:
-            ext = p.rsplit(".", 1)[-1].lower() if "." in p else ""
-            if ext not in supported:
-                result.warnings.append(ValidationMessage(
-                    path=path,
-                    message=f"addMedia path '{p}' has an unsupported type for "
-                            f"iOS/Android drivers (supported: png/jpg/jpeg/gif/mp4)",
-                    level="warning"
-                ))
+        if not _gated_off(step, ("ios", "android")):
+            for p in paths:
+                ext = p.rsplit(".", 1)[-1].lower() if "." in p else ""
+                if ext not in supported:
+                    result.warnings.append(ValidationMessage(
+                        path=path,
+                        message=f"addMedia path '{p}' has an unsupported type for "
+                                f"iOS/Android drivers (supported: png/jpg/jpeg/gif/mp4)",
+                        level="warning"
+                    ))
 
         # The iOS bundle is flat: a subdirectory path silently falls back to
         # its basename there. Nudge toward basenames unless the step is
-        # explicitly gated off iOS.
-        when_platform = (step.get("when") or {}).get("platform")
-        gated_off_ios = when_platform is not None and "ios" not in (
-            when_platform if isinstance(when_platform, list) else [when_platform]
-        )
-        if not gated_off_ios:
+        # explicitly gated off iOS. Narrower than the matrix above on purpose:
+        # this one is an iOS packaging property, so Android does not keep it
+        # alive.
+        if not _gated_off(step, ("ios",)):
             for p in paths:
                 if "/" in p and not p.startswith("/"):
                     result.warnings.append(ValidationMessage(
