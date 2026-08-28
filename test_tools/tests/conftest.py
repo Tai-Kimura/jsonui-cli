@@ -1,21 +1,31 @@
 """Pytest configuration for the jsonui-test CLI test suite.
 
-`test_cli.py` and `test_generator.py` were written against a previous CLI shape
-(a monolithic `cmd_generate` and a `jsonui_test_cli.generator` module) that no
-longer exists — generation was split into `generate test screen|flow` /
-`generate description` and doc-generation moved out to `jsonui-doc`. They fail at
-import/collection and block the whole suite. Ignore them at collection so the
-still-valid suites (validation, report, mock) run. Remove or rewrite these two
-files to the current API when generation gets test coverage again.
+This file used to ignore `test_cli.py` and `test_generator.py` at collection,
+on the stated grounds that they were written against a CLI shape that "no
+longer exists". Measured, that premise was wrong in the way that matters: the
+subjects had not been deleted, they had *moved* to `jsonui-doc`
+(`DocumentGenerator` and `generate_schema_reference` live in
+`jsonui_doc_cli/test_doc/generator.py`; `generate -f/-o/--schema` and
+`generate html` are `jsonui-doc generate doc|html`). All 45 tests were
+recoverable, and 44 of the 45 failures came from two mechanical causes — one
+unused import, and inline flow steps needing the `screen` the schema now
+requires. `test_cli.py` keeps the 14 that test what `jsonui-test` still owns;
+the other 31 moved to `document_tools/tests/test_test_doc_{cli,generator}.py`.
 
-It also pins the suite to THIS checkout. `pip install -e` registers an editable
+Worth keeping in mind next time: an ignore entry written as a temporary
+measure reads, a few months later, as a statement that the coverage is gone.
+Nothing re-checks it, because the suite is green precisely because it is not
+looking. `collect_ignore` and a green run are indistinguishable from having no
+such tests at all.
+
+This file also pins the suite to THIS checkout. `pip install -e` registers an editable
 finder for `jsonui_test_cli` pointing at the distributed copy under the
 user-level install directory — right for the `jsonui-test` entry point, wrong
 here. Two separate accidents currently keep it right: `tests/__init__.py` makes
-pytest insert `test_tools/` rather than `test_tools/tests/`, and 14 of the 18
+pytest insert `test_tools/` rather than `test_tools/tests/`, and 16 of the 24
 test modules pin the path themselves. Either alone suffices, which is why
 removing one and re-measuring shows no change and proves nothing. Neither is a
-stated property, and four modules — including the one that checks the bundled
+stated property, and eight modules — including the one that checks the bundled
 schema — rely entirely on the other files.
 
 The failure mode is why it is worth stating: the installed copy passes, because
@@ -31,11 +41,6 @@ from __future__ import annotations
 
 import sys
 from pathlib import Path
-
-collect_ignore = [
-    "test_cli.py",
-    "test_generator.py",
-]
 
 _SOURCE_ROOT = Path(__file__).resolve().parents[1]
 

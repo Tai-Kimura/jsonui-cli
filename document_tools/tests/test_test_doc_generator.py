@@ -1,4 +1,11 @@
-"""Tests for the generator module."""
+"""Tests for the test-document generator.
+
+Moved here from `test_tools/tests/test_generator.py`: `DocumentGenerator`
+and `generate_schema_reference` moved to `jsonui-doc` when doc generation
+left `jsonui-test`. The tests went stale rather than obsolete — the only
+other change needed was giving flow inline steps the `screen` the schema
+now requires.
+"""
 
 import pytest
 import sys
@@ -7,7 +14,7 @@ from pathlib import Path
 # Add package to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from jsonui_test_cli.generator import DocumentGenerator, generate_schema_reference
+from jsonui_doc_cli.test_doc.generator import DocumentGenerator, generate_schema_reference
 
 
 class TestDocumentGenerator:
@@ -242,9 +249,9 @@ class TestFlowTestHtmlGeneration:
             },
             "platform": "ios",
             "steps": [
-                {"action": "waitFor", "id": "login_screen", "timeout": 5000},
-                {"action": "tap", "id": "login_button"},
-                {"assert": "visible", "id": "home_screen"}
+                {"screen": "probe", "action": "waitFor", "id": "login_screen", "timeout": 5000},
+                {"screen": "probe", "action": "tap", "id": "login_button"},
+                {"screen": "probe", "assert": "visible", "id": "home_screen"}
             ]
         }
 
@@ -276,7 +283,7 @@ class TestFlowTestHtmlGeneration:
             "metadata": {"name": "file_ref_flow"},
             "steps": [
                 {"file": "screens/login", "case": "valid_login"},
-                {"action": "waitFor", "id": "home_screen", "timeout": 5000},
+                {"screen": "probe", "action": "waitFor", "id": "home_screen", "timeout": 5000},
                 {"file": "screens/home", "cases": ["verify_display", "navigate"]}
             ]
         }
@@ -304,14 +311,16 @@ class TestFlowTestHtmlGeneration:
         test_data = {
             "type": "flow",
             "metadata": {"name": "setup_teardown_flow"},
+            # setup/teardown are validated with is_flow=True too, so their
+            # steps need `screen` exactly as the main steps do.
             "setup": [
-                {"action": "waitFor", "id": "launch_screen", "timeout": 5000}
+                {"screen": "probe", "action": "waitFor", "id": "launch_screen", "timeout": 5000}
             ],
             "steps": [
-                {"action": "tap", "id": "start_button"}
+                {"screen": "probe", "action": "tap", "id": "start_button"}
             ],
             "teardown": [
-                {"action": "screenshot", "name": "final_state"}
+                {"screen": "probe", "action": "screenshot", "name": "final_state"}
             ]
         }
 
@@ -338,8 +347,8 @@ class TestFlowTestHtmlGeneration:
             "type": "flow",
             "metadata": {"name": "checkpoint_flow"},
             "steps": [
-                {"action": "tap", "id": "login_button"},
-                {"action": "waitFor", "id": "home_screen", "timeout": 5000}
+                {"screen": "probe", "action": "tap", "id": "login_button"},
+                {"screen": "probe", "action": "waitFor", "id": "home_screen", "timeout": 5000}
             ],
             "checkpoints": [
                 {"name": "After Login", "afterStep": 1, "screenshot": True},
@@ -373,8 +382,8 @@ class TestFlowTestHtmlGeneration:
             "metadata": {"name": "sidebar_test"},
             "steps": [
                 {"file": "screens/login", "case": "valid_login"},
-                {"action": "waitFor", "id": "home"},
-                {"assert": "visible", "id": "title"}
+                {"screen": "probe", "action": "waitFor", "id": "home"},
+                {"screen": "probe", "assert": "visible", "id": "title"}
             ],
             "checkpoints": [
                 {"name": "login_done", "afterStep": 1}
@@ -496,7 +505,7 @@ class TestArgsHtmlGeneration:
                         "env": "staging"
                     }
                 },
-                {"action": "waitFor", "id": "home_screen", "timeout": 5000}
+                {"screen": "probe", "action": "waitFor", "id": "home_screen", "timeout": 5000}
             ]
         }
 
@@ -527,7 +536,7 @@ class TestArgsHtmlGeneration:
             "metadata": {"name": "simple_flow"},
             "steps": [
                 {"file": "login", "case": "display"},
-                {"action": "tap", "id": "button"}
+                {"screen": "probe", "action": "tap", "id": "button"}
             ]
         }
 
@@ -602,7 +611,7 @@ class TestHtmlDirectoryGeneration:
 
     def test_generate_html_directory_basic(self):
         """Test basic HTML directory generation."""
-        from jsonui_test_cli.generator import generate_html_directory
+        from jsonui_doc_cli.test_doc.generator import generate_html_directory
         import tempfile
         import json
 
@@ -638,7 +647,7 @@ class TestHtmlDirectoryGeneration:
 
     def test_generate_html_directory_with_flow_tests(self):
         """Test HTML directory generation with flow tests."""
-        from jsonui_test_cli.generator import generate_html_directory
+        from jsonui_doc_cli.test_doc.generator import generate_html_directory
         import tempfile
         import json
 
@@ -659,7 +668,7 @@ class TestHtmlDirectoryGeneration:
             flow_test = {
                 "type": "flow",
                 "metadata": {"name": "login_flow", "description": "Login flow"},
-                "steps": [{"action": "tap", "id": "btn"}]
+                "steps": [{"screen": "probe", "action": "tap", "id": "btn"}]
             }
             with open(input_dir / "login_flow.test.json", 'w') as f:
                 json.dump(flow_test, f)
@@ -681,7 +690,7 @@ class TestHtmlDirectoryGeneration:
 
     def test_generate_html_directory_collapsible_categories(self):
         """Test HTML directory has collapsible categories."""
-        from jsonui_test_cli.generator import generate_html_directory
+        from jsonui_doc_cli.test_doc.generator import generate_html_directory
         import tempfile
         import json
 
@@ -709,7 +718,7 @@ class TestHtmlDirectoryGeneration:
 
     def test_generate_html_directory_sidebar(self):
         """Test HTML directory index has sidebar navigation."""
-        from jsonui_test_cli.generator import generate_html_directory
+        from jsonui_doc_cli.test_doc.generator import generate_html_directory
         import tempfile
         import json
 
@@ -736,7 +745,7 @@ class TestHtmlDirectoryGeneration:
 
     def test_generate_html_directory_summary_stats(self):
         """Test HTML directory index has summary statistics."""
-        from jsonui_test_cli.generator import generate_html_directory
+        from jsonui_doc_cli.test_doc.generator import generate_html_directory
         import tempfile
         import json
 
