@@ -508,14 +508,17 @@ def resolve_canonical_marks(spec_data: dict, spec_path) -> None:
             or list(canon.iter_divergence_declarations(spec_data))):
         return
 
-    index: dict = {}
-    for api_dir in canon.find_api_directories(spec_path):
-        documents, _missing = canon.load_documents(api_dir)
-        found = canon.index_documents(documents)
-        if found:
-            index = found
-            break
-    convention = canon.param_case_for(spec_path)
+    # One context, so the documents and the naming convention come from the
+    # same config. The working directory is offered first because it is what
+    # `jui` itself resolves its config from — in a split tree (specs in one
+    # tree, app and config in another) walking up from the spec never reaches
+    # the config that declares the convention.
+    try:
+        cwd = Path.cwd().resolve()
+    except OSError:
+        cwd = None
+    context = canon.build_spec_canon_context(spec_path, extra_roots=(cwd,))
+    index, convention = context.index, context.convention
 
     # Before resolution — see the note in jsonui-doc's validator.
     errors = canon.check_divergences(spec_data, index, convention)

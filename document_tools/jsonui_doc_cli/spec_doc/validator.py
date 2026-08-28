@@ -2283,11 +2283,15 @@ class SpecValidator:
         declared = self._collect_declared_endpoints(data_flow)
         if not declared:
             return
-        index = self._load_api_canonical_index(result)
-        if not index:
-            return
         canon = shared_core.openapi_canonical()
         if canon is None:
+            return
+        context = self._canon_context()
+        if context is None:
+            return
+        self._report_yaml_shortfall(context, result)
+        index = context.index
+        if not index:
             return
 
         for spec_path, endpoint in declared:
@@ -2380,8 +2384,8 @@ class SpecValidator:
                 or list(canon.iter_misplaced_marks(data))
                 or list(canon.iter_divergence_declarations(data))):
             return
-        index = self._load_api_canonical_index(result) or {}
-        convention = self._case_convention()
+        context = self._canon_context()
+        index, convention = context.index, context.convention
         # Before resolution, not after: `resolve_spec_marks` rewrites `params`
         # in place, so a method that carried a mark stops looking like one and
         # the "a mark has no divergence to declare" check silently never fires.
@@ -2395,8 +2399,37 @@ class SpecValidator:
             result.warnings.append(SpecValidationMessage(
                 path=path, message=message, level="warning"))
 
-    def _case_convention(self):
-        """`spec.canonical_param_case`, resolved by the shared reader."""
+    def _report_yaml_shortfall(self, context, result):
+        """Say once that the check was skipped, rather than degrade quietly.
+
+        Half an index would report every route living in the YAML documents as
+        missing — a wrong answer that looks like a finding.
+        """
+        if not getattr(context, "missing_yaml", 0):
+            return
+        if self._api_yaml_skip_reported:
+            return
+        self._api_yaml_skip_reported = True
+        result.warnings.append(SpecValidationMessage(
+            path="dataFlow",
+            message=(
+                f"Endpoint check skipped: {context.missing_yaml} YAML "
+                "OpenAPI document(s) under api_directory cannot be "
+                "read without PyYAML installed"
+            ),
+            level="warning",
+        ))
+
+    def _canon_context(self):
+        """The API canon and the naming convention, from ONE config.
+
+        Resolved together. They used to be separate calls and a split tree
+        pulled them apart — the documents came from the repository-root config
+        while the convention was searched for by walking up from the spec,
+        which in that layout never reaches the app config. The run then
+        expanded marks in `camelCase` and compared divergences against the
+        document's raw spelling, in the same run.
+        """
         canon = shared_core.openapi_canonical()
         if canon is None:
             return None
@@ -2404,7 +2437,18 @@ class SpecValidator:
             cwd = Path.cwd().resolve()
         except OSError:
             cwd = None
-        return canon.param_case_for(self._spec_file_path, extra_roots=(cwd,))
+        spec_dir = (self._spec_file_path.parent.resolve()
+                    if self._spec_file_path else None)
+        key = (spec_dir, cwd)
+        if key in self._api_index_cache:
+            return self._api_index_cache[key]
+        # Cached per validator: a batch run validates every spec in a
+        # directory and would otherwise re-read and re-index the whole canon
+        # once per file.
+        context = canon.build_spec_canon_context(self._spec_file_path,
+                                                 extra_roots=(cwd,))
+        self._api_index_cache[key] = context
+        return context
 
     def _validate_related_files(self, files: list, result: SpecValidationResult):
         """Validate relatedFiles section."""

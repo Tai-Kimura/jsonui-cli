@@ -411,6 +411,101 @@ def param_case_for(start, *, extra_roots=()):
     return None
 
 
+@dataclass(frozen=True)
+class SpecCanonContext:
+    """The canon and the naming convention, from ONE config.
+
+    They used to be resolved separately, and a split tree pulled them apart:
+    the API documents came from the repository-root config while the naming
+    convention was looked for by walking up from the spec, which in that
+    layout never reaches the app's config at all. Measured — expansion spelled
+    parameters `camelCase` and the divergence check compared against the
+    document's raw spelling **in the same run**, so a project that set the
+    convention could not write a `canonicalDivergence` in either spelling.
+
+    The same shape as the mockDir defect three days earlier: a declared config
+    losing to a path walk. That one was fixed by making the declaration
+    outrank the search; this reintroduced the search as the only path for a
+    new setting. So the config that answers is the config the run loaded, and
+    it answers both questions or neither.
+    """
+
+    index: dict
+    convention: str | None = None
+    config_path: object = None
+    #: YAML documents that could not be read for want of PyYAML. Half an index
+    #: is worse than none — every route living in those documents would be
+    #: reported as missing — so the shortfall is carried to the caller rather
+    #: than absorbed into a smaller index.
+    missing_yaml: int = 0
+
+
+def build_spec_canon_context(spec_path, *, config_path=None, extra_roots=()):
+    """Resolve the canon and the convention together, preferring the run's config.
+
+    Candidate order is explicit config, then the caller's roots (its working
+    directory — the one `jui` itself resolves from), then the spec's ancestors.
+    The first candidate holding OpenAPI documents answers both questions, so
+    the two cannot come from different files.
+    """
+    candidates: list = []
+    seen: set = set()
+
+    def add(path):
+        if path is None:
+            return
+        path = Path(path)
+        if path.is_file():
+            path = path.parent
+        path = path.resolve()
+        if path not in seen:
+            seen.add(path)
+            candidates.append(path)
+
+    add(config_path)
+    for root in extra_roots:
+        add(root)
+        if root is not None:
+            for parent in list(Path(root).resolve().parents)[:8]:
+                add(parent)
+    if spec_path is not None:
+        for parent in list(Path(spec_path).resolve().parents)[:8]:
+            add(parent)
+
+    fallback_convention = None
+    for root in candidates:
+        cfg = root / "jui.config.json"
+        if not cfg.is_file():
+            continue
+        try:
+            with open(cfg, "r", encoding="utf-8") as f:
+                config = json.load(f)
+        except (OSError, json.JSONDecodeError):
+            continue
+        if not isinstance(config, dict):
+            continue
+        spec_cfg = config.get("spec")
+        declared = (spec_cfg or {}).get("canonical_param_case") \
+            if isinstance(spec_cfg, dict) else None
+        if declared and fallback_convention is None:
+            fallback_convention = declared
+
+        api_dir = (root / config.get("api_directory", "docs/api")).resolve()
+        documents, missing = load_documents(api_dir)
+        if missing:
+            return SpecCanonContext(index={}, convention=declared,
+                                    config_path=cfg, missing_yaml=missing)
+        index = index_documents(documents)
+        if index:
+            # This config answers both. Not "this config for the routes and
+            # whichever other one happened to declare a convention".
+            return SpecCanonContext(index=index, convention=declared,
+                                    config_path=cfg)
+
+    return SpecCanonContext(index={}, convention=fallback_convention,
+                            config_path=None)
+
+
 def lookup(index: dict, endpoint: str):
     """`(operation, reason)` — reason is set only when there is no operation.
 
