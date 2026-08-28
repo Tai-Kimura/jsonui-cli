@@ -782,3 +782,100 @@ def _divergence_errors(path, renamed, canonical, declared):
             "A declaration subtracts from the comparison, it does not exempt "
             "the method from it.")))
     return out
+
+
+# --------------------------------------------------------------------------- #
+# cross-spec agreement
+# --------------------------------------------------------------------------- #
+
+def iter_declared_methods(spec_data):
+    """`(section, owner, method)` for every dataFlow method with an owner."""
+    data_flow = (spec_data or {}).get("dataFlow")
+    if not isinstance(data_flow, dict):
+        return
+    for section in MARKABLE_SECTIONS:
+        items = data_flow.get(section)
+        if not isinstance(items, list):
+            continue
+        for item in items:
+            if not isinstance(item, dict) or not item.get("name"):
+                continue
+            for method in item.get("methods") or []:
+                if isinstance(method, dict) and method.get("name"):
+                    yield section, item["name"], method
+
+
+def _signature(method) -> tuple:
+    params = method.get("params")
+    if isinstance(params, str):
+        shape = ("raw", params)
+    elif isinstance(params, list):
+        shape = tuple(
+            p if isinstance(p, str)
+            else (p.get("name"), p.get("type"))
+            for p in params
+        )
+    else:
+        shape = ()
+    return (shape, method.get("returnType") or "", method.get("endpoint") or "")
+
+
+def cross_spec_disagreements(specs):
+    """`[(owner.method, [(source, description), ...])]` for split declarations.
+
+    `specs` is `(source_label, spec_data)` pairs.
+
+    One repository method declared by several screens is normal — a shared
+    component is used by several screens, and the rule is that every screen
+    using it declares what it calls, so the method's usage can be read off the
+    specs. What is not normal is those declarations disagreeing: the method has
+    one implementation, so at most one of them describes it.
+
+    Both consumer lanes that looked found defects of exactly this shape by
+    hand — a method declared by four specs with one of them missing its
+    arguments, and four more where one of a pair had lost a parameter. Neither
+    is visible from one spec, which is why no per-file check could ever have
+    caught them.
+
+    Compared, deliberately, before `@canonical` expands: two specs that both
+    write `"@canonical"` agree by construction, and a spec that writes the
+    expansion out by hand while its sibling references it is a difference in
+    how they are maintained, not in what they say. Reporting that would make
+    the check fire on the mixed state every project passes through while
+    converting.
+    """
+    seen: dict = {}
+    for source, spec in specs:
+        for _section, owner, method in iter_declared_methods(spec or {}):
+            platforms = method.get("platforms") or []
+            if not isinstance(platforms, list):
+                platforms = []
+            # A method scoped to one platform is not in disagreement with the
+            # same name scoped to another: `UIImage` against `Bitmap`, `Void`
+            # against `Unit`, `inout` against plain. Measured on the corpus —
+            # ignoring `platforms` produced four findings and all four were
+            # this, which would have been the whole of the check's output on
+            # the face that had no real disagreement left.
+            key = (f"{owner}.{method['name']}",
+                   tuple(sorted(str(p) for p in platforms)))
+            seen.setdefault(key, []).append((source, _signature(method)))
+
+    out = []
+    for (name, platforms), entries in sorted(seen.items()):
+        shapes = {sig for _src, sig in entries}
+        if len(shapes) < 2:
+            continue
+        label = f"{name} [{'/'.join(platforms)}]" if platforms else name
+        out.append((label, [(src, _describe(sig)) for src, sig in entries]))
+    return out
+
+
+def _describe(sig) -> str:
+    shape, return_type, endpoint = sig
+    if shape and shape[0] == "raw":
+        params = shape[1]
+    else:
+        params = ", ".join(
+            p if isinstance(p, str) else f"{p[0]}: {p[1]}" for p in shape)
+    head = f"({params}) -> {return_type or '?'}"
+    return f"{head}   [{endpoint}]" if endpoint else head

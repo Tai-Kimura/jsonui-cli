@@ -428,16 +428,54 @@ def cmd_validate_spec_batch(input_dir: Path):
             for warning in result.warnings:
                 print(warning)
 
+    # Only reachable in batch mode, and only worth reaching there: one
+    # repository method declared by several screens is how a shared component
+    # records where it is used, and a disagreement between those declarations
+    # is invisible from any single file. Both consumer lanes that looked found
+    # real defects of this shape by hand.
+    cross = _cross_spec_disagreements(spec_files)
+    if cross:
+        print()
+        for key, entries in cross:
+            print(f"[ERROR] {key} is declared differently by "
+                  f"{len(entries)} spec(s) — one implementation cannot match "
+                  f"more than one of them:")
+            for source, description in entries:
+                print(f"    {source}: {description}")
+        total_errors += len(cross)
+
     print()
-    if failed:
-        print(f"Result: FAILED ({len(failed)} of {len(spec_files)} spec file(s))")
+    if failed or cross:
+        print(f"Result: FAILED ({len(failed)} of {len(spec_files)} spec file(s)"
+              + (f", {len(cross)} cross-spec disagreement(s)" if cross else "")
+              + ")")
         for spec_file in failed:
             print(f"  - {spec_file}")
     else:
         print(f"Result: PASSED ({len(spec_files)} spec file(s))")
     print(f"Errors: {total_errors}, Warnings: {total_warnings}")
 
-    return 1 if failed else 0
+    return 1 if (failed or cross) else 0
+
+
+def _cross_spec_disagreements(spec_files):
+    """Same declaration, different content, across files. `[]` when unknowable.
+
+    Silent rather than approximate when `shared/core` is not in the tool tree:
+    a partial answer here reads exactly like agreement.
+    """
+    from . import shared_core
+    canon = shared_core.openapi_canonical()
+    if canon is None:
+        return []
+    specs = []
+    for path in spec_files:
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                specs.append((path.name, json.load(f)))
+        except (OSError, json.JSONDecodeError):
+            continue
+    return canon.cross_spec_disagreements(specs)
 
 
 def cmd_generate_spec(args):

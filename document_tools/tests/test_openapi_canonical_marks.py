@@ -673,3 +673,98 @@ class DeclaredDivergenceTests(_Fixture):
                            "endpoint": "GET /api/venues/{venue_id}",
                            "params": "@canonical"})
         self.assertEqual(errs, [])
+
+
+class CrossSpecAgreementTests(unittest.TestCase):
+    """One repository method, several screens, one implementation.
+
+    A method declared by several specs is normal and required: a shared
+    component is used by several screens, and every screen using it declares
+    what it calls so the usage can be read off the specs. What is not normal
+    is those declarations disagreeing — the method has one implementation, so
+    at most one of them describes it.
+
+    Invisible from any single file, which is why no per-file check could have
+    caught it. Both consumer lanes that looked found real defects of exactly
+    this shape by hand: a method declared by four specs with one missing its
+    arguments, and four more where one of a pair had lost a parameter.
+    """
+
+    def check(self, *specs):
+        canon = shared_core.openapi_canonical()
+        return canon.cross_spec_disagreements(
+            [(f"s{i}.spec.json", s) for i, s in enumerate(specs)])
+
+    def spec(self, method, owner="UserRepository", section="repositories"):
+        return {"dataFlow": {section: [{"name": owner, "methods": [method]}]}}
+
+    def test_the_same_method_declared_two_ways_is_reported(self):
+        got = self.check(
+            self.spec({"name": "getBookmarks",
+                       "params": [{"name": "limit", "type": "Int?"}]}),
+            self.spec({"name": "getBookmarks", "params": []}))
+        self.assertEqual(len(got), 1)
+        self.assertEqual(got[0][0], "UserRepository.getBookmarks")
+        self.assertEqual(len(got[0][1]), 2)
+
+    def test_identical_declarations_are_silent(self):
+        """The common case — a shared component used by several screens."""
+        m = {"name": "logout", "params": [], "returnType": "Void"}
+        self.assertEqual(self.check(self.spec(m), self.spec(m), self.spec(m)),
+                         [])
+
+    def test_platform_scoped_variants_are_not_a_disagreement(self):
+        """Measured: ignoring `platforms` produced four findings on the corpus
+        and all four were this — `UIImage` against `Bitmap`, `Void` against
+        `Unit`. It would have been the entire output of the check."""
+        got = self.check(self.spec(
+            {"name": "encode", "platforms": ["ios"],
+             "params": [{"name": "data", "type": "Data"}]}),
+            self.spec({"name": "encode", "platforms": ["android"],
+                       "params": [{"name": "data", "type": "ByteArray"}]}))
+        self.assertEqual(got, [])
+
+    def test_two_declarations_on_the_same_platform_still_disagree(self):
+        """Scoping must not become an exemption."""
+        got = self.check(self.spec(
+            {"name": "encode", "platforms": ["ios"],
+             "params": [{"name": "data", "type": "Data"}]}),
+            self.spec({"name": "encode", "platforms": ["ios"],
+                       "params": [{"name": "bytes", "type": "Data"}]}))
+        self.assertEqual(len(got), 1)
+        self.assertIn("[ios]", got[0][0])
+
+    def test_a_different_return_type_is_a_disagreement(self):
+        got = self.check(
+            self.spec({"name": "get", "params": [], "returnType": "A"}),
+            self.spec({"name": "get", "params": [], "returnType": "B"}))
+        self.assertEqual(len(got), 1)
+
+    def test_different_owners_are_different_methods(self):
+        """The false-positive boundary — name collisions across repositories."""
+        got = self.check(
+            self.spec({"name": "fetch", "params": []}, owner="A"),
+            self.spec({"name": "fetch",
+                       "params": [{"name": "x", "type": "Int"}]}, owner="B"))
+        self.assertEqual(got, [])
+
+    def test_a_mark_and_its_expansion_are_not_compared(self):
+        """Deliberate: comparing after expansion would fire on the mixed state
+        every project passes through while converting. Two specs that both
+        write the mark agree by construction."""
+        got = self.check(
+            self.spec({"name": "get", "params": "@canonical"}),
+            self.spec({"name": "get", "params": "@canonical"}))
+        self.assertEqual(got, [])
+
+    def test_use_cases_are_compared_too(self):
+        got = self.check(
+            self.spec({"name": "run", "params": []},
+                      owner="LoginUseCase", section="useCases"),
+            self.spec({"name": "run", "params": [{"name": "a", "type": "Int"}]},
+                      owner="LoginUseCase", section="useCases"))
+        self.assertEqual(len(got), 1)
+
+    def test_a_single_spec_declaring_it_once_is_silent(self):
+        self.assertEqual(self.check(self.spec({"name": "get", "params": []})),
+                         [])
