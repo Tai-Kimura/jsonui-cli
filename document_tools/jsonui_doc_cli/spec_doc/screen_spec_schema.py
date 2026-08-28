@@ -703,18 +703,39 @@ SCREEN_SPEC_SCHEMA = {
                     "oneOf": [
                         {
                             "type": "string",
-                            "description": "Method parameters (legacy free-text format)"
+                            "description": (
+                                "'@canonical' to take the parameters from the "
+                                "operation this method's 'endpoint' names, or "
+                                "legacy free-text"
+                            )
                         },
                         {
                             "type": "array",
-                            "items": {"$ref": "#/$defs/methodParam"},
-                            "description": "Structured method parameters"
+                            "items": {
+                                "oneOf": [
+                                    {"const": "@canonical"},
+                                    {"$ref": "#/$defs/methodParam"}
+                                ]
+                            },
+                            "description": (
+                                "Structured method parameters. '@canonical' may "
+                                "appear as an entry, expanding in place to the "
+                                "operation's parameters; hand-written entries "
+                                "beside it win on name collision, which is how "
+                                "a client-side argument the API never declares "
+                                "is added"
+                            )
                         }
                     ]
                 },
                 "returnType": {
                     "type": "string",
-                    "description": "Return type"
+                    "description": (
+                        "Return type, or '@canonical.wire' for the schema the "
+                        "operation's success response names. Not '@canonical': "
+                        "a spec's return type is the domain type and the "
+                        "canon's is the wire type, and they legitimately differ"
+                    )
                 },
                 "isAsync": {
                     "type": "boolean",

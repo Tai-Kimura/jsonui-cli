@@ -881,7 +881,7 @@ def _load_all_specs(config_mgr: ConfigManager) -> list[tuple[Path, ScreenSpec]]:
                 for c in merge_result.conflicts:
                     print(f"  {c.path}: {c.message}")
             spec_data = merge_result.spec
-        results.append((sf, extract_screen_spec(spec_data)))
+        results.append((sf, extract_screen_spec(spec_data, sf)))
     return results
 
 

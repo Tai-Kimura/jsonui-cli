@@ -11,6 +11,7 @@ from typing import Any
 from .screen_spec_schema import SCREEN_SPEC_SCHEMA
 from .component_spec_schema import COMPONENT_SPEC_SCHEMA
 from .rules_config import CustomRules, load_rules_for_path
+from .. import shared_core
 
 
 def _has_external_layout_ref(node: dict) -> bool:
@@ -264,6 +265,9 @@ class SpecValidator:
 
         # Validate dataFlow
         if "dataFlow" in data and data["dataFlow"]:
+            # First: every check below, and the HTML the doc site renders,
+            # must see what `jui build` will generate from — not the mark.
+            self._resolve_canonical_marks(data, result)
             self._validate_data_flow(data["dataFlow"], result)
             # Declared routes against the project's OpenAPI canonical
             # (skipped when the project has no readable API documents).
@@ -2143,7 +2147,7 @@ class SpecValidator:
     # A screen spec names the transport it talks to; the OpenAPI documents
     # under api_directory are the canonical spelling of those routes. Nothing
     # compared the two until now, so a path that drifted (renamed resource,
-    # `{barUuid}` where the API says `{bar_uuid}`) stayed invisible until
+    # `{venueId}` where the API says `{venue_id}`) stayed invisible until
     # someone generated branch tests and the mock resolver refused to bind.
     #
     # Warnings only, and only in the direction spec -> canonical: a screen
@@ -2155,50 +2159,25 @@ class SpecValidator:
 
     @classmethod
     def _normalize_api_path(cls, path: str) -> str:
-        """Path with every parameter segment collapsed, so `{barUuid}`,
-        `{bar_uuid}` and `:barUuid` all compare equal."""
+        """Path with every parameter segment collapsed, so `{venueId}`,
+        `{venue_id}` and `:venueId` all compare equal."""
         return cls._COLON_PARAM_RE.sub("{}", cls._PATH_PARAM_RE.sub("{}", path))
 
     def _candidate_api_directories(self) -> list[Path]:
-        """api_directory candidates, nearest-first.
+        """Delegated to `shared/core/openapi_canonical.py`.
 
-        Two layouts exist in practice and neither subsumes the other: a
-        project whose jui.config.json is an ancestor of its specs, and one
-        whose specs live in a docs/ tree beside the config (there the specs'
-        own ancestors carry partial configs that never mention
-        api_directory). `jui` itself resolves the config from the working
-        directory, so that is the second source rather than a guess — the
-        first candidate that actually holds OpenAPI documents wins, and an
-        unrelated directory simply never qualifies.
+        `jui build` resolves the same marks and must read the same documents;
+        two rules for where the canon lives is two answers to one question.
         """
-        roots: list[Path] = []
-        if self._spec_file_path:
-            roots.extend(list(self._spec_file_path.parents)[:8])
+        canon = shared_core.openapi_canonical()
+        if canon is None:
+            return []
         try:
             cwd = Path.cwd().resolve()
-            roots.append(cwd)
-            roots.extend(list(cwd.parents)[:8])
         except OSError:
-            pass
-
-        candidates: list[Path] = []
-        seen: set[Path] = set()
-        for root in roots:
-            config_path = root / "jui.config.json"
-            if not config_path.is_file():
-                continue
-            try:
-                with open(config_path, "r", encoding="utf-8") as f:
-                    config = json.load(f)
-            except (OSError, json.JSONDecodeError):
-                continue
-            if not isinstance(config, dict):
-                continue
-            api_dir = (root / config.get("api_directory", "docs/api")).resolve()
-            if api_dir not in seen:
-                seen.add(api_dir)
-                candidates.append(api_dir)
-        return candidates
+            cwd = None
+        return canon.find_api_directories(self._spec_file_path,
+                                          extra_roots=(cwd,))
 
     def _load_api_canonical_index(
         self, result: SpecValidationResult
@@ -2211,9 +2190,14 @@ class SpecValidator:
                 return index
         return None
 
-    def _index_api_directory(
-        self, api_dir: Path, result: SpecValidationResult
-    ) -> dict[str, dict[str, str]] | None:
+    def _index_api_directory(self, api_dir: Path, result: SpecValidationResult):
+        """`{(normalized path, METHOD): CanonicalOperation}` for one directory.
+
+        Indexing lives in `shared/core/openapi_canonical.py`, not here. `jui
+        build` resolves the same `@canonical` marks when it generates
+        repository stubs, and two readers of one canon would answer
+        differently the first time either grew a rule the other did not.
+        """
         if not api_dir.is_dir():
             return None
 
@@ -2221,53 +2205,39 @@ class SpecValidator:
         if cached is not None:
             return cached or None
 
-        yaml_docs = list(api_dir.rglob("*.yaml")) + list(api_dir.rglob("*.yml"))
-        if yaml_docs:
-            try:
-                import yaml  # noqa: F401
-            except ImportError:
-                # Half an index is worse than none: every route that lives in
-                # the YAML documents would be reported as missing. Skip the
-                # whole check and say so once, rather than degrade quietly.
-                if not self._api_yaml_skip_reported:
-                    self._api_yaml_skip_reported = True
-                    result.warnings.append(SpecValidationMessage(
-                        path="dataFlow",
-                        message=(
-                            f"Endpoint check skipped: {len(yaml_docs)} YAML "
-                            "OpenAPI document(s) under api_directory cannot be "
-                            "read without PyYAML installed"
-                        ),
-                        level="warning",
-                    ))
-                self._api_index_cache[api_dir] = {}
-                return None
+        canon = shared_core.openapi_canonical()
+        if canon is None:
+            if not self._api_yaml_skip_reported:
+                self._api_yaml_skip_reported = True
+                result.warnings.append(SpecValidationMessage(
+                    path="dataFlow",
+                    message=("Endpoint check skipped: shared/core is not "
+                             "present in this tool tree"),
+                    level="warning",
+                ))
+            self._api_index_cache[api_dir] = {}
+            return None
 
-        index: dict[str, dict[str, str]] = {}
-        for doc_path in sorted(api_dir.rglob("*.json")) + sorted(yaml_docs):
-            try:
-                with open(doc_path, "r", encoding="utf-8") as f:
-                    if doc_path.suffix == ".json":
-                        doc = json.load(f)
-                    else:
-                        import yaml
-                        doc = yaml.safe_load(f)
-            except Exception:
-                continue
-            if not isinstance(doc, dict) or not ("openapi" in doc or "swagger" in doc):
-                continue
-            paths = doc.get("paths")
-            if not isinstance(paths, dict):
-                continue
-            for path, operations in paths.items():
-                if not isinstance(path, str) or not isinstance(operations, dict):
-                    continue
-                for verb in operations:
-                    if isinstance(verb, str) and verb.upper() in self.VALID_HTTP_METHODS:
-                        index.setdefault(
-                            self._normalize_api_path(path), {}
-                        ).setdefault(verb.upper(), path)
+        documents, missing_yaml = canon.load_documents(api_dir)
+        if missing_yaml:
+            # Half an index is worse than none: every route that lives in the
+            # YAML documents would be reported as missing. Skip the whole
+            # check and say so once, rather than degrade quietly.
+            if not self._api_yaml_skip_reported:
+                self._api_yaml_skip_reported = True
+                result.warnings.append(SpecValidationMessage(
+                    path="dataFlow",
+                    message=(
+                        f"Endpoint check skipped: {missing_yaml} YAML "
+                        "OpenAPI document(s) under api_directory cannot be "
+                        "read without PyYAML installed"
+                    ),
+                    level="warning",
+                ))
+            self._api_index_cache[api_dir] = {}
+            return None
 
+        index = canon.index_documents(documents)
         self._api_index_cache[api_dir] = index
         return index or None
 
@@ -2310,55 +2280,94 @@ class SpecValidator:
         index = self._load_api_canonical_index(result)
         if not index:
             return
+        canon = shared_core.openapi_canonical()
+        if canon is None:
+            return
 
         for spec_path, endpoint in declared:
-            match = self._ENDPOINT_RE.match(endpoint)
-            if not match:
+            operation, reason = canon.lookup(index, endpoint)
+            if operation is not None:
+                verb, _, path = endpoint.strip().partition(" ")
+                path = path.split("?")[0]
+                if operation.path != path:
+                    result.warnings.append(SpecValidationMessage(
+                        path=spec_path,
+                        message=(
+                            f"Endpoint path parameters differ from the API "
+                            f"document: spec '{path}' vs canonical "
+                            f"'{operation.path}'"
+                        ),
+                        level="warning",
+                    ))
                 continue
-            verb = match.group(1).upper()
-            # Non-HTTP transports (WebSocket, RTDB, GraphQL …) are declared
+
+            # Non-HTTP transports (WebSocket, RTDB, GraphQL ...) are declared
             # the same way and are legal — the canonical documents simply do
             # not describe them.
-            if verb not in self.VALID_HTTP_METHODS:
+            if reason in ("non_http", "malformed"):
                 continue
-            path = match.group(2).split("?")[0]
-            normalized = self._normalize_api_path(path)
-
-            if normalized not in index:
-                result.warnings.append(SpecValidationMessage(
-                    path=spec_path,
-                    message=(
-                        f"Endpoint '{verb} {path}' is not declared in any "
-                        "OpenAPI document under api_directory — update the "
-                        "spec to the canonical route, or document the route"
-                    ),
-                    level="warning",
-                ))
-                continue
-
-            if verb not in index[normalized]:
-                declared_verbs = ", ".join(sorted(index[normalized]))
+            verb, _, path = endpoint.strip().partition(" ")
+            path = path.split("?")[0]
+            if reason == "method_missing":
+                verbs = sorted({m for (p, m) in index
+                                if p == canon.normalize_path(path)})
                 result.warnings.append(SpecValidationMessage(
                     path=spec_path,
                     message=(
                         f"Endpoint path '{path}' is declared in the API "
-                        f"document but not for {verb} (declared: "
-                        f"{declared_verbs})"
+                        f"document but not for {verb.upper()} (declared: "
+                        f"{', '.join(verbs)})"
                     ),
                     level="warning",
                 ))
-                continue
-
-            canonical = index[normalized][verb]
-            if canonical != path:
+            else:
                 result.warnings.append(SpecValidationMessage(
                     path=spec_path,
                     message=(
-                        f"Endpoint path parameters differ from the API "
-                        f"document: spec '{path}' vs canonical '{canonical}'"
+                        f"Endpoint '{verb.upper()} {path}' is not declared in "
+                        "any OpenAPI document under api_directory — update the "
+                        "spec to the canonical route, or document the route"
                     ),
                     level="warning",
                 ))
+
+    # --- @canonical marks -------------------------------------------------
+
+    def _resolve_canonical_marks(
+        self, data: dict, result: SpecValidationResult
+    ):
+        """Expand `params: "@canonical"` / `returnType: "@canonical.wire"`.
+
+        A thin adapter: the walk, the lookup and the expansion all live in
+        `shared/core/openapi_canonical.py`, because `jui build` resolves the
+        same marks when it generates repository stubs and two answers to one
+        question would drift. Everything this file adds is where the canon is
+        found and how a failure is reported.
+
+        A mark that cannot resolve is an ERROR. Falling back to an empty
+        parameter list would generate a stub with no arguments and say nothing.
+        """
+        canon = shared_core.openapi_canonical()
+        if canon is None:
+            return
+        marked = list(canon.iter_marked_methods(data))
+        if not marked:
+            return
+        index = self._load_api_canonical_index(result) or {}
+        for path, message in canon.resolve_spec_marks(
+                data, index, self._case_convention()):
+            result.errors.append(SpecValidationMessage(path=path, message=message))
+
+    def _case_convention(self):
+        """`spec.canonical_param_case`, resolved by the shared reader."""
+        canon = shared_core.openapi_canonical()
+        if canon is None:
+            return None
+        try:
+            cwd = Path.cwd().resolve()
+        except OSError:
+            cwd = None
+        return canon.param_case_for(self._spec_file_path, extra_roots=(cwd,))
 
     def _validate_related_files(self, files: list, result: SpecValidationResult):
         """Validate relatedFiles section."""

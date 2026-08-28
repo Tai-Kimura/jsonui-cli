@@ -149,7 +149,7 @@ def cmd_verify(args: argparse.Namespace) -> int:
         if spec_data.get("type") == "screen_parent_spec":
             merge_result = merger.merge_from_file(sf)
             spec_data = merge_result.spec
-        screen_spec = extract_screen_spec(spec_data)
+        screen_spec = extract_screen_spec(spec_data, sf)
 
         # Skip specs whose layout is authored externally (layoutFile mode
         # with no components). Generating would produce an empty stub,

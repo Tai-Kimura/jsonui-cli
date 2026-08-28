@@ -486,7 +486,7 @@ def _cmd_generate_project(args: argparse.Namespace) -> int:
                     print(f"  {c.path}: {c.message}")
             spec_data = merge_result.spec
 
-        screen_spec = extract_screen_spec(spec_data)
+        screen_spec = extract_screen_spec(spec_data, sf)
         all_specs.append((sf, screen_spec))
 
     if args.file:

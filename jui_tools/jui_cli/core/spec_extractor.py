@@ -1,8 +1,21 @@
 """Extract structured data from screen spec JSON."""
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any
+
+from . import shared_core
+
+
+class CanonicalMarkError(ValueError):
+    """A `@canonical` mark that could not be expanded.
+
+    Raised rather than absorbed. The alternative is a repository stub whose
+    method takes no arguments, generated silently, which compiles on all three
+    platforms and is wrong on all three.
+    """
 
 
 @dataclass
@@ -258,8 +271,22 @@ def _parse_collection(coll_data: dict) -> CollectionDef:
     )
 
 
-def extract_screen_spec(spec_data: dict) -> ScreenSpec:
-    """Convert spec JSON to ScreenSpec dataclass."""
+def extract_screen_spec(spec_data: dict, spec_path=None) -> ScreenSpec:
+    """Convert spec JSON to ScreenSpec dataclass.
+
+    `spec_path` locates the project's API canon so `params: "@canonical"` can
+    be expanded before anything reads it. Resolution happens here, at the one
+    door every caller comes through, rather than in each command — the same
+    reason `jsonui-doc` resolves at its own single entry point, and both of
+    them call the same `shared/core` implementation.
+
+    Omitting `spec_path` leaves a mark unexpanded, and `_parse_params` then
+    refuses it loudly. Generating a method with no arguments because context
+    was not threaded is exactly the silent shrinking this codebase keeps
+    removing.
+    """
+    if spec_path is not None:
+        resolve_canonical_marks(spec_data, spec_path)
     metadata = spec_data.get("metadata", {})
     structure = spec_data.get("structure", {})
     data_flow = spec_data.get("dataFlow", {})
@@ -463,10 +490,46 @@ def _parse_methods(methods_data: list, *, default_async: bool = True) -> list[Me
     return result
 
 
+def resolve_canonical_marks(spec_data: dict, spec_path) -> None:
+    """Expand `@canonical` marks against the project's API canon.
+
+    Finds the canon by walking up from the spec for an `api_directory` holding
+    OpenAPI documents — the same shape `jsonui-doc` uses, and the same shared
+    implementation reads them, so a mark cannot expand to one list here and a
+    different list there.
+    """
+    canon = shared_core.openapi_canonical()
+    if canon is None:
+        return
+    if not list(canon.iter_marked_methods(spec_data)):
+        return
+
+    index: dict = {}
+    for api_dir in canon.find_api_directories(spec_path):
+        documents, _missing = canon.load_documents(api_dir)
+        found = canon.index_documents(documents)
+        if found:
+            index = found
+            break
+    convention = canon.param_case_for(spec_path)
+
+    errors = canon.resolve_spec_marks(spec_data, index, convention)
+    if errors:
+        raise CanonicalMarkError("; ".join(f"{p}: {m}" for p, m in errors))
+
+
 def _parse_params(params_data) -> list[MethodParam]:
     """Parse params (supports both string and structured array)."""
     if params_data is None:
         return []
+    if params_data == "@canonical" or (
+            isinstance(params_data, list) and "@canonical" in params_data):
+        # Reached only when the caller did not give `extract_screen_spec` a
+        # path to find the canon with. Silence here would generate a method
+        # with no arguments.
+        raise CanonicalMarkError(
+            "'@canonical' was not expanded: extract_screen_spec() needs the "
+            "spec's path to locate the project's OpenAPI documents")
     if isinstance(params_data, str):
         # Legacy free-text: "email: String, password: String"
         result = []
