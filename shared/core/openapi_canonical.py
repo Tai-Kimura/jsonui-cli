@@ -122,6 +122,12 @@ class CanonicalParam:
     name: str
     type: str
     required: bool = False
+    #: `path` / `query` / `body`. A `wrapped` holder stands in for the request
+    #: body, so naming a path variable in one is structurally wrong — the id is
+    #: passed separately and the wrapper never carries it. Measured across the
+    #: corpus: all 119 fields named by a `wrapped` clause are body fields, so
+    #: the rule costs nothing and catches the one error shape it describes.
+    location: str = "body"
 
     def as_spec_param(self, convention: str | None = None) -> dict:
         return {"name": apply_case(self.name, convention), "type": self.type}
@@ -222,7 +228,8 @@ def _operation_params(op: dict, schemas: dict) -> list:
         seen.add(name)
         required = bool(p.get("required"))
         t = _schema_type(p.get("schema") or {}, schemas)
-        params.append(CanonicalParam(name, t if required else f"{t}?", required))
+        params.append(CanonicalParam(name, t if required else f"{t}?", required,
+                                     location=str(p.get("in") or "query")))
 
     body = ((op.get("requestBody") or {}).get("content") or {})
     body_schema = _deref((body.get("application/json") or {}).get("schema") or {},
@@ -235,7 +242,8 @@ def _operation_params(op: dict, schemas: dict) -> list:
         seen.add(name)
         required = body_required and name in required_props
         t = _schema_type(prop or {}, schemas)
-        params.append(CanonicalParam(name, t if required else f"{t}?", required))
+        params.append(CanonicalParam(name, t if required else f"{t}?", required,
+                                     location="body"))
     return params
 
 
@@ -955,12 +963,13 @@ def check_divergences(spec_data, index, convention=None):
                     if isinstance(p, dict) and p.get("name")]
         errors.extend(_divergence_errors(
             path, renamed, canonical, declared,
-            omitted=lists["omitted"], wrapped=wrapped, added=lists["added"]))
+            omitted=lists["omitted"], wrapped=wrapped, added=lists["added"],
+            locations=operation.params))
     return errors
 
 
 def _divergence_errors(path, renamed, canonical, declared,
-                       omitted=(), wrapped=None, added=()):
+                       omitted=(), wrapped=None, added=(), locations=None):
     out = []
     wrapped = wrapped or {}
 
@@ -973,7 +982,18 @@ def _divergence_errors(path, renamed, canonical, declared,
             out.append((path, (
                 f"'omitted' names '{name}', which the operation does not "
                 "declare — there is nothing here to leave out.")))
+    outside = {p.name: p.location for p in (locations or ())
+               if p.location != "body"}
     for holder, covered in wrapped.items():
+        for name in covered:
+            if name in outside:
+                out.append((path, (
+                    f"'wrapped' says '{holder}' covers '{name}', which the "
+                    f"operation declares in the {outside[name]}, not the "
+                    "request body. A wrapper stands in for body fields; a "
+                    f"{outside[name]} parameter is passed separately, so this "
+                    "is usually a rename or an omission rather than something "
+                    "the wrapper carries.")))
         if holder not in declared:
             out.append((path, (
                 f"'wrapped' says '{holder}' stands in for other arguments, "

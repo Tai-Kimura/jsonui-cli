@@ -872,3 +872,85 @@ class DivergenceVocabularyTests(_Fixture):
         errs = self.check([{"name": "request", "type": "R"}],
                           {"wrapped": {"request": "item_uuid"}, "reason": "r"})
         self.assertTrue(any("must be an object of" in e for e in errs), errs)
+
+
+class WrappedCoversBodyFieldsTests(_Fixture):
+    """A wrapper stands in for the request body, not for the whole signature.
+
+    A lane wrote a path variable into `wrapped` — the id it actually passes as
+    a separate argument, which the wrapper never carries. The clause read as
+    "this object covers that field", so the field stopped being compared and
+    the real relationship (a rename) stopped being visible.
+
+    Measured across the corpus before adding the rule: all 119 fields named by
+    a `wrapped` clause are body fields. Nothing legitimate is refused, and the
+    one error shape it describes is caught.
+
+    It catches one of the four mistakes two lanes made, not all four. A
+    wrapper claiming a body field it does not carry is still invisible — the
+    tool cannot read the code that builds the object. That limit is why the
+    skill asks for the construction site to be read.
+    """
+
+    def op(self):
+        doc = json.loads(json.dumps(SWAGGER))
+        doc["paths"]["/api/venues/{venue_id}"]["put"] = {
+            "parameters": [{"name": "venue_id", "in": "path", "required": True,
+                            "schema": {"type": "string"}}],
+            "requestBody": {"required": True, "content": {"application/json": {
+                "schema": {"type": "object",
+                           "properties": {"title": {"type": "string"},
+                                          "note": {"type": "string"}}}}}},
+            "responses": {"200": {"description": "ok"}}}
+        (self.root / "docs" / "api" / "swagger.json").write_text(
+            json.dumps(doc), encoding="utf-8")
+
+    def check(self, params, divergence):
+        self.op()
+        data = _spec({"name": "updateVenue",
+                      "endpoint": "PUT /api/venues/{venue_id}",
+                      "params": params, "canonicalDivergence": divergence})
+        self.spec_path.write_text(json.dumps(data), encoding="utf-8")
+        v = SpecValidator()
+        v._spec_file_path = self.spec_path
+        result = SpecValidationResult()
+        v._resolve_canonical_marks(data, result)
+        return [m.message for m in result.errors]
+
+    def test_a_path_variable_in_wrapped_is_refused(self):
+        errs = self.check(
+            [{"name": "payload", "type": "M"}],
+            {"wrapped": {"payload": ["venue_id", "title", "note"]},
+             "reason": "one object"})
+        self.assertTrue(any("not the request body" in e for e in errs), errs)
+
+    def test_the_same_declaration_written_correctly_passes(self):
+        """The id is a separate argument, so it is a rename, not a wrap."""
+        self.assertEqual(self.check(
+            [{"name": "venueId", "type": "String"},
+             {"name": "payload", "type": "M"}],
+            {"renamed": {"venue_id": "venueId"},
+             "wrapped": {"payload": ["title", "note"]},
+             "reason": "one object for the body"}), [])
+
+    def test_wrapping_body_fields_only_is_accepted(self):
+        """The false-positive boundary — all 119 corpus clauses are this.
+
+        The id is genuinely not taken here (a build constant, say), so it is
+        `omitted` and no argument stands for it. Writing `omitted` while also
+        declaring an argument for the same thing is a rename, and the residual
+        check says so — which is how the first draft of this fixture was
+        caught being an invalid declaration rather than a valid one.
+        """
+        self.assertEqual(self.check(
+            [{"name": "payload", "type": "M"}],
+            {"omitted": ["venue_id"],
+             "wrapped": {"payload": ["title", "note"]},
+             "reason": "the repository fills the id from context"}),
+            [])
+
+    def test_a_query_parameter_in_wrapped_is_refused_too(self):
+        errs = self.check(
+            [{"name": "payload", "type": "M"}],
+            {"wrapped": {"payload": ["limit"]}, "reason": "r"})
+        self.assertTrue(errs)
