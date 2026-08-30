@@ -403,6 +403,11 @@ class SpecCanonContext:
     #: reported as missing — so the shortfall is carried to the caller rather
     #: than absorbed into a smaller index.
     missing_yaml: int = 0
+    #: The directory the answering config's `api_directory` resolved to, so an
+    #: empty index can be reported with the place that was actually searched.
+    #: "No OpenAPI document was found" without the where sent a consumer lane
+    #: hunting through three hypotheses it could not distinguish.
+    api_dir: object = None
 
 
 def _note(problems, cfg, target, what) -> None:
@@ -565,6 +570,7 @@ def build_spec_canon_context(spec_path, *, config_path=None, extra_roots=()):
         if declared and fallback_convention is None:
             fallback_convention = declared
 
+        declares_api = "api_directory" in config
         api_dir = (root / config.get("api_directory", "docs/api")).resolve()
         documents, missing = load_documents(api_dir)
         if missing:
@@ -574,12 +580,30 @@ def build_spec_canon_context(spec_path, *, config_path=None, extra_roots=()):
             if answer is None:
                 answer = SpecCanonContext(index={}, convention=declared,
                                           config_path=cfg,
-                                          missing_yaml=missing)
+                                          missing_yaml=missing,
+                                          api_dir=api_dir)
             continue
         index = index_documents(documents)
-        if index and answer is None:
+        if answer is None and (index or declares_api):
             # This config answers both. Not "this config for the routes and
             # whichever other one happened to declare a convention".
+            #
+            # `declares_api` keeps a config that NAMES a directory the answer
+            # even when that directory holds nothing. Without it, a broken
+            # `api_directory` fell through to whatever shallower config the
+            # walk reached next — in the measured case a repository-root `{}`
+            # whose DEFAULT directory held the real documents — so the canon
+            # arrived from one config and the convention silently reverted to
+            # another's absence, the exact split v1.7.6 closed. A declared
+            # value that resolves to nothing is a broken declaration and must
+            # surface as one (empty index → the "nothing was compared" notice
+            # downstream); it is not permission to keep searching. Same ruling
+            # as `extends` in v1.7.9: writing the key is a statement of
+            # intent, and only a config that says nothing about the API lets
+            # the walk continue past it. Found by a consumer lane that shot
+            # the side the acceptance had not: pointed its `api_directory` at
+            # a missing path and got 44 convention-shifted divergence errors
+            # instead of the notice.
             #
             # Recorded, not returned: returning here stopped the walk, so a
             # stub further along the ancestry was never opened and its
@@ -588,13 +612,14 @@ def build_spec_canon_context(spec_path, *, config_path=None, extra_roots=()):
             # questions, and short-circuiting the first silently narrowed the
             # second. Found by a lane that measured the two orderings.
             answer = SpecCanonContext(index=index, convention=declared,
-                                      config_path=cfg)
+                                      config_path=cfg, api_dir=api_dir)
 
     if answer is not None:
         return SpecCanonContext(index=answer.index,
                                 convention=answer.convention,
                                 config_path=answer.config_path,
                                 missing_yaml=answer.missing_yaml,
+                                api_dir=answer.api_dir,
                                 unresolved_extends=tuple(problems),
                                 unknown_config_keys=tuple(unknown))
     return SpecCanonContext(index={}, convention=fallback_convention,

@@ -108,7 +108,6 @@ class SpecValidator:
         # specs of one project; the OpenAPI documents are read once.
         self._api_index_cache: dict[Path, dict[str, dict[str, str]]] = {}
         self._api_yaml_skip_reported: bool = False
-        self._api_no_canon_reported: bool = False
         self._custom_rules: CustomRules = custom_rules or CustomRules()
         self._build_effective_rules()
 
@@ -2252,20 +2251,34 @@ class SpecValidator:
             # in its own three gates on the same day, the guard present in the
             # two it built after learning it and absent from the one it
             # already had.
-            # Once per validator, like the YAML shortfall above: a batch run
-            # over a project with no canon should say this once, not per file.
-            # And not at all when the shortfall already said why the index is
-            # empty — two sentences for one cause reads as two problems.
-            if (not self._api_no_canon_reported
-                    and not getattr(context, "missing_yaml", 0)):
-                self._api_no_canon_reported = True
+            # Per file, not once per run. The first version deduplicated per
+            # validator while counting per file, and the two units disagreed:
+            # a batch whose unchecked declarations totalled four reported
+            # whichever count the first-reached file happened to hold — "1
+            # endpoint declaration(s) were not checked" over a shortfall of
+            # four (found by a consumer lane, which held the total at four
+            # and watched the reported number track the file order). Every
+            # other message in this validator is a per-file fact attributed to
+            # its file; this one now is too, and the run total is the sum of
+            # what the batch prints. Loudness is proportionate: a project
+            # with fifty canonless spec files has fifty files' worth of
+            # unchecked contracts.
+            # Still absent when the YAML shortfall already said why the index
+            # is empty — two sentences for one cause reads as two problems.
+            if not getattr(context, "missing_yaml", 0):
+                # Name the directory and the config: without the where, a
+                # consumer lane that provoked this on purpose was left with
+                # three hypotheses it could not tell apart from the outside.
+                api_dir = getattr(context, "api_dir", None)
+                cfg = getattr(context, "config_path", None)
+                where = f" ('{api_dir}', from '{cfg}')" if api_dir else ""
                 result.warnings.append(SpecValidationMessage(
                     path="dataFlow",
                     message=(
                         f"{len(declared)} endpoint declaration(s) were not "
                         "checked: no OpenAPI document was found under "
-                        "api_directory. This is not 'every route matches' — "
-                        "nothing was compared."
+                        f"api_directory{where}. This is not 'every route "
+                        "matches' — nothing was compared."
                     ),
                     level="warning",
                 ))

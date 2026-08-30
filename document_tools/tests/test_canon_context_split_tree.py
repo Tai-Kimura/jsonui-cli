@@ -215,8 +215,17 @@ class OneConfigAnswersBothTests(unittest.TestCase):
         self.assertEqual(ctx.convention, "camelCase")
         self.assertIn("inner", str(ctx.config_path))
 
-    def test_a_config_with_no_documents_does_not_win(self):
-        """Nearest is not the rule — holding the canon is."""
+    def test_a_declared_but_empty_api_directory_answers_as_broken(self):
+        """This test used to assert the opposite — "nearest is not the rule,
+        holding the canon is" — and that ruling is what three faces measured
+        as misattribution: a declared path that resolved to nothing was
+        outvoted by a shallower config's documents, so the canon arrived from
+        one file and the convention from another's absence, and every correct
+        divergence declaration re-emerged as an error in the document's raw
+        spelling. The ruling now: DECLARING api_directory is the rule, and
+        holding the canon only breaks ties among configs that declare
+        nothing (the undeclared case keeps falling through — asserted in
+        DeclaredButEmptyApiDirectoryAnswersTests)."""
         self.write("outer/jui.config.json",
                    {"api_directory": "api",
                     "spec": {"canonical_param_case": "snake_case"}})
@@ -225,8 +234,8 @@ class OneConfigAnswersBothTests(unittest.TestCase):
         spec = self.write("outer/inner/specs/f.spec.json", _spec({"name": "a"}))
 
         ctx = canon.build_spec_canon_context(spec)
-        self.assertEqual(ctx.convention, "snake_case")
-        self.assertTrue(ctx.index)
+        self.assertEqual(ctx.index, {})
+        self.assertIn("inner", str(ctx.config_path))
 
     def test_no_config_at_all_is_silent(self):
         spec = self.write("bare/specs/f.spec.json", _spec({"name": "a"}))
@@ -526,3 +535,164 @@ class ComparedNothingIsNotAMatchTests(unittest.TestCase):
             "dataFlow": {"viewModel": {"methods": [{"name": "onLoad"}]}},
         }), encoding="utf-8")
         self.assertEqual(self.warnings(), [])
+
+
+class DeclaredButEmptyApiDirectoryAnswersTests(unittest.TestCase):
+    """A config that NAMES an api_directory answers, even when it holds nothing.
+
+    Before this, a declared directory that resolved to no documents was
+    treated as "keep looking", and the walk fell through to a shallower
+    config — in the measured case a repository-root `{}` whose DEFAULT
+    directory held the real documents. The canon then arrived from one config
+    while the convention silently reverted to another's absence, and every
+    correct camelCase divergence declaration re-emerged as an error keyed on
+    the document's raw spelling. Two consumer lanes hit it independently within the
+    hour: one pointed its api_directory at a missing path and got 44
+    convention-shifted errors instead of the compared-nothing notice; the
+    other typoed its path and got 72.
+
+    The ruling is v1.7.9's, applied to one more key: writing `api_directory`
+    is a statement of intent, and a declaration that resolves to nothing must
+    surface as a broken declaration — not as permission to keep searching.
+
+        root/jui.config.json          {}            (default dir holds docs)
+        root/docs/api/swagger.json                  (the REAL documents)
+        root/docs/user/jui.config.json              extends -> ../../user
+        root/docs/user/screens/json/f.spec.json
+        root/user/jui.config.json     api_directory -> ../docs/api-missing
+    """
+
+    def setUp(self):
+        self._tmp = TemporaryDirectory()
+        self.root = Path(self._tmp.name)
+        (self.root / "docs" / "api").mkdir(parents=True)
+        (self.root / "docs" / "api" / "swagger.json").write_text(
+            json.dumps(SWAGGER), encoding="utf-8")
+        (self.root / "docs" / "user" / "screens" / "json").mkdir(parents=True)
+        (self.root / "jui.config.json").write_text("{}", encoding="utf-8")
+        (self.root / "docs" / "user" / "jui.config.json").write_text(
+            json.dumps({"extends": "../../user/jui.config.json"}),
+            encoding="utf-8")
+        self.app = self.root / "user"
+        self.app.mkdir()
+        (self.app / "jui.config.json").write_text(json.dumps(
+            {"api_directory": "../docs/api-missing",
+             "spec": {"canonical_param_case": "camelCase"}}), encoding="utf-8")
+        self.spec = (self.root / "docs" / "user" / "screens" / "json"
+                     / "f.spec.json")
+        self.spec.write_text(json.dumps(_spec(
+            {"name": "m", "endpoint": "POST /api/quotes",
+             "params": [{"name": "venueSlug", "type": "String"}],
+             "canonicalDivergence": {
+                 "omitted": [{"name": "tierId", "reason": "server derives"}]},
+             })), encoding="utf-8")
+
+    def tearDown(self):
+        self._tmp.cleanup()
+
+    def context(self):
+        return canon.build_spec_canon_context(self.spec)
+
+    def validate(self):
+        v = SpecValidator()
+        v._spec_file_path = self.spec
+        result = SpecValidationResult()
+        data = json.loads(self.spec.read_text())
+        v._resolve_canonical_marks(data, result)
+        v._validate_api_endpoint_canonical(data, result)
+        return ([m.message for m in result.errors],
+                [m.message for m in result.warnings])
+
+    def test_the_declaring_config_answers_with_its_empty_index(self):
+        ctx = self.context()
+        self.assertEqual(ctx.index, {})
+        self.assertEqual(Path(ctx.config_path).resolve(),
+                         (self.app / "jui.config.json").resolve())
+
+    def test_the_shallower_configs_documents_are_not_borrowed(self):
+        """The root's default directory holds the real swagger; it must not
+        leak into a run whose own config names a different place."""
+        ctx = self.context()
+        self.assertEqual(ctx.index, {})
+
+    def test_the_searched_directory_is_recorded(self):
+        ctx = self.context()
+        self.assertEqual(Path(ctx.api_dir).resolve(),
+                         (self.root / "docs" / "api-missing").resolve())
+
+    def test_the_notice_fires_and_names_the_place(self):
+        errors, warnings = self.validate()
+        notice = [w for w in warnings if "were not checked" in w]
+        self.assertEqual(len(notice), 1)
+        self.assertIn("api-missing", notice[0])
+        self.assertIn("jui.config.json", notice[0])
+
+    def test_the_divergence_error_says_unreachable_not_undeclared(self):
+        """The failure must be attributed to the broken path, not to the
+        declarations. 'does not declare' on 44 correct rows is what the
+        fallthrough produced; 'is not declared in any OpenAPI document' is
+        the honest sentence."""
+        errors, _ = self.validate()
+        self.assertTrue(errors)
+        for message in errors:
+            self.assertNotIn("does not declare", message)
+
+    def test_a_config_that_says_nothing_still_lets_the_walk_continue(self):
+        """The boundary a consumer monorepo measured on purpose and asked to keep: a
+        face config with NO api_directory key falls through, and a root whose
+        default directory holds the documents answers. Monorepos rely on it."""
+        (self.app / "jui.config.json").write_text(json.dumps(
+            {"spec": {"canonical_param_case": "camelCase"}}), encoding="utf-8")
+        ctx = self.context()
+        self.assertTrue(ctx.index)
+        self.assertEqual(Path(ctx.config_path).resolve(),
+                         (self.root / "jui.config.json").resolve())
+
+
+class UncheckedCountIsPerFileTests(unittest.TestCase):
+    """The notice is a per-file fact now, and the counts must sum to the run.
+
+    The first version fired once per validator while counting per file, and
+    a consumer lane measured the disagreement directly: it held the run's
+    unchecked total at four and moved declarations between the two files, and
+    the reported number tracked the file order (1 <-> 3) instead of the total.
+    Per-file emission makes each count that file's own fact; the batch total
+    is their sum, not whichever file came first.
+    """
+
+    def setUp(self):
+        self._tmp = TemporaryDirectory()
+        self.root = Path(self._tmp.name)
+        (self.root / "docs" / "screens").mkdir(parents=True)
+        (self.root / "jui.config.json").write_text(
+            json.dumps({"api_directory": "docs/api"}), encoding="utf-8")
+
+    def tearDown(self):
+        self._tmp.cleanup()
+
+    def _file(self, name, n):
+        methods = [{"name": f"m{i}", "endpoint": f"GET /api/{name}/{i}",
+                    "params": []} for i in range(n)]
+        p = self.root / "docs" / "screens" / f"{name}.spec.json"
+        p.write_text(json.dumps({
+            "type": "screen",
+            "metadata": {"name": name, "description": "d.", "screen": name},
+            "dataFlow": {"repositories": [{"name": "R", "methods": methods}]},
+        }), encoding="utf-8")
+        return p
+
+    def test_each_file_reports_its_own_count_and_the_sum_is_the_run(self):
+        files = [self._file("items", 1), self._file("profile", 3)]
+        v = SpecValidator()  # ONE validator, as `validate spec <dir>` uses
+        counts = []
+        for p in files:
+            v._spec_file_path = p
+            result = SpecValidationResult()
+            v._validate_api_endpoint_canonical(
+                json.loads(p.read_text()), result)
+            notices = [w.message for w in result.warnings
+                       if "were not checked" in w.message]
+            self.assertEqual(len(notices), 1, p.name)
+            counts.append(int(notices[0].split(" ")[0]))
+        self.assertEqual(sorted(counts), [1, 3])
+        self.assertEqual(sum(counts), 4)
