@@ -308,11 +308,19 @@ class ChromeCropTests(unittest.TestCase):
     def test_local_lanes_are_never_cropped(self):
         for platform in ("android", "ios", "web"):
             self.assertEqual(baseline.chrome_crop(platform, "local"), (0, 0))
-        self.assertEqual(baseline.chrome_crop("ios", "ci"), (0, 0))
         self.assertEqual(baseline.chrome_crop(None, None), (0, 0))
 
     def test_ci_android_excludes_the_measured_chrome_bands(self):
         self.assertEqual(baseline.chrome_crop("android", "ci"), (48, 120))
+
+    def test_ci_ios_excludes_the_status_bar_band(self):
+        # The glyphs live at rows 78–116 and their color is inferred from the
+        # luminance behind the bar — a race the fixture cannot pin (measured
+        # flipping black/white across runs 32657361988/33333136630 on
+        # effectStyle__regular with every non-glyph pixel identical). The app
+        # is edge-to-edge on ios, so unlike android this band carries fixture
+        # pixels; the crop trades them away and says so at the definition.
+        self.assertEqual(baseline.chrome_crop("ios", "ci"), (160, 0))
 
     def test_crop_hides_change_confined_to_the_excluded_band(self):
         with tempfile.TemporaryDirectory() as tmp:

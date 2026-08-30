@@ -3,16 +3,6 @@
   "_comment": "Accepted dynamic≢codegen deviations, per screenshot, platform and render environment (a deviation measured against the local baselines says nothing about the CI renderer's). The codegen host's render of this screenshot does NOT match the committed dynamic baseline (status 'mismatch', with the measured distance) or was never produced (status 'missing'). Every entry needs a reason: fix the codegen and drop the entry, or justify the difference here. Unrecorded deviations fail `jui conformance gate --parity`; entries the measurement no longer supports are stale and must be pruned (re-run `jui conformance parity --update`). Reason 'unreviewed-initial-measurement' marks the initial-measurement backlog — consume it.",
   "entries": [
     {
-      "screenshot": "common_effectStyle__regular.png",
-      "platform": "ios",
-      "env": "ci",
-      "status": "mismatch",
-      "distance": 23,
-      "reason": "Blur-noise class: 'regular' is the mid-strength material blur, and the two pipelines' blur dithering lands just over the dhash threshold while every sampled pixel pair is identical (run 31298447950 artifacts, verified). Every sibling effectStyle value (dark/light/extralight/chrome/prominent/thick/thin/ultrathin) measures converged on the same run — the effect itself is implemented on both faces; only this value's noise profile straddles the threshold.",
-      "note": "",
-      "owner": "orch (wave 4, 2026-08-09)"
-    },
-    {
       "screenshot": "TabView_selectedIndex__alias_selectedTabIndex.png",
       "platform": "android",
       "env": "local",

@@ -115,8 +115,31 @@ def _load_pillow():
 #: baselines never cross environments, so the crop never has to either.
 #: Bounds come from the measured bands (status bar 11–36, taskbar 1495–1583)
 #: with margin, and stop short of the tab bar at 1300–1450.
+#:
+#: The CI ios simulator draws its status bar glyphs (clock, cellular, wifi,
+#: battery) at rows 78–116 of the 1206x2622 frame, and their COLOR is not a
+#: function of the fixture: UIKit infers light/dark status-bar content from
+#: the luminance behind the bar, and on a fixture that lands near the decision
+#: boundary the inference races the render and flips run to run. Measured on
+#: runs 32657361988/33333136630 (same image, same code, same library pins):
+#: the codegen host drew effectStyle__regular's clock black on one run and
+#: white on the next — dhash 23 vs 0 with every non-glyph pixel identical —
+#: while the dynamic host held white on both. The battery glyph also renders
+#: the host's charging state, a second flake the fixture cannot control.
+#:
+#: Unlike android, the ios app is edge-to-edge, so this band DOES carry
+#: fixture pixels (safe-area backgrounds reach the top edge). Cropping trades
+#: them away deliberately: a codegen deviation confined to rows 0–159 with no
+#: trace below is invisible after the crop. That loss is accepted because the
+#: OS glyphs inside the band are unfixably nondeterministic, and measured on
+#: run 33333136630 it costs nothing today: the crop flips not one control-diff
+#: verdict (494 active / 111 inert, unchanged) — backgrounds that reach the
+#: top edge continue below it. Neither the Dynamic Island nor the home
+#: indicator is rendered in these captures (measured, same runs), so the
+#: bottom stays 0.
 PLATFORM_ENV_CHROME_CROP: dict[tuple[str, str], tuple[int, int]] = {
     ("android", "ci"): (48, 120),
+    ("ios", "ci"): (160, 0),
 }
 
 
