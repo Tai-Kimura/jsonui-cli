@@ -408,6 +408,12 @@ class SpecCanonContext:
     #: "No OpenAPI document was found" without the where sent a consumer lane
     #: hunting through three hypotheses it could not distinguish.
     api_dir: object = None
+    #: Declared values no tool accepts, in the configs this context read —
+    #: `canonical_param_case: "camelcase"` spelled every parameter the
+    #: document's way with nothing said, exactly the shape a broken `extends`
+    #: value had before v1.7.9. A declaration whose value resolves to nothing
+    #: is a broken declaration; reported, never absorbed into the default.
+    invalid_config_values: tuple = ()
 
 
 def _note(problems, cfg, target, what) -> None:
@@ -508,6 +514,18 @@ def _follow_extends(root, cfg, config, problems=None, _depth=0, unknown=None):
                            _depth + 1, unknown)
 
 
+#: Every config key the walk below reads. A declaration, not documentation:
+#: the split-tree test suite iterates this and REFUSES a key that has no
+#: broken-declaration probe. Four key families produced eight versions of the
+#: same defect — a declaration falling quietly to the default or the search
+#: when it fails to resolve, with the landing spot able to answer, so every
+#: check downstream stays correctly silent (mockDir v1.6.52-55, the
+#: convention v1.7.4/6/8, `extends` v1.7.9/10/11, api_directory v1.7.17) —
+#: before a consumer lane tabulated them and named the rule: a new declared
+#: key ships WITH the shot at its empty-resolution case, or it does not ship.
+WALK_READS = ("extends", "api_directory", "spec.canonical_param_case")
+
+
 def build_spec_canon_context(spec_path, *, config_path=None, extra_roots=()):
     """Resolve the canon and the convention together, preferring the run's config.
 
@@ -553,6 +571,7 @@ def build_spec_canon_context(spec_path, *, config_path=None, extra_roots=()):
     fallback_convention = None
     problems: list = []
     unknown: list = []
+    invalid_values: list = []
     answer = None
     for root in candidates:
         cfg = root / "jui.config.json"
@@ -567,6 +586,20 @@ def build_spec_canon_context(spec_path, *, config_path=None, extra_roots=()):
         spec_cfg = config.get("spec")
         declared = (spec_cfg or {}).get("canonical_param_case") \
             if isinstance(spec_cfg, dict) else None
+        if declared is not None and declared not in PARAM_CASE_CONVENTIONS:
+            # `apply_case` treats anything it does not recognise as `asIs`,
+            # so a typo here spelled every parameter the document's way with
+            # nothing said — measured: 'camelcase', 'CamelCase' and
+            # 'camel_case' all resolved silently. Fifth instance of the one
+            # shape (a declaration falling quietly to the default), found by
+            # sweeping the walk's other declared keys after a consumer lane
+            # tabulated the first four.
+            invalid_values.append(
+                f"{cfg}: spec.canonical_param_case is {declared!r}, which no "
+                f"tool reads — the run proceeds as 'asIs' (the document's own "
+                f"spelling). Valid values: {', '.join(PARAM_CASE_CONVENTIONS)}."
+            )
+            declared = None
         if declared and fallback_convention is None:
             fallback_convention = declared
 
@@ -621,11 +654,13 @@ def build_spec_canon_context(spec_path, *, config_path=None, extra_roots=()):
                                 missing_yaml=answer.missing_yaml,
                                 api_dir=answer.api_dir,
                                 unresolved_extends=tuple(problems),
-                                unknown_config_keys=tuple(unknown))
+                                unknown_config_keys=tuple(unknown),
+                                invalid_config_values=tuple(invalid_values))
     return SpecCanonContext(index={}, convention=fallback_convention,
                             config_path=None,
                             unresolved_extends=tuple(problems),
-                            unknown_config_keys=tuple(unknown))
+                            unknown_config_keys=tuple(unknown),
+                            invalid_config_values=tuple(invalid_values))
 
 
 def lookup(index: dict, endpoint: str):

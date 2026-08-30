@@ -511,11 +511,15 @@ class ComparedNothingIsNotAMatchTests(unittest.TestCase):
         self.assertIn("nothing was compared", w[0])
 
     def test_it_carries_how_many_were_skipped(self):
-        """A quantity beside the verdict. Had the corpus measurement behind
-        v1.7.12 printed the directories it scanned next to its count, the two
-        faces that yielded no files would have been visible in it."""
+        """A quantity beside the verdict, in BOTH units. Had the corpus
+        measurement behind v1.7.12 printed the directories it scanned next to
+        its count, the two faces that yielded no files would have been visible
+        in it. And the unit must be named: a lane summed the site counts
+        against its route count and reported the checker counting something
+        else — 134 routes, 263 sites, both right, in different units."""
         self.canon(False)
-        self.assertIn("1 endpoint declaration(s)", self.warnings()[0])
+        self.assertIn("1 endpoint(s), declared in 1 place(s)",
+                      self.warnings()[0])
 
     def test_a_canon_that_is_present_checks_instead(self):
         """The boundary: with a canon, the drifted route is the finding, and
@@ -696,3 +700,100 @@ class UncheckedCountIsPerFileTests(unittest.TestCase):
             counts.append(int(notices[0].split(" ")[0]))
         self.assertEqual(sorted(counts), [1, 3])
         self.assertEqual(sum(counts), 4)
+
+
+class EveryWalkKeyHasABrokenDeclarationProbeTests(unittest.TestCase):
+    """Walk `WALK_READS`; a key without a probe here fails this suite.
+
+    Four key families produced eight versions of one defect — a declaration
+    falling quietly to the default or the search when it fails to resolve,
+    with the landing spot able to answer, so every downstream check stays
+    correctly silent. A consumer lane tabulated them and named the rule:
+    a declared key ships WITH the shot at its empty-resolution case.
+
+    Each probe builds the adversarial tree — the declaration broken AND a
+    shallower config able to answer — and asserts two things: the breakage
+    surfaces in the context's diagnostics, and the shallower config has not
+    silently supplied the answer the broken declaration was meant to give.
+    """
+
+    def setUp(self):
+        self._tmp = TemporaryDirectory()
+        self.root = Path(self._tmp.name)
+        (self.root / "docs" / "api").mkdir(parents=True)
+        (self.root / "docs" / "api" / "swagger.json").write_text(
+            json.dumps(SWAGGER), encoding="utf-8")
+        (self.root / "docs" / "screens").mkdir(parents=True)
+        self.spec = self.root / "docs" / "screens" / "f.spec.json"
+        self.spec.write_text(json.dumps(_spec({"name": "a"})), encoding="utf-8")
+        # The shallower config that could answer everything by default.
+        (self.root / "jui.config.json").write_text("{}", encoding="utf-8")
+        self.app = self.root / "app"
+        self.app.mkdir()
+
+    def tearDown(self):
+        self._tmp.cleanup()
+
+    def _stub(self, target="../app/jui.config.json"):
+        (self.root / "docs" / "jui.config.json").write_text(
+            json.dumps({"extends": target}), encoding="utf-8")
+
+    def _probe_extends(self):
+        self._stub(target="../nowhere/jui.config.json")
+        ctx = canon.build_spec_canon_context(self.spec)
+        self.assertTrue(ctx.unresolved_extends)
+
+    def _probe_api_directory(self):
+        self._stub()
+        (self.app / "jui.config.json").write_text(json.dumps(
+            {"api_directory": "../docs/api-missing"}), encoding="utf-8")
+        ctx = canon.build_spec_canon_context(self.spec)
+        self.assertEqual(ctx.index, {},
+                         "the root's default directory answered for a "
+                         "declared-but-empty api_directory")
+
+    def _probe_spec_canonical_param_case(self):
+        self._stub()
+        (self.app / "jui.config.json").write_text(json.dumps(
+            {"api_directory": "../docs/api",
+             "spec": {"canonical_param_case": "camelcase"}}), encoding="utf-8")
+        ctx = canon.build_spec_canon_context(self.spec)
+        self.assertTrue(ctx.invalid_config_values)
+        self.assertIsNone(ctx.convention,
+                          "a typo'd convention must resolve as no convention "
+                          "AND say so — not silently become the typo")
+
+    def test_every_registered_key_is_probed(self):
+        probes = {
+            "extends": self._probe_extends,
+            "api_directory": self._probe_api_directory,
+            "spec.canonical_param_case": self._probe_spec_canonical_param_case,
+        }
+        unprobed = [k for k in canon.WALK_READS if k not in probes]
+        self.assertEqual(unprobed, [],
+                         "a key was added to the walk without a "
+                         "broken-declaration probe — that is how the last "
+                         "four families shipped")
+        for key in canon.WALK_READS:
+            with self.subTest(key=key):
+                probes[key]()
+
+    def test_the_typo_convention_is_named_with_its_valid_values(self):
+        self._stub()
+        (self.app / "jui.config.json").write_text(json.dumps(
+            {"api_directory": "../docs/api",
+             "spec": {"canonical_param_case": "CamelCase"}}), encoding="utf-8")
+        ctx = canon.build_spec_canon_context(self.spec)
+        self.assertEqual(len(ctx.invalid_config_values), 1)
+        message = ctx.invalid_config_values[0]
+        self.assertIn("'CamelCase'", message)
+        self.assertIn("asIs, camelCase, snake_case", message)
+
+    def test_a_valid_convention_says_nothing(self):
+        self._stub()
+        (self.app / "jui.config.json").write_text(json.dumps(
+            {"api_directory": "../docs/api",
+             "spec": {"canonical_param_case": "camelCase"}}), encoding="utf-8")
+        ctx = canon.build_spec_canon_context(self.spec)
+        self.assertEqual(ctx.invalid_config_values, ())
+        self.assertEqual(ctx.convention, "camelCase")

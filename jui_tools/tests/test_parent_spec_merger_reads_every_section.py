@@ -107,17 +107,55 @@ class SubSpecsSupplyEverythingTests(unittest.TestCase):
             len(result.spec["dataFlow"]["viewModel"]["methods"]), 1)
 
     def test_branch_contracts_and_task_cancellation_come_from_sub_specs(self):
-        result = self.merge({"branchContracts": {"onLoad": {"branches": []}},
-                             "task_cancellation": {"onLoad": "cancel on leave"}})
-        self.assertIn("onLoad", result.spec["branchContracts"])
+        result = self.merge(
+            {"branchContracts": {"methods": {"onLoad": {"branches": []}}},
+             "task_cancellation": {"onLoad": "cancel on leave"}})
+        self.assertIn("onLoad", result.spec["branchContracts"]["methods"])
         self.assertIn("onLoad", result.spec["task_cancellation"])
 
-    def test_a_keyed_block_declared_twice_differently_conflicts(self):
+    def test_each_tabs_contracts_coexist_in_the_merge(self):
+        """The reported defect. `conditions` and `methods` are FIXED
+        sub-sections; the entries under them are the keyed individuals. The
+        shallow merge read 'the second sub-spec also has conditions' as a
+        conflict and dropped that tab's contracts wholesale — a four-tab
+        parent whose tabs declared 2/2/2/6 conditions kept only the first
+        tab's 2. These earlier fixtures put a method name directly under
+        branchContracts, a shape the schema never allowed, so the tests
+        pinned the shallow key on a spec that cannot occur."""
         result = self.merge(
-            {"branchContracts": {"onLoad": {"branches": ["a"]}}},
-            {"branchContracts": {"onLoad": {"branches": ["b"]}}})
+            {"branchContracts": {
+                "conditions": {"canEditA": {"witness": "a"}},
+                "methods": {"onLoadA": {"branches": []}}}},
+            {"branchContracts": {
+                "conditions": {"canEditB": {"witness": "b"}},
+                "methods": {"onLoadB": {"branches": []}}}})
+        self.assertFalse(result.has_conflicts)
+        merged = result.spec["branchContracts"]
+        self.assertEqual(sorted(merged["conditions"]), ["canEditA", "canEditB"])
+        self.assertEqual(sorted(merged["methods"]), ["onLoadA", "onLoadB"])
+
+    def test_one_condition_declared_twice_differently_conflicts(self):
+        """The consumer declared its acceptance for this fix in advance: its
+        real corpus holds exactly one same-name condition whose wording
+        differs between two tabs, and the fixed merge must surface THAT — a
+        merge that comes back conflict-free is one that did not descend."""
+        result = self.merge(
+            {"branchContracts": {"conditions": {
+                "manageAllowed": {"witness": "w", "meaning": "tab A"}}}},
+            {"branchContracts": {"conditions": {
+                "manageAllowed": {"witness": "w", "meaning": "tab B"}}}})
         self.assertTrue(result.has_conflicts)
-        self.assertIn("branchContracts[onLoad]", result.conflicts[0].path)
+        self.assertEqual(len(result.conflicts), 1)
+        self.assertIn("branchContracts.conditions[name=manageAllowed]",
+                      result.conflicts[0].path)
+
+    def test_identical_contract_entries_do_not_conflict(self):
+        m = {"branchContracts": {"conditions": {
+            "canEdit": {"witness": "w", "meaning": "same"}}}}
+        result = self.merge(m, json.loads(json.dumps(m)))
+        self.assertFalse(result.has_conflicts)
+        self.assertEqual(list(result.spec["branchContracts"]["conditions"]),
+                         ["canEdit"])
 
     def test_error_handling_and_root_components_concatenate(self):
         result = self.merge(

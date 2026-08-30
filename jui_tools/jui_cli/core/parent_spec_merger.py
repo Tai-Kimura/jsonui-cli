@@ -357,24 +357,67 @@ class ParentSpecMerger:
                 if sub_vm.get("description") and not data_flow["viewModel"]["description"]:
                     data_flow["viewModel"]["description"] = sub_vm["description"]
 
-            # branchContracts / task_cancellation — keyed dicts.
-            for section, target, seen_map in (
-                    ("branchContracts", branch_contracts, seen_branch),
-                    ("task_cancellation", task_cancellation, seen_cancellation)):
-                block = sub.get(section)
-                if not isinstance(block, dict):
-                    continue
+            # branchContracts — two fixed sub-sections (`conditions`,
+            # `methods`) whose values are NAME-keyed maps, so the merge key
+            # is the name one level down. Keying on the sub-section spelled
+            # every second sub-spec that also had `conditions` as "Defined
+            # differently" and dropped that tab's contracts wholesale —
+            # measured on a four-tab parent whose 2/2/2/6 conditions survived
+            # only as the first tab's 2. Same granularity `uiVariables` and
+            # `viewModel[name=...]` always had; this section was the one
+            # keyed a level too shallow.
+            branch_block = sub.get("branchContracts")
+            if isinstance(branch_block, dict):
+                for subsection, entries in branch_block.items():
+                    if not isinstance(entries, dict):
+                        # Not the documented shape — keep whole-value
+                        # semantics rather than inventing a descent.
+                        if subsection in seen_branch:
+                            if not _stripped_equal(
+                                    {"v": branch_contracts.get(subsection)},
+                                    {"v": entries}):
+                                record_conflict(
+                                    path=f"branchContracts[{subsection}]",
+                                    message=(f"Defined differently in "
+                                             f"'{seen_branch[subsection]}' "
+                                             f"and '{source_name}'"))
+                            continue
+                        seen_branch[subsection] = source_name
+                        branch_contracts[subsection] = entries
+                        continue
+                    for name, value in entries.items():
+                        key = (subsection, name)
+                        if key in seen_branch:
+                            prev = branch_contracts[subsection][name]
+                            if _stripped_equal({"v": prev}, {"v": value}):
+                                continue
+                            record_conflict(
+                                path=(f"branchContracts.{subsection}"
+                                      f"[name={name}]"),
+                                message=(f"Defined differently in "
+                                         f"'{seen_branch[key]}' and "
+                                         f"'{source_name}'"))
+                            continue
+                        seen_branch[key] = source_name
+                        branch_contracts.setdefault(subsection, {})[name] = value
+
+            # task_cancellation — keyed dict at the top level (its keys ARE
+            # the entries; there is no fixed sub-section layer to descend).
+            block = sub.get("task_cancellation")
+            if isinstance(block, dict):
                 for key, value in block.items():
-                    if key in seen_map:
-                        if _stripped_equal({"v": target[key]}, {"v": value}):
+                    if key in seen_cancellation:
+                        if _stripped_equal(
+                                {"v": task_cancellation[key]}, {"v": value}):
                             continue
                         record_conflict(
-                            path=f"{section}[{key}]",
+                            path=f"task_cancellation[{key}]",
                             message=(f"Defined differently in "
-                                     f"'{seen_map[key]}' and '{source_name}'"))
+                                     f"'{seen_cancellation[key]}' and "
+                                     f"'{source_name}'"))
                         continue
-                    seen_map[key] = source_name
-                    target[key] = value
+                    seen_cancellation[key] = source_name
+                    task_cancellation[key] = value
 
             # error_handling / structure.rootComponents — list concat, the
             # same treatment userActions and transitions already had.

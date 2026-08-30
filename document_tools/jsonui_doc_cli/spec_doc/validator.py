@@ -2237,6 +2237,12 @@ class SpecValidator:
             # intent; not writing it is not.
             result.errors.append(SpecValidationMessage(
                 path="jui.config.json", message=message))
+        for message in getattr(context, "invalid_config_values", ()):
+            # Same ruling as `extends`: a declared value nothing accepts is a
+            # broken declaration, and this one silently changed how every
+            # generated parameter is spelled.
+            result.errors.append(SpecValidationMessage(
+                path="jui.config.json", message=message))
         index = context.index
         if not index:
             # Silence here compared nothing and looked exactly like a project
@@ -2272,11 +2278,24 @@ class SpecValidator:
                 api_dir = getattr(context, "api_dir", None)
                 cfg = getattr(context, "config_path", None)
                 where = f" ('{api_dir}', from '{cfg}')" if api_dir else ""
+                # Both units, labelled. A spec that lists its routes in
+                # `apiEndpoints` as well as on its methods declares each of
+                # them twice, and a count that does not say which unit it
+                # counts gets read as the other one: a lane summed these
+                # against its route count and reported the checker counting
+                # something else (134 routes, 263 sites — both numbers were
+                # right, in different units).
+                routes = {
+                    (canon.normalize_path(e.split(" ", 1)[-1]),
+                     e.split(" ", 1)[0].upper())
+                    for _, e in declared
+                }
                 result.warnings.append(SpecValidationMessage(
                     path="dataFlow",
                     message=(
-                        f"{len(declared)} endpoint declaration(s) were not "
-                        "checked: no OpenAPI document was found under "
+                        f"{len(routes)} endpoint(s), declared in "
+                        f"{len(declared)} place(s), were not checked: no "
+                        f"OpenAPI document was found under "
                         f"api_directory{where}. This is not 'every route "
                         "matches' — nothing was compared."
                     ),
