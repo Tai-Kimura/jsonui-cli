@@ -22,7 +22,7 @@ from ..core.spec_extractor import (
 )
 from ..core.type_mapper import TypeMapper
 from ..core.generated_marker import comment_header, comment_footer
-from ..core.spec_validator import resolve_platforms
+from ..core.spec_validator import SpecWarning, resolve_platforms
 
 
 # Component types whose event attributes land as optional function props in
@@ -123,6 +123,10 @@ class WebGenerator:
         ).replace("src/", "@/")
         self._repo_dir = root / "src" / "repository"
         self._usecase_dir = root / "src" / "usecase"
+        #: Findings raised while emitting, drained by the caller onto the
+        #: build's warning stream. One generator serves every screen of a
+        #: platform, so this accumulates across the run.
+        self.warnings: list[SpecWarning] = []
 
     def _load_rjui_config(self) -> dict:
         """Read rjui.config.json if present."""
@@ -219,8 +223,7 @@ class WebGenerator:
         seen_imports: set[str] = set()
         extra_import_lines: list[str] = []
         for v in web_vars_base:
-            for imp in self._type_mapper.resolve_imports(v.type, "web"):
-                line = f'import {{ {_TS_TYPE_OVERRIDES.get(v.type, v.type)} }} from "{imp}";'
+            for line in self._import_lines(v.type):
                 if line in seen_imports:
                     continue
                 seen_imports.add(line)
@@ -241,7 +244,7 @@ class WebGenerator:
         # Non-observable vars emitted as public fields on the Base class.
         # Observable vars live inside <Name>Data (uiVariables handle that).
         for v in web_vars_base:
-            lines.append(self._var_base_declaration(v))
+            lines.append(self._var_base_declaration(v, spec.name))
         lines += [
             "",
             f"  get data(): {data_type} {{",
@@ -393,17 +396,106 @@ class WebGenerator:
 
     # --- Helpers ---
 
-    def _var_base_declaration(self, var) -> str:
+    def _map_type(self, spec_type: str) -> str:
+        """Resolve a spec type to TypeScript. Same shape as iOS/Android.
+
+        The type map is the one place that answers "what is this type on
+        this platform" — optional suffixes (``String?`` → ``string |
+        undefined``), collections, unions and all. This generator used to
+        carry a private five-word table instead, which is how ``String?``
+        reached the output verbatim and became invalid TS: the table only
+        matched exact spellings, so every suffixed type missed it.
+
+        Closure types walk sub-expression by sub-expression and then take
+        the two TS-only touches the type map does not spell: Swift's ``->``
+        arrow, and a trailing ``?`` that the ``$T?`` pattern cannot match
+        across the ``>`` of an arrow.
+        """
+        if "->" in spec_type:
+            ts = self._type_mapper.resolve_in_string(spec_type, "web")
+            ts = ts.replace("->", "=>")
+            if ts.endswith("?"):
+                ts = f"{ts[:-1]} | undefined"
+            return ts
+        return self._type_mapper.resolve_class(spec_type, "web")
+
+    def _import_lines(self, spec_type: str) -> list[str]:
+        """``import { X } from "..."`` for each custom type in *spec_type*.
+
+        The identifier is what gets imported, so it is resolved on its own.
+        Importing the whole type expression emitted ``import { ItemImage? }``
+        (plus a duplicate line) whenever the var carried an optional suffix.
+        """
+        lines: list[str] = []
+        for ident in dict.fromkeys(_TYPE_IDENT_RE.findall(spec_type)):
+            imports = self._type_mapper.resolve_imports(ident, "web")
+            if not imports:
+                continue
+            symbol = self._type_mapper.resolve_class(ident, "web")
+            lines.extend(f'import {{ {symbol} }} from "{imp}";' for imp in imports)
+        return lines
+
+    def _var_default_value(self, var) -> str | None:
+        """TS initializer for a non-observable var, or None if there is none.
+
+        Mirrors ``IosGenerator``/``AndroidGenerator._var_default_value``: the
+        declared ``defaultValue`` from the type map wins, and there is no
+        second opinion about what a zero value is.
+        """
+        if var.optional:
+            # `?:` already admits absence — TS wants no initializer, and
+            # writing one would contradict the declaration.
+            return None
+        try:
+            default = self._type_mapper.resolve_default(var.type, "web")
+        except Exception:  # pragma: no cover — defensive; TypeMapper is total
+            default = None
+        if default is not None:
+            return _ts_literal(default)
+        # A type that admits `undefined` (`[String]?`, `callback`, …) has a
+        # zero value even though the type map declares no `defaultValue`:
+        # `undefined` is inside the declared type, so writing it invents
+        # nothing. Only types with no inhabitant we can name fall through
+        # to the `!` branch.
+        if _admits_undefined(self._map_type(var.type)):
+            return "undefined"
+        return None
+
+    def _var_base_declaration(self, var, spec_name: str) -> str:
         """TypeScript public-field declaration for a non-observable var.
 
         Observable vars are part of ``<Name>Data`` so they're not re-emitted
-        here. Closure types (containing ``->``) are translated to TS arrow
-        syntax.
+        here.
         """
-        type_str = _to_ts_type(var.type)
+        type_str = self._map_type(var.type)
         if var.optional:
+            # `optional: true` is a statement about the member; a `?` in the
+            # type is a statement about the type. Both are kept — collapsing
+            # either would silence something the spec said.
             return f"  public {var.name}?: {type_str};"
-        return f"  public {var.name}: {type_str};"
+        init = self._var_default_value(var)
+        if init is not None:
+            return f"  public {var.name}: {type_str} = {init};"
+        # Nothing can be synthesized: a custom type with no `defaultValue`
+        # in .jsonui-type-map.json. iOS/Kotlin emit a bare declaration here
+        # and let the compiler ask the author — which works only because
+        # their output is a scaffold written once and editable afterwards.
+        # This file is @generated and rewritten every build, so the same
+        # emit is a dead end (TS2564) the consumer cannot clear. `!` is the
+        # one TS spelling that neither invents a value nor rewrites the
+        # declared type, but it is a promise nothing checks, so it never
+        # goes out silently.
+        self.warnings.append(SpecWarning(
+            spec_name=spec_name,
+            message=(
+                f"dataFlow.viewModel.vars.{var.name}: '{var.type}' has no "
+                f"declared defaultValue, so the web ViewModelBase declares it "
+                f"with `!` (definite assignment) — a promise nothing verifies. "
+                f"Either add a \"defaultValue\" for '{var.type}' to "
+                f".jsonui-type-map.json, or declare the var \"optional\": true."
+            ),
+        ))
+        return f"  public {var.name}!: {type_str};"
 
     def _ts_method_signature(self, method: MethodDef, with_async: bool = False) -> str:
         params = ", ".join(
@@ -445,24 +537,49 @@ def _subdir_to_pascal(subdir: str) -> Path:
     return Path(*parts) if parts else Path()
 
 
-_TS_TYPE_OVERRIDES = {
-    "String": "string",
-    "Int": "number",
-    "Double": "number",
-    "Bool": "boolean",
-    "Void": "void",
-}
+_TYPE_IDENT_RE = re.compile(r"[A-Za-z_]\w*")
+
+_BRACKETS = {"<": ">", "(": ")", "[": "]", "{": "}"}
 
 
-def _to_ts_type(spec_type: str) -> str:
-    """Best-effort spec-type → TypeScript translation.
+def _admits_undefined(ts_type: str) -> bool:
+    """True if ``undefined`` is one of *ts_type*'s top-level union members.
 
-    - Closure types: Swift ``() -> Void`` → TS ``() => void``; ``Void`` inside
-      the return position becomes ``void``
-    - Known primitives via ``_TS_TYPE_OVERRIDES``
-    - Otherwise pass through (custom types author wrote in TS form)
+    Depth-aware on purpose: ``Record<string, string | undefined>`` admits no
+    undefined *itself*, and a suffix match would say it does.
     """
-    if "->" in spec_type:
-        ts = spec_type.replace("->", "=>").replace("Void", "void")
-        return ts
-    return _TS_TYPE_OVERRIDES.get(spec_type, spec_type)
+    return any(member == "undefined" for member in _split_top_level(ts_type))
+
+
+def _split_top_level(ts_type: str) -> list[str]:
+    """Split a TS type on ``|`` that sits outside any bracket pair."""
+    parts: list[str] = []
+    buf: list[str] = []
+    stack: list[str] = []
+    for ch in ts_type:
+        if ch in _BRACKETS:
+            stack.append(_BRACKETS[ch])
+        elif stack and ch == stack[-1]:
+            stack.pop()
+        if ch == "|" and not stack:
+            parts.append("".join(buf).strip())
+            buf = []
+            continue
+        buf.append(ch)
+    parts.append("".join(buf).strip())
+    return parts
+
+
+def _ts_literal(value) -> str:
+    """Render a Python default-value as a TypeScript literal."""
+    if value is None:
+        return "null"
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    if isinstance(value, (int, float)):
+        return repr(value)
+    if isinstance(value, str):
+        return json.dumps(value)
+    if isinstance(value, list):
+        return "[" + ", ".join(_ts_literal(v) for v in value) + "]"
+    return str(value)

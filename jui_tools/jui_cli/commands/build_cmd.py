@@ -1452,6 +1452,12 @@ def _sync_viewmodel_protocols(
                 if atomic_write_text(impl_path, updated):
                     impl_writes += 1
 
+        # Findings raised while emitting (e.g. a var the generated Base can
+        # only declare with `!`). They ride the warning stream, where the
+        # zero-warnings invariant makes them gate — same channel as the
+        # localize findings above.
+        emit_warnings(getattr(generator, "warnings", []))
+
     if errors:
         print("\nERROR [protocol-sync]:")
         for line in errors:

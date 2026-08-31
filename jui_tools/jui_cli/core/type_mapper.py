@@ -32,7 +32,17 @@ _BUILTIN_TYPES = {
         "android": {"class": "Unit"},
         "web": {"class": "void"},
     },
-    "Visibility": {"class": "String", "defaultValue": "gone"},
+    # `class` is the Swift spelling and Kotlin shares it, but TypeScript's
+    # `String` is the boxed wrapper object — legal, and wrong (eslint
+    # @typescript-eslint/no-wrapper-object-types). Every other entry whose
+    # native spellings differ already carries a `web` override; this one was
+    # missed because `String` happens to be a real TS type name, so nothing
+    # downstream could tell the leak from an intentional mapping.
+    "Visibility": {
+        "class": "String",
+        "defaultValue": "gone",
+        "web": {"class": "string"},
+    },
     "CollectionDataSource": {"class": "CollectionDataSource"},
     "callback": {
         "class": "(() -> Void)?",
@@ -59,8 +69,15 @@ _BUILTIN_TYPES = {
     # Without the explicit nullable-element variants the pattern engine
     # would only match the elements-required forms and `[String?]` would
     # leak through to the Kotlin/TS protocols verbatim.
+    # A non-optional list has a zero value on every platform, so it is
+    # declared here rather than in any one generator: `[]` / `listOf()` /
+    # `[]`. Without it all three emit an uninitialized declaration for
+    # `items: [Item]`, which is a compile error on iOS/Kotlin and a TS2564
+    # on web. The optional variants below deliberately have none — `nil` /
+    # `null` / an absent property is what optionality already means.
     "[$T]": {
         "class": "[$T]",
+        "defaultValue": [],
         "android": {"class": "List<$T>"},
         "web": {"class": "$T[]"},
     },
@@ -86,6 +103,7 @@ _BUILTIN_TYPES = {
     },
     "Array($T)": {
         "class": "[$T]",
+        "defaultValue": [],
         "android": {"class": "List<$T>"},
         "web": {"class": "$T[]"},
     },
@@ -96,6 +114,7 @@ _BUILTIN_TYPES = {
     # both generators route through this same TypeMapper.
     "List($T)": {
         "class": "[$T]",
+        "defaultValue": [],
         "android": {"class": "List<$T>"},
         "web": {"class": "$T[]"},
     },

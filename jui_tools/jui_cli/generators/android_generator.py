@@ -497,8 +497,25 @@ class AndroidGenerator:
         """
         type_str = _kotlin_optional(self._map_type(var.type), var.optional)
         init = self._var_default_value(var)
+        if init is None and type_str.endswith("?"):
+            # Nullable by the *type* rather than by `optional: true` (a var
+            # declared `"type": "[Item]?"`). Kotlin has no implicit-null rule
+            # the way Swift has implicit-nil, so leaving this bare emitted a
+            # property Kotlin refuses to compile.
+            init = "null"
         if var.observable and not var.read_only:
-            init_expr = init if init is not None else "null"
+            # `null` is only a value when the declared type accepts it.
+            # `MutableStateFlow<UserProfile>(null)` does not compile, and a
+            # custom type with no `defaultValue` in .jsonui-type-map.json
+            # reached exactly that. `TODO(...)` returns Nothing, so it types
+            # against any T and hands the decision to the author by name —
+            # which works here because this file is a scaffold written once
+            # and editable afterwards (the web Base, regenerated every
+            # build, has to say it with `!` plus a build warning instead).
+            init_expr = init if init is not None else (
+                f'TODO("initialize {var.name}: no default is declared '
+                f'for {var.type}")'
+            )
             return (
                 f"    private val _{var.name}: MutableStateFlow<{type_str}> = "
                 f"MutableStateFlow({init_expr})\n"

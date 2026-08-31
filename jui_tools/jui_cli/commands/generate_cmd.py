@@ -655,6 +655,13 @@ def _cmd_generate_project(args: argparse.Namespace) -> int:
             else:
                 decl_content = generator.generate_viewmodel_protocol(screen_spec)
 
+            # Findings raised while emitting (e.g. a var the generated Base
+            # can only declare with `!`) join this command's warning stream.
+            for w in getattr(generator, "warnings", []):
+                warnings.append(f"WARNING [spec:{w.spec_name}] {w.message}")
+            if hasattr(generator, "warnings"):
+                generator.warnings.clear()
+
             if decl_path.exists() and not args.force:
                 diff = diff_checker.check(decl_path, decl_content)
                 if diff:
