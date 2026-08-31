@@ -327,6 +327,14 @@ def generate(
 
     gen_root = mock_dir / GENERATED_DIR
     _clear_generated(gen_root)
+    # The report names generated/ as the output tree even when zero routes
+    # are in scope (a new sub-project whose API face is not in the shared
+    # swagger yet is a legitimate state, not an error). Create it
+    # unconditionally so `mock serve` can start — deferring the mkdir to
+    # the first file write left serve's "run 'mock generate' first" hint
+    # pointing at a command that had just exited 0 without changing
+    # anything, a loop with no exit.
+    gen_root.mkdir(parents=True, exist_ok=True)
 
     for swagger in swagger_paths:
         doc = OpenApiDoc.load(swagger)

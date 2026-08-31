@@ -37,11 +37,22 @@ def register_init_command(subparsers: argparse._SubParsersAction) -> None:
 
 def cmd_init(args: argparse.Namespace) -> int:
     """Execute jui init."""
-    config_mgr = ConfigManager()
+    # Double-init protection judges THIS directory only. An ancestor
+    # jui.config.json is a normal monorepo layout (a root config plus one
+    # per sub-project) and must not block bootstrapping a new sub-project.
+    # The ancestor-walking resolver is for read-side commands; for a
+    # creation command the only config whose existence means "already
+    # initialized" is the one at the target path itself.
+    target_path = Path.cwd() / ConfigManager.CONFIG_FILENAME
+    config_mgr = ConfigManager(config_path=target_path)
     if config_mgr.exists():
         print(f"ERROR: {config_mgr.CONFIG_FILENAME} already exists at {config_mgr.path}")
         print("Use --force to overwrite (not yet implemented)")
         return 1
+    ancestor_path = ConfigManager().path
+    if ancestor_path.exists() and ancestor_path.resolve() != target_path.resolve():
+        print(f"NOTE: {ConfigManager.CONFIG_FILENAME} exists at {ancestor_path} "
+              "(ancestor) — initializing a new sub-project here anyway.")
 
     # Build config
     config = {

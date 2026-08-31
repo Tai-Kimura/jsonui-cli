@@ -186,6 +186,40 @@ class WebScanTests(unittest.TestCase):
         self.assertEqual(report.dynamic, [])
         self.assertEqual(report.unused, [])
 
+    def test_formatter_wrapped_call_keeps_the_exemption(self):
+        # Prettier wraps at printWidth and pushes the map name onto its
+        # own line inside the call's arguments. The warning text always
+        # said "statement", but the window was the physical line, so a
+        # convention-compliant call went dynamic depending on where the
+        # formatter broke it (reported from a real consumer, 2026-08-31).
+        self.fx.write(
+            "src/vm.ts",
+            'const KIND_STRING_KEYS = {\n'
+            '  a: "screen_title",\n'
+            '};\n'
+            "this.showError(\n"
+            "  StringManager.getString(\n"
+            '    KIND_STRING_KEYS[kind] ?? "screen_help"\n'
+            "  )\n"
+            ");\n")
+        report = self._run()
+        self.assertEqual(report.dynamic, [])
+        self.assertEqual(report.unused, [])
+
+    def test_the_widened_window_stops_at_the_statement(self):
+        # The over-widening direction: a *_STRING_KEYS mention in the NEXT
+        # statement must not exempt this call — the window is bounded by
+        # the call's own parentheses, not "somewhere below in the file".
+        self.fx.write(
+            "src/vm.ts",
+            "const t = StringManager.getString(\n"
+            "  kind\n"
+            ");\n"
+            'const K_STRING_KEYS = { a: "screen_title" };\n')
+        report = self._run()
+        self.assertEqual(len(report.dynamic), 1)
+        self.assertTrue(report.dynamic[0].site.endswith(":1"))
+
     def test_map_literal_not_in_strings_json_is_a_missing_key(self):
         self.fx.write("src/vm.ts",
                       'const K_STRING_KEYS = { a: "screen_gone" };\n')

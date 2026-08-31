@@ -1067,7 +1067,12 @@ def cmd_mock_serve(args):
     project_root = config_path.parent if config_path else Path(".")
 
     if not Path(mock_dir).exists():
-        print(f"Error: mock dir not found: {mock_dir} (run 'jsonui-test mock generate' first)", file=sys.stderr)
+        # generate creates mockDir even when the project's path scope
+        # matches 0 endpoints, so a missing dir really does mean generate
+        # has not run (older tool versions skipped the mkdir on the
+        # 0-endpoint path and made this hint a loop).
+        print(f"Error: mock dir not found: {mock_dir} (run 'jsonui-test mock generate' first — "
+              "it creates the directory even when 0 endpoints are in scope)", file=sys.stderr)
         return 1
 
     post_run_hook = None
@@ -1101,6 +1106,12 @@ def cmd_mock_serve(args):
         return 1
     print(f"JsonUI mock server: http://127.0.0.1:{server.port}")
     print(f"  loaded {len(store.endpoints)} endpoint(s) from {mock_dir}/")
+    if not store.endpoints:
+        # A servable state, not an error: mock-independent tests (security
+        # regressions and the like) still need the server up. Say what a
+        # request will get so an empty scope is diagnosable from the banner.
+        print("  0 endpoints — every request will 404. If you expected mocks, "
+              "check the swagger against this project's API path scope.")
     if store.overrides:
         # A hand-written mock silently shadowing a generated one is the
         # confusing case, so say so.

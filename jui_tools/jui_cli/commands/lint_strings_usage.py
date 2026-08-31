@@ -589,13 +589,51 @@ def _line_of(text: str, offset: int) -> int:
 
 
 def _statement_mentions_keys_map(text: str, offset: int) -> bool:
-    """Whether the line containing *offset* references a *_STRING_KEYS
-    name — the declared-map route that exempts a dynamic reference."""
+    """Whether the statement at *offset* references a *_STRING_KEYS name —
+    the declared-map route that exempts a dynamic reference.
+
+    The window is the physical line containing *offset*, extended to the
+    close of any ``(...)``/``[...]`` group that opens on that line and
+    runs past it. Formatters wrap long calls at printWidth and push the
+    map name onto its own line inside the call's arguments, so a one-line
+    window turned convention-compliant calls into dynamic-ref warnings
+    (the warning text always said "statement"). Balancing stops at the
+    group's own closer, so the widened window cannot reach a
+    *_STRING_KEYS mention in a neighbouring statement. A group left
+    unclosed at EOF falls back to the one-line window.
+    """
     start = text.rfind("\n", 0, offset) + 1
     end = text.find("\n", offset)
     if end < 0:
         end = len(text)
-    return _KEYS_MAP_NAME_RE.search(text, start, end) is not None
+    window_end = end
+    depth = 0
+    in_str: str | None = None
+    j = start
+    while j < len(text):
+        if j >= end and depth == 0:
+            break
+        ch = text[j]
+        if in_str is not None:
+            if ch == "\\":
+                j += 2
+                continue
+            if ch == in_str:
+                in_str = None
+        elif ch in "\"'`":
+            in_str = ch
+        elif ch in "([":
+            depth += 1
+        elif ch in ")]":
+            # A closer at depth 0 belongs to a group opened on an earlier
+            # line; the statement continues past it — skip it.
+            if depth > 0:
+                depth -= 1
+                if depth == 0 and j >= end:
+                    window_end = j + 1
+                    break
+        j += 1
+    return _KEYS_MAP_NAME_RE.search(text, start, window_end) is not None
 
 
 def scan_vm_sources(
