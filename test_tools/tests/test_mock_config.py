@@ -130,7 +130,9 @@ class TestEndToEnd:
             # Regeneration is a separate step now: `validate` runs it before
             # it counts files, so the two are ordered rather than nested.
             assert _regenerate_stale_mocks(None) == 0
-            assert _check_mocks_against_swagger(None) == (0, 0)
+            # (exit code, orphans, errors) — the error count joined the
+            # return value so the caller's `Errors:` line can read it.
+            assert _check_mocks_against_swagger(None) == (0, 0, 0)
         finally:
             os.chdir(cwd)
         generated = list((proj / "tests" / "mocks" / "generated").rglob("*.mock.json"))

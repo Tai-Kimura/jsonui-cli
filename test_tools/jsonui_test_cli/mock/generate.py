@@ -410,6 +410,17 @@ class UpdateReport:
     added: dict = field(default_factory=dict)
     #: Findings a merge cannot fix — wrong types, undeclared fields.
     needs_review: list = field(default_factory=list)
+    #: `rel -> [scenario names]` this run would actually change the BODY of.
+    #:
+    #: Narrower than `updated`, on purpose. `updated` also holds files whose
+    #: only change was the `source` route, and the merge only ever touches
+    #: `default` — so `updated` cannot answer "will running this close that
+    #: finding?", which is the question `--check` has to answer before it
+    #: prints `--update-default` as the remedy. Answered here, by the merge
+    #: itself, rather than re-derived from the kind of drift: a second
+    #: implementation of "what a merge can decide" diverges silently the day
+    #: this one's policy changes.
+    repaired: dict = field(default_factory=dict)
     #: editor schema copies written this run (see `place_editor_schema`)
     schemas: list = field(default_factory=list)
     warnings: list = field(default_factory=list)
@@ -484,8 +495,14 @@ def update_default(
     Violations a merge cannot decide — a value of the wrong type, a field the
     contract does not have — are reported rather than guessed at.
 
-    `scope` keeps endpoints the project does not consume out of `skipped`,
-    which otherwise reads as "you are missing these mocks".
+    `scope` is the project's declared API paths, and this command honours it
+    the same way `generate` and `--check` do: an endpoint outside it is not
+    visited at all. It used to be read in one branch only — whether an absent
+    file counts as a gap in `skipped` — so a mock for an excluded route was
+    still opened and written to. The narrow role was DECLARED here, matching
+    the code, which is why the gap survived review: a reader checking that
+    scope was handled found a sentence saying it was, for the case it
+    covered.
     """
     mock_dir = Path(mock_dir)
     scope = scope or PathScope()
@@ -494,6 +511,7 @@ def update_default(
     skipped: list[str] = []
     added: dict = {}
     needs_review: list = []
+    repaired: dict = {}
     # A route can hold two files under the overlay model (generated
     # counterpart + hand-written overlay), so the repair target is picked by
     # WHICH file's `default` actually serves — serve lets a hand-written
@@ -524,6 +542,19 @@ def update_default(
         if not doc.is_api_spec():
             continue
         for op in doc.operations():
+            if not scope.covers(op.path):
+                # `generate` and `_check` both drop out-of-scope routes in
+                # the body of their loop; this one used `scope` in a single
+                # branch — whether an ABSENT file counts as a gap — and wrote
+                # to the ones that were present. Measured: on a project
+                # excluding /api/legacy/*, one run of `--check` called
+                # `legacy/legacyPing.mock.json` "safe to delete" and
+                # `--update-default` then edited that file and nothing else,
+                # reporting "Repaired the default scenario of 1 mock file(s)"
+                # while the file that made the check red was untouched. Two
+                # commands of one tool disagreeing about whether a file
+                # belongs to the project leaves the reader to pick one.
+                continue
             # Located by route, so a project's own file naming is honoured.
             key = route_key(op.method, op.path)
             hand_rel = hand_index.get(key)
@@ -535,9 +566,7 @@ def update_default(
                 rel = hand_rel or mock_relpath(op)
             target = mock_dir / rel
             if not target.exists():
-                # Out of scope and absent is the correct state, not a gap.
-                if scope.covers(op.path):
-                    skipped.append(rel)
+                skipped.append(rel)
                 continue
             try:
                 with open(target, "r", encoding="utf-8") as f:
@@ -563,6 +592,8 @@ def update_default(
             data["source"] = source
 
             scenarios = data.get("scenarios")
+            scenarios_before = json.dumps(scenarios, ensure_ascii=False,
+                                          sort_keys=True)
             if isinstance(scenarios, dict):
                 current = scenarios.get("default")
                 if not isinstance(current, dict):
@@ -596,6 +627,13 @@ def update_default(
                         if problems:
                             needs_review.append((rel, problems))
 
+            # Measured, not assumed: the body is compared before and after,
+            # so a run that only refreshed the `source` route does not claim
+            # to have repaired a scenario.
+            if json.dumps(scenarios, ensure_ascii=False,
+                          sort_keys=True) != scenarios_before:
+                repaired.setdefault(rel, []).append("default")
+
             if json.dumps(data, ensure_ascii=False, sort_keys=True) == before:
                 unchanged.append(rel)
                 continue
@@ -612,7 +650,7 @@ def update_default(
     schemas = [] if dry_run else _place_editor_schema_quietly(mock_dir, warnings)
     return UpdateReport(updated=updated, unchanged=unchanged, skipped=skipped,
                         added=added, needs_review=needs_review,
-                        schemas=schemas, warnings=warnings)
+                        repaired=repaired, schemas=schemas, warnings=warnings)
 
 
 @dataclass
@@ -869,6 +907,31 @@ class BodyDrift:
         return "\n".join(lines)
 
 
+#: The buckets that fail the check, and what to call each one in the summary.
+#:
+#: One declaration, read by BOTH `has_drift` and `drift_summary`. They used to
+#: be written separately — `has_drift` read five lists while the summary line
+#: counted four — and the cost is not cosmetic: a run gated by the fifth
+#: printed
+#:
+#:     Drift detected: 0 missing, 0 orphaned, 0 drifted, 0 stale body(ies)
+#:     exit 1
+#:
+#: Four zeroes and a failure. A consumer greps that line in CI and reads the
+#: red as a false positive. Both categories added on 2026-09-01 opened the
+#: same hole, one of them in a shipped release, which is what says the shape
+#: is wrong rather than the two edits: adding a gating bucket must not be able
+#: to leave the account of it behind. Order is the printing order.
+GATING_BUCKETS: tuple = (
+    ("missing", "missing"),
+    ("orphaned", "orphaned"),
+    ("drifted", "drifted"),
+    ("errors", "stale body(ies)"),
+    ("absent_generated", "declared but absent from generated/"),
+    ("unmatched_generated", "undeclared in generated/"),
+)
+
+
 @dataclass
 class CheckReport:
     missing: list[str]   # in swagger, no mock file
@@ -1013,10 +1076,34 @@ class CheckReport:
                 if b.generated and (self.strict or not b.is_note_only)]
 
     @property
+    def unmatched_notes(self) -> list:
+        """`unmatched` minus the entries that are already gated as
+        `unmatched_generated`.
+
+        The gating subset is a subset, so a generated scenario for an
+        undeclared status was printed twice — once as `[EXTRA]` (gating) and
+        once as `[NOTE] ... — not compared`, which reads as the opposite
+        claim about the same line. `unmatched` stays whole because it is the
+        denominator; only the reporting channel splits.
+        """
+        gated = set(self.unmatched_generated)
+        return [n for n in self.unmatched if n not in gated]
+
+    @property
+    def gating(self) -> list:
+        """`(label, count)` for every bucket that fails the check."""
+        return [(label, len(getattr(self, name)))
+                for name, label in GATING_BUCKETS]
+
+    @property
     def has_drift(self) -> bool:
-        return bool(self.missing or self.orphaned or self.drifted
-                    or self.errors or self.absent_generated
-                    or self.unmatched_generated)
+        return any(count for _, count in self.gating)
+
+    @property
+    def drift_summary(self) -> str:
+        """The line that has to add up to the exit code."""
+        return "Drift detected: " + ", ".join(
+            f"{count} {label}" for label, count in self.gating)
 
 
 def expected_generated_relpaths(

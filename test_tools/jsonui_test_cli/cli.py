@@ -134,10 +134,11 @@ def cmd_validate(args):
     # upstream can silently retire a chunk of the contract check while every
     # line a reader looks at still says PASSED.
     mock_rc = 0
+    mock_errors = 0
     orphans = None
     unchecked_mocks = None
     if total_errors == 0 and not getattr(args, "no_mock_check", False):
-        mock_rc, orphans = _check_mocks_against_swagger(
+        mock_rc, orphans, mock_errors = _check_mocks_against_swagger(
             getattr(args, "config", None))
         if orphans is None:
             unchecked_mocks = _warn_unchecked_mocks(
@@ -177,12 +178,21 @@ def cmd_validate(args):
         print(f"[ERROR] {message}")
         total_errors += 1
 
+    # The mock gate's findings are errors of this run, so they are added to
+    # the count rather than carried beside it.
+    #
+    # The headline was patched to read `mock_rc` after a run printed PASSED
+    # and exited 1. `Errors:` is the next line and was not patched, so the
+    # same run then printed `Errors: 0` alongside exit 1 — and a consumer
+    # greps that line. Patching the individual line is what left the second
+    # one: the word, the count and the exit code have to be three readings
+    # of ONE number, not three lines that each learn about the mock gate
+    # separately. `mock_rc` is non-zero exactly when the gate found
+    # something, so the two cannot disagree.
+    total_errors += mock_errors
+
     # Summary
     print(f"\n{'='*50}")
-    # The mock gate counts toward the headline. It always counted toward the
-    # exit code, so a run could print PASSED and exit 1 — and the reporting
-    # project read the word, not the code. A headline that disagrees with the
-    # result is the same silent failure this gate exists to stop.
     status = "PASSED" if total_errors == 0 and mock_rc == 0 else "FAILED"
     print(f"Result: {status}")
     summary = f"Files: {files_checked}, Errors: {total_errors}, Warnings: {total_warnings}"
@@ -502,13 +512,95 @@ def _rebuild_generated(resolved, mock_path, scope) -> int:
     return 0
 
 
+def _print_drift_findings(report):
+    """Every finding that fails the check, on both commands that print them.
+
+    One printer, because the two used to disagree about what a red run even
+    contains: this path listed four kinds and `mock generate --check` listed
+    six, so a run gated by one of the other two printed the "Mock contract
+    drift:" header with nothing under it and then a remedy for findings it
+    had not shown. Adding a gating bucket has to reach every reader of one,
+    which is what a shared printer means and a copied loop does not.
+    """
+    for rel in report.missing:
+        print(f"  [MISSING] {rel} (in swagger, no mock file)")
+    for rel in report.orphaned:
+        print(f"  [ORPHAN]  {rel} (mock file, not in swagger)")
+    for msg in report.drifted:
+        print(f"  [DRIFT]   {msg}")
+    for msg in report.absent_generated:
+        # generated/ is a pure function of the swagger, so there is no state
+        # in which one of its scenarios is legitimately missing — it was
+        # edited, or a generation run was interrupted.
+        print(f"  [ABSENT]  {msg}\n"
+              "            generated/ is derived from the swagger; run "
+              "`jsonui-test mock generate` to restore it")
+    for msg in report.unmatched_generated:
+        # The mirror of [ABSENT]: holding a status the swagger no longer
+        # declares is as impossible a state as missing one. A consumer
+        # measured what it costs — an end-to-end suite green against a 409
+        # the implementation had no branch for.
+        print(f"  [EXTRA]   {msg}\n"
+              "            generated/ is derived from the swagger; run "
+              "`jsonui-test mock generate` to drop it")
+    for drift in report.errors:
+        print(f"  [BODY]    {drift}")
+
+
+def _print_body_drift_remedy(report, swaggers, mock_dir, scope):
+    """Say which body findings `--update-default` will actually close.
+
+    The remedy used to be printed for every body finding, and it is a merge
+    that only touches the `default` scenario and never overwrites a value —
+    so on a stale `error_422`, or on a `default` whose value is the wrong
+    type, running it repairs nothing and the same check comes back
+    identical. A remedy that cannot work is worse than none: the reader runs
+    it, nothing changes, and the gate is what stops being believed.
+
+    Which findings it closes is asked of the merge itself, in dry-run,
+    rather than re-derived from the kind of drift. A second implementation
+    of "what a merge can decide" would diverge silently the day the merge's
+    policy changes — and the knowledge is already there: `--update-default`
+    prints these same files under "violations a merge cannot decide".
+    """
+    from .mock.generate import update_default
+
+    upd = update_default(swaggers, mock_dir, dry_run=True, scope=scope)
+    blocked = {rel for rel, _ in upd.needs_review}
+    # Both halves come from the merge: `repaired` says it would change this
+    # scenario's body at all, `needs_review` says what it leaves behind.
+    # A file it would touch but not finish still needs a person.
+    fixable = {(rel, scenario)
+               for rel, scenarios in upd.repaired.items()
+               if rel not in blocked
+               for scenario in scenarios}
+    by_merge = [d for d in report.errors if (d.rel, d.scenario) in fixable]
+    by_hand = [d for d in report.errors if (d.rel, d.scenario) not in fixable]
+
+    if by_merge:
+        print("\nRefresh these with `jsonui-test mock generate "
+              "--update-default` (hand-grown scenarios are preserved):")
+        for drift in by_merge:
+            print(f"  {drift.rel}  {drift.scenario}")
+    if by_hand:
+        print(f"\n{len(by_hand)} finding(s) a merge cannot decide — "
+              "`--update-default` never overwrites a value and only touches "
+              "`default`, so it would leave these unchanged. Fix by hand, "
+              "keeping your test data:")
+        for drift in by_hand:
+            print(f"  {drift.rel}  {drift.scenario}")
+
+
 def _check_mocks_against_swagger(config_path):
-    """Check the mocks against swagger. Returns (exit code, orphan count).
+    """Check the mocks against swagger.
+
+    Returns (exit code, orphan count, error count).
 
     The orphan count is returned rather than only printed: an orphaned mock is
     a mock whose body stops being compared to anything, and a check that
     quietly shrinks its own scope is the one failure a reader cannot see in a
-    pass/fail line.
+    pass/fail line. The error count is returned for the same reason one step
+    up — the caller's `Errors:` line read zero on a run this gate failed.
     """
     from .mock.generate import generate, CheckReport
 
@@ -518,14 +610,14 @@ def _check_mocks_against_swagger(config_path):
         # and returning 0 made every mock-less project print the sentence a
         # clean result prints. Same reason below — a report we cannot read is
         # not a report of zero orphans.
-        return 0, None
+        return 0, None, 0
     resolved, mock_path, config = inputs
     scope = _load_path_scope(config_path)
 
     report = generate(resolved, mock_path, check=True, scope=scope,
                       strict=bool(config.get("checkOptionalFields", False)))
     if not isinstance(report, CheckReport):
-        return 0, None
+        return 0, None, 0
     orphans = len(report.orphaned)
     # What the check measured, on every run that reaches it — before the
     # early return, because a clean result was where this went missing.
@@ -539,21 +631,18 @@ def _check_mocks_against_swagger(config_path):
     print(f"\n{report.contract_summary}")
     _print_uncompared(report)
     if not report.has_drift:
-        return 0, orphans
+        return 0, orphans, 0
 
     print(f"\n{'='*50}")
     print("Mock contract drift:")
-    for rel in report.missing:
-        print(f"  [MISSING] {rel} (in swagger, no mock file)")
-    for rel in report.orphaned:
-        print(f"  [ORPHAN]  {rel} (mock file, not in swagger)")
-    for msg in report.drifted:
-        print(f"  [DRIFT]   {msg}")
-    for drift in report.errors:
-        print(f"  [BODY]    {drift}")
-    print("Fix with `jsonui-test mock generate --update-default`, "
-          "or pass --no-mock-check to skip this gate.")
-    return 1, orphans
+    _print_drift_findings(report)
+    print(f"\n{report.drift_summary}")
+    if report.errors:
+        _print_body_drift_remedy(report, resolved, mock_path, scope)
+    print("\nPass --no-mock-check to skip this gate.")
+    # The count the caller prints as `Errors:`, from the same buckets the
+    # exit code is decided by.
+    return 1, orphans, sum(count for _, count in report.gating)
 
 
 def _print_uncompared(report):
@@ -564,9 +653,20 @@ def _print_uncompared(report):
     number belongs on screen — it is the one that should be walking towards
     zero, and a test asserting a shape nothing compared is a test that can
     be green for a branch the implementation does not have.
+
+    `[STATUS]`, not `[NOTE]`: that label named two unrelated findings — this
+    one, and a body that merely omits optional fields — and the only thing
+    telling them apart was whether the line ended in " — not compared". A
+    consumer trying to break down its own 93 of them by bucket could not,
+    and nearly counted them as the other kind. A label a reader cannot
+    resolve is a label that makes the count unusable.
     """
-    for note in report.unmatched:
-        print(f"  [NOTE]    {note} — not compared")
+    # `unmatched_notes`, not `unmatched`: the generated/ subset of it is
+    # gated and printed as [EXTRA], and printing it here too put the same
+    # scenario on screen twice under two labels that contradict each other —
+    # one saying the run failed on it, the other that it was not compared.
+    for note in report.unmatched_notes:
+        print(f"  [STATUS]  {note} — not compared")
     if report.out_of_scope:
         # `[ORPHAN] (mock file, not in swagger)` is the only thing this path
         # ever said about an unmatched mock, and for these files it would be
@@ -1187,35 +1287,13 @@ def cmd_mock_generate(args):
                       scope=_load_path_scope(getattr(args, "config", None)))
 
     if isinstance(report, CheckReport):
-        for rel in report.missing:
-            print(f"  [MISSING] {rel} (in swagger, no mock file)")
-        for rel in report.orphaned:
-            print(f"  [ORPHAN]  {rel} (mock file, not in swagger)")
+        # The gating findings, from the printer the validate gate also uses.
+        _print_drift_findings(report)
         for rel in report.out_of_scope:
             print(f"  [SCOPE]   {rel} — outside this project's API paths, "
                   "safe to delete")
-        for msg in report.absent_generated:
-            # Gating. generated/ is a pure function of the swagger, so there
-            # is no state in which one of its scenarios is legitimately
-            # missing — it was edited, or a generation run was interrupted.
-            print(f"  [ABSENT]  {msg}\n"
-                  "            generated/ is derived from the swagger; run "
-                  "`jsonui-test mock generate` to restore it")
         for msg in report.absent_handwritten:
             print(f"  [WARN]    {msg}")
-        for msg in report.unmatched_generated:
-            # Gating, and the mirror of [ABSENT]: generated/ is derived, so
-            # holding a status the swagger no longer declares is as
-            # impossible a state as missing one. A consumer measured what
-            # this costs — an end-to-end suite green against a 409 the
-            # implementation had no branch for.
-            print(f"  [EXTRA]   {msg}\n"
-                  "            generated/ is derived from the swagger; run "
-                  "`jsonui-test mock generate` to drop it")
-        for msg in report.drifted:
-            print(f"  [DRIFT]   {msg}")
-        for drift in report.errors:
-            print(f"  [BODY]    {drift}")
         for drift in report.stale_generated:
             # Same visibility channel as the hand-written findings, but a
             # warning: regenerating fixes it, so it never gates (the ORPHAN
@@ -1234,24 +1312,34 @@ def cmd_mock_generate(args):
         notes = [d for d in report.bodies
                  if d.is_note_only and not d.generated and not report.strict]
         for drift in notes:
-            print(f"  [NOTE]    {drift}")
+            # `[OPTIONAL]`, not `[NOTE]`: one label used to cover both this
+            # (a body that spells out fewer optional fields than the schema
+            # has) and the `[STATUS]` findings below, which are a different
+            # question entirely. A consumer could not split its own count
+            # between them.
+            print(f"  [OPTIONAL] {drift}")
         for rel in report.misnamed:
             print(f"  [NAME]    {rel}")
-        for note in report.unmatched:
-            print(f"  [NOTE]    {note} — not compared")
+        for note in report.unmatched_notes:
+            # `unmatched_notes`: the generated/ subset is gated and already
+            # printed as [EXTRA] above, and printing it again here put one
+            # scenario on screen twice under contradicting labels.
+            print(f"  [STATUS]  {note} — not compared")
         for warning in report.warnings:
             print(f"  [WARN]    {warning}")
         if report.scope_note:
             print(f"\nAPI path scope: {report.scope_note} "
                   f"({report.scope_excluded} endpoint(s) outside it, not checked)")
         if report.has_drift:
-            print(f"\nDrift detected: {len(report.missing)} missing, "
-                  f"{len(report.orphaned)} orphaned, {len(report.drifted)} drifted, "
-                  f"{len(report.errors)} stale body(ies)")
+            # From `CheckReport.gating`, the same declaration `has_drift`
+            # reads. Hand-counted, this line named four buckets while the
+            # gate read five, so a run failing on the fifth printed four
+            # zeroes above its own non-zero exit code.
+            print(f"\n{report.drift_summary}")
             if report.errors:
-                print("Refresh the generated bodies with "
-                      "`jsonui-test mock generate --update-default` "
-                      "(hand-grown scenarios are preserved).")
+                _print_body_drift_remedy(
+                    report, swaggers, mock_dir,
+                    _load_path_scope(getattr(args, "config", None)))
             return 1
         if report.stale_generated:
             # "No drift: in sync" would be misinformation here — the check
