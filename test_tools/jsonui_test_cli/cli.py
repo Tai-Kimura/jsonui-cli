@@ -543,6 +543,14 @@ def _print_drift_findings(report):
         print(f"  [EXTRA]   {msg}\n"
               "            generated/ is derived from the swagger; run "
               "`jsonui-test mock generate` to drop it")
+    for msg in report.unmatched_borrowed:
+        # A hand-written scenario answering a status this operation does not
+        # declare, in a form where the contract declares it SOMEWHERE — so
+        # the code was taken from elsewhere in the contract. The finding
+        # carries the form and its remedy; they are opposite (A: the
+        # swagger for this operation is short one response; C: the mock may
+        # be answering a branch the implementation does not have).
+        print(f"  [STATUS]  {msg}")
     for drift in report.errors:
         print(f"  [BODY]    {drift}")
 
@@ -654,19 +662,23 @@ def _print_uncompared(report):
     zero, and a test asserting a shape nothing compared is a test that can
     be green for a branch the implementation does not have.
 
-    `[STATUS]`, not `[NOTE]`: that label named two unrelated findings — this
-    one, and a body that merely omits optional fields — and the only thing
-    telling them apart was whether the line ended in " — not compared". A
-    consumer trying to break down its own 93 of them by bucket could not,
-    and nearly counted them as the other kind. A label a reader cannot
-    resolve is a label that makes the count unusable.
+    The label carries the WEIGHT, which is why these are `[WARN]` and the
+    gating ones are `[STATUS]`. `[NOTE]` used to name two unrelated findings
+    — this one and a body that omits only optional fields — separated by
+    nothing but whether the line ended in " — not compared"; a consumer with
+    93 of them could not break its own count down. Splitting the label by
+    KIND alone would have rebuilt the same problem one step along, because
+    the undeclared-status findings do not share a weight: two of the three
+    forms gate. So the rule is that a reader knows the weight from the
+    label, and `[ABSENT]`/`[EXTRA]`/`[STATUS]` gate while
+    `[WARN]`/`[OPTIONAL]`/`[SCOPE]`/`[NAME]` do not.
     """
-    # `unmatched_notes`, not `unmatched`: the generated/ subset of it is
-    # gated and printed as [EXTRA], and printing it here too put the same
+    # `unmatched_notes`, not `unmatched`: the gated subsets of it are
+    # printed as [EXTRA] and [STATUS], and printing them here too put one
     # scenario on screen twice under two labels that contradict each other —
     # one saying the run failed on it, the other that it was not compared.
     for note in report.unmatched_notes:
-        print(f"  [STATUS]  {note} — not compared")
+        print(f"  [WARN]    {note} — not compared")
     if report.out_of_scope:
         # `[ORPHAN] (mock file, not in swagger)` is the only thing this path
         # ever said about an unmatched mock, and for these files it would be
@@ -1321,10 +1333,11 @@ def cmd_mock_generate(args):
         for rel in report.misnamed:
             print(f"  [NAME]    {rel}")
         for note in report.unmatched_notes:
-            # `unmatched_notes`: the generated/ subset is gated and already
-            # printed as [EXTRA] above, and printing it again here put one
-            # scenario on screen twice under contradicting labels.
-            print(f"  [STATUS]  {note} — not compared")
+            # What is left after the gating subsets ([EXTRA], [STATUS]) have
+            # been printed above — form B, and scenarios with no status at
+            # all. `[WARN]` because the label carries the weight: these do
+            # not fail the check.
+            print(f"  [WARN]    {note} — not compared")
         for warning in report.warnings:
             print(f"  [WARN]    {warning}")
         if report.scope_note:

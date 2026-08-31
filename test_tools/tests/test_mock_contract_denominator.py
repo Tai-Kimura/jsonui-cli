@@ -200,14 +200,22 @@ class TheGateNamesWhatItCompared(unittest.TestCase):
 
 
 class TheUncomparedStatusCarriesWhatTheSwaggerKnows(unittest.TestCase):
-    """Two facts are cheap and each tells an omission from a decision.
+    """Three forms, and the finding says which one and what to do about it.
 
-    A mirrored endpoint declaring the status makes the gap look like an
-    asymmetry someone forgot; no operation anywhere declaring it means the
-    mock introduced a class of failure the contract does not have. Anything
-    else — a status many unrelated endpoints declare — says nothing about
-    this endpoint, and the clause is omitted rather than filled with the
-    absence of information.
+    A — a realm twin declares the status, so the gap is an asymmetry someone
+    forgot and the swagger for this operation is what to fix.
+    B — no operation in scope declares it, so the contract has nothing to
+    compare against; a warning, not a gate.
+    C — other operations declare it but this one's twin does not, so the
+    code was borrowed from elsewhere in the contract and the question is
+    whether the implementation has that branch.
+
+    The old message left the third case SILENT, on the reasoning that a
+    status many unrelated endpoints declare says nothing about this one.
+    The one measured incident is exactly that shape — a mock answering 409
+    on a path whose neighbour declares 409 and whose own operation does not
+    — so silence there was the finding going missing, not information being
+    withheld.
     """
 
     def setUp(self):
@@ -237,21 +245,32 @@ class TheUncomparedStatusCarriesWhatTheSwaggerKnows(unittest.TestCase):
                 "responses": {"200": JSON_200, "422": JSON_200}}},
         }, "/api/first/items/archive", 422)
         self.assertEqual(len(report.unmatched), 1)
-        self.assertIn("(sibling POST /api/second/items/archive declares 422)",
+        self.assertIn("[A]", report.unmatched[0])
+        # The twin is named, and the line says which side to fix: this is
+        # the form a backend closes by adding the response to the swagger.
+        self.assertIn("POST /api/second/items/archive declares 422",
                       report.unmatched[0])
+        self.assertIn("fix the swagger", report.unmatched[0])
+        self.assertEqual(len(report.unmatched_borrowed), 1)
 
     def test_a_status_no_operation_declares_is_named_as_such(self):
         report = self._run({
             "/api/first/items/archive": {"post": {
                 "operationId": "act", "responses": {"200": JSON_200}}},
         }, "/api/first/items/archive", 500)
-        self.assertIn("(no operation in this swagger declares 500)",
+        self.assertIn("[B]", report.unmatched[0])
+        self.assertIn("no operation in this swagger declares 500",
                       report.unmatched[0])
+        # B does not gate: measured on two projects, every B finding was a
+        # 500, and "any endpoint may 500" is a premise rather than a
+        # declaration.
+        self.assertEqual(report.unmatched_borrowed, [])
 
-    def test_an_unrelated_endpoint_declaring_it_says_nothing(self):
-        # The silent case, and the common one: a status that belongs
-        # to many endpoints in a large swagger and to none of this one's
-        # mirrors says nothing about this one.
+    def test_an_unrelated_endpoint_declaring_it_is_a_borrowed_code(self):
+        # This used to be the SILENT case, on the reasoning that a status
+        # many unrelated endpoints declare says nothing about this one. It
+        # is the shape of the one incident anyone has measured, so it now
+        # names itself and gates.
         report = self._run({
             "/api/first/items/archive": {"post": {
                 "operationId": "act", "responses": {"200": JSON_200}}},
@@ -259,12 +278,17 @@ class TheUncomparedStatusCarriesWhatTheSwaggerKnows(unittest.TestCase):
                 "operationId": "book",
                 "responses": {"200": JSON_200, "409": JSON_200}}},
         }, "/api/first/items/archive", 409)
-        self.assertEqual(report.unmatched[0].count("("), 0)
+        self.assertIn("[C]", report.unmatched[0])
+        self.assertIn("confirm the implementation has this branch",
+                      report.unmatched[0])
+        self.assertEqual(len(report.unmatched_borrowed), 1)
 
     def test_a_differing_last_segment_is_not_a_mirror(self):
         # "one segment differs" alone would pair an endpoint with its
         # neighbour in the same realm, which is a different endpoint, not
-        # the same one seen from another realm.
+        # the same one seen from another realm. Still gating — it is C, not
+        # A — but the line must not name a twin that is not one, because A
+        # and C are acted on differently.
         report = self._run({
             "/api/second/items/archive": {"post": {
                 "operationId": "act", "responses": {"200": JSON_200}}},
@@ -272,7 +296,8 @@ class TheUncomparedStatusCarriesWhatTheSwaggerKnows(unittest.TestCase):
                 "operationId": "remove",
                 "responses": {"200": JSON_200, "422": JSON_200}}},
         }, "/api/second/items/archive", 422)
-        self.assertNotIn("sibling", report.unmatched[0])
+        self.assertIn("[C]", report.unmatched[0])
+        self.assertNotIn("/api/first/items/restore", report.unmatched[0])
 
 
 if __name__ == "__main__":

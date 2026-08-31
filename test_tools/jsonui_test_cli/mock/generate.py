@@ -814,6 +814,35 @@ class ViolationDeclaration:
         return cls(paths, reason.strip(), errors)
 
 
+def _declares_undeclared_status(scenario: dict) -> bool:
+    """True when the scenario says its undeclared status is on purpose.
+
+    A sibling key of `contractViolations` rather than one of its categories:
+    those name PATHS inside a body, and this is a statement about the
+    scenario's status code. `reason` is required for the same reason it is
+    there — a suppression nobody can explain is usually one nobody fixed.
+
+    Optional, because the gate is A and C only, and both lanes that measured
+    their corpora can turn it on without writing a single declaration. It
+    exists so that a scenario which genuinely has to answer a borrowed code
+    — a fail-open regression, an edge case the contract will never state —
+    has somewhere to say so. Without it the gate would have a state it can
+    never leave, and a red that cannot be cleared is a red people learn to
+    skip past.
+
+    Only the object form silences it. A bare `true` is tempting to accept as
+    a convenience and would be a second, looser spelling of a declaration
+    the schema states one way — and the checker being more permissive than
+    the schema is how a project ends up with a suppression the schema calls
+    invalid and the gate honours.
+    """
+    raw = scenario.get("undeclaredStatus")
+    if not isinstance(raw, dict):
+        return False
+    reason = raw.get("reason")
+    return isinstance(reason, str) and bool(reason.strip())
+
+
 def _violation_matcher(declared: str):
     """Compile one declared path.
 
@@ -929,6 +958,7 @@ GATING_BUCKETS: tuple = (
     ("errors", "stale body(ies)"),
     ("absent_generated", "declared but absent from generated/"),
     ("unmatched_generated", "undeclared in generated/"),
+    ("unmatched_borrowed", "borrowed an undeclared status"),
 )
 
 
@@ -992,6 +1022,15 @@ class CheckReport:
     #: way. Hand-written excess stays a warning, because an extra scenario
     #: there can be deliberate.
     unmatched_generated: list = field(default_factory=list)
+    #: Hand-written scenarios whose status the operation does not declare,
+    #: but which the contract declares SOMEWHERE — form A (a realm twin has
+    #: it) or form C (unrelated operations have it, the twin does not).
+    #: Both mean a code was borrowed from elsewhere in the contract, which
+    #: is the shape of the one incident anyone has measured. Form B — a code
+    #: no operation declares — stays in `unmatched` as a warning; gating it
+    #: instead would invert the result, failing two lanes' benign 500s and
+    #: passing the real one.
+    unmatched_borrowed: list = field(default_factory=list)
 
     @property
     def absent(self) -> list:
@@ -1086,7 +1125,7 @@ class CheckReport:
         claim about the same line. `unmatched` stays whole because it is the
         denominator; only the reporting channel splits.
         """
-        gated = set(self.unmatched_generated)
+        gated = set(self.unmatched_generated) | set(self.unmatched_borrowed)
         return [n for n in self.unmatched if n not in gated]
 
     @property
@@ -1249,6 +1288,7 @@ def _check(swagger_paths: list[str], mock_dir: Path, strict: bool = False,
     absent_generated: list[str] = []
     absent_handwritten: list[str] = []
     unmatched_generated: list[str] = []
+    unmatched_borrowed: list[str] = []
     compared = 0
     for key in sorted(set(expected) & set(existing)):
         doc, op = expected[key]
@@ -1285,7 +1325,9 @@ def _check(swagger_paths: list[str], mock_dir: Path, strict: bool = False,
                                       no_schema, non_json, malformed,
                                       generated=is_generated(rel),
                                       all_ops=all_ops,
-                                      unmatched_generated=unmatched_generated)
+                                      unmatched_generated=unmatched_generated,
+                                      unmatched_borrowed=unmatched_borrowed,
+                                      scope=scope)
             if is_generated(rel) and len(bodies) > before:
                 # The advice attached to a generated finding is "regenerate".
                 # Check that it would do something: when the file already
@@ -1312,13 +1354,15 @@ def _check(swagger_paths: list[str], mock_dir: Path, strict: bool = False,
         absent_generated=absent_generated,
         absent_handwritten=absent_handwritten,
         unmatched_generated=unmatched_generated,
+        unmatched_borrowed=unmatched_borrowed,
         scope_excluded=len(excluded),
         scope_note=scope.describe() if scope.is_active() else "",
         strict=strict,
     )
 
 
-def _status_context(op: Operation, status, all_ops: dict) -> str:
+def _status_context(op: Operation, status, all_ops: dict,
+                    scope: PathScope | None = None) -> tuple:
     """What the rest of the swagger says about *status*, when it says anything.
 
     A mock has to name one concrete status for a failure the contract states
@@ -1336,23 +1380,61 @@ def _status_context(op: Operation, status, all_ops: dict) -> str:
       — which is the harder one to notice by reading, because the code it
       picked can still be a real code from elsewhere in the product.
 
-    Neither true, nothing is said: a status many unrelated endpoints declare
-    is not evidence about this one. Saying "no sibling found" would be
-    filling the line with the absence of information — and it would be read
-    as "deliberate", which silence here does not mean: an omission missing
-    from every realm at once looks exactly like a status the endpoint is
-    right not to have.
+    Three outcomes, and they are returned as a FORM rather than as prose,
+    because they are acted on differently and two of them gate:
+
+    ==== ==================================== ======= ======================
+    form what the rest of the swagger says    weight  what the reader does
+    ==== ==================================== ======= ======================
+    A    a realm twin declares it             gate    fix the twin's swagger
+    B    no operation anywhere declares it     warn    nothing (convention)
+    C    others declare it, no twin does       gate    check the impl branch
+    ==== ==================================== ======= ======================
+
+    A and C gate because in both the mock BORROWED a code that exists
+    somewhere in the contract and attached it to an operation that does not
+    declare it — which is the shape the one measured incident had. B is a
+    warning: measured on two lanes, both of their B findings were 500, and
+    "any endpoint may 500" is a premise rather than a declaration; making
+    every operation write it down is noise.
+
+    The obvious split — gate whatever the contract has nowhere — inverts
+    exactly this. It would have gated those two benign 500s and let the real
+    incident through, because the code it borrowed (409) was declared by the
+    neighbouring operation.
+
+    Returning prose was not enough. A reader could only tell the forms apart
+    by whether the line ended in a bracket and what was inside it, and the
+    consumer who first split them had to read this function to do it — so
+    the caller writes the REMEDY into the finding, and the mechanism (which
+    twin, or that nothing declares it) is evidence beside it.
     """
     want = str(status)
     siblings: list[str] = []
     anywhere = False
     segments = op.path.split("/")
+    scope = scope or PathScope()
     for other in all_ops.values():
         if want not in other.responses:
             continue
         if other.path == op.path and other.method == op.method:
             continue
-        anywhere = True
+        if scope.covers(other.path):
+            # B is "this project's contract has this code nowhere", not "the
+            # shared swagger has it nowhere". A shared swagger is sliced by
+            # scope per front-end, and a code declared only in a realm this
+            # project never calls is no evidence that its author borrowed
+            # it. Measured on one shared swagger: three operations declare
+            # 500, one of them inside one consumer's scope and none inside
+            # another's — so the same finding is a declaration debt for the
+            # first (gate) and a premise for the second (warning), and a
+            # whole-swagger denominator collapses them.
+            #
+            # The TWIN search below is deliberately not narrowed: the twin
+            # that answers "was this status forgotten here?" is nearly
+            # always in the realm the scope filters out, which is the reason
+            # this function is given every operation in the first place.
+            anywhere = True
         theirs = other.path.split("/")
         realm = (other.method == op.method and len(theirs) == len(segments)
                  and sum(a != b for a, b in zip(segments, theirs)) == 1
@@ -1362,10 +1444,29 @@ def _status_context(op: Operation, status, all_ops: dict) -> str:
             # put the same sibling in the message on two different machines.
             siblings.append(f"{other.method} {other.path}")
     if siblings:
-        return f" (sibling {sorted(siblings)[0]} declares {want})"
+        return "A", sorted(siblings)[0]
     if not anywhere:
-        return f" (no operation in this swagger declares {want})"
-    return ""
+        return "B", None
+    return "C", None
+
+
+#: What a reader does about each form, written into the finding. The bracket
+#: said which twin declares the code — the mechanism — and left deriving the
+#: action to the reader, who has to know that A means the swagger is wrong
+#: and C means the mock may be. The two remedies are opposite.
+_STATUS_FORM_REMEDY = {
+    "A": ("{sibling} declares {status} and this operation does not — an "
+          "asymmetry between realms, so fix the swagger for this operation"),
+    "B": ("no operation in this swagger declares {status}, so there is "
+          "nothing to compare against — declare it on the scenario if it is "
+          "deliberate"),
+    "C": ("other operations declare {status} but this operation's realm twin "
+          "does not — the code was borrowed, so confirm the implementation "
+          "has this branch"),
+}
+
+#: The forms that fail the check on a hand-written mock.
+GATING_STATUS_FORMS = ("A", "C")
 
 
 def _collect_absent(
@@ -1478,6 +1579,8 @@ def _check_bodies(
     generated: bool = False,
     all_ops: dict | None = None,
     unmatched_generated: list | None = None,
+    unmatched_borrowed: list | None = None,
+    scope: PathScope | None = None,
 ) -> int:
     """Compare every scenario body against the schema for its status code.
 
@@ -1519,20 +1622,32 @@ def _check_bodies(
             unmatched.append(f"{rel}  {name}: no status")
             continue
         if str(status) not in op.responses and "default" not in op.responses:
-            # A deliberate edge case the spec does not describe — reported so
-            # it is visible, but not drift: there is nothing to compare to.
-            hint = _status_context(op, status, all_ops) if all_ops else ""
-            note = f"{rel}  {name}: status {status} not declared{hint}"
+            form, sibling = (_status_context(op, status, all_ops, scope)
+                             if all_ops else ("B", None))
+            remedy = _STATUS_FORM_REMEDY[form].format(
+                sibling=sibling, status=status)
+            note = (f"{rel}  {name}: status {status} not declared "
+                    f"[{form}] — {remedy}")
             unmatched.append(note)
             if generated and unmatched_generated is not None:
                 # generated/ holding a status the swagger no longer declares
                 # is the mirror of it missing one: the tree is derived, so
                 # neither state can be reached by anything but an edit or an
-                # interrupted run. A consumer measured the cost of the other
-                # direction -- a mock answering 409 for a path the
-                # implementation had no branch for, with the end-to-end
-                # suite green against a case production cannot produce.
+                # interrupted run — whatever form it is. A consumer measured
+                # the cost of the other direction: a mock answering 409 for a
+                # path the implementation had no branch for, with the
+                # end-to-end suite green against a case production cannot
+                # produce.
                 unmatched_generated.append(note)
+            elif (not generated and form in GATING_STATUS_FORMS
+                  and unmatched_borrowed is not None
+                  and not _declares_undeclared_status(scenario)):
+                # A and C both mean the mock took a status code that exists
+                # elsewhere in the contract and attached it to an operation
+                # that does not declare it. The one incident anyone has
+                # measured is exactly that, and it is invisible by reading:
+                # the code is real, it is just real somewhere else.
+                unmatched_borrowed.append(note)
             _report_declaration_only(rel, name, decl_problems, bodies, generated)
             continue
 

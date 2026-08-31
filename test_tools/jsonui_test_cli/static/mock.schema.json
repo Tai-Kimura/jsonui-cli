@@ -55,6 +55,15 @@
               "violations": { "$ref": "#/definitions/violationPaths" },
               "reason": { "type": "string", "minLength": 1 }
             }
+          },
+          "undeclaredStatus": {
+            "description": "This scenario answers a status its operation does not declare, ON PURPOSE — a fail-open regression, or an edge the contract will never state. Without this the check gates on it (forms A and C: a code the contract declares somewhere, attached to an operation that does not declare it), and a gate a project cannot clear is one people learn to read past. Authoring-time only: nothing at runtime reads this key, so it carries no driver requirement.",
+            "type": "object",
+            "required": ["reason"],
+            "additionalProperties": false,
+            "properties": {
+              "reason": { "type": "string", "minLength": 1 }
+            }
           }
         }
       }

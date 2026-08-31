@@ -95,9 +95,12 @@ def test_a_hand_written_undeclared_status_is_still_reported_here(swagger,
     _print_uncompared(report)
     printed = capsys.readouterr().out
 
+    # 418 is form B here — no operation in this swagger declares it — so it
+    # is a warning, and the label says so.
     assert len(report.unmatched_notes) == 1
-    assert "[STATUS]" in printed and "418" in printed
+    assert "[WARN]" in printed and "418" in printed
     assert "[NOTE]" not in printed
+    assert not report.has_drift
 
 
 def test_the_two_kinds_of_note_no_longer_share_a_label(swagger, tmp_path,
@@ -133,7 +136,7 @@ def test_the_two_kinds_of_note_no_longer_share_a_label(swagger, tmp_path,
     printed = capsys.readouterr().out
 
     optional = [ln for ln in printed.splitlines() if "[OPTIONAL]" in ln]
-    status = [ln for ln in printed.splitlines() if "[STATUS]" in ln]
-    assert len(optional) == 1 and len(status) == 1
-    assert "418" in status[0]
+    warned = [ln for ln in printed.splitlines() if "[WARN]" in ln]
+    assert len(optional) == 1 and len(warned) == 1
+    assert "418" in warned[0]
     assert "[NOTE]" not in printed
