@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json
+
 from pathlib import Path
 from typing import Any
 
@@ -740,7 +742,20 @@ def _format_member_platforms_md(member) -> str:
 
 
 def _format_json_schema(schema: dict, indent: int = 2) -> str:
-    """Format JSON schema with type comments."""
+    """Format JSON schema with type comments.
+
+    A non-object reaches here only from a spec the validator should have
+    rejected, but generation is reachable without validating. It used to
+    raise `AttributeError: 'str' object has no attribute 'items'`, which
+    names neither the field nor the file — the reporting lane rebuilt the
+    traceback by hand to find which of the spec's many strings it was.
+    Rendered instead, matching what the HTML generator already does with
+    the same input, so the two generators agree and the diagnosis stays
+    where it belongs (the validator, which now names the path).
+    """
+    if not isinstance(schema, dict):
+        return json.dumps(schema, ensure_ascii=False)
+
     lines = []
     lines.append("{")
 

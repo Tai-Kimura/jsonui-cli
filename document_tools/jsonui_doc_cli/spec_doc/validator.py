@@ -1020,6 +1020,28 @@ class SpecValidator:
                     message=f"Invalid HTTP method: '{method}'. Valid methods: {', '.join(self.VALID_HTTP_METHODS)}"
                 ))
 
+            # `request` / `response` are field -> type objects. A bare schema
+            # name reads as a reference but is not one: nothing resolves it,
+            # so the HTML renders the name as a quoted string and the
+            # markdown generator raised a bare AttributeError naming neither
+            # the field nor the spec. Caught here so the mistake is reported
+            # where it was made, with the path — the generators are not the
+            # place to learn that a spec is wrong.
+            for field in ("request", "response"):
+                value = endpoint.get(field)
+                if value is not None and not isinstance(value, dict):
+                    kind = type(value).__name__
+                    result.errors.append(SpecValidationMessage(
+                        path=f"dataFlow.apiEndpoints[{i}].{field}",
+                        message=(
+                            f"'{field}' must be an object of field -> type "
+                            f"(e.g. {{\"message\": \"string\"}}), got {kind}"
+                            + (f" '{value}'" if isinstance(value, str) else "")
+                            + ". A schema name on its own is not resolved by "
+                            "anything — write the fields out."
+                        )
+                    ))
+
     # Swift-only / iOS-only type tokens that do not compile on Kotlin / TS
     # when used without a platforms: ["ios"] filter.
     _IOS_ONLY_TOKENS = ("inout ", "UIImage", "CGImage", "NSImage", "AnyView")
