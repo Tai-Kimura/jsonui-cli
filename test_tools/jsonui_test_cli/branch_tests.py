@@ -1758,7 +1758,7 @@ fun resolveString(h: BranchHarness, key: String): String {
   val identifier = resolved.all { it.isLetterOrDigit() || it == '_' }
   if (resolved == key || (identifier && resolved.endsWith("_" + key))) {
     error(
-      "resolveString(\"" + key + "\") returned \"" + resolved + "\", which " +
+      "resolveString(\\"" + key + "\\") returned \\"" + resolved + "\\", which " +
       "is a strings KEY, not the text it names. Bindings are not resolved " +
       "when a component renders, so the field holds resolved text — return " +
       "the string manager's lookup of the full key, not the full key."

@@ -1054,3 +1054,61 @@ class TestEmptyRouteListStaysCompilableFixture:
         content = report.test_file.read_text(encoding="utf-8")
         assert "private val routes: List<RouteSpec> = listOf(" in content
         assert report.routes  # the arm that passes on the broken generator
+
+
+class TestEmittedRuntimesHaveBalancedStringLiterals:
+    """Every emitted runtime must have balanced quotes, line by line.
+
+    A diagnostic added to the Kotlin runtime was written inside a NON-raw
+    Python triple-quoted string, so its `\\"` collapsed to `"` before it was
+    ever emitted:
+
+        "resolveString("" + key + "") returned "" + resolved + "", which " +
+
+    The Kotlin file did not compile, which took every Android branch test in
+    the project down with it — 8 screens, 17 tests, `0 tests` run.
+
+    `--check` stayed green throughout: it compares the copy on disk to what
+    the generator produces, and both were equally broken. "The generated
+    tests are current" and "the generated tests compile" are different
+    claims, and only the first had a gate. Second instance of that pair in
+    one day; the first was an untyped empty `listOf()`.
+
+    Comparing the emitted text to an expected string would not have caught
+    it either — the expectation would have been written from the same
+    source and collapsed the same way. This asserts a property the escaping
+    has to satisfy instead: strip the escaped quotes, and what remains must
+    pair up.
+    """
+
+    def _runtimes(self, tmp_path):
+        out = {}
+        for platform, kwargs in (("android", {"package": "com.example.x"}),
+                                 ("ios", {"module": "app"}),
+                                 ("web", {})):
+            root = _project(tmp_path / platform, BASIC)
+            report = generate_branch_tests("checkout", root,
+                                           platform=platform, **kwargs)
+            out[platform] = report.runtime_file.read_text(encoding="utf-8")
+        return out
+
+    @pytest.mark.parametrize("platform", ["android", "ios", "web"])
+    def test_no_line_has_an_odd_number_of_unescaped_quotes(
+            self, tmp_path, platform):
+        text = self._runtimes(tmp_path)[platform]
+        offenders = []
+        for n, line in enumerate(text.splitlines(), 1):
+            code = line.split("//")[0] if "//" in line else line
+            if code.lstrip().startswith(("*", "/*")):
+                continue
+            if code.replace('\\"', "").count('"') % 2:
+                offenders.append(f"{platform} runtime line {n}: {line.strip()}")
+        assert offenders == [], "\n".join(offenders)
+
+    def test_the_kotlin_diagnostic_escapes_its_quotes(self, tmp_path):
+        # The specific regression, named. The property test above is the net;
+        # this says which fish was caught, so a future edit that reintroduces
+        # it fails with the reason rather than with a line number.
+        text = self._runtimes(tmp_path)["android"]
+        assert 'resolveString(\\"' in text
+        assert 'resolveString(""' not in text
