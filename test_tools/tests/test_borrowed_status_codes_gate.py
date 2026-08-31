@@ -362,3 +362,45 @@ def test_a_generated_mock_gates_whatever_the_form(tmp_path):
     assert report.unmatched_generated
     assert report.unmatched_borrowed == []   # the generated bucket owns it
     assert report.has_drift
+
+
+class TestFormBOffersNoInstructionItCannotHonour:
+    """B's finding must not tell the reader to declare the scenario.
+
+    It used to. `undeclaredStatus` is consulted on the gating path only —
+    the ruling is that a code no operation declares is a premise, not a
+    declarable — so a consumer who followed the instruction got output that
+    did not change by a single byte, concluded they had written the key
+    wrong, and went to read the generator.
+
+    An instruction that does nothing is worse than none: the tool says
+    nothing about being inapplicable, so the failure is attributed to the
+    reader. Same defect as the `--update-default` remedy that could not fix
+    a non-default scenario, which is the ticket that opened this release —
+    shipped again inside the release that fixed it.
+
+    A and C keep their instructions, and they are opposite (A: the swagger
+    for this operation is short a response; C: the mock may be answering a
+    branch the implementation does not have), so this is not "drop the
+    advice", it is "do not advise where there is nothing to do".
+    """
+
+    def test_b_says_nothing_to_compare_and_stops_there(self):
+        from jsonui_test_cli.mock.generate import _STATUS_FORM_REMEDY
+        b = _STATUS_FORM_REMEDY["B"]
+        assert "nothing to compare against" in b
+        # Matched on the instruction, not on the word: the sentence still
+        # says "no operation ... declares {status}", which is a statement of
+        # fact. The first version of this assertion tripped on that
+        # substring and read as a failure of the code.
+        assert "declare it on the scenario" not in b, (
+            "B takes no declaration, so it must not ask for one")
+        assert "if it is deliberate" not in b
+
+    def test_a_and_c_still_carry_their_opposite_remedies(self):
+        # The control. Without it, "B has no instruction" and "no form has an
+        # instruction" are the same result, and the whole point of the
+        # remedy table is that A and C differ.
+        from jsonui_test_cli.mock.generate import _STATUS_FORM_REMEDY
+        assert "fix the swagger" in _STATUS_FORM_REMEDY["A"]
+        assert "confirm the implementation" in _STATUS_FORM_REMEDY["C"]

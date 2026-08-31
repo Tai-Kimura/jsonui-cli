@@ -1476,9 +1476,23 @@ def _status_context(op: Operation, status, all_ops: dict,
 _STATUS_FORM_REMEDY = {
     "A": ("{sibling} declares {status} and this operation does not — an "
           "asymmetry between realms, so fix the swagger for this operation"),
+    # No instruction. B does not gate and takes no declaration: the ruling is
+    # that a code no operation declares is a premise rather than a
+    # declarable, so there is nothing for the reader to do.
+    #
+    # It used to end "declare it on the scenario if it is deliberate", and a
+    # consumer followed it. `undeclaredStatus` is read on the gating path
+    # only, so the output did not change by a single byte — and the reader's
+    # next move was to assume they had written the key wrong and go read the
+    # generator. An instruction that does nothing is worse than none,
+    # because the tool stays silent about being inapplicable and the failure
+    # gets attributed to the reader.
+    #
+    # This is the same defect as the `--update-default` remedy that could
+    # not fix a non-default scenario, which is the ticket that opened this
+    # release. Shipped a fresh instance of it in the fix's own release.
     "B": ("no operation in this swagger declares {status}, so there is "
-          "nothing to compare against — declare it on the scenario if it is "
-          "deliberate"),
+          "nothing to compare against"),
     "C": ("other operations declare {status} but this operation's realm twin "
           "does not — the code was borrowed, so confirm the implementation "
           "has this branch"),
