@@ -17,8 +17,10 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
 import shutil
 import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -636,12 +638,48 @@ class ConformanceGeneratorRealDefinitionsTest(unittest.TestCase):
         lowered = [f["layout"].lower() for f in self.manifest["fixtures"]]
         self.assertEqual(len(lowered), len(set(lowered)), "macOS filename collision")
 
-    @unittest.skipIf(shutil.which("jsonui-test") is None, "jsonui-test CLI not installed")
     def test_jsonui_test_validate_passes(self):
+        """The fixtures this generator emits validate — against the
+        `jsonui_test_cli` in THIS checkout.
+
+        It used to run `jsonui-test` off `PATH`, which is the previously
+        released build. Two releases were tagged with red CI because local
+        suites were measuring that build: one where a new `[WARN]` line
+        moved `Warnings:` off zero, and this assertion is on `Warnings: 0`.
+        The trap has two doors — `subprocess` + `PATH`, and `import` +
+        `sys.path` — and closing one does not close the other.
+
+        Measured, not assumed: adding a warning to the checkout's screen
+        validator left this test green while CI went red on the same change.
+
+        `-m jsonui_test_cli.cli` with `PYTHONPATH` at the sibling tree is
+        what makes the version under test the version being changed. The
+        skip is gone with it: it was conditioned on the CLI being installed,
+        which is a fact about the machine and not about this repository.
+        """
+        test_tools = REPO_ROOT / "test_tools"
+        self.assertTrue((test_tools / "jsonui_test_cli" / "cli.py").is_file(),
+                        f"no jsonui_test_cli to validate against in {test_tools}")
+        env = {**os.environ, "PYTHONPATH": str(test_tools)}
+
+        # Asserted, not implied by how the argv is built. "It runs the
+        # checkout" is exactly the claim both burnt releases believed about
+        # their local suites, and the only thing that separates believing it
+        # from knowing it is asking where the import landed.
+        where = subprocess.run(
+            [sys.executable, "-c",
+             "import jsonui_test_cli, sys; sys.stdout.write(jsonui_test_cli.__file__)"],
+            capture_output=True, text=True, cwd=str(test_tools), env=env)
+        self.assertTrue(where.stdout.startswith(str(REPO_ROOT)),
+                        f"validating against {where.stdout!r}, not this checkout")
+
         proc = subprocess.run(
-            ["jsonui-test", "validate", str(self.out_dir / "fixtures")],
+            [sys.executable, "-m", "jsonui_test_cli.cli", "validate",
+             str(self.out_dir / "fixtures")],
             capture_output=True,
             text=True,
+            cwd=str(test_tools),
+            env=env,
         )
         self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
         self.assertIn("Errors: 0, Warnings: 0", proc.stdout)
