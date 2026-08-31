@@ -6,6 +6,6 @@ module SjuiTools
     # file; this constant is a standalone copy for consumer-project installs
     # (where the root file is absent) and is locked to the root VERSION by
     # jui_tools/tests/test_version_lockstep.py.
-    VERSION = '1.7.22'
+    VERSION = '1.7.23'
   end
 end
