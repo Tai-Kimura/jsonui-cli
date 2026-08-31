@@ -1061,7 +1061,7 @@ def _branch_check_summary(reports: list, scanned: int, orphans=()) -> int:
         # reported by neither command — and a leftover that still PASSES is
         # the worse direction, reading as "this screen has branch tests
         # here" about a screen that has none.
-        print(f"  [STALE]   {path} (this screen no longer generates a test "
+        print(f"  [RETIRED] {path} (this screen no longer generates a test "
               "for this platform; regenerate to remove it)")
     for path in unowned:
         print(f"  [WARN]    {path} sits where a generated test would be "
@@ -1083,8 +1083,16 @@ def _branch_check_summary(reports: list, scanned: int, orphans=()) -> int:
     print(f"\nbranch tests: {screens} screen(s) declaring branchContracts "
           f"of {scanned} spec(s) scanned{skipped} — {screens - stale_screens} "
           f"up to date, {stale_screens} stale "
+          # `retired`, not `stale`: the word is already taken two clauses
+          # earlier by `stale_screens`, which counts screens whose copies are
+          # out of date. This counts FILES that should no longer exist at
+          # all. A consumer read the line while both were zero and flagged
+          # that a non-zero run would leave the reader asking which `stale`
+          # they were looking at — the one-label-two-meanings shape this
+          # release split `[NOTE]` apart to remove, reappearing in a summary
+          # line three commits later.
           f"({len(matched)} file(s) current, {len(drifted)} drifted, "
-          f"{len(absent)} absent, {len(stale)} stale)")
+          f"{len(absent)} absent, {len(stale)} retired)")
     if drifted or absent or stale:
         print("Regenerate with the same command without --check.")
         return 1

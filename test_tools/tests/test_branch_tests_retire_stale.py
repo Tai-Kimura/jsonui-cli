@@ -209,5 +209,13 @@ class TestCheckMode:
         out = capsys.readouterr().out
 
         assert rc == 1
-        assert "[STALE]" in out
-        assert "1 stale" in out
+        assert "[RETIRED]" in out
+        # `1 retired`, and the line must not say `stale` twice. The word is
+        # already used two clauses earlier for screens whose copies are out
+        # of date; this counts files that should not exist at all. A
+        # consumer read the line while both were zero and pointed out that a
+        # non-zero run would leave the reader asking which one they were
+        # looking at.
+        assert "1 retired" in out
+        assert out.count("stale") == 1, (
+            "one word, one meaning: `stale` belongs to the screen count")
