@@ -61,6 +61,13 @@ class MockGateAbsenceTests(unittest.TestCase):
         (self.root / "tests").mkdir()
         (self.root / "tests" / "smoke.test.json").write_text(
             json.dumps(TEST_DOC), encoding="utf-8")
+        # The layout the fixture's `source` names. Declared paths are
+        # resolved now, so a fixture that names a file it does not create
+        # earns an unrelated warning and this file's assertions about the
+        # summary line stop measuring the summary line.
+        layouts = self.root / "docs" / "screens" / "layouts"
+        layouts.mkdir(parents=True)
+        (layouts / "test.json").write_text("{}", encoding="utf-8")
 
     def tearDown(self):
         self._tmp.cleanup()

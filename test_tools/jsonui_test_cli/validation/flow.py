@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from .models import ValidationMessage, ValidationResult
+from . import declared_paths
 from .required import check_required_top_level
 from .step import StepValidator
 from .launch import validate_launch
@@ -164,6 +165,22 @@ class FlowTestValidator:
                     result.errors.append(ValidationMessage(
                         path=source_path,
                         message=f"Unknown key in source: {key} (allowed: layout, alias, document)"
+                    ))
+
+            # Same rule as the screen test's `source`: the declaration is
+            # resolved, not just shape-checked. `sources` is the more
+            # thoroughly validated of the two — array, non-empty, key
+            # allow-list, string types — which is exactly why nobody
+            # suspected the one thing it never did.
+            for key, kind in (("layout", "layout"), ("document", "document"),
+                              ("spec", "document")):
+                if key in source and not declared_paths.resolves(
+                        source.get(key), kind):
+                    result.warnings.append(ValidationMessage(
+                        path=source_path,
+                        message=declared_paths.unresolved_message(
+                            key, source.get(key), kind),
+                        level="warning"
                     ))
 
     def _check_subdirectory_references(self, data: dict, path: str, result: ValidationResult):

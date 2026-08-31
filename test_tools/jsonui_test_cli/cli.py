@@ -92,6 +92,16 @@ def cmd_validate(args):
     from .validation.step import PLATFORM_CONSTRAINT, set_project_platforms
     declared_platforms = _project_platforms(getattr(args, "config", None))
     set_project_platforms(declared_platforms)
+
+    # Where a declaration that names a file resolves from. Same shape again,
+    # and the same reason: a validator that searched for a config starting
+    # from the file it is checking answers a different question in a split
+    # tree. Cleared to None when the run cannot tell where the project is,
+    # which makes the check silent rather than wrong.
+    from .validation.declared_paths import set_path_roots
+    _root = _project_root(getattr(args, "config", None))
+    set_path_roots(_root, _load_mock_config(getattr(args, "config", None))[0]
+                   if _root else None)
     platform_warnings = 0
 
     if not files_to_validate:
@@ -171,6 +181,17 @@ def cmd_validate(args):
         KEY_DRIVER_REQUIREMENTS,
         _project_root(getattr(args, "config", None)),
     )
+    # A check that declined to run says so. Silence here would be the very
+    # confusion this check exists to remove: "no dangling paths" and "the
+    # path check never ran" would print identically.
+    from .validation.declared_paths import skipped_kinds
+    for kind in skipped_kinds():
+        print(f"[WARN] declared {kind} paths were not resolved: no "
+              f"{'layouts_directory' if kind == 'layout' else 'spec_directory'}"
+              f" under {_root} — declare it in jui.config.json to turn this "
+              "check on")
+        total_warnings += 1
+
     for note in runtime_notes:
         print(f"[WARN] {note}")
         total_warnings += 1

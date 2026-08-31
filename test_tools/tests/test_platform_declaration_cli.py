@@ -46,6 +46,11 @@ class _Fixture(unittest.TestCase):
         self._tmp = TemporaryDirectory()
         self.root = Path(self._tmp.name)
         (self.root / "tests").mkdir()
+        # The layout `doc()`'s `source` names: declared paths are resolved
+        # now, and this file counts warnings.
+        layouts = self.root / "docs" / "screens" / "layouts"
+        layouts.mkdir(parents=True)
+        (layouts / "test.json").write_text("{}", encoding="utf-8")
 
     def tearDown(self):
         self._tmp.cleanup()

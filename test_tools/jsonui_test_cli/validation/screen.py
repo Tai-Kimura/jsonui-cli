@@ -10,6 +10,7 @@ from .step import StepValidator
 from .launch import validate_launch
 from .mock import find_mock_index, validate_mock_reference
 from .platform import validate_platform_field
+from . import declared_paths
 from .required import check_required_top_level
 from .responsive import validate_responsive_field
 from ..schema import (
@@ -83,6 +84,22 @@ class ScreenTestValidator:
                     result.errors.append(ValidationMessage(
                         path=f"{path}.source",
                         message=f"Unknown source key: {key} (allowed: {', '.join(VALID_SOURCE_KEYS)})"
+                    ))
+
+            # The path is resolved, not merely typed. A `source.layout`
+            # pointing at a file that does not exist validated clean, so a
+            # green run said the same thing whether the paths were right or
+            # whether nothing had looked at them.
+            for key, kind in (("layout", "layout"), ("document", "document"),
+                              ("spec", "document")):
+                value = source.get(key)
+                if key in source and not declared_paths.resolves(
+                        value, kind):
+                    result.warnings.append(ValidationMessage(
+                        path=f"{path}.source",
+                        message=declared_paths.unresolved_message(
+                            key, value, kind),
+                        level="warning"
                     ))
 
         # `screenReady` overrides the runner's readiness gate for this file.
