@@ -1076,7 +1076,17 @@ def _print_branch_generation(report, show_siblings: bool = True) -> None:
         print(f"  {report.harness_file}  (NEW harness skeleton — implement createHarness())")
     else:
         print(f"  {report.harness_file}  (existing harness kept)")
-    print(f"  routes: {', '.join(report.routes) or '(none)'}")
+    # Named with its source. Two readers, on the same day, one working from a
+    # real corpus and one writing a fixture, both predicted this list from the
+    # contract's `when: {api.<op>: …}` clauses and both were wrong — the
+    # contract's api references are the only mention of an API a spec reader
+    # sees, and the declarations this list actually comes from live in a
+    # different section with no stated link to the generated output. Two
+    # independent readings of the same wrong provenance is a property of the
+    # output, not of the readers.
+    print(f"  routes: {', '.join(report.routes) or '(none)'}"
+          f"  (from dataFlow.repositories[].methods[].endpoint, "
+          f"not from the contract's api references)")
 
 
 def cmd_generate_description(args):
