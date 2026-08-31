@@ -1542,10 +1542,19 @@ def _collect_absent(
                 return
             for name in sorted(produced):
                 if name not in present:
+                    # Worded per scenario, because that is what is missing.
+                    # The status wording this replaced was inherited from
+                    # when the check identified findings BY status, and it
+                    # survives into a false sentence: delete `empty` while
+                    # `default` remains and both serve 200, and the line
+                    # claims the file does not serve 200 with the proof that
+                    # it does sitting two lines above it in the same file.
+                    # A reader who opens the file refutes the gate in one
+                    # line, which is how a gate stops being read.
                     absent_generated.append(
-                        f"{rel}  {name}: status {produced[name]['status']} "
-                        "is declared but this generated file does not serve "
-                        "it")
+                        f"{rel}  {name}: generation produces this scenario "
+                        f"(status {produced[name]['status']}), and this file "
+                        "does not have it")
         return
 
     served: set[str] = set()

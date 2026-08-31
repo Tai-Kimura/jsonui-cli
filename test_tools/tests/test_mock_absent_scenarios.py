@@ -477,3 +477,45 @@ def test_declared_responses_generation_does_not_produce_are_not_absences(tmp_pat
 
     assert report.absent == []
     assert not report.has_drift
+
+
+def test_the_finding_does_not_claim_an_unserved_status(two_hundreds):
+    """The line has to stay true after identity moved from status to scenario.
+
+    The wording was inherited from the status-keyed check, where "status 200
+    is declared but this file does not serve it" was true whenever the bucket
+    fired. Scenario identity breaks that: drop `empty` while `default`
+    remains and both answer 200, and the sentence is refuted by the same file
+    it names, two lines up. A gate a reader can disprove by opening the file
+    is one they stop reading — the failure mode a consumer named for the
+    remedy line in the same release.
+    """
+    spec, mocks = two_hundreds
+    _drop(_generated(mocks), "empty")
+
+    [msg] = generate([spec], mocks, check=True).absent_generated
+
+    served = {s["status"] for s
+              in json.loads(_generated(mocks).read_text("utf-8"))
+              ["scenarios"].values()}
+    assert 200 in served, "precondition: `default` still answers 200"
+    assert "empty" in msg
+    assert "does not serve" not in msg
+
+
+def test_the_finding_still_reads_correctly_for_a_wholly_absent_status(
+        two_hundreds):
+    """The other arm: nothing in the file answers 403 once `error_403` goes.
+
+    Both arms must name the scenario. One wording for both is the point —
+    branching on "is this status still served" would put the two sentences
+    back on a condition, which is how they drifted apart the first time.
+    """
+    spec, mocks = two_hundreds
+    _drop(_generated(mocks), "error_403")
+
+    [msg] = generate([spec], mocks, check=True).absent_generated
+
+    assert "error_403" in msg
+    assert "403" in msg
+    assert "does not serve" not in msg
