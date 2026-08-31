@@ -10,6 +10,7 @@ from .step import StepValidator
 from .launch import validate_launch
 from .mock import find_mock_index, validate_mock_reference
 from .platform import validate_platform_field
+from .required import check_required_top_level
 from .responsive import validate_responsive_field
 from ..schema import (
     VALID_SCREEN_READY_VALUES,
@@ -124,13 +125,10 @@ class ScreenTestValidator:
                     )
                 ))
 
-        # Check required fields
-        if "metadata" not in data:
-            result.warnings.append(ValidationMessage(
-                path=path,
-                message="Missing 'metadata' field",
-                level="warning"
-            ))
+        # Required top-level keys. Errors, not warnings: the same schema's
+        # `additionalProperties: false` is enforced as an error, and there is
+        # no reading of one declaration that makes it weaker than the other.
+        check_required_top_level(data, "screen", path, result)
 
         # Validate test-level platform if present
         if "platform" in data:
@@ -147,7 +145,10 @@ class ScreenTestValidator:
 
         # Validate cases
         cases = data.get("cases", [])
-        if not cases:
+        if "cases" in data and not cases:
+            # Present but empty is not a schema violation — `required` asks
+            # for the key — so it stays a warning. A file that declares an
+            # empty list has said something, even if it asserts nothing.
             result.warnings.append(ValidationMessage(
                 path=path,
                 message="No test cases defined",

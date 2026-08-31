@@ -30,6 +30,7 @@ REPO_TOOL = Path(__file__).resolve().parents[1]
 
 TEST_DOC = {
     "type": "screen",
+    "source": {"layout": "test.json"},
     "metadata": {"name": "Fixture", "description": "Fixture screen test.",
                  "screen": "fixture"},
     "platform": "web",

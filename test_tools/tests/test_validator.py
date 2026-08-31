@@ -69,6 +69,7 @@ class TestActionValidation:
     def _make_test(self, steps: list) -> dict:
         return {
             "type": "screen",
+            "source": {"layout": "test.json"},
             "metadata": {"name": "test"},
             "cases": [{"name": "case1", "steps": steps}]
         }
@@ -199,6 +200,7 @@ class TestAssertionValidation:
     def _make_test(self, steps: list) -> dict:
         return {
             "type": "screen",
+            "source": {"layout": "test.json"},
             "metadata": {"name": "test"},
             "cases": [{"name": "case1", "steps": steps}]
         }
@@ -273,6 +275,7 @@ class TestStepValidation:
     def _make_test(self, steps: list) -> dict:
         return {
             "type": "screen",
+            "source": {"layout": "test.json"},
             "metadata": {"name": "test"},
             "cases": [{"name": "case1", "steps": steps}]
         }
@@ -430,6 +433,7 @@ class TestCaseValidation:
         """Test case without name fails."""
         data = {
             "type": "screen",
+            "source": {"layout": "test.json"},
             "metadata": {"name": "test"},
             "cases": [{"steps": [{"action": "tap", "id": "elem"}]}]
         }
@@ -441,6 +445,7 @@ class TestCaseValidation:
         """Test case with empty steps produces warning."""
         data = {
             "type": "screen",
+            "source": {"layout": "test.json"},
             "metadata": {"name": "test"},
             "cases": [{"name": "empty_case", "steps": []}]
         }
@@ -543,6 +548,7 @@ class TestFlowTestFileReferenceValidation:
         """Test file reference in screen test fails."""
         data = {
             "type": "screen",
+            "source": {"layout": "test.json"},
             "metadata": {"name": "test"},
             "cases": [
                 {"name": "case1", "steps": [{"file": "screens/login"}]}
@@ -833,6 +839,7 @@ class TestArgsValidation:
             case["args"] = case_args
         return {
             "type": "screen",
+            "source": {"layout": "test.json"},
             "metadata": {"name": "login_test"},
             "cases": [case]
         }
@@ -856,6 +863,7 @@ class TestArgsValidation:
         # Use a test without @{} placeholders to test various arg types
         data = {
             "type": "screen",
+            "source": {"layout": "test.json"},
             "metadata": {"name": "test"},
             "cases": [{
                 "name": "test_case",
@@ -919,6 +927,7 @@ class TestArgsValidation:
         # Use a test without @{} placeholders
         data = {
             "type": "screen",
+            "source": {"layout": "test.json"},
             "metadata": {"name": "test"},
             "cases": [{
                 "name": "test_case",
@@ -1027,6 +1036,7 @@ class TestArgsValidation:
         """Test screen case with undefined @{varName} fails."""
         data = {
             "type": "screen",
+            "source": {"layout": "test.json"},
             "metadata": {"name": "test"},
             "cases": [{
                 "name": "test_case",
@@ -1046,6 +1056,7 @@ class TestArgsValidation:
         """Test screen case with all @{varName} defined passes."""
         data = {
             "type": "screen",
+            "source": {"layout": "test.json"},
             "metadata": {"name": "test"},
             "cases": [{
                 "name": "test_case",
@@ -1064,6 +1075,7 @@ class TestArgsValidation:
         """Test screen case without args and without placeholders passes."""
         data = {
             "type": "screen",
+            "source": {"layout": "test.json"},
             "metadata": {"name": "test"},
             "cases": [{
                 "name": "test_case",
@@ -1081,6 +1093,7 @@ class TestArgsValidation:
         """Test screen case with multiple undefined args shows all errors."""
         data = {
             "type": "screen",
+            "source": {"layout": "test.json"},
             "metadata": {"name": "test"},
             "cases": [{
                 "name": "test_case",
@@ -1102,6 +1115,7 @@ class TestArgsValidation:
         """Test screen case with undefined arg in contains fails."""
         data = {
             "type": "screen",
+            "source": {"layout": "test.json"},
             "metadata": {"name": "test"},
             "cases": [{
                 "name": "test_case",
@@ -1228,6 +1242,7 @@ class TestFlowBlockStepValidation:
         """Test block step in screen test fails."""
         data = {
             "type": "screen",
+            "source": {"layout": "test.json"},
             "metadata": {"name": "test"},
             "cases": [
                 {
@@ -1292,6 +1307,7 @@ class TestFlowFileStepArgsValidation:
             # Create screen test with all args defined
             screen_test = {
                 "type": "screen",
+                "source": {"layout": "test.json"},
                 "metadata": {"name": "login"},
                 "cases": [{
                     "name": "input",
@@ -1335,6 +1351,7 @@ class TestFlowFileStepArgsValidation:
             # Create screen test with all args defined
             screen_test = {
                 "type": "screen",
+                "source": {"layout": "test.json"},
                 "metadata": {"name": "login"},
                 "cases": [{
                     "name": "input",
@@ -1377,6 +1394,7 @@ class TestFlowFileStepArgsValidation:
             # Create screen test with all args defined
             screen_test = {
                 "type": "screen",
+                "source": {"layout": "test.json"},
                 "metadata": {"name": "login"},
                 "cases": [{
                     "name": "input",
@@ -1419,6 +1437,7 @@ class TestFlowFileStepArgsValidation:
             # Create screen test with all args defined
             screen_test = {
                 "type": "screen",
+                "source": {"layout": "test.json"},
                 "metadata": {"name": "login"},
                 "cases": [{
                     "name": "input",
@@ -1657,6 +1676,7 @@ class TestPlatformFieldValidation:
             case["platform"] = case_platform
         data = {
             "type": "screen",
+            "source": {"layout": "test.json"},
             "metadata": {"name": "test", "description": "Test"},
             "cases": [case],
         }
@@ -1753,6 +1773,7 @@ class TestResponsiveConditionValidation:
     def _screen_with_when(self, responsive):
         return {
             "type": "screen",
+            "source": {"layout": "test.json"},
             "metadata": {"name": "test", "description": "Test"},
             "cases": [{
                 "name": "case1",
@@ -1782,6 +1803,7 @@ class TestResponsiveConditionValidation:
     def test_valid_responsive_in_repeat_while(self):
         data = {
             "type": "screen",
+            "source": {"layout": "test.json"},
             "metadata": {"name": "test", "description": "Test"},
             "cases": [{
                 "name": "case1",
@@ -1869,6 +1891,7 @@ class TestCaseLevelResponsiveValidation:
     def _screen(self, case_responsive):
         return {
             "type": "screen",
+            "source": {"layout": "test.json"},
             "metadata": {"name": "test", "description": "Test"},
             "cases": [{
                 "name": "case1",
@@ -1921,6 +1944,7 @@ class TestSetViewportSetOrientationValidation:
     def _make_test(self, steps: list) -> dict:
         return {
             "type": "screen",
+            "source": {"layout": "test.json"},
             "metadata": {"name": "test", "description": "Test"},
             "cases": [{"name": "case1", "description": "d", "steps": steps}],
         }

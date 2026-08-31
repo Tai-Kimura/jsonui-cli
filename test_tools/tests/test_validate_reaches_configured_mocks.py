@@ -39,7 +39,7 @@ def _project(tmp_path: Path, schema_ref: str) -> tuple[Path, Path]:
     tests = tmp_path / "tests" / "user" / "screens"
     tests.mkdir(parents=True)
     (tests / "x.test.json").write_text(json.dumps({
-        "type": "screen", "metadata": {"name": "X"},
+        "type": "screen", "source": {"layout": "test.json"}, "metadata": {"name": "X"},
         "cases": [{"name": "c", "steps": []}],
     }), encoding="utf-8")
     return front, tmp_path / "tests" / "user"
@@ -81,7 +81,7 @@ def test_a_project_without_mocks_is_unaffected(tmp_path):
     tests = tmp_path / "tests" / "user" / "screens"
     tests.mkdir(parents=True)
     (tests / "x.test.json").write_text(json.dumps({
-        "type": "screen", "metadata": {"name": "X"},
+        "type": "screen", "source": {"layout": "test.json"}, "metadata": {"name": "X"},
         "cases": [{"name": "c", "steps": []}],
     }), encoding="utf-8")
     proc = _validate(tmp_path, tmp_path / "tests" / "user")

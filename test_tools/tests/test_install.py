@@ -21,6 +21,7 @@ from jsonui_test_cli.cli import main
 
 SCREEN_TEST = {
     "type": "screen",
+    "source": {"layout": "test.json"},
     "metadata": {"name": "sample"},
     "cases": [{"name": "case1", "steps": [{"action": "back"}]}],
 }
@@ -33,7 +34,7 @@ def _write_test(path: Path, data=SCREEN_TEST):
 
 
 def _screen(name, platform=None, cases=None):
-    data = {"type": "screen", "metadata": {"name": name}}
+    data = {"type": "screen", "source": {"layout": "test.json"}, "metadata": {"name": name}}
     if platform is not None:
         data["platform"] = platform
     data["cases"] = cases if cases is not None else [
@@ -284,6 +285,7 @@ class TestPlatformShaping:
     def test_pruned_file_preserves_key_order(self, tmp_path):
         data = {
             "type": "screen",
+            "source": {"layout": "test.json"},
             "platform": ["ios", "android"],
             "metadata": {"name": "ordered"},
             "launch": {"clearState": True},

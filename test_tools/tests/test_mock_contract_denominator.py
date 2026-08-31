@@ -37,6 +37,7 @@ from jsonui_test_cli.mock.generate import _check, generate  # noqa: E402
 
 TEST_DOC = {
     "type": "screen",
+    "source": {"layout": "test.json"},
     "metadata": {"name": "Fixture", "description": "Fixture screen test.",
                  "screen": "fixture"},
     "platform": "web",

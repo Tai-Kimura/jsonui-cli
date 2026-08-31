@@ -189,6 +189,7 @@ class TestSummaryCounts:
         (proj / "tests" / "mocks").mkdir()
         (proj / "tests" / "sample.test.json").write_text(json.dumps({
             "type": "screen",
+            "source": {"layout": "test.json"},
             "metadata": {"name": "sample_test", "description": "d"},
             "cases": [{"name": "c", "description": "d",
                        "steps": [{"assert": "visible", "id": "root"}]}],

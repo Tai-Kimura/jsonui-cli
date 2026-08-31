@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from .models import ValidationMessage, ValidationResult
+from .required import check_required_top_level
 from .step import StepValidator
 from .launch import validate_launch
 from .platform import validate_platform_field
@@ -45,6 +46,11 @@ class FlowTestValidator:
                 path=path,
                 message=message
             ))
+
+        # Required top-level keys. `metadata` produced no message at all
+        # here — the one field of the four that was not merely mis-levelled
+        # but entirely unchecked.
+        check_required_top_level(data, "flow", path, result)
 
         # Warn if file references use subdirectories
         self._check_subdirectory_references(data, path, result)

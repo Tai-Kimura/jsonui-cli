@@ -26,6 +26,7 @@ class TestCLIValidate:
         """Test validating a valid file."""
         test_data = {
             "type": "screen",
+            "source": {"layout": "test.json"},
             "metadata": {"name": "test"},
             "cases": [
                 {"name": "case1", "steps": [{"action": "tap", "id": "btn"}]}
@@ -47,6 +48,7 @@ class TestCLIValidate:
         """Test validating an invalid file."""
         test_data = {
             "type": "screen",
+            "source": {"layout": "test.json"},
             "cases": [
                 {"name": "case1", "steps": [{"action": "invalid_action"}]}
             ]
@@ -69,6 +71,7 @@ class TestCLIValidate:
             # Create valid test file
             test_data = {
                 "type": "screen",
+                "source": {"layout": "test.json"},
                 "metadata": {"name": "test"},
                 "cases": [{"name": "case1", "steps": [{"action": "back"}]}]
             }
@@ -91,6 +94,7 @@ class TestCLIValidate:
         """Test verbose output."""
         test_data = {
             "type": "screen",
+            "source": {"layout": "test.json"},
             "metadata": {"name": "test"},
             "cases": [{"name": "case1", "steps": [{"action": "back"}]}]
         }
@@ -216,6 +220,7 @@ class TestCLIValidateFlowTests:
         """
         screen_test = {
             "type": "screen",
+            "source": {"layout": "test.json"},
             "metadata": {"name": "login"},
             "cases": [{"name": "valid_login", "steps": [{"action": "back"}]}]
         }

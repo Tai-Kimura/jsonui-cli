@@ -33,6 +33,7 @@ from jsonui_test_cli.validation.mock import find_mock_dir
 
 TEST_FILE = {
     "type": "screen",
+    "source": {"layout": "test.json"},
     "metadata": {"name": "a_test", "description": "d"},
     "cases": [{"name": "c", "description": "d",
                "steps": [{"assert": "visible", "id": "root"}]}],

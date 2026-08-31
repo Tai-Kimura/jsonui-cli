@@ -317,6 +317,28 @@ VALID_FLOW_TOP_LEVEL_KEYS = [
     "descriptionFile"
 ]
 
+# Top-level keys the canonical schemas mark `required`, per test type.
+#
+# The schemas declare two things about a document's shape, and only one of
+# them was implemented: `additionalProperties: false` rejected unknown keys
+# as errors, while `required` was enforced as warnings, or — for a flow
+# test's `metadata` — not at all. A file holding nothing but `{"type":
+# "screen"}` passed, which is a file that names no screen and asserts
+# nothing.
+#
+# The half that worked made the other half look like it worked too: a
+# reader who sees unknown keys rejected has no reason to suspect that
+# missing ones are not. `test_required_fields_are_enforced` walks this map
+# against the vendored schemas in both directions, so a field added to a
+# schema's `required` cannot be declared here without being checked, or
+# checked without being declared.
+#
+# `$schema` is never required — it is an editor affordance.
+REQUIRED_TOP_LEVEL_KEYS = {
+    "screen": ["type", "source", "metadata", "cases"],
+    "flow": ["type", "metadata", "steps"],
+}
+
 # Valid keys in source object
 VALID_SOURCE_KEYS = ["layout", "document"]
 

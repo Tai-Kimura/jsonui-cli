@@ -29,6 +29,7 @@ TYPE_W = "has an unsupported type"
 def doc(step):
     return {
         "type": "screen",
+        "source": {"layout": "test.json"},
         "metadata": {"name": "Fixture", "description": "Fixture screen test.",
                      "screen": "fixture"},
         "platform": "web",
