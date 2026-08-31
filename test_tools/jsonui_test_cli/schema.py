@@ -294,6 +294,17 @@ VALID_SCREEN_TOP_LEVEL_KEYS = [
     "cases"
 ]
 
+# Minimum driver version per top-level key, mirroring `x-requires-driver` in
+# the canonical schemas. The requirement lives beside the key it constrains so
+# that adding a key means stating its runtime requirement in the same edit —
+# a README sentence cannot be checked, and the failure it fails to prevent
+# (an older driver ignoring the declaration in silence) surfaces as a timeout
+# naming the screen, with nothing pointing at the declaration.
+# test_schema_drift.py pins this to the schemas in both directions.
+KEY_DRIVER_REQUIREMENTS = {
+    "screenReady": {"web": "1.8.4"},
+}
+
 # `screenReady` string forms. The object form is {"marker": "<screen id>"}.
 # A file declares this when waiting for its own screen would be wrong —
 # a permission refusal rendered in the screen's place, a redirect to login —

@@ -324,3 +324,24 @@ def test_a_bundle_that_opens_the_scenario_object_turns_the_gate_red(monkeypatch)
 
     with pytest.raises(AssertionError):
         test_mock_scenario_object_stays_closed()
+
+
+def test_driver_requirements_match_the_schemas():
+    """`x-requires-driver` in the schemas <-> KEY_DRIVER_REQUIREMENTS.
+
+    Pinned in both directions so that adding a key to the schema without
+    stating its runtime requirement, or stating one the schema does not
+    carry, is a red test rather than a declaration that validates green and
+    is then ignored by an older driver in silence.
+    """
+    from_schema = {}
+    for name in ("screen-test", "flow-test"):
+        props = _load(name).get("properties", {})
+        for key, spec in props.items():
+            if isinstance(spec, dict) and "x-requires-driver" in spec:
+                from_schema[key] = spec["x-requires-driver"]
+    assert from_schema == sc.KEY_DRIVER_REQUIREMENTS, (
+        "driver requirements drifted from the schemas.\n"
+        f"    only in schema: {sorted(from_schema.keys() - sc.KEY_DRIVER_REQUIREMENTS.keys())}\n"
+        f"    only in const : {sorted(sc.KEY_DRIVER_REQUIREMENTS.keys() - from_schema.keys())}"
+    )

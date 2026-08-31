@@ -158,6 +158,25 @@ def cmd_validate(args):
               f"run read, so none were suppressed — a project that targets one "
               f"platform can declare it to silence the others.")
 
+    # A key can be spelled correctly and still be ignored: the schema is the
+    # authoring side, the driver is the runtime, and they ship separately. An
+    # ignored declaration falls back to the default behaviour, so the file
+    # does the very thing it declared it would not — and nothing in that
+    # output points at the declaration.
+    from .schema import KEY_DRIVER_REQUIREMENTS
+    from .validation.runtime_support import check_declarations, collect_declared_keys
+    runtime_errors, runtime_notes = check_declarations(
+        collect_declared_keys(valid_test_files, set(KEY_DRIVER_REQUIREMENTS)),
+        KEY_DRIVER_REQUIREMENTS,
+        _project_root(getattr(args, "config", None)),
+    )
+    for note in runtime_notes:
+        print(f"[WARN] {note}")
+        total_warnings += 1
+    for message in runtime_errors:
+        print(f"[ERROR] {message}")
+        total_errors += 1
+
     # Summary
     print(f"\n{'='*50}")
     # The mock gate counts toward the headline. It always counted toward the

@@ -136,6 +136,9 @@
       "$ref": "actions.schema.json#/definitions/mocksScenarioMap"
     },
     "screenReady": {
+      "x-requires-driver": {
+        "web": "1.8.4"
+      },
       "oneOf": [
         {
           "type": "string",
