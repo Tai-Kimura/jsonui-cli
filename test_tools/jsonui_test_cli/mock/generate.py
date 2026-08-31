@@ -894,17 +894,32 @@ class CheckReport:
     #: much was looked at, and the two failures this check has shipped were
     #: both "the comparison did not happen" rather than "it passed".
     compared: int = 0
-    #: Scenarios there is no JSON body to compare — a binary/file response,
-    #: a status that declares no body (204 and friends), or a malformed
-    #: entry. Counted, not silent: they are neither compared nor a gap, and
-    #: a scenario belonging to no bucket makes the summary read as though
-    #: the buckets it does print were everything.
-    no_body: list = field(default_factory=list)
+    #: Scenarios whose status IS declared but which declare no response
+    #: body — the contract stops before the payload. A debt, fixable in
+    #: the swagger, not a property of the payload.
+    no_schema: list = field(default_factory=list)
+    #: Scenarios whose DECLARED response is not JSON (a file, a stream,
+    #: html). Structurally not comparable, so silence here is correct.
+    #:
+    #: Split from `no_schema` on a consumer's measurement: of 105 in one
+    #: project 94 were the debt and 11 the correct silence, and in another
+    #: all 22 were debt. Merged, the number could not be acted on — the
+    #: same "a true gap and a correct silence share one bucket" shape the
+    #: sibling-operation clause carries a warning about. The split is made
+    #: from the DECLARATION, which can itself be wrong (a framework that
+    #: auto-declares application/json for a streaming route lands a file
+    #: response in the other bucket), so this says what the contract says,
+    #: not what the endpoint returns.
+    non_json: list = field(default_factory=list)
+    #: Scenario entries that are not objects at all — a defect in the mock
+    #: file rather than in the contract.
+    malformed: list = field(default_factory=list)
 
     @property
     def scenarios_seen(self) -> int:
         """Every scenario the run opened, by construction of the buckets."""
-        return self.compared + len(self.unmatched) + len(self.no_body)
+        return (self.compared + len(self.unmatched) + len(self.no_schema)
+                + len(self.non_json) + len(self.malformed))
 
     @property
     def contract_summary(self) -> str:
@@ -919,8 +934,15 @@ class CheckReport:
         if self.unmatched:
             parts.append(f"{len(self.unmatched)} not compared "
                          "(status not declared)")
-        if self.no_body:
-            parts.append(f"{len(self.no_body)} not compared (no JSON body)")
+        if self.no_schema:
+            parts.append(f"{len(self.no_schema)} not compared "
+                         "(no response body declared)")
+        if self.non_json:
+            parts.append(f"{len(self.non_json)} not compared "
+                         "(declared non-JSON response)")
+        if self.malformed:
+            parts.append(f"{len(self.malformed)} not compared "
+                         "(malformed scenario)")
         if self.stale_generated:
             parts.append(f"{len(self.stale_generated)} generated body(ies) stale")
         return (f"mock contract: {self.scenarios_seen} scenario(s) — "
@@ -1066,7 +1088,9 @@ def _check(swagger_paths: list[str], mock_dir: Path, strict: bool = False,
 
     bodies: list[BodyDrift] = []
     unmatched: list[str] = []
-    no_body: list[str] = []
+    no_schema: list[str] = []
+    non_json: list[str] = []
+    malformed: list[str] = []
     misnamed: list[str] = []
     compared = 0
     for key in sorted(set(expected) & set(existing)):
@@ -1099,7 +1123,7 @@ def _check(swagger_paths: list[str], mock_dir: Path, strict: bool = False,
                 continue
             before = len(bodies)
             compared += _check_bodies(doc, op, rel, data, bodies, unmatched,
-                                      no_body,
+                                      no_schema, non_json, malformed,
                                       generated=is_generated(rel),
                                       all_ops=all_ops)
             if is_generated(rel) and len(bodies) > before:
@@ -1123,7 +1147,8 @@ def _check(swagger_paths: list[str], mock_dir: Path, strict: bool = False,
         missing=missing, orphaned=orphaned, drifted=drifted,
         bodies=bodies, unmatched=unmatched, misnamed=misnamed,
         warnings=warnings, out_of_scope=out_of_scope,
-        compared=compared, no_body=no_body,
+        compared=compared, no_schema=no_schema,
+        non_json=non_json, malformed=malformed,
         scope_excluded=len(excluded),
         scope_note=scope.describe() if scope.is_active() else "",
         strict=strict,
@@ -1187,7 +1212,9 @@ def _check_bodies(
     data: dict,
     bodies: list,
     unmatched: list[str],
-    no_body: list[str],
+    no_schema: list[str],
+    non_json: list[str],
+    malformed: list[str],
     generated: bool = False,
     all_ops: dict | None = None,
 ) -> int:
@@ -1199,9 +1226,9 @@ def _check_bodies(
 
     Returns how many scenarios were actually compared, so a run can say what
     it measured rather than only what it found. A scenario the contract has
-    no JSON body for goes to `no_body` with its reason. Every scenario
-    lands in exactly one of compared / unmatched / no_body, so the three
-    add up to what was on disk — a scenario that fell into none of them
+    no JSON body for goes to the bucket naming its reason. Every scenario
+    lands in exactly one of compared / unmatched / no_schema / non_json /
+    malformed, so the buckets add up to what was on disk — a scenario that fell into none of them
     was invisible in a line whose whole purpose is to account for the
     corpus (measured: a PDF receipt mock sat outside both counts, and the
     summary read as though 405 + 1 were everything).
@@ -1213,7 +1240,7 @@ def _check_bodies(
 
     for name, scenario in scenarios.items():
         if not isinstance(scenario, dict):
-            no_body.append(f"{rel}  {name}: not an object")
+            malformed.append(f"{rel}  {name}: not an object")
             continue
         decl = ViolationDeclaration.parse(scenario.get("contractViolations"))
         decl_problems = list(decl.errors) if decl is not None else []
@@ -1242,12 +1269,12 @@ def _check_bodies(
         schema, content_type = _response_schema(op, status)
         if content_type is not None and content_type != "application/json":
             # binary/file response — the author supplies the fixture
-            no_body.append(
-                f"{rel}  {name}: {content_type} response, no JSON body to compare")
+            non_json.append(
+                f"{rel}  {name}: declared {content_type}, no JSON body to compare")
             _report_declaration_only(rel, name, decl_problems, bodies, generated)
             continue
         if schema is None:
-            no_body.append(
+            no_schema.append(
                 f"{rel}  {name}: status {status} declares no response body")
             _report_declaration_only(rel, name, decl_problems, bodies, generated)
             continue

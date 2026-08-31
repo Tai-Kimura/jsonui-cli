@@ -315,12 +315,18 @@ class TheBucketsClose(unittest.TestCase):
             generate([swagger], mocks)
             report = generate([swagger], mocks, check=True)
 
-            self.assertEqual(len(report.no_body), 1, report.no_body)
-            self.assertIn("no JSON body", report.contract_summary)
+            # Split by reason, not merged: a declared-but-unschema'd
+            # status is a debt someone can fix, a file response is
+            # correct silence, and one number cannot be acted on.
+            self.assertEqual(len(report.non_json), 1, report.non_json)
+            self.assertIn("declared non-JSON response",
+                          report.contract_summary)
             # The whole point: the parts add up to the total on screen.
             self.assertEqual(
                 report.scenarios_seen,
-                report.compared + len(report.unmatched) + len(report.no_body))
+                report.compared + len(report.unmatched)
+                + len(report.no_schema) + len(report.non_json)
+                + len(report.malformed))
             self.assertIn(f"{report.scenarios_seen} scenario(s)",
                           report.contract_summary)
 
@@ -337,3 +343,30 @@ class TheBucketsClose(unittest.TestCase):
                 for p in mocks.rglob("*.mock.json"))
             report = generate([swagger], mocks, check=True)
             self.assertEqual(report.scenarios_seen, on_disk)
+
+    def test_a_declared_status_with_no_schema_is_the_other_bucket(self):
+        """The debt half. A consumer measured 94 of 105 in one project and
+        22 of 22 in another as this — merged with the file responses, the
+        number named no action; split, it is a swagger to-do list."""
+        with TemporaryDirectory() as d:
+            tmp = Path(d)
+            spec = {
+                "openapi": "3.0.3",
+                "paths": {"/api/items": {"get": {
+                    "operationId": "listItems", "tags": ["I"],
+                    "responses": {
+                        "200": {"content": {"application/json": {
+                            "schema": {"type": "object",
+                                       "properties": {"id": {"type": "string"}}}}}},
+                        # declared, but the contract stops before the payload
+                        "403": {"description": "forbidden"}}}}},
+            }
+            (tmp / "swagger.json").write_text(json.dumps(spec), encoding="utf-8")
+            mocks = tmp / "mocks"
+            generate([str(tmp / "swagger.json")], mocks)
+            report = generate([str(tmp / "swagger.json")], mocks, check=True)
+
+            self.assertEqual(len(report.no_schema), 1, report.no_schema)
+            self.assertEqual(report.non_json, [])
+            self.assertIn("no response body declared", report.contract_summary)
+            self.assertNotIn("non-JSON", report.contract_summary)
