@@ -2637,10 +2637,28 @@ class SpecValidator:
         if not self._spec_file_path:
             return []
         roots = [self._spec_file_path.parent]
+        # Bounded, and the bound is the project. Collecting every marker
+        # above the spec had no ceiling, so on a machine where this
+        # repository sits inside another checkout, the OUTER checkout's
+        # `.git` became a candidate — and a path that exists only outside
+        # this project resolved. A consumer produced 43 such paths on one
+        # machine without contriving anything: green at their desk, warning
+        # in CI, on a check scheduled to become an error. "Cannot reproduce
+        # locally" is the worst shape for that to take.
+        #
+        # The ceiling is the nearest enclosing `.git` — the same place
+        # `jsonui-test` resolves its project root from. A split tree still
+        # reaches its parent repository (the specs live in the parent, so
+        # the parent is the nearest `.git`); a submodule stops at its own.
+        # Ascending further is guessing about the machine, and breadth
+        # beyond the project belongs in config, where the answer does not
+        # depend on what happens to sit above the checkout.
         for parent in self._spec_file_path.parents:
             if ((parent / "jui.config.json").is_file()
                     or (parent / ".git").exists()):
                 roots.append(parent)
+            if (parent / ".git").exists():
+                break
         return roots
 
     def _validate_related_files(self, files: list, result: SpecValidationResult):

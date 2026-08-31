@@ -170,3 +170,50 @@ def test_the_message_names_the_roots_it_tried(repo):
     [warning] = _path_warnings(result)
     assert "looked under" in warning.message
     assert str(repo) in warning.message
+
+
+class TestTheAscentStopsAtTheProject:
+    """A neighbouring checkout is not a candidate root.
+
+    Collecting every marker above the spec had no ceiling, so on a machine
+    where the repository sits inside another checkout, the OUTER checkout's
+    `.git` became a candidate and a path that exists only outside this
+    project resolved. A consumer produced 43 such paths on one machine
+    without contriving anything.
+
+    The damage is that the check becomes machine-dependent: green at a
+    desk, warning in CI, on a check scheduled to become an error. That
+    arrives as "CI fails and I cannot reproduce it", which is the shape
+    that costs the most to chase.
+    """
+
+    def _tree(self, tmp_path):
+        outer = tmp_path / "outer"
+        (outer / ".git").mkdir(parents=True)
+        repo = outer / "repo"
+        (repo / ".git").mkdir(parents=True)
+        specs = repo / "docs" / "screens" / "json"
+        specs.mkdir(parents=True)
+        # exists ONLY above the repository under test
+        (outer / "elsewhere.ts").write_text("x", encoding="utf-8")
+        (repo / "inside.ts").write_text("x", encoding="utf-8")
+        return outer, repo, specs
+
+    def test_a_file_only_outside_the_repo_does_not_resolve(self, tmp_path):
+        outer, repo, specs = self._tree(tmp_path)
+        v = SpecValidator()
+        v._spec_file_path = specs / "s.spec.json"
+        roots = v._related_file_roots()
+        assert outer not in roots, (
+            "the enclosing checkout is not part of this project")
+        assert repo in roots
+
+    def test_a_file_inside_the_repo_still_resolves(self, tmp_path):
+        # The control. Without it, "the outer root is gone" and "every root
+        # is gone" are the same result, and the previous fix existed to add
+        # the repository root.
+        outer, repo, specs = self._tree(tmp_path)
+        v = SpecValidator()
+        v._spec_file_path = specs / "s.spec.json"
+        roots = v._related_file_roots()
+        assert any((r / "inside.ts").exists() for r in roots)
