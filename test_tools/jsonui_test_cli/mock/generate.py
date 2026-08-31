@@ -883,6 +883,24 @@ class CheckReport:
     scope_note: str = ""
     #: When set, a scenario that only omits optional fields counts as drift.
     strict: bool = False
+    #: How many scenario bodies were compared to a schema. The denominator
+    #: for everything else here: findings say what is wrong, this says how
+    #: much was looked at, and the two failures this check has shipped were
+    #: both "the comparison did not happen" rather than "it passed".
+    compared: int = 0
+
+    @property
+    def contract_summary(self) -> str:
+        """One line naming what the run measured. Printed whether or not
+        anything was found — a gate that only speaks when it fails cannot be
+        distinguished from one that measured nothing."""
+        parts = [f"{self.compared} scenario(s) compared"]
+        if self.unmatched:
+            parts.append(f"{len(self.unmatched)} not compared "
+                         "(status not declared)")
+        if self.stale_generated:
+            parts.append(f"{len(self.stale_generated)} generated body(ies) stale")
+        return "mock contract: " + ", ".join(parts)
 
     @property
     def errors(self) -> list:
@@ -922,8 +940,9 @@ def _check(swagger_paths: list[str], mock_dir: Path, strict: bool = False,
     expected: dict[tuple, tuple[OpenApiDoc, Operation]] = {}
     #: normalized key -> the spelling that side wrote, for messages
     shown_swagger: dict[tuple, str] = {}
-    shown_mock: dict[tuple, str] = {}
+    shown_mock: dict[str, str] = {}
     excluded: dict[tuple, Operation] = {}
+    all_ops: dict[tuple, Operation] = {}
     for swagger in swagger_paths:
         doc = OpenApiDoc.load(swagger)
         if not doc.is_api_spec():
@@ -935,6 +954,11 @@ def _check(swagger_paths: list[str], mock_dir: Path, strict: bool = False,
             # `/api/items/{}` sends the reader looking for a path that is in
             # neither file.
             shown_swagger[key] = f"{key[0]} {op.path}"
+            # Every operation the swagger declares, in scope or not: the
+            # mirrored endpoint that answers "was this status forgotten?"
+            # usually belongs to another realm, which is exactly the half
+            # the scope filters out.
+            all_ops[key] = op
             if scope.covers(op.path):
                 expected[key] = (doc, op)
             else:
@@ -950,16 +974,20 @@ def _check(swagger_paths: list[str], mock_dir: Path, strict: bool = False,
             if key is None:
                 drifted.append(f"{rel}: unreadable")
                 continue
-            existing[key] = rel
+            existing.setdefault(key, []).append(rel)
             try:
                 with open(path, "r", encoding="utf-8") as f:
                     source = (json.load(f).get("source") or {})
             except (OSError, json.JSONDecodeError):
                 source = {}
-            shown_mock[key] = f"{key[0]} {source.get('path') or key[1]}"
+            shown_mock[rel] = f"{key[0]} {source.get('path') or key[1]}"
             op_id = source.get("operationId")
             if op_id:
                 op_ids.setdefault(op_id, key)
+    # Hand-written first within a route, so a route-level message names the
+    # file a person owns rather than the derived copy beside it.
+    for key, rels in existing.items():
+        existing[key] = sorted(rels, key=lambda r: (is_generated(r), r))
 
     missing_keys = [k for k in expected if k not in existing]
     orphan_keys = [k for k in existing if k not in expected]
@@ -972,8 +1000,9 @@ def _check(swagger_paths: list[str], mock_dir: Path, strict: bool = False,
         _doc, op = expected[key]
         was = op_ids.get(op.operation_id)
         if was is not None and was in set(orphan_keys):
+            rel = existing[was][0]
             drifted.append(
-                f"{existing[was]}: source {shown_mock[was]} "
+                f"{rel}: source {shown_mock[rel]} "
                 f"!= swagger {shown_swagger[key]}"
             )
             paired.add(key)
@@ -989,49 +1018,123 @@ def _check(swagger_paths: list[str], mock_dir: Path, strict: bool = False,
     # separately keeps ORPHAN meaning "no such endpoint any more", and lets
     # the file read as deletable without turning the gate red for it.
     out_of_scope = sorted(
-        f"{existing[k]} ({shown_mock[k]})"
+        f"{rel} ({shown_mock[rel]})"
         for k in orphan_keys if k not in paired and k in excluded
+        for rel in existing[k]
     )
     orphan_keys = [k for k in orphan_keys if k not in excluded]
 
     # A stale entry in generated/ is fixed by regenerating, so it is reported
     # rather than failed. One outside it needs a decision.
+    #
+    # Per file, not per route: a route can hold both a hand-written mock and
+    # the generated copy it overlays, and the two need opposite treatment.
     orphaned = sorted(
-        f"{existing[k]} ({shown_mock[k]})"
-        for k in orphan_keys if k not in paired and not is_generated(existing[k])
+        f"{rel} ({shown_mock[rel]})"
+        for k in orphan_keys if k not in paired
+        for rel in existing[k] if not is_generated(rel)
     )
     warnings += sorted(
-        f"{existing[k]} ({shown_mock[k]}) — stale generated mock, regenerate"
-        for k in orphan_keys if k not in paired and is_generated(existing[k])
+        f"{rel} ({shown_mock[rel]}) — stale generated mock, regenerate"
+        for k in orphan_keys if k not in paired
+        for rel in existing[k] if is_generated(rel)
     )
 
     bodies: list[BodyDrift] = []
     unmatched: list[str] = []
     misnamed: list[str] = []
+    compared = 0
     for key in sorted(set(expected) & set(existing)):
-        rel = existing[key]
         doc, op = expected[key]
-        # Naming is a convention, not identity — reported so a rename is
-        # visible, never as drift. Generated files always follow it.
-        if not is_generated(rel) and rel != mock_relpath(op):
-            misnamed.append(f"{rel} (scaffolding would name it {mock_relpath(op)})")
-        try:
-            with open(mock_dir / rel, "r", encoding="utf-8") as f:
-                data = json.load(f)
-        except (OSError, json.JSONDecodeError):
-            drifted.append(f"{rel}: unreadable")
-            continue
-        _check_bodies(doc, op, rel, data, bodies, unmatched,
-                      generated=is_generated(rel))
+        # Every file on the route, not one of them. The index used to fold a
+        # route to a single entry, last spelling wins over the sorted paths —
+        # and `generated/` sorts after most tag directories, so the generated
+        # copy displaced the hand-written mock it overlays. The hand-written
+        # body is the one `mock serve` actually sends (generated is the base,
+        # hand-written scenarios overwrite it by name), so the check was
+        # comparing the derived file and skipping the served one: on the
+        # reporting project all ten hand-written `default` bodies went
+        # uncompared while the run printed "mocks are in sync with swagger".
+        #
+        # Both are checked rather than only the served merge, so a generated
+        # scenario a hand-written file happens to shadow keeps its `[WARN]`.
+        # `generated` is per file, so the weights (WARN vs gating BODY) stay
+        # attached to the file a reader would open.
+        for rel in existing[key]:
+            # Naming is a convention, not identity — reported so a rename is
+            # visible, never as drift. Generated files always follow it.
+            if not is_generated(rel) and rel != mock_relpath(op):
+                misnamed.append(
+                    f"{rel} (scaffolding would name it {mock_relpath(op)})")
+            try:
+                with open(mock_dir / rel, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+            except (OSError, json.JSONDecodeError):
+                drifted.append(f"{rel}: unreadable")
+                continue
+            compared += _check_bodies(doc, op, rel, data, bodies, unmatched,
+                                      generated=is_generated(rel),
+                                      all_ops=all_ops)
 
     return CheckReport(
         missing=missing, orphaned=orphaned, drifted=drifted,
         bodies=bodies, unmatched=unmatched, misnamed=misnamed,
         warnings=warnings, out_of_scope=out_of_scope,
+        compared=compared,
         scope_excluded=len(excluded),
         scope_note=scope.describe() if scope.is_active() else "",
         strict=strict,
     )
+
+
+def _status_context(op: Operation, status, all_ops: dict) -> str:
+    """What the rest of the swagger says about *status*, when it says anything.
+
+    A mock has to name one concrete status for a failure the contract states
+    only as "an error", and that choice was never compared to anything. Two
+    facts are cheap here, and each is evidence about which of the two this
+    is — a status the swagger forgot, or one this endpoint genuinely does
+    not have:
+
+    - a mirrored endpoint declares it (same method and shape, differing in
+      one leading segment — the realm — with the same tail; failing that,
+      the same operationId elsewhere). An asymmetry between realms reads as
+      an omission on one side.
+    - *no* operation anywhere declares it. Then the mock did not borrow from
+      a neighbour, it introduced a class of failure the contract has nowhere
+      — which is the harder one to notice by reading, because the code it
+      picked can still be a real code from elsewhere in the product.
+
+    Neither true, nothing is said: a status many unrelated endpoints declare
+    is not evidence about this one. Saying "no sibling found" would be
+    filling the line with the absence of information — and it would be read
+    as "deliberate", which silence here does not mean: an omission missing
+    from every realm at once looks exactly like a status the endpoint is
+    right not to have.
+    """
+    want = str(status)
+    siblings: list[str] = []
+    anywhere = False
+    segments = op.path.split("/")
+    for other in all_ops.values():
+        if want not in other.responses:
+            continue
+        if other.path == op.path and other.method == op.method:
+            continue
+        anywhere = True
+        theirs = other.path.split("/")
+        realm = (other.method == op.method and len(theirs) == len(segments)
+                 and sum(a != b for a, b in zip(segments, theirs)) == 1
+                 and segments[-1] == theirs[-1])
+        if realm or other.operation_id == op.operation_id:
+            # Sorted, not first-seen: swagger order is not stable enough to
+            # put the same sibling in the message on two different machines.
+            siblings.append(f"{other.method} {other.path}")
+    if siblings:
+        return f" (sibling {sorted(siblings)[0]} declares {want})"
+    if not anywhere:
+        return f" (no operation in this swagger declares {want})"
+    return ""
 
 
 def _check_bodies(
@@ -1042,16 +1145,24 @@ def _check_bodies(
     bodies: list,
     unmatched: list[str],
     generated: bool = False,
-) -> None:
+    all_ops: dict | None = None,
+) -> int:
     """Compare every scenario body against the schema for its status code.
 
     Scenarios are matched by their declared `status`, never by name: a
     scenario called `not_found` is an error shape because it says 404, and a
     name-based rule mangles exactly those.
+
+    Returns how many scenarios were actually compared, so a run can say what
+    it measured rather than only what it found. A scenario the contract has
+    no JSON body for is neither compared nor a gap — it is not counted here
+    either way; one whose status the contract does not declare goes to
+    `unmatched`, which is the number that should be walking towards zero.
     """
     scenarios = data.get("scenarios")
     if not isinstance(scenarios, dict):
-        return
+        return 0
+    compared = 0
 
     for name, scenario in scenarios.items():
         if not isinstance(scenario, dict):
@@ -1074,7 +1185,9 @@ def _check_bodies(
         if str(status) not in op.responses and "default" not in op.responses:
             # A deliberate edge case the spec does not describe — reported so
             # it is visible, but not drift: there is nothing to compare to.
-            unmatched.append(f"{rel}  {name}: status {status} not declared")
+            hint = _status_context(op, status, all_ops) if all_ops else ""
+            unmatched.append(
+                f"{rel}  {name}: status {status} not declared{hint}")
             _report_declaration_only(rel, name, decl_problems, bodies, generated)
             continue
 
@@ -1088,10 +1201,12 @@ def _check_bodies(
 
         actual_body = scenario.get("body")
         if actual_body is None:
+            compared += 1
             bodies.append(BodyDrift(rel, name, ["<body>"], [], generated=generated,
                                     declaration=decl_problems))
             continue
 
+        compared += 1
         found = compare_to_schema(doc, schema, actual_body)
         found, used = _subtract_declared(found, decl)
         if decl is not None and not decl.errors:
@@ -1116,6 +1231,7 @@ def _check_bodies(
                     declaration=decl_problems,
                 )
             )
+    return compared
 
 
 def _report_declaration_only(rel: str, name: str, problems: list,

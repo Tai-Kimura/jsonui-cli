@@ -63,7 +63,7 @@ class MockStore:
         Overlay is per scenario name, and the hand-written `activeScenario`
         wins when it names one that exists.
         """
-        from .generate import GENERATED_DIR
+        from .generate import GENERATED_DIR, route_key
 
         root = Path(self.mock_dir)
         merged: dict = {}
@@ -80,7 +80,14 @@ class MockStore:
             src = data.get("source", {})
             method = (src.get("method") or "GET").upper()
             path = src.get("path") or "/"
-            key = (method, path)
+            # Grouped on the same normalized route the checker matches on: a
+            # path variable's name is not part of the URL, so a hand-written
+            # `/items/{id}` overlays a generated `/items/{item_id}`. Keyed on
+            # the raw spelling, the two registered as separate endpoints with
+            # identical regexes and the generated one — registered first —
+            # answered every request, so the hand-written mock was loaded,
+            # logged as present, and never served.
+            key = route_key(method, path)
             scenarios = data.get("scenarios", {}) or {}
             generated = GENERATED_DIR in f.relative_to(root).parts
 

@@ -486,6 +486,17 @@ def _check_mocks_against_swagger(config_path):
     if not isinstance(report, CheckReport):
         return 0, None
     orphans = len(report.orphaned)
+    # What the check measured, on every run that reaches it — before the
+    # early return, because a clean result was where this went missing.
+    #
+    # `mock generate --check` enumerates the not-compared scenarios; this
+    # path printed four kinds of finding and nothing else, so a scenario the
+    # contract does not declare a status for was invisible here whether the
+    # run was red or green. One reached a consumer as an E2E test that was
+    # green on a branch the implementation cannot take — the check had
+    # measured it and said so only on the other command.
+    print(f"\n{report.contract_summary}")
+    _print_uncompared(report)
     if not report.has_drift:
         return 0, orphans
 
@@ -502,6 +513,31 @@ def _check_mocks_against_swagger(config_path):
     print("Fix with `jsonui-test mock generate --update-default`, "
           "or pass --no-mock-check to skip this gate.")
     return 1, orphans
+
+
+def _print_uncompared(report):
+    """List the scenarios the contract check could not compare.
+
+    Not a gate: a scenario may legitimately declare a status the swagger
+    does not, and failing on it is how a check gets switched off. But the
+    number belongs on screen — it is the one that should be walking towards
+    zero, and a test asserting a shape nothing compared is a test that can
+    be green for a branch the implementation does not have.
+    """
+    for note in report.unmatched:
+        print(f"  [NOTE]    {note} — not compared")
+    if report.out_of_scope:
+        # `[ORPHAN] (mock file, not in swagger)` is the only thing this path
+        # ever said about an unmatched mock, and for these files it would be
+        # false twice over: the swagger declares the route, and the reason
+        # they are unmatched is this project's own path scope. `mock
+        # generate --check` distinguishes them; here they were simply
+        # absent, so a reader comparing the two commands saw one report a
+        # set of files the other never mentioned. Counted rather than
+        # listed — this is a permanent line and the set is often large.
+        print(f"  [SCOPE]   {len(report.out_of_scope)} mock(s) outside "
+              f"this project's API paths ({report.scope_note or 'all paths'})"
+              " — not checked, listed by `mock generate --check`")
 
 
 def _load_test_config(explicit_path=None):

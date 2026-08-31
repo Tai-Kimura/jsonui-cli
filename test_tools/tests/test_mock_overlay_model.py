@@ -19,6 +19,7 @@ validate did not know the model:
 """
 
 import json
+import subprocess
 import sys
 from pathlib import Path
 
@@ -27,7 +28,8 @@ import pytest
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from jsonui_test_cli.branch_tests import find_mock, index_mock_files
-from jsonui_test_cli.mock.generate import generate, update_default
+from jsonui_test_cli.mock.generate import _check, generate, update_default
+from jsonui_test_cli.mock.server import MockStore
 from jsonui_test_cli.validation.mock import find_mock_index, set_mock_source
 from jsonui_test_cli.validation.validator import TestValidator
 
@@ -236,3 +238,209 @@ class TestEveryIndexSeesTheUnion:
         update_default([str(root / "swagger.json")], mocks)
         repaired = json.loads(hand.read_text(encoding="utf-8"))
         assert "id" in repaired["scenarios"]["default"]["body"]
+
+
+def _wrong_type_default(scenarios: dict | None = None) -> dict:
+    """A `default` whose `id` is an integer where the contract says string."""
+    return dict(THIN, scenarios=dict(
+        scenarios if scenarios is not None else THIN["scenarios"],
+        default={"status": 200, "body": {"id": 1}}))
+
+
+class TestTheCheckIndexSeesTheUnion:
+    """`--check` compared the derived file and skipped the served one.
+
+    Fifth member of the same family, and the one that matters most: serve
+    resolves a request from the merged view, where a hand-written scenario
+    overwrites the generated one of the same name — so the hand-written body
+    is what a test receives. `_check`'s index collapsed the route last-wins
+    over sorted paths, and `generated/` sorts after most tag directories, so
+    the body that ships was never compared to the contract while the run
+    printed "mocks are in sync with swagger".
+
+    On the reporting project all ten hand-written mocks had a counterpart:
+    0 of 10 files and 0 of 48 scenarios reached the comparison.
+    """
+
+    def _run(self, root, mocks):
+        return _check([str(root / "swagger.json")], mocks)
+
+    # Each collapse defect fires on one side of the sort order only. A
+    # fixture on the wrong side passes without the fix, so both are asserted.
+    @pytest.mark.parametrize("dirname", ["custom", "z-custom"])
+    def test_a_hand_written_body_that_serves_is_compared(self, project, dirname):
+        root, mocks = project
+        rel = str(_overlay(mocks, _wrong_type_default(), dirname=dirname)
+                  .relative_to(mocks))
+        report = self._run(root, mocks)
+        assert [d.rel for d in report.errors] == [rel]
+        # It has to gate, not merely print: the reporting project read the
+        # exit code and the closing line, both of which said clean.
+        assert report.has_drift
+
+    @pytest.mark.parametrize("dirname", ["custom", "z-custom"])
+    def test_the_generated_counterpart_is_compared_too(self, project, dirname):
+        # Not "whichever file wins" in the other direction — both. The
+        # generated side keeps its own weight: reported, never gating.
+        root, mocks = project
+        _overlay(mocks, THIN, dirname=dirname)
+        gen = mocks / "generated" / "default" / "listItems.mock.json"
+        data = json.loads(gen.read_text(encoding="utf-8"))
+        data["scenarios"]["default"]["body"] = {"id": 1}
+        gen.write_text(json.dumps(data), encoding="utf-8")
+        report = self._run(root, mocks)
+        assert [d.rel for d in report.stale_generated] == [
+            str(gen.relative_to(mocks))]
+        assert report.errors == []
+        assert not report.has_drift
+
+    def test_a_matching_overlay_pair_reports_nothing(self, project):
+        # The control. Widening the compared set is only useful if the
+        # bodies that were never compared pass when they are correct — 10
+        # files and 48 scenarios entered the comparison on the reporting
+        # project's corpus and produced 0 findings.
+        root, mocks = project
+        _overlay(mocks, dict(THIN, scenarios=dict(
+            THIN["scenarios"], default={"status": 200, "body": {"id": "1"}})))
+        report = self._run(root, mocks)
+        assert report.bodies == []
+        assert not report.has_drift
+
+    def test_a_retired_route_names_both_of_its_files(self, project):
+        # The index change reaches the route-existence findings as well: a
+        # route deleted upstream leaves two files behind, and they need
+        # opposite advice — regenerate the derived one, decide about the
+        # hand-written one. Naming one of them hid the other.
+        root, mocks = project
+        rel = str(_overlay(mocks, THIN).relative_to(mocks))
+        (root / "swagger.json").write_text(
+            json.dumps({"openapi": "3.0.3", "paths": {}}), encoding="utf-8")
+        report = self._run(root, mocks)
+        assert [o.split(" ")[0] for o in report.orphaned] == [rel]
+        assert [w.split(" ")[0] for w in report.warnings] == [
+            "generated/default/listItems.mock.json"]
+
+
+class TestTheGateClosesInBothSortOrders:
+    """Findings and exit code are separate claims, and the gap was the defect.
+
+    With the same files, the same swagger and the same command, renaming the
+    tag directory from one that sorts after `generated/` to one that sorts
+    before it turned a violating hand-written `default` from `[BODY]` +
+    exit 1 into "No drift: mocks are in sync with swagger." + exit 0. So a
+    green `--check` before this fix meant only that the directory name
+    happened to be favourable.
+
+    Run through the CLI rather than `_check`: the exit code is the part a CI
+    job reads, and it is one `has_drift` and two printers away from the
+    report object the other tests assert on.
+    """
+
+    def _project(self, tmp_path, dirname: str, hand_body, gen_body=None):
+        (tmp_path / "swagger.json").write_text(json.dumps(SPEC),
+                                               encoding="utf-8")
+        mocks = tmp_path / "tests" / "mocks"
+        generate([str(tmp_path / "swagger.json")], mocks)
+        if gen_body is not None:
+            gen = mocks / "generated" / "default" / "listItems.mock.json"
+            data = json.loads(gen.read_text(encoding="utf-8"))
+            data["scenarios"]["default"]["body"] = gen_body
+            gen.write_text(json.dumps(data), encoding="utf-8")
+        _overlay(mocks, dict(THIN, scenarios=dict(
+            THIN["scenarios"], default={"status": 200, "body": hand_body})),
+            dirname=dirname)
+        (tmp_path / "jui.config.json").write_text(json.dumps({
+            "mock": {"swagger": ["swagger.json"], "mockDir": "tests/mocks"},
+        }), encoding="utf-8")
+        proc = subprocess.run(
+            [sys.executable, "-m", "jsonui_test_cli.cli", "mock", "generate",
+             "--check"],
+            cwd=tmp_path, capture_output=True, text=True,
+            env={"PYTHONPATH": str(Path(__file__).resolve().parents[1]),
+                 "PATH": "/usr/bin:/bin"})
+        return proc.returncode, proc.stdout + proc.stderr
+
+    # "custom" sorts before `generated/`, "z-custom" after. The defect only
+    # ever fired on one side, so one fixture is a coin toss.
+    @pytest.mark.parametrize("dirname", ["custom", "z-custom"])
+    def test_a_violating_hand_written_default_closes_the_gate(
+            self, tmp_path, dirname):
+        rc, out = self._project(tmp_path, dirname, {"wrong": "key"})
+        assert rc == 1, out
+        assert "[BODY]" in out
+        assert "No drift" not in out
+
+    @pytest.mark.parametrize("dirname", ["custom", "z-custom"])
+    def test_a_violating_generated_default_does_not(self, tmp_path, dirname):
+        # The other half of the ruling: the derived side is reported and
+        # never gates, because regenerating fixes it. Widening what gets
+        # compared must not quietly widen what fails.
+        rc, out = self._project(tmp_path, dirname, {"id": "1"},
+                                gen_body={"wrong": "key"})
+        assert rc == 0, out
+        assert "[WARN]" in out
+        assert "stale" in out
+
+    @pytest.mark.parametrize("dirname", ["custom", "z-custom"])
+    def test_both_sides_drifting_produce_two_findings(self, tmp_path, dirname):
+        """One arm per side, however many, cannot tell "both are checked"
+        from "one is checked and each arm happened to hit the one".
+
+        Breaking both at once separates them: an index that still resolves
+        the route to a single file reports exactly one finding whichever
+        file it picked. Two findings, with the weights split by file — the
+        hand-written one gating, the derived one not — is the claim.
+        """
+        rc, out = self._project(tmp_path, dirname, {"wrong": "key"},
+                                gen_body={"also_wrong": "key"})
+        assert rc == 1, out
+        assert out.count("[BODY]") == 1, out
+        assert out.count("[WARN]") == 1, out
+
+
+class TestServeAndCheckAgreeOnRouteIdentity:
+    """A path variable's name is not part of the URL it matches.
+
+    The checker has matched mocks to operations on the normalized route
+    since a swagger rename detached every hand-written mock on it. `serve`
+    kept grouping on the raw spelling, so the two disagreed about which
+    files are one route — and disagreeing indexes is what produced this
+    whole family. Here the disagreement is not a silent gap in a report but
+    a mock that never answers: both files registered as endpoints with
+    identical regexes, and the generated one, registered first, won.
+    """
+
+    def _store(self, tmp_path, hand_path: str) -> MockStore:
+        gen = tmp_path / "generated" / "default" / "getItem.mock.json"
+        gen.parent.mkdir(parents=True)
+        gen.write_text(json.dumps({
+            "source": {"operationId": "getItem", "method": "GET",
+                       "path": "/api/items/{item_id}"},
+            "scenarios": {"default": {"status": 200, "body": {"id": "gen"}}},
+        }), encoding="utf-8")
+        hand = tmp_path / "custom" / "getItem.mock.json"
+        hand.parent.mkdir(parents=True)
+        hand.write_text(json.dumps({
+            "source": {"operationId": "getItem", "method": "GET",
+                       "path": hand_path},
+            "scenarios": {"default": {"status": 200, "body": {"id": "hand"}}},
+        }), encoding="utf-8")
+        return MockStore.load(tmp_path)
+
+    def test_a_differently_spelled_variable_still_overlays(self, tmp_path):
+        store = self._store(tmp_path, "/api/items/{id}")
+        assert len(store.endpoints) == 1
+        assert store.endpoints[0].scenarios["default"]["body"] == {"id": "hand"}
+        assert store.overrides == ["custom/getItem.mock.json"]
+
+    def test_the_same_spelling_is_unaffected(self, tmp_path):
+        # The behaviour that already worked, pinned: normalizing must widen
+        # what counts as one route, never change what a matched route serves.
+        store = self._store(tmp_path, "/api/items/{item_id}")
+        assert len(store.endpoints) == 1
+        assert store.endpoints[0].scenarios["default"]["body"] == {"id": "hand"}
+
+    def test_a_genuinely_different_route_stays_separate(self, tmp_path):
+        store = self._store(tmp_path, "/api/items/{id}/history")
+        assert len(store.endpoints) == 2
+        assert store.overrides == []
