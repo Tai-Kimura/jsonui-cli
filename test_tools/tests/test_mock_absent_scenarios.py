@@ -519,3 +519,56 @@ def test_the_finding_still_reads_correctly_for_a_wholly_absent_status(
     assert "error_403" in msg
     assert "403" in msg
     assert "does not serve" not in msg
+
+
+def test_a_scenario_generation_does_not_produce_is_caught(two_hundreds):
+    """The mirror of absence, and the half that was missing.
+
+    Deleting one of generation's scenarios failed the check; adding one
+    passed it, and the next `mock generate` discarded the addition without
+    a word. "The check was green" followed by "it vanished" is the sequence
+    that costs, because the green is what makes the disappearance hard to
+    explain.
+    """
+    spec, mocks = two_hundreds
+    gen = _generated(mocks)
+    data = json.loads(gen.read_text("utf-8"))
+    data["scenarios"]["handmade"] = {"status": 200, "body": []}
+    gen.write_text(json.dumps(data, indent=2), encoding="utf-8")
+
+    report = generate([spec], mocks, check=True)
+
+    assert report.has_drift, "an addition regeneration discards is drift"
+    assert len(report.extra_generated) == 1
+    assert "handmade" in report.extra_generated[0]
+    assert report.absent_generated == [], "nothing was deleted"
+
+
+def test_an_undeclared_status_is_not_reported_twice(two_hundreds):
+    """`unmatched_generated` already covers a status the swagger lacks.
+
+    Both buckets are set differences over the same file, so a scenario that
+    is neither produced nor declared satisfies both. One edit must produce
+    one finding — the two-lines-for-one-problem shape that `[NOTE]` was
+    split to remove earlier in this same release.
+    """
+    spec, mocks = two_hundreds
+    gen = _generated(mocks)
+    data = json.loads(gen.read_text("utf-8"))
+    data["scenarios"]["teapot"] = {"status": 418, "body": {}}
+    gen.write_text(json.dumps(data, indent=2), encoding="utf-8")
+
+    report = generate([spec], mocks, check=True)
+
+    assert len(report.unmatched_generated) == 1
+    assert report.extra_generated == [], (
+        "an undeclared status belongs to the bucket that names it as such")
+
+
+def test_the_healthy_tree_stays_green_for_the_new_bucket(two_hundreds):
+    # The control. Without it, "every addition is caught" and "everything is
+    # caught" look the same from the arm above.
+    spec, mocks = two_hundreds
+    report = generate([spec], mocks, check=True)
+    assert report.extra_generated == []
+    assert not report.has_drift

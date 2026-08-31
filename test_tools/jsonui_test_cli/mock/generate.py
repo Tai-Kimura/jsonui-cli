@@ -959,6 +959,7 @@ GATING_BUCKETS: tuple = (
     ("absent_generated", "declared but absent from generated/"),
     ("unmatched_generated", "undeclared in generated/"),
     ("unmatched_borrowed", "borrowed an undeclared status"),
+    ("extra_generated", "in generated/ but not produced by generation"),
 )
 
 
@@ -1031,6 +1032,21 @@ class CheckReport:
     #: instead would invert the result, failing two lanes' benign 500s and
     #: passing the real one.
     unmatched_borrowed: list = field(default_factory=list)
+    #: Scenarios in generated/ that generation does not produce, whose
+    #: status IS declared. The mirror of `absent_generated`, and the half
+    #: that was missing: deleting one of generation's scenarios failed the
+    #: check, adding one passed it — and the next `mock generate` discarded
+    #: the addition without a word. The sequence that costs is "the check
+    #: was green" followed by "it vanished", because the green is what
+    #: makes the disappearance hard to explain.
+    #:
+    #: Gating, like its mirror and like `unmatched_generated`. The argument
+    #: for warning instead — a deletion loses coverage, an addition is only
+    #: undone by regeneration — does not separate this from the bucket
+    #: beside it: `unmatched_generated` is equally undone by regeneration
+    #: and gates. One rule, both directions: generated/ holds exactly what
+    #: generation produces.
+    extra_generated: list = field(default_factory=list)
 
     @property
     def absent(self) -> list:
@@ -1287,13 +1303,15 @@ def _check(swagger_paths: list[str], mock_dir: Path, strict: bool = False,
     misnamed: list[str] = []
     absent_generated: list[str] = []
     absent_handwritten: list[str] = []
+    extra_generated: list[str] = []
     unmatched_generated: list[str] = []
     unmatched_borrowed: list[str] = []
     compared = 0
     for key in sorted(set(expected) & set(existing)):
         doc, op = expected[key]
         _collect_absent(doc, op, mock_dir, existing[key],
-                        absent_generated, absent_handwritten)
+                        absent_generated, absent_handwritten,
+                        extra_generated)
         # Every file on the route, not one of them. The index used to fold a
         # route to a single entry, last spelling wins over the sorted paths —
         # and `generated/` sorts after most tag directories, so the generated
@@ -1355,6 +1373,7 @@ def _check(swagger_paths: list[str], mock_dir: Path, strict: bool = False,
         absent_handwritten=absent_handwritten,
         unmatched_generated=unmatched_generated,
         unmatched_borrowed=unmatched_borrowed,
+        extra_generated=extra_generated,
         scope_excluded=len(excluded),
         scope_note=scope.describe() if scope.is_active() else "",
         strict=strict,
@@ -1476,6 +1495,7 @@ def _collect_absent(
     rels: list[str],
     absent_generated: list[str],
     absent_handwritten: list[str],
+    extra_generated: list[str] | None = None,
 ) -> None:
     """Declared scenarios that no file on the route serves.
 
@@ -1555,6 +1575,23 @@ def _collect_absent(
                         f"{rel}  {name}: generation produces this scenario "
                         f"(status {produced[name]['status']}), and this file "
                         "does not have it")
+            if extra_generated is not None:
+                # The other direction of the same set difference. Scenarios
+                # whose status is not declared at all are already reported
+                # as `unmatched_generated`; reporting them here as well
+                # would print one edit as two findings.
+                declared_statuses = {str(s["status"]) for s in produced.values()}
+                for name in sorted(present):
+                    scenario = present[name]
+                    if name in produced or not isinstance(scenario, dict):
+                        continue
+                    status = scenario.get("status")
+                    if status is None or str(status) not in declared_statuses:
+                        continue
+                    extra_generated.append(
+                        f"{rel}  {name}: generation does not produce this "
+                        f"scenario (status {status}), and the next "
+                        "`mock generate` will drop it")
         return
 
     served: set[str] = set()
