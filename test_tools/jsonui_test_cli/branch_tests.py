@@ -947,7 +947,7 @@ def render_test_file(
     lines.append("// for VM construction, screenRoutes, and string resolution.")
     lines.append("import { describe, expect, it } from \"vitest\";")
     lines.append("import {")
-    lines.append("  installFetchMock, partialMismatches, seedState, settle, type RouteSpec,")
+    lines.append("  installFetchMock, partialMismatches, resolveString, seedState, settle,\n  type RouteSpec,")
     lines.append("} from \"./jsonui-branch-runtime\";")
     lines.append(f"import {{ createHarness }} from \"{harness_import}\";")
     lines.append("")
@@ -1097,7 +1097,7 @@ def _render_expected(value) -> str:
     if isinstance(value, str) and value.startswith("@data."):
         return f"ref_{value[len('@data.'):]}"
     if isinstance(value, str) and value.startswith("@"):
-        return f"h.resolveString({_ts(value[1:])})"
+        return f"resolveString(h, {_ts(value[1:])})"
     if isinstance(value, dict):
         entries = ", ".join(
             f"{_ts(k)}: {_render_expected(v)}" for k, v in value.items()
@@ -1316,6 +1316,46 @@ export function applyDeclaredKeys(
  * predates seedable state drops the name, the read-back does not match,
  * and it fails by name instead of passing for the wrong reason.
  */
+/** Resolve an '@key' expectation through the harness, and refuse a harness
+ * that hands back a KEY.
+ *
+ * `resolveString` must return the RESOLVED TEXT. The reason is the render
+ * path, not the field: `@{...}` bindings are not resolved when a component
+ * renders — the generated component emits the value raw, and only a
+ * layout's static text goes through the string manager. So a data field
+ * holds resolved text and nothing else, and an expectation compared
+ * against it has to be resolved text too.
+ *
+ * (A second fact points the same way and is often reached first: a field
+ * that also carries a server message has no front-end key for that value
+ * at all. That is a SUFFICIENT reason, not the reason — read alone it
+ * invites "then a field servers never touch may return a key", which is
+ * wrong, because the render path does not resolve keys for any field.)
+ *
+ * Checked here rather than documented only, because the shape hides: of 12
+ * harnesses in one project, 3 returned the key, and 2 of those had an
+ * empty table so `resolveString` was never called — broken and green until
+ * the screen's first `@key` contract arrived. A check that fires on the
+ * call has no dormant state.
+ */
+export function resolveString(
+  h: { resolveString(key: string): string },
+  key: string
+): string {
+  const resolved = h.resolveString(key);
+  const identifier = /^[A-Za-z0-9_]+$/.test(resolved);
+  if (resolved === key || (identifier && resolved.endsWith(`_${key}`))) {
+    throw new Error(
+      `resolveString(${JSON.stringify(key)}) returned ` +
+      `${JSON.stringify(resolved)}, which is a strings KEY, not the text ` +
+      "it names. Bindings are not resolved when a component renders, so " +
+      "the field holds resolved text — return " +
+      "StringManager.getString(TABLE[key]), not TABLE[key]."
+    );
+  }
+  return resolved;
+}
+
 export function seedState(
   h: { vm: unknown; setState(state: Record<string, unknown>): void },
   state: Record<string, unknown>
@@ -1387,15 +1427,32 @@ export interface BranchHarness {
   setState(state: Record<string, unknown>): void;
   /** Assert a `then.transition` destination against recorded navigation. */
   expectTransition(destination: string): void;
-  /** Resolve an '@strings_key' expectation via the closed map above. */
+  /** Resolve an '@strings_key' expectation via the closed map above.
+   *
+   * RETURN THE RESOLVED TEXT, never the key. `@{...}` bindings are not
+   * resolved when a component renders — the value is emitted raw, and only
+   * a layout's static text goes through the string manager — so a data
+   * field holds resolved text and the expectation compared against it must
+   * too. (A field that can also carry a server message has no front-end
+   * key for that value either; that is a second reason, not the reason.
+   * The render path resolves keys for no field at all, so "this field
+   * never holds server text, so a key is fine" is wrong.)
+   *
+   *     return StringManager.getString(%(screen_const)s_BRANCH_STRING_KEYS[key]);
+   *     // NOT: return %(screen_const)s_BRANCH_STRING_KEYS[key];
+   *
+   * The runtime rejects a key-shaped return when this is called, so the
+   * mistake surfaces at the first '@key' contract rather than living in a
+   * harness whose table is still empty. */
   resolveString(key: string): string;
 }
 
 export function createHarness(): BranchHarness {
   // TODO: construct the ViewModel with a router recorder and a data store;
   // resolveString should look the key up in %(screen_const)s_BRANCH_STRING_KEYS
-  // (throw on a missing entry — same contract as SCREEN_ROUTES) and pass the
-  // full key to the project's StringManager.
+  // (throw on a missing entry — same contract as SCREEN_ROUTES), pass the full
+  // key to the project's StringManager, and RETURN WHAT THAT RESOLVES TO —
+  // returning the full key itself is the one mistake the runtime rejects.
   throw new Error("branch-harness for %(screen)s is not implemented yet");
 }
 '''
@@ -1444,7 +1501,7 @@ def _kt_expected(value) -> str:
     if isinstance(value, str) and value.startswith("@data."):
         return f"Ref(ref_{value[len('@data.'):]})"
     if isinstance(value, str) and value.startswith("@"):
-        return f"h.resolveString({_kt_str(value[1:])})"
+        return f"resolveString(h, {_kt_str(value[1:])})"
     if isinstance(value, dict):
         entries = ", ".join(
             f"{_kt_str(str(k))} to {_kt_expected(v)}" for k, v in value.items()
@@ -1663,8 +1720,51 @@ interface BranchHarness {
   fun setState(state: Map<String, Any?>)
   fun invoke(name: String, vararg args: Any?)
   fun expectTransition(destination: String)
+  /** Resolve an '@strings_key' expectation.
+   *
+   * RETURN THE RESOLVED TEXT, never the key. Bindings are not resolved
+   * when a component renders — only a layout's static text goes through
+   * the string manager — so a data field holds resolved text and the
+   * expectation compared against it must too. (A field that can also carry
+   * a server message has no front-end key for that value either; that is a
+   * second reason, not the reason.) The runtime rejects a key-shaped
+   * return when this is called. */
   fun resolveString(key: String): String
   fun settle()
+}
+
+/** Resolve an '@key' expectation through the harness, refusing a KEY.
+ *
+ * `resolveString` must return the RESOLVED TEXT. The reason is the render
+ * path, not the field: `@{...}` bindings are not resolved when a component
+ * renders — the value is emitted raw, and only a layout's static text goes
+ * through the string manager. A data field therefore holds resolved text,
+ * and an expectation compared against it has to be resolved text too.
+ *
+ * (A second fact points the same way and is often reached first: a field
+ * that can also carry a server message has no front-end key for that
+ * value. That is a SUFFICIENT reason, not the reason — read alone it
+ * invites "then a field servers never touch may return a key", which is
+ * wrong, because the render path resolves keys for no field at all.)
+ *
+ * Checked rather than only documented, because the shape hides: of 12
+ * harnesses in one project 3 returned the key, and 2 of those had an empty
+ * table, so `resolveString` was never called — broken and green until that
+ * screen's first '@key' contract arrived. A check on the call has no
+ * dormant state.
+ */
+fun resolveString(h: BranchHarness, key: String): String {
+  val resolved = h.resolveString(key)
+  val identifier = resolved.all { it.isLetterOrDigit() || it == '_' }
+  if (resolved == key || (identifier && resolved.endsWith("_" + key))) {
+    error(
+      "resolveString(\"" + key + "\") returned \"" + resolved + "\", which " +
+      "is a strings KEY, not the text it names. Bindings are not resolved " +
+      "when a component renders, so the field holds resolved text — return " +
+      "the string manager's lookup of the full key, not the full key."
+    )
+  }
+  return resolved
 }
 
 /** Seed `branchContracts.seedableState` names, then READ THEM BACK.
@@ -2006,7 +2106,7 @@ def _swift_expected(value) -> str:
     if isinstance(value, str) and value.startswith("@data."):
         return f"Ref(value: ref_{value[len('@data.'):]})"
     if isinstance(value, str) and value.startswith("@"):
-        return f"h.resolveString({_swift_str(value[1:])})"
+        return f"resolveString(h, {_swift_str(value[1:])})"
     if isinstance(value, dict):
         entries = ", ".join(
             f"{_swift_str(str(k))}: {_swift_expected(v)}" for k, v in value.items()
@@ -2194,6 +2294,15 @@ protocol BranchHarness {
   func setState(_ state: [String: Any])
   func invoke(_ name: String, args: [Any])
   func expectTransition(_ destination: String)
+  /// Resolve an '@strings_key' expectation.
+  ///
+  /// RETURN THE RESOLVED TEXT, never the key. Bindings are not resolved
+  /// when a component renders — only a layout's static text goes through
+  /// the string manager — so a data field holds resolved text and the
+  /// expectation compared against it must too. (A field that can also
+  /// carry a server message has no front-end key for that value either;
+  /// that is a second reason, not the reason.) The runtime rejects a
+  /// key-shaped return when this is called.
   func resolveString(_ key: String) -> String
   func settle()
 }
@@ -2460,6 +2569,42 @@ private func asDouble(_ value: Any?) -> Double? {
   if let d = value as? Double { return d }
   if let i = value as? Int { return Double(i) }
   return nil
+}
+
+/// Resolve an '@key' expectation through the harness, refusing a KEY.
+///
+///
+/// `resolveString` must return the RESOLVED TEXT. The reason is the render
+/// path, not the field: `@{...}` bindings are not resolved when a component
+/// renders — the value is emitted raw, and only a layout's static text goes
+/// through the string manager. A data field therefore holds resolved text,
+/// and an expectation compared against it has to be resolved text too.
+///
+/// (A second fact points the same way and is often reached first: a field
+/// that can also carry a server message has no front-end key for that
+/// value. That is a SUFFICIENT reason, not the reason — read alone it
+/// invites "then a field servers never touch may return a key", which is
+/// wrong, because the render path resolves keys for no field at all.)
+///
+/// Checked rather than only documented, because the shape hides: of 12
+/// harnesses in one project 3 returned the key, and 2 of those had an empty
+/// table, so `resolveString` was never called — broken and green until that
+/// screen's first '@key' contract arrived. A check on the call has no
+/// dormant state.
+func resolveString(_ h: BranchHarness, _ key: String) -> String {
+  let resolved = h.resolveString(key)
+  let identifier = !resolved.isEmpty && resolved.allSatisfy {
+    $0.isLetter || $0.isNumber || $0 == "_"
+  }
+  if resolved == key || (identifier && resolved.hasSuffix("_" + key)) {
+    XCTFail(
+      "resolveString(\\(key)) returned \\(resolved), which is a " +
+      "strings KEY, not the text it names. Bindings are not resolved when a " +
+      "component renders, so the field holds resolved text — return the " +
+      "string manager's lookup of the full key, not the full key."
+    )
+  }
+  return resolved
 }
 
 /// Seed `branchContracts.seedableState` names, then READ THEM BACK.

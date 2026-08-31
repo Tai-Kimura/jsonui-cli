@@ -212,7 +212,9 @@ class TestGenerationHappyPath:
         ])
         root = _project(tmp_path, bc)
         content = generate_branch_tests("checkout", root).test_file.read_text(encoding="utf-8")
-        assert 'h.resolveString("order_error_generic")' in content
+        # Through the runtime helper, not straight at the harness: the
+        # helper is what refuses a harness that returns the key itself.
+        assert 'resolveString(h, "order_error_generic")' in content
 
     def test_transition_goes_through_harness(self, tmp_path):
         bc = _contract([
