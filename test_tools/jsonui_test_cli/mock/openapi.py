@@ -21,7 +21,18 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 # Guard against unbounded recursion through self-referential schemas.
-_MAX_DEPTH = 8
+#
+# Depth alone was the guard, and depth is a proxy for "this schema refers to
+# itself": it stops the infinite case, but it also stops finite ones. A
+# consumer's swagger nested eight levels legitimately, and the synthesised
+# body came back with `null` in a required, non-nullable integer — the
+# generator writing a body that violates the contract it had just read, and
+# then the check calling its own output stale with a remedy (regenerate)
+# that could not change anything. Self-reference is now detected directly,
+# by the `$ref`s on the current path, so a deep-but-finite schema is
+# synthesised in full; the depth number stays only as a backstop against a
+# pathological document, far above any hand-written nesting.
+_MAX_DEPTH = 64
 
 _HTTP_METHODS = ("get", "post", "put", "delete", "patch", "head", "options")
 
@@ -139,10 +150,22 @@ class OpenApiDoc:
 
     # ---- sample synthesis ---------------------------------------------
 
-    def sample_for_schema(self, schema, _depth: int = 0):
-        """Synthesize a representative JSON value for a (possibly $ref) schema."""
-        if _depth > _MAX_DEPTH:
-            return None
+    def sample_for_schema(self, schema, _depth: int = 0, _seen: tuple = ()):
+        """Synthesize a representative JSON value for a (possibly $ref) schema.
+
+        `_seen` carries the `$ref` pointers already open on this path. A
+        repeat means the schema refers to itself, which is the only case
+        that cannot be synthesised in full — and there the value stops at
+        the type's zero value, never at `null`: `null` in a required,
+        non-nullable field makes the generated body violate the very
+        contract it was built from, and `--check` then reports the
+        generator's own output as drift.
+        """
+        ref = schema.get("$ref") if isinstance(schema, dict) else None
+        if _depth > _MAX_DEPTH or (ref is not None and ref in _seen):
+            return _stop_value(self.resolve_schema(schema, _depth))
+        if ref is not None:
+            _seen = _seen + (ref,)
         schema = self.resolve_schema(schema, _depth)
         if not isinstance(schema, dict):
             return None
@@ -164,10 +187,10 @@ class OpenApiDoc:
         if stype == "object" or "properties" in schema:
             out = {}
             for name, prop in (schema.get("properties") or {}).items():
-                out[name] = self.sample_for_schema(prop, _depth + 1)
+                out[name] = self.sample_for_schema(prop, _depth + 1, _seen)
             return out
         if stype == "array":
-            item = self.sample_for_schema(schema.get("items", {}), _depth + 1)
+            item = self.sample_for_schema(schema.get("items", {}), _depth + 1, _seen)
             return [item] if item is not None else []
         return _primitive_sample(schema, stype)
 
@@ -193,6 +216,28 @@ class OpenApiDoc:
     def error_codes(self, op: Operation) -> list[str]:
         """Declared 4xx/5xx status codes for this operation."""
         return sorted(c for c in op.responses if c[:1] in ("4", "5") and c.isdigit())
+
+
+def _stop_value(schema):
+    """The value to place where synthesis has to stop (self-reference).
+
+    A zero value of the declared type, never `null`: the body is checked
+    against the same schema it was built from, so a `null` in a required,
+    non-nullable field turns the generator into the source of the drift it
+    then reports. An object stops as `{}` — it may still be missing
+    required properties, which the check names precisely, instead of
+    "null, contract says integer" pointing at the tool.
+    """
+    if not isinstance(schema, dict):
+        return None
+    stype = schema.get("type")
+    if stype is None and "properties" in schema:
+        stype = "object"
+    if stype == "object":
+        return {}
+    if stype == "array":
+        return []
+    return _primitive_sample(schema, stype)
 
 
 def _primitive_sample(schema: dict, stype):

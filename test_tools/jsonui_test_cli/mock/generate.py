@@ -831,9 +831,15 @@ class BodyDrift:
     #: mechanical merge puts null into non-nullable slots and manufactures
     #: real violations.
     optional: list = field(default_factory=list)
-    #: A finding in generated/ is a warning — regenerating fixes it. One in a
-    #: hand-written mock is an error: a person has to decide what it should be.
+    #: A finding in generated/ is a warning — regenerating usually fixes it.
+    #: One in a hand-written mock is an error: a person has to decide what it
+    #: should be.
     generated: bool = False
+    #: False when the file on disk already IS what regeneration produces, so
+    #: the advice "regenerate" is a no-op. A remedy that cannot work is
+    #: worse than none: the reader runs it, nothing changes, and the warning
+    #: becomes permanent — which is how a warning stops being read.
+    regenerating_helps: bool = True
     #: Problems with the scenario's own `contractViolations` block: a
     #: declaration with no reason, a malformed one, or one that no longer
     #: matches anything. The last is the important one — when a declared
@@ -888,19 +894,37 @@ class CheckReport:
     #: much was looked at, and the two failures this check has shipped were
     #: both "the comparison did not happen" rather than "it passed".
     compared: int = 0
+    #: Scenarios there is no JSON body to compare — a binary/file response,
+    #: a status that declares no body (204 and friends), or a malformed
+    #: entry. Counted, not silent: they are neither compared nor a gap, and
+    #: a scenario belonging to no bucket makes the summary read as though
+    #: the buckets it does print were everything.
+    no_body: list = field(default_factory=list)
+
+    @property
+    def scenarios_seen(self) -> int:
+        """Every scenario the run opened, by construction of the buckets."""
+        return self.compared + len(self.unmatched) + len(self.no_body)
 
     @property
     def contract_summary(self) -> str:
         """One line naming what the run measured. Printed whether or not
         anything was found — a gate that only speaks when it fails cannot be
-        distinguished from one that measured nothing."""
-        parts = [f"{self.compared} scenario(s) compared"]
+        distinguished from one that measured nothing.
+
+        Every bucket is named and the buckets close: a scenario that
+        belonged to none of them used to vanish between "compared" and "not
+        compared", and the line still read as a full account."""
+        parts = [f"{self.compared} compared"]
         if self.unmatched:
             parts.append(f"{len(self.unmatched)} not compared "
                          "(status not declared)")
+        if self.no_body:
+            parts.append(f"{len(self.no_body)} not compared (no JSON body)")
         if self.stale_generated:
             parts.append(f"{len(self.stale_generated)} generated body(ies) stale")
-        return "mock contract: " + ", ".join(parts)
+        return (f"mock contract: {self.scenarios_seen} scenario(s) — "
+                + ", ".join(parts))
 
     @property
     def errors(self) -> list:
@@ -1042,6 +1066,7 @@ def _check(swagger_paths: list[str], mock_dir: Path, strict: bool = False,
 
     bodies: list[BodyDrift] = []
     unmatched: list[str] = []
+    no_body: list[str] = []
     misnamed: list[str] = []
     compared = 0
     for key in sorted(set(expected) & set(existing)):
@@ -1072,15 +1097,33 @@ def _check(swagger_paths: list[str], mock_dir: Path, strict: bool = False,
             except (OSError, json.JSONDecodeError):
                 drifted.append(f"{rel}: unreadable")
                 continue
+            before = len(bodies)
             compared += _check_bodies(doc, op, rel, data, bodies, unmatched,
+                                      no_body,
                                       generated=is_generated(rel),
                                       all_ops=all_ops)
+            if is_generated(rel) and len(bodies) > before:
+                # The advice attached to a generated finding is "regenerate".
+                # Check that it would do something: when the file already
+                # equals what generation produces, the drift comes from the
+                # generator's own synthesis and regenerating is a no-op —
+                # measured as a loop a consumer ran twice and reported. The
+                # comparison is against the freshly built definition, not
+                # against a claim about it.
+                fresh = build_mock_definition(doc, op)
+                for drift in bodies[before:]:
+                    fresh_body = (fresh.get("scenarios", {})
+                                  .get(drift.scenario, {}).get("body"))
+                    on_disk = (data.get("scenarios", {})
+                               .get(drift.scenario, {}).get("body"))
+                    if fresh_body == on_disk:
+                        drift.regenerating_helps = False
 
     return CheckReport(
         missing=missing, orphaned=orphaned, drifted=drifted,
         bodies=bodies, unmatched=unmatched, misnamed=misnamed,
         warnings=warnings, out_of_scope=out_of_scope,
-        compared=compared,
+        compared=compared, no_body=no_body,
         scope_excluded=len(excluded),
         scope_note=scope.describe() if scope.is_active() else "",
         strict=strict,
@@ -1144,6 +1187,7 @@ def _check_bodies(
     data: dict,
     bodies: list,
     unmatched: list[str],
+    no_body: list[str],
     generated: bool = False,
     all_ops: dict | None = None,
 ) -> int:
@@ -1155,9 +1199,12 @@ def _check_bodies(
 
     Returns how many scenarios were actually compared, so a run can say what
     it measured rather than only what it found. A scenario the contract has
-    no JSON body for is neither compared nor a gap — it is not counted here
-    either way; one whose status the contract does not declare goes to
-    `unmatched`, which is the number that should be walking towards zero.
+    no JSON body for goes to `no_body` with its reason. Every scenario
+    lands in exactly one of compared / unmatched / no_body, so the three
+    add up to what was on disk — a scenario that fell into none of them
+    was invisible in a line whose whole purpose is to account for the
+    corpus (measured: a PDF receipt mock sat outside both counts, and the
+    summary read as though 405 + 1 were everything).
     """
     scenarios = data.get("scenarios")
     if not isinstance(scenarios, dict):
@@ -1166,6 +1213,7 @@ def _check_bodies(
 
     for name, scenario in scenarios.items():
         if not isinstance(scenario, dict):
+            no_body.append(f"{rel}  {name}: not an object")
             continue
         decl = ViolationDeclaration.parse(scenario.get("contractViolations"))
         decl_problems = list(decl.errors) if decl is not None else []
@@ -1193,11 +1241,16 @@ def _check_bodies(
 
         schema, content_type = _response_schema(op, status)
         if content_type is not None and content_type != "application/json":
+            # binary/file response — the author supplies the fixture
+            no_body.append(
+                f"{rel}  {name}: {content_type} response, no JSON body to compare")
             _report_declaration_only(rel, name, decl_problems, bodies, generated)
-            continue  # binary/file response — the author supplies the fixture
+            continue
         if schema is None:
+            no_body.append(
+                f"{rel}  {name}: status {status} declares no response body")
             _report_declaration_only(rel, name, decl_problems, bodies, generated)
-            continue  # no declared body (204 and friends)
+            continue
 
         actual_body = scenario.get("body")
         if actual_body is None:

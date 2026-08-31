@@ -33,7 +33,7 @@ from tempfile import TemporaryDirectory
 REPO_TOOL = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO_TOOL))
 
-from jsonui_test_cli.mock.generate import _check  # noqa: E402
+from jsonui_test_cli.mock.generate import _check, generate  # noqa: E402
 
 TEST_DOC = {
     "type": "screen",
@@ -110,7 +110,7 @@ class TheGateNamesWhatItCompared(unittest.TestCase):
         # Four: the two written here plus the two the generated tree holds
         # for this route (`default` and `error_404`). Everything that can
         # serve is counted, which is the point of the number.
-        self.assertIn("mock contract: 4 scenario(s) compared", out)
+        self.assertIn("mock contract: 4 scenario(s) — 4 compared", out)
 
     def test_the_denominator_counts_scenarios_not_files(self):
         self.write_mock({"default": OK, "gone": GONE, "odd": TEAPOT})
@@ -118,7 +118,7 @@ class TheGateNamesWhatItCompared(unittest.TestCase):
         # Two files, five scenarios, one of them uncompared. A file-level
         # denominator would say "2 compared" and read as complete — the gap
         # is inside a file that also holds scenarios which were compared.
-        self.assertIn("mock contract: 4 scenario(s) compared, "
+        self.assertIn("mock contract: 5 scenario(s) — 4 compared, "
                       "1 not compared (status not declared)", out)
 
     def test_the_uncompared_scenario_is_named(self):
@@ -194,7 +194,7 @@ class TheGateNamesWhatItCompared(unittest.TestCase):
         self.write_mock({"default": {"status": 200, "body": {"id": 1}}})
         rc, out = self.validate()
         self.assertEqual(rc, 1, out)
-        self.assertIn("mock contract: 3 scenario(s) compared", out)
+        self.assertIn("mock contract: 3 scenario(s) — 3 compared", out)
         self.assertIn("[BODY]", out)
 
 
@@ -276,3 +276,64 @@ class TheUncomparedStatusCarriesWhatTheSwaggerKnows(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TheBucketsClose(unittest.TestCase):
+    """Every scenario the run opened lands in exactly one named bucket.
+
+    A file response (`bodyFile` + `contentType`, no JSON body) was counted
+    as neither compared nor not-compared, so the line read as a full
+    account of a corpus it was one short of. Both consumer projects hit it
+    independently — a PDF receipt in one, five CSV exports in the other —
+    which is what makes it structural rather than one project's shape: it
+    follows from the payload type, not from the project.
+    """
+
+    def _doc_with_file_response(self, tmp):
+        spec = {
+            "openapi": "3.0.3",
+            "paths": {
+                "/api/items": {"get": {
+                    "operationId": "listItems", "tags": ["I"],
+                    "responses": {"200": {"content": {"application/json": {
+                        "schema": {"type": "object",
+                                   "properties": {"id": {"type": "string"}}}}}}}}},
+                "/api/export": {"get": {
+                    "operationId": "exportCsv", "tags": ["I"],
+                    "responses": {"200": {"content": {"text/csv": {
+                        "schema": {"type": "string", "format": "binary"}}}}}}},
+            },
+        }
+        (tmp / "swagger.json").write_text(json.dumps(spec), encoding="utf-8")
+        return str(tmp / "swagger.json")
+
+    def test_a_file_response_is_counted_as_not_compared(self):
+        with TemporaryDirectory() as d:
+            tmp = Path(d)
+            swagger = self._doc_with_file_response(tmp)
+            mocks = tmp / "mocks"
+            generate([swagger], mocks)
+            report = generate([swagger], mocks, check=True)
+
+            self.assertEqual(len(report.no_body), 1, report.no_body)
+            self.assertIn("no JSON body", report.contract_summary)
+            # The whole point: the parts add up to the total on screen.
+            self.assertEqual(
+                report.scenarios_seen,
+                report.compared + len(report.unmatched) + len(report.no_body))
+            self.assertIn(f"{report.scenarios_seen} scenario(s)",
+                          report.contract_summary)
+
+    def test_the_total_matches_the_scenarios_on_disk(self):
+        """Counted from the files, not from the report's own arithmetic —
+        a report that agrees with itself proves nothing about the corpus."""
+        with TemporaryDirectory() as d:
+            tmp = Path(d)
+            swagger = self._doc_with_file_response(tmp)
+            mocks = tmp / "mocks"
+            generate([swagger], mocks)
+            on_disk = sum(
+                len(json.loads(p.read_text(encoding="utf-8")).get("scenarios", {}))
+                for p in mocks.rglob("*.mock.json"))
+            report = generate([swagger], mocks, check=True)
+            self.assertEqual(report.scenarios_seen, on_disk)

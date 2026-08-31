@@ -1025,8 +1025,17 @@ def cmd_mock_generate(args):
             # Same visibility channel as the hand-written findings, but a
             # warning: regenerating fixes it, so it never gates (the ORPHAN
             # convention). It used to be detected and then shown nowhere.
-            print(f"  [WARN]    {drift}\n"
-                  "            stale generated body — regenerating fixes it")
+            if drift.regenerating_helps:
+                remedy = "stale generated body — regenerating fixes it"
+            else:
+                # Measured, not assumed: this file already equals what
+                # generation produces, so telling the reader to regenerate
+                # sends them round a loop with no exit.
+                remedy = ("the generator produced this body — regenerating "
+                          "will not change it; the schema cannot be "
+                          "synthesised here (self-reference), so supply the "
+                          "value in a hand-written overlay")
+            print(f"  [WARN]    {drift}\n            {remedy}")
         notes = [d for d in report.bodies
                  if d.is_note_only and not d.generated and not report.strict]
         for drift in notes:
