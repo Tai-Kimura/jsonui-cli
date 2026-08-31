@@ -66,12 +66,24 @@ def installed_driver_version(platform: str, project_root: Path) -> str | None:
 
 def check_declarations(declared: dict[str, list[Path]],
                        requirements: dict[str, dict[str, str]],
-                       project_root: Path) -> tuple[list[str], list[str]]:
+                       project_root: Path | None) -> tuple[list[str], list[str]]:
     """Compare declared keys against the installed drivers.
 
     `declared` maps a top-level key to the files that use it. Returns
     (errors, notes): errors are declarations measured to be unsupported,
     notes are the ones whose runtime could not be measured.
+
+    There are three ways the runtime can be unknowable, and the third one
+    arrives here rather than inside `installed_driver_version`: the caller
+    resolves the project root from the config or the enclosing `.git`, and
+    returns None when it finds neither. The two handled below it — an
+    unsearchable platform, an unreadable manifest — made this one look
+    handled too, and it crashed instead (docsite, 1.7.33).
+
+    It gets its own wording. "The installed version could not be read"
+    points at the driver, and the reader installs one; here nothing was
+    read because nowhere was searched, and what the reader needs is to
+    pass --config or run from the project root.
     """
     errors: list[str] = []
     notes: list[str] = []
@@ -82,6 +94,16 @@ def check_declarations(declared: dict[str, list[Path]],
         files = declared[key]
         for platform in sorted(needed):
             required = needed[platform]
+            if not project_root:
+                notes.append(
+                    f"'{key}' requires the {platform} driver {required} or newer; "
+                    f"no project root could be resolved (no config was passed and "
+                    f"no enclosing .git was found), so the installed driver was "
+                    f"never looked for and this is not checked. Pass --config or "
+                    f"run from the project root. An older driver ignores the "
+                    f"declaration silently ({len(files)} file(s) declare it)."
+                )
+                continue
             found = installed_driver_version(platform, project_root)
             if found is None:
                 notes.append(

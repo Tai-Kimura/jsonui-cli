@@ -156,3 +156,36 @@ class TestTheRequirementComesFromTheSchema:
         # the key in the canonical schema, so adding a key means stating its
         # runtime requirement. test_schema_drift pins both directions.
         assert KEY_DRIVER_REQUIREMENTS["screenReady"] == {"web": "1.8.4"}
+
+
+class TestNoProjectRootIsAThirdKindOfUnknowable:
+    """`_project_root` returns None when there is no config and no `.git`.
+
+    Two "unknowable" cases are handled inside `installed_driver_version`; this
+    one is decided before the call and crashed with a TypeError instead
+    (docsite, 1.7.33). Two handled cases made the third look handled.
+    """
+
+    def test_a_missing_project_root_notes_rather_than_crashing(self, tmp_path):
+        declared = {"screenReady": [write_test(tmp_path, screenReady="none")]}
+        errors, notes = check_declarations(declared, REQ, None)
+        assert errors == [] and len(notes) == 1
+        assert "not checked" in notes[0]
+
+    def test_it_does_not_reuse_the_unreadable_driver_wording(self, tmp_path):
+        # The distinction is the whole point of the fix. "The installed
+        # version could not be read" sends the reader to install a driver;
+        # here nothing was searched, and what they need is --config or a
+        # different working directory. Same wording would misdirect them.
+        declared = {"screenReady": [write_test(tmp_path, screenReady="none")]}
+        _, rootless = check_declarations(declared, REQ, None)
+        _, unreadable = check_declarations(declared, REQ, tmp_path)
+        assert len(rootless) == 1 and len(unreadable) == 1
+        assert rootless[0] != unreadable[0]
+        assert "no project root" in rootless[0]
+        assert "could not be read" in unreadable[0]
+
+    def test_no_declaration_means_no_note_without_a_root_either(self, tmp_path):
+        # Same opt-in rule as everywhere else: a project that declares nothing
+        # hears nothing, wherever it is run from.
+        assert check_declarations({}, REQ, None) == ([], [])
