@@ -32,6 +32,28 @@ Resolution is deliberately generous — every plausible root is tried and the
 finding only appears when the path is under NONE of them. A false positive
 here costs more than a miss: this check's whole purpose is that people act
 on it, and the first thing that stops them is one wrong finding.
+
+**Considered and declined: reporting that one file mixes bases.** Once the
+check tries several roots it can also say WHICH one answered, and a run
+where `source.layout` resolves from the test file while `source.document`
+resolves from the repository root looks like a convention nobody wrote
+down. Measured before proposing it, on the project that found the two
+defects above: 85 of 85 `layout` declarations use the test-relative
+spelling and 85 of 85 `document` declarations use the root-relative one.
+The mixing is inside every single `source` block, and it is not drift — the
+two keys name different kinds of thing (an implementation artefact the test
+points at, and a generated document that belongs to the repository), so the
+bases differ for a reason. A finding here would fire 85 times on a project
+that is completely consistent, which is the same shape as the 402 false
+positives this module has already produced once.
+
+The reporter's counter-proposal is the one worth building IF anyone ever
+measures a case: not "this file mixes bases" but **"this key is spelled
+from different bases within one project"** — same key, two spellings, which
+is a genuine deviation rather than two conventions. Their count for it is
+0/85 on both keys, so there is nothing to detect yet and nothing to tune a
+threshold against. Re-visit when a project measures a non-zero count; the
+unit is the KEY, not the file.
 """
 
 from __future__ import annotations
