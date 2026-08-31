@@ -127,7 +127,15 @@ class WriteSyncMetaTest(unittest.TestCase):
             self.assertTrue(changed)
             self.assertEqual(_read_meta(project)["platforms"]["ios"]["version"], "1.1.0")
 
-    def test_content_is_deterministic(self):
+    def test_content_is_deterministic_apart_from_the_stamp(self):
+        """Two fresh projects agree on everything except `syncedAt`.
+
+        The stamp is wall-clock, so this compared equal only while both
+        writes landed inside the same second — it passed, and would have
+        started failing at a second boundary. Determinism is now claimed of
+        the coordinates, which is what the property was for: a consumer's
+        git status must not churn because two syncs ran at different times.
+        """
         with tempfile.TemporaryDirectory() as d:
             root = Path(d)
             source = _make_source(root / "src")
@@ -137,9 +145,53 @@ class WriteSyncMetaTest(unittest.TestCase):
 
             _write_sync_meta(p1, source, {"ios": "sjui_tools"}, dry_run=False)
             _write_sync_meta(p2, source, {"ios": "sjui_tools"}, dry_run=False)
-            a = (p1 / SYNC_META_DIRNAME / SYNC_META_FILENAME).read_text()
-            b = (p2 / SYNC_META_DIRNAME / SYNC_META_FILENAME).read_text()
-            self.assertEqual(a, b)
+            a = _read_meta(p1)["platforms"]["ios"]
+            b = _read_meta(p2)["platforms"]["ios"]
+            self.assertEqual({k: v for k, v in a.items() if k != "syncedAt"},
+                             {k: v for k, v in b.items() if k != "syncedAt"})
+            self.assertIn("syncedAt", a)
+
+    def test_a_resync_of_the_same_coordinates_keeps_the_stamp(self):
+        """`syncedAt` answers "when did THIS version arrive".
+
+        Refreshing it on every sync would churn the consumer's git status on
+        every run, which is the property the file was written not to have.
+        """
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d)
+            source = _make_source(root / "src")
+            project = root / "p"
+            project.mkdir()
+            _write_sync_meta(project, source, {"ios": "sjui_tools"}, dry_run=False)
+            first = _read_meta(project)["platforms"]["ios"]["syncedAt"]
+
+            _, changed = _write_sync_meta(project, source, {"ios": "sjui_tools"},
+                                          dry_run=False)
+            self.assertFalse(changed, "same coordinates must not rewrite")
+            self.assertEqual(
+                _read_meta(project)["platforms"]["ios"]["syncedAt"], first)
+
+    def test_a_new_version_moves_the_stamp(self):
+        """The control: without it, "the stamp is stable" and "the stamp is
+        never written" are the same observation."""
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d)
+            source = _make_source(root / "src")
+            project = root / "p"
+            project.mkdir()
+            meta_dir = project / SYNC_META_DIRNAME
+            meta_dir.mkdir(parents=True)
+            old = "2020-01-01T00:00:00+00:00"
+            (meta_dir / SYNC_META_FILENAME).write_text(json.dumps({"platforms": {
+                "ios": {"tool": "sjui_tools", "version": "0.0.1",
+                        "sourceSha": "deadbeef", "sourceRoot": "~/x",
+                        "syncedAt": old}}}))
+
+            _, changed = _write_sync_meta(project, source, {"ios": "sjui_tools"},
+                                          dry_run=False)
+            self.assertTrue(changed)
+            entry = _read_meta(project)["platforms"]["ios"]
+            self.assertNotEqual(entry["syncedAt"], old)
 
 
 if __name__ == "__main__":

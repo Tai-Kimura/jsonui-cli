@@ -37,6 +37,8 @@ import os
 import shutil
 from pathlib import Path
 
+from datetime import datetime, timezone
+
 from ..core.config_manager import ConfigManager
 from ..version import source_sha, toolchain_version
 
@@ -357,9 +359,24 @@ def _write_sync_meta(
     """Stamp toolchain coordinates for the platforms just synced.
 
     Entries merge per platform: syncing only ``web`` must not erase the
-    coordinates ``ios`` was synced at earlier. Content is deterministic
-    (no timestamps) and the file is left untouched when nothing changed,
-    so repeated syncs don't churn the consumer's git status.
+    coordinates ``ios`` was synced at earlier. The file is left untouched
+    when the coordinates did not change, so repeated syncs don't churn the
+    consumer's git status.
+
+    ``syncedAt`` records when THIS version arrived, not when sync last ran,
+    which is what keeps both properties: it is written only alongside a
+    coordinate that changed, and a no-op sync leaves the old stamp in place.
+    Comparison for "did anything change" deliberately ignores it — stamping
+    every run would churn the file on every sync, which is the property the
+    previous "no timestamps" rule existed to protect.
+
+    Distribution is automatic and notification is manual, so a consumer can
+    be measuring while a new version lands under them. Three lanes hit this
+    in one day; two of them ended up unable to say afterwards which version
+    a recorded number came from, and one downgraded its own ledger from
+    "measured at 1.7.33" to "assumed 1.7.33". Asking each face to bracket
+    its measurements with ``--version`` is the same procedure copied N
+    times, which is the shape of a missing tool feature.
 
     Returns ``(meta_path, changed)``.
     """
@@ -376,25 +393,54 @@ def _write_sync_meta(
     version = toolchain_version(source_root)
     sha = source_sha(source_root)
     for platform_name, tool_name in synced.items():
-        platforms[platform_name] = {
+        entry = {
             "tool": tool_name,
             "version": version,
             "sourceSha": sha,
             "sourceRoot": _home_relative(source_root),
         }
+        previous = platforms.get(platform_name)
+        if isinstance(previous, dict) and previous.get("syncedAt"):
+            # Carried, not refreshed: the stamp answers "when did THIS
+            # version arrive", so a re-sync of the same coordinates must
+            # not move it. Replaced below only when the coordinates differ.
+            same = all(previous.get(k) == entry[k] for k in entry)
+            if same:
+                entry["syncedAt"] = previous["syncedAt"]
+        platforms[platform_name] = entry
 
-    payload = {
-        "_generated_by": "jui sync_tool — toolchain coordinates of the last sync; quote these in bug reports",
-        "platforms": {name: platforms[name] for name in sorted(platforms)},
-    }
-    content = json.dumps(payload, indent=2, sort_keys=True) + "\n"
+    def _render(table: dict) -> str:
+        return json.dumps({
+            "_generated_by": (
+                "jui sync_tool — toolchain coordinates of the last sync; "
+                "quote these in bug reports. syncedAt is when this version "
+                "arrived, not when sync last ran."
+            ),
+            "platforms": {name: table[name] for name in sorted(table)},
+        }, indent=2, sort_keys=True) + "\n"
 
+    def _without_stamps(table: dict) -> dict:
+        return {n: {k: v for k, v in e.items() if k != "syncedAt"}
+                for n, e in table.items() if isinstance(e, dict)}
+
+    # Unchanged is decided on the coordinates alone. Including the stamp
+    # would make every sync a change, which is what the file is written not
+    # to do.
     if meta_path.exists():
         try:
-            if meta_path.read_text(encoding="utf-8") == content:
+            old = json.loads(meta_path.read_text(encoding="utf-8"))
+            old_platforms = old.get("platforms")
+            if isinstance(old_platforms, dict) and \
+                    _without_stamps(old_platforms) == _without_stamps(platforms):
                 return meta_path, False
-        except OSError:
+        except (OSError, json.JSONDecodeError):
             pass
+
+    stamp = datetime.now(timezone.utc).replace(microsecond=0).isoformat()
+    for entry in platforms.values():
+        if isinstance(entry, dict):
+            entry.setdefault("syncedAt", stamp)
+    content = _render(platforms)
     if not dry_run:
         meta_path.parent.mkdir(parents=True, exist_ok=True)
         meta_path.write_text(content, encoding="utf-8")
