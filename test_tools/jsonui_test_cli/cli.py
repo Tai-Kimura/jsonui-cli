@@ -559,9 +559,28 @@ def _regenerate_stale_mocks(config_path):
     return _rebuild_generated(resolved, mock_path, scope)
 
 
+def _scenario_names(gen_root: Path) -> dict:
+    """`{relpath: {scenario names}}` for the generated tree, best effort."""
+    table: dict = {}
+    if not gen_root.exists():
+        return table
+    for p in sorted(gen_root.rglob("*.mock.json")):
+        try:
+            with open(p, "r", encoding="utf-8") as f:
+                data = json.load(f)
+        except (OSError, json.JSONDecodeError):
+            continue
+        scenarios = data.get("scenarios")
+        if isinstance(scenarios, dict):
+            table[p.name] = set(scenarios)
+    return table
+
+
 def _rebuild_generated(resolved, mock_path, scope) -> int:
     from .mock.generate import GENERATED_DIR, generate
 
+    gen_root = mock_path / GENERATED_DIR
+    before = _scenario_names(gen_root)
     try:
         built = generate(resolved, mock_path, scope=scope)
     except (OSError, ValueError, KeyError) as e:
@@ -573,6 +592,24 @@ def _rebuild_generated(resolved, mock_path, scope) -> int:
     if built.created:
         print(f"\nRegenerated {len(built.created)} mock file(s) "
               f"into {mock_path.name}/{GENERATED_DIR}/")
+    # Name what came BACK, not just how many files were written. This
+    # rebuild runs before the contract check, so anything it restores is
+    # something the check will not report — and the two lines a reader
+    # actually sees, "Regenerated N mock file(s)" and "PASSED", do not say
+    # that a scenario was missing a moment ago. A consumer deleted one,
+    # got a green run, and could not tell from the output that the tree had
+    # been repaired underneath the check.
+    #
+    # File counts answer "what did this run do". They do not answer "what
+    # did this run hide".
+    after = _scenario_names(gen_root)
+    restored = sorted(
+        f"{name}: {', '.join(sorted(after[name] - before[name]))}"
+        for name in after
+        if name in before and after[name] - before[name]
+    )
+    for line in restored:
+        print(f"  restored a scenario the tree was missing — {line}")
     return 0
 
 

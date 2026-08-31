@@ -261,3 +261,67 @@ class MockGateAbsenceTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestARebuildNamesWhatItPutBack:
+    """The rebuild runs before the contract check, so what it restores is
+    what the check will not report.
+
+    A consumer deleted a generated scenario, got `Regenerated N mock
+    file(s)` and `PASSED`, and could not tell from that output that the
+    tree had been repaired underneath the check. The `mock contract:` line
+    is true of the repaired tree, so nothing in the run reads as wrong.
+
+    File counts answer "what did this run do". They do not answer "what did
+    this run hide".
+    """
+
+    def _project(self, tmp_path):
+        (tmp_path / "api.json").write_text(json.dumps({
+            "openapi": "3.0.0", "info": {"title": "t", "version": "1"},
+            "paths": {"/api/items": {"get": {
+                "operationId": "listItems",
+                "responses": {"200": {"content": {"application/json": {"schema": {
+                    "type": "array",
+                    "items": {"type": "object", "required": ["id"],
+                              "properties": {"id": {"type": "string"}}}}}}}}}}},
+        }), encoding="utf-8")
+        (tmp_path / "jui.config.json").write_text(json.dumps(
+            {"mock": {"swagger": ["api.json"], "mockDir": "tests/mocks"}}),
+            encoding="utf-8")
+        (tmp_path / "tests").mkdir()
+        return tmp_path
+
+    def _run(self, tmp_path, *args):
+        import os
+        import subprocess
+        tree = str(Path(__file__).parent.parent)
+        return subprocess.run(
+            [sys.executable, "-m", "jsonui_test_cli.cli", *args],
+            cwd=tmp_path, capture_output=True, text=True,
+            env={**os.environ, "PYTHONPATH": tree})
+
+    def test_a_restored_scenario_is_named(self, tmp_path):
+        import os
+        import time
+        root = self._project(tmp_path)
+        self._run(root, "mock", "generate")
+        gen = next((root / "tests/mocks").rglob("*.mock.json"))
+        data = json.loads(gen.read_text(encoding="utf-8"))
+        data["scenarios"].pop("empty")
+        gen.write_text(json.dumps(data, indent=2), encoding="utf-8")
+        # age it so the freshness branch of the rebuild trigger fires
+        old = time.time() - 10_000
+        os.utime(gen, (old, old))
+
+        out = self._run(root, "validate", "tests").stdout
+        assert "restored a scenario the tree was missing" in out
+        assert "empty" in out
+
+    def test_an_untouched_tree_says_nothing_about_restoring(self, tmp_path):
+        # The control. Without it, "restores are named" and "the line always
+        # prints" are the same observation.
+        root = self._project(tmp_path)
+        self._run(root, "mock", "generate")
+        out = self._run(root, "validate", "tests").stdout
+        assert "restored a scenario" not in out
