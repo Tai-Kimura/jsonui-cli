@@ -1112,3 +1112,61 @@ class TestEmittedRuntimesHaveBalancedStringLiterals:
         text = self._runtimes(tmp_path)["android"]
         assert 'resolveString(\\"' in text
         assert 'resolveString(""' not in text
+
+
+class TestEmittedRuntimesDoNotQuoteResolverCalls:
+    """A diagnostic must not spell a resolver call, and must not carry a
+    Python comment into the emitted language.
+
+    Two failures from one release, both of the same shape — a construct
+    from the generator's language ending up in the generated one:
+
+    - The web diagnostic said `StringManager.getString(TABLE[key])` to
+      teach the fix. `jui lint-strings` scans for `getString(<expression>)`
+      and cannot tell a real reference from one quoted inside a message, so
+      it reported an undeclared dynamic ref and exited 2 on every project
+      with `lint.stringsUsage`. Generated files cannot be hand-edited and
+      the raw-literal allowlist does not cover dynamic refs, so the
+      consumer had no way out: emit and lint is red, do not emit and
+      `--check` is red. Comments are blanked for that scan (v1.6.16);
+      string literals deliberately are not, because interpolation inside
+      one IS a reference site. A message that quotes code is a third case.
+    - Writing the explanation as a `#` comment inside the emitted template
+      put Python comments into the TypeScript. Committed and caught in the
+      same minute.
+
+    Kotlin and Swift already worded it without a call, so the fix also
+    makes the three agree.
+    """
+
+    def _runtime(self, tmp_path, platform, **kw):
+        root = _project(tmp_path / platform, BASIC)
+        return generate_branch_tests(
+            "checkout", root, platform=platform, **kw
+        ).runtime_file.read_text(encoding="utf-8")
+
+    @pytest.mark.parametrize("platform,kw", [
+        ("web", {}), ("android", {"package": "com.example.x"}),
+        ("ios", {"module": "app"}),
+    ])
+    def test_no_resolver_call_is_spelled_in_a_diagnostic(
+            self, tmp_path, platform, kw):
+        text = self._runtime(tmp_path, platform, **kw)
+        assert "getString(" not in text, (
+            "a quoted resolver call reads as a real reference to the "
+            "strings-usage scan")
+
+    @pytest.mark.parametrize("platform,kw", [
+        ("web", {}), ("android", {"package": "com.example.x"}),
+        ("ios", {"module": "app"}),
+    ])
+    def test_no_python_comment_survives_into_the_emitted_language(
+            self, tmp_path, platform, kw):
+        text = self._runtime(tmp_path, platform, **kw)
+        # `# ` with the space, not a bare `#`: Swift has `#selector` and
+        # `#available` as real syntax, and the first version of this
+        # assertion reported one of them. The predicate was the defect, not
+        # the emitted code — third time today that a check's own claim was
+        # the thing that was wrong.
+        leaked = [l for l in text.splitlines() if l.strip().startswith("# ")]
+        assert leaked == [], "\n".join(leaked)
