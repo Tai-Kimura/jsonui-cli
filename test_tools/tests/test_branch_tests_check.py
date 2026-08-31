@@ -521,6 +521,184 @@ def test_check_does_not_call_an_unproducible_screen_current(project,
 
 
 # --------------------------------------------------------------------- #
+# Screens that belong to another platform
+#
+# Generation used to emit a test file on every platform, holding no
+# assertion when every branch was scoped away. That is a test that can
+# never fail, and — because generation would write it — `--check` had to
+# expect it, so a project that sensibly did not generate it read as one
+# with missing output. Both sides move together, per the convention that a
+# column which did not run is not printed.
+# --------------------------------------------------------------------- #
+
+IOS_ONLY = _contract([
+    {"when": {"api.createOrder": "conflict"},
+     "then": {"data.screenState": "error"}, "platforms": ["ios"]},
+])
+
+PLATFORM_DIRS = {"web": "tests/unit/generated", "ios": "Tests/Generated",
+                 "android": "app/src/test/java"}
+PLATFORM_ARGS = {"web": {}, "ios": {"module": "App"},
+                 "android": {"package": "com.acme.app"}}
+
+
+@pytest.fixture
+def ios_only(tmp_path):
+    return _project(tmp_path, IOS_ONLY)
+
+
+def _gen(root: Path, platform: str, **extra):
+    out = PLATFORM_DIRS[platform]
+    return generate_branch_tests(
+        "checkout", project_root=root, platform=platform, out_dir=out,
+        harness_dir=out, **PLATFORM_ARGS[platform], **extra)
+
+
+@pytest.mark.parametrize("platform", ["web", "android"])
+def test_a_screen_scoped_to_another_platform_emits_nothing(ios_only, platform):
+    report = _gen(ios_only, platform)
+
+    assert report.platform_applicable is False
+    assert report.declared_branches == 0 and report.platform_skipped == 1
+    assert not (ios_only / PLATFORM_DIRS[platform]).exists()
+
+
+def test_the_platform_it_belongs_to_still_emits(ios_only):
+    report = _gen(ios_only, "ios")
+
+    assert report.platform_applicable is True
+    assert report.test_file.exists()
+
+
+@pytest.mark.parametrize("platform", ["web", "android"])
+def test_check_does_not_expect_what_generation_would_not_write(ios_only,
+                                                               platform):
+    """The invariant this whole check rests on: --check predicts generate.
+    Suppressing one side alone would make them disagree."""
+    _gen(ios_only, platform)
+    report = _gen(ios_only, platform, check=True)
+
+    assert report.platform_applicable is False
+    assert report.absent == [] and report.drifted == []
+
+
+def test_a_screen_with_active_branches_is_unaffected(project):
+    """The ordinary case must not be swept up: platform_skipped is 0 here,
+    so nothing about this screen is platform-scoped."""
+    report = generate_branch_tests("checkout", project_root=project)
+    assert report.platform_applicable is True
+    assert report.test_file.exists()
+
+
+def test_a_contract_of_only_notes_is_not_a_platform_question(tmp_path):
+    """`declared_branches == 0` has more than one cause. A contract that
+    lists only notes has nothing scoped away, and suppressing it here would
+    silently retire a screen for a reason this rule is not about — found by
+    a red-check that killed nothing, which is what a missing test looks
+    like from the outside."""
+    root = _project(tmp_path, _contract([{"note": "polling is out of scope"}]))
+
+    report = generate_branch_tests("checkout", project_root=root)
+
+    assert report.declared_branches == 0
+    assert report.platform_skipped == 0
+    assert report.platform_applicable is True
+    assert report.test_file.exists()
+
+
+def test_the_summary_separates_not_applicable_from_up_to_date(ios_only,
+                                                              monkeypatch,
+                                                              capsys):
+    """A screen that was never a candidate is not "up to date", and it is
+    not a scan that reached nothing either."""
+    assert _cli(ios_only, monkeypatch=monkeypatch) == 0
+    out = capsys.readouterr().out
+    assert "Skipped 'checkout'" in out
+
+    assert _cli(ios_only, "--check", monkeypatch=monkeypatch) == 0
+    summary = capsys.readouterr().out
+    assert "1 not applicable to this platform" in summary
+    assert "0 up to date, 0 stale" in summary
+
+
+# --------------------------------------------------------------------- #
+# Split screens: parent + subSpecs is one screen
+# --------------------------------------------------------------------- #
+
+def _split_family(root: Path) -> None:
+    """A parent declaring two sub-specs: one holds the contract, the other
+    holds the endpoint declaration the contract refers to."""
+    spec = json.loads((root / "docs/specs/checkout.spec.json").read_text())
+
+    core = json.loads(json.dumps(spec))
+    core.pop("branchContracts")
+    core["metadata"]["name"] = "CheckoutCore"
+    _write(root / "docs/specs/checkout/checkout-core.spec.json", core)
+
+    panel = json.loads(json.dumps(spec))
+    panel["dataFlow"].pop("repositories")       # the sibling declares them
+    panel["metadata"]["name"] = "CheckoutPanel"
+    _write(root / "docs/specs/checkout/checkout-panel.spec.json", panel)
+
+    _write(root / "docs/specs/checkout.spec.json", {
+        "type": "screen_parent_spec", "version": "1.0",
+        "metadata": {"name": "Checkout", "displayName": "Checkout",
+                     "description": "d", "layoutFile": "checkout"},
+        "subSpecs": [{"file": "checkout/checkout-core.spec.json"},
+                     {"file": "checkout/checkout-panel.spec.json"}],
+    })
+
+
+def test_a_split_screen_generates_under_the_parent_name(project):
+    """The contract is in one sub-spec and the endpoint it names is in a
+    sibling. `jui build` and `jui verify` already read parent + subSpecs as
+    ONE screen; reading it differently here is what made the siblings
+    strangers to each other."""
+    _split_family(project)
+
+    report = generate_branch_tests("checkout", project_root=project)
+
+    assert report.test_file.name == "checkout.branches.test.ts"
+    assert report.declared_branches == 1
+    assert "createOrder" in report.routes
+
+
+def test_sub_specs_are_not_enumerated_as_screens(project):
+    _split_family(project)
+
+    declaring, scanned = discover_branch_screens(project)
+
+    assert declaring == ["checkout"]
+    assert "checkout-panel" in scanned  # scanned, so the denominator is honest
+
+
+def test_naming_a_sub_spec_says_what_it_is(project):
+    """It used to fail on whatever its half of the screen could not see —
+    an endpoint declared in the sibling — which sends the reader to add a
+    declaration that already exists."""
+    _split_family(project)
+
+    with pytest.raises(BranchTestGenerationError) as caught:
+        generate_branch_tests("checkout-panel", project_root=project)
+
+    assert "is a sub-spec of 'checkout'" in str(caught.value)
+
+
+def test_the_family_is_the_declaration_not_the_directory(project):
+    """Sitting in the same folder is not membership. An undeclared spec
+    beside the sub-specs stays a screen of its own."""
+    _split_family(project)
+    stray = json.loads(
+        (project / "docs/specs/checkout/checkout-panel.spec.json").read_text())
+    stray["metadata"]["name"] = "Stray"
+    _write(project / "docs/specs/checkout/stray.spec.json", stray)
+
+    declaring, _ = discover_branch_screens(project)
+
+    assert sorted(declaring) == ["checkout", "stray"]
+
+
+# --------------------------------------------------------------------- #
 # The other two emitters
 #
 # Kotlin and Swift go through the same _Emitter, and all three grew the

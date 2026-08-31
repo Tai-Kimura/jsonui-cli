@@ -776,6 +776,12 @@ def _branch_check_summary(reports: list, scanned: int) -> int:
     absent: dict[Path, None] = {}
     matched: dict[Path, None] = {}
     stale_screens = 0
+    # A screen whose branches all belong to other platforms produces no file
+    # here, so there is nothing to compare. Counted apart from "up to date"
+    # because it was never a candidate — and apart from a scan that reached
+    # nothing, which is the failure this summary exists to make visible.
+    not_applicable = [r for r in reports if not r.platform_applicable]
+    reports = [r for r in reports if r.platform_applicable]
     for report in reports:
         for path in report.drifted:
             drifted[path] = None
@@ -800,9 +806,11 @@ def _branch_check_summary(reports: list, scanned: int) -> int:
                   "emit a skeleton)")
 
     screens = len(reports)
+    skipped = (f", {len(not_applicable)} not applicable to this platform"
+               if not_applicable else "")
     print(f"\nbranch tests: {screens} screen(s) declaring branchContracts "
-          f"of {scanned} spec(s) scanned — {screens - stale_screens} up to "
-          f"date, {stale_screens} stale "
+          f"of {scanned} spec(s) scanned{skipped} — {screens - stale_screens} "
+          f"up to date, {stale_screens} stale "
           f"({len(matched)} file(s) current, {len(drifted)} drifted, "
           f"{len(absent)} absent)")
     if drifted or absent:
@@ -931,6 +939,11 @@ def _generate_one_branch_test(args, screen: str):
 
 
 def _print_branch_generation(report, show_siblings: bool = True) -> None:
+    if not report.platform_applicable:
+        print(f"Skipped '{report.screen}': every branch it declares belongs "
+              f"to another platform ({report.platform_skipped} scoped away), "
+              f"so there is no assertion to emit")
+        return
     print(f"Generated branch tests for '{report.screen}':")
     print(f"  {report.test_file}  "
           f"({report.declared_branches} declared branch(es), "

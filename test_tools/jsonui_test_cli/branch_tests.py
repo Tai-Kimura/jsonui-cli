@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import json
 import re
+import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -47,6 +48,116 @@ def load_project_config(project_root: Path) -> dict:
             except (OSError, json.JSONDecodeError):
                 pass
     return {}
+
+
+PARENT_SPEC_TYPE = "screen_parent_spec"
+
+
+def _prefer_sibling_jui_cli() -> None:
+    """Put the jui_cli from THIS tree ahead of any separately installed one.
+
+    Same bootstrap `validation/screen_ids.py` uses. jsonui-test ships
+    separately from jui but always sits beside it, and without this the
+    import resolves to the distributed copy — which is the right answer at
+    runtime and the wrong one under test.
+    """
+    sibling = Path(__file__).resolve().parents[2] / "jui_tools"
+    if not (sibling / "jui_cli" / "core" / "parent_spec_merger.py").is_file():
+        return
+    if str(sibling) not in sys.path:
+        sys.path.insert(0, str(sibling))
+    cached = sys.modules.get("jui_cli")
+    cached_file = str(getattr(cached, "__file__", "") or "")
+    if cached is not None and not cached_file.startswith(str(sibling)):
+        for name in [n for n in sys.modules
+                     if n == "jui_cli" or n.startswith("jui_cli.")]:
+            del sys.modules[name]
+
+
+def _merge_parent_spec(parent_path: Path) -> dict | None:
+    """The merged view of a parent spec and the sub-specs it declares.
+
+    Delegated to `jui_cli.core.parent_spec_merger`, which is what `jui
+    build` and `jui verify` already use to read a split screen: parent plus
+    sub-specs is ONE screen producing one layout and one view model.
+    Answering that question differently here is how this tool came to treat
+    sibling sub-specs as strangers, so a contract in one of them could not
+    see the endpoint declared in another.
+
+    The family is the parent's `subSpecs` DECLARATION, not the directory
+    listing — sitting in the same folder is not membership, and the
+    declaration is the only thing that says what belongs together.
+
+    Returns None when jui_cli is unavailable (a tool tree synced without
+    it): a split project then behaves as it did before, which is the
+    failure this removes rather than a new one.
+    """
+    _prefer_sibling_jui_cli()
+    try:
+        from jui_cli.core.parent_spec_merger import ParentSpecMerger
+    except ImportError:
+        return None
+    try:
+        return ParentSpecMerger(spec_dir=parent_path.parent).merge_from_file(
+            parent_path).spec
+    except (OSError, ValueError, KeyError, json.JSONDecodeError):
+        # merge_from_file raises on a parent that declares what it may not;
+        # that is `jui build`'s error to report, in its own words.
+        return None
+
+
+def _load_spec(spec_file: Path) -> dict:
+    """The spec as this generator should read it — merged when it is a parent."""
+    with open(spec_file, "r", encoding="utf-8") as f:
+        spec = json.load(f)
+    if spec.get("type") == PARENT_SPEC_TYPE:
+        merged = _merge_parent_spec(spec_file)
+        if merged is not None:
+            return merged
+    return spec
+
+
+def _parent_declaring(path: Path, spec_path: Path) -> Path | None:
+    """The parent under *spec_path* that declares *path* in its subSpecs.
+
+    A sub-spec is not a screen of its own: it is part of one. Listing it
+    separately is what made a whole-project run try to generate half a
+    screen and fail on the half it could not see.
+    """
+    for candidate in _spec_files(spec_path):
+        try:
+            with open(candidate, "r", encoding="utf-8") as f:
+                parent = json.load(f)
+        except (OSError, json.JSONDecodeError):
+            continue
+        if parent.get("type") != PARENT_SPEC_TYPE:
+            continue
+        for entry in parent.get("subSpecs") or []:
+            if not isinstance(entry, dict):
+                continue
+            ref = entry.get("file")
+            if not ref:
+                continue
+            for base in (candidate.parent, spec_path):
+                if (base / ref).resolve() == path.resolve():
+                    return candidate
+    return None
+
+
+def _is_sub_spec_of_a_parent(path: Path, spec_path: Path) -> bool:
+    return _parent_declaring(path, spec_path) is not None
+
+
+def _parent_of_sub_spec(spec_file: Path, project_root: Path) -> Path | None:
+    """The parent owning *spec_file*, when the project declares one."""
+    config = load_project_config(project_root)
+    spec_dir = config.get("spec_directory")
+    if not spec_dir:
+        return None
+    spec_path = (project_root / spec_dir).resolve()
+    if not spec_path.is_dir():
+        return None
+    return _parent_declaring(spec_file, spec_path)
 
 
 def _spec_files(spec_path: Path) -> list[Path]:
@@ -126,12 +237,17 @@ def discover_branch_screens(
         scanned.append(screen)
         try:
             with open(path, "r", encoding="utf-8") as f:
-                spec = json.load(f)
+                raw = json.load(f)
         except (OSError, json.JSONDecodeError):
             # Unreadable is not "declares nothing": leaving it out of the
             # scanned list too would shrink the denominator to match the
             # numerator and report full coverage of what it could parse.
             continue
+        if raw.get("type") != PARENT_SPEC_TYPE and _is_sub_spec_of_a_parent(
+                path, spec_path):
+            # Part of a screen, not a screen. Its parent carries it.
+            continue
+        spec = _load_spec(path)
         bc = spec.get("branchContracts")
         if isinstance(bc, dict) and bc.get("methods"):
             declaring.append(screen)
@@ -272,6 +388,11 @@ class GenerationReport:
     platform_skipped: int = 0
     methods: list[str] = field(default_factory=list)
     routes: list[str] = field(default_factory=list)
+    #: False when the screen declares contracts but none of its branches
+    #: apply to this platform. Nothing is emitted and nothing is expected:
+    #: a test file holding no assertion is the "column that did not run",
+    #: and the convention for those is not to print them.
+    platform_applicable: bool = True
     #: check mode only — @generated files whose bytes differ / are missing.
     drifted: list[Path] = field(default_factory=list)
     absent: list[Path] = field(default_factory=list)
@@ -2320,8 +2441,17 @@ def generate_branch_tests(
     spec_file = resolve_spec_path(screen, project_root, spec_path)
     if not spec_file.exists():
         raise BranchTestGenerationError(f"spec not found: {spec_file}")
-    with open(spec_file, "r", encoding="utf-8") as f:
-        spec = json.load(f)
+    parent = _parent_of_sub_spec(spec_file, project_root)
+    if parent is not None:
+        # Naming a sub-spec used to fail on whatever its half of the screen
+        # could not see — an endpoint declared in a sibling, most often —
+        # which sends the reader to add a declaration that already exists.
+        raise BranchTestGenerationError(
+            f"'{screen}' is a sub-spec of '{_screen_of(parent)}', not a "
+            f"screen of its own — the parent and its subSpecs are one "
+            f"screen. Generate '{_screen_of(parent)}' instead."
+        )
+    spec = _load_spec(spec_file)
 
     bc = spec.get("branchContracts")
     if not isinstance(bc, dict) or not bc.get("methods"):
@@ -2360,12 +2490,17 @@ def generate_branch_tests(
 
     emitter = _Emitter(check)
     out_path = project_root / out_dir
-    emitter.mkdir(out_path)
     harness_path = project_root / harness_dir
-    emitter.mkdir(harness_path)
 
+    # Relative paths are computed, not walked, so the render can happen
+    # before anything is dug — and a screen that turns out to belong to
+    # another platform leaves no empty directory behind.
     rel = _relative_import(out_path, harness_path / screen)
     content, report = render_test_file(screen, spec, routes, rel)
+    if _skip_for_platform(report):
+        return report
+    emitter.mkdir(out_path)
+    emitter.mkdir(harness_path)
 
     runtime_file = out_path / "jsonui-branch-runtime.ts"
     emitter.emit(runtime_file, RUNTIME_TS)
@@ -2406,11 +2541,13 @@ def _emit_ios(
     pascal = _pascal(screen)
     emitter = _Emitter(check)
     out_path = project_root / out_dir
-    emitter.mkdir(out_path)
     harness_path = project_root / harness_dir
-    emitter.mkdir(harness_path)
 
     content, report = render_swift_test_file(screen, spec, routes, module)
+    if _skip_for_platform(report):
+        return report
+    emitter.mkdir(out_path)
+    emitter.mkdir(harness_path)
 
     runtime_file = out_path / "JsonuiBranchRuntime.swift"
     emitter.emit(runtime_file, SWIFT_RUNTIME)
@@ -2451,11 +2588,13 @@ def _emit_android(
     pkg_path = _relative_kotlin_paths(package)
     emitter = _Emitter(check)
     out_path = project_root / out_dir / pkg_path
-    emitter.mkdir(out_path)
     harness_path = project_root / harness_dir / pkg_path
-    emitter.mkdir(harness_path)
 
     content, report = render_kotlin_test_file(screen, spec, routes, package)
+    if _skip_for_platform(report):
+        return report
+    emitter.mkdir(out_path)
+    emitter.mkdir(harness_path)
 
     runtime_file = out_path / "JsonuiBranchRuntime.kt"
     emitter.emit(runtime_file, KOTLIN_RUNTIME % {"package": package})
@@ -2485,6 +2624,25 @@ def _emit_android(
     report.harness_created = created
     emitter.apply_to(report)
     return report
+
+
+def _skip_for_platform(report: "GenerationReport") -> bool:
+    """True when every branch this screen declares belongs to other platforms.
+
+    The file that would be written holds no assertion at all. Emitting it
+    puts a test in the suite that can never fail, and — because generation
+    would write it — a check has to expect it, so a project that sensibly
+    does not generate it reads as a project with missing output.
+
+    Both sides move together: nothing is emitted and nothing is expected.
+    Only a screen whose branches were ALL platform-scoped away qualifies;
+    a contract with no active branches for other reasons is a different
+    question and is left alone.
+    """
+    if report.declared_branches or not report.platform_skipped:
+        return False
+    report.platform_applicable = False
+    return True
 
 
 def _relative_import(from_dir: Path, to_module: Path) -> str:
