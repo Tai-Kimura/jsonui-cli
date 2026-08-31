@@ -141,6 +141,34 @@ class TestValidateSeesTheOverlay:
         assert len(result.errors) == 1
         assert "'default' is not among" in result.errors[0].message
 
+    def test_the_counterpart_is_found_in_the_files_own_tree(self, project):
+        """Anchoring, not discovery. When the run's declared mockDir does
+        not contain the file being validated — a monorepo sub-project
+        validated while an ancestor config answers — asking the declared
+        directory about this file found nothing and judged the thin
+        overlay alone, resurrecting the very error 1.7.22 removed. The
+        file's own tree still has the sibling generated/."""
+        _root, mocks = project
+        overlay = _overlay(mocks, THIN)
+        elsewhere = mocks.parent.parent / "other-project" / "mocks"
+        elsewhere.mkdir(parents=True)
+        set_mock_source(directory=elsewhere, boundary=elsewhere.parent)
+        result = self._validate(overlay)
+        assert [e.message for e in result.errors] == []
+
+    def test_a_file_with_no_generated_sibling_is_still_judged_alone(
+            self, project):
+        """The protection the anchoring must not dissolve: no counterpart
+        anywhere above the file means it IS the whole route."""
+        _root, mocks = project
+        lonely = mocks.parent.parent / "loose" / "listItems.mock.json"
+        lonely.parent.mkdir(parents=True)
+        lonely.write_text(json.dumps(THIN), encoding="utf-8")
+        set_mock_source(directory=None, boundary=lonely.parent)
+        result = self._validate(lonely)
+        assert len(result.errors) == 1
+        assert "'default' is not among" in result.errors[0].message
+
     def test_a_generated_file_is_judged_alone_too(self, project):
         _root, mocks = project
         gen = mocks / "generated" / "default" / "listItems.mock.json"

@@ -171,6 +171,23 @@ def find_mock_dir(test_file_path):
 _GENERATED_ROUTES_CACHE: dict = {}
 
 
+def _enclosing_mock_root(mock_file: Path):
+    """The mock tree *mock_file* itself sits in, or None.
+
+    Nearest ancestor that holds a `generated/` directory — the tool writes
+    that tree, so its presence is what makes a directory a mock root, and
+    a file with no such ancestor has no counterpart to overlay by
+    definition. Used only when the run's declared mockDir does not contain
+    the file; the declaration keeps answering discovery.
+    """
+    from ..mock.generate import GENERATED_DIR
+
+    for parent in mock_file.parents:
+        if (parent / GENERATED_DIR).is_dir():
+            return parent
+    return None
+
+
 def _generated_scenarios_by_route(mock_dir) -> dict:
     """``route_key -> scenario-name set`` for ``<mockDir>/generated/**``.
 
@@ -393,9 +410,19 @@ class MockValidator:
     def _generated_counterpart(path: str, source) -> set | None:
         """Scenario names of the generated mock this file overlays, or None.
 
-        None for a generated file itself, for a file whose mock directory
-        cannot be resolved (declared mockDir first, bounded walk otherwise —
-        `find_mock_dir`), and for a route generated/ does not serve.
+        None for a generated file itself and for a route generated/ does
+        not serve.
+
+        The tree is anchored to THIS FILE, not to the run's declared
+        mockDir. Those answer different questions: discovery ("where are
+        this project's mocks") is the declaration's, and it stays
+        authoritative there — but "what does this file overlay" is about
+        one file, and a file outside the declared tree still has the
+        sibling `generated/` of its own tree. Asking the declared dir
+        about it found nothing and judged the overlay alone, which is the
+        very error 1.7.22 removed, reappearing whenever validate is aimed
+        at mocks outside the resolved config's mockDir (a monorepo
+        sub-project validated while an ancestor config answers, measured).
         """
         from ..mock.generate import GENERATED_DIR, route_key
 
@@ -404,14 +431,13 @@ class MockValidator:
         file_on_disk = Path(path)
         if not file_on_disk.exists():
             return None
+        here = file_on_disk.resolve()
         mock_dir = find_mock_dir(file_on_disk)
+        if mock_dir is None or Path(mock_dir).resolve() not in here.parents:
+            mock_dir = _enclosing_mock_root(here)
         if mock_dir is None:
             return None
-        try:
-            rel_parts = file_on_disk.resolve().relative_to(
-                Path(mock_dir).resolve()).parts
-        except ValueError:
-            return None
+        rel_parts = here.relative_to(Path(mock_dir).resolve()).parts
         if GENERATED_DIR in rel_parts:
             return None
         rk = route_key((source.get("method") or "GET"), source["path"])
