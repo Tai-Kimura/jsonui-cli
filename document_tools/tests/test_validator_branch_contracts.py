@@ -290,10 +290,15 @@ class BranchWhenVocabulary(unittest.TestCase):
         )
 
     def test_unknown_when_key_is_error(self):
-        result = _validate(self._spec({"state.isAgreed": True}))
-        errs = _errors_at(result, "when.state.isAgreed")
+        # `vm.` is not a prefix the vocabulary has. (`state.` used to serve
+        # as this fixture; it is now the seedable-state namespace, and an
+        # undeclared name there gets its own message — see
+        # BranchSeedableState. Either way it is an error.)
+        result = _validate(self._spec({"vm.isAgreed": True}))
+        errs = _errors_at(result, "when.vm.isAgreed")
         self.assertTrue(errs)
         self.assertIn("Unknown when key", errs[0].message)
+        self.assertIn("state.<name>", errs[0].message)
 
     def test_data_scalar_values_pass(self):
         for value in (True, "compact", 0, None):
@@ -1000,3 +1005,121 @@ class BranchCrossFaces(unittest.TestCase):
         )
         result = _validate(spec)
         self.assertEqual(_warnings_at(result, "userActions"), [])
+
+
+class BranchSeedableState(unittest.TestCase):
+    """`seedableState` — ViewModel-internal state a branch may arrange.
+
+    The arrange surface was uiVariables only, so a branch gated on private
+    state could not be arranged from the contract at all; the reproduction
+    lived in a consumer-owned harness, which is where the reproduction
+    condition then stopped being readable from the spec.
+
+    Letting `when` reach for an arbitrary property path was considered and
+    rejected by the reporter: the contract would bind to the
+    implementation's private vocabulary, and a rename would make the
+    arrange step silently stop arranging. Naming the seedable state in the
+    spec keeps that binding in one declared place.
+    """
+
+    def _spec(self, bc_extra, when):
+        bc = {
+            "methods": {"onConfirmTap": {"branches": [
+                {"when": when, "then": {"api": "none"}},
+            ]}},
+        }
+        bc.update(bc_extra)
+        return _base_spec(
+            bc,
+            vm_methods=[{"name": "onConfirmTap"}],
+            ui_vars=[_ui_var("isAgreed")],
+        )
+
+    def test_a_declared_name_is_accepted(self):
+        result = _validate(self._spec(
+            {"seedableState": {"canRead": "Bool?"}}, {"state.canRead": False}))
+        self.assertEqual(_errors_at(result, "state.canRead"), [])
+
+    def test_an_undeclared_name_is_an_error(self):
+        """(b) — and an error rather than the warning an undeclared DATA
+        field gets. A data field may exist on a platform this spec does not
+        describe; internal state is arranged by the generated test itself,
+        so an undeclared name means nothing is seeded and the branch runs
+        against whatever state it started in."""
+        result = _validate(self._spec({}, {"state.canRead": False}))
+        errs = _errors_at(result, "when.state.canRead")
+        self.assertTrue(errs)
+        self.assertIn("not declared in branchContracts.seedableState",
+                      errs[0].message)
+        # names the alternative, so the fix does not require reading source
+        self.assertIn("data.<field>", errs[0].message)
+
+    def test_a_declared_name_may_be_arranged_in_a_baseline(self):
+        bc = {
+            "seedableState": {"canRead": "Bool?"},
+            "methods": {"onConfirmTap": {
+                "baseline": {"isAgreed": True, "state.canRead": None},
+                "branches": [{"when": {"data.isAgreed": False},
+                              "then": {"api": "none"}}],
+            }},
+        }
+        result = _validate(_base_spec(
+            bc, vm_methods=[{"name": "onConfirmTap"}],
+            ui_vars=[_ui_var("isAgreed")]))
+        self.assertEqual(_errors_at(result, "baseline"), [])
+
+    def test_an_undeclared_name_in_a_baseline_is_an_error(self):
+        bc = {
+            "methods": {"onConfirmTap": {
+                "baseline": {"state.canRead": None},
+                "branches": [{"when": {"data.isAgreed": False},
+                              "then": {"api": "none"}}],
+            }},
+        }
+        result = _validate(_base_spec(
+            bc, vm_methods=[{"name": "onConfirmTap"}],
+            ui_vars=[_ui_var("isAgreed")]))
+        self.assertTrue(_errors_at(result, "baseline.state.canRead"))
+
+    def test_a_witness_may_arrange_declared_internal_state(self):
+        bc = {
+            "seedableState": {"canRead": "Bool?"},
+            "conditions": {"readable": {
+                "meaning": "permission resolved",
+                "witness_true": {"state.canRead": True},
+                "witness_false": {"state.canRead": False},
+            }},
+            "methods": {"onConfirmTap": {"branches": [
+                {"when": {"cond": "readable"}, "then": {"api": "none"}},
+            ]}},
+        }
+        result = _validate(_base_spec(bc, vm_methods=[{"name": "onConfirmTap"}]))
+        self.assertEqual([e.message for e in result.errors], [])
+
+    def test_the_name_must_be_camel_case(self):
+        result = _validate(self._spec(
+            {"seedableState": {"can_read": "Bool?"}}, {"data.isAgreed": False}))
+        errs = _errors_at(result, "seedableState.can_read")
+        self.assertTrue(errs)
+        self.assertIn("camelCase", errs[0].message)
+
+    def test_the_type_must_be_a_non_empty_string(self):
+        for bad in (None, "", 7, {"t": "Bool"}):
+            with self.subTest(type=bad):
+                result = _validate(self._spec(
+                    {"seedableState": {"canRead": bad}}, {"data.isAgreed": False}))
+                errs = _errors_at(result, "seedableState.canRead")
+                self.assertTrue(errs)
+                # (4) no new type language: the message points at the
+                # existing vars vocabulary rather than defining one here.
+                self.assertIn("dataFlow.viewModel.vars", errs[0].message)
+
+    def test_the_section_must_be_an_object(self):
+        result = _validate(self._spec(
+            {"seedableState": ["canRead"]}, {"data.isAgreed": False}))
+        self.assertTrue(_errors_at(result, "branchContracts.seedableState"))
+
+    def test_a_spec_without_the_section_is_unaffected(self):
+        """(d) — opt-in. An existing spec validates exactly as before."""
+        result = _validate(self._spec({}, {"data.isAgreed": False}))
+        self.assertEqual([e.message for e in result.errors], [])

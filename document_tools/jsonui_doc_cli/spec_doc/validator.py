@@ -1339,18 +1339,19 @@ class SpecValidator:
             ))
             return
         for key in bc:
-            if key not in ("conditions", "methods", "notes"):
+            if key not in ("conditions", "methods", "notes", "seedableState"):
                 result.errors.append(SpecValidationMessage(
                     path=f"branchContracts.{key}",
                     message=(
                         "Unknown branchContracts key — allowed: "
-                        "'conditions', 'methods', 'notes'"
+                        "'conditions', 'methods', 'notes', 'seedableState'"
                     ),
                 ))
 
+        seedable = self._validate_seedable_state(bc.get("seedableState"), result)
         data_fields = self._collect_branch_data_fields()
         condition_names = self._validate_branch_conditions(
-            bc.get("conditions"), data_fields, result
+            bc.get("conditions"), data_fields, result, seedable
         )
         self._validate_branch_condition_usage(bc, condition_names, result)
         self._validate_branch_arg_bindings(bc, result)
@@ -1380,7 +1381,7 @@ class SpecValidator:
                 ))
             self._validate_branch_method_contract(
                 contract, path, data_fields, condition_names,
-                api_ops, transition_dests, result
+                api_ops, transition_dests, result, seedable
             )
 
     def _collect_branch_data_fields(self) -> set[str]:
@@ -1427,7 +1428,8 @@ class SpecValidator:
         return names
 
     def _validate_branch_conditions(
-        self, conditions: Any, data_fields: set[str], result: SpecValidationResult
+        self, conditions: Any, data_fields: set[str],
+        result: SpecValidationResult, seedable: set[str] | None = None,
     ) -> set[str]:
         """Validate branchContracts.conditions. Returns declared names."""
         names: set[str] = set()
@@ -1471,7 +1473,8 @@ class SpecValidator:
             for wkey in ("witness_true", "witness_false"):
                 if wkey in cond:
                     self._validate_branch_witness(
-                        cond[wkey], f"{path}.{wkey}", data_fields, result
+                        cond[wkey], f"{path}.{wkey}", data_fields, result,
+                        seedable,
                     )
             # Two witnesses that arrange the same state cannot separate the
             # branches they gate: the generated tests would set up identical
@@ -1624,9 +1627,90 @@ class SpecValidator:
                     level="warning",
                 ))
 
+    def _validate_seedable_state(
+        self, seedable: Any, result: SpecValidationResult,
+    ) -> set[str]:
+        """`seedableState: {name: type}` — ViewModel-internal state a branch
+        may arrange.
+
+        The layer exists because a value that is neither bound to the UI nor
+        a screen state does not belong on the data surface, yet branches
+        still gate on it. Declaring the names (rather than letting `when` reach for
+        any property path) keeps the contract off the implementation's
+        private vocabulary: a rename breaks a declaration someone has to
+        update, not an arrange step that silently stops arranging.
+
+        The declaration is also what makes the write checkable at all. The
+        harness applies data keys leniently on purpose — a data-only field
+        assigned onto the ViewModel invents a property that then shadows the
+        store — so the writer cannot tell "should exist on the VM" from
+        "belongs to the store". These names carry exactly that bit.
+        """
+        names: set[str] = set()
+        if seedable is None:
+            return names
+        if not isinstance(seedable, dict):
+            result.errors.append(SpecValidationMessage(
+                path="branchContracts.seedableState",
+                message=(
+                    "seedableState must be an object of {name: type}, got "
+                    f"{type(seedable).__name__}"
+                ),
+            ))
+            return names
+        for name, type_name in seedable.items():
+            path = f"branchContracts.seedableState.{name}"
+            if not self._matches_variable_name(name):
+                result.errors.append(SpecValidationMessage(
+                    path=path,
+                    message=f"Seedable state name must be camelCase: '{name}'",
+                ))
+                continue
+            if not isinstance(type_name, str) or not type_name:
+                result.errors.append(SpecValidationMessage(
+                    path=path,
+                    message=(
+                        "Seedable state type must be a non-empty type string "
+                        "using the same vocabulary as dataFlow.viewModel.vars "
+                        f"(e.g. 'Int?', '[String]'), got {type_name!r}"
+                    ),
+                ))
+                continue
+            names.add(name)
+        return names
+
+    def _check_branch_seedable_ref(
+        self, name: str, path: str, seedable: set[str],
+        result: SpecValidationResult,
+    ) -> None:
+        """`state.<name>` resolves only against a declaration.
+
+        An error, not a warning, and deliberately unlike the undeclared
+        data-field case: a data field may exist on a platform this spec does
+        not describe, but internal state is arranged by the generated test
+        itself — an undeclared name means nothing will be seeded, and the
+        branch would run against whatever state it happened to start in.
+        """
+        if not self._matches_variable_name(name):
+            result.errors.append(SpecValidationMessage(
+                path=path,
+                message=f"Seedable state name must be camelCase: '{name}'",
+            ))
+            return
+        if name not in seedable:
+            result.errors.append(SpecValidationMessage(
+                path=path,
+                message=(
+                    f"'state.{name}' is not declared in "
+                    "branchContracts.seedableState — declare it (with its "
+                    "type) or use 'data.<field>' if it belongs to the data "
+                    "surface"
+                ),
+            ))
+
     def _validate_branch_witness(
         self, witness: Any, path: str, data_fields: set[str],
-        result: SpecValidationResult,
+        result: SpecValidationResult, seedable: set[str] | None = None,
     ) -> None:
         """Witness / baseline object: {field: any JSON value}."""
         if not isinstance(witness, dict):
@@ -1636,6 +1720,12 @@ class SpecValidator:
             ))
             return
         for field_name in witness:
+            if field_name.startswith("state."):
+                self._check_branch_seedable_ref(
+                    field_name[len("state."):], f"{path}.{field_name}",
+                    seedable or set(), result,
+                )
+                continue
             if data_fields and field_name not in data_fields:
                 result.warnings.append(SpecValidationMessage(
                     path=f"{path}.{field_name}",
@@ -1651,6 +1741,7 @@ class SpecValidator:
         self, contract: Any, path: str, data_fields: set[str],
         condition_names: set[str], api_ops: set[str],
         transition_dests: set[str], result: SpecValidationResult,
+        seedable: set[str] | None = None,
     ) -> None:
         if not isinstance(contract, dict):
             result.errors.append(SpecValidationMessage(
@@ -1666,7 +1757,8 @@ class SpecValidator:
                 ))
         if "baseline" in contract:
             self._validate_branch_witness(
-                contract["baseline"], f"{path}.baseline", data_fields, result
+                contract["baseline"], f"{path}.baseline", data_fields, result,
+                seedable,
             )
         branches = contract.get("branches")
         if not isinstance(branches, list) or not branches:
@@ -1678,13 +1770,14 @@ class SpecValidator:
         for i, branch in enumerate(branches):
             self._validate_branch_entry(
                 branch, f"{path}.branches[{i}]", data_fields,
-                condition_names, api_ops, transition_dests, result
+                condition_names, api_ops, transition_dests, result, seedable
             )
 
     def _validate_branch_entry(
         self, branch: Any, path: str, data_fields: set[str],
         condition_names: set[str], api_ops: set[str],
         transition_dests: set[str], result: SpecValidationResult,
+        seedable: set[str] | None = None,
     ) -> None:
         if not isinstance(branch, dict):
             result.errors.append(SpecValidationMessage(
@@ -1747,7 +1840,7 @@ class SpecValidator:
             for key, value in when.items():
                 self._validate_branch_when_entry(
                     key, value, f"{path}.when", data_fields,
-                    condition_names, api_ops, result
+                    condition_names, api_ops, result, seedable
                 )
         then = branch.get("then")
         if isinstance(then, dict):
@@ -1832,7 +1925,7 @@ class SpecValidator:
     def _validate_branch_when_entry(
         self, key: str, value: Any, path: str, data_fields: set[str],
         condition_names: set[str], api_ops: set[str],
-        result: SpecValidationResult,
+        result: SpecValidationResult, seedable: set[str] | None = None,
     ) -> None:
         entry_path = f"{path}.{key}"
         if key == "cond":
@@ -1864,6 +1957,11 @@ class SpecValidator:
                         f"(string/number/bool/null), got {type(value).__name__}"
                     ),
                 ))
+            return
+        if key.startswith("state."):
+            self._check_branch_seedable_ref(
+                key[len("state."):], entry_path, seedable or set(), result
+            )
             return
         if key.startswith("arg."):
             arg = key[len("arg."):]
@@ -1903,7 +2001,7 @@ class SpecValidator:
             path=entry_path,
             message=(
                 f"Unknown when key '{key}' — allowed: 'data.<field>', "
-                "'arg.<name>', 'api.<op>', 'cond'"
+                "'state.<name>', 'arg.<name>', 'api.<op>', 'cond'"
             ),
         ))
 

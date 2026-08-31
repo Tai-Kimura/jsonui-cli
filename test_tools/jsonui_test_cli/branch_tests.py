@@ -482,12 +482,36 @@ def _ts(value) -> str:
     return json.dumps(value, ensure_ascii=False)
 
 
-def _arrange_state(contract: dict, branch: dict, conditions: dict) -> dict:
-    """baseline -> cond witnesses -> when.data (later wins)."""
+#: Prefix marking ViewModel-internal state declared in
+#: `branchContracts.seedableState`. Kept in its own namespace rather than
+#: mixed into the data keys because the two are written differently: data
+#: keys are applied leniently (a data-only field assigned onto the VM
+#: invents a property that then shadows the store), while a declared
+#: internal name is asserted to land.
+SEED_PREFIX = "state."
+
+
+def _arrange_state(
+    contract: dict, branch: dict, conditions: dict
+) -> tuple[dict, dict]:
+    """baseline -> cond witnesses -> when (later wins).
+
+    Returns (data state, seeded internal state). Both come from the same
+    three sources in the same order; only the write path differs.
+    """
     state: dict = {}
+    seed: dict = {}
+
+    def absorb(source: dict) -> None:
+        for key, value in source.items():
+            if key.startswith(SEED_PREFIX):
+                seed[key[len(SEED_PREFIX):]] = value
+            else:
+                state[key] = value
+
     baseline = contract.get("baseline")
     if isinstance(baseline, dict):
-        state.update(baseline)
+        absorb(baseline)
     when = branch.get("when") or {}
     cond_ref = when.get("cond")
     if isinstance(cond_ref, str) and cond_ref:
@@ -501,11 +525,13 @@ def _arrange_state(contract: dict, branch: dict, conditions: dict) -> dict:
                 f"{'witness_false' if negated else 'witness_true'} — test "
                 "generation needs a witness to arrange the state"
             )
-        state.update(witness)
+        absorb(witness)
     for key, value in when.items():
         if key.startswith("data."):
             state[key[len("data."):]] = value
-    return state
+        elif key.startswith(SEED_PREFIX):
+            seed[key[len(SEED_PREFIX):]] = value
+    return state, seed
 
 
 def _branch_title(index: int, branch: dict) -> str:
@@ -539,7 +565,7 @@ def render_test_file(
     lines.append("// for VM construction, screenRoutes, and string resolution.")
     lines.append("import { describe, expect, it } from \"vitest\";")
     lines.append("import {")
-    lines.append("  installFetchMock, partialMismatches, settle, type RouteSpec,")
+    lines.append("  installFetchMock, partialMismatches, seedState, settle, type RouteSpec,")
     lines.append("} from \"./jsonui-branch-runtime\";")
     lines.append(f"import {{ createHarness }} from \"{harness_import}\";")
     lines.append("")
@@ -614,7 +640,7 @@ def _render_branch(
 ) -> list[str]:
     when = branch.get("when") or {}
     then = branch.get("then") or {}
-    state = _arrange_state(contract, branch, conditions)
+    state, seed = _arrange_state(contract, branch, conditions)
     overrides = {k[len("api."):]: v for k, v in when.items() if k.startswith("api.")}
     args = []
     arg_values = {k[len("arg."):]: v for k, v in when.items() if k.startswith("arg.")}
@@ -631,6 +657,12 @@ def _render_branch(
     out.append("    const h = createHarness();")
     if state:
         out.append(f"    h.setState({_ts(state)});")
+    if seed:
+        # Strict, and read back. A harness written before seedable state
+        # ignores names it does not know, so "setState was called" and "the
+        # state went in" are separate claims — only the second one arranges
+        # the branch.
+        out.append(f"    seedState(h, {_ts(seed)});")
     if overrides:
         out.append(f"    const rec = installFetchMock(ROUTES, {_ts(overrides)});")
     else:
@@ -887,6 +919,51 @@ export function applyDeclaredKeys(
     }
   }
 }
+
+/** Seed `branchContracts.seedableState` names, then READ THEM BACK.
+ *
+ * The lenient write above is correct for data keys: assigning a data-only
+ * field onto the ViewModel invents a property that then shadows the store.
+ * The cost is that an unknown name is dropped in silence — which for a
+ * declared internal name would mean the branch runs against whatever state
+ * it started in, asserting the right outcome for the wrong arrangement.
+ *
+ * So the seed does not trust the write. It asserts the value is readable
+ * afterwards, which is the same claim the branch depends on. That also
+ * removes any need to detect old harnesses: a harness whose setState
+ * predates seedable state drops the name, the read-back does not match,
+ * and it fails by name instead of passing for the wrong reason.
+ */
+export function seedState(
+  h: { vm: unknown; setState(state: Record<string, unknown>): void },
+  state: Record<string, unknown>
+): void {
+  h.setState(state);
+  const vm = h.vm as Record<string, unknown>;
+  for (const [name, want] of Object.entries(state)) {
+    // Read the ViewModel, NOT readField. readField falls back to the data
+    // store, and a harness hands the same object to both — so a name the
+    // ViewModel never received still reads back correctly from the store,
+    // and the check passes while nothing was arranged. (Measured: the
+    // first version of this helper did exactly that.)
+    if (!(name in vm)) {
+      throw new Error(
+        `seedableState '${name}' is declared but the view model has no ` +
+        "such field. Add the field, or remove the declaration from " +
+        "branchContracts.seedableState."
+      );
+    }
+    if (JSON.stringify(vm[name] ?? null) !== JSON.stringify(want ?? null)) {
+      throw new Error(
+        `seedableState '${name}' did not take: seeded ` +
+        `${JSON.stringify(want)}, the view model holds ` +
+        `${JSON.stringify(vm[name])}. This screen's harness predates ` +
+        "seedable state — its setState drops names it does not know. " +
+        "Teach the harness to write it."
+      );
+    }
+  }
+}
 '''
 
 
@@ -1072,7 +1149,7 @@ def _render_kotlin_branch(
 ) -> list[str]:
     when = branch.get("when") or {}
     then = branch.get("then") or {}
-    state = _arrange_state(contract, branch, conditions)
+    state, seed = _arrange_state(contract, branch, conditions)
     overrides = {k[len("api."):]: v for k, v in when.items() if k.startswith("api.")}
     arg_values = {k[len("arg."):]: v for k, v in when.items() if k.startswith("arg.")}
     args = [
@@ -1093,6 +1170,8 @@ def _render_kotlin_branch(
     )
     if state:
         out.append(f"      h.setState({_kt(state)})")
+    if seed:
+        out.append(f"      seedState(h, {_kt(seed)})")
     for fname in data_refs:
         out.append(f"      val ref_{fname} = h.readField({_kt_str(fname)})")
     call_args = ", ".join(args)
@@ -1197,6 +1276,45 @@ interface BranchHarness {
   fun expectTransition(destination: String)
   fun resolveString(key: String): String
   fun settle()
+}
+
+/** Seed `branchContracts.seedableState` names, then READ THEM BACK.
+ *
+ * The reflective setState skips a name it cannot find, which is right for
+ * data keys (they may live in the data class rather than on the VM) and
+ * wrong for a declared internal name: the branch would run against the
+ * state it started in and assert the right outcome for the wrong
+ * arrangement. Reading back turns "setState was called" into "the state is
+ * there", and makes a harness that predates seedable state fail by name
+ * rather than pass by accident.
+ */
+fun seedState(h: BranchHarness, state: Map<String, Any?>) {
+  h.setState(state)
+  for ((name, want) in state) {
+    // The ViewModel, not readField: readField falls back to the data class,
+    // which the harness fills from the same map, so a name the VM never
+    // received would still read back and the check would pass over an
+    // unarranged branch.
+    val field = generateSequence(h.vm.javaClass as Class<*>?) { it.superclass }
+      .mapNotNull { runCatching { it.getDeclaredField(name) }.getOrNull() }
+      .firstOrNull()
+      ?: error(
+        "seedableState '" + name + "' is declared but the view model has " +
+        "no such field. Add the field, or remove the declaration from " +
+        "branchContracts.seedableState."
+      )
+    field.isAccessible = true
+    val raw = field.get(h.vm)
+    val got = if (raw is MutableStateFlow<*>) raw.value else raw
+    if (got != want) {
+      error(
+        "seedableState '" + name + "' did not take: seeded " + want +
+        ", the view model holds " + got + ". This screen's harness " +
+        "predates seedable state — its setState drops names it does not " +
+        "know. Teach the harness to write it."
+      )
+    }
+  }
 }
 
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -1581,7 +1699,7 @@ def _render_swift_branch(
 ) -> list[str]:
     when = branch.get("when") or {}
     then = branch.get("then") or {}
-    state = _arrange_state(contract, branch, conditions)
+    state, seed = _arrange_state(contract, branch, conditions)
     overrides = {k[len("api."):]: v for k, v in when.items() if k.startswith("api.")}
     arg_values = {k[len("arg."):]: v for k, v in when.items() if k.startswith("arg.")}
     args = [
@@ -1602,6 +1720,8 @@ def _render_swift_branch(
     out.append(f"                      harnessFactory: create{pascal}BranchHarness) {{ h, rec in")
     if state:
         out.append(f"      h.setState({_swift(state)})")
+    if seed:
+        out.append(f"      seedState(h, {_swift(seed)})")
     for fname in data_refs:
         out.append(f"      let ref_{fname} = h.readField({_swift_str(fname)})")
     call_args = ", ".join(args)
@@ -1951,6 +2071,44 @@ private func asDouble(_ value: Any?) -> Double? {
   if let d = value as? Double { return d }
   if let i = value as? Int { return Double(i) }
   return nil
+}
+
+/// Seed `branchContracts.seedableState` names, then READ THEM BACK.
+///
+/// Swift has no reflective writes, so a harness always hand-writes
+/// `setState` — and a harness written before seedable state ignores names
+/// it does not know. Reading back is what turns that into a named failure
+/// instead of a branch that runs against the state it started in and
+/// asserts the right outcome for the wrong arrangement.
+///
+/// Compared with `partialMismatches` rather than a second comparison: the
+/// contract's own values are matched that way everywhere else, and one
+/// comparison that both sides agree on beats two that can drift.
+func seedState(_ h: BranchHarness, _ state: [String: Any]) {
+  h.setState(state)
+  for (name, want) in state {
+    // The ViewModel, not readField: readField falls back to the data
+    // object, which the harness fills from the same dictionary, so a name
+    // the VM never received would still read back and the check would pass
+    // over an unarranged branch.
+    let labels = Mirror(reflecting: h.vm).children.compactMap { $0.label }
+    if !labels.contains(name) {
+      XCTFail(
+        "seedableState '\(name)' is declared but the view model has no " +
+        "such property. Add the property, or remove the declaration from " +
+        "branchContracts.seedableState."
+      )
+      continue
+    }
+    let diff = partialMismatches(mirrorField(h.vm, name), want)
+    if !diff.isEmpty {
+      XCTFail(
+        "seedableState '\(name)' did not take: \(diff.joined(separator: "; ")). " +
+        "This screen's harness predates seedable state — its setState drops " +
+        "names it does not know. Teach the harness to write it."
+      )
+    }
+  }
 }
 
 /// Recursive partial match against a recorded JSON body. NSNull/nil

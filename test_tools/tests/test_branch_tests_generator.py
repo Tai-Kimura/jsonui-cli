@@ -825,3 +825,134 @@ class TestCollectionEmptinessAssert:
         ):
             assert render([]) == expected[0]
             assert render("load_error") == expected[1]
+
+
+SEEDABLE = {
+    "seedableState": {"canRead": "Bool?", "selectedIds": "[Int]"},
+    "methods": {"onConfirmTap": {"branches": [
+        {"when": {"state.canRead": False}, "then": {"api": "none"}},
+        {"when": {"state.canRead": True, "api.createOrder": "success"},
+         "then": {"data.screenState": "ok"}},
+    ]}},
+}
+
+
+class TestSeedableState:
+    """ViewModel-internal state a branch may arrange.
+
+    The arrange surface reached uiVariables only, so a branch gated on
+    private state — a stale-fetch guard, a selection id, an ordered
+    selection — could not be arranged from the contract. Three independent
+    cases in one consumer is what opened this; the reporter had ruled it
+    out until a third arrived.
+
+    The declaration is not only vocabulary. The harness applies data keys
+    leniently on purpose (a data-only field assigned onto the ViewModel
+    invents a property that then shadows the store), so the writer cannot
+    tell "should be on the VM" from "belongs to the store". These names
+    carry exactly that bit, which is what makes a strict write checkable.
+    """
+
+    def test_seeded_names_are_written_through_the_checked_path(self, tmp_path):
+        root = _project(tmp_path, SEEDABLE)
+        report = generate_branch_tests("checkout", root)
+        content = report.test_file.read_text(encoding="utf-8")
+        assert 'seedState(h, {"canRead": false})' in content
+        assert 'seedState(h, {"canRead": true})' in content
+
+    def test_seeded_names_do_not_go_through_setState(self, tmp_path):
+        # The split is the point: setState stays lenient for data keys, so
+        # routing an internal name through it would drop it in silence.
+        #
+        # Asserted on the emitted CALLS, not on a text split around the word
+        # "seedState": the runtime import names it unconditionally, so a
+        # split on the bare word matched the file header and the assertion
+        # held whatever the generator emitted. A red-check caught it.
+        root = _project(tmp_path, SEEDABLE)
+        content = generate_branch_tests(
+            "checkout", root).test_file.read_text(encoding="utf-8")
+        set_state_calls = [ln for ln in content.splitlines() if "h.setState(" in ln]
+        assert set_state_calls == []
+        seed_calls = [ln.strip() for ln in content.splitlines() if "seedState(h," in ln]
+        # one per branch, both naming the seeded field
+        assert len(seed_calls) == 2
+        assert all("canRead" in call for call in seed_calls)
+
+    def test_the_runtime_helper_is_imported(self, tmp_path):
+        root = _project(tmp_path, SEEDABLE)
+        content = generate_branch_tests(
+            "checkout", root).test_file.read_text(encoding="utf-8")
+        assert "seedState" in content.split("from \"./jsonui-branch-runtime\"")[0]
+
+    def test_baseline_and_witnesses_split_the_same_way(self, tmp_path):
+        bc = {
+            "seedableState": {"canRead": "Bool?"},
+            "conditions": {
+                "readable": {
+                    "description": "permission has resolved",
+                    "witness_true": {"state.canRead": True},
+                    "witness_false": {"state.canRead": False},
+                },
+            },
+            "methods": {"onConfirmTap": {
+                "baseline": {"isAgreed": True, "state.canRead": None},
+                "branches": [
+                    {"when": {"cond": "readable", "api.createOrder": "success"},
+                     "then": {"data.screenState": "ok"}},
+                    {"when": {"cond": "!readable"}, "then": {"api": "none"}},
+                ]}},
+        }
+        root = _project(tmp_path, bc)
+        content = generate_branch_tests(
+            "checkout", root).test_file.read_text(encoding="utf-8")
+        # baseline data key on the lenient path, baseline seed on the strict
+        # one, and the witness overriding the baseline seed (later wins).
+        assert 'h.setState({"isAgreed": true})' in content
+        assert 'seedState(h, {"canRead": true})' in content
+        assert 'seedState(h, {"canRead": false})' in content
+
+    def test_a_spec_without_seedable_state_is_unchanged(self, tmp_path):
+        # (d): the section is opt-in. Nothing about an existing spec moves.
+        root = _project(tmp_path, BASIC)
+        content = generate_branch_tests(
+            "checkout", root).test_file.read_text(encoding="utf-8")
+        assert "seedState(h," not in content
+
+    def test_android_and_ios_emit_the_same_seed(self, tmp_path):
+        # Parity: a contract that arranges internal state has to arrange it
+        # on every platform that renders the contract, or the same branch
+        # means different things per driver.
+        root = _project(tmp_path, SEEDABLE)
+        android = generate_branch_tests(
+            "checkout", root, platform="android", package="com.example.checkout",
+            out_dir="app/src/test/java", harness_dir="app/src/test/java",
+        ).test_file.read_text(encoding="utf-8")
+        ios = generate_branch_tests(
+            "checkout", root, platform="ios", module="CheckoutApp",
+        ).test_file.read_text(encoding="utf-8")
+        assert 'seedState(h, mapOf<String, Any?>("canRead" to false))' in android
+        assert 'seedState(h, ["canRead": false])' in ios
+
+    def test_the_seed_reads_the_view_model_not_read_field(self, tmp_path):
+        """The decision an execution arm caught, pinned here.
+
+        The first version read the value back through `readField`, which
+        falls back to the data store — and a harness hands the same object
+        to both, so a name the ViewModel never received still read back
+        correctly and the check passed over a branch that was never
+        arranged. Measured with vitest on a generated project: the stale
+        arm went green. Reading the ViewModel directly also separates "no
+        such field" from "the harness did not write it", which are
+        different repairs.
+        """
+        root = _project(tmp_path, SEEDABLE)
+        runtime = generate_branch_tests(
+            "checkout", root).runtime_file.read_text(encoding="utf-8")
+        body = runtime.split("export function seedState")[1].split("\n}\n")[0]
+        assert "h.vm" in body
+        # the CALL, not the word: the comment above it names readField as
+        # the thing deliberately not used
+        assert "readField(" not in body
+        # two causes, two repairs, each named
+        assert "has no" in body and "such field" in body
+        assert "did not take" in body
