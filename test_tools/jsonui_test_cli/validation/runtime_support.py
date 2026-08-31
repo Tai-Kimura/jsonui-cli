@@ -38,7 +38,19 @@ DRIVER_PACKAGES = {"web": "jsonui-test-runner-web"}
 
 
 def parse_version(text: str) -> tuple[int, ...]:
-    """`1.8.4` -> (1, 8, 4). Trailing pre-release text is dropped."""
+    """`1.8.4` -> (1, 8, 4). Trailing pre-release text is dropped.
+
+    So `1.8.4-beta.1` satisfies a requirement of `1.8.4`, which is the
+    intent: ordering pre-releases strictly below the release they lead to
+    would red every project validating against a beta, and shipping a beta
+    to a lane that then cannot run its tests closes the only path by which
+    a driver gets exercised before release.
+
+    Stated because the behaviour was measured and asked about rather than
+    designed — the original line described what the simplest parse does.
+    A reader who finds a limit with no reason attached supplies one, and
+    the reason they supply is usually that it was an oversight.
+    """
     parts = re.findall(r"\d+", text.split("+")[0].split("-")[0])
     return tuple(int(p) for p in parts[:3]) or (0,)
 
