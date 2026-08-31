@@ -723,8 +723,102 @@ def _sibling_branch_tests(report) -> list[str]:
     return sorted(names)
 
 
+def _branch_check_summary(reports: list, scanned: int) -> int:
+    """Print the check verdict for `generate branch-tests --check`.
+
+    Findings are folded by path, not by screen. The runtime is one file the
+    whole output directory shares, so a release that changes its shape
+    drifts every screen at once — listing it per screen reports nine
+    findings for one stale file and puts the reader to work nine times.
+    """
+    drifted: dict[Path, None] = {}
+    absent: dict[Path, None] = {}
+    matched: dict[Path, None] = {}
+    stale_screens = 0
+    for report in reports:
+        for path in report.drifted:
+            drifted[path] = None
+        for path in report.absent:
+            absent[path] = None
+        for path in report.matched:
+            matched[path] = None
+        if report.drifted or report.absent:
+            stale_screens += 1
+
+    for path in absent:
+        print(f"  [ABSENT]  {path} (never generated)")
+    for path in drifted:
+        print(f"  [DRIFT]   {path}")
+    for report in reports:
+        if report.harness_absent:
+            # Consumer-owned, so never compared and never a failure — but a
+            # check that said nothing would call a project up to date whose
+            # generated tests cannot compile.
+            print(f"  [WARN]    {report.harness_file} — harness missing; "
+                  "the generated test imports it (run without --check to "
+                  "emit a skeleton)")
+
+    screens = len(reports)
+    print(f"\nbranch tests: {screens} screen(s) declaring branchContracts "
+          f"of {scanned} spec(s) scanned — {screens - stale_screens} up to "
+          f"date, {stale_screens} stale "
+          f"({len(matched)} file(s) current, {len(drifted)} drifted, "
+          f"{len(absent)} absent)")
+    if drifted or absent:
+        print("Regenerate with the same command without --check.")
+        return 1
+    return 0
+
+
 def cmd_generate_branch_tests(args):
     """Handle 'generate branch-tests' — vitest tests from branchContracts."""
+    from .branch_tests import (
+        BranchTestGenerationError, discover_branch_screens,
+        generate_branch_tests,
+    )
+
+    check = getattr(args, "check", False)
+    screens = [args.screen] if args.screen else []
+    scanned_count = len(screens)
+    if not screens:
+        if args.spec:
+            print("Error: --spec names one file, so a screen name is required "
+                  "(omit both to scan every spec in spec_directory)",
+                  file=sys.stderr)
+            return 1
+        try:
+            screens, scanned = discover_branch_screens(Path.cwd())
+        except BranchTestGenerationError as e:
+            print(f"Error: {e}", file=sys.stderr)
+            return 1
+        scanned_count = len(scanned)
+        if not screens:
+            # Not a green: a scan that reaches nothing and a project with
+            # nothing to generate produce the same "0 drifted", and this is
+            # the form a check silently stops covering anything.
+            print(f"Error: no screen declares branchContracts.methods "
+                  f"({scanned_count} spec(s) scanned) — nothing to "
+                  f"{'check' if check else 'generate'}", file=sys.stderr)
+            return 1
+
+    reports = []
+    for screen in screens:
+        rc, report = _generate_one_branch_test(args, screen)
+        if rc:
+            return rc
+        reports.append(report)
+
+    if check:
+        return _branch_check_summary(reports, scanned_count)
+    for report in reports:
+        # The "regenerate the siblings too" note answers a question that
+        # only arises when one screen was regenerated on its own.
+        _print_branch_generation(report, show_siblings=len(reports) == 1)
+    return 0
+
+
+def _generate_one_branch_test(args, screen: str):
+    """Generate (or check) one screen. Returns (exit_code, report)."""
     from .branch_tests import BranchTestGenerationError, generate_branch_tests
 
     try:
@@ -752,7 +846,7 @@ def cmd_generate_branch_tests(args):
         mock_config, _ = _load_mock_config(None)
         mocks_dir = args.mocks_dir or mock_config.get("mockDir") or "tests/mocks"
         report = generate_branch_tests(
-            args.screen,
+            screen,
             project_root=Path.cwd(),
             spec_path=args.spec,
             out_dir=out_dir,
@@ -761,17 +855,21 @@ def cmd_generate_branch_tests(args):
             platform=args.platform,
             package=args.package,
             module=args.module,
+            check=getattr(args, "check", False),
         )
     except BranchTestGenerationError as e:
         print(f"Error: {e}", file=sys.stderr)
-        return 1
+        return 1, None
+    return 0, report
 
+
+def _print_branch_generation(report, show_siblings: bool = True) -> None:
     print(f"Generated branch tests for '{report.screen}':")
     print(f"  {report.test_file}  "
           f"({report.declared_branches} declared branch(es), "
           f"{report.note_branches} note-only listed as comments)")
     print(f"  {report.runtime_file}  (shared runtime)")
-    siblings = _sibling_branch_tests(report)
+    siblings = _sibling_branch_tests(report) if show_siblings else []
     if siblings:
         # The runtime is one file for the whole directory, so a release that
         # changes its shape leaves every screen that was not regenerated
@@ -787,7 +885,6 @@ def cmd_generate_branch_tests(args):
     else:
         print(f"  {report.harness_file}  (existing harness kept)")
     print(f"  routes: {', '.join(report.routes) or '(none)'}")
-    return 0
 
 
 def cmd_generate_description(args):
@@ -1518,8 +1615,17 @@ def main():
         help="Generate web (vitest) unit tests from the screen spec's branchContracts"
     )
     gen_branch_parser.add_argument(
-        "screen",
-        help="Screen name in snake_case (resolves <spec_directory>/<screen>.spec.json)"
+        "screen", nargs="?",
+        help="Screen name in snake_case (resolves <spec_directory>/<screen>"
+             ".spec.json). Omit to cover every spec in spec_directory that "
+             "declares branchContracts — the unit of regeneration is the "
+             "project, because the runtime is one shared file"
+    )
+    gen_branch_parser.add_argument(
+        "--check", action="store_true",
+        help="Report drift against the @generated files on disk and exit "
+             "non-zero; write nothing. The embedded scenario bodies are "
+             "copies of the mock files, and no other gate compares them"
     )
     gen_branch_parser.add_argument(
         "--spec",

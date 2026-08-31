@@ -49,6 +49,21 @@ def load_project_config(project_root: Path) -> dict:
     return {}
 
 
+def _spec_files(spec_path: Path) -> list[Path]:
+    """Every spec under *spec_path*, at any depth.
+
+    Splitting a parent spec puts its screens in `<spec_directory>/<parent>/`,
+    which a non-recursive lookup cannot see. `@generated` files may not be
+    hand-edited, so a screen the generator cannot resolve is a screen whose
+    tests can never be updated again.
+    """
+    return sorted(spec_path.rglob("*.spec.json"))
+
+
+def _screen_of(path: Path) -> str:
+    return path.name[: -len(".spec.json")]
+
+
 def resolve_spec_path(screen: str, project_root: Path, explicit: str | None) -> Path:
     if explicit:
         return (project_root / explicit).resolve() if not Path(explicit).is_absolute() else Path(explicit)
@@ -58,7 +73,69 @@ def resolve_spec_path(screen: str, project_root: Path, explicit: str | None) -> 
         raise BranchTestGenerationError(
             "spec_directory is not declared in jui.config.json and --spec was not given"
         )
-    return (project_root / spec_dir / f"{screen}.spec.json").resolve()
+    spec_path = (project_root / spec_dir).resolve()
+    flat = spec_path / f"{screen}.spec.json"
+    if flat.exists():
+        return flat
+    # Same rule as the canonical `screen_id_for_path`: the basename is the
+    # identity and the directories above it are not part of it.
+    matches = [p for p in _spec_files(spec_path) if _screen_of(p) == screen]
+    if len(matches) == 1:
+        return matches[0]
+    if len(matches) > 1:
+        # Choosing by sort order is how a route silently collapses onto one
+        # file; two screens with one id is the project's to resolve.
+        listed = ", ".join(str(p.relative_to(spec_path)) for p in matches)
+        raise BranchTestGenerationError(
+            f"'{screen}' matches {len(matches)} specs ({listed}) — the "
+            "basename is the screen id, so these are the same screen twice; "
+            "rename one or pass --spec"
+        )
+    return flat
+
+
+def discover_branch_screens(
+    project_root: Path, spec_dir: str | None = None,
+) -> tuple[list[str], list[str]]:
+    """``(screens declaring branchContracts.methods, every spec scanned)``.
+
+    Both halves are returned because the caller has to name a denominator.
+    "0 drifted" over an empty scan and "0 drifted" over nine screens are the
+    same sentence and opposite facts, and the unit of regeneration here is
+    the project rather than the screen — the runtime is one file the whole
+    directory shares, so a release that changes its shape leaves every
+    screen that was not regenerated pointing at the old one.
+    """
+    if spec_dir is None:
+        config = load_project_config(project_root)
+        spec_dir = config.get("spec_directory")
+    if not spec_dir:
+        raise BranchTestGenerationError(
+            "spec_directory is not declared in jui.config.json — cannot "
+            "enumerate screens (name a screen explicitly, or declare it)"
+        )
+    spec_path = (project_root / spec_dir).resolve()
+    if not spec_path.is_dir():
+        raise BranchTestGenerationError(
+            f"spec directory not found: {spec_path}"
+        )
+    scanned: list[str] = []
+    declaring: list[str] = []
+    for path in _spec_files(spec_path):
+        screen = _screen_of(path)
+        scanned.append(screen)
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                spec = json.load(f)
+        except (OSError, json.JSONDecodeError):
+            # Unreadable is not "declares nothing": leaving it out of the
+            # scanned list too would shrink the denominator to match the
+            # numerator and report full coverage of what it could parse.
+            continue
+        bc = spec.get("branchContracts")
+        if isinstance(bc, dict) and bc.get("methods"):
+            declaring.append(screen)
+    return declaring, scanned
 
 
 def collect_endpoint_ops(spec: dict) -> dict[str, dict]:
