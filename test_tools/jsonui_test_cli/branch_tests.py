@@ -2094,7 +2094,7 @@ func seedState(_ h: BranchHarness, _ state: [String: Any]) {
     let labels = Mirror(reflecting: h.vm).children.compactMap { $0.label }
     if !labels.contains(name) {
       XCTFail(
-        "seedableState '\(name)' is declared but the view model has no " +
+        "seedableState '\\(name)' is declared but the view model has no " +
         "such property. Add the property, or remove the declaration from " +
         "branchContracts.seedableState."
       )
@@ -2103,7 +2103,7 @@ func seedState(_ h: BranchHarness, _ state: [String: Any]) {
     let diff = partialMismatches(mirrorField(h.vm, name), want)
     if !diff.isEmpty {
       XCTFail(
-        "seedableState '\(name)' did not take: \(diff.joined(separator: "; ")). " +
+        "seedableState '\\(name)' did not take: \\(diff.joined(separator: "; ")). " +
         "This screen's harness predates seedable state — its setState drops " +
         "names it does not know. Teach the harness to write it."
       )

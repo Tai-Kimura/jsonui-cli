@@ -157,3 +157,40 @@ class TestTheRemedyIsCheckedBeforeItIsPrinted:
         edited = [b for b in report.stale_generated
                   if any("id" in v for v in b.violations)]
         assert edited and edited[0].regenerating_helps is True
+
+
+class TestGeneratorSourcesAreWarningFree:
+    """No module emits a SyntaxWarning when imported.
+
+    A Swift interpolation (`\\(name)`) written into a non-raw Python string
+    is an unknown escape: CPython keeps it verbatim today, so the emitted
+    Swift is correct, and warns that a future version will make it a
+    SyntaxError. The cost before then is not cosmetic either — the MCP
+    tool surfaces the warning in its `errors` field, so a *successful*
+    call comes back with errors non-empty and a real one has somewhere to
+    hide.
+
+    Compiled here rather than grepped: the warning is the compiler's
+    verdict, and a grep for the pattern would have to re-implement "is
+    this escape known", which is the thing being checked. Two of the three
+    occurrences shared a line, and `-W once` deduplicated them — an
+    enumeration that reports "1" for two lines is why this asserts on the
+    whole set instead of a count from a single run.
+    """
+
+    def test_no_module_warns_on_compile(self):
+        import pathlib
+        import warnings
+
+        root = pathlib.Path(__file__).resolve().parents[1] / "jsonui_test_cli"
+        offenders = []
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            for path in sorted(root.rglob("*.py")):
+                if "__pycache__" in str(path):
+                    continue
+                compile(path.read_text(encoding="utf-8"), str(path), "exec")
+            for entry in caught:
+                if issubclass(entry.category, SyntaxWarning):
+                    offenders.append(f"{entry.filename}:{entry.lineno}: {entry.message}")
+        assert offenders == [], "\n".join(offenders)
