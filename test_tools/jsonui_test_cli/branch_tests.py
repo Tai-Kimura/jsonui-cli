@@ -1349,7 +1349,7 @@ export function resolveString(
       `resolveString(${JSON.stringify(key)}) returned ` +
       `${JSON.stringify(resolved)}, which is a strings KEY, not the text ` +
       "it names. Bindings are not resolved when a component renders, so " +
-      "the field holds resolved text — return the string manager's lookup "
+      "the field holds resolved text — return the string manager's lookup " +
       "of the full key, not the key itself."
     );
   }

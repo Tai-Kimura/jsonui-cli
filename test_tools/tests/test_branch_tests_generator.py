@@ -1170,3 +1170,49 @@ class TestEmittedRuntimesDoNotQuoteResolverCalls:
         # the thing that was wrong.
         leaked = [l for l in text.splitlines() if l.strip().startswith("# ")]
         assert leaked == [], "\n".join(leaked)
+
+
+class TestEmittedRuntimesConcatenateTheirStrings:
+    """Two string literals on consecutive lines need an operator between them.
+
+    Rewording the web diagnostic dropped the trailing `+`, so the emitted
+    TypeScript held two adjacent string literals inside a call:
+
+        "…the field holds resolved text — return the string manager's lookup "
+        "of the full key, not the key itself."
+
+    Python concatenates adjacent literals, so the generator's own source was
+    fine and every string-comparison test agreed with it. TypeScript does
+    not: `tsc` reported TS1005, twelve test files failed to collect, the
+    unit suite went 130 → 64, and `next build` stopped type-checking.
+
+    That fix was for a lint failure in the SAME diagnostic, made minutes
+    after writing "the only tool that can say whether output is valid in its
+    own language is a compiler". This is the property standing in for the
+    compiler until the CI step exists — narrower, but it covers exactly the
+    way Python's concatenation rule leaks into a language that has none.
+    """
+
+    def _runtime(self, tmp_path, platform, **kw):
+        root = _project(tmp_path / platform, BASIC)
+        return generate_branch_tests(
+            "checkout", root, platform=platform, **kw
+        ).runtime_file.read_text(encoding="utf-8")
+
+    @pytest.mark.parametrize("platform,kw", [
+        ("web", {}), ("android", {"package": "com.example.x"}),
+        ("ios", {"module": "app"}),
+    ])
+    def test_no_two_string_literals_sit_adjacent_without_an_operator(
+            self, tmp_path, platform, kw):
+        lines = self._runtime(tmp_path, platform, **kw).splitlines()
+        offenders = []
+        for n, (a, b) in enumerate(zip(lines, lines[1:]), 1):
+            first, second = a.strip(), b.strip()
+            if first.lstrip().startswith(("*", "//", "/*")):
+                continue
+            # a line that ENDS a literal, followed by one that OPENS a
+            # literal, with nothing joining them
+            if first.endswith('"') and second.startswith('"'):
+                offenders.append(f"{platform} line {n}: {first}\n    then: {second}")
+        assert offenders == [], "\n".join(offenders)
