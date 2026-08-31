@@ -304,6 +304,15 @@ class SpecValidator:
         if "relatedFiles" in data:
             self._validate_related_files(data["relatedFiles"], result)
 
+        # `metadata.layoutFile` names the Layout JSON this spec documents,
+        # and was read for its CONTENTS without anything asking whether it
+        # was there. `jui verify` does catch an unresolvable one, but only
+        # under `--fail-on-diff`, and this gate is the one a spec author
+        # runs.
+        self._check_layout_ref(
+            (data.get("metadata") or {}).get("layoutFile"),
+            "metadata.layoutFile", result, what="metadata.layoutFile")
+
         # Cross-reference validation
         self._validate_cross_references(data, result)
 
@@ -694,6 +703,13 @@ class SpecValidator:
         Layout JSON / runtime level.
         """
         self._validate_required_fields(collection, ["id"], path, result)
+
+        # Each entry names a cell Layout JSON. The shape check below only
+        # asks that the array is non-empty, so a name that resolves to
+        # nothing counted as a satisfied declaration.
+        for index, ref in enumerate(collection.get("cellClasses") or []):
+            self._check_layout_ref(ref, f"{path}.cellClasses[{index}]",
+                                   result, what="cellClasses entry")
 
         has_single_cell = "cell" in collection and collection.get("cell")
         has_cell_classes = (
@@ -2607,8 +2623,60 @@ class SpecValidator:
         self._api_index_cache[key] = context
         return context
 
-    def _related_file_roots(self):
-        """Directories a `relatedFiles[].path` may be written relative to.
+    def _declared_directory(self, key: str, default: str):
+        """A directory the project declares, from the config that owns the spec.
+
+        The nearest `jui.config.json` above the spec, not the one nearest
+        the working directory — a run started from anywhere else would
+        otherwise resolve a different project's layouts.
+        """
+        if not self._spec_file_path:
+            return None
+        for parent in self._spec_file_path.parents:
+            config = parent / "jui.config.json"
+            if not config.is_file():
+                continue
+            try:
+                declared = json.loads(config.read_text(encoding="utf-8"))
+            except (OSError, ValueError):
+                return None
+            if not isinstance(declared, dict):
+                return None
+            return parent / declared.get(key, default)
+        return None
+
+    def _declared_path_roots(self, kind: str | None = None):
+        """The bases a declaration that names a file may be written from.
+
+        Three, in order, and a path only counts as missing when it is under
+        none of them:
+
+        1. **the declared directory for its KIND**, when the declaration has
+           one — `layoutFile` and `cellClasses` name layouts, so
+           `layouts_directory`. `relatedFiles[].path` has no kind (a layout,
+           a view model and a model all share the key), so it skips this
+           one and starts at 2.
+        2. **the directory the declaration is written in.**
+        3. **every declared boundary above it, up to the project.**
+
+        One rule with a kind-dependent first step, rather than two rules —
+        the same question was asked twice within a week and the answers had
+        drifted apart by a candidate.
+        """
+        if not self._spec_file_path:
+            return []
+        roots = []
+        if kind == "layout":
+            declared = self._declared_directory(
+                "layouts_directory", "docs/screens/layouts")
+            if declared is not None:
+                roots.append(declared)
+        roots.append(self._spec_file_path.parent)
+        roots.extend(self._boundary_roots())
+        return roots
+
+    def _boundary_roots(self):
+        """Step 3: declared boundaries above the spec, up to the project.
 
         EVERY declared boundary above the spec, not the nearest one. The
         first version stopped at the first ancestor holding a
@@ -2634,9 +2702,7 @@ class SpecValidator:
         these, because one visibly wrong finding is what stops people acting
         on the rest — and this one shipped as 35 of them.
         """
-        if not self._spec_file_path:
-            return []
-        roots = [self._spec_file_path.parent]
+        roots = []
         # Bounded, and the bound is the project. Collecting every marker
         # above the spec had no ceiling, so on a machine where this
         # repository sits inside another checkout, the OUTER checkout's
@@ -2661,9 +2727,39 @@ class SpecValidator:
                 break
         return roots
 
+    def _check_layout_ref(self, value, path: str, result, *, what: str):
+        """Report a layout name that resolves under none of its bases.
+
+        `layoutFile` and `cellClasses[]` name a layout WITHOUT the `.json`
+        suffix, so the suffix is added here rather than expected from the
+        author — every one of the 30 references a consumer counted is
+        written that way, and demanding the other spelling would report
+        them all.
+        """
+        if not isinstance(value, str) or not value.strip():
+            return                      # a shape problem, checked elsewhere
+        name = value.strip()
+        if not name.endswith(".json"):
+            name += ".json"
+        roots = self._declared_path_roots("layout")
+        if not roots or any((root / name).exists() for root in roots):
+            return
+        result.warnings.append(SpecValidationMessage(
+            path=path,
+            message=(
+                f"{what} names a layout that does not exist: {value} "
+                f"(looked for {name} under "
+                f"{', '.join(str(r) for r in roots)}). A warning for now — "
+                "this becomes an error once projects have cleared their "
+                "existing counts, so it is worth fixing rather than living "
+                "with."
+            ),
+            level="warning",
+        ))
+
     def _validate_related_files(self, files: list, result: SpecValidationResult):
         """Validate relatedFiles section."""
-        roots = self._related_file_roots()
+        roots = self._declared_path_roots()
         for i, file_info in enumerate(files):
             if not self._validate_required_fields(
                 file_info, ["type", "path"],

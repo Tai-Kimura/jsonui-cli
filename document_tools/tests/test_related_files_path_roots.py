@@ -66,8 +66,12 @@ def repo(tmp_path):
 
     specs = tmp_path / "docs" / "user" / "screens" / "json"
     specs.mkdir(parents=True)
+    # The app config declares where its layouts live, as the real one does.
+    # Without it `layoutFile` resolves against the default path, which is
+    # not where this fixture puts the layout — and every assertion below
+    # would carry an unrelated warning.
     (tmp_path / "docs" / "user" / "jui.config.json").write_text(
-        "{}", encoding="utf-8")
+        json.dumps({"layouts_directory": "screens/layouts"}), encoding="utf-8")
 
     layouts = tmp_path / "docs" / "user" / "screens" / "layouts"
     layouts.mkdir(parents=True)
@@ -203,7 +207,7 @@ class TestTheAscentStopsAtTheProject:
         outer, repo, specs = self._tree(tmp_path)
         v = SpecValidator()
         v._spec_file_path = specs / "s.spec.json"
-        roots = v._related_file_roots()
+        roots = v._declared_path_roots()
         assert outer not in roots, (
             "the enclosing checkout is not part of this project")
         assert repo in roots
@@ -215,5 +219,5 @@ class TestTheAscentStopsAtTheProject:
         outer, repo, specs = self._tree(tmp_path)
         v = SpecValidator()
         v._spec_file_path = specs / "s.spec.json"
-        roots = v._related_file_roots()
+        roots = v._declared_path_roots()
         assert any((r / "inside.ts").exists() for r in roots)

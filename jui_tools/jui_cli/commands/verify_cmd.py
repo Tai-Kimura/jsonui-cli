@@ -201,9 +201,19 @@ def cmd_verify(args: argparse.Namespace) -> int:
     report = render_report(results, detail=args.detail)
     print(report)
 
-    if skipped_external:
+    # Computed before the skip list is printed, so a name reported below as
+    # missing is not also listed above as an ordinary external skip. One
+    # consumer read the skip list as recognition — "it is in the list, so
+    # the tool knows about it" — and stopped there. Two lines about one
+    # name, saying opposite things, is the shape a reader resolves by
+    # believing the first.
+    coverage = _check_spec_coverage(config_mgr, config, spec_dir, layouts_root)
+    require_coverage = bool((config.get("verify") or {}).get("requireSpecPerScreen"))
+    unresolved = {f"{name}.json" for name in coverage.missing_layouts}
+    external = [n for n in skipped_external if n.split(" -> ")[-1] not in unresolved]
+    if external:
         print("\n**Skipped (layout authored externally):**")
-        for name in skipped_external:
+        for name in external:
             print(f"- {name}")
 
     if missing_layouts:
@@ -253,8 +263,6 @@ def cmd_verify(args: argparse.Namespace) -> int:
     # actual, validate checks the specs on disk. A screen shipped without a
     # spec is absent from all three inputs, so nothing was ever in a
     # position to notice it — one went five days unremarked.
-    coverage = _check_spec_coverage(config_mgr, config, spec_dir, layouts_root)
-    require_coverage = bool((config.get("verify") or {}).get("requireSpecPerScreen"))
     if coverage.missing_specs:
         print(
             f"\n**{'ERROR' if require_coverage else 'WARNING'}: "
