@@ -257,9 +257,15 @@ class TestTheCheckReadsTheDeclaredDirectories:
         (tmp_path / "spec/layouts").mkdir(parents=True)
         (tmp_path / "spec/json").mkdir(parents=True)
         (tmp_path / "spec/layouts/home.json").write_text("{}", encoding="utf-8")
+        # The `mock` section matters: `_load_mock_config` returns
+        # `data.get("mock", data)`, so a config WITHOUT one falls back to
+        # the whole document and the bug does not reproduce. The first
+        # version of this fixture had no `mock` key and the mutation stayed
+        # green — the test was measuring the fallback, not the wiring.
         (tmp_path / "jui.config.json").write_text(json.dumps(
             {"layouts_directory": "spec/layouts",
-             "spec_directory": "spec/json"}), encoding="utf-8")
+             "spec_directory": "spec/json",
+             "mock": {"mockDir": "tests/mocks"}}), encoding="utf-8")
         (tmp_path / "tests").mkdir()
         return tmp_path
 
