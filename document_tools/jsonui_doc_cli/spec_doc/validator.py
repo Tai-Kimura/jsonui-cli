@@ -2610,20 +2610,37 @@ class SpecValidator:
     def _related_file_roots(self):
         """Directories a `relatedFiles[].path` may be written relative to.
 
-        The repository root — the nearest ancestor holding a
-        `jui.config.json` — and the spec's own directory. Both spellings are
-        in the corpus and this check is not the place to choose between
-        them; a wrong finding here costs more than a missed one, because the
-        first thing that stops people acting on a check is one they can see
-        is wrong.
+        EVERY declared boundary above the spec, not the nearest one. The
+        first version stopped at the first ancestor holding a
+        `jui.config.json`, which in a multi-app repository is the APP's
+        config — and reported 35 warnings on a project whose 26 unique paths
+        all resolve, because the repository root above it was never tried.
+
+        The reporter's own evidence for the shape of the bug: one warning
+        named a class under an application tree that is a SIBLING of the
+        docs tree at the repository root — a path that cannot exist under
+        either candidate the message listed. **The check was searching only
+        places the file could not be and concluding it was nowhere.**
+
+        Their layout is why the repository root cannot be derived from the
+        app: the docs tree lives in the parent repository while the
+        application trees are submodules beside it, so a spec has to name
+        files in both — and the only base that spells both without `../`
+        chains is the repository root. Collecting every marker
+        (`jui.config.json` or `.git`, file or directory, so a submodule
+        boundary counts) reaches it without this code knowing the topology.
+
+        Generous by design. A finding needs the path to be under NONE of
+        these, because one visibly wrong finding is what stops people acting
+        on the rest — and this one shipped as 35 of them.
         """
         if not self._spec_file_path:
             return []
         roots = [self._spec_file_path.parent]
         for parent in self._spec_file_path.parents:
-            if (parent / "jui.config.json").is_file():
+            if ((parent / "jui.config.json").is_file()
+                    or (parent / ".git").exists()):
                 roots.append(parent)
-                break
         return roots
 
     def _validate_related_files(self, files: list, result: SpecValidationResult):
