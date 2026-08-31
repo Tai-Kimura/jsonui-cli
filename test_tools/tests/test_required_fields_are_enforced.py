@@ -123,6 +123,30 @@ def test_every_schema_with_a_required_list_is_covered():
     )
 
 
+def test_a_flow_test_does_not_have_to_declare_a_source(tmp_path):
+    """`source` is a screen-test key, and the requirement stops there.
+
+    A flow crosses several screens, so a single `source.layout` has no
+    referent — its optional `sources` (plural) is the shape for naming more
+    than one. The flow schema has no `source` property at all.
+
+    Pinned rather than left to the derivation above, because that test only
+    checks the constant and the schema AGREE. Adding `source` to the flow
+    schema's `required` would change both and stay green, while breaking
+    every flow test in every project — measured on one: 14 of 14 flows
+    declare no `source`, and none of them declares `sources` either. The
+    scope of a new requirement is a claim in its own right, and a consumer
+    had to ask about this one rather than read it.
+    """
+    doc = {k: v for k, v in VALID["flow"].items() if k != "sources"}
+    assert "source" not in doc
+
+    result = _validate(tmp_path, doc)
+
+    assert result.is_valid, [m.message for m in result.errors]
+    assert not any("source" in m.message for m in result.errors)
+
+
 def test_the_missing_source_error_names_its_runtime_consequence(tmp_path):
     """`source.layout` is not only metadata — it is the readiness input.
 
