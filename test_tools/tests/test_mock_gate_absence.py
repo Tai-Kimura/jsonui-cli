@@ -239,9 +239,14 @@ class MockGateAbsenceTests(unittest.TestCase):
         self.assertEqual(rc, 0, out)
 
     def test_a_configured_project_says_nothing(self):
+        # "Nothing" means steady state. A hand-written mock's route now gets
+        # a generated counterpart too (the overlay model — 1.7.22), so the
+        # FIRST run after adding one legitimately reports a regeneration;
+        # quiet is the property of the run after that.
         swagger = self.add_swagger()
         self.add_mocks(1)
         self.write_config({"swagger": [str(swagger)], "mockDir": "tests/mocks"})
+        self.validate()
         _rc, out = self.validate()
         self.assertNotIn("mock file(s)", out)
 

@@ -266,7 +266,14 @@ def _empty_variant(body: dict):
 @dataclass
 class GenerateReport:
     created: list[str]     # written into generated/
-    skipped: list[str]     # a hand-written mock already serves that route
+    #: hand-written mocks that overlay a generated route. The route is still
+    #: generated — the generated side supplies the routine scenarios the
+    #: hand-written file deliberately omits (the serve-side overlay model).
+    #: Until 1.7.21 this was `skipped` and the route was NOT generated; that
+    #: branch only ever ran on a fresh clone, because the detection feeding
+    #: it was shadowed by the previous run's generated tree — two defects
+    #: cancelling into the correct behaviour.
+    overlaid: list[str]
     warnings: list[str]
     #: routes the project's path scope excludes — not scaffolded
     out_of_scope: list[str] = field(default_factory=list)
@@ -314,16 +321,25 @@ def generate(
         return _check(swagger_paths, mock_dir, strict=strict, scope=scope)
 
     created: list[str] = []
-    skipped: list[str] = []
+    overlaid: list[str] = []
     warnings: list[str] = []
     out_of_scope: list[str] = []
     # Hand-written mocks are recognised by the route they serve, not by
-    # filename, so a project's own naming keeps working and generation never
-    # produces a duplicate of one.
-    hand_written = {
-        key: rel for key, rel in index_existing(mock_dir).items()
-        if not is_generated(rel)
-    }
+    # filename, so a project's own naming keeps working. Collected directly,
+    # skipping generated/ file by file: `index_existing` collapses to one
+    # entry per route LAST-WINS, and `generated/...` sorts after most tag
+    # directories, so the previous run's generated copy shadowed the
+    # hand-written entry out of the index before the filter could keep it —
+    # detection read 0 hand-written mocks on every run but the first.
+    hand_written: dict = {}
+    if mock_dir.exists():
+        for hw_path in sorted(mock_dir.rglob("*.mock.json")):
+            rel = str(hw_path.relative_to(mock_dir))
+            if is_generated(rel):
+                continue
+            hw_key = read_route(hw_path)
+            if hw_key is not None:
+                hand_written[hw_key] = rel
 
     gen_root = mock_dir / GENERATED_DIR
     _clear_generated(gen_root)
@@ -351,8 +367,14 @@ def generate(
                 )
             covered = hand_written.get(route_key(op.method, op.path))
             if covered is not None:
-                skipped.append(covered)
-                continue
+                # Overlaid, not skipped: the generated side is still written.
+                # It supplies the routine scenarios (`empty` / `error_*` /
+                # the current `default` body) that a thin hand-written
+                # overlay deliberately omits — serve reads generated first
+                # and lets the hand-written file win per scenario name.
+                # Suppressing generation here left the route with only the
+                # scenarios its tests drive, which contradicts the model.
+                overlaid.append(covered)
             rel = f"{GENERATED_DIR}/{mock_relpath(op)}"
             target = mock_dir / rel
             definition = build_mock_definition(doc, op)
@@ -363,7 +385,7 @@ def generate(
             created.append(rel)
 
     schemas = _place_editor_schema_quietly(mock_dir, warnings)
-    return GenerateReport(created=created, skipped=skipped, warnings=warnings,
+    return GenerateReport(created=created, overlaid=overlaid, warnings=warnings,
                           out_of_scope=sorted(out_of_scope), schemas=schemas)
 
 

@@ -1014,7 +1014,7 @@ def cmd_mock_generate(args):
         print(f"  [WARN] {w}")
     print(f"\nGenerated {len(report.created)} mock file(s) into "
           f"{mock_dir}/generated/ (rewritten each run — safe to gitignore); "
-          f"{len(report.skipped)} route(s) already served by a hand-written mock.")
+          f"{len(report.overlaid)} route(s) overlaid by hand-written mock(s).")
     if report.out_of_scope:
         print(f"{len(report.out_of_scope)} endpoint(s) outside this project's "
               "API paths were not scaffolded.")

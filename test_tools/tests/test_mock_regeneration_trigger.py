@@ -1,15 +1,17 @@
 """Regression: jui-mock-regeneration-trigger-is-swagger-mtime-only.
 
-`generated/` is a pure function of the swagger AND of which operations a
-hand-written mock has taken over. The rebuild trigger only watched the
-swagger's mtime, so adopting an operation by hand left its generated copy in
-place until the schema next changed. `Files:` counted that copy.
+Originally: `generated/` was a function of the swagger AND of which
+operations a hand-written mock had taken over, and the rebuild trigger only
+watched the swagger's mtime — so adopting an operation by hand left its
+generated copy behind until the schema next changed, and `Files:` moved for
+a reason unrelated to the edit.
 
-The stale file is mostly harmless — serving prefers the hand-written mock and
-the check reports it as a warning. What is not harmless is that `Files:`
-moves by one for a reason unrelated to the edit, which reads exactly like the
-count instability the previous release removed. A reader cannot separate the
-residue from the bug, so the residue has to go.
+Since the overlay model (1.7.22) the second input is gone: a hand-written
+mock overlays its generated counterpart instead of retiring it, so
+`generated/` is a pure function of the swagger alone. The trigger itself
+still matters — a stale or partial generated tree must be rebuilt when the
+swagger is newer — and the hand-written-mtime input is kept because
+adoption still changes what `validate` must re-examine (the overlay union).
 """
 
 from __future__ import annotations
@@ -73,14 +75,22 @@ class RegenerationTriggerTests(unittest.TestCase):
         os.utime(dst, (future, future))
         return src.name
 
-    def test_adopting_an_operation_retires_its_generated_copy(self):
+    def test_adopting_an_operation_keeps_its_generated_copy(self):
+        """RULING CHANGE (1.7.22). This test pinned retirement: adopting an
+        operation removed its generated copy, making generated/ a function
+        of the swagger AND the hand-written tree. Under the overlay model
+        the hand-written file overlays the generated one per scenario, so
+        the generated copy is the supply of routine scenarios and must
+        STAY. generated/ is a pure function of the swagger alone again —
+        the simpler contract the module docstring originally wanted.
+        """
         before = self.generated()
         self.assertEqual(len(before), 2, before)
         name = self.adopt_one()
         self.assertEqual(_regenerate_stale_mocks(str(self.config)), 0)
         after = self.generated()
-        self.assertNotIn(name, after)
-        self.assertEqual(len(after), 1, after)
+        self.assertIn(name, after)
+        self.assertEqual(len(after), 2, after)
 
     def test_an_untouched_tree_does_not_rebuild(self):
         """Normal work must stay quiet, or every run pays for a rebuild."""
@@ -91,13 +101,13 @@ class RegenerationTriggerTests(unittest.TestCase):
             self.assertEqual(p.stat().st_mtime_ns, was, p)
 
     def test_a_newer_swagger_still_triggers(self):
-        """The original trigger must keep working."""
-        name = self.adopt_one()
-        _regenerate_stale_mocks(str(self.config))
-        self.assertNotIn(name, self.generated())
-        # Put the operation back in play by removing the hand-written copy
-        # and touching the swagger.
-        (self.mocks / name).unlink()
+        """The original trigger must keep working. (Reworked for the
+        overlay model: adoption no longer removes anything, so the missing
+        file is made by hand — a partial tree is still what a stale
+        checkout looks like.)"""
+        name = self.generated()[0]
+        removed = next((self.mocks / GENERATED_DIR).rglob(name))
+        removed.unlink()
         future = time.time() + 4
         os.utime(self.spec, (future, future))
         self.assertEqual(_regenerate_stale_mocks(str(self.config)), 0)

@@ -226,11 +226,15 @@ class TestMockIdentity:
         assert any("post_api-bars-by-uuid-follow" in m for m in report.misnamed)
         assert not report.has_drift
 
-    def test_scaffolding_does_not_duplicate_a_renamed_mock(self, tmp_path):
+    def test_a_renamed_mock_is_still_recognised_as_covering_its_route(self, tmp_path):
+        # The subject is route normalization: a hand-written mock under its
+        # own filename must match the swagger operation. The observable
+        # changed with the overlay model (1.7.22): recognition now reads as
+        # `overlaid` membership, and the route's generated counterpart is
+        # written regardless — if normalization broke, `overlaid` is empty.
         spec, out, _ = self._renamed(tmp_path)
         report = generate([spec], out)
-        assert "bars/post_api-bars-by-uuid-follow.mock.json" in report.skipped
-        assert not any("followBar" in c for c in report.created)
+        assert "bars/post_api-bars-by-uuid-follow.mock.json" in report.overlaid
 
     def test_update_default_finds_a_renamed_mock(self, tmp_path):
         spec, out, dst = self._renamed(tmp_path)

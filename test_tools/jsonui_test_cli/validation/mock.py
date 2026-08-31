@@ -74,6 +74,11 @@ def set_mock_source(directory=None, boundary=None) -> None:
         provenance="declared" if directory is not None else "none",
         boundary=Path(boundary).resolve() if boundary is not None else None,
     )
+    # A new run means the mocks on disk may have changed (validate rebuilds
+    # a stale generated/ before this is called) — a cache surviving the
+    # source it was read from would validate against the previous tree.
+    _MOCK_INDEX_CACHE.clear()
+    _GENERATED_ROUTES_CACHE.clear()
 
 
 def _enclosing_project(start: Path):
@@ -160,6 +165,39 @@ def find_mock_dir(test_file_path):
         if resolved != boundary and boundary not in resolved.parents:
             return None
     return mock_dir
+
+
+#: `str(mock_dir)` -> `{route_key: set(scenario names)}` for generated/.
+_GENERATED_ROUTES_CACHE: dict = {}
+
+
+def _generated_scenarios_by_route(mock_dir) -> dict:
+    """``route_key -> scenario-name set`` for ``<mockDir>/generated/**``.
+
+    What the serve-side overlay merges under a hand-written file: the
+    validator judges a thin overlay against the same union the server
+    builds, instead of against the file alone.
+    """
+    from ..mock.generate import GENERATED_DIR, read_route
+
+    key = str(Path(mock_dir).resolve())
+    if key in _GENERATED_ROUTES_CACHE:
+        return _GENERATED_ROUTES_CACHE[key]
+    index: dict = {}
+    gen_root = Path(mock_dir) / GENERATED_DIR
+    if gen_root.is_dir():
+        for f in gen_root.rglob("*.mock.json"):
+            rk = read_route(f)
+            if rk is None:
+                continue
+            try:
+                with open(f, "r", encoding="utf-8") as fh:
+                    data = json.load(fh)
+            except (OSError, json.JSONDecodeError):
+                continue
+            index[rk] = set((data.get("scenarios") or {}).keys())
+    _GENERATED_ROUTES_CACHE[key] = index
+    return index
 
 
 def find_mock_index(test_file_path):
@@ -317,8 +355,55 @@ class MockValidator:
                 result.errors.append(ValidationMessage(
                     path=f"{spath}.delayMs", message="'delayMs' must be a number"))
 
-        active = data.get("activeScenario", "default")
-        if active not in scenarios:
+        # A hand-written mock with a generated counterpart is a thin overlay
+        # (the serve model: generated supplies the routine scenarios, the
+        # hand-written file carries only what its tests drive, and an OMITTED
+        # activeScenario inherits the generated side's). Judging such a file
+        # alone rejected the exact shape the server documents — so the
+        # membership check runs against the same merged view serve builds.
+        # A file with no counterpart is the whole route and is judged alone,
+        # exactly as before.
+        counterpart = self._generated_counterpart(path, source)
+        active = data.get("activeScenario")
+        if counterpart is None:
+            effective = active if active is not None else "default"
+            if effective not in scenarios:
+                result.errors.append(ValidationMessage(
+                    path=f"{path}.activeScenario",
+                    message=f"activeScenario '{effective}' is not among "
+                            f"scenarios: {list(scenarios.keys())}"))
+        elif active is not None and active not in (set(scenarios) | counterpart):
             result.errors.append(ValidationMessage(
                 path=f"{path}.activeScenario",
-                message=f"activeScenario '{active}' is not among scenarios: {list(scenarios.keys())}"))
+                message=(
+                    f"activeScenario '{active}' is not among this file's "
+                    f"scenarios {sorted(scenarios)} or the generated "
+                    f"mock's {sorted(counterpart)} it overlays")))
+
+    @staticmethod
+    def _generated_counterpart(path: str, source) -> set | None:
+        """Scenario names of the generated mock this file overlays, or None.
+
+        None for a generated file itself, for a file whose mock directory
+        cannot be resolved (declared mockDir first, bounded walk otherwise —
+        `find_mock_dir`), and for a route generated/ does not serve.
+        """
+        from ..mock.generate import GENERATED_DIR, route_key
+
+        if not isinstance(source, dict) or not source.get("path"):
+            return None
+        file_on_disk = Path(path)
+        if not file_on_disk.exists():
+            return None
+        mock_dir = find_mock_dir(file_on_disk)
+        if mock_dir is None:
+            return None
+        try:
+            rel_parts = file_on_disk.resolve().relative_to(
+                Path(mock_dir).resolve()).parts
+        except ValueError:
+            return None
+        if GENERATED_DIR in rel_parts:
+            return None
+        rk = route_key((source.get("method") or "GET"), source["path"])
+        return _generated_scenarios_by_route(mock_dir).get(rk)

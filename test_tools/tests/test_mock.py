@@ -131,9 +131,18 @@ class TestGenerate:
                   for p in sorted(out.rglob("*.mock.json"))}
         assert first == second
         assert len(report2.created) == 3
-        assert report2.skipped == []
+        assert report2.overlaid == []
 
-    def test_a_hand_written_mock_is_never_regenerated(self, tmp_path):
+    def test_a_hand_written_mock_is_never_touched_and_stays_an_overlay(self, tmp_path):
+        """RULING CHANGE (1.7.22). This test pinned the pre-overlay model:
+        a hand-written mock suppressed its route's generated file, and the
+        old name said "never regenerated". The suppression contradicted the
+        serve-side overlay (routine scenarios come FROM the generated side)
+        and only ever ran on a fresh clone, because the detection feeding it
+        was shadowed by the previous run's generated tree — the two defects
+        cancelled into the overlay behaviour this now pins on purpose. What
+        survives unchanged: the hand-written file's bytes are never touched.
+        """
         spec_file = tmp_path / "spec.json"
         spec_file.write_text(json.dumps(SPEC))
         out = tmp_path / "mocks"
@@ -145,8 +154,8 @@ class TestGenerate:
 
         report = generate([str(spec_file)], out)
         assert adopted.read_bytes() == before
-        assert "stocks/listStocks.mock.json" in report.skipped
-        assert not (out / "generated" / "stocks" / "listStocks.mock.json").exists()
+        assert "stocks/listStocks.mock.json" in report.overlaid
+        assert (out / "generated" / "stocks" / "listStocks.mock.json").exists()
 
     def test_check_detects_drift(self, tmp_path):
         spec_file = tmp_path / "spec.json"

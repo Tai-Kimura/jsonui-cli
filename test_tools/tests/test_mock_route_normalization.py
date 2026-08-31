@@ -84,16 +84,20 @@ class TestNormalization:
         assert report.errors, "a violating body must still be reported"
         assert report.has_drift
 
-    def test_the_mock_is_not_scaffolded_over(self, tmp_path):
-        # The count inversion in the report: a detached mock stops "covering"
-        # its route, so generation scaffolds a second file for it.
+    def test_the_mock_still_covers_its_normalized_route(self, tmp_path):
+        # The subject: a detached mock stops "covering" its route, so
+        # normalization must keep the differently-spelt path variable bound
+        # to the same route. The observable changed with the overlay model
+        # (1.7.22): coverage reads as `overlaid` membership — the generated
+        # counterpart is written either way, so `created` no longer
+        # discriminates. If normalization broke, `overlaid` comes back
+        # empty.
         renamed = _write_spec(tmp_path, "after.json", var="item_id")
         mocks = tmp_path / "mocks"
         _hand_written(mocks, "/api/items/{id}", {"name": "a"})
 
         built = generate([renamed], mocks)
-        assert built.created == []
-        assert built.skipped == ["items/getItem.mock.json"]
+        assert built.overlaid == ["items/getItem.mock.json"]
 
     def test_a_trailing_slash_is_absorbed_too(self, tmp_path):
         # Half a normalization is a new bug: whichever side is not absorbed
