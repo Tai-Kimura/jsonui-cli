@@ -385,7 +385,7 @@ def _cmd_generate_project(args: argparse.Namespace) -> int:
     from ..generators.cell_layout_generator import CellLayoutGenerator
     from ..generators.ios_generator import IosGenerator
     from ..generators.android_generator import AndroidGenerator
-    from ..generators.web_generator import WebGenerator
+    from ..generators.web_generator import WebGenerator, owns_viewmodel_base
     from ..core.diff_checker import DiffChecker
 
     import json
@@ -635,46 +635,28 @@ def _cmd_generate_project(args: argparse.Namespace) -> int:
             if not generator:
                 continue
 
-            # ViewModel declaration (auto-update)
-            decl_path = generator.viewmodel_protocol_path(screen_spec.name, vm_subdir)
-            if platform == "web":
-                # Same filter as jui build: only <Name>Data members may be
-                # initialized in the Base's updateData literal (TS2353).
-                from ..generators.web_generator import (
-                    collect_layout_event_names,
-                    resolve_layout_path,
-                )
-                decl_content = generator.generate_viewmodel_protocol(
-                    screen_spec,
-                    layout_event_names=collect_layout_event_names(
-                        resolve_layout_path(
-                            config_mgr.layouts_directory, screen_spec
-                        )
-                    ),
-                )
-            else:
+            # ViewModel declaration (auto-update). Skipped where another tool
+            # owns the file: `jui build`'s protocol sync stopped writing the
+            # web Base, and seeding it here would just re-plant the
+            # round-trip from the scaffolding side.
+            if owns_viewmodel_base(platform):
+                decl_path = generator.viewmodel_protocol_path(
+                    screen_spec.name, vm_subdir)
                 decl_content = generator.generate_viewmodel_protocol(screen_spec)
 
-            # Findings raised while emitting (e.g. a var the generated Base
-            # can only declare with `!`) join this command's warning stream.
-            for w in getattr(generator, "warnings", []):
-                warnings.append(f"WARNING [spec:{w.spec_name}] {w.message}")
-            if hasattr(generator, "warnings"):
-                generator.warnings.clear()
-
-            if decl_path.exists() and not args.force:
-                diff = diff_checker.check(decl_path, decl_content)
-                if diff:
-                    warnings.append(f"WARNING: {decl_path.relative_to(config_mgr.project_root)}\n{diff}")
+                if decl_path.exists() and not args.force:
+                    diff = diff_checker.check(decl_path, decl_content)
+                    if diff:
+                        warnings.append(f"WARNING: {decl_path.relative_to(config_mgr.project_root)}\n{diff}")
+                    else:
+                        skipped_files.append(decl_path)
                 else:
-                    skipped_files.append(decl_path)
-            else:
-                if args.dry_run:
-                    print(f"  [DRY-RUN] Would create: {decl_path}")
-                else:
-                    decl_path.parent.mkdir(parents=True, exist_ok=True)
-                    decl_path.write_text(decl_content, encoding="utf-8")
-                    generated_files.append(decl_path)
+                    if args.dry_run:
+                        print(f"  [DRY-RUN] Would create: {decl_path}")
+                    else:
+                        decl_path.parent.mkdir(parents=True, exist_ok=True)
+                        decl_path.write_text(decl_content, encoding="utf-8")
+                        generated_files.append(decl_path)
 
             # ViewModel implementation (never overwrite)
             impl_path = generator.viewmodel_impl_path(screen_spec.name, vm_subdir)

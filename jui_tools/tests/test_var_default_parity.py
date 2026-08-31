@@ -1,10 +1,8 @@
-"""One declaration, three faces: what `vars` initialize to on each platform.
+"""One declaration, two faces: what `vars` initialize to on each platform.
 
-A list has a zero value everywhere, so `[]` belongs in the type map rather
-than in any one generator — putting it in `web_generator` alone would have
-made web the loosest of the three faces, accepting a declaration the other
-two still refuse. These tests hold the three faces together so a change to
-one is visible as a change to all.
+A list has a zero value on both, so `[]` belongs in the type map rather than
+in either generator. These tests hold the faces together so a change to one
+is visible as a change to the other.
 
 The Kotlin cases cover the other half: `MutableStateFlow(init ?? "null")` fed
 `null` into a non-null `MutableStateFlow<T>` whenever no default resolved, and
@@ -12,11 +10,11 @@ a type-nullable-but-not-`optional` var got no initializer at all. Kotlin has
 no implicit-null rule the way Swift has implicit-nil, so both were programs
 Kotlin refuses to compile.
 
-Where no value can be named at all, the three differ by necessity and not by
-accident: iOS/Kotlin write a scaffold once and leave it editable, so they can
-hand the decision to the author in the file; the web Base is `@generated` and
-rewritten every build, so it has to say the same thing with `!` and a build
-warning. That asymmetry is the point of `TheEndOfWhatCanBeSynthesized`.
+Web is deliberately absent. It had a third face here — `!` plus a build
+warning, because its Base was `@generated` and could not hand the decision to
+an author the way an editable scaffold can. That whole path is gone:
+rjui_tools owns the web ViewModelBase, so jui_tools no longer emits web var
+declarations at all. See `test_web_viewmodel_base_ownership.py`.
 """
 from __future__ import annotations
 
@@ -28,7 +26,6 @@ from jui_cli.core.spec_extractor import VarDef
 from jui_cli.core.type_mapper import TypeMapper
 from jui_cli.generators.android_generator import AndroidGenerator
 from jui_cli.generators.ios_generator import IosGenerator
-from jui_cli.generators.web_generator import WebGenerator
 
 
 def faces(v: VarDef) -> dict[str, str]:
@@ -36,12 +33,10 @@ def faces(v: VarDef) -> dict[str, str]:
     tm = TypeMapper(None)
     with tempfile.TemporaryDirectory() as tmp:
         root = Path(tmp)
-        web = WebGenerator(root, {}, tm)
         return {
             "ios": IosGenerator(root, {}, tm)._var_impl_declaration(v).strip(),
             "android": AndroidGenerator(root, {}, tm)
             ._var_impl_declaration(v).strip(),
-            "web": web._var_base_declaration(v, "S").strip(),
         }
 
 
@@ -60,7 +55,6 @@ class AListHasAZeroValueOnEveryPlatform(unittest.TestCase):
                 self.assertEqual(f["ios"], "var items: [Item] = []")
                 self.assertEqual(f["android"],
                                  "override var items: List<Item> = listOf()")
-                self.assertEqual(f["web"], "public items: Item[] = [];")
 
     def test_no_face_is_left_uninitialized(self):
         """The failure this closes: three uninitialized declarations."""
@@ -74,7 +68,6 @@ class AListHasAZeroValueOnEveryPlatform(unittest.TestCase):
         f = faces(var("items", "[Item]", optional=True))
         self.assertEqual(f["ios"], "var items: [Item]? = nil")
         self.assertEqual(f["android"], "override var items: List<Item>? = null")
-        self.assertEqual(f["web"], "public items?: Item[];")
 
     def test_a_map_is_deliberately_not_covered(self):
         """Scope boundary, stated rather than left to be inferred.
@@ -85,7 +78,7 @@ class AListHasAZeroValueOnEveryPlatform(unittest.TestCase):
         """
         f = faces(var("index", "Map(String,Item)"))
         self.assertEqual(f["ios"], "var index: [String: Item]")
-        self.assertEqual(f["web"], "public index!: Record<string, Item>;")
+        self.assertEqual(f["android"], "override var index: Map<String, Item>")
 
 
 class KotlinInitializesWhatItDeclares(unittest.TestCase):
@@ -119,32 +112,19 @@ class KotlinInitializesWhatItDeclares(unittest.TestCase):
         f = faces(var("maybe", "[Item]?"))
         self.assertEqual(f["android"], "override var maybe: List<Item>? = null")
         self.assertEqual(f["ios"], "var maybe: [Item]?")
-        self.assertEqual(f["web"],
-                         "public maybe: Item[] | undefined = undefined;")
 
 
 class TheEndOfWhatCanBeSynthesized(unittest.TestCase):
-    """A custom type with no declared default: each face says so its own way."""
+    """A custom type with no declared default: a bare declaration.
 
-    def test_the_three_faces_of_an_unsynthesizable_type(self):
+    Both faces emit one and let the compiler ask the author, which works
+    because both files are scaffolds written once and editable afterwards.
+    """
+
+    def test_neither_face_invents_a_value(self):
         f = faces(var("profile", "UserProfile"))
-        # iOS/Kotlin: a bare declaration in a scaffold the author may edit —
-        # the compiler asks them, and they can answer in place.
         self.assertEqual(f["ios"], "var profile: UserProfile")
         self.assertEqual(f["android"], "override var profile: UserProfile")
-        # Web: the same question, asked where an @generated file can ask it.
-        self.assertEqual(f["web"], "public profile!: UserProfile;")
-
-    def test_only_the_web_face_raises_a_build_warning(self):
-        """Because only the web face emits a promise nothing verifies."""
-        tm = TypeMapper(None)
-        with tempfile.TemporaryDirectory() as tmp:
-            gen = WebGenerator(Path(tmp), {}, tm)
-            gen._var_base_declaration(var("profile", "UserProfile"), "S")
-            self.assertEqual(len(gen.warnings), 1)
-            gen.warnings.clear()
-            gen._var_base_declaration(var("items", "[Item]"), "S")
-            self.assertEqual(gen.warnings, [])
 
 
 if __name__ == "__main__":

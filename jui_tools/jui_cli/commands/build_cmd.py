@@ -1226,11 +1226,7 @@ def _sync_viewmodel_protocols(
     from ..core.type_mapper import TypeMapper
     from ..generators.android_generator import AndroidGenerator
     from ..generators.ios_generator import IosGenerator
-    from ..generators.web_generator import (
-        WebGenerator,
-        collect_layout_event_names,
-        resolve_layout_path,
-    )
+    from ..generators.web_generator import WebGenerator, owns_viewmodel_base
 
     specs = _load_all_specs(config_mgr)
     if not specs:
@@ -1303,6 +1299,20 @@ def _sync_viewmodel_protocols(
             continue
         if args.web_only and platform != "web":
             continue
+        if not owns_viewmodel_base(platform):
+            # rjui_tools generates this platform's ViewModelBase and runs
+            # after us, so writing it here only produced churn and a warning
+            # about a declaration that did not survive. Nothing else in this
+            # loop applies to web — Impl inheritance patching is iOS/Android
+            # only — so the whole iteration is skipped, which also keeps the
+            # file out of the `updated N protocol(s)` count.
+            #
+            # This is the ONLY guard: `_get_gen` deliberately still builds a
+            # WebGenerator, so that removing this line changes behaviour and
+            # a red-check can see it. Letting the factory quietly return None
+            # for web instead gave two defences for one decision, and each
+            # stayed green while the other was broken.
+            continue
 
         generator = _get_gen(platform, pconfig)
         if generator is None:
@@ -1324,12 +1334,8 @@ def _sync_viewmodel_protocols(
                         f"[{platform}] could not read Impl {impl_path}: {e}"
                     )
                     continue
-                # Web members live inside <Name>Data or the ViewModelBase
-                # auto-emit — the `func`/`var` scanner doesn't understand
-                # TypeScript, so skip the consistency check there.
-                if platform != "web":
-                    impl_method_names = list_impl_method_names(impl_source)
-                    impl_var_names = list_impl_var_names(impl_source)
+                impl_method_names = list_impl_method_names(impl_source)
+                impl_var_names = list_impl_var_names(impl_source)
 
             sync_platform = platform
             try:
@@ -1392,22 +1398,11 @@ def _sync_viewmodel_protocols(
                         )
 
             # Protocol / Base file.
-            if platform == "web":
-                # Restrict initializeEventHandlers to members that actually
-                # exist in the rjui-generated <Name>Data (layout-derived) —
-                # spec-only methods in the updateData literal are a TS2353.
-                layout_event_names = collect_layout_event_names(
-                    resolve_layout_path(config_mgr.layouts_directory, spec)
-                )
-                content = generator.generate_viewmodel_protocol(
-                    spec, layout_event_names=layout_event_names
-                )
-            else:
-                content = generator.generate_viewmodel_protocol(
-                    spec,
-                    impl_source=impl_source,
-                    sync_result=sync_result,
-                )
+            content = generator.generate_viewmodel_protocol(
+                spec,
+                impl_source=impl_source,
+                sync_result=sync_result,
+            )
             if atomic_write_text(proto_path, content):
                 protocol_writes += 1
 
