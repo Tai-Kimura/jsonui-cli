@@ -229,6 +229,32 @@ def cmd_validate(args):
     # something, so the two cannot disagree.
     total_errors += mock_errors
 
+    # `Warnings:` deliberately does NOT take the mock gate's warnings, and
+    # the asymmetry with the line above is the point rather than an
+    # oversight — a consumer asked, having read the `Errors:` fix and been
+    # unable to tell which of the two this was.
+    #
+    # `Errors:` had to move because it contradicted `Result:` and the exit
+    # code: three readings of one number that disagreed. Nothing contradicts
+    # here. A mock warning is non-gating by construction, and the ones that
+    # persist are non-gating BY RULING — form B is a status no operation
+    # declares, which the same release decided is a premise rather than a
+    # declarable, so it can never be cleared. Counting it would put a
+    # permanent +1 on every project that has one, which is the standing
+    # warning that teaches people to stop reading the count. Two lanes run a
+    # "keep Warnings at zero so a new one is visible" discipline; this is
+    # what lets a permanent B coexist with it.
+    #
+    # The mock findings are not hidden by this — `mock contract:` reports
+    # them with their own denominator, which is the line to read for them.
+    # Two counts answering two questions, not one count with a hole in it.
+    #
+    # Left open: mock warnings that ARE actionable (a stale generated body,
+    # which regenerating clears) are excluded by the same blanket rule. The
+    # principled split is "count what the reader can act on", and it needs
+    # each mock warning classified rather than a rule about where they come
+    # from.
+
     # Summary
     print(f"\n{'='*50}")
     status = "PASSED" if total_errors == 0 and mock_rc == 0 else "FAILED"
