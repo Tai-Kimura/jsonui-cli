@@ -453,6 +453,73 @@ def test_the_gate_fails_on_a_tree_that_never_generated(project, monkeypatch,
     assert "0 up to date, 1 stale" in out
 
 
+def _unbindable_screen(root: Path, name: str) -> None:
+    """A screen whose contract names an operation nothing declares an
+    endpoint for. Generation refuses it — correctly — so it stands in for
+    any screen a whole-project run cannot produce.
+
+    The reported instance was a sub-spec whose contract referenced an
+    operation its SIBLING sub-spec declared the endpoint for; the shape
+    that matters here is only that the reference does not bind.
+    """
+    spec = json.loads((root / "docs/specs/checkout.spec.json").read_text())
+    spec["metadata"]["name"] = name.title()
+    spec["branchContracts"] = {"methods": {"onConfirmTap": {"branches": [
+        {"when": {"api.notDeclaredAnywhere": "empty"},
+         "then": {"data.screenState": "error"}},
+    ]}}}
+    _write(root / f"docs/specs/{name}.spec.json", spec)
+
+
+def test_one_unproducible_screen_does_not_hide_the_rest(project, monkeypatch,
+                                                        capsys):
+    """Stopping at the first failure hides every screen after it — the ones
+    that are fine, and any other failure. A consumer lost a whole iOS run
+    to a single screen this way."""
+    _second_screen(project, "cart")
+    _unbindable_screen(project, "orders")
+
+    rc = _cli(project, monkeypatch=monkeypatch)
+    captured = capsys.readouterr()
+
+    assert rc == 1
+    assert "Generated branch tests for 'cart'" in captured.out
+    assert "Generated branch tests for 'checkout'" in captured.out
+    assert "[FAILED]  orders" in captured.err
+    assert "Generated 2 screen(s); 1 failed." in captured.err
+
+
+def test_a_named_screen_still_answers_with_its_own_error(project, monkeypatch,
+                                                         capsys):
+    """One screen was asked for, so its failure is the answer — not a
+    summary of a project the caller did not ask about."""
+    _unbindable_screen(project, "orders")
+
+    rc = _cli(project, "orders", monkeypatch=monkeypatch)
+
+    assert rc == 1
+    err = capsys.readouterr().err
+    assert "has no `endpoint` declaration" in err
+    assert "[FAILED]" not in err
+
+
+def test_check_does_not_call_an_unproducible_screen_current(project,
+                                                            monkeypatch,
+                                                            capsys):
+    """Not verifiable is not verified: a screen that cannot be generated
+    cannot be compared to what is on disk either."""
+    _cli(project, monkeypatch=monkeypatch)
+    capsys.readouterr()
+    _unbindable_screen(project, "orders")
+
+    rc = _cli(project, "--check", monkeypatch=monkeypatch)
+    captured = capsys.readouterr()
+
+    assert rc == 1
+    assert "1 up to date, 0 stale" in captured.out  # checkout is genuinely fine
+    assert "could not be generated, so they were not checked" in captured.err
+
+
 # --------------------------------------------------------------------- #
 # The other two emitters
 #

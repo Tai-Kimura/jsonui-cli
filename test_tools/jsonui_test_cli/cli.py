@@ -842,15 +842,42 @@ def cmd_generate_branch_tests(args):
                   f"{'check' if check else 'generate'}", file=sys.stderr)
             return 1
 
+    named_one = bool(args.screen)
     reports = []
+    failures: list[tuple[str, str]] = []
     for screen in screens:
-        rc, report = _generate_one_branch_test(args, screen)
+        rc, report, error = _generate_one_branch_test(args, screen)
         if rc:
-            return rc
+            if named_one:
+                # One screen was asked for, so its failure is the answer.
+                print(f"Error: {error}", file=sys.stderr)
+                return rc
+            # Across a whole project, stopping at the first screen that
+            # cannot generate hides every screen after it — including the
+            # ones that are fine, and including other failures. A consumer
+            # lost the entire iOS run to one screen this way.
+            failures.append((screen, error))
+            continue
         reports.append(report)
 
+    for screen, error in failures:
+        print(f"  [FAILED]  {screen}: {error}", file=sys.stderr)
+
     if check:
-        return _branch_check_summary(reports, scanned_count)
+        rc = _branch_check_summary(reports, scanned_count)
+        if failures:
+            # Not verifiable is not verified: a screen that cannot be
+            # generated cannot be compared to what is on disk either.
+            print(f"{len(failures)} screen(s) could not be generated, so they "
+                  f"were not checked.", file=sys.stderr)
+            return 1
+        return rc
+    if failures:
+        for report in reports:
+            _print_branch_generation(report, show_siblings=False)
+        print(f"\nGenerated {len(reports)} screen(s); {len(failures)} failed.",
+              file=sys.stderr)
+        return 1
     for report in reports:
         # The "regenerate the siblings too" note answers a question that
         # only arises when one screen was regenerated on its own.
@@ -859,7 +886,7 @@ def cmd_generate_branch_tests(args):
 
 
 def _generate_one_branch_test(args, screen: str):
-    """Generate (or check) one screen. Returns (exit_code, report)."""
+    """Generate (or check) one screen. Returns (exit_code, report, error)."""
     from .branch_tests import BranchTestGenerationError, generate_branch_tests
 
     try:
@@ -899,9 +926,8 @@ def _generate_one_branch_test(args, screen: str):
             check=getattr(args, "check", False),
         )
     except BranchTestGenerationError as e:
-        print(f"Error: {e}", file=sys.stderr)
-        return 1, None
-    return 0, report
+        return 1, None, str(e)
+    return 0, report, ""
 
 
 def _print_branch_generation(report, show_siblings: bool = True) -> None:
