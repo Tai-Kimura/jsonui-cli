@@ -206,6 +206,139 @@ def test_a_hand_written_scenario_covers_the_declared_status(project):
 # The reference set
 # --------------------------------------------------------------------- #
 
+# --------------------------------------------------------------------- #
+# The other direction: a status the swagger no longer declares
+#
+# `absent` gated because generated/ is a pure function of the swagger and
+# cannot legitimately be missing a scenario. Holding an EXTRA one is the
+# same claim read the other way, and it went to a non-gating bucket. A
+# consumer measured the cost: a mock answering 409 for a path the
+# implementation had no branch for, with the end-to-end suite green
+# against a case production cannot produce.
+#
+# The four predicates below are the reporter's, verbatim in intent. The
+# second is the load-bearing one: without it, "only the generated side
+# gates" is indistinguishable from "everything gates".
+# --------------------------------------------------------------------- #
+
+SPEC_WITHOUT_422 = {
+    "openapi": "3.0.3",
+    "paths": {
+        "/api/user/sessions": {"post": {
+            "operationId": "createSession",
+            "responses": {
+                "200": {"content": {"application/json": {"schema": {
+                    "type": "object", "properties": {"token": {"type": "string"}},
+                    "required": ["token"]}}}},
+                "429": {"content": {"application/json": {"schema": {
+                    "type": "object", "properties": {"error": {"type": "string"}},
+                    "required": ["error"]}}}},
+            },
+        }},
+    },
+}
+
+
+def _narrow_the_swagger(tmp_path: Path) -> str:
+    """Rewrite the swagger without 423 — the backend deleting an
+    over-declared response, which is what prompted this."""
+    spec = tmp_path / "swagger.json"
+    spec.write_text(json.dumps(SPEC_WITHOUT_422), encoding="utf-8")
+    return str(spec)
+
+
+def _hand_written(mocks: Path, scenarios: dict) -> None:
+    path = mocks / "sessions" / "post_api-user-sessions.mock.json"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps({
+        "source": {"method": "POST", "path": "/api/user/sessions"},
+        "activeScenario": sorted(scenarios)[0],
+        "scenarios": scenarios,
+    }), encoding="utf-8")
+
+
+def test_generated_holding_an_undeclared_status_fails_the_check(project,
+                                                                tmp_path):
+    """Predicate 1: narrow the swagger, and the generated leftover gates."""
+    _, mocks = project
+    spec = _narrow_the_swagger(tmp_path)
+
+    report = generate([spec], mocks, check=True)
+
+    assert report.has_drift
+    assert len(report.unmatched_generated) == 1
+    assert "423" in report.unmatched_generated[0]
+
+
+def test_a_hand_written_extra_scenario_is_a_warning_not_a_failure(tmp_path):
+    """Predicate 2, the load-bearing one. An extra scenario a person wrote
+    can be deliberate. If this went red too, "only generated gates" would
+    be indistinguishable from "everything gates" — the shape where a check
+    looks effective because it fails on everything."""
+    spec = _narrow_the_swagger(tmp_path)
+    mocks = tmp_path / "tests" / "mocks"
+    mocks.mkdir(parents=True)
+    generate([spec], mocks)                      # generated/ has no 423
+    _hand_written(mocks, {"ok": {"status": 200, "body": {"token": "t"}},
+                          "legacy": {"status": 423, "body": {"e": "x"}}})
+
+    report = generate([spec], mocks, check=True)
+
+    assert report.unmatched_generated == []
+    assert any("423" in u for u in report.unmatched)   # still reported
+    assert not report.has_drift                        # but does not gate
+
+
+def test_the_absence_direction_still_gates(project):
+    """Predicate 3: the direction shipped earlier is unchanged."""
+    spec, mocks = project
+    _drop(_generated(mocks), "error_423")
+
+    report = generate([spec], mocks, check=True)
+
+    assert report.has_drift and len(report.absent_generated) == 1
+
+
+def test_the_denominator_closes_in_both_directions(project, tmp_path):
+    """Predicate 4."""
+    spec, mocks = project
+    before = generate([spec], mocks, check=True)
+    assert before.scenarios_seen == 3
+
+    narrowed = _narrow_the_swagger(tmp_path)
+    after = generate([narrowed], mocks, check=True)
+    # The leftover is still one of the scenarios the run opened; it moved
+    # buckets rather than vanishing from the total.
+    assert after.scenarios_seen == 3
+    assert after.compared == 2 and len(after.unmatched) == 1
+
+
+def test_the_rebuild_trigger_removes_the_leftover_first(project, tmp_path,
+                                                        monkeypatch):
+    """Measured, and worth pinning: on the `validate` path the rebuild runs
+    BEFORE the check, so a narrowed swagger regenerates the tree and the
+    leftover is gone by the time anything looks. The gate above therefore
+    fires on the direct `mock generate --check` path — which is where the
+    report observed it — rather than on every run."""
+    import time
+    from jsonui_test_cli.cli import _regenerate_stale_mocks
+
+    spec, mocks = project
+    root = Path(spec).parent
+    (root / "jui.config.json").write_text(json.dumps(
+        {"mock": {"swagger": ["swagger.json"], "mockDir": "tests/mocks"}}),
+        encoding="utf-8")
+    time.sleep(0.01)
+    _narrow_the_swagger(root)
+    monkeypatch.chdir(root)
+
+    _regenerate_stale_mocks(None)
+
+    assert "error_423" not in json.loads(
+        _generated(mocks).read_text())["scenarios"]
+    assert not generate([spec], mocks, check=True).has_drift
+
+
 def test_declared_responses_generation_does_not_produce_are_not_absences(tmp_path):
     """204, 302 and `default` are declared and yield no scenario. Reading
     the denominator off `op.responses` reports three absences here — a

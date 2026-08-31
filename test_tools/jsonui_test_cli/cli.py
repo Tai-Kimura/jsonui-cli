@@ -1203,6 +1203,15 @@ def cmd_mock_generate(args):
                   "`jsonui-test mock generate` to restore it")
         for msg in report.absent_handwritten:
             print(f"  [WARN]    {msg}")
+        for msg in report.unmatched_generated:
+            # Gating, and the mirror of [ABSENT]: generated/ is derived, so
+            # holding a status the swagger no longer declares is as
+            # impossible a state as missing one. A consumer measured what
+            # this costs — an end-to-end suite green against a 409 the
+            # implementation had no branch for.
+            print(f"  [EXTRA]   {msg}\n"
+                  "            generated/ is derived from the swagger; run "
+                  "`jsonui-test mock generate` to drop it")
         for msg in report.drifted:
             print(f"  [DRIFT]   {msg}")
         for drift in report.errors:

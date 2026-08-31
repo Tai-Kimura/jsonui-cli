@@ -922,6 +922,13 @@ class CheckReport:
     #: The same, on a route served only by hand-written mocks. Absence
     #: there can be the author's choice, so it is reported, not gated.
     absent_handwritten: list = field(default_factory=list)
+    #: The subset of `unmatched` that lives in generated/ — a scenario for a
+    #: status the swagger NO LONGER declares. The mirror of
+    #: `absent_generated`: absence was gated because generated/ is a pure
+    #: function of the swagger, and excess is the same claim read the other
+    #: way. Hand-written excess stays a warning, because an extra scenario
+    #: there can be deliberate.
+    unmatched_generated: list = field(default_factory=list)
 
     @property
     def absent(self) -> list:
@@ -1008,7 +1015,8 @@ class CheckReport:
     @property
     def has_drift(self) -> bool:
         return bool(self.missing or self.orphaned or self.drifted
-                    or self.errors or self.absent_generated)
+                    or self.errors or self.absent_generated
+                    or self.unmatched_generated)
 
 
 def expected_generated_relpaths(
@@ -1153,6 +1161,7 @@ def _check(swagger_paths: list[str], mock_dir: Path, strict: bool = False,
     misnamed: list[str] = []
     absent_generated: list[str] = []
     absent_handwritten: list[str] = []
+    unmatched_generated: list[str] = []
     compared = 0
     for key in sorted(set(expected) & set(existing)):
         doc, op = expected[key]
@@ -1188,7 +1197,8 @@ def _check(swagger_paths: list[str], mock_dir: Path, strict: bool = False,
             compared += _check_bodies(doc, op, rel, data, bodies, unmatched,
                                       no_schema, non_json, malformed,
                                       generated=is_generated(rel),
-                                      all_ops=all_ops)
+                                      all_ops=all_ops,
+                                      unmatched_generated=unmatched_generated)
             if is_generated(rel) and len(bodies) > before:
                 # The advice attached to a generated finding is "regenerate".
                 # Check that it would do something: when the file already
@@ -1214,6 +1224,7 @@ def _check(swagger_paths: list[str], mock_dir: Path, strict: bool = False,
         non_json=non_json, malformed=malformed,
         absent_generated=absent_generated,
         absent_handwritten=absent_handwritten,
+        unmatched_generated=unmatched_generated,
         scope_excluded=len(excluded),
         scope_note=scope.describe() if scope.is_active() else "",
         strict=strict,
@@ -1347,6 +1358,7 @@ def _check_bodies(
     malformed: list[str],
     generated: bool = False,
     all_ops: dict | None = None,
+    unmatched_generated: list | None = None,
 ) -> int:
     """Compare every scenario body against the schema for its status code.
 
@@ -1391,8 +1403,17 @@ def _check_bodies(
             # A deliberate edge case the spec does not describe — reported so
             # it is visible, but not drift: there is nothing to compare to.
             hint = _status_context(op, status, all_ops) if all_ops else ""
-            unmatched.append(
-                f"{rel}  {name}: status {status} not declared{hint}")
+            note = f"{rel}  {name}: status {status} not declared{hint}"
+            unmatched.append(note)
+            if generated and unmatched_generated is not None:
+                # generated/ holding a status the swagger no longer declares
+                # is the mirror of it missing one: the tree is derived, so
+                # neither state can be reached by anything but an edit or an
+                # interrupted run. A consumer measured the cost of the other
+                # direction -- a mock answering 409 for a path the
+                # implementation had no branch for, with the end-to-end
+                # suite green against a case production cannot produce.
+                unmatched_generated.append(note)
             _report_declaration_only(rel, name, decl_problems, bodies, generated)
             continue
 
