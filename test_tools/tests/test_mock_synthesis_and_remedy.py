@@ -172,10 +172,25 @@ class TestGeneratorSourcesAreWarningFree:
 
     Compiled here rather than grepped: the warning is the compiler's
     verdict, and a grep for the pattern would have to re-implement "is
-    this escape known", which is the thing being checked. Two of the three
-    occurrences shared a line, and `-W once` deduplicated them — an
-    enumeration that reports "1" for two lines is why this asserts on the
-    whole set instead of a count from a single run.
+    this escape known", which is the thing being checked.
+
+    `compile()` rather than importing, for two measured reasons. Neither is
+    deduplication, which is what a first pass here wrongly claimed:
+
+    - CPython emits one SyntaxWarning per *string literal*, not per
+      occurrence, so the three that prompted this — all inside one
+      triple-quoted Swift template — could only ever surface as one. And
+      `-W error` aborts the compile at the first, capping any run at one
+      however many literals offend. A count from a single run is not a
+      census, so this asserts on the whole set.
+    - SyntaxWarning is a compile-time verdict, so a warm `__pycache__`
+      makes an import silent — `-W error::SyntaxWarning` does not even
+      promote, and exits 0. It is bistable and the state is invisible from
+      the output: `-W error` never writes a .pyc for an offending module
+      (the compile fails), so the module is either permanently cold and
+      always reports, or was warmed by an earlier ordinary run and is
+      permanently silent. `compile()` reads the source and bypasses the
+      cache, which is the only form that reproduces.
     """
 
     def test_no_module_warns_on_compile(self):

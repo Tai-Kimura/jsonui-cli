@@ -189,11 +189,65 @@ class GenerationReport:
     runtime_file: Path | None = None
     harness_file: Path | None = None
     harness_created: bool = False
+    harness_absent: bool = False
     declared_branches: int = 0
     note_branches: int = 0
     platform_skipped: int = 0
     methods: list[str] = field(default_factory=list)
     routes: list[str] = field(default_factory=list)
+    #: check mode only — @generated files whose bytes differ / are missing.
+    drifted: list[Path] = field(default_factory=list)
+    absent: list[Path] = field(default_factory=list)
+    matched: list[Path] = field(default_factory=list)
+
+    @property
+    def up_to_date(self) -> bool:
+        return not self.drifted and not self.absent
+
+
+@dataclass
+class _Emitter:
+    """Writes the generated files, or compares them to what is on disk.
+
+    Two properties this exists to hold:
+
+    - **Check mode does not touch the tree.** No mkdir, no write. A check
+      that creates the directory it is auditing reports "0 drifted" on a
+      project that has never generated anything, and leaves an empty
+      directory behind to make the second run agree with it.
+    - **The bytes compared are the bytes that would be written.** The
+      content is produced by the same expression in both modes rather than
+      re-rendered for the comparison, so a check cannot pass against a
+      rendering path the writer does not use.
+    """
+
+    check: bool = False
+    drifted: list[Path] = field(default_factory=list)
+    absent: list[Path] = field(default_factory=list)
+    matched: list[Path] = field(default_factory=list)
+
+    def mkdir(self, path: Path) -> None:
+        if not self.check:
+            path.mkdir(parents=True, exist_ok=True)
+
+    def emit(self, path: Path, content: str) -> None:
+        if not self.check:
+            path.write_text(content, encoding="utf-8")
+            return
+        if not path.exists():
+            self.absent.append(path)
+            return
+        try:
+            current = path.read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError):
+            self.drifted.append(path)
+            return
+        (self.matched if current == content else self.drifted).append(path)
+
+    def apply_to(self, report: "GenerationReport") -> None:
+        report.drifted = list(self.drifted)
+        report.absent = list(self.absent)
+        report.matched = list(self.matched)
 
 
 def _branch_active(branch: dict, platform: str) -> bool:
@@ -2184,6 +2238,7 @@ def generate_branch_tests(
     platform: str = "web",
     package: str | None = None,
     module: str | None = None,
+    check: bool = False,
 ) -> GenerationReport:
     spec_file = resolve_spec_path(screen, project_root, spec_path)
     if not spec_file.exists():
@@ -2210,7 +2265,8 @@ def generate_branch_tests(
                 "of the generated test sources)"
             )
         return _emit_android(
-            screen, spec, routes, project_root, out_dir, harness_dir, package)
+            screen, spec, routes, project_root, out_dir, harness_dir, package,
+            check)
     if platform == "ios":
         if not module:
             raise BranchTestGenerationError(
@@ -2218,83 +2274,97 @@ def generate_branch_tests(
                 "for @testable import)"
             )
         return _emit_ios(
-            screen, spec, routes, project_root, out_dir, harness_dir, module)
+            screen, spec, routes, project_root, out_dir, harness_dir, module,
+            check)
     if platform != "web":
         raise BranchTestGenerationError(
             f"unknown platform '{platform}' — supported: web, android, ios"
         )
 
+    emitter = _Emitter(check)
     out_path = project_root / out_dir
-    out_path.mkdir(parents=True, exist_ok=True)
+    emitter.mkdir(out_path)
     harness_path = project_root / harness_dir
-    harness_path.mkdir(parents=True, exist_ok=True)
+    emitter.mkdir(harness_path)
 
     rel = _relative_import(out_path, harness_path / screen)
     content, report = render_test_file(screen, spec, routes, rel)
 
     runtime_file = out_path / "jsonui-branch-runtime.ts"
-    runtime_file.write_text(RUNTIME_TS, encoding="utf-8")
+    emitter.emit(runtime_file, RUNTIME_TS)
     test_file = out_path / f"{screen}.branches.test.ts"
-    test_file.write_text(content + "\n", encoding="utf-8")
+    emitter.emit(test_file, content + "\n")
 
     harness_file = harness_path / f"{screen}.ts"
     created = False
     if not harness_file.exists():
-        harness_file.write_text(
-            HARNESS_SKELETON % {"screen": screen,
-                                "screen_const": screen.upper()},
-            encoding="utf-8",
-        )
-        created = True
+        # The harness is consumer-owned, so its absence is not drift and its
+        # contents are never compared — but a check that stayed silent about
+        # it would call a project green whose generated tests cannot compile.
+        if check:
+            report.harness_absent = True
+        else:
+            harness_file.write_text(
+                HARNESS_SKELETON % {"screen": screen,
+                                    "screen_const": screen.upper()},
+                encoding="utf-8",
+            )
+            created = True
 
     report.test_file = test_file
     report.runtime_file = runtime_file
     report.harness_file = harness_file
     report.harness_created = created
+    emitter.apply_to(report)
     return report
 
 
 def _emit_ios(
     screen: str, spec: dict, routes: list[Route], project_root: Path,
-    out_dir: str, harness_dir: str, module: str,
+    out_dir: str, harness_dir: str, module: str, check: bool = False,
 ) -> GenerationReport:
     """iOS emission: Swift XCTest sources. With Xcode's file-system-
     synchronized test groups, dropping the files into the test target's
     folder is registration enough."""
     pascal = _pascal(screen)
+    emitter = _Emitter(check)
     out_path = project_root / out_dir
-    out_path.mkdir(parents=True, exist_ok=True)
+    emitter.mkdir(out_path)
     harness_path = project_root / harness_dir
-    harness_path.mkdir(parents=True, exist_ok=True)
+    emitter.mkdir(harness_path)
 
     content, report = render_swift_test_file(screen, spec, routes, module)
 
     runtime_file = out_path / "JsonuiBranchRuntime.swift"
-    runtime_file.write_text(SWIFT_RUNTIME, encoding="utf-8")
+    emitter.emit(runtime_file, SWIFT_RUNTIME)
     test_file = out_path / f"{pascal}BranchesTest.swift"
-    test_file.write_text(content, encoding="utf-8")
+    emitter.emit(test_file, content)
 
     harness_file = harness_path / f"{pascal}BranchHarness.swift"
     created = False
     if not harness_file.exists():
-        harness_file.write_text(
-            SWIFT_HARNESS_SKELETON % {
-                "screen": screen, "pascal": pascal, "module": module,
-            },
-            encoding="utf-8",
-        )
-        created = True
+        if check:
+            report.harness_absent = True
+        else:
+            harness_file.write_text(
+                SWIFT_HARNESS_SKELETON % {
+                    "screen": screen, "pascal": pascal, "module": module,
+                },
+                encoding="utf-8",
+            )
+            created = True
 
     report.test_file = test_file
     report.runtime_file = runtime_file
     report.harness_file = harness_file
     report.harness_created = created
+    emitter.apply_to(report)
     return report
 
 
 def _emit_android(
     screen: str, spec: dict, routes: list[Route], project_root: Path,
-    out_dir: str, harness_dir: str, package: str,
+    out_dir: str, harness_dir: str, package: str, check: bool = False,
 ) -> GenerationReport:
     """Android emission: Kotlin JUnit4 (Robolectric) sources.
 
@@ -2302,37 +2372,41 @@ def _emit_android(
     app/src/test/java); the package path is appended automatically."""
     pascal = _pascal(screen)
     pkg_path = _relative_kotlin_paths(package)
+    emitter = _Emitter(check)
     out_path = project_root / out_dir / pkg_path
-    out_path.mkdir(parents=True, exist_ok=True)
+    emitter.mkdir(out_path)
     harness_path = project_root / harness_dir / pkg_path
-    harness_path.mkdir(parents=True, exist_ok=True)
+    emitter.mkdir(harness_path)
 
     content, report = render_kotlin_test_file(screen, spec, routes, package)
 
     runtime_file = out_path / "JsonuiBranchRuntime.kt"
-    runtime_file.write_text(KOTLIN_RUNTIME % {"package": package},
-                            encoding="utf-8")
+    emitter.emit(runtime_file, KOTLIN_RUNTIME % {"package": package})
     test_file = out_path / f"{pascal}BranchesTest.kt"
-    test_file.write_text(content, encoding="utf-8")
+    emitter.emit(test_file, content)
 
     harness_file = harness_path / f"{pascal}BranchHarness.kt"
     created = False
     if not harness_file.exists():
-        harness_file.write_text(
-            KOTLIN_HARNESS_SKELETON % {
-                "screen": screen,
-                "screen_const": screen.upper(),
-                "pascal": pascal,
-                "package": package,
-            },
-            encoding="utf-8",
-        )
-        created = True
+        if check:
+            report.harness_absent = True
+        else:
+            harness_file.write_text(
+                KOTLIN_HARNESS_SKELETON % {
+                    "screen": screen,
+                    "screen_const": screen.upper(),
+                    "pascal": pascal,
+                    "package": package,
+                },
+                encoding="utf-8",
+            )
+            created = True
 
     report.test_file = test_file
     report.runtime_file = runtime_file
     report.harness_file = harness_file
     report.harness_created = created
+    emitter.apply_to(report)
     return report
 
 
