@@ -316,6 +316,71 @@ class WebScanTests(unittest.TestCase):
         report = self._run()
         self.assertEqual(report.unused, [])
 
+    def test_an_in_file_prefix_wrapper_makes_literals_strict(self):
+        """A per-ViewModel wrapper whose definition is in the same file
+        composes a knowable key, so its literals stop being broad. Without
+        this, str/tpl calls could never produce a missing finding at all:
+        a typo was silently ignored, and a literal equal to ANOTHER
+        section's bare key read as usage — both reached the screen as raw
+        keys through getString's `|| key` fallback with the gate green."""
+        groups = {"admin_user": {"title": "T"},
+                  "pager": {"prev": "Prev", "next": "Next"}}
+        self.fx.write(
+            "src/vm.ts",
+            "function str(key: string): string {\n"
+            "  return StringManager.getString(`admin_user_${key}`);\n"
+            "}\n"
+            'a(str("title"));\n'          # admin_user_title — declared
+            'b(str("prev"));\n'           # composes admin_user_prev — NOT
+            'c(str("no_such_zzz"));\n')   # typo
+        report = self._run(groups)
+        sites = sorted(f.site.split(":")[-1] for f in report.missing)
+        self.assertEqual(sites, ["5", "6"], report.missing)
+        self.assertIn("admin_user_prev", report.missing[0].detail)
+        # The composed hit counts as usage of the right pair.
+        self.assertNotIn("admin_user.title", [f.site for f in report.unused])
+
+    def test_an_imported_wrapper_stays_broad(self):
+        """No definition in the file, no evidence — the identifier-collision
+        trade-off that justifies the broad match is unchanged there."""
+        groups = {"screen": {"title": "T"}, "pager": {"prev": "Prev"}}
+        self.fx.write(
+            "src/vm.ts",
+            'import { str } from "@/lib/i18n";\n'
+            'a(str("prev"));\n'          # bare key of another section: used
+            'b(str("no_such_zzz"));\n')  # unmatched: NOT a finding
+        report = self._run(groups)
+        self.assertEqual(report.missing, [])
+        self.assertNotIn("pager.prev", [f.site for f in report.unused])
+
+    def test_an_unreadable_wrapper_body_stays_broad(self):
+        """Unreadable degrades to the old behaviour, never to a guess."""
+        groups = {"screen": {"title": "T"}, "pager": {"prev": "Prev"}}
+        self.fx.write(
+            "src/vm.ts",
+            "function str(key: string): string {\n"
+            "  return StringManager.getString(`${SECTION}_${key}`);\n"
+            "}\n"
+            'a(str("prev"));\n'
+            'b(str("no_such_zzz"));\n')
+        report = self._run(groups)
+        self.assertEqual(report.missing, [])
+
+    def test_a_flat_delegation_wrapper_is_strict_with_empty_prefix(self):
+        """`getString(key)` pass-through: the runtime looks up the FLAT
+        key, so a bare literal would not resolve there either."""
+        self.fx.write(
+            "src/vm.ts",
+            "function str(key: string): string {\n"
+            "  return StringManager.getString(key);\n"
+            "}\n"
+            'a(str("screen_title"));\n'
+            'b(str("title"));\n')  # bare: resolves to nothing at runtime
+        report = self._run()
+        self.assertEqual(len(report.missing), 1)
+        self.assertIn("title", report.missing[0].detail)
+        self.assertNotIn("screen.title", [f.site for f in report.unused])
+
     def test_generated_string_manager_stub_is_not_scanned(self):
         # The real stub defines getString(key) — a dynamic-looking call
         # with no *_STRING_KEYS anywhere near it — and embeds the whole

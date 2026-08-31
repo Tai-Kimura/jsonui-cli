@@ -102,8 +102,17 @@ _GETSTRING_LITERAL_RE = re.compile(
 # Matching is therefore broad and an unmatched literal is NOT reported
 # (str/tpl are ordinary identifiers elsewhere; getString is the
 # unambiguous one and keeps the strict missing check).
+#
+# EXCEPT when the wrapper's own definition sits in the same file and its
+# body is statically readable (see `_wrapper_prefixes`): then the composed
+# key is knowable, the broad trade-off's justification disappears, and the
+# literal is checked strictly. Without this, a call under a per-ViewModel
+# prefix wrapper could never produce a missing finding at all — a typo'd
+# key was silently ignored, and a literal that happened to equal another
+# section's bare key read as usage, both reaching the screen as raw keys
+# through getString's `|| key` fallback while the gate stayed green.
 _WRAPPER_LITERAL_RE = re.compile(
-    r"\b(?:str|tpl)\(\s*([\"'])([A-Za-z0-9_]+)\1"
+    r"\b(str|tpl)\(\s*([\"'])([A-Za-z0-9_]+)\2"
 )
 _WRAPPER_DYNAMIC_RE = re.compile(
     r"\b(?:str|tpl|getString|StringManager\s*\.\s*plural)\(\s*(?![\"'])"
@@ -124,14 +133,22 @@ _FUNCTION_DEF_BEFORE_RE = re.compile(r"(?:function|func|fun|def)\s+$")
 # delegation layer (param → getString, possibly with a section prefix) —
 # key SELECTION happens at their call sites, where the literal rule is
 # enforced, so flagging the plumbing adds nothing to the closure and
-# would fire once per ViewModel-local wrapper.
-_WRAPPER_DEF_RE = re.compile(r"\bfunction\s+(?:str|tpl)\s*\(")
+# would fire once per ViewModel-local wrapper. The captured name feeds
+# `_wrapper_prefixes`, which reads the body to make call sites strict.
+_WRAPPER_DEF_NAME_RE = re.compile(r"\bfunction\s+(str|tpl)\s*\(")
+# The two statically readable wrapper bodies. Anything else (a variable
+# prefix, several interpolations, a lookup table) keeps the broad match —
+# unreadable must degrade to the old behaviour, never to a guess.
+_WRAPPER_PREFIX_BODY_RE = re.compile(
+    r"getString\(\s*`([A-Za-z0-9_]*)\$\{[^}`$]*\}`\s*\)")
+_WRAPPER_FLAT_BODY_RE = re.compile(
+    r"getString\(\s*[A-Za-z_][A-Za-z0-9_]*\s*\)")
 
 
-def _wrapper_body_spans(text: str) -> list[tuple[int, int]]:
-    """(start, end) offsets of every `function str/tpl(...) {...}` body."""
-    spans: list[tuple[int, int]] = []
-    for m in _WRAPPER_DEF_RE.finditer(text):
+def _wrapper_defs(text: str) -> list[tuple[str, int, int]]:
+    """(name, start, end) for every `function str/tpl(...) {...}` in *text*."""
+    defs: list[tuple[str, int, int]] = []
+    for m in _WRAPPER_DEF_NAME_RE.finditer(text):
         brace = text.find("{", m.end())
         if brace < 0:
             continue
@@ -155,8 +172,46 @@ def _wrapper_body_spans(text: str) -> list[tuple[int, int]]:
                 if depth == 0:
                     break
             j += 1
-        spans.append((m.start(), j + 1))
-    return spans
+        defs.append((m.group(1), m.start(), j + 1))
+    return defs
+
+
+def _wrapper_body_spans(text: str) -> list[tuple[int, int]]:
+    """(start, end) offsets of every `function str/tpl(...) {...}` body."""
+    return [(start, end) for _name, start, end in _wrapper_defs(text)]
+
+
+def _wrapper_prefixes(text: str) -> dict:
+    """``callee name -> static key prefix`` for this file's own wrappers.
+
+    A name is present only when its definition sits in *text* AND the body
+    is one of the two readable shapes: prefix composition
+    (``getString(`section_${key}`)`` → that prefix) or flat delegation
+    (``getString(key)`` → ``""``). The definition is the evidence that
+    licenses the strict check at the call sites; a file that merely imports
+    its wrapper — or defines an unrelated `str()` of its own with a body
+    this cannot read — stays on the broad match. Conflicting definitions of
+    one name make it unreadable too.
+    """
+    out: dict = {}
+    unreadable: set = set()
+    for name, start, end in _wrapper_defs(text):
+        body = text[start:end]
+        pm = _WRAPPER_PREFIX_BODY_RE.search(body)
+        if pm:
+            prefix = pm.group(1)
+        elif _WRAPPER_FLAT_BODY_RE.search(body):
+            prefix = ""
+        else:
+            unreadable.add(name)
+            continue
+        if name in out and out[name] != prefix:
+            unreadable.add(name)
+            continue
+        out[name] = prefix
+    for name in unreadable:
+        out.pop(name, None)
+    return out
 
 
 def _in_spans(offset: int, spans: list[tuple[int, int]]) -> bool:
@@ -716,8 +771,29 @@ def scan_vm_sources(
                         site=f"{rel}:{_line_of(text, m.start())}",
                         detail=f"getString({literal!r})",
                     ))
+            wrapper_prefixes = _wrapper_prefixes(text)
             for m in _WRAPPER_LITERAL_RE.finditer(text):
-                literal = m.group(2)
+                callee = m.group(1)
+                literal = m.group(3)
+                prefix = wrapper_prefixes.get(callee)
+                if prefix is not None:
+                    # This file defines the wrapper and its composition is
+                    # readable, so the key the call will look up is exactly
+                    # `prefix + literal` — checked strictly, like getString.
+                    composed = prefix + literal
+                    pairs = declared.by_flat.get(composed)
+                    if pairs:
+                        used |= pairs
+                    else:
+                        report.missing.append(UsageFinding(
+                            kind="missing-key",
+                            site=f"{rel}:{_line_of(text, m.start())}",
+                            detail=(
+                                f"{callee}({literal!r}) — this file's "
+                                f"{callee}() wrapper composes "
+                                f"'{composed}', which is not declared"),
+                        ))
+                    continue
                 pairs = declared.by_flat.get(literal) or declared.by_bare.get(
                     literal
                 )
