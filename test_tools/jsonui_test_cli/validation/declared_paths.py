@@ -69,6 +69,19 @@ def set_path_roots(project_root=None, config=None):
         "layouts_directory", "docs/screens/layouts")
     _ROOTS["document"] = root / config.get(
         "spec_directory", "docs/screens/json")
+    # Every declared boundary above the project, not just the project. In a
+    # multi-app repository the config a run reads is the APP's, and paths
+    # written from the repository root resolve under none of the roots
+    # above it. Measured on one such project: 201 `source.document`
+    # declarations, every one of them correct, and every one of them
+    # unreachable from the app. Same defect the doc side carried, found on
+    # the doc side first.
+    bases = [root]
+    for parent in root.resolve().parents:
+        if ((parent / "jui.config.json").is_file()
+                or (parent / ".git").exists()):
+            bases.append(parent)
+    _ROOTS["bases"] = bases
 
 
 def skipped_kinds() -> list:
@@ -93,17 +106,29 @@ def _root_for(kind: str):
     return root
 
 
-def _candidates(value: str, kind: str):
+def _candidates(value: str, kind: str, test_file):
     kind_root = _root_for(kind)
     if kind_root is not None:
         yield kind_root / value
-        # A path written from the repository root rather than from the
-        # declaration's own directory. Both spellings are in use, and this
-        # check is not the place to decide between them.
-        yield _ROOTS["project"] / value
+    # Every declared boundary from the project up to the repository root:
+    # the spellings in use are written from whichever of them the author
+    # had in mind, and this check is not the place to choose between them.
+    for base in _ROOTS.get("bases", ()):
+        yield base / value
+    if test_file is not None:
+        # The declaration's own file. Excluded in the first version, on the
+        # reasoning that the driver resolves a layout from the layouts
+        # directory rather than from beside the test — which is true, and
+        # was the wrong thing to reason about. The spelling actually in use
+        # is an explicit `../../../docs/...` chain FROM THE TEST FILE, 201
+        # times in one project, and none of it resolves from any other
+        # base. A relative path is written relative to something, and the
+        # file it is written in is the one candidate that is always
+        # available.
+        yield Path(test_file).parent / value
 
 
-def resolves(value, kind: str) -> bool:
+def resolves(value, kind: str, test_file=None) -> bool:
     """True when *value* names a file under any root this run knows about.
 
     Also true when there is nothing to resolve against, so a caller cannot
@@ -119,10 +144,17 @@ def resolves(value, kind: str) -> bool:
         return True          # a shape problem, reported by the shape check
     if Path(value).is_absolute():
         return Path(value).exists()
-    candidates = list(_candidates(value.strip(), kind))
-    if not candidates:
-        return True          # nothing to resolve against — see `_root_for`
-    return any(candidate.exists() for candidate in candidates)
+    if not _ROOTS:
+        return True          # no project — nothing to resolve against
+    if _root_for(kind) is None:
+        # The configured directory for this kind is not on disk, so this
+        # run cannot tell a missing file from a layout it cannot name.
+        # Declining still beats guessing even though other candidates
+        # exist: the paths written relative to that directory would all be
+        # reported, which is the mass false positive this guard is for.
+        return True
+    return any(candidate.exists()
+               for candidate in _candidates(value.strip(), kind, test_file))
 
 
 def unresolved_message(key: str, value: str, kind: str) -> str:

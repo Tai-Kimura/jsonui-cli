@@ -175,7 +175,8 @@ class FlowTestValidator:
             for key, kind in (("layout", "layout"), ("document", "document"),
                               ("spec", "document")):
                 if key in source and not declared_paths.resolves(
-                        source.get(key), kind):
+                        source.get(key), kind,
+                        self._test_file_path):
                     result.warnings.append(ValidationMessage(
                         path=source_path,
                         message=declared_paths.unresolved_message(

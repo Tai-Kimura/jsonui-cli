@@ -113,6 +113,90 @@ class TestScreenSource:
         assert _path_warnings(_validate(project, doc)) == []
 
 
+class TestTheSpellingsActuallyInUse:
+    """Measured on a multi-app project, 402 declarations, all correct.
+
+    Under the first version every one of them would have been reported:
+
+    ==========  ================================  ====================
+    key         how it is written (201 each)      resolves only from
+    ==========  ================================  ====================
+    `layout`    `../../../docs/<app>/.../x.json`  the TEST FILE
+    `document`  `docs/<app>/.../x.html`           the REPOSITORY ROOT
+    ==========  ================================  ====================
+
+    Neither base was a candidate. The test file's directory was excluded
+    deliberately, on the reasoning that the driver resolves a layout from
+    the layouts directory rather than from beside the test — true, and the
+    wrong thing to reason about: an explicit `../../../` chain is written
+    relative to the file it appears in, and that is the corpus. The
+    repository root was missed the same way the doc side missed it, in the
+    same release: the config a run reads is the APP's.
+    """
+
+    @pytest.fixture
+    def multi_app(self, tmp_path):
+        (tmp_path / ".git").mkdir()
+        app = tmp_path / "app"
+        app.mkdir()
+        (app / "jui.config.json").write_text(json.dumps({
+            "layouts_directory": "../docs/app/screens/layouts",
+            "spec_directory": "../docs/app/screens/json",
+        }), encoding="utf-8")
+        for sub in ("layouts", "json", "html"):
+            (tmp_path / "docs" / "app" / "screens" / sub).mkdir(parents=True)
+        (tmp_path / "docs/app/screens/layouts/home.json").write_text(
+            "{}", encoding="utf-8")
+        (tmp_path / "docs/app/screens/html/home.html").write_text(
+            "", encoding="utf-8")
+        (tmp_path / "tests" / "app" / "screens").mkdir(parents=True)
+        declared_paths.set_path_roots(app, json.loads(
+            (app / "jui.config.json").read_text()))
+        yield tmp_path
+        declared_paths.set_path_roots(None)
+
+    def _validate(self, repo, source):
+        path = repo / "tests" / "app" / "screens" / "home.test.json"
+        path.write_text(json.dumps(dict(SCREEN, source=source)),
+                        encoding="utf-8")
+        return TestValidator().validate_file(path)
+
+    def test_a_chain_relative_to_the_test_file_resolves(self, multi_app):
+        result = self._validate(multi_app, {
+            "layout": "../../../docs/app/screens/layouts/home.json"})
+
+        assert _path_warnings(result) == []
+
+    def test_a_path_from_the_repository_root_resolves(self, multi_app):
+        """The app config is what the run reads, and this spelling is
+        reachable from neither it nor the directories it declares."""
+        result = self._validate(multi_app, {
+            "layout": "../../../docs/app/screens/layouts/home.json",
+            "document": "docs/app/screens/html/home.html"})
+
+        assert _path_warnings(result) == []
+
+    def test_a_missing_file_in_either_spelling_still_warns(self, multi_app):
+        """The negative arm. Widening the bases silences findings by
+        construction, so both spellings need a miss to prove the check
+        survived the widening."""
+        result = self._validate(multi_app, {
+            "layout": "../../../docs/app/screens/layouts/gone.json",
+            "document": "docs/app/screens/html/gone.html"})
+
+        assert len(_path_warnings(result)) == 2
+
+    def test_the_check_is_running_rather_than_declining(self, multi_app):
+        """The control on the control. `skipped_kinds()` non-empty would
+        make every "no warnings" assertion above pass for the wrong reason
+        — which is exactly the state this project was measured in before
+        the wiring that feeds the declared directories was fixed."""
+        self._validate(multi_app, {
+            "layout": "../../../docs/app/screens/layouts/home.json"})
+
+        assert declared_paths.skipped_kinds() == []
+
+
 class TestFlowSources:
     def test_a_layout_that_exists_says_nothing(self, project):
         assert _path_warnings(_validate(project, FLOW)) == []

@@ -94,7 +94,7 @@ class ScreenTestValidator:
                               ("spec", "document")):
                 value = source.get(key)
                 if key in source and not declared_paths.resolves(
-                        value, kind):
+                        value, kind, self._test_file_path):
                     result.warnings.append(ValidationMessage(
                         path=f"{path}.source",
                         message=declared_paths.unresolved_message(
