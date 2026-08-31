@@ -182,18 +182,33 @@ def test_an_absence_on_a_hand_written_only_route_is_reported_not_gated(tmp_path)
 # The overlay union
 # --------------------------------------------------------------------- #
 
-def test_a_hand_written_scenario_covers_the_declared_status(project):
-    """Statuses are the identity, not names — the same rule the body check
-    uses. A hand-written `locked` at 423 covers the declared 423 that
-    generation happens to call `error_423`."""
-    spec, mocks = project
-    _drop(_generated(mocks), "error_423")
-    (mocks / "sessions").mkdir(parents=True, exist_ok=True)
+def test_a_hand_written_scenario_covers_the_declared_status(tmp_path):
+    """On the hand-written side, statuses are the identity rather than
+    names — the same rule the body check uses. `locked` covers the declared
+    423 that generation happens to call `error_423`, and a project that
+    names its scenarios after its own domain owes nobody the generator's
+    spelling.
+
+    Hand-written only, deliberately. This used to reach the same state by
+    deleting `error_423` out of `generated/` and letting a hand-written 423
+    stand in for it — a state the overlay model cannot produce, because
+    `generated/` is rewritten wholesale on every run. It is now the state
+    the generated-side gate exists to catch, so the claim about names is
+    made where it actually applies.
+    """
+    spec = tmp_path / "swagger.json"
+    spec.write_text(json.dumps(SPEC), encoding="utf-8")
+    mocks = tmp_path / "tests" / "mocks"
+    (mocks / "sessions").mkdir(parents=True)
     (mocks / "sessions" / "post_api-user-sessions.mock.json").write_text(
         json.dumps({
             "source": {"method": "POST", "path": "/api/user/sessions"},
-            "activeScenario": "locked",
-            "scenarios": {"locked": {"status": 423, "body": {"error": "locked"}}},
+            "activeScenario": "ok",
+            "scenarios": {
+                "ok": {"status": 200, "body": {"token": "t"}},
+                "locked": {"status": 423, "body": {"error": "locked"}},
+                "slow_down": {"status": 429, "body": {"error": "rate"}},
+            },
         }), encoding="utf-8")
 
     report = generate([str(spec)], mocks, check=True)
@@ -203,8 +218,116 @@ def test_a_hand_written_scenario_covers_the_declared_status(project):
 
 
 # --------------------------------------------------------------------- #
-# The reference set
+# The reference set: the generator's scenarios, not its statuses
+#
+# The first version of this bucket read the denominator off the STATUSES
+# generation produces, on both sides. That closes only the case where a
+# status loses its LAST scenario. An operation declaring 200 twice —
+# `default` and `empty` — kept answering "in sync" with `empty` deleted,
+# because 200 was still served, and the run's own total shrank from 7 to 6
+# to match: the generator's own output deleted, both gates green.
+#
+# The three arms below are the reporter's, one variable apart. The control
+# is load-bearing: "the `empty` arm is red" and "every arm is red" are the
+# same observation without it.
 # --------------------------------------------------------------------- #
+
+#: 200 twice: `default` and `empty` are both produced for the same status.
+SPEC_WITH_TWO_200_SCENARIOS = {
+    "openapi": "3.0.3",
+    "paths": {
+        "/api/items": {"get": {
+            "operationId": "listItems",
+            "responses": {
+                "200": {"content": {"application/json": {"schema": {
+                    "type": "array", "items": {
+                        "type": "object", "required": ["id"],
+                        "properties": {"id": {"type": "string"}}}}}}},
+                "403": {"content": {"application/json": {"schema": {
+                    "type": "object", "required": ["error"],
+                    "properties": {"error": {"type": "string"}}}}}},
+            },
+        }},
+    },
+}
+
+
+@pytest.fixture
+def two_hundreds(tmp_path):
+    spec = tmp_path / "swagger.json"
+    spec.write_text(json.dumps(SPEC_WITH_TWO_200_SCENARIOS), encoding="utf-8")
+    mocks = tmp_path / "tests" / "mocks"
+    mocks.mkdir(parents=True)
+    generate([str(spec)], mocks)
+    assert set(json.loads(_generated(mocks).read_text("utf-8"))["scenarios"]) == {
+        "default", "empty", "error_403"}
+    return str(spec), mocks
+
+
+def test_the_control_arm_is_green(two_hundreds):
+    spec, mocks = two_hundreds
+    report = generate([spec], mocks, check=True)
+    assert report.absent == []
+    assert not report.has_drift
+    assert report.scenarios_seen == 3
+
+
+def test_deleting_one_of_two_scenarios_for_a_status_is_caught(two_hundreds):
+    """The reported hole. 200 is still served by `default`, so a
+    status-keyed denominator sees nothing missing."""
+    spec, mocks = two_hundreds
+    _drop(_generated(mocks), "empty")
+
+    report = generate([spec], mocks, check=True)
+
+    assert report.has_drift
+    assert len(report.absent_generated) == 1
+    assert "empty" in report.absent_generated[0]
+
+
+def test_the_total_holds_when_one_of_two_is_deleted(two_hundreds):
+    """The denominator is the point: `compared` falls by one and the bucket
+    rises by one, so the line does not read as a smaller, healthy run."""
+    spec, mocks = two_hundreds
+    before = generate([spec], mocks, check=True)
+    _drop(_generated(mocks), "empty")
+    after = generate([spec], mocks, check=True)
+
+    assert after.compared == before.compared - 1
+    assert after.scenarios_seen == before.scenarios_seen
+
+
+def test_the_last_scenario_for_a_status_is_still_caught(two_hundreds):
+    """The case the first version did close, kept."""
+    spec, mocks = two_hundreds
+    _drop(_generated(mocks), "error_403")
+
+    report = generate([spec], mocks, check=True)
+
+    assert report.has_drift
+    assert len(report.absent_generated) == 1
+    assert "error_403" in report.absent_generated[0]
+
+
+def test_a_hand_written_mock_does_not_have_to_repeat_the_generators_names(
+        two_hundreds):
+    """Only `generated/` is held to the generator's scenario NAMES, and it
+    is held to them on its own contents — so an overlay beside it, carrying
+    one scenario under a name of its own, neither satisfies nor violates
+    anything. (The hand-written side's own rule — statuses, not names — is
+    measured on a hand-written-only route above, where it applies.)"""
+    spec, mocks = two_hundreds
+    (mocks / "items").mkdir(parents=True, exist_ok=True)
+    (mocks / "items" / "listItems.mock.json").write_text(json.dumps({
+        "source": {"method": "GET", "path": "/api/items"},
+        "scenarios": {"two_rows": {"status": 200, "body": [{"id": "1"}]}},
+    }), encoding="utf-8")
+
+    report = generate([spec], mocks, check=True)
+
+    assert report.absent == []
+    assert not report.has_drift
+
 
 # --------------------------------------------------------------------- #
 # The other direction: a status the swagger no longer declares

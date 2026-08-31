@@ -1391,9 +1391,26 @@ def _collect_absent(
     happen to cover, which is the normal state of every hand-written mock
     in every project.
 
-    Statuses, not names, are the identity — the same rule the body check
-    uses. A hand-written `no_refund` at 409 covers the declared 409 that
-    generation happens to call `error_409`.
+    The two sides are asked different questions, because they are held to
+    different things:
+
+    `generated/` is a pure function of the swagger, so it must hold exactly
+    the scenarios generation produces, BY NAME. Reading it by status instead
+    closes only the case where a status loses its last scenario: an
+    operation declaring 200 twice (`default` and `empty`) kept answering
+    "in sync" with `empty` deleted, because 200 was still served — and the
+    run's own total shrank from 7 to 6 to match. That is the generator's own
+    output being deleted while both gates call the tree synchronised.
+
+    Hand-written mocks are held to STATUSES, over the union of the route.
+    They carry only the scenarios their tests drive, so a name generation
+    happens to use is not owed by anyone, and coverage is a property of the
+    route rather than of a file: the overlay model serves generated/ as the
+    base with hand-written scenarios overriding by name. Asking each file
+    separately would report every status a hand-written mock does not happen
+    to cover, which is the normal state of every hand-written mock in every
+    project. A hand-written `no_refund` at 409 covers the declared 409 that
+    generation calls `error_409`.
     """
     try:
         fresh = build_mock_definition(doc, op)
@@ -1401,34 +1418,49 @@ def _collect_absent(
         # Synthesis can fail on shapes the generator cannot build (self
         # reference); nothing to hold the route to in that case.
         return
-    declared = {str(s.get("status")): name
-                for name, s in (fresh.get("scenarios") or {}).items()
+    produced = {name: s for name, s in (fresh.get("scenarios") or {}).items()
                 if isinstance(s, dict) and s.get("status") is not None}
-    if not declared:
+    if not produced:
         return
 
-    served: set[str] = set()
-    has_generated = False
-    for rel in rels:
-        if is_generated(rel):
-            has_generated = True
+    def _scenarios(rel):
         try:
             with open(mock_dir / rel, "r", encoding="utf-8") as f:
-                data = json.load(f)
+                return (json.load(f).get("scenarios") or {})
         except (OSError, json.JSONDecodeError):
             # Reported as drift by the caller; an unreadable file cannot be
             # held to serve anything, and calling its whole contract absent
             # would bury one finding under a list of derived ones.
+            return None
+
+    generated_rels = [rel for rel in rels if is_generated(rel)]
+    if generated_rels:
+        for rel in generated_rels:
+            present = _scenarios(rel)
+            if present is None:
+                return
+            for name in sorted(produced):
+                if name not in present:
+                    absent_generated.append(
+                        f"{rel}  {name}: status {produced[name]['status']} "
+                        "is declared but this generated file does not serve "
+                        "it")
+        return
+
+    served: set[str] = set()
+    for rel in rels:
+        present = _scenarios(rel)
+        if present is None:
             return
-        for scenario in (data.get("scenarios") or {}).values():
+        for scenario in present.values():
             if isinstance(scenario, dict) and scenario.get("status") is not None:
                 served.add(str(scenario.get("status")))
 
-    sink = absent_generated if has_generated else absent_handwritten
-    where = mock_relpath(op) if has_generated else ", ".join(sorted(rels))
+    declared = {str(s["status"]): name for name, s in produced.items()}
+    where = ", ".join(sorted(rels))
     for status in sorted(declared):
         if status not in served:
-            sink.append(
+            absent_handwritten.append(
                 f"{where}  {declared[status]}: status {status} is declared "
                 "but no scenario on this route serves it")
 
