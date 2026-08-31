@@ -106,10 +106,27 @@ class MockFile:
 
 
 def index_mock_files(mocks_dir: Path) -> list[MockFile]:
-    mocks: list[MockFile] = []
+    """One merged MockFile per route — the view `mock serve` serves.
+
+    generated/ is read first and hand-written files overlay it per scenario
+    name, the hand-written `activeScenario` winning only when explicit and
+    resolvable. Returning one raw MockFile per FILE made the branch tests'
+    winner a property of directory sort order once the overlay model
+    guaranteed every hand-written route a generated counterpart:
+    `find_mock` takes the first match, so a hand-written file sorting after
+    `generated/` had its test-driven scenarios silently ignored.
+    """
+    from .mock.generate import GENERATED_DIR
+
     if not mocks_dir.is_dir():
-        return mocks
-    for f in sorted(mocks_dir.rglob("*.mock.json")):
+        return []
+
+    def _is_generated(f: Path) -> bool:
+        return GENERATED_DIR in f.relative_to(mocks_dir).parts
+
+    merged: dict = {}
+    for f in sorted(mocks_dir.rglob("*.mock.json"),
+                    key=lambda p: (not _is_generated(p), str(p))):
         try:
             with open(f, "r", encoding="utf-8") as fh:
                 data = json.load(fh)
@@ -123,11 +140,25 @@ def index_mock_files(mocks_dir: Path) -> list[MockFile]:
                 and isinstance(scenarios, dict) and scenarios):
             continue
         active = data.get("activeScenario")
-        if not (isinstance(active, str) and active in scenarios):
-            active = next(iter(scenarios))
-        mocks.append(MockFile(file=f, method=method.upper(), path=path,
-                              active_scenario=active, scenarios=scenarios))
-    return mocks
+        explicit = isinstance(active, str) and active in scenarios
+        key = (method.upper(), path)
+        entry = merged.get(key)
+        if entry is None:
+            merged[key] = MockFile(
+                file=f, method=method.upper(), path=path,
+                active_scenario=(active if explicit
+                                 else next(iter(scenarios))),
+                scenarios=dict(scenarios))
+            continue
+        if _is_generated(f):
+            # Two generated files for one route cannot happen (the tree is
+            # rewritten from the swagger); if it somehow does, first wins.
+            continue
+        entry.scenarios.update(scenarios)
+        if explicit:
+            entry.active_scenario = active
+        entry.file = f
+    return list(merged.values())
 
 
 def find_mock(mocks: list[MockFile], method: str, path: str) -> MockFile | None:

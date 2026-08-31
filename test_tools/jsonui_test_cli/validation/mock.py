@@ -225,7 +225,16 @@ def find_mock_index(test_file_path):
         except (OSError, json.JSONDecodeError):
             continue
         op_id = (data.get("source", {}) or {}).get("operationId") or f.stem.replace(".mock", "")
-        index[op_id] = set((data.get("scenarios", {}) or {}).keys())
+        # UNION per operation — the view serve actually serves. A route can
+        # legitimately have two files (generated counterpart + hand-written
+        # overlay), and a test's scenario reference is valid iff the union
+        # answers it. This used to assign (last-wins over an UNSORTED walk),
+        # so once the overlay model guaranteed the counterpart exists, the
+        # generated copy could shadow the very scenarios the tests drive —
+        # 24 reference errors on the reporting consumer, every one naming
+        # the generated side's set as "available".
+        index.setdefault(op_id, set()).update(
+            (data.get("scenarios", {}) or {}).keys())
     _MOCK_INDEX_CACHE[key] = index
     _INDEX_SOURCE[id(index)] = key
     return index

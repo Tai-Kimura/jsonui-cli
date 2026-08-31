@@ -26,8 +26,9 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from jsonui_test_cli.mock.generate import generate
-from jsonui_test_cli.validation.mock import set_mock_source
+from jsonui_test_cli.branch_tests import find_mock, index_mock_files
+from jsonui_test_cli.mock.generate import generate, update_default
+from jsonui_test_cli.validation.mock import find_mock_index, set_mock_source
 from jsonui_test_cli.validation.validator import TestValidator
 
 SPEC = {
@@ -36,7 +37,7 @@ SPEC = {
         "/api/items": {"get": {
             "operationId": "listItems",
             "responses": {"200": {"content": {"application/json": {
-                "schema": {"type": "object",
+                "schema": {"type": "object", "required": ["id"],
                            "properties": {"id": {"type": "string"}}}}}}},
         }},
     },
@@ -53,13 +54,15 @@ def project(tmp_path):
     set_mock_source()
 
 
-def _overlay(mocks: Path, body: dict) -> Path:
-    # The directory name is load-bearing: the shadowing this file guards
-    # against was LAST-WINS collapse over `sorted(rglob(...))`, so it only
-    # fired when the hand-written directory sorted BEFORE `generated/`
-    # (the reporting consumer's tag dirs did; an `items/` fixture sorts
-    # after and hides the defect by accident).
-    path = mocks / "custom" / "listItems.mock.json"
+def _overlay(mocks: Path, body: dict, dirname: str = "custom") -> Path:
+    # The directory name is load-bearing: each collapse defect only fires
+    # for one sort order relative to `generated/`. "custom" sorts BEFORE it
+    # (the generate-detection shadow, the reporting consumer's tag dirs);
+    # pass a name sorting AFTER it ("z-custom") for the defects where the
+    # HAND-WRITTEN file winning the collapse is the harmful direction
+    # (update_default scaffolding a default into a thin overlay). A fixture
+    # on the wrong side of the order hides its defect by accident.
+    path = mocks / dirname / "listItems.mock.json"
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(body), encoding="utf-8")
     return path
@@ -146,3 +149,62 @@ class TestValidateSeesTheOverlay:
         gen.write_text(json.dumps(data), encoding="utf-8")
         result = self._validate(gen)
         assert any("gone" in e.message for e in result.errors)
+
+
+class TestEveryIndexSeesTheUnion:
+    """The overlay model guarantees every hand-written route a generated
+    counterpart, so every index that collapses a route to ONE file picks
+    its winner by directory sort order. That shape shipped four separate
+    shadowing defects (generate detection, then — after v1.7.22 made the
+    counterpart universal — the scenario-reference index, with the branch
+    test lookup and the update-default target as the same class); the
+    reference-index one reached a consumer as 24 errors whose `available:`
+    sets all came from the generated side.
+    """
+
+    def test_the_reference_index_unions_both_files(self, project):
+        # The reported regression: a test referencing a hand-written,
+        # test-driven scenario must stay valid with the counterpart
+        # present — and the generated side's scenarios stay valid too.
+        # Asserting BOTH directions makes the red-check deterministic:
+        # a one-file collapse loses one side whichever file wins.
+        _root, mocks = project
+        _overlay(mocks, THIN)
+        index = find_mock_index(mocks / "custom" / "listItems.mock.json")
+        assert index["listItems"] >= {"paging", "paging_page2", "default"}
+
+    def test_branch_tests_read_the_merged_route(self, project):
+        _root, mocks = project
+        _overlay(mocks, dict(THIN, activeScenario="paging"))
+        merged = index_mock_files(mocks)
+        assert len(merged) == 1
+        m = find_mock(merged, "GET", "/api/items")
+        assert set(m.scenarios) >= {"paging", "paging_page2", "default"}
+        # the hand-written explicit active wins, mirroring serve
+        assert m.active_scenario == "paging"
+
+    def test_update_default_repairs_the_generated_side_of_a_thin_overlay(
+            self, project):
+        # A thin overlay deliberately has no `default`; scaffolding one
+        # into it would fork the very body the layout keeps unforked. The
+        # served default comes from the generated side, so that is the
+        # repair target — and the hand-written file's bytes stay untouched.
+        root, mocks = project
+        hand = _overlay(mocks, THIN, dirname="z-custom")
+        before = hand.read_bytes()
+        report = update_default([str(root / "swagger.json")], mocks)
+        assert hand.read_bytes() == before
+        assert all("z-custom/" not in rel for rel in report.updated)
+
+    def test_update_default_repairs_a_hand_written_default_that_serves(
+            self, project):
+        # The other direction: a full hand-written mock DOES override the
+        # generated default at serve time, so the repair belongs to it.
+        root, mocks = project
+        body = dict(THIN)
+        body["scenarios"] = dict(THIN["scenarios"],
+                                 default={"status": 200, "body": {}})
+        hand = _overlay(mocks, body, dirname="z-custom")
+        update_default([str(root / "swagger.json")], mocks)
+        repaired = json.loads(hand.read_text(encoding="utf-8"))
+        assert "id" in repaired["scenarios"]["default"]["body"]

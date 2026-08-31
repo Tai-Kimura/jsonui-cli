@@ -160,16 +160,12 @@ def read_route(path: Path) -> tuple | None:
     return route_key(src.get("method"), src.get("path"))
 
 
-def index_existing(mock_dir: Path) -> dict:
-    """`route_key -> relative path` for every mock file under `mock_dir`."""
-    out: dict = {}
-    if not mock_dir.exists():
-        return out
-    for path in sorted(mock_dir.rglob("*.mock.json")):
-        key = read_route(path)
-        if key is not None:
-            out[key] = str(path.relative_to(mock_dir))
-    return out
+# NOTE: there deliberately is no route->single-file index helper anymore.
+# A route can hold two files under the overlay model, so every consumer of
+# "the mock for this route" has to say WHICH view it wants (hand-written
+# only, generated only, or the serve-time union) — a one-file collapse
+# answers by directory sort order, which produced four separate shadowing
+# defects before it was removed.
 
 
 def build_mock_definition(doc: OpenApiDoc, op: Operation) -> dict:
@@ -498,7 +494,30 @@ def update_default(
     skipped: list[str] = []
     added: dict = {}
     needs_review: list = []
-    existing = index_existing(mock_dir)
+    # A route can hold two files under the overlay model (generated
+    # counterpart + hand-written overlay), so the repair target is picked by
+    # WHICH file's `default` actually serves — serve lets a hand-written
+    # `default` override the generated one, otherwise the generated side
+    # supplies it. The old single `index_existing` collapse picked the
+    # target by directory sort order, which could inject a scaffolded
+    # default into a thin overlay that deliberately omits one (forking the
+    # very body the layout exists to keep unforked).
+    hand_index: dict = {}
+    gen_index: dict = {}
+    if mock_dir.exists():
+        for p in sorted(mock_dir.rglob("*.mock.json")):
+            k = read_route(p)
+            if k is None:
+                continue
+            rel_p = str(p.relative_to(mock_dir))
+            (gen_index if is_generated(rel_p) else hand_index)[k] = rel_p
+
+    def _declares_default(rel_path: str) -> bool:
+        try:
+            with open(mock_dir / rel_path, "r", encoding="utf-8") as f:
+                return "default" in (json.load(f).get("scenarios") or {})
+        except (OSError, json.JSONDecodeError):
+            return False
 
     for swagger in swagger_paths:
         doc = OpenApiDoc.load(swagger)
@@ -507,7 +526,13 @@ def update_default(
         for op in doc.operations():
             # Located by route, so a project's own file naming is honoured.
             key = route_key(op.method, op.path)
-            rel = existing.get(key) or mock_relpath(op)
+            hand_rel = hand_index.get(key)
+            if hand_rel is not None and _declares_default(hand_rel):
+                rel = hand_rel                # the served default is this one
+            elif key in gen_index:
+                rel = gen_index[key]          # thin overlay / no hand file
+            else:
+                rel = hand_rel or mock_relpath(op)
             target = mock_dir / rel
             if not target.exists():
                 # Out of scope and absent is the correct state, not a gap.
