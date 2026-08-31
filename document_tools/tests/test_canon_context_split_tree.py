@@ -477,6 +477,7 @@ class ComparedNothingIsNotAMatchTests(unittest.TestCase):
         self.spec = self.root / "docs" / "screens" / "s.spec.json"
         self.spec.write_text(json.dumps({
             "type": "screen",
+            "source": {"layout": "S.json"},
             "metadata": {"name": "S", "description": "S.", "screen": "s"},
             "dataFlow": {"repositories": [{"name": "R", "methods": [
                 {"name": "m", "endpoint": "GET /api/nowhere", "params": []}]}]},
@@ -535,6 +536,7 @@ class ComparedNothingIsNotAMatchTests(unittest.TestCase):
         self.canon(False)
         self.spec.write_text(json.dumps({
             "type": "screen",
+            "source": {"layout": "S.json"},
             "metadata": {"name": "S", "description": "S.", "screen": "s"},
             "dataFlow": {"viewModel": {"methods": [{"name": "onLoad"}]}},
         }), encoding="utf-8")
@@ -680,6 +682,7 @@ class UncheckedCountIsPerFileTests(unittest.TestCase):
         p = self.root / "docs" / "screens" / f"{name}.spec.json"
         p.write_text(json.dumps({
             "type": "screen",
+            "source": {"layout": "R.json"},
             "metadata": {"name": name, "description": "d.", "screen": name},
             "dataFlow": {"repositories": [{"name": "R", "methods": methods}]},
         }), encoding="utf-8")

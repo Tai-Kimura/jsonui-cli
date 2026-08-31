@@ -71,6 +71,7 @@ SWAGGER = {
 def _spec(method: dict) -> dict:
     return {
         "type": "screen",
+        "source": {"layout": "Fixture.json"},
         "metadata": {"name": "Fixture", "description": "Fixture.",
                      "screen": "fixture"},
         "dataFlow": {"repositories": [
@@ -406,6 +407,7 @@ class MisplacedMarkTests(_Fixture):
     def resolve_vm(self, vm_method, repo_method=None):
         data = {
             "type": "screen",
+            "source": {"layout": "F.json"},
             "metadata": {"name": "F", "description": "F.", "screen": "f"},
             "dataFlow": {"viewModel": {"methods": [vm_method]}},
         }

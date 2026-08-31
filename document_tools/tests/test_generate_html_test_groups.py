@@ -24,6 +24,7 @@ from jsonui_doc_cli.test_doc.generator import _report_stale_pages, _test_group
 def _screen_test(name: str) -> str:
     return json.dumps({
         "type": "screen",
+        "source": {"layout": "c.json"},
         "metadata": {"name": name},
         "cases": [{"name": "c", "steps": []}],
     })

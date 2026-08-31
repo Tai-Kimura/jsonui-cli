@@ -24,6 +24,7 @@ class TestGenerateDoc:
         """Test generating markdown documentation."""
         test_data = {
             "type": "screen",
+            "source": {"layout": "test.json"},
             "metadata": {"name": "test"},
             "cases": [{"name": "case1", "steps": [{"action": "back"}]}]
         }
@@ -48,6 +49,7 @@ class TestGenerateDoc:
         """Test generating HTML documentation."""
         test_data = {
             "type": "screen",
+            "source": {"layout": "test.json"},
             "metadata": {"name": "test"},
             "cases": [{"name": "case1", "steps": [{"action": "back"}]}]
         }
@@ -108,6 +110,7 @@ class TestGenerateHtml:
         """Test generating HTML directory with index."""
         test_data = {
             "type": "screen",
+            "source": {"layout": "test.json"},
             "metadata": {"name": "test", "description": "Test screen"},
             "cases": [{"name": "case1", "steps": [{"action": "back"}]}]
         }
@@ -131,6 +134,7 @@ class TestGenerateHtml:
         """Test generating HTML directory with flow tests."""
         screen_test = {
             "type": "screen",
+            "source": {"layout": "login_test.json"},
             "metadata": {"name": "login_test"},
             "cases": [{"name": "case1", "steps": [{"action": "back"}]}]
         }
@@ -160,6 +164,7 @@ class TestGenerateHtml:
         """Test generating HTML with custom title."""
         test_data = {
             "type": "screen",
+            "source": {"layout": "test.json"},
             "metadata": {"name": "test"},
             "cases": [{"name": "case1", "steps": [{"action": "back"}]}]
         }

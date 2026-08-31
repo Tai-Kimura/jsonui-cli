@@ -70,6 +70,7 @@ class TestDocumentGenerator:
         """Test basic HTML generation."""
         test_data = {
             "type": "screen",
+            "source": {"layout": "HTML Test.json"},
             "metadata": {"name": "HTML Test"},
             "cases": [
                 {
@@ -100,6 +101,7 @@ class TestDocumentGenerator:
         """Test generation fails on invalid test file."""
         test_data = {
             "type": "screen",
+            "source": {"layout": "screen.json"},
             "cases": [
                 {
                     "name": "bad_case",
@@ -125,6 +127,7 @@ class TestDocumentGenerator:
         """Test generation writes to output file."""
         test_data = {
             "type": "screen",
+            "source": {"layout": "Output Test.json"},
             "metadata": {"name": "Output Test"},
             "cases": [
                 {"name": "case1", "steps": [{"action": "back"}]}
@@ -157,6 +160,7 @@ class TestDocumentGenerator:
         """Test step details are formatted correctly."""
         test_data = {
             "type": "screen",
+            "source": {"layout": "Details Test.json"},
             "metadata": {"name": "Details Test"},
             "cases": [
                 {
@@ -424,6 +428,7 @@ class TestArgsHtmlGeneration:
         """Test screen case args are displayed in HTML."""
         test_data = {
             "type": "screen",
+            "source": {"layout": "login_test.json"},
             "metadata": {"name": "login_test", "description": "Login screen test"},
             "cases": [
                 {
@@ -465,6 +470,7 @@ class TestArgsHtmlGeneration:
         """Test screen case without args doesn't show args section."""
         test_data = {
             "type": "screen",
+            "source": {"layout": "simple_test.json"},
             "metadata": {"name": "simple_test"},
             "cases": [
                 {
@@ -560,6 +566,7 @@ class TestArgsHtmlGeneration:
         """Test multiple cases with different args are displayed correctly."""
         test_data = {
             "type": "screen",
+            "source": {"layout": "multi_args_test.json"},
             "metadata": {"name": "multi_args_test"},
             "cases": [
                 {
@@ -622,6 +629,7 @@ class TestHtmlDirectoryGeneration:
             # Create a screen test
             screen_test = {
                 "type": "screen",
+                "source": {"layout": "login_test.json"},
                 "metadata": {"name": "login_test", "description": "Login screen tests"},
                 "cases": [{"name": "initial", "steps": [{"action": "back"}]}]
             }
@@ -658,6 +666,7 @@ class TestHtmlDirectoryGeneration:
             # Create a screen test
             screen_test = {
                 "type": "screen",
+                "source": {"layout": "login_test.json"},
                 "metadata": {"name": "login_test"},
                 "cases": [{"name": "initial", "steps": [{"action": "back"}]}]
             }
@@ -700,6 +709,7 @@ class TestHtmlDirectoryGeneration:
 
             screen_test = {
                 "type": "screen",
+                "source": {"layout": "test.json"},
                 "metadata": {"name": "test"},
                 "cases": [{"name": "case1", "steps": [{"action": "back"}]}]
             }
@@ -728,6 +738,7 @@ class TestHtmlDirectoryGeneration:
 
             screen_test = {
                 "type": "screen",
+                "source": {"layout": "sidebar_test.json"},
                 "metadata": {"name": "sidebar_test"},
                 "cases": [{"name": "case1", "steps": [{"action": "back"}]}]
             }
@@ -757,6 +768,7 @@ class TestHtmlDirectoryGeneration:
             for i in range(2):
                 screen_test = {
                     "type": "screen",
+                    "source": {"layout": "screen.json"},
                     "metadata": {"name": f"test_{i}"},
                     "cases": [
                         {"name": "case1", "steps": [{"action": "tap", "id": "btn"}]},
