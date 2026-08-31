@@ -123,6 +123,40 @@ def test_every_schema_with_a_required_list_is_covered():
     )
 
 
+def test_the_missing_source_error_names_its_runtime_consequence(tmp_path):
+    """`source.layout` is not only metadata — it is the readiness input.
+
+    Under the default `screenReady: auto` the runner derives the screen id
+    from it, and a test with no `source` falls back to the `networkidle`
+    gate. Filling it in switches that file to waiting for a screen marker,
+    which a production build does not emit: a suite running against one goes
+    from passing to timing out, and the timeout names the screen rather than
+    the edit that caused it.
+
+    So the error says so. "Missing required top-level key" reads like
+    metadata housekeeping, and a reader who acts on it as housekeeping finds
+    out at the next run.
+    """
+    doc = {k: v for k, v in VALID["screen"].items() if k != "source"}
+
+    result = _validate(tmp_path, doc)
+
+    [error] = [m for m in result.errors if "'source'" in m.message]
+    assert "readiness" in error.message
+    assert "networkidle" in error.message      # the escape hatch, by name
+
+
+def test_the_other_required_keys_do_not_carry_that_sentence(tmp_path):
+    """The control. A note appended to every message is a note nobody reads,
+    and `metadata` genuinely is housekeeping."""
+    doc = {k: v for k, v in VALID["screen"].items() if k != "metadata"}
+
+    result = _validate(tmp_path, doc)
+
+    [error] = [m for m in result.errors if "'metadata'" in m.message]
+    assert "readiness" not in error.message
+
+
 def test_an_empty_cases_list_is_a_warning_not_an_error(tmp_path):
     """`required` asks for the key, not for its contents. A file that
     declares an empty list has said something; conflating the two would

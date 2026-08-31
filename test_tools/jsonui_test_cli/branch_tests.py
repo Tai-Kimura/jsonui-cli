@@ -160,6 +160,68 @@ def _parent_of_sub_spec(spec_file: Path, project_root: Path) -> Path | None:
     return _parent_declaring(spec_file, spec_path)
 
 
+def sub_spec_screen_names(project_root: Path,
+                          spec_dir: str | None = None) -> list[str]:
+    """Screen names that are sub-specs — parts of a screen, not screens.
+
+    Used to explain a check result rather than to decide one. When a project
+    upgrades across the change that made parent+subSpecs ONE screen, its
+    generated directory still holds a file per sub-spec and none for the
+    parent, and the check reports the parent as `[ABSENT]` while saying
+    nothing about the files that are now orphans. A consumer read that as a
+    generation failure and worked backwards from an unrelated import error
+    before reaching the model change; several steps, all of them spent
+    finding out what the red meant.
+    """
+    if spec_dir is None:
+        spec_dir = load_project_config(project_root).get("spec_directory")
+    if not spec_dir:
+        return []
+    spec_path = (project_root / spec_dir).resolve()
+    if not spec_path.is_dir():
+        return []
+    names: list[str] = []
+    for path in _spec_files(spec_path):
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                raw = json.load(f)
+        except (OSError, json.JSONDecodeError):
+            continue
+        if raw.get("type") == PARENT_SPEC_TYPE:
+            continue
+        if _is_sub_spec_of_a_parent(path, spec_path):
+            names.append(_screen_of(path))
+    return names
+
+
+#: What a generated artefact is called, per platform, given a screen name.
+#: Only used to spot the leftovers from the old one-file-per-sub-spec
+#: layout, so a miss here costs an explanation, never a verdict.
+_ARTEFACT_PATTERNS = {
+    "web": ("{screen}.branches.test.ts",),
+    "android": ("{screen}BranchTest.kt", "{screen}BranchTests.kt"),
+    "ios": ("{screen}BranchTests.swift",),
+}
+
+
+def orphaned_sub_spec_artefacts(project_root: Path, out_dir: str,
+                                platform: str = "web",
+                                spec_dir: str | None = None) -> list[Path]:
+    """Generated files named after a sub-spec, which no longer generates one."""
+    names = sub_spec_screen_names(project_root, spec_dir)
+    if not names:
+        return []
+    out_path = (project_root / out_dir).resolve()
+    if not out_path.is_dir():
+        return []
+    found: list[Path] = []
+    for name in names:
+        for pattern in _ARTEFACT_PATTERNS.get(platform, ()):
+            for path in out_path.rglob(pattern.format(screen=name)):
+                found.append(path)
+    return sorted(set(found))
+
+
 def _spec_files(spec_path: Path) -> list[Path]:
     """Every spec under *spec_path*, at any depth.
 

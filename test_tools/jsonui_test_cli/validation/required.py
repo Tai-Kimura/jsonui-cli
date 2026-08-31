@@ -23,6 +23,27 @@ from .models import ValidationMessage, ValidationResult
 from ..schema import REQUIRED_TOP_LEVEL_KEYS
 
 
+#: Keys whose absence changes how the RUNNER behaves, not only what the
+#: document records. Filling one in is not metadata housekeeping, and an
+#: error that reads like housekeeping gets acted on as if it were — the
+#: consumer would find out at the next run, from a timeout that names the
+#: screen rather than the edit.
+#:
+#: Only `source` is in here, and the control test says so: a sentence
+#: appended to every message is a sentence nobody reads.
+_RUNTIME_CONSEQUENCE = {
+    ("screen", "source"): (
+        " — note that `source.layout` is also the readiness input: under the "
+        "default `screenReady: auto` the runner derives the screen id from "
+        "it, and a test with no `source` falls back to the `networkidle` "
+        "gate. Adding it switches that file to waiting for a screen marker, "
+        "which a production build does not emit. A suite running against a "
+        "production build needs `screenReady: 'networkidle'` (or `'none'`) "
+        "on those files — driver 1.8.4 and later."
+    ),
+}
+
+
 def check_required_top_level(
     data: dict, test_type: str, path: str, result: ValidationResult,
 ) -> None:
@@ -31,5 +52,6 @@ def check_required_top_level(
         if key not in data:
             result.errors.append(ValidationMessage(
                 path=path,
-                message=f"Missing required top-level key '{key}'",
+                message=(f"Missing required top-level key '{key}'"
+                         + _RUNTIME_CONSEQUENCE.get((test_type, key), "")),
             ))

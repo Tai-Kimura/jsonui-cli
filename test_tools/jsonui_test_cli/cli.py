@@ -564,6 +564,14 @@ def _print_drift_findings(report):
         print(f"  [EXTRA]   {msg}\n"
               "            generated/ is derived from the swagger; run "
               "`jsonui-test mock generate` to drop it")
+    for msg in report.extra_generated:
+        # The other direction of the same set difference. Reported under the
+        # same label as its sibling because the reader's remedy is identical
+        # — regenerate — and splitting the label would suggest the two
+        # states differ in what to do about them.
+        print(f"  [EXTRA]   {msg}\n"
+              "            generated/ is derived from the swagger; run "
+              "`jsonui-test mock generate` to drop it")
     for msg in report.unmatched_borrowed:
         # A hand-written scenario answering a status this operation does not
         # declare, in a form where the contract declares it SOMEWHERE — so
@@ -897,7 +905,35 @@ def _sibling_branch_tests(report) -> list[str]:
     return sorted(names)
 
 
-def _branch_check_summary(reports: list, scanned: int) -> int:
+def _print_model_change_note(absent, orphans):
+    """Say what an `[ABSENT]` parent means, once, when it can only mean this.
+
+    The check named the file and stopped. A consumer upgrading across the
+    change that made parent+subSpecs ONE screen sees the parent reported
+    absent and its old per-sub-spec files sitting there unmentioned, and has
+    to work out the model change from a red that does not describe it —
+    which took several steps, starting from an unrelated import error.
+
+    Printed only when both halves are present: an absent parent AND leftover
+    files named after its sub-specs. That pairing has one explanation. An
+    absent file on its own has several, and guessing at the reader's
+    situation is how an explanation becomes noise.
+    """
+    if not (absent and orphans):
+        return
+    print("\n  A parent spec and its subSpecs are ONE screen, and generate "
+          "one set of\n  files under the parent's name. These "
+          f"{len(orphans)} file(s) are named after a\n  sub-spec, so nothing "
+          "regenerates them:")
+    for path in orphans:
+        print(f"    {path}")
+    print("  Migration: regenerate (the parent's files appear), then delete "
+          "the files\n  above. Mocks first — the generator resolves routes "
+          "through them, so a\n  branch-tests run before `mock generate` "
+          "reports routes it cannot see.")
+
+
+def _branch_check_summary(reports: list, scanned: int, orphans=()) -> int:
     """Print the check verdict for `generate branch-tests --check`.
 
     Findings are folded by path, not by screen. The runtime is one file the
@@ -927,6 +963,7 @@ def _branch_check_summary(reports: list, scanned: int) -> int:
 
     for path in absent:
         print(f"  [ABSENT]  {path} (never generated)")
+    _print_model_change_note(absent, orphans)
     for path in drifted:
         print(f"  [DRIFT]   {path}")
     for report in reports:
@@ -1005,7 +1042,11 @@ def cmd_generate_branch_tests(args):
         print(f"  [FAILED]  {screen}: {error}", file=sys.stderr)
 
     if check:
-        rc = _branch_check_summary(reports, scanned_count)
+        from .branch_tests import orphaned_sub_spec_artefacts
+        rc = _branch_check_summary(
+            reports, scanned_count,
+            orphaned_sub_spec_artefacts(
+                Path.cwd(), _branch_dirs(args)[0], args.platform))
         if failures:
             # Not verifiable is not verified: a screen that cannot be
             # generated cannot be compared to what is on disk either.
@@ -1026,27 +1067,39 @@ def cmd_generate_branch_tests(args):
     return 0
 
 
+def _branch_dirs(args):
+    """`(out_dir, harness_dir)` for this run, defaults remapped per platform.
+
+    One definition, because the check summary needs the same answer to find
+    the leftovers of the old layout — and a second copy of a per-platform
+    default is a second copy that goes stale on the platform nobody is
+    looking at.
+    """
+    out_dir = args.out_dir
+    harness_dir = args.harness_dir
+    if args.platform == "android":
+        # Kotlin sources live under the JVM test source root by default.
+        if out_dir == "tests/unit/generated":
+            out_dir = "app/src/test/java"
+        if harness_dir == "tests/unit/branch-harness":
+            harness_dir = "app/src/test/java"
+    elif args.platform == "ios":
+        # Swift sources default to a Tests/ folder; with Xcode's
+        # file-system-synchronized groups, point --out-dir at the unit
+        # test target's folder instead.
+        if out_dir == "tests/unit/generated":
+            out_dir = "Tests/Generated"
+        if harness_dir == "tests/unit/branch-harness":
+            harness_dir = "Tests/Generated"
+    return out_dir, harness_dir
+
+
 def _generate_one_branch_test(args, screen: str):
     """Generate (or check) one screen. Returns (exit_code, report, error)."""
     from .branch_tests import BranchTestGenerationError, generate_branch_tests
 
     try:
-        out_dir = args.out_dir
-        harness_dir = args.harness_dir
-        if args.platform == "android":
-            # Kotlin sources live under the JVM test source root by default.
-            if out_dir == "tests/unit/generated":
-                out_dir = "app/src/test/java"
-            if harness_dir == "tests/unit/branch-harness":
-                harness_dir = "app/src/test/java"
-        elif args.platform == "ios":
-            # Swift sources default to a Tests/ folder; with Xcode's
-            # file-system-synchronized groups, point --out-dir at the unit
-            # test target's folder instead.
-            if out_dir == "tests/unit/generated":
-                out_dir = "Tests/Generated"
-            if harness_dir == "tests/unit/branch-harness":
-                harness_dir = "Tests/Generated"
+        out_dir, harness_dir = _branch_dirs(args)
         # Same precedence as `mock generate` / `mock serve`: the flag, then
         # the project's own declaration, then the default. Reading only the
         # flag sent projects whose mocks live outside the app directory to a
