@@ -135,6 +135,27 @@
     "mocks": {
       "$ref": "actions.schema.json#/definitions/mocksScenarioMap"
     },
+    "screenReady": {
+      "oneOf": [
+        {
+          "type": "string",
+          "enum": ["auto", "marker", "networkidle", "none"]
+        },
+        {
+          "type": "object",
+          "required": ["marker"],
+          "additionalProperties": false,
+          "properties": {
+            "marker": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Screen id whose marker to wait for instead of the one derived from source.layout"
+            }
+          }
+        }
+      ],
+      "description": "How this file decides the page is ready, overriding the runner's project-wide screenReadyStrategy. Needed by tests whose expected outcome is that the screen does NOT render — a permission refusal shown in its place, an expired session redirecting to login — for which waiting on the screen's own marker can only time out. 'none' skips the gate (the test's first step does the waiting); { marker } waits for where it lands instead, keeping a positive readiness condition; 'auto' / 'marker' / 'networkidle' are the project-wide gates applied to this file alone."
+    },
     "setup": {
       "type": "array",
       "description": "Steps to execute before each test case",

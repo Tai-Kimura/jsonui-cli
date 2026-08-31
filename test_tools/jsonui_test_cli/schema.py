@@ -290,8 +290,16 @@ VALID_PERMISSION_VALUES = ["allow", "deny", "unset"]
 # pins both lists to the vendored schemas.
 VALID_SCREEN_TOP_LEVEL_KEYS = [
     "$schema", "type", "source", "metadata", "platform", "embeddedIn",
-    "initialState", "launch", "mocks", "setup", "teardown", "cases"
+    "initialState", "launch", "mocks", "screenReady", "setup", "teardown",
+    "cases"
 ]
+
+# `screenReady` string forms. The object form is {"marker": "<screen id>"}.
+# A file declares this when waiting for its own screen would be wrong —
+# a permission refusal rendered in the screen's place, a redirect to login —
+# because the readiness gate would otherwise wait for a marker that is
+# correctly never going to appear.
+VALID_SCREEN_READY_VALUES = ["auto", "marker", "networkidle", "none"]
 VALID_FLOW_TOP_LEVEL_KEYS = [
     "$schema", "type", "metadata", "platform", "initialState", "launch",
     "mocks", "setup", "teardown", "sources", "steps", "checkpoints",

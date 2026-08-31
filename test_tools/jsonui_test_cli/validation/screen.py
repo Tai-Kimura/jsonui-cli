@@ -12,6 +12,7 @@ from .mock import find_mock_index, validate_mock_reference
 from .platform import validate_platform_field
 from .responsive import validate_responsive_field
 from ..schema import (
+    VALID_SCREEN_READY_VALUES,
     VALID_SCREEN_TOP_LEVEL_KEYS,
     VALID_FLOW_TOP_LEVEL_KEYS,
     VALID_CASE_KEYS,
@@ -82,6 +83,46 @@ class ScreenTestValidator:
                         path=f"{path}.source",
                         message=f"Unknown source key: {key} (allowed: {', '.join(VALID_SOURCE_KEYS)})"
                     ))
+
+        # `screenReady` overrides the runner's readiness gate for this file.
+        # Its values are checked here because a misspelling is otherwise
+        # invisible until the run: an unrecognised string falls through to the
+        # default gate, so the file waits for the very marker it declared it
+        # would not wait for, and fails as a timeout that names the screen
+        # rather than the typo.
+        if "screenReady" in data:
+            ready = data["screenReady"]
+            if isinstance(ready, str):
+                if ready not in VALID_SCREEN_READY_VALUES:
+                    result.errors.append(ValidationMessage(
+                        path=f"{path}.screenReady",
+                        message=(
+                            f"Unknown screenReady value: {ready!r} (allowed: "
+                            f"{', '.join(VALID_SCREEN_READY_VALUES)}, or "
+                            "{\"marker\": \"<screen id>\"})"
+                        )
+                    ))
+            elif isinstance(ready, dict):
+                unknown = [k for k in ready if k != "marker"]
+                if unknown:
+                    result.errors.append(ValidationMessage(
+                        path=f"{path}.screenReady",
+                        message=f"Unknown screenReady key(s): {', '.join(sorted(unknown))} (only 'marker')"
+                    ))
+                if not isinstance(ready.get("marker"), str) or not ready.get("marker"):
+                    result.errors.append(ValidationMessage(
+                        path=f"{path}.screenReady",
+                        message="screenReady object form requires a non-empty 'marker' (the screen id to wait for instead)"
+                    ))
+            else:
+                result.errors.append(ValidationMessage(
+                    path=f"{path}.screenReady",
+                    message=(
+                        "screenReady must be a string ("
+                        f"{', '.join(VALID_SCREEN_READY_VALUES)}) or "
+                        "{\"marker\": \"<screen id>\"}"
+                    )
+                ))
 
         # Check required fields
         if "metadata" not in data:
