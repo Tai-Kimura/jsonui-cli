@@ -126,6 +126,49 @@ def test_a_changed_runtime_template_drifts_every_screen(project, monkeypatch):
         assert drifted == ["jsonui-branch-runtime.ts"], screen
 
 
+def test_generation_is_deterministic(project):
+    """The precondition the whole check rests on. If the same input and the
+    same version produced different bytes, every run would report drift and
+    the gate would be switched off within the week."""
+    first = generate_branch_tests("checkout", project_root=project)
+    test_bytes = first.test_file.read_text()
+    runtime_bytes = first.runtime_file.read_text()
+
+    second = generate_branch_tests("checkout", project_root=project)
+
+    assert second.test_file.read_text() == test_bytes
+    assert second.runtime_file.read_text() == runtime_bytes
+
+
+def test_an_edit_to_the_generated_file_itself_is_drift(project):
+    """@generated may not be hand-edited, and this is the axis a hash of the
+    generator's INPUTS cannot cover: the inputs are untouched, so an input
+    digest still matches while the file says something else."""
+    report = generate_branch_tests("checkout", project_root=project)
+    report.test_file.write_text(
+        report.test_file.read_text() + "\n// edited by hand\n",
+        encoding="utf-8")
+
+    assert [p.name for p in _check(project).drifted] == [
+        "checkout.branches.test.ts"]
+
+
+def test_a_hand_written_only_scenario_is_part_of_the_comparison(project):
+    """The embedded copy is the UNION of the hand-written and generated
+    mocks, so a scenario that exists only in the hand-written file is in it.
+    A check keyed on the swagger would be green here — the swagger did not
+    change."""
+    generate_branch_tests("checkout", project_root=project)
+    mock = project / "tests/mocks/orders/post_api-user-orders.mock.json"
+    data = json.loads(mock.read_text())
+    data["scenarios"]["hand_written_only"] = {"status": 200,
+                                              "body": {"ok": True}}
+    _write(mock, data)
+
+    assert [p.name for p in _check(project).drifted] == [
+        "checkout.branches.test.ts"]
+
+
 def test_a_never_generated_tree_is_absent_not_current(project):
     report = _check(project)
     assert sorted(p.name for p in report.absent) == [
