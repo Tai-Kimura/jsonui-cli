@@ -28,6 +28,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
+from ..core.comment_safety import sanitize_block_comment
 from ..core.generated_marker import comment_footer, comment_header
 from ..core.impl_updater import atomic_write_text
 from ..core.openapi_naming import (
@@ -924,7 +925,13 @@ def _relative_source(absolute_path: str) -> str:
 
 
 def _kdoc_lines(text: str) -> list[str]:
-    """Render *text* as a Kotlin ``/** ... */`` doc comment block."""
+    """Render *text* as a Kotlin ``/** ... */`` doc comment block.
+
+    Kotlin block comments nest, so a `/*` in the source text opens an
+    inner comment the trailing `*/` only closes back to — the KDoc stays
+    open and the file stops compiling. See `sanitize_block_comment`.
+    """
+    text = sanitize_block_comment(text)
     raw_lines = text.splitlines() or [text]
     if len(raw_lines) == 1:
         return [f"/** {raw_lines[0]} */"]

@@ -20,6 +20,7 @@ import re
 from dataclasses import dataclass
 from pathlib import Path
 
+from ..core.comment_safety import sanitize_block_comment
 from ..core.generated_marker import comment_footer, comment_header
 from ..core.impl_updater import atomic_write_text
 from ..core.openapi_naming import factory_name, snake_to_camel, snake_to_pascal
@@ -709,6 +710,13 @@ def _relative_source(absolute_path: str) -> str:
 
 
 def _jsdoc_lines(text: str) -> list[str]:
+    """Render *text* as a `/** ... */` block.
+
+    TS block comments do not nest, so `/*` is harmless here — but a `*/`
+    in the text ends the comment early and spills prose into code, so the
+    same sanitizer runs on this face too.
+    """
+    text = sanitize_block_comment(text)
     raw = text.splitlines() or [text]
     if len(raw) == 1:
         return [f"/** {raw[0]} */"]

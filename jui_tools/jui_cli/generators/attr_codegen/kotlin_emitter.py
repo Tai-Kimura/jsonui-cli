@@ -24,6 +24,7 @@ public metadata contract.
 """
 from __future__ import annotations
 
+from ...core.comment_safety import sanitize_block_comment
 from ...core.type_mapper import TypeMapper
 from .model import Attribute, AttrKind, AttrModel, Component, format_default, merged_alias_map
 from .swift_emitter import (
@@ -295,7 +296,9 @@ def _component_file(comp: Component, model: AttrModel, mapper: TypeMapper) -> st
     for attr in comp.attrs:
         doc = _doc_comment(attr)
         if doc:
-            ctor.append(f"    /** {doc} */")
+            # Attribute docs carry defaults and alias lists verbatim; a
+            # `*/` or `/*` among them would end or nest the comment.
+            ctor.append(f"    /** {sanitize_block_comment(doc)} */")
         ctor.append(
             f"    val {_escape_ident(attr.name)}: {_prop_type(attr, mapper)}? = null,"
         )
