@@ -432,20 +432,33 @@ def diff_specs(doc: NormSpec, impl: NormSpec,
                ignore_paths: list[str],
                ignore_codes: set[str],
                ignore_keys: frozenset[str] = frozenset(),
-               warn_keys: frozenset[str] = frozenset()
+               warn_keys: frozenset[str] = frozenset(),
+               coverage: dict | None = None,
                ) -> tuple[list[ResultItem], list[str]]:
+    """Compare the two sides; optionally report how much of the doc side was covered.
+
+    `coverage` is filled in rather than returned so the count comes from the
+    same passes that do the excluding. Counting it again at the call site
+    would be a second implementation of "is this path ignored", and this
+    tool has spent a lot of versions on decisions that drifted between two
+    implementations of one rule.
+    """
     results: list[ResultItem] = []
     warnings: list[str] = list(doc.warnings) + list(impl.warnings)
 
     doc_keys = set(doc.operations)
     impl_keys = set(impl.operations)
+    doc_examined = 0
+    doc_excluded = 0
 
     # ignore_paths excludes an endpoint from the contract check in every
     # direction: doc-only, impl-only, and present-on-both-sides comparison.
     for key in sorted(doc_keys - impl_keys):
         op = doc.operations[key]
         if _path_ignored(op.path, ignore_paths):
+            doc_excluded += 1
             continue
+        doc_examined += 1
         results.append(ResultItem(f"{op.method} {op.path}",
                                   "missing_in_impl", "proof",
                                   message="endpoint declared in docs/api but "
@@ -463,11 +476,20 @@ def diff_specs(doc: NormSpec, impl: NormSpec,
         doc_op, impl_op = doc.operations[key], impl.operations[key]
         if (_path_ignored(doc_op.path, ignore_paths)
                 or _path_ignored(impl_op.path, ignore_paths)):
+            doc_excluded += 1
             continue
+        doc_examined += 1
         if _compare_operation(doc_op, impl_op, ignore_codes, results, warnings,
                               ignore_keys, warn_keys):
             results.append(ResultItem(f"{doc_op.method} {doc_op.path}",
                                       "ok", "proof"))
+
+    if coverage is not None:
+        # Doc-side only: the denominator is what this project publishes as
+        # its contract. Impl-only operations still surface as missing_in_doc,
+        # but they are not part of "how much of the contract did we check".
+        coverage["compared"] = doc_examined
+        coverage["excluded"] = doc_excluded
 
     return results, warnings
 
@@ -489,6 +511,9 @@ def run_openapi_diff(decl, project_root: Path, run_command) -> CheckReport:
             "contains docs/api"
         )
     doc_spec, doc_files = load_doc_side(api_dir)
+    # Before any exclusion: this is the contract the project publishes, and
+    # the denominator every later count is read against.
+    declared_operations = len(doc_spec.operations)
 
     code, stdout, stderr = run_command(decl.impl_openapi_command,
                                        decl.timeout_seconds)
@@ -504,8 +529,10 @@ def run_openapi_diff(decl, project_root: Path, run_command) -> CheckReport:
     # scope=generated: restrict both sides to the endpoints that feed DTO
     # generation (api.schemas include_paths/exclude_paths from jui.config.json)
     scope_note = None
+    scope_excluded_doc = 0
     if decl.scope == "generated" and decl.api_path_filters:
         include_globs, exclude_globs = decl.api_path_filters
+        doc_before = len(doc_spec.operations)
         before = len(doc_spec.operations) + len(impl_spec.operations)
         for spec in (doc_spec, impl_spec):
             spec.operations = {
@@ -513,18 +540,34 @@ def run_openapi_diff(decl, project_root: Path, run_command) -> CheckReport:
                 if _in_generated_scope(op.path, include_globs, exclude_globs)
             }
         after = len(doc_spec.operations) + len(impl_spec.operations)
+        scope_excluded_doc = doc_before - len(doc_spec.operations)
         scope_note = (
             f"scope=generated: comparing only DTO-generation endpoints "
             f"(api.schemas path filters; {before - after} operations "
             "excluded from comparison)"
         )
 
+    coverage: dict = {}
     results, warnings = diff_specs(
         doc_spec, impl_spec, ignore_paths, ignore_codes,
         frozenset(getattr(decl, "ignore_schema_keys", ()) or ()),
-        frozenset(getattr(decl, "downgrade_to_warning", ()) or ()))
+        frozenset(getattr(decl, "downgrade_to_warning", ()) or ()),
+        coverage=coverage)
     if scope_note:
         warnings.insert(0, scope_note)
+
+    compared = coverage.get("compared", 0)
+    excluded = coverage.get("excluded", 0) + scope_excluded_doc
+    if declared_operations and compared == 0:
+        # Every count is zero here, which is the shape of a clean pass. Said
+        # out loud for the same reason the spec-side "were not checked"
+        # notice is: "nothing was compared" and "everything matched" are
+        # indistinguishable from the numbers alone.
+        warnings.insert(0, (
+            f"{declared_operations} operation(s) are declared in docs/api but "
+            f"NONE were compared — every one was excluded by configuration. "
+            f"This is not 'the contract matches'; nothing was checked."
+        ))
 
     warnings.append(
         "This check compares the implementation's DECLARED OpenAPI schema; "
@@ -538,4 +581,54 @@ def run_openapi_diff(decl, project_root: Path, run_command) -> CheckReport:
         input_hashes=compute_input_hashes(doc_files, project_root),
         results=results,
         warnings=warnings,
+        unit="operation",
+        declared=declared_operations,
+        compared=compared,
+        excluded=excluded,
+        inputs=_provenance(decl, stdout, doc_files, project_root),
     )
+
+
+def _provenance(decl, impl_stdout: str, doc_files, project_root: Path) -> dict:
+    """Name both sides of the comparison. Metadata only — never compared.
+
+    The implementation side sits behind a command this tool cannot see past:
+    it may run in a container, over the network, or against a checkout
+    somewhere else entirely. A git revision read from `project_root` would
+    name the DOCS repository while appearing to name the implementation's, so
+    it is not reported as the implementation's revision at all. What can be
+    stated exactly is the payload that was compared, so that is what is
+    recorded — and it is the stronger fact anyway: two runs agreeing on this
+    hash compared the same implementation contract, wherever it came from.
+    """
+    inputs: dict = {
+        "impl_command": list(decl.impl_openapi_command),
+        "impl_openapi_sha256": _sha256_of_text(impl_stdout),
+        "doc_files": sorted(
+            str(p.resolve().relative_to(project_root.resolve()))
+            if p.resolve().is_relative_to(project_root.resolve()) else str(p)
+            for p in doc_files
+        ),
+    }
+    rev = _git_head(project_root)
+    if rev:
+        # The docs side, named as such. Absent rather than guessed when this
+        # is not a git checkout.
+        inputs["doc_source_rev"] = rev
+    return inputs
+
+
+def _sha256_of_text(text: str) -> str:
+    import hashlib
+    return "sha256:" + hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
+def _git_head(root: Path) -> str | None:
+    import subprocess
+    try:
+        proc = subprocess.run(
+            ["git", "-C", str(root), "rev-parse", "HEAD"],
+            capture_output=True, text=True, timeout=5, shell=False)
+    except (OSError, subprocess.SubprocessError):
+        return None
+    return proc.stdout.strip() or None if proc.returncode == 0 else None

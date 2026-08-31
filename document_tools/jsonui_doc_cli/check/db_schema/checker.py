@@ -90,6 +90,11 @@ def run_db_schema_check(decl, project_root: Path, databases: dict,
         doc_tables, actual, dialect, ignore_tables=decl.ignore_tables)
 
     input_files = sorted({t.source_file for t in doc_tables.values()})
+    # `ignore_tables` only suppresses tables found in the database that the
+    # docs do not describe; a documented table is always compared. So the
+    # doc-side denominator and the compared count coincide here, and saying
+    # so is the point — a reader cannot otherwise tell that this checker has
+    # no partial-coverage mode.
     return CheckReport(
         checker=decl.name,
         target_kind="db",
@@ -97,4 +102,14 @@ def run_db_schema_check(decl, project_root: Path, databases: dict,
         target_extra={"dialect": dialect},
         input_hashes=compute_input_hashes(input_files, project_root),
         results=results,
+        unit="table",
+        declared=len(doc_tables),
+        compared=len(doc_tables),
+        excluded=0,
+        inputs={"dialect": dialect,
+                "doc_files": sorted(
+                    str(p.resolve().relative_to(project_root.resolve()))
+                    if p.resolve().is_relative_to(project_root.resolve())
+                    else str(p)
+                    for p in input_files)},
     )

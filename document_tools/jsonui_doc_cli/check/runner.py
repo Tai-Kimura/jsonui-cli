@@ -159,11 +159,25 @@ def run_checks(decls: list[CheckDecl], project_root: Path,
         path = save_report(report, project_root)
         s = report.summary
         status = "✗ MISMATCH" if report.has_mismatch else "✓ ok"
+        # Counts first, then what they are counts OF and out of how many.
+        # `ok=136` alone cannot distinguish 136-of-136 from 136-of-236, and a
+        # consumer lane was reduced to inferring the unit from the spelling
+        # of `target` strings to build its own gate.
+        coverage = ""
+        if report.unit and report.declared is not None:
+            coverage = (f"  [{report.compared}/{report.declared} "
+                        f"{report.unit}")
+            if report.excluded:
+                coverage += f", {report.excluded} excluded by config"
+            if report.coverage_residual:
+                coverage += f", {report.coverage_residual} unaccounted"
+            coverage += "]"
         print(
             f"  {status}  ok={s['ok']} mismatch={s['mismatch']} "
             f"missing_in_impl={s['missing_in_impl']} "
             f"missing_in_doc={s['missing_in_doc']} skipped={s['skipped']}"
             + (f" warning={s['warning']}" if s.get("warning") else "")
+            + coverage
         )
         for item in report.results:
             if item.status == "ok":

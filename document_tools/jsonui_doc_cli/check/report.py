@@ -72,19 +72,66 @@ class CheckReport:
     input_hashes: dict[str, str] = field(default_factory=dict)
     results: list[ResultItem] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
+    #: What this checker counts — "operation", "table". A count with no unit
+    #: cannot be read from the output: a consumer lane had to infer it from
+    #: the shape of `target` strings, which made its gate depend on this
+    #: report's internal spelling.
+    unit: str = ""
+    #: Units on the declaring side before any exclusion, and units actually
+    #: examined. `None` means the checker did not report one — never fill
+    #: either in with a guess, because the whole point is telling
+    #: "compared 136 of 136" apart from "compared 136 of 236".
+    declared: int | None = None
+    compared: int | None = None
+    #: Units configuration deliberately left out.
+    excluded: int = 0
+    #: Provenance of the two sides. Metadata only: never compared, never
+    #: consulted for staleness (`is_stale` stays one-directional by design).
+    inputs: dict = field(default_factory=dict)
 
     def __post_init__(self):
         if not self.executed_at:
             self.executed_at = datetime.now().astimezone().isoformat(timespec="seconds")
 
     @property
-    def summary(self) -> dict[str, int]:
-        counts = {s: 0 for s in
-                  ("ok", "mismatch", "missing_in_impl", "missing_in_doc",
-                   "skipped", "warning")}
+    def summary(self) -> dict:
+        counts: dict = {s: 0 for s in
+                        ("ok", "mismatch", "missing_in_impl", "missing_in_doc",
+                         "skipped", "warning")}
         for r in self.results:
             counts[r.status] += 1
+        if self.unit:
+            counts["unit"] = self.unit
+        if self.declared is not None:
+            counts["declared"] = self.declared
+        if self.compared is not None:
+            counts["compared"] = self.compared
+        if self.excluded:
+            counts["excluded"] = self.excluded
+        residual = self.coverage_residual
+        if residual:
+            # Shown, not rounded away. The arithmetic failing to close means
+            # this report cannot account for some of what it declared, and a
+            # denominator nobody can reconcile is worse than none — it looks
+            # authoritative.
+            counts["unaccounted"] = residual
         return counts
+
+    @property
+    def coverage_residual(self) -> int:
+        """`declared - compared - excluded`; 0 when the arithmetic closes."""
+        if self.declared is None or self.compared is None:
+            return 0
+        return self.declared - self.compared - self.excluded
+
+    @property
+    def compared_nothing(self) -> bool:
+        """Declared units exist and not one of them was examined.
+
+        The endpoint of partial coverage, and the case that reads exactly
+        like a clean pass: every count is zero because nothing happened.
+        """
+        return bool(self.declared) and self.compared == 0
 
     @property
     def has_mismatch(self) -> bool:
@@ -92,7 +139,7 @@ class CheckReport:
         return (s["mismatch"] + s["missing_in_impl"] + s["missing_in_doc"]) > 0
 
     def to_dict(self) -> dict:
-        return {
+        d = {
             "schemaVersion": SCHEMA_VERSION,
             "checker": self.checker,
             "executed_at": self.executed_at,
@@ -103,6 +150,9 @@ class CheckReport:
             "warnings": list(self.warnings),
             "summary": self.summary,
         }
+        if self.inputs:
+            d["inputs"] = dict(self.inputs)
+        return d
 
 
 def validate_report_dict(data: dict, source: str = "report") -> list[str]:
@@ -178,7 +228,26 @@ def report_from_dict(data: dict, source: str = "report") -> CheckReport:
             for r in data["results"]
         ],
         warnings=list(data.get("warnings", [])),
+        # Coverage lives in `summary` on the wire (that is where a reader
+        # looks) but as fields here. Absent in a plugin's output means the
+        # plugin does not report coverage, which stays distinguishable from
+        # reporting zero.
+        unit=_coverage_str(data, "unit"),
+        declared=_coverage_int(data, "declared"),
+        compared=_coverage_int(data, "compared"),
+        excluded=_coverage_int(data, "excluded") or 0,
+        inputs=dict(data.get("inputs") or {}),
     )
+
+
+def _coverage_int(data: dict, key: str) -> int | None:
+    value = (data.get("summary") or {}).get(key)
+    return value if isinstance(value, int) and not isinstance(value, bool) else None
+
+
+def _coverage_str(data: dict, key: str) -> str:
+    value = (data.get("summary") or {}).get(key)
+    return value if isinstance(value, str) else ""
 
 
 # --------------------------------------------------------------------- #
