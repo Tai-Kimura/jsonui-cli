@@ -1360,7 +1360,14 @@ def render_kotlin_test_file(
     lines.append(f"@RunWith(RobolectricTestRunner::class)")
     lines.append(f"class {pascal}BranchesTest {{")
     lines.append("")
-    lines.append("  private val routes = listOf(")
+    # Annotated even though the elements would usually infer it: a screen
+    # whose contract references no API operation emits an empty `listOf()`,
+    # and Kotlin cannot infer T from nothing. Swift and TypeScript already
+    # annotate, so this was the one asymmetric emitter. The blast radius is
+    # what makes it worth the redundancy on the non-empty path — a Kotlin
+    # test source set compiles as a unit, so one uncompilable file takes
+    # every other screen's branch tests down with it.
+    lines.append("  private val routes: List<RouteSpec> = listOf(")
     lines.append(",\n".join(route_lines))
     lines.append("  )")
 

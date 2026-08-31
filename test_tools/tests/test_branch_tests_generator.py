@@ -956,3 +956,99 @@ class TestSeedableState:
         # two causes, two repairs, each named
         assert "has no" in body and "such field" in body
         assert "did not take" in body
+
+
+# A contract that references no API operation at all: every branch is decided
+# by data alone. Legitimate — a screen can validate input or track selection
+# without touching the network — and the only shape that reaches an empty
+# routes list.
+NO_ROUTES = _contract([
+    {"when": {"data.isAgreed": False}, "then": {"api": "none"}},
+    {"when": {"data.isAgreed": True}, "then": {"data.screenState": "ready"}},
+])
+
+
+class TestEmptyRouteListStaysCompilable:
+    """A screen with no routes must still emit a typed empty list.
+
+    Kotlin cannot infer `T` from `listOf()`, and a Kotlin test source set
+    compiles as one unit — so a single screen with no API routes took every
+    other screen's branch tests down with it (a reporting project: 16
+    screens generated, 2 uncompilable, the remaining 14 unable to run).
+    Swift and TypeScript already annotated; Android was the asymmetric
+    emitter.
+
+    The negative test has to use a zero-route screen. Any contract that
+    references one operation infers `T` from its elements and passes on the
+    broken generator too.
+    """
+
+def _routeless_project(tmp_path: Path) -> Path:
+    """A screen whose spec declares no repository endpoints at all.
+
+    `_project` cannot express this: routes are collected from the spec's
+    repository `endpoint` declarations, not from what the contract's `when`
+    clauses reference. Reusing it here produced three routes and the
+    precondition assert below caught it — the same proxy-measure mistake a
+    consumer lane made reading its own corpus ("no api. key in when").
+    """
+    root = tmp_path / "proj"
+    root.mkdir(parents=True, exist_ok=True)
+    _write(root / "jui.config.json", {"spec_directory": "docs/specs"})
+    _write(root / "docs/specs/checkout.spec.json", {
+        "type": "screen_spec",
+        "version": "1.0",
+        "metadata": {"name": "Checkout", "displayName": "Checkout",
+                     "description": "d", "layoutFile": "checkout"},
+        "structure": {"components": [], "layout": {}},
+        "dataFlow": {
+            "viewModel": {"methods": [{"name": "onConfirmTap"}], "vars": []},
+            "repositories": [],
+        },
+        "stateManagement": {"uiVariables": []},
+        "branchContracts": NO_ROUTES,
+    })
+    return root
+
+
+class TestEmptyRouteListStaysCompilableFixture:
+    def test_the_fixture_really_produces_no_routes(self, tmp_path):
+        # Assert the precondition rather than trusting the contract's shape:
+        # routes are collected from more than `when` (a lane misread its own
+        # corpus by using "no api. key in when" as a proxy and got a false
+        # positive). If this ever gains a route the tests below would pass
+        # against the defect they exist to catch.
+        root = _routeless_project(tmp_path)
+        report = generate_branch_tests("checkout", root, platform="android",
+                                       package="com.example.x")
+        assert report.routes == []
+
+    def test_android_annotates_the_empty_list(self, tmp_path):
+        root = _routeless_project(tmp_path)
+        report = generate_branch_tests("checkout", root, platform="android",
+                                       package="com.example.x")
+        content = report.test_file.read_text(encoding="utf-8")
+        assert "private val routes: List<RouteSpec> = listOf(" in content
+        assert "private val routes = listOf(" not in content
+
+    def test_ios_and_web_are_annotated_too(self, tmp_path):
+        # The fix made the three emitters symmetric; assert the other two so a
+        # future edit cannot restore the asymmetry from the other side.
+        root = _routeless_project(tmp_path)
+        ios = generate_branch_tests("checkout", root, platform="ios",
+                                    module="checkout_app")
+        assert "private let routes: [RouteSpec] = [" in \
+            ios.test_file.read_text(encoding="utf-8")
+        web = generate_branch_tests("checkout", root)
+        assert "const ROUTES: RouteSpec[] = [" in \
+            web.test_file.read_text(encoding="utf-8")
+
+    def test_a_populated_list_is_annotated_as_well(self, tmp_path):
+        # No branch on emptiness: "only when empty" would leave the two forms
+        # to drift, and the annotation costs nothing when elements exist.
+        root = _project(tmp_path, BASIC)
+        report = generate_branch_tests("checkout", root, platform="android",
+                                       package="com.example.x")
+        content = report.test_file.read_text(encoding="utf-8")
+        assert "private val routes: List<RouteSpec> = listOf(" in content
+        assert report.routes  # the arm that passes on the broken generator
