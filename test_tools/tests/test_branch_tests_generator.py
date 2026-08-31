@@ -13,6 +13,9 @@ import pytest
 
 from jsonui_test_cli.branch_tests import (
     BranchTestGenerationError,
+    _kt_expected,
+    _render_expected,
+    _swift_expected,
     generate_branch_tests,
     path_to_pattern,
 )
@@ -754,3 +757,71 @@ class TestPlatformScopedBranches:
         assert (ios.declared_branches, ios.platform_skipped) == (2, 1)
         # The skip is announced in the emitted file, not silent.
         assert "platform-scoped" in web.test_file.read_text(encoding="utf-8")
+
+
+class TestCollectionEmptinessAssert:
+    """`then data.<field>: []` must emit a deep-equality assert that runs.
+
+    Generating an assert and contracting a guarantee are different claims:
+    the emitted line has to compile on each driver AND fail when the
+    clearing is removed. The Swift and Kotlin renderers already handled
+    lists, so this pins the emission rather than changing it — the risk was
+    an empty literal that reads as valid and asserts nothing.
+
+    While this was written the web emission was executed under vitest 4.1.9
+    against a stand-in harness: with only the scalar witness the same
+    regression stayed green, and with `[]` it went red on
+    `expected [ { id: 'stale' } ] to deeply equal []`. The Swift shape was
+    compiled and run under Swift 6 (Xcode 26.5): `[]` binds as `[Any]` in
+    the `Any?` parameter and discriminates a stale list, an empty
+    dictionary, and nil. Kotlin was not executed here — no kotlinc on this
+    machine — so its emission is pinned by shape only.
+    """
+
+    EMPTY = _contract([
+        {"when": {"api.createOrder": "conflict"},
+         "then": {"data.rows": [], "data.screenState": "load_error"}},
+    ])
+
+    def _project_with_rows(self, tmp_path):
+        return _project(tmp_path, self.EMPTY)
+
+    def test_web_emits_deep_equality_against_an_empty_array(self, tmp_path):
+        root = self._project_with_rows(tmp_path)
+        report = generate_branch_tests("checkout", root)
+        content = report.test_file.read_text(encoding="utf-8")
+        assert 'expect(h.readField("rows")).toEqual([]);' in content
+        # The sibling scalar in the same `then` still lands — the exception
+        # is additive, not a replacement.
+        assert 'expect(h.readField("screenState")).toEqual("load_error");' in content
+
+    def test_android_emits_an_empty_list_not_null(self, tmp_path):
+        root = self._project_with_rows(tmp_path)
+        report = generate_branch_tests(
+            "checkout", root, platform="android", package="com.example.x",
+            out_dir="app/src/test/java", harness_dir="app/src/test/java")
+        content = report.test_file.read_text(encoding="utf-8")
+        assert 'assertFieldEquals(listOf<Any?>(), h.readField("rows"))' in content
+
+    def test_ios_emits_an_empty_collection_literal(self, tmp_path):
+        root = self._project_with_rows(tmp_path)
+        report = generate_branch_tests(
+            "checkout", root, platform="ios", module="checkout_app",
+            out_dir="Tests/Generated", harness_dir="Tests/Generated")
+        content = report.test_file.read_text(encoding="utf-8")
+        assert 'assertFieldEquals([], h.readField("rows"))' in content
+
+    def test_no_platform_drops_the_list_entry_while_keeping_the_scalar(self):
+        """The failure mode a per-platform example test can miss.
+
+        A renderer that cannot express a list would most plausibly skip the
+        entry and emit the scalar beside it — leaving a green test that
+        asserts strictly less than the contract says, on one platform only.
+        """
+        for render, expected in (
+            (_render_expected, ("[]", '"load_error"')),
+            (_kt_expected, ("listOf<Any?>()", '"load_error"')),
+            (_swift_expected, ("[]", '"load_error"')),
+        ):
+            assert render([]) == expected[0]
+            assert render("load_error") == expected[1]

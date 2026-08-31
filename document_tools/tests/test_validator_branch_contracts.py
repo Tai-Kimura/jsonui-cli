@@ -449,6 +449,91 @@ class BranchThenVocabulary(unittest.TestCase):
         self.assertEqual(_warnings_at(result, "then.transition"), [])
 
 
+class BranchThenCollectionEmptiness(unittest.TestCase):
+    """`then data.<field>: []` — "this collection is empty afterwards".
+
+    Reported twice on the same day from two screens. A contract that clears
+    a list on failure could only be witnessed by a scalar set in the same
+    update (a visibility flag), and that witness stays satisfied when only
+    the clearing is removed — so the guarantee never reached the observable
+    surface. Both reports independently rejected `.length` paths and
+    non-empty deep equality; only the empty case is opened here.
+
+    `baseline` already accepted array seeds, so the gap was exactly the
+    second half of "seed a loaded list, then assert it is emptied".
+    """
+
+    def _spec(self, then, *, baseline=None):
+        contract = {"branches": [
+            {"when": {"api.confirmBooking": "failure"}, "then": then}]}
+        if baseline is not None:
+            contract["baseline"] = baseline
+        return _base_spec(
+            {"methods": {"onConfirmTap": contract}},
+            vm_methods=["onConfirmTap"],
+            ui_vars=[_ui_var("rows", "[Row]"),
+                     _ui_var("pagerVisibility", "String")],
+            use_cases=[{"name": "ConfirmUseCase",
+                        "methods": [{"name": "confirmBooking"}]}],
+        )
+
+    def test_an_empty_list_is_accepted(self):
+        result = _validate(self._spec({"data.rows": []}))
+        self.assertEqual(_errors_at(result, "then.data.rows"), [])
+
+    def test_the_reported_shape_validates(self):
+        """Seed a loaded list in baseline, assert it is emptied afterwards."""
+        result = _validate(self._spec(
+            {"data.rows": [], "data.pagerVisibility": "gone"},
+            baseline={"rows": [{"id": "1"}]},
+        ))
+        self.assertEqual(_errors_at(result, "branches[0]"), [])
+
+    def test_a_non_empty_list_is_still_rejected(self):
+        result = _validate(self._spec({"data.rows": [{"id": "1"}]}))
+        self.assertTrue(_errors_at(result, "then.data.rows"))
+
+    def test_an_object_is_still_rejected(self):
+        result = _validate(self._spec({"data.rows": {"a": 1}}))
+        self.assertTrue(_errors_at(result, "then.data.rows"))
+
+    def test_the_error_says_what_is_accepted_and_what_is_not(self):
+        """A non-empty list should read as a scope decision, not an oversight.
+
+        Otherwise the author's next move is to work around a rule whose
+        reason they cannot see.
+        """
+        errs = _errors_at(_validate(self._spec({"data.rows": [1, 2]})),
+                          "then.data.rows")
+        self.assertTrue(errs)
+        msg = errs[0].message
+        self.assertIn("'[]'", msg)
+        self.assertIn("empty", msg)
+        self.assertIn("element-by-element matching is out of scope", msg)
+
+    def test_a_request_match_leaf_does_not_get_the_exception(self):
+        """`[]` under api.<op>.request is a claim about a request.
+
+        Different statement, no defined partial-match meaning — and the
+        message there must not advertise an exception that does not apply.
+        """
+        errs = _errors_at(
+            _validate(self._spec({"api.confirmBooking.request": {"tags": []}})),
+            "then.api.confirmBooking.request.tags")
+        self.assertTrue(errs)
+        self.assertNotIn("'[]'", errs[0].message)
+
+    def test_baseline_array_seeds_were_already_allowed(self):
+        """Pinned because it is the half that already worked.
+
+        If a later change routes baseline through the then-value check, this
+        catches it before the asymmetry is rediscovered from the outside.
+        """
+        result = _validate(self._spec({"data.pagerVisibility": "gone"},
+                                      baseline={"rows": [{"id": "1"}]}))
+        self.assertEqual(_errors_at(result, "baseline"), [])
+
+
 class BranchNoteEscapeHatch(unittest.TestCase):
     def _spec(self, branch):
         return _base_spec(

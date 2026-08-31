@@ -1973,7 +1973,9 @@ class SpecValidator:
             self._check_branch_data_field(
                 key[len("data."):], entry_path, data_fields, result
             )
-            self._validate_branch_then_value(value, entry_path, data_fields, result)
+            self._validate_branch_then_value(
+                value, entry_path, data_fields, result, allow_empty_list=True,
+            )
             return
         result.errors.append(SpecValidationMessage(
             path=entry_path,
@@ -1985,18 +1987,29 @@ class SpecValidator:
 
     def _validate_branch_then_value(
         self, value: Any, path: str, data_fields: set[str],
-        result: SpecValidationResult,
+        result: SpecValidationResult, *, allow_empty_list: bool = False,
     ) -> None:
         """then data.* / request-leaf value: scalar literal, '@strings_key',
-        '@data.<field>' or '@response.<path>' reference."""
+        '@data.<field>' or '@response.<path>' reference.
+
+        ``allow_empty_list`` opens exactly one exception, for
+        ``then data.<field>``: ``[]``, meaning "this collection is empty
+        afterwards". Contracts that clear a list on failure had no way to say
+        so, and the scalar witness they fell back on — a visibility flag set
+        in the same update — stays satisfied when only the clearing is
+        removed, so the guarantee never reached the observable surface.
+
+        Non-empty lists stay rejected: matching elements would bind the
+        contract to the mock body. Request-match leaves never take the
+        exception either — ``[]`` there would be a claim about a request,
+        which is a different statement with no defined partial-match meaning.
+        """
+        if allow_empty_list and isinstance(value, list) and not value:
+            return
         if not self._is_scalar(value):
             result.errors.append(SpecValidationMessage(
                 path=path,
-                message=(
-                    "Value must be a scalar literal, '@strings_key', "
-                    f"'@data.<field>' or '@response.<path>', got "
-                    f"{type(value).__name__}"
-                ),
+                message=self._branch_then_value_error(value, allow_empty_list),
             ))
             return
         if not isinstance(value, str) or not value.startswith("@"):
@@ -2027,6 +2040,21 @@ class SpecValidator:
                     f"'@data.<field>' or '@response.<path>', got '{value}'"
                 ),
             ))
+
+    @staticmethod
+    def _branch_then_value_error(value: Any, allow_empty_list: bool) -> str:
+        base = ("Value must be a scalar literal, '@strings_key', "
+                "'@data.<field>' or '@response.<path>'")
+        if allow_empty_list:
+            # Say what IS accepted and what is deliberately not, so a
+            # non-empty list reads as a scope decision rather than an
+            # oversight the author should work around.
+            base += (
+                ", or '[]' to assert the collection is empty (only the empty "
+                "list is accepted — element-by-element matching is out of "
+                "scope, since it binds the contract to the mock body)"
+            )
+        return f"{base}, got {type(value).__name__}"
 
     def _validate_branch_request_match(
         self, value: Any, path: str, data_fields: set[str],
