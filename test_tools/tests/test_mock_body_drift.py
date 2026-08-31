@@ -504,7 +504,13 @@ class TestGeneratedTree:
     def test_body_drift_inside_generated_does_not_fail_the_check(self, tmp_path):
         spec, out = self._fresh(tmp_path)
         mock = out / GENERATED_DIR / "bars" / "followBar.mock.json"
-        _write(mock, {"default": {"status": 200, "body": {"message": "x"}}})
+        # Only the body is changed. Replacing the whole scenarios map, as
+        # this fixture used to, also deleted the declared 404 — which is a
+        # gating absence, so the test would have gone red for a reason
+        # other than the one it names.
+        data = json.loads(mock.read_text(encoding="utf-8"))
+        data["scenarios"]["default"]["body"] = {"message": "x"}
+        _write(mock, data["scenarios"])
         report = generate([spec], out, check=True)
         assert report.bodies and report.bodies[0].generated
         assert report.errors == []

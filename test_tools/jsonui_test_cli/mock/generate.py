@@ -914,12 +914,39 @@ class CheckReport:
     #: Scenario entries that are not objects at all — a defect in the mock
     #: file rather than in the contract.
     malformed: list = field(default_factory=list)
+    #: Declared scenarios that no file on the route provides, on a route
+    #: whose generated/ copy exists. Gating: generated/ is a pure function
+    #: of the swagger, so there is no legitimate state in which one of its
+    #: scenarios is missing — it was edited, or generation was interrupted.
+    absent_generated: list = field(default_factory=list)
+    #: The same, on a route served only by hand-written mocks. Absence
+    #: there can be the author's choice, so it is reported, not gated.
+    absent_handwritten: list = field(default_factory=list)
+
+    @property
+    def absent(self) -> list:
+        """Declared scenarios nothing on the route serves.
+
+        Every other bucket is filled by walking the files, so all of them
+        answer "of what is on disk, how much was compared". A scenario that
+        was deleted is in none of them: it is not drift, not unmatched, not
+        malformed — it is simply not there, and the run's own total shrinks
+        to match. Measured on a consumer: deleting a declared scenario from
+        a generated mock moved `compared` from 3 to 2 with every bucket at
+        zero, and both gates stayed green.
+
+        This is the one bucket sourced from the DECLARATION rather than
+        from the disk, which is what lets the total close against a fixed
+        denominator instead of against itself.
+        """
+        return self.absent_generated + self.absent_handwritten
 
     @property
     def scenarios_seen(self) -> int:
         """Every scenario the run opened, by construction of the buckets."""
         return (self.compared + len(self.unmatched) + len(self.no_schema)
-                + len(self.non_json) + len(self.malformed))
+                + len(self.non_json) + len(self.malformed)
+                + len(self.absent))
 
     @property
     def contract_summary(self) -> str:
@@ -943,6 +970,9 @@ class CheckReport:
         if self.malformed:
             parts.append(f"{len(self.malformed)} not compared "
                          "(malformed scenario)")
+        if self.absent:
+            parts.append(f"{len(self.absent)} not compared "
+                         "(declared but absent)")
         if self.stale_generated:
             parts.append(f"{len(self.stale_generated)} generated body(ies) stale")
         return (f"mock contract: {self.scenarios_seen} scenario(s) — "
@@ -977,7 +1007,36 @@ class CheckReport:
 
     @property
     def has_drift(self) -> bool:
-        return bool(self.missing or self.orphaned or self.drifted or self.errors)
+        return bool(self.missing or self.orphaned or self.drifted
+                    or self.errors or self.absent_generated)
+
+
+def expected_generated_relpaths(
+    swagger_paths: list[str], scope: PathScope | None = None,
+) -> set[str]:
+    """Every file a generation run would write under `generated/`.
+
+    Shared with the rebuild trigger so there is one definition of what the
+    generated tree should contain. The trigger's own question — "is the
+    tree current" — cannot be answered by mtimes alone: a DELETED file has
+    no mtime to be stale, so a comparison of timestamps reports a complete
+    tree whatever is missing from it.
+    """
+    scope = scope or PathScope()
+    out: set[str] = set()
+    for swagger in swagger_paths:
+        try:
+            doc = OpenApiDoc.load(swagger)
+        except (OSError, ValueError, KeyError):
+            # The trigger must not fail on an unreadable swagger; generation
+            # reports that in its own voice.
+            continue
+        if not doc.is_api_spec():
+            continue
+        for op in doc.operations():
+            if scope.covers(op.path):
+                out.add(f"{GENERATED_DIR}/{mock_relpath(op)}")
+    return out
 
 
 def _check(swagger_paths: list[str], mock_dir: Path, strict: bool = False,
@@ -1092,9 +1151,13 @@ def _check(swagger_paths: list[str], mock_dir: Path, strict: bool = False,
     non_json: list[str] = []
     malformed: list[str] = []
     misnamed: list[str] = []
+    absent_generated: list[str] = []
+    absent_handwritten: list[str] = []
     compared = 0
     for key in sorted(set(expected) & set(existing)):
         doc, op = expected[key]
+        _collect_absent(doc, op, mock_dir, existing[key],
+                        absent_generated, absent_handwritten)
         # Every file on the route, not one of them. The index used to fold a
         # route to a single entry, last spelling wins over the sorted paths —
         # and `generated/` sorts after most tag directories, so the generated
@@ -1149,6 +1212,8 @@ def _check(swagger_paths: list[str], mock_dir: Path, strict: bool = False,
         warnings=warnings, out_of_scope=out_of_scope,
         compared=compared, no_schema=no_schema,
         non_json=non_json, malformed=malformed,
+        absent_generated=absent_generated,
+        absent_handwritten=absent_handwritten,
         scope_excluded=len(excluded),
         scope_note=scope.describe() if scope.is_active() else "",
         strict=strict,
@@ -1203,6 +1268,71 @@ def _status_context(op: Operation, status, all_ops: dict) -> str:
     if not anywhere:
         return f" (no operation in this swagger declares {want})"
     return ""
+
+
+def _collect_absent(
+    doc: OpenApiDoc,
+    op: Operation,
+    mock_dir: Path,
+    rels: list[str],
+    absent_generated: list[str],
+    absent_handwritten: list[str],
+) -> None:
+    """Declared scenarios that no file on the route serves.
+
+    The reference is what generation PRODUCES, not what the swagger
+    declares. Measured: an operation declaring 200/204/302/409/500/default
+    yields three scenarios, so reading the denominator off `op.responses`
+    would report three absences on a correct route — a check that invents
+    findings on healthy input is switched off before it finds a real one.
+
+    Coverage is asked of the whole route rather than of each file, because
+    the overlay model serves the union: generated/ is the base and a
+    hand-written scenario overrides it by name. Asking each file
+    separately would report every status a hand-written mock does not
+    happen to cover, which is the normal state of every hand-written mock
+    in every project.
+
+    Statuses, not names, are the identity — the same rule the body check
+    uses. A hand-written `no_refund` at 409 covers the declared 409 that
+    generation happens to call `error_409`.
+    """
+    try:
+        fresh = build_mock_definition(doc, op)
+    except (KeyError, TypeError, ValueError):
+        # Synthesis can fail on shapes the generator cannot build (self
+        # reference); nothing to hold the route to in that case.
+        return
+    declared = {str(s.get("status")): name
+                for name, s in (fresh.get("scenarios") or {}).items()
+                if isinstance(s, dict) and s.get("status") is not None}
+    if not declared:
+        return
+
+    served: set[str] = set()
+    has_generated = False
+    for rel in rels:
+        if is_generated(rel):
+            has_generated = True
+        try:
+            with open(mock_dir / rel, "r", encoding="utf-8") as f:
+                data = json.load(f)
+        except (OSError, json.JSONDecodeError):
+            # Reported as drift by the caller; an unreadable file cannot be
+            # held to serve anything, and calling its whole contract absent
+            # would bury one finding under a list of derived ones.
+            return
+        for scenario in (data.get("scenarios") or {}).values():
+            if isinstance(scenario, dict) and scenario.get("status") is not None:
+                served.add(str(scenario.get("status")))
+
+    sink = absent_generated if has_generated else absent_handwritten
+    where = mock_relpath(op) if has_generated else ", ".join(sorted(rels))
+    for status in sorted(declared):
+        if status not in served:
+            sink.append(
+                f"{where}  {declared[status]}: status {status} is declared "
+                "but no scenario on this route serves it")
 
 
 def _check_bodies(

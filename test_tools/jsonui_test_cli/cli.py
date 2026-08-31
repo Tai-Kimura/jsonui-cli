@@ -426,7 +426,9 @@ def _regenerate_stale_mocks(config_path):
     to remove, which is the part that matters: a reader cannot tell the
     residue from the bug.
     """
-    from .mock.generate import GENERATED_DIR, generate
+    from .mock.generate import (
+        GENERATED_DIR, expected_generated_relpaths, generate,
+    )
 
     inputs = _mock_gate_inputs(config_path)
     if inputs is None:
@@ -435,6 +437,13 @@ def _regenerate_stale_mocks(config_path):
     scope = _load_path_scope(config_path)
 
     gen_root = mock_path / GENERATED_DIR
+    # Presence before freshness. A deleted mock has no mtime to compare, so
+    # a timestamp rule reports a complete tree however much is missing from
+    # it — the route simply 404s and the reason is nowhere.
+    on_disk = {str(p.relative_to(mock_path))
+               for p in gen_root.rglob("*.mock.json")}
+    if expected_generated_relpaths(resolved, scope) - on_disk:
+        return _rebuild_generated(resolved, mock_path, scope)
     newest_input = max(
         (Path(s).stat().st_mtime for s in resolved if Path(s).exists()), default=0)
     # Hand-written mocks are inputs too: one of them appearing is what makes a
@@ -443,10 +452,23 @@ def _regenerate_stale_mocks(config_path):
         if gen_root in p.parents:
             continue
         newest_input = max(newest_input, p.stat().st_mtime)
-    generated_at = max(
+    # The OLDEST generated file decides, not the newest. `max` asks "has
+    # anything been generated since the inputs changed", which one touched
+    # file answers for the whole directory — so a single fresh mock kept
+    # every stale sibling stale, and the worst case is that DAMAGING a
+    # generated file raises its mtime and switches off the rebuild that
+    # would have repaired it. `min` asks the question the caller means:
+    # is all of it at least as new as the inputs.
+    generated_at = min(
         (p.stat().st_mtime for p in gen_root.rglob("*.mock.json")), default=0)
     if generated_at >= newest_input:
         return 0
+    return _rebuild_generated(resolved, mock_path, scope)
+
+
+def _rebuild_generated(resolved, mock_path, scope) -> int:
+    from .mock.generate import GENERATED_DIR, generate
+
     try:
         built = generate(resolved, mock_path, scope=scope)
     except (OSError, ValueError, KeyError) as e:
@@ -1114,6 +1136,15 @@ def cmd_mock_generate(args):
         for rel in report.out_of_scope:
             print(f"  [SCOPE]   {rel} — outside this project's API paths, "
                   "safe to delete")
+        for msg in report.absent_generated:
+            # Gating. generated/ is a pure function of the swagger, so there
+            # is no state in which one of its scenarios is legitimately
+            # missing — it was edited, or a generation run was interrupted.
+            print(f"  [ABSENT]  {msg}\n"
+                  "            generated/ is derived from the swagger; run "
+                  "`jsonui-test mock generate` to restore it")
+        for msg in report.absent_handwritten:
+            print(f"  [WARN]    {msg}")
         for msg in report.drifted:
             print(f"  [DRIFT]   {msg}")
         for drift in report.errors:
