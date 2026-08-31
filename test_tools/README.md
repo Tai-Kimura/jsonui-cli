@@ -416,6 +416,36 @@ Set `mock.includePaths` / `mock.excludePaths` to give the mocks a different
 scope from the DTOs (`"includePaths": ["*"]` opts out of narrowing entirely).
 With no declaration anywhere, the whole swagger is in scope, as before.
 
+### What the `--check` gates do not compare
+
+Each `--check` compares two things, and the chain stops short of the
+implementation:
+
+| Gate | Compares |
+|---|---|
+| `jsonui-test validate` | mock **↔ the shape the schema declares** |
+| `mock generate --check` | mock **↔ swagger** |
+| `generate branch-tests --check` | the copy baked into the test **↔ the mock file** |
+
+None of them read implementation source, and a swagger does not declare the
+**text** of a body. So a green run does not mean a mock's message strings
+match what the endpoint actually returns — a mock can hold wording no code
+produces and pass all three.
+
+This is not an oversight to be fixed by a fourth gate. A project that tried
+one measured 88 false positives (messages raised through helpers, composed
+with f-strings, or built outside the handler), and a gate that is always red
+costs more than the checking is worth — it takes the credibility of the gates
+next to it. Treat body text as a discipline rather than a gate: check pinned
+strings against the implementation when you pin them, and re-check when the
+implementation changes.
+
+The gap is worst when the assertion does not depend on the text either — a
+branch asserted by string key passes identically before and after the wording
+is corrected, so no test count moves and no diff appears. Errors in an
+ungated stretch do not arrive at a commit; they sit there from the start,
+which is why `git diff` and range comparisons do not find them.
+
 ### Legacy Syntax
 
 For backwards compatibility, the old syntax still works:
