@@ -985,6 +985,12 @@ def cmd_mock_generate(args):
             print(f"  [DRIFT]   {msg}")
         for drift in report.errors:
             print(f"  [BODY]    {drift}")
+        for drift in report.stale_generated:
+            # Same visibility channel as the hand-written findings, but a
+            # warning: regenerating fixes it, so it never gates (the ORPHAN
+            # convention). It used to be detected and then shown nowhere.
+            print(f"  [WARN]    {drift}\n"
+                  "            stale generated body — regenerating fixes it")
         notes = [d for d in report.bodies
                  if d.is_note_only and not d.generated and not report.strict]
         for drift in notes:
@@ -1007,6 +1013,14 @@ def cmd_mock_generate(args):
                       "`jsonui-test mock generate --update-default` "
                       "(hand-grown scenarios are preserved).")
             return 1
+        if report.stale_generated:
+            # "No drift: in sync" would be misinformation here — the check
+            # measured these bodies as stale and merely chose not to gate.
+            print(f"\nNo drift in hand-written mocks; "
+                  f"{len(report.stale_generated)} generated body(ies) are "
+                  "stale — refresh with 'jsonui-test mock generate' "
+                  "(hand-written scenarios are preserved).")
+            return 0
         print("No drift: mocks are in sync with swagger.")
         return 0
 

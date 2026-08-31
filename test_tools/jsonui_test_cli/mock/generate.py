@@ -897,6 +897,21 @@ class CheckReport:
                 if not b.generated and (self.strict or not b.is_note_only)]
 
     @property
+    def stale_generated(self) -> list:
+        """Body drift in generated/ — reported, never gating.
+
+        Regenerating fixes these, so they do not fail the check (the ORPHAN
+        convention). But they were detected and then shown NOWHERE: the
+        errors property excluded them (correct) and the printer's note path
+        filtered them too (the leftover), so `--check` said "No drift:
+        mocks are in sync with swagger" over bodies it had just measured as
+        stale. Detection must reach the reader on the same channel the
+        sibling findings use.
+        """
+        return [b for b in self.bodies
+                if b.generated and (self.strict or not b.is_note_only)]
+
+    @property
     def has_drift(self) -> bool:
         return bool(self.missing or self.orphaned or self.drifted or self.errors)
 

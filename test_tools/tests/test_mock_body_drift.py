@@ -420,6 +420,66 @@ class TestGeneratedTree:
         generate([spec], out)
         assert not stale.exists()
 
+    def test_a_stale_generated_body_is_surfaced_without_gating(self, tmp_path):
+        """Detected, then discarded: `_check_bodies` measured generated
+        bodies correctly, `errors` excluded them (right — regenerating
+        fixes them, so they must not gate), but the printer's note path
+        filtered them too, so `--check` said "No drift: mocks are in sync
+        with swagger" over bodies it had just measured as stale. The
+        reporting consumer hit it with a real contract change (a field
+        moving from object to JSON string) and four planted probes, every
+        one silent."""
+        spec, out = self._fresh(tmp_path)
+        target = out / GENERATED_DIR / "items" / "listItems.mock.json"
+        data = json.loads(target.read_text(encoding="utf-8"))
+        data["scenarios"]["default"]["body"] = {
+            "items": [{"series": 42}]}  # id (required) gone, series mistyped
+        target.write_text(json.dumps(data), encoding="utf-8")
+
+        report = generate([spec], out, check=True)
+        assert not report.has_drift          # still not gating
+        assert report.errors == []
+        assert len(report.stale_generated) == 1
+        assert "listItems" in str(report.stale_generated[0])
+
+    def test_generated_note_only_omissions_follow_strict_like_errors(
+            self, tmp_path):
+        spec, out = self._fresh(tmp_path)
+        target = out / GENERATED_DIR / "items" / "listItems.mock.json"
+        data = json.loads(target.read_text(encoding="utf-8"))
+        data["scenarios"]["default"]["body"] = {
+            "items": [{"id": "1"}]}  # omits optional `series` only
+        target.write_text(json.dumps(data), encoding="utf-8")
+
+        assert generate([spec], out, check=True).stale_generated == []
+        strict = generate([spec], out, check=True, strict=True)
+        assert len(strict.stale_generated) == 1
+        assert not strict.has_drift  # strict widens visibility, not the gate
+
+    def test_check_output_names_the_stale_generated_bodies(
+            self, tmp_path, capsys, monkeypatch):
+        """Reaching the reader is a separate claim from being on the
+        report object — the defect lived exactly in that gap."""
+        import argparse
+        from jsonui_test_cli.cli import cmd_mock_generate
+
+        spec, out = self._fresh(tmp_path)
+        target = out / GENERATED_DIR / "items" / "listItems.mock.json"
+        data = json.loads(target.read_text(encoding="utf-8"))
+        data["scenarios"]["default"]["body"] = {"items": [{"series": 42}]}
+        target.write_text(json.dumps(data), encoding="utf-8")
+
+        monkeypatch.chdir(tmp_path)
+        rc = cmd_mock_generate(argparse.Namespace(
+            swagger=[spec], out=str(out), check=True, strict=False,
+            config=None, update_default=False, dry_run=False))
+        printed = capsys.readouterr().out
+        assert rc == 0
+        assert "[WARN]" in printed
+        assert "stale generated body" in printed
+        assert "1 generated body(ies) are stale" in printed
+        assert "mocks are in sync with swagger" not in printed
+
     def test_a_stale_generated_mock_is_a_warning_not_a_failure(self, tmp_path):
         spec, out = self._fresh(tmp_path)
         (out / GENERATED_DIR / "bars" / "extra.mock.json").write_text(json.dumps({
