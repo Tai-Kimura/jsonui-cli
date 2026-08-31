@@ -993,6 +993,17 @@ def _branch_check_summary(reports: list, scanned: int, orphans=()) -> int:
     # because it was never a candidate — and apart from a scan that reached
     # nothing, which is the failure this summary exists to make visible.
     not_applicable = [r for r in reports if not r.platform_applicable]
+    # Collected from the not-applicable reports too, and only from them: a
+    # leftover exists BECAUSE the screen stopped being applicable, so the
+    # filter that removes those reports from the comparison is exactly the
+    # one that hid this finding from every gate.
+    stale: dict[Path, None] = {}
+    unowned: dict[Path, None] = {}
+    for report in reports:
+        for path in getattr(report, "stale", ()):
+            stale[path] = None
+        for path in getattr(report, "unowned", ()):
+            unowned[path] = None
     reports = [r for r in reports if r.platform_applicable]
     for report in reports:
         for path in report.drifted:
@@ -1007,6 +1018,17 @@ def _branch_check_summary(reports: list, scanned: int, orphans=()) -> int:
     for path in absent:
         print(f"  [ABSENT]  {path} (never generated)")
     _print_model_change_note(absent, orphans)
+    for path in stale:
+        # Gating. `--check` did not count a screen that is not applicable to
+        # this platform, so a leftover from before the branches moved was
+        # reported by neither command — and a leftover that still PASSES is
+        # the worse direction, reading as "this screen has branch tests
+        # here" about a screen that has none.
+        print(f"  [STALE]   {path} (this screen no longer generates a test "
+              "for this platform; regenerate to remove it)")
+    for path in unowned:
+        print(f"  [WARN]    {path} sits where a generated test would be "
+              "without an @generated banner — not this tool's to remove")
     for path in drifted:
         print(f"  [DRIFT]   {path}")
     for report in reports:
@@ -1025,8 +1047,8 @@ def _branch_check_summary(reports: list, scanned: int, orphans=()) -> int:
           f"of {scanned} spec(s) scanned{skipped} — {screens - stale_screens} "
           f"up to date, {stale_screens} stale "
           f"({len(matched)} file(s) current, {len(drifted)} drifted, "
-          f"{len(absent)} absent)")
-    if drifted or absent:
+          f"{len(absent)} absent, {len(stale)} stale)")
+    if drifted or absent or stale:
         print("Regenerate with the same command without --check.")
         return 1
     return 0
@@ -1172,6 +1194,18 @@ def _print_branch_generation(report, show_siblings: bool = True) -> None:
         print(f"Skipped '{report.screen}': every branch it declares belongs "
               f"to another platform ({report.platform_skipped} scoped away), "
               f"so there is no assertion to emit")
+        for path in report.stale:
+            # Said, not done silently. The consumer who reported this went
+            # looking for a misspelt `platforms` declaration, because the
+            # run said "skipped" while the old test kept failing — so the
+            # line that says the screen was skipped is the line that has to
+            # account for what was left behind.
+            print(f"  removed {path} (generated for this screen before its "
+                  "branches moved to another platform)")
+        for path in report.unowned:
+            print(f"  [WARN] {path} is where this screen's generated test "
+                  "would be, but it carries no @generated banner — left "
+                  "alone; delete it by hand if it is a stale copy")
         return
     print(f"Generated branch tests for '{report.screen}':")
     print(f"  {report.test_file}  "
