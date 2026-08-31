@@ -797,3 +797,98 @@ class EveryWalkKeyHasABrokenDeclarationProbeTests(unittest.TestCase):
         ctx = canon.build_spec_canon_context(self.spec)
         self.assertEqual(ctx.invalid_config_values, ())
         self.assertEqual(ctx.convention, "camelCase")
+
+
+class WalkReadsMatchesTheCodeTests(unittest.TestCase):
+    """WALK_READS must equal what the walk's source actually reads.
+
+    The probe suite above guards one direction: a key registered without a
+    probe fails. A lane shot the other direction and it passed silently —
+    it taught the walk a new `config.get(...)` WITHOUT registering it, and
+    every suite stayed green, because WALK_READS was a hand-maintained list
+    referenced by nothing but its own tests. That is the exact entry point
+    of all five defect families: nobody 'registers a key without a probe';
+    what actually happens is 'the walk learns to read a new key', and the
+    reader must remember the registry. config_keys.py already solved this
+    shape with a corpus check that goes stale loudly; this is the same
+    move — the source is scanned, so teaching the walk a new key without
+    registering it turns THIS test red, and registering without a probe
+    turns the probe suite red. Both directions are now structure.
+    """
+
+    #: Functions that constitute the walk. A read added anywhere else that
+    #: feeds the context should be moved into (or called from) these.
+    WALK_FUNCTIONS = ("build_spec_canon_context", "_follow_extends")
+
+    def _keys_read_by_the_source(self):
+        import ast
+
+        source = Path(canon.__file__).read_text(encoding="utf-8")
+        tree = ast.parse(source)
+        reads: set = set()
+
+        def receiver_name(value):
+            """`config.get(...)` and `(spec_cfg or {}).get(...)` both count."""
+            if isinstance(value, ast.Name):
+                return value.id
+            if isinstance(value, ast.BoolOp):
+                for v in value.values:
+                    if isinstance(v, ast.Name):
+                        return v.id
+            return None
+
+        class Visitor(ast.NodeVisitor):
+            def visit_Call(self, node):
+                f = node.func
+                if (isinstance(f, ast.Attribute) and f.attr == "get"
+                        and node.args
+                        and isinstance(node.args[0], ast.Constant)
+                        and isinstance(node.args[0].value, str)):
+                    name = receiver_name(f.value)
+                    if name == "config":
+                        reads.add(node.args[0].value)
+                    elif name == "spec_cfg":
+                        reads.add("spec." + node.args[0].value)
+                self.generic_visit(node)
+
+            def visit_Compare(self, node):
+                # `"api_directory" in config`
+                if (isinstance(node.left, ast.Constant)
+                        and isinstance(node.left.value, str)
+                        and len(node.ops) == 1
+                        and isinstance(node.ops[0], ast.In)
+                        and isinstance(node.comparators[0], ast.Name)
+                        and node.comparators[0].id == "config"):
+                    reads.add(node.left.value)
+                self.generic_visit(node)
+
+        for fn in ast.walk(tree):
+            if (isinstance(fn, ast.FunctionDef)
+                    and fn.name in self.WALK_FUNCTIONS):
+                Visitor().visit(fn)
+        # `config.get("spec")` is the container reach for
+        # `spec.canonical_param_case`; the dotted form is the declaration.
+        if "spec" in reads and any(k.startswith("spec.") for k in reads):
+            reads.discard("spec")
+        return reads
+
+    def test_the_registry_and_the_source_agree(self):
+        reads = self._keys_read_by_the_source()
+        registered = set(canon.WALK_READS)
+        self.assertEqual(
+            reads - registered, set(),
+            "the walk reads keys WALK_READS does not declare — register "
+            "them AND give each a broken-declaration probe")
+        self.assertEqual(
+            registered - reads, set(),
+            "WALK_READS declares keys the walk no longer reads — prune "
+            "them or the probes assert dead behavior")
+
+    def test_the_scan_itself_sees_the_known_reads(self):
+        """The scanner's own negative control: a scan that returned an empty
+        set would make the agreement test pass vacuously against an empty
+        registry diff — 'compared nothing' wearing a green checkmark."""
+        reads = self._keys_read_by_the_source()
+        self.assertIn("extends", reads)
+        self.assertIn("api_directory", reads)
+        self.assertIn("spec.canonical_param_case", reads)
