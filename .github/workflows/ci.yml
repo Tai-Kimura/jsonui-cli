@@ -13,7 +13,22 @@ name: ci
 
 on:
   push:
-    branches: [main]
+    # `release-check` is where a release commit is verified BEFORE main sees
+    # it. Two constraints have to hold at once and neither survives alone:
+    #
+    #   - tag only a commit CI has verified. Tagging first burned v1.7.34
+    #     and v1.7.35 (both red, neither distributed).
+    #   - main must never reference a tag that does not exist yet.
+    #     `document_tools/pyproject.toml` pins the sibling by tag, so a
+    #     release commit sitting on main without its tag fails every
+    #     install from main HEAD — closed in 2026-08 with an atomic push,
+    #     and reopened when "CI before tag" split that push apart.
+    #
+    # Verifying on a branch satisfies both: CI reports a real headSha for
+    # this exact commit, and main + tag then land together in one atomic
+    # push. A `pull_request` run would not do — its headSha is a merge
+    # commit, so "CI verified this SHA" could not be checked by equality.
+    branches: [main, release-check]
   pull_request:
 
 concurrency:
