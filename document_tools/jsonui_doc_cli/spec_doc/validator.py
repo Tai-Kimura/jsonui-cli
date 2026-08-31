@@ -1843,14 +1843,36 @@ class SpecValidator:
                 ))
             return
         for key in branch:
-            if key not in ("when", "then", "notes", "platforms"):
+            if key not in ("when", "then", "notes", "platforms", "baseline"):
                 result.errors.append(SpecValidationMessage(
                     path=f"{path}.{key}",
                     message=(
-                        "Unknown branch key — allowed: 'when', 'then', 'notes', "
-                        "'platforms' (or a lone 'note')"
+                        "Unknown branch key — allowed: 'when', 'then', "
+                        "'baseline', 'notes', 'platforms' (or a lone 'note')"
                     ),
                 ))
+        if "baseline" in branch:
+            # A pre-state this branch alone starts from, overriding the
+            # method's baseline KEY BY KEY.
+            #
+            # `when data.*` takes scalars only, and `baseline` takes any
+            # JSON — so a list-valued pre-state was fixed per method while
+            # the scalars agreeing with it moved per branch. That asymmetry
+            # is a shape that builds incoherent states: a list with one row
+            # beside an "empty" flag the branch flipped, arranged and
+            # asserted against a state the implementation cannot reach. One
+            # project arrived at it three times, twice in opposite authoring
+            # orders and once by a writer who had considered the second
+            # field and rejected it as a substitute for the first.
+            #
+            # So the fix is not "let `when` carry lists" — the composition
+            # of partial overrides is the shape, and widening the types
+            # that can be partially overridden keeps it. A branch states
+            # the whole value of every key it touches instead.
+            self._validate_branch_witness(
+                branch["baseline"], f"{path}.baseline", data_fields, result,
+                seedable,
+            )
         if "platforms" in branch:
             # Platform-scoped branch (P3b: a data field may exist on one
             # platform only — e.g. an Android-only alert-message var while

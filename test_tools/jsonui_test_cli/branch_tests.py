@@ -3,7 +3,7 @@
 P2 of the branch-declarations track (docs/plans/2026-08-24-branch-
 declarations-p2-design.md). The generator is deliberately mechanical:
 
-  arrange = baseline -> named-condition witnesses -> when.data (later wins)
+  arrange = baseline -> branch baseline -> condition witnesses -> when.data
             + fetch stub serving named mock scenarios per declared endpoint
   act     = await vm.<method>(args from when.arg via spec param order)
             + settle() to drain fire-and-forget fetches
@@ -863,7 +863,7 @@ SEED_PREFIX = "state."
 def _arrange_state(
     contract: dict, branch: dict, conditions: dict
 ) -> tuple[dict, dict]:
-    """baseline -> cond witnesses -> when (later wins).
+    """baseline -> branch baseline -> cond witnesses -> when (later wins).
 
     Returns (data state, seeded internal state). Both come from the same
     three sources in the same order; only the write path differs.
@@ -881,6 +881,19 @@ def _arrange_state(
     baseline = contract.get("baseline")
     if isinstance(baseline, dict):
         absorb(baseline)
+    # The branch's own pre-state, over the method's, KEY BY KEY — the whole
+    # value of every key it names, never a merge into one.
+    #
+    # A deep merge would rebuild the defect this exists to remove. The
+    # method's baseline could hold a list and the branch could reach inside
+    # it, so a branch would again be able to move part of a state and leave
+    # the rest agreeing with the old one — which is how a list with a row in
+    # it ended up beside an "the list is empty" flag, arranged and asserted
+    # against a state the implementation cannot produce. Owning the key
+    # outright is what makes the resulting state readable in one place.
+    branch_baseline = branch.get("baseline")
+    if isinstance(branch_baseline, dict):
+        absorb(branch_baseline)
     when = branch.get("when") or {}
     cond_ref = when.get("cond")
     if isinstance(cond_ref, str) and cond_ref:
