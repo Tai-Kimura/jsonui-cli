@@ -98,9 +98,19 @@ def cmd_validate(args):
     # from the file it is checking answers a different question in a split
     # tree. Cleared to None when the run cannot tell where the project is,
     # which makes the check silent rather than wrong.
+    #
+    # The WHOLE config document, not `_load_mock_config` — that returns the
+    # `mock` section, which has no `layouts_directory` or `spec_directory`,
+    # so every project fell back to the defaults and the check silently ran
+    # against directories that do not exist. It then reported "no
+    # layouts_directory under <root>" and stood down. Measured on a project
+    # that declares both: `root/declared` is a directory, `root/default` is
+    # not — the declaration resolved and was never read. The check shipped
+    # switched off wherever the directories are not at their default paths,
+    # which is exactly the projects it was written for.
     from .validation.declared_paths import set_path_roots
     _root = _project_root(getattr(args, "config", None))
-    set_path_roots(_root, _load_mock_config(getattr(args, "config", None))[0]
+    set_path_roots(_root, _read_config_doc(getattr(args, "config", None))[0]
                    if _root else None)
     platform_warnings = 0
 

@@ -235,3 +235,59 @@ class TestDecliningToCheckIsNotAFinding:
         assert "were not resolved" not in out, "the check ran, so no notice"
         assert "Warnings: 1" in out, "home.json is declared and absent"
         assert rc == 0
+
+
+class TestTheCheckReadsTheDeclaredDirectories:
+    """The roots come from the whole config, not from its `mock` section.
+
+    `set_path_roots` was handed `_load_mock_config(...)`, which returns
+    `config["mock"]` — a dict with no `layouts_directory` and no
+    `spec_directory`. Every project therefore resolved against the defaults,
+    and a project that declares non-default directories got the defaults,
+    found no such directory, and stood down with the "declare it in
+    jui.config.json" notice for a key it had already declared.
+
+    So the check shipped switched off wherever the directories are not at
+    their default paths — which is the shape it was written for. Reported by
+    a consumer who declined to "just add the key" and measured instead:
+    `root/declared` is a directory, `root/default` is not.
+    """
+
+    def _project(self, tmp_path):
+        (tmp_path / "spec/layouts").mkdir(parents=True)
+        (tmp_path / "spec/json").mkdir(parents=True)
+        (tmp_path / "spec/layouts/home.json").write_text("{}", encoding="utf-8")
+        (tmp_path / "jui.config.json").write_text(json.dumps(
+            {"layouts_directory": "spec/layouts",
+             "spec_directory": "spec/json"}), encoding="utf-8")
+        (tmp_path / "tests").mkdir()
+        return tmp_path
+
+    def _run(self, tmp_path, layout, name):
+        import os
+        import subprocess
+        doc = dict(SCREEN, source={"layout": layout})
+        (tmp_path / "tests" / name).write_text(json.dumps(doc), encoding="utf-8")
+        tree = str(Path(__file__).parent.parent)
+        proc = subprocess.run(
+            [sys.executable, "-m", "jsonui_test_cli.cli", "validate", "tests"],
+            cwd=tmp_path, capture_output=True, text=True,
+            env={**os.environ, "PYTHONPATH": tree})
+        return proc.stdout + proc.stderr
+
+    def test_a_declared_directory_turns_the_check_on(self, tmp_path):
+        root = self._project(tmp_path)
+        out = self._run(root, "nope.json", "bad.test.json")
+        assert "were not resolved" not in out, (
+            "the directory is declared, so the check must not stand down")
+        assert "names a file that does not exist" in out
+        assert "Warnings: 1" in out
+
+    def test_a_file_that_is_there_is_not_reported(self, tmp_path):
+        # The control: with the roots wired, the check has to be able to say
+        # yes as well as no. Otherwise "the check is on" and "the check
+        # reports everything" look the same.
+        root = self._project(tmp_path)
+        out = self._run(root, "home.json", "ok.test.json")
+        assert "names a file that does not exist" not in out
+        assert "Warnings: 0" in out
