@@ -179,3 +179,59 @@ class TestTheCheckDeclinesLoudly:
         declared_paths.set_path_roots(None)
 
         assert declared_paths.skipped_kinds() == []
+
+
+class TestDecliningToCheckIsNotAFinding:
+    """The skip notice prints, and does not move `Warnings:`.
+
+    A project with no `layouts_directory` has nothing wrong with it and
+    nothing to fix, so counting the notice puts a permanent +1 on every such
+    project — the standing warning that teaches people to stop reading the
+    count, which is the failure this release spent its time removing
+    elsewhere. `Unchecked mocks:` already draws this line in the same
+    summary: say what was not covered, without calling it a finding.
+
+    Caught by CI, not here. Locally the conformance suite shells out to
+    `jsonui-test`, which resolves to the installed ~/.jsonui-cli — the
+    PREVIOUS release, without this check — so the assertion passed against
+    code that could not fail it.
+    """
+
+    def _run(self, tmp_path, config):
+        """Invoke the CLI as a subprocess, pinned to THIS working tree.
+
+        Deliberately not `shutil.which("jsonui-test")`: that resolves to the
+        installed ~/.jsonui-cli, which is the previous release. The
+        conformance suite does exactly that and therefore could not fail on
+        this change — the reason it took CI to find it.
+        """
+        import os
+        import subprocess
+        (tmp_path / "jui.config.json").write_text(json.dumps(config),
+                                                  encoding="utf-8")
+        tests = tmp_path / "tests"
+        tests.mkdir()
+        (tests / "a.test.json").write_text(json.dumps(SCREEN), encoding="utf-8")
+        tree = str(Path(__file__).parent.parent)
+        proc = subprocess.run(
+            [sys.executable, "-m", "jsonui_test_cli.cli", "validate", "tests"],
+            cwd=tmp_path, capture_output=True, text=True,
+            env={**os.environ, "PYTHONPATH": tree})
+        return proc.returncode, proc.stdout + proc.stderr
+
+    def test_the_notice_prints_but_does_not_count(self, tmp_path):
+        rc, out = self._run(tmp_path, {"spec_directory": "docs/specs"})
+        assert "were not resolved" in out, "declining to check must be said"
+        assert "Warnings: 0" in out, (
+            "a project with no layouts_directory has nothing to fix")
+        assert rc == 0
+
+    def test_a_real_unresolved_path_still_counts(self, tmp_path):
+        # The control. Without it, "the notice is not counted" and "nothing
+        # is counted" produce the same green.
+        (tmp_path / "layouts").mkdir()
+        rc, out = self._run(tmp_path, {"layouts_directory": "layouts",
+                                       "spec_directory": "docs/specs"})
+        assert "were not resolved" not in out, "the check ran, so no notice"
+        assert "Warnings: 1" in out, "home.json is declared and absent"
+        assert rc == 0

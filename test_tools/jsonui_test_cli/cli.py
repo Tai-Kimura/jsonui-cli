@@ -185,12 +185,19 @@ def cmd_validate(args):
     # confusion this check exists to remove: "no dangling paths" and "the
     # path check never ran" would print identically.
     from .validation.declared_paths import skipped_kinds
+    #
+    # Printed, but NOT counted. It is a statement about coverage, not a
+    # finding about this project's files: nothing here is wrong and there is
+    # nothing to fix, so counting it puts a permanent +1 on every project
+    # that has no layouts_directory — the standing warning that teaches
+    # people to stop reading the count. `Unchecked mocks:` is the same
+    # distinction already made in this summary. Measured on the conformance
+    # fixtures, whose whole assertion is `Errors: 0, Warnings: 0`.
     for kind in skipped_kinds():
-        print(f"[WARN] declared {kind} paths were not resolved: no "
+        print(f"[NOTE] declared {kind} paths were not resolved: no "
               f"{'layouts_directory' if kind == 'layout' else 'spec_directory'}"
               f" under {_root} — declare it in jui.config.json to turn this "
               "check on")
-        total_warnings += 1
 
     for note in runtime_notes:
         print(f"[WARN] {note}")
