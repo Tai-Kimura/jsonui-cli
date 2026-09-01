@@ -352,7 +352,7 @@ def cmd_validate(args):
     if skipped_kinds():
         summary += f", Path checks skipped: {', '.join(skipped_kinds())}"
     print(summary)
-    _print_uncounted_footnote(uncounted)
+    _print_uncounted_footnote(uncounted, command="validate")
 
     if total_errors > 0:
         return 1
@@ -901,11 +901,7 @@ def _print_uncompared(report):
     # printed as [EXTRA] and [STATUS], and printing them here too put one
     # scenario on screen twice under two labels that contradict each other —
     # one saying the run failed on it, the other that it was not compared.
-    from .mock.generate import UNMATCHED_NOTE_CLASSES, classify_unmatched_note
-    uncounted = {name: 0 for name in UNMATCHED_NOTE_CLASSES}
-    for note in report.unmatched_notes:
-        print(f"  [WARN]    {note} — not compared")
-        uncounted[classify_unmatched_note(note)] += 1
+    uncounted = _print_uncompared_notes(report)
     if report.out_of_scope:
         # `[ORPHAN] (mock file, not in swagger)` is the only thing this path
         # ever said about an unmatched mock, and for these files it would be
@@ -918,6 +914,31 @@ def _print_uncompared(report):
         print(f"  [SCOPE]   {len(report.out_of_scope)} mock(s) outside "
               f"this project's API paths ({report.scope_note or 'all paths'})"
               " — not checked, listed by `mock generate --check`")
+    return uncounted
+
+
+def _print_uncompared_notes(report) -> dict:
+    """Print the not-compared scenarios and count them by class.
+
+    Split out of `_print_uncompared` for `mock generate --check`, which
+    prints the same line and needs the same count but lists its
+    out-of-scope mocks one per file, so it must not also print the scope
+    SUMMARY this function's caller adds.
+
+    The split is the point of the change it came from. `--check` carried its
+    own copy of this loop, emitting `  [WARN]    {note} — not compared`
+    byte-for-byte identically, and only THIS copy ever learned to classify
+    — so the command that shows every class showed no class, and the command
+    that classifies cannot reach one of them. Two copies of a line, one of
+    which learned something: the shape `GATING_BUCKETS` and `PATH_KINDS`
+    exist to prevent. One printer, every caller.
+    """
+    from .mock.generate import UNMATCHED_NOTE_CLASSES, classify_unmatched_note
+
+    uncounted = {name: 0 for name in UNMATCHED_NOTE_CLASSES}
+    for note in report.unmatched_notes:
+        print(f"  [WARN]    {note} — not compared")
+        uncounted[classify_unmatched_note(note)] += 1
     return uncounted
 
 
@@ -940,9 +961,23 @@ def _skipped_path_note(kind: str, root) -> str:
             "jui.config.json to turn this check on")
 
 
-def _print_uncounted_footnote(uncounted: dict) -> None:
-    """Say how many findings above are NOT in `Warnings:`, and why — in as
-    many sentences as there are reasons.
+#: How the footnote opens on each command. The CLAUSES below are one
+#: sentence each wherever they print — what differs is the denominator the
+#: number is absent from. `validate` has a `Warnings:` count; `mock generate
+#: --check` has no counter at all, only an exit code these do not move, so
+#: "not counted in Warnings:" would name a line that command never prints.
+#:
+#: A table rather than a default, so a third caller has to answer the
+#: question rather than inherit the first caller's answer.
+UNCOUNTED_LEAD = {
+    "validate": "{total} finding(s) above are not counted in Warnings:",
+    "check": "{total} finding(s) above do not fail this check:",
+}
+
+
+def _print_uncounted_footnote(uncounted: dict, *, command: str) -> None:
+    """Say how many findings above do not move this command's count, and
+    why — in as many sentences as there are reasons.
 
     A summary key was the other candidate (`Unactionable: 93`). Not taken:
     it creates a new thing to grep and a permanently non-zero NUMBER, which
@@ -961,7 +996,7 @@ def _print_uncounted_footnote(uncounted: dict) -> None:
     total = sum(uncounted.values())
     if not total:
         return
-    print(f"{total} finding(s) above are not counted in Warnings:")
+    print(UNCOUNTED_LEAD[command].format(total=total))
     if uncounted.get("no-remedy"):
         print(f"  {uncounted['no-remedy']}: a status no operation declares. "
               "There is no remedy — such a code is a premise, not something "
@@ -974,6 +1009,23 @@ def _print_uncounted_footnote(uncounted: dict) -> None:
         # Deliberately worded as an exception to the two above rather than
         # alongside them: this one CAN be cleared, and saying so in the same
         # breath as "no remedy" is how it stayed invisible.
+        #
+        # WHICH COMMAND THIS FIRES ON: `check`, never `validate`. Measured
+        # both ways, on the hand-written and the generated side: a scenario
+        # with no status is ITSELF a validation error, and the mock gate
+        # runs only `if total_errors == 0`, so the run that could produce
+        # this finding exits 1 several screens earlier. It is not a
+        # coincidence of one fixture — the note is built on `status is
+        # None`, the validator errors on anything that is not an int in
+        # 100..599, and the first set is a strict subset of the second, over
+        # the same files (both sides walk `_resolve_mock_dir()` for
+        # `*.mock.json`). Two modules have to change together to open it.
+        #
+        # That is why this clause was unreachable from the only command that
+        # printed the footnote, while the command where the finding actually
+        # appears printed no classification at all. The fix was to give
+        # `--check` this footnote, not to reword a sentence about a case
+        # `validate` cannot show.
         print(f"  {uncounted['actionable']}: a scenario with no status at "
               "all — this one CAN be cleared by adding one (the mock editor "
               "schema already marks `status` required), and is not counted "
@@ -1710,6 +1762,21 @@ def cmd_mock_generate(args):
                       scope=_load_path_scope(getattr(args, "config", None)))
 
     if isinstance(report, CheckReport):
+        # WHAT THIS RUN MEASURED, ahead of what it found — the same line
+        # `validate` prints, from the same property, in the same position.
+        # This command had no denominator at all: it listed findings and
+        # then closed with "No drift: mocks are in sync with swagger.", so a
+        # tree with three scenarios nobody compared reported the sentence a
+        # fully-compared tree reports. Same shape as `copied 0` and
+        # `Warnings: 0` — a run that did not look, printed in the words of a
+        # run that looked and found nothing.
+        #
+        # It adds a line to this command's output. That was weighed against
+        # keeping it: a lane grepping three known words had already missed a
+        # whole release's additions, so the grep baseline is not an asset
+        # being protected here — it is the thing already failing. The
+        # release note names this printing surface instead.
+        print(f"\n{report.contract_summary}")
         # The gating findings, from the printer the validate gate also uses.
         _print_drift_findings(report)
         for rel in report.out_of_scope:
@@ -1743,17 +1810,25 @@ def cmd_mock_generate(args):
             print(f"  [OPTIONAL] {drift}")
         for rel in report.misnamed:
             print(f"  [NAME]    {rel}")
-        for note in report.unmatched_notes:
-            # What is left after the gating subsets ([EXTRA], [STATUS]) have
-            # been printed above — form B, and scenarios with no status at
-            # all. `[WARN]` because the label carries the weight: these do
-            # not fail the check.
-            print(f"  [WARN]    {note} — not compared")
+        # What is left after the gating subsets ([EXTRA], [STATUS]) have
+        # been printed above — form B, scenarios that declared their own
+        # `undeclaredStatus`, and scenarios with no status at all. `[WARN]`
+        # because the label carries the weight: these do not fail the check.
+        #
+        # From the shared printer. The copy that used to live here printed
+        # the identical line and counted nothing, so the three classes
+        # arrived on screen indistinguishable — including the one class that
+        # CAN be cleared, which only this command can show.
+        uncounted = _print_uncompared_notes(report)
         for warning in report.warnings:
             print(f"  [WARN]    {warning}")
         if report.scope_note:
             print(f"\nAPI path scope: {report.scope_note} "
                   f"({report.scope_excluded} endpoint(s) outside it, not checked)")
+        # Before the verdict, so it reaches every exit below rather than
+        # only the green one — a reader whose run failed on something else
+        # still has uncompared scenarios to read about.
+        _print_uncounted_footnote(uncounted, command="check")
         if report.has_drift:
             # From `CheckReport.gating`, the same declaration `has_drift`
             # reads. Hand-counted, this line named four buckets while the
@@ -1772,6 +1847,16 @@ def cmd_mock_generate(args):
                   f"{len(report.stale_generated)} generated body(ies) are "
                   "stale — refresh with 'jsonui-test mock generate' "
                   "(hand-written scenarios are preserved).")
+            return 0
+        if report.unmatched_notes:
+            # Same rule as the stale-generated sentence above, and the
+            # reason the denominator line was added: "in sync" is what a run
+            # with nothing uncompared says, and printing it under a contract
+            # line that names three uncompared scenarios puts a
+            # contradiction in one output.
+            print(f"\nNo drift in the {report.compared} scenario(s) "
+                  f"compared; {len(report.unmatched_notes)} scenario(s) "
+                  "were not compared — the contract line above says why.")
             return 0
         print("No drift: mocks are in sync with swagger.")
         return 0

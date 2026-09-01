@@ -72,7 +72,7 @@ def _run(tmp_path, scenarios, *, sibling_declares_409=False):
     buffer = io.StringIO()
     with contextlib.redirect_stdout(buffer):
         uncounted = cli._print_uncompared(report)
-        cli._print_uncounted_footnote(uncounted)
+        cli._print_uncounted_footnote(uncounted, command="validate")
     return uncounted, buffer.getvalue()
 
 
@@ -368,3 +368,294 @@ class TestTheMockLineSaysWhatItIsLookingAt:
         assert "mock generate --check" in out
         assert "misnamed files" in out
         assert "optional-field omissions" in out
+
+
+class TestWhichCommandEachClassCanReach:
+    """The footnote had to move to where its findings are.
+
+    `_print_uncounted_footnote` was printed by `validate` alone, and one of
+    its three clauses cannot occur there. Measured on both sides — a
+    hand-written mock and a `generated/` one — a scenario with no status is
+    ITSELF a validation error, and the mock gate runs only `if total_errors
+    == 0`, so the run that would produce the finding exits 1 several screens
+    earlier.
+
+    That is structural, not a property of one fixture: the note is built on
+    `status is None`, the validator errors on anything that is not an int in
+    100..599, and the first set is a strict subset of the second — over the
+    same files, since both sides walk `_resolve_mock_dir()` for
+    `*.mock.json`. Two modules have to change together to open it.
+
+    Meanwhile `mock generate --check`, where all three classes DO appear,
+    printed them as three identical `[WARN]` lines and classified nothing:
+    it carried its own copy of the printer, and only the other copy ever
+    learned to classify. So one command could not see the class, and the
+    other did not explain it.
+
+    Every test here has a NON-FIRING half, and a non-firing half is only
+    meaningful against a control — "no line appeared" says nothing about a
+    finding that never occurred, so the same tree is first run through a
+    command that does produce it.
+    """
+
+    #: A realm twin declaring 409 turns a 409 scenario from form B ("no
+    #: operation declares it", a premise) into form C ("borrowed", a gate).
+    #: Without it the `declared` class is unreachable: form B never consults
+    #: `undeclaredStatus`, so nothing can land in that bucket. The first
+    #: draft of these tests omitted the twin and measured form B three times
+    #: while claiming to measure three different things.
+    def _project(self, tmp_path, scenarios, *, twin=False):
+        docs = tmp_path / "docs" / "api"
+        docs.mkdir(parents=True)
+        paths = {"/api/x": {"get": {"operationId": "getX",
+                                    "responses": {"200": _OK}}}}
+        if twin:
+            paths["/api/y"] = {"get": {"operationId": "getY",
+                                       "responses": {"200": _OK, "409": _OK}}}
+        (docs / "spec.json").write_text(json.dumps(
+            {"openapi": "3.0.0", "paths": paths}), encoding="utf-8")
+        proj = tmp_path / "proj"
+        (proj / "tests" / "mocks").mkdir(parents=True)
+        (proj / "tests" / "sample.test.json").write_text(json.dumps({
+            "type": "screen", "source": {"layout": "test.json"},
+            "metadata": {"name": "sample_test", "description": "d"},
+            "cases": [{"name": "c", "description": "d",
+                       "steps": [{"assert": "visible", "id": "root"}]}],
+        }), encoding="utf-8")
+        (proj / "jui.config.json").write_text(json.dumps({
+            "mock": {"swagger": "../docs/api/spec.json",
+                     "mockDir": "tests/mocks"},
+        }), encoding="utf-8")
+        mock = proj / "tests" / "mocks" / "x" / "getX.mock.json"
+        mock.parent.mkdir(parents=True)
+        mock.write_text(json.dumps({
+            "source": {"operationId": "getX", "method": "GET", "path": "/api/x"},
+            "scenarios": {"default": {"status": 200, "body": {}}, **scenarios},
+        }), encoding="utf-8")
+        if twin:
+            # The twin gets a mock too. Without one the route is `missing`,
+            # the check fails on THAT, and an arm asserting a clean exit
+            # reads as the declaration having failed to silence anything.
+            twin_mock = proj / "tests" / "mocks" / "y" / "getY.mock.json"
+            twin_mock.parent.mkdir(parents=True)
+            twin_mock.write_text(json.dumps({
+                "source": {"operationId": "getY", "method": "GET",
+                           "path": "/api/y"},
+                "scenarios": {"default": {"status": 200, "body": {}},
+                              "conflict": {"status": 409, "body": {}}},
+            }), encoding="utf-8")
+        return proj
+
+    def _validate(self, proj, monkeypatch, capsys):
+        import argparse
+        monkeypatch.chdir(proj)
+        rc = cli.cmd_validate(argparse.Namespace(
+            files=["tests"], verbose=False, quiet=False, config=None,
+            no_mock_check=False, no_install=True, strict=False))
+        return rc, capsys.readouterr().out
+
+    def _check(self, proj, monkeypatch, capsys):
+        import argparse
+        monkeypatch.chdir(proj)
+        rc = cli.cmd_mock_generate(argparse.Namespace(
+            swagger=None, out=None, check=True, config=None, strict=False,
+            update_default=False, update=False, force=False))
+        return rc, capsys.readouterr().out
+
+    # -- actionable ----------------------------------------------------- #
+
+    def test_check_shows_the_clearable_class_and_says_it_is_clearable(
+            self, tmp_path, monkeypatch, capsys):
+        rc, out = self._check(
+            self._project(tmp_path, {"weird": {"body": {}}}),
+            monkeypatch, capsys)
+
+        assert "weird: no status" in out
+        assert "CAN be cleared" in out
+        assert rc == 0
+
+    def test_validate_cannot_reach_that_class_at_all(
+            self, tmp_path, monkeypatch, capsys):
+        """The non-firing half, with its control.
+
+        The reader is not left with nothing — they get the `[ERROR]` naming
+        the same scenario and the same key — which is why the answer was to
+        move the footnote rather than to relax the validator.
+        """
+        proj = self._project(tmp_path, {"weird": {"body": {}}})
+        # CONTROL: this tree really does produce the finding.
+        _, control = self._check(proj, monkeypatch, capsys)
+        assert "weird: no status" in control, control
+
+        rc, out = self._validate(proj, monkeypatch, capsys)
+
+        assert rc == 1
+        assert "CAN be cleared" not in out
+        assert "not counted in Warnings:" not in out
+        # The gate never ran, so its denominator is absent too: the finding
+        # is not merely unexplained here, it is unmeasured.
+        assert "mock contract:" not in out
+        assert "'status' must be an HTTP status int" in out
+
+    # -- no-remedy ------------------------------------------------------ #
+
+    def test_no_remedy_fires_for_a_status_no_operation_declares(
+            self, tmp_path, monkeypatch, capsys):
+        _, out = self._check(
+            self._project(tmp_path, {"teapot": {"status": 418, "body": {}}}),
+            monkeypatch, capsys)
+
+        assert "no remedy" in out
+
+    def test_no_remedy_does_not_fire_for_a_borrowed_code(
+            self, tmp_path, monkeypatch, capsys):
+        """The non-firing half. A form A/C scenario with no declaration is
+        GATED, so it leaves `unmatched_notes` for `[STATUS]` — uncounted and
+        unexplained are different states, and a gating finding is neither."""
+        proj = self._project(
+            tmp_path, {"conflict": {"status": 409, "body": {}}}, twin=True)
+
+        rc, out = self._check(proj, monkeypatch, capsys)
+
+        # CONTROL: the finding exists, under the other label.
+        assert "[STATUS]" in out and "409" in out, out
+        assert rc == 1
+        assert "no remedy" not in out
+        assert "do not fail this check:" not in out
+
+    # -- declared ------------------------------------------------------- #
+
+    def test_declared_fires_for_the_object_form(
+            self, tmp_path, monkeypatch, capsys):
+        proj = self._project(
+            tmp_path,
+            {"conflict": {"status": 409, "body": {},
+                          "undeclaredStatus": {"reason": "the twin owns it"}}},
+            twin=True)
+
+        rc, out = self._check(proj, monkeypatch, capsys)
+
+        assert rc == 0
+        assert "made on purpose" in out
+
+    def test_declared_does_not_fire_for_a_bare_true(
+            self, tmp_path, monkeypatch, capsys):
+        """The non-firing half, and the trap it documents.
+
+        Only the object form silences the gate. Measured before this was
+        written: a bare `true` produced output BYTE-IDENTICAL to writing
+        nothing at all, so the tool could not distinguish "did not declare"
+        from "declared in a shape that does nothing" — see
+        `_declaration_clause`, which is what broke the tie.
+        """
+        proj = self._project(
+            tmp_path,
+            {"conflict": {"status": 409, "body": {},
+                          "undeclaredStatus": True}},
+            twin=True)
+
+        rc, out = self._check(proj, monkeypatch, capsys)
+
+        assert rc == 1
+        assert "made on purpose" not in out
+        # Nor is it silently ignored, which is the other half: the finding
+        # says the declaration is not the shape it needs.
+        assert "does not suppress this finding" in out
+
+
+class TestOnePrinterForBothCommands:
+    """The duplication that let one command learn and the other not.
+
+    `--check` carried its own copy of `  [WARN]    {note} — not compared`,
+    byte-for-byte identical to the one in `_print_uncompared`, and only the
+    latter was taught to classify. Two copies of a line, one of which
+    learned something: the shape `GATING_BUCKETS` and `PATH_KINDS` exist to
+    prevent.
+    """
+
+    def _both(self, tmp_path, monkeypatch, capsys, scenarios):
+        reach = TestWhichCommandEachClassCanReach()
+        proj = reach._project(tmp_path, scenarios)
+        _, validate_out = reach._validate(proj, monkeypatch, capsys)
+        _, check_out = reach._check(proj, monkeypatch, capsys)
+        return validate_out, check_out
+
+    def _warn_lines(self, out):
+        return [l for l in out.splitlines()
+                if l.startswith("  [WARN]    ") and "not compared" in l]
+
+    def test_the_same_note_prints_identically_on_both(
+            self, tmp_path, monkeypatch, capsys):
+        validate_out, check_out = self._both(
+            tmp_path, monkeypatch, capsys,
+            {"teapot": {"status": 418, "body": {}}})
+
+        lines = self._warn_lines(validate_out)
+        assert len(lines) == 1, validate_out
+        assert self._warn_lines(check_out) == lines
+
+    def test_the_lead_names_the_count_that_command_actually_prints(
+            self, tmp_path, monkeypatch, capsys):
+        """`--check` prints no `Warnings:` line, so the `validate` wording
+        would send its reader looking for one that is not there."""
+        validate_out, check_out = self._both(
+            tmp_path, monkeypatch, capsys,
+            {"teapot": {"status": 418, "body": {}}})
+
+        assert "not counted in Warnings:" in validate_out
+        assert "do not fail this check:" not in validate_out
+        assert "do not fail this check:" in check_out
+        assert "not counted in Warnings:" not in check_out
+
+    def test_every_lead_is_declared_rather_than_defaulted(self):
+        """A table, not a default: a third caller has to answer the question
+        rather than inherit the first caller's answer."""
+        assert set(cli.UNCOUNTED_LEAD) == {"validate", "check"}
+        for lead in cli.UNCOUNTED_LEAD.values():
+            assert lead.format(total=3).startswith("3 finding(s)")
+
+    def test_an_unknown_command_is_a_failure_not_a_silent_default(self):
+        with pytest.raises(KeyError):
+            cli._print_uncounted_footnote({"no-remedy": 1}, command="serve")
+
+
+class TestCheckSaysWhatItMeasured:
+    """`--check` had no denominator at all.
+
+    It listed findings and closed with "No drift: mocks are in sync with
+    swagger." — so a tree with scenarios nobody compared printed the
+    sentence a fully-compared tree prints. Same shape as `copied 0` and
+    `Warnings: 0`: a run that did not look, reported in the words of a run
+    that looked and found nothing.
+    """
+
+    def _check(self, tmp_path, monkeypatch, capsys, scenarios):
+        reach = TestWhichCommandEachClassCanReach()
+        return reach._check(reach._project(tmp_path, scenarios),
+                            monkeypatch, capsys)
+
+    def test_the_contract_line_is_printed(self, tmp_path, monkeypatch, capsys):
+        _, out = self._check(tmp_path, monkeypatch, capsys,
+                             {"teapot": {"status": 418, "body": {}}})
+
+        lines = [l for l in out.splitlines() if l.startswith("mock contract:")]
+        assert len(lines) == 1, out
+        assert "not compared" in lines[0]
+
+    def test_the_verdict_does_not_claim_what_was_not_compared(
+            self, tmp_path, monkeypatch, capsys):
+        _, out = self._check(tmp_path, monkeypatch, capsys,
+                             {"teapot": {"status": 418, "body": {}}})
+
+        assert "in sync with swagger" not in out
+        assert "1 scenario(s) were not compared" in out
+
+    def test_a_fully_compared_tree_still_says_in_sync(
+            self, tmp_path, monkeypatch, capsys):
+        """The non-firing half. The qualified sentence must not become the
+        standing line the next uncompared scenario hides behind."""
+        _, out = self._check(tmp_path, monkeypatch, capsys, {})
+
+        assert "No drift: mocks are in sync with swagger." in out
+        assert "were not compared" not in out
+        assert "do not fail this check:" not in out

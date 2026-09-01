@@ -1498,6 +1498,48 @@ _STATUS_FORM_REMEDY = {
           "has this branch"),
 }
 
+#: What a finding says about this scenario's `undeclaredStatus`, if
+#: anything. Kept OUT of `_STATUS_FORM_REMEDY`, which describes the form —
+#: the same C finding gets a different one of these depending on what the
+#: scenario wrote, and baking one into the C string printed "if it is
+#: deliberate, say so" at a scenario that had already said so.
+#:
+#: Three cases, three sentences, each true only of its own:
+_DECLARATION_CLAUSE = {
+    # The reader who has not written the key. Named at all because the
+    # alternative was measured: with no spelling anywhere in the finding, a
+    # reader who guessed `undeclaredStatus: true` got output BYTE-IDENTICAL
+    # to writing nothing.
+    "absent": ('if it is deliberate, say so on the scenario as '
+               '`undeclaredStatus: {"reason": "..."}`'),
+    # The reader already in the trap. Same measurement, other side: the tool
+    # did not distinguish "did not declare" from "declared in a shape that
+    # does nothing", so the unchanged red is attributed to the reader, who
+    # goes to read this file. That is the defect the B comment above records
+    # — this module was carrying an instance of it.
+    "unusable": ("this scenario's `undeclaredStatus` is not the object form "
+                 'the schema requires (`{"reason": "..."}`), so it does not '
+                 "suppress this finding"),
+}
+
+
+def _declaration_clause(scenario: dict) -> str | None:
+    """The clause for this scenario's declaration, or None when honoured.
+
+    None is the third case and it is a sentence deliberately not written: a
+    scenario whose declaration IS honoured has nothing to be told, and the
+    finding it appears on is a `[WARN]` it already chose to accept.
+
+    Not the negation of `_declares_undeclared_status`, which cannot tell
+    "wrote nothing" from "wrote something unusable" — the two get opposite
+    sentences.
+    """
+    if "undeclaredStatus" not in scenario:
+        return _DECLARATION_CLAUSE["absent"]
+    if _declares_undeclared_status(scenario):
+        return None
+    return _DECLARATION_CLAUSE["unusable"]
+
 #: The forms that fail the check on a hand-written mock.
 GATING_STATUS_FORMS = ("A", "C")
 
@@ -1723,8 +1765,24 @@ def _check_bodies(
                              if all_ops else ("B", None))
             remedy = _STATUS_FORM_REMEDY[form].format(
                 sibling=sibling, status=status)
+            # Appended to the note BEFORE it is appended anywhere, because
+            # `unmatched_notes` subtracts `unmatched_borrowed` from
+            # `unmatched` BY VALUE. Extending one copy and not the other
+            # would put the same scenario on screen twice under two labels
+            # that contradict each other, which is the exact double-print
+            # that property exists to prevent.
+            #
+            # Only for the gating forms: B never consults the declaration
+            # at all, so neither "declare it" nor "your declaration is
+            # malformed" is true there — a CORRECT declaration does nothing
+            # on a B finding either, which is the incident the B remedy's
+            # own comment above records.
             note = (f"{rel}  {name}: status {status} not declared "
                     f"[{form}] — {remedy}")
+            clause = (_declaration_clause(scenario)
+                      if form in GATING_STATUS_FORMS else None)
+            if clause:
+                note += f" — {clause}"
             unmatched.append(note)
             if generated and unmatched_generated is not None:
                 # generated/ holding a status the swagger no longer declares

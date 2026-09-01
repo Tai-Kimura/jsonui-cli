@@ -404,3 +404,102 @@ class TestFormBOffersNoInstructionItCannotHonour:
         from jsonui_test_cli.mock.generate import _STATUS_FORM_REMEDY
         assert "fix the swagger" in _STATUS_FORM_REMEDY["A"]
         assert "confirm the implementation" in _STATUS_FORM_REMEDY["C"]
+
+
+class TestTheFindingSaysWhatThisScenarioDeclared:
+    """Three states of `undeclaredStatus`, three sentences, none shared.
+
+    The measurement that opened this: on one fixture, whole outputs
+    compared, a scenario with `undeclaredStatus: true` produced output
+    BYTE-IDENTICAL to a scenario with no declaration at all — same
+    `[STATUS]` line, same drift summary, same exit code. So the tool did not
+    distinguish "did not declare" from "declared in a shape that does
+    nothing", and the reader who HAS written the key attributes the
+    unchanged red to themselves.
+
+    That is the defect `TestFormBOffersNoInstructionItCannotHonour` above
+    describes, one key over — and this module was carrying an instance of it
+    while documenting it.
+
+    Each sentence has a NON-FIRING arm, because a clause that always prints
+    is not a clause: it is padding on every finding of that form.
+    """
+
+    def _finding(self, tmp_path, scenario, *, spec=TWIN_REALMS,
+                 path="/api/partner/stalls/suspend", rel="partner/suspend"):
+        swagger, mocks = _project(tmp_path, spec)
+        _mock(mocks, f"{rel}.mock.json", "POST", path,
+              {"default": {"status": 200, "body": {"id": "1"}},
+               "borrowed": scenario})
+        _mock_every_other_route(mocks, spec, path)
+        report = generate([swagger], mocks, check=True)
+        [note] = report.unmatched
+        return note
+
+    def test_a_scenario_with_no_declaration_is_told_the_spelling(
+            self, tmp_path):
+        """The reader who has not written the key. Named in the finding
+        because the alternative was measured: with the spelling nowhere on
+        screen, a reader guessed `true`."""
+        note = self._finding(tmp_path, {"status": 409, "body": {"id": "1"}})
+
+        assert "if it is deliberate" in note
+        assert '`undeclaredStatus: {"reason": "..."}`' in note
+
+    def test_an_unusable_declaration_is_named_as_unusable(self, tmp_path):
+        """The reader already in the trap."""
+        note = self._finding(tmp_path, {"status": 409, "body": {"id": "1"},
+                                        "undeclaredStatus": True})
+
+        assert "does not suppress this finding" in note
+        assert 'object form the schema requires' in note
+        # NOT the other sentence: they have written it, so "if it is
+        # deliberate, say so" is an instruction they already followed.
+        assert "if it is deliberate" not in note
+
+    def test_an_honoured_declaration_is_told_nothing(self, tmp_path):
+        """The non-firing arm the adjudication asked for.
+
+        A scenario whose declaration IS honoured has nothing to be told, and
+        the finding it appears on is a `[WARN]` it already chose to accept.
+        Without this arm, a clause that printed unconditionally would still
+        pass both tests above.
+        """
+        note = self._finding(
+            tmp_path,
+            {"status": 409, "body": {"id": "1"},
+             "undeclaredStatus": {"reason": "the fail-open regression"}})
+
+        assert "if it is deliberate" not in note
+        assert "does not suppress this finding" not in note
+        # The control: this really is the same finding, still reported.
+        assert "status 409 not declared [C]" in note
+
+    def test_form_b_is_told_neither(self, tmp_path):
+        """The other non-firing arm. B never consults the declaration, so
+        BOTH sentences would be false there — "declare it" is the instruction
+        that does nothing (the incident above), and "your declaration is
+        malformed" implies a correct one would work. It would not."""
+        note = self._finding(tmp_path, {"status": 500, "body": {"id": "1"},
+                                        "undeclaredStatus": True})
+
+        assert "not declared [B]" in note, note
+        assert "if it is deliberate" not in note
+        assert "does not suppress this finding" not in note
+
+    def test_the_two_shapes_no_longer_produce_the_same_finding(
+            self, tmp_path):
+        """The measurement itself, as a test.
+
+        Before the clause, these two notes were equal — which is what made
+        the trap invisible. Comparing them directly is what a reworded
+        clause has to keep true, rather than the wording of either.
+        """
+        one, two = tmp_path / "a", tmp_path / "b"
+        one.mkdir()
+        two.mkdir()
+        absent = self._finding(one, {"status": 409, "body": {"id": "1"}})
+        bare_true = self._finding(two, {"status": 409, "body": {"id": "1"},
+                                        "undeclaredStatus": True})
+
+        assert absent != bare_true
