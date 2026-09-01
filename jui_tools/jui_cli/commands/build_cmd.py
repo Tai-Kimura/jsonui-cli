@@ -402,6 +402,64 @@ def _distribute_styles(config_mgr: ConfigManager, platforms: dict, args) -> None
             print(f"Distributed {count} style(s) → {platform}{suffix}")
 
 
+def _merge_strings_into(src_file, dest) -> "tuple[int, list[str]]":
+    """Distribute strings.json by MERGE, not overwrite.
+
+    The face-side copy has two writers with opposite policies: this
+    distributor, and the platform extractors (sjui/kjui build), which append
+    sections derived from face layouts and allowlisted literals and never
+    delete anything. A copy2 here silently reverted every section an
+    extractor had added — whichever tool ran last decided the file's
+    content, and no gate reads the output side (measured 2026-09-01: both
+    multi-platform faces diverged, three hash lineages each, and neither
+    face has anything fixing the build order).
+
+    The ruling this implements: the face copy is A DISTRIBUTION TARGET PLUS
+    AN EXTRACTOR APPEND AREA. Sections the SSoT declares are the SSoT's —
+    overwritten unconditionally. Sections only the face copy has are the
+    extractors' — preserved, and NAMED in the output, because a section
+    deleted from the SSoT whose layout is also gone will now survive here
+    forever (the same orphan family the kjui prune fix closed), and naming
+    the kept sections on every build is what keeps that drift visible
+    instead of silent.
+
+    An unreadable destination is replaced wholesale — merge needs a
+    readable base, and preserving bytes we cannot parse would preserve a
+    corruption. Returns (sections distributed, face-local section names
+    kept)."""
+    src_data = json.loads(src_file.read_text(encoding="utf-8"))
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    kept: "list[str]" = []
+    merged = dict(src_data)
+    if dest.exists():
+        try:
+            existing = json.loads(dest.read_text(encoding="utf-8"))
+        except (ValueError, UnicodeDecodeError):
+            print(f"  strings.json at {dest} was unreadable — replaced wholesale")
+            existing = {}
+        if isinstance(existing, dict):
+            for key, value in existing.items():
+                if key not in merged:
+                    merged[key] = value
+                    kept.append(key)
+    # No face-local sections -> distribute the SOURCE BYTES verbatim. Four
+    # web-only faces have nothing appended, and re-serialising for them
+    # would move every byte-hashing gate (face fingerprints) once for a
+    # formatting change that distributes nothing. Merge formatting is the
+    # price of having something to merge, and only then.
+    if not kept:
+        text = src_file.read_text(encoding="utf-8")
+    else:
+        text = json.dumps(merged, ensure_ascii=False, indent=2) + "\n"
+    try:
+        if dest.read_text(encoding="utf-8") == text:
+            return (len(src_data), kept)
+    except (OSError, ValueError, UnicodeDecodeError):
+        pass
+    dest.write_text(text, encoding="utf-8")
+    return (len(src_data), kept)
+
+
 def _distribute_resources(config_mgr: ConfigManager, platforms: dict, args) -> None:
     """Copy Resources/ (strings, colors, etc.) into each platform's Layouts/Resources/."""
     # Resources live inside layouts_directory/Resources/
@@ -432,6 +490,14 @@ def _distribute_resources(config_mgr: ConfigManager, platforms: dict, args) -> N
                     continue
                 rel = src_file.relative_to(resources_src)
                 dest = resources_dest / rel
+                if src_file.name == "strings.json":
+                    _, kept = _merge_strings_into(src_file, dest)
+                    if kept:
+                        print(f"  strings.json → {platform}: kept "
+                              f"{len(kept)} face-local section(s): "
+                              f"{', '.join(sorted(kept))}")
+                    count += 1
+                    continue
                 dest.parent.mkdir(parents=True, exist_ok=True)
                 shutil.copy2(src_file, dest)
                 count += 1
@@ -440,8 +506,10 @@ def _distribute_resources(config_mgr: ConfigManager, platforms: dict, args) -> N
         if strings_src and strings_src.exists():
             if not resources_src.exists() or resources_src not in strings_src.parents:
                 dest = resources_dest / "strings.json"
-                dest.parent.mkdir(parents=True, exist_ok=True)
-                shutil.copy2(strings_src, dest)
+                _, kept = _merge_strings_into(strings_src, dest)
+                if kept:
+                    print(f"  strings.json → {platform}: kept {len(kept)} "
+                          f"face-local section(s): {', '.join(sorted(kept))}")
                 count += 1
 
         if count:
