@@ -227,17 +227,56 @@ class TestTheMediaWipeIsNotGatedByThis:
     cleaning media a project really did delete, so the asymmetry is measured
     rather than assumed."""
 
-    def test_media_is_still_cleaned_on_a_partial_run(self, tmp_path):
+    def _partial(self, tmp_path):
+        """A destination holding BOTH a stale test and a stale media file.
+
+        The stale test is not decoration. The first version of this fixture
+        had only the media file, so `report.removed == 0` below was an
+        assertion that could not fail — nothing was there to remove — and
+        restoring the bug left it green. It is the shape this whole file is
+        about, one level down: an assertion whose subject does not exist.
+        """
         src = tmp_path / "a.test.json"
         src.write_text(json.dumps(_doc("a")), encoding="utf-8")
         ios = tmp_path / "ios"
         (ios / "media").mkdir(parents=True)
-        gone = ios / "media" / "gone.mp4"
-        gone.write_bytes(b"old")
+        stale_test = ios / "was_installed_earlier.test.json"
+        stale_test.write_text("{}", encoding="utf-8")
+        stale_media = ios / "media" / "gone.mp4"
+        stale_media.write_bytes(b"old")
+        return src, ios, stale_test, stale_media
+
+    def test_media_is_still_cleaned_on_a_partial_run(self, tmp_path):
+        src, ios, _, stale_media = self._partial(tmp_path)
 
         report = flatten_install([src], [("ios", ios)], clean=False)
 
-        assert not gone.exists()
+        assert not stale_media.exists()
         assert report.media_removed == 1
+
+    def test_the_test_wipe_is_the_one_that_stands_down(self, tmp_path):
+        """The other half, at the level the flag lives on.
+
+        `clean=False` reaching `flatten_install` and being honoured there is
+        pinned here rather than only through `validate`, so a change inside
+        the installer cannot be green on the strength of the caller.
+        """
+        src, ios, stale_test, _ = self._partial(tmp_path)
+
+        report = flatten_install([src], [("ios", ios)], clean=False)
+
+        assert stale_test.exists()
         assert report.removed == 0
         assert report.clean_skipped
+
+    def test_the_same_fixture_loses_the_stale_test_on_a_full_sync(
+            self, tmp_path):
+        """The control. Without it, "the stale test survived" and "this
+        installer never removes anything" are the same result."""
+        src, ios, stale_test, _ = self._partial(tmp_path)
+
+        report = flatten_install([src], [("ios", ios)], clean=True)
+
+        assert not stale_test.exists()
+        assert report.removed == 1
+        assert not report.clean_skipped
