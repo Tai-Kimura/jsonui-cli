@@ -28,7 +28,7 @@ VALID_SOURCE_KEYS = ["swagger", "operationId", "method", "path"]
 #: repeat it. The reverse direction is deliberately NOT an invariant:
 #: `contractViolations` / `undeclaredStatus` are authoring-time declarations
 #: the checker reads and the server never does.
-VALID_SCENARIO_KEYS = ["status", "headers", "body", "delayMs", "contentType",
+VALID_SCENARIO_KEYS = ["status", "body", "delayMs", "contentType",
                        "bodyFile", "contractViolations", "undeclaredStatus",
                        "skipRequestValidation"]
 VALID_METHODS = ["GET", "POST", "PUT", "DELETE", "PATCH", "HEAD", "OPTIONS"]

@@ -77,11 +77,15 @@ def _server_reads(subjects: set) -> set:
     return _literal_keys(_SERVER.read_text(encoding="utf-8"), subjects)
 
 
-def _schema_properties(*path) -> set:
+def _schema_properties_node(*path) -> dict:
     node = json.loads(_SCHEMA.read_text(encoding="utf-8"))
     for step in path:
         node = node[step]
-    return set(node["properties"])
+    return node["properties"]
+
+
+def _schema_properties(*path) -> set:
+    return set(_schema_properties_node(*path))
 
 
 class TestTheScannerReallyReadsSource:
@@ -190,3 +194,84 @@ class TestTheKeyThatStartedIt:
         result = TestValidator().validate_file(mock)
 
         assert any("Unknown scenario key" in str(w) for w in result.warnings)
+
+
+class TestTheSchemaAcceptsWhatTheToolsAccept:
+    """The other direction of the same family: input the tools take that the
+    schema calls invalid.
+
+    `skipRequestValidation` was a key the server honoured and neither
+    registry declared. `method` was the same shape one level along — the CLI
+    uppercases before matching (`validation/mock.py`) and so does the mock
+    server on both the read and the route match (`server.py`), so `"get"`
+    works everywhere and only the schema's uppercase-only enum marked it
+    invalid.
+
+    Derived from `VALID_METHODS` rather than restated, for the reason the
+    file above exists: a second list is a second thing to forget.
+    """
+
+    def _method_enum(self) -> set:
+        return set(_schema_properties_node("properties", "source")["method"]["enum"])
+
+    def test_every_method_is_accepted_in_either_case(self):
+        from jsonui_test_cli.validation.mock import VALID_METHODS
+
+        enum = self._method_enum()
+        missing = {m for m in VALID_METHODS if m not in enum or m.lower() not in enum}
+
+        assert missing == set(), (
+            f"the CLI accepts {sorted(missing)} in any case, but the schema's "
+            "enum does not list both spellings")
+
+    def test_it_does_not_accept_a_method_the_cli_rejects(self):
+        """The control. Listing both cases must not have turned into listing
+        anything — an enum of every string would satisfy the test above."""
+        from jsonui_test_cli.validation.mock import VALID_METHODS
+
+        enum = self._method_enum()
+
+        assert "TRACE" not in enum and "trace" not in enum
+        assert enum == ({m for m in VALID_METHODS} |
+                        {m.lower() for m in VALID_METHODS})
+
+
+class TestTheInertKeyIsGone:
+    """`headers` was declared in both registries and read by nobody.
+
+    Measured three ways before removing it: the mock server never reads it
+    (the scenario walk in `server.py` copies scenarios verbatim and `_send`
+    writes only Content-Type, Content-Length and CORS), the contract checker
+    never reads it, and the three drivers do not parse mock documents at
+    all. Zero occurrences across every consumer face.
+
+    A key that can be written and is then ignored is the same defect as one
+    that cannot be written at all — both are the tool disagreeing with
+    itself about what the document means.
+    """
+
+    def test_it_is_absent_from_both_registries(self):
+        from jsonui_test_cli.validation.mock import VALID_SCENARIO_KEYS
+
+        assert "headers" not in VALID_SCENARIO_KEYS
+        assert "headers" not in _schema_properties(
+            "properties", "scenarios", "additionalProperties")
+
+    def test_a_scenario_using_it_is_now_told_so(self, tmp_path):
+        """Removing it has to be VISIBLE, not silent: a project that still
+        writes it must hear that nothing reads it, rather than carrying a
+        key with no effect for another release."""
+        from jsonui_test_cli.validation.validator import TestValidator
+
+        mock = tmp_path / "getX.mock.json"
+        mock.write_text(json.dumps({
+            "source": {"method": "GET", "path": "/api/x"},
+            "scenarios": {"default": {"status": 200, "body": {},
+                                      "headers": {"X-Trace": "1"}}},
+        }), encoding="utf-8")
+
+        result = TestValidator().validate_file(mock)
+
+        assert any("Unknown scenario key: headers" in str(w)
+                   for w in result.warnings)
+        assert result.errors == []

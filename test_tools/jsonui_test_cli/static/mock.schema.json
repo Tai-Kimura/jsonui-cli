@@ -24,7 +24,12 @@
       "properties": {
         "swagger": { "type": "string" },
         "operationId": { "type": "string" },
-        "method": { "type": "string", "enum": ["GET", "POST", "PUT", "DELETE", "PATCH", "HEAD", "OPTIONS"] },
+        "method": {
+        "description": "HTTP method. The tools uppercase before matching, so any case is accepted and the lowercase spellings are listed here for that reason -- an editor that marked `get` invalid would be rejecting input the CLI and the mock server both take. Uppercase is canonical and is what `mock generate` writes.",
+        "type": "string",
+        "enum": ["GET", "POST", "PUT", "DELETE", "PATCH", "HEAD", "OPTIONS",
+                 "get", "post", "put", "delete", "patch", "head", "options"]
+      },
         "path": { "type": "string" }
       }
     },
@@ -38,7 +43,6 @@
         "additionalProperties": false,
         "properties": {
           "status": { "type": "integer", "minimum": 100, "maximum": 599 },
-          "headers": { "type": "object" },
           "body": {},
           "delayMs": { "type": "number", "minimum": 0 },
           "contentType": { "type": "string" },
