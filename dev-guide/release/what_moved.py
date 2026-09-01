@@ -44,6 +44,12 @@ SURFACES = [
     ("jui CLI — machine-shared, arrives via bootstrap", r"^jui_tools/"),
     ("release procedure / installer — maintainer side only",
      r"^(dev-guide|installer)/"),
+    # CI config is maintainer-side too, but it is worth its own line: a face
+    # reading a notice needs to know a gate MOVED, not just that some
+    # maintainer file did. v1.7.52 turned on submodule checkout, without
+    # which the canonical guard had no subject to read.
+    ("CI configuration — a gate changed, nothing shipped changed",
+     r"^\.github/"),
     ("tests only — no shipped behaviour", r"^[^/]+/tests?/"),
     # Docs are a shipped surface: a config key a face has to WRITE lives here
     # before it lives anywhere else. v1.7.50 added `test.testDir` and the only
