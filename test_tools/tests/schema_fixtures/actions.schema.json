@@ -160,7 +160,7 @@
         "clearState": {
           "type": "boolean",
           "default": false,
-          "description": "Clear app data before launch (iOS: JSONUI_TEST_CLEAR_STATE env contract; Android: pm clear; Web: cookies + storage)"
+          "description": "Clear app data before launch (iOS: JSONUI_TEST_CLEAR_STATE env contract; Android: in-process wipe of files, shared_prefs, databases, cache and code_cache — persisted state only, process memory survives the relaunch; Web: cookies + storage)"
         },
         "permissions": {
           "type": "object",
