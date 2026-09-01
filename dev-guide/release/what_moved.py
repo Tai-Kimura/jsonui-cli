@@ -53,6 +53,25 @@ def _run(*args: str) -> str:
                           check=True).stdout
 
 
+# This file is distributed: `dev-guide/` is copied into `~/.jsonui-cli` by
+# the installer, so every face HAS it. Measured 2026-09-01: `~/.jsonui-cli`
+# is not a git checkout, so every `git diff` below fails there. A consumer
+# asked to re-derive a notice would get a CalledProcessError traceback and
+# read it as the tool being broken, when the tool is fine and the tree is
+# not one it can read. Arriving and being runnable are different things —
+# say which one is missing.
+def _needs_a_git_tree() -> str | None:
+    proc = subprocess.run(("git", "rev-parse", "--git-dir"),
+                          capture_output=True, text=True)
+    if proc.returncode == 0:
+        return None
+    return ("CANNOT ATTEMPT: this is not a git checkout of jsonui-cli.\n"
+            "  `dev-guide/` is copied into ~/.jsonui-cli by the installer, "
+            "but that tree has no\n"
+            "  history to diff. Run this from a clone of the toolchain repo, "
+            "naming the two tags.")
+
+
 def stamp_only(frm: str, to: str, path: str) -> bool:
     body = [l for l in _run("git", "diff", "-U0", frm, to, "--", path).splitlines()
             if l[:1] in "+-" and not l.startswith(("+++", "---"))]
@@ -60,6 +79,10 @@ def stamp_only(frm: str, to: str, path: str) -> bool:
 
 
 def main(frm: str, to: str) -> int:
+    problem = _needs_a_git_tree()
+    if problem:
+        print(problem, file=sys.stderr)
+        return 2
     paths = _run("git", "diff", "--name-only", frm, to).split()
     if not paths:
         print(f"no files changed between {frm} and {to}")
