@@ -7,6 +7,7 @@ witnesses) — a test that silently weakens is a ritual test.
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 
 import pytest
@@ -1216,3 +1217,67 @@ class TestEmittedRuntimesConcatenateTheirStrings:
             if first.endswith('"') and second.startswith('"'):
                 offenders.append(f"{platform} line {n}: {first}\n    then: {second}")
         assert offenders == [], "\n".join(offenders)
+
+
+class TestResolveStringRejectsAnEmptyReturn:
+    """Returning nothing is a failure the guard used to pass.
+
+    The guard rejected a key and a `<prefix>_<key>` identifier. It let `""`
+    through, and a consumer measured that: a harness whose table lookup
+    misses returns an empty string, the check says nothing, and the
+    assertion compares the field to `""` — which passes whenever the field
+    is also empty.
+
+    Worse, the comment beside the guard cited "an empty table, so
+    `resolveString` was never called" as the motivation. That is about
+    dormancy and is true, but it reads as a claim that empty tables are
+    caught. They are only caught when the harness returns the key; a
+    harness that returns nothing was still green.
+
+    Kotlin makes it easy to miss: `resolved.all { … }` on an empty string
+    is vacuously true, so `identifier` was true and only the suffix test
+    saved it from a wrong message.
+
+    One condition and one message for both, not two blocks: a key and
+    nothing are the same failure — the table did not resolve — and every
+    extra emitted block is more surface in a file this release has already
+    broken three times.
+    """
+
+    def _runtime(self, tmp_path, platform, **kw):
+        root = _project(tmp_path / platform, BASIC)
+        return generate_branch_tests(
+            "checkout", root, platform=platform, **kw
+        ).runtime_file.read_text(encoding="utf-8")
+
+    @pytest.mark.parametrize("platform,kw,empty_test", [
+        ("web", {}, "!resolved"),
+        ("android", {"package": "com.example.x"}, "resolved.isEmpty()"),
+        # The guard line itself, not the bare call: `!resolved.isEmpty`
+        # already appears in the `identifier` line above it, so matching the
+        # call alone stayed true with the guard deleted. Measured — the
+        # mutation killed web and android and left ios green.
+        ("ios", {"module": "app"}, "if resolved.isEmpty || resolved == key"),
+    ])
+    def test_the_guard_tests_for_an_empty_return(
+            self, tmp_path, platform, kw, empty_test):
+        text = self._runtime(tmp_path, platform, **kw)
+        assert empty_test in text
+
+    @pytest.mark.parametrize("platform,kw", [
+        ("web", {}), ("android", {"package": "com.example.x"}),
+        ("ios", {"module": "app"}),
+    ])
+    def test_the_message_covers_both_failures(self, tmp_path, platform, kw):
+        # It no longer says "is a strings KEY", which was wrong for the
+        # empty case — the diagnostic has to be true of what it fired on.
+        # Compare the EFFECTIVE message, not the source lines. Each runtime
+        # splits the sentence across concatenated literals at a different
+        # point, so a phrase that is contiguous in one is cut in another —
+        # the first version of this assertion reported Swift for a message
+        # that was correct. Fourth time today the predicate was the defect.
+        text = self._runtime(tmp_path, platform, **kw)
+        joined = re.sub(r'"\s*\+\s*\n\s*"', "", text)
+        assert "is not the text that key names" in joined
+        assert "A key, or nothing, means the table did not resolve" in joined
+        assert "is a strings KEY" not in joined

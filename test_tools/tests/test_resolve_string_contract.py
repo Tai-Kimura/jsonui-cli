@@ -70,9 +70,18 @@ def _emitted(project, platform):
 
 
 def _flat(text: str) -> str:
-    """Whitespace-normalised, because these strings are wrapped comments and
-    a line break must not decide whether an assertion holds."""
-    return " ".join(text.split())
+    """Whitespace-normalised AND concatenation-joined.
+
+    A line break must not decide whether an assertion holds — and neither
+    must the point at which a wrapped message is split into concatenated
+    literals. Each runtime breaks the same sentence somewhere different, so
+    a phrase that is contiguous in one is cut in another, and an assertion
+    on the sentence reports the runtime whose wrapping differs rather than
+    the one whose message is wrong. Measured: a reword that was correct in
+    all three failed here for Swift and web only.
+    """
+    joined = re.sub(r'"\s*\+\s*"', "", " ".join(text.split()))
+    return joined
 
 
 def _runtime(platform) -> str:
@@ -173,7 +182,12 @@ class TestTheCheckItself:
     def test_the_failure_names_the_fix(self, platform):
         helper = _flat(_helper(platform))
 
-        assert "strings KEY" in helper
+        # `strings KEY` was the old wording. It stopped being true when the
+        # guard grew to reject an empty return as well — a message has to be
+        # true of everything it fires on, so it now names the failure
+        # ("not the text that key names") and the remedy separately.
+        assert "is not the text that key names" in helper
+        assert "string manager's lookup of the full key" in helper
         assert "resolved text" in helper
 
 

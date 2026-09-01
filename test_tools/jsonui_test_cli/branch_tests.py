@@ -1344,13 +1344,14 @@ export function resolveString(
 ): string {
   const resolved = h.resolveString(key);
   const identifier = /^[A-Za-z0-9_]+$/.test(resolved);
-  if (resolved === key || (identifier && resolved.endsWith(`_${key}`))) {
+  if (!resolved || resolved === key ||
+      (identifier && resolved.endsWith(`_${key}`))) {
     throw new Error(
       `resolveString(${JSON.stringify(key)}) returned ` +
-      `${JSON.stringify(resolved)}, which is a strings KEY, not the text ` +
-      "it names. Bindings are not resolved when a component renders, so " +
-      "the field holds resolved text — return the string manager's lookup " +
-      "of the full key, not the key itself."
+      `${JSON.stringify(resolved)}, which is not the text that key names. ` +
+      "Bindings are not resolved when a component renders, so the field " +
+      "holds resolved text — return the string manager's lookup of the " +
+      "full key. A key, or nothing, means the table did not resolve."
     );
   }
   return resolved;
@@ -1756,12 +1757,14 @@ interface BranchHarness {
 fun resolveString(h: BranchHarness, key: String): String {
   val resolved = h.resolveString(key)
   val identifier = resolved.all { it.isLetterOrDigit() || it == '_' }
-  if (resolved == key || (identifier && resolved.endsWith("_" + key))) {
+  if (resolved.isEmpty() || resolved == key ||
+      (identifier && resolved.endsWith("_" + key))) {
     error(
       "resolveString(\\"" + key + "\\") returned \\"" + resolved + "\\", which " +
-      "is a strings KEY, not the text it names. Bindings are not resolved " +
-      "when a component renders, so the field holds resolved text — return " +
-      "the string manager's lookup of the full key, not the full key."
+      "is not the text that key names. Bindings are not resolved when a " +
+      "component renders, so the field holds resolved text — return the " +
+      "string manager's lookup of the full key. A key, or nothing, means " +
+      "the table did not resolve."
     )
   }
   return resolved
@@ -2596,12 +2599,14 @@ func resolveString(_ h: BranchHarness, _ key: String) -> String {
   let identifier = !resolved.isEmpty && resolved.allSatisfy {
     $0.isLetter || $0.isNumber || $0 == "_"
   }
-  if resolved == key || (identifier && resolved.hasSuffix("_" + key)) {
+  if resolved.isEmpty || resolved == key ||
+     (identifier && resolved.hasSuffix("_" + key)) {
     XCTFail(
-      "resolveString(\\(key)) returned \\(resolved), which is a " +
-      "strings KEY, not the text it names. Bindings are not resolved when a " +
-      "component renders, so the field holds resolved text — return the " +
-      "string manager's lookup of the full key, not the full key."
+      "resolveString(\\(key)) returned \\(resolved), which is not the " +
+      "text that key names. Bindings are not resolved when a component " +
+      "renders, so the field holds resolved text — return the string " +
+      "manager's lookup of the full key. A key, or nothing, means the " +
+      "table did not resolve."
     )
   }
   return resolved
