@@ -656,7 +656,14 @@ def _scenario_names(gen_root: Path) -> dict:
             continue
         scenarios = data.get("scenarios")
         if isinstance(scenarios, dict):
-            table[p.name] = set(scenarios)
+            # Keyed on the path RELATIVE to the generated root, as the
+            # docstring always said. `p.name` was the basename, and the
+            # generated tree is `generated/<tag>/<operationId>.mock.json` —
+            # so one operationId scaffolded under two tags collapsed to a
+            # single entry, and whichever sorted last decided what the
+            # comparison below saw. The printed name was ambiguous for the
+            # same reason.
+            table[str(p.relative_to(gen_root))] = set(scenarios)
     return table
 
 
@@ -664,6 +671,10 @@ def _rebuild_generated(resolved, mock_path, scope) -> int:
     from .mock.generate import GENERATED_DIR, generate
 
     gen_root = mock_path / GENERATED_DIR
+    # Whether there was a tree at all, kept separately from what was in it:
+    # a first build has an empty `before` and every file is "new", which is
+    # not a repair and must not be reported as one.
+    had_tree = gen_root.exists()
     before = _scenario_names(gen_root)
     try:
         built = generate(resolved, mock_path, scope=scope)
@@ -686,14 +697,40 @@ def _rebuild_generated(resolved, mock_path, scope) -> int:
     #
     # File counts answer "what did this run do". They do not answer "what
     # did this run hide".
+    # TWO THINGS CAN HAVE HAPPENED, AND THEY ARE NOT ONE SENTENCE.
+    #
+    # This used to be a single line, `restored a scenario the tree was
+    # missing`, guarded by `if name in before` — which excluded the case the
+    # comment above describes. A whole file that was deleted is absent from
+    # `before`, so its key is not there to match, and the run that quietly
+    # put it back printed nothing. Measured, on a fixture, with the file
+    # confirmed gone and then confirmed back:
+    #
+    #   whole generated file deleted -> restored, silently, PASSED, exit 0
+    #   one scenario deleted from a file -> not rebuilt at all; reported
+    #       loudly as [ABSENT] and exit 1, which is correct and not this
+    #   swagger gains a response -> the file IS rewritten, and the old line
+    #       fired, calling a legitimate ADDITION "a scenario the tree was
+    #       missing"
+    #
+    # So the one path that could print it printed a false description, and
+    # the path it was written for could not print at all. Relaxing the guard
+    # alone would have turned a silent branch into a lying one.
     after = _scenario_names(gen_root)
-    restored = sorted(
-        f"{name}: {', '.join(sorted(after[name] - before[name]))}"
-        for name in after
-        if name in before and after[name] - before[name]
-    )
-    for line in restored:
-        print(f"  restored a scenario the tree was missing — {line}")
+    if had_tree:
+        # A file that was not there and is now. `had_tree` excludes the
+        # first build, where every file is new and nothing was repaired.
+        for rel in sorted(set(after) - set(before)):
+            print(f"  regenerated a file that was missing from the tree "
+                  f"— {rel}")
+    for rel in sorted(set(after) & set(before)):
+        gained = after[rel] - before[rel]
+        if gained:
+            # Deliberately NOT called a restoration. The measured cause is a
+            # swagger that grew a response; whether a scenario had also been
+            # deleted is not knowable from here, and "restored" asserts it.
+            print(f"  generation added a scenario this file did not have "
+                  f"— {rel}: {', '.join(sorted(gained))}")
     return 0
 
 

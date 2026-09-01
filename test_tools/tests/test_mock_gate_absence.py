@@ -315,7 +315,20 @@ class TestARebuildNamesWhatItPutBack:
         os.utime(gen, (old, old))
 
         out = self._run(root, "validate", "tests").stdout
-        assert "restored a scenario the tree was missing" in out
+        # WORDING CHANGED, and the change is a narrowing of a claim rather
+        # than a weakening of this test. This branch has two causes that the
+        # rebuild cannot tell apart: a scenario really was deleted (this
+        # fixture), or the swagger grew a response and generation added one
+        # (measured separately). The old sentence, "restored a scenario the
+        # tree was missing", asserted the first for both — so on the second
+        # it described a legitimate addition as a repair.
+        #
+        # What this test exists to pin is unchanged: the run must NAME what
+        # came back rather than leave it to a file count. The sibling case
+        # the old line could not reach at all — a whole file deleted, whose
+        # key is absent from `before` — is covered in
+        # `test_the_rebuild_says_what_it_repaired.py`.
+        assert "generation added a scenario this file did not have" in out
         assert "empty" in out
 
     def test_an_untouched_tree_says_nothing_about_restoring(self, tmp_path):
