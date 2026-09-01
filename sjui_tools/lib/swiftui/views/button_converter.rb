@@ -333,8 +333,9 @@ module SjuiTools
           apply_frame_size
           apply_margins
 
-          # confirmationDialog (iOS 15+)
+          # confirmationDialog / alert (iOS 15+)
           apply_confirmation_dialog_to_bag
+          apply_alert_to_bag
 
           generated_code
         end

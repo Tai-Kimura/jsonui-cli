@@ -35,6 +35,7 @@ module SjuiTools
           :on_appear,           # onAppear
           :on_disappear,        # onDisappear
           :confirmation_dialog, # confirmationDialog
+          :alert,               # alert
           :safe_area_insets,    # ignoresSafeArea
           :tag,                 # tag
           :z_index,             # zIndex

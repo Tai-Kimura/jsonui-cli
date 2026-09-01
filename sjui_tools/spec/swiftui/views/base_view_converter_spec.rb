@@ -589,6 +589,78 @@ RSpec.describe SjuiTools::SwiftUI::Views::BaseViewConverter do
       end
     end
 
+    context 'with alert attribute' do
+      # `alert` exists as its own attribute because `.confirmationDialog`
+      # draws no cancel button in a regular size class while `.alert` draws
+      # it in both — measured on iPhone 16 Pro / iPad A16 / iPad Pro M4 with
+      # the same button set. Same shape as confirmationDialog minus
+      # titleVisibility, which `.alert` has no parameter for.
+      let(:component) do
+        {
+          'type' => 'View',
+          'alert' => {
+            'isPresented' => '@{showDeleteAlert}',
+            'title' => 'Confirm Delete',
+            'message' => 'Are you sure you want to delete?',
+            'actions' => '@{deleteActions}'
+          }
+        }
+      end
+
+      it 'generates an alert modifier, not a confirmationDialog' do
+        code = test_converter.new(component).convert
+
+        expect(code).to include('.alert(')
+        expect(code).not_to include('.confirmationDialog(')
+        expect(code).to include('"Confirm Delete"')
+        expect(code).to include('isPresented: $data.showDeleteAlert')
+      end
+
+      it 'emits no titleVisibility argument' do
+        # `.alert` has no such parameter; emitting one does not compile.
+        code = test_converter.new(component).convert
+
+        expect(code).not_to include('titleVisibility')
+      end
+
+      it 'includes the actions binding and the message closure' do
+        code = test_converter.new(component).convert
+
+        expect(code).to include('data.deleteActions')
+        expect(code).to include('message: {')
+        expect(code).to include('Text("Are you sure you want to delete?")')
+      end
+
+      it 'ignores a titleVisibility the layout declares anyway' do
+        # The SSoT declares none for alert, so a stray one is not a knob.
+        code = test_converter.new(
+          component.merge('alert' => component['alert'].merge('titleVisibility' => 'visible'))
+        ).convert
+
+        expect(code).to include('.alert(')
+        expect(code).not_to include('titleVisibility')
+      end
+    end
+
+    context 'with both alert and confirmationDialog declared' do
+      it 'emits both modifiers, each with its own arguments' do
+        code = test_converter.new(
+          'type' => 'View',
+          'confirmationDialog' => {
+            'isPresented' => '@{showDialog}', 'title' => 'D', 'actions' => '@{a}'
+          },
+          'alert' => {
+            'isPresented' => '@{showAlert}', 'title' => 'A', 'actions' => '@{b}'
+          }
+        ).convert
+
+        expect(code).to include('.confirmationDialog(')
+        expect(code).to include('titleVisibility: .automatic')
+        expect(code).to include('.alert(')
+        expect(code).to include('isPresented: $data.showAlert')
+      end
+    end
+
     context 'with binding title' do
       let(:component) do
         {

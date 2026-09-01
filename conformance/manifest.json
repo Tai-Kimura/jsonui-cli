@@ -8,7 +8,7 @@
     "agentWarning": "LLM/Agent: you MUST NOT modify this file."
   },
   "schemaVersion": 2,
-  "generatedFrom": "1565216371b36804d0ee90bf630dc23ef3a0b61a222a1bfa716ec5e62c16081f",
+  "generatedFrom": "36bfd57e3d377bebbc8687cbe7d9e329e5ad39cbbd35eda8d034a13898b30a7e",
   "counts": {
     "fixtures": 1067,
     "assertable": 41,
@@ -16,7 +16,7 @@
     "interactive": 37,
     "control": 106,
     "declarationOnly": 77,
-    "skipped": 156,
+    "skipped": 157,
     "promoted": {
       "callback": 11
     }
@@ -26053,6 +26053,11 @@
     {
       "component": "common",
       "attribute": "confirmationDialog",
+      "reason": "behavioral (no visual or assertable effect in v1)"
+    },
+    {
+      "component": "common",
+      "attribute": "alert",
       "reason": "behavioral (no visual or assertable effect in v1)"
     },
     {

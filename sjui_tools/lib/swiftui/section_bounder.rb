@@ -432,7 +432,7 @@ module SjuiTools
         # (.onAppear, .onTapGesture, ...) is imperative.
         if stripped.start_with?('.')
           viewbuilder_modifier = stripped.match?(
-            /\A\.(overlay|background|mask|safeAreaInset|sheet|fullScreenCover|popover|confirmationDialog|contextMenu|toolbar|swipeActions|refreshable)\b/
+            /\A\.(overlay|background|mask|safeAreaInset|sheet|fullScreenCover|popover|confirmationDialog|alert|contextMenu|toolbar|swipeActions|refreshable)\b/
           )
           return viewbuilder_modifier && head.count('(') == head.count(')') ? [:container, {}] : [:imperative, {}]
         end

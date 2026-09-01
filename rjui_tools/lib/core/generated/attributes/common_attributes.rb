@@ -13,6 +13,8 @@ module JsonUI
       # contract together with `rows` / `declared?` / `alias_map`
       # (see the directory README).
       ATTRS = [
+        # Alert configuration (iOS 15+). Same shape as confirmationDialog minus titleVisibility: .alert always shows its title, and unlike .confirmationDialog it draws the cancel role in a regular size class
+        { name: 'alert', kind: :object }.freeze,
         # Align to parent bottom (binding supported)
         { name: 'alignBottom', kind: :boolean, bindable: true }.freeze,
         # Align above specified view ID

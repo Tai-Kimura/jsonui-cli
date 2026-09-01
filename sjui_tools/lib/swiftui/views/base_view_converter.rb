@@ -652,8 +652,9 @@ module SjuiTools
           # Lifecycle events (SwiftUI only)
           apply_lifecycle_events_to_bag
 
-          # confirmationDialog (iOS 15+)
+          # confirmationDialog / alert (iOS 15+)
           apply_confirmation_dialog_to_bag
+          apply_alert_to_bag
         end
 
         # `onclick` values are method names, not bindings: a bare string, or an
@@ -763,7 +764,35 @@ module SjuiTools
 
         # Apply confirmationDialog modifier (iOS 15+) into the bag
         def apply_confirmation_dialog_to_bag
-          dialog = @component['confirmationDialog']
+          apply_presented_dialog_to_bag(
+            @component['confirmationDialog'], 'confirmationDialog', :confirmation_dialog
+          )
+        end
+
+        # Apply alert modifier (iOS 15+) into the bag.
+        #
+        # `.alert` and `.confirmationDialog` take the same arguments except
+        # for titleVisibility, so they share one emitter rather than a second
+        # copy that can drift. The attribute exists because the two APIs do
+        # NOT render the same: in a regular size class `.confirmationDialog`
+        # draws no cancel button, while `.alert` draws it in both classes
+        # (measured on iPhone 16 Pro / iPad A16 / iPad Pro M4 against the same
+        # button set). The SSoT declares no titleVisibility for `alert`
+        # because `.alert` has no such parameter — it always shows its title.
+        def apply_alert_to_bag
+          apply_presented_dialog_to_bag(@component['alert'], 'alert', :alert)
+        end
+
+        # The body of both. *attribute* names the SwiftUI modifier to emit,
+        # which is spelled exactly like the attribute that drives it — an
+        # attribute whose name disagrees with the API it emits is a name that
+        # lies. *slot* is the modifier-bag key.
+        #
+        # The config is passed IN rather than read from @component here: the
+        # conformance coverage scanner recognises a read by the literal
+        # `@component['x']` form, so a computed key would report both
+        # attributes as unread by any converter (measured — it did).
+        def apply_presented_dialog_to_bag(dialog, attribute, slot)
           return unless dialog.is_a?(Hash)
 
           is_presented = dialog['isPresented']
@@ -782,15 +811,19 @@ module SjuiTools
             title_expr = get_text_with_string_manager("\"#{title_value}\"")
           end
 
-          # Get titleVisibility (automatic, visible, hidden)
-          title_visibility = dialog['titleVisibility'] || 'automatic'
-          title_visibility_expr = case title_visibility
-          when 'visible'
-            '.visible'
-          when 'hidden'
-            '.hidden'
-          else
-            '.automatic'
+          # titleVisibility is confirmationDialog's alone: `.alert` has no
+          # such parameter, and the SSoT declares none for it.
+          has_title_visibility = attribute == 'confirmationDialog'
+          if has_title_visibility
+            title_visibility = dialog['titleVisibility'] || 'automatic'
+            title_visibility_expr = case title_visibility
+            when 'visible'
+              '.visible'
+            when 'hidden'
+              '.hidden'
+            else
+              '.automatic'
+            end
           end
 
           # Check for layout or actions (one of them is required)
@@ -806,10 +839,14 @@ module SjuiTools
 
           # Build the full confirmation dialog code as multi-line string
           lines = []
-          lines << ".confirmationDialog("
+          lines << ".#{attribute}("
           lines << "    #{title_expr},"
-          lines << "    isPresented: $data.#{is_presented_var},"
-          lines << "    titleVisibility: #{title_visibility_expr}"
+          if has_title_visibility
+            lines << "    isPresented: $data.#{is_presented_var},"
+            lines << "    titleVisibility: #{title_visibility_expr}"
+          else
+            lines << "    isPresented: $data.#{is_presented_var}"
+          end
           if has_message
             lines << ") {"
           else
@@ -847,7 +884,7 @@ module SjuiTools
             lines << "})"
           end
 
-          @modifier_bag.register(:confirmation_dialog, lines)
+          @modifier_bag.register(slot, lines)
         end
 
         # Legacy method - kept for backward compatibility with converters that call it directly

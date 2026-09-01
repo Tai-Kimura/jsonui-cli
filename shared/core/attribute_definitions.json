@@ -1031,6 +1031,54 @@
         }
       }
     },
+    "alert": {
+      "type": "object",
+      "description": "Alert configuration (iOS 15+). Same shape as confirmationDialog minus titleVisibility: .alert always shows its title, and unlike .confirmationDialog it draws the cancel role in a regular size class",
+      "platform": "swift",
+      "mode": "swiftui",
+      "properties": {
+        "isPresented": {
+          "type": "binding",
+          "required": true,
+          "description": "Binding to control alert visibility"
+        },
+        "title": {
+          "type": [
+            "string",
+            "binding"
+          ],
+          "default": "",
+          "description": "Alert title (empty string if not specified)"
+        },
+        "message": {
+          "type": [
+            "string",
+            "binding"
+          ],
+          "description": "Optional alert message"
+        },
+        "actions": {
+          "type": "binding",
+          "description": "Binding to function returning action buttons (alternative to layout)"
+        },
+        "layout": {
+          "type": "object",
+          "description": "Layout configuration for alert content (alternative to actions)",
+          "properties": {
+            "name": {
+              "type": "string",
+              "required": true,
+              "description": "JSON filename for alert content"
+            },
+            "data": {
+              "type": "binding",
+              "required": true,
+              "description": "Binding to data for the layout view"
+            }
+          }
+        }
+      }
+    },
     "alignment": {
       "type": "string",
       "enum": [

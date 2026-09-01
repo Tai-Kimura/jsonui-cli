@@ -117,8 +117,9 @@ module SjuiTools
 
       # Infer type from variable name and attribute context (Swift types)
       def infer_type(var_name, attribute_name, component_type = nil)
-        # confirmationDialog.actions -> (() -> AnyView)? (SwiftUI callback returning Button views)
-        return '(() -> AnyView)?' if attribute_name == 'confirmationDialog.actions'
+        # confirmationDialog.actions / alert.actions -> (() -> AnyView)?
+        # (SwiftUI callback returning Button views)
+        return '(() -> AnyView)?' if %w[confirmationDialog.actions alert.actions].include?(attribute_name)
 
         # Callbacks with Int parameter
         return '((Int) -> Void)?' if %w[onTabChange onItemAppear].include?(var_name) || %w[onTabChange onItemAppear].include?(attribute_name)

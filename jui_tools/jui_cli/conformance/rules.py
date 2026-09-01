@@ -170,6 +170,11 @@ BEHAVIORAL_ATTRS = {
     "nextFocus",
     "canBack",
     "confirmationDialog",
+    # Same class as confirmationDialog: a modal presented OVER the render
+    # surface, so a screenshot of the surface asserts nothing about it. The
+    # composite-value rule also catches it (it is an object), but that reason
+    # would go stale the moment composite values become representable.
+    "alert",
     "momentary",
     "setTargetAsDelegate",
     "setTargetAsDataSource",
