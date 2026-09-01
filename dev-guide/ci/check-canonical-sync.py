@@ -97,6 +97,11 @@ def check_condition_keys(canonical_root: Path) -> None:
     if not declared:
         cannot_attempt("actions.schema.json declares no condition properties")
 
+    # What the green line reports has to be what this run MEASURED, not the
+    # size of the table it was configured with: `3 driver(s)` is true even in
+    # a run that read nothing, and this file's whole subject is guards that
+    # pass without a subject.
+    compared: list[int] = []
     for driver, (rel, pattern) in DRIVER_CONDITION_KEYS.items():
         path = canonical_root / rel
         if not path.is_file():
@@ -116,6 +121,7 @@ def check_condition_keys(canonical_root: Path) -> None:
                  re.findall(r'"([^"]+)"|\'([^\']+)\'', match.group(1))}
         if not found:
             cannot_attempt(f"{driver}: the matched set is empty")
+        compared.append(len(found))
         if found != declared:
             problems.append(
                 f"condition keys: the {driver} driver and the canonical "
@@ -125,6 +131,7 @@ def check_condition_keys(canonical_root: Path) -> None:
                 "    A condition key a driver does not know is fail-safe "
                 "UNMET, so every step gated on it is SKIPPED — which reads "
                 "on a report exactly like a pass.")
+    return compared
 
 
 def main(argv: list[str]) -> int:
@@ -137,14 +144,15 @@ def main(argv: list[str]) -> int:
         cannot_attempt(f"{canonical_root} is not a directory")
 
     check_mock_schema(canonical_root)
-    check_condition_keys(canonical_root)
+    compared = check_condition_keys(canonical_root)
 
     if problems:
         for problem in problems:
             print(f"DRIFTED: {problem}", file=sys.stderr)
         return 1
     print(f"OK: shipped mock.schema.json matches canonical; condition keys "
-          f"agree across {len(DRIVER_CONDITION_KEYS)} driver(s)")
+          f"agree across {len(compared)} driver(s), "
+          f"{'/'.join(str(n) for n in compared)} key(s) read")
     return 0
 
 
