@@ -136,6 +136,64 @@ class TestGenerationHappyPath:
         assert '"createOrder"' in content and '"fetchOrder"' in content
         assert "noMockOp" not in content
 
+    def test_when_declared_route_must_be_reached(self, tmp_path):
+        # A branch that ARRANGES api.createOrder="conflict" asserted nothing
+        # about the route being called: the implementation could stop before
+        # the request and still satisfy the data assertion from a local
+        # failure path. Measured in the wild — an error branch certified its
+        # 409 handling against a local validation error.
+        root = _project(tmp_path, BASIC)
+        content = generate_branch_tests("checkout", root).test_file.read_text(
+            encoding="utf-8")
+        assert 'expect(rec.countFor("createOrder"),' in content
+        assert content.count("was never hit") == 1
+
+    def test_reach_failure_names_the_route_and_the_count(self, tmp_path):
+        # `expected object, got nil` reads as a defect in the implementation.
+        # The route name and the observed count say which of the two happened,
+        # so the fix carries its own misattribution guard.
+        root = _project(tmp_path, BASIC)
+        content = generate_branch_tests("checkout", root).test_file.read_text(
+            encoding="utf-8")
+        assert ("route 'createOrder' declared in when was never hit "
+                "(${rec.countFor(\"createOrder\")} requests)") in content
+
+    def test_reach_is_asserted_before_the_then_entries(self, tmp_path):
+        # An unreached route makes every data assertion ambiguous, so the
+        # cause is reported first.
+        root = _project(tmp_path, BASIC)
+        content = generate_branch_tests("checkout", root).test_file.read_text(
+            encoding="utf-8")
+        assert content.index("was never hit") < content.index('readField("screenState")')
+
+    def test_an_explicit_then_entry_suppresses_the_inferred_one(self, tmp_path):
+        # `then` wins wherever it speaks: an inferred assertion must never
+        # contradict, or duplicate, a written one.
+        for then in ({"api.createOrder": "called"},
+                     {"api.createOrder": "not-called"},
+                     {"api.createOrder.request": {"id": 1}},
+                     {"api": "none"}):
+            root = _project(tmp_path / f"p{abs(hash(str(then)))}", _contract(
+                [{"when": {"api.createOrder": "conflict"}, "then": then}]))
+            content = generate_branch_tests("checkout", root).test_file.read_text(
+                encoding="utf-8")
+            assert "was never hit" not in content, then
+
+    def test_every_platform_asserts_reach(self, tmp_path):
+        for platform, kw, needle in (
+            ("web", {}, 'expect(rec.countFor("createOrder"),'),
+            ("android", {"package": "com.example.app"},
+             'assertTrue("route \'createOrder\' declared in when was never hit'),
+            ("ios", {"module": "App"},
+             'XCTAssertGreaterThan(rec.countFor("createOrder"), 0, "route'),
+        ):
+            root = _project(tmp_path / platform, BASIC)
+            content = generate_branch_tests(
+                "checkout", root, platform=platform, **kw
+            ).test_file.read_text(encoding="utf-8")
+            assert needle in content, platform
+            assert content.count("was never hit") == 1, platform
+
     def test_harness_skeleton_uses_closed_string_keys_map(self, tmp_path):
         # Consumer feedback (2026-08-24): a dynamic getString(`<screen>_${key}`)
         # in the harness trips `jui lint-strings --usage` and blocks consumers

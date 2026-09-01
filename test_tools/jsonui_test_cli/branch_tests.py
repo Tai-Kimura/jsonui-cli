@@ -898,6 +898,36 @@ def check_arg_bindings(spec: dict, methods_contracts: dict) -> None:
 # Rendering
 # ---------------------------------------------------------------------------
 
+def _unspoken_when_ops(when: dict, then: dict) -> list[str]:
+    """The ops a branch ARRANGES in `when` and says nothing about in `then`.
+
+    Declaring `when: {api.<op>: "<scenario>"}` supplies a scenario; until
+    this, nothing asserted the route was ever reached. A branch could pass
+    with the API never called, as long as some local failure path happened
+    to satisfy the `then` data assertions — measured in the wild: an error
+    branch was certifying its 409 handling against a local validation error
+    (see docs/bugs/test-branch-api-scenario-branch-passes-without-the-api-
+    ever-called.md). `api: "none"` could already assert zero calls; the
+    positive direction had no vocabulary at all.
+
+    `then` wins wherever it speaks. An explicit `api.<op>: "called"` already
+    emits this assertion, `api.<op>: <anything else>` asserts the opposite on
+    purpose, `api.<op>.request` implies reach, and the bare `api` key asserts
+    no declared call happened at all. An inferred assertion must never
+    contradict a written one, so all four suppress it. (No branch in the
+    measured corpus declares the contradiction today — 0 of 290 — but the
+    vocabulary permits it, and permitting is what decides this, not counting.)
+    """
+    ops = [k[len("api."):] for k in when if k.startswith("api.")]
+    if not ops or "api" in then:
+        return []
+    spoken = {
+        k[len("api."):-len(".request")] if k.endswith(".request") else k[len("api."):]
+        for k in then if k.startswith("api.")
+    }
+    return [op for op in dict.fromkeys(ops) if op not in spoken]
+
+
 def _ts(value) -> str:
     return json.dumps(value, ensure_ascii=False)
 
@@ -1106,6 +1136,17 @@ def _render_branch(
     call_args = ", ".join(args)
     out.append(f"      await (h.vm as any).{method_name}({call_args});")
     out.append("      await settle();")
+
+    # Reach, before the `then` assertions: a route that was never called
+    # makes every data assertion below ambiguous, and reporting the cause
+    # first is what keeps "the API was not reached" from being read as
+    # "the implementation produced the wrong value".
+    for op in _unspoken_when_ops(when, then):
+        out.append(
+            f"      expect(rec.countFor({_ts(op)}), "
+            f"`route '{op}' declared in when was never hit "
+            f"(${{rec.countFor({_ts(op)})}} requests)`).toBeGreaterThan(0);"
+        )
 
     for key, value in then.items():
         if key == "api":
@@ -1634,6 +1675,16 @@ def _render_kotlin_branch(
     call_args = ", ".join(args)
     out.append(f"      h.invoke({_kt_str(method_name)}{', ' + call_args if call_args else ''})")
     out.append("      h.settle()")
+
+    # See the web emitter: reach is asserted before the `then` entries so an
+    # unreached route is reported as such, not as a wrong value.
+    for op in _unspoken_when_ops(when, then):
+        out.append(
+            f"      assertTrue(\"route '{op}' declared in when was never hit "
+            f"(${{rec.countFor({_kt_str(op)})}} requests)\", "
+            f"rec.countFor({_kt_str(op)}) > 0)"
+        )
+
     for key, value in then.items():
         if key == "api":
             out.append("      assertTrue(\"expected no declared-API calls, got ${rec.matchedCalls()}\", rec.matchedCalls().isEmpty())")
@@ -2199,6 +2250,16 @@ def _render_swift_branch(
     call_args = ", ".join(args)
     out.append(f"      h.invoke({_swift_str(method_name)}, args: [{call_args}])")
     out.append("      h.settle()")
+
+    # See the web emitter: reach is asserted before the `then` entries so an
+    # unreached route is reported as such, not as a wrong value.
+    for op in _unspoken_when_ops(when, then):
+        out.append(
+            f"      XCTAssertGreaterThan(rec.countFor({_swift_str(op)}), 0, "
+            f"\"route '{op}' declared in when was never hit "
+            f"(\\(rec.countFor({_swift_str(op)})) requests)\")"
+        )
+
     for key, value in then.items():
         if key == "api":
             out.append("      XCTAssertTrue(rec.matchedCalls().isEmpty, \"expected no declared-API calls, got \\(rec.matchedCalls())\")")
