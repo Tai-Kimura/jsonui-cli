@@ -191,6 +191,16 @@ def cmd_validate(args):
         KEY_DRIVER_REQUIREMENTS,
         _project_root(getattr(args, "config", None)),
     )
+    # The toolchain this project vendored, against the one running the gate.
+    # Both values live inside the tool — the stamp `jui sync_tool` writes and
+    # this CLI's own version — so a consumer comparing them in a pretest is
+    # recomputing what the tool already knows, in as many places as it has
+    # projects.
+    from .validation.toolchain import sync_meta_mismatches
+    for message in sync_meta_mismatches(_root, __version__):
+        print(f"[WARN] {message}")
+        total_warnings += 1
+
     # A check that declined to run says so. Silence here would be the very
     # confusion this check exists to remove: "no dangling paths" and "the
     # path check never ran" would print identically.
