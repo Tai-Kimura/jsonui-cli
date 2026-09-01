@@ -101,6 +101,66 @@ def place_editor_schema(mock_dir: Path) -> list[str]:
     return written
 
 
+def editor_schema_drift(mock_dir: Path):
+    """How many editor-schema copies are behind, and which way they are wrong.
+
+    `place_editor_schema` is called only from `mock generate` (twice, below).
+    Nothing on the `validate` path writes these copies, so a project that
+    never runs the generator keeps the copy it was first given — forever,
+    with every gate green, because no gate reads them.
+
+    THE TWO DIRECTIONS ARE NOT EQUALLY BAD, so they are counted apart.
+
+    A copy that allows a key the CLI has since dropped only lets an author
+    write something the CLI answers with one warning and exit 0. A copy that
+    LACKS a key the CLI has since added is worse: the copies declare
+    `additionalProperties: false`, so the editor marks a correctly written
+    declaration invalid — and an author whose editor is red has a reason to
+    delete a line that was right. Measured across every consumer on one
+    machine the day this landed: 162 copies, 0 fresh, and 64 of them missing
+    `skipRequestValidation`, which had shipped one version earlier.
+
+    Returns (total, stale, missing_a_shipped_key). Silent — never raises —
+    because this runs inside a summary line: a project with no mocks, an
+    unreadable copy, or a copy that is not JSON must not fail the gate that
+    was reporting on something else.
+    """
+    if mock_dir is None:
+        return (0, 0, 0)
+    try:
+        text = editor_schema_text()
+        shipped = set(json.loads(text)["properties"]["scenarios"]
+                      ["additionalProperties"]["properties"])
+    except Exception:
+        return (0, 0, 0)
+    total = stale = missing = 0
+    try:
+        copies = sorted(Path(mock_dir).rglob(EDITOR_SCHEMA_FILENAME))
+    except OSError:
+        return (0, 0, 0)
+    for copy in copies:
+        total += 1
+        try:
+            found = copy.read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError):
+            stale += 1
+            continue
+        if found == text:
+            continue
+        stale += 1
+        try:
+            keys = set(json.loads(found)["properties"]["scenarios"]
+                       ["additionalProperties"]["properties"])
+        except Exception:
+            # Unparseable or differently shaped: it cannot be honouring the
+            # shipped vocabulary, so it counts on the side that misleads.
+            missing += 1
+            continue
+        if shipped - keys:
+            missing += 1
+    return (total, stale, missing)
+
+
 def is_generated(rel) -> bool:
     """True for a path inside the generated tree (relative to mockDir)."""
     return Path(rel).parts[:1] == (GENERATED_DIR,)

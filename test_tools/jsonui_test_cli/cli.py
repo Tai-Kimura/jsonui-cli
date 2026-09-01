@@ -353,6 +353,7 @@ def cmd_validate(args):
         summary += f", Path checks skipped: {', '.join(skipped_kinds())}"
     print(summary)
     _print_uncounted_footnote(uncounted, command="validate")
+    _print_editor_schema_drift(getattr(args, "config", None))
 
     if total_errors > 0:
         return 1
@@ -367,6 +368,39 @@ def cmd_validate(args):
             return install_rc
 
     return 0
+
+
+def _print_editor_schema_drift(config_path):
+    """Name the editor-schema copies this CLI has outrun.
+
+    Each mock says `"$schema": "./.mock.schema.json"`, so THE EDITOR READS THE
+    COPY, not the schema shipped in this package. Only `mock generate` writes
+    those copies, so a project that validates but never generates keeps
+    whatever it was first given, and no gate anywhere reads them: `Warnings:`,
+    `No drift` and `0 stale` are all silent about it.
+
+    NOT ADDED TO `Warnings:`. That count is a baseline for several consumers,
+    and this would move it for every project at once for a condition none of
+    them created — the same reason the uncounted footnote sits outside it.
+    Exit code is untouched: this is a fact about the editor, not the run.
+
+    The line names the direction that misleads. A stale copy that allows a
+    dropped key costs one warning; a stale copy MISSING a key this CLI accepts
+    makes the editor mark a correct declaration invalid, because the copies
+    say `additionalProperties: false`. An author with a red editor has a
+    reason to delete a line that was right, and that is the half worth a
+    sentence.
+    """
+    from .mock.generate import editor_schema_drift
+    total, stale, missing = editor_schema_drift(_resolve_mock_dir(config_path))
+    if not stale:
+        return
+    print(f"[NOTE] {stale} of {total} .mock.schema.json copies are behind this "
+          f"CLI ({__version__}).")
+    if missing:
+        print(f"       {missing} lack a key this CLI accepts, so an editor "
+              "reading them marks a correct declaration invalid.")
+    print("       `jsonui-test mock generate` rewrites them; nothing else does.")
 
 
 def _resolve_mock_dir(config_path):
