@@ -84,6 +84,19 @@ def main(frm: str, to: str) -> int:
             print(f"  {label}")
             for path in sorted(hit[label]):
                 print(f"      {path}")
+    # What this cannot answer, said where its answer is read. "The
+    # generator did not move" became "so no regeneration is needed" in a
+    # notice, and a lane regenerated 38 files that same day: the ROUTES
+    # baked into a branch test are a copy of the mocks, so a backend
+    # declaring 426/429/503 drifts them with branch_tests.py byte-identical.
+    # A diff between two tags of THIS repo cannot see that — the input
+    # lives in the consumer's swagger and specs.
+    print("\n  this reads a diff of the toolchain, so it answers"
+          " \"did the generator move\" only.")
+    print("  whether the INPUT moved (swagger, specs, hand-written mocks)"
+          " is on the consumer side:")
+    print("  a byte-identical generator still drifts when its input moved."
+          " Say so in the notice.")
     if unclassified:
         print("\n  UNCLASSIFIED — name the surface before announcing:")
         for path in sorted(unclassified):
