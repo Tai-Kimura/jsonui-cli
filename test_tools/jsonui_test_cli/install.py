@@ -43,6 +43,7 @@ class InstallReport:
     skipped_flows: dict = field(default_factory=dict)  # platform -> [reason_str]
     media_copied: dict = field(default_factory=dict)   # platform -> [dest_file_str]
     media_removed: int = 0                             # stale media cleaned
+    clean_skipped: bool = False                        # the wipe did not run
 
     @property
     def has_collision(self) -> bool:
@@ -257,7 +258,8 @@ def _plan_target(files: list, parsed: dict, platform: str, report: InstallReport
     return surviving
 
 
-def flatten_install(test_files, targets, media_files=None) -> InstallReport:
+def flatten_install(test_files, targets, media_files=None,
+                    clean: bool = True) -> InstallReport:
     """Flatten-copy each `.test.json` in `test_files` into every target dir.
 
     Per target, the source set is shaped first (see module docstring): files
@@ -266,10 +268,22 @@ def flatten_install(test_files, targets, media_files=None) -> InstallReport:
     were shaped out are dropped whole. Unmodified files are byte-copied; only
     screen tests with pruned cases are re-serialized.
 
-    Full sync: existing `*.test.json` in each target dir are removed first so
-    renamed/deleted SSoT tests leave no stale copies. Basename collisions among
-    the files actually written to the same destination abort the install — the
-    flat layout requires screen-unique names per target.
+    `clean` says whether this run is a FULL SYNC — whether `test_files` is
+    every test the destination should hold. Only then may existing
+    `*.test.json` be removed first, so renamed/deleted SSoT tests leave no
+    stale copies. With `clean=False` the run adds and overwrites and removes
+    nothing, because a narrower source set cannot tell a deleted test from
+    one it was never given.
+
+    The default is the removing one: every caller other than `validate`
+    constructs its own destination and hands over the whole source set, so
+    for them it is true by construction. `validate` is the one caller whose
+    source set comes from a command line, and it establishes the answer
+    rather than inheriting it.
+
+    Basename collisions among the files actually written to the same
+    destination abort the install — the flat layout requires screen-unique
+    names per target.
 
     `media_files` are addMedia fixtures (from `test.mediaDir`). iOS targets get
     them under `<target_dir>/media/` — a CLI-owned subdir so stale cleanup can
@@ -282,6 +296,7 @@ def flatten_install(test_files, targets, media_files=None) -> InstallReport:
     media = [Path(f) for f in (media_files or [])]
 
     report = InstallReport(targets=[(p, str(d)) for p, d in targets])
+
 
     # Media basename collisions abort exactly like test-name collisions.
     media_by_name: dict = {}
@@ -319,12 +334,30 @@ def flatten_install(test_files, targets, media_files=None) -> InstallReport:
     if report.collisions:
         return report
 
+    report.clean_skipped = not clean
     for platform, dest_dir, surviving in plans:
         dest_dir.mkdir(parents=True, exist_ok=True)
-        # Clean stale flattened tests only — leave any other files in place.
-        for stale in dest_dir.glob("*.test.json"):
-            stale.unlink()
-            report.removed += 1
+        # THE WIPE'S DENOMINATOR IS THE WHOLE DESTINATION; the repopulate's is
+        # `files`. When those two are the same set the pair is a full sync and
+        # the wipe is what removes a test whose source was deleted. When
+        # `files` is narrower, the wipe deletes work this run never looked at
+        # — measured, on a real project: one file passed to `validate` took a
+        # destination from 63 tests to 1, and the destination is gitignored,
+        # so `git status` showed nothing.
+        #
+        # It read as harmless for as long as it did because a full run makes
+        # `cleaned == installed`, which is the only shape anyone had seen.
+        # `Clean stale flattened tests only — leave any other files in place`
+        # used to sit here and reads as a scope limit; it is about file TYPE.
+        #
+        # So the caller establishes full-sync and says so, and this stays a
+        # wipe-and-repopulate only when it really is one — the same argument
+        # the media wipe below makes for itself, which is where the shape was
+        # justified correctly all along.
+        if clean:
+            for stale in dest_dir.glob("*.test.json"):
+                stale.unlink()
+                report.removed += 1
         for entry in surviving:
             target = dest_dir / entry.src.name
             if entry.shaped is None:
@@ -337,6 +370,13 @@ def flatten_install(test_files, targets, media_files=None) -> InstallReport:
 
         # Media fixtures: iOS UITest-bundle targets only. media/ is wholly
         # CLI-owned, so full-sync is a safe wipe-and-repopulate.
+        #
+        # And it IS one on every run, unlike the tests above: `media` comes
+        # from `test.mediaDir` in config, never from the command line, so
+        # narrowing the arguments cannot narrow it. That is why this wipe is
+        # not behind `clean` — asserted rather than assumed, since making the
+        # two symmetrical "for safety" would silently stop cleaning media a
+        # project really did delete.
         if platform == "ios":
             media_dir = dest_dir / "media"
             if media_dir.is_dir():

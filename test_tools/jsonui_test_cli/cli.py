@@ -1067,6 +1067,34 @@ def _resolve_media_files(test_config, project_root):
     )
 
 
+#: Where a project's `.test.json` sources live, for deciding whether a run
+#: saw all of them. `tests` matches `mediaDir`'s default (`tests/media`) and
+#: the layout `generate test screen` writes into.
+TEST_DIR_KEY = "testDir"
+TEST_DIR_DEFAULT = "tests"
+
+
+def _declared_test_files(test_config, project_root):
+    """Every `*.test.json` under the declared test directory, or None.
+
+    None means the directory is not there — the run cannot establish what
+    the full set IS, which is a different answer from "the full set is
+    empty" and has to stay distinguishable at the call site.
+
+    This is the DENOMINATOR the install clean was missing. The clean
+    removes a destination file whose source was deleted; deciding that a
+    source was deleted requires having looked everywhere it could be. The
+    command line is not that — one file passed to `validate` is a complete
+    answer about one file and no answer at all about the rest.
+    """
+    root = Path(test_config.get(TEST_DIR_KEY) or TEST_DIR_DEFAULT)
+    if not root.is_absolute():
+        root = project_root / root
+    if not root.is_dir():
+        return None
+    return {p.resolve() for p in root.rglob("*.test.json")}
+
+
 def _install_validated_tests(valid_test_files, config_path):
     """Flatten-install valid .test.json files per config. Returns exit code."""
     from .install import resolve_targets, flatten_install
@@ -1081,7 +1109,29 @@ def _install_validated_tests(valid_test_files, config_path):
         return 0  # no install destinations declared → validate-only
 
     media_files = _resolve_media_files(test_config, project_root)
-    report = flatten_install(valid_test_files, targets, media_files=media_files)
+
+    # IS THIS RUN A FULL SYNC? The clean wipes the whole destination and the
+    # repopulate refills it from the command line, so when those two sets
+    # differ the run deletes work it never looked at. Measured on a real
+    # project: one file passed to `validate` took a destination from 63
+    # tests to 1, and the destination is gitignored, so nothing a person
+    # would check showed it.
+    #
+    # The count was ON SCREEN the whole time — `Installed 2 test file(s) → 2
+    # target(s) (cleaned 126 stale)` — and did not stop anybody, including
+    # the person who ran it. Two numbers in one sentence with nothing
+    # comparing them, printed after `Result: PASSED`, in the same words a
+    # healthy full sync uses. So this is a comparison, not a louder line.
+    #
+    # `None` (no declared test directory) is NOT treated as "nothing to
+    # cover": a run that cannot establish the full set must not delete on
+    # the strength of not knowing.
+    declared = _declared_test_files(test_config, project_root)
+    covered = {Path(f).resolve() for f in valid_test_files}
+    full_sync = declared is not None and declared <= covered
+
+    report = flatten_install(valid_test_files, targets,
+                             media_files=media_files, clean=full_sync)
 
     if report.has_collision:
         print(f"\n{'='*50}")
@@ -1095,6 +1145,21 @@ def _install_validated_tests(valid_test_files, config_path):
     print(f"\n{'='*50}")
     print(f"Installed {len(report.copied)} test file(s) → {len(targets)} target(s)"
           f" (cleaned {report.removed} stale):")
+    if report.clean_skipped:
+        # Named where the count would have been, so the run says what it did
+        # NOT do rather than printing a smaller number for the same word. A
+        # full sync prints nothing here and is byte-identical to before.
+        if declared is None:
+            root = test_config.get(TEST_DIR_KEY) or TEST_DIR_DEFAULT
+            print(f"  partial run — stale files left in place: no {root}/ "
+                  f"under {project_root}, so this run cannot tell which "
+                  f"installed tests still have a source "
+                  f"(declare test.{TEST_DIR_KEY} to turn the clean on)")
+        else:
+            print(f"  partial run — stale files left in place: this run "
+                  f"covered {len(covered)} of {len(declared)} declared "
+                  f"test(s), so a missing one may simply not have been "
+                  f"passed to this command")
     for platform, dest in report.targets:
         installed = len(report.installed.get(platform, []))
         details = []

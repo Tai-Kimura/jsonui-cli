@@ -97,6 +97,24 @@ jsonui-test v -q tests/
 - `0`: All files valid
 - `1`: Validation errors found
 
+**Install side effect, and when it cleans.** A successful `validate` flatten-installs
+the validated tests into every destination in `test.install`. That install removes
+installed tests whose source is gone — but only on a FULL SYNC, because a run given
+a narrower set cannot tell a deleted test from one it was simply not passed.
+
+A run is a full sync when it covered every `*.test.json` under the project's test
+directory (`test.testDir`, default `tests`). Otherwise the run installs what it was
+given, removes nothing, and says so:
+
+```
+Installed 1 test file(s) → 1 target(s) (cleaned 0 stale):
+  partial run — stale files left in place: this run covered 1 of 3 declared test(s),
+  so a missing one may simply not have been passed to this command
+```
+
+Declare `test.testDir` when your tests do not live under `tests/`; without it the
+run cannot establish the full set and declines the clean.
+
 ### generate test screen (g t screen)
 
 Generate screen test file template from a layout JSON file.
