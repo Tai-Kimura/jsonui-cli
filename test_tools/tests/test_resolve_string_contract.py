@@ -84,6 +84,22 @@ def _flat(text: str) -> str:
     return joined
 
 
+def _prose(text: str) -> str:
+    """`_flat`, with the comment markers taken off first.
+
+    The doc comments are now WRAPPED BY THE GENERATOR from one shared
+    constant, so where a line breaks is a function of the sentence's length
+    rather than of anyone's typing. An assertion on a two-word phrase that
+    happened to straddle a break would then fail for a reword that is
+    correct — the same defect `_flat` exists to prevent, one comment marker
+    over. `_flat` alone does not help here: it joins the lines, and leaves
+    the `*` sitting between the two words.
+    """
+    return _flat("\n".join(
+        re.sub(r"^\s*(///|/\*\*|\*/|\*|//)\s?", "", line)
+        for line in text.splitlines()))
+
+
 def _runtime(platform) -> str:
     return getattr(bt, PLATFORM[platform]["runtime"])
 
@@ -200,7 +216,7 @@ class TestTheReasonIsOrderedCorrectly:
 
     @pytest.mark.parametrize("platform", sorted(PLATFORM))
     def test_the_runtime_doc_leads_with_the_render_path(self, platform):
-        text = _flat(_helper_doc(platform))
+        text = _prose(_helper_doc(platform))
 
         # "render" for the general reason, "server message" for the
         # sufficient one — tokens each side owns, so the assertion is about
@@ -209,7 +225,7 @@ class TestTheReasonIsOrderedCorrectly:
 
     @pytest.mark.parametrize("platform", sorted(PLATFORM))
     def test_the_harness_doc_leads_with_the_render_path(self, platform):
-        text = _flat(_skeleton(platform))
+        text = _prose(_skeleton(platform))
 
         # "render" for the general reason, "server message" for the
         # sufficient one — tokens each side owns, so the assertion is about
@@ -221,7 +237,7 @@ class TestTheReasonIsOrderedCorrectly:
         """Written where the harness author reads, not only in the runtime:
         two people on the reporting project wrote the two different forms,
         so a new harness has to be right before anything calls it."""
-        assert "RETURN THE RESOLVED TEXT" in _skeleton(platform)
+        assert "RETURN THE RESOLVED TEXT" in _prose(_skeleton(platform))
 
 
 class TestTheSkeletonDefaultFails:

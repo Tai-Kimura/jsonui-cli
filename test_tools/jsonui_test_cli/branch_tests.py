@@ -29,6 +29,8 @@ import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from . import branch_runtime_prose as prose
+
 
 class BranchTestGenerationError(Exception):
     """Raised for vocabulary that cannot be bound to real assets."""
@@ -1316,28 +1318,7 @@ export function applyDeclaredKeys(
  * predates seedable state drops the name, the read-back does not match,
  * and it fails by name instead of passing for the wrong reason.
  */
-/** Resolve an '@key' expectation through the harness, and refuse a harness
- * that hands back a KEY.
- *
- * `resolveString` must return the RESOLVED TEXT. The reason is the render
- * path, not the field: `@{...}` bindings are not resolved when a component
- * renders — the generated component emits the value raw, and only a
- * layout's static text goes through the string manager. So a data field
- * holds resolved text and nothing else, and an expectation compared
- * against it has to be resolved text too.
- *
- * (A second fact points the same way and is often reached first: a field
- * that also carries a server message has no front-end key for that value
- * at all. That is a SUFFICIENT reason, not the reason — read alone it
- * invites "then a field servers never touch may return a key", which is
- * wrong, because the render path does not resolve keys for any field.)
- *
- * Checked here rather than documented only, because the shape hides: of 12
- * harnesses in one project, 3 returned the key, and 2 of those had an
- * empty table so `resolveString` was never called — broken and green until
- * the screen's first `@key` contract arrived. A check that fires on the
- * call has no dormant state.
- */
+//<<resolve-string doc>>
 export function resolveString(
   h: { resolveString(key: string): string },
   key: string
@@ -1347,11 +1328,7 @@ export function resolveString(
   if (!resolved || resolved === key ||
       (identifier && resolved.endsWith(`_${key}`))) {
     throw new Error(
-      `resolveString(${JSON.stringify(key)}) returned ` +
-      `${JSON.stringify(resolved)}, which is not the text that key names. ` +
-      "Bindings are not resolved when a component renders, so the field " +
-      "holds resolved text — return the string manager's lookup of the " +
-      "full key. A key, or nothing, means the table did not resolve."
+//<<resolve-string message>>
     );
   }
   return resolved;
@@ -1428,23 +1405,7 @@ export interface BranchHarness {
   setState(state: Record<string, unknown>): void;
   /** Assert a `then.transition` destination against recorded navigation. */
   expectTransition(destination: string): void;
-  /** Resolve an '@strings_key' expectation via the closed map above.
-   *
-   * RETURN THE RESOLVED TEXT, never the key. `@{...}` bindings are not
-   * resolved when a component renders — the value is emitted raw, and only
-   * a layout's static text goes through the string manager — so a data
-   * field holds resolved text and the expectation compared against it must
-   * too. (A field that can also carry a server message has no front-end
-   * key for that value either; that is a second reason, not the reason.
-   * The render path resolves keys for no field at all, so "this field
-   * never holds server text, so a key is fine" is wrong.)
-   *
-   *     return StringManager.getString(%(screen_const)s_BRANCH_STRING_KEYS[key]);
-   *     // NOT: return %(screen_const)s_BRANCH_STRING_KEYS[key];
-   *
-   * The runtime rejects a key-shaped return when this is called, so the
-   * mistake surfaces at the first '@key' contract rather than living in a
-   * harness whose table is still empty. */
+//<<resolve-string harness doc>>
   resolveString(key: string): string;
 }
 
@@ -1721,50 +1682,19 @@ interface BranchHarness {
   fun setState(state: Map<String, Any?>)
   fun invoke(name: String, vararg args: Any?)
   fun expectTransition(destination: String)
-  /** Resolve an '@strings_key' expectation.
-   *
-   * RETURN THE RESOLVED TEXT, never the key. Bindings are not resolved
-   * when a component renders — only a layout's static text goes through
-   * the string manager — so a data field holds resolved text and the
-   * expectation compared against it must too. (A field that can also carry
-   * a server message has no front-end key for that value either; that is a
-   * second reason, not the reason.) The runtime rejects a key-shaped
-   * return when this is called. */
+//<<resolve-string harness doc>>
   fun resolveString(key: String): String
   fun settle()
 }
 
-/** Resolve an '@key' expectation through the harness, refusing a KEY.
- *
- * `resolveString` must return the RESOLVED TEXT. The reason is the render
- * path, not the field: `@{...}` bindings are not resolved when a component
- * renders — the value is emitted raw, and only a layout's static text goes
- * through the string manager. A data field therefore holds resolved text,
- * and an expectation compared against it has to be resolved text too.
- *
- * (A second fact points the same way and is often reached first: a field
- * that can also carry a server message has no front-end key for that
- * value. That is a SUFFICIENT reason, not the reason — read alone it
- * invites "then a field servers never touch may return a key", which is
- * wrong, because the render path resolves keys for no field at all.)
- *
- * Checked rather than only documented, because the shape hides: of 12
- * harnesses in one project 3 returned the key, and 2 of those had an empty
- * table, so `resolveString` was never called — broken and green until that
- * screen's first '@key' contract arrived. A check on the call has no
- * dormant state.
- */
+//<<resolve-string doc>>
 fun resolveString(h: BranchHarness, key: String): String {
   val resolved = h.resolveString(key)
   val identifier = resolved.all { it.isLetterOrDigit() || it == '_' }
   if (resolved.isEmpty() || resolved == key ||
       (identifier && resolved.endsWith("_" + key))) {
     error(
-      "resolveString(\\"" + key + "\\") returned \\"" + resolved + "\\", which " +
-      "is not the text that key names. Bindings are not resolved when a " +
-      "component renders, so the field holds resolved text — return the " +
-      "string manager's lookup of the full key. A key, or nothing, means " +
-      "the table did not resolve."
+//<<resolve-string message>>
     )
   }
   return resolved
@@ -2297,15 +2227,7 @@ protocol BranchHarness {
   func setState(_ state: [String: Any])
   func invoke(_ name: String, args: [Any])
   func expectTransition(_ destination: String)
-  /// Resolve an '@strings_key' expectation.
-  ///
-  /// RETURN THE RESOLVED TEXT, never the key. Bindings are not resolved
-  /// when a component renders — only a layout's static text goes through
-  /// the string manager — so a data field holds resolved text and the
-  /// expectation compared against it must too. (A field that can also
-  /// carry a server message has no front-end key for that value either;
-  /// that is a second reason, not the reason.) The runtime rejects a
-  /// key-shaped return when this is called.
+//<<resolve-string harness doc>>
   func resolveString(_ key: String) -> String
   func settle()
 }
@@ -2574,26 +2496,7 @@ private func asDouble(_ value: Any?) -> Double? {
   return nil
 }
 
-/// Resolve an '@key' expectation through the harness, refusing a KEY.
-///
-///
-/// `resolveString` must return the RESOLVED TEXT. The reason is the render
-/// path, not the field: `@{...}` bindings are not resolved when a component
-/// renders — the value is emitted raw, and only a layout's static text goes
-/// through the string manager. A data field therefore holds resolved text,
-/// and an expectation compared against it has to be resolved text too.
-///
-/// (A second fact points the same way and is often reached first: a field
-/// that can also carry a server message has no front-end key for that
-/// value. That is a SUFFICIENT reason, not the reason — read alone it
-/// invites "then a field servers never touch may return a key", which is
-/// wrong, because the render path resolves keys for no field at all.)
-///
-/// Checked rather than only documented, because the shape hides: of 12
-/// harnesses in one project 3 returned the key, and 2 of those had an empty
-/// table, so `resolveString` was never called — broken and green until that
-/// screen's first '@key' contract arrived. A check on the call has no
-/// dormant state.
+//<<resolve-string doc>>
 func resolveString(_ h: BranchHarness, _ key: String) -> String {
   let resolved = h.resolveString(key)
   let identifier = !resolved.isEmpty && resolved.allSatisfy {
@@ -2602,11 +2505,7 @@ func resolveString(_ h: BranchHarness, _ key: String) -> String {
   if resolved.isEmpty || resolved == key ||
      (identifier && resolved.hasSuffix("_" + key)) {
     XCTFail(
-      "resolveString(\\(key)) returned \\(resolved), which is not the " +
-      "text that key names. Bindings are not resolved when a component " +
-      "renders, so the field holds resolved text — return the string " +
-      "manager's lookup of the full key. A key, or nothing, means the " +
-      "table did not resolve."
+//<<resolve-string message>>
     )
   }
   return resolved
@@ -2711,6 +2610,94 @@ func create%(pascal)sBranchHarness() -> BranchHarness {
   fatalError("branch-harness for %(screen)s is not implemented yet")
 }
 '''
+
+
+# ---------------------------------------------------------------------------
+# `resolveString`: one source for the text, three hand-written guards.
+#
+# The markers above are filled in here rather than typed into each literal.
+# Three consecutive blockers came out of maintaining three copies by hand
+# — `f43b8fb1` (Kotlin escaping), `89efcda1` (one copy reworded, three
+# drifted), `73a5e32a` (a dropped `+` between adjacent literals) — and all
+# three are properties of transcription, not of the sentence. Escaping,
+# wrapping and joining are computed in `branch_runtime_prose`; the guards
+# themselves stay per-language, because they differ for reasons that are
+# about the language.
+#
+# A marker that survives splicing would emit a runtime with no diagnostic
+# and no doc, and would read as an ordinary `//` comment in all three
+# languages, so `_splice` refuses rather than returning the text unchanged.
+# ---------------------------------------------------------------------------
+
+_LANGUAGE = {"web": "ts", "android": "kotlin", "ios": "swift"}
+
+#: The web harness owns its key table in the same file, so its summary line
+#: says where to look and it carries the worked example. The other two
+#: declare `resolveString` on the shared `BranchHarness` interface.
+_HARNESS_SUMMARY = {
+    "ts": "Resolve an '@strings_key' expectation via the closed map above.",
+    "kotlin": "Resolve an '@strings_key' expectation.",
+    "swift": "Resolve an '@strings_key' expectation.",
+}
+
+_TS_HARNESS_SAMPLE = (
+    "    return StringManager.getString("
+    "%(screen_const)s_BRANCH_STRING_KEYS[key]);",
+    "    // NOT: return %(screen_const)s_BRANCH_STRING_KEYS[key];",
+)
+
+
+def _splice(template: str, marker: str, block: str, *,
+            percent_literal: bool = False) -> str:
+    """Put `block` where `marker` is, and refuse if it is not there.
+
+    `str.replace` on a missing marker returns the template unchanged, which
+    would ship a runtime whose diagnostic is silently gone. Raising at
+    import time is the loud form of the same answer.
+
+    `percent_literal` doubles `%` for the templates that are `%`-formatted
+    later. No prose carries one today; the point is that a reword which
+    adds one does not break Kotlin emission at a distance.
+    """
+    if marker not in template:
+        raise AssertionError(
+            f"{marker!r} is not in this template — the resolveString text "
+            f"has nowhere to go, and a runtime would ship without it")
+    if percent_literal:
+        block = block.replace("%", "%%")
+    return template.replace(marker, block)
+
+
+def _with_resolve_string_text(template: str, platform: str, *,
+                              harness_doc: bool, percent_literal: bool = False,
+                              sample: tuple = ()) -> str:
+    language = _LANGUAGE[platform]
+    text = _splice(
+        template, "//<<resolve-string doc>>",
+        prose.doc(prose.RESOLVE_STRING_RUNTIME_DOC, language, indent=0),
+        percent_literal=percent_literal)
+    text = _splice(
+        text, "//<<resolve-string message>>",
+        prose.message(prose.RESOLVE_STRING_FAILURE, language, indent=6),
+        percent_literal=percent_literal)
+    if harness_doc:
+        text = _splice(
+            text, "//<<resolve-string harness doc>>",
+            prose.harness_doc(language, summary=_HARNESS_SUMMARY[language],
+                              indent=2, sample=sample),
+            percent_literal=percent_literal)
+    return text
+
+
+RUNTIME_TS = _with_resolve_string_text(RUNTIME_TS, "web", harness_doc=False)
+KOTLIN_RUNTIME = _with_resolve_string_text(
+    KOTLIN_RUNTIME, "android", harness_doc=True, percent_literal=True)
+SWIFT_RUNTIME = _with_resolve_string_text(
+    SWIFT_RUNTIME, "ios", harness_doc=True)
+HARNESS_SKELETON = _splice(
+    HARNESS_SKELETON, "//<<resolve-string harness doc>>",
+    prose.harness_doc("ts", summary=_HARNESS_SUMMARY["ts"], indent=2,
+                      sample=_TS_HARNESS_SAMPLE))
 
 
 def generate_branch_tests(
