@@ -16,6 +16,11 @@ TWO LINKS, NEITHER OF WHICH ANY EXISTING GATE COVERS.
    one `\\u2014` escape. Two copies edited deliberately, on purpose, in the
    same sitting, still drifted.
 
+   Since 2026-09-02 the byte comparison covers EVERY canonical schema, the
+   vendored fixtures included: the clearState rewrite sat in
+   actions.schema.json with the vendored copy a commit behind and every gate
+   green, because only mock.schema.json had a byte guard.
+
 2. Condition keys. The set lives in FIVE places — the canonical schema, this
    repo's `VALID_CONDITION_KEYS`, and one hard-coded set in each of the three
    drivers. `test_schema_drift.py` pins the first two to each other. Nothing
@@ -45,6 +50,7 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parents[2]
 SHIPPED_MOCK = HERE / "test_tools/jsonui_test_cli/static/mock.schema.json"
+FIXTURES = HERE / "test_tools/tests/schema_fixtures"
 
 #: Where each driver states the condition keys it can evaluate, and the
 #: pattern that lifts the set out. Declared as data so that adding a fourth
@@ -67,28 +73,54 @@ def cannot_attempt(message: str) -> None:
     sys.exit(2)
 
 
-def check_mock_schema(canonical_root: Path) -> None:
+def check_schema_bytes(canonical_root: Path) -> tuple[int, int]:
     """Byte-identical, because the re-vendor step is `cp`.
 
     Structural comparison was the other option and is weaker in the way that
     matters: the drift that actually occurred was one escape inside a
     description, which every structural comparison calls equal and `cp`
     does not.
+
+    ALL canonical schemas are compared, not just mock.schema.json: the
+    clearState rewrite (2026-09-02) drifted in actions.schema.json with
+    every gate green, because only mock had a byte guard. mock stays the
+    one special case in WHERE the local copy lives — it is the only schema
+    the CLI ships (static/, so the `$schema` line next to generated mocks
+    resolves in an editor); the rest are test-only vendored fixtures. That
+    shipped path is the reason it was the only one guarded at first.
+
+    Returns (identical, total) so the green line reports what this run
+    MEASURED, not the size of a table it was configured with.
     """
-    canonical = canonical_root / "schemas/mock.schema.json"
-    if not canonical.is_file():
-        cannot_attempt(f"{canonical} is not there")
-    if canonical.read_bytes() != SHIPPED_MOCK.read_bytes():
-        problems.append(
-            "mock.schema.json: the shipped copy and the canonical copy are "
-            "not byte-identical.\n"
-            f"    canonical: {canonical}\n"
-            f"    shipped  : {SHIPPED_MOCK}\n"
-            "    The re-vendor step is `cp`, so whichever was edited alone "
-            "loses its change on the next re-vendor.")
+    schemas = sorted(canonical_root.glob("schemas/*.schema.json"))
+    if not schemas:
+        cannot_attempt(
+            f"no *.schema.json under {canonical_root}/schemas — there was "
+            "nothing to compare")
+    identical = 0
+    for canonical in schemas:
+        local = (SHIPPED_MOCK if canonical.name == "mock.schema.json"
+                 else FIXTURES / canonical.name)
+        if not local.is_file():
+            problems.append(
+                f"{canonical.name}: no local copy at {local} — a canonical "
+                "schema without a vendored counterpart is pinned by "
+                "nothing. Vendor it (schema_fixtures/VENDOR.md).")
+            continue
+        if canonical.read_bytes() != local.read_bytes():
+            problems.append(
+                f"{canonical.name}: the local copy and the canonical copy "
+                "are not byte-identical.\n"
+                f"    canonical: {canonical}\n"
+                f"    local    : {local}\n"
+                "    The re-vendor step is `cp`, so whichever was edited "
+                "alone loses its change on the next re-vendor.")
+            continue
+        identical += 1
+    return identical, len(schemas)
 
 
-def check_condition_keys(canonical_root: Path) -> None:
+def check_condition_keys(canonical_root: Path) -> list[int]:
     schema = canonical_root / "schemas/actions.schema.json"
     if not schema.is_file():
         cannot_attempt(f"{schema} is not there")
@@ -143,15 +175,16 @@ def main(argv: list[str]) -> int:
     if not canonical_root.is_dir():
         cannot_attempt(f"{canonical_root} is not a directory")
 
-    check_mock_schema(canonical_root)
+    identical, total = check_schema_bytes(canonical_root)
     compared = check_condition_keys(canonical_root)
 
     if problems:
         for problem in problems:
             print(f"DRIFTED: {problem}", file=sys.stderr)
         return 1
-    print(f"OK: shipped mock.schema.json matches canonical; condition keys "
-          f"agree across {len(compared)} driver(s), "
+    print(f"OK: {identical}/{total} schema(s) byte-identical to canonical "
+          f"(mock from the shipped copy, the rest vendored fixtures); "
+          f"condition keys agree across {len(compared)} driver(s), "
           f"{'/'.join(str(n) for n in compared)} key(s) read")
     return 0
 
