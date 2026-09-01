@@ -14,8 +14,23 @@ from .models import ValidationMessage, ValidationResult
 
 VALID_MOCK_KEYS = ["$schema", "source", "activeScenario", "scenarios"]
 VALID_SOURCE_KEYS = ["swagger", "operationId", "method", "path"]
+#: Every key a scenario may carry. THE MOCK SERVER READS FROM THIS DOCUMENT
+#: TOO, and a key it reads that is missing here is worse than one nobody
+#: checks: `skipRequestValidation` is honoured at serve time (server.py) and
+#: was absent from this list, so a project using a real feature correctly
+#: earned `Unknown scenario key` from the validator and an invalid marker
+#: from the editor schema. Unchecked keys mean "write it and nothing
+#: happens"; an unregistered one means "write it correctly and be told you
+#: are wrong" — and the only way to clear it was to stop using the feature.
+#:
+#: `test_runtime_keys_are_registered.py` derives the server's reads from its
+#: source and fails when one is not here, so the next runtime key cannot
+#: repeat it. The reverse direction is deliberately NOT an invariant:
+#: `contractViolations` / `undeclaredStatus` are authoring-time declarations
+#: the checker reads and the server never does.
 VALID_SCENARIO_KEYS = ["status", "headers", "body", "delayMs", "contentType",
-                       "bodyFile", "contractViolations", "undeclaredStatus"]
+                       "bodyFile", "contractViolations", "undeclaredStatus",
+                       "skipRequestValidation"]
 VALID_METHODS = ["GET", "POST", "PUT", "DELETE", "PATCH", "HEAD", "OPTIONS"]
 
 

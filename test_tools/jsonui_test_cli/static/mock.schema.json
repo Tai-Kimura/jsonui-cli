@@ -56,6 +56,10 @@
               "reason": { "type": "string", "minLength": 1 }
             }
           },
+          "skipRequestValidation": {
+            "description": "Do not check what the APP SENT against the swagger for this scenario. The mock server validates request bodies and query strings and RECORDS the violations (it never rejects — a 422 here would turn 'the implementation is wrong' into 'this screen should show an error' in every test that touches it). Set this on a scenario that deliberately drives a request the contract does not allow, so the recording stays a list of real problems.",
+            "type": "boolean"
+          },
           "undeclaredStatus": {
             "description": "This scenario answers a status its operation does not declare, ON PURPOSE — a fail-open regression, or an edge the contract will never state. Without this the check gates on it (forms A and C: a code the contract declares somewhere, attached to an operation that does not declare it), and a gate a project cannot clear is one people learn to read past. Authoring-time only: nothing at runtime reads this key, so it carries no driver requirement.",
             "type": "object",
