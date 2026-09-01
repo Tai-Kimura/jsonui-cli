@@ -45,6 +45,12 @@ SURFACES = [
     ("release procedure / installer — maintainer side only",
      r"^(dev-guide|installer)/"),
     ("tests only — no shipped behaviour", r"^[^/]+/tests?/"),
+    # Docs are a shipped surface: a config key a face has to WRITE lives here
+    # before it lives anywhere else. v1.7.50 added `test.testDir` and the only
+    # place a consumer can read what it means is this file — announcing that
+    # release as code-only would have shipped a key nobody could look up.
+    ("consumer docs — a config key or behaviour a face has to read",
+     r"(^|/)(README|CHANGELOG)\.md$|^docs/"),
 ]
 
 
