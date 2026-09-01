@@ -292,10 +292,15 @@ jobs:
       # which is the manual re-vendor step this replaces. The cost is that a
       # change in the sibling repo can turn this job red with no change
       # here — which is the guard reporting real drift, and is the point.
+      # submodules: the three drivers are SUBMODULES of jsonui-test-runner, so a
+      # plain checkout leaves drivers/{ios,android,web} empty and the guard
+      # exits 2 (CANNOT ATTEMPT) rather than passing on nothing — which is how
+      # this was found, on the release that added it.
       - uses: actions/checkout@v4
         with:
           repository: Tai-Kimura/jsonui-test-runner
           path: .canonical
+          submodules: recursive
       - name: Canonical sync (mock schema bytes, condition keys per driver)
         run: dev-guide/ci/check-canonical-sync.py .canonical
 
