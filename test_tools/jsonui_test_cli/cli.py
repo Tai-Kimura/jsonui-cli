@@ -282,33 +282,45 @@ def cmd_validate(args):
     # them with their own denominator, which is the line to read for them.
     # Two counts answering two questions, not one count with a hole in it.
     #
-    # CORRECTED, by measurement rather than by reading: this used to say the
-    # actionable mock warnings (a stale generated body, which regenerating
-    # clears) were "excluded by the same blanket rule". They are not
-    # excluded from the count — `validate` NEVER PRINTS THEM.
+    # WHERE A FINDING CAN COME OUT — four exits, not one. Every wrong
+    # sentence written about this file so far came from checking one of
+    # them and saying something about "output":
     #
-    # HOW THAT WAS MEASURED, because the next reader needs the procedure
-    # more than the conclusion: take the existing `TestGeneratedTree`
-    # fixture, edit one file under `generated/` so its body no longer
-    # matches the schema, run `generate(..., check=True)`, and confirm the
-    # report carries it (`stale_generated == 1`, `has_drift False`). Then
-    # feed that same report to the only two printers this command uses —
-    # `_print_uncompared` and `_print_drift_findings` — and capture stdout.
-    # It is EMPTY. `_print_drift_findings` carries only the gating labels,
-    # so nothing on that path can mention a stale body.
+    #   1 denominator   the `mock contract:` line (`contract_summary`)
+    #   2 printers      `_print_uncompared` / `_print_drift_findings`
+    #   3 counter       `Warnings:` / `Errors:`
+    #   4 exit code
     #
-    # A visibility hole, not a counter hole; the two have different fixes,
-    # and the `mock contract:` line now says which findings it looks at.
+    # Measured on one `validate` run per finding, with a control confirming
+    # the finding was actually on the report (an absent line proves nothing
+    # about a finding that never occurred):
     #
-    # The original was written from the counter alone, without running the
-    # printers — which is how a claim about OUTPUT gets made from a reading
-    # of ACCOUNTING, and it is why the procedure is written down here.
+    #   finding                    1        2        3        4
+    #   stale generated body       NAMES    silent   no       0
+    #   misnamed file              silent   silent   no       0
+    #   optional-field omission    silent   silent   no       0
+    #   uncompared scenario        NAMES    [WARN]   no       0
     #
-    # Still open, and now visible in the summary rather than in a comment:
-    # a scenario with NO STATUS is uncounted and is actionable (adding one
-    # clears it; the editor schema already marks it required). Moving it
-    # into `Warnings:` would change the baseline of every project that has
-    # one, so it is named in the footnote and left where it is.
+    # Two corrections live in that table:
+    #
+    # - `a10c5f56` said actionable mock warnings were "excluded by the same
+    #   blanket rule" from the counter. Written from exit 3 alone.
+    # - the correction to it said `validate` "never prints them". Written
+    #   from exit 2 alone. Also wrong: exit 1 names stale bodies, and a
+    #   consumer had the line on screen the whole time.
+    #
+    # The same mistake twice, from opposite directions, because both tried
+    # to answer "does it show up" with ONE predicate. It takes four.
+    #
+    # Non-gating is deliberate for the stale/misnamed/optional row:
+    # regenerating clears them, so they follow the ORPHAN convention. That
+    # is now said next to the denominator line rather than only here.
+    #
+    # Still open, and visible in the summary rather than in a comment: a
+    # scenario with NO STATUS is uncounted and IS clearable (adding one
+    # fixes it; the mock editor schema already marks `status` required).
+    # Moving it into `Warnings:` would change the baseline of every project
+    # that has one, so it is named in the footnote and left where it is.
 
     # Summary
     print(f"\n{'='*50}")
@@ -803,17 +815,32 @@ def _check_mocks_against_swagger(config_path):
     # measured it and said so only on the other command.
     print(f"\n{report.contract_summary}")
     uncounted = _print_uncompared(report)
-    # What this gate is looking at, said where it prints its verdict. It
-    # reports the GATING findings and the uncompared ones; a stale generated
-    # body, a misnamed file and an optional-field omission are measured on
-    # the same report object and printed only by `mock generate --check`.
-    # MEASURED, not read off the call graph: one stale generated body was
-    # planted and the two printers this command uses emitted nothing at all
-    # for it. Without this line a project that never runs `--check`
-    # separately reads "Mock contract" as the whole answer.
+    # What this gate is looking at, said where it prints its verdict.
+    #
+    # `stale generated bodies` USED TO BE IN THIS LIST and had to come out:
+    # the summary line printed one line above names them
+    # (`contract_summary` has a `stale_generated` clause), so the footnote
+    # contradicted the line it hangs under. It was written from a
+    # measurement of the two PRINTERS, which is one exit of four — see the
+    # table at the counter below.
+    #
+    # The two that remain were measured the same way and with a control:
+    # fixtures that genuinely produce a `misnamed` entry and a note-only
+    # body (confirmed on the report object) produce no line here at all.
     print("  (this line reports gating findings and uncompared scenarios; "
-          "stale generated bodies, misnamed files and optional-field "
-          "omissions appear only in `jsonui-test mock generate --check`)")
+          "misnamed files and optional-field omissions appear only in "
+          "`jsonui-test mock generate --check`)")
+    if report.stale_generated:
+        # The convention, next to the number it explains. Named on the line
+        # above, not counted, and not a failure — regenerating clears them,
+        # so they follow the ORPHAN convention deliberately rather than by
+        # omission. A consumer read the count, ran `mock generate --check`
+        # to chase it, found that green too, and reasonably took the pair
+        # for a bug. Saying "does not fail, by convention" is what turns
+        # two green exits from a contradiction into a rule.
+        print("  (generated bodies are refreshed by `jsonui-test mock "
+              "generate`, so a stale one is reported and does NOT fail this "
+              "check — the same convention orphans follow)")
     if not report.has_drift:
         return 0, orphans, 0, uncounted
 

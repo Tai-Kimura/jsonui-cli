@@ -222,14 +222,140 @@ class TestTheBaselineDoesNotMove:
         assert "no remedy" in out
 
 
+class TestTheFourExits:
+    """Where a finding can come out, counted as four places rather than one.
+
+    Every wrong sentence written about this file came from checking one exit
+    and then saying something about "output":
+
+      1 denominator   the `mock contract:` line (`contract_summary`)
+      2 printers      `_print_uncompared` / `_print_drift_findings`
+      3 counter       `Warnings:` / `Errors:`
+      4 exit code
+
+    `a10c5f56` said the actionable mock warnings were excluded from the
+    COUNTER — exit 3 alone. The correction to it said `validate` never
+    PRINTS them — exit 2 alone, and also wrong, because exit 1 names stale
+    bodies and a consumer had that line on screen throughout. The same
+    mistake twice from opposite directions, because both answered "does it
+    show up" with one predicate.
+
+    A footnote written from exit 2 then contradicted the line one row above
+    it, in the same output. That is what these pin.
+    """
+
+    def _project(self, tmp_path):
+        """No hand-written mock, unlike the fixture above.
+
+        The first draft reused it and measured nothing: a hand-written mock
+        OVERLAYS the route, so the generated copy is not compared and
+        editing it produces no stale finding at all. The test failed with
+        `2 compared` and no stale count — the fixture was wrong, not the
+        code, which is the third time today a probe measured its own setup.
+        """
+        docs = tmp_path / "docs" / "api"
+        docs.mkdir(parents=True)
+        (docs / "spec.json").write_text(json.dumps({
+            "openapi": "3.0.0",
+            "paths": {"/api/x": {"get": {"operationId": "getX", "responses": {
+                "200": {"description": "d", "content": {"application/json": {
+                    "schema": {"type": "object", "required": ["id"],
+                               "properties": {"id": {"type": "string"}}}}}}}}}},
+        }), encoding="utf-8")
+        proj = tmp_path / "proj"
+        (proj / "tests" / "mocks").mkdir(parents=True)
+        (proj / "tests" / "sample.test.json").write_text(json.dumps({
+            "type": "screen", "source": {"layout": "test.json"},
+            "metadata": {"name": "sample_test", "description": "d"},
+            "cases": [{"name": "c", "description": "d",
+                       "steps": [{"assert": "visible", "id": "root"}]}],
+        }), encoding="utf-8")
+        (proj / "jui.config.json").write_text(json.dumps({
+            "mock": {"swagger": "../docs/api/spec.json",
+                     "mockDir": "tests/mocks"},
+        }), encoding="utf-8")
+        return proj
+
+    def _stale(self, tmp_path, monkeypatch, capsys):
+        import argparse
+        proj = self._project(tmp_path)
+        monkeypatch.chdir(proj)
+        args = lambda: argparse.Namespace(
+            files=["tests"], verbose=False, quiet=False, config=None,
+            no_mock_check=False, no_install=True, strict=False)
+        cli.cmd_validate(args())
+        capsys.readouterr()
+
+        generated = next(p for p in (proj / "tests" / "mocks").rglob(
+            "getX.mock.json") if "generated" in str(p))
+        data = json.loads(generated.read_text(encoding="utf-8"))
+        data["scenarios"]["default"]["body"] = {"wrong": 1}
+        generated.write_text(json.dumps(data), encoding="utf-8")
+
+        rc = cli.cmd_validate(args())
+        return rc, capsys.readouterr().out
+
+    def test_the_denominator_line_names_a_stale_generated_body(
+            self, tmp_path, monkeypatch, capsys):
+        _, out = self._stale(tmp_path, monkeypatch, capsys)
+
+        denominator = [l for l in out.splitlines()
+                       if l.startswith("mock contract:")]
+        assert len(denominator) == 1, out
+        assert "stale" in denominator[0], denominator
+
+    def test_the_footnote_does_not_contradict_the_line_above_it(
+            self, tmp_path, monkeypatch, capsys):
+        """The regression this replaces, exactly: the footnote said stale
+        bodies "appear only in `mock generate --check`" while the line one
+        row above was naming one."""
+        _, out = self._stale(tmp_path, monkeypatch, capsys)
+
+        footnote = [l for l in out.splitlines() if "appear only in" in l]
+        assert len(footnote) == 1, out
+        assert "stale" not in footnote[0], footnote[0]
+
+    def test_it_is_reported_but_neither_counted_nor_failed(
+            self, tmp_path, monkeypatch, capsys):
+        """Exits 3 and 4. Non-gating is DELIBERATE — regenerating clears
+        them, so they follow the ORPHAN convention."""
+        rc, out = self._stale(tmp_path, monkeypatch, capsys)
+
+        assert rc == 0
+        summary = [l for l in out.splitlines() if l.startswith("Files:")]
+        assert len(summary) == 1 and "Warnings: 0" in summary[0], summary
+
+    def test_the_convention_is_readable_beside_the_number(
+            self, tmp_path, monkeypatch, capsys):
+        """A consumer read the count, ran `mock generate --check` to chase
+        it, found that green too, and took the pair for a bug. Saying "does
+        not fail, by convention" turns two green exits into a rule."""
+        _, out = self._stale(tmp_path, monkeypatch, capsys)
+
+        assert "does NOT fail this check" in out
+        assert "jsonui-test mock generate" in out
+
+    def test_the_convention_line_is_absent_when_nothing_is_stale(
+            self, tmp_path, monkeypatch, capsys):
+        """A standing line is the one a new finding hides behind."""
+        import argparse
+        proj = self._project(tmp_path)
+        monkeypatch.chdir(proj)
+        cli.cmd_validate(argparse.Namespace(
+            files=["tests"], verbose=False, quiet=False, config=None,
+            no_mock_check=False, no_install=True, strict=False))
+
+        assert "does NOT fail this check" not in capsys.readouterr().out
+
+
 class TestTheMockLineSaysWhatItIsLookingAt:
-    def test_it_names_the_findings_it_does_not_carry(self, tmp_path,
-                                                     monkeypatch, capsys):
-        """`validate` prints NOTHING about a stale generated body — measured
-        by planting one and running the two printers this command uses. That
-        is a design decision (`mock generate --check` is the command for it)
-        and it was invisible, so a project that never runs `--check`
-        separately read `Mock contract` as the whole answer."""
+    def test_it_names_the_two_findings_it_really_does_not_carry(
+            self, tmp_path, monkeypatch, capsys):
+        """Kept only for the two that survived measurement. Both fixtures
+        were checked against the report object first — an absent line
+        proves nothing about a finding that never occurred — and both
+        produce a `misnamed` entry and a note-only body while `validate`
+        stays silent about them."""
         import argparse
         proj = TestTheBaselineDoesNotMove()._project(tmp_path, {})
         monkeypatch.chdir(proj)
@@ -240,4 +366,5 @@ class TestTheMockLineSaysWhatItIsLookingAt:
         out = capsys.readouterr().out
 
         assert "mock generate --check" in out
-        assert "stale generated bodies" in out
+        assert "misnamed files" in out
+        assert "optional-field omissions" in out
