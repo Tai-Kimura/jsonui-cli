@@ -43,6 +43,13 @@ RSpec.describe KjuiTools::Core::Resources::StringManager, 'plural support' do
     described_class.new(config, source_path, resources_dir)
   end
 
+  def write_layout(relative_path)
+    path = File.join(layouts_dir, relative_path)
+    FileUtils.mkdir_p(File.dirname(path))
+    File.write(path, '{"type": "View"}')
+    path
+  end
+
   def read_strings_xml(lang_dir)
     REXML::Document.new(File.read(File.join(temp_dir, 'src/main/res', lang_dir, 'strings.xml')))
   end
@@ -99,7 +106,11 @@ RSpec.describe KjuiTools::Core::Resources::StringManager, 'plural support' do
       XML
 
       write_strings_json(plural_strings)
-      new_manager.send(:update_strings_xml, 'values')
+      # Reached the way production reaches it: the prune only deletes
+      # inside namespaces this build re-derived from a layout.
+      m = new_manager
+      m.process_strings([write_layout('home.json')], 1, 0)
+      m.send(:update_strings_xml, 'values')
 
       doc = read_strings_xml('values')
       expect(doc.root.elements["string[@name='home_items_count']"]).to be_nil

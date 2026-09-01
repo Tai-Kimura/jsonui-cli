@@ -63,6 +63,22 @@ RSpec.describe KjuiTools::Core::Resources::StringManager do
       doc.root.elements.to_a('string').map { |e| e.attributes['name'] }
     end
 
+    let(:layouts_dir) { File.join(temp_dir, 'src/main/assets/Layouts') }
+
+    # The prune may only delete inside namespaces THIS build re-derived,
+    # so the spec has to reach it the way production does: extraction
+    # first, then the write. Calling update_strings_xml on its own now
+    # lands in the third state (see 'when no strings were extracted').
+    def extract(*relative_paths)
+      files = relative_paths.map do |rel|
+        path = File.join(layouts_dir, rel)
+        FileUtils.mkdir_p(File.dirname(path))
+        File.write(path, '{"type": "View"}')
+        path
+      end
+      manager.process_strings(files, files.size, 0)
+    end
+
     before do
       File.write(File.join(resources_dir, 'strings.json'),
                  JSON.generate({ 'login' => { 'title' => 'Login' } }))
@@ -77,6 +93,7 @@ RSpec.describe KjuiTools::Core::Resources::StringManager do
       XML
       allow(KjuiTools::Core::Logger).to receive(:info)
       allow(KjuiTools::Core::Logger).to receive(:debug)
+      extract('login.json')
       manager.send(:update_strings_xml, 'values')
     end
 
@@ -94,6 +111,54 @@ RSpec.describe KjuiTools::Core::Resources::StringManager do
 
     it 'never touches hand-written keys outside managed prefixes' do
       expect(xml_names).to include('app_name')
+    end
+
+    context 'when the section is gone from strings.json but the layout is not' do
+      # jui build copies the shared strings.json over this tree wholesale,
+      # so a section can vanish from under live keys without the layout
+      # moving. The prefix used to leave the managed set together with its
+      # keys, which orphaned them here forever.
+      it 'prunes the orphaned keys under BOTH spellings of the namespace' do
+        File.write(File.join(resources_dir, 'strings.json'), JSON.generate({}))
+        File.write(strings_xml, <<~XML)
+          <?xml version="1.0" encoding="utf-8"?>
+          <resources>
+              <string name="app_name">My App</string>
+              <string name="summary_cell_label">sjui spelling</string>
+              <string name="detail_summary_cell_label">kjui spelling</string>
+          </resources>
+        XML
+        fresh = described_class.new(config, source_path, resources_dir)
+        path = File.join(layouts_dir, 'detail/summary_cell.json')
+        FileUtils.mkdir_p(File.dirname(path))
+        File.write(path, '{"type": "View"}')
+        fresh.process_strings([path], 1, 0)
+        fresh.send(:update_strings_xml, 'values')
+
+        expect(xml_names).not_to include('summary_cell_label')
+        expect(xml_names).not_to include('detail_summary_cell_label')
+        expect(xml_names).to include('app_name')
+      end
+    end
+
+    context 'when no strings were extracted this build' do
+      # strings.json may then be another writer's file, and its silence
+      # about a key is not evidence the key is stale. Declining to judge
+      # must be distinguishable from judging and finding nothing.
+      it 'prunes nothing and says it declined' do
+        File.write(strings_xml, <<~XML)
+          <?xml version="1.0" encoding="utf-8"?>
+          <resources>
+              <string name="login_title">Old Login</string>
+              <string name="login_removed_key">Gone from strings.json</string>
+          </resources>
+        XML
+        fresh = described_class.new(config, source_path, resources_dir)
+        expect(KjuiTools::Core::Logger).to receive(:info).with(/Did not prune/).once
+        fresh.send(:update_strings_xml, 'values')
+
+        expect(xml_names).to include('login_removed_key')
+      end
     end
   end
 

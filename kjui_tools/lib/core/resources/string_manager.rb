@@ -3,6 +3,7 @@
 require 'json'
 require 'fileutils'
 require 'rexml/document'
+require 'pathname'
 require_relative '../logger'
 require_relative '../generated_marker'
 require_relative '../plural_validator'
@@ -29,6 +30,18 @@ module KjuiTools
           # { extraction prefix => the layout's other section spellings }
           @namespace_aliases = {}
           @strings_data = load_strings_json
+          # Whether THIS build re-derived strings.json from the layouts.
+          # The prune below deletes on the strength of what strings.json
+          # says, so it may only run when strings.json is this build's own
+          # output — see the three states in update_strings_xml.
+          @extraction_ran = false
+          # The section spellings extraction actually re-derived, in every
+          # convention that names them. This is the prune's namespace, and
+          # it is recorded rather than re-globbed on purpose: a namespace
+          # is only safe to delete inside if THIS build re-read the layout
+          # that owns it. Globbing the layouts directory would claim the
+          # namespace of a layout extraction never opened.
+          @extracted_namespaces = []
         end
 
         # Main process method called from ResourcesManager
@@ -36,6 +49,8 @@ module KjuiTools
           validate_plural_strings!
 
           return if processed_files.empty?
+
+          @extraction_ran = true
 
           Core::Logger.info "Extracting strings from #{processed_count} files (#{skipped_count} skipped)..."
 
@@ -56,10 +71,6 @@ module KjuiTools
           return if @plural_validated
           @plural_validated = true
 
-          layouts_dir = File.join(@source_path, @config['source_directory'] || 'src/main', 'assets/Layouts')
-          layout_files = Dir.glob(File.join(layouts_dir, '**/*.json')).reject do |file|
-            file.include?('/Resources/')
-          end
           validate_plural_strings_data!(@strings_data, layout_files, Core::Logger)
         end
 
@@ -99,6 +110,19 @@ module KjuiTools
 
         private
 
+        # The layouts this app declares. Declared once: both the plural
+        # validation and the prune namespace read it, and a second spelling
+        # of the directory is how the two would come to disagree.
+        def layouts_dir
+          File.join(@source_path, @config['source_directory'] || 'src/main', 'assets/Layouts')
+        end
+
+        def layout_files
+          Dir.glob(File.join(layouts_dir, '**/*.json')).reject do |file|
+            file.include?('/Resources/')
+          end
+        end
+
         # Load existing strings.json file
         def load_strings_json
           return {} unless File.exist?(@strings_file)
@@ -136,7 +160,7 @@ module KjuiTools
           Core::Logger.debug "Processing #{processed_files.size} files for strings"
 
           # Get the layouts directory to calculate relative paths
-          layouts_dir = File.join(@source_path, @config['source_directory'] || 'src/main', 'assets/Layouts')
+          base_dir = layouts_dir
 
           processed_files.each do |json_file|
             begin
@@ -145,7 +169,7 @@ module KjuiTools
               data = JSON.parse(content)
 
               # Get file prefix from relative path
-              relative_path = Pathname.new(json_file).relative_path_from(Pathname.new(layouts_dir)).to_s
+              relative_path = Pathname.new(json_file).relative_path_from(Pathname.new(base_dir)).to_s
               file_prefix = generate_file_prefix(relative_path)
               # The other spelling of this layout's section (sjui names it
               # after the basename). Recorded so the merge does not mint a
@@ -153,6 +177,11 @@ module KjuiTools
               @namespace_aliases[file_prefix] = JsonUIShared::StringManagerCore.namespace_candidates(
                 relative_path, preferred: :relative
               )
+              # Claimed whether or not this layout yields any string: a
+              # layout with nothing to extract declares an EMPTY section,
+              # and a key left over under its name is stale by exactly the
+              # same argument.
+              @extracted_namespaces.concat(@namespace_aliases[file_prefix])
 
               # Extract strings recursively from JSON structure (without modifying)
               file_strings = extract_strings_from_json(data)
@@ -265,14 +294,38 @@ module KjuiTools
             end
           end
 
-          # Prune stale keys: a key inside a JsonUI-managed namespace
-          # (`<file_prefix>_...` for a prefix present in strings.json) that
+          # Prune stale keys: a key inside a JsonUI-managed namespace that
           # strings.json no longer declares was removed from the SSoT and
-          # must not survive here (same semantics as iOS Localizable.strings).
-          # Hand-written keys outside the managed prefixes are never touched.
+          # must not survive here (same semantics as iOS
+          # Localizable.strings). Keys outside the managed namespace are
+          # never touched.
+          #
+          # The namespace is derived from the LAYOUTS as well as from the
+          # sections, because a section's prefix leaves the managed set
+          # together with its keys: deleting `summary_cell` from
+          # strings.json used to orphan `summary_cell_label` here
+          # FOREVER, since nothing left in strings.json claimed the prefix.
+          # A layout keeps claiming its own namespace after its section is
+          # gone, which is exactly the case that recurs — jui build
+          # overwrites this tree's strings.json wholesale from the shared
+          # copy, so a section can vanish from under live keys without the
+          # layout moving.
+          #
+          # Both spellings count. kjui names a section by the relative
+          # path and sjui by the basename (a deliberate divergence — see
+          # StringManagerCore.namespace_candidates, which is the one place
+          # that convention is written down); a file written by either
+          # extractor is the same file's namespace.
+          #
+          # NOT covered, deliberately: a key whose layout AND section are
+          # both gone. Nothing derivable distinguishes it from a key the
+          # app author wrote by hand, and deleting the second kind is the
+          # worse failure. Those need a ledger or a mark in the generated
+          # file; both are open designs.
           expected_keys = {}
           expected_plural_keys = {}
           managed_prefixes = []
+          @extracted_namespaces.each { |spelling| managed_prefixes << "#{spelling}_" }
           @strings_data.each do |file_prefix, file_strings|
             next unless file_strings.is_a?(Hash)
             managed_prefixes << "#{file_prefix}_"
@@ -284,10 +337,35 @@ module KjuiTools
               end
             end
           end
+          managed_prefixes.uniq!
+          stale = existing_strings.reject do |name, _elem|
+            expected_keys[name] ||
+              managed_prefixes.none? { |prefix| name.start_with?(prefix) }
+          end
+          stale_plurals = existing_plurals.reject do |name, _elem|
+            expected_plural_keys[name] ||
+              managed_prefixes.none? { |prefix| name.start_with?(prefix) }
+          end
+
+          # Three states, so that "declined to judge" can never be read as
+          # "judged and found nothing". The prune deletes on the strength
+          # of strings.json; when this build did not re-derive strings.json
+          # from the layouts, the file may be another writer's — jui build
+          # copies the shared one over this tree — and its silence about a
+          # key is not evidence the key is stale.
+          unless @extraction_ran
+            candidates = stale.size + stale_plurals.size
+            Core::Logger.info(
+              "Did not prune #{lang_dir}/strings.xml: no strings were " \
+              "extracted this build, so strings.json is not this build's " \
+              "own output (#{candidates} key(s) left unjudged)"
+            )
+            write_strings_xml(doc, strings_xml_file, lang_dir)
+            return
+          end
+
           pruned_count = 0
-          existing_strings.each do |name, elem|
-            next if expected_keys[name]
-            next unless managed_prefixes.any? { |prefix| name.start_with?(prefix) }
+          stale.each do |name, elem|
             resources.delete_element(elem)
             pruned_count += 1
             Core::Logger.debug "Pruned stale string '#{name}' from #{lang_dir}/strings.xml"
@@ -295,17 +373,22 @@ module KjuiTools
           # Same rule for <plurals>: prunes keys removed from strings.json
           # AND the stale twin left behind when a key switches between the
           # flat and plural forms.
-          existing_plurals.each do |name, elem|
-            next if expected_plural_keys[name]
-            next unless managed_prefixes.any? { |prefix| name.start_with?(prefix) }
+          stale_plurals.each do |name, elem|
             resources.delete_element(elem)
             pruned_count += 1
             Core::Logger.debug "Pruned stale plurals '#{name}' from #{lang_dir}/strings.xml"
           end
-          Core::Logger.info "Pruned #{pruned_count} stale strings from #{lang_dir}/strings.xml" if pruned_count > 0
+          if pruned_count > 0
+            Core::Logger.info "Pruned #{pruned_count} stale strings from #{lang_dir}/strings.xml"
+          else
+            Core::Logger.info "Nothing to prune in #{lang_dir}/strings.xml"
+          end
 
+          write_strings_xml(doc, strings_xml_file, lang_dir)
+        end
 
-          # Write updated XML with custom formatting to prevent multiline strings
+        # Write updated XML with custom formatting to prevent multiline strings
+        def write_strings_xml(doc, strings_xml_file, lang_dir)
           File.open(strings_xml_file, 'w') do |file|
             # Use a custom formatter that doesn't wrap text content
             formatter = REXML::Formatters::Pretty.new(4)
