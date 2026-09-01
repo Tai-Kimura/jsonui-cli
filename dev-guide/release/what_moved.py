@@ -42,6 +42,12 @@ SURFACES = [
     ("vendored platform codegen — arrives via `jui sync_tool`",
      r"^(sjui_tools|kjui_tools|rjui_tools)/"),
     ("jui CLI — machine-shared, arrives via bootstrap", r"^jui_tools/"),
+    # The SSoT and the manifests that certify its emit. This is the widest
+    # surface there is — a declaration change reaches every face's vocabulary
+    # through three re-vendored tables — and it was unclassified until the
+    # v1.7.53 range put attribute_definitions.json through this script.
+    ("SSoT declaration + emit manifests — every face's vocabulary",
+     r"^(shared/core/|conformance/manifest\.json$|build/attr_codegen/manifest\.json$)"),
     ("release procedure / installer — maintainer side only",
      r"^(dev-guide|installer)/"),
     # CI config is maintainer-side too, but it is worth its own line: a face
