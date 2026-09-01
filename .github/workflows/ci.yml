@@ -275,6 +275,29 @@ jobs:
         # ledger, fails here. See conformance/coverage.json.
         run: |
           python3 -c "import sys; from jui_cli.cli import main; sys.exit(main(['conformance','coverage']))"
+      # The two links to the canonical repo that no gate here can see.
+      #
+      # `test_schema_drift.py` compares the SHIPPED mock schema against this
+      # repo's constants; nothing compared it against the copy it is copied
+      # FROM, so a fix applied to one side survived until the next re-vendor
+      # and was then silently reverted. And the condition-key set exists in
+      # five places — the canonical schema, this repo, and one hard-coded
+      # set per driver — of which only the first two were pinned to each
+      # other. A driver that does not know a condition key treats it as
+      # fail-safe UNMET, so the gated step is SKIPPED, which reads on a
+      # report exactly like a pass.
+      #
+      # NOT PINNED to a ref, deliberately, unlike the vendored-manifest
+      # guards above: a pin defers detection until somebody moves the pin,
+      # which is the manual re-vendor step this replaces. The cost is that a
+      # change in the sibling repo can turn this job red with no change
+      # here — which is the guard reporting real drift, and is the point.
+      - uses: actions/checkout@v4
+        with:
+          repository: Tai-Kimura/jsonui-test-runner
+          path: .canonical
+      - name: Canonical sync (mock schema bytes, condition keys per driver)
+        run: dev-guide/ci/check-canonical-sync.py .canonical
 
   # ------------------------------------------------------------------ #
   # Web conformance: the full generated fixture suite through the real

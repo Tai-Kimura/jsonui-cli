@@ -56,3 +56,18 @@ python -m pytest test_tools/tests/test_schema_drift.py   # must pass, or a real 
 If `test_schema_drift.py` fails after re-vendoring, the canonical schema and the
 validator constants genuinely disagree — fix `schema.py` / `report.py` (or the
 schema) so the mirror holds, do not loosen the test.
+
+Then confirm the two mock-schema copies are still one file:
+
+```bash
+dev-guide/ci/check-canonical-sync.py "$TR"
+```
+
+**That line is a convenience, not the guard.** A step in a procedure runs when
+somebody remembers it, and the failure this closes is precisely somebody not
+remembering: `skipRequestValidation` was added to the shipped copy alone and
+would have been reverted by the next `cp` with every gate green, and the two
+copies then drifted a SECOND time within minutes when the same sentence was
+hand-written into both and differed by one `\u2014` escape. The gate is the
+`Canonical sync` step in `ci.yml`, which checks this repo out and runs the same
+script on every push. Running it here just saves you a round trip.
