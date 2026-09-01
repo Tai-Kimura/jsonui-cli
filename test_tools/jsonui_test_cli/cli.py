@@ -157,8 +157,9 @@ def cmd_validate(args):
     mock_errors = 0
     orphans = None
     unchecked_mocks = None
+    uncounted = {}
     if total_errors == 0 and not getattr(args, "no_mock_check", False):
-        mock_rc, orphans, mock_errors = _check_mocks_against_swagger(
+        mock_rc, orphans, mock_errors, uncounted = _check_mocks_against_swagger(
             getattr(args, "config", None))
         if orphans is None:
             unchecked_mocks = _warn_unchecked_mocks(
@@ -226,11 +227,13 @@ def cmd_validate(args):
     #                 vendored toolchain older than this CLI. One command
     #                 fixes each, and a warning with a one-line remedy is
     #                 doing its job by staying until someone runs it.
-    #   not counted — the mock gate's findings. The ones that persist are
-    #                 non-gating BY RULING (form B: a status no operation
-    #                 declares is a premise, not a declarable), so they can
-    #                 never be cleared, and counting them puts a permanent
-    #                 +1 on every project that has one.
+    #   not counted — the mock gate's uncompared scenarios. Three reasons,
+    #                 not one, and the summary now names them separately:
+    #                 a status no operation declares can never be cleared
+    #                 (form B, non-gating BY RULING); a scenario declaring
+    #                 its own `undeclaredStatus` should not be; a scenario
+    #                 with no status at all CAN be, and is the one this
+    #                 blanket rule was hiding.
     #
     # A consumer running "keep Warnings at zero so a new one is visible"
     # measured both and asked, because the SAME label carries the two.
@@ -279,11 +282,33 @@ def cmd_validate(args):
     # them with their own denominator, which is the line to read for them.
     # Two counts answering two questions, not one count with a hole in it.
     #
-    # Left open: mock warnings that ARE actionable (a stale generated body,
-    # which regenerating clears) are excluded by the same blanket rule. The
-    # principled split is "count what the reader can act on", and it needs
-    # each mock warning classified rather than a rule about where they come
-    # from.
+    # CORRECTED, by measurement rather than by reading: this used to say the
+    # actionable mock warnings (a stale generated body, which regenerating
+    # clears) were "excluded by the same blanket rule". They are not
+    # excluded from the count — `validate` NEVER PRINTS THEM.
+    #
+    # HOW THAT WAS MEASURED, because the next reader needs the procedure
+    # more than the conclusion: take the existing `TestGeneratedTree`
+    # fixture, edit one file under `generated/` so its body no longer
+    # matches the schema, run `generate(..., check=True)`, and confirm the
+    # report carries it (`stale_generated == 1`, `has_drift False`). Then
+    # feed that same report to the only two printers this command uses —
+    # `_print_uncompared` and `_print_drift_findings` — and capture stdout.
+    # It is EMPTY. `_print_drift_findings` carries only the gating labels,
+    # so nothing on that path can mention a stale body.
+    #
+    # A visibility hole, not a counter hole; the two have different fixes,
+    # and the `mock contract:` line now says which findings it looks at.
+    #
+    # The original was written from the counter alone, without running the
+    # printers — which is how a claim about OUTPUT gets made from a reading
+    # of ACCOUNTING, and it is why the procedure is written down here.
+    #
+    # Still open, and now visible in the summary rather than in a comment:
+    # a scenario with NO STATUS is uncounted and is actionable (adding one
+    # clears it; the editor schema already marks it required). Moving it
+    # into `Warnings:` would change the baseline of every project that has
+    # one, so it is named in the footnote and left where it is.
 
     # Summary
     print(f"\n{'='*50}")
@@ -299,6 +324,7 @@ def cmd_validate(args):
     if unchecked_mocks:
         summary += f", Unchecked mocks: {unchecked_mocks}"
     print(summary)
+    _print_uncounted_footnote(uncounted)
 
     if total_errors > 0:
         return 1
@@ -757,14 +783,14 @@ def _check_mocks_against_swagger(config_path):
         # and returning 0 made every mock-less project print the sentence a
         # clean result prints. Same reason below — a report we cannot read is
         # not a report of zero orphans.
-        return 0, None, 0
+        return 0, None, 0, {}
     resolved, mock_path, config = inputs
     scope = _load_path_scope(config_path)
 
     report = generate(resolved, mock_path, check=True, scope=scope,
                       strict=bool(config.get("checkOptionalFields", False)))
     if not isinstance(report, CheckReport):
-        return 0, None, 0
+        return 0, None, 0, {}
     orphans = len(report.orphaned)
     # What the check measured, on every run that reaches it — before the
     # early return, because a clean result was where this went missing.
@@ -776,9 +802,20 @@ def _check_mocks_against_swagger(config_path):
     # green on a branch the implementation cannot take — the check had
     # measured it and said so only on the other command.
     print(f"\n{report.contract_summary}")
-    _print_uncompared(report)
+    uncounted = _print_uncompared(report)
+    # What this gate is looking at, said where it prints its verdict. It
+    # reports the GATING findings and the uncompared ones; a stale generated
+    # body, a misnamed file and an optional-field omission are measured on
+    # the same report object and printed only by `mock generate --check`.
+    # MEASURED, not read off the call graph: one stale generated body was
+    # planted and the two printers this command uses emitted nothing at all
+    # for it. Without this line a project that never runs `--check`
+    # separately reads "Mock contract" as the whole answer.
+    print("  (this line reports gating findings and uncompared scenarios; "
+          "stale generated bodies, misnamed files and optional-field "
+          "omissions appear only in `jsonui-test mock generate --check`)")
     if not report.has_drift:
-        return 0, orphans, 0
+        return 0, orphans, 0, uncounted
 
     print(f"\n{'='*50}")
     print("Mock contract drift:")
@@ -789,7 +826,7 @@ def _check_mocks_against_swagger(config_path):
     print("\nPass --no-mock-check to skip this gate.")
     # The count the caller prints as `Errors:`, from the same buckets the
     # exit code is decided by.
-    return 1, orphans, sum(count for _, count in report.gating)
+    return (1, orphans, sum(count for _, count in report.gating), uncounted)
 
 
 def _print_uncompared(report):
@@ -811,13 +848,21 @@ def _print_uncompared(report):
     forms gate. So the rule is that a reader knows the weight from the
     label, and `[ABSENT]`/`[EXTRA]`/`[STATUS]` gate while
     `[WARN]`/`[OPTIONAL]`/`[SCOPE]`/`[NAME]` do not.
+
+    Returns the count per `UNMATCHED_NOTE_CLASSES`, because the summary has
+    to say why these are not in `Warnings:` and the three reasons are not
+    one reason. Classified by the module that BUILDS the notes, so a reword
+    there cannot silently reclassify them here.
     """
     # `unmatched_notes`, not `unmatched`: the gated subsets of it are
     # printed as [EXTRA] and [STATUS], and printing them here too put one
     # scenario on screen twice under two labels that contradict each other —
     # one saying the run failed on it, the other that it was not compared.
+    from .mock.generate import UNMATCHED_NOTE_CLASSES, classify_unmatched_note
+    uncounted = {name: 0 for name in UNMATCHED_NOTE_CLASSES}
     for note in report.unmatched_notes:
         print(f"  [WARN]    {note} — not compared")
+        uncounted[classify_unmatched_note(note)] += 1
     if report.out_of_scope:
         # `[ORPHAN] (mock file, not in swagger)` is the only thing this path
         # ever said about an unmatched mock, and for these files it would be
@@ -830,6 +875,47 @@ def _print_uncompared(report):
         print(f"  [SCOPE]   {len(report.out_of_scope)} mock(s) outside "
               f"this project's API paths ({report.scope_note or 'all paths'})"
               " — not checked, listed by `mock generate --check`")
+    return uncounted
+
+
+def _print_uncounted_footnote(uncounted: dict) -> None:
+    """Say how many findings above are NOT in `Warnings:`, and why — in as
+    many sentences as there are reasons.
+
+    A summary key was the other candidate (`Unactionable: 93`). Not taken:
+    it creates a new thing to grep and a permanently non-zero NUMBER, which
+    invites the "keep it at zero" discipline onto a count that can never be
+    zero — the standing warning that teaches people to stop reading. A
+    footnote carries the same number without becoming a field, so a lane
+    running `Warnings: 0` keeps its baseline exactly as it is.
+
+    THE REASONS ARE NOT ONE REASON. "Cannot be cleared" and "should not be
+    cleared" are different sentences; written as one, a reader takes the
+    second for the first and waits for a release that makes it fixable. And
+    a third was found while writing this — a scenario with no status at all
+    is uncounted AND clearable, which the blanket rule had hidden from
+    everyone including the two people who wrote the rule down.
+    """
+    total = sum(uncounted.values())
+    if not total:
+        return
+    print(f"{total} finding(s) above are not counted in Warnings:")
+    if uncounted.get("no-remedy"):
+        print(f"  {uncounted['no-remedy']}: a status no operation declares. "
+              "There is no remedy — such a code is a premise, not something "
+              "a scenario can declare.")
+    if uncounted.get("declared"):
+        print(f"  {uncounted['declared']}: the scenario declares its own "
+              "`undeclaredStatus`. Clearing it would undo a decision "
+              "somebody made on purpose.")
+    if uncounted.get("actionable"):
+        # Deliberately worded as an exception to the two above rather than
+        # alongside them: this one CAN be cleared, and saying so in the same
+        # breath as "no remedy" is how it stayed invisible.
+        print(f"  {uncounted['actionable']}: a scenario with no status at "
+              "all — this one CAN be cleared by adding one (the mock editor "
+              "schema already marks `status` required), and is not counted "
+              "only because it arrives through the same channel.")
 
 
 def _load_test_config(explicit_path=None):

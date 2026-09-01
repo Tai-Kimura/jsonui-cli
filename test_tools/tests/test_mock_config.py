@@ -132,7 +132,14 @@ class TestEndToEnd:
             assert _regenerate_stale_mocks(None) == 0
             # (exit code, orphans, errors) — the error count joined the
             # return value so the caller's `Errors:` line can read it.
-            assert _check_mocks_against_swagger(None) == (0, 0, 0)
+            rc, orphans, errors, uncounted = _check_mocks_against_swagger(None)
+            assert (rc, orphans, errors) == (0, 0, 0)
+            # 4th element: the uncompared notes, classified by whether the
+            # reader can act on them. Asserted as a SUM rather than as `{}`
+            # — the gate ran, so it returns the zeroed classes, and pinning
+            # the literal shape would fail the day a fourth class is added
+            # without anything being wrong.
+            assert sum(uncounted.values()) == 0
         finally:
             os.chdir(cwd)
         generated = list((proj / "tests" / "mocks" / "generated").rglob("*.mock.json"))

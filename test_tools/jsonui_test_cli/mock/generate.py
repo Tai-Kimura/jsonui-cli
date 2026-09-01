@@ -1502,6 +1502,43 @@ _STATUS_FORM_REMEDY = {
 GATING_STATUS_FORMS = ("A", "C")
 
 
+#: The two shapes an unmatched note can take. Declared here, beside the
+#: code that builds them, because `cli.py` has to read a note back to say
+#: whether the reader can act on it — and a reader that pattern-matches a
+#: string the producer is free to reword is a reader that goes quietly
+#: wrong. Same shape as `GATING_BUCKETS`: one declaration, every consumer.
+NO_STATUS_NOTE = ": no status"
+
+#: What a note in `unmatched_notes` means for the person reading it. The
+#: three are NOT one thing, and collapsing them loses which:
+#:
+#:   "actionable"  a scenario with no status at all. Adding one clears it —
+#:                 the editor schema already marks it required, so this is
+#:                 a project authoring without that schema.
+#:   "no-remedy"   form B: a status no operation declares. The ruling is
+#:                 that this is a premise rather than a declarable, so
+#:                 `_STATUS_FORM_REMEDY` deliberately has no B entry and
+#:                 there is nothing for anyone to do.
+#:   "declared"    forms A and C that reached here rather than the gate,
+#:                 which happens exactly when the scenario declares its own
+#:                 `undeclaredStatus`. Deliberate; clearing it would undo
+#:                 the author's decision.
+#:
+#: "cannot be cleared" and "should not be cleared" are different sentences.
+#: Written as one, a reader takes the second for the first and waits for a
+#: release that makes it fixable.
+UNMATCHED_NOTE_CLASSES = ("actionable", "no-remedy", "declared")
+
+
+def classify_unmatched_note(note: str) -> str:
+    """Which of `UNMATCHED_NOTE_CLASSES` this note is."""
+    if note.endswith(NO_STATUS_NOTE):
+        return "actionable"
+    if "[B]" in note:
+        return "no-remedy"
+    return "declared"
+
+
 def _collect_absent(
     doc: OpenApiDoc,
     op: Operation,
@@ -1679,7 +1716,7 @@ def _check_bodies(
                 "that overlays this route")
         status = scenario.get("status")
         if status is None:
-            unmatched.append(f"{rel}  {name}: no status")
+            unmatched.append(f"{rel}  {name}{NO_STATUS_NOTE}")
             continue
         if str(status) not in op.responses and "default" not in op.responses:
             form, sibling = (_status_context(op, status, all_ops, scope)
