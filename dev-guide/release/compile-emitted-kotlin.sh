@@ -14,6 +14,19 @@
 # before shipping, not something it offers its consumers. It runs on a
 # maintainer's machine, from the Gradle cache that is already there.
 #
+# WHAT IT DOES NOT COVER — read before quoting a green from it:
+# only KOTLIN_RUNTIME is compiled. The per-screen test file and the harness
+# skeleton are not, because they pull Robolectric and androidx, which the
+# cache here does not carry. One of the two blockers above (the untyped
+# `listOf()`) lived in the PER-SCREEN TEST FILE, so this script would not
+# have caught it where it actually happened. It closes the escaping class
+# and the runtime's own type inference; it is not "Kotlin is compiled".
+#
+# Red-checked in both historical forms, injected into the runtime:
+#   an unescaped `"`      -> 8 errors, exit 1
+#   an untyped `listOf()` -> 7 errors, exit 1
+#   unmodified            -> exit 0
+#
 # Exit codes: 0 compiled, 1 did not compile, 2 could not be attempted
 # (missing compiler or dependency — say so rather than pass).
 set -u
