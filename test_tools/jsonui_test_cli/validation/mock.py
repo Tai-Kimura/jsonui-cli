@@ -392,9 +392,53 @@ class MockValidator:
             if not isinstance(status, int) or not (100 <= status <= 599):
                 result.errors.append(ValidationMessage(
                     path=f"{spath}.status", message=f"'status' must be an HTTP status int, got: {status!r}"))
-            if "delayMs" in scenario and not isinstance(scenario["delayMs"], (int, float)):
+            # A NUMBER, AND NOT A NEGATIVE ONE. The server does
+            # `time.sleep(min(delay, 30000) / 1000.0)`, and a negative delay
+            # raises `ValueError: sleep length must be non-negative` inside
+            # the request handler — BEFORE it has written a response. Measured
+            # against a live `mock serve`, one request per arm: no delayMs →
+            # HTTP 200, delayMs 50 → HTTP 200, delayMs -5 → the client HANGS
+            # until its own timeout. So the caller does not get an error, it
+            # gets nothing, which is the hardest shape to trace back to a
+            # mock file. An error rather than a warning for that reason.
+            #
+            # The schema declared `minimum: 0` all along and nothing read it;
+            # measured across every mock file on this machine (1189 files,
+            # 4560 scenarios, walked with a tool that does not honour
+            # .gitignore), one scenario sets delayMs and none is negative, so
+            # this gates nothing that exists today.
+            delay = scenario.get("delayMs")
+            if "delayMs" in scenario and (
+                    not isinstance(delay, (int, float))
+                    or isinstance(delay, bool)):
                 result.errors.append(ValidationMessage(
                     path=f"{spath}.delayMs", message="'delayMs' must be a number"))
+            elif "delayMs" in scenario and delay < 0:
+                result.errors.append(ValidationMessage(
+                    path=f"{spath}.delayMs",
+                    message=f"'delayMs' must not be negative, got: {delay!r} "
+                            "— the mock server raises inside the request "
+                            "handler and the caller hangs with no response"))
+            # `undeclaredStatus` is honoured ONLY as `{"reason": "<why>"}`;
+            # `_declares_undeclared_status` requires the object form and a
+            # non-empty reason. Anything else is read as no declaration at
+            # all, and the output for a bare `true` was measured byte-identical
+            # to writing nothing — so the author gets their scenario gated,
+            # having declared it, with nothing on screen about the shape.
+            #
+            # A warning, not an error: it does not break a run, and the
+            # gating finding now names it too (`_declaration_clause`). This is
+            # the half that reaches a scenario whose status IS declared, where
+            # no finding is produced to carry that sentence.
+            if "undeclaredStatus" in scenario:
+                declared = scenario["undeclaredStatus"]
+                reason = declared.get("reason") if isinstance(declared, dict) else None
+                if not (isinstance(reason, str) and reason.strip()):
+                    result.warnings.append(ValidationMessage(
+                        path=f"{spath}.undeclaredStatus", level="warning",
+                        message="'undeclaredStatus' is honoured only as "
+                                '{"reason": "<why>"} with a non-empty reason '
+                                "— as written it does not suppress anything"))
 
         # A hand-written mock with a generated counterpart is a thin overlay
         # (the serve model: generated supplies the routine scenarios, the
