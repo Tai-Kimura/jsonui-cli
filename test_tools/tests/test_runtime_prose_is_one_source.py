@@ -142,7 +142,10 @@ class TestTheRenderingIsFaithful:
         message would differ from the prose by an amount no assertion on a
         phrase would notice."""
         for part in prose.RESOLVE_STRING_FAILURE:
-            if isinstance(part, prose.Value):
+            # "is prose", not "is a Value": `Quoted` is a separate marker
+            # and not a subclass, so a filter naming one of the two silently
+            # stopped covering the other the day the second one arrived.
+            if not isinstance(part, str):
                 continue
             assert "".join(prose._chunks(part, language, width)) == part
 
@@ -184,3 +187,115 @@ class TestTheRenderingIsFaithful:
         the escaper does — the prose does not have to know."""
         assert prose.message(("$5",), "kotlin", indent=0) == '"\\$5"'
         assert prose.message(("$5",), "swift", indent=0) == '"$5"'
+
+
+class TestValuesAreQuotedByTheLanguage:
+    """A value shown back to the reader goes in through the language's own
+    quoting, not between two literal quote characters.
+
+    The three copies disagreed about this before `3dcaf4b7` merged them,
+    and THE MERGE TOOK THE WEAKEST: TypeScript had `JSON.stringify`, Kotlin
+    and Swift hand-wrote the quotes around a raw splice, and the shared
+    form became the hand-written one. So consolidating made two languages
+    agree with the third rather than with the safe one — "they now agree"
+    does not say what they agree ON, and a merge is a choice even when it
+    is not written down as one.
+
+    It matters here more than it would elsewhere: `resolveString` fails on
+    values nobody expected, so the values this message carries are exactly
+    the ones most likely to hold a quote or a newline. The worse the value,
+    the worse the message describing it.
+
+    Measured before the fix by running the rendered expression in all three
+    languages with `resolved` built from character codes (no fixture
+    escaping involved, so the probe is not testing the escaper with
+    itself): 3/3 printed the raw quote and the raw newline. After: 3/3
+    escape them, and all three outputs are byte-identical — including
+    `\\\\`, `\\t`, `\\b`, `\\f` and `\\u0001`.
+    """
+
+    def test_both_values_in_the_failure_are_quoted_not_spliced(self):
+        """The regression as a property of the constant. `Value` splices
+        raw, which stays right for a value the sentence describes some
+        other way — so this is asserted of THIS message, where both values
+        are handed back to the reader verbatim."""
+        # Every part that is not prose must be `Quoted`. Written this way
+        # round on purpose: `isinstance(part, Value) and not
+        # isinstance(part, Quoted)` reads like the same claim and is
+        # VACUOUS, because `Quoted` is a separate marker rather than a
+        # subclass — it can never find anything. That was the first draft.
+        spliced = [part for part in prose.RESOLVE_STRING_FAILURE
+                   if not isinstance(part, (str, prose.Quoted))]
+
+        assert spliced == [], (
+            "a value this message hands back to the reader must go through "
+            f"Quoted, not Value: {spliced}")
+
+    def test_the_prose_carries_no_quotes_around_the_values(self):
+        """The other half. Moving to `Quoted` while leaving the literal
+        quotes in the sentence would double them, and every phrase
+        assertion in this suite would still pass."""
+        prose_parts = [part for part in prose.RESOLVE_STRING_FAILURE
+                       if isinstance(part, str)]
+
+        assert not any('"' in part for part in prose_parts), prose_parts
+
+    @pytest.mark.parametrize("language,form", [
+        ("ts", "JSON.stringify(resolved)"),
+        ("kotlin", "quotedValue(resolved)"),
+        ("swift", "quotedValue(resolved)"),
+    ])
+    def test_each_language_spells_it_its_own_way(self, language, form):
+        assert form in prose.message((prose.Quoted("resolved"),), language,
+                                     indent=0)
+
+    @pytest.mark.parametrize("platform,expected", [
+        ("web", False), ("android", True), ("ios", True),
+    ])
+    def test_the_helper_is_emitted_exactly_where_it_is_called(
+            self, tmp_path, platform, expected):
+        """TypeScript's answer is one stdlib expression, so it carries no
+        helper and no marker. The two are tied together in the generator:
+        a runtime that needs the helper has the marker, and one that does
+        not, does not — otherwise a marker would go unspliced on the
+        platform with nothing to put there."""
+        runtime = _runtime_file(tmp_path, platform)
+
+        assert ("private fun quotedValue" in runtime
+                or "private func quotedValue" in runtime) is expected
+        assert ("quotedValue(resolved)" in runtime) is expected
+        assert ("JSON.stringify(resolved)" in runtime) is not expected
+
+
+class TestAnUnknownLanguageIsNamedNotRaised:
+    """A bare `KeyError: 'typescript'` is what this replaces.
+
+    The key is `ts`, which is not guessable from the miss, and the rest of
+    this toolchain already answers this kind of mistake by naming the
+    permitted set (`screenReady`'s five forms, `relatedFiles[].type`). One
+    flavour across the toolchain is the point; the caller being internal is
+    not a reason to answer differently.
+    """
+
+    @pytest.mark.parametrize("call", [
+        lambda: prose.message(("x",), "typescript", indent=0),
+        lambda: prose.doc(("x",), "typescript", indent=0),
+        lambda: prose.escape("x", "typescript"),
+        lambda: prose.quoter_helper("typescript"),
+        lambda: prose.harness_doc("typescript", summary="s", indent=0),
+    ])
+    def test_every_entry_point_names_the_set(self, call):
+        with pytest.raises(ValueError) as raised:
+            call()
+
+        message = str(raised.value)
+        assert "typescript" in message
+        assert all(name in message for name in prose.LANGUAGES), message
+
+    def test_the_three_tables_are_keyed_the_same(self):
+        """Asserted rather than left to whichever table is consulted first.
+        A language added to `_ESCAPES` alone would render a message and then
+        fail in `doc()`, one call later and in a different sentence."""
+        assert (set(prose._ESCAPES) == set(prose._DOC_STYLE)
+                == set(prose._QUOTED_FORM) == set(prose._QUOTER)
+                == set(prose.LANGUAGES))

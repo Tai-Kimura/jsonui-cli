@@ -1687,6 +1687,7 @@ interface BranchHarness {
   fun settle()
 }
 
+//<<resolve-string quoter>>
 //<<resolve-string doc>>
 fun resolveString(h: BranchHarness, key: String): String {
   val resolved = h.resolveString(key)
@@ -2496,6 +2497,7 @@ private func asDouble(_ value: Any?) -> Double? {
   return nil
 }
 
+//<<resolve-string quoter>>
 //<<resolve-string doc>>
 func resolveString(_ h: BranchHarness, _ key: String) -> String {
   let resolved = h.resolveString(key)
@@ -2672,8 +2674,17 @@ def _with_resolve_string_text(template: str, platform: str, *,
                               harness_doc: bool, percent_literal: bool = False,
                               sample: tuple = ()) -> str:
     language = _LANGUAGE[platform]
+    quoter = prose.quoter_helper(language)
+    text = template
+    if quoter:
+        # TypeScript spells this `JSON.stringify` and carries no marker, so
+        # the two are tied together: a runtime that needs the helper has the
+        # marker, and one that does not, does not. Splitting them would let
+        # a marker go unspliced on the platform that has no helper.
+        text = _splice(text, "//<<resolve-string quoter>>", quoter,
+                       percent_literal=percent_literal)
     text = _splice(
-        template, "//<<resolve-string doc>>",
+        text, "//<<resolve-string doc>>",
         prose.doc(prose.RESOLVE_STRING_RUNTIME_DOC, language, indent=0),
         percent_literal=percent_literal)
     text = _splice(

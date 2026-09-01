@@ -59,6 +59,45 @@ class Value:
     expr: str
 
 
+@dataclass(frozen=True)
+class Quoted:
+    """A runtime expression rendered INTO the message with its own quotes.
+
+    `Value` splices a string in raw. That is right for a value the message
+    already describes some other way, and wrong for one it presents back to
+    the reader: `resolveString` fails on values that are not what anyone
+    expected, so the values this message carries are exactly the ones most
+    likely to contain a quote or a newline — and a raw splice puts them
+    into the sentence unescaped.
+
+    The three copies disagreed about this before they were merged, and the
+    merge took the WEAKEST of them: TypeScript had `JSON.stringify`, Kotlin
+    and Swift hand-wrote the quotes around a raw splice, and the shared
+    form was the hand-written one. Consolidating made two languages
+    consistent with the third rather than with the safe one, which is a
+    failure mode worth naming: a merge chooses, and "they now agree" does
+    not say what they agree ON.
+
+    Measured before the fix, with `resolved` built from character codes so
+    no fixture escaping is involved — all three printed the raw quote and
+    the raw newline:
+
+        resolveString("k") returned "a"b
+        c", which is not …
+    """
+
+    expr: str
+
+
+#: How each language spells "this value, quoted and escaped". TypeScript
+#: has a one-expression stdlib answer; the other two get a helper emitted
+#: into their runtime, because they do not.
+_QUOTED_FORM = {
+    "ts": "JSON.stringify({expr})",
+    "kotlin": "quotedValue({expr})",
+    "swift": "quotedValue({expr})",
+}
+
 #: Order matters: the backslash rule has to run before the rules that
 #: introduce backslashes. Kotlin additionally reads `$` inside a plain
 #: literal as the start of a template expression; the other two do not.
@@ -76,9 +115,30 @@ _DOC_STYLE = {
 }
 
 
+#: The three tables are keyed the same on purpose. A language added to one
+#: and not the others would fail somewhere downstream with whichever table
+#: was consulted first, which is a worse place to read about it.
+assert set(_ESCAPES) == set(_DOC_STYLE) == set(_QUOTED_FORM) == set(LANGUAGES)
+
+
+def language_or_raise(language: str) -> str:
+    """Reject an unknown language by NAMING the ones that exist.
+
+    A bare `KeyError: 'typescript'` is what this replaces. The key is `ts`,
+    which is not guessable from the miss, and the rest of this toolchain
+    already answers this kind of mistake with the permitted set
+    (`screenReady`'s five forms, `relatedFiles[].type`). One flavour.
+    """
+    if language not in _ESCAPES:
+        raise ValueError(
+            f"unknown branch-runtime language {language!r} — expected one "
+            f"of {', '.join(repr(name) for name in sorted(_ESCAPES))}")
+    return language
+
+
 def escape(text: str, language: str) -> str:
     """The text as it must appear inside a double-quoted literal."""
-    for old, new in _ESCAPES[language]:
+    for old, new in _ESCAPES[language_or_raise(language)]:
         text = text.replace(old, new)
     return text
 
@@ -112,11 +172,14 @@ def message(parts, language: str, *, indent: int, width: int = WIDTH) -> str:
     "a line closing a literal followed by a line opening one, with nothing
     between them" unreachable here rather than only asserted against.
     """
+    language_or_raise(language)
     pad = " " * indent
     budget = width - indent - len('" +')
     terms: list[str] = []
     for part in parts:
-        if isinstance(part, Value):
+        if isinstance(part, Quoted):
+            terms.append(_QUOTED_FORM[language].format(expr=part.expr))
+        elif isinstance(part, Value):
             terms.append(part.expr)
         else:
             terms += [f'"{escape(chunk, language)}"'
@@ -141,7 +204,7 @@ def doc(paragraphs, language: str, *, indent: int, width: int = WIDTH) -> str:
     harness carries a code sample whose indentation is the point of it, and
     reflowing that would be the same defect as reflowing the sentence.
     """
-    opener, cont, closer, blank = _DOC_STYLE[language]
+    opener, cont, closer, blank = _DOC_STYLE[language_or_raise(language)]
     pad = " " * indent
     lines: list[str] = []
     for index, para in enumerate(paragraphs):
@@ -161,20 +224,101 @@ def doc(paragraphs, language: str, *, indent: int, width: int = WIDTH) -> str:
     return "\n".join(lines)
 
 
+#: The helper `Quoted` compiles to on the two platforms with no
+#: one-expression stdlib answer. Written as RAW Python strings: this is
+#: emitted source full of `\\` and `\"`, and a non-raw triple-quoted
+#: literal collapsing exactly those is `f43b8fb1`. What is typed here is
+#: what is emitted.
+#:
+#: Both follow `JSON.stringify` rather than their own language's rules, so
+#: one message means the same thing on all three platforms; that agreement
+#: is asserted by running all three, not by reading them.
+_QUOTER = {
+    "ts": "",
+    "kotlin": r"""
+/** The value as it should read inside a message: quoted, and escaped.
+ *
+ * `resolveString` fails on values nobody expected, so the ones it prints
+ * back are the ones most likely to hold a quote or a newline — and a raw
+ * splice ends the sentence early, exactly when the reader needs it. */
+private fun quotedValue(value: String): String {
+  val out = StringBuilder("\"")
+  for (ch in value) {
+    when (ch) {
+      '\\' -> out.append("\\\\")
+      '"' -> out.append("\\\"")
+      '\n' -> out.append("\\n")
+      '\r' -> out.append("\\r")
+      '\t' -> out.append("\\t")
+      '\b' -> out.append("\\b")
+      '\u000C' -> out.append("\\f")
+      else ->
+        if (ch.code < 0x20) {
+          val hex = ch.code.toString(16)
+          out.append("\\u").append("0".repeat(4 - hex.length)).append(hex)
+        } else {
+          out.append(ch)
+        }
+    }
+  }
+  return out.append("\"").toString()
+}
+""",
+    "swift": r"""
+/// The value as it should read inside a message: quoted, and escaped.
+///
+/// `resolveString` fails on values nobody expected, so the ones it prints
+/// back are the ones most likely to hold a quote or a newline — and a raw
+/// splice ends the sentence early, exactly when the reader needs it.
+private func quotedValue(_ value: String) -> String {
+  var out = "\""
+  for scalar in value.unicodeScalars {
+    switch scalar {
+    case "\\": out += "\\\\"
+    case "\"": out += "\\\""
+    case "\n": out += "\\n"
+    case "\r": out += "\\r"
+    case "\t": out += "\\t"
+    default:
+      if scalar.value == 8 {
+        out += "\\b"
+      } else if scalar.value == 12 {
+        out += "\\f"
+      } else if scalar.value < 0x20 {
+        let hex = String(scalar.value, radix: 16)
+        out += "\\u" + String(repeating: "0", count: 4 - hex.count) + hex
+      } else {
+        out.unicodeScalars.append(scalar)
+      }
+    }
+  }
+  return out + "\""
+}
+""",
+}
+
+
+def quoter_helper(language: str) -> str:
+    """The `quotedValue` source for `language`, or "" where none is needed."""
+    return _QUOTER[language_or_raise(language)]
+
+
 # ---------------------------------------------------------------------------
 # The prose itself. Everything below is what a reword edits.
 # ---------------------------------------------------------------------------
 
-#: The runtime's failure message. The quotes around the two values are part
-#: of the PROSE, not of the emitter: `returned ""` is how an empty return
-#: reads as a return rather than as a truncated sentence, and putting them
-#: here means the escaping that `f43b8fb1` got wrong is computed.
+#: The runtime's failure message. The quotes around the two values come
+#: from `Quoted`, not from the prose: `returned ""` is how an empty return
+#: reads as a return rather than as a truncated sentence, and a value that
+#: itself holds a quote or a newline has to be escaped on the way in —
+#: which is a fact about the language, so it belongs beside `escape()`
+#: rather than in the sentence.
 RESOLVE_STRING_FAILURE = (
-    'resolveString("',
-    Value("key"),
-    '") returned "',
-    Value("resolved"),
-    '", which is not the text that key names. Bindings are not resolved '
+    "resolveString(",
+    Quoted("key"),
+    ") returned ",
+    Quoted("resolved"),
+    ", which is not the text that key names. Bindings are not resolved "
     "when a component renders, so the field holds resolved text — return "
     "the string manager's lookup of the full key. A key, or nothing, means "
     "the table did not resolve.",

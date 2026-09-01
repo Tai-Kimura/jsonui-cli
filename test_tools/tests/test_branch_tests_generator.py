@@ -1093,6 +1093,79 @@ class TestEmittedRuntimesHaveBalancedStringLiterals:
             out[platform] = report.runtime_file.read_text(encoding="utf-8")
         return out
 
+    @staticmethod
+    def _unescaped_quotes(code: str) -> int:
+        """Count the quotes a compiler would see as opening or closing one.
+
+        The first version stripped `\\"` and counted what was left, which
+        reads a line ending in an escaped BACKSLASH as unbalanced: in
+        `out.append("\\\\")` the last backslash of the pair is followed by
+        the closing quote, so the naive strip removes a `\\"` that is not
+        there and leaves an odd count.
+
+        That surfaced the day a `quotedValue` helper — whose whole job is
+        emitting backslashes — was added to the Kotlin runtime, on a line
+        the Kotlin compiler accepts (measured: compiled and run). A net
+        that reports correct output is a net people start ignoring, so the
+        escape is tracked rather than pattern-matched.
+        """
+        count = 0
+        index = 0
+        in_double = False
+        while index < len(code):
+            char = code[index]
+            if char == "\\":
+                index += 2
+                continue
+            if char == '"':
+                count += 1
+                in_double = not in_double
+            elif char == "'" and not in_double:
+                # A Kotlin CHARACTER literal, or a TypeScript string. Either
+                # way the quote inside `'"'` is not a delimiter, and counting
+                # it reported the `when (ch)` arm of a helper the compiler
+                # accepts. Skip to the close; an unclosed one falls out of
+                # the loop and is left to the compiler to describe.
+                closing = index + 1
+                while closing < len(code):
+                    if code[closing] == "\\":
+                        closing += 2
+                        continue
+                    if code[closing] == "'":
+                        break
+                    closing += 1
+                index = closing + 1
+                continue
+            index += 1
+        return count
+
+    @pytest.mark.parametrize("line,odd", [
+        # What it catches: a literal left OPEN. `\\"` collapsing to `"`
+        # inside a call is the shape.
+        ('out.append("\\")', True),
+        # What it must not catch — every one of these compiles, and the
+        # Kotlin ones were compiled and run. Each was reported by an
+        # earlier version of the counter.
+        ('out.append("\\"")', False),
+        ('return out.append("\\"").toString()', False),
+        ('''      '"' -> out.append("\\\\\\"")''', False),
+        ('      "resolveString(" + quotedValue(key) + ") returned " +', False),
+    ])
+    def test_the_counter_catches_an_open_literal_and_nothing_else(
+            self, line, odd):
+        """The counter was loosened twice — escape-aware, then char-literal
+        aware — and each loosening is a chance to stop catching anything.
+
+        MEASURED WHILE WRITING THIS, and it corrects the premise the test
+        started from: the `f43b8fb1` line is BALANCED. Ten quotes, even
+        under the original heuristic and under this one. So this counter
+        never caught that regression and was never going to; the named
+        assertion below (`resolveString(""` is absent) is what catches it.
+        Two nets, two different fish, and it was worth finding out which
+        was which before loosening one of them.
+        """
+        assert (self._unescaped_quotes(line) % 2 == 1) is odd, line
+
     @pytest.mark.parametrize("platform", ["android", "ios", "web"])
     def test_no_line_has_an_odd_number_of_unescaped_quotes(
             self, tmp_path, platform):
@@ -1102,7 +1175,7 @@ class TestEmittedRuntimesHaveBalancedStringLiterals:
             code = line.split("//")[0] if "//" in line else line
             if code.lstrip().startswith(("*", "/*")):
                 continue
-            if code.replace('\\"', "").count('"') % 2:
+            if self._unescaped_quotes(code) % 2:
                 offenders.append(f"{platform} runtime line {n}: {line.strip()}")
         assert offenders == [], "\n".join(offenders)
 
@@ -1110,8 +1183,20 @@ class TestEmittedRuntimesHaveBalancedStringLiterals:
         # The specific regression, named. The property test above is the net;
         # this says which fish was caught, so a future edit that reintroduces
         # it fails with the reason rather than with a line number.
+        #
+        # Re-aimed when the quotes around the values moved out of the
+        # message literal and into `quotedValue`: the old needle
+        # (`resolveString(\\"`) no longer exists, and asserting it would have
+        # to be deleted rather than moved. The collapse it was watching for
+        # can still happen — the helper is the densest escaping in any of
+        # the three runtimes — so the needle follows it there.
         text = self._runtimes(tmp_path)["android"]
-        assert 'resolveString(\\"' in text
+        assert 'out.append("\\\\\\"")' in text, "the escaped-quote arm collapsed"
+        assert 'out.append("\\\\\\\\")' in text, "the escaped-backslash arm collapsed"
+        # `resolveString(""` is the f43b8fb1 line itself. A collapsed pair
+        # elsewhere is what the counter above is for; a negative needle on
+        # `out.append("\\"")` was tried and removed, because the helper
+        # legitimately appends one closing quote with exactly that spelling.
         assert 'resolveString(""' not in text
 
 
