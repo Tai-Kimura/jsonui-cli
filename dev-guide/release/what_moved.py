@@ -24,7 +24,7 @@ import re
 import subprocess
 import sys
 
-# `v?` because the sibling pin is spelled `...git@v1.7.48#...`: `\b` finds
+# `v?` because the sibling pin is spelled `...git@vX.Y.Z#...`: `\b` finds
 # no boundary between `v` and `1`, so the pin line failed the stamp test
 # and dragged document_tools/pyproject.toml into the jsonui-doc surface.
 STAMP_LINE = re.compile(r"^[+-].*(?<![\w.])v?\d+\.\d+\.\d+(?![\w.])")
