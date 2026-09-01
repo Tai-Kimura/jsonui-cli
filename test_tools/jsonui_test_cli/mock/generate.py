@@ -104,10 +104,13 @@ def place_editor_schema(mock_dir: Path) -> list[str]:
 def editor_schema_drift(mock_dir: Path):
     """How many editor-schema copies are behind, and which way they are wrong.
 
-    `place_editor_schema` is called only from `mock generate` (twice, below).
-    Nothing on the `validate` path writes these copies, so a project that
-    never runs the generator keeps the copy it was first given — forever,
-    with every gate green, because no gate reads them.
+    `place_editor_schema` is called from `mock generate` (twice, below) and
+    from `validate` — but only when validate finds generated mocks missing
+    or stale and rebuilds them (the rebuild goes through the same update
+    path). Measured on the day this shipped: one face's red-check deleted a
+    generated mock, the rebuild refreshed 36 copies, and the face then
+    reported the notice's stale count as wrong. A project that neither
+    generates nor triggers a rebuild keeps the copy it was first given.
 
     THE TWO DIRECTIONS ARE NOT EQUALLY BAD, so they are counted apart.
 
@@ -133,9 +136,29 @@ def editor_schema_drift(mock_dir: Path):
                       ["additionalProperties"]["properties"])
     except Exception:
         return (0, 0, 0)
+    # ONLY COPIES WITH A READER. Each mock names its copy via
+    # `"$schema": "./.mock.schema.json"`, so a copy in a directory holding
+    # no mocks has no reader and the harm this function reports — an editor
+    # showing a correct declaration as invalid — cannot occur there. Three
+    # faces independently hit the other reading on day one: an orphan copy
+    # left behind by an old cleanup (deleting `*.mock.json` does not take
+    # the hidden schema along) sat in a directory `mock generate` never
+    # visits, so the note it produced could never be cleared by the remedy
+    # the note itself named. Counting it answered "is this directory still
+    # needed?" with a predicate built for "will an editor mislead here?" —
+    # two different questions through one test.
+    #
+    # This also matches the WRITER's denominator (place_editor_schema walks
+    # directories holding *.mock.json), so the remedy line below is true for
+    # every copy this counts. The window that remains: a hand-written mock
+    # placed in such a directory without running generate briefly gives the
+    # old copy a reader — an operational shape, judged too weak to widen the
+    # denominator for; the prose names the hand instead.
     total = stale = missing = 0
     try:
-        copies = sorted(Path(mock_dir).rglob(EDITOR_SCHEMA_FILENAME))
+        copies = sorted(
+            copy for copy in Path(mock_dir).rglob(EDITOR_SCHEMA_FILENAME)
+            if any(copy.parent.glob("*.mock.json")))
     except OSError:
         return (0, 0, 0)
     for copy in copies:

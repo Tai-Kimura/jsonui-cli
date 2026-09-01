@@ -69,6 +69,37 @@ class EditorSchemaDrift(unittest.TestCase):
             mock_dir = self._mock_dir(tmp, "{ not json")
             self.assertEqual(editor_schema_drift(mock_dir), (1, 1, 1))
 
+    def test_an_orphan_copy_has_no_reader_and_is_not_counted(self):
+        """Three faces hit this on day one: a cleanup that deleted the mocks
+        left the hidden schema copy behind, in a directory `mock generate`
+        never visits — so the note could never be cleared by the remedy it
+        named. A copy no mock points at cannot mislead an editor, and
+        counting it answers a different question than this function asks."""
+        with TemporaryDirectory() as tmp:
+            doc = json.loads(editor_schema_text())
+            doc["properties"]["scenarios"]["additionalProperties"][
+                "properties"].pop(sorted(
+                    doc["properties"]["scenarios"]["additionalProperties"][
+                        "properties"])[0])
+            orphan_dir = Path(tmp) / "mocks" / "gone"
+            orphan_dir.mkdir(parents=True)
+            (orphan_dir / EDITOR_SCHEMA_FILENAME).write_text(
+                json.dumps(doc, indent=2), encoding="utf-8")
+            self.assertEqual(editor_schema_drift(Path(tmp) / "mocks"),
+                             (0, 0, 0))
+
+    def test_a_stale_copy_beside_a_mock_is_still_counted(self):
+        """The negative test the adjudication demanded: narrowing the
+        denominator to readers must not lose the copies this note exists
+        for. A directory with one mock and one stale copy stays in."""
+        with TemporaryDirectory() as tmp:
+            doc = json.loads(editor_schema_text())
+            props = doc["properties"]["scenarios"]["additionalProperties"][
+                "properties"]
+            props.pop(sorted(props)[0])
+            mock_dir = self._mock_dir(tmp, json.dumps(doc, indent=2))
+            self.assertEqual(editor_schema_drift(mock_dir), (1, 1, 1))
+
     def test_no_mock_dir_is_silent_rather_than_an_error(self):
         """This runs inside a summary line. A project with no mocks must not
         fail the gate that was reporting on something else."""

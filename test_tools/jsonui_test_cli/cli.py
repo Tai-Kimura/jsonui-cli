@@ -374,10 +374,13 @@ def _print_editor_schema_drift(config_path):
     """Name the editor-schema copies this CLI has outrun.
 
     Each mock says `"$schema": "./.mock.schema.json"`, so THE EDITOR READS THE
-    COPY, not the schema shipped in this package. Only `mock generate` writes
-    those copies, so a project that validates but never generates keeps
-    whatever it was first given, and no gate anywhere reads them: `Warnings:`,
-    `No drift` and `0 stale` are all silent about it.
+    COPY, not the schema shipped in this package. The copies are written by
+    `mock generate`, and by a validate run only when it rebuilds generated
+    mocks — a project that triggers neither keeps whatever it was first
+    given, and no gate anywhere reads them: `Warnings:`, `No drift` and
+    `0 stale` are all silent about it. The count covers only copies with a
+    reader (a mock beside them); see editor_schema_drift for why an orphan
+    copy is not this note's business.
 
     NOT ADDED TO `Warnings:`. That count is a baseline for several consumers,
     and this would move it for every project at once for a condition none of
@@ -385,7 +388,8 @@ def _print_editor_schema_drift(config_path):
     Exit code is untouched: this is a fact about the editor, not the run.
 
     THE THREE-LINE SHAPE IS LOAD-BEARING — do not "tidy" it into one line.
-    A consumer's shape gate filters finding-shaped lines (`^\[`-style) out of
+    A consumer's shape gate filters finding-shaped lines (leading-bracket
+    prefixes) out of
     its skeleton, so the [NOTE] head itself is invisible to at least one
     face's gate; what fired there was the INDENTED CONTINUATION lines
     slipping past the filter (measured by that face on this note's first
@@ -408,7 +412,10 @@ def _print_editor_schema_drift(config_path):
     if missing:
         print(f"       {missing} lack a key this CLI accepts, so an editor "
               "reading them marks a correct declaration invalid.")
-    print("       `jsonui-test mock generate` rewrites them; nothing else does.")
+    print("       `jsonui-test mock generate` rewrites them (so does a "
+          "validate run that rebuilds generated mocks).")
+    print("       A copy in a directory holding no mocks has no reader and "
+          "is not counted here; delete it by hand if you want it gone.")
 
 
 def _resolve_mock_dir(config_path):
