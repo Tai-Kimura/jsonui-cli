@@ -91,6 +91,20 @@ open(out, "w").write(KOTLIN_RUNTIME % {"package": "release.probe"})
 PY
 [ -s "$WORK/JsonuiBranchRuntime.kt" ] || { echo "CANNOT ATTEMPT: the runtime did not render" >&2; exit 2; }
 
+# Non-empty is not the same as having something to check. Measured: a file
+# containing only `package release.probe` compiles with exit 0 and produces
+# ZERO class files, and this script would have called that "emitted Kotlin
+# compiles". So require the source to carry the things this check exists to
+# protect -- the diagnostic and the per-language quoting -- before running
+# a compiler over it at all.
+for marker in 'resolveString(' 'quotedValue' 'class '; do
+    grep -qF "$marker" "$WORK/JsonuiBranchRuntime.kt" || {
+        echo "CANNOT ATTEMPT: the rendered runtime has no '$marker'" >&2
+        echo "  Compiling it would pass by having nothing in it." >&2
+        exit 2
+    }
+done
+
 # -jvm-target is not optional. Without it the backend crashes on a JDK 21
 # default rather than reporting anything about the file, which reads as
 # "the emitted Kotlin is broken" when it is not.
@@ -100,9 +114,16 @@ PY
 status=$?
 
 grep -v '^warning: unable to find' "$WORK/log"
-if [ "$status" -eq 0 ]; then
-    echo "OK: emitted Kotlin compiles (kotlinc $KOTLIN_VERSION, jvm-target 17)"
+classes=$(find "$WORK/out" -name '*.class' 2>/dev/null | wc -l | tr -d ' ')
+if [ "$status" -eq 0 ] && [ "${classes:-0}" -gt 0 ]; then
+    echo "OK: emitted Kotlin compiles (kotlinc $KOTLIN_VERSION, jvm-target 17)" \
+         "— $classes class file(s)"
     exit 0
+fi
+if [ "$status" -eq 0 ]; then
+    echo "CANNOT ATTEMPT: the compiler succeeded and emitted no classes." >&2
+    echo "  A green with nothing compiled is the failure this guards." >&2
+    exit 2
 fi
 echo "FAILED: the emitted Kotlin does not compile (kotlinc $KOTLIN_VERSION)" >&2
 exit 1
