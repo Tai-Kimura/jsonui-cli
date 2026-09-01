@@ -2181,13 +2181,38 @@ class SpecValidator:
             # A value the server chose (a passed-through API error message).
             # The text lives in the scenario, so only the shape is checkable
             # here; test generation reads the actual value out of the mock.
-            if not re.match(r"^response\.[A-Za-z_][A-Za-z0-9_]*"
-                            r"(\.[A-Za-z_][A-Za-z0-9_]*)*$", ref):
+            # A numeric segment indexes a list: FastAPI's 422 puts the text
+            # a screen shows inside `detail[]`, so without this the one
+            # response class where "the screen shows what the server sent"
+            # is most worth stating is the one class that cannot state it.
+            #
+            # THIS GATE RUNS FIRST. The reporting lane named the generator,
+            # which is the second gate; a spec carrying `detail.0.msg` was
+            # rejected here before generation ever read the body, with a
+            # different message. Fixing one of the two would have moved the
+            # refusal rather than removed it.
+            if "[" in ref or "]" in ref:
+                # One spelling, and the other is refused by name. The rest of
+                # this vocabulary is dotted, and a second spelling is a second
+                # thing every reader of a contract has to know.
+                dotted = ref.replace("[", ".").replace("]", "")
+                result.errors.append(SpecValidationMessage(
+                    path=path,
+                    message=(
+                        f"'@response.' indexes a list with a dotted number, "
+                        f"not brackets — write '@{dotted}' rather than "
+                        f"'{value}'"
+                    ),
+                ))
+            elif not re.match(r"^response\.[A-Za-z_][A-Za-z0-9_]*"
+                              r"(\.([A-Za-z_][A-Za-z0-9_]*|[0-9]+))*$", ref):
                 result.errors.append(SpecValidationMessage(
                     path=path,
                     message=(
                         "'@response.' must be followed by a dotted field path "
-                        f"into the response body, got '{value}'"
+                        "into the response body, with a number for a list "
+                        f"position (e.g. '@response.detail.0.msg'), got "
+                        f"'{value}'"
                     ),
                 ))
         elif not re.match(r"^[a-z][a-z0-9_]*$", ref):

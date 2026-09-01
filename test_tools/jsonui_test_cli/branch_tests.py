@@ -750,25 +750,74 @@ def resolve_response_refs(methods_contracts: dict, routes: list[Route]) -> None:
 
 
 def _read_response_path(body, path: str, where: str, key: str, scenario: str):
+    """The value at `path` in a scenario's response body.
+
+    Lists are indexed by a dotted number: `detail.0.msg`. ONE spelling, not
+    two — `detail[0].msg` was offered as an alternative by the lane that
+    asked for this and is refused by name instead, because the rest of this
+    vocabulary is dotted (`@data.<field>`, the `then` keys) and a second
+    spelling is a second thing every reader of a contract has to know.
+    A path that uses brackets is told which form to write.
+
+    The shape this exists for is FastAPI's 422: the text a screen shows is
+    always inside `detail[]`, so a contract could not say "the screen shows
+    what the server sent" about the one response class where that claim is
+    most worth making. The reporting lane fell back to a literal
+    expectation, which still discriminates but binds the contract to the
+    mock body — the thing `@response.` was introduced to avoid.
+    """
     if not path:
         raise BranchTestGenerationError(
             f"{where}.then.{key}: '@response.' needs a field path "
             "(e.g. '@response.error.message')"
         )
+    parts = path.split(".")
     node = body
     walked: list[str] = []
-    for part in path.split("."):
-        if not isinstance(node, dict) or part not in node:
-            available = (
-                ", ".join(sorted(node)) if isinstance(node, dict) else "(not an object)"
-            )
-            at = ".".join(walked) or "(root)"
+    for position, part in enumerate(parts):
+        at = ".".join(walked) or "(root)"
+        if "[" in part or "]" in part:
+            # Named before the lookup fails, because the lookup would fail
+            # with "no such key", which is true and unhelpful.
             raise BranchTestGenerationError(
-                f"{where}.then.{key}: scenario '{scenario}' has no "
-                f"'{path}' in its response body — at {at} the available "
-                f"keys are: {available}"
+                f"{where}.then.{key}: '{path}' indexes with brackets; write "
+                f"the position as a dotted number instead — "
+                f"'{path.replace('[', '.').replace(']', '')}'"
             )
-        node = node[part]
+        if isinstance(node, list):
+            if not part.isdigit():
+                # The message the reporting lane asked for. Falling through
+                # to the object branch printed "the available keys are: (not
+                # an object)", which reads as "there are no candidates" when
+                # what it means is "you are standing on a list".
+                suggestion = ".".join(walked + ["0"] + parts[position:])
+                raise BranchTestGenerationError(
+                    f"{where}.then.{key}: scenario '{scenario}' has a list of "
+                    f"{len(node)} item(s) at {at} in its response body, not an "
+                    f"object — index it by position: '{suggestion}'"
+                )
+            index = int(part)
+            if index >= len(node):
+                raise BranchTestGenerationError(
+                    f"{where}.then.{key}: scenario '{scenario}' has "
+                    f"{len(node)} item(s) at {at} in its response body, so "
+                    f"index {index} in '{path}' is past the end"
+                )
+            node = node[index]
+        elif isinstance(node, dict):
+            if part not in node:
+                raise BranchTestGenerationError(
+                    f"{where}.then.{key}: scenario '{scenario}' has no "
+                    f"'{path}' in its response body — at {at} the available "
+                    f"keys are: {', '.join(sorted(node))}"
+                )
+            node = node[part]
+        else:
+            raise BranchTestGenerationError(
+                f"{where}.then.{key}: scenario '{scenario}' has a "
+                f"{type(node).__name__} at {at} in its response body, so "
+                f"'{path}' cannot be read past there"
+            )
         walked.append(part)
     if isinstance(node, (dict, list)):
         raise BranchTestGenerationError(

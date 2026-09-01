@@ -784,6 +784,48 @@ class BranchResponsePassthrough(unittest.TestCase):
         warnings = [w for w in result.warnings if "exactly one" in w.message]
         self.assertEqual(1, len(warnings))
 
+    def test_a_list_position_is_accepted(self):
+        """FastAPI's 422 puts the text a screen shows inside `detail[]`, so
+        without a numeric segment the one response class where "the screen
+        shows what the server sent" is most worth stating is the one class
+        that cannot state it.
+
+        THIS GATE RUNS FIRST. The reporting lane named the generator, which
+        is the second gate; a spec carrying this path was refused here
+        before generation ever read a response body, and with a different
+        message. Fixing one of the two would have moved the refusal rather
+        than removed it.
+        """
+        result = _validate(self._spec({
+            "when": {"api.createOrder": "declined"},
+            "then": {"data.errorMessage": "@response.detail.0.msg"},
+        }))
+        self.assertEqual(_errors_at(result, "branchContracts"), [])
+
+    def test_bracket_indexing_is_refused_by_name(self):
+        """One spelling. The lane that asked for this offered brackets as an
+        equally acceptable alternative; the rest of the vocabulary is dotted
+        (`@data.<field>`, the `then` keys), and a second spelling is a
+        second thing every reader of a contract has to know. So it is
+        refused with the form to write instead, rather than accepted."""
+        result = _validate(self._spec({
+            "when": {"api.createOrder": "declined"},
+            "then": {"data.errorMessage": "@response.detail[0].msg"},
+        }))
+        errors = _errors_at(result, "branches[0].then")
+        self.assertTrue(errors)
+        self.assertIn("@response.detail.0.msg",
+                      " ".join(e.message for e in errors))
+
+    def test_a_path_that_is_neither_is_still_refused(self):
+        """The arm that keeps the loosening honest: opening the shape to
+        numbers must not open it to anything else."""
+        result = _validate(self._spec({
+            "when": {"api.createOrder": "declined"},
+            "then": {"data.errorMessage": "@response.detail.-1.msg"},
+        }))
+        self.assertTrue(_errors_at(result, "branches[0].then"))
+
     def test_branches_without_response_refs_are_unaffected(self):
         result = _validate(self._spec({
             "when": {"data.isAgreed": False},
