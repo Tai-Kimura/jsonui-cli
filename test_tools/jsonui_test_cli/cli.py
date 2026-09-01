@@ -219,6 +219,26 @@ def cmd_validate(args):
               f" under {_root} — declare it in jui.config.json to turn this "
               "check on")
 
+    # ⚠️ Two kinds of `[WARN]` reach a reader, and only one moves the
+    # counter. The line is drawn on whether the reader can clear it:
+    #
+    #   counted     — a declaration the installed driver cannot read; a
+    #                 vendored toolchain older than this CLI. One command
+    #                 fixes each, and a warning with a one-line remedy is
+    #                 doing its job by staying until someone runs it.
+    #   not counted — the mock gate's findings. The ones that persist are
+    #                 non-gating BY RULING (form B: a status no operation
+    #                 declares is a premise, not a declarable), so they can
+    #                 never be cleared, and counting them puts a permanent
+    #                 +1 on every project that has one.
+    #
+    # A consumer running "keep Warnings at zero so a new one is visible"
+    # measured both and asked, because the SAME label carries the two.
+    # That is the shape `[NOTE]` was split apart for earlier in this
+    # release, and the honest answer is that the split here is by remedy
+    # rather than by kind — so it is written down instead of encoded in a
+    # third label. Renaming the label a third time in one day would cost
+    # every lane another baseline for a distinction they can read here.
     for note in runtime_notes:
         print(f"[WARN] {note}")
         total_warnings += 1
