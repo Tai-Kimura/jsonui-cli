@@ -384,6 +384,14 @@ def _print_editor_schema_drift(config_path):
     them created — the same reason the uncounted footnote sits outside it.
     Exit code is untouched: this is a fact about the editor, not the run.
 
+    THE THREE-LINE SHAPE IS LOAD-BEARING — do not "tidy" it into one line.
+    A consumer's shape gate filters finding-shaped lines (`^\[`-style) out of
+    its skeleton, so the [NOTE] head itself is invisible to at least one
+    face's gate; what fired there was the INDENTED CONTINUATION lines
+    slipping past the filter (measured by that face on this note's first
+    day out). A one-line rewrite silences that gate without failing any
+    test here.
+
     The line names the direction that misleads. A stale copy that allows a
     dropped key costs one warning; a stale copy MISSING a key this CLI accepts
     makes the editor mark a correct declaration invalid, because the copies
