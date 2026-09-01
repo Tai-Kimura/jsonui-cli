@@ -565,6 +565,21 @@ def cmd_sync_tool(args: argparse.Namespace) -> int:
         f"  shared-core: {totals['shared_core']}"
         + (f"  pruned: {totals['pruned']}" if args.prune else "")
     )
+    # These counters have a denominator the numbers do not name, and `0` is
+    # the reading that goes wrong: it is a true statement about the vendored
+    # platform tools, and consumers read it as one about the toolchain. In
+    # one release three lanes did — two skipped `branch-tests --check` after
+    # a version that changed the generator, and a third nearly put that
+    # check on a deployment gate on the strength of `copied 0`. The
+    # generator is not one of the things counted here, so say what is.
+    print(
+        "  counted: the vendored platform tools only"
+        " (sjui_tools / kjui_tools / rjui_tools).\n"
+        "           test_tools and document_tools live in ~/.jsonui-cli and"
+        " arrive via\n"
+        "           installer/bootstrap.sh — a 0 above says nothing about"
+        " them."
+    )
     if args.dry_run:
         print("  (dry-run — nothing changed on disk)")
 
