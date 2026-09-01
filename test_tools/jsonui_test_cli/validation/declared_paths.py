@@ -73,6 +73,26 @@ _ROOTS: dict = {}
 #: that difference is the reason this whole file exists.
 _SKIPPED: set = set()
 
+#: kind -> (config key, default directory). ONE declaration: the roots are
+#: built from it, and the caller that has to name a missing directory reads
+#: it back rather than carrying its own copy.
+#:
+#: It carried one: the note naming the absent directory spelled
+#: `'layouts_directory' if kind == 'layout' else 'spec_directory'`, which
+#: answers "spec_directory" for every kind that is not `layout` — including
+#: a third one nobody has added yet. The same shape as a `counted:` line
+#: that listed its trees instead of deriving them, and it goes wrong the
+#: same way: silently, and only for the case that did not exist yet.
+PATH_KINDS: dict = {
+    "layout": ("layouts_directory", "docs/screens/layouts"),
+    "document": ("spec_directory", "docs/screens/json"),
+}
+
+
+def config_key_for(kind: str) -> str:
+    """The `jui.config.json` key that declares where *kind* lives."""
+    return PATH_KINDS[kind][0]
+
 
 def set_path_roots(project_root=None, config=None):
     """Declare where declared paths resolve from (`None` clears them).
@@ -87,10 +107,8 @@ def set_path_roots(project_root=None, config=None):
     root = Path(project_root)
     config = config or {}
     _ROOTS["project"] = root
-    _ROOTS["layout"] = root / config.get(
-        "layouts_directory", "docs/screens/layouts")
-    _ROOTS["document"] = root / config.get(
-        "spec_directory", "docs/screens/json")
+    for kind, (config_key, default) in PATH_KINDS.items():
+        _ROOTS[kind] = root / config.get(config_key, default)
     # Every declared boundary above the project, not just the project. In a
     # multi-app repository the config a run reads is the APP's, and paths
     # written from the repository root resolve under none of the roots

@@ -205,7 +205,7 @@ def cmd_validate(args):
     # A check that declined to run says so. Silence here would be the very
     # confusion this check exists to remove: "no dangling paths" and "the
     # path check never ran" would print identically.
-    from .validation.declared_paths import skipped_kinds
+    from .validation.declared_paths import config_key_for, skipped_kinds
     #
     # Printed, but NOT counted. It is a statement about coverage, not a
     # finding about this project's files: nothing here is wrong and there is
@@ -215,10 +215,7 @@ def cmd_validate(args):
     # distinction already made in this summary. Measured on the conformance
     # fixtures, whose whole assertion is `Errors: 0, Warnings: 0`.
     for kind in skipped_kinds():
-        print(f"[NOTE] declared {kind} paths were not resolved: no "
-              f"{'layouts_directory' if kind == 'layout' else 'spec_directory'}"
-              f" under {_root} — declare it in jui.config.json to turn this "
-              "check on")
+        print(_skipped_path_note(kind, _root))
 
     # ⚠️ Two kinds of `[WARN]` reach a reader, and only one moves the
     # counter. The line is drawn on whether the reader can clear it:
@@ -335,6 +332,25 @@ def cmd_validate(args):
     # mocks must not print the line a run with no mocks prints.
     if unchecked_mocks:
         summary += f", Unchecked mocks: {unchecked_mocks}"
+    # THE COUNT AND ITS DENOMINATOR ON ONE LINE. `Warnings: 0` means two
+    # different things depending on whether the path check ran, and the
+    # `[NOTE]` above says so — several lines up, on the other side of the
+    # mock-contract block and a divider. A face collecting "0 findings" from
+    # every screen reads the summary line, not the transcript; one project
+    # was in a position to report zero with TWO kinds declined.
+    #
+    # Measured on one test file declaring a missing layout and a missing
+    # document: `Warnings: 2` with both directories present, `Warnings: 0`
+    # with neither, `Warnings: 1` with one. Same file, same declarations —
+    # the number moves with the directories.
+    #
+    # Named, not counted: "2 kinds skipped" leaves the reader unable to
+    # decide what their own zero covers. Suffixed conditionally, like
+    # `Orphan mocks:` and `Unchecked mocks:` above — a run with nothing
+    # skipped gains no line and no field, because a standing line is the one
+    # the next finding hides behind.
+    if skipped_kinds():
+        summary += f", Path checks skipped: {', '.join(skipped_kinds())}"
     print(summary)
     _print_uncounted_footnote(uncounted)
 
@@ -903,6 +919,25 @@ def _print_uncompared(report):
               f"this project's API paths ({report.scope_note or 'all paths'})"
               " — not checked, listed by `mock generate --check`")
     return uncounted
+
+
+def _skipped_path_note(kind: str, root) -> str:
+    """The note naming the directory a declined path check wanted.
+
+    A function rather than an f-string in the loop, because the loop can
+    only ever be exercised for the kinds something actually resolves
+    against — today `layout` and `document`. The key is DERIVED from the
+    kind table, and the spelling it replaced (`'layouts_directory' if kind
+    == 'layout' else 'spec_directory'`) answers identically for both of
+    them: red-checking the change through the loop came back green, because
+    no reachable case can tell the two apart. The case that can is a third
+    kind, and it is reachable here.
+    """
+    from .validation.declared_paths import config_key_for
+
+    return (f"[NOTE] declared {kind} paths were not resolved: no "
+            f"{config_key_for(kind)} under {root} — declare it in "
+            "jui.config.json to turn this check on")
 
 
 def _print_uncounted_footnote(uncounted: dict) -> None:
