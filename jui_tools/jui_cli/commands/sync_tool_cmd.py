@@ -572,14 +572,28 @@ def cmd_sync_tool(args: argparse.Namespace) -> int:
     # a version that changed the generator, and a third nearly put that
     # check on a deployment gate on the strength of `copied 0`. The
     # generator is not one of the things counted here, so say what is.
-    print(
-        "  counted: the vendored platform tools only"
-        " (sjui_tools / kjui_tools / rjui_tools).\n"
-        "           test_tools and document_tools live in ~/.jsonui-cli and"
-        " arrive via\n"
-        "           installer/bootstrap.sh — a 0 above says nothing about"
-        " them."
-    )
+    counted_names = " / ".join(sorted(set(PLATFORM_TO_TOOL.values())))
+    # Read the uncounted trees off the source root rather than listing them.
+    # The first version of this line spelled them out and left `jui_tools`
+    # off -- the tree this very line was added in, and one of the three that
+    # moved in that release. A denominator that is maintained by hand drifts
+    # exactly like the numbers it was added to explain.
+    try:
+        uncounted = sorted(
+            entry.name for entry in source_root.iterdir()
+            if entry.is_dir() and entry.name.endswith("_tools")
+            and entry.name not in set(PLATFORM_TO_TOOL.values()))
+    except OSError:
+        uncounted = []
+    print(f"  counted: the vendored platform tools only ({counted_names}).")
+    if uncounted:
+        print(
+            f"           {', '.join(uncounted)} also live in the source root"
+            " and are NOT\n"
+            "           counted here — they arrive via"
+            " installer/bootstrap.sh, so a 0 above\n"
+            "           says nothing about them."
+        )
     if args.dry_run:
         print("  (dry-run — nothing changed on disk)")
 

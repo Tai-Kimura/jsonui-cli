@@ -26,8 +26,11 @@ from pathlib import Path
 from jui_cli.commands.sync_tool_cmd import PLATFORM_TO_TOOL, cmd_sync_tool
 
 #: Trees that reach a machine through installer/bootstrap.sh and are NOT
-#: counted by this command. Named so the message cannot drop one silently.
-UNCOUNTED_TREES = ("test_tools", "document_tools")
+#: counted by this command. The command reads these off the source root
+#: rather than carrying a list; `jui_tools` is here because the first
+#: version DID carry a list and left it off -- the tree the line itself
+#: lives in, and one of three that moved in that release.
+UNCOUNTED_TREES = ("test_tools", "document_tools", "jui_tools")
 
 
 def _run_dry_sync(project: Path, source: Path) -> str:
@@ -74,6 +77,8 @@ class TotalsNameTheirDenominatorTest(unittest.TestCase):
             for tool in PLATFORM_TO_TOOL.values():
                 (source / tool / "lib").mkdir(parents=True)
                 (source / tool / "lib" / "x.rb").write_text("# x\n")
+            for tree in UNCOUNTED_TREES:
+                (source / tree).mkdir(parents=True)
             (source / "VERSION").write_text("9.9.9\n")
 
             project = root / "project"
@@ -95,6 +100,30 @@ class TotalsNameTheirDenominatorTest(unittest.TestCase):
         block = _counted_block(self._output())
         for tree in UNCOUNTED_TREES:
             self.assertIn(tree, block, f"{tree} is not counted and not named")
+
+    def test_an_unlisted_tool_tree_is_named_without_being_added_here(self):
+        """The line is derived, so a tree nobody thought of still appears.
+
+        This is the assertion the hand-written version could not make: it
+        named three trees from memory, and the one it forgot was the one it
+        was written in. A `zzz_tools` that no constant here mentions has to
+        show up, or the denominator is being maintained by hand again.
+        """
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d)
+            source = root / "src"
+            for tool in PLATFORM_TO_TOOL.values():
+                (source / tool / "lib").mkdir(parents=True)
+                (source / tool / "lib" / "x.rb").write_text("# x\n")
+            (source / "zzz_tools").mkdir(parents=True)
+            (source / "VERSION").write_text("9.9.9\n")
+            project = root / "project"
+            for platform in PLATFORM_TO_TOOL:
+                (project / platform).mkdir(parents=True)
+            (project / "jui.config.json").write_text(json.dumps({
+                "platforms": {p: {"root": p} for p in PLATFORM_TO_TOOL}}))
+            block = _counted_block(_run_dry_sync(project, source))
+        self.assertIn("zzz_tools", block)
 
     def test_it_says_how_the_uncounted_trees_arrive(self):
         """Naming the exclusion without naming the remedy leaves the reader
