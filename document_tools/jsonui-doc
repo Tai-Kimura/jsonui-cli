@@ -27,9 +27,19 @@ import sys
 from pathlib import Path
 
 _root = Path(__file__).resolve().parent
-for _path in (_root, _root.parent / "test_tools"):
-    if _path.is_dir() and str(_path) not in sys.path:
-        sys.path.insert(0, str(_path))
+_sibling = _root.parent / "test_tools"
+
+# The sibling goes AFTER this package's own directory, and the position is
+# computed rather than assumed. Running the launcher already puts its own
+# directory at sys.path[0], so the `not in sys.path` guard skips re-adding
+# it — and a loop that inserted both at 0 left the SIBLING in front, which
+# is the opposite of what the loop order reads like. `tests` is the one
+# top-level name that exists in both trees. Nothing shipped imports it, so
+# this is the order being right rather than a fix for a live failure.
+if str(_root) not in sys.path:
+    sys.path.insert(0, str(_root))
+if _sibling.is_dir() and str(_sibling) not in sys.path:
+    sys.path.insert(sys.path.index(str(_root)) + 1, str(_sibling))
 
 from jsonui_doc_cli.cli import main
 

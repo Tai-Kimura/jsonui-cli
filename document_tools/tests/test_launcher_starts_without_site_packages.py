@@ -27,6 +27,7 @@ both.
 """
 from __future__ import annotations
 
+import json
 import os
 import subprocess
 import sys
@@ -66,10 +67,9 @@ def test_it_is_the_sibling_path_that_makes_that_work():
     the defect shipped.
     """
     source = LAUNCHER.read_text(encoding="utf-8")
-    broken = source.replace(
-        'for _path in (_root, _root.parent / "test_tools"):',
-        "for _path in (_root,):")
-    assert broken != source, "the launcher no longer adds the sibling by this spelling"
+    needle = "if _sibling.is_dir() and str(_sibling) not in sys.path:"
+    assert needle in source, "the launcher no longer adds the sibling by this spelling"
+    broken = source.replace(needle, "if False:")
 
     tmp = LAUNCHER.parent / ".jsonui-doc-probe"
     try:
@@ -105,3 +105,36 @@ def test_every_subcommand_reaches_its_own_module_tree():
             capture_output=True, text=True, env=_bare_env())
         assert proc.returncode == 0, (
             f"{subcommand}: " + proc.stdout + proc.stderr)
+
+
+def test_the_launchers_own_tree_resolves_before_the_siblings():
+    """Own tree first. The tuple reads in the opposite order on purpose.
+
+    `sys.path.insert(0, ...)` puts the LAST iterated entry in front, so the
+    fix that added the sibling also put the sibling ahead of this package's
+    own directory. `tests` is the one top-level name that exists in both
+    trees, and a bare `import tests` from here resolved into test_tools/.
+    Nothing shipped imports it, so this asserts an order rather than a
+    repaired failure — the point is that the next reader of that tuple sees
+    the reversal stated instead of having to derive it.
+    """
+    source = LAUNCHER.read_text(encoding="utf-8")
+    marker = "from jsonui_doc_cli.cli import main"
+    assert marker in source, "the launcher no longer imports by this spelling"
+
+    probe_src = source.split(marker)[0] + "import json\nprint(json.dumps(sys.path[:2]))\n"
+    probe = LAUNCHER.parent / ".jsonui-doc-order-probe"
+    try:
+        probe.write_text(probe_src, encoding="utf-8")
+        proc = subprocess.run(
+            [sys.executable, "-S", str(probe)],
+            capture_output=True, text=True, env=_bare_env())
+        assert proc.returncode == 0, proc.stdout + proc.stderr
+        first, second = json.loads(proc.stdout)
+    finally:
+        probe.unlink(missing_ok=True)
+
+    assert Path(first).name == "document_tools", (
+        f"own tree must resolve first, got {first}")
+    assert Path(second).name == "test_tools", (
+        f"sibling must resolve second, got {second}")
