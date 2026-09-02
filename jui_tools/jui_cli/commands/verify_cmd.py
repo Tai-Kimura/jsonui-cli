@@ -52,6 +52,14 @@ def register_verify_command(subparsers: argparse._SubParsersAction) -> None:
         default=None,
         help="Target platform (defaults to the first platform in config)",
     )
+    parser.add_argument(
+        "--json",
+        dest="json_out",
+        default=None,
+        metavar="PATH",
+        help="Write the counts (verified / skipped / total, with reasons) "
+             "to PATH as JSON, for automation that cannot read the report",
+    )
     parser.set_defaults(func=cmd_verify)
 
 
@@ -201,6 +209,23 @@ def cmd_verify(args: argparse.Namespace) -> int:
     report = render_report(results, detail=args.detail)
     print(report)
 
+    # What was actually compared, against what was there to compare.
+    #
+    # `match=0` and `has_diffs: false` are the same output whether every
+    # screen agreed or every screen was skipped, and a reader resolves that
+    # by believing the friendlier one — a downstream lane read a run that
+    # verified NOTHING as "no differences" (2026-09-03) and only caught it
+    # by running `jui build` separately. The exit code deliberately does not
+    # change: an all-skip run is legitimate where layouts are authored
+    # externally, and a gate that is permanently red is a gate that gets
+    # ignored. So the honesty lives in the count, which a face can floor at
+    # whatever it expects.
+    verified = len(results)
+    skips = _skip_counts(skipped_external, missing_layouts)
+    total = verified + sum(n for _, n in skips)
+    print()
+    print(_verified_line(verified, total, skips))
+
     # Computed before the skip list is printed, so a name reported below as
     # missing is not also listed above as an ordinary external skip. One
     # consumer read the skip list as recognition — "it is in the list, so
@@ -322,6 +347,13 @@ def cmd_verify(args: argparse.Namespace) -> int:
             "  → run `jui build` (or `jui g api` once available) to regenerate."
         )
 
+    if args.json_out:
+        summary = _summary_payload(results, skips)
+        out_path = Path(args.json_out)
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        out_path.write_text(json.dumps(summary, indent=2) + "\n", encoding="utf-8")
+        print(f"\nCounts written to {out_path}")
+
     coverage_gap = bool(coverage.missing_specs or coverage.missing_layouts)
     if args.fail_on_diff and (
         any(r.has_diff for r in results) or data_orphans or api_drift
@@ -329,6 +361,67 @@ def cmd_verify(args: argparse.Namespace) -> int:
     ):
         return 1
     return 0
+
+
+#: Why a spec was not compared, in the wording the report already uses.
+#: A count with no reason answers "how many" and not "why it was zero",
+#: which is the question a reader asks first.
+SKIP_REASONS = (
+    ("layout authored externally", "external"),
+    ("layout not found on disk", "missing"),
+)
+
+
+def _skip_counts(skipped_external, missing_layouts) -> list[tuple[str, int]]:
+    """Non-zero skip reasons, paired with their counts."""
+    counts = {
+        "layout authored externally": len(skipped_external),
+        "layout not found on disk": len(missing_layouts),
+    }
+    return [(reason, n) for reason, n in counts.items() if n]
+
+
+def _summary_payload(results, skips: list[tuple[str, int]]) -> dict:
+    """The counts, for automation that never reads the report.
+
+    The MCP wrapper derives `has_diffs` from the exit code and passes the
+    report through as text, so a consumer without a parser has only a 0 that
+    an all-skip run also produces. These are what such a consumer can floor
+    on instead — and `verified + skipped == total` by construction, so a
+    reader can tell a quiet run from a complete one.
+    """
+    skipped = sum(n for _, n in skips)
+    return {
+        "verified": len(results),
+        "skipped": skipped,
+        "total": len(results) + skipped,
+        "skippedByReason": {reason: n for reason, n in skips},
+        "match": sum(r.match for r in results),
+        "missing": sum(len(r.missing) for r in results),
+        "extra": sum(len(r.extra) for r in results),
+        "typeMismatch": sum(len(r.type_mismatch) for r in results),
+        "hasDiffs": any(r.has_diff for r in results),
+    }
+
+
+def _verified_line(verified: int, total: int, skips: list[tuple[str, int]]) -> str:
+    """`verified 3 of 11 screen(s) — 8 skipped (...)`.
+
+    The shape is fixed so a face can floor it: a run that drops from 11
+    verified to 3 changes this line even though both exit 0.
+    """
+    # `screen(s)` is not laziness about plurals: the reported shape is what
+    # a face floors on (`verified # of # screen(s)`), so it stays fixed for
+    # one screen and for eleven.
+    line = f"**verified {verified} of {total} screen(s)**"
+    if not skips:
+        return line
+    skipped = sum(n for _, n in skips)
+    if len(skips) == 1:
+        detail = skips[0][0]
+    else:
+        detail = ", ".join(f"{n} {reason}" for reason, n in skips)
+    return f"{line} — {skipped} skipped ({detail})"
 
 
 @dataclass
