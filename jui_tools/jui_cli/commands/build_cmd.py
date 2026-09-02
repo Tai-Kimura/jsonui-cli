@@ -52,6 +52,18 @@ def register_build_command(subparsers: argparse._SubParsersAction) -> None:
     build_parser.add_argument("--ios-only", action="store_true", help="Build iOS only")
     build_parser.add_argument("--android-only", action="store_true", help="Build Android only")
     build_parser.add_argument("--web-only", action="store_true", help="Build Web only")
+    # The MCP tool takes `platform: "ios" | "android" | "web"`, so anyone who
+    # met that interface first writes `--platform web` here and gets exit 2.
+    # That is not only a typo: a build stopped by an unknown argument leaves
+    # every output exactly as it was, which reads as a successful no-op —
+    # one project compared manifest checksums across two such runs, found
+    # them identical, and nearly recorded "no churn" from a tool that had
+    # not run. One concept, two spellings, and the failure mode of guessing
+    # wrong is invisible.
+    build_parser.add_argument(
+        "--platform", choices=["ios", "android", "web"], default=None,
+        help="Build one platform (same vocabulary as the MCP jui_build tool; "
+             "equivalent to --ios-only / --android-only / --web-only)")
     build_parser.add_argument(
         "--lint-strings",
         action="store_true",
@@ -63,6 +75,10 @@ def register_build_command(subparsers: argparse._SubParsersAction) -> None:
 
 
 def cmd_build(args: argparse.Namespace) -> int:
+    # One vocabulary from here down: the alias sets the flags every step
+    # already reads, so no call site has to know both spellings.
+    _apply_platform_alias(args)
+
     """Execute jui build."""
     config_mgr = ConfigManager()
     if not config_mgr.exists():
@@ -1780,3 +1796,16 @@ def _tracked_scope(present_keys: list[str]) -> dict:
         head = key.split("/", 1)[0] if "/" in key else "."
         scope[head] = scope.get(head, 0) + 1
     return dict(sorted(scope.items(), key=lambda kv: (-kv[1], kv[0])))
+
+
+def _apply_platform_alias(args) -> None:
+    """Fold `--platform X` into the `--X-only` flag the code already uses.
+
+    Kept as an alias rather than a replacement: the `--*-only` spellings are
+    in scripts and habits, and breaking them to fix a mismatch would trade
+    one wrong guess for another.
+    """
+    platform = getattr(args, "platform", None)
+    if not platform:
+        return
+    setattr(args, f"{platform}_only", True)

@@ -568,3 +568,59 @@ class ManifestWindowTests(unittest.TestCase):
         self.file.write_text('{"normalised": true, "new": 1}\n', encoding="utf-8")
         self.assertEqual(["gen/Home.json"],
                          run.written([self.file], known={"gen/Home.json"}))
+
+
+class PlatformSelectorAliasTests(unittest.TestCase):
+    """`--platform web` means what `--web-only` means.
+
+    The MCP tool takes `platform: "ios" | "android" | "web"`; the CLI took
+    only `--ios-only` / `--android-only` / `--web-only`. Anyone who met the
+    MCP interface first writes the MCP spelling here and gets exit 2 — and
+    a build stopped by an unknown argument leaves every output exactly as it
+    was, which is indistinguishable from a successful no-op. One project
+    compared manifest checksums across two such runs, found them identical,
+    and nearly recorded "no churn" from a tool that never ran.
+
+    The old spellings stay: they are in scripts and habits, and removing
+    them would trade one wrong guess for another.
+    """
+
+    def _folded(self, **kwargs):
+        from jui_cli.commands.build_cmd import _apply_platform_alias
+
+        args = _make_args(platform=None, **kwargs)
+        _apply_platform_alias(args)
+        return args
+
+    def test_each_platform_sets_the_matching_flag(self):
+        for platform in ("ios", "android", "web"):
+            args = self._folded()
+            args.platform = platform
+            from jui_cli.commands.build_cmd import _apply_platform_alias
+            _apply_platform_alias(args)
+            self.assertTrue(getattr(args, f"{platform}_only"),
+                            f"--platform {platform} did not select {platform}")
+            others = {"ios", "android", "web"} - {platform}
+            for other in others:
+                self.assertFalse(getattr(args, f"{other}_only"))
+
+    def test_the_old_spelling_still_works_on_its_own(self):
+        args = self._folded(web_only=True)
+        self.assertTrue(args.web_only)
+
+    def test_no_platform_leaves_every_flag_alone(self):
+        args = self._folded()
+        for platform in ("ios", "android", "web"):
+            self.assertFalse(getattr(args, f"{platform}_only"))
+
+    def test_the_parser_accepts_the_mcp_vocabulary(self):
+        # The arm that actually reproduces the report: the parser used to
+        # exit 2 on this spelling.
+        import argparse
+
+        from jui_cli.commands.build_cmd import register_build_command
+
+        parser = argparse.ArgumentParser()
+        register_build_command(parser.add_subparsers(dest="command"))
+        parsed = parser.parse_args(["build", "--platform", "web"])
+        self.assertEqual("web", parsed.platform)
