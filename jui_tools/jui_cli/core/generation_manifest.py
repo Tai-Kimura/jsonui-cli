@@ -438,65 +438,98 @@ def save(
 def coverage_line(
     written: int, total: int, version: str, distributed: int | None = None,
     dropped: int = 0, collisions: int = 0, collision_keys=(),
+    recorded_versions=None,
 ) -> str:
-    """Two lines: what this project is, then what this run did to the record.
+    """One line per subject, one population, one number.
 
     ```
-    generation manifest: 508 tracked generated file(s) as 1.8.11 (1042 ...)
-      this run: recorded/updated 310, dropped 3, merged away 2
+    generation manifest: 492 tracked generated file(s)
+      distributed to platforms: 1042 file(s)
+      recorded versions: 294 at 1.8.10, 198 at 1.8.7
+      this run (jui 1.8.13): recorded/updated 0
     ```
 
-    THE SPLIT IS ABOUT WHAT A BASELINE CAN SAY. Every number used to share
-    one line, and they are two kinds: `tracked`, the version and
-    `distributed` follow from the project's shape, while
-    `recorded/updated`, `dropped` and `merged away` follow from whatever
-    state the record happened to be in. A face comparing build output
-    against a stored baseline caught both with equal weight — the same tree
-    at the same version reported `0 of 234` warm and `234 of 234` from a
-    fresh clone, so a project that gitignores the manifest could not
-    reproduce its own baseline.
+    THE RULE IS THE POINT, not the wording. Every misreading this line has
+    produced came from two numbers, or a number and a version, sharing a
+    clause. `wrote N of M as V` was read as V describing M once N moved to
+    its own line. `492 tracked (1042 distributed)` was read as "492 of
+    1042", which are different populations. Three faces read the head alone
+    and took the running version for the version the entries carry — one
+    of them wrote that into its own ledger as an independent fact and
+    committed on it, before anyone had said anything about this line.
 
-    They worked around it by deleting the run number with a substitution.
-    That is a removal rule, and a removal rule passes whatever it has not
-    been told about: `dropped` and `merged away` came later, are just as
-    state-dependent, and went straight through. Two lines let a baseline
-    say "this line" instead, so the next state-dependent number lands
-    outside it by default.
+    Patching the wording did not hold: the docstring records two earlier
+    repairs, both made by appending a denial to the end, and the head kept
+    being read the same way. A denial at the end cannot reach a reading
+    formed at the start.
 
-    The second line prints even when nothing happened. A run that recorded
-    nothing and a run whose output nobody read produce the same silence
-    otherwise, which is the failure this line was added to end. `dropped`
-    and `merged away` are omitted at zero — nothing turns on telling "none
-    dropped" from "not reported" — but `recorded/updated` always appears,
-    because zero is one of its answers.
+    So the version now appears once, on the line about the run it belongs
+    to, and nothing else shares a line with a number that is not its own.
+    What the entries actually carry is printed instead of left to be
+    inferred — it was in no output at all before, so a reader wanting it
+    had to parse the JSON.
+
+    EVERY LINE IS PRINTED, ALWAYS. A line that appears only when its number
+    is interesting makes its absence carry the opposite claim: no
+    `recorded versions` line would say "they are all the same", and no
+    `distributed` line would say "none were". Both were proposed and both
+    are refused for the same reason the rest of this file refuses silence
+    as a value.
+
+    Parsers are better off, not worse: each line has a stable prefix, so
+    the number can be found by it rather than by matching around
+    neighbouring words.
     """
-    config = (
-        f"generation manifest: {total} tracked generated file(s) "
-        f"as {version}"
-    )
-    if distributed is not None and distributed != total:
-        config += f" ({distributed} file(s) distributed in total)"
-    # The ending used to read "records writes, not currency". It was there
-    # to deny freshness, and a reader took it as confirmation that the
-    # number counts writes, which the number does not do. The denial it
-    # exists to make is kept; the word that made the other claim is gone.
-    config += (
-        " — untouched files keep the version that last generated them "
-        "(a version stamp, not a freshness check)"
+    lines = [f"generation manifest: {total} tracked generated file(s)"]
+
+    # "not counted" rather than nothing, and 0 rather than "not counted".
+    # The count returned None for both "the walk failed" and "there were
+    # none", and the line then omitted itself for both — plus for the case
+    # where it equalled `tracked`. Three states, one silence, and a lane
+    # reading its own output took the absence for a zero.
+    if distributed is None:
+        lines.append("  distributed to platforms: not counted")
+    else:
+        lines.append(f"  distributed to platforms: {distributed} file(s)")
+
+    # The caveat sits beside the thing it qualifies. Put at the end of the
+    # block it qualified nothing in particular, and the two earlier
+    # attempts to fix a misreading by appending a denial there did not
+    # reach the reading. Its scope was also wrong: it said "untouched files
+    # keep the version that last generated them", and a face measured a
+    # file whose contents had changed that morning still carrying an older
+    # version — so the promise was false for touched files too. What is
+    # true of every entry is the weaker statement.
+    lines.append(
+        f"  recorded versions: {_versions_phrase(recorded_versions)}"
+        " — the version of the run that stamped each entry, not proof of"
+        " what generated the file"
     )
 
-    run = f"  this run: recorded/updated {written}"
+    run = f"  this run (jui {version}): recorded/updated {written}"
     if dropped:
-        # Saying "untouched files keep their version" while removing
-        # records describes the opposite of what happened. It stays on
-        # this line: a dropped entry means a generated file is gone, and
-        # the generated files are tracked, so the deletion shows in a diff.
+        # Stays on this line: a dropped entry means a generated file was
+        # deleted, and those are tracked, so a diff shows it.
         run += f", dropped {dropped} entr(y/ies) whose file is gone"
+    lines.append(run)
 
-    lines = [config, run]
     if collisions:
         lines.extend(_collision_warning(collisions, collision_keys))
     return "\n".join(lines)
+
+
+def _versions_phrase(recorded_versions) -> str:
+    """`294 at 1.8.10, 198 at 1.8.7`, or what to say when there are none.
+
+    Ordered by count and then by version so two runs over the same record
+    render identically; a baseline comparing this line needs that.
+    """
+    if not recorded_versions:
+        return "none recorded yet"
+    counts = dict(recorded_versions)
+    ordered = sorted(counts.items(), key=lambda kv: (-kv[1], kv[0]),
+                     reverse=False)
+    return ", ".join(f"{count} at {name}" for name, count in ordered)
 
 
 def _collision_warning(collisions: int, keys) -> list[str]:

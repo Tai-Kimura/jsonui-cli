@@ -105,33 +105,37 @@ class ManifestTests(unittest.TestCase):
         # A partial run reporting only its numerator reads like a full one.
         # The two now sit on separate lines — see coverage_line — so this
         # checks both are present and which line each is on.
-        config, run = gm.coverage_line(1, 3, "1.8.4").split("\n")
-        self.assertIn("3 tracked generated file(s)", config)
-        self.assertIn("1.8.4", config)
-        self.assertIn("recorded/updated 1", run)
+        block = gm.coverage_line(1, 3, "1.8.4")
+        self.assertIn("generation manifest: 3 tracked generated file(s)",
+                      block)
+        self.assertIn("this run (jui 1.8.4): recorded/updated 1", block)
 
     def test_the_two_kinds_of_number_do_not_share_a_line(self):
         # What the split is for: a baseline that keeps the first line can
         # say "this line" rather than deleting the run's number, so the
         # next state-dependent number added lands outside it instead of
         # passing an exclusion rule that never heard of it.
-        block = gm.coverage_line(1, 3, "1.8.4", distributed=9, dropped=2,
-                                 collisions=1, collision_keys=["gen/A.kt"])
-        config, run = block.split("\n")[:2]
-        for state_word in ("recorded/updated", "dropped", "merged away"):
-            self.assertNotIn(state_word, config)
-        for shape_word in ("tracked", "distributed", "1.8.4"):
-            self.assertNotIn(shape_word, run)
-        # The collision does not ride inside the run line either: the
-        # baselines reading this are moving to replacing that line's values
-        # while keeping the line, so anything folded in would be replaced
-        # with them and never differ anywhere.
+        lines = gm.coverage_line(1, 3, "1.8.4", distributed=9, dropped=2,
+                                 collisions=1, collision_keys=["gen/A.kt"],
+                                 recorded_versions={"1.8.3": 3}).split("\n")
+        head = lines[0]
+        # One subject, one population, one number per line. The head is the
+        # project's file count and carries nothing else — not the version,
+        # which was read as describing it, and not the distributed total,
+        # which is a different population and was read as its denominator.
+        for foreign in ("recorded/updated", "dropped", "merged away",
+                        "distributed", "1.8.4", "1.8.3"):
+            self.assertNotIn(foreign, head)
+        run = next(l for l in lines if "this run" in l)
+        for foreign in ("tracked", "distributed", "recorded versions"):
+            self.assertNotIn(foreign, run)
         self.assertNotIn("merged away", run)
 
     def test_the_run_line_prints_when_the_run_did_nothing(self):
         # Otherwise "recorded nothing" and "nobody read the output" are the
         # same observation.
-        run = gm.coverage_line(0, 3, "1.8.4").split("\n")[1]
+        lines = gm.coverage_line(0, 3, "1.8.4").split("\n")
+        run = next(l for l in lines if "this run" in l)
         self.assertIn("recorded/updated 0", run)
         # The other two are omitted at zero: nothing turns on telling
         # "none dropped" from "not reported".
@@ -141,7 +145,13 @@ class ManifestTests(unittest.TestCase):
     def test_the_block_says_what_it_is_not(self):
         # The reader's next move depends on it: this records which version
         # wrote a file, not whether the file is current.
-        self.assertIn("not a freshness check", gm.coverage_line(1, 3, "1.8.4"))
+        # Beside what it qualifies, and true of every entry — the earlier
+        # wording promised something only about untouched files, and a
+        # face measured a touched one carrying an older version anyway.
+        block = gm.coverage_line(1, 3, "1.8.4")
+        versions = next(l for l in block.split("\n")
+                        if "recorded versions" in l)
+        self.assertIn("not proof of what generated the file", versions)
 
     def test_the_line_does_not_call_the_count_a_write_count(self):
         # It is not one, in either direction: a run that wrote 83 files
@@ -321,10 +331,13 @@ class PathSpellingTests(unittest.TestCase):
         # A reader took the distributed total for the manifest's scope and
         # concluded hundreds of files were unrecorded. Two names, two
         # numbers.
-        config = gm.coverage_line(198, 200, "1.8.8",
-                                   distributed=507).split("\n")[0]
-        self.assertIn("200 tracked generated file(s)", config)
-        self.assertIn("507 file(s) distributed in total", config)
+        lines = gm.coverage_line(198, 200, "1.8.8",
+                                  distributed=507).split("\n")
+        self.assertIn("200 tracked generated file(s)", lines[0])
+        self.assertIn("distributed to platforms: 507 file(s)", lines[1])
+        # Not in the same clause: "200 tracked (507 distributed)" was read
+        # as 200 OF 507, which are different populations.
+        self.assertNotIn("507", lines[0])
 
     def test_the_line_omits_the_second_number_when_it_adds_nothing(self):
         line = gm.coverage_line(4, 4, "1.8.8", distributed=4)
@@ -606,9 +619,9 @@ class KeyCollisionTests(unittest.TestCase):
         lines = gm.coverage_line(0, 1, "1.8.10", collisions=2,
                                  collision_keys=["src/generated/A.ts"]
                                  ).split("\n")
-        self.assertEqual(4, len(lines), lines)
-        self.assertIn("merged away 2", lines[2])
-        self.assertNotIn("merged away", lines[1])
+        run = next(i for i, l in enumerate(lines) if "this run" in l)
+        self.assertIn("merged away 2", lines[run + 1])
+        self.assertNotIn("merged away", lines[run])
 
     def test_the_warning_reads_as_a_loss_to_someone_seeing_it_first(self):
         # No corpus has ever produced a collision, so whoever reads this
@@ -619,7 +632,8 @@ class KeyCollisionTests(unittest.TestCase):
         lines = gm.coverage_line(
             0, 9, "1.8.10", collisions=2,
             collision_keys=["src/generated/ColorManager.ts"]).split("\n")
-        warning = "\n".join(lines[2:])
+        run = next(i for i, l in enumerate(lines) if "this run" in l)
+        warning = "\n".join(lines[run + 1:])
         # Which files.
         self.assertIn("src/generated/ColorManager.ts", warning)
         # What was lost, in words, not a count.
@@ -633,12 +647,17 @@ class KeyCollisionTests(unittest.TestCase):
     def test_the_warning_says_how_many_keys_it_did_not_name(self):
         # A truncated list reads as the whole list.
         keys = [f"src/generated/f{i}.ts" for i in range(7)]
-        warning = gm.coverage_line(0, 9, "1.8.10", collisions=9,
-                                   collision_keys=keys).split("\n")[2]
+        lines = gm.coverage_line(0, 9, "1.8.10", collisions=9,
+                                 collision_keys=keys).split("\n")
+        warning = lines[next(i for i, l in enumerate(lines)
+                             if "this run" in l) + 1]
         self.assertIn("+2 more", warning)
 
     def test_no_warning_line_when_nothing_merged(self):
-        self.assertEqual(2, len(gm.coverage_line(0, 1, "1.8.10").split("\n")))
+        lines = gm.coverage_line(0, 1, "1.8.10").split("\n")
+        self.assertTrue(all("merged away" not in l for l in lines), lines)
+        # And the four that always print are all there.
+        self.assertEqual(4, len(lines), lines)
 
     def test_a_truncated_key_list_says_it_is_truncated(self):
         # 20 keys under a count of 45 reads as the whole list unless the
@@ -704,3 +723,66 @@ class CleanRebuildTests(unittest.TestCase):
         before = gm.manifest_path(self.root).read_bytes()
         self.assertEqual([], self._build("1.8.11"))
         self.assertEqual(before, gm.manifest_path(self.root).read_bytes())
+
+
+class OneSubjectPerLineTests(unittest.TestCase):
+    """The rule the block is built on, checked as a rule.
+
+    Every misreading this line produced came from two things sharing a
+    clause: a version beside a count it did not describe, and two counts
+    over different populations inside one parenthesis. Patching the wording
+    did not hold — two earlier repairs appended a denial to the end, and a
+    denial at the end cannot reach a reading formed at the start.
+    """
+
+    def _lines(self, **kwargs):
+        base = dict(written=1, total=492, version="1.8.13", distributed=1042,
+                    recorded_versions={"1.8.10": 294, "1.8.7": 198})
+        base.update(kwargs)
+        return gm.coverage_line(**base).split("\n")
+
+    def test_the_running_version_appears_once_and_on_the_run_line(self):
+        lines = self._lines()
+        carrying = [l for l in lines if "1.8.13" in l]
+        self.assertEqual(1, len(carrying), lines)
+        self.assertIn("this run", carrying[0])
+
+    def test_no_line_holds_two_populations(self):
+        # `492 tracked (1042 distributed)` was read as 492 OF 1042.
+        for line in self._lines():
+            with self.subTest(line=line):
+                self.assertFalse("492" in line and "1042" in line)
+
+    def test_the_recorded_versions_are_printed_at_all(self):
+        # They were in no output: a reader wanting them had to parse the
+        # JSON, and three faces read the running version instead.
+        line = next(l for l in self._lines() if "recorded versions" in l)
+        self.assertIn("294 at 1.8.10", line)
+        self.assertIn("198 at 1.8.7", line)
+
+    def test_every_line_prints_when_its_number_is_dull(self):
+        # A line that appears only when interesting makes its absence carry
+        # the opposite claim: no `recorded versions` would say "all the
+        # same", no `distributed` would say "none".
+        lines = self._lines(distributed=0, recorded_versions={"1.8.13": 492})
+        self.assertIn("  distributed to platforms: 0 file(s)", lines)
+        self.assertTrue(any("recorded versions: 492 at 1.8.13" in l
+                            for l in lines), lines)
+
+    def test_a_count_that_could_not_be_taken_says_so(self):
+        # Distinct from zero. One value used to mean both, and a lane read
+        # the resulting silence as a zero on a tree that distributed
+        # nothing because nothing was wired.
+        lines = self._lines(distributed=None)
+        self.assertIn("  distributed to platforms: not counted", lines)
+
+    def test_an_empty_record_says_so_rather_than_omitting_the_line(self):
+        lines = self._lines(recorded_versions={})
+        self.assertTrue(any("none recorded yet" in l for l in lines), lines)
+
+    def test_the_order_is_stable_for_a_baseline(self):
+        a = gm.coverage_line(0, 2, "1.8.13",
+                             recorded_versions={"1.8.7": 1, "1.8.10": 1})
+        b = gm.coverage_line(0, 2, "1.8.13",
+                             recorded_versions={"1.8.10": 1, "1.8.7": 1})
+        self.assertEqual(a, b)

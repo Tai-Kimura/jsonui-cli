@@ -170,7 +170,8 @@ def cmd_build(args: argparse.Namespace) -> int:
             distributed=_distributed_file_count(config_mgr),
             dropped=manifest["summary"].get("dropped", 0),
             collisions=manifest["summary"].get("collisions", 0),
-            collision_keys=manifest["summary"].get("collisionKeys", ())))
+            collision_keys=manifest["summary"].get("collisionKeys", ()),
+            recorded_versions=_recorded_versions(manifest)))
         _report_stage_failures(_stage_ledger)
         return code
 
@@ -243,7 +244,8 @@ def cmd_build(args: argparse.Namespace) -> int:
         distributed=_distributed_file_count(config_mgr),
         dropped=manifest["summary"].get("dropped", 0),
         collisions=manifest["summary"].get("collisions", 0),
-        collision_keys=manifest["summary"].get("collisionKeys", ())))
+        collision_keys=manifest["summary"].get("collisionKeys", ()),
+        recorded_versions=_recorded_versions(manifest)))
 
     # "Build completed successfully" is the identical sentence whether a
     # run produced every file or none: `jui verify` had the same shape
@@ -261,6 +263,24 @@ def cmd_build(args: argparse.Namespace) -> int:
           f"generated file(s)")
     _report_stage_failures(_stage_ledger)
     return 0
+
+
+def _recorded_versions(manifest: dict) -> dict:
+    """How many entries carry each version, straight from what was saved.
+
+    This was in no output at all: a reader wanting to know which versions
+    the entries carry had to parse the JSON, and three faces instead read
+    the running version off the summary line and took it for this. Two of
+    them reported a defect on that reading and one wrote it into its own
+    ledger as an independent fact and committed on it.
+    """
+    counts: dict = {}
+    for entry in (manifest.get("files") or {}).values():
+        if not isinstance(entry, dict):
+            continue
+        name = entry.get("version") or "unknown"
+        counts[name] = counts.get(name, 0) + 1
+    return counts
 
 
 def _report_stage_failures(ledger: Path) -> None:
@@ -2058,7 +2078,12 @@ def _distributed_file_count(config_mgr) -> int | None:
             total += sum(1 for f in layouts.rglob("*") if f.is_file())
     except OSError:
         return None
-    return total or None
+    # `total or None` collapsed a real zero into the same value the OSError
+    # path returns, and the line then omitted itself for both. A lane
+    # reading its own output took that absence for a zero and carried on;
+    # the tree it was measuring had no distribution wired at all. Zero is
+    # an answer, and this returns it.
+    return total
 
 
 def _tracked_scope(present_keys: list[str]) -> dict:
