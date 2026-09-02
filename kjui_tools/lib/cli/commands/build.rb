@@ -152,6 +152,9 @@ module KjuiTools
 
           builder.build(options)
 
+          require_relative '../../core/stage_failures'
+          JsonUI::StageFailures.report!(Core::Logger)
+
           Core::Logger.success "XML build completed!"
         end
 
@@ -373,6 +376,9 @@ module KjuiTools
             Core::Logger.error "  … #{stranded.length - 20} more" if stranded.length > 20
             exit 1
           end
+
+          require_relative '../../core/stage_failures'
+          JsonUI::StageFailures.report!(Core::Logger)
 
           Core::Logger.success "Compose build completed!"
         end

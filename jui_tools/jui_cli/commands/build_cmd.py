@@ -7,6 +7,7 @@ import re
 import shutil
 import os
 import subprocess
+import tempfile
 import sys
 from pathlib import Path
 
@@ -124,6 +125,15 @@ def cmd_build(args: argparse.Namespace) -> int:
     )
     gen_run.observe(_generated_paths(config_mgr))
 
+    # Where the platform tools leave stages that failed while their build
+    # carried on. Each of them is a separate process and names its own at
+    # its own terminus, which still sits above everything printed here —
+    # and here is the bottom a reader looks at. Naming the file rather than
+    # having the tools guess a path keeps the two sides from disagreeing
+    # about where it is.
+    _stage_ledger = Path(tempfile.mkdtemp()) / "stage-failures.json"
+    os.environ["JUI_STAGE_FAILURES"] = str(_stage_ledger)
+
     def _halt(code: int) -> int:
         """Record what this run wrote, then return `code`.
 
@@ -161,6 +171,7 @@ def cmd_build(args: argparse.Namespace) -> int:
             dropped=manifest["summary"].get("dropped", 0),
             collisions=manifest["summary"].get("collisions", 0),
             collision_keys=manifest["summary"].get("collisionKeys", ())))
+        _report_stage_failures(_stage_ledger)
         return code
 
     # Distribute shared assets to each platform before build
@@ -248,7 +259,34 @@ def cmd_build(args: argparse.Namespace) -> int:
     # for it will find it named as such.
     print(f"\nBuild completed successfully — {len(present_keys)} tracked "
           f"generated file(s)")
+    _report_stage_failures(_stage_ledger)
     return 0
+
+
+def _report_stage_failures(ledger: Path) -> None:
+    """Name stages a platform tool could not complete, after everything else.
+
+    Those tools log at their own terminus, which on a real run is dozens of
+    lines above this — one measured build put the colours failure at line
+    13 of 46 and ended with a success line. A reader who scrolls to the
+    bottom saw only the success, which is the whole reason the failure went
+    unnoticed for as long as it did.
+
+    Silent when nothing failed, so a healthy build's output is unchanged
+    and no downstream baseline moves.
+    """
+    try:
+        entries = json.loads(ledger.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return
+    if not isinstance(entries, list) or not entries:
+        return
+    print(f"\n{len(entries)} stage(s) did not complete; the build carried "
+          f"on without them:")
+    for entry in entries:
+        if not isinstance(entry, dict):
+            continue
+        print(f"  - {entry.get('stage', '?')}: {entry.get('message', '')}")
 
 
 def _record_generation(config_mgr, gen_run, present, *, bootstrap=True):

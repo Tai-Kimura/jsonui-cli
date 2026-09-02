@@ -970,3 +970,53 @@ class HaltedRunRecordsWhatItWroteTests(unittest.TestCase):
         written, _keys, _m = _record_generation(
             _ConfigStub(self.root), self._run(), self.files)
         self.assertEqual(3, len(written))
+
+
+class StageFailureReportTests(unittest.TestCase):
+    """Stages that failed are named after everything else, or not at all.
+
+    A platform tool logs its own failures at its own terminus, which on a
+    real build is dozens of lines above the end: one measured run put the
+    colours failure at line 13 of 46 and finished with a success line and
+    exit 0. A reader looks at the bottom, so that is where this repeats it.
+    """
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.ledger = Path(self._tmp.name) / "stage-failures.json"
+
+    def tearDown(self):
+        self._tmp.cleanup()
+
+    def _run(self) -> str:
+        import contextlib
+        import io as _io
+
+        from jui_cli.commands.build_cmd import _report_stage_failures
+
+        out = _io.StringIO()
+        with contextlib.redirect_stdout(out):
+            _report_stage_failures(self.ledger)
+        return out.getvalue()
+
+    def test_a_failed_stage_is_named_with_its_message(self):
+        self.ledger.write_text(json.dumps([
+            {"stage": "colors", "message": "colors.json could not be parsed"},
+        ]), encoding="utf-8")
+        out = self._run()
+        self.assertIn("1 stage(s) did not complete", out)
+        self.assertIn("colors", out)
+        self.assertIn("could not be parsed", out)
+
+    def test_a_healthy_run_prints_nothing(self):
+        # The condition that keeps this off every downstream baseline: a
+        # build with no failed stage must be byte-identical to before.
+        self.assertEqual("", self._run())
+        self.ledger.write_text("[]", encoding="utf-8")
+        self.assertEqual("", self._run())
+
+    def test_an_unreadable_ledger_is_not_an_error(self):
+        # The tools may not have written one, and a build that succeeded
+        # must not fail at the last line because of it.
+        self.ledger.write_text("not json", encoding="utf-8")
+        self.assertEqual("", self._run())

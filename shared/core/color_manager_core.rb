@@ -134,6 +134,17 @@ module JsonUIShared
         rescue JSON::ParserError => e
           logger.warn "Failed to parse colors.json: #{e.message}"
           @load_failure = e.message
+          # Named again at the end of the build: this warning is line 13 of
+          # 46 on a real run, and a reader looks at the bottom.
+          begin
+            require_relative 'stage_failures'
+            JsonUI::StageFailures.record(
+              'colors', "colors.json could not be parsed (#{e.message}); " \
+                        'it was left as it is and no colours were recorded'
+            )
+          rescue LoadError
+            nil
+          end
           nil
         end
 

@@ -199,6 +199,9 @@ module SjuiTools
         # キャッシュの保存（集約された全ファイルのincluding_filesを保存）
         @cache_manager.save_cache(all_including_files) if json_updated_flag
         
+        require_relative '../core/stage_failures'
+        JsonUI::StageFailures.report!(Core::Logger)
+
         Core::Logger.success "Build completed successfully!"
       end
 

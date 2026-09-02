@@ -271,6 +271,11 @@ module RjuiTools
             exit 1
           end
 
+          # Stages that failed while the build carried on. Prints nothing
+          # when nothing failed, so a healthy run is unchanged.
+          require_relative '../../core/stage_failures'
+          JsonUI::StageFailures.report!(Core::Logger)
+
           Core::Logger.success('Build completed!')
         end
 
