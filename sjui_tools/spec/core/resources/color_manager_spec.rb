@@ -76,6 +76,38 @@ RSpec.describe SjuiTools::Core::Resources::ColorManager do
       expect(File.read(colors_file)).to eq(original)
     end
 
+    # A value that cannot be a key name passes through untouched, and the
+    # branch that does it raised NameError instead: it reached for
+    # `Core::Logger`, which does not resolve from this file's nesting, so
+    # `return color_value` was never executed. Four releases carried the
+    # repair without it ever running, and the six suites were green the
+    # whole time because nothing drove this input.
+    it 'passes a dotted literal through instead of raising' do
+      manager = described_class.new(config, source_path, resources_dir)
+      expect { manager.send(:process_and_replace_color, 'Color.Green') }
+        .not_to raise_error
+      expect(manager.send(:process_and_replace_color, 'Color.Green'))
+        .to eq('Color.Green')
+    end
+
+    it 'does not record a dotted literal as an undefined color key' do
+      # The point of the branch: writing it to defined_colors.json is what
+      # made every generated ColorManager emit `val Color.Green`, which is
+      # an extension property on Color and does not compile.
+      manager = described_class.new(config, source_path, resources_dir)
+      manager.send(:process_and_replace_color, 'Color.Green')
+      expect(manager.instance_variable_get(:@undefined_colors))
+        .not_to have_key('Color.Green')
+    end
+
+    it 'still treats a bare key name as a key' do
+      # The control: the branch must not swallow the canonical shape.
+      manager = described_class.new(config, source_path, resources_dir)
+      manager.send(:process_and_replace_color, 'smoke_ink')
+      expect(manager.instance_variable_get(:@undefined_colors))
+        .to have_key('smoke_ink')
+    end
+
     it 'says what it did not write, since the build carries on' do
       colors_file = File.join(resources_dir, 'colors.json')
       File.write(colors_file, '{ this is not valid json')

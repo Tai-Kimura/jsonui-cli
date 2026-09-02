@@ -440,7 +440,18 @@ module JsonUIShared
           # property on Color and does not compile (measured on the sample
           # app 2026-09-02). The value passes through untouched; the codegen
           # emits it as the literal it already is.
-          Core::Logger.warn "Not treating '#{color_value}' as a color key (not a valid key name) — passing it through"
+          # `logger`, like the other thirteen calls in this file. Written as
+          # `Core::Logger` it raises NameError from this lexical scope —
+          # the nesting is JsonUIShared::ColorManagerCore and `Core` is in
+          # neither it nor any ancestor — so the `return color_value` below
+          # was never reached and the repair this branch exists for has not
+          # run since it was written. Four releases.
+          #
+          # Nothing in the file could have shown it: this was the only
+          # `Core::Logger` here, so there was no sibling to copy and no
+          # sibling to contradict.
+          logger.warn "Not treating '#{color_value}' as a color key " \
+                      "(not a valid key name) — passing it through"
           return color_value
         else
           @undefined_colors[color_value] = nil

@@ -20,6 +20,11 @@ require_relative '../../react/viewmodel_generator'
 require_relative '../../react/hook_generator'
 require_relative '../../core/layout_variant'
 require_relative '../../core/screen_index'
+# Loaded here, not at the point that reports: the recording calls run
+# earlier in the build than the report does, and a require sitting at
+# the report would leave them raising NameError — which is the exact
+# shape of the defect this file is being changed to fix.
+require_relative '../../core/stage_failures'
 
 module RjuiTools
   module CLI
@@ -238,8 +243,20 @@ module RjuiTools
               end
             rescue JSON::ParserError => e
               Core::Logger.error("Invalid JSON in #{json_file}: #{e.message}")
+              JsonUI::StageFailures.record(
+                'layout', "#{json_file} was not generated: #{e.message}"
+              )
             rescue StandardError => e
+              # Carrying on is right — one bad layout should not stop the
+              # other seventeen — but the run then finished with `Build
+              # completed!` and exit 0 while a component was missing. That
+              # is why a defect in the colour path went four releases
+              # unnoticed: the exception reached neither the exit code nor
+              # the closing line, and the error scrolled past.
               Core::Logger.error("Error processing #{json_file}: #{e.message}")
+              JsonUI::StageFailures.record(
+                'layout', "#{json_file} was not generated: #{e.message}"
+              )
             end
           end
 
@@ -273,10 +290,23 @@ module RjuiTools
 
           # Stages that failed while the build carried on. Prints nothing
           # when nothing failed, so a healthy run is unchanged.
-          require_relative '../../core/stage_failures'
           JsonUI::StageFailures.report!(Core::Logger)
 
-          Core::Logger.success('Build completed!')
+          # And the closing line does not say completed when it did not.
+          # "Build completed!" beside an error the reader has already
+          # scrolled past is what let a broken layout look like a clean
+          # run. The exit code is left alone deliberately: a partial build
+          # is a legitimate outcome here, and stopping it would break the
+          # window every consuming project builds in. What was missing is
+          # that the last line stops claiming otherwise.
+          if JsonUI::StageFailures.any?
+            Core::Logger.error(
+              "Build finished with #{JsonUI::StageFailures.entries.size} " \
+              'stage(s) incomplete — see above'
+            )
+          else
+            Core::Logger.success('Build completed!')
+          end
         end
 
         def prune_orphan_components(expected_paths)
@@ -577,6 +607,9 @@ module RjuiTools
           ensure_use_color_mode_hook
         rescue StandardError => e
           Core::Logger.error("Error processing colors: #{e.message}")
+          JsonUI::StageFailures.record(
+            'colors', "colors were not processed: #{e.message}"
+          )
         end
 
         # Copy the useColorMode React hook template to @/hooks/ so consumers

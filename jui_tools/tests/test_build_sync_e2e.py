@@ -992,11 +992,13 @@ class StageFailureReportTests(unittest.TestCase):
         import contextlib
         import io as _io
 
-        from jui_cli.commands.build_cmd import _report_stage_failures
+        from jui_cli.commands.build_cmd import (
+            _print_stage_failures, _stage_failures,
+        )
 
         out = _io.StringIO()
         with contextlib.redirect_stdout(out):
-            _report_stage_failures(self.ledger)
+            _print_stage_failures(_stage_failures(self.ledger))
         return out.getvalue()
 
     def test_a_failed_stage_is_named_with_its_message(self):
@@ -1090,3 +1092,69 @@ class ForeignGeneratedTreeTests(unittest.TestCase):
         self.assertNotIn("web/spec/fixtures/generated/a.ts", keys)
         # And the one it no longer declares comes back into scope.
         self.assertIn("web/tests/mocks/generated/a.ts", keys)
+
+
+class ClosingLineMatchesWhatHappenedTests(unittest.TestCase):
+    """`Build completed successfully` is not printed above a list of things
+    that did not complete.
+
+    A platform tool can finish having skipped work — one bad layout does
+    not stop the other seventeen — and the closing line said the build
+    succeeded directly above the report of what had not. That is the same
+    shape as a launcher discarding an exit code, one level up: the failure
+    was already on screen and the last line contradicted it. Measured on a
+    real build, where a layout that raised produced the error, the stage
+    report, and `Build completed successfully` together.
+    """
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.ledger = Path(self._tmp.name) / "stage-failures.json"
+
+    def tearDown(self):
+        self._tmp.cleanup()
+
+    def _entries(self):
+        from jui_cli.commands.build_cmd import _stage_failures
+        return _stage_failures(self.ledger)
+
+    def test_a_run_with_a_failed_stage_reports_entries(self):
+        self.ledger.write_text(json.dumps([
+            {"stage": "layout", "message": "Bad.json was not generated"},
+        ]), encoding="utf-8")
+        self.assertEqual(1, len(self._entries()))
+
+    def test_a_healthy_run_reports_none(self):
+        # The condition that keeps the closing line unchanged for everyone
+        # whose build is fine, so no downstream baseline moves.
+        self.assertEqual([], self._entries())
+        self.ledger.write_text("[]", encoding="utf-8")
+        self.assertEqual([], self._entries())
+
+    def test_an_unreadable_ledger_reports_none(self):
+        self.ledger.write_text("not json", encoding="utf-8")
+        self.assertEqual([], self._entries())
+
+    def test_the_decision_is_taken_before_the_line_is_printed(self):
+        # Structural: reading the ledger after printing is what made the
+        # contradiction possible, and it reads as correct either way.
+        import ast
+        import inspect
+
+        from jui_cli.commands import build_cmd
+
+        source = inspect.getsource(build_cmd.cmd_build)
+        tree = ast.parse(source.lstrip())
+        read_line = printed_line = None
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Call) and isinstance(node.func, ast.Name):
+                if node.func.id == "_stage_failures" and read_line is None:
+                    read_line = node.lineno
+            if isinstance(node, ast.Constant) and isinstance(node.value, str):
+                if "Build completed successfully" in node.value:
+                    printed_line = node.lineno
+        self.assertIsNotNone(read_line)
+        self.assertIsNotNone(printed_line)
+        self.assertLess(read_line, printed_line,
+                        "the ledger is read after the closing line is "
+                        "chosen, so the line cannot depend on it")

@@ -173,7 +173,7 @@ def cmd_build(args: argparse.Namespace) -> int:
             collisions=manifest["summary"].get("collisions", 0),
             collision_keys=manifest["summary"].get("collisionKeys", ()),
             recorded_versions=_recorded_versions(manifest)))
-        _report_stage_failures(_stage_ledger)
+        _print_stage_failures(_stage_failures(_stage_ledger))
         return code
 
     # EVERY EXIT RECORDS, INCLUDING THE ONES THAT ARE NOT RETURNS.
@@ -279,9 +279,22 @@ def cmd_build(args: argparse.Namespace) -> int:
         # that reason, and repeating the pair here would put it back. What
         # this run did to the record is two lines up, where a reader looking
         # for it will find it named as such.
-        print(f"\nBuild completed successfully — {len(present_keys)} tracked "
-              f"generated file(s)")
-        _report_stage_failures(_stage_ledger)
+        # Read before the closing line is chosen, not after it is
+        # printed. A platform tool can finish having skipped work — one
+        # bad layout does not stop the other seventeen — and this said
+        # "completed successfully" directly above the report of what had
+        # not completed. Same shape as a launcher discarding an exit code,
+        # one level up: the failure was on screen and the last line
+        # contradicted it.
+        incomplete = _stage_failures(_stage_ledger)
+        if incomplete:
+            print(f"\nBuild finished — {len(present_keys)} tracked "
+                  f"generated file(s); {len(incomplete)} stage(s) did not "
+                  f"complete")
+        else:
+            print(f"\nBuild completed successfully — {len(present_keys)} "
+                  f"tracked generated file(s)")
+        _print_stage_failures(incomplete)
         return 0
     except BaseException:
         # Record what this run wrote, then let it fail as it would have.
@@ -312,7 +325,18 @@ def _recorded_versions(manifest: dict) -> dict:
     return counts
 
 
-def _report_stage_failures(ledger: Path) -> None:
+def _stage_failures(ledger: Path) -> list:
+    """What the platform tools left behind, or an empty list."""
+    try:
+        entries = json.loads(ledger.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return []
+    if not isinstance(entries, list):
+        return []
+    return [e for e in entries if isinstance(e, dict)]
+
+
+def _print_stage_failures(entries: list) -> None:
     """Name stages a platform tool could not complete, after everything else.
 
     Those tools log at their own terminus, which on a real run is dozens of
@@ -324,11 +348,7 @@ def _report_stage_failures(ledger: Path) -> None:
     Silent when nothing failed, so a healthy build's output is unchanged
     and no downstream baseline moves.
     """
-    try:
-        entries = json.loads(ledger.read_text(encoding="utf-8"))
-    except (OSError, ValueError):
-        return
-    if not isinstance(entries, list) or not entries:
+    if not entries:
         return
     print(f"\n{len(entries)} stage(s) did not complete; the build carried "
           f"on without them:")
