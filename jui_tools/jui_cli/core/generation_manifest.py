@@ -54,12 +54,16 @@ MANIFEST_FILENAME = "generation-manifest.json"
 
 _COMMENT = (
     "Which jsonui-cli version last WROTE each generated file, and when. "
-    "Entries are updated only for files a run actually touched, so a "
-    "partial regeneration leaves the rest at their earlier version rather "
-    "than claiming the new one. This says what wrote a file; it does not "
-    "say whether that version's defects reach this project (measure the "
-    "layouts for that), and it is not evidence of freshness — an entry is "
-    "the last generation, however long ago that was."
+    "An entry appears only for a file some run has written with content "
+    "different from what was there, so a partial regeneration leaves the "
+    "rest at their earlier version rather than claiming the new one, and a "
+    "rebuild that produces identical bytes changes nothing here at all. "
+    "'summary' names the gap that follows from this: a generated file with "
+    "no entry has not been written since this file started being kept — "
+    "which is NOT the same as having been written by an old version, and "
+    "the two cannot be told apart from here. This says what wrote a file; "
+    "it does not say whether that version's defects reach this project "
+    "(measure the layouts for that), and it is not evidence of freshness."
 )
 
 
@@ -105,10 +109,19 @@ def manifest_path(project_root: Path) -> Path:
 
 @dataclass(frozen=True)
 class FileState:
-    """Enough of a file's identity to tell "written" from "left alone"."""
+    """What decides "written" from "left alone": the content, and only that.
+
+    An earlier version paired the hash with an mtime and treated either
+    moving as a write. Generators rewrite unconditionally, so every build
+    touched every timestamp and the manifest re-stamped files whose bytes
+    had not changed — measured at 89 entries moving between two consecutive
+    builds with nothing edited in between, and 448 lines of churn on one
+    project, which is why that project stopped tracking the file at all. A
+    record that changes when nothing changed is noise, and noise is what
+    gets ignored.
+    """
 
     sha256: str
-    mtime_ns: int
 
 
 @dataclass
@@ -139,7 +152,7 @@ class GenerationRun:
                 # is dropped by `save` rather than left naming a missing file.
                 continue
             prior = self.before.get(key)
-            if prior is None or prior.sha256 != after.sha256 or prior.mtime_ns < after.mtime_ns:
+            if prior is None or prior.sha256 != after.sha256:
                 touched.append(key)
         return touched
 
@@ -171,10 +184,9 @@ def _state_of(path) -> FileState | None:
     p = Path(path)
     try:
         data = p.read_bytes()
-        stat = p.stat()
     except OSError:
         return None
-    return FileState(hashlib.sha256(data).hexdigest(), stat.st_mtime_ns)
+    return FileState(hashlib.sha256(data).hexdigest())
 
 
 def load(project_root: Path) -> dict:
@@ -214,6 +226,19 @@ def save(
     manifest = {
         "_comment": _COMMENT,
         "schemaVersion": 1,
+        # The denominator, inside the file. Without it a reader compares the
+        # entry count against the number in the build log, finds a gap of a
+        # hundred-odd, and reads it as records that went missing — measured:
+        # a run reporting "112 of 233" wrote a file holding 112 entries, and
+        # nothing in the file said the other 121 were simply never written.
+        "summary": {
+            "tracked": len(present_keys) if present_keys is not None else len(files),
+            "recorded": len(files),
+            "unrecorded": (
+                max(len(present_keys) - len(files), 0)
+                if present_keys is not None else 0
+            ),
+        },
         "files": {k: files[k] for k in sorted(files)},
     }
     path = manifest_path(project_root)

@@ -22,7 +22,9 @@ would fail differently:
 from __future__ import annotations
 
 import json
+import os
 import tempfile
+import time
 import unittest
 from pathlib import Path
 
@@ -122,22 +124,64 @@ class ManifestTests(unittest.TestCase):
         self.assertEqual({"gen/A.kt", "gen/C.kt"}, set(versions))
 
     # The limitation, pinned so it cannot be quietly lost -----------------
-    def test_an_unwritten_file_keeps_its_version_even_on_a_later_run(self):
-        # A generator that produces byte-identical content and skips the
-        # write leaves the earlier version in place. That is the honest
-        # answer for a manifest that records writes — and the reason the
-        # line says so out loud rather than implying currency.
+    def test_rewriting_identical_content_is_not_a_write(self):
+        # Generators rewrite unconditionally, so a build moves every mtime.
+        # Deciding on the timestamp made every build re-stamp files whose
+        # bytes had not changed — 89 entries moved between two consecutive
+        # builds of an unedited project, and one project saw 448 lines of
+        # churn and stopped tracking the file. Content is the only thing
+        # that decides.
         first = self._run("1.8.3")
         for path in self.files:
             path.write_text("// stable output\n", encoding="utf-8")
         self._save(first)
+        before = gm.manifest_path(self.root).read_bytes()
 
-        second = self._run("1.8.4")  # nothing rewritten
+        second = self._run("1.8.4")
+        for path in self.files:
+            # Same bytes, new timestamp: what a rebuild actually does.
+            path.write_text("// stable output\n", encoding="utf-8")
+            os.utime(path, (time.time() + 5, time.time() + 5))
         written = self._save(second)
 
         self.assertEqual([], written)
         self.assertEqual({"gen/A.kt": "1.8.3", "gen/B.kt": "1.8.3",
                           "gen/C.kt": "1.8.3"}, self._versions())
+        self.assertEqual(before, gm.manifest_path(self.root).read_bytes(),
+                         "an unchanged rebuild rewrote the manifest")
+
+    def test_changed_content_still_updates(self):
+        # The control for the test above: if nothing were ever recorded,
+        # "byte-identical manifest" would pass for the wrong reason.
+        first = self._run("1.8.3")
+        for path in self.files:
+            path.write_text("// v1\n", encoding="utf-8")
+        self._save(first)
+
+        second = self._run("1.8.4")
+        self.files[0].write_text("// v2\n", encoding="utf-8")
+        written = self._save(second)
+
+        self.assertEqual(["gen/A.kt"], written)
+        self.assertEqual("1.8.4", self._versions()["gen/A.kt"])
+
+    def test_the_file_names_the_gap_between_tracked_and_recorded(self):
+        # A run reporting "112 of 233" wrote a file holding 112 entries, and
+        # nothing in the file said the other 121 had simply never been
+        # written. A reader compared the two numbers and concluded records
+        # had gone missing.
+        run = self._run("1.8.4")
+        self.files[0].write_text("// only this one\n", encoding="utf-8")
+        self._save(run)
+
+        data = json.loads(gm.manifest_path(self.root).read_text(encoding="utf-8"))
+        self.assertEqual(3, data["summary"]["tracked"])
+        self.assertEqual(1, data["summary"]["recorded"])
+        self.assertEqual(2, data["summary"]["unrecorded"])
+        self.assertEqual(len(data["files"]), data["summary"]["recorded"])
+        # And the file says what an absent entry means, since "never
+        # written" and "written by an old version" are not the same claim.
+        self.assertIn("has not been written since", data["_comment"])
 
     def test_the_manifest_is_not_the_sync_record(self):
         # Two different facts: which toolchain copy a project holds, and
@@ -198,6 +242,19 @@ class PathSpellingTests(unittest.TestCase):
         absent = self.root / "src" / "generated" / "hooks" / "Missing.ts"
         run = gm.GenerationRun(project_root=self.root, version="1.8.8")
         self.assertEqual("src/generated/hooks/Missing.ts", run._key(absent))
+
+    def test_keys_relative_to_a_platform_root_are_spelled_correctly_too(self):
+        # The reporting project's real manifest keys start at `src/`, not
+        # at a platform directory — its jui.config.json sits inside the web
+        # project, so project_root IS that root. My fixture used the
+        # prefixed shape, which is a different input: the origin of the
+        # relative path is what differs, and canonicalisation has to hold
+        # from either origin.
+        project = self.root / "src" / "generated"
+        run = gm.GenerationRun(project_root=self.root, version="1.8.8")
+        miscased = self.root / "SRC" / "Generated" / "hooks" / "useColorMode.ts"
+        self.assertEqual("src/generated/hooks/useColorMode.ts", run._key(miscased))
+        self.assertTrue(project.is_dir())
 
     def test_the_line_separates_tracked_from_distributed(self):
         # A reader took the distributed total for the manifest's scope and
