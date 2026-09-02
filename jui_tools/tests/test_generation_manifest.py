@@ -103,11 +103,39 @@ class ManifestTests(unittest.TestCase):
 
     def test_the_line_names_both_numbers(self):
         # A partial run reporting only its numerator reads like a full one.
-        line = gm.coverage_line(1, 3, "1.8.4")
-        self.assertIn("1 of 3", line)
-        self.assertIn("1.8.4", line)
-        # And says what it is not, since a reader's next move depends on it.
-        self.assertIn("not a freshness check", line)
+        # The two now sit on separate lines — see coverage_line — so this
+        # checks both are present and which line each is on.
+        config, run = gm.coverage_line(1, 3, "1.8.4").split("\n")
+        self.assertIn("3 tracked generated file(s)", config)
+        self.assertIn("1.8.4", config)
+        self.assertIn("recorded/updated 1", run)
+
+    def test_the_two_kinds_of_number_do_not_share_a_line(self):
+        # What the split is for: a baseline that keeps the first line can
+        # say "this line" rather than deleting the run's number, so the
+        # next state-dependent number added lands outside it instead of
+        # passing an exclusion rule that never heard of it.
+        config, run = gm.coverage_line(
+            1, 3, "1.8.4", distributed=9, dropped=2, collisions=1).split("\n")
+        for state_word in ("recorded/updated", "dropped", "merged away"):
+            self.assertNotIn(state_word, config)
+        for shape_word in ("tracked", "distributed", "1.8.4"):
+            self.assertNotIn(shape_word, run)
+
+    def test_the_run_line_prints_when_the_run_did_nothing(self):
+        # Otherwise "recorded nothing" and "nobody read the output" are the
+        # same observation.
+        run = gm.coverage_line(0, 3, "1.8.4").split("\n")[1]
+        self.assertIn("recorded/updated 0", run)
+        # The other two are omitted at zero: nothing turns on telling
+        # "none dropped" from "not reported".
+        self.assertNotIn("dropped", run)
+        self.assertNotIn("merged away", run)
+
+    def test_the_block_says_what_it_is_not(self):
+        # The reader's next move depends on it: this records which version
+        # wrote a file, not whether the file is current.
+        self.assertIn("not a freshness check", gm.coverage_line(1, 3, "1.8.4"))
 
     def test_the_line_does_not_call_the_count_a_write_count(self):
         # It is not one, in either direction: a run that wrote 83 files
@@ -287,9 +315,10 @@ class PathSpellingTests(unittest.TestCase):
         # A reader took the distributed total for the manifest's scope and
         # concluded hundreds of files were unrecorded. Two names, two
         # numbers.
-        line = gm.coverage_line(198, 200, "1.8.8", distributed=507)
-        self.assertIn("198 of 200 tracked generated file(s)", line)
-        self.assertIn("507 file(s) distributed in total", line)
+        config = gm.coverage_line(198, 200, "1.8.8",
+                                   distributed=507).split("\n")[0]
+        self.assertIn("200 tracked generated file(s)", config)
+        self.assertIn("507 file(s) distributed in total", config)
 
     def test_the_line_omits_the_second_number_when_it_adds_nothing(self):
         line = gm.coverage_line(4, 4, "1.8.8", distributed=4)

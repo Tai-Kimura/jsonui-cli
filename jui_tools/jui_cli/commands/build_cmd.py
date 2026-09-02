@@ -194,15 +194,20 @@ def cmd_build(args: argparse.Namespace) -> int:
         dropped=manifest["summary"].get("dropped", 0),
         collisions=manifest["summary"].get("collisions", 0)))
 
-    # The success line carries the same numbers. "Build completed
-    # successfully" is the identical sentence whether a run produced every
-    # file or none: `jui verify` had the same shape until it started naming
-    # its denominator, and doing so revealed that five projects had been
-    # verifying nothing at all. An exit code cannot tell those apart —
-    # a crash is caught by it, a silent zero is not.
-    print(f"\nBuild completed successfully — recorded/updated "
-          f"{len(written)} of {len(present_keys)} tracked generated "
-          f"file(s) in the manifest")
+    # "Build completed successfully" is the identical sentence whether a
+    # run produced every file or none: `jui verify` had the same shape
+    # until it started naming its denominator, and doing so revealed that
+    # five projects had been verifying nothing at all. An exit code cannot
+    # tell those apart — a crash is caught by it, a silent zero is not.
+    #
+    # It names the denominator only. This line carried both numbers, and a
+    # number that depends on the record's state does not belong beside one
+    # that depends on the project's shape — the split above exists for
+    # that reason, and repeating the pair here would put it back. What
+    # this run did to the record is two lines up, where a reader looking
+    # for it will find it named as such.
+    print(f"\nBuild completed successfully — {len(present_keys)} tracked "
+          f"generated file(s)")
     return 0
 
 

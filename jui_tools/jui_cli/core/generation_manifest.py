@@ -428,52 +428,61 @@ def coverage_line(
     written: int, total: int, version: str, distributed: int | None = None,
     dropped: int = 0, collisions: int = 0,
 ) -> str:
-    """`generation manifest: recorded/updated 3 of 44 tracked file(s)`.
+    """Two lines: what this project is, then what this run did to the record.
 
-    Both numbers, because a partial run is the normal case and a line that
-    reported only the numerator would read the same as a full one.
+    ```
+    generation manifest: 508 tracked generated file(s) as 1.8.11 (1042 ...)
+      this run: recorded/updated 310, dropped 3, merged away 2
+    ```
 
-    THE VERB IS PART OF THE CLAIM. This said "wrote", and the number it
-    reports is not a count of files written — it is a count of entries this
-    run recorded or corrected. Measured on one project, the same word
-    counted two different things and matched the writes in neither
-    direction: `wrote 223 of 223` on a run that wrote 83 files (the rest
-    were entries being bootstrapped), and `wrote 0 of 223` on a --clean run
-    that also wrote 83 (nothing on record had changed). Naming the
-    denominator, which is what this line was added for, does not help when
-    the verb is wrong about what is being counted.
+    THE SPLIT IS ABOUT WHAT A BASELINE CAN SAY. Every number used to share
+    one line, and they are two kinds: `tracked`, the version and
+    `distributed` follow from the project's shape, while
+    `recorded/updated`, `dropped` and `merged away` follow from whatever
+    state the record happened to be in. A face comparing build output
+    against a stored baseline caught both with equal weight — the same tree
+    at the same version reported `0 of 234` warm and `234 of 234` from a
+    fresh clone, so a project that gitignores the manifest could not
+    reproduce its own baseline.
 
-    "tracked" is load-bearing. The denominator is what the manifest speaks
-    about, which is not every file a build distributes — a reader took the
-    larger number for the manifest's scope and concluded that hundreds of
-    files had gone unrecorded. When the distributed count is known it is
-    reported beside it, as a different number with its own name, rather
-    than left for someone to infer.
+    They worked around it by deleting the run number with a substitution.
+    That is a removal rule, and a removal rule passes whatever it has not
+    been told about: `dropped` and `merged away` came later, are just as
+    state-dependent, and went straight through. Two lines let a baseline
+    say "this line" instead, so the next state-dependent number lands
+    outside it by default.
 
-    The limitation rides along too: a reader who takes this for "this
-    project is on 3.0.0" has read it as freshness, which it is not.
+    The second line prints even when nothing happened. A run that recorded
+    nothing and a run whose output nobody read produce the same silence
+    otherwise, which is the failure this line was added to end. `dropped`
+    and `merged away` are omitted at zero — nothing turns on telling "none
+    dropped" from "not reported" — but `recorded/updated` always appears,
+    because zero is one of its answers.
     """
-    line = (
-        f"generation manifest: recorded/updated {written} of {total} "
-        f"tracked generated file(s) as {version}"
+    config = (
+        f"generation manifest: {total} tracked generated file(s) "
+        f"as {version}"
     )
     if distributed is not None and distributed != total:
-        line += f" ({distributed} file(s) distributed in total)"
-    if dropped:
-        # Saying "untouched files keep their version" while removing records
-        # describes the opposite of what happened.
-        line += f", dropped {dropped} entr(y/ies) whose file is gone"
-    if collisions:
-        # The prune never saw these, so the `dropped` count above says
-        # nothing about them and a reader watching only that number sees a
-        # clean run while the file holds fewer entries than it did.
-        line += (f", merged away {collisions} entr(y/ies) whose key now "
-                 f"spells the same as another's")
+        config += f" ({distributed} file(s) distributed in total)"
     # The ending used to read "records writes, not currency". It was there
     # to deny freshness, and a reader took it as confirmation that the
     # number counts writes, which the number does not do. The denial it
     # exists to make is kept; the word that made the other claim is gone.
-    return line + (
+    config += (
         " — untouched files keep the version that last generated them "
         "(a version stamp, not a freshness check)"
     )
+
+    run = f"  this run: recorded/updated {written}"
+    if dropped:
+        # Saying "untouched files keep their version" while removing
+        # records describes the opposite of what happened.
+        run += f", dropped {dropped} entr(y/ies) whose file is gone"
+    if collisions:
+        # The prune never saw these, so `dropped` says nothing about them
+        # and a reader watching only that number sees a clean run while
+        # the file holds fewer entries than it did.
+        run += (f", merged away {collisions} entr(y/ies) whose key now "
+                f"spells the same as another's")
+    return config + "\n" + run
