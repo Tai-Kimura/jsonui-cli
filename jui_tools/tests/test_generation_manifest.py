@@ -619,9 +619,11 @@ class KeyCollisionTests(unittest.TestCase):
         lines = gm.coverage_line(0, 1, "1.8.10", collisions=2,
                                  collision_keys=["src/generated/A.ts"]
                                  ).split("\n")
-        run = next(i for i, l in enumerate(lines) if "this run" in l)
-        self.assertIn("merged away 2", lines[run + 1])
-        self.assertNotIn("merged away", lines[run])
+        warn = next(i for i, l in enumerate(lines) if "merged away" in l)
+        self.assertIn("merged away 2", lines[warn])
+        # Not folded into any of the counted lines.
+        for other in lines[:warn]:
+            self.assertNotIn("merged away", other)
 
     def test_the_warning_reads_as_a_loss_to_someone_seeing_it_first(self):
         # No corpus has ever produced a collision, so whoever reads this
@@ -632,8 +634,8 @@ class KeyCollisionTests(unittest.TestCase):
         lines = gm.coverage_line(
             0, 9, "1.8.10", collisions=2,
             collision_keys=["src/generated/ColorManager.ts"]).split("\n")
-        run = next(i for i, l in enumerate(lines) if "this run" in l)
-        warning = "\n".join(lines[run + 1:])
+        warn = next(i for i, l in enumerate(lines) if "merged away" in l)
+        warning = "\n".join(lines[warn:])
         # Which files.
         self.assertIn("src/generated/ColorManager.ts", warning)
         # What was lost, in words, not a count.
@@ -649,8 +651,7 @@ class KeyCollisionTests(unittest.TestCase):
         keys = [f"src/generated/f{i}.ts" for i in range(7)]
         lines = gm.coverage_line(0, 9, "1.8.10", collisions=9,
                                  collision_keys=keys).split("\n")
-        warning = lines[next(i for i, l in enumerate(lines)
-                             if "this run" in l) + 1]
+        warning = next(l for l in lines if "merged away" in l)
         self.assertIn("+2 more", warning)
 
     def test_no_warning_line_when_nothing_merged(self):
@@ -786,3 +787,67 @@ class OneSubjectPerLineTests(unittest.TestCase):
         b = gm.coverage_line(0, 2, "1.8.13",
                              recorded_versions={"1.8.10": 1, "1.8.7": 1})
         self.assertEqual(a, b)
+
+
+class ReproducibleLinesComeFirstTests(unittest.TestCase):
+    """The block is ordered by what a fresh clone reproduces.
+
+    `recorded versions` was placed with the project's facts because it
+    describes the record rather than the run. True, and not the property a
+    baseline cares about: a face that gitignores the manifest gets a
+    different value from a warm tree and a fresh one. Measured on one tree
+    at one tool version — `9 at 1.8.10` warm, `9 at 1.8.13` after deleting
+    the record, because the first-sighting rule stamps everything with the
+    running version.
+
+    That is exactly the failure the two-line split was meant to end, back
+    again one line up. So the order is the rule now, and this checks it.
+    """
+
+    #: What each line's value depends on. A line moved between groups
+    #: without this being updated fails below.
+    REPRODUCES = ("generation manifest:", "  distributed to platforms:")
+    STATE = ("  this run (", "  recorded versions:")
+
+    def _block(self, **kwargs):
+        base = dict(written=0, total=9, version="1.8.13", distributed=2,
+                    recorded_versions={"1.8.10": 9})
+        base.update(kwargs)
+        return gm.coverage_line(**base).split("\n")
+
+    def test_the_state_dependent_region_starts_at_this_run(self):
+        # Contiguity alone is too weak: the previous order also had both
+        # state lines last, as `recorded versions` then `this run`, and a
+        # rule written as "from `this run:` to the end" missed the first of
+        # them. That is the rule the faces have. So the property is where
+        # the region STARTS, not merely that it is contiguous — checked
+        # after a red-check where the weaker version passed against the
+        # order it was written to reject.
+        lines = [l for l in self._block() if "merged away" not in l]
+        kinds = ["state" if any(l.startswith(p) for p in self.STATE)
+                 else "reproduces" for l in lines]
+        self.assertEqual(["reproduces", "reproduces", "state", "state"],
+                         kinds, lines)
+        first_state = lines[kinds.index("state")]
+        self.assertTrue(first_state.startswith("  this run ("),
+                        f"the state-dependent region begins at "
+                        f"{first_state!r}; a face keying on `this run:` "
+                        f"would leave the line above it in its baseline")
+
+    def test_the_lines_that_move_are_the_ones_grouped_as_state(self):
+        # The grouping is checked against behaviour, not against a comment:
+        # render the same project warm and fresh and see which lines differ.
+        warm = self._block(written=0, recorded_versions={"1.8.10": 9})
+        fresh = self._block(written=9, recorded_versions={"1.8.13": 9})
+        differing = [w for w, f in zip(warm, fresh) if w != f]
+        self.assertTrue(differing)
+        for line in differing:
+            self.assertTrue(any(line.startswith(p) for p in self.STATE),
+                            f"{line!r} changed between a warm and a fresh "
+                            f"record but is not grouped as state-dependent")
+
+    def test_the_warning_stays_after_everything(self):
+        # It is a signal, not a count, and a face keeps it whatever it does
+        # with the two groups.
+        lines = self._block(collisions=1, collision_keys=["gen/A.ts"])
+        self.assertIn("merged away", lines[-2])

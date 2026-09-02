@@ -443,11 +443,27 @@ def coverage_line(
     """One line per subject, one population, one number.
 
     ```
-    generation manifest: 492 tracked generated file(s)
-      distributed to platforms: 1042 file(s)
-      recorded versions: 294 at 1.8.10, 198 at 1.8.7
-      this run (jui 1.8.13): recorded/updated 0
+    generation manifest: 492 tracked generated file(s)      # reproduces
+      distributed to platforms: 1042 file(s)                # reproduces
+      this run (jui 1.8.13): recorded/updated 0             # state
+      recorded versions: 294 at 1.8.10, 198 at 1.8.7 — ...  # state
     ```
+
+    ORDERED BY WHETHER A FRESH CLONE REPRODUCES IT, not by subject. The
+    first two follow from the project and come out the same for anyone who
+    clones and builds. The last two depend on what the record already held,
+    and a face that gitignores the manifest gets different values from a
+    warm tree and a fresh one: measured on the same tree at the same tool
+    version, `9 at 1.8.10` warm and `9 at 1.8.13` after deleting the
+    record, because the first-sighting rule stamps everything with the
+    running version.
+
+    That is the failure the split into two lines was meant to end, and it
+    came back here — `recorded versions` was put with the project's facts
+    because it describes the record rather than the run, which is true and
+    is not the property that matters to a baseline. Grouping by subject
+    made the block readable; grouping by reproducibility is what lets a
+    face keep one region and replace the other.
 
     THE RULE IS THE POINT, not the wording. Every misreading this line has
     produced came from two numbers, or a number and a version, sharing a
@@ -500,18 +516,26 @@ def coverage_line(
     # file whose contents had changed that morning still carrying an older
     # version — so the promise was false for touched files too. What is
     # true of every entry is the weaker statement.
-    lines.append(
-        f"  recorded versions: {_versions_phrase(recorded_versions)}"
-        " — the version of the run that stamped each entry, not proof of"
-        " what generated the file"
-    )
-
     run = f"  this run (jui {version}): recorded/updated {written}"
     if dropped:
         # Stays on this line: a dropped entry means a generated file was
         # deleted, and those are tracked, so a diff shows it.
         run += f", dropped {dropped} entr(y/ies) whose file is gone"
     lines.append(run)
+
+    # The caveat sits beside the thing it qualifies. Put at the end of the
+    # block it qualified nothing in particular, and the two earlier
+    # attempts to fix a misreading by appending a denial there did not
+    # reach the reading. Its scope was also wrong: it said "untouched files
+    # keep the version that last generated them", and a face measured a
+    # file whose contents had changed that morning still carrying an older
+    # version — so the promise was false for touched files too. What is
+    # true of every entry is the weaker statement.
+    lines.append(
+        f"  recorded versions: {_versions_phrase(recorded_versions)}"
+        " — the version of the run that stamped each entry, not proof of"
+        " what generated the file"
+    )
 
     if collisions:
         lines.extend(_collision_warning(collisions, collision_keys))
