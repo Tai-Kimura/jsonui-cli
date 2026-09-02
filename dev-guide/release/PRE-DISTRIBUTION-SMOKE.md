@@ -164,7 +164,29 @@ parse のほうが壊れ方が静か。**
 配布側は `layouts_rel = pconfig.get("layoutsDir")` が空なら黙って `continue` する。
 ⇒ **SSoT を編集しても face に届かず、届かなかったことも言われない。**
 
-⇒ **判別子は成功行にある**:
+🚨 **この節は一度「判別子は成功行にある」と書いた。不健全だった。** `(N file(s) distributed
+in total)` の**欠落は 3 通りに読める**:
+
+```
+_distributed_file_count()   except OSError: return None        ← 数えられなかった
+                            return total or None               ← 本物の 0 も None になる
+coverage_line()             if distributed is not None and distributed != total:
+                                                               ← tracked と一致しても出ない
+```
+⇒ **「数えられなかった」「0 だった」「tracked と同数だった」が同じ沈黙になる。**
+📌 **「不在は測定結果」と言い続けた波で、不在に 1 つの意味を与えて手順書に書いた。**
+
+⇒ **健全な判別子は config を直接読むこと**:
+```
+python3 -c "import json; d=json.load(open('jui.config.json'));
+print([k for k,v in (d.get('platforms') or {}).items() if 'layoutsDir' in v])"
+```
+⚠️ **そして結線しただけでは足りない** —— `layoutsDir` を足すと、**SSoT 側に layout が 1 つも
+無い面では配布の prune が face の layout を消す**（仕様どおり）。⇒ **走査対象が無くなるので、
+色を参照する layout が 1 つも無い状態になり、colors は schema に関係なく生成物に届かない。**
+⇒ **SSoT 側に layout を置いてから撃つ。**
+
+（参考。上のとおり単独では判別子にならない）
 ```
 generation manifest: 14 tracked generated file(s) as 1.8.11
                      ↑ (N file(s) distributed in total) が無い = 配布 0 件
