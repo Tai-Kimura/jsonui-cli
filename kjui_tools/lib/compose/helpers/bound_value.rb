@@ -59,7 +59,7 @@ module KjuiTools
         # A dotted or bracketed path has no data definition and is therefore
         # NOT known to be a String — those keep their conversion.
         def string_typed?(path)
-          ResourceResolver.get_property_class(path).to_s.strip.casecmp('string').zero?
+          ResourceResolver.get_property_class(path).to_s.strip.delete_suffix('?').casecmp('string').zero?
         end
 
         # Dp expression, or nil when the value is absent.
@@ -238,29 +238,36 @@ module KjuiTools
 
           inner = BindingExpression.extract_inner(value)
           p = BindingExpression.parse(inner)
-          access = "data.#{p.path}"
-          # `toString()` first WHEN THE PROPERTY IS NOT ALREADY A STRING:
-          # `fontWeight` declares `["string", "number", "binding"]`, so
-          # `data.x.lowercase()` does not resolve when the layout bound it to
-          # an Int — a type error that no amount of `@{...}` analysis can
-          # see, because the spelling carries no type. But when the data
-          # section DOES declare String, the conversion is a no-op the
-          # compiler reports, so the declared class decides rather than the
-          # call site: dropping it everywhere would break the Int faces, and
-          # keeping it everywhere warns on the String ones.
+          # The whole subject is decided ONCE, from the declaration.
+          #
+          # Applying rules one after another is what put a stray safe call on
+          # a non-null property: dropping `.toString()` on its own left the
+          # `?.` that only existed to guard the conversion, trading a
+          # redundant-conversion warning for an unnecessary-safe-call one
+          # (measured downstream 2026-09-03). Nullability, conversion and
+          # fallback are one decision because each answer changes what the
+          # other two may emit.
+          #
+          # `toString()` stays wherever the property is not declared a
+          # String: `fontWeight` accepts `["string", "number", "binding"]`,
+          # and `Int.lowercase()` does not resolve — a type error the binding
+          # spelling cannot reveal. An unknown path keeps it for the same
+          # reason.
+          # ResourceResolver's predicate, not BindingExpression's: the
+          # latter only asks about a default value and misses a class
+          # declared `String?`. Two emitters answering "is this nullable"
+          # differently is how the residue above got in.
+          nullable = ResourceResolver.generated_property_nullable?(p.path)
+          dot = nullable ? '?.' : '.'
+          subject = "data.#{p.path}"
           if lowercase
-            access = if string_typed?(p.path)
-                       "#{access}?.lowercase()"
-                     else
-                       "#{access}?.toString()?.lowercase()"
-                     end
+            subject += "#{dot}toString()" unless string_typed?(p.path)
+            subject += "#{dot}lowercase()"
           end
-          subject = if BindingExpression.property_nullable?(p.path) || lowercase
-                      fallback = p.has_default && p.default.is_a?(String) ? p.default : ''
-                      "#{access} ?: #{BindingExpression.quote(fallback)}"
-                    else
-                      access
-                    end
+          if nullable
+            fallback = p.has_default && p.default.is_a?(String) ? p.default : ''
+            subject = "#{subject} ?: #{BindingExpression.quote(fallback)}"
+          end
 
           branches = mapping.map { |k, v| "#{BindingExpression.quote(k)} -> #{v}" }
           branches << "else -> #{else_arm}"

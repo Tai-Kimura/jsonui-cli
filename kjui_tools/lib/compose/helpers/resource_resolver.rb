@@ -69,6 +69,33 @@ module KjuiTools
             data_definitions[property_name]['class']
           end
 
+          # Does the GENERATED property have a nullable type? Mirrors
+          # DataModelUpdater's own rule (`var x: T? = null` when there is no
+          # usable default, or when the declared class already ends in `?`),
+          # because an emitter that guesses differently from the model emits
+          # calls the model's own output rejects.
+          #
+          # `has_default_value?` is not the same question and must not be
+          # substituted: it misses the `'nil'` spelling and a class declared
+          # `String?`. That gap is harmless where it is used (a missing
+          # interpolation default still compiles) and is NOT harmless here —
+          # dropping a safe call on a property the model declared nullable is
+          # a build failure, measured downstream 2026-09-03.
+          #
+          # An unknown property (a dotted or bracketed path, a name with no
+          # data section) is treated as nullable: the conservative answer
+          # keeps the safe call, which compiles either way.
+          def generated_property_nullable?(property_name)
+            definition = data_definitions[property_name]
+            return true unless definition
+
+            class_type = definition['class'].to_s
+            return true if class_type.strip.end_with?('?')
+
+            default_value = definition['defaultValue']
+            default_value.nil? || default_value == 'nil'
+          end
+
           # Don't cache - just load each time to avoid issues
           def cached_config
             Core::ConfigManager.load_config

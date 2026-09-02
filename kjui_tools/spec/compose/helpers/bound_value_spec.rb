@@ -184,6 +184,40 @@ RSpec.describe KjuiTools::Compose::Helpers::BoundValue do
       expect(described.enum('@{item.align}', mapping, bound_default: 'X', lowercase: true))
         .to include('toString()')
     end
+
+    # The subject is ONE decision, not a sequence of edits. Dropping the
+    # conversion on its own left behind the safe call that existed only to
+    # guard it, and the elvis that existed only to absorb its null — trading
+    # one warning for another (measured downstream 2026-09-03). Every
+    # declaration is pinned so a rule applied in isolation cannot pass.
+    it 'emits a bare call chain for a non-null String' do
+      KjuiTools::Compose::Helpers::ResourceResolver.data_definitions = {
+        'align' => { 'name' => 'align', 'class' => 'String', 'defaultValue' => 'regular' }
+      }
+      result = described.enum('@{align}', mapping, bound_default: 'X', lowercase: true)
+      expect(result).to include('when (data.align.lowercase())')
+      expect(result).not_to include('?.')
+      expect(result).not_to include('toString()')
+      expect(result).not_to include('?: ""')
+    end
+
+    it 'emits conversion without safe calls for a non-null non-String' do
+      KjuiTools::Compose::Helpers::ResourceResolver.data_definitions = {
+        'align' => { 'name' => 'align', 'class' => 'Int', 'defaultValue' => 1 }
+      }
+      result = described.enum('@{align}', mapping, bound_default: 'X', lowercase: true)
+      expect(result).to include('when (data.align.toString().lowercase())')
+      expect(result).not_to include('?.')
+    end
+
+    it 'reads a class declared String? as a String, still safely called' do
+      KjuiTools::Compose::Helpers::ResourceResolver.data_definitions = {
+        'align' => { 'name' => 'align', 'class' => 'String?', 'defaultValue' => 'x' }
+      }
+      result = described.enum('@{align}', mapping, bound_default: 'X', lowercase: true)
+      expect(result).to include('data.align?.lowercase()')
+      expect(result).not_to include('toString()')
+    end
   end
 
   describe '.priority_modifier' do

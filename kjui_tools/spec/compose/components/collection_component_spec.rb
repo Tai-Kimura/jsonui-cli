@@ -68,6 +68,84 @@ RSpec.describe KjuiTools::Compose::Components::CollectionComponent do
       expect(result).to include('data.items')
     end
 
+    # The safe calls on a collection property are decided by how the DATA
+    # MODEL declared it, not by the type it holds: CollectionDataSource
+    # gives every field a default, so the type is never null, but a property
+    # holding it is `CollectionDataSource? = null` whenever its data section
+    # carries no default. Reading the type instead of the declaration
+    # emitted unsafe calls on nullable properties and broke a downstream
+    # build (2026-09-03) while every fixture here stayed green — none of
+    # them declares a nullable collection. Both directions are pinned so a
+    # fix that satisfies one cannot pass.
+    context 'safe calls follow the declared nullability' do
+      let(:json_data) do
+        {
+          'type' => 'Collection',
+          'items' => '@{items}',
+          'sections' => [{ 'type' => 'section', 'cell' => 'ItemCell' }]
+        }
+      end
+
+      around do |example|
+        KjuiTools::Compose::Helpers::ResourceResolver.data_definitions = {}
+        example.run
+        KjuiTools::Compose::Helpers::ResourceResolver.data_definitions = {}
+      end
+
+      it 'keeps them when the property is declared nullable (no default)' do
+        KjuiTools::Compose::Helpers::ResourceResolver.data_definitions = {
+          'items' => { 'name' => 'items', 'class' => 'CollectionDataSource' }
+        }
+        result = described_class.generate(json_data, 0, required_imports)
+        expect(result).to include('data.items?.sections?')
+        expect(result).not_to include('data.items.sections')
+      end
+
+      it 'keeps them when the declared class itself is nullable' do
+        KjuiTools::Compose::Helpers::ResourceResolver.data_definitions = {
+          'items' => { 'name' => 'items', 'class' => 'CollectionDataSource?', 'defaultValue' => {} }
+        }
+        result = described_class.generate(json_data, 0, required_imports)
+        expect(result).to include('data.items?.sections?')
+      end
+
+      it 'drops them when the property is declared non-null (has a default)' do
+        KjuiTools::Compose::Helpers::ResourceResolver.data_definitions = {
+          'items' => { 'name' => 'items', 'class' => 'CollectionDataSource', 'defaultValue' => {} }
+        }
+        result = described_class.generate(json_data, 0, required_imports)
+        expect(result).to include('data.items.sections')
+        expect(result).not_to include('data.items?.sections')
+      end
+
+      it 'keeps them for a property with no data section at all' do
+        result = described_class.generate(json_data, 0, required_imports)
+        expect(result).to include('data.items?.sections?')
+      end
+
+      # Every path that emits `.sections` goes through the same decision.
+      # The scroll-anchor path was missed when the sites were edited by
+      # hand and kept its safe calls after the others lost theirs
+      # (measured downstream 2026-09-03) — one path out of eleven is enough
+      # to leave a warning standing, so this pins a second path rather than
+      # a second shape.
+      it 'applies the same decision on the scroll-anchor path' do
+        anchored = json_data.merge('defaultScrollAnchor' => 'bottom')
+
+        KjuiTools::Compose::Helpers::ResourceResolver.data_definitions = {
+          'items' => { 'name' => 'items', 'class' => 'CollectionDataSource', 'defaultValue' => {} }
+        }
+        non_null = described_class.generate(anchored, 0, Set.new)
+        expect(non_null).to include('val defaultAnchorCount = data.items.sections.firstOrNull()')
+
+        KjuiTools::Compose::Helpers::ResourceResolver.data_definitions = {
+          'items' => { 'name' => 'items', 'class' => 'CollectionDataSource' }
+        }
+        nullable = described_class.generate(anchored, 0, Set.new)
+        expect(nullable).to include('val defaultAnchorCount = data.items?.sections?.firstOrNull()')
+      end
+    end
+
     context 'with sections' do
       it 'generates section-based collection' do
         json_data = {
