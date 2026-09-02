@@ -169,16 +169,22 @@ def cmd_build(args: argparse.Namespace) -> int:
     # Re-read after the build: a run can create files that did not exist to
     # be observed, and can leave others exactly as they were.
     present = _generated_paths(config_mgr)
-    written = gen_run.written(present)
+    # The keys already on record: a file with none is recorded even when its
+    # bytes did not move, since otherwise a stable project never gets a
+    # first entry and the manifest reports 0 of N forever.
+    known = set(generation_manifest.load(config_mgr.project_root).get("files") or {})
+    written = gen_run.written(present, known=known)
     present_keys = [gen_run._key(p) for p in present]
-    generation_manifest.save(
+    manifest = generation_manifest.save(
         config_mgr.project_root, gen_run.version, written,
         present_keys=present_keys,
+        scope=_tracked_scope(present_keys),
     )
     print()
     print(generation_manifest.coverage_line(
         len(written), len(present_keys), gen_run.version,
-        distributed=_distributed_file_count(config_mgr)))
+        distributed=_distributed_file_count(config_mgr),
+        dropped=manifest["summary"].get("dropped", 0)))
 
     # The success line carries the same numbers. "Build completed
     # successfully" is the identical sentence whether a run produced every
@@ -1758,3 +1764,19 @@ def _distributed_file_count(config_mgr) -> int | None:
     except OSError:
         return None
     return total or None
+
+
+def _tracked_scope(present_keys: list[str]) -> dict:
+    """Where the tracked files live, counted per top-level directory.
+
+    `tracked: 223` on its own is a number a reader cannot reconcile with
+    their own tree — one counted 84 + 30 + 13 = 127 by hand and could not
+    account for the rest, which is the same trouble a bare denominator
+    always causes. The breakdown says which directories the number came
+    from, so a disagreement points at a place instead of a total.
+    """
+    scope: dict[str, int] = {}
+    for key in present_keys:
+        head = key.split("/", 1)[0] if "/" in key else "."
+        scope[head] = scope.get(head, 0) + 1
+    return dict(sorted(scope.items(), key=lambda kv: (-kv[1], kv[0])))

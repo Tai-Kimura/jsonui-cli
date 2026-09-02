@@ -526,9 +526,15 @@ class ManifestWindowTests(unittest.TestCase):
         self._tmp.cleanup()
 
     def _cycle(self, observe_before_distribution: bool):
-        """One build, with the snapshot on either side of distribution."""
+        """One build, with the snapshot on either side of distribution.
+
+        The file is already on record — otherwise the bootstrap rule (a
+        file with no entry is recorded on sight) would report a write and
+        the window position would not be what the result depends on.
+        """
         from jui_cli.core import generation_manifest as gm
 
+        known = {"gen/Home.json"}
         run = gm.GenerationRun(project_root=self.root, version="1.8.9")
         if observe_before_distribution:
             run.observe([self.file])
@@ -538,7 +544,7 @@ class ManifestWindowTests(unittest.TestCase):
             run.observe([self.file])
         # The platform tool normalises it back to exactly what was there.
         self.file.write_text('{"normalised": true}\n', encoding="utf-8")
-        return run.written([self.file])
+        return run.written([self.file], known=known)
 
     def test_a_build_that_ends_where_it_started_records_nothing(self):
         self.assertEqual(
@@ -560,4 +566,5 @@ class ManifestWindowTests(unittest.TestCase):
         run = gm.GenerationRun(project_root=self.root, version="1.8.9")
         run.observe([self.file])
         self.file.write_text('{"normalised": true, "new": 1}\n', encoding="utf-8")
-        self.assertEqual(["gen/Home.json"], run.written([self.file]))
+        self.assertEqual(["gen/Home.json"],
+                         run.written([self.file], known={"gen/Home.json"}))

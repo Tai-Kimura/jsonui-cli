@@ -52,8 +52,13 @@ class ManifestTests(unittest.TestCase):
         return run
 
     def _save(self, run, present=None):
+        # Called the way build_cmd calls it, `known` included. A helper that
+        # drops an argument production passes is a helper that tests a
+        # different function — which is how the observation-window defect
+        # stayed green here while churning on a real project.
         paths = present if present is not None else self.files
-        written = run.written(paths)
+        known = set(gm.load(self.root).get("files") or {})
+        written = run.written(paths, known=known)
         gm.save(self.root, run.version, written,
                 present_keys=[run._key(p) for p in paths])
         return written
@@ -170,14 +175,20 @@ class ManifestTests(unittest.TestCase):
         # nothing in the file said the other 121 had simply never been
         # written. A reader compared the two numbers and concluded records
         # had gone missing.
+        #
+        # The gap is narrower now that a file with no entry is recorded on
+        # sight: what is left is a tracked path the run could not read —
+        # discovered, then gone before the manifest was written. That still
+        # has to be visible rather than rounded away.
         run = self._run("1.8.4")
-        self.files[0].write_text("// only this one\n", encoding="utf-8")
-        self._save(run)
+        vanished = self.gen / "D.kt"
+        tracked = self.files + [vanished]        # discovered, never readable
+        self._save(run, present=tracked)
 
         data = json.loads(gm.manifest_path(self.root).read_text(encoding="utf-8"))
-        self.assertEqual(3, data["summary"]["tracked"])
-        self.assertEqual(1, data["summary"]["recorded"])
-        self.assertEqual(2, data["summary"]["unrecorded"])
+        self.assertEqual(4, data["summary"]["tracked"])
+        self.assertEqual(3, data["summary"]["recorded"])
+        self.assertEqual(1, data["summary"]["unrecorded"])
         self.assertEqual(len(data["files"]), data["summary"]["recorded"])
         # And the file says what an absent entry means, since "never
         # written" and "written by an old version" are not the same claim.
@@ -271,3 +282,186 @@ class PathSpellingTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class BootstrapTests(unittest.TestCase):
+    """A stable project still gets a first entry.
+
+    Deciding on content alone stopped the churn and introduced a worse
+    failure: a build whose output is byte-identical to what was there
+    records nothing, so a project whose generation is idempotent never gets
+    a first entry at all. Measured downstream — a run that wrote 83 files
+    reported `wrote 0 of 223` with an empty file, on every build, because
+    each file came back the same.
+
+    A file with no entry is recorded whatever its bytes did: this run
+    produced exactly those bytes, which is both true and the only answer
+    available. The two rules converge — the first build fills the record,
+    later ones only correct it — so the churn does not come back.
+    """
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.root = Path(self._tmp.name)
+        self.gen = self.root / "gen"
+        self.gen.mkdir()
+        self.files = []
+        for name in ("A.kt", "B.kt"):
+            path = self.gen / name
+            path.write_text("stable\n", encoding="utf-8")
+            self.files.append(path)
+
+    def tearDown(self):
+        self._tmp.cleanup()
+
+    def _build(self, version):
+        """One build that regenerates identical bytes, as a stable one does."""
+        known = set(gm.load(self.root).get("files") or {})
+        run = gm.GenerationRun(project_root=self.root, version=version)
+        run.observe(self.files)
+        for path in self.files:
+            path.write_text("stable\n", encoding="utf-8")
+        written = run.written(self.files, known=known)
+        gm.save(self.root, version, written,
+                present_keys=[run._key(p) for p in self.files])
+        return written
+
+    def test_the_first_build_records_even_when_nothing_changed(self):
+        self.assertEqual(2, len(self._build("1.8.10")))
+        data = json.loads(gm.manifest_path(self.root).read_text(encoding="utf-8"))
+        self.assertEqual(2, data["summary"]["recorded"])
+        self.assertEqual(0, data["summary"]["unrecorded"])
+
+    def test_the_second_build_records_nothing(self):
+        # The control that keeps the churn fix honest: bootstrapping must
+        # not turn into "record everything, every time".
+        self._build("1.8.10")
+        before = gm.manifest_path(self.root).read_bytes()
+        self.assertEqual([], self._build("1.8.11"))
+        self.assertEqual(before, gm.manifest_path(self.root).read_bytes())
+
+    def test_a_file_added_later_is_recorded_on_the_build_that_finds_it(self):
+        self._build("1.8.10")
+        extra = self.gen / "C.kt"
+        extra.write_text("stable\n", encoding="utf-8")
+        self.files.append(extra)
+        self.assertEqual(["gen/C.kt"], self._build("1.8.11"))
+
+    def test_the_summary_says_which_directories_were_counted(self):
+        run = gm.GenerationRun(project_root=self.root, version="1.8.10")
+        keys = [run._key(p) for p in self.files]
+        gm.save(self.root, "1.8.10", keys, present_keys=keys,
+                scope={"gen": 2})
+        data = json.loads(gm.manifest_path(self.root).read_text(encoding="utf-8"))
+        self.assertEqual({"gen": 2}, data["summary"]["trackedByDirectory"])
+
+
+class KeyMigrationTests(unittest.TestCase):
+    """Records written under an older spelling survive; gone files do not.
+
+    Fixing the key spelling silently destroyed the records it was meant to
+    protect: `save` prunes entries whose key is not in the present set, and
+    it compares strings, so every entry written as `src/Generated/…` looked
+    like a file that no longer exists once keys became `src/generated/…`.
+    One project lost 198 in a single build — same files, same disk, a
+    different spelling.
+
+    Restoring them by re-recording is not a fix. This record exists to find
+    files written by a particular release; re-stamping them with today's
+    version answers that question wrongly while looking repaired. So the
+    entry keeps ITS OWN version and only its key moves.
+    """
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.root = Path(self._tmp.name)
+        (self.root / "src" / "generated").mkdir(parents=True)
+        self.file = self.root / "src" / "generated" / "ColorManager.ts"
+        self.file.write_text("export {}\n", encoding="utf-8")
+
+    def tearDown(self):
+        self._tmp.cleanup()
+
+    def _seed(self, key: str, version: str) -> None:
+        gm.manifest_path(self.root).parent.mkdir(parents=True, exist_ok=True)
+        gm.manifest_path(self.root).write_text(json.dumps({
+            "schemaVersion": 1,
+            "files": {key: {"version": version, "generatedAt": "2026-09-03T00:00:00Z",
+                            "generatedBy": "jui build"}},
+        }, indent=2), encoding="utf-8")
+
+    def _save_with_present(self, present_keys):
+        return gm.save(self.root, "1.8.10", [], present_keys=present_keys)
+
+    def test_an_entry_written_under_the_old_spelling_survives(self):
+        self._seed("src/Generated/ColorManager.ts", "1.8.7")
+        manifest = self._save_with_present(["src/generated/ColorManager.ts"])
+        self.assertIn("src/generated/ColorManager.ts", manifest["files"])
+        self.assertEqual(
+            "1.8.7",
+            manifest["files"]["src/generated/ColorManager.ts"]["version"],
+            "the record was restored under today's version, which answers "
+            "'which release wrote this' wrongly",
+        )
+        self.assertEqual(0, manifest["summary"]["dropped"])
+
+    def test_an_entry_whose_file_is_gone_is_still_dropped(self):
+        # The control for the migration: it must not resurrect everything.
+        self._seed("src/Generated/GONE.ts", "1.8.7")
+        manifest = self._save_with_present(["src/generated/ColorManager.ts"])
+        self.assertEqual({}, manifest["files"])
+        self.assertEqual(1, manifest["summary"]["dropped"])
+
+    def test_dropping_is_announced(self):
+        self._seed("src/Generated/GONE.ts", "1.8.7")
+        manifest = self._save_with_present(["src/generated/ColorManager.ts"])
+        self.assertIn("src/generated/GONE.ts", manifest["summary"]["droppedKeys"])
+        line = gm.coverage_line(0, 1, "1.8.10", dropped=1)
+        self.assertIn("dropped 1", line)
+
+
+class CleanRebuildTests(unittest.TestCase):
+    """A `--clean` build records what it regenerated.
+
+    The reproduction the pre-distribution smoke never ran: it only ever
+    exercised an unedited tree, so it checked the "wrote nothing" side and
+    called an empty-but-stable manifest a pass. A project deleting its
+    output and regenerating it reported `wrote 0 of 223` with an empty file
+    while 83 files were written.
+    """
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.root = Path(self._tmp.name)
+        self.gen = self.root / "src" / "generated"
+        self.gen.mkdir(parents=True)
+        self.files = [self.gen / n for n in ("A.ts", "B.ts", "C.ts")]
+        for f in self.files:
+            f.write_text("generated\n", encoding="utf-8")
+
+    def tearDown(self):
+        self._tmp.cleanup()
+
+    def _build(self, version):
+        known = set(gm.load(self.root).get("files") or {})
+        run = gm.GenerationRun(project_root=self.root, version=version)
+        run.observe(self.files)
+        for f in self.files:            # --clean: remove, then regenerate
+            f.unlink()
+        for f in self.files:
+            f.write_text("generated\n", encoding="utf-8")
+        written = run.written(self.files, known=known)
+        gm.save(self.root, version, written,
+                present_keys=[run._key(f) for f in self.files])
+        return written
+
+    def test_a_clean_rebuild_does_not_record_nothing(self):
+        self.assertEqual(3, len(self._build("1.8.10")))
+        data = json.loads(gm.manifest_path(self.root).read_text(encoding="utf-8"))
+        self.assertEqual(3, data["summary"]["recorded"])
+
+    def test_a_second_clean_rebuild_adds_no_churn(self):
+        self._build("1.8.10")
+        before = gm.manifest_path(self.root).read_bytes()
+        self.assertEqual([], self._build("1.8.11"))
+        self.assertEqual(before, gm.manifest_path(self.root).read_bytes())

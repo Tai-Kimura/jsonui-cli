@@ -103,6 +103,21 @@ def _remaining(full: Path, prefix: Path) -> tuple:
         return full.parts
 
 
+def _migrate_key(project_root: Path, key: str) -> str:
+    """An existing key, re-spelled the way the current normaliser spells it.
+
+    Only the spelling moves. A key naming a file that is genuinely absent
+    normalises to itself (real_case keeps components it cannot find), so it
+    still fails the presence test and is still dropped.
+    """
+    root = Path(project_root)
+    candidate = real_case(root / key)
+    try:
+        return candidate.relative_to(real_case(root)).as_posix()
+    except ValueError:
+        return key
+
+
 def manifest_path(project_root: Path) -> Path:
     return Path(project_root) / MANIFEST_DIRNAME / MANIFEST_FILENAME
 
@@ -140,8 +155,27 @@ class GenerationRun:
             if state is not None:
                 self.before[self._key(path)] = state
 
-    def written(self, paths) -> list[str]:
-        """The subset that this run actually touched, as manifest keys."""
+    def written(self, paths, known: set | None = None) -> list[str]:
+        """The subset this run wrote, as manifest keys.
+
+        Two ways in, and the second one is what makes the record able to
+        exist at all:
+
+        CONTENT CHANGED. The run produced different bytes than were there.
+
+        NO ENTRY YET. The file has no record of who wrote it, so this run —
+        which just produced exactly these bytes — is the honest answer, and
+        the only one available. Without this an idempotent build records
+        nothing forever: a project whose generated output is stable never
+        gets a first entry, and `wrote 0 of 223` with an empty file is what
+        it reports on every build. Measured downstream: a run that wrote 83
+        files reported 0, because every one came back byte-identical.
+
+        Once a file has an entry, an unchanged rebuild leaves it alone, so
+        the churn this replaced does not return. The two rules converge:
+        the first build fills the record, later ones only correct it.
+        """
+        known = known if known is not None else set()
         touched = []
         for path in paths:
             key = self._key(path)
@@ -152,7 +186,7 @@ class GenerationRun:
                 # is dropped by `save` rather than left naming a missing file.
                 continue
             prior = self.before.get(key)
-            if prior is None or prior.sha256 != after.sha256:
+            if prior is None or prior.sha256 != after.sha256 or key not in known:
                 touched.append(key)
         return touched
 
@@ -205,6 +239,7 @@ def save(
     *,
     present_keys: list[str] | None = None,
     generated_by: str = "jui build",
+    scope: dict | None = None,
 ) -> dict:
     """Merge this run's writes into the manifest and write it back.
 
@@ -215,8 +250,27 @@ def save(
     existing = load(project_root)
     files = dict(existing.get("files") or {})
 
+    # Migrate BEFORE pruning. The prune drops any key not currently present,
+    # and it compares strings — so when the spelling of a key changed, every
+    # entry written under the old spelling looked like a file that no longer
+    # exists. One project lost 198 records in a single build that way: the
+    # same files, the same disk, a different spelling.
+    #
+    # Re-running each stored key through the current normaliser is what
+    # separates "spelled differently" from "gone". An entry that maps onto a
+    # present file keeps ITS OWN version — which is the whole point, because
+    # this record exists to find files written by a particular release, and
+    # a restore that re-stamps them with today's version answers that
+    # question wrongly while looking repaired.
+    migrated: dict = {}
+    for key, value in files.items():
+        migrated.setdefault(_migrate_key(project_root, key), value)
+    files = migrated
+
+    dropped: list[str] = []
     if present_keys is not None:
         present = set(present_keys)
+        dropped = sorted(k for k in files if k not in present)
         files = {k: v for k, v in files.items() if k in present}
 
     stamp = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
@@ -238,6 +292,17 @@ def save(
                 max(len(present_keys) - len(files), 0)
                 if present_keys is not None else 0
             ),
+            # Which directories `tracked` came from. A bare total is a number
+            # a reader cannot reconcile against their own tree, and one who
+            # tried got 127 by hand against a reported 223 with no way to
+            # find the difference.
+            "trackedByDirectory": scope or {},
+            # Entries this run removed because the file is no longer there.
+            # A run that drops records while printing "untouched files keep
+            # the version that last wrote them" is describing the opposite
+            # of what it did.
+            "dropped": len(dropped),
+            "droppedKeys": dropped[:20],
         },
         "files": {k: files[k] for k in sorted(files)},
     }
@@ -248,7 +313,8 @@ def save(
 
 
 def coverage_line(
-    written: int, total: int, version: str, distributed: int | None = None
+    written: int, total: int, version: str, distributed: int | None = None,
+    dropped: int = 0,
 ) -> str:
     """`generation manifest: this run wrote 3 of 44 tracked generated file(s)`.
 
@@ -271,6 +337,10 @@ def coverage_line(
     )
     if distributed is not None and distributed != total:
         line += f" ({distributed} file(s) distributed in total)"
+    if dropped:
+        # Saying "untouched files keep their version" while removing records
+        # describes the opposite of what happened.
+        line += f", dropped {dropped} entr(y/ies) whose file is gone"
     return line + (
         " — untouched files keep the version that last wrote them "
         "(records writes, not currency)"
