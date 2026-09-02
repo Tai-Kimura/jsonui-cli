@@ -496,3 +496,68 @@ class DistributedResourcesSmokeTests(unittest.TestCase):
             "never done — if that changed, this smoke should assert the "
             "themed shape here instead of the flat one",
         )
+
+
+class ManifestWindowTests(unittest.TestCase):
+    """The snapshot has to span every step of the build that writes.
+
+    Shipped 1.8.8 passed its unit tests and churned on a real project: 89
+    layout files recorded as written on every build, with identical bytes at
+    the start and the end of each. The comparison was not the problem — the
+    pair being compared was. The window opened AFTER distribution, so the
+    baseline was a mid-run state: distribution copies the authored layout
+    over the platform's copy, the platform tool normalises it back, and the
+    two moments compared were "just overwritten" and "normalised again".
+
+    The unit tests could not see it because their fixture wrote content
+    once, with nothing in between. A build has steps in between; that is
+    what makes it a build. These cases put a step inside the window.
+    """
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.root = Path(self._tmp.name)
+        self.file = self.root / "gen" / "Home.json"
+        self.file.parent.mkdir(parents=True)
+        # The state a previous build left behind: normalised.
+        self.file.write_text('{"normalised": true}\n', encoding="utf-8")
+
+    def tearDown(self):
+        self._tmp.cleanup()
+
+    def _cycle(self, observe_before_distribution: bool):
+        """One build, with the snapshot on either side of distribution."""
+        from jui_cli.core import generation_manifest as gm
+
+        run = gm.GenerationRun(project_root=self.root, version="1.8.9")
+        if observe_before_distribution:
+            run.observe([self.file])
+        # Distribution: the authored (un-normalised) form lands on top.
+        self.file.write_text('{"authored": true}\n', encoding="utf-8")
+        if not observe_before_distribution:
+            run.observe([self.file])
+        # The platform tool normalises it back to exactly what was there.
+        self.file.write_text('{"normalised": true}\n', encoding="utf-8")
+        return run.written([self.file])
+
+    def test_a_build_that_ends_where_it_started_records_nothing(self):
+        self.assertEqual(
+            [], self._cycle(observe_before_distribution=True),
+            "an unchanged build recorded a write — the window is opening "
+            "after a step that writes",
+        )
+
+    def test_the_late_window_is_what_produced_the_churn(self):
+        # The control: the same cycle with the snapshot where 1.8.8 put it,
+        # so this file demonstrates the defect rather than only asserting
+        # its absence.
+        self.assertEqual(["gen/Home.json"],
+                         self._cycle(observe_before_distribution=False))
+
+    def test_a_real_change_is_still_recorded(self):
+        from jui_cli.core import generation_manifest as gm
+
+        run = gm.GenerationRun(project_root=self.root, version="1.8.9")
+        run.observe([self.file])
+        self.file.write_text('{"normalised": true, "new": 1}\n', encoding="utf-8")
+        self.assertEqual(["gen/Home.json"], run.written([self.file]))

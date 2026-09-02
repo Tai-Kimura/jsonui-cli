@@ -89,6 +89,25 @@ def cmd_build(args: argparse.Namespace) -> int:
         for line in run_for_build(config_mgr):
             print(f"  WARNING [lint-strings]: {line}")
 
+    # Snapshot BEFORE the first step that writes anything — distribution
+    # included, not only the platform tools.
+    #
+    # The window has to span the whole build. Opening it after distribution
+    # made the baseline a mid-run state: distribution copies the authored
+    # layout over the platform's copy, the platform tool normalises it
+    # back, and the two moments being compared were "just overwritten" and
+    # "normalised again". Content genuinely differed across that pair, so
+    # every build recorded the same files as written — 89 of them on a real
+    # project, every run, with identical bytes at the start and the end of
+    # each. The comparison was right; the pair it compared was wrong.
+    from ..core import generation_manifest
+    from ..version import toolchain_version
+    gen_run = generation_manifest.GenerationRun(
+        project_root=config_mgr.project_root,
+        version=toolchain_version(),
+    )
+    gen_run.observe(_generated_paths(config_mgr))
+
     # Distribute shared assets to each platform before build
     _distribute_layouts(config_mgr, platforms, args)
     _distribute_styles(config_mgr, platforms, args)
@@ -120,19 +139,6 @@ def cmd_build(args: argparse.Namespace) -> int:
     # must not declare present-type transitions (sheet/modal/dialog/dismiss).
     if _check_isolated_embed_constraints(config_mgr) is False:
         return 1
-
-    # Snapshot every generated file before the platform tools run, so the
-    # manifest can record the ones this run actually wrote rather than
-    # claiming the current version for the whole tree. A partial run that
-    # overstated would be worse than no manifest at all: a record is
-    # trusted in a way a guess is not.
-    from ..core import generation_manifest
-    from ..version import toolchain_version
-    gen_run = generation_manifest.GenerationRun(
-        project_root=config_mgr.project_root,
-        version=toolchain_version(),
-    )
-    gen_run.observe(_generated_paths(config_mgr))
 
     should_build_ios = "ios" in platforms and not args.android_only and not args.web_only
     should_build_android = "android" in platforms and not args.ios_only and not args.web_only
@@ -1722,20 +1728,33 @@ def _distribute_images(
 
 
 def _distributed_file_count(config_mgr) -> int | None:
-    """How many files the build put on disk, for the line's second number.
+    """How many files the build DISTRIBUTED, for the line's second number.
 
-    Reported beside the manifest's own denominator, never as it: a reader
-    took the larger figure for the manifest's scope and concluded hundreds
-    of files had gone unrecorded. Two numbers with two names.
+    Counts the layouts and resources placed under each platform's
+    `layoutsDir`, which is what "distributed" means here. It used to walk
+    the whole platform root, which on a web project means node_modules and
+    build output: 52,038 files reported beside a manifest scope of 454.
+    A denominator that wrong is worse than none — the line exists to stop a
+    reader inventing the scope, and a number off by two orders of magnitude
+    invites exactly that, which is the misreading it was added to prevent.
     """
-    from .lint_generated_cmd import _platform_roots
+    config = config_mgr.load()
+    platforms = config.get("platforms") if isinstance(config, dict) else None
+    if not isinstance(platforms, dict):
+        return None
 
     total = 0
     try:
-        for root in _platform_roots(config_mgr):
-            if root is None or not Path(root).is_dir():
+        for pconfig in platforms.values():
+            if not isinstance(pconfig, dict):
                 continue
-            total += sum(1 for f in Path(root).rglob("*") if f.is_file())
+            root, layouts_rel = pconfig.get("root"), pconfig.get("layoutsDir")
+            if not root or not layouts_rel:
+                continue
+            layouts = config_mgr.project_root / root / layouts_rel
+            if not layouts.is_dir():
+                continue
+            total += sum(1 for f in layouts.rglob("*") if f.is_file())
     except OSError:
         return None
     return total or None
