@@ -154,8 +154,25 @@ class IosApiModelGenerator:
         if schema.is_strict:
             body_lines.append("// additionalProperties: false (strict — extra fields are dropped on decode)")
 
+        # `nonisolated`, because a DTO is a copy of the wire and holds no
+        # main-actor state. Under SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor
+        # every conformance here would otherwise be main-actor isolated, and
+        # a nonisolated context — a test harness decoding a fixture — cannot
+        # use an isolated conformance ("this is an error in the Swift 6
+        # language mode"). The type already declares Sendable, which says
+        # the VALUE crosses isolation domains; without this the CONFORMANCE
+        # still could not, so it could be handed over but not decoded.
+        #
+        # The modifier goes on the type, not on `Codable` alone: scoping it
+        # to the conformance leaves Equatable and Hashable isolated, and
+        # comparing or hashing a DTO off the main actor then draws the same
+        # diagnostic (measured — 4 of them where the type-level spelling
+        # gives 0). Verified on Swift 6.3.2 and 6.3.3; which release first
+        # accepted the spelling was NOT measured, so read this as "known
+        # good there" rather than a floor. String/Int enums and enums nested
+        # inside this type need nothing — measured 0 either way.
         body_lines.append(
-            f"struct {schema.name}Dto: {', '.join(conformances)} {{"
+            f"nonisolated struct {schema.name}Dto: {', '.join(conformances)} {{"
         )
 
         fmt = self._format_enabled(doc)
@@ -309,8 +326,10 @@ class IosApiModelGenerator:
             lines.extend(_doc_comment_lines(union.description))
         if union.deprecated:
             lines.append("@available(*, deprecated)")
+        # Same reasoning as the struct emit: a union DTO is decoded from
+        # nonisolated contexts too.
         lines.append(
-            f"enum {union.name}Dto: Codable, Sendable, Equatable, Hashable {{"
+            f"nonisolated enum {union.name}Dto: Codable, Sendable, Equatable, Hashable {{"
         )
         for variant in union.variants:
             case = _swift_oneof_case_ident(variant.discriminator_value)

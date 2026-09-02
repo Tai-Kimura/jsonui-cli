@@ -1234,3 +1234,91 @@ class DefaultedFieldDecodeTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class NonisolatedDtoTests(unittest.TestCase):
+    """DTOs carry `nonisolated`, so a nonisolated context can decode them.
+
+    Under `SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor` every conformance a
+    generated DTO declares is main-actor isolated, and a test harness
+    decoding a fixture off the main actor cannot use it — a warning today, an
+    error in the Swift 6 language mode. Neither end is the consumer's to fix:
+    the DTO is generated, and so is the branch-test runtime that calls it.
+
+    Measured on Swift 6.3.2 and 6.3.3 before choosing the spelling:
+
+        emitted today (no modifier)             2 diagnostics
+        `: nonisolated Codable` (conformance)   4 diagnostics  ← WORSE
+        `nonisolated struct` (the type)         0 diagnostics
+
+    The conformance-scoped spelling is worse than it looks: it silences
+    Codable and leaves Equatable and Hashable isolated, so comparing or
+    hashing a DTO off the main actor draws the same diagnostic. Which
+    release first accepted the type-level spelling was NOT measured — read
+    the two versions above as "known good there", not as a floor.
+
+    The pre-existing assertions in this file cannot catch a regression here:
+    they use `assertIn("struct UserDto: ...")`, which a `nonisolated struct
+    UserDto: ...` line satisfies as a substring. These name the prefix.
+    """
+
+    def _dto_source(self, schemas: dict, index: int = 0) -> str:
+        doc = parse_swagger(_doc(schemas), "test.json")
+        with tempfile.TemporaryDirectory() as tmpdir:
+            gen = _make_generator(Path(tmpdir))
+            return gen.generate_dto_source(doc.schemas[index], doc)
+
+    def test_a_struct_dto_is_nonisolated(self):
+        src = self._dto_source({
+            "User": {
+                "type": "object",
+                "properties": {"id": {"type": "string"}},
+            },
+        })
+        self.assertIn(
+            "nonisolated struct UserDto: Codable, Sendable, Equatable, Hashable {",
+            src,
+        )
+
+    def test_a_union_dto_is_nonisolated(self):
+        # A oneOf DTO is decoded from the same nonisolated contexts.
+        doc = parse_swagger(_doc({
+            "Cat": {"type": "object",
+                    "properties": {"kind": {"type": "string", "enum": ["cat"]}}},
+            "Dog": {"type": "object",
+                    "properties": {"kind": {"type": "string", "enum": ["dog"]}}},
+            "Pet": {
+                "oneOf": [
+                    {"$ref": "#/components/schemas/Cat"},
+                    {"$ref": "#/components/schemas/Dog"},
+                ],
+                "discriminator": {"propertyName": "kind"},
+            },
+        }), "test.json")
+        self.assertTrue(doc.unions, "no union was extracted")
+        with tempfile.TemporaryDirectory() as tmpdir:
+            gen = _make_generator(Path(tmpdir))
+            src = gen.generate_union_source(doc.unions[0], doc)
+        self.assertIn("nonisolated enum PetDto:", src)
+
+    def test_a_string_enum_is_left_alone(self):
+        # Measured: a raw-value enum's conformances are not isolated, so
+        # annotating it would add diff lines to every regeneration without
+        # silencing anything. The attribution downstream depends on the
+        # regeneration diff being one line per DTO and nothing else.
+        doc = parse_swagger(_doc({
+            "Holder": {
+                "type": "object",
+                "properties": {
+                    "status": {"type": "string", "enum": ["active", "closed"]},
+                },
+            },
+        }), "test.json")
+        self.assertTrue(doc.enums, "no enum was extracted to annotate or not")
+        with tempfile.TemporaryDirectory() as tmpdir:
+            gen = _make_generator(Path(tmpdir))
+            src = gen.generate_enum_source(doc.enums[0], doc)
+        self.assertIn("enum HolderStatus: String", src)
+        self.assertNotIn("nonisolated enum", src)
+
+
