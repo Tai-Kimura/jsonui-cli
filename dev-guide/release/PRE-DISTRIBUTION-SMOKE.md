@@ -186,12 +186,16 @@ print([k for k,v in (d.get('platforms') or {}).items() if 'layoutsDir' in v])"
 色を参照する layout が 1 つも無い状態になり、colors は schema に関係なく生成物に届かない。**
 ⇒ **SSoT 側に layout を置いてから撃つ。**
 
-（参考。上のとおり単独では判別子にならない）
+**由来（この節が一度書いた誤りを、印を付けて残す）**:
 ```
 generation manifest: 14 tracked generated file(s) as 1.8.11
-                     ↑ (N file(s) distributed in total) が無い = 配布 0 件
+                     ↑ (N file(s) distributed in total) が無い
+❌ 「= 配布 0 件」と読んだ。3 通りに読めるので偽
 ```
 ⚠️ **列車はこの欠落を見て「0 distributed だろう」と説明で片付け、その条件のまま
-「読めない入力に固有」という対照を取った。対照は無効だった。**
-⇒ **撃つ前に `(N distributed)` が出ることを確かめる。** manifest だけを見る腕
-（記録・churn・`dropped`・衝突）は結線に依存しないが、**配布や SSoT を経由する腕は依存する。**
+「読めない入力に固有」という対照を取った。対照は無効だった。** そして**その誤読を
+判別子として手順書に書いた**。⇒ **削除せず残すのは、次の読み手が同じ読みを再発明しないため。**
+
+**腕ごとの依存**: manifest だけを見る腕（記録・churn・`dropped`・衝突）は結線に依存しない。
+**配布・SSoT・colors を経由する腕は依存する** —— しかも依存の段が 3 つある
+（`layoutsDir` が在るか / SSoT 側に layout が在るか / その layout が色を参照するか）。
