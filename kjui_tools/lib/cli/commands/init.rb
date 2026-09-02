@@ -128,7 +128,14 @@ module KjuiTools
               'view_directory' => "kotlin/#{package_name.gsub('.', '/')}/views",
               'extension_directory' => "kotlin/#{package_name.gsub('.', '/')}/extensions",
               'adapter_directory' => "kotlin/#{package_name.gsub('.', '/')}/adapters",
-              'resource_manager_directory' => "kotlin/#{package_name.gsub('.', '/')}/generated",
+              # NOT the project package: ColorManager.kt declares the fixed
+              # `com.kotlinjsonui.generated` (color_manager.rb), so a path
+              # built from the app's own package puts the file where its
+              # package says it does not belong — and every emit that
+              # imports `com.kotlinjsonui.generated.ColorManager` then fails
+              # to resolve. Both shipping consumers configure this by hand;
+              # a project that took the default was broken from `init`.
+              'resource_manager_directory' => File.join(source_dir, Core::Resources::ColorManager::DEFAULT_RESOURCE_MANAGER_SUFFIX),
               'package_name' => package_name,
               'string_files' => [
                 'res/values/strings.xml',
