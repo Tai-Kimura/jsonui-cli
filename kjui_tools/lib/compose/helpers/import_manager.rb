@@ -267,13 +267,20 @@ module KjuiTools
             screen_marker: "import com.kotlinjsonui.core.ScreenMarker",
             embedded_event: "import com.kotlinjsonui.embed.EmbeddedEvent",
             viewmodel_compose: "import androidx.lifecycle.viewmodel.compose.viewModel",
-            # `hiltViewModel(viewModelStoreOwner, key)` from
-            # androidx.hilt:hilt-navigation-compose. Works for both
+            # `hiltViewModel(viewModelStoreOwner, key)`. Works for both
             # @HiltViewModel-annotated VMs (resolved via HiltViewModelFactory)
             # and plain no-arg VMs (fallback to NewInstanceFactory). Used by
             # EmbedComponent so child ViewModels load in Hilt projects without
             # NoSuchMethodException on missing no-arg ctor.
-            hilt_viewmodel: "import androidx.hilt.navigation.compose.hiltViewModel",
+            #
+            # The androidx.hilt.navigation.compose spelling is deprecated in
+            # favour of this one (the deprecation carries the ReplaceWith
+            # verbatim). A project declaring hilt-navigation-compose gets the
+            # new module transitively through its api dependency, so nothing
+            # has to be added downstream. VERIFIED FLOOR: 1.4.0 — the version
+            # measured. Which earlier version first shipped this package was
+            # NOT measured, so 1.3.x may or may not work.
+            hilt_viewmodel: "import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel",
             composition_local_provider: "import androidx.compose.runtime.CompositionLocalProvider",
             # Responsive branches read LocalWindowInfo.containerSize (pixels)
             # and convert to dp via LocalDensity — replaces the deprecated

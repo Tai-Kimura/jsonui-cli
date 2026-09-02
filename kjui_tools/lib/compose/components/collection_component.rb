@@ -424,7 +424,7 @@ module KjuiTools
             scroll_code = indent("val gridState = rememberLazyGridState()", depth) + "\n" +
                           indent("// Programmatic scrolling", depth) + "\n" +
                           indent("LaunchedEffect(data.#{scroll_prop}) {", depth) + "\n" +
-                          indent("val raw = data.#{scroll_prop}?.toString().orEmpty()", depth + 1) + "\n" +
+                          indent("val raw = data.#{scroll_prop}#{Helpers::BoundValue.string_typed?(scroll_prop) ? %q(.orEmpty()) : %q(?.toString().orEmpty())}", depth + 1) + "\n" +
                           indent("if (raw.isEmpty()) return@LaunchedEffect", depth + 1) + "\n" +
                           indent("val index = raw.substringBefore(\"#\").toIntOrNull() ?: return@LaunchedEffect", depth + 1) + "\n"
 
@@ -1405,7 +1405,7 @@ module KjuiTools
 
             code += indent("val collectionStackState = androidx.compose.foundation.lazy.rememberLazyListState()", depth) + "\n"
             code += indent("LaunchedEffect(data.#{scroll_prop}) {", depth) + "\n"
-            code += indent("val raw = data.#{scroll_prop}?.toString().orEmpty()", depth + 1) + "\n"
+            code += indent("val raw = data.#{scroll_prop}#{Helpers::BoundValue.string_typed?(scroll_prop) ? %q(.orEmpty()) : %q(?.toString().orEmpty())}", depth + 1) + "\n"
             code += indent("if (raw.isEmpty()) return@LaunchedEffect", depth + 1) + "\n"
             code += indent("val index = raw.substringBefore(\"#\").toIntOrNull() ?: return@LaunchedEffect", depth + 1) + "\n"
             stack_anchor_decl, stack_anchor_arg = scroll_anchor_offset_code(json_data, 'collectionStackState', depth)

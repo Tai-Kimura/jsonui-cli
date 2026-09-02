@@ -155,6 +155,35 @@ RSpec.describe KjuiTools::Compose::Helpers::BoundValue do
       expect(described.enum('@{align}', mapping, bound_default: 'X', lowercase: true))
         .to include('data.align?.toString()?.lowercase()')
     end
+
+    # Both halves of this have to hold at once: dropping the conversion
+    # everywhere breaks the faces that bind a number, and keeping it
+    # everywhere makes the compiler report a redundant conversion on the
+    # faces that bind a String. The declared class is what decides, so
+    # neither is a per-site judgement.
+    it 'keeps the conversion when the data section declares a non-String' do
+      KjuiTools::Compose::Helpers::ResourceResolver.data_definitions = {
+        'align' => { 'name' => 'align', 'class' => 'Int' }
+      }
+      expect(described.enum('@{align}', mapping, bound_default: 'X', lowercase: true))
+        .to include('data.align?.toString()?.lowercase()')
+    end
+
+    it 'drops the conversion when the data section declares a String' do
+      KjuiTools::Compose::Helpers::ResourceResolver.data_definitions = {
+        'align' => { 'name' => 'align', 'class' => 'String' }
+      }
+      result = described.enum('@{align}', mapping, bound_default: 'X', lowercase: true)
+      expect(result).to include('data.align?.lowercase()')
+      expect(result).not_to include('toString()')
+    end
+
+    it 'keeps the conversion for a path with no data definition' do
+      # A dotted or bracketed path has no declaration to read, so it is not
+      # known to be a String and must keep its conversion.
+      expect(described.enum('@{item.align}', mapping, bound_default: 'X', lowercase: true))
+        .to include('toString()')
+    end
   end
 
   describe '.priority_modifier' do

@@ -54,6 +54,14 @@ module KjuiTools
           value.is_a?(String) && !BindingExpression.extract_inner(value).nil?
         end
 
+        # True when the data section declares this property as a String, so a
+        # generated `.toString()` on it would be a no-op the compiler reports.
+        # A dotted or bracketed path has no data definition and is therefore
+        # NOT known to be a String — those keep their conversion.
+        def string_typed?(path)
+          ResourceResolver.get_property_class(path).to_s.strip.casecmp('string').zero?
+        end
+
         # Dp expression, or nil when the value is absent.
         #
         # `fallback:` is the value used when a nullable property resolves to
@@ -231,12 +239,22 @@ module KjuiTools
           inner = BindingExpression.extract_inner(value)
           p = BindingExpression.parse(inner)
           access = "data.#{p.path}"
-          # `toString()` first: the property may not be a String. `fontWeight`
-          # declares `["string", "number", "binding"]`, so `data.x.lowercase()`
-          # does not resolve when the layout bound it to an Int — a type error
-          # that no amount of `@{...}` analysis can see, because the spelling
-          # carries no type.
-          access = "#{access}?.toString()?.lowercase()" if lowercase
+          # `toString()` first WHEN THE PROPERTY IS NOT ALREADY A STRING:
+          # `fontWeight` declares `["string", "number", "binding"]`, so
+          # `data.x.lowercase()` does not resolve when the layout bound it to
+          # an Int — a type error that no amount of `@{...}` analysis can
+          # see, because the spelling carries no type. But when the data
+          # section DOES declare String, the conversion is a no-op the
+          # compiler reports, so the declared class decides rather than the
+          # call site: dropping it everywhere would break the Int faces, and
+          # keeping it everywhere warns on the String ones.
+          if lowercase
+            access = if string_typed?(p.path)
+                       "#{access}?.lowercase()"
+                     else
+                       "#{access}?.toString()?.lowercase()"
+                     end
+          end
           subject = if BindingExpression.property_nullable?(p.path) || lowercase
                       fallback = p.has_default && p.default.is_a?(String) ? p.default : ''
                       "#{access} ?: #{BindingExpression.quote(fallback)}"

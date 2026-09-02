@@ -97,7 +97,7 @@ module KjuiTools
           end
           code += "\n" + indent(') { embedScope ->', depth)
           code += "\n" + indent("#{embedded_view_class(screen)}(", depth + 1)
-          code += "\n" + indent('viewModel = androidx.hilt.navigation.compose.hiltViewModel(', depth + 2)
+          code += "\n" + indent('viewModel = androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel(', depth + 2)
           code += "\n" + indent('viewModelStoreOwner = embedScope.viewModelStoreOwner,', depth + 3)
           code += "\n" + indent("key = \"#{embed_id}\"", depth + 3)
           code += "\n" + indent(')', depth + 2)

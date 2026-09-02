@@ -162,7 +162,12 @@ RSpec.describe KjuiTools::Compose::Components::EmbedComponent do
           0,
           required_imports
         )
-        expect(result).to include('viewModel = androidx.hilt.navigation.compose.hiltViewModel(')
+        # The androidx.hilt.navigation.compose spelling is deprecated in
+        # favour of androidx.hilt.lifecycle.viewmodel.compose (measured on
+        # hilt-navigation-compose 1.4.0, which carries the new module as an
+        # api dependency — so a project declaring the old artifact still
+        # compiles this without adding anything).
+        expect(result).to include('viewModel = androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel(')
         expect(result).not_to include('viewModel = androidx.lifecycle.viewmodel.compose.viewModel(')
       end
 
