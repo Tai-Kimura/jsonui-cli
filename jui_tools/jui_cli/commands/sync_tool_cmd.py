@@ -138,7 +138,12 @@ def _resolve_source_root_and_reason(override: str | None) -> tuple[Path, str]:
     Saying which one was used is the tool's call.
     """
     if override:
-        root, reason = Path(override).expanduser().resolve(), "--source"
+        # The flag is `--from`; `source` is only its dest. Naming the dest
+        # here printed `(1.6.42, --source)` for a flag argparse rejects,
+        # which is worse than printing nothing: a reader who acts on it
+        # gets `unrecognized arguments`. Found by running the command
+        # instead of reading the function.
+        root, reason = Path(override).expanduser().resolve(), "--from"
     elif os.environ.get("JSONUI_CLI_PATH"):
         root, reason = (Path(os.environ["JSONUI_CLI_PATH"]).expanduser().resolve(),
                         "$JSONUI_CLI_PATH")

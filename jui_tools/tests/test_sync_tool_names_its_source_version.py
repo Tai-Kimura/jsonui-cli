@@ -58,11 +58,32 @@ class SourceVersionTests(unittest.TestCase):
         self.assertIn("1.8.5", line)
         self.assertIn("$JSONUI_CLI_PATH", line)
 
-    def test_an_explicit_source_is_named_as_such(self):
+    def test_an_explicit_source_is_named_by_the_flag_that_sets_it(self):
+        # `--source` is the argparse dest, not the flag. The line named the
+        # dest, so it told a reader to pass an argument the parser rejects.
         root, reason = _resolve_source_root_and_reason(str(self.home))
         line = _describe_source(root, reason)
         self.assertIn("1.8.7", line)
-        self.assertIn("--source", line)
+        self.assertIn("--from", line)
+        self.assertNotIn("--source", line)
+
+    def test_the_named_flag_is_one_the_parser_accepts(self):
+        # Pinning the name against the parser rather than against a string
+        # I typed twice: the two drifted, and only running the command
+        # showed it.
+        import argparse
+
+        from jui_cli.commands.sync_tool_cmd import register_sync_tool_command
+
+        parser = argparse.ArgumentParser()
+        register_sync_tool_command(parser.add_subparsers(dest="cmd"))
+        _root, reason = _resolve_source_root_and_reason(str(self.home))
+        sub = parser._subparsers._group_actions[0].choices["sync_tool"]
+        flags = {opt for action in sub._actions
+                 for opt in action.option_strings}
+        self.assertIn(reason, flags,
+                      f"the line names {reason}, which the parser does not "
+                      f"accept: {sorted(flags)}")
 
     def test_the_default_names_itself_too(self):
         # This arm used to assert the opposite: no rule name when nothing
@@ -85,7 +106,7 @@ class SourceVersionTests(unittest.TestCase):
         # The property, rather than three separate examples of it: whatever
         # picked the source, the line says so. Written this way, a fourth
         # route added later cannot quietly go silent.
-        for reason in ("default", "$JSONUI_CLI_PATH", "--source"):
+        for reason in ("default", "$JSONUI_CLI_PATH", "--from"):
             with self.subTest(reason=reason):
                 self.assertIn(reason, _describe_source(self.home, reason))
 
