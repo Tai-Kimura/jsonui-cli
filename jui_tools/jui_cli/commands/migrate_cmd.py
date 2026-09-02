@@ -45,7 +45,11 @@ def cmd_migrate_layouts(args: argparse.Namespace) -> int:
     if not layouts_rel:
         # Guess based on convention
         root = config_mgr.project_root / pconfig["root"]
-        for candidate in ["Layouts", "app/src/main/assets/Layouts", "src/Layouts"]:
+        # Same map init writes, so a guess here cannot point at a
+        # directory the build would never distribute from.
+        from ..core.config_manager import DEFAULT_LAYOUTS_DIR
+
+        for candidate in dict.fromkeys(DEFAULT_LAYOUTS_DIR.values()):
             if (root / candidate).exists():
                 layouts_rel = candidate
                 break

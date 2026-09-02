@@ -43,6 +43,24 @@ API_PLATFORM_DEFAULTS = {
 }
 
 
+#: Where each platform keeps its distributed Layouts, by convention.
+#:
+#: One list, because there were two ideas of this and only one of them was
+#: written down. `jui init` wrote no `layoutsDir` at all, so a project made
+#: by it had every distribution step silently skip — eight places read this
+#: key and most of them `continue` without a word — while `jui migrate`
+#: carried its own candidate list to guess with. A project could therefore
+#: be migrated from a directory that the build would never distribute to.
+#:
+#: The values are relative to the PLATFORM ROOT, which is the directory the
+#: user named at init.
+DEFAULT_LAYOUTS_DIR = {
+    "ios": "Layouts",
+    "android": "app/src/main/assets/Layouts",
+    "web": "src/Layouts",
+}
+
+
 class ConfigManager:
     """Manages jui.config.json read/write."""
 

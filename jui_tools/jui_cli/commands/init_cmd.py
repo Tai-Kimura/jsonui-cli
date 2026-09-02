@@ -6,7 +6,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-from ..core.config_manager import ConfigManager
+from ..core.config_manager import DEFAULT_LAYOUTS_DIR, ConfigManager
 from .sync_tool_cmd import (
     PLATFORM_TO_TOOL,
     _resolve_source_root,
@@ -67,12 +67,14 @@ def cmd_init(args: argparse.Namespace) -> int:
     if args.ios:
         config["platforms"]["ios"] = {
             "root": args.ios,
+            "layoutsDir": DEFAULT_LAYOUTS_DIR["ios"],
             "mode": args.ios_mode,
         }
 
     if args.android:
         android_config = {
             "root": args.android,
+            "layoutsDir": DEFAULT_LAYOUTS_DIR["android"],
             "mode": args.android_mode,
         }
         if args.package_name:
@@ -82,6 +84,7 @@ def cmd_init(args: argparse.Namespace) -> int:
     if args.web:
         config["platforms"]["web"] = {
             "root": args.web,
+            "layoutsDir": DEFAULT_LAYOUTS_DIR["web"],
         }
 
     # Create directories
