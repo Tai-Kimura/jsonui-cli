@@ -44,4 +44,15 @@ if _sibling.is_dir() and str(_sibling) not in sys.path:
 from jsonui_doc_cli.cli import main
 
 if __name__ == "__main__":
-    main()
+    # The exit code, not just the output. Bare `main()` discarded it, so a
+    # check that printed `✗ MISMATCH` still exited 0 and gated nothing —
+    # measured against the same broken document through both routes: this
+    # launcher exited 0, the pip-installed console script exited 1.
+    #
+    # The console script is why CI never saw it: `[project.scripts]` wraps
+    # `main` in `sys.exit(...)` for whoever installs the package, and CI
+    # installs. The docstring at the top of this file already said a green
+    # CI says nothing about whether the distributed launcher works — so the
+    # scope was named, and the one line inside that scope was still wrong.
+    # Naming a gap is not checking inside it.
+    sys.exit(main())
