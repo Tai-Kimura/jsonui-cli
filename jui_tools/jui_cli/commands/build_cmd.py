@@ -489,6 +489,27 @@ def _test_owned_trees(config_mgr) -> set:
 
     Keeping them would mean rewriting what the record claims, and a weaker
     claim is worse here: the number would still read as provenance.
+
+    WHY ONE TREE GOT IN AND ANOTHER DID NOT, since the prune is otherwise
+    hard to reconstruct later. Two independent factors, measured on three
+    faces:
+
+    1. IS IT UNDER A PLATFORM ROOT. Both the walk and the lint collection
+       start there, so a test tree that is a SIBLING of the platform root
+       is never reachable. One face declares `root: "."` and has both trees
+       inside; another declares `root: "web"` and keeps its mocks beside
+       it, so those 67 files were never recorded; a third keeps its mocks
+       outside three app roots, so this prune is a no-op for it.
+    2. THE EXTENSION, for the older route. The lint collection scans with a
+       source-extension filter and `.json` is not in it, so mock files were
+       invisible to it while branch tests (`.ts`) were not. That is why the
+       branch tests carry 1.8.10 — they were being claimed before the walk
+       existed — and the mocks carry 1.8.12, having arrived with the walk,
+       which takes every file in a generated directory whatever it is.
+
+    So "another command wrote it" was never what decided; reachability and
+    a file extension were. Both trees are pruned here by ownership, which
+    is the property that actually matters.
     """
     # Through the shared loader, not a literal here: a fallback list would
     # be the second copy this declaration exists to prevent, and it would
