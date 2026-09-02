@@ -199,3 +199,22 @@ generation manifest: 14 tracked generated file(s) as 1.8.11
 **腕ごとの依存**: manifest だけを見る腕（記録・churn・`dropped`・衝突）は結線に依存しない。
 **配布・SSoT・colors を経由する腕は依存する** —— しかも依存の段が 3 つある
 （`layoutsDir` が在るか / SSoT 側に layout が在るか / その layout が色を参照するか）。
+
+## ⚠️ bed の vendored ツールは、インストール済みコピー由来
+
+`jui init` は各面の `*_tools/` を **`~/.jsonui-cli` から**ベンダーする。⇒ **worktree の
+`bin/jui` で init しても、Ruby 側（sjui / kjui / rjui）の変更は bed に入らない。**
+
+実例: 「失敗した段を最後で名乗る」を bed で撃ったが**発火しなかった**。Python 側は worktree の
+コードだが、**行を書くのはツール側**で、そのツールは前のリリース版だった。⇒ **Python 側の
+変更だけが効いている、という中途半端な条件で測っていた。**
+
+```
+bed でツール側の変更を測る前に:
+  <worktree>/jui_tools/bin/jui sync_tool --from <worktree>
+確認:  Source: <worktree>  (X.Y.Z, --from)      ← 出所と理由を名乗るので証拠になる
+       grep -rl "<新しい識別子>" <bed>/<face>/<tool>_tools/   ← 実際に入ったか
+```
+
+📌 **`jui` のランチャが自分の置き場所から解決する**（別項）のと**同じ族**で、⇒ **層が 2 つある**:
+**どの Python が走るか**と**どのツールが走るか**は別に決まる。**版名はどちらも区別しない。**
