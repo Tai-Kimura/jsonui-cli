@@ -158,9 +158,13 @@ parse のほうが壊れ方が静か。**
 📌 これは列車側の「1 面に聞いて全面に聞いたことにした」と同じ形 ——
 **手順を踏んだ形が残るぶん、踏んでいない範囲が見えない。**
 
-## ⚠️ 捨てプロジェクトは、配布が結線されていない
+## ⚠️ 捨てプロジェクトは、配布が結線されていない（1.8.12 で解消）
 
-`jui init` が書く config には **`layoutsDir` が無い**（実測: `platforms: {"web": {"root": "./web"}}`）。
+**1.8.12 以降の `jui init` は `layoutsDir` を書く**（実測: `{"web": {"root": "./web",
+"layoutsDir": "src/Layouts"}}`）。⇒ **以下は 1.8.11 以前の bed について**。
+⚠️ **節ごと消さないのは、判別子の誤読とその由来がここにしか残っていないから。**
+
+1.8.11 以前の `jui init` が書く config には **`layoutsDir` が無い**（実測: `platforms: {"web": {"root": "./web"}}`）。
 配布側は `layouts_rel = pconfig.get("layoutsDir")` が空なら黙って `continue` する。
 ⇒ **SSoT を編集しても face に届かず、届かなかったことも言われない。**
 
