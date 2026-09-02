@@ -851,3 +851,80 @@ class ReproducibleLinesComeFirstTests(unittest.TestCase):
         # with the two groups.
         lines = self._block(collisions=1, collision_keys=["gen/A.ts"])
         self.assertIn("merged away", lines[-2])
+
+
+class WhyAnEntryLeftTests(unittest.TestCase):
+    """Leaving the record has two reasons and they are opposite news.
+
+    The prune reported every removal as `whose file is gone`. True while
+    the scan only ever grew; once it could shrink — the ownership prune
+    that stopped this record claiming another command's output — entries
+    left with their files sitting right there. Two faces measured 231 and
+    63 such entries, all present on disk. One checked before raising an
+    alarm about a build deleting them; the other keeps its manifest in git
+    and would have committed that explanation into its history.
+    """
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.root = Path(self._tmp.name)
+        (self.root / "gen").mkdir()
+        self.here = self.root / "gen" / "still_here.ts"
+        self.here.write_text("x\n", encoding="utf-8")
+
+    def tearDown(self):
+        self._tmp.cleanup()
+
+    def _seed(self, *keys):
+        path = gm.manifest_path(self.root)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps({
+            "schemaVersion": 1,
+            "files": {k: {"version": "1.8.13"} for k in keys},
+        }), encoding="utf-8")
+        self.assertEqual(len(keys),
+                         len(gm.load(self.root).get("files") or {}))
+
+    def test_a_file_that_is_gone_is_reported_as_gone(self):
+        self._seed("gen/deleted.ts")
+        summary = gm.save(self.root, "1.8.14", [],
+                          present_keys=[], scope={})["summary"]
+        self.assertEqual(1, summary["dropped"])
+        self.assertEqual(["gen/deleted.ts"], summary["droppedKeys"])
+        self.assertEqual(0, summary["untracked"])
+
+    def test_a_file_still_on_disk_is_not_called_gone(self):
+        # The one that was being misreported: present, but no longer in
+        # the scan's scope.
+        self._seed("gen/still_here.ts")
+        summary = gm.save(self.root, "1.8.14", [],
+                          present_keys=[], scope={})["summary"]
+        self.assertEqual(0, summary["dropped"],
+                         "a file that is right there was reported gone")
+        self.assertEqual(1, summary["untracked"])
+        self.assertEqual(["gen/still_here.ts"], summary["untrackedKeys"])
+
+    def test_both_can_happen_in_one_run_and_are_counted_apart(self):
+        self._seed("gen/still_here.ts", "gen/deleted.ts")
+        summary = gm.save(self.root, "1.8.14", [],
+                          present_keys=[], scope={})["summary"]
+        self.assertEqual((1, 1), (summary["dropped"], summary["untracked"]))
+
+    def test_the_line_does_not_call_them_the_same_thing(self):
+        line = gm.coverage_line(0, 1, "1.8.14", dropped=2, untracked=231)
+        self.assertIn("dropped 2 entr(y/ies) whose file is gone", line)
+        self.assertIn("released 231 entr(y/ies) that left the tracked set",
+                      line)
+        self.assertIn("their files are still there", line)
+
+    def test_the_untracked_key_list_says_when_it_is_truncated(self):
+        # The truncation note fired for the first time on a real face at
+        # 231 keys and was readable; the new list gets the same treatment.
+        self._seed(*[f"gen/k{i}.ts" for i in range(45)])
+        for i in range(45):
+            (self.root / "gen" / f"k{i}.ts").write_text("x\n", encoding="utf-8")
+        summary = gm.save(self.root, "1.8.14", [],
+                          present_keys=[], scope={})["summary"]
+        self.assertEqual(45, summary["untracked"])
+        self.assertEqual(20, len(summary["untrackedKeys"]))
+        self.assertEqual("first 20 of 45", summary["untrackedKeysNote"])

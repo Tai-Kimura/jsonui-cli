@@ -380,10 +380,28 @@ def save(
     # this record exists to find files written by a particular release, and
     # a restore that re-stamps them with today's version answers that
     # question wrongly while looking repaired.
+    # TWO REASONS AN ENTRY LEAVES, AND THEY ARE NOT THE SAME NEWS.
+    #
+    # The prune removes every key the current scan did not return, and this
+    # reported all of them as "whose file is gone". That was true while the
+    # scan only ever grew. Once it could also shrink — the ownership prune
+    # that stopped this record claiming another command's output — entries
+    # left with their files sitting right there, and the line said the
+    # build had deleted 231 of them. One face checked before raising an
+    # alarm; another keeps its manifest in git and would have committed
+    # that explanation into its history.
+    #
+    # The file itself is the discriminator, so it is asked rather than
+    # assumed.
     dropped: list[str] = []
+    untracked: list[str] = []
     if present_keys is not None:
         present = set(present_keys)
-        dropped = sorted(k for k in files if k not in present)
+        for key in sorted(k for k in files if k not in present):
+            if (Path(project_root) / key).exists():
+                untracked.append(key)
+            else:
+                dropped.append(key)
         files = {k: v for k, v in files.items() if k in present}
 
     stamp = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
@@ -416,6 +434,11 @@ def save(
             # of what it did.
             "dropped": len(dropped),
             "droppedKeys": dropped[:20],
+            # Left the tracked set with the file still on disk. A separate
+            # number because the two call for opposite responses: one is a
+            # finding, the other is this tool's own scope changing.
+            "untracked": len(untracked),
+            "untrackedKeys": untracked[:20],
             # Entries lost when two spellings normalised onto one key. The
             # prune never saw these, so `dropped` says nothing about them.
             "collisions": sum(collisions.values()),
@@ -426,6 +449,7 @@ def save(
     # A list silently cut at 20 reads as the whole list. Said only when it
     # applies, so the common case stays quiet.
     for field, total in (("droppedKeys", len(dropped)),
+                         ("untrackedKeys", len(untracked)),
                          ("collisionKeys", len(collisions))):
         if total > 20:
             manifest["summary"][field + "Note"] = f"first 20 of {total}"
@@ -438,7 +462,7 @@ def save(
 def coverage_line(
     written: int, total: int, version: str, distributed: int | None = None,
     dropped: int = 0, collisions: int = 0, collision_keys=(),
-    recorded_versions=None,
+    recorded_versions=None, untracked: int = 0,
 ) -> str:
     """One line per subject, one population, one number.
 
@@ -521,6 +545,12 @@ def coverage_line(
         # Stays on this line: a dropped entry means a generated file was
         # deleted, and those are tracked, so a diff shows it.
         run += f", dropped {dropped} entr(y/ies) whose file is gone"
+    if untracked:
+        # Deliberately not the same words. Reported as a drop, this reads
+        # as the build having deleted them, and on a face that keeps the
+        # manifest in git that explanation goes into the commit message.
+        run += (f", released {untracked} entr(y/ies) that left the tracked "
+                f"set (their files are still there)")
     lines.append(run)
 
     # The caveat sits beside the thing it qualifies. Put at the end of the
