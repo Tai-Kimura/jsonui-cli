@@ -16,6 +16,22 @@ module KjuiTools
         # so resolved_* local names don't drift with process build history.
         def self.reset_counter!
           @counter = 0
+          @interaction_names = {}
+        end
+
+        # The pressed-state locals are named after the button's id, so two
+        # buttons WITHOUT one produced the same `buttonInteraction` in the
+        # same scope and the generated file stopped compiling ("Conflicting
+        # declarations" — measured 2026-09-02 on the sample app, where one
+        # button declares `tapBackground` and another `hilightColor`, and
+        # neither carries an id). A name that is still free is used as-is, so
+        # every layout that compiles today keeps byte-identical output; only
+        # the colliding second one gains a suffix.
+        def self.unique_interaction_name(base)
+          @interaction_names ||= {}
+          n = @interaction_names[base].to_i + 1
+          @interaction_names[base] = n
+          n == 1 ? base : "#{base}_#{n}"
         end
 
         def self.next_resolved_var
@@ -51,8 +67,8 @@ module KjuiTools
           if highlight_bg || highlight_font
             required_imports&.add(:pressed_state)
             suffix = json_data['id'].to_s.gsub(/[^A-Za-z0-9]/, '')
-            interaction_var = "buttonInteraction#{suffix}"
-            pressed_var = "buttonPressed#{suffix}"
+            interaction_var = unique_interaction_name("buttonInteraction#{suffix}")
+            pressed_var = interaction_var.sub('buttonInteraction', 'buttonPressed')
             code += indent("val #{interaction_var} = remember { MutableInteractionSource() }", depth) + "\n"
             code += indent("val #{pressed_var} by #{interaction_var}.collectIsPressedAsState()", depth) + "\n"
           end
