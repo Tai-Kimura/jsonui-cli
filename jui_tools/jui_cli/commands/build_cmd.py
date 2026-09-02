@@ -175,94 +175,121 @@ def cmd_build(args: argparse.Namespace) -> int:
         _report_stage_failures(_stage_ledger)
         return code
 
-    # Distribute shared assets to each platform before build
-    _distribute_layouts(config_mgr, platforms, args)
-    _distribute_styles(config_mgr, platforms, args)
-    _distribute_resources(config_mgr, platforms, args)
-    _distribute_images(config_mgr, config, platforms, args)
-    _distribute_hotload_config(config_mgr, platforms, args)
-
-    # Sync swagger-derived DTO + Domain scaffold files. Halts on §3.3
-    # invariants (oneOf, multi-file $ref, direct self-ref, etc.) so the
-    # downstream platform builds never see a broken model.
-    if _sync_api_models(config_mgr, platforms, args) is False:
-        return _halt(1)
-
-    # Converter scaffolding is an explicit, one-time author action — run
-    # `jui g converter --from <spec>` (or `--all --skip-existing`) yourself
-    # when you add or change a `docs/components/json/*.component.json`. We
-    # used to auto-run that here, but it surprised users (every build
-    # touched extension/ directories) and blocked non-interactive callers
-    # (MCP, CI) on the downstream generators that still prompt. See
-    # `docs/bugs/reports/2026-04-23-jui-build-auto-converter-removed.md`.
-
-    # Sync ViewModel Protocol / Base files from spec.event_handlers + Impl
-    # markers. Hard error if any spec-declared handler has no matching Impl
-    # function — catches drift before the platform build starts.
-    if _sync_viewmodel_protocols(config_mgr, config, platforms, args) is False:
-        return _halt(1)
-
-    # Hard gate for navigationMode:"isolated" — the embedded screen's spec
-    # must not declare present-type transitions (sheet/modal/dialog/dismiss).
-    if _check_isolated_embed_constraints(config_mgr) is False:
-        return _halt(1)
-
-    should_build_ios = "ios" in platforms and not args.android_only and not args.web_only
-    should_build_android = "android" in platforms and not args.ios_only and not args.web_only
-    should_build_web = "web" in platforms and not args.ios_only and not args.android_only
-
-    if should_build_ios:
-        ios_root = config_mgr.project_root / platforms["ios"]["root"]
-        print(f"\n--- Building iOS ({ios_root}) ---")
-        if not _run_tool(["sjui", "build"] + clean, ios_root):
-            failed.append("ios")
-
-    if should_build_android:
-        android_root = config_mgr.project_root / platforms["android"]["root"]
-        print(f"\n--- Building Android ({android_root}) ---")
-        if not _run_tool(["kjui", "build"] + clean, android_root):
-            failed.append("android")
-
-    if should_build_web:
-        web_root = config_mgr.project_root / platforms["web"]["root"]
-        print(f"\n--- Building Web ({web_root}) ---")
-        if not _run_tool(["rjui", "build"] + clean, web_root):
-            failed.append("web")
-
-    if failed:
-        print(f"\nERROR: Build failed for: {', '.join(failed)}")
-        return _halt(1)
-
-    # Re-read after the build: a run can create files that did not exist to
-    # be observed, and can leave others exactly as they were.
-    present = _generated_paths(config_mgr)
-    written, present_keys, manifest = _record_generation(
-        config_mgr, gen_run, present)
-    print()
-    print(generation_manifest.coverage_line(
-        len(written), len(present_keys), gen_run.version,
-        distributed=_distributed_file_count(config_mgr),
-        dropped=manifest["summary"].get("dropped", 0),
-        collisions=manifest["summary"].get("collisions", 0),
-        collision_keys=manifest["summary"].get("collisionKeys", ()),
-        recorded_versions=_recorded_versions(manifest)))
-
-    # "Build completed successfully" is the identical sentence whether a
-    # run produced every file or none: `jui verify` had the same shape
-    # until it started naming its denominator, and doing so revealed that
-    # five projects had been verifying nothing at all. An exit code cannot
-    # tell those apart — a crash is caught by it, a silent zero is not.
+    # EVERY EXIT RECORDS, INCLUDING THE ONES THAT ARE NOT RETURNS.
     #
-    # It names the denominator only. This line carried both numbers, and a
-    # number that depends on the record's state does not belong beside one
-    # that depends on the project's shape — the split above exists for
-    # that reason, and repeating the pair here would put it back. What
-    # this run did to the record is two lines up, where a reader looking
-    # for it will find it named as such.
-    print(f"\nBuild completed successfully — {len(present_keys)} tracked "
-          f"generated file(s)")
-    _report_stage_failures(_stage_ledger)
-    return 0
+    # The four `return _halt(1)` sites cover the failures this function
+    # decides on. They do not cover the ones it is handed: a §3.3 invariant
+    # is a raised ValueError, a canonical-mark or parent-spec problem is a
+    # raised error that `cli.py` catches and formats OUTSIDE this function,
+    # and an exception leaves through none of those four returns.
+    #
+    # Measured, both ways. In a fixture, a stage that writes a generated
+    # file and then raises leaves no manifest at all. On a real face, a
+    # build printed its formatted ERROR and then neither the manifest block
+    # nor the success line, and three DTO files it had just rewritten kept
+    # a version two releases old — the same shape this guard exists to end,
+    # arriving through the one door that was not wired.
+    #
+    # Counting the returns was the mistake: "all four are wired" was true
+    # and the exits were five.
+    try:
+        # Distribute shared assets to each platform before build
+        _distribute_layouts(config_mgr, platforms, args)
+        _distribute_styles(config_mgr, platforms, args)
+        _distribute_resources(config_mgr, platforms, args)
+        _distribute_images(config_mgr, config, platforms, args)
+        _distribute_hotload_config(config_mgr, platforms, args)
+
+        # Sync swagger-derived DTO + Domain scaffold files. Halts on §3.3
+        # invariants (oneOf, multi-file $ref, direct self-ref, etc.) so the
+        # downstream platform builds never see a broken model.
+        if _sync_api_models(config_mgr, platforms, args) is False:
+            return _halt(1)
+
+        # Converter scaffolding is an explicit, one-time author action — run
+        # `jui g converter --from <spec>` (or `--all --skip-existing`) yourself
+        # when you add or change a `docs/components/json/*.component.json`. We
+        # used to auto-run that here, but it surprised users (every build
+        # touched extension/ directories) and blocked non-interactive callers
+        # (MCP, CI) on the downstream generators that still prompt. See
+        # `docs/bugs/reports/2026-04-23-jui-build-auto-converter-removed.md`.
+
+        # Sync ViewModel Protocol / Base files from spec.event_handlers + Impl
+        # markers. Hard error if any spec-declared handler has no matching Impl
+        # function — catches drift before the platform build starts.
+        if _sync_viewmodel_protocols(config_mgr, config, platforms, args) is False:
+            return _halt(1)
+
+        # Hard gate for navigationMode:"isolated" — the embedded screen's spec
+        # must not declare present-type transitions (sheet/modal/dialog/dismiss).
+        if _check_isolated_embed_constraints(config_mgr) is False:
+            return _halt(1)
+
+        should_build_ios = "ios" in platforms and not args.android_only and not args.web_only
+        should_build_android = "android" in platforms and not args.ios_only and not args.web_only
+        should_build_web = "web" in platforms and not args.ios_only and not args.android_only
+
+        if should_build_ios:
+            ios_root = config_mgr.project_root / platforms["ios"]["root"]
+            print(f"\n--- Building iOS ({ios_root}) ---")
+            if not _run_tool(["sjui", "build"] + clean, ios_root):
+                failed.append("ios")
+
+        if should_build_android:
+            android_root = config_mgr.project_root / platforms["android"]["root"]
+            print(f"\n--- Building Android ({android_root}) ---")
+            if not _run_tool(["kjui", "build"] + clean, android_root):
+                failed.append("android")
+
+        if should_build_web:
+            web_root = config_mgr.project_root / platforms["web"]["root"]
+            print(f"\n--- Building Web ({web_root}) ---")
+            if not _run_tool(["rjui", "build"] + clean, web_root):
+                failed.append("web")
+
+        if failed:
+            print(f"\nERROR: Build failed for: {', '.join(failed)}")
+            return _halt(1)
+
+        # Re-read after the build: a run can create files that did not exist to
+        # be observed, and can leave others exactly as they were.
+        present = _generated_paths(config_mgr)
+        written, present_keys, manifest = _record_generation(
+            config_mgr, gen_run, present)
+        print()
+        print(generation_manifest.coverage_line(
+            len(written), len(present_keys), gen_run.version,
+            distributed=_distributed_file_count(config_mgr),
+            dropped=manifest["summary"].get("dropped", 0),
+            collisions=manifest["summary"].get("collisions", 0),
+            collision_keys=manifest["summary"].get("collisionKeys", ()),
+            recorded_versions=_recorded_versions(manifest)))
+
+        # "Build completed successfully" is the identical sentence whether a
+        # run produced every file or none: `jui verify` had the same shape
+        # until it started naming its denominator, and doing so revealed that
+        # five projects had been verifying nothing at all. An exit code cannot
+        # tell those apart — a crash is caught by it, a silent zero is not.
+        #
+        # It names the denominator only. This line carried both numbers, and a
+        # number that depends on the record's state does not belong beside one
+        # that depends on the project's shape — the split above exists for
+        # that reason, and repeating the pair here would put it back. What
+        # this run did to the record is two lines up, where a reader looking
+        # for it will find it named as such.
+        print(f"\nBuild completed successfully — {len(present_keys)} tracked "
+              f"generated file(s)")
+        _report_stage_failures(_stage_ledger)
+        return 0
+    except BaseException:
+        # Record what this run wrote, then let it fail as it would have.
+        # Nothing about the failure changes — the exception is re-raised
+        # untouched and the exit code is whatever it was going to be.
+        try:
+            _halt(1)
+        except Exception:
+            pass
+        raise
 
 
 def _recorded_versions(manifest: dict) -> dict:
