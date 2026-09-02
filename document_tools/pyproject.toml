@@ -11,7 +11,7 @@ include = ["jsonui_doc_cli*"]
 
 [project]
 name = "jsonui-doc-cli"
-version = "1.8.8"
+version = "1.8.9"
 description = "CLI tool for generating documentation from JsonUI test files and specifications"
 requires-python = ">=3.10"
 license = "MIT"
@@ -30,7 +30,7 @@ keywords = ["jsonui", "documentation", "html", "markdown", "mermaid"]
 # change from an implementation change. jui_tools/tests/test_version_lockstep.py
 # enforces it.
 dependencies = [
-    "jsonui-test-cli @ git+https://github.com/Tai-Kimura/jsonui-cli.git@v1.8.8#subdirectory=test_tools",
+    "jsonui-test-cli @ git+https://github.com/Tai-Kimura/jsonui-cli.git@v1.8.9#subdirectory=test_tools",
 ]
 classifiers = [
     "Development Status :: 4 - Beta",
