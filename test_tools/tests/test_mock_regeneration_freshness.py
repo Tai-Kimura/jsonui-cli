@@ -158,3 +158,70 @@ def test_a_deleted_file_is_restored_even_when_the_rest_are_fresh(project):
     _regenerate_stale_mocks(None)
 
     assert gone.exists()
+
+
+# --- The line names which of its two triggers fired -----------------------
+#
+# `Regenerated N mock file(s)` said how many and not why, so a reader had to
+# rule out "a new tool version changed the output" by hand — twice in one
+# day on one face, each time by reading `git log` on the OpenAPI document.
+# The function has already decided by the time it prints, and the version is
+# not read anywhere in that decision, so the line can both name the trigger
+# and close off the wrong explanation.
+
+def test_a_newer_openapi_document_says_so(project, capsys):
+    swagger, mocks = project
+    _age(_generated(mocks), 3600)
+    _touch(swagger, 0)
+
+    _regenerate_stale_mocks(None)
+
+    out = capsys.readouterr().out
+    assert "Regenerated" in out
+    assert "the OpenAPI document is newer than the generated tree" in out
+
+
+def test_a_newer_hand_written_mock_is_named_as_the_trigger(project, capsys):
+    # Not the same repair: a hand-written mock appearing is what makes a
+    # generated file redundant, and a reader chasing the OpenAPI document
+    # for that one finds nothing changed there.
+    swagger, mocks = project
+    _age(_generated(mocks), 3600)
+    _age([swagger], 3600)
+    hand = mocks / "adopted.mock.json"
+    hand.write_text(json.dumps({"scenarios": {}}), encoding="utf-8")
+    _touch(hand, 0)
+
+    _regenerate_stale_mocks(None)
+
+    out = capsys.readouterr().out
+    assert "a hand-written mock is newer than the generated tree" in out
+    assert "OpenAPI document" not in out
+
+
+def test_missing_files_are_named_as_the_trigger(project, capsys):
+    # Presence is checked before freshness, and it is a different repair
+    # with a different follow-up.
+    swagger, mocks = project
+    _generated(mocks)[0].unlink()
+
+    _regenerate_stale_mocks(None)
+
+    out = capsys.readouterr().out
+    assert "expected file(s) were missing" in out
+    assert "newer than the generated tree" not in out
+
+
+def test_the_line_rules_out_the_tool_version(project, capsys):
+    # The explanation a reader reaches for, because this line tends to
+    # appear in the same session as a version bump. The decision does not
+    # read the version at all, so saying so costs nothing and ends the
+    # investigation the count kept starting.
+    swagger, mocks = project
+    _age(_generated(mocks), 3600)
+    _touch(swagger, 0)
+
+    _regenerate_stale_mocks(None)
+
+    assert ("the tool version is not an input to this decision"
+            in capsys.readouterr().out)

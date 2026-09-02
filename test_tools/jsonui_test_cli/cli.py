@@ -668,16 +668,31 @@ def _regenerate_stale_mocks(config_path):
     # it — the route simply 404s and the reason is nowhere.
     on_disk = {str(p.relative_to(mock_path))
                for p in gen_root.rglob("*.mock.json")}
-    if expected_generated_relpaths(resolved, scope) - on_disk:
-        return _rebuild_generated(resolved, mock_path, scope)
-    newest_input = max(
-        (Path(s).stat().st_mtime for s in resolved if Path(s).exists()), default=0)
+    missing = expected_generated_relpaths(resolved, scope) - on_disk
+    if missing:
+        return _rebuild_generated(
+            resolved, mock_path, scope,
+            f"{len(missing)} expected file(s) were missing")
+    # Which input is newest is kept, not just how new it is. The count on
+    # its own sent a reader to `git log` on the OpenAPI document twice in
+    # one day to work out whether a rebuild came from the input or from a
+    # new tool version — a question this function has already answered by
+    # the time it prints, and one the answer to is always the same: the
+    # version is not read here at all.
+    newest_input, newest_kind = 0.0, None
+    for source in resolved:
+        path = Path(source)
+        if path.exists() and path.stat().st_mtime > newest_input:
+            newest_input = path.stat().st_mtime
+            newest_kind = "the OpenAPI document"
     # Hand-written mocks are inputs too: one of them appearing is what makes a
     # generated file redundant.
     for p in mock_path.rglob("*.mock.json"):
         if gen_root in p.parents:
             continue
-        newest_input = max(newest_input, p.stat().st_mtime)
+        if p.stat().st_mtime > newest_input:
+            newest_input = p.stat().st_mtime
+            newest_kind = "a hand-written mock"
     # The OLDEST generated file decides, not the newest. `max` asks "has
     # anything been generated since the inputs changed", which one touched
     # file answers for the whole directory — so a single fresh mock kept
@@ -689,7 +704,9 @@ def _regenerate_stale_mocks(config_path):
         (p.stat().st_mtime for p in gen_root.rglob("*.mock.json")), default=0)
     if generated_at >= newest_input:
         return 0
-    return _rebuild_generated(resolved, mock_path, scope)
+    return _rebuild_generated(
+        resolved, mock_path, scope,
+        f"{newest_kind or 'an input'} is newer than the generated tree")
 
 
 def _scenario_names(gen_root: Path) -> dict:
@@ -716,7 +733,7 @@ def _scenario_names(gen_root: Path) -> dict:
     return table
 
 
-def _rebuild_generated(resolved, mock_path, scope) -> int:
+def _rebuild_generated(resolved, mock_path, scope, reason: str) -> int:
     from .mock.generate import GENERATED_DIR, generate
 
     gen_root = mock_path / GENERATED_DIR
@@ -734,8 +751,15 @@ def _rebuild_generated(resolved, mock_path, scope) -> int:
         print(f"Mock generation failed: {e}")
         return 1
     if built.created:
+        # The count says what happened; the reason says why, and without it
+        # a reader has to rule out the tool version by hand. They cannot do
+        # that from here — so the line says the version is not an input,
+        # rather than leaving the likeliest wrong explanation standing.
+        # It is the likeliest because this line tends to appear in the same
+        # session as a version bump.
         print(f"\nRegenerated {len(built.created)} mock file(s) "
-              f"into {mock_path.name}/{GENERATED_DIR}/")
+              f"into {mock_path.name}/{GENERATED_DIR}/ — {reason} "
+              f"(the tool version is not an input to this decision)")
     # Name what came BACK, not just how many files were written. This
     # rebuild runs before the contract check, so anything it restores is
     # something the check will not report — and the two lines a reader
