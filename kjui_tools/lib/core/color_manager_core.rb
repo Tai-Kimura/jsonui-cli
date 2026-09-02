@@ -370,6 +370,17 @@ module JsonUIShared
           return color_value
         elsif @defined_colors_data.key?(color_value)
           return color_value
+        elsif !color_key_shaped?(color_value)
+          # Not a hex, not a declared key, and not shaped like one either —
+          # a platform literal such as `Color.Green` reaching this through a
+          # data section's `defaultValue`. Registering it would put a key
+          # holding a `.` into defined_colors.json, and every generated
+          # ColorManager then emits `val Color.Green`, which is an extension
+          # property on Color and does not compile (measured on the sample
+          # app 2026-09-02). The value passes through untouched; the codegen
+          # emits it as the literal it already is.
+          Core::Logger.warn "Not treating '#{color_value}' as a color key (not a valid key name) — passing it through"
+          return color_value
         else
           @undefined_colors[color_value] = nil
           return color_value
@@ -385,6 +396,15 @@ module JsonUIShared
     def color_key_exists_anywhere?(key)
       @palettes.any? { |_, p| p.key?(key) } ||
         @extracted_colors.any? { |_, p| p.key?(key) }
+    end
+
+    # Could this string be a color KEY at all? A key ends up as an Android
+    # resource name and as a generated Kotlin/Swift property, so it can hold
+    # only letters, digits and underscores. Anything else reaching the
+    # colour path is a value of some other kind — a platform literal, an
+    # expression — and must not be recorded as an undefined colour.
+    def color_key_shaped?(value)
+      value.match?(/\A[A-Za-z_][A-Za-z0-9_]*\z/)
     end
 
     # Find existing key for a hex color WITHIN the given mode. A collision

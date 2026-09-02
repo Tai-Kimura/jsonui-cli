@@ -467,7 +467,7 @@ module KjuiTools
               enrichment_hoist = ''
               sections.each_with_index do |sec, idx|
                 next unless sec['cell']
-                enrichment_hoist += indent("val section#{idx} = data.#{hoist_property_name}?.sections?.getOrNull(#{idx})", depth) + "\n"
+                enrichment_hoist += indent("val section#{idx} = data.#{hoist_property_name}.sections.getOrNull(#{idx})", depth) + "\n"
                 enrichment_hoist += indent("val cellData#{idx} = section#{idx}?.cells", depth) + "\n"
                 enrichment_hoist += indent("val enrichedData#{idx} = if (cellData#{idx} != null) remember(cellData#{idx}.data) { com.kotlinjsonui.utils.CellIdGenerator.enrichCellIds(cellData#{idx}.data, \"#{hoist_cell_id_prop}\") } else null", depth) + "\n"
               end
@@ -681,7 +681,7 @@ module KjuiTools
                   # `section#{index}` is hoisted; just guard null.
                   code += "\n" + indent("if (#{section_var} != null) {", depth + 1)
                 else
-                  code += "\n" + indent("data.#{property_name}?.sections?.getOrNull(#{index})?.let { #{section_var} ->", depth + 1)
+                  code += "\n" + indent("data.#{property_name}.sections.getOrNull(#{index})?.let { #{section_var} ->", depth + 1)
                 end
 
                 # Generate header if present
@@ -845,7 +845,7 @@ module KjuiTools
 
           # Page count from data source
           if item_binding && sections.any?
-            code += indent("val pageCount = data.#{item_binding}?.sections?.firstOrNull()?.cells?.data?.size ?: 0", depth) + "\n"
+            code += indent("val pageCount = data.#{item_binding}.sections.firstOrNull()?.cells?.data?.size ?: 0", depth) + "\n"
           else
             code += indent("val pageCount = 0", depth) + "\n"
           end
@@ -906,7 +906,7 @@ module KjuiTools
               auto_tracking = json_data['autoChangeTrackingId'] == true
               # Use val + if instead of .let { cellData -> ... } so remember(...)
               # (which is @Composable) isn't called from a non-@Composable lambda.
-              code += "\n" + indent("val cellData = data.#{item_binding}?.sections?.firstOrNull()?.cells", depth + 1)
+              code += "\n" + indent("val cellData = data.#{item_binding}.sections.firstOrNull()?.cells", depth + 1)
               code += "\n" + indent("if (cellData != null) {", depth + 1)
               if auto_tracking && cell_id_prop
                 required_imports&.add(:remember_state)
@@ -1002,7 +1002,7 @@ module KjuiTools
               cell_data_var = use_val_if ? "cellData#{index}" : 'cellData'
 
               if use_val_if
-                code += "\n" + indent("val #{section_var} = data.#{property_name}?.sections?.getOrNull(#{index})", depth + 1)
+                code += "\n" + indent("val #{section_var} = data.#{property_name}.sections.getOrNull(#{index})", depth + 1)
                 code += "\n" + indent("if (#{section_var} != null) {", depth + 1)
                 code += "\n" + indent("val #{cell_data_var} = #{section_var}.cells", depth + 2)
                 code += "\n" + indent("if (#{cell_data_var} != null) {", depth + 2)
@@ -1010,7 +1010,7 @@ module KjuiTools
                 code += "\n" + indent("val enrichedData#{index} = remember(#{cell_data_var}.data) { com.kotlinjsonui.utils.CellIdGenerator.enrichCellIds(#{cell_data_var}.data, \"#{cell_id_property}\") }", depth + 3)
                 code += "\n" + indent("enrichedData#{index}.forEachIndexed { cellIndex, item ->", depth + 3)
               else
-                code += "\n" + indent("data.#{property_name}?.sections?.getOrNull(#{index})?.let { #{section_var} ->", depth + 1)
+                code += "\n" + indent("data.#{property_name}.sections.getOrNull(#{index})?.let { #{section_var} ->", depth + 1)
                 code += "\n" + indent("#{section_var}.cells?.let { #{cell_data_var} ->", depth + 2)
                 code += "\n" + indent("#{cell_data_var}.data.forEachIndexed { cellIndex, item ->", depth + 3)
               end
@@ -1106,10 +1106,10 @@ module KjuiTools
 
               code += "\n" + indent("// Section #{index + 1}: #{cell_view_name}", depth + 1)
               if use_val_if
-                code += "\n" + indent("val #{section_var} = data.#{property_name}?.sections?.getOrNull(#{index})", depth + 1)
+                code += "\n" + indent("val #{section_var} = data.#{property_name}.sections.getOrNull(#{index})", depth + 1)
                 code += "\n" + indent("if (#{section_var} != null) {", depth + 1)
               else
-                code += "\n" + indent("data.#{property_name}?.sections?.getOrNull(#{index})?.let { #{section_var} ->", depth + 1)
+                code += "\n" + indent("data.#{property_name}.sections.getOrNull(#{index})?.let { #{section_var} ->", depth + 1)
               end
 
               # Header
@@ -1219,7 +1219,7 @@ module KjuiTools
               cell_id_prop = json_data['cellIdProperty']
 
               code += "\n" + indent("// Section #{index + 1}: #{cell_view_name}", depth + 1)
-              code += "\n" + indent("data.#{property_name}?.sections?.getOrNull(#{index})?.let { section ->", depth + 1)
+              code += "\n" + indent("data.#{property_name}.sections.getOrNull(#{index})?.let { section ->", depth + 1)
               code += "\n" + indent("section.cells?.let { cellData ->", depth + 2)
               code += "\n" + indent("cellData.data.forEachIndexed { cellIndex, _ ->", depth + 3)
               code += "\n" + indent("val currentCellData = cellData.data[cellIndex]", depth + 4)
@@ -1438,7 +1438,7 @@ module KjuiTools
           if property_name
             sections.each_with_index do |section, idx|
               next unless section['cell']
-              code += indent("val section#{idx} = data.#{property_name}?.sections?.getOrNull(#{idx})", depth) + "\n"
+              code += indent("val section#{idx} = data.#{property_name}.sections.getOrNull(#{idx})", depth) + "\n"
               code += indent("val cellData#{idx} = section#{idx}?.cells", depth) + "\n"
               if auto_tracking && cell_id_prop
                 required_imports&.add(:remember_state)

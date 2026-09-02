@@ -307,8 +307,17 @@ module KjuiTools
           lines << '            return try { Color.parseColor(key) } catch (e: IllegalArgumentException) { null }'
           lines << '        }'
           lines << ''
+          # A colour whose camelCase name equals one of the palette objects
+          # emitted below would be a second declaration of that name in the
+          # same scope, and the generated file would not compile ("Conflicting
+          # declarations"). Measured on the sample app, whose palette mode and
+          # one of its colours are both called `light`. Only the colliding
+          # property moves — every other name, and so every file that compiles
+          # today, is emitted unchanged.
+          palette_object_names = @modes.map { |mode| kotlin_object_name(mode) }
           all_keys.each do |key|
             camel = snake_to_camel(key)
+            camel = "#{camel}Color" if palette_object_names.include?(camel)
             lines << "        val #{camel}: Int? get() = color(\"#{key}\")"
           end
           lines << ''
@@ -353,6 +362,7 @@ module KjuiTools
           lines << ''
           all_keys.each do |key|
             camel = snake_to_camel(key)
+            camel = "#{camel}Color" if palette_object_names.include?(camel)
             lines << "        val #{camel}: ComposeColor? get() = color(\"#{key}\")"
           end
           lines << ''
