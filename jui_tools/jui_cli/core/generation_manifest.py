@@ -1,0 +1,184 @@
+"""Which tool version wrote each generated file, recorded per project.
+
+A face that regenerates cannot otherwise answer "which version produced
+what is on disk". After a defective 1.8.2 shipped and 1.8.3 fixed it, every
+consumer was told to regenerate if their tree came from 1.8.2 — and none of
+them could read that from their own files. One approximated with mtimes,
+which say when a file was written and not by what; translating that into a
+version needed the release lane's distribution timetable.
+
+WHAT THIS DOES NOT ANSWER. It records which version wrote a file. It does
+not say whether that version's defects reach this project — that is a
+property of the layouts, measured on the input side, and it is usually the
+stronger evidence. The same investigation that prompted this closed on
+"zero declarations meet the condition", not on a version stamp.
+
+WHY NOT A STAMP IN EACH FILE. A version line in every `@generated` header
+puts a diff in every generated file on every release, which destroys the
+attribution method those releases depend on — reading a regeneration diff
+line by line and asking whether it is only the warning sites. The noise
+would bury the substance. One manifest keeps the churn in one file.
+
+WHAT "WROTE" MEANS, EXACTLY. An entry is recorded for a file this run
+actually touched on disk (new, or changed content, or an advanced mtime).
+Files the run did not touch keep their previous entry, including its older
+version — a partial regeneration must not claim the new version for files
+it never looked at. A record is trusted in a way a guess is not, so a
+manifest that overstates is worse than no manifest.
+
+The cost of that choice, stated rather than hidden: a tool that regenerates
+a file, finds byte-identical content and skips the write leaves the earlier
+version in place. The manifest records WRITES, not verifications, and the
+success line names both numbers so a partial run is visible as one.
+
+FRESHNESS. Every entry describes the last generation, not the present. The
+file is not touched by hand-editing or by anything but a generation run, so
+an entry can be arbitrarily old and still be returned as fact. It answers
+"what wrote this, when it was last written" — never "is this current".
+"""
+from __future__ import annotations
+
+import hashlib
+import json
+from dataclasses import dataclass, field
+from datetime import datetime, timezone
+from pathlib import Path
+
+#: Sibling of sync-meta.json, deliberately not the same file: that one
+#: records a SYNC (which toolchain copy a project holds), this one records a
+#: GENERATION (which version wrote an output). A project can sync without
+#: generating and generate without syncing, so one file cannot answer both.
+MANIFEST_DIRNAME = ".jsonui-cli"
+MANIFEST_FILENAME = "generation-manifest.json"
+
+_COMMENT = (
+    "Which jsonui-cli version last WROTE each generated file, and when. "
+    "Entries are updated only for files a run actually touched, so a "
+    "partial regeneration leaves the rest at their earlier version rather "
+    "than claiming the new one. This says what wrote a file; it does not "
+    "say whether that version's defects reach this project (measure the "
+    "layouts for that), and it is not evidence of freshness — an entry is "
+    "the last generation, however long ago that was."
+)
+
+
+def manifest_path(project_root: Path) -> Path:
+    return Path(project_root) / MANIFEST_DIRNAME / MANIFEST_FILENAME
+
+
+@dataclass(frozen=True)
+class FileState:
+    """Enough of a file's identity to tell "written" from "left alone"."""
+
+    sha256: str
+    mtime_ns: int
+
+
+@dataclass
+class GenerationRun:
+    """Snapshot a tree, run a generator, record only what moved."""
+
+    project_root: Path
+    version: str
+    #: Paths considered, keyed relative to project_root.
+    before: dict[str, FileState] = field(default_factory=dict)
+
+    def observe(self, paths) -> None:
+        """Record the pre-run state of every path a run could write."""
+        for path in paths:
+            state = _state_of(path)
+            if state is not None:
+                self.before[self._key(path)] = state
+
+    def written(self, paths) -> list[str]:
+        """The subset that this run actually touched, as manifest keys."""
+        touched = []
+        for path in paths:
+            key = self._key(path)
+            after = _state_of(path)
+            if after is None:
+                # Generated last time, absent now: the run did not write it,
+                # and neither does the manifest claim it did. The stale entry
+                # is dropped by `save` rather than left naming a missing file.
+                continue
+            prior = self.before.get(key)
+            if prior is None or prior.sha256 != after.sha256 or prior.mtime_ns < after.mtime_ns:
+                touched.append(key)
+        return touched
+
+    def _key(self, path) -> str:
+        p = Path(path)
+        try:
+            return p.resolve().relative_to(Path(self.project_root).resolve()).as_posix()
+        except ValueError:
+            return p.as_posix()
+
+
+def _state_of(path) -> FileState | None:
+    p = Path(path)
+    try:
+        data = p.read_bytes()
+        stat = p.stat()
+    except OSError:
+        return None
+    return FileState(hashlib.sha256(data).hexdigest(), stat.st_mtime_ns)
+
+
+def load(project_root: Path) -> dict:
+    path = manifest_path(project_root)
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+def save(
+    project_root: Path,
+    version: str,
+    written_keys: list[str],
+    *,
+    present_keys: list[str] | None = None,
+    generated_by: str = "jui build",
+) -> dict:
+    """Merge this run's writes into the manifest and write it back.
+
+    `present_keys`, when given, is every generated file the run could see;
+    entries naming a file that is no longer there are dropped, so the
+    manifest does not keep asserting a version for something absent.
+    """
+    existing = load(project_root)
+    files = dict(existing.get("files") or {})
+
+    if present_keys is not None:
+        present = set(present_keys)
+        files = {k: v for k, v in files.items() if k in present}
+
+    stamp = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    for key in written_keys:
+        files[key] = {"version": version, "generatedAt": stamp, "generatedBy": generated_by}
+
+    manifest = {
+        "_comment": _COMMENT,
+        "schemaVersion": 1,
+        "files": {k: files[k] for k in sorted(files)},
+    }
+    path = manifest_path(project_root)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(manifest, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    return manifest
+
+
+def coverage_line(written: int, total: int, version: str) -> str:
+    """`generation manifest: this run wrote 3 of 44 generated file(s) ...`.
+
+    Both numbers, because a partial run is the normal case and a line that
+    reported only the numerator would read the same as a full one. The
+    limitation rides along: a reader who takes this for "this project is on
+    3.0.0" has read it as freshness, which it is not.
+    """
+    return (
+        f"generation manifest: this run wrote {written} of {total} "
+        f"generated file(s) as {version} — untouched files keep the version "
+        "that last wrote them (records writes, not currency)"
+    )

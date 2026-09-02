@@ -120,6 +120,19 @@ def cmd_build(args: argparse.Namespace) -> int:
     if _check_isolated_embed_constraints(config_mgr) is False:
         return 1
 
+    # Snapshot every generated file before the platform tools run, so the
+    # manifest can record the ones this run actually wrote rather than
+    # claiming the current version for the whole tree. A partial run that
+    # overstated would be worse than no manifest at all: a record is
+    # trusted in a way a guess is not.
+    from ..core import generation_manifest
+    from ..core.version import toolchain_version
+    gen_run = generation_manifest.GenerationRun(
+        project_root=config_mgr.project_root,
+        version=toolchain_version(),
+    )
+    gen_run.observe(_generated_paths(config_mgr))
+
     should_build_ios = "ios" in platforms and not args.android_only and not args.web_only
     should_build_android = "android" in platforms and not args.ios_only and not args.web_only
     should_build_web = "web" in platforms and not args.ios_only and not args.android_only
@@ -146,8 +159,49 @@ def cmd_build(args: argparse.Namespace) -> int:
         print(f"\nERROR: Build failed for: {', '.join(failed)}")
         return 1
 
+    # Re-read after the build: a run can create files that did not exist to
+    # be observed, and can leave others exactly as they were.
+    present = _generated_paths(config_mgr)
+    written = gen_run.written(present)
+    present_keys = [gen_run._key(p) for p in present]
+    generation_manifest.save(
+        config_mgr.project_root, gen_run.version, written,
+        present_keys=present_keys,
+    )
+    print()
+    print(generation_manifest.coverage_line(
+        len(written), len(present_keys), gen_run.version))
+
     print("\nBuild completed successfully!")
     return 0
+
+
+def _generated_paths(config_mgr) -> list:
+    """Every generated file the manifest can speak about.
+
+    Reuses `lint-generated`'s two collections rather than defining a third
+    idea of "generated": a second list would drift, and the answer would
+    depend on which one a reader consulted.
+
+    BOTH are needed, measured rather than assumed. `_collect_targets` finds
+    distributed layout JSON and directories literally named `Generated`;
+    `_view_targets` finds the per-screen `*GeneratedView.{kt,swift}` files —
+    which are exactly the ones a defective release rewrites. On a real
+    project the first returned 0 and the second 850, so taking only the
+    first would have produced an empty manifest that never said so.
+    """
+    from .lint_generated_cmd import _collect_targets, _view_targets
+
+    paths = set()
+    for collect in (
+        lambda: [path for _kind, path in _collect_targets(config_mgr)],
+        lambda: _view_targets(config_mgr),
+    ):
+        try:
+            paths.update(collect())
+        except Exception:
+            continue
+    return sorted(paths)
 
 
 def _run_tool(cmd: list[str], cwd: Path) -> bool:
