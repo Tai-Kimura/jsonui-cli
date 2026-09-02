@@ -779,20 +779,21 @@ class GeneratedTreeScanTests(unittest.TestCase):
     sitting directly in the generated tree is then invisible when the
     discovery below it happens one level down.
 
-    It was also answering differently on different machines. The collection
-    it leaned on globs for a directory literally named `Generated`, which
-    matches `generated` on a case-insensitive filesystem and matches nothing
-    on a case-sensitive one; the fallback is an enumerated list of four
-    subdirectory names. Measured in a Linux container: the glob returns
-    nothing for a tree named `generated`, so a build there records a
-    strictly smaller set than the same build on macOS.
+    It was also answering differently per environment, and not in the way
+    it first looked. The collection it leaned on globs for a directory
+    literally named `Generated`; the fallback is an enumerated list of four
+    subdirectory names. Whether the glob matches `generated` was measured
+    three ways: never on a case-sensitive filesystem, not under Python 3.12
+    on a case-insensitive one, and yes under 3.14 on that same tree. So the
+    reported face recorded 444 files with one python3 on PATH and 454 with
+    another — same machine, same disk, same code.
 
-    THESE ARMS DO NOT COVER THE REPORT THAT STARTED THIS. A face reported
-    ten helpers unrecorded on every build; it is case-insensitive and has
-    nine source files at the top of its generated tree, so the glob reaches
-    that directory there and the scan returns the same count before and
-    after this change. Whatever produced that face's number is still
-    unexplained, and nothing here should be read as having found it.
+    Three lanes looked at this and each generalised from the interpreter it
+    happened to be running: two concluded the glob is case-sensitive, one
+    concluded the old code reaches the files on macOS. Every measurement
+    was correct and every conclusion was too broad. The arms below do not
+    depend on either variable, which is the point of walking for the name
+    instead of globbing for one spelling.
 
     The fixtures below hold no code file at the top level of the generated
     tree, which is what makes them fail on either filesystem rather than

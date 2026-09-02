@@ -290,19 +290,23 @@ def _generated_paths(config_mgr) -> list:
     # `src/generated/` is invisible when the discovery below it happens one
     # level down.
     #
-    # It also stops the answer depending on the filesystem. The collection
-    # this leaned on looks for a directory literally named `Generated`,
-    # which matches `generated` on a case-insensitive filesystem and
-    # matches nothing on a case-sensitive one, so the same project recorded
-    # a different set depending on where the build ran. Measured both ways.
+    # It also stops the answer depending on the interpreter. The collection
+    # this leaned on globs for a directory literally named `Generated`, and
+    # whether that matches `generated` is not a property of the project:
     #
-    # WHAT THIS DOES NOT EXPLAIN. A face reported ten runtime helpers
-    # unrecorded on every build while the 303 files in the subdirectories
-    # beside them were recorded. That face is case-insensitive and has nine
-    # source files at the top level, so the glob does reach them there —
-    # this scan returns the same 454 before and after this change on it.
-    # The defect below is real and measured; the reported symptom is not
-    # reproduced by it, and the cause of that run's 444 is still unknown.
+    #   case-sensitive filesystem           never matches
+    #   case-insensitive fs, Python 3.12    does not match  (measured)
+    #   case-insensitive fs, Python 3.14    matches         (measured)
+    #
+    # Same machine, same tree, same pattern. So one face recorded 444 files
+    # and another 454 for the same project, and the difference was which
+    # python3 was on PATH — nothing a reader of this code, or of the
+    # project, could see. (3.13 is untested, and a container will not
+    # settle it: the version only shows on a case-insensitive filesystem,
+    # and a Linux image gives a case-sensitive one, where the glob misses
+    # under every version. A green there would read as agreement.) Walking
+    # and comparing names ourselves takes the question away rather than
+    # answering it per environment.
     for directory in _generated_tree_roots(config_mgr) | {
         p.parent for p in list(paths) if _is_generated_dir(p.parent)
     }:
