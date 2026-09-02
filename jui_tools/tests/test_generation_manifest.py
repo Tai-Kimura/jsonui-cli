@@ -378,24 +378,38 @@ class KeyMigrationTests(unittest.TestCase):
         (self.root / "src" / "generated").mkdir(parents=True)
         self.file = self.root / "src" / "generated" / "ColorManager.ts"
         self.file.write_text("export {}\n", encoding="utf-8")
+        # A second tree whose name is ALREADY spelled the way the disk
+        # spells it. The fixture has to hold both sides: measured on two
+        # real manifests, keys died exactly when normalisation changed the
+        # spelling (327 of 537 and 161 of 249, residual zero), so a fixture
+        # containing only the changing side passes whatever the migration
+        # does to the other — and a project that looked only at survivors
+        # read this defect as "churn fixed".
+        (self.root / "Model" / "Generated").mkdir(parents=True)
+        self.stable = self.root / "Model" / "Generated" / "UserDto.swift"
+        self.stable.write_text("struct UserDto {}\n", encoding="utf-8")
 
     def tearDown(self):
         self._tmp.cleanup()
 
-    def _seed(self, key: str, version: str) -> None:
+    def _seed(self, *entries: tuple) -> None:
         gm.manifest_path(self.root).parent.mkdir(parents=True, exist_ok=True)
         gm.manifest_path(self.root).write_text(json.dumps({
             "schemaVersion": 1,
-            "files": {key: {"version": version, "generatedAt": "2026-09-03T00:00:00Z",
-                            "generatedBy": "jui build"}},
+            "files": {key: {"version": version,
+                            "generatedAt": "2026-09-03T00:00:00Z",
+                            "generatedBy": "jui build"}
+                      for key, version in entries},
         }, indent=2), encoding="utf-8")
 
     def _save_with_present(self, present_keys):
         return gm.save(self.root, "1.8.10", [], present_keys=present_keys)
 
     def test_an_entry_written_under_the_old_spelling_survives(self):
-        self._seed("src/Generated/ColorManager.ts", "1.8.7")
-        manifest = self._save_with_present(["src/generated/ColorManager.ts"])
+        self._seed(("src/Generated/ColorManager.ts", "1.8.7"),
+                   ("Model/Generated/UserDto.swift", "1.8.6"))
+        manifest = self._save_with_present(
+            ["src/generated/ColorManager.ts", "Model/Generated/UserDto.swift"])
         self.assertIn("src/generated/ColorManager.ts", manifest["files"])
         self.assertEqual(
             "1.8.7",
@@ -405,15 +419,26 @@ class KeyMigrationTests(unittest.TestCase):
         )
         self.assertEqual(0, manifest["summary"]["dropped"])
 
+    def test_an_entry_whose_spelling_does_not_change_is_untouched(self):
+        # The other side of the fixture. Keys died exactly when
+        # normalisation changed their spelling; one that does not change
+        # must come through with its own version and not be re-stamped,
+        # which a fixture holding only the changing side cannot show.
+        self._seed(("Model/Generated/UserDto.swift", "1.8.6"))
+        manifest = self._save_with_present(["Model/Generated/UserDto.swift"])
+        self.assertEqual("1.8.6",
+                         manifest["files"]["Model/Generated/UserDto.swift"]["version"])
+        self.assertEqual(0, manifest["summary"]["dropped"])
+
     def test_an_entry_whose_file_is_gone_is_still_dropped(self):
         # The control for the migration: it must not resurrect everything.
-        self._seed("src/Generated/GONE.ts", "1.8.7")
+        self._seed(("src/Generated/GONE.ts", "1.8.7"))
         manifest = self._save_with_present(["src/generated/ColorManager.ts"])
         self.assertEqual({}, manifest["files"])
         self.assertEqual(1, manifest["summary"]["dropped"])
 
     def test_dropping_is_announced(self):
-        self._seed("src/Generated/GONE.ts", "1.8.7")
+        self._seed(("src/Generated/GONE.ts", "1.8.7"))
         manifest = self._save_with_present(["src/generated/ColorManager.ts"])
         self.assertIn("src/generated/GONE.ts", manifest["summary"]["droppedKeys"])
         line = gm.coverage_line(0, 1, "1.8.10", dropped=1)

@@ -171,6 +171,15 @@ class GenerationRun:
         it reports on every build. Measured downstream: a run that wrote 83
         files reported 0, because every one came back byte-identical.
 
+        This rule is also what reaches the outputs no rule based on writing
+        could. Generated DTOs are written through a writer that SKIPS the
+        write when content matches, while generated views are rewritten
+        unconditionally by the platform tools — so a project's manifest held
+        210 view entries and zero DTO entries, under both the timestamp rule
+        and the content rule, for the same reason: nobody ever wrote them
+        again. An asymmetry in how outputs are written should not decide
+        which of them the record can describe.
+
         Once a file has an entry, an unchanged rebuild leaves it alone, so
         the churn this replaced does not return. The two rules converge:
         the first build fills the record, later ones only correct it.
