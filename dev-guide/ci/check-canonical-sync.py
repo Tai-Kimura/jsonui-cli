@@ -21,7 +21,15 @@ TWO LINKS, NEITHER OF WHICH ANY EXISTING GATE COVERS.
    actions.schema.json with the vendored copy a commit behind and every gate
    green, because only mock.schema.json had a byte guard.
 
-2. Condition keys. The set lives in FIVE places — the canonical schema, this
+2. The Android permission map. Cross-platform permission names ->
+   android.permission.* lives in the Android driver
+   (ANDROID_PERMISSION_MAP in JsonUITestRunner.kt) and, since `pregrant`
+   grew an Android arm (2026-09-02), as a deliberate copy in this repo's
+   schema.py — the fourth copy of a cross-repo table. A divergent copy
+   means pregrant revokes a different permission than the driver asserts,
+   and the deny-assert then fails for a reason nobody declared.
+
+3. Condition keys. The set lives in FIVE places — the canonical schema, this
    repo's `VALID_CONDITION_KEYS`, and one hard-coded set in each of the three
    drivers. `test_schema_drift.py` pins the first two to each other. Nothing
    pins the drivers.
@@ -120,6 +128,52 @@ def check_schema_bytes(canonical_root: Path) -> tuple[int, int]:
     return identical, len(schemas)
 
 
+PERMISSION_MAP_SOURCES = {
+    "android driver": (
+        "drivers/android/jsonuitestrunner/src/main/kotlin/com/jsonui/"
+        "testrunner/runner/JsonUITestRunner.kt",
+        r"ANDROID_PERMISSION_MAP\s*=\s*mapOf\(([^)]+)\)",
+        r'"([^"]+)"\s+to\s+"([^"]+)"'),
+}
+CLI_PERMISSION_MAP = (
+    HERE / "test_tools/jsonui_test_cli/schema.py",
+    r"ANDROID_PERMISSION_MAP\s*=\s*\{([^}]+)\}",
+    r'"([^"]+)":\s*"([^"]+)"')
+
+
+def check_permission_map(canonical_root: Path) -> int:
+    """The pregrant copy and the driver's map must be the same table."""
+    def extract(path: Path, block_pattern: str, pair_pattern: str, label: str) -> dict:
+        if not path.is_file():
+            cannot_attempt(f"{label}: {path} is not there")
+        match = re.search(block_pattern, path.read_text(encoding="utf-8"))
+        if match is None:
+            cannot_attempt(
+                f"{label}: no ANDROID_PERMISSION_MAP matched in {path.name} — "
+                "the constant was renamed or moved, so this guard is not "
+                "reading it any more")
+        table = dict(re.findall(pair_pattern, match.group(1)))
+        if not table:
+            cannot_attempt(f"{label}: the matched map is empty")
+        return table
+
+    (rel, block, pair), = PERMISSION_MAP_SOURCES.values()
+    driver = extract(canonical_root / rel, block, pair, "android driver")
+    cli_path, cli_block, cli_pair = CLI_PERMISSION_MAP
+    cli = extract(cli_path, cli_block, cli_pair, "cli schema.py")
+    if driver != cli:
+        only_driver = {k: v for k, v in driver.items() if cli.get(k) != v}
+        only_cli = {k: v for k, v in cli.items() if driver.get(k) != v}
+        problems.append(
+            "android permission map: pregrant's copy and the driver's "
+            "disagree.\n"
+            f"    driver-side entries not mirrored: {only_driver}\n"
+            f"    cli-side entries not mirrored   : {only_cli}\n"
+            "    A divergent copy makes pregrant revoke a different "
+            "permission than the driver's deny-assert reads.")
+    return len(driver)
+
+
 def check_condition_keys(canonical_root: Path) -> list[int]:
     schema = canonical_root / "schemas/actions.schema.json"
     if not schema.is_file():
@@ -176,6 +230,7 @@ def main(argv: list[str]) -> int:
         cannot_attempt(f"{canonical_root} is not a directory")
 
     identical, total = check_schema_bytes(canonical_root)
+    map_entries = check_permission_map(canonical_root)
     compared = check_condition_keys(canonical_root)
 
     if problems:
@@ -184,6 +239,7 @@ def main(argv: list[str]) -> int:
         return 1
     print(f"OK: {identical}/{total} schema(s) byte-identical to canonical "
           f"(mock from the shipped copy, the rest vendored fixtures); "
+          f"permission map agrees ({map_entries} entries); "
           f"condition keys agree across {len(compared)} driver(s), "
           f"{'/'.join(str(n) for n in compared)} key(s) read")
     return 0
