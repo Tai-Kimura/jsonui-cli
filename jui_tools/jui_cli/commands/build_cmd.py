@@ -5,6 +5,7 @@ import argparse
 import json
 import re
 import shutil
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -170,7 +171,8 @@ def cmd_build(args: argparse.Namespace) -> int:
     )
     print()
     print(generation_manifest.coverage_line(
-        len(written), len(present_keys), gen_run.version))
+        len(written), len(present_keys), gen_run.version,
+        distributed=_distributed_file_count(config_mgr)))
 
     print("\nBuild completed successfully!")
     return 0
@@ -189,10 +191,28 @@ def _generated_paths(config_mgr) -> list:
     which are exactly the ones a defective release rewrites. On a real
     project the first returned 0 and the second 850, so taking only the
     first would have produced an empty manifest that never said so.
+
+    Two corrections a downstream face measured on 1.8.7 (web):
+
+    CASE. `rglob("Generated")` matches a directory named `generated` on a
+    case-insensitive filesystem and hands back a path spelled the way the
+    PATTERN is, not the way the disk is — `src/Generated/…` for a tree that
+    is really `src/generated/…`. Every entry then names a path that exists
+    on macOS and on no case-sensitive filesystem, so a consumer asking the
+    manifest about a real file gets "not recorded" forever, and the check
+    looks like it ran. Paths are canonicalised against the filesystem
+    before they are recorded.
+
+    ASSETS. `_collect_targets` filters to source extensions, because a
+    marker banner can only live in a source file — the right rule for the
+    gate that reads banners, the wrong one for a record of what a run
+    wrote. A generator that emits `theme.css` into a generated tree wrote
+    it just as much. Inside a directory already identified as generated,
+    every file counts.
     """
     from .lint_generated_cmd import _collect_targets, _view_targets
 
-    paths = set()
+    paths: set = set()
     for collect in (
         lambda: [path for _kind, path in _collect_targets(config_mgr)],
         lambda: _view_targets(config_mgr),
@@ -201,7 +221,24 @@ def _generated_paths(config_mgr) -> list:
             paths.update(collect())
         except Exception:
             continue
-    return sorted(paths)
+
+    # Everything else living beside a discovered generated file, whatever
+    # its extension. Bounded to directories already identified as generated
+    # so this cannot wander into hand-written trees.
+    for directory in {p.parent for p in list(paths) if _is_generated_dir(p.parent)}:
+        try:
+            paths.update(f for f in directory.rglob("*") if f.is_file())
+        except OSError:
+            continue
+
+    from ..core.generation_manifest import real_case
+
+    return sorted({real_case(p) for p in paths})
+
+
+def _is_generated_dir(directory) -> bool:
+    """Is this directory part of a generated tree, by its own name?"""
+    return any(part.lower() == "generated" for part in Path(directory).parts)
 
 
 def _run_tool(cmd: list[str], cwd: Path) -> bool:
@@ -1675,3 +1712,23 @@ def _distribute_images(
                 )
             else:
                 print(f"Converted {count} image(s) → {platform}")
+
+
+def _distributed_file_count(config_mgr) -> int | None:
+    """How many files the build put on disk, for the line's second number.
+
+    Reported beside the manifest's own denominator, never as it: a reader
+    took the larger figure for the manifest's scope and concluded hundreds
+    of files had gone unrecorded. Two numbers with two names.
+    """
+    from .lint_generated_cmd import _platform_roots
+
+    total = 0
+    try:
+        for root in _platform_roots(config_mgr):
+            if root is None or not Path(root).is_dir():
+                continue
+            total += sum(1 for f in Path(root).rglob("*") if f.is_file())
+    except OSError:
+        return None
+    return total or None

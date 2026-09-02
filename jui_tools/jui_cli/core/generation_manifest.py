@@ -40,6 +40,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
@@ -60,6 +61,42 @@ _COMMENT = (
     "layouts for that), and it is not evidence of freshness — an entry is "
     "the last generation, however long ago that was."
 )
+
+
+def real_case(path: Path) -> Path:
+    """A path spelled the way the filesystem spells it.
+
+    Case-insensitive filesystems accept — and hand back — whatever casing
+    they were given, so a glob pattern's spelling can travel all the way
+    into a record and only fail somewhere else, on a machine nobody ran.
+    Each component is matched against the real directory entries; a
+    component that is not there is kept as given, since the path may simply
+    not exist yet and inventing a spelling would be worse than echoing the
+    one asked for.
+    """
+    p = Path(path)
+    if not p.is_absolute():
+        return p
+    fixed = Path(p.anchor)
+    for part in p.relative_to(p.anchor).parts:
+        try:
+            entries = os.listdir(fixed)
+        except OSError:
+            return fixed.joinpath(*_remaining(p, fixed))
+        if part in entries:
+            fixed = fixed / part
+            continue
+        lowered = part.lower()
+        match = next((e for e in entries if e.lower() == lowered), None)
+        fixed = fixed / (match if match is not None else part)
+    return fixed
+
+
+def _remaining(full: Path, prefix: Path) -> tuple:
+    try:
+        return full.relative_to(prefix).parts
+    except ValueError:
+        return full.parts
 
 
 def manifest_path(project_root: Path) -> Path:
@@ -107,9 +144,25 @@ class GenerationRun:
         return touched
 
     def _key(self, path) -> str:
-        p = Path(path)
+        """The project-relative path, spelled the way the disk spells it.
+
+        NOT `Path.resolve()`. That normalises per platform — on macOS it
+        keeps whatever casing it was handed, so the manifest recorded one
+        spelling while the file walk produced another, and the two sides
+        disagreed about the same file. Measured on two projects, in
+        opposite directions: one had `src/generated` in the manifest and
+        `src/Generated` from the walk, the other the reverse. Either way a
+        consumer asking about a real path got "not recorded", forever, and
+        the check looked like it ran. On a case-sensitive filesystem not one
+        key would have resolved.
+
+        Disk spelling is canonical, and every path entering the manifest
+        goes through this one function so the two sides cannot drift again.
+        """
+        p = real_case(Path(path))
+        root = real_case(Path(self.project_root))
         try:
-            return p.resolve().relative_to(Path(self.project_root).resolve()).as_posix()
+            return p.relative_to(root).as_posix()
         except ValueError:
             return p.as_posix()
 
@@ -169,16 +222,31 @@ def save(
     return manifest
 
 
-def coverage_line(written: int, total: int, version: str) -> str:
-    """`generation manifest: this run wrote 3 of 44 generated file(s) ...`.
+def coverage_line(
+    written: int, total: int, version: str, distributed: int | None = None
+) -> str:
+    """`generation manifest: this run wrote 3 of 44 tracked generated file(s)`.
 
     Both numbers, because a partial run is the normal case and a line that
-    reported only the numerator would read the same as a full one. The
-    limitation rides along: a reader who takes this for "this project is on
-    3.0.0" has read it as freshness, which it is not.
+    reported only the numerator would read the same as a full one.
+
+    "tracked" is load-bearing. The denominator is what the manifest speaks
+    about, which is not every file a build distributes — a reader took the
+    larger number for the manifest's scope and concluded that hundreds of
+    files had gone unrecorded. When the distributed count is known it is
+    reported beside it, as a different number with its own name, rather
+    than left for someone to infer.
+
+    The limitation rides along too: a reader who takes this for "this
+    project is on 3.0.0" has read it as freshness, which it is not.
     """
-    return (
-        f"generation manifest: this run wrote {written} of {total} "
-        f"generated file(s) as {version} — untouched files keep the version "
-        "that last wrote them (records writes, not currency)"
+    line = (
+        f"generation manifest: this run wrote {written} of {total} tracked "
+        f"generated file(s) as {version}"
+    )
+    if distributed is not None and distributed != total:
+        line += f" ({distributed} file(s) distributed in total)"
+    return line + (
+        " — untouched files keep the version that last wrote them "
+        "(records writes, not currency)"
     )

@@ -146,5 +146,71 @@ class ManifestTests(unittest.TestCase):
         self.assertNotEqual("sync-meta.json", gm.MANIFEST_FILENAME)
 
 
+
+
+class PathSpellingTests(unittest.TestCase):
+    """Keys are spelled the way the filesystem spells them.
+
+    Two projects measured the same defect from opposite sides: one had
+    `src/generated` in the manifest and `src/Generated` from the file walk,
+    the other the reverse. `Path.resolve()` was the cause — it keeps
+    whatever casing it is handed on a case-insensitive filesystem, so a
+    glob pattern's spelling travelled into the record. Every key named a
+    path that exists on macOS and on no case-sensitive filesystem, which
+    turns "which version wrote this?" into a question that always answers
+    "not recorded" while looking like it ran.
+
+    macOS cannot show that by opening the file — the assertions below
+    compare STRINGS, which is the check a case-sensitive filesystem would
+    perform for us.
+    """
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.root = Path(self._tmp.name)
+        (self.root / "src" / "generated" / "hooks").mkdir(parents=True)
+        self.file = self.root / "src" / "generated" / "hooks" / "useColorMode.ts"
+        self.file.write_text("export {}\n", encoding="utf-8")
+
+    def tearDown(self):
+        self._tmp.cleanup()
+
+    def test_a_miscased_input_is_recorded_with_the_real_spelling(self):
+        miscased = self.root / "src" / "Generated" / "hooks" / "useColorMode.ts"
+        run = gm.GenerationRun(project_root=self.root, version="1.8.8")
+        self.assertEqual("src/generated/hooks/useColorMode.ts", run._key(miscased))
+
+    def test_the_key_matches_the_walk_byte_for_byte(self):
+        # The comparison a consumer makes, and the one macOS will not make
+        # for us: exact string equality against what os.walk reports.
+        import os as _os
+        walked = {
+            _os.path.relpath(_os.path.join(r, f), self.root)
+            for r, _d, fs in _os.walk(self.root / "src")
+            for f in fs
+        }
+        run = gm.GenerationRun(project_root=self.root, version="1.8.8")
+        self.assertIn(run._key(self.file), walked)
+
+    def test_a_spelling_that_is_not_on_disk_is_not_invented(self):
+        # The negative arm: a path with no real counterpart keeps what it
+        # was given rather than being silently mapped onto something else.
+        absent = self.root / "src" / "generated" / "hooks" / "Missing.ts"
+        run = gm.GenerationRun(project_root=self.root, version="1.8.8")
+        self.assertEqual("src/generated/hooks/Missing.ts", run._key(absent))
+
+    def test_the_line_separates_tracked_from_distributed(self):
+        # A reader took the distributed total for the manifest's scope and
+        # concluded hundreds of files were unrecorded. Two names, two
+        # numbers.
+        line = gm.coverage_line(198, 200, "1.8.8", distributed=507)
+        self.assertIn("198 of 200 tracked generated file(s)", line)
+        self.assertIn("507 file(s) distributed in total", line)
+
+    def test_the_line_omits_the_second_number_when_it_adds_nothing(self):
+        line = gm.coverage_line(4, 4, "1.8.8", distributed=4)
+        self.assertNotIn("distributed in total", line)
+
+
 if __name__ == "__main__":
     unittest.main()
