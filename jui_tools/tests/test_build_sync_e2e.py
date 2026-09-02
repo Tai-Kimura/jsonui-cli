@@ -774,20 +774,25 @@ class _ConfigStub:
 class GeneratedTreeScanTests(unittest.TestCase):
     """The scan starts from the generated tree, not from what it found in it.
 
-    Ten runtime helpers sitting directly in `src/generated/` went unrecorded
-    on a real project, every build, while the 303 files in the four
-    subdirectories beside them were recorded — same directory, same write,
-    same second. The widening began at the PARENT of each already-discovered
-    file, so it could only ever reach directories that already contained
-    one, and nothing discovered sat at the top level.
+    The widening began at the PARENT of each already-discovered file, so it
+    could only ever reach directories that already contained one. Anything
+    sitting directly in the generated tree is then invisible when the
+    discovery below it happens one level down.
 
     It was also answering differently on different machines. The collection
     it leaned on globs for a directory literally named `Generated`, which
     matches `generated` on a case-insensitive filesystem and matches nothing
     on a case-sensitive one; the fallback is an enumerated list of four
     subdirectory names. Measured in a Linux container: the glob returns
-    nothing for a tree named `generated`, so a build there recorded a
+    nothing for a tree named `generated`, so a build there records a
     strictly smaller set than the same build on macOS.
+
+    THESE ARMS DO NOT COVER THE REPORT THAT STARTED THIS. A face reported
+    ten helpers unrecorded on every build; it is case-insensitive and has
+    nine source files at the top of its generated tree, so the glob reaches
+    that directory there and the scan returns the same count before and
+    after this change. Whatever produced that face's number is still
+    unexplained, and nothing here should be read as having found it.
 
     The fixtures below hold no code file at the top level of the generated
     tree, which is what makes them fail on either filesystem rather than

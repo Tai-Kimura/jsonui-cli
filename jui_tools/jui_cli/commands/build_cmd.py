@@ -286,17 +286,23 @@ def _generated_paths(config_mgr) -> list:
     # The starting points are the generated directories THEMSELVES, found
     # by name on disk, not the parents of files something else already
     # found. Widening from those parents can only reach directories that
-    # already contain a discovered file, so a helper sitting directly in
-    # `src/generated/` was invisible whenever the discovery below it
-    # happened one level down — which is the normal shape: ten runtime
-    # helpers went unrecorded on a real project while 303 files in the four
-    # subdirectories beside them were recorded, every build.
+    # already contain a discovered file, so anything sitting directly in
+    # `src/generated/` is invisible when the discovery below it happens one
+    # level down.
     #
     # It also stops the answer depending on the filesystem. The collection
-    # this used to lean on looks for a directory literally named
-    # `Generated`, which matches `generated` on macOS and matches nothing
-    # on Linux, so the same project recorded a different set of files
-    # depending on where the build ran. Measured both ways.
+    # this leaned on looks for a directory literally named `Generated`,
+    # which matches `generated` on a case-insensitive filesystem and
+    # matches nothing on a case-sensitive one, so the same project recorded
+    # a different set depending on where the build ran. Measured both ways.
+    #
+    # WHAT THIS DOES NOT EXPLAIN. A face reported ten runtime helpers
+    # unrecorded on every build while the 303 files in the subdirectories
+    # beside them were recorded. That face is case-insensitive and has nine
+    # source files at the top level, so the glob does reach them there —
+    # this scan returns the same 454 before and after this change on it.
+    # The defect below is real and measured; the reported symptom is not
+    # reproduced by it, and the cause of that run's 444 is still unknown.
     for directory in _generated_tree_roots(config_mgr) | {
         p.parent for p in list(paths) if _is_generated_dir(p.parent)
     }:
