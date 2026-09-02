@@ -118,18 +118,55 @@ def register_sync_tool_command(subparsers: argparse._SubParsersAction) -> None:
 
 def _resolve_source_root(override: str | None) -> Path:
     """Return the source CLI directory, or raise if none is usable."""
+    root, _why = _resolve_source_root_and_reason(override)
+    return root
+
+
+def _resolve_source_root_and_reason(override: str | None) -> tuple[Path, str]:
+    """The source directory, and which rule chose it.
+
+    Callers print the reason because the choice is invisible otherwise:
+    `~/.jsonui-cli` is refreshed by the bootstrap, so a project pinning one
+    version and a home directory holding another produce the same line. A
+    docs project shipped a tool tree stamped 1.8.6 while its pin said 1.8.5
+    and the contents were older still — 35 paths apart, 10 of them specs
+    that had never been vendored at all. The stamp was right about itself;
+    nothing said which tree it came from.
+
+    Which source is CORRECT is not the tool's call — a project may pin
+    deliberately, and CI setting the variable is the intended arrangement.
+    Saying which one was used is the tool's call.
+    """
     if override:
-        root = Path(override).expanduser().resolve()
+        root, reason = Path(override).expanduser().resolve(), "--source"
     elif os.environ.get("JSONUI_CLI_PATH"):
-        root = Path(os.environ["JSONUI_CLI_PATH"]).expanduser().resolve()
+        root, reason = (Path(os.environ["JSONUI_CLI_PATH"]).expanduser().resolve(),
+                        "$JSONUI_CLI_PATH")
     else:
-        root = Path.home() / ".jsonui-cli"
+        root, reason = Path.home() / ".jsonui-cli", "default"
     if not root.exists():
         raise FileNotFoundError(
             f"Source CLI directory not found: {root}. "
             "Set $JSONUI_CLI_PATH or run the JsonUI bootstrap."
         )
-    return root
+    return root, reason
+
+
+def _source_version(root: Path) -> str:
+    """The VERSION the source tree carries, or a word saying it has none."""
+    try:
+        text = (Path(root) / "VERSION").read_text(encoding="utf-8").strip()
+    except OSError:
+        return "no VERSION file"
+    return text or "empty VERSION file"
+
+
+def _describe_source(root: Path, reason: str) -> str:
+    """`/path (1.8.7)` — plus the rule, when a rule other than the default chose it."""
+    version = _source_version(root)
+    if reason == "default":
+        return f"{root}  ({version})"
+    return f"{root}  ({version}, {reason})"
 
 
 def _is_extensions_path(rel_path: Path) -> bool:
@@ -462,13 +499,13 @@ def cmd_sync_tool(args: argparse.Namespace) -> int:
         return 0
 
     try:
-        source_root = _resolve_source_root(args.source)
+        source_root, source_reason = _resolve_source_root_and_reason(args.source)
     except FileNotFoundError as exc:
         print(f"ERROR: {exc}")
         return 1
 
     print(f"Project:      {project_root}")
-    print(f"Source:       {source_root}")
+    print(f"Source:       {_describe_source(source_root, source_reason)}")
     if args.dry_run:
         print("Mode:         DRY RUN (no files written)")
 

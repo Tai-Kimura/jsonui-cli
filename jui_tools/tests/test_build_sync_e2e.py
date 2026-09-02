@@ -413,3 +413,86 @@ class SyncProtocolE2ETests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class DistributedResourcesSmokeTests(unittest.TestCase):
+    """What a build PRODUCED, not only that it exited 0.
+
+    Two holes, caught by different instruments. A crash gives a non-zero
+    exit and an exit-code smoke finds it. A run that quietly produces
+    nothing exits 0 and that same smoke passes — which is how five projects
+    ran `jui verify` against zero screens until it began naming its
+    denominator. So a smoke has to assert what came out.
+
+    The colours case is the sharp one. A crash before the platform tools
+    normalise leaves the SSoT's flat form sitting at the distributed path:
+    not a truncated file, a different well-formed one. Exit codes, diff line
+    counts and a glance all read it as fine.
+
+    DIRECTION MATTERS, and reading it backwards condemns healthy projects.
+    Flat is the AUTHORED form — the SSoT is flat on purpose and the build
+    migrates it to themed on the way out. So the property is about the
+    DISTRIBUTED copy, and the source is expected to stay flat.
+    """
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.root = Path(self._tmp.name)
+        _build_fixture_project(self.root)
+        resources = self.root / "docs/screens/layouts/Resources"
+        resources.mkdir(parents=True, exist_ok=True)
+        # Authored (flat) — this shape is correct at the source.
+        (resources / "colors.json").write_text(json.dumps({
+            "primary": "#FF0000",
+            "background": "#FFFFFF",
+        }, indent=2), encoding="utf-8")
+        (resources / "strings.json").write_text(json.dumps({
+            "login": {"title": "Login"},
+        }, indent=2), encoding="utf-8")
+
+    def tearDown(self):
+        self._tmp.cleanup()
+
+    def _distribute(self):
+        from jui_cli.commands.build_cmd import _distribute_resources
+        cfg = ConfigManager(self.root / "jui.config.json")
+        platforms = cfg.load()["platforms"]
+        _distribute_resources(cfg, platforms, _make_args())
+        return cfg
+
+    def test_the_run_produced_files_at_every_platform_path(self):
+        # The assertion an exit code cannot make: something arrived.
+        self._distribute()
+        for rel in ("ios/Layouts/Resources",
+                    "android/app/src/main/assets/Layouts/Resources",
+                    "web/src/Layouts/Resources"):
+            dest = self.root / rel
+            produced = sorted(p.name for p in dest.glob("*.json"))
+            self.assertEqual(["colors.json", "strings.json"], produced,
+                             f"{rel} did not receive the resources")
+
+    def test_the_authored_colours_stay_flat(self):
+        # The direction guard. Flat at the source is the authored form; a
+        # check that calls it broken reports every healthy project.
+        self._distribute()
+        src = json.loads(
+            (self.root / "docs/screens/layouts/Resources/colors.json")
+            .read_text(encoding="utf-8"))
+        self.assertNotIn("modes", src)
+        self.assertIn("primary", src)
+
+    def test_a_distributed_colours_file_is_recognisable_as_flat(self):
+        # Distribution copies; the platform tools migrate to themed. This
+        # pins the shape a smoke has to look at — the DISTRIBUTED copy —
+        # and states which side of it is the defect, so the next reader
+        # does not have to rediscover the direction from the ticket.
+        self._distribute()
+        dest = (self.root / "web/src/Layouts/Resources/colors.json")
+        distributed = json.loads(dest.read_text(encoding="utf-8"))
+        themed = "modes" in distributed and "fallback_mode" in distributed
+        self.assertFalse(
+            themed,
+            "the Python distribution step migrated colours, which it has "
+            "never done — if that changed, this smoke should assert the "
+            "themed shape here instead of the flat one",
+        )

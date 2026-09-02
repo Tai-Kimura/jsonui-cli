@@ -174,7 +174,14 @@ def cmd_build(args: argparse.Namespace) -> int:
         len(written), len(present_keys), gen_run.version,
         distributed=_distributed_file_count(config_mgr)))
 
-    print("\nBuild completed successfully!")
+    # The success line carries the same numbers. "Build completed
+    # successfully" is the identical sentence whether a run produced every
+    # file or none: `jui verify` had the same shape until it started naming
+    # its denominator, and doing so revealed that five projects had been
+    # verifying nothing at all. An exit code cannot tell those apart —
+    # a crash is caught by it, a silent zero is not.
+    print(f"\nBuild completed successfully — wrote {len(written)} of "
+          f"{len(present_keys)} tracked generated file(s)")
     return 0
 
 
