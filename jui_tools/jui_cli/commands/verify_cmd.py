@@ -224,7 +224,7 @@ def cmd_verify(args: argparse.Namespace) -> int:
     skips = _skip_counts(skipped_external, missing_layouts)
     total = verified + sum(n for _, n in skips)
     print()
-    print(_verified_line(verified, total, skips))
+    print(_verified_line(verified, total, skips, spec_dir=spec_dir))
 
     # Computed before the skip list is printed, so a name reported below as
     # missing is not also listed above as an ordinary external skip. One
@@ -404,12 +404,25 @@ def _summary_payload(results, skips: list[tuple[str, int]]) -> dict:
     }
 
 
-def _verified_line(verified: int, total: int, skips: list[tuple[str, int]]) -> str:
+def _verified_line(
+    verified: int, total: int, skips: list[tuple[str, int]],
+    spec_dir=None,
+) -> str:
     """`verified 3 of 11 screen(s) — 8 skipped (...)`.
 
     The shape is fixed so a face can floor it: a run that drops from 11
     verified to 3 changes this line even though both exit 0.
+
+    An empty denominator gets DIFFERENT words. `verified 0 of 0 screen(s)`
+    reads as "all of them were skipped" when it means "there was nothing to
+    look at", and those need to be distinguishable for the same reason this
+    line exists at all — the two were confused once already while measuring
+    this very change, by pointing a run at a tree whose spec_directory was
+    unset. Naming the directory says which tree answered.
     """
+    if total == 0:
+        where = f" (spec_directory: {spec_dir})" if spec_dir else ""
+        return f"**no screens found{where}** — nothing to verify"
     # `screen(s)` is not laziness about plurals: the reported shape is what
     # a face floors on (`verified # of # screen(s)`), so it stays fixed for
     # one screen and for eleven.

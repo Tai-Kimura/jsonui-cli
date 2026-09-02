@@ -62,6 +62,25 @@ class VerifiedLineTests(unittest.TestCase):
         self.assertIn("2 layout authored externally", line)
         self.assertIn("3 layout not found on disk", line)
 
+    def test_an_empty_denominator_is_not_worded_as_an_all_skip_run(self):
+        # `verified 0 of 0 screen(s)` reads as "every screen was skipped"
+        # when it means "there was nothing to look at". The two were
+        # confused while measuring this very change — a run pointed at a
+        # tree whose spec_directory was unset reported the same shape as a
+        # genuine all-skip run.
+        line = _verified_line(0, 0, [], spec_dir="/tmp/proj/specs")
+        self.assertIn("no screens found", line)
+        self.assertNotIn("verified 0 of 0", line)
+        # Which tree answered is part of the answer.
+        self.assertIn("/tmp/proj/specs", line)
+
+    def test_an_all_skip_run_keeps_saying_verified(self):
+        # The control for the line above: a real denominator still reports
+        # in the shape a face floors on.
+        line = _verified_line(0, 11, _skip_counts(["a -> a.json"] * 11, []))
+        self.assertIn("verified 0 of 11 screen(s)", line)
+        self.assertNotIn("no screens found", line)
+
     def test_the_shape_is_fixed_for_one_screen_too(self):
         # A face floors on the reported shape; pluralising would move
         # that shape out from under it.
