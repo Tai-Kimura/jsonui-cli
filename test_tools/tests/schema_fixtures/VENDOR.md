@@ -24,7 +24,7 @@ turning drift into a CI failure.
 
 - Source repo: `Tai-Kimura/jsonui-test-runner`
 - Source path: `schemas/{actions,screen-test,flow-test,results,description}.schema.json`
-- Vendored at commit: `4f2ddf0`
+- Vendored at commit: `b2a042e`
 
 ## `mock.schema.json` is not here
 

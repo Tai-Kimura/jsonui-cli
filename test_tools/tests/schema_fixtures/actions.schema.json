@@ -164,7 +164,7 @@
         },
         "permissions": {
           "type": "object",
-          "description": "Permission grants applied before launch",
+          "description": "Permission grants applied before launch. Android deny is an ASSERT, not a revoke: satisfied when the permission is currently denied, and a loud per-file failure when it is granted — an in-run revoke kills the instrumented process (ActivityManager: permissions revoked), so the driver never executes one. Establish a denied baseline per run with a pre-instrumentation step (pregrant); grants persist across update-installs, so the run inherits the previous run's state. Android unset leaves inherited state untouched.",
           "propertyNames": {
             "enum": [
               "camera",
