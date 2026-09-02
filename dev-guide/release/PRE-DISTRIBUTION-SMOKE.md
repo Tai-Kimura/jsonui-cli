@@ -157,3 +157,19 @@ parse のほうが壊れ方が静か。**
 
 📌 これは列車側の「1 面に聞いて全面に聞いたことにした」と同じ形 ——
 **手順を踏んだ形が残るぶん、踏んでいない範囲が見えない。**
+
+## ⚠️ 捨てプロジェクトは、配布が結線されていない
+
+`jui init` が書く config には **`layoutsDir` が無い**（実測: `platforms: {"web": {"root": "./web"}}`）。
+配布側は `layouts_rel = pconfig.get("layoutsDir")` が空なら黙って `continue` する。
+⇒ **SSoT を編集しても face に届かず、届かなかったことも言われない。**
+
+⇒ **判別子は成功行にある**:
+```
+generation manifest: 14 tracked generated file(s) as 1.8.11
+                     ↑ (N file(s) distributed in total) が無い = 配布 0 件
+```
+⚠️ **列車はこの欠落を見て「0 distributed だろう」と説明で片付け、その条件のまま
+「読めない入力に固有」という対照を取った。対照は無効だった。**
+⇒ **撃つ前に `(N distributed)` が出ることを確かめる。** manifest だけを見る腕
+（記録・churn・`dropped`・衝突）は結線に依存しないが、**配布や SSoT を経由する腕は依存する。**
