@@ -281,10 +281,25 @@ def _generated_paths(config_mgr) -> list:
         except Exception:
             continue
 
-    # Everything else living beside a discovered generated file, whatever
-    # its extension. Bounded to directories already identified as generated
-    # so this cannot wander into hand-written trees.
-    for directory in {p.parent for p in list(paths) if _is_generated_dir(p.parent)}:
+    # Everything inside a generated tree, whatever its extension.
+    #
+    # The starting points are the generated directories THEMSELVES, found
+    # by name on disk, not the parents of files something else already
+    # found. Widening from those parents can only reach directories that
+    # already contain a discovered file, so a helper sitting directly in
+    # `src/generated/` was invisible whenever the discovery below it
+    # happened one level down — which is the normal shape: ten runtime
+    # helpers went unrecorded on a real project while 303 files in the four
+    # subdirectories beside them were recorded, every build.
+    #
+    # It also stops the answer depending on the filesystem. The collection
+    # this used to lean on looks for a directory literally named
+    # `Generated`, which matches `generated` on macOS and matches nothing
+    # on Linux, so the same project recorded a different set of files
+    # depending on where the build ran. Measured both ways.
+    for directory in _generated_tree_roots(config_mgr) | {
+        p.parent for p in list(paths) if _is_generated_dir(p.parent)
+    }:
         try:
             paths.update(f for f in directory.rglob("*") if f.is_file())
         except OSError:
@@ -293,6 +308,49 @@ def _generated_paths(config_mgr) -> list:
     from ..core.generation_manifest import real_case
 
     return sorted({real_case(p) for p in paths})
+
+
+def _generated_tree_roots(config_mgr) -> set:
+    """Every directory named `generated`, found on disk under a platform root.
+
+    Matched case-insensitively and by walking, rather than by globbing for
+    one spelling: a glob for `Generated` finds `generated` on a
+    case-insensitive filesystem and finds nothing on a case-sensitive one,
+    which made the manifest's denominator depend on the machine. Excluded
+    directory names are pruned during the walk, so this does not descend
+    into `node_modules` or a build output — the same list the lint
+    collection uses, including a project's own additions.
+    """
+    from .lint_generated_cmd import DEFAULT_EXCLUDED_DIR_NAMES, _platform_roots
+    from .sync_tool_cmd import PLATFORM_TO_TOOL
+
+    # The vendored tool trees are pruned too. `rjui_tools/lib/core/generated`
+    # is the TOOL's own source, sitting inside the project because that is
+    # how the toolchain is distributed; 33 of its files are not files this
+    # project's build generated, and a record claiming otherwise is worse
+    # than one that omits them. The old collection missed this tree only by
+    # accident — it filters to source extensions and those files are Ruby —
+    # so widening to every extension is exactly what exposes it. Names come
+    # from the sync map rather than a second list here.
+    excluded = set(DEFAULT_EXCLUDED_DIR_NAMES) | set(PLATFORM_TO_TOOL.values())
+    try:
+        config = config_mgr.load()
+        lint_cfg = config.get("lint") if isinstance(config, dict) else None
+        if isinstance(lint_cfg, dict):
+            excluded |= set(lint_cfg.get("exclude_dir_names") or [])
+    except Exception:
+        pass
+
+    found: set = set()
+    for platform_root in _platform_roots(config_mgr):
+        if platform_root is None or not platform_root.exists():
+            continue
+        for dirpath, dirnames, _filenames in os.walk(platform_root):
+            dirnames[:] = [d for d in dirnames if d not in excluded]
+            for name in dirnames:
+                if name.lower() == "generated":
+                    found.add(Path(dirpath) / name)
+    return found
 
 
 def _is_generated_dir(directory) -> bool:

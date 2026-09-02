@@ -769,3 +769,118 @@ class RecordOrderTests(unittest.TestCase):
 class _ConfigStub:
     def __init__(self, project_root):
         self.project_root = project_root
+
+
+class GeneratedTreeScanTests(unittest.TestCase):
+    """The scan starts from the generated tree, not from what it found in it.
+
+    Ten runtime helpers sitting directly in `src/generated/` went unrecorded
+    on a real project, every build, while the 303 files in the four
+    subdirectories beside them were recorded — same directory, same write,
+    same second. The widening began at the PARENT of each already-discovered
+    file, so it could only ever reach directories that already contained
+    one, and nothing discovered sat at the top level.
+
+    It was also answering differently on different machines. The collection
+    it leaned on globs for a directory literally named `Generated`, which
+    matches `generated` on a case-insensitive filesystem and matches nothing
+    on a case-sensitive one; the fallback is an enumerated list of four
+    subdirectory names. Measured in a Linux container: the glob returns
+    nothing for a tree named `generated`, so a build there recorded a
+    strictly smaller set than the same build on macOS.
+
+    The fixtures below hold no code file at the top level of the generated
+    tree, which is what makes them fail on either filesystem rather than
+    only on Linux.
+    """
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.root = Path(self._tmp.name)
+        self.web = self.root / "web"
+        (self.web / "src" / "Layouts").mkdir(parents=True)
+        self.gen = self.web / "src" / "generated"
+        (self.gen / "components").mkdir(parents=True)
+        (self.gen / "components" / "Foo.tsx").write_text(
+            "x\n", encoding="utf-8")
+        # Top level holds ONLY a non-source file. That is what makes these
+        # arms fail on this machine too: with a `.ts` up here, the lint
+        # collection finds it on a case-insensitive filesystem, its parent
+        # becomes a starting point, and the old widening reaches the rest —
+        # so a fixture with one would pass on macOS whether or not the
+        # repair is present, and only fail on Linux. Arms that need the
+        # `.ts` add it themselves and say what they can and cannot catch.
+        (self.gen / "theme.css").write_text("x\n", encoding="utf-8")
+        (self.root / "jui.config.json").write_text(json.dumps({
+            "platforms": {"web": {"root": "web", "layoutsDir": "src/Layouts"}},
+        }), encoding="utf-8")
+
+    def tearDown(self):
+        self._tmp.cleanup()
+
+    def _paths(self):
+        from jui_cli.commands.build_cmd import _generated_paths
+        return sorted(p.name for p in _generated_paths(_config(self.root)))
+
+    def test_a_helper_at_the_top_of_the_tree_is_found(self):
+        # The shape the report was about — a `.ts` helper beside the four
+        # subdirectories. NOTE: this arm cannot fail on a case-insensitive
+        # filesystem, where the glob for `Generated` matches `generated`
+        # and picks the file up regardless. It is the Linux-side pin; the
+        # arms below are the ones that fail here.
+        (self.gen / "ColorManager.ts").write_text("x\n", encoding="utf-8")
+        self.assertIn("ColorManager.ts", self._paths())
+
+    def test_a_non_source_file_at_the_top_of_the_tree_is_found(self):
+        # The one the old code could not reach by any route: not a source
+        # extension, so no collection returns it, and its directory was
+        # never a starting point.
+        self.assertIn("theme.css", self._paths())
+
+    def test_the_old_starting_points_are_what_missed_them(self):
+        # The control. Widening from the parents of discovered files only,
+        # as before — this must still miss the two above, or the arms above
+        # are not measuring the repair.
+        from jui_cli.commands.build_cmd import _is_generated_dir
+        from jui_cli.commands.lint_generated_cmd import _collect_targets
+
+        cm = _config(self.root)
+        found = {p for _kind, p in _collect_targets(cm)}
+        widened = set(found)
+        starts = {p.parent for p in found if _is_generated_dir(p.parent)}
+        for directory in starts:
+            widened.update(f for f in directory.rglob("*") if f.is_file())
+        names = {p.name for p in widened}
+        self.assertNotIn("theme.css", names,
+                         "the control no longer reproduces the gap")
+
+    def test_a_vendored_tool_tree_is_not_claimed_as_output(self):
+        # The toolchain ships inside the project, and its own source has a
+        # directory named `generated` too. Widening to every extension is
+        # what exposes it: the old collection missed those files only
+        # because they are Ruby and it filtered to source extensions.
+        tool = self.web / "rjui_tools" / "lib" / "core" / "generated"
+        tool.mkdir(parents=True)
+        (tool / "emitter.rb").write_text("x\n", encoding="utf-8")
+        self.assertNotIn("emitter.rb", self._paths())
+
+    def test_an_excluded_directory_is_not_walked_into(self):
+        junk = self.web / "node_modules" / "pkg" / "generated"
+        junk.mkdir(parents=True)
+        (junk / "junk.ts").write_text("x\n", encoding="utf-8")
+        self.assertNotIn("junk.ts", self._paths())
+
+    def test_the_tree_is_found_under_either_spelling(self):
+        # A project spelling it `Generated` gets the same answer. On a
+        # case-insensitive filesystem this is the same directory as the
+        # fixture's; on a case-sensitive one it is a second one, and both
+        # must be found.
+        other = self.web / "src" / "Generated"
+        other.mkdir(exist_ok=True)  # same dir on macOS, a second one on Linux
+        (other / "Marker.ts").write_text("x\n", encoding="utf-8")
+        self.assertIn("Marker.ts", self._paths())
+
+
+def _config(root: Path):
+    from jui_cli.core.config_manager import ConfigManager
+    return ConfigManager(root / "jui.config.json")

@@ -203,6 +203,12 @@ class ManifestTests(unittest.TestCase):
         # And the file says what an absent entry means, since "never
         # written" and "written by an old version" are not the same claim.
         self.assertIn("has not been written since", data["_comment"])
+        # The other limitation, which the behaviour cannot fix: with the
+        # old record gone there is no other version to write, so the only
+        # repair available is saying so. A comment that lists the blank
+        # carefully and omits this one reads as complete.
+        self.assertIn("re-made it, not the version that generated",
+                      data["_comment"])
 
     def test_the_manifest_is_not_the_sync_record(self):
         # Two different facts: which toolchain copy a project holds, and
