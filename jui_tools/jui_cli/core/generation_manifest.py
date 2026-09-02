@@ -262,11 +262,68 @@ def load_migrated(project_root: Path) -> dict:
     Two call sites normalising separately is what let those spellings
     diverge, so there is one function and both use it.
     """
+    return load_migrated_with_collisions(project_root)[0]
+
+
+def load_migrated_with_collisions(project_root: Path) -> tuple[dict, dict]:
+    """`load_migrated`, plus how many entries each collision absorbed.
+
+    The second value maps a canonical key to the number of records lost to
+    it, because those are different numbers: three spellings of one file
+    are one collided key and two lost entries. Returning both from the one
+    place that merges keeps the caller from deriving either — recomputing
+    "how many were there before" from a second read of the file would put
+    two sources under one number.
+
+    A collision is a silent deletion. Two records naming the same file in
+    two spellings collapse into one, and `dropped` cannot report it: that
+    counts what the prune removed, and this happens before the prune, in
+    the merge. So the summary reads `dropped 0` while the file holds fewer
+    entries than it did — the same shape as the re-stamping defect, where
+    every number looked like a healthy build.
+
+    NOT REACHABLE IN TODAY'S REAL DATA, AND MEASURED, NOT ASSUMED: across
+    three downstream corpora, every generation of every recorded manifest
+    normalised without collapsing (537→537, 210→210, 249→249, 198→198, and
+    so on through eight generations). A smoke test on a real tree would
+    therefore report "no collisions" forever and prove only that it ran.
+    The coverage for this lives in synthetic fixtures with a positive
+    control, and belongs there.
+    """
     files = dict(load(project_root).get("files") or {})
     migrated: dict = {}
+    winner: dict = {}
+    collisions: dict = {}
     for key, value in files.items():
-        migrated.setdefault(_migrate_key(project_root, key), value)
-    return migrated
+        canonical = _migrate_key(project_root, key)
+        if canonical not in migrated:
+            migrated[canonical] = value
+            winner[canonical] = key
+            continue
+        collisions[canonical] = collisions.get(canonical, 0) + 1
+        if _supersedes(key, value, winner[canonical], migrated[canonical],
+                       canonical):
+            migrated[canonical] = value
+            winner[canonical] = key
+    return migrated, collisions
+
+
+def _supersedes(new_key, new_value, old_key, old_value, canonical) -> bool:
+    """Of two records for one file, which one to keep.
+
+    There is one entry per file and no way to hold both, so something is
+    lost either way; what must not happen is losing it by dict order, which
+    is the manifest's own byte order and means nothing. The stored
+    timestamp decides — these are `%Y-%m-%dT%H:%M:%SZ`, so string order is
+    time order, and a missing one sorts oldest. When that cannot separate
+    them, the entry already spelled the canonical way is the one a run
+    using the current normaliser wrote, so it wins.
+    """
+    new_at = (new_value or {}).get("generatedAt") or ""
+    old_at = (old_value or {}).get("generatedAt") or ""
+    if new_at != old_at:
+        return new_at > old_at
+    return new_key == canonical and old_key != canonical
 
 
 def save(
@@ -284,7 +341,7 @@ def save(
     entries naming a file that is no longer there are dropped, so the
     manifest does not keep asserting a version for something absent.
     """
-    files = load_migrated(project_root)
+    files, collisions = load_migrated_with_collisions(project_root)
 
     # Migration happens in load_migrated, BEFORE the prune below. The prune
     # drops any key not currently present, and it compares strings — so when
@@ -335,9 +392,19 @@ def save(
             # of what it did.
             "dropped": len(dropped),
             "droppedKeys": dropped[:20],
+            # Entries lost when two spellings normalised onto one key. The
+            # prune never saw these, so `dropped` says nothing about them.
+            "collisions": sum(collisions.values()),
+            "collisionKeys": sorted(collisions)[:20],
         },
         "files": {k: files[k] for k in sorted(files)},
     }
+    # A list silently cut at 20 reads as the whole list. Said only when it
+    # applies, so the common case stays quiet.
+    for field, total in (("droppedKeys", len(dropped)),
+                         ("collisionKeys", len(collisions))):
+        if total > 20:
+            manifest["summary"][field + "Note"] = f"first 20 of {total}"
     path = manifest_path(project_root)
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(manifest, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
@@ -346,7 +413,7 @@ def save(
 
 def coverage_line(
     written: int, total: int, version: str, distributed: int | None = None,
-    dropped: int = 0,
+    dropped: int = 0, collisions: int = 0,
 ) -> str:
     """`generation manifest: recorded/updated 3 of 44 tracked file(s)`.
 
@@ -383,6 +450,12 @@ def coverage_line(
         # Saying "untouched files keep their version" while removing records
         # describes the opposite of what happened.
         line += f", dropped {dropped} entr(y/ies) whose file is gone"
+    if collisions:
+        # The prune never saw these, so the `dropped` count above says
+        # nothing about them and a reader watching only that number sees a
+        # clean run while the file holds fewer entries than it did.
+        line += (f", merged away {collisions} entr(y/ies) whose key now "
+                 f"spells the same as another's")
     # The ending used to read "records writes, not currency". It was there
     # to deny freshness, and a reader took it as confirmation that the
     # number counts writes, which the number does not do. The denial it

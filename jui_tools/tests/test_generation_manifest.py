@@ -455,6 +455,135 @@ class KeyMigrationTests(unittest.TestCase):
         self.assertIn("dropped 1", line)
 
 
+class KeyCollisionTests(unittest.TestCase):
+    """Two spellings normalising onto one key is a deletion nothing counts.
+
+    `dropped` counts what the prune removed. A collision happens earlier,
+    in the merge, so an entry can vanish with `dropped 0` and every other
+    number in the summary intact — the same shape as the re-stamping
+    defect, which is why it is worth its own arms rather than a note.
+
+    SYNTHETIC ON PURPOSE, AND THAT IS THE MEASUREMENT, NOT A GUESS. Real
+    manifests were checked across three downstream corpora and all eight
+    recorded generations, normalising every stored key: 537→537, 210→210,
+    249→249, 198→198, and so on. Zero collisions anywhere. A smoke arm on a
+    real tree would therefore return "none" on every run for as long as no
+    project happens to hold two spellings, and each of those runs would
+    read like the check had passed. The invariant is worth holding anyway —
+    the next normaliser change is what makes it reachable — so it is held
+    here, over a fixture built to contain one, with a control proving the
+    detection fires.
+    """
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.root = Path(self._tmp.name)
+        (self.root / "src" / "generated").mkdir(parents=True)
+        (self.root / "src" / "generated" / "A.ts").write_text("x\n",
+                                                             encoding="utf-8")
+
+    def tearDown(self):
+        self._tmp.cleanup()
+
+    def _seed(self, files: dict) -> None:
+        path = gm.manifest_path(self.root)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps({"schemaVersion": 1, "files": files},
+                                   indent=2), encoding="utf-8")
+        self.assertEqual(len(files),
+                         len(gm.load(self.root).get("files") or {}),
+                         "the seed is not being read — the arms below would "
+                         "then be measuring a project with no manifest")
+
+    def test_migration_keeps_every_entry_when_no_two_keys_converge(self):
+        # The invariant: as many entries out as in.
+        self._seed({"src/generated/A.ts": {"version": "1.8.7"},
+                    "src/generated/B.ts": {"version": "1.8.7"}})
+        migrated, collisions = gm.load_migrated_with_collisions(self.root)
+        self.assertEqual(2, len(migrated))
+        self.assertEqual({}, collisions)
+
+    def test_three_spellings_of_one_file_are_detected_not_absorbed(self):
+        # The positive control. Without it, the arm above passes on any
+        # corpus that simply has no collisions to find — which is every
+        # corpus measured so far.
+        self._seed({"src/Generated/A.ts": {"version": "1.8.5"},
+                    "src/generated/A.ts": {"version": "1.8.7"},
+                    "src/GENERATED/A.ts": {"version": "1.8.6"}})
+        migrated, collisions = gm.load_migrated_with_collisions(self.root)
+        self.assertEqual(1, len(migrated))
+        # One collided key, two entries absorbed — different numbers.
+        self.assertEqual({"src/generated/A.ts": 2}, collisions)
+
+    def test_the_survivor_is_chosen_by_time_not_by_order_or_spelling(self):
+        # Whichever entry is kept, it must not be decided by the order the
+        # keys happen to sit in the file.
+        #
+        # The fixture has to separate three rules that would otherwise
+        # agree. Written the obvious way — newest entry first — first-wins
+        # and newest-wins give the same answer and the arm proves nothing.
+        # So the newest record is placed LAST and under the non-canonical
+        # spelling: order would keep 1.8.7, the canonical-spelling
+        # tiebreak would keep 1.8.7, and only the timestamp keeps 1.8.5.
+        self._seed({
+            "src/generated/A.ts": {"version": "1.8.7",
+                                   "generatedAt": "2026-08-01T00:00:00Z"},
+            "src/Generated/A.ts": {"version": "1.8.5",
+                                   "generatedAt": "2026-09-01T00:00:00Z"},
+        })
+        migrated, _ = gm.load_migrated_with_collisions(self.root)
+        self.assertEqual("1.8.5", migrated["src/generated/A.ts"]["version"],
+                         "the newer record lost to the one listed first")
+
+    def test_the_canonical_spelling_decides_when_the_clock_cannot(self):
+        # Same timestamp on both, so the rule above cannot separate them.
+        # The entry already spelled the canonical way is the one a run with
+        # the current normaliser wrote. It is placed second, so first-wins
+        # would give the other answer.
+        self._seed({
+            "src/Generated/A.ts": {"version": "1.8.5",
+                                   "generatedAt": "2026-08-01T00:00:00Z"},
+            "src/generated/A.ts": {"version": "1.8.7",
+                                   "generatedAt": "2026-08-01T00:00:00Z"},
+        })
+        migrated, _ = gm.load_migrated_with_collisions(self.root)
+        self.assertEqual("1.8.7", migrated["src/generated/A.ts"]["version"])
+
+    def test_the_saved_summary_says_entries_were_merged_away(self):
+        # dropped stays 0 here: that is exactly the reason this needs its
+        # own field rather than riding on the existing count.
+        self._seed({"src/Generated/A.ts": {"version": "1.8.5"},
+                    "src/generated/A.ts": {"version": "1.8.7"}})
+        manifest = gm.save(self.root, "1.8.10", [],
+                           present_keys=["src/generated/A.ts"], scope={})
+        self.assertEqual(1, manifest["summary"]["collisions"])
+        self.assertEqual(["src/generated/A.ts"],
+                         manifest["summary"]["collisionKeys"])
+        self.assertEqual(0, manifest["summary"]["dropped"])
+
+    def test_the_line_reports_the_merge(self):
+        line = gm.coverage_line(0, 1, "1.8.10", collisions=2)
+        self.assertIn("merged away 2", line)
+
+    def test_a_truncated_key_list_says_it_is_truncated(self):
+        # 20 keys under a count of 45 reads as the whole list unless the
+        # file says otherwise.
+        self._seed({f"src/generated/gone{i}.ts": {"version": "1.8.7"}
+                    for i in range(45)})
+        manifest = gm.save(self.root, "1.8.10", [],
+                           present_keys=["src/generated/A.ts"], scope={})
+        self.assertEqual(45, manifest["summary"]["dropped"])
+        self.assertEqual(20, len(manifest["summary"]["droppedKeys"]))
+        self.assertEqual("first 20 of 45",
+                         manifest["summary"]["droppedKeysNote"])
+
+    def test_nothing_is_said_about_truncation_when_nothing_is_cut(self):
+        self._seed({"src/generated/gone.ts": {"version": "1.8.7"}})
+        manifest = gm.save(self.root, "1.8.10", [],
+                           present_keys=["src/generated/A.ts"], scope={})
+        self.assertNotIn("droppedKeysNote", manifest["summary"])
+
+
 class CleanRebuildTests(unittest.TestCase):
     """A `--clean` build records what it regenerated.
 

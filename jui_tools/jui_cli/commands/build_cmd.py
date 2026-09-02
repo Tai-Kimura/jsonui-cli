@@ -191,7 +191,8 @@ def cmd_build(args: argparse.Namespace) -> int:
     print(generation_manifest.coverage_line(
         len(written), len(present_keys), gen_run.version,
         distributed=_distributed_file_count(config_mgr),
-        dropped=manifest["summary"].get("dropped", 0)))
+        dropped=manifest["summary"].get("dropped", 0),
+        collisions=manifest["summary"].get("collisions", 0)))
 
     # The success line carries the same numbers. "Build completed
     # successfully" is the identical sentence whether a run produced every
