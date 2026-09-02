@@ -162,11 +162,24 @@ def _source_version(root: Path) -> str:
 
 
 def _describe_source(root: Path, reason: str) -> str:
-    """`/path (1.8.7)` — plus the rule, when a rule other than the default chose it."""
-    version = _source_version(root)
-    if reason == "default":
-        return f"{root}  ({version})"
-    return f"{root}  ({version}, {reason})"
+    """`/path  (1.8.7, default)` — the tree, its version, and what selected it.
+
+    All three routes name themselves, including the default. This used to
+    omit the reason for the default, so that a line with no reason meant
+    "nothing selected this" — which asks the reader to decode an absence,
+    and an absence carries more than one reading. It also meant "this
+    version does not print reasons": before 1.8.8 none of the routes named
+    one, so a reader comparing the same line across versions could not tell
+    a defaulted 1.8.9 from any 1.8.7 at all.
+
+    The earlier shape was deliberate — the concern was that printing a rule
+    for the default would imply a decision nobody made. That still holds
+    against a word like "chosen"; "default" makes no such claim, and it
+    names the fallback rather than a choice. So the reader who does not
+    know the convention can read the line, and the one comparing versions
+    can tell silence from a defaulted source.
+    """
+    return f"{root}  ({_source_version(root)}, {reason})"
 
 
 def _is_extensions_path(rel_path: Path) -> bool:

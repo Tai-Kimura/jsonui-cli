@@ -64,13 +64,30 @@ class SourceVersionTests(unittest.TestCase):
         self.assertIn("1.8.7", line)
         self.assertIn("--source", line)
 
-    def test_the_default_is_not_dressed_up_as_a_choice(self):
-        # No rule name when nothing selected it: the line should not imply
-        # a decision that was never made.
+    def test_the_default_names_itself_too(self):
+        # This arm used to assert the opposite: no rule name when nothing
+        # selected it, so the line would not imply a decision nobody made.
+        # That concern survives — it is why the word is "default" and not
+        # something like "chosen" — but omitting it made the line say two
+        # things at once. An absent reason reads as "nothing selected this"
+        # AND as "this version does not print reasons", and the second was
+        # true of every release before 1.8.8, so a reader comparing the
+        # line across versions could not separate them.
         line = _describe_source(self.home, "default")
         self.assertIn("1.8.7", line)
+        self.assertIn("default", line)
+        # What the original arm was actually protecting: the line must not
+        # claim a rule that had no part in it.
         self.assertNotIn("$JSONUI_CLI_PATH", line)
         self.assertNotIn("--source", line)
+
+    def test_every_route_names_itself(self):
+        # The property, rather than three separate examples of it: whatever
+        # picked the source, the line says so. Written this way, a fourth
+        # route added later cannot quietly go silent.
+        for reason in ("default", "$JSONUI_CLI_PATH", "--source"):
+            with self.subTest(reason=reason):
+                self.assertIn(reason, _describe_source(self.home, reason))
 
     def test_a_source_without_a_version_file_says_so(self):
         # Silence here would read as "same version", which is the failure
