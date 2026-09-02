@@ -520,16 +520,25 @@ def _test_owned_trees(config_mgr) -> set:
        inside; another declares `root: "web"` and keeps its mocks beside
        it, so those 67 files were never recorded; a third keeps its mocks
        outside three app roots, so this prune is a no-op for it.
-    2. THE EXTENSION, for the older route. The lint collection scans with a
-       source-extension filter and `.json` is not in it, so mock files were
-       invisible to it while branch tests (`.ts`) were not. That is why the
-       branch tests carry 1.8.10 — they were being claimed before the walk
-       existed — and the mocks carry 1.8.12, having arrived with the walk,
-       which takes every file in a generated directory whatever it is.
+    2. WHICH ROUTE REACHES IT. There are three, and only one of them
+       filters by extension — a summary that mentions only that one reads
+       as "no .json ever enters", which a face with 33 recorded .json files
+       contradicts.
+
+         a. Layout JSON under the declared `layoutsDir`, collected by its
+            own branch. Extension-independent: those 33 are all here.
+         b. `_scan_code_tree`, under directories named `Generated` and the
+            four subdirectory names beside it. Source extensions only, so
+            `.ts` branch tests entered and `.json` mocks did not.
+         c. The walk added in 1.8.11, which takes every file in a generated
+            tree whatever it is. This is where the mocks came from.
+
+       That is why branch tests carry 1.8.10 and mocks carry 1.8.12: (b)
+       had been claiming the first since before (c) existed.
 
     So "another command wrote it" was never what decided; reachability and
-    a file extension were. Both trees are pruned here by ownership, which
-    is the property that actually matters.
+    which route arrives were. Both trees are pruned here by ownership,
+    which is the property that actually matters.
     """
     # Through the shared loader, not a literal here: a fallback list would
     # be the second copy this declaration exists to prevent, and it would
