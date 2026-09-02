@@ -12,6 +12,11 @@ RSpec.describe KjuiTools::Compose::Components::ButtonComponent do
     allow(KjuiTools::Core::ProjectFinder).to receive(:get_full_source_path).and_return('/tmp')
     # Clear data definitions before each test
     KjuiTools::Compose::Helpers::ResourceResolver.data_definitions = {}
+    # These examples call .generate directly, so nothing else marks the file
+    # boundary that compose_builder marks in production. Without this, the
+    # names taken by one example (resolved_button*, buttonInteraction*)
+    # carry into the next and a later example reads `buttonInteraction_2`.
+    described_class.reset_counter!
   end
 
   describe '.generate' do
