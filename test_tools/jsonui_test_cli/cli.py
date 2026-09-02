@@ -2242,6 +2242,73 @@ def _platform_reaches_ios(value):
     return True
 
 
+def _platform_reaches_android(value):
+    """Mirror of the install-time platform-membership rules, for target android."""
+    if value is None:
+        return True
+    if isinstance(value, str):
+        return value in ("all", "android")
+    if isinstance(value, list):
+        return "android" in value
+    return True
+
+
+def _test_android_deny_permissions(data):
+    """Cross-platform permission names a parsed test file declares deny on Android."""
+    if not isinstance(data, dict):
+        return set()
+    if not _platform_reaches_android(data.get("platform")):
+        return set()
+    permissions = (data.get("launch") or {}).get("permissions")
+    if not isinstance(permissions, dict):
+        return set()
+    return {name for name, value in permissions.items() if value == "deny"}
+
+
+def _requested_permissions_from_dumpsys(text, app_id):
+    """The package's requested permissions, or None when undeterminable.
+
+    None is the loud-fail signal: the package header is missing, so nothing
+    was read about this app (not installed, or dumpsys said something else
+    entirely). A present package with no 'requested permissions:' section is
+    an app that requests nothing — an empty set, which IS a determination.
+    The distinction keeps an unrelated pm failure from reading as a
+    vacuously-satisfied deny.
+    """
+    if f"Package [{app_id}]" not in text:
+        return None
+    requested = set()
+    in_section = False
+    for line in text.splitlines():
+        stripped = line.strip()
+        if stripped == "requested permissions:":
+            in_section = True
+            continue
+        if in_section:
+            if not line.startswith(" ") or stripped.endswith(":"):
+                break
+            requested.add(stripped.split(":")[0])
+    return requested
+
+
+def _classify_deny_revokes(deny_names, requested_permissions, permission_map):
+    """Split declared denies into (to_revoke, vacuous) [(name, permission)].
+
+    A name outside the map is skipped, matching the Android driver's apply
+    loop; unknown-name detection is the validator's job.
+    """
+    to_revoke, vacuous = [], []
+    for name in sorted(deny_names):
+        permission = permission_map.get(name)
+        if permission is None:
+            continue
+        if permission in requested_permissions:
+            to_revoke.append((name, permission))
+        else:
+            vacuous.append((name, permission))
+    return to_revoke, vacuous
+
+
 def _test_uses_add_media_on_ios(data):
     """True if a parsed test file can execute an addMedia step on iOS."""
     if not isinstance(data, dict):
@@ -2261,19 +2328,35 @@ def _test_uses_add_media_on_ios(data):
 
 
 def cmd_pregrant(args):
-    """Pre-grant photo-library add access to the iOS UITest runner.
+    """Establish per-run permission baselines before the test process exists.
 
-    addMedia on iOS seeds the photo library from the xctrunner process, which
-    needs photos-add authorization. Granting it up front (before xcodebuild)
-    means no permission alert ever appears. Probed on iOS 18.6: the service
-    must be `photos-add` — `photos` is written to TCC but not honored for the
-    runner — and the grant works pre-install and survives reinstalls.
+    iOS: pre-grant photo-library add access to the UITest runner (addMedia
+    seeds the photo library from the xctrunner process; granting before
+    xcodebuild means no alert ever appears — probed on iOS 18.6, the service
+    must be `photos-add`, and the grant works pre-install).
+
+    Android: pre-revoke every permission the test files declare deny.
+    Measured 2026-09-02: a granted runtime permission cannot be denied from
+    inside an instrumentation run (`pm revoke` kills the instrumented
+    process; appops is a silent no-op on permission-backed ops), and grants
+    persist across update-installs — so the denied baseline the driver's
+    deny-assert relies on is made here, where there is no process to kill.
+
+    Each arm no-ops when its scan finds nothing, so running both (the
+    default) is safe on single-platform projects.
     """
-    import subprocess
-
     test_config, cfg_path = _load_test_config(getattr(args, "config", None))
+    files = _discover_test_files(args, cfg_path)
+    platform = getattr(args, "platform", None)
+    rc = 0
+    if platform in (None, "ios"):
+        rc = _pregrant_ios(args, test_config, files) or rc
+    if platform in (None, "android"):
+        rc = _pregrant_android(args, test_config, files) or rc
+    return rc
 
-    # 1) Scan for addMedia usage reachable on iOS.
+
+def _discover_test_files(args, cfg_path):
     paths = getattr(args, "paths", None) or []
     files = []
     if paths:
@@ -2290,7 +2373,13 @@ def cmd_pregrant(args):
         tests_dir = root / "tests"
         if tests_dir.is_dir():
             files = sorted(tests_dir.rglob("*.test.json"))
+    return files
 
+
+def _pregrant_ios(args, test_config, files):
+    import subprocess
+
+    # 1) Scan for addMedia usage reachable on iOS.
     uses = []
     for f in files:
         try:
@@ -2347,6 +2436,108 @@ def cmd_pregrant(args):
         return 1
     print(f"pregrant: granted photos-add to {runner_id} on {udid}"
           f" ({len(uses)} test file(s) use addMedia)")
+    return 0
+
+
+def _pregrant_android(args, test_config, files):
+    import subprocess
+    from jsonui_test_cli.artifacts import find_adb
+    from jsonui_test_cli.schema import ANDROID_PERMISSION_MAP
+
+    # 1) Union of deny declarations reachable on Android.
+    deny_names = set()
+    declaring = []
+    for f in files:
+        try:
+            data = json.loads(f.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            continue
+        names = _test_android_deny_permissions(data)
+        if names:
+            deny_names |= names
+            declaring.append(f)
+    if not deny_names:
+        print(f"pregrant(android): 0 deny declaration(s) across {len(files)} "
+              "file(s) — nothing to revoke")
+        return 0
+
+    # 2) The app under test.
+    app_id = getattr(args, "app_id", None)
+    if not app_id:
+        install_entry = (test_config.get("install") or {}).get("android")
+        if isinstance(install_entry, dict):
+            app_id = install_entry.get("applicationId") or install_entry.get("application_id")
+    if not app_id:
+        artifacts_entry = (test_config.get("artifacts") or {}).get("android")
+        if isinstance(artifacts_entry, dict):
+            app_id = artifacts_entry.get("appId")
+    if not app_id:
+        print("pregrant(android): app id unknown — pass --app-id or set "
+              "test.install.android.applicationId in the config", file=sys.stderr)
+        return 1
+
+    # 3) adb + device, same conventions as artifacts pull.
+    android_cfg = (test_config.get("artifacts") or {}).get("android") or {}
+    adb = find_adb(android_cfg)
+    if not adb:
+        print("pregrant(android): adb not found (config test.artifacts.android.adb, "
+              "PATH, ANDROID_HOME/ANDROID_SDK_ROOT)", file=sys.stderr)
+        return 1
+    serial = getattr(args, "serial", None) or android_cfg.get("serial")
+    try:
+        out = subprocess.run([adb, "devices"], capture_output=True, text=True,
+                             check=True).stdout
+    except (OSError, subprocess.CalledProcessError) as e:
+        print(f"pregrant(android): could not list devices: {e}", file=sys.stderr)
+        return 1
+    devices = [line.split("\t")[0] for line in out.splitlines()[1:]
+               if "\tdevice" in line]
+    if serial:
+        if serial not in devices:
+            print(f"pregrant(android): device '{serial}' is not connected "
+                  f"(saw: {', '.join(devices) or 'none'})", file=sys.stderr)
+            return 1
+    elif len(devices) == 1:
+        serial = devices[0]
+    elif not devices:
+        print("pregrant(android): no device/emulator connected", file=sys.stderr)
+        return 1
+    else:
+        print("pregrant(android): multiple devices — pass --serial:", file=sys.stderr)
+        for d in devices:
+            print(f"  {d}", file=sys.stderr)
+        return 1
+
+    # 4) Three-way judgment: revoke / vacuously satisfied / cannot determine.
+    #    The read of requested permissions is deliberate: pm error output must
+    #    never be swallowed into "vacuously satisfied".
+    proc = subprocess.run([adb, "-s", serial, "shell", "dumpsys", "package", app_id],
+                          capture_output=True, text=True)
+    requested = (_requested_permissions_from_dumpsys(proc.stdout, app_id)
+                 if proc.returncode == 0 else None)
+    if requested is None:
+        print(f"pregrant(android): cannot determine which permissions '{app_id}' "
+              f"requests on {serial} — is the app installed? Install it first, "
+              "then pregrant. Refusing to guess: an unrelated pm failure must "
+              "not read as a vacuously-satisfied deny.", file=sys.stderr)
+        return 1
+
+    to_revoke, vacuous = _classify_deny_revokes(deny_names, requested,
+                                                ANDROID_PERMISSION_MAP)
+    for name, permission in to_revoke:
+        proc = subprocess.run([adb, "-s", serial, "shell", "pm", "revoke",
+                               app_id, permission], capture_output=True, text=True)
+        blob = (proc.stderr or "") + (proc.stdout or "")
+        if proc.returncode != 0 or "Exception" in blob or "Error" in blob:
+            print(f"pregrant(android): pm revoke {app_id} {permission} failed: "
+                  f"{blob.strip()}", file=sys.stderr)
+            return 1
+    for name, permission in vacuous:
+        print(f"pregrant(android): note — '{name}' ({permission}) is not requested "
+              f"by {app_id}; its deny is vacuously satisfied")
+    print(f"pregrant(android): revoked {len(to_revoke)} permission(s) on {app_id}: "
+          f"{', '.join(p for _, p in to_revoke) or '-'} "
+          f"({len(declaring)} test file(s) declare deny)")
     return 0
 
 
@@ -2647,11 +2838,26 @@ def main():
     # Pregrant command (iOS addMedia)
     pregrant_parser = subparsers.add_parser(
         "pregrant",
-        help="Pre-grant simulator photo-library add access to the iOS UITest "
-             "runner so addMedia never prompts (run before xcodebuild)")
+        help="Establish per-run permission baselines before the test process "
+             "exists: iOS grants photos-add so addMedia never prompts; "
+             "Android revokes every permission the tests declare deny "
+             "(run before xcodebuild / connectedAndroidTest)")
     pregrant_parser.add_argument(
         "paths", nargs="*",
-        help="Test files/dirs to scan for addMedia (default: tests/)")
+        help="Test files/dirs to scan (default: tests/)")
+    pregrant_parser.add_argument(
+        "--platform", choices=["ios", "android"],
+        help="Limit to one platform (default: both — each arm no-ops when "
+             "its scan finds nothing)")
+    pregrant_parser.add_argument(
+        "--app-id",
+        help="Android application id to revoke on (default: "
+             "test.install.android.applicationId, falling back to "
+             "test.artifacts.android.appId)")
+    pregrant_parser.add_argument(
+        "--serial",
+        help="adb device serial (default: test.artifacts.android.serial, "
+             "or the single connected device)")
     pregrant_parser.add_argument(
         "--bundle-id",
         help="UITest target bundle id ('.xctrunner' appended automatically; "

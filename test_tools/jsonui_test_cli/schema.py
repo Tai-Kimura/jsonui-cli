@@ -273,6 +273,23 @@ VALID_CONDITION_STATE_KEYS = ["path", "equals"]
 # Valid keys in the root-level 'launch' object
 VALID_LAUNCH_KEYS = ["clearState", "permissions", "arguments"]
 
+# Cross-platform permission names -> Android runtime permissions, for
+# `pregrant`'s pre-instrumentation revokes. A deliberate copy of the Android
+# driver's ANDROID_PERMISSION_MAP (JsonUITestRunner.kt) — the fourth copy of
+# this table in the ecosystem — pinned to the driver's by
+# dev-guide/ci/check-canonical-sync.py, which fails CI when they diverge.
+ANDROID_PERMISSION_MAP = {
+    "camera": "android.permission.CAMERA",
+    "microphone": "android.permission.RECORD_AUDIO",
+    "location": "android.permission.ACCESS_FINE_LOCATION",
+    "notifications": "android.permission.POST_NOTIFICATIONS",
+    "photos": "android.permission.READ_MEDIA_IMAGES",
+    "storage": "android.permission.READ_MEDIA_IMAGES",
+    "contacts": "android.permission.READ_CONTACTS",
+    "calendar": "android.permission.READ_CALENDAR",
+    "bluetooth": "android.permission.BLUETOOTH_CONNECT",
+}
+
 # Cross-platform permission names for launch.permissions
 VALID_PERMISSION_NAMES = [
     "camera", "microphone", "location", "notifications",
