@@ -890,3 +890,83 @@ class GeneratedTreeScanTests(unittest.TestCase):
 def _config(root: Path):
     from jui_cli.core.config_manager import ConfigManager
     return ConfigManager(root / "jui.config.json")
+
+
+class HaltedRunRecordsWhatItWroteTests(unittest.TestCase):
+    """A build that writes and then fails must not leave a stale record.
+
+    Measured downstream: a build rewrote generated files on three faces and
+    then stopped on a spec error, so nothing was recorded; the next build
+    succeeded and recorded nothing either, correctly, because the bytes no
+    longer changed. Both halves behave properly on their own and the
+    mismatch is stable — the manifest carries one build's timestamp over
+    another build's contents until something edits those files again.
+
+    The record is of writes, not of successes.
+    """
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.root = Path(self._tmp.name)
+        (self.root / "gen").mkdir()
+        self.files = []
+        for name in ("A.kt", "B.kt", "C.kt"):
+            path = self.root / "gen" / name
+            path.write_text("// from an earlier release\n", encoding="utf-8")
+            self.files.append(path)
+
+    def tearDown(self):
+        self._tmp.cleanup()
+
+    def _run(self):
+        from jui_cli.core import generation_manifest as gm
+
+        run = gm.GenerationRun(project_root=self.root, version="1.8.11")
+        run.observe(self.files)
+        return run
+
+    def test_a_halted_run_records_the_file_it_changed(self):
+        from jui_cli.commands.build_cmd import _record_generation
+        from jui_cli.core import generation_manifest as gm
+
+        run = self._run()
+        self.files[1].write_text("// written by this run\n", encoding="utf-8")
+        written, _keys, _m = _record_generation(
+            _ConfigStub(self.root), run, self.files, bootstrap=False)
+        self.assertEqual(["gen/B.kt"], written)
+        self.assertEqual("1.8.11",
+                         gm.load(self.root)["files"]["gen/B.kt"]["version"])
+
+    def test_a_halted_run_that_wrote_nothing_claims_nothing(self):
+        # The rule does NOT switch itself off. Bootstrap records a file
+        # with no entry on the grounds that this run produced exactly those
+        # bytes; it fires on the absence of a record, not on having
+        # written, so a run that stopped before writing anything would
+        # claim every unrecorded file in the project.
+        from jui_cli.commands.build_cmd import _record_generation
+        from jui_cli.core import generation_manifest as gm
+
+        written, _keys, _m = _record_generation(
+            _ConfigStub(self.root), self._run(), self.files, bootstrap=False)
+        self.assertEqual([], written)
+        self.assertEqual({}, gm.load(self.root).get("files") or {})
+
+    def test_the_control_shows_bootstrap_would_have_claimed_them(self):
+        # Same fixture, same untouched files, bootstrap left on: three
+        # files this run never wrote come back stamped with its version.
+        # Without this arm the one above passes on any fixture where the
+        # files happen to be recorded already.
+        from jui_cli.commands.build_cmd import _record_generation
+
+        written, _keys, _m = _record_generation(
+            _ConfigStub(self.root), self._run(), self.files, bootstrap=True)
+        self.assertEqual(["gen/A.kt", "gen/B.kt", "gen/C.kt"], sorted(written))
+
+    def test_a_completed_run_still_bootstraps(self):
+        # The halted path must not change what a successful build records:
+        # a stable project still gets a first entry.
+        from jui_cli.commands.build_cmd import _record_generation
+
+        written, _keys, _m = _record_generation(
+            _ConfigStub(self.root), self._run(), self.files)
+        self.assertEqual(3, len(written))

@@ -168,7 +168,8 @@ class GenerationRun:
             if state is not None:
                 self.before[self._key(path)] = state
 
-    def written(self, paths, known: set | None = None) -> list[str]:
+    def written(self, paths, known: set | None = None,
+                bootstrap: bool = True) -> list[str]:
         """The keys this run records or corrects in the manifest.
 
         NOT the files it wrote to disk, and the difference is not small:
@@ -202,6 +203,15 @@ class GenerationRun:
         Once a file has an entry, an unchanged rebuild leaves it alone, so
         the churn this replaced does not return. The two rules converge:
         the first build fills the record, later ones only correct it.
+
+        `bootstrap=False` drops the second rule, for a run that did not
+        finish. Its warrant is "this run produced exactly these bytes",
+        which a build that stopped part-way cannot claim — and the rule
+        does not go quiet on its own there: measured, a run that wrote
+        nothing at all still claims every unrecorded file, because the
+        rule fires on the absence of a record, not on having written.
+        A halted run has one kind of direct evidence, a content change
+        inside its window, so that is all it may record.
         """
         known = known if known is not None else set()
         touched = []
@@ -214,7 +224,8 @@ class GenerationRun:
                 # is dropped by `save` rather than left naming a missing file.
                 continue
             prior = self.before.get(key)
-            if prior is None or prior.sha256 != after.sha256 or key not in known:
+            changed = prior is None or prior.sha256 != after.sha256
+            if changed or (bootstrap and key not in known):
                 touched.append(key)
         return touched
 

@@ -124,6 +124,45 @@ def cmd_build(args: argparse.Namespace) -> int:
     )
     gen_run.observe(_generated_paths(config_mgr))
 
+    def _halt(code: int) -> int:
+        """Record what this run wrote, then return `code`.
+
+        A build that writes generated files and then fails leaves the disk
+        holding this version's output and the record holding the previous
+        run's. Both halves behave correctly on their own — the failed run
+        recorded nothing because it stopped, and the next successful run
+        records nothing because the bytes no longer change — so the
+        mismatch is stable until something edits those files again.
+        Measured downstream: a manifest stamped one build's timestamp over
+        another build's contents.
+
+        The record is of writes, not of successes; a version that wrote
+        those bytes wrote them whether or not the run went on to finish.
+
+        BOOTSTRAP IS OFF HERE, and it does not switch itself off. That
+        rule records a file with no entry on the grounds that this run
+        produced exactly those bytes, which a halted run cannot say — and
+        it fires on the absence of a record, not on having written, so a
+        run that stopped before writing anything would otherwise claim
+        every unrecorded file in the project. A content change inside the
+        window is the only direct evidence a halted run has.
+        """
+        halted = _generated_paths(config_mgr)
+        written, present_keys, manifest = _record_generation(
+            config_mgr, gen_run, halted, bootstrap=False)
+        # Printed even though the build failed: a record nobody is told
+        # about is the same as no record when the next reader tries to
+        # explain a version stamp. The success line is not printed — the
+        # build did not succeed.
+        print()
+        print(generation_manifest.coverage_line(
+            len(written), len(present_keys), gen_run.version,
+            distributed=_distributed_file_count(config_mgr),
+            dropped=manifest["summary"].get("dropped", 0),
+            collisions=manifest["summary"].get("collisions", 0),
+            collision_keys=manifest["summary"].get("collisionKeys", ())))
+        return code
+
     # Distribute shared assets to each platform before build
     _distribute_layouts(config_mgr, platforms, args)
     _distribute_styles(config_mgr, platforms, args)
@@ -135,7 +174,7 @@ def cmd_build(args: argparse.Namespace) -> int:
     # invariants (oneOf, multi-file $ref, direct self-ref, etc.) so the
     # downstream platform builds never see a broken model.
     if _sync_api_models(config_mgr, platforms, args) is False:
-        return 1
+        return _halt(1)
 
     # Converter scaffolding is an explicit, one-time author action — run
     # `jui g converter --from <spec>` (or `--all --skip-existing`) yourself
@@ -149,12 +188,12 @@ def cmd_build(args: argparse.Namespace) -> int:
     # markers. Hard error if any spec-declared handler has no matching Impl
     # function — catches drift before the platform build starts.
     if _sync_viewmodel_protocols(config_mgr, config, platforms, args) is False:
-        return 1
+        return _halt(1)
 
     # Hard gate for navigationMode:"isolated" — the embedded screen's spec
     # must not declare present-type transitions (sheet/modal/dialog/dismiss).
     if _check_isolated_embed_constraints(config_mgr) is False:
-        return 1
+        return _halt(1)
 
     should_build_ios = "ios" in platforms and not args.android_only and not args.web_only
     should_build_android = "android" in platforms and not args.ios_only and not args.web_only
@@ -180,7 +219,7 @@ def cmd_build(args: argparse.Namespace) -> int:
 
     if failed:
         print(f"\nERROR: Build failed for: {', '.join(failed)}")
-        return 1
+        return _halt(1)
 
     # Re-read after the build: a run can create files that did not exist to
     # be observed, and can leave others exactly as they were.
@@ -212,7 +251,7 @@ def cmd_build(args: argparse.Namespace) -> int:
     return 0
 
 
-def _record_generation(config_mgr, gen_run, present):
+def _record_generation(config_mgr, gen_run, present, *, bootstrap=True):
     """Decide what this run changed in the record, and save it.
 
     THE ORDER IS THE CONTRACT, which is why it is one function instead of
@@ -233,7 +272,7 @@ def _record_generation(config_mgr, gen_run, present):
     from ..core import generation_manifest
 
     known = set(generation_manifest.load_migrated(config_mgr.project_root))
-    written = gen_run.written(present, known=known)
+    written = gen_run.written(present, known=known, bootstrap=bootstrap)
     present_keys = [gen_run._key(p) for p in present]
     manifest = generation_manifest.save(
         config_mgr.project_root, gen_run.version, written,
