@@ -222,6 +222,66 @@ RSpec.describe KjuiTools::Core::Resources::StringManager do
       it 'collapses multiple underscores' do
         expect(manager.send(:generate_string_key, 'Hello   World')).to eq('hello_world')
       end
+
+      # The key is a resource identifier, not a label: aapt2 takes kanji and
+      # kana as name characters but rejects punctuation, so a Japanese
+      # sentence that keeps its `。` stops the Android build outright
+      # (measured on the sample app 2026-09-02).
+      it 'keeps Japanese letters but drops punctuation a resource name cannot hold' do
+        expect(manager.send(:generate_string_key, '今日は天気がいいですね。明日も晴れるといいです。'))
+          .to eq('今日は天気がいいですね_明日も晴れるといいです')
+      end
+
+      it 'folds spaces and punctuation between Japanese words to single underscores' do
+        expect(manager.send(:generate_string_key, '選択、または　入力！')).to eq('選択_または_入力')
+      end
+
+      it 'leaves a punctuation-free Japanese string alone' do
+        expect(manager.send(:generate_string_key, '選択してください')).to eq('選択してください')
+      end
+
+      # A key that is ALREADY a usable identifier must come back byte for
+      # byte. Without this the change stops being a fix and becomes a
+      # migration: every reference that resolves today on iOS and web would
+      # have to be rewritten to match a new spelling.
+      # (Bare `_leading` / `trailing_` are deliberately absent: the ASCII
+      # branch has always trimmed edge underscores, and that predates this
+      # change — measured, the diff touches only the Japanese branch.)
+      it 'is idempotent on keys that are already identifier-safe' do
+        %w[
+          hello_world submit_button item_count_2 完了する 選択してください
+          日付を選択 mixed_日本語_key a1_b2_c3 送信_2
+        ].each do |key|
+          expect(manager.send(:generate_string_key, key)).to eq(key), "rewrote #{key.inspect}"
+        end
+      end
+
+      it 'is deterministic' do
+        text = '確認して、送信してください！'
+        first = manager.send(:generate_string_key, text)
+        expect(manager.send(:generate_string_key, text)).to eq(first)
+      end
+
+      # Folding punctuation to underscores can map two different sentences
+      # onto one key, so distinct texts must still end up under distinct
+      # keys. Driven through the real extraction path because that is what
+      # registers each key as it goes — the duplicate counter can only see a
+      # collision against keys already taken.
+      it 'does not collapse distinct texts onto one key' do
+        texts = [
+          '今日は天気がいいですね。明日も晴れるといいです。',
+          '今日は天気がいいですね、明日も晴れるといいです',
+          '選択、または　入力！',
+          '選択または入力',
+          '確認して、送信してください！',
+          '確認して送信してください'
+        ]
+        data = { 'type' => 'View', 'child' => texts.map { |t| { 'type' => 'Text', 'text' => t } } }
+        manager.send(:extract_strings_recursive, data, 'home')
+        strings = manager.instance_variable_get(:@current_file_strings)
+        expect(strings.length).to eq(texts.length), "collision: #{texts.length - strings.length} text(s) lost"
+        expect(strings.values.uniq.length).to eq(texts.length)
+      end
     end
 
     describe '#generate_file_prefix' do

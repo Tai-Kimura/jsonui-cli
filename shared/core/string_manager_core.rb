@@ -221,31 +221,51 @@ module JsonUIShared
     # ASCII text converts to snake_case; Japanese/non-ASCII text keeps the
     # original text as the key (the localize skill assigns a proper key
     # later — stripping non-ASCII would collapse the key to nothing).
+    #
+    # The key becomes a RESOURCE IDENTIFIER (an Android `strings.xml` name,
+    # an `R.string` symbol), so punctuation cannot survive even where the
+    # letters can: aapt2 accepts kanji and kana as name characters but
+    # rejects `。`, and the app then fails to build rather than warning.
+    # Measured 2026-09-02 on the sample app, where re-extracting a layout
+    # emitted `name='..._今日は天気がいいですね。明日も晴れるといいです。'`
+    # and packaging stopped with "'。' is not a valid resource name
+    # character". Runs of anything that is not a letter, digit or
+    # underscore fold to a single underscore.
     def generate_string_key(text)
       @current_file_strings ||= {}
-      if text.match?(/[\p{Hiragana}\p{Katakana}\p{Han}]/)
-        text.strip
-      else
-        base_key = text
-          .downcase
-          .gsub(/[^a-z0-9\s_]/, '') # Remove special characters (keep underscores)
-          .gsub(/\s+/, '_')         # Replace spaces with underscores
-          .gsub(/^_+|_+$/, '')      # Remove leading/trailing underscores
-          .gsub(/__+/, '_')         # Replace multiple underscores with single
 
-        # Limit length
-        base_key = base_key[0..30] if base_key.length > 30
+      base_key =
+        if text.match?(/[\p{Hiragana}\p{Katakana}\p{Han}]/)
+          text.strip.gsub(/[^\p{L}\p{N}_]+/, '_').gsub(/\A_+|_+\z/, '')
+        else
+          ascii_key = text
+            .downcase
+            .gsub(/[^a-z0-9\s_]/, '') # Remove special characters (keep underscores)
+            .gsub(/\s+/, '_')         # Replace spaces with underscores
+            .gsub(/^_+|_+$/, '')      # Remove leading/trailing underscores
+            .gsub(/__+/, '_')         # Replace multiple underscores with single
 
-        # Handle duplicates within this file (append _2, _3, ...)
-        final_key = base_key
-        counter = 2
-        while @current_file_strings.key?(final_key) && @current_file_strings[final_key] != text
-          final_key = "#{base_key}_#{counter}"
-          counter += 1
+          # Limit length
+          ascii_key.length > 30 ? ascii_key[0..30] : ascii_key
         end
 
-        final_key
+      # Handle duplicates within this file (append _2, _3, ...). BOTH branches
+      # go through this: dropping characters a resource name cannot hold is
+      # lossy, so two different sentences can reduce to one key — `…ですね。明日…`
+      # and `…ですね、明日…` differ only in punctuation. The ASCII branch has
+      # always had that property (`Hello, World!` and `Hello World` both reduce
+      # to `hello_world`) and has always resolved it here; the Japanese branch
+      # used the raw text as its key, so it could not collide and returned
+      # early. Now that it also reduces, it needs the same mechanism rather
+      # than a second one of its own.
+      final_key = base_key
+      counter = 2
+      while @current_file_strings.key?(final_key) && @current_file_strings[final_key] != text
+        final_key = "#{base_key}_#{counter}"
+        counter += 1
       end
+
+      final_key
     end
 
     # Merge freshly-extracted strings into the (possibly nested-by-file)

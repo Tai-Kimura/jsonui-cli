@@ -542,12 +542,19 @@ RSpec.describe SjuiTools::Core::Resources::StringManager do
         expect(strings['完了する']).to eq('完了する')
       end
 
-      it 'extracts mixed Japanese-English text' do
+      # The key is a resource identifier on the Android face (`strings.xml`
+      # name / `R.string` symbol), and this extractor is shared by all three
+      # platforms, so the space and the `!` cannot survive even though the
+      # letters do. This example asserted the raw text until 2026-09-02,
+      # which is the shape that emitted a name aapt2 rejects outright. The
+      # neighbouring pure-Japanese example is unchanged and stays that way:
+      # a key that is already a valid identifier is returned byte-identical.
+      it 'extracts mixed Japanese-English text, keyed by an identifier-safe form' do
         data = { 'type' => 'Text', 'text' => 'Hello 世界!' }
         manager.send(:extract_strings_recursive, data, 'home')
         strings = manager.instance_variable_get(:@current_file_strings)
-        expect(strings).to have_key('Hello 世界!')
-        expect(strings['Hello 世界!']).to eq('Hello 世界!')
+        expect(strings).to have_key('Hello_世界')
+        expect(strings['Hello_世界']).to eq('Hello 世界!')
       end
 
       it 'skips short Japanese text (2 chars or less)' do
