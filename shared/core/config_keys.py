@@ -40,6 +40,26 @@ _TEST = frozenset({"mock", "test"})
 #: Read by shared/core, on behalf of both.
 _SHARED = frozenset({"spec", "extends"})
 
+#: Generated trees the TEST tooling writes, relative to a platform root or
+#: the project root.
+#:
+#: `jui build` records which version wrote each generated file, and finds
+#: them by walking a platform root for directories named `generated`. That
+#: walk also reaches trees another command owns, and the rule that records
+#: a file with no entry yet then stamped them with the running version of
+#: `jui build` — which never writes them. Measured across three faces: 215
+#: mocks and 16 branch tests on one, 53 and 10 on another, 14 on a third,
+#: all claimed by a command that has no step writing into a test tree
+#: (checked: zero writes in build_cmd, none in the platform build it
+#: shells out to).
+#:
+#: The mock directory is per-project and declared as `mock.mockDir`; this
+#: is the one the test tooling defaults to without asking the config
+#: (`branch_tests.py`'s `out_dir`). Both are pruned from the walk.
+TEST_OWNED_GENERATED = (
+    "tests/unit/generated",
+)
+
 KNOWN_TOP_LEVEL = _JUI | _DOC | _TEST | _SHARED
 
 #: A key that begins with this is a note to a reader, not a setting.

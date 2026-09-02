@@ -1020,3 +1020,73 @@ class StageFailureReportTests(unittest.TestCase):
         # must not fail at the last line because of it.
         self.ledger.write_text("not json", encoding="utf-8")
         self.assertEqual("", self._run())
+
+
+class ForeignGeneratedTreeTests(unittest.TestCase):
+    """The record must not claim files another command writes.
+
+    `jui build` finds generated files by walking for directories named
+    `generated`, and that reaches trees the test tooling owns. The rule
+    that records a file with no entry yet then stamps them with the running
+    version — measured on a real face, 215 mock files carrying
+    `generatedBy: "jui build"` at 1.8.12, from a command with no step that
+    writes into a test tree.
+
+    Two ages, measured from the entries themselves: the mocks arrived with
+    the walk added in 1.8.11 and are stamped 1.8.12, while the 16 branch
+    tests are stamped 1.8.10 — the lint collection's glob was already
+    reaching those before the walk existed. So pruning the walk alone
+    leaves the older half in place.
+    """
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.root = Path(self._tmp.name)
+        web = self.root / "web"
+        (web / "src" / "Layouts").mkdir(parents=True)
+        for rel in ("src/generated", "src/models/generated",
+                    "tests/unit/generated", "tests/mocks/generated"):
+            d = web / rel
+            d.mkdir(parents=True, exist_ok=True)
+            (d / "a.ts").write_text("x\n", encoding="utf-8")
+        (self.root / "jui.config.json").write_text(json.dumps({
+            "platforms": {"web": {"root": "web", "layoutsDir": "src/Layouts"}},
+            "mock": {"mockDir": "tests/mocks"},
+        }), encoding="utf-8")
+
+    def tearDown(self):
+        self._tmp.cleanup()
+
+    def _keys(self):
+        from jui_cli.commands.build_cmd import _generated_paths
+        return sorted(p.relative_to(self.root).as_posix()
+                      for p in _generated_paths(_config(self.root)))
+
+    def test_this_commands_own_output_is_still_recorded(self):
+        keys = self._keys()
+        self.assertIn("web/src/generated/a.ts", keys)
+        self.assertIn("web/src/models/generated/a.ts", keys)
+
+    def test_the_declared_mock_tree_is_not_claimed(self):
+        self.assertNotIn("web/tests/mocks/generated/a.ts", self._keys())
+
+    def test_the_branch_test_tree_is_not_claimed(self):
+        # The older half. It arrives through the lint collection rather
+        # than the walk, so a prune applied only to the walk's starting
+        # points leaves it — which is what the first attempt did.
+        self.assertNotIn("web/tests/unit/generated/a.ts", self._keys())
+
+    def test_the_mock_tree_is_read_from_the_config_not_a_literal(self):
+        # A project that puts its mocks somewhere else is covered too.
+        config_path = self.root / "jui.config.json"
+        config = json.loads(config_path.read_text())
+        config["mock"]["mockDir"] = "spec/fixtures"
+        config_path.write_text(json.dumps(config), encoding="utf-8")
+        moved = self.root / "web" / "spec" / "fixtures" / "generated"
+        moved.mkdir(parents=True)
+        (moved / "a.ts").write_text("x\n", encoding="utf-8")
+
+        keys = self._keys()
+        self.assertNotIn("web/spec/fixtures/generated/a.ts", keys)
+        # And the one it no longer declares comes back into scope.
+        self.assertIn("web/tests/mocks/generated/a.ts", keys)

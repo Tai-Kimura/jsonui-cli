@@ -400,7 +400,30 @@ def _generated_paths(config_mgr) -> list:
 
     from ..core.generation_manifest import real_case
 
-    return sorted({real_case(p) for p in paths})
+    # Pruned on the RESULT, not only on the walk's starting points. The
+    # other set of starting points is the parent of each file the lint
+    # collection found, and that collection globs for `Generated` — so on
+    # a case-insensitive filesystem it hands back `tests/unit/Generated`,
+    # which is not equal to anything spelled the way the disk spells it and
+    # slipped past a prune that compared strings. Sixteen branch tests came
+    # through that way on one face after the walk had already been fixed.
+    # Canonicalising first is what makes the comparison mean anything.
+    # Compared after resolving BOTH sides. `real_case` fixes spelling and
+    # does not follow symlinks, while the owned set is resolved — so under
+    # a symlinked temp directory one side said /var and the other
+    # /private/var and nothing ever matched. The real faces have no symlink
+    # on that path, so only a fixture caught it.
+    owned = _test_owned_trees(config_mgr)
+
+    def _owned_elsewhere(path) -> bool:
+        try:
+            probe = path.resolve()
+        except OSError:
+            probe = path
+        return any(probe == tree or tree in probe.parents for tree in owned)
+
+    return sorted({c for c in (real_case(p) for p in paths)
+                   if not _owned_elsewhere(c)})
 
 
 def _generated_tree_roots(config_mgr) -> set:
@@ -434,6 +457,7 @@ def _generated_tree_roots(config_mgr) -> set:
     except Exception:
         pass
 
+    owned_elsewhere = _test_owned_trees(config_mgr)
     found: set = set()
     for platform_root in _platform_roots(config_mgr):
         if platform_root is None or not platform_root.exists():
@@ -441,9 +465,68 @@ def _generated_tree_roots(config_mgr) -> set:
         for dirpath, dirnames, _filenames in os.walk(platform_root):
             dirnames[:] = [d for d in dirnames if d not in excluded]
             for name in dirnames:
-                if name.lower() == "generated":
-                    found.add(Path(dirpath) / name)
+                if name.lower() != "generated":
+                    continue
+                tree = Path(dirpath) / name
+                if any(tree == owned or owned in tree.parents
+                       for owned in owned_elsewhere):
+                    continue
+                found.add(tree)
     return found
+
+
+def _test_owned_trees(config_mgr) -> set:
+    """Generated trees a DIFFERENT command writes.
+
+    The record says which version wrote each file, so it must not name
+    files this command does not write. Widening the walk to every tree
+    called `generated` reached two that the test tooling owns — the mocks
+    under the declared `mock.mockDir`, and the branch tests it defaults to
+    — and the rule that records a file with no entry yet then stamped them
+    with the running version. Measured: 215 and 16 on one face, 53 and 10
+    on another, 14 on a third, against zero writes into a test tree from
+    this command or the platform builds it shells out to.
+
+    Keeping them would mean rewriting what the record claims, and a weaker
+    claim is worse here: the number would still read as provenance.
+    """
+    # Through the shared loader, not a literal here: a fallback list would
+    # be the second copy this declaration exists to prevent, and it would
+    # be the copy that goes stale. A tool tree synced without `shared/`
+    # simply prunes nothing extra, which is the pre-existing behaviour.
+    from ..core import shared_core
+
+    keys = shared_core.load("config_keys")
+    owned_relatives = list(getattr(keys, "TEST_OWNED_GENERATED", ()) or ())
+
+    try:
+        config = config_mgr.load() or {}
+    except Exception:
+        config = {}
+    mock = config.get("mock") if isinstance(config, dict) else None
+    relatives = list(owned_relatives)
+    if isinstance(mock, dict) and mock.get("mockDir"):
+        relatives.append(f"{mock['mockDir']}/generated")
+
+    bases = [config_mgr.project_root]
+    bases += [r for r in _platform_roots_safe(config_mgr) if r is not None]
+    owned = set()
+    for base in bases:
+        for rel in relatives:
+            try:
+                owned.add((Path(base) / rel).resolve())
+            except OSError:
+                continue
+    return owned
+
+
+def _platform_roots_safe(config_mgr) -> list:
+    from .lint_generated_cmd import _platform_roots
+
+    try:
+        return list(_platform_roots(config_mgr))
+    except Exception:
+        return []
 
 
 def _is_generated_dir(directory) -> bool:
