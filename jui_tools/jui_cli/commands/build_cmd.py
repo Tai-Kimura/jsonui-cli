@@ -126,7 +126,7 @@ def cmd_build(args: argparse.Namespace) -> int:
     # overstated would be worse than no manifest at all: a record is
     # trusted in a way a guess is not.
     from ..core import generation_manifest
-    from ..core.version import toolchain_version
+    from ..version import toolchain_version
     gen_run = generation_manifest.GenerationRun(
         project_root=config_mgr.project_root,
         version=toolchain_version(),
