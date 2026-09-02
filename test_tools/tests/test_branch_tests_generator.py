@@ -13,6 +13,7 @@ from pathlib import Path
 import pytest
 
 from jsonui_test_cli.branch_tests import (
+    KOTLIN_RUNTIME,
     BranchTestGenerationError,
     _kt_expected,
     _render_expected,
@@ -1424,3 +1425,42 @@ class TestResolveStringRejectsAnEmptyReturn:
         assert "is not the text that key names" in joined
         assert "A key, or nothing, means the table did not resolve" in joined
         assert "is a strings KEY" not in joined
+
+
+class TestCoerceUsesKotlinsOwnClassSpellings:
+    """`coerce` matches Class objects, and how it spells them is visible.
+
+    The Java boxed literals (`java.lang.Long::class.java`) draw "This class
+    is not recommended for use in Kotlin" once per type, in every consumer
+    that generates Android branch tests — and the file is `@generated`, so
+    nobody downstream can silence them. Measured on Kotlin 2.4.10: the
+    emitted text produced 4 warnings before this change and 0 after, and the
+    two spellings select the same Class objects (identity true for all four
+    types, and `coerce` answered identically across 104 (type, value) pairs
+    covering primitive, boxed, unrelated and null inputs).
+
+    Both halves are asserted because either alone would pass a broken fix: a
+    file with no boxed literals could have dropped the primitive branch, and
+    one with both spellings would still warn.
+    """
+
+    RUNTIME = KOTLIN_RUNTIME % {"package": "com.example.x"}
+
+    @pytest.mark.parametrize("boxed", [
+        "java.lang.Long::class.java", "java.lang.Integer::class.java",
+        "java.lang.Double::class.java", "java.lang.Float::class.java",
+    ])
+    def test_no_boxed_class_literal_is_emitted_as_code(self, boxed):
+        code = "\n".join(
+            line for line in self.RUNTIME.splitlines()
+            if not line.lstrip().startswith("//")
+        )
+        assert boxed not in code
+
+    @pytest.mark.parametrize("kotlin_type", ["Long", "Int", "Double", "Float"])
+    def test_both_class_objects_are_still_matched(self, kotlin_type):
+        # javaPrimitiveType is the same Class as java.lang.Long.TYPE and
+        # javaObjectType the same as the boxed literal, so dropping either
+        # would stop matching inputs coerce used to convert.
+        assert f"{kotlin_type}::class.javaPrimitiveType" in self.RUNTIME
+        assert f"{kotlin_type}::class.javaObjectType" in self.RUNTIME
