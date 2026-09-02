@@ -115,12 +115,18 @@ class ManifestTests(unittest.TestCase):
         # say "this line" rather than deleting the run's number, so the
         # next state-dependent number added lands outside it instead of
         # passing an exclusion rule that never heard of it.
-        config, run = gm.coverage_line(
-            1, 3, "1.8.4", distributed=9, dropped=2, collisions=1).split("\n")
+        block = gm.coverage_line(1, 3, "1.8.4", distributed=9, dropped=2,
+                                 collisions=1, collision_keys=["gen/A.kt"])
+        config, run = block.split("\n")[:2]
         for state_word in ("recorded/updated", "dropped", "merged away"):
             self.assertNotIn(state_word, config)
         for shape_word in ("tracked", "distributed", "1.8.4"):
             self.assertNotIn(shape_word, run)
+        # The collision does not ride inside the run line either: the
+        # baselines reading this are moving to replacing that line's values
+        # while keeping the line, so anything folded in would be replaced
+        # with them and never differ anywhere.
+        self.assertNotIn("merged away", run)
 
     def test_the_run_line_prints_when_the_run_did_nothing(self):
         # Otherwise "recorded nothing" and "nobody read the output" are the
@@ -596,9 +602,43 @@ class KeyCollisionTests(unittest.TestCase):
                          manifest["summary"]["collisionKeys"])
         self.assertEqual(0, manifest["summary"]["dropped"])
 
-    def test_the_line_reports_the_merge(self):
-        line = gm.coverage_line(0, 1, "1.8.10", collisions=2)
-        self.assertIn("merged away 2", line)
+    def test_the_merge_gets_a_line_of_its_own(self):
+        lines = gm.coverage_line(0, 1, "1.8.10", collisions=2,
+                                 collision_keys=["src/generated/A.ts"]
+                                 ).split("\n")
+        self.assertEqual(4, len(lines), lines)
+        self.assertIn("merged away 2", lines[2])
+        self.assertNotIn("merged away", lines[1])
+
+    def test_the_warning_reads_as_a_loss_to_someone_seeing_it_first(self):
+        # No corpus has ever produced a collision, so whoever reads this
+        # line will be reading it for the first time with no context. The
+        # text is asserted rather than the count, because the count is the
+        # part that will look self-explanatory and the rest is what has to
+        # carry the meaning.
+        lines = gm.coverage_line(
+            0, 9, "1.8.10", collisions=2,
+            collision_keys=["src/generated/ColorManager.ts"]).split("\n")
+        warning = "\n".join(lines[2:])
+        # Which files.
+        self.assertIn("src/generated/ColorManager.ts", warning)
+        # What was lost, in words, not a count.
+        self.assertIn("the version each of them named is gone", warning)
+        # That no other check covers it — the reason it is not folded into
+        # the run line.
+        self.assertIn("a silent loss", warning)
+        self.assertIn("`dropped` does not count", warning)
+        self.assertIn("nothing else reports", warning)
+
+    def test_the_warning_says_how_many_keys_it_did_not_name(self):
+        # A truncated list reads as the whole list.
+        keys = [f"src/generated/f{i}.ts" for i in range(7)]
+        warning = gm.coverage_line(0, 9, "1.8.10", collisions=9,
+                                   collision_keys=keys).split("\n")[2]
+        self.assertIn("+2 more", warning)
+
+    def test_no_warning_line_when_nothing_merged(self):
+        self.assertEqual(2, len(gm.coverage_line(0, 1, "1.8.10").split("\n")))
 
     def test_a_truncated_key_list_says_it_is_truncated(self):
         # 20 keys under a count of 45 reads as the whole list unless the

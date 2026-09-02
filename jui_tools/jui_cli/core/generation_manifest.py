@@ -426,7 +426,7 @@ def save(
 
 def coverage_line(
     written: int, total: int, version: str, distributed: int | None = None,
-    dropped: int = 0, collisions: int = 0,
+    dropped: int = 0, collisions: int = 0, collision_keys=(),
 ) -> str:
     """Two lines: what this project is, then what this run did to the record.
 
@@ -477,12 +477,56 @@ def coverage_line(
     run = f"  this run: recorded/updated {written}"
     if dropped:
         # Saying "untouched files keep their version" while removing
-        # records describes the opposite of what happened.
+        # records describes the opposite of what happened. It stays on
+        # this line: a dropped entry means a generated file is gone, and
+        # the generated files are tracked, so the deletion shows in a diff.
         run += f", dropped {dropped} entr(y/ies) whose file is gone"
+
+    lines = [config, run]
     if collisions:
-        # The prune never saw these, so `dropped` says nothing about them
-        # and a reader watching only that number sees a clean run while
-        # the file holds fewer entries than it did.
-        run += (f", merged away {collisions} entr(y/ies) whose key now "
-                f"spells the same as another's")
-    return config + "\n" + run
+        lines.extend(_collision_warning(collisions, collision_keys))
+    return "\n".join(lines)
+
+
+def _collision_warning(collisions: int, keys) -> list[str]:
+    """The one loss here that nothing else would surface.
+
+    ON ITS OWN LINE, NOT INSIDE THE RUN LINE. A dropped entry corresponds
+    to a deleted generated file, and those are tracked, so a reader has a
+    diff to find it in. A collision has no such shadow: two records fold
+    into one, the file simply holds fewer entries, and in a diff that looks
+    like a key being removed — indistinguishable from a drop, and nobody is
+    watching for either. Counted across the seven faces that keep a
+    manifest, none has a check that would catch it, including the four that
+    track the file: tracking gives you the ability to look afterwards, and
+    looking afterwards only ever happens on the runs where nothing went
+    wrong.
+
+    It also cannot ride along inside the run line, because the baselines
+    that read this output are moving to replacing that line's values while
+    keeping the line — so a count folded into it would be replaced along
+    with the rest and never differ anywhere.
+
+    NOT AN ERROR. The build is fine and stopping it would help nobody; the
+    point is that the loss cannot pass unread. Same call as leaving
+    `verify`'s exit code alone when it started naming its denominator.
+
+    Exposure is zero today: no collision exists in any recorded generation
+    of any corpus, and a downstream check of 234 entries found no two keys
+    that fold together. A line nobody has seen is a line nobody has
+    proof-read, which is why a test renders this one and asserts on the
+    text a reader would actually get.
+    """
+    shown = list(keys)[:5]
+    more = len(list(keys)) - len(shown)
+    named = ", ".join(shown) if shown else "(keys not reported)"
+    if more > 0:
+        named += f", +{more} more"
+    # Indented to sit under the run line, matching the shape the faces
+    # were told to keep out of their baselines.
+    return [
+        f"  ⚠️  merged away {collisions} entr(y/ies): records that now "
+        f"spell the same key were combined — {named}",
+        "      the version each of them named is gone — a silent loss that "
+        "`dropped` does not count and nothing else reports.",
+    ]
