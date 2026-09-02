@@ -78,6 +78,17 @@ module JsonUIShared
       (@palettes[mode] || @palettes.values.first || {}).dup
     end
 
+    #: Set when colors.json existed but could not be parsed. Distinct from
+    #: an absent file and from an empty one, which are both ordinary states
+    #: for a project that has not defined colours yet.
+    def load_failed?
+      !@load_failure.nil?
+    end
+
+    def load_failure_message
+      @load_failure
+    end
+
     private
 
     # ---- platform profile hooks ------------------------------------------
@@ -98,19 +109,44 @@ module JsonUIShared
       @modes = []
       @fallback_mode = nil
       @system_mode_mapping = nil
+      @load_failure = nil
 
       if File.exist?(@colors_file)
+        # A FAILURE IS NOT AN EMPTY FILE. This used to hand `nil` to
+        # detect_schema, which answers :empty for it — the same answer it
+        # gives for a file that is absent and for one holding `{}`. Three
+        # different situations became one state, and nothing downstream
+        # could tell them apart, so an unreadable file was treated as a
+        # project that has not defined any colours yet.
+        #
+        # Two things followed. The generated ColorManager came out with
+        # every colour `undefined` — syntactically valid, so it builds and
+        # type-checks and only fails at runtime. And, worse, the seeded
+        # palette is a palette like any other, so the write-back below
+        # replaced the unreadable file with a valid-looking one holding
+        # only the colours this run happened to extract from layouts.
+        # Measured: a file with `brand_primary` defined came back holding
+        # `dark_cyan` and `pale_cyan` and nothing else, exit 0. The text
+        # the author would have fixed was gone, and the next build parses
+        # the replacement without complaint.
         raw = begin
           JSON.parse(File.read(@colors_file))
         rescue JSON::ParserError => e
           logger.warn "Failed to parse colors.json: #{e.message}"
+          @load_failure = e.message
           nil
         end
 
-        case detect_schema(raw)
-        when :themed then ingest_themed(raw)
-        when :flat then ingest_flat(raw)
-        else seed_default_empty
+        if @load_failure
+          # Seeded so nothing downstream crashes on a nil palette, never
+          # persisted: `load_failed?` gates every write.
+          seed_default_empty
+        else
+          case detect_schema(raw)
+          when :themed then ingest_themed(raw)
+          when :flat then ingest_flat(raw)
+          else seed_default_empty
+          end
         end
       else
         seed_default_empty
@@ -225,6 +261,18 @@ module JsonUIShared
     end
 
     def save_colors_json
+      # Never write over a file we could not read. The palette in memory is
+      # the seeded default plus whatever this run extracted, so writing it
+      # back replaces the author's text with a valid-looking file holding
+      # only the extracted colours — and the definitions that were in there
+      # cannot be recovered from it afterwards.
+      if load_failed?
+        logger.error "colors.json was not written: it could not be parsed " \
+                     "(#{@load_failure}). Fix the file; this run left it as " \
+                     "it is rather than replacing it with the colours it " \
+                     "extracted."
+        return
+      end
       @extracted_colors.each do |mode, new_entries|
         @palettes[mode] ||= {}
         @palettes[mode].merge!(new_entries)
@@ -256,6 +304,8 @@ module JsonUIShared
     end
 
     def save_defined_colors_json
+      return if load_failed?
+
       @defined_colors_data.merge!(@undefined_colors)
       FileUtils.mkdir_p(@resources_dir)
       File.write(@defined_colors_file, JSON.pretty_generate(@defined_colors_data))

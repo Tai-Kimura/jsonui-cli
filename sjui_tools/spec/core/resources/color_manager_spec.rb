@@ -38,6 +38,54 @@ RSpec.describe SjuiTools::Core::Resources::ColorManager do
       expect { described_class.new(config, source_path, resources_dir) }.not_to raise_error
     end
 
+    # An unreadable file used to become the same state as an empty one and
+    # as a missing one: the parse error produced `nil`, and `nil` answers
+    # :empty, so all three seeded the default palette. Two things followed
+    # — a ColorManager emitted with every colour `undefined`, which builds
+    # and type-checks and only fails at runtime, and a write-back that
+    # replaced the author's file with a valid-looking one holding only the
+    # colours that run had extracted. Measured on a real build: a file
+    # defining `brand_primary` came back holding `dark_cyan` and
+    # `pale_cyan`, exit 0, and the next build parses the replacement
+    # without complaint.
+    it 'tells an unreadable colors.json apart from an empty one' do
+      colors_file = File.join(resources_dir, 'colors.json')
+
+      File.write(colors_file, '{ this is not valid json')
+      expect(described_class.new(config, source_path, resources_dir)).to be_load_failed
+
+      File.write(colors_file, '{}')
+      expect(described_class.new(config, source_path, resources_dir)).not_to be_load_failed
+    end
+
+    it 'does not call a missing colors.json a failure' do
+      # A project that has not defined colours yet is an ordinary state and
+      # must not be reported as a broken one.
+      expect(described_class.new(config, source_path, resources_dir))
+        .not_to be_load_failed
+    end
+
+    it 'leaves an unreadable colors.json exactly as it found it' do
+      colors_file = File.join(resources_dir, 'colors.json')
+      original = '{ this is not valid json'
+      File.write(colors_file, original)
+
+      manager = described_class.new(config, source_path, resources_dir)
+      manager.send(:save_colors_json)
+
+      expect(File.read(colors_file)).to eq(original)
+    end
+
+    it 'says what it did not write, since the build carries on' do
+      colors_file = File.join(resources_dir, 'colors.json')
+      File.write(colors_file, '{ this is not valid json')
+      manager = described_class.new(config, source_path, resources_dir)
+
+      expect(SjuiTools::Core::Logger).to receive(:error)
+        .with(/colors\.json was not written/)
+      manager.send(:save_colors_json)
+    end
+
     it 'loads existing defined_colors.json if present' do
       defined_colors_file = File.join(resources_dir, 'defined_colors.json')
       File.write(defined_colors_file, '{"myColor": null}')
