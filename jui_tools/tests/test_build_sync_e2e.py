@@ -624,3 +624,148 @@ class PlatformSelectorAliasTests(unittest.TestCase):
         register_build_command(parser.add_subparsers(dest="command"))
         parsed = parser.parse_args(["build", "--platform", "web"])
         self.assertEqual("web", parsed.platform)
+
+
+class RecordOrderTests(unittest.TestCase):
+    """Migration and the has-it-been-recorded lookup must key alike.
+
+    Caught on a real project before distribution, by a run against real
+    data rather than a fixture. Key migration was perfect — 198 of 198
+    renamed, `dropped 0` — a --clean build recorded 508 instead of zero,
+    and two consecutive builds were byte-identical. Every number in the
+    summary was right. The versions were gone anyway: entries went 1.8.7 →
+    1.8.9 and `generatedAt` with them, because the lookup deciding which
+    files had no record read the manifest raw while migration ran later,
+    inside `save`. Every entry whose spelling changed was therefore missing
+    from the lookup, the bootstrap rule fired, and `save` re-stamped what
+    it had just migrated. 327 of 537 entries on that project.
+
+    Both parts had been checked, each on its own, and neither check could
+    see this: the defect is in their order. So these go through
+    `_record_generation`, which is that order, and the control below runs
+    the old arrangement to show it still fails there.
+    """
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.root = Path(self._tmp.name)
+        # Two files whose keys the normaliser respells, three it leaves be.
+        self.recorded = ["src/generated/A.ts", "src/generated/B.ts"]
+        self.fresh = ["src/generated/C.ts", "src/generated/D.ts",
+                      "src/generated/E.ts"]
+        for key in self.recorded + self.fresh:
+            path = self.root / key
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(f"// {key}\n", encoding="utf-8")
+        # On record under the old spelling, from an older release. The
+        # location comes from the module: written to a hand-spelled path,
+        # this seed is simply never read, and then every arm here passes
+        # for the reason a project with no manifest passes — including the
+        # control, which reported the defect it was built to reproduce
+        # while measuring an empty file. (Observed, first run.)
+        from jui_cli.core import generation_manifest as gm
+
+        seed = gm.manifest_path(self.root)
+        seed.parent.mkdir(parents=True, exist_ok=True)
+        seed.write_text(json.dumps({
+            "version": 1,
+            "files": {k.replace("src/generated", "src/Generated"):
+                      {"version": "1.8.7",
+                       "generatedAt": "2026-08-01T00:00:00Z"}
+                      for k in self.recorded},
+        }, indent=2), encoding="utf-8")
+        self.assertEqual(
+            2, len(gm.load(self.root).get("files") or {}),
+            "the seeded manifest is not being read — every arm below would "
+            "then be measuring a project that has no record at all",
+        )
+
+    def tearDown(self):
+        self._tmp.cleanup()
+
+    def _present(self):
+        return [self.root / k for k in self.recorded + self.fresh]
+
+    def _run(self):
+        from jui_cli.core import generation_manifest as gm
+
+        run = gm.GenerationRun(project_root=self.root, version="1.8.10")
+        run.observe(self._present())
+        return run
+
+    def _versions(self):
+        from jui_cli.core import generation_manifest as gm
+
+        return {k: v.get("version")
+                for k, v in gm.load(self.root)["files"].items()}
+
+    # Arm 5 ---------------------------------------------------------------
+    def test_a_migrated_entry_keeps_the_version_that_generated_it(self):
+        from jui_cli.commands.build_cmd import _record_generation
+
+        _record_generation(_ConfigStub(self.root), self._run(),
+                           self._present())
+        versions = self._versions()
+        for key in self.recorded:
+            self.assertEqual(
+                "1.8.7", versions.get(key),
+                "an entry that only changed spelling was re-stamped with "
+                "the running version — the record's whole purpose",
+            )
+
+    # Arm 6 ---------------------------------------------------------------
+    def test_the_run_records_only_the_files_that_had_no_entry(self):
+        from jui_cli.commands.build_cmd import _record_generation
+
+        written, present_keys, _ = _record_generation(
+            _ConfigStub(self.root), self._run(), self._present())
+        self.assertEqual(
+            sorted(self.fresh), sorted(written),
+            "the count is 5 of 5 when the lookup misses the migrated keys, "
+            "and 3 of 5 when it sees them",
+        )
+        self.assertEqual(5, len(present_keys))
+
+    # The control ---------------------------------------------------------
+    def test_the_raw_lookup_is_what_loses_the_versions(self):
+        # The old arrangement, spelled out: `known` from the file as
+        # written, migration left to `save`, which still does it. This
+        # demonstrates the defect rather than only asserting its absence,
+        # so the arms above cannot pass by measuring something that was
+        # never at risk.
+        #
+        # It has to be built this precisely. Disabling migration in both
+        # places instead — the shortcut — turns the arms above red too, but
+        # by dropping the old entries and adding new ones, which is a
+        # different failure with a different summary. A reproduction that
+        # fails differently from the original does not establish that the
+        # arms above are watching the original.
+        from jui_cli.commands.build_cmd import _tracked_scope
+        from jui_cli.core import generation_manifest as gm
+
+        run = self._run()
+        known = set(gm.load(self.root).get("files") or {})  # ← raw
+        written = run.written(self._present(), known=known)
+        present_keys = [run._key(p) for p in self._present()]
+        manifest = gm.save(self.root, run.version, written,
+                           present_keys=present_keys,
+                           scope=_tracked_scope(present_keys))
+
+        self.assertEqual(5, len(written), "the control did not reproduce the "
+                                         "over-recording it exists to show")
+        self.assertEqual(["1.8.10"] * 2,
+                         [self._versions()[k] for k in self.recorded],
+                         "the control did not reproduce the re-stamping")
+
+        # And this is why neither part's own tests caught it, and why arm 5
+        # asserts versions rather than totals: with the defect running,
+        # every count in the summary is the count of a healthy build.
+        self.assertEqual(0, manifest["summary"].get("dropped", 0))
+        self.assertEqual(sorted(self.recorded + self.fresh),
+                         sorted(self._versions()))
+        self.assertEqual(5, len(present_keys))
+
+
+class _ConfigStub:
+    def __init__(self, project_root):
+        self.project_root = project_root

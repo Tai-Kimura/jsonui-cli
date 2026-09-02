@@ -156,7 +156,13 @@ class GenerationRun:
                 self.before[self._key(path)] = state
 
     def written(self, paths, known: set | None = None) -> list[str]:
-        """The subset this run wrote, as manifest keys.
+        """The keys this run records or corrects in the manifest.
+
+        NOT the files it wrote to disk, and the difference is not small:
+        the second rule below admits files whose bytes never moved, so this
+        count runs above the writes on a first build and below them on a
+        later one. The line reporting it says "recorded/updated" for that
+        reason; the name here means written to the RECORD.
 
         Two ways in, and the second one is what makes the record able to
         exist at all:
@@ -167,7 +173,7 @@ class GenerationRun:
         which just produced exactly these bytes — is the honest answer, and
         the only one available. Without this an idempotent build records
         nothing forever: a project whose generated output is stable never
-        gets a first entry, and `wrote 0 of 223` with an empty file is what
+        gets a first entry, and `0 of 223` with an empty file is what
         it reports on every build. Measured downstream: a run that wrote 83
         files reported 0, because every one came back byte-identical.
 
@@ -241,6 +247,28 @@ def load(project_root: Path) -> dict:
     return data if isinstance(data, dict) else {}
 
 
+def load_migrated(project_root: Path) -> dict:
+    """The recorded entries, keyed the way the current normaliser spells them.
+
+    Everything that needs the existing keys goes through here. The caller
+    that decides which files are new, and the save that prunes and rewrites,
+    were reading the same file and building keys from different spellings:
+    the caller took them raw, so every entry whose spelling the normaliser
+    changes looked like a file with no record. The bootstrap rule then fired
+    on all of them and re-stamped 327 entries with the current version —
+    counts intact, dropped zero, and the versions gone, which is the one
+    thing this record exists to keep.
+
+    Two call sites normalising separately is what let those spellings
+    diverge, so there is one function and both use it.
+    """
+    files = dict(load(project_root).get("files") or {})
+    migrated: dict = {}
+    for key, value in files.items():
+        migrated.setdefault(_migrate_key(project_root, key), value)
+    return migrated
+
+
 def save(
     project_root: Path,
     version: str,
@@ -256,14 +284,14 @@ def save(
     entries naming a file that is no longer there are dropped, so the
     manifest does not keep asserting a version for something absent.
     """
-    existing = load(project_root)
-    files = dict(existing.get("files") or {})
+    files = load_migrated(project_root)
 
-    # Migrate BEFORE pruning. The prune drops any key not currently present,
-    # and it compares strings — so when the spelling of a key changed, every
-    # entry written under the old spelling looked like a file that no longer
-    # exists. One project lost 198 records in a single build that way: the
-    # same files, the same disk, a different spelling.
+    # Migration happens in load_migrated, BEFORE the prune below. The prune
+    # drops any key not currently present, and it compares strings — so when
+    # the spelling of a key changed, every entry written under the old
+    # spelling looked like a file that no longer exists. One project lost
+    # 198 records in a single build that way: the same files, the same disk,
+    # a different spelling.
     #
     # Re-running each stored key through the current normaliser is what
     # separates "spelled differently" from "gone". An entry that maps onto a
@@ -271,11 +299,6 @@ def save(
     # this record exists to find files written by a particular release, and
     # a restore that re-stamps them with today's version answers that
     # question wrongly while looking repaired.
-    migrated: dict = {}
-    for key, value in files.items():
-        migrated.setdefault(_migrate_key(project_root, key), value)
-    files = migrated
-
     dropped: list[str] = []
     if present_keys is not None:
         present = set(present_keys)
@@ -325,10 +348,20 @@ def coverage_line(
     written: int, total: int, version: str, distributed: int | None = None,
     dropped: int = 0,
 ) -> str:
-    """`generation manifest: this run wrote 3 of 44 tracked generated file(s)`.
+    """`generation manifest: recorded/updated 3 of 44 tracked file(s)`.
 
     Both numbers, because a partial run is the normal case and a line that
     reported only the numerator would read the same as a full one.
+
+    THE VERB IS PART OF THE CLAIM. This said "wrote", and the number it
+    reports is not a count of files written — it is a count of entries this
+    run recorded or corrected. Measured on one project, the same word
+    counted two different things and matched the writes in neither
+    direction: `wrote 223 of 223` on a run that wrote 83 files (the rest
+    were entries being bootstrapped), and `wrote 0 of 223` on a --clean run
+    that also wrote 83 (nothing on record had changed). Naming the
+    denominator, which is what this line was added for, does not help when
+    the verb is wrong about what is being counted.
 
     "tracked" is load-bearing. The denominator is what the manifest speaks
     about, which is not every file a build distributes — a reader took the
@@ -341,8 +374,8 @@ def coverage_line(
     project is on 3.0.0" has read it as freshness, which it is not.
     """
     line = (
-        f"generation manifest: this run wrote {written} of {total} tracked "
-        f"generated file(s) as {version}"
+        f"generation manifest: recorded/updated {written} of {total} "
+        f"tracked generated file(s) as {version}"
     )
     if distributed is not None and distributed != total:
         line += f" ({distributed} file(s) distributed in total)"
@@ -350,7 +383,11 @@ def coverage_line(
         # Saying "untouched files keep their version" while removing records
         # describes the opposite of what happened.
         line += f", dropped {dropped} entr(y/ies) whose file is gone"
+    # The ending used to read "records writes, not currency". It was there
+    # to deny freshness, and a reader took it as confirmation that the
+    # number counts writes, which the number does not do. The denial it
+    # exists to make is kept; the word that made the other claim is gone.
     return line + (
-        " — untouched files keep the version that last wrote them "
-        "(records writes, not currency)"
+        " — untouched files keep the version that last generated them "
+        "(a version stamp, not a freshness check)"
     )

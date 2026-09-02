@@ -185,17 +185,8 @@ def cmd_build(args: argparse.Namespace) -> int:
     # Re-read after the build: a run can create files that did not exist to
     # be observed, and can leave others exactly as they were.
     present = _generated_paths(config_mgr)
-    # The keys already on record: a file with none is recorded even when its
-    # bytes did not move, since otherwise a stable project never gets a
-    # first entry and the manifest reports 0 of N forever.
-    known = set(generation_manifest.load(config_mgr.project_root).get("files") or {})
-    written = gen_run.written(present, known=known)
-    present_keys = [gen_run._key(p) for p in present]
-    manifest = generation_manifest.save(
-        config_mgr.project_root, gen_run.version, written,
-        present_keys=present_keys,
-        scope=_tracked_scope(present_keys),
-    )
+    written, present_keys, manifest = _record_generation(
+        config_mgr, gen_run, present)
     print()
     print(generation_manifest.coverage_line(
         len(written), len(present_keys), gen_run.version,
@@ -208,9 +199,41 @@ def cmd_build(args: argparse.Namespace) -> int:
     # its denominator, and doing so revealed that five projects had been
     # verifying nothing at all. An exit code cannot tell those apart —
     # a crash is caught by it, a silent zero is not.
-    print(f"\nBuild completed successfully — wrote {len(written)} of "
-          f"{len(present_keys)} tracked generated file(s)")
+    print(f"\nBuild completed successfully — recorded/updated "
+          f"{len(written)} of {len(present_keys)} tracked generated "
+          f"file(s) in the manifest")
     return 0
+
+
+def _record_generation(config_mgr, gen_run, present):
+    """Decide what this run changed in the record, and save it.
+
+    THE ORDER IS THE CONTRACT, which is why it is one function instead of
+    four lines at the call site. Two things here key the same entries: the
+    lookup that decides which files have no record yet, and the migration
+    inside `save` that renames entries whose spelling the normaliser
+    changed. Built separately, they drifted — the lookup read the file raw,
+    so every entry awaiting migration looked like a file that had never
+    been recorded, the bootstrap rule fired on all of them, and `save`
+    stamped the current version over versions it had just migrated
+    correctly. Measured on a real project: 327 of 537 entries re-stamped,
+    with the counts right and `dropped 0`, so no number in the summary
+    moved. The versions are the one thing this record exists to keep.
+
+    Both sides now come from `load_migrated`, and a build cannot use one
+    without the other.
+    """
+    from ..core import generation_manifest
+
+    known = set(generation_manifest.load_migrated(config_mgr.project_root))
+    written = gen_run.written(present, known=known)
+    present_keys = [gen_run._key(p) for p in present]
+    manifest = generation_manifest.save(
+        config_mgr.project_root, gen_run.version, written,
+        present_keys=present_keys,
+        scope=_tracked_scope(present_keys),
+    )
+    return written, present_keys, manifest
 
 
 def _generated_paths(config_mgr) -> list:

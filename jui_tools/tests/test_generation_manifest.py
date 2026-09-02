@@ -104,10 +104,20 @@ class ManifestTests(unittest.TestCase):
     def test_the_line_names_both_numbers(self):
         # A partial run reporting only its numerator reads like a full one.
         line = gm.coverage_line(1, 3, "1.8.4")
-        self.assertIn("wrote 1 of 3", line)
+        self.assertIn("1 of 3", line)
         self.assertIn("1.8.4", line)
         # And says what it is not, since a reader's next move depends on it.
-        self.assertIn("records writes, not currency", line)
+        self.assertIn("not a freshness check", line)
+
+    def test_the_line_does_not_call_the_count_a_write_count(self):
+        # It is not one, in either direction: a run that wrote 83 files
+        # reported 223 of 223 (bootstrapped entries) and, after --clean,
+        # 0 of 223 (nothing on record moved). Whichever number is right for
+        # the record, "wrote" is wrong for both.
+        line = gm.coverage_line(1, 3, "1.8.4")
+        self.assertNotIn("wrote", line)
+        self.assertNotIn("records writes", line)
+        self.assertIn("recorded/updated", line)
 
     # (c) ---------------------------------------------------------------
     def test_a_file_that_disappeared_is_no_longer_claimed(self):
