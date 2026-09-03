@@ -440,7 +440,8 @@ With no declaration anywhere, the whole swagger is in scope, as before.
 exits non-zero if it is not this project's:
 
 ```bash
-jsonui-test mock identity --port 8795   # 0 = mine, 1 = another project's, 2 = nothing listening
+jsonui-test mock identity --port 8795   # 0 = mine, 1 = another project's, 2 = nothing listening,
+                                        # 3 = something answered but has no identity
 ```
 
 A health check that only sees HTTP 200 cannot do this. Measured 2026-09-04: a
@@ -451,7 +452,9 @@ under test, and nothing in the results said otherwise.
 
 Run it **after starting the server and again after the run**. The port can
 change hands in between, and the second call is the only thing that says so.
-`--any-project` prints the identity without failing; the endpoint itself
+Exit 3 means a server is up but predates this endpoint (it answers 401 from
+the admin router) — you cannot learn whose corpus it serves, so upgrade or
+stop it. `--any-project` prints the identity without failing; the endpoint itself
 (`GET /__jsonui__/identity`) needs no admin token, because a caller asking
 "are you mine?" does not hold the token of the server that answers when the
 answer is no.

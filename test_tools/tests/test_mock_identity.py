@@ -182,3 +182,38 @@ class TestIdentityCommand:
             assert str(a_root.resolve()) in proc.stdout
         finally:
             srv.shutdown()
+
+    def test_a_server_without_the_endpoint_is_not_reported_as_absent(self, tmp_path):
+        """Measured against a deployed server from before this endpoint: the
+        request falls through to the admin router and comes back 401.
+        Reporting that as "nothing answered" would send the caller to start a
+        server that is already running — and would hide that an unidentified
+        mock holds the port."""
+        import http.server
+        import socket
+        import threading
+
+        class Old(http.server.BaseHTTPRequestHandler):
+            def do_GET(self):  # noqa: N802
+                self.send_response(401)
+                self.end_headers()
+                self.wfile.write(b'{"error": "admin token required"}')
+
+            def log_message(self, *a):
+                pass
+
+        sock = socket.socket()
+        sock.bind(("127.0.0.1", 0))
+        port = sock.getsockname()[1]
+        sock.close()
+        httpd = http.server.HTTPServer(("127.0.0.1", port), Old)
+        threading.Thread(target=httpd.serve_forever, daemon=True).start()
+        time.sleep(0.1)
+        try:
+            root = tmp_path / "projectA"
+            root.mkdir(parents=True, exist_ok=True)
+            proc = self._run(root, "--port", str(port))
+            assert proc.returncode == 3, (proc.returncode, proc.stdout, proc.stderr)
+            assert "no identity endpoint" in proc.stderr
+        finally:
+            httpd.shutdown()
