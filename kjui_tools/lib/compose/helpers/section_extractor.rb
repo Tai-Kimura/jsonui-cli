@@ -77,7 +77,8 @@ module KjuiTools
             next if line.empty?
             if provider_stack.none? &&
                (SCOPE_BOUND_MODIFIER_PREFIXES.any? { |m| line.include?(m) } ||
-                SCOPE_BOUND_CALL_PREFIXES.any? { |m| line.include?(m) })
+                SCOPE_BOUND_CALL_PREFIXES.any? { |m| line.include?(m) } ||
+                SCOPE_BOUND_MEMBER_PATTERNS.any? { |re| line.match?(re) })
               return true
             end
             opens = line.count('{')
@@ -213,6 +214,20 @@ module KjuiTools
         # matching.
         SCOPE_BOUND_CALL_PREFIXES = %w[
           NavigationBarItem(
+        ].freeze
+
+        # Scope-bound RECEIVER MEMBERS, neither modifier nor call: the
+        # matchParent flow arm reads `constraints.hasBoundedHeight`, a
+        # property of BoxWithConstraintsScope, on the FlowRow's opening
+        # line inside the BoxWithConstraints content lambda. Lifted into a
+        # SectionN helper that line is an "Unresolved reference:
+        # constraints" — the android codegen host failed to compile on
+        # flowOverflow__fill (2026-09-03). A chunk that holds the
+        # BoxWithConstraints itself provides the receiver (`) {` opener on
+        # the stack) and may still be lifted whole. The lookbehind keeps a
+        # `foo.constraints.` member of something else from matching.
+        SCOPE_BOUND_MEMBER_PATTERNS = [
+          /(?<![\w.])constraints\./,
         ].freeze
 
         # Returns [new_body, [function_string, ...]]. When the body is shorter

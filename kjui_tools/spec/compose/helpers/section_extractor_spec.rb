@@ -163,6 +163,55 @@ RSpec.describe KjuiTools::Compose::Helpers::SectionExtractor do
       expect(fns.size).to be >= 4
     end
 
+    it 'does not lift the content of a BoxWithConstraints lambda that reads `constraints.`' do
+      # The matchParent flow arm: `constraints.hasBoundedHeight` is a
+      # BoxWithConstraintsScope member on the FlowRow's opening line. Lifted
+      # into a file-scope SectionN it is "Unresolved reference: constraints"
+      # — the android codegen host did not compile (flowOverflow__fill,
+      # 2026-09-03). The FlowRow stays inside the lambda; its inner children
+      # can still be lifted, and a chunk holding the whole BoxWithConstraints
+      # (which provides the receiver) still may be.
+      body = <<~KOTLIN
+        Column(modifier = Modifier.fillMaxSize()) {
+            BoxWithConstraints(
+                modifier = Modifier
+                    .testTag("target")
+                    .fillMaxHeight()
+            ) {
+                FlowRow(
+                    modifier = (if (constraints.hasBoundedHeight) Modifier.fillMaxSize().verticalScroll(rememberScrollState()) else Modifier.fillMaxWidth()),
+                    horizontalArrangement = Arrangement.spacedBy(0.dp)
+                ) {
+                    Text(text = data.a)
+                    Text(text = data.b)
+                    Text(text = data.c)
+                    Text(text = data.d)
+                    Text(text = data.e)
+                    Text(text = data.f)
+                }
+            }
+        }
+      KOTLIN
+      new_body, fns = described_class.extract(body, **opts, line_threshold: 5)
+      # wherever the FlowRow landed, `constraints.` sits under a
+      # BoxWithConstraints opener in the same text
+      [new_body, *fns].each do |text|
+        next unless text.include?('constraints.')
+        expect(text.index('BoxWithConstraints(')).not_to be_nil, text
+        expect(text.index('BoxWithConstraints(')).to be < text.index('constraints.')
+      end
+      expect(described_class.scope_bound_needs_outer_receiver?(
+        "FlowRow(\n    modifier = (if (constraints.hasBoundedHeight) Modifier.fillMaxSize() else Modifier.fillMaxWidth())\n) {\n}\n"
+      )).to eq(true)
+      expect(described_class.scope_bound_needs_outer_receiver?(
+        "BoxWithConstraints(\n    modifier = Modifier\n) {\n    FlowRow(modifier = (if (constraints.hasBoundedHeight) Modifier else Modifier)) {\n    }\n}\n"
+      )).to eq(false)
+      # a member of something else is not the scope's
+      expect(described_class.scope_bound_needs_outer_receiver?(
+        "Text(text = data.constraints.label)\n"
+      )).to eq(false)
+    end
+
     it 'does not lift a scope-bound composable call (NavigationBarItem needs RowScope)' do
       # material3's NavigationBarItem is `fun RowScope.NavigationBarItem(...)`.
       # The bound TabView emit puts one per tab inside NavigationBar's content
