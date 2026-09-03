@@ -86,6 +86,33 @@ RSpec.describe KjuiTools::CLI::Commands::Init do
     end
   end
 
+  # `kjui init --mode compose` in a fresh process (2026-09-03): the compose
+  # branch reads ColorManager::DEFAULT_RESOURCE_MANAGER_SUFFIX, and init.rb
+  # did not load it. This file's own examples could not see that — run with
+  # the rest of the suite, spec/core/resources/color_manager_spec.rb had
+  # already loaded the constant, and only an isolated run
+  # (`rspec spec/cli/commands/init_spec.rb`) went red. So the check below
+  # runs in a child interpreter that loads init.rb and nothing else: what a
+  # consumer's `kjui init` actually starts from.
+  describe 'require chain (fresh interpreter, no sibling spec loaded)' do
+    let(:lib_dir) { File.expand_path('../../../lib', __dir__) }
+
+    it 'resolves the ColorManager constant the compose default reads' do
+      script = "require 'cli/commands/init'; " \
+               "puts KjuiTools::Core::Resources::ColorManager::DEFAULT_RESOURCE_MANAGER_SUFFIX"
+      out = IO.popen([RbConfig.ruby, '-I', lib_dir, '-e', script], err: %i[child out], &:read)
+      expect($?.success?).to be(true), "init.rb alone must load the constant it reads:\n#{out}"
+      expect(out.strip).to eq(File.join('kotlin', 'com', 'kotlinjsonui', 'generated'))
+    end
+
+    it 'writes the compose config with the generated ColorManager path' do
+      init = described_class.new
+      expect { init.run(['--mode', 'compose']) }.to output(/Initialization complete/).to_stdout
+      config = JSON.parse(File.read('kjui.config.json'))
+      expect(config['resource_manager_directory']).to eq('src/main/kotlin/com/kotlinjsonui/generated')
+    end
+  end
+
   describe 'option parsing' do
     it 'accepts --mode option' do
       init = described_class.new

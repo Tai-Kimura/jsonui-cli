@@ -5,6 +5,14 @@ require 'fileutils'
 require 'json'
 require_relative '../../core/config_manager'
 require_relative '../../core/project_finder'
+# The compose default for resource_manager_directory is ColorManager's own
+# constant (one source for the fixed `com.kotlinjsonui.generated` path), so
+# the file that reads it loads it — the same form as build.rb / xml_builder.rb
+# loading resources_manager before they use it. Without this line the compose
+# branch raised `uninitialized constant KjuiTools::Core::Resources` in a fresh
+# process (2026-09-03), while the spec suite stayed green because sibling
+# specs had loaded the constant first.
+require_relative '../../core/resources/color_manager'
 
 module KjuiTools
   module CLI
