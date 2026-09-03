@@ -158,8 +158,13 @@ RSpec.describe RjuiTools::React::Helpers::StringManagerHelper do
     let(:host) { host_class.new('_current_json_name' => 'login') }
 
     it 'resolves a declared trailing-underscore key as the key itself' do
+      # `…ApplyFor_`, with the underscore: that is the property the generated
+      # proxy defines for this key (it upper-cases only after an underscore
+      # and a trailing one has nothing to upper-case). This expectation used
+      # to read `…ApplyFor`, the `capitalize`-per-segment spelling, which the
+      # runtime does not expose — measured undefined under node, 2026-09-04.
       expect(host.get_text_with_string_manager('dont_have_an_account_apply_for_'))
-        .to eq('{StringManager.currentLanguage.loginDontHaveAnAccountApplyFor}')
+        .to eq('{StringManager.currentLanguage.loginDontHaveAnAccountApplyFor_}')
     end
 
     it 'prefers key membership over a value reverse-lookup hit' do
@@ -171,8 +176,10 @@ RSpec.describe RjuiTools::React::Helpers::StringManagerHelper do
     end
 
     it 'still falls back to value lookup for display text' do
+      # Same accessor spelling as the key path above: the value lookup lands
+      # on the same trailing-underscore key, so it emits the same property.
       expect(host.get_text_with_string_manager("Don't have an account? Apply for Membership"))
-        .to eq('{StringManager.currentLanguage.loginDontHaveAnAccountApplyFor}')
+        .to eq('{StringManager.currentLanguage.loginDontHaveAnAccountApplyFor_}')
     end
   end
 
@@ -217,6 +224,101 @@ RSpec.describe RjuiTools::React::Helpers::StringManagerHelper do
       expect(result.scan(/StringManager\.currentLanguage\.learnInstallationLangToggle/).size).to eq(2)
       expect(result).to include('"id":"x"')
       expect(result).to include('"id":"y"')
+    end
+  end
+
+  # A key with a capital used to be invisible to this face: `convert_string_key`
+  # asked `string_key?` (lowercase-only) BEFORE consulting strings.json, so a
+  # declared key was never looked up and every caller fell back to the raw
+  # identifier — which is how `section_collection_basic_bullet_scrollEnabled`
+  # reached two published docsite pages as body text with `jui build` and
+  # `lint-strings` both green. sjui calls its lookup unconditionally and kjui's
+  # step 1 is `entries.key?`; this face was the only one gating on spelling.
+  describe 'a key with a capital letter (membership decides, not spelling)' do
+    before do
+      strings_path = File.join('docs', 'screens', 'layouts', 'Resources', 'strings.json')
+      extra = JSON.parse(File.read(strings_path))
+      extra['learn_installation'] = extra['learn_installation'].merge(
+        'bullet_scrollEnabled' => '• scrollEnabled — whether the collection scrolls'
+      )
+      extra['learn_hello_world'] = extra['learn_hello_world'].merge(
+        'bullet_displayName' => '• displayName — the label shown to the reader'
+      )
+      File.write(strings_path, JSON.generate(extra))
+    end
+
+    let(:host) { host_class.new('_current_json_name' => 'learn_installation') }
+
+    it 'resolves a bare key with a capital, like its all-lowercase sibling' do
+      expect(host.convert_string_key('bullet_scrollEnabled'))
+        .to eq('{StringManager.currentLanguage.learnInstallationBulletScrollEnabled}')
+    end
+
+    it 'resolves the fully-qualified spelling too' do
+      # The ticket reported the bare form; the qualified form was equally
+      # invisible, because the gate ran before either lookup phase.
+      expect(host.convert_string_key('learn_installation_bullet_scrollEnabled'))
+        .to eq('{StringManager.currentLanguage.learnInstallationBulletScrollEnabled}')
+    end
+
+    it 'still resolves all-lowercase keys' do
+      expect(host.convert_string_key('lang_toggle'))
+        .to eq('{StringManager.currentLanguage.learnInstallationLangToggle}')
+    end
+
+    it 'still returns nil for an identifier that is not declared' do
+      # The membership gate is the whole safety story: `bash` / `yaml` /
+      # `shell` are key-shaped and must stay literal.
+      expect(host.convert_string_key('bash')).to be_nil
+      expect(host.convert_string_key('scrollEnabled')).to be_nil
+    end
+
+    it 'still returns nil for a binding expression' do
+      expect(host.convert_string_key('@{viewModel.title}')).to be_nil
+    end
+
+    it 'warns when a key with a capital is declared only in a foreign section' do
+      # The one case where the raw identifier still reaches the screen was
+      # also the one case nothing warned about: the warning guard carried the
+      # same lowercase-only spelling as the gate.
+      expect(RjuiTools::Core::Logger).to receive(:warn).with(/bullet_displayName/)
+      expect(host.convert_string_key('bullet_displayName')).to be_nil
+    end
+
+    it 'rewrites a JSON value that is a key with a capital' do
+      json = '{"label":"bullet_scrollEnabled"}'
+      expect(host.rewrite_json_string_values(json))
+        .to include('StringManager.currentLanguage.learnInstallationBulletScrollEnabled')
+    end
+  end
+
+  # The emitted accessor has to be the property the GENERATED StringManager
+  # exposes. `createCamelCaseProxy` (build_command.rb) upper-cases only the
+  # character after an underscore; `capitalize` also lower-cases the rest of
+  # the segment, so the two agree on an all-lowercase key and disagree the
+  # moment a key carries a capital or a trailing underscore. Measured against
+  # the generated proxy under node (2026-09-04): the `capitalize` spellings
+  # below are `undefined` at runtime — a blank on the page, which is worse
+  # than the identifier the ticket reported.
+  describe '#string_manager_accessor matches the generated proxy' do
+    let(:host) { host_class.new('_current_json_name' => 'learn_installation') }
+
+    # key in strings.json => property createCamelCaseProxy defines
+    {
+      'guides_bullet_lazy' => 'guidesBulletLazy',
+      'guides_bullet_scrollEnabled' => 'guidesBulletScrollEnabled',
+      'login_dont_have_an_account_apply_for_' => 'loginDontHaveAnAccountApplyFor_',
+      'a_b_1_c' => 'aB1C'
+    }.each do |full_key, accessor|
+      it "#{full_key} -> #{accessor}" do
+        expect(host.send(:string_manager_accessor, full_key)).to eq(accessor)
+      end
+    end
+
+    it 'is the JS transformation, not capitalize-per-segment' do
+      # The distinguishing input: capitalize would answer "…Scrollenabled".
+      expect(host.send(:string_manager_accessor, 'x_scrollEnabled')).to eq('xScrollEnabled')
+      expect(host.send(:to_camel_case, 'x_scrollEnabled')).to eq('xScrollenabled')
     end
   end
 end

@@ -8,7 +8,24 @@ module RjuiTools
   module React
     module Helpers
       module StringManagerHelper
-        # Check if the text is a snake_case string key (e.g., "welcome_message", "button_submit")
+        # An identifier that could be a strings.json key: letters, digits and
+        # underscores, with the trailing underscore the extractor's 31-char
+        # truncation can leave ("dont_have_an_account_apply_for_").
+        #
+        # UPPERCASE IS PART OF THE SPELLING. It used to be lowercase-only,
+        # copied from the extractor's should_extract_string? skip — but the
+        # two ask different questions. The extractor asks "is this prose or an
+        # identifier?"; a resolver asks "does the SSoT declare this?", and
+        # `strings.json` keys are minted by hand as often as by the extractor.
+        # A key with one capital ("bullet_scrollEnabled") failed this and was
+        # emitted as its own name: the identifier reached two published docsite
+        # pages as body text, with `jui build` and `lint-strings` both green
+        # (2/2 such keys on that face were broken, the 1986 lowercase ones fine).
+        KEY_SPELLING = /\A[A-Za-z][A-Za-z0-9]*(_[A-Za-z0-9]+)*_?\z/
+
+        # Does this text LOOK like a strings.json key? A shape question, and
+        # only ever used as one — whether a key resolves is decided by
+        # membership in strings.json (`convert_string_key`), never by spelling.
         def string_key?(text)
           return false unless text.is_a?(String)
           return false if text.empty?
@@ -21,29 +38,34 @@ module RjuiTools
           # Skip if it contains spaces (regular text)
           return false if text_without_quotes.include?(' ')
 
-          # Check if it's snake_case (lowercase letters, numbers, underscores
-          # only). Same spelling the extractor's should_extract_string? skips
-          # (string_manager_core.rb), trailing underscore included — the
-          # extractor truncates long ASCII text to 31 chars, which can leave
-          # a trailing underscore ("dont_have_an_account_apply_for_"), and
-          # every resolver must accept what the extractor produces.
-          text_without_quotes.match?(/^[a-z][a-z0-9]*(_[a-z0-9]+)*_?$/)
+          text_without_quotes.match?(KEY_SPELLING)
         end
 
-        # Convert snake_case string key to StringManager.currentLanguage.{filePrefix}{Key}
-        # Looks up strings.json to resolve the file prefix (screen name).
+        # Resolve a strings.json key to `{StringManager.currentLanguage.<camelCase>}`.
         #
-        # Returns nil when the key either isn't a snake_case identifier or
-        # doesn't resolve to any strings.json namespace. Callers must
-        # handle nil — the old behavior (silently falling back to
-        # `{StringManager.currentLanguage.<camelCase>}` whether or not the
-        # key was registered) produced runtime `undefined` for identifiers
-        # like "bash" / "yaml" / "shell" that look like snake_case but are
-        # not translations.
+        # MEMBERSHIP DECIDES, NOT SPELLING — the ruling this face already
+        # states one method down (get_text_with_string_manager) and the one
+        # sjui's resolver and kjui's find_string_key implement: both call
+        # their lookup unconditionally. This face alone gated the lookup on
+        # `string_key?` first, so a declared key whose spelling the gate
+        # disliked was never looked up at all; widening the gate would leave
+        # the third spelling of the same rule in place, so the gate is gone
+        # instead. The cheap structural exclusions stay: a binding is not a
+        # key, and neither is empty text.
+        #
+        # Returns nil when the text doesn't resolve to any strings.json
+        # namespace. Callers must handle nil — the old behavior (silently
+        # falling back to `{StringManager.currentLanguage.<camelCase>}`
+        # whether or not the key was registered) produced runtime `undefined`
+        # for identifiers like "bash" / "yaml" / "shell" that look like
+        # snake_case but are not translations.
         def convert_string_key(text, warnings: true)
-          return nil unless string_key?(text)
+          return nil unless text.is_a?(String)
 
           text_without_quotes = text.gsub(/^["']|["']$/, '')
+          return nil if text_without_quotes.empty?
+          return nil if text_without_quotes.match?(/^@\{.*\}$/)
+
           lookup_string_manager_key(text_without_quotes, warnings: warnings)
         end
 
@@ -62,7 +84,7 @@ module RjuiTools
         def rewrite_json_string_values(json_str)
           return json_str unless json_str.is_a?(String)
 
-          json_str.gsub(/:\s*"([a-z][a-z0-9]*(?:_[a-z0-9]+)*_?)"/) do |match|
+          json_str.gsub(/:\s*"([A-Za-z][A-Za-z0-9]*(?:_[A-Za-z0-9]+)*_?)"/) do |match|
             key = Regexp.last_match(1)
             resolved = lookup_string_manager_key(key)
             next match unless resolved
@@ -116,7 +138,7 @@ module RjuiTools
               match_value = value.is_a?(Hash) ? (value.values.first || '') : value.to_s
               if match_value == text
                 full_key = "#{file_name}_#{key}"
-                camel_key = to_camel_case(full_key)
+                camel_key = string_manager_accessor(full_key)
                 return "{StringManager.currentLanguage.#{camel_key}}"
               end
             end
@@ -141,7 +163,7 @@ module RjuiTools
               key = text.sub(/^#{Regexp.escape(file_name)}_/, '')
               if file_strings.key?(key)
                 full_key = "#{file_name}_#{key}"
-                camel_key = to_camel_case(full_key)
+                camel_key = string_manager_accessor(full_key)
                 return "{StringManager.currentLanguage.#{camel_key}}"
               end
             end
@@ -161,7 +183,7 @@ module RjuiTools
 
             if file_strings.key?(text)
               full_key = "#{namespace}_#{text}"
-              camel_key = to_camel_case(full_key)
+              camel_key = string_manager_accessor(full_key)
               return "{StringManager.currentLanguage.#{camel_key}}"
             end
           end
@@ -186,7 +208,11 @@ module RjuiTools
         # warning from their resolvers).
         def report_foreign_bare_key(text, strings_data)
           return unless strings_data.is_a?(Hash)
-          return unless text.is_a?(String) && text.match?(/^[a-z][a-z0-9]*(_[a-z0-9]+)*_?$/)
+          # KEY_SPELLING, not the old lowercase-only copy: a foreign key with
+          # a capital used to fail this guard too, so the one case where the
+          # raw identifier still reaches the screen was also the one case
+          # nothing warned about.
+          return unless text.is_a?(String) && text.match?(KEY_SPELLING)
 
           own = own_namespaces
           foreign = strings_data.map do |namespace, entries|
@@ -219,7 +245,34 @@ module RjuiTools
           end
         end
 
-        # Convert snake_case to camelCase
+        # The property name the GENERATED StringManager actually exposes for a
+        # `<namespace>_<key>` entry — `createCamelCaseProxy` in
+        # build_command.rb, character for character:
+        #
+        #   key.replace(/_([a-z0-9])/g, (_, letter) => letter.toUpperCase())
+        #
+        # Only the character after an underscore is upper-cased; the rest of
+        # each segment is left alone. `to_camel_case` below splits on "_" and
+        # `capitalize`s, which also LOWER-cases the rest of every segment — the
+        # same answer for an all-lowercase key, a different one as soon as a
+        # key carries a capital or a trailing underscore. Measured against the
+        # generated proxy (node, 2026-09-04):
+        #
+        #   guides_bullet_scrollEnabled -> $s.guidesBulletScrollEnabled  resolves
+        #                               -> $s.guidesBulletScrollenabled  undefined
+        #   login_..._apply_for_        -> $s.loginDontHaveAnAccountApplyFor_  resolves
+        #                               -> $s.loginDontHaveAnAccountApplyFor   undefined
+        #
+        # So emitting the `capitalize` spelling for either shape produces a
+        # reference the runtime does not have: the page renders nothing where
+        # the string should be. (The proxy also keeps the raw snake spelling,
+        # which is why nothing here needs to quote it.)
+        def string_manager_accessor(full_key)
+          full_key.gsub(/_([a-z0-9])/) { Regexp.last_match(1).upcase }
+        end
+
+        # Convert snake_case to camelCase (ViewModel property names — NOT
+        # StringManager accessors; see string_manager_accessor).
         def to_camel_case(snake_str)
           parts = snake_str.split('_')
           return snake_str if parts.empty?
