@@ -342,6 +342,11 @@ module SjuiTools
           binding_validator = options[:validate] ? Core::BindingValidator.new : nil
 
           converter = SjuiTools::SwiftUI::JsonToSwiftUIConverter.new
+          # Which layouts are cells / headers / footers of a vertically
+          # scrolling Collection — decided over the WHOLE tree, like the
+          # screen index below, so a wrapping flow inside such a cell lets
+          # the host scroll (the in-tree mark cannot see across files).
+          converter.scrolling_cell_ids = SjuiTools::SwiftUI::ScrollingCellIndex.build(layouts_dir)
           updater = SjuiTools::SwiftUI::ViewUpdater.new
 
           # Screen identity: only screens carry a marker (cells and partials
