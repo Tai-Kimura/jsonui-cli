@@ -220,12 +220,20 @@ def cmd_build(args: argparse.Namespace) -> int:
         # Sync ViewModel Protocol / Base files from spec.event_handlers + Impl
         # markers. Hard error if any spec-declared handler has no matching Impl
         # function — catches drift before the platform build starts.
-        if _sync_viewmodel_protocols(config_mgr, config, platforms, args) is False:
+        # Both of the next two need every spec. Parsing them twice also
+        # printed every per-spec NOTE twice — but only on projects that
+        # declare an isolated Embed, because the gate below returns before
+        # it loads anything when there are none. Two faces reported 6 lines
+        # and 2 lines for the same feature and neither number was wrong.
+        all_specs = _load_all_specs(config_mgr)
+
+        if _sync_viewmodel_protocols(
+                config_mgr, config, platforms, args, specs=all_specs) is False:
             return _halt(1)
 
         # Hard gate for navigationMode:"isolated" — the embedded screen's spec
         # must not declare present-type transitions (sheet/modal/dialog/dismiss).
-        if _check_isolated_embed_constraints(config_mgr) is False:
+        if _check_isolated_embed_constraints(config_mgr, specs=all_specs) is False:
             return _halt(1)
 
         should_build_ios = "ios" in platforms and not args.android_only and not args.web_only
@@ -1478,7 +1486,9 @@ def _spec_present_like_entries(spec: ScreenSpec) -> list[str]:
     return found
 
 
-def _check_isolated_embed_constraints(config_mgr: ConfigManager) -> bool:
+def _check_isolated_embed_constraints(
+    config_mgr: ConfigManager, specs: list | None = None
+) -> bool:
     """Hard gate: screens hosted in an isolated Embed must not present.
 
     Scans every layout for ``Embed`` nodes with ``navigationMode:"isolated"``
@@ -1514,7 +1524,8 @@ def _check_isolated_embed_constraints(config_mgr: ConfigManager) -> bool:
         return "".join(part.capitalize() for part in name.split("_"))
 
     errors: list[str] = []
-    specs = _load_all_specs(config_mgr)
+    if specs is None:
+        specs = _load_all_specs(config_mgr)
     for screen, host_layouts in sorted(isolated_targets.items()):
         pascal = _snake_to_pascal(screen)
         spec = next(
@@ -1771,6 +1782,7 @@ def _sync_viewmodel_protocols(
     config: dict,
     platforms: dict,
     args,
+    specs: list | None = None,
 ) -> bool:
     """Regenerate Protocol/Base files + patch Impl inheritance/override.
 
@@ -1783,7 +1795,8 @@ def _sync_viewmodel_protocols(
     from ..generators.ios_generator import IosGenerator
     from ..generators.web_generator import WebGenerator, owns_viewmodel_base
 
-    specs = _load_all_specs(config_mgr)
+    if specs is None:
+        specs = _load_all_specs(config_mgr)
     if not specs:
         return True
 
