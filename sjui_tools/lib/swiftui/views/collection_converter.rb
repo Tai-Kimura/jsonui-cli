@@ -1771,6 +1771,35 @@ module SjuiTools
         # SwiftJsonUI's CollectionStackMode enum. Returns :lazy / :eager / :none.
         # Bindings always resolve to :lazy at build time; the runtime expression
         # in `collection_mode_swift_expr` handles the dynamic case.
+        # A Collection is not a container by TYPE. Every lazy shape emits a
+        # ScrollView (or List / TabView / CollectionStackView), which IS an
+        # accessibility element and takes the identifier itself. `lazy:
+        # "none"` emits a bare VStack / HStack / FlowLayout — no scroll
+        # container, by the intent stated at generate_non_lazy — and a bare
+        # `.accessibilityIdentifier` on a non-element is pushed DOWN onto
+        # every child element, renaming each cell to the collection's id.
+        #
+        # Measured on a consumer face: a flow Collection's cells were all
+        # called `suggested_collection`, so `tapItem` could not address any
+        # index, and `assert visible <collection>` passed against a renamed
+        # chip. Same mechanism that put `embed` in
+        # ACCESSIBILITY_CONTAINER_TYPES in 10.4.2.
+        #
+        # The anchor comes with it: a Collection declares no `child` nodes,
+        # so guaranteed_accessible_child_count is 0 and the merge hazard is
+        # already true. With one cell, `.contain` alone still merged — the
+        # consumer measured that too.
+        #
+        # NOTE for whoever changes the emitted containers: this predicate
+        # tracks which shapes are elements. If a shape stops being one (say
+        # the ScrollView is removed from the flow arm to match the other
+        # codegens), it has to be added here, or its cells lose their
+        # addresses silently. SwiftJsonUI's Dynamic renderer wraps flow in a
+        # ScrollView today and needs nothing; the same applies there.
+        def accessibility_container?
+          super || collection_lazy_mode == :none
+        end
+
         def collection_lazy_mode
           value = @component['lazy']
           case value

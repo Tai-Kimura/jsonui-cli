@@ -339,8 +339,7 @@ module SjuiTools
           # spellings must suppress the identifier for the same reason.
           return if @component['visibility'] == 'invisible' || @component['hidden'] == true
 
-          type_name = (@component['type'] || '').downcase
-          if ACCESSIBILITY_CONTAINER_TYPES.include?(type_name)
+          if accessibility_container?
             if accessibility_merge_hazard?
               add_modifier_line ".overlay(alignment: .topLeading) {"
               indent do
@@ -353,6 +352,17 @@ module SjuiTools
             add_modifier_line ".accessibilityElement(children: .contain)"
           end
           add_modifier_line ".accessibilityIdentifier(\"#{@component['id']}\")"
+        end
+
+        # Whether the container this converter EMITS becomes an accessibility
+        # element on its own. Type is enough for every component whose emitted
+        # shape is fixed, which is what ACCESSIBILITY_CONTAINER_TYPES lists.
+        # A converter whose shape depends on the declaration overrides this
+        # rather than adding its type to that list — the list's own sentence
+        # ("types whose SwiftUI representation is a plain layout container")
+        # would become false for the shapes that do not match.
+        def accessibility_container?
+          ACCESSIBILITY_CONTAINER_TYPES.include?((@component['type'] || '').downcase)
         end
 
         # A container is at risk of the single-child accessibility merge
