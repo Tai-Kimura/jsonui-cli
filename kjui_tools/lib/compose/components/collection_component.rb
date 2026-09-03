@@ -958,6 +958,23 @@ module KjuiTools
           code
         end
 
+        # See generate_flow_layout: `lazy` in effect AND a height that is finite
+        # by declaration. A bound height (`@{...}`) is unknown here and stays
+        # with the parent.
+        def self.flow_scrolls_in_own_bounds?(json_data)
+          return false if json_data['lazy'] == 'none'
+
+          finite_dimension?(json_data['height']) || finite_dimension?(json_data['maxHeight'])
+        end
+
+        def self.finite_dimension?(value)
+          case value
+          when Numeric then true
+          when String then value.match?(/\A\d+(\.\d+)?\z/)
+          else false
+          end
+        end
+
         # Generate FlowLayout using Compose FlowRow
         def self.generate_flow_layout(json_data, sections, depth, required_imports, parent_type)
           required_imports&.add(:flow_row)
@@ -997,7 +1014,17 @@ module KjuiTools
           # scrolled on iOS and did not on Android. After size and background —
           # the size is the viewport, the background paints it, the content
           # scrolls inside.
-          if json_data['lazy'] != 'none'
+          #
+          # "Its own bounds" is literal: only a node whose height is finite by
+          # its own declaration (a number, or a maxHeight) gets the modifier.
+          # Compose throws when a vertically scrollable node is measured with
+          # an infinite max height — which is what wrapContent, or matchParent
+          # under a LazyColumn cell or a scrolling sheet, hands it — and a node
+          # without bounds of its own has nothing to scroll inside: the parent
+          # scrolls. The static emit cannot see the parent, so matchParent is
+          # left to the parent too; the dynamic renderer checks the parent's
+          # constraints at runtime for that one shape.
+          if flow_scrolls_in_own_bounds?(json_data)
             required_imports&.add(:vertical_scroll)
             modifiers << ".verticalScroll(rememberScrollState())"
           end
