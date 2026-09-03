@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/__control/Collection__flow-overflow-none-wrapInBox.layout.json"
+  },
+  "metadata": {
+    "name": "conformance Collection__flow-overflow-none-wrapInBox",
+    "description": "Control for the duplicated-overflow-modifier pair: the same lazy \"none\" flow under a 150x100 box with its height key ABSENT, which emits no wrapContentHeight of its own.",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "Collection"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "Collection__flow-overflow-none-wrapInBox",
+      "description": "Control for the duplicated-overflow-modifier pair: the same lazy \"none\" flow under a 150x100 box with its height key ABSENT, which emits no wrapContentHeight of its own.",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "Collection_Collection__flow-overflow-none-wrapInBox"
+        }
+      ]
+    }
+  ]
+}

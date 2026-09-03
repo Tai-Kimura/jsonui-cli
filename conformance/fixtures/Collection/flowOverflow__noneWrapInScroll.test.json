@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/Collection/flowOverflow__noneWrapInScroll.layout.json"
+  },
+  "metadata": {
+    "name": "conformance flowOverflow__noneWrapInScroll",
+    "description": "A lazy \"none\" flow Collection with an explicit height of wrapContent, holding 12 cells under a ScrollView. kjui emits `.wrapContentHeight()` for the explicit height AND appends `.wrapContentHeight(Alignment.Top, unbounded = true)` for the overflow rule, so this renders through TWO stacked wrapContentHeight modifiers; the control omits the height key and therefore emits only the second. Identical pictures mean the duplicate is inert; different ones mean the outer modifier (default CenterVertically) is deciding the alignment the inner one asked for.",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "Collection"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "flowOverflow__noneWrapInScroll",
+      "description": "A lazy \"none\" flow Collection with an explicit height of wrapContent, holding 12 cells under a ScrollView. kjui emits `.wrapContentHeight()` for the explicit height AND appends `.wrapContentHeight(Alignment.Top, unbounded = true)` for the overflow rule, so this renders through TWO stacked wrapContentHeight modifiers; the control omits the height key and therefore emits only the second. Identical pictures mean the duplicate is inert; different ones mean the outer modifier (default CenterVertically) is deciding the alignment the inner one asked for.",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "Collection_flowOverflow__noneWrapInScroll"
+        }
+      ]
+    }
+  ]
+}
