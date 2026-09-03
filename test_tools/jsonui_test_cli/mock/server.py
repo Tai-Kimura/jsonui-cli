@@ -12,6 +12,8 @@ from __future__ import annotations
 
 import errno
 import json
+import os
+from datetime import datetime, timezone
 import re
 import secrets
 import subprocess
@@ -424,11 +426,37 @@ class MockServer:
         self.store = store
         self.run = run_manager
         self.port = port
+        self.started_at = datetime.now(timezone.utc).isoformat()
         self.token = secrets.token_urlsafe(24)
         self.requests = RequestLog()
         self.contract = contract
         self.contract_log = contract_log
         self._httpd: ThreadingHTTPServer | None = None
+
+    def identity(self) -> dict:
+        """Who this server is — enough for a caller to tell it apart from
+        another project's mock on the same port.
+
+        A health check that only sees HTTP 200 learns that *a* mock answered,
+        not *whose*. Measured 2026-09-04: one lane's server failed to bind
+        (the port was taken), its health check passed on the control panel's
+        200, and five tests ran against another project's corpus. The failures
+        looked like the change under test.
+
+        `mockDir` is the answer to "which corpus", and `projectRoot` to "which
+        project"; `pid` is the answer to "my process", which the other two
+        cannot give when a second run of the SAME project takes the port.
+        Unauthenticated on purpose: a caller asking "are you mine?" does not
+        have this server's token when the answer is no. Carries no secret —
+        never the admin token.
+        """
+        return {
+            "pid": os.getpid(),
+            "projectRoot": str(Path(self.run._root).resolve()),
+            "mockDir": str(Path(self.store.mock_dir).resolve()),
+            "port": self.port,
+            "startedAt": self.started_at,
+        }
 
     def bind(self):
         """Bind the listening socket now so the real port is known (port 0 = ephemeral)."""
@@ -548,6 +576,10 @@ def _make_handler(server: "MockServer"):
             path = parsed.path
             if not _host_ok(self.headers.get("Host", ""), server.port):
                 self._send(403, {"error": "bad host"})
+                return
+            if path == ADMIN_PREFIX + "/identity":
+                # Before the token gate: see MockServer.identity.
+                self._send(200, server.identity())
                 return
             if path == ADMIN_PREFIX + "/panel":
                 self._send(200, _panel_html(server.token), content_type="text/html")

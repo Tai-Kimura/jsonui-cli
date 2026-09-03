@@ -434,6 +434,28 @@ Set `mock.includePaths` / `mock.excludePaths` to give the mocks a different
 scope from the DTOs (`"includePaths": ["*"]` opts out of narrowing entirely).
 With no declaration anywhere, the whole swagger is in scope, as before.
 
+### Which mock is answering
+
+`jsonui-test mock identity` asks the running server whose corpus it serves and
+exits non-zero if it is not this project's:
+
+```bash
+jsonui-test mock identity --port 8795   # 0 = mine, 1 = another project's, 2 = nothing listening
+```
+
+A health check that only sees HTTP 200 cannot do this. Measured 2026-09-04: a
+lane's server failed to bind because another project already held the port,
+the health check passed on the control panel's 200, and five tests ran against
+the other project's mocks — the failures read as regressions of the change
+under test, and nothing in the results said otherwise.
+
+Run it **after starting the server and again after the run**. The port can
+change hands in between, and the second call is the only thing that says so.
+`--any-project` prints the identity without failing; the endpoint itself
+(`GET /__jsonui__/identity`) needs no admin token, because a caller asking
+"are you mine?" does not hold the token of the server that answers when the
+answer is no.
+
 ### What the `--check` gates do not compare
 
 Each `--check` compares two things, and the chain stops short of the
