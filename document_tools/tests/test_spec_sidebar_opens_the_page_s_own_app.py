@@ -141,6 +141,18 @@ class TestPagesThatWereAlreadyRight:
         assert "href='../../admin/specs/s1.html'" in html
         assert "href='../../specs/a.html'" in html
 
+    def test_no_link_is_removed_from_a_multi_app_page(self):
+        # Collapsing is not deleting. A repair that dropped the other apps'
+        # sections would satisfy every arm about which list opens, and the
+        # sidebar would quietly stop being able to reach them.
+        #
+        # Counted with `href='([^']+)'` rather than a pattern anchored on
+        # `/specs/` — the app pages' hrefs start `../../`, so a pattern
+        # beginning at `/specs/` matches none of them and reports zero.
+        for current in ("admin/specs/s1.html", "user/specs/s2.html"):
+            after = len(re.findall(r"href='([^']+)'", sidebar(NO_TOP_LEVEL, current)))
+            assert after == 30  # 29 specs + the Back to Index link
+
 
 class TestTheAppIsFoundByContainmentNotByName:
     """The app name and the path prefix agree only because generator.py

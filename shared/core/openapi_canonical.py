@@ -129,6 +129,18 @@ class CanonicalParam:
     #: refused them, on a corpus measurement whose glob had silently matched
     #: nothing for half the faces.
     location: str = "body"
+    #: Set when the canon declares this field as a string `enum`. The
+    #: expansion still resolves it to `String` — the type the specs are
+    #: written in — but the DTO generated from the same schema holds a
+    #: generated enum, so a repository written against both has to convert
+    #: at the boundary. That conversion is where a `rawValue` lookup returns
+    #: nil and the value disappears, which is the failure this whole family
+    #: of work is about, so the gap is named rather than left to be found.
+    #:
+    #: Carries the name the DTO generator would derive
+    #: (`{ParentSchema}{PascalField}`, `openapi_loader.py`), so a project can
+    #: count its own occurrences and see what typing them would produce.
+    enum_type: str = ""
 
     def as_spec_param(self, convention: str | None = None) -> dict:
         return {"name": apply_case(self.name, convention), "type": self.type}
@@ -196,6 +208,43 @@ def _schema_type(schema: dict, schemas: dict, depth: int = 0) -> str:
     }.get(kind, "[String: Any]")
 
 
+_ENUM_NAME_SPLIT_RE = re.compile(r"[^A-Za-z0-9]+")
+
+
+def _pascal_field(field: str) -> str:
+    parts = [p for p in _ENUM_NAME_SPLIT_RE.sub("_", field).split("_") if p]
+    return "".join(p[:1].upper() + p[1:] for p in parts)
+
+
+def _derived_enum_name(parent: str, field: str, prop: dict) -> str:
+    """The enum type the DTO generator derives for an INLINE enum.
+
+    Mirrors `openapi_loader._field_type`, which derives
+    `x-jui-name or f"{parent_name}{_pascal(field_name)}"` for a `string` OR
+    `integer` field carrying `enum`, and recurses into `items` with
+    `field_name + "_item"` for arrays — so an array of enums becomes
+    `{Parent}{Field}Item` and the expansion widens it to `[String]`. That is
+    the same gap as the scalar case, so it is counted the same way.
+
+    The two derivations live in different layers — `shared/core` is below
+    `jui_tools` and cannot import it — so a test holds them together rather
+    than a shared call.
+
+    Only INLINE enums. A `$ref` to a named enum schema already resolves to
+    that name through `_schema_type`, so protocol and DTO agree and there is
+    nothing to report.
+    """
+    if not parent or not isinstance(prop, dict):
+        return ""
+    if prop.get("type") == "array":
+        items = prop.get("items")
+        return _derived_enum_name(parent, field + "_item", items) \
+            if isinstance(items, dict) else ""
+    if not (prop.get("enum") and prop.get("type") in ("string", "integer")):
+        return ""
+    return str(prop.get("x-jui-name") or "") or parent + _pascal_field(field)
+
+
 def _deref(schema: dict, schemas: dict) -> dict:
     ref = (schema or {}).get("$ref")
     if ref:
@@ -233,6 +282,9 @@ def _operation_params(op: dict, schemas: dict) -> list:
                                      location=str(p.get("in") or "query")))
 
     body = ((op.get("requestBody") or {}).get("content") or {})
+    body_ref = ((body.get("application/json") or {}).get("schema") or {}).get("$ref")
+    # The name is what the DTO is generated under, and `_deref` drops it.
+    body_name = body_ref.rsplit("/", 1)[-1] if body_ref else ""
     body_schema = _deref((body.get("application/json") or {}).get("schema") or {},
                          schemas)
     body_required = bool((op.get("requestBody") or {}).get("required"))
@@ -244,7 +296,8 @@ def _operation_params(op: dict, schemas: dict) -> list:
         required = body_required and name in required_props
         t = _schema_type(prop or {}, schemas)
         params.append(CanonicalParam(name, t if required else f"{t}?", required,
-                                     location="body"))
+                                     location="body",
+                                     enum_type=_derived_enum_name(body_name, name, prop)))
     return params
 
 
@@ -711,6 +764,10 @@ class Resolution:
     return_type: str = ""
     errors: list = field(default_factory=list)
     warnings: list = field(default_factory=list)
+    #: `(arg name, expanded type, enum the DTO holds)` for arguments the
+    #: canon declares as an inline enum. Deliberately NOT a warning — see
+    #: :func:`iter_widened_enums`.
+    widened_enums: list = field(default_factory=list)
 
 
 def resolve_params(declared, operation, convention=None) -> Resolution:
@@ -734,6 +791,20 @@ def resolve_params(declared, operation, convention=None) -> Resolution:
     entries = declared if isinstance(declared, list) else [declared]
     written = {e.get("name") for e in entries
                if isinstance(e, dict) and e.get("name")}
+    # Fields the canon declares as a string enum. The expansion resolves them
+    # to `String` — the vocabulary specs are written in — while the DTO
+    # generated from the same schema holds a generated enum, so a repository
+    # written against both converts at the boundary, and a failed `rawValue`
+    # lookup there is exactly how a value disappears silently. Naming the
+    # gap does not close it; it lets a project count its own occurrences,
+    # which is what deciding to close it needs. Reported per method through
+    # the caller's existing warning channel: `jui build` prints these, and
+    # `jsonui-doc`'s spec validation carries the same text as structured
+    # warnings, so a project that does not run a build in CI can still count.
+    # Keyed by the spelling that reaches the signature — `spec_params`
+    # applies the naming convention, so the raw wire name would miss.
+    widened = {apply_case(p.name, convention): p.enum_type
+               for p in operation.params if p.enum_type}
     out: list = []
     for entry in entries:
         if entry == CANONICAL_MARKER:
@@ -752,6 +823,14 @@ def resolve_params(declared, operation, convention=None) -> Resolution:
                 f"unexpected params entry {entry!r}: expected an object or "
                 f"'{CANONICAL_MARKER}'")
     res.params = out
+    res.widened_enums = [
+        (o["name"], o.get("type"), widened[o["name"]])
+        for o in out
+        if isinstance(o, dict) and o.get("name") in widened
+        # A hand-written entry replaced the canonical one — the author is
+        # saying something the canon does not, and the type is theirs.
+        and o.get("name") not in written
+    ]
     return res
 
 
@@ -877,6 +956,41 @@ def resolve_spec_marks(spec_data, index, convention=None):
             if not res.errors:
                 method["returnType"] = res.return_type
     return errors, warnings
+
+
+def iter_widened_enums(spec_data, index, convention=None):
+    """`(label, arg, expanded type, enum the DTO holds)` per marked argument.
+
+    A request-body field the canon declares as an inline `enum` expands to
+    `String` (or `[String]`) — the vocabulary specs are written in — while
+    the DTO generated from the same schema holds a derived enum. Code using
+    both converts at the boundary, and the conversion consumers write is
+    `Enum(rawValue:)`, which returns nil for anything unexpected. Dropping
+    the value there is the failure this work exists to remove, so the gap is
+    named where it can be counted.
+
+    **Not a warning, deliberately.** There is no way for a project to act on
+    it: typing the argument means abandoning `@canonical` and writing the
+    enum name by hand, which is the exact trade-off being reported. A
+    permanent finding on a build that gates at zero warnings does not make
+    anyone fix it — it raises the accepted baseline, and the next real
+    warning arrives as `N+1` on a number nobody reads. Reported to whoever
+    asks for the inventory instead, so the count is available without
+    spending the gate on it.
+
+    Read-only: unlike `resolve_spec_marks` this does not rewrite `spec_data`.
+    """
+    found = []
+    for label, method in list(iter_marked_methods(spec_data)):
+        if not is_canonical_params(method.get("params")):
+            continue
+        operation, _ = lookup(index or {}, method.get("endpoint"))
+        if operation is None:
+            continue
+        res = resolve_params(method.get("params"), operation, convention)
+        for name, expanded, enum_name in res.widened_enums:
+            found.append((label, name, expanded, enum_name))
+    return found
 
 
 def resolve_return_type(declared, operation) -> Resolution:
