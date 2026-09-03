@@ -177,6 +177,59 @@ RSpec.describe KjuiTools::Compose::Components::CollectionComponent do
     end
   end
 
+  describe 'the overflow is laid out — clipping is clipToBounds\' to decide (51-E)' do
+    # attribute_semantics.clipToBounds (2026-08-07): default false, absent
+    # means no clip, hit testing follows clipping. FlowRow does not lay out
+    # the rows past its max height, so a lazy:"none" flow in a fixed box drew
+    # three rows and nothing below on Android while iOS and web drew six past
+    # the box. The FlowRow is measured unbounded and aligned over the box —
+    # the last modifier on it, after size, background, scroll and padding,
+    # where KotlinJsonUI's dynamic renderer applies the same.
+    UNBOUNDED = '.wrapContentHeight(Alignment.Top, unbounded = true)'
+
+    it 'a lazy:"none" flow in a fixed box lays every row out past the box' do
+      code, imports = build(layout: 'flow', lazy: 'none', height: 100, extra: { 'background' => '#DDDDDD', 'padding' => 4 })
+      expect(code).to include(UNBOUNDED)
+      expect(imports).to include(:alignment)
+      last_modifier = code.index(UNBOUNDED)
+      # A numeric height is emitted as requiredHeight (build_size).
+      %w[.requiredHeight( .background( .padding(].each do |earlier|
+        expect(code.index(earlier)).not_to be_nil
+        expect(code.index(earlier)).to be < last_modifier
+      end
+      expect(code.index('FlowRow(')).to be < last_modifier
+      expect(last_modifier).to be < code.index('horizontalArrangement')
+    end
+
+    LAZY_VALUES.each do |lazy|
+      it "lazy=#{lazy || '(default)'}: the scrolling arms carry it too, after the scroll" do
+        code, = build(layout: 'flow', lazy: lazy, height: 100)
+        expect(code).to include(UNBOUNDED)
+        expect(code.index(SCROLL)).to be < code.index(UNBOUNDED) if code.include?(SCROLL)
+      end
+    end
+
+    it 'the matchParent box arm applies it on the inner FlowRow, after the guard' do
+      code, = build(layout: 'flow', lazy: nil, height: 'matchParent')
+      expect(code).to include(UNBOUNDED)
+      expect(code.index(GUARD)).to be < code.index(UNBOUNDED)
+      expect(code.index(UNBOUNDED)).to be < code.index('horizontalArrangement')
+    end
+
+    it 'never uses the deprecated FlowRow overflow parameter' do
+      code, = build(layout: 'flow', lazy: 'none', height: 100)
+      expect(code).not_to include('FlowRowOverflow')
+      expect(code).not_to include('overflow =')
+    end
+
+    %w[vertical horizontal].each do |layout|
+      it "#{layout} is untouched" do
+        code, = build(layout: layout, lazy: 'none', height: 100)
+        expect(code).not_to include(UNBOUNDED)
+      end
+    end
+  end
+
   describe 'what the modifier sits on' do
     # Order is the contract: the size is the viewport and the background
     # paints it; the content scrolls inside. A scroll placed before the size

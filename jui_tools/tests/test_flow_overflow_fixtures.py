@@ -37,13 +37,14 @@ def _target(files, entry):
 
 
 class FamilyShape(unittest.TestCase):
-    def test_four_fixtures_four_controls_and_nothing_else(self):
+    def test_five_fixtures_four_controls_and_nothing_else(self):
         _, entries = _fixtures()
         fixtures = sorted(i for i, e in entries.items() if not e.get("isControl"))
         controls = sorted(i for i, e in entries.items() if e.get("isControl"))
         self.assertEqual(
             fixtures,
             ["Collection/flowOverflow__fill", "Collection/flowOverflow__none",
+             "Collection/flowOverflow__none_item11",
              "Collection/flowOverflow__scroll", "Collection/flowOverflow__wrap"],
         )
         self.assertEqual(
@@ -53,7 +54,27 @@ class FamilyShape(unittest.TestCase):
              "__control/Collection__flow-overflow-scroll",
              "__control/Collection__flow-overflow-wrap"],
         )
-        self.assertTrue(all(e["class"] == "visual" for e in entries.values()))
+        classes = {i: e["class"] for i, e in entries.items()}
+        self.assertEqual(classes.pop("Collection/flowOverflow__none_item11"), "assertable")
+        self.assertTrue(all(c == "visual" for c in classes.values()), classes)
+
+    def test_the_reachability_arm_asks_for_the_last_cell_past_the_box(self):
+        # 51-E's hit-testing half: an unclipped overflow is drawn AND
+        # tappable. The arm is none's body; it waits for the last cell of the
+        # sixth row (past the 100pt box) and taps it.
+        files, entries = _fixtures()
+        reach = entries["Collection/flowOverflow__none_item11"]
+        none = entries["Collection/flowOverflow__none"]
+        mine, theirs = dict(files[reach["layout"]]), dict(files[none["layout"]])
+        self.assertEqual(mine, theirs, "the reach arm must be none's exact body")
+        self.assertIsNone(reach["control"])
+        steps = files[reach["test"]]["cases"][0]["steps"]
+        count = len(files[reach["layout"]]["data"][0]["defaultValue"])
+        self.assertEqual(
+            [(s["action"], s.get("id"), s.get("index")) for s in steps],
+            [("waitFor", "root", None), ("waitFor", f"target_item_{count - 1}", None),
+             ("tapItem", "target", count - 1)],
+        )
 
     def test_each_box_fixture_is_compared_against_the_other_shape(self):
         files, entries = _fixtures()

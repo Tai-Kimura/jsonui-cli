@@ -49,6 +49,15 @@ scrolled in one Android mode and not the other. Its control is the same
 tree with ``lazy: "none"``, as for ``scroll``: a platform that never scrolls
 a matchParent flow renders the fixture like its control, and the inert
 verdict names it.
+
+The fifth member, ``none_item11``, is ``none``'s body asked the
+hit-testing half of the clipToBounds ruling (attribute_semantics 51-E:
+default false, absent means no clip, and an unclipped overflow is drawn
+AND tappable) as an assertable arm: the last cell of the sixth row, past
+the 100pt box, must be addressable and tappable. Android's FlowRow did not
+lay out the rows past its max height, so that cell did not exist there
+while iOS and web reached it — a picture cannot show "not tappable", this
+arm can. No control: an assertable fixture states its own expectation.
 """
 from __future__ import annotations
 
@@ -336,4 +345,58 @@ def build_flow_overflow_fixtures(
         fill_case, "lazy", None, None,
         fill_layout_rel, fill_test_rel, fill_control_id,
     ))
+    # --- the reachability arm: none's body, the hit-testing half asked directly.
+    reach_case = "flowOverflow__none_item11"
+    reach_layout_rel = f"fixtures/Collection/{reach_case}.layout.json"
+    reach_test_rel = f"fixtures/Collection/{reach_case}.test.json"
+    last = _ITEM_COUNT - 1
+    reach_description = (
+        f"A lazy \"none\" flow Collection holding {_ITEM_COUNT} cells in a "
+        f"{_BOX_WIDTH}x{_BOX_HEIGHT} box lays every row out past the box, and the "
+        f"unclipped overflow is tappable (clipToBounds defaults to false): cell {last} "
+        "is addressable and can be tapped."
+    )
+    files.append((reach_layout_rel, _layout(source_label, "none")))
+    files.append((reach_test_rel, {
+        "type": "screen",
+        "source": {"layout": reach_layout_rel},
+        "metadata": {
+            "name": f"conformance {reach_case}",
+            "description": reach_description,
+            "generatedBy": TEST_GENERATED_BY,
+            "tags": ["conformance", "Collection"],
+        },
+        "platform": "all",
+        "cases": [{
+            "name": reach_case,
+            "description": reach_description,
+            "steps": [
+                {"action": "waitFor", "id": "root"},
+                {"action": "waitFor", "id": f"target_item_{last}"},
+                {"action": "tapItem", "id": "target", "index": last},
+            ],
+        }],
+    }))
+    entries.append({
+        "id": f"Collection/{reach_case}",
+        "component": "Collection",
+        "attribute": "lazy",
+        "case": reach_case,
+        "class": rules.CLASS_ASSERTABLE,
+        "host": "Collection",
+        "writtenKey": "lazy",
+        "aliasOf": None,
+        "value": "none",
+        "platforms": list(_PLATFORMS),
+        "mode": None,
+        "deprecated": None,
+        "layout": reach_layout_rel,
+        "test": reach_test_rel,
+        "state": None,
+        "promotedFrom": None,
+        "peerGroup": None,
+        # Assertable: the fixture states its own expectation.
+        "control": None,
+        "companions": list(rules.BASE_COMPANIONS["Collection"]),
+    })
     return files, entries

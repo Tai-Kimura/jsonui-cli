@@ -958,6 +958,22 @@ module KjuiTools
           code
         end
 
+        # `clipToBounds` defaults to false on every component (SSoT
+        # common.clipToBounds; attribute_semantics 51-E, 2026-08-07: absent means
+        # no clip, and hit testing follows clipping). FlowRow does not lay out
+        # the rows that exceed its max height, so a lazy:"none" flow in a
+        # fixed-height box drew the rows that fit and nothing else while iOS and
+        # web drew every row past the box. Measuring the FlowRow without regard
+        # for the incoming max height and aligning the result over that space
+        # is what "overflow visible" is in Compose (foundation-layout Size.kt:
+        # wrapContentHeight, unbounded); FlowRow's own `overflow` parameter says
+        # the same but is deprecated in foundation-layout 1.11 and draws the rows
+        # overlapping inside the box. Last on the FlowRow, after size, background,
+        # scroll and padding — the same place KotlinJsonUI's dynamic renderer
+        # applies it (renderFlowLayout). `clipToBounds: true` keeps its opt-in
+        # `.clipToBounds()` from build_background, which is now what decides.
+        FLOW_OVERFLOW_MODIFIER = '.wrapContentHeight(Alignment.Top, unbounded = true)'
+
         # See generate_flow_layout: `lazy` in effect AND a height that is finite
         # by declaration. A bound height (`@{...}`) is unknown here and stays
         # with the parent.
@@ -1003,6 +1019,9 @@ module KjuiTools
           required_imports&.add(:flow_row)
           required_imports&.add(:arrangement)
           required_imports&.add(:launched_effect)
+          # FLOW_OVERFLOW_MODIFIER names Alignment.Top; wrapContentHeight itself
+          # rides the foundation.layout.* import every generated file carries.
+          required_imports&.add(:alignment)
 
           # Spacing. Undeclared means 0, the platform default — the dynamic
           # renderer falls back to 0f, and the silent 8 here was the parity
@@ -1072,7 +1091,9 @@ module KjuiTools
             code += "\n" + indent("FlowRow(", depth)
             code += "\n" + indent("modifier = (if (constraints.hasBoundedHeight) Modifier.fillMaxSize().verticalScroll(rememberScrollState()) else Modifier.fillMaxWidth())", depth + 1)
             padding_modifiers.each { |mod| code += "\n" + indent(indent(mod, 1), depth + 1) }
+            code += "\n" + indent(indent(FLOW_OVERFLOW_MODIFIER, 1), depth + 1)
           else
+            modifiers << FLOW_OVERFLOW_MODIFIER
             code = indent("FlowRow(", depth)
             code += Helpers::ModifierBuilder.format(modifiers, depth)
           end
