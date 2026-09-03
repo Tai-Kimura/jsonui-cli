@@ -775,6 +775,32 @@ class TestIosEmission:
         assert "asDouble(act)" in body
         assert report.test_file.read_text(encoding="utf-8").count("NSNull()") >= 1
 
+    def test_as_double_reads_the_nsnumber_before_asking_if_it_is_a_bool(self, tmp_path):
+        # Consumer report (2026-09-03): `api.register.request: {item_id: 1}`
+        # failed on iOS only, "expected Optional(1), got 1", while 2 passed.
+        # JSONSerialization hands back NSNumber, and Foundation bridges
+        # NSNumber(0)/NSNumber(1) through `as? Bool`, so an `as? Bool` guard
+        # placed first swallows exactly the JSON 0 and 1. Measured standalone
+        # (swiftc): old order -> asDouble(JSON 1) = nil; NSNumber-first ->
+        # 1.0, with real Bools (JSON true / Swift true) still nil.
+        report, _root = self._generate(tmp_path)
+        runtime = report.runtime_file.read_text(encoding="utf-8")
+        body = runtime[runtime.index("private func asDouble("):]
+        body = body[:body.index("\n}\n")]
+        lines = [ln.strip() for ln in body.splitlines()[1:] if ln.strip()]
+        # The NSNumber read is the first decision, and the CF type id is
+        # what decides Bool-ness for it.
+        assert lines[0].startswith("if let n = value as? NSNumber")
+        assert "CFGetTypeID(n) == CFBooleanGetTypeID() ? nil : n.doubleValue" in body
+        # No `as? Bool` short-circuit anywhere in the function.
+        assert "as? Bool" not in body
+        # ... and the Swift-side Bool guard still exists, after the NSNumber read.
+        assert body.index("as? NSNumber") < body.index("value is Bool")
+        # One asDouble serves partialMismatches (request bodies) and
+        # assertFieldEquals (@response / data reads): both call sites
+        # reference the same private function.
+        assert runtime.count("asDouble(") >= 5  # def + 2x2 call sites
+
     def test_ios_requires_module(self, tmp_path):
         root = _project(tmp_path, BASIC)
         with pytest.raises(BranchTestGenerationError, match="--module"):
