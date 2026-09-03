@@ -16,9 +16,9 @@ module JsonUI
       ATTRS = [
         # Enable bounce effect
         { name: 'bounces', kind: :boolean }.freeze,
-        # Child component(s)
+        # Child component(s). A single component node (object) is accepted as a one-element array.
         { name: 'child', kind: :array }.freeze,
-        # Child components
+        # Child components. A single component node (object) is accepted as a one-element array.
         { name: 'children', kind: :array }.freeze,
         # Content inset adjustment
         { name: 'contentInsetAdjustmentBehavior', kind: :enum, values: ['never', 'always', 'automatic', 'scrollableAxes'].freeze }.freeze,
