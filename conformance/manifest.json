@@ -10,11 +10,11 @@
   "schemaVersion": 2,
   "generatedFrom": "ee026153ca42bb9b59f7f10287cdac9d935f51e4a987ac1d92b9db626227d165",
   "counts": {
-    "fixtures": 1071,
+    "fixtures": 1075,
     "assertable": 45,
-    "visual": 806,
+    "visual": 808,
     "interactive": 37,
-    "control": 106,
+    "control": 108,
     "declarationOnly": 77,
     "skipped": 157,
     "promoted": {
@@ -25967,6 +25967,114 @@
       "promotedFrom": null,
       "peerGroup": null,
       "control": null,
+      "companions": [
+        "fixtures/Collection/__cells/conformance_cell.layout.json"
+      ]
+    },
+    {
+      "id": "__control/Collection__flow-overflow-scroll",
+      "component": "__control",
+      "attribute": null,
+      "case": "Collection__flow-overflow-scroll",
+      "class": "visual",
+      "host": "Collection",
+      "writtenKey": null,
+      "aliasOf": null,
+      "value": null,
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/__control/Collection__flow-overflow-scroll.layout.json",
+      "test": "fixtures/__control/Collection__flow-overflow-scroll.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "control": null,
+      "isControl": true,
+      "companions": [
+        "fixtures/Collection/__cells/conformance_cell.layout.json"
+      ]
+    },
+    {
+      "id": "__control/Collection__flow-overflow-none",
+      "component": "__control",
+      "attribute": null,
+      "case": "Collection__flow-overflow-none",
+      "class": "visual",
+      "host": "Collection",
+      "writtenKey": null,
+      "aliasOf": null,
+      "value": null,
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/__control/Collection__flow-overflow-none.layout.json",
+      "test": "fixtures/__control/Collection__flow-overflow-none.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "control": null,
+      "isControl": true,
+      "companions": [
+        "fixtures/Collection/__cells/conformance_cell.layout.json"
+      ]
+    },
+    {
+      "id": "Collection/flowOverflow__scroll",
+      "component": "Collection",
+      "attribute": "lazy",
+      "case": "flowOverflow__scroll",
+      "class": "visual",
+      "host": "Collection",
+      "writtenKey": null,
+      "aliasOf": null,
+      "value": null,
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/Collection/flowOverflow__scroll.layout.json",
+      "test": "fixtures/Collection/flowOverflow__scroll.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": null,
+      "control": "__control/Collection__flow-overflow-none",
+      "companions": [
+        "fixtures/Collection/__cells/conformance_cell.layout.json"
+      ]
+    },
+    {
+      "id": "Collection/flowOverflow__none",
+      "component": "Collection",
+      "attribute": "lazy",
+      "case": "flowOverflow__none",
+      "class": "visual",
+      "host": "Collection",
+      "writtenKey": "lazy",
+      "aliasOf": null,
+      "value": "none",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/Collection/flowOverflow__none.layout.json",
+      "test": "fixtures/Collection/flowOverflow__none.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": null,
+      "control": "__control/Collection__flow-overflow-scroll",
       "companions": [
         "fixtures/Collection/__cells/conformance_cell.layout.json"
       ]

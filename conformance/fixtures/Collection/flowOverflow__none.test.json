@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/Collection/flowOverflow__none.layout.json"
+  },
+  "metadata": {
+    "name": "conformance flowOverflow__none",
+    "description": "A flow Collection with lazy \"none\" holding 12 cells in a 150x100 box only wraps: the cells spill past the box. A platform that scrolls regardless of lazy renders this identically to flowOverflow__scroll.",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "Collection"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "flowOverflow__none",
+      "description": "A flow Collection with lazy \"none\" holding 12 cells in a 150x100 box only wraps: the cells spill past the box. A platform that scrolls regardless of lazy renders this identically to flowOverflow__scroll.",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "Collection_flowOverflow__none"
+        }
+      ]
+    }
+  ]
+}
