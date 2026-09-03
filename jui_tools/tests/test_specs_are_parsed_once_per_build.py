@@ -6,16 +6,26 @@ per-spec line printed during extraction therefore appeared twice — including
 the `@canonical` enum NOTE and the canonical-mark WARNINGs.
 
 Only on some projects, though: the embed gate returns before it loads
-anything when no layout declares `navigationMode: "isolated"`. So one
-consumer reported 6 lines and another reported 2 for the same feature, and
-neither number was wrong. Measured on a temp project:
+anything when no layout declares `navigationMode: "isolated"`. Measured on a
+temp project, one spec with one finding:
 
     isolated Embed absent,  1 platform    1 NOTE
     isolated Embed absent,  3 platforms   1 NOTE
     isolated Embed PRESENT, 1 platform    2 NOTE
     isolated Embed PRESENT, 3 platforms   2 NOTE
 
-The platform count never mattered, which is what the first report supposed.
+The platform count never moves it, which is what the report supposed.
+
+Two things about how this was found, kept because they are easy to repeat.
+The report was of a doubling seen on one project alongside a single count on
+another, and both the offered explanation (per platform) and this mechanism
+predicted a doubling — so reproducing a doubling did not confirm either one.
+The report's number later turned out to be a measurement artefact and was
+withdrawn; six projects were then counted and none doubles, because none of
+them declares an isolated Embed. So this defect is real, reproduced above,
+and had no exposure at all when it was fixed. Retracting the wrong
+explanation would not have shown that, and neither would the right one.
+
 
 The arms below pin the contract rather than the plumbing: given a spec list,
 neither consumer reloads. A version that cached inside `_load_all_specs`
