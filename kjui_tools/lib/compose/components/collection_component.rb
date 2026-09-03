@@ -18,6 +18,23 @@ module KjuiTools
         # empty on first composition (the data arrives async) and an anchor
         # applied to an empty list does nothing. The remembered flag is what
         # stops a later append from yanking the user back.
+        # Every arm that emits a cell has to give it the address the test
+        # drivers use — `{collectionId}_item_{index}`, what `tapItem` and
+        # `waitFor` resolve. The rule lived inline in five arms and was simply
+        # absent from two others (FlowRow, and the non-lazy horizontal Row),
+        # so whether a cell could be addressed depended on the Collection's
+        # `layout` value. It should not: `layout` says how cells are arranged,
+        # not whether a test can reach them.
+        #
+        # One place, so the next arm inherits the rule instead of having to
+        # remember it. `index_expr` is the loop variable that arm happens to
+        # bind ($cellIndex / $index / $page); `extra` is any modifier chain
+        # that arm needs after the tag.
+        def self.cell_test_tag_modifier(collection_id, index_expr, depth, extra = '')
+          tag = collection_id ? ".testTag(\"#{collection_id}_item_\$#{index_expr}\")" : ''
+          indent("modifier = Modifier#{tag}#{extra}", depth)
+        end
+
         def self.default_scroll_anchor_code(json_data, state_var, depth, required_imports)
           anchor = json_data['defaultScrollAnchor']
           return '' unless %w[center bottom].include?(anchor.to_s)
@@ -558,12 +575,7 @@ module KjuiTools
             code += "\n" + indent("#{cell_class_name}View(", depth + 4)
             code += "\n" + indent("data = itemData,", depth + 5)
             code += "\n" + indent("viewModel = viewModel(),", depth + 5)
-            # Add testTag for test automation (tapItem action)
-            if json_data['id']
-              code += "\n" + indent("modifier = Modifier.testTag(\"#{json_data['id']}_item_\$index\")", depth + 5)
-            else
-              code += "\n" + indent("modifier = Modifier", depth + 5)
-            end
+            code += "\n" + cell_test_tag_modifier(json_data['id'], 'index', depth + 5)
 
             # Cell-specific modifiers
             if json_data['cellHeight']
@@ -583,12 +595,7 @@ module KjuiTools
             code += "\n" + indent("#{cell_class_name}View(", depth + 4)
             code += "\n" + indent("data = data,", depth + 5)
             code += "\n" + indent("viewModel = viewModel(),", depth + 5)
-            # Add testTag for test automation (tapItem action)
-            if json_data['id']
-              code += "\n" + indent("modifier = Modifier.testTag(\"#{json_data['id']}_item_\$index\")", depth + 5)
-            else
-              code += "\n" + indent("modifier = Modifier", depth + 5)
-            end
+            code += "\n" + cell_test_tag_modifier(json_data['id'], 'index', depth + 5)
 
             # Cell-specific modifiers
             if json_data['cellHeight']
@@ -780,11 +787,7 @@ module KjuiTools
                 code += "\n" + indent("viewModel = cellViewModel,", depth + 6)
                 # Add testTag for test automation (tapItem action)
                 collection_id = json_data['id']
-                if collection_id
-                  code += "\n" + indent("modifier = Modifier.testTag(\"#{collection_id}_item_\$cellIndex\")", depth + 6)
-                else
-                  code += "\n" + indent("modifier = Modifier", depth + 6)
-                end
+                code += "\n" + cell_test_tag_modifier(collection_id, 'cellIndex', depth + 6)
                 code += "\n" + indent(")", depth + 5)
                 if cell_size_box_open(json_data, nil)
                   code += "\n" + indent("}", depth + 5)
@@ -944,11 +947,7 @@ module KjuiTools
               code += "\n" + indent("#{cell_class}View(", depth + 3)
               code += "\n" + indent("viewModel = cellViewModel,", depth + 4)
               collection_id = json_data['id']
-              if collection_id
-                code += "\n" + indent("modifier = Modifier.testTag(\"#{collection_id}_item_\$page\").fillMaxSize()", depth + 4)
-              else
-                code += "\n" + indent("modifier = Modifier.fillMaxSize()", depth + 4)
-              end
+              code += "\n" + cell_test_tag_modifier(collection_id, 'page', depth + 4, '.fillMaxSize()')
               code += "\n" + indent(")", depth + 3)
               code += "\n" + indent("}", depth + 2)
               code += "\n" + indent("}", depth + 1)
@@ -1055,7 +1054,8 @@ module KjuiTools
               code += "\n" + indent("cellViewModel.updateData(item)", inner_depth + 1)
               code += "\n" + indent("}", inner_depth)
               code += "\n" + indent("#{cell_class}View(", inner_depth)
-              code += "\n" + indent("viewModel = cellViewModel", inner_depth + 1)
+              code += "\n" + indent("viewModel = cellViewModel,", inner_depth + 1)
+              code += "\n" + cell_test_tag_modifier(json_data['id'], 'cellIndex', inner_depth + 1)
               code += "\n" + indent(")", inner_depth)
 
               if cell_id_property
@@ -1170,11 +1170,7 @@ module KjuiTools
               # honors the declared width; a full-width cell declares
               # matchParent itself). Stretching here was the parity deviation
               # measured across every android Collection fixture.
-              if collection_id
-                code += "\n" + indent("modifier = Modifier.testTag(\"#{collection_id}_item_\$cellIndex\")", depth + 5)
-              else
-                code += "\n" + indent("modifier = Modifier", depth + 5)
-              end
+              code += "\n" + cell_test_tag_modifier(collection_id, 'cellIndex', depth + 5)
               code += "\n" + indent(")", depth + 4)
               code += "\n" + indent("}", depth + 3)
               code += "\n" + indent("}", depth + 2)
@@ -1252,7 +1248,8 @@ module KjuiTools
               end
               code += "\n" + indent("LaunchedEffect(currentCellData) { cellViewModel.updateData(currentCellData) }", depth + 4)
               code += "\n" + indent("#{cell_class}View(", depth + 4)
-              code += "\n" + indent("viewModel = cellViewModel", depth + 5)
+              code += "\n" + indent("viewModel = cellViewModel,", depth + 5)
+              code += "\n" + cell_test_tag_modifier(json_data['id'], 'cellIndex', depth + 5)
               code += "\n" + indent(")", depth + 4)
               code += "\n" + indent("}", depth + 3)
               code += "\n" + indent("}", depth + 2)
@@ -1638,11 +1635,7 @@ module KjuiTools
             out += "\n" + indent("viewModel = cellViewModel,", depth + 4)
             collection_id = json_data['id']
             # No fillMaxWidth on cells — see the grid path note above.
-            if collection_id
-              out += "\n" + indent("modifier = Modifier.testTag(\"#{collection_id}_item_\$cellIndex\")", depth + 4)
-            else
-              out += "\n" + indent("modifier = Modifier", depth + 4)
-            end
+            out += "\n" + cell_test_tag_modifier(collection_id, 'cellIndex', depth + 4)
             out += "\n" + indent(")", depth + 3)
             if cell_size_box_open(json_data, nil)
               out += "\n" + indent("}", depth + 3)
@@ -1742,11 +1735,7 @@ module KjuiTools
             out += "\n" + indent("viewModel = cellViewModel,", depth + 4)
             collection_id = json_data['id']
             # No fillMaxWidth on cells — see the grid path note above.
-            if collection_id
-              out += "\n" + indent("modifier = Modifier.testTag(\"#{collection_id}_item_\$cellIndex\")", depth + 4)
-            else
-              out += "\n" + indent("modifier = Modifier", depth + 4)
-            end
+            out += "\n" + cell_test_tag_modifier(collection_id, 'cellIndex', depth + 4)
             out += "\n" + indent(")", depth + 3)
             if cell_size_box_open(json_data, nil)
               out += "\n" + indent("}", depth + 3)
