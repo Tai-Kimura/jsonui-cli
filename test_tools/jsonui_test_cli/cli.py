@@ -2079,6 +2079,54 @@ def _make_artifacts_post_run_hook(explicit_config):
     return hook
 
 
+def cmd_mock_identity(args):
+    """Ask a running mock server whose corpus it serves, and (by default)
+    refuse if it is not this project's.
+
+    The check a health check cannot do: HTTP 200 on the panel says a mock is
+    listening, not whose. Measured 2026-09-04 — a server that failed to bind
+    left another project's mock on the port, the 200 passed, and five tests
+    ran against the wrong corpus and were read as regressions.
+
+    Run it after starting the server AND after the run: the port can change
+    hands in between, and nothing in the results says so afterwards.
+    """
+    import urllib.error
+    import urllib.request
+
+    config, _cfg_path = _load_mock_config(getattr(args, "config", None))
+    port = args.port if args.port is not None else config.get("server", {}).get("port", 8790)
+    url = f"http://127.0.0.1:{port}/__jsonui__/identity"
+    try:
+        req = urllib.request.Request(url, headers={"Host": f"127.0.0.1:{port}"})
+        with urllib.request.urlopen(req, timeout=5) as resp:
+            identity = json.loads(resp.read().decode())
+    except (urllib.error.URLError, OSError) as e:
+        # Nothing listening is a distinct outcome from the wrong mock
+        # listening, and the caller must be able to tell them apart.
+        print(f"mock identity: nothing answered on port {port} ({e})", file=sys.stderr)
+        return 2
+
+    # No config file in the tree means the project root is where the caller
+    # is standing — the same place `mock serve` would take it from.
+    expected = str(Path(getattr(args, "expect_root", None)
+                        or _project_root(getattr(args, "config", None))
+                        or Path.cwd()).resolve())
+    actual = identity.get("projectRoot", "")
+    print(json.dumps(identity, indent=2))
+    if getattr(args, "any_project", False):
+        return 0
+    if actual != expected:
+        print(
+            f"mock identity: port {port} is serving '{actual}', not '{expected}' — "
+            "another project's mock holds this port. Its corpus would answer this "
+            "run's requests and the failures would look like your change.",
+            file=sys.stderr,
+        )
+        return 1
+    return 0
+
+
 def cmd_mock_serve(args):
     """Start the local mock server + control panel."""
     from .mock.contract import ContractIndex, ContractLog
@@ -2829,6 +2877,15 @@ def main():
     mock_serve_parser.add_argument("--artifacts", action="store_true",
                                    help="After an ios/android run target finishes, pull its artifacts automatically")
 
+    mock_identity_parser = mock_subparsers.add_parser(
+        "identity",
+        help="Ask the running mock server whose corpus it serves (exit 1 on another project, 2 if nothing answers)")
+    mock_identity_parser.add_argument("--port", type=int, help="Port (default: mock.server.port or 8790)")
+    mock_identity_parser.add_argument("--config", help="Config file (default: jui.config.json)")
+    mock_identity_parser.add_argument("--expect-root", help="Project root to require (default: this project's)")
+    mock_identity_parser.add_argument("--any-project", action="store_true",
+                                      help="Only report the identity; do not fail on a mismatch")
+
     # Artifacts command (nested: artifacts pull | artifacts status)
     artifacts_parser = subparsers.add_parser(
         "artifacts",
@@ -2908,6 +2965,8 @@ def main():
             return cmd_mock_generate(args)
         elif getattr(args, "mock_action", None) == "serve":
             return cmd_mock_serve(args)
+        elif getattr(args, "mock_action", None) == "identity":
+            return cmd_mock_identity(args)
         mock_parser.print_help()
         return 0
     elif args.command in ["artifacts", "a"]:
