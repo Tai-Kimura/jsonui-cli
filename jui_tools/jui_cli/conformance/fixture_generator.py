@@ -903,6 +903,26 @@ def generate_conformance(definitions_path: Path, out_dir: Path) -> GenerationSum
     fixture_entries.extend(address_entries)
     summary.fixture_count += len(address_entries)
     summary.assertable_count += len(address_entries)
+
+    # Flow Collection overflow fixtures (flow track): the rule that a flow
+    # Collection scrolls when `lazy` is in effect and only wraps under
+    # lazy:"none" is visible only when the cells overflow the box, and the
+    # sweep's layout__flow never overflows — see flow_overflow_fixtures
+    # module docstring.
+    from .flow_overflow_fixtures import build_flow_overflow_fixtures
+
+    overflow_files, overflow_entries = build_flow_overflow_fixtures(source_label)
+    for rel_path, payload in overflow_files:
+        target = out_dir / rel_path
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(_dump_json(payload), encoding="utf-8")
+        summary.files_written += 1
+    fixture_entries.extend(overflow_entries)
+    summary.fixture_count += len(overflow_entries)
+    summary.visual_count += sum(
+        1 for e in overflow_entries if e["class"] == "visual" and not e.get("isControl")
+    )
+    summary.control_count += sum(1 for e in overflow_entries if e.get("isControl"))
     summary.fixture_count += len(bounds_entries)
     summary.visual_count += sum(
         1 for e in bounds_entries if e["class"] == "visual" and not e.get("isControl")
