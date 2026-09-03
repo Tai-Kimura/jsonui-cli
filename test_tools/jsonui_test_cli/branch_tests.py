@@ -1874,7 +1874,7 @@ fun seedState(h: BranchHarness, state: Map<String, Any?>) {
     if ((want is Map<*, *> || want is List<*>) && got != null) {
       error(
         "seedableState '" + name + "': seeded " + want + " but the view " +
-        "model's " + (got?.javaClass?.simpleName ?: "null") + " differs at " +
+        "model's " + got.javaClass.simpleName + " differs at " +
         diff.joinToString("; ") + ". If setState wrote it, the harness " +
         "built a different object; if not, teach the harness to write it."
       )

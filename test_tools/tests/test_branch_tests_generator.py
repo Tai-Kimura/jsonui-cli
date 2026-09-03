@@ -1042,6 +1042,11 @@ class TestSeedableState:
         assert "differs at" in kbody and "did not take" in kbody
         assert "private fun memberValue(target: Any, name: String)" in android
         assert "primaryConstructor" in android and "private fun construct(" in android
+        # Consumer gate is kotlinc warnings == 0: `got` is smart-cast non-null
+        # inside the object branch, so a safe call there is a warning
+        # ("Unnecessary safe call on a non-null receiver"), measured as the
+        # one -Werror failure of the first emit.
+        assert "got?.javaClass" not in kbody and "got.javaClass.simpleName" in kbody
         assert "if (exp is List<*>)" in android  # request bodies too
 
         # ios: a struct / class is folded through Mirror into a dictionary
