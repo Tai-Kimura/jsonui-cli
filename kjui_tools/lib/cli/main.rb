@@ -22,7 +22,13 @@ module KjuiTools
         when 'build', 'b'
           Commands::Build.new.run(args)
         when 'watch', 'w'
-          puts "Watch command not yet implemented"
+          # Never implemented here, and it is not going to be: watching is
+          # `jui hotload listen`, which serves every platform from one place.
+          # It stayed in the command list printing a line and exiting 0, so a
+          # script that called it got success for a no-op and a reader of the
+          # list got a promise the tool could not keep.
+          warn "kjui watch: not implemented, and not planned — use `jui hotload listen` instead."
+          exit 1
         when 'version', 'v', '--version', '-v'
           puts "KotlinJsonUI Tools version #{VERSION}"
         when 'help', '--help', '-h', nil
@@ -49,7 +55,6 @@ module KjuiTools
             generate, g         Generate views and components
             setup              Set up project dependencies
             build, b           Build the project
-            watch, w           Watch for file changes
             version, v         Show version information
             help               Show this help message
           
