@@ -17,7 +17,9 @@ require 'compose/helpers/modifier_builder'
 # LazyColumn cell or a scrolling sheet, which the corpus did not hold when the
 # first arm shipped and a consumer's tree did. So the modifier is emitted only
 # when the node's height is finite by its own declaration: a number, or a
-# maxHeight. wrapContent and matchParent stay with the parent.
+# maxHeight. wrapContent stays with the parent; matchParent and a bound
+# height defer to the device (BoxWithConstraints), where the parent is
+# visible — the arm the dynamic renderer takes for them.
 #
 # `lazy` values come from attribute_definitions.json rather than a list here,
 # so a value added to the SSoT is covered without anyone extending this file.
@@ -67,8 +69,7 @@ RSpec.describe KjuiTools::Compose::Components::CollectionComponent do
       ['100', {}, true, 'a numeric string is still a number'],
       ['wrapContent', { 'maxHeight' => 200 }, true, 'maxHeight bounds a wrapping height'],
       ['wrapContent', {}, false, 'wrapContent has no bounds: measured with infinite max height under a scrolling parent'],
-      [nil, {}, false, 'an undeclared height is not a bound'],
-      ['@{h}', {}, false, 'a bound height is unknown here'],
+      [nil, {}, false, 'an undeclared height is wrapContent by default: not a bound, and the parent scrolls'],
     ].each do |height, extra, scrolls, why|
       it "height=#{height.inspect} #{extra.keys.join(',')}: #{why}" do
         code, imports = build(layout: 'flow', lazy: nil, height: height, extra: extra)
@@ -142,6 +143,25 @@ RSpec.describe KjuiTools::Compose::Components::CollectionComponent do
           expect(code).to include(GUARD)
         end
       end
+    end
+
+    it 'a bound height takes the box arm: unknown here, a number on the device' do
+      # build_size emits `requiredHeight(data.h?.dp ?: 0.dp)` for it, so the
+      # box is bounded at runtime whatever the parent does — the same
+      # resolution the dynamic renderer gives a bound height.
+      code, imports = build(layout: 'flow', lazy: nil, height: '@{h}')
+      expect(code).to include(BOX)
+      expect(code).to include(GUARD)
+      expect(code).to include('.requiredHeight((data.h?.dp ?: 0.dp))')
+      expect(imports).to include(:box_with_constraints)
+      expect(code.index('.requiredHeight(')).to be < code.index('FlowRow(')
+    end
+
+    it 'an undeclared height does not take the box arm' do
+      code, imports = build(layout: 'flow', lazy: nil, height: nil)
+      expect(code).not_to include(BOX)
+      expect(code).not_to include(SCROLL)
+      expect(imports).not_to include(:box_with_constraints)
     end
 
     it 'a self-bounded matchParent (maxHeight) keeps the static modifier' do

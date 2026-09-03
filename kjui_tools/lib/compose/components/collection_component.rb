@@ -974,14 +974,20 @@ module KjuiTools
         # height — so under a finite parent the same JSON scrolled there and not
         # here (the residue the parity ticket recorded). Emitting the same
         # BoxWithConstraints closes it: the decision moves to the device, where
-        # the parent is visible. wrapContent stays out (nothing to scroll
-        # inside, and the crash shape); a bound `@{...}` height stays out (the
-        # value is unknown here); numbers keep the static modifier.
+        # the parent is visible. A bound `@{...}` height takes the same arm:
+        # its value is unknown here but is a number at runtime (build_size
+        # emits `requiredHeight(data.h?.dp ?: 0.dp)`), so the box IS bounded
+        # on the device and the FlowRow scrolls inside it — the dynamic
+        # renderer resolves a bound height the same way. wrapContent stays
+        # out (nothing to scroll inside, and the crash shape); an undeclared
+        # height is wrapContent by default and stays out with it; numbers
+        # keep the static modifier.
         def self.flow_scrolls_if_parent_bounded?(json_data)
           return false if json_data['lazy'] == 'none'
           return false if flow_scrolls_in_own_bounds?(json_data)
 
-          json_data['height'] == 'matchParent'
+          height = json_data['height']
+          height == 'matchParent' || Helpers::ModifierBuilder.is_binding?(height)
         end
 
         def self.finite_dimension?(value)
