@@ -160,6 +160,46 @@ def _finite_parent_layout(source_label: str, lazy: str | None) -> dict:
     }
 
 
+def _none_wrap_layout(source_label: str, parent: str, declare_height: bool) -> dict:
+    """A `lazy: "none"` flow whose own height wraps, under a parent that either
+    bounds it or does not.
+
+    The pair (declare_height True/False) is the experiment. kjui's `build_size`
+    emits `.wrapContentHeight()` for an EXPLICIT `height: "wrapContent"` and
+    nothing at all when the key is absent, while the flow arm appends
+    `.wrapContentHeight(Alignment.Top, unbounded = true)` either way. So the two
+    layouts differ in the emitted Kotlin by exactly one modifier — the
+    duplicate — and by nothing else. Whatever the pictures do with that is the
+    answer the corpus was missing.
+    """
+    collection = _collection("none", "wrapContent")
+    if not declare_height:
+        del collection["height"]
+    if parent == "box":
+        # A finite ancestor: the case where a clip can happen at all.
+        collection.pop("background")
+        return {
+            "_generated": _marker(source_label),
+            "type": "View",
+            "id": "root",
+            "width": _BOX_WIDTH,
+            "height": _BOX_HEIGHT,
+            "background": "#DDDDDD",
+            "child": [collection],
+            "data": _items(),
+        }
+    # No finite ancestor: the consumer shape (a chip flow under a ScrollView).
+    return {
+        "_generated": _marker(source_label),
+        "type": "ScrollView",
+        "id": "root",
+        "width": "matchParent",
+        "height": "matchParent",
+        "child": [collection],
+        "data": _items(),
+    }
+
+
 def _test(name: str, description: str, layout_rel: str) -> dict:
     return {
         "type": "screen",
@@ -399,4 +439,39 @@ def build_flow_overflow_fixtures(
         "control": None,
         "companions": list(rules.BASE_COMPANIONS["Collection"]),
     })
+    # --- the duplicated overflow modifier: declared wrapContent vs omitted.
+    for parent, suffix in (("box", "InBox"), ("scroll", "InScroll")):
+        stem = f"Collection__flow-overflow-none-wrap{suffix}"
+        control_id = f"__control/{stem}"
+        control_layout_rel = f"fixtures/__control/{stem}.layout.json"
+        control_test_rel = f"fixtures/__control/{stem}.test.json"
+        files.append((control_layout_rel, _none_wrap_layout(source_label, parent, declare_height=False)))
+        files.append((control_test_rel, _test(
+            stem,
+            "Control for the duplicated-overflow-modifier pair: the same lazy "
+            f"\"none\" flow under {'a 150x100 box' if parent == 'box' else 'a ScrollView'} "
+            "with its height key ABSENT, which emits no wrapContentHeight of its own.",
+            control_layout_rel,
+        )))
+        entries.append(_control_entry(control_id, stem, control_layout_rel, control_test_rel))
+
+        case = f"flowOverflow__noneWrap{suffix}"
+        layout_rel = f"fixtures/Collection/{case}.layout.json"
+        test_rel = f"fixtures/Collection/{case}.test.json"
+        description = (
+            f"A lazy \"none\" flow Collection with an explicit height of wrapContent, holding "
+            f"{_ITEM_COUNT} cells under {'a finite 150x100 parent' if parent == 'box' else 'a ScrollView'}. "
+            "kjui emits `.wrapContentHeight()` for the explicit height AND appends "
+            "`.wrapContentHeight(Alignment.Top, unbounded = true)` for the overflow rule, so this "
+            "renders through TWO stacked wrapContentHeight modifiers; the control omits the height "
+            "key and therefore emits only the second. Identical pictures mean the duplicate is "
+            "inert; different ones mean the outer modifier (default CenterVertically) is deciding "
+            "the alignment the inner one asked for."
+        )
+        files.append((layout_rel, _none_wrap_layout(source_label, parent, declare_height=True)))
+        files.append((test_rel, _test(case, description, layout_rel)))
+        entries.append(_fixture_entry(
+            case, "height", "height", "wrapContent", layout_rel, test_rel, control_id,
+        ))
+
     return files, entries

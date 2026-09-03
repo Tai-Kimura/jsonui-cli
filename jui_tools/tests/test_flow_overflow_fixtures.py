@@ -37,13 +37,15 @@ def _target(files, entry):
 
 
 class FamilyShape(unittest.TestCase):
-    def test_five_fixtures_four_controls_and_nothing_else(self):
+    def test_seven_fixtures_six_controls_and_nothing_else(self):
         _, entries = _fixtures()
         fixtures = sorted(i for i, e in entries.items() if not e.get("isControl"))
         controls = sorted(i for i, e in entries.items() if e.get("isControl"))
         self.assertEqual(
             fixtures,
             ["Collection/flowOverflow__fill", "Collection/flowOverflow__none",
+             "Collection/flowOverflow__noneWrapInBox",
+             "Collection/flowOverflow__noneWrapInScroll",
              "Collection/flowOverflow__none_item11",
              "Collection/flowOverflow__scroll", "Collection/flowOverflow__wrap"],
         )
@@ -51,6 +53,8 @@ class FamilyShape(unittest.TestCase):
             controls,
             ["__control/Collection__flow-overflow-fill",
              "__control/Collection__flow-overflow-none",
+             "__control/Collection__flow-overflow-none-wrapInBox",
+             "__control/Collection__flow-overflow-none-wrapInScroll",
              "__control/Collection__flow-overflow-scroll",
              "__control/Collection__flow-overflow-wrap"],
         )
@@ -172,6 +176,74 @@ class FillShape(unittest.TestCase):
         # as for `scroll`: the undeclared shape writes nothing
         self.assertIsNone(self.fill["writtenKey"])
         self.assertEqual(self.fill["attribute"], "lazy")
+
+
+class DuplicateOverflowModifierPairs(unittest.TestCase):
+    """The shape the corpus had no arm for.
+
+    kjui emits `.wrapContentHeight()` for an EXPLICIT `height: "wrapContent"`
+    and nothing when the key is absent, while the flow arm appends
+    `.wrapContentHeight(Alignment.Top, unbounded = true)` in both cases — so a
+    declared wrapContent flow renders through two stacked wrapContentHeight
+    modifiers and an undeclared one through a single modifier. Measured on the
+    emit: 2 vs 1, with every other modifier identical. The dynamic renderer has
+    the same asymmetry (ModifierBuilder.applySingleDimension returns the
+    modifier untouched when the key is absent), so both faces stack the same
+    pair.
+
+    Each fixture's control is its own undeclared twin, which makes the
+    control-diff verdict the measurement: inert means the duplicate changes
+    nothing, active means the outer modifier (default CenterVertically) is
+    overriding the alignment the inner one asked for.
+    """
+
+    def setUp(self):
+        self.files, self.entries = _fixtures()
+
+    def test_both_parents_are_covered(self):
+        ids = sorted(i for i in self.entries if "noneWrap" in i)
+        self.assertEqual(
+            ids,
+            ["Collection/flowOverflow__noneWrapInBox",
+             "Collection/flowOverflow__noneWrapInScroll"],
+        )
+
+    def test_each_fixture_is_paired_with_its_undeclared_twin(self):
+        for suffix in ("InBox", "InScroll"):
+            fixture = self.entries[f"Collection/flowOverflow__noneWrap{suffix}"]
+            control = self.entries[fixture["control"]]
+            self.assertTrue(control.get("isControl"), suffix)
+            mine = dict(_target(self.files, fixture))
+            theirs = dict(_target(self.files, control))
+            # The declared height is the whole difference — that is what makes
+            # the pair a measurement of the duplicate and of nothing else.
+            self.assertEqual(mine.pop("height"), "wrapContent", suffix)
+            self.assertNotIn("height", theirs, suffix)
+            self.assertEqual(mine, theirs, suffix)
+            self.assertEqual(fixture["writtenKey"], "height")
+            root_mine = {k: v for k, v in self.files[fixture["layout"]].items() if k != "child"}
+            root_theirs = {k: v for k, v in self.files[control["layout"]].items() if k != "child"}
+            self.assertEqual(root_mine, root_theirs, suffix)
+
+    def test_the_two_parents_are_the_bounded_and_unbounded_cases(self):
+        boxed = self.files[self.entries["Collection/flowOverflow__noneWrapInBox"]["layout"]]
+        free = self.files[self.entries["Collection/flowOverflow__noneWrapInScroll"]["layout"]]
+        # bounded: a clip can happen at all
+        self.assertEqual(boxed["type"], "View")
+        self.assertIsInstance(boxed["height"], int)
+        # unbounded: the consumer shape, where nothing was being clipped anyway
+        self.assertEqual(free["type"], "ScrollView")
+        self.assertEqual(free["height"], "matchParent")
+
+    def test_every_arm_is_a_lazy_none_flow_that_overflows(self):
+        for suffix in ("InBox", "InScroll"):
+            fixture = self.entries[f"Collection/flowOverflow__noneWrap{suffix}"]
+            for entry in (fixture, self.entries[fixture["control"]]):
+                target = _target(self.files, entry)
+                self.assertEqual(target["layout"], "flow", entry["id"])
+                self.assertEqual(target["lazy"], "none", entry["id"])
+                count = len(self.files[entry["layout"]]["data"][0]["defaultValue"])
+                self.assertGreaterEqual(count, 12, entry["id"])
 
 
 class OverflowArithmetic(unittest.TestCase):

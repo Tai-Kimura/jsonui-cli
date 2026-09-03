@@ -10,11 +10,11 @@
   "schemaVersion": 2,
   "generatedFrom": "ee026153ca42bb9b59f7f10287cdac9d935f51e4a987ac1d92b9db626227d165",
   "counts": {
-    "fixtures": 1080,
+    "fixtures": 1084,
     "assertable": 46,
-    "visual": 810,
+    "visual": 812,
     "interactive": 37,
-    "control": 110,
+    "control": 112,
     "declarationOnly": 77,
     "skipped": 157,
     "promoted": {
@@ -26210,6 +26210,114 @@
       "promotedFrom": null,
       "peerGroup": null,
       "control": null,
+      "companions": [
+        "fixtures/Collection/__cells/conformance_cell.layout.json"
+      ]
+    },
+    {
+      "id": "__control/Collection__flow-overflow-none-wrapInBox",
+      "component": "__control",
+      "attribute": null,
+      "case": "Collection__flow-overflow-none-wrapInBox",
+      "class": "visual",
+      "host": "Collection",
+      "writtenKey": null,
+      "aliasOf": null,
+      "value": null,
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/__control/Collection__flow-overflow-none-wrapInBox.layout.json",
+      "test": "fixtures/__control/Collection__flow-overflow-none-wrapInBox.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "control": null,
+      "isControl": true,
+      "companions": [
+        "fixtures/Collection/__cells/conformance_cell.layout.json"
+      ]
+    },
+    {
+      "id": "Collection/flowOverflow__noneWrapInBox",
+      "component": "Collection",
+      "attribute": "height",
+      "case": "flowOverflow__noneWrapInBox",
+      "class": "visual",
+      "host": "Collection",
+      "writtenKey": "height",
+      "aliasOf": null,
+      "value": "wrapContent",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/Collection/flowOverflow__noneWrapInBox.layout.json",
+      "test": "fixtures/Collection/flowOverflow__noneWrapInBox.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": null,
+      "control": "__control/Collection__flow-overflow-none-wrapInBox",
+      "companions": [
+        "fixtures/Collection/__cells/conformance_cell.layout.json"
+      ]
+    },
+    {
+      "id": "__control/Collection__flow-overflow-none-wrapInScroll",
+      "component": "__control",
+      "attribute": null,
+      "case": "Collection__flow-overflow-none-wrapInScroll",
+      "class": "visual",
+      "host": "Collection",
+      "writtenKey": null,
+      "aliasOf": null,
+      "value": null,
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/__control/Collection__flow-overflow-none-wrapInScroll.layout.json",
+      "test": "fixtures/__control/Collection__flow-overflow-none-wrapInScroll.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "control": null,
+      "isControl": true,
+      "companions": [
+        "fixtures/Collection/__cells/conformance_cell.layout.json"
+      ]
+    },
+    {
+      "id": "Collection/flowOverflow__noneWrapInScroll",
+      "component": "Collection",
+      "attribute": "height",
+      "case": "flowOverflow__noneWrapInScroll",
+      "class": "visual",
+      "host": "Collection",
+      "writtenKey": "height",
+      "aliasOf": null,
+      "value": "wrapContent",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/Collection/flowOverflow__noneWrapInScroll.layout.json",
+      "test": "fixtures/Collection/flowOverflow__noneWrapInScroll.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": null,
+      "control": "__control/Collection__flow-overflow-none-wrapInScroll",
       "companions": [
         "fixtures/Collection/__cells/conformance_cell.layout.json"
       ]
