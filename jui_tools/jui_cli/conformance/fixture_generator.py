@@ -922,6 +922,7 @@ def generate_conformance(definitions_path: Path, out_dir: Path) -> GenerationSum
     summary.visual_count += sum(
         1 for e in overflow_entries if e["class"] == "visual" and not e.get("isControl")
     )
+    summary.assertable_count += sum(1 for e in overflow_entries if e["class"] == "assertable")
     summary.control_count += sum(1 for e in overflow_entries if e.get("isControl"))
     summary.fixture_count += len(bounds_entries)
     summary.visual_count += sum(

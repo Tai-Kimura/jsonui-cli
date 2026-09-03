@@ -10,8 +10,8 @@
   "schemaVersion": 2,
   "generatedFrom": "ee026153ca42bb9b59f7f10287cdac9d935f51e4a987ac1d92b9db626227d165",
   "counts": {
-    "fixtures": 1079,
-    "assertable": 45,
+    "fixtures": 1080,
+    "assertable": 46,
     "visual": 810,
     "interactive": 37,
     "control": 110,
@@ -26183,6 +26183,33 @@
       "promotedFrom": null,
       "peerGroup": null,
       "control": "__control/Collection__flow-overflow-fill",
+      "companions": [
+        "fixtures/Collection/__cells/conformance_cell.layout.json"
+      ]
+    },
+    {
+      "id": "Collection/flowOverflow__none_item11",
+      "component": "Collection",
+      "attribute": "lazy",
+      "case": "flowOverflow__none_item11",
+      "class": "assertable",
+      "host": "Collection",
+      "writtenKey": "lazy",
+      "aliasOf": null,
+      "value": "none",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/Collection/flowOverflow__none_item11.layout.json",
+      "test": "fixtures/Collection/flowOverflow__none_item11.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": null,
+      "control": null,
       "companions": [
         "fixtures/Collection/__cells/conformance_cell.layout.json"
       ]
