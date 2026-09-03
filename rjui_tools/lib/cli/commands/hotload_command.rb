@@ -119,10 +119,22 @@ module RjuiTools
             File.delete(PID_FILE)
           end
 
-          # Also try to kill by process name
-          system("pkill -f 'rjui.*hotload.*listen' 2>/dev/null")
-          system("pkill -f 'rjui.*watch' 2>/dev/null")
-
+          # No name-matching sweep here, deliberately. `pkill -f` matches the
+          # whole command line, so 'rjui.*watch' signals ANY process whose
+          # command line happens to contain both words — another lane's
+          # script, an editor task, a tool invoked with that string as an
+          # argument. It cannot tell whether it owns what it kills, which is
+          # the one thing a stop command must know. (Measured on the
+          # maintainer's machine: those two patterns matched nothing that
+          # day, while a control pattern matched 64 unrelated processes —
+          # the zero was the day's process list, not a property of the
+          # patterns. On the same machine, an outside SIGTERM mid-run turned
+          # a consumer's E2E suite red three times.)
+          #
+          # The PID file is the only record of ownership this command has —
+          # `hotload listen` watches directories and binds no port, so there
+          # is no listener to look up either. No PID file means the owner is
+          # unknown, and an unknown owner is not something to kill.
           Core::Logger.success('HotLoader stopped')
         end
 
