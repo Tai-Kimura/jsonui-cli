@@ -24,6 +24,7 @@ module KjuiTools
           @validation_warnings = []
           @validation_errors = 0
           @binding_errors = []
+          @structural_errors = []
 
           case mode
           when 'xml', 'all'
@@ -36,6 +37,19 @@ module KjuiTools
 
           # Print validation summary if there were warnings
           print_validation_summary if options[:validate] != false && @validation_warnings.any?
+
+          # A `child`/`children` that does not hold nodes is not a style
+          # question the author can weigh: the renderer wraps it, iterates
+          # it, matches nothing, and emits a view with no children in it.
+          # Before this, that run printed one warning among many and then
+          # said "Compose build completed!" — the generated file claims to
+          # be the layout and is empty. Fail like the other two tools do.
+          if @structural_errors.any?
+            Core::Logger.error "Build failed: #{@structural_errors.size} layout(s) hold a non-node child; " \
+                               "their generated views would be empty:"
+            @structural_errors.each { |e| Core::Logger.error "  #{e}" }
+            exit 1
+          end
 
           # Error-severity canonical binding rules (binding_semantics.json
           # validatorRules) always fail the build, strict or not
@@ -270,7 +284,13 @@ module KjuiTools
                 # take the canonical-only validation path; raw layouts
                 # keep the alias-tolerant L0 path.
                 validator.normalized = Core::Normalization.canonicalized?(json_data)
+                # Structural violations accumulate across the recursion (see
+                # AttributeValidator#structural_errors) — clear per file.
+                validator.reset_structural_errors!
                 warnings = validate_json(json_data, validator, file_name)
+                @structural_errors.concat(
+                  validator.structural_errors.map { |e| "[#{relative_path}] #{e}" }
+                )
                 if warnings.any?
                   @validation_warnings.concat(warnings.map { |w| "[#{relative_path}] #{w}" })
                   @validation_errors += warnings.length
@@ -302,7 +322,11 @@ module KjuiTools
                 end
                 if validator
                   validator.normalized = Core::Normalization.canonicalized?(variant_data)
+                  validator.reset_structural_errors!
                   v_warnings = validate_json(variant_data, validator, File.basename(variant_file, '.json'))
+                  @structural_errors.concat(
+                    validator.structural_errors.map { |e| "[#{variant_rel}] #{e}" }
+                  )
                   if v_warnings.any?
                     @validation_warnings.concat(v_warnings.map { |w| "[#{variant_rel}] #{w}" })
                     @validation_errors += v_warnings.length

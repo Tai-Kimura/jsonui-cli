@@ -63,10 +63,34 @@ module JsonUIShared
       margin margins
     ].freeze
 
+    # Keys that hold nested component nodes.
+    #
+    # check_child_structure is the authority for their shape, NOT the
+    # declared type: the definitions say `"type": "array"`, but every
+    # renderer also accepts a single node object as shorthand for a
+    # one-element array (164 nodes across 12 layout trees rely on it), so
+    # the declaration would reject working layouts. The generic type check
+    # is skipped for these keys for that reason — see validate_attribute.
+    #
+    # Widening the declaration to ["array", "object"] is the honest fix and
+    # is tracked separately: it changes the generated Kotlin/Swift tables
+    # from `List<Any?>?` to `Any?` (an AttrCoerce.array call disappears),
+    # which is a source-breaking signature change in two libraries and does
+    # not belong in a bug fix. Until then the declaration is not the gate
+    # here, and this comment is the reason why.
+    #
+    # The shorthand is implemented everywhere as
+    # `[value] unless value.is_a?(Array)` — a negation of Array where it
+    # means "a node". A String, number, null or boolean is wrapped just as
+    # happily and then iterated over, matching nothing, which is how a
+    # layout that cannot be rendered becomes an empty view and a green run.
+    CHILD_KEYS = %w[child children].freeze
+
     def initialize(mode = :all, styles_dir = nil)
       @mode = mode
       @definitions = load_definitions
       @warnings = []
+      @structural_errors = []
       @infos = []
       @normalized = false
       @styles_dir = styles_dir
@@ -147,6 +171,9 @@ module JsonUIShared
         end
       end
 
+      # Check that child/children actually hold nodes
+      check_child_structure(merged_component, type)
+
       # Check for conflicting attributes
       check_spacing_gravity_conflict(merged_component, type)
 
@@ -187,7 +214,58 @@ module JsonUIShared
       !@infos.empty?
     end
 
+    # Violations that make a node unrenderable rather than merely
+    # questionable: `child`/`children` holding something that is not a node.
+    #
+    # `validate` clears @warnings on every call, and callers recurse into the
+    # tree with one validator instance, so a per-call channel would only ever
+    # describe the last node visited. These accumulate instead, and the
+    # caller clears them once per file.
+    attr_reader :structural_errors
+
+    def reset_structural_errors!
+      @structural_errors = []
+    end
+
+    def structural_errors?
+      !@structural_errors.empty?
+    end
+
     private
+
+    # A renderer can skip an attribute it does not understand and still draw
+    # the screen. It cannot skip a child: the child IS the screen. So a
+    # `child`/`children` value that is not a node — or an array with a
+    # non-node in it — is reported as structural, not as one more warning in
+    # a list the build prints and then ignores.
+    def check_child_structure(component, component_type)
+      CHILD_KEYS.each do |key|
+        next unless component.key?(key)
+        value = component[key]
+
+        # A data-only definition list (entries with `data` and no `type`) is
+        # not a node list; the loop above skips those for the same reason.
+        next if value.is_a?(Array) &&
+                value.all? { |i| i.is_a?(Hash) && i.key?('data') && !i.key?('type') }
+
+        if value.is_a?(Array)
+          value.each_with_index do |item, index|
+            next if item.is_a?(Hash)
+            add_structural_error(
+              "'#{key}[#{index}]' in '#{component_type}' must be a component " \
+              "node, got #{get_value_type(item)} — it cannot be rendered and " \
+              "would be dropped silently"
+            )
+          end
+        elsif !value.is_a?(Hash)
+          add_structural_error(
+            "'#{key}' in '#{component_type}' must be a component node or an " \
+            "array of them, got #{get_value_type(value)} — it cannot be " \
+            "rendered and would be dropped silently"
+          )
+        end
+      end
+    end
 
     # ---- platform profile hooks (implemented by the per-tool subclass) ----
 
@@ -412,6 +490,12 @@ module JsonUIShared
         # is tracked separately.
         if actual_type == 'array' && edge_inset_array?(name, value)
           # accepted
+        elsif CHILD_KEYS.include?(name)
+          # check_child_structure owns this key (see CHILD_KEYS). It accepts
+          # the single-node shorthand the declaration does not, and reports
+          # the real violations in terms of nodes. Warning here too would
+          # both reject working layouts and say one defect twice.
+          return
         else
           add_warning("Attribute '#{current_path}' in '#{component_type}' expects #{format_expected_types(expected_types)}, got #{actual_type}")
           return # Don't validate nested properties if type is wrong
@@ -579,6 +663,16 @@ module JsonUIShared
     def add_warning(message)
       context = build_context_prefix
       full_message = context.empty? ? message : "#{context}#{message}"
+      @warnings << full_message unless @warnings.include?(full_message)
+    end
+
+    # Structural violations are warnings too — they belong in the same
+    # summary a reader already looks at — but they are also kept on their own
+    # channel so a build can act on them without matching warning text.
+    def add_structural_error(message)
+      context = build_context_prefix
+      full_message = context.empty? ? message : "#{context}#{message}"
+      @structural_errors << full_message unless @structural_errors.include?(full_message)
       @warnings << full_message unless @warnings.include?(full_message)
     end
 
