@@ -2,8 +2,13 @@
 
 require_relative '../../core/config_manager'
 require_relative '../../core/logger'
-require_relative '../../core/file_watcher'
 require_relative 'build_command'
+# NOT file_watcher: it requires the `listen` gem, which needs ffi >= Ruby
+# 3.0 and so cannot be installed on the oldest ruby these tools are
+# vendored into (2.6, the system ruby on macOS). Required at the top of the
+# file it made `rjui hotload stop` and `status` raise LoadError before doing
+# anything on those consumers — the two subcommands that need no watcher at
+# all. `run_listen` requires it where it is used.
 
 module RjuiTools
   module CLI
@@ -45,6 +50,10 @@ module RjuiTools
         private
 
         def run_listen
+          # Here rather than at the top of the file: only listening needs a
+          # watcher, and the gem behind it does not exist on ruby 2.6.
+          require_relative '../../core/file_watcher'
+
           Core::Logger.info('Starting HotLoader development environment...')
 
           layouts_dir = @config['layouts_directory']
