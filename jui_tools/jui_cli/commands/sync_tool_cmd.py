@@ -277,7 +277,8 @@ def _sync_one_tool(
     Returns a counters dict: copied / updated / preserved / pruned / ruby_pin /
     shared_core.
     """
-    counters = {"copied": 0, "updated": 0, "preserved": 0, "pruned": 0, "ruby_pin": 0, "shared_core": 0}
+    counters = {"copied": 0, "updated": 0, "preserved": 0, "pruned": 0, "ruby_pin": 0,
+                "shared_core": 0, "unsynced": 0}
 
     if not source_tool_dir.exists():
         raise FileNotFoundError(f"Source tool directory not found: {source_tool_dir}")
@@ -369,7 +370,92 @@ def _sync_one_tool(
                     (dp / fn).unlink()
                 counters["pruned"] += 1
 
+    # Top-level directories the destination has and the source does not.
+    # This command neither copies nor removes them, so they sit in the
+    # consumer's tree looking as synced as everything around them.
+    #
+    # The measured case is `spec/`: the distributed rjui_tools carries none,
+    # so each face keeps whatever spec tree it vendored once — one face's is
+    # frozen at 2026-08-10, 73 files, in no gate — while the lib beside it
+    # moves every release. It runs nowhere, so it cannot go falsely green;
+    # what it produces is the reading "there are tests here", made by a
+    # person instead of looking, which is the same family as a green that
+    # means nothing.
+    #
+    # Named, never deleted: `extensions/` is the consumer's own by design,
+    # and from in here a face-specific directory is indistinguishable from a
+    # stale one. Deleting is the consumer's call; this line is what lets
+    # them make it. The freeze date is what makes it actionable — "it is
+    # there" is not the question, "how old is it" is.
+    for name, frozen in _unsynced_top_level(source_tool_dir, target_tool_dir, source_rels):
+        counters["unsynced"] += 1
+        print(
+            f"  note: {name}/ is not synced (frozen {frozen}); "
+            "it does not run against the lib just synced"
+        )
+
     return counters
+
+
+#: Suffixes that make a vendored directory read as "the tool's own code,
+#: maintained with it". All three vendored tools are Ruby; a directory of
+#: generated HTML (a `coverage/` report) or data is stale clutter, not a
+#: thing anyone mistakes for a live check, and naming it would cost the
+#: note its one line of attention. Measured before shipping, over the 27
+#: vendored trees on this machine: the unfiltered rule produced 32 lines
+#: (`shared/`, `coverage/`, `spec/`, up to 3 per tree); with the exclusions
+#: it produces 15, one per tree, every one of them `spec/`.
+TOOL_SOURCE_SUFFIXES = (".rb",)
+
+
+def _unsynced_top_level(
+    source_tool_dir: Path,
+    target_tool_dir: Path,
+    source_rels: set[Path],
+) -> list[tuple[str, str]]:
+    """``(name, YYYY-MM-DD)`` for target top-level dirs the source lacks.
+
+    Excluded, and each for its own reason:
+
+    * anything under ``source_rels`` — the command writes it. ``shared/`` is
+      the case that matters: it is absent from the source TOOL directory
+      because it is distributed from the CLI root, so a plain "not in the
+      source" test calls a directory this command just wrote unsynced.
+      Measured: that mistake accounted for 9 of the first 32 lines.
+    * ``extensions/`` — the consumer's own by design.
+    * directories holding no file of the tool's own language: a coverage
+      report is stale, but nobody reads it as a check.
+    * directories holding no files at all — an empty shell, possibly one
+      ``--prune`` just emptied.
+
+    The date is the newest mtime anywhere under the tree: the last time
+    anyone touched it, which is what a reader needs in order to decide.
+    """
+    if not target_tool_dir.exists() or not source_tool_dir.exists():
+        return []
+
+    managed = {p.name for p in source_tool_dir.iterdir()}
+    managed |= {rel.parts[0] for rel in source_rels if rel.parts}
+    out: list[tuple[str, str]] = []
+    for entry in sorted(target_tool_dir.iterdir()):
+        if not entry.is_dir() or entry.name.startswith("."):
+            continue
+        if entry.name in managed or _is_extensions_path(Path(entry.name)):
+            continue
+        newest = 0.0
+        has_source = False
+        for dirpath, _dirnames, filenames in os.walk(entry):
+            for fn in filenames:
+                if fn.endswith(TOOL_SOURCE_SUFFIXES):
+                    has_source = True
+                try:
+                    newest = max(newest, (Path(dirpath) / fn).stat().st_mtime)
+                except OSError:
+                    continue
+        if newest <= 0.0 or not has_source:
+            continue
+        out.append((entry.name, datetime.fromtimestamp(newest).strftime("%Y-%m-%d")))
+    return out
 
 
 def _files_equal(a: Path, b: Path) -> bool:
@@ -535,7 +621,7 @@ def cmd_sync_tool(args: argparse.Namespace) -> int:
             return 1
         targets = [(args.platform, platforms[args.platform])]
 
-    totals = {"copied": 0, "updated": 0, "preserved": 0, "pruned": 0, "ruby_pin": 0, "shared_core": 0}
+    totals = {"copied": 0, "updated": 0, "preserved": 0, "pruned": 0, "ruby_pin": 0, "shared_core": 0, "unsynced": 0}
     had_error = False
     synced: dict[str, str] = {}  # platform -> tool actually mirrored
 
