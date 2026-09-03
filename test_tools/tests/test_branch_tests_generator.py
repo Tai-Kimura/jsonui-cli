@@ -999,6 +999,59 @@ class TestSeedableState:
         assert 'seedState(h, {"canRead": true})' in content
         assert 'seedState(h, {"canRead": false})' in content
 
+    def test_an_object_seed_reads_back_by_partial_match_on_all_three(self, tmp_path):
+        """Consumer report (2026-09-03): a seed whose value is a struct /
+        data class (`state.registration: {name, age, ...}`) failed the
+        read-back on both native faces by construction — Kotlin compared the
+        live data class to the map with `!=`, Swift demanded a dictionary —
+        and the message blamed setState ("did not take") for a comparison
+        the runtime could not make. Web was not exempt either: whole-JSON
+        equality is order- and superset-sensitive, so a class with one more
+        field than the seed also failed. Each runtime now folds the live
+        value and compares only the keys the seed names, recursing, and a
+        mismatch names the path. Measured standalone on all three (node
+        strip-types / swiftc / a kotlin-jvm probe with kotlin-reflect): a
+        subset seed in another key order takes, a nested value that differs
+        reports `nested.a`, arrays compare element-wise, and the scalar
+        control still says "did not take".
+        """
+        root = _project(tmp_path, SEEDABLE)
+        web = generate_branch_tests("checkout", root).runtime_file.read_text(encoding="utf-8")
+        android = generate_branch_tests(
+            "checkout", root, platform="android",
+            package="com.example.app").runtime_file.read_text(encoding="utf-8")
+        ios = generate_branch_tests(
+            "checkout", root, platform="ios", module="checkout_app",
+            out_dir="Tests/Generated", harness_dir="Tests/Generated"
+        ).runtime_file.read_text(encoding="utf-8")
+
+        # web: the read-back is the shared partial match, not JSON equality
+        body = web.split("export function seedState")[1].split("\n}\n")[0]
+        assert "partialMismatches(vm[name], want)" in body
+        assert "JSON.stringify(vm[name] ?? null) !==" not in body
+        assert "differs at" in body and "did not take" in body
+        pm = web.split("export function partialMismatches")[1].split("\n}\n")[0]
+        assert "Array.isArray(expected)" in pm and "element(s)" in pm
+
+        # android: a live-value matcher that reads data-class members, and
+        # a map seed is CONSTRUCTED into a class-typed field
+        assert "fun valueMismatches(actual: Any?, expected: Any?" in android
+        kbody = android.split("fun seedState(")[1].split("\n}\n")[0]
+        assert "valueMismatches(got, want)" in kbody
+        assert "if (got != want)" not in kbody
+        assert "differs at" in kbody and "did not take" in kbody
+        assert "private fun memberValue(target: Any, name: String)" in android
+        assert "primaryConstructor" in android and "private fun construct(" in android
+        assert "if (exp is List<*>)" in android  # request bodies too
+
+        # ios: a struct / class is folded through Mirror into a dictionary
+        assert "func reflectedDictionary(_ value: Any) -> [String: Any]?" in ios
+        spm = ios.split("func partialMismatches(")[1].split("\n}\n")[0]
+        assert "actual.flatMap(reflectedDictionary)" in spm
+        assert "if let list = exp as? [Any]" in spm
+        sbody = ios.split("func seedState(")[1].split("\n}\n")[0]
+        assert "differs at" in sbody and "did not take" in sbody
+
     def test_a_spec_without_seedable_state_is_unchanged(self, tmp_path):
         # (d): the section is opt-in. Nothing about an existing spec moves.
         root = _project(tmp_path, BASIC)
