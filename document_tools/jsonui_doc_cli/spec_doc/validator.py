@@ -1683,6 +1683,12 @@ class SpecValidator:
         assigned onto the ViewModel invents a property that then shadows the
         store — so the writer cannot tell "should exist on the VM" from
         "belongs to the store". These names carry exactly that bit.
+
+        A seed's VALUE may be an object (a struct / data class behind the
+        name) or a list, not only a scalar. The read-back is then a partial
+        match on every platform: only the keys the seed names are compared,
+        nested objects recurse, lists compare element-wise at equal length,
+        and a mismatch is reported at its path.
         """
         names: set[str] = set()
         if seedable is None:

@@ -937,7 +937,9 @@ def _ts(value) -> str:
 #: mixed into the data keys because the two are written differently: data
 #: keys are applied leniently (a data-only field assigned onto the VM
 #: invents a property that then shadows the store), while a declared
-#: internal name is asserted to land.
+#: internal name is asserted to land. The value may be an object or a
+#: list; the read-back is then a partial match — the seed's keys only,
+#: nested, lists element-wise — on web, android and ios alike.
 SEED_PREFIX = "state."
 
 
@@ -1333,7 +1335,21 @@ export function partialMismatches(
   prefix = ""
 ): string[] {
   const label = prefix || "$";
-  if (expected !== null && typeof expected === "object" && !Array.isArray(expected)) {
+  if (Array.isArray(expected)) {
+    if (!Array.isArray(actual)) {
+      return [`${label}: expected array, got ${JSON.stringify(actual)}`];
+    }
+    if (actual.length !== expected.length) {
+      return [`${label}: expected ${expected.length} element(s), got ${actual.length}`];
+    }
+    return expected.flatMap((v, i) =>
+      partialMismatches(actual[i], v, `${label}[${i}]`)
+    );
+  }
+  if (expected !== null && typeof expected === "object") {
+    // A plain object OR a class instance (a seeded view-model value):
+    // reading by key works for both, and only the keys the contract names
+    // are compared.
     if (actual === null || typeof actual !== "object" || Array.isArray(actual)) {
       return [`${label}: expected object, got ${JSON.stringify(actual)}`];
     }
@@ -1443,15 +1459,30 @@ export function seedState(
         "branchContracts.seedableState."
       );
     }
-    if (JSON.stringify(vm[name] ?? null) !== JSON.stringify(want ?? null)) {
+    // The same partial match the contract's other values get: an object
+    // seed compares only the keys it names (a class instance with more
+    // fields than the seed, or fields in another order, still takes), and
+    // a mismatch names the path. Whole-JSON equality could not say that.
+    const diff = partialMismatches(vm[name], want);
+    if (diff.length === 0) continue;
+    // An object seed the view model holds a DIFFERENT object for is a
+    // harness that built it wrong — name the path. A null there means the
+    // harness never wrote it, which is the same repair as for a scalar.
+    if (want !== null && typeof want === "object" && vm[name] !== null && vm[name] !== undefined) {
       throw new Error(
-        `seedableState '${name}' did not take: seeded ` +
-        `${JSON.stringify(want)}, the view model holds ` +
-        `${JSON.stringify(vm[name])}. This screen's harness predates ` +
-        "seedable state — its setState drops names it does not know. " +
-        "Teach the harness to write it."
+        `seedableState '${name}': seeded ${JSON.stringify(want)} but the ` +
+        `view model's value differs at ${diff.join("; ")}. If setState ` +
+        "wrote it, the harness built a different object; if not, teach " +
+        "the harness to write it."
       );
     }
+    throw new Error(
+      `seedableState '${name}' did not take: seeded ` +
+      `${JSON.stringify(want)}, the view model holds ` +
+      `${JSON.stringify(vm[name])}. This screen's harness predates ` +
+      "seedable state — its setState drops names it does not know. " +
+      "Teach the harness to write it."
+    );
   }
 }
 '''
@@ -1747,8 +1778,11 @@ import okhttp3.mockwebserver.MockWebServer
 import okhttp3.mockwebserver.RecordedRequest
 import java.lang.reflect.Field
 import java.lang.reflect.Modifier
+import kotlin.reflect.KClass
+import kotlin.reflect.KParameter
 import kotlin.reflect.full.instanceParameter
 import kotlin.reflect.full.memberFunctions
+import kotlin.reflect.full.primaryConstructor
 import kotlin.reflect.jvm.isAccessible
 
 data class RouteSpec(
@@ -1829,15 +1863,104 @@ fun seedState(h: BranchHarness, state: Map<String, Any?>) {
     field.isAccessible = true
     val raw = field.get(h.vm)
     val got = if (raw is MutableStateFlow<*>) raw.value else raw
-    if (got != want) {
+    // Partial match, not `got != want`: an object seed (a data class
+    // behind the field) is compared key by key against the map the
+    // contract wrote, so a class with more fields than the seed still
+    // takes, and a mismatch names the path instead of blaming setState.
+    val diff = valueMismatches(got, want)
+    if (diff.isEmpty()) continue
+    // An object the view model holds a DIFFERENT object for names the path;
+    // null there means the harness never wrote it (the scalar repair).
+    if ((want is Map<*, *> || want is List<*>) && got != null) {
       error(
-        "seedableState '" + name + "' did not take: seeded " + want +
-        ", the view model holds " + got + ". This screen's harness " +
-        "predates seedable state — its setState drops names it does not " +
-        "know. Teach the harness to write it."
+        "seedableState '" + name + "': seeded " + want + " but the view " +
+        "model's " + (got?.javaClass?.simpleName ?: "null") + " differs at " +
+        diff.joinToString("; ") + ". If setState wrote it, the harness " +
+        "built a different object; if not, teach the harness to write it."
       )
     }
+    error(
+      "seedableState '" + name + "' did not take: seeded " + want +
+      ", the view model holds " + got + ". This screen's harness " +
+      "predates seedable state — its setState drops names it does not " +
+      "know. Teach the harness to write it."
+    )
   }
+}
+
+/** Partial match of a LIVE Kotlin value (a seeded field, a data class, a
+ * list) against a contract value. Maps compare only the keys they name,
+ * reading a data class by field or getter; lists compare element-wise at
+ * equal length; StateFlows are read through; numbers compare as doubles;
+ * a string also matches an enum constant of that name. Paths in the
+ * result are the contract's ("registration.age", "ids[1]"). */
+fun valueMismatches(actual: Any?, expected: Any?, prefix: String = ""): List<String> {
+  val label = prefix.ifEmpty { "${'$'}" }
+  val exp = if (expected is Ref) expected.value else expected
+  val act = if (actual is StateFlow<*>) actual.value else actual
+  if (exp is Map<*, *>) {
+    if (act == null) return listOf(label + ": expected object, got null")
+    val out = mutableListOf<String>()
+    for ((k, v) in exp) {
+      val key = k.toString()
+      val path = if (prefix.isEmpty()) key else "$prefix.$key"
+      val child = if (act is Map<*, *>) act[key] else memberValue(act, key)
+      if (child === NoSuchMember) {
+        out += path + ": no such property on " + act.javaClass.simpleName
+        continue
+      }
+      out += valueMismatches(child, v, path)
+    }
+    return out
+  }
+  if (exp is List<*>) {
+    val list: List<*> = when (act) {
+      is List<*> -> act
+      is Collection<*> -> act.toList()
+      is Array<*> -> act.toList()
+      else -> return listOf(label + ": expected list, got " + act)
+    }
+    if (list.size != exp.size) {
+      return listOf(label + ": expected " + exp.size + " element(s), got " + list.size)
+    }
+    return exp.indices.flatMap { i -> valueMismatches(list[i], exp[i], "$label[$i]") }
+  }
+  if (exp == null) {
+    return if (act == null) emptyList() else listOf(label + ": expected null, got " + act)
+  }
+  if (act == null) return listOf(label + ": expected " + exp + ", got null")
+  val matches = when (exp) {
+    is Boolean -> act == exp
+    is Number -> act is Number && act.toDouble() == exp.toDouble()
+    is String -> (act is String && act == exp) || (act is Enum<*> && act.name == exp)
+    else -> act == exp
+  }
+  return if (matches) emptyList() else listOf(label + ": expected " + exp + ", got " + act)
+}
+
+private object NoSuchMember
+
+/** A member of a live object by name: backing field (`name` / `_name`) up
+ * the class chain, else a zero-arg getter (`getName` / `isName` / `name`).
+ * NoSuchMember when neither exists. */
+private fun memberValue(target: Any, name: String): Any? {
+  var cls: Class<*>? = target.javaClass
+  while (cls != null) {
+    for (candidate in arrayOf(name, "_" + name)) {
+      val f = try { cls.getDeclaredField(candidate) } catch (_: NoSuchFieldException) { null }
+      if (f != null) {
+        f.isAccessible = true
+        return f.get(target)
+      }
+    }
+    cls = cls.superclass
+  }
+  val cap = name.replaceFirstChar { it.uppercaseChar() }
+  val getter = target.javaClass.methods.firstOrNull {
+    it.parameterCount == 0 && (it.name == "get$cap" || it.name == "is$cap" || it.name == name)
+  } ?: return NoSuchMember
+  getter.isAccessible = true
+  return getter.invoke(target)
 }
 
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -1975,7 +2098,7 @@ abstract class BaseBranchHarness(
     for (param in copyFn.parameters) {
       val name = param.name ?: continue
       if (name in state) {
-        callArgs[param] = state[name]
+        callArgs[param] = coerce(state[name], (param.type.classifier as? KClass<*>)?.java)
         any = true
       }
     }
@@ -2001,8 +2124,36 @@ abstract class BaseBranchHarness(
         (value as? Number)?.toDouble() ?: value
       Float::class.javaPrimitiveType, Float::class.javaObjectType ->
         (value as? Number)?.toFloat() ?: value
-      else -> value
+      else ->
+        if (value is Map<*, *> && !Map::class.java.isAssignableFrom(type)) construct(type, value)
+        else value
     }
+  }
+
+  /** A map seed into a class-typed field (an object-valued seedableState):
+   * build the instance through the class's primary constructor by
+   * parameter name — defaults kept, nullable-without-default set to null,
+   * nested maps recurse. A required parameter the seed does not name is
+   * an error that names it; a class with no primary constructor is left
+   * as the map (the field write then fails with the JVM's own message). */
+  private fun construct(type: Class<*>, value: Map<*, *>): Any? {
+    val ctor = type.kotlin.primaryConstructor ?: return value
+    val args = mutableMapOf<KParameter, Any?>()
+    for (p in ctor.parameters) {
+      val name = p.name ?: continue
+      when {
+        value.containsKey(name) ->
+          args[p] = coerce(value[name], (p.type.classifier as? KClass<*>)?.java)
+        p.isOptional -> {}
+        p.type.isMarkedNullable -> args[p] = null
+        else -> error(
+          "seedableState: cannot build " + type.simpleName + " from " + value +
+          " — its constructor requires '" + name + "'. Add it to the seed."
+        )
+      }
+    }
+    ctor.isAccessible = true
+    return ctor.callBy(args)
   }
 
   /** VM method first (by name + arity), else a data-field lambda (the
@@ -2052,6 +2203,15 @@ fun partialMismatches(actual: JsonElement?, expected: Any?, prefix: String = "")
       out += partialMismatches(actual[key], v, if (prefix.isEmpty()) key else "$prefix.$key")
     }
     return out
+  }
+  if (exp is List<*>) {
+    if (actual !is JsonArray) {
+      return listOf(label + ": expected array, got " + actual)
+    }
+    if (actual.size != exp.size) {
+      return listOf(label + ": expected " + exp.size + " element(s), got " + actual.size)
+    }
+    return exp.indices.flatMap { i -> partialMismatches(actual[i], exp[i], "$label[$i]") }
   }
   if (exp == null) {
     return if (actual == null || actual is JsonNull) emptyList()
@@ -2669,15 +2829,54 @@ func seedState(_ h: BranchHarness, _ state: [String: Any]) {
       )
       continue
     }
-    let diff = partialMismatches(mirrorField(h.vm, name), want)
-    if !diff.isEmpty {
+    // partialMismatches folds a struct / class behind the property into a
+    // dictionary (Mirror), so an object seed compares only the keys it
+    // names and a mismatch carries the path instead of blaming setState.
+    let got = mirrorField(h.vm, name)
+    let diff = partialMismatches(got, want)
+    if diff.isEmpty { continue }
+    // An object the view model holds a DIFFERENT object for names the path;
+    // nil there means the harness never wrote it (the scalar repair).
+    if (want is [String: Any] || want is [Any]), got != nil, !(got is NSNull) {
+      let type = got.map { String(describing: Swift.type(of: $0)) } ?? "nil"
       XCTFail(
-        "seedableState '\\(name)' did not take: \\(diff.joined(separator: "; ")). " +
-        "This screen's harness predates seedable state — its setState drops " +
-        "names it does not know. Teach the harness to write it."
+        "seedableState '\\(name)': seeded \\(want) but the view model's " +
+        "\\(type) differs at \\(diff.joined(separator: "; ")). If setState " +
+        "wrote it, the harness built a different object; if not, teach the " +
+        "harness to write it."
       )
+      continue
     }
+    XCTFail(
+      "seedableState '\\(name)' did not take: \\(diff.joined(separator: "; ")). " +
+      "This screen's harness predates seedable state — its setState drops " +
+      "names it does not know. Teach the harness to write it."
+    )
   }
+}
+
+/// A struct or class instance as `[label: value]` for partial matching —
+/// labels without their `_` prefix (@Published storage), Optionals
+/// unwrapped, superclass members included, nil members omitted (a nil
+/// expectation accepts absence). nil for scalars, collections and
+/// dictionaries, which are matched directly.
+func reflectedDictionary(_ value: Any) -> [String: Any]? {
+  let top = Mirror(reflecting: value)
+  if top.displayStyle == .optional {
+    return flattenOptional(value).flatMap(reflectedDictionary)
+  }
+  guard top.displayStyle == .struct || top.displayStyle == .class else { return nil }
+  var out: [String: Any] = [:]
+  var mirror: Mirror? = top
+  while let m = mirror {
+    for child in m.children {
+      guard let raw = child.label else { continue }
+      let label = raw.hasPrefix("_") ? String(raw.dropFirst()) : raw
+      if out[label] == nil, let v = unwrapPublished(child.value) { out[label] = v }
+    }
+    mirror = m.superclassMirror
+  }
+  return out
 }
 
 /// Recursive partial match against a recorded JSON body. NSNull/nil
@@ -2685,8 +2884,21 @@ func seedState(_ h: BranchHarness, _ state: [String: Any]) {
 func partialMismatches(_ actual: Any?, _ expected: Any?, _ prefix: String = "") -> [String] {
   let label = prefix.isEmpty ? "$" : prefix
   let exp = (expected as? Ref).map { $0.value } ?? expected
+  if let list = exp as? [Any] {
+    guard let actualList = actual as? [Any] else {
+      return ["\\(label): expected array, got \\(String(describing: actual))"]
+    }
+    if actualList.count != list.count {
+      return ["\\(label): expected \\(list.count) element(s), got \\(actualList.count)"]
+    }
+    return list.indices.flatMap { i in
+      partialMismatches(actualList[i], list[i], "\\(label)[\\(i)]")
+    }
+  }
   if let dict = exp as? [String: Any] {
-    guard let actualDict = actual as? [String: Any] else {
+    // A recorded JSON body is a dictionary already; a seeded view-model
+    // value is a struct / class and is folded into one.
+    guard let actualDict = (actual as? [String: Any]) ?? actual.flatMap(reflectedDictionary) else {
       return ["\\(label): expected object, got \\(String(describing: actual))"]
     }
     var out: [String] = []
@@ -2708,8 +2920,16 @@ func partialMismatches(_ actual: Any?, _ expected: Any?, _ prefix: String = "") 
   if let eb = exp as? Bool, let ab = actualValue as? Bool {
     return eb == ab ? [] : ["\\(label): expected \\(eb), got \\(ab)"]
   }
-  if let es = exp as? String, let asv = actualValue as? String {
-    return es == asv ? [] : ["\\(label): expected \\(es), got \\(asv)"]
+  if let es = exp as? String {
+    if let asv = actualValue as? String {
+      return es == asv ? [] : ["\\(label): expected \\(es), got \\(asv)"]
+    }
+    // An enum case behind a seeded property: its description is the case
+    // name (or, for a String-backed enum, what the contract spells).
+    if Mirror(reflecting: actualValue).displayStyle == .enum,
+       String(describing: actualValue) == es {
+      return []
+    }
   }
   return ["\\(label): expected \\(String(describing: exp)), got \\(String(describing: actualValue))"]
 }
