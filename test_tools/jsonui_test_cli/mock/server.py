@@ -10,10 +10,12 @@ it defends against DNS-rebinding / CSRF:
 
 from __future__ import annotations
 
+import errno
 import json
 import re
 import secrets
 import subprocess
+import sys
 import threading
 import time
 from dataclasses import dataclass, field
@@ -22,6 +24,9 @@ from pathlib import Path
 from urllib.parse import urlparse, parse_qs
 
 ADMIN_PREFIX = "/__jsonui__"
+#: Seconds a kept-alive connection may sit idle before the server closes it.
+#: Read when the handler class is built, so a test can shorten it.
+IDLE_KEEPALIVE_TIMEOUT = 30
 _MAX_RECORDED = 200
 _PARAM_RE = re.compile(r"\{[^/}]+\}")
 _SAFE_OP_ID = re.compile(r"^[A-Za-z0-9_.-]+$")
@@ -382,6 +387,37 @@ def _panel_html(token: str) -> bytes:
     return raw.replace("__JSONUI_TOKEN__", token).encode("utf-8")
 
 
+class _MockHTTPServer(ThreadingHTTPServer):
+    """ThreadingHTTPServer that says so when it runs out of descriptors.
+
+    socketserver swallows an accept() failure (`except OSError: return`), so
+    a server whose descriptors are exhausted stops answering while its
+    process stays alive — from a client that is indistinguishable from a
+    dead server, and it was reported as one ("the mock server dies mid-run",
+    2026-09-03, hundreds of ECONNREFUSED/ECONNRESET with the process still
+    running). One line on stderr is the difference between a diagnosis and a
+    version hunt. Said once: the condition repeats per accept.
+    """
+
+    _descriptors_exhausted_reported = False
+
+    def get_request(self):
+        try:
+            return super().get_request()
+        except OSError as e:
+            if (e.errno in (errno.EMFILE, errno.ENFILE)
+                    and not self._descriptors_exhausted_reported):
+                self._descriptors_exhausted_reported = True
+                print(
+                    "mock server: out of file descriptors — cannot accept new "
+                    "connections (the process is still running; clients will see "
+                    "connection refused/reset). Raise the descriptor limit "
+                    "(`ulimit -n`) or find what is holding connections open.",
+                    file=sys.stderr, flush=True,
+                )
+            raise
+
+
 class MockServer:
     def __init__(self, store: MockStore, run_manager: RunManager, port: int = 8790,
                  contract=None, contract_log=None):
@@ -397,7 +433,7 @@ class MockServer:
     def bind(self):
         """Bind the listening socket now so the real port is known (port 0 = ephemeral)."""
         handler = _make_handler(self)
-        self._httpd = ThreadingHTTPServer(("127.0.0.1", self.port), handler)
+        self._httpd = _MockHTTPServer(("127.0.0.1", self.port), handler)
         self.port = self._httpd.server_address[1]
         return self.port
 
@@ -424,6 +460,29 @@ def _host_ok(host: str, port: int) -> bool:
 def _make_handler(server: "MockServer"):
     class Handler(BaseHTTPRequestHandler):
         protocol_version = "HTTP/1.1"
+
+        #: Seconds a kept-alive connection may sit idle before the server
+        #: closes it. HTTP/1.1 keeps connections open, and each one holds a
+        #: thread and a file descriptor for as long as it lives. Nothing
+        #: closed an idle one — BaseHTTPRequestHandler.timeout is None — so a
+        #: client that abandons connections rather than closing them (a
+        #: browser reloading between tests) left one thread + one descriptor
+        #: behind each time. Measured 2026-09-03: exactly linear, no
+        #: reclamation, and at the descriptor limit the server stopped
+        #: accepting anything while its process stayed alive — reported by a
+        #: consumer as "the mock server dies mid-run", after a scenario
+        #: switch, only in the full chain (a single spec never reached the
+        #: ceiling). http.server turns the read timeout into
+        #: `close_connection`, which is the ordinary end of a keep-alive: a
+        #: client that wants another request opens another connection.
+        #:
+        #: 30s is above any pause a driver takes between requests on one
+        #: connection and far below the length of a suite, so the descriptors
+        #: in use track the last 30 seconds of traffic instead of the whole
+        #: run. It does NOT bound a slow RESPONSE: a scenario's `delayMs`
+        #: sleeps before the write, and the timeout applies per socket
+        #: operation.
+        timeout = IDLE_KEEPALIVE_TIMEOUT
 
         def log_message(self, *args):
             pass  # keep stdout clean; panel shows requests
