@@ -10,8 +10,8 @@
   "schemaVersion": 2,
   "generatedFrom": "2347dc65a4b524712f7dc80b209c233d042075babd48a5b300d9aa36c84bdd92",
   "counts": {
-    "fixtures": 1067,
-    "assertable": 41,
+    "fixtures": 1071,
+    "assertable": 45,
     "visual": 806,
     "interactive": 37,
     "control": 106,
@@ -25862,6 +25862,114 @@
       "state": null,
       "promotedFrom": null,
       "control": "__control/Label__wrap-max"
+    },
+    {
+      "id": "Collection/cellAddress__scroll_1",
+      "component": "Collection",
+      "attribute": "layout",
+      "case": "cellAddress__scroll_1",
+      "class": "assertable",
+      "host": "Collection",
+      "writtenKey": "layout",
+      "aliasOf": null,
+      "value": "flow",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/Collection/cellAddress__scroll_1.layout.json",
+      "test": "fixtures/Collection/cellAddress__scroll_1.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": null,
+      "control": null,
+      "companions": [
+        "fixtures/Collection/__cells/conformance_cell.layout.json"
+      ]
+    },
+    {
+      "id": "Collection/cellAddress__scroll_2",
+      "component": "Collection",
+      "attribute": "layout",
+      "case": "cellAddress__scroll_2",
+      "class": "assertable",
+      "host": "Collection",
+      "writtenKey": "layout",
+      "aliasOf": null,
+      "value": "flow",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/Collection/cellAddress__scroll_2.layout.json",
+      "test": "fixtures/Collection/cellAddress__scroll_2.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": null,
+      "control": null,
+      "companions": [
+        "fixtures/Collection/__cells/conformance_cell.layout.json"
+      ]
+    },
+    {
+      "id": "Collection/cellAddress__none_1",
+      "component": "Collection",
+      "attribute": "layout",
+      "case": "cellAddress__none_1",
+      "class": "assertable",
+      "host": "Collection",
+      "writtenKey": "layout",
+      "aliasOf": null,
+      "value": "flow",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/Collection/cellAddress__none_1.layout.json",
+      "test": "fixtures/Collection/cellAddress__none_1.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": null,
+      "control": null,
+      "companions": [
+        "fixtures/Collection/__cells/conformance_cell.layout.json"
+      ]
+    },
+    {
+      "id": "Collection/cellAddress__none_2",
+      "component": "Collection",
+      "attribute": "layout",
+      "case": "cellAddress__none_2",
+      "class": "assertable",
+      "host": "Collection",
+      "writtenKey": "layout",
+      "aliasOf": null,
+      "value": "flow",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/Collection/cellAddress__none_2.layout.json",
+      "test": "fixtures/Collection/cellAddress__none_2.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": null,
+      "control": null,
+      "companions": [
+        "fixtures/Collection/__cells/conformance_cell.layout.json"
+      ]
     }
   ],
   "skipped": [
