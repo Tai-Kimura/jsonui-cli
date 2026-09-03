@@ -343,7 +343,14 @@ module KjuiTools
           # invariant gates it, the same channel as report_string_namespace.
           def report_foreign_bare_key(text, strings_data)
             return unless strings_data.is_a?(Hash)
-            return unless text.match?(/^[a-z][a-z0-9]*(_[a-z0-9]+)*_?$/)
+            # Letters, not lowercase letters: `find_string_key` above resolves
+            # a key by membership whatever its spelling, so a foreign key with
+            # a capital reached this guard, failed it, and was quoted as a raw
+            # literal with nothing said — the one case where the identifier
+            # ships is the one case that was silent. (rjui gated its whole
+            # lookup on the lowercase spelling and published two such keys as
+            # page text; this is the same hole, warning-side only.)
+            return unless text.match?(/\A[A-Za-z][A-Za-z0-9]*(_[A-Za-z0-9]+)*_?\z/)
 
             own = current_namespaces
             # map + compact, not filter_map — Ruby 2.6 (see section_extractor).
