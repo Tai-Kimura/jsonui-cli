@@ -887,6 +887,22 @@ def generate_conformance(definitions_path: Path, out_dir: Path) -> GenerationSum
         target.write_text(_dump_json(payload), encoding="utf-8")
         summary.files_written += 1
     fixture_entries.extend(bounds_entries)
+
+    # Collection cell-address fixtures (flow track): the sweep's Collection
+    # fixtures are all visual, and the Android suite skips waitFor for
+    # visual fixtures, so nothing ever asked whether a cell is reachable —
+    # see collection_address_fixtures module docstring.
+    from .collection_address_fixtures import build_collection_address_fixtures
+
+    address_files, address_entries = build_collection_address_fixtures(source_label)
+    for rel_path, payload in address_files:
+        target = out_dir / rel_path
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(_dump_json(payload), encoding="utf-8")
+        summary.files_written += 1
+    fixture_entries.extend(address_entries)
+    summary.fixture_count += len(address_entries)
+    summary.assertable_count += len(address_entries)
     summary.fixture_count += len(bounds_entries)
     summary.visual_count += sum(
         1 for e in bounds_entries if e["class"] == "visual" and not e.get("isControl")
