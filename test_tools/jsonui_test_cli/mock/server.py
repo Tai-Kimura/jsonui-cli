@@ -422,7 +422,7 @@ class _MockHTTPServer(ThreadingHTTPServer):
 
 class MockServer:
     def __init__(self, store: MockStore, run_manager: RunManager, port: int = 8790,
-                 contract=None, contract_log=None):
+                 contract=None, contract_log=None, swagger=None):
         self.store = store
         self.run = run_manager
         self.port = port
@@ -431,7 +431,27 @@ class MockServer:
         self.requests = RequestLog()
         self.contract = contract
         self.contract_log = contract_log
+        # `.resolve()`, matching what `identity` does to projectRoot: on
+        # macOS /var is a symlink to /private/var, so an unresolved root here
+        # produced a `swagger` path that did not start with the
+        # `projectRoot` beside it — two spellings of one directory, in the
+        # one payload whose job is comparison. Caught by running the server
+        # for real; the unit arms passed because pytest hands out an
+        # already-resolved tmp_path.
+        root = (Path(run_manager._root).resolve()
+                if getattr(run_manager, "_root", None) else None)
+        self.swagger = [
+            str(root / source) if (root is not None and not Path(source).is_absolute())
+            else str(source)
+            for source in (swagger or [])
+        ]
         self._httpd: ThreadingHTTPServer | None = None
+        #: Set while `serve_forever` is inside the loop. `shutdown()` waits
+        #: for that loop to stop, so calling it on a server that only ever
+        #: bound blocks forever — waiting for something that never started.
+        #: Hit while writing the tests for this endpoint; a bound-but-never-
+        #: served server is exactly what a unit test makes.
+        self._serving = threading.Event()
 
     def identity(self) -> dict:
         """Who this server is — enough for a caller to tell it apart from
@@ -454,6 +474,17 @@ class MockServer:
             "pid": os.getpid(),
             "projectRoot": str(Path(self.run._root).resolve()),
             "mockDir": str(Path(self.store.mock_dir).resolve()),
+            # The swagger this corpus was generated from, anchored to the
+            # project root: "api/openapi.yaml" is the same string in every
+            # project, so as a bare relative path it cannot distinguish the
+            # two servers this endpoint exists to distinguish.
+            "swagger": self.swagger,
+            # How many endpoints are actually loaded. `mockDir` says which
+            # tree was read; this says whether it had anything in it, which
+            # is the difference between "the wrong corpus" and "an empty
+            # one" — a server with 0 endpoints 404s every request, and that
+            # reads as a broken app rather than a mock pointed nowhere.
+            "endpointCount": len(self.store.endpoints),
             "port": self.port,
             "startedAt": self.started_at,
         }
@@ -468,11 +499,25 @@ class MockServer:
     def serve_forever(self):
         if self._httpd is None:
             self.bind()
-        self._httpd.serve_forever()
+        self._serving.set()
+        try:
+            self._httpd.serve_forever()
+        finally:
+            self._serving.clear()
 
     def shutdown(self):
+        """Stop serving and release the port.
+
+        `ThreadingHTTPServer.shutdown()` blocks until the serve loop exits,
+        so calling it when no loop was ever started hangs forever. Closing
+        the socket is enough in that case, and is what actually frees the
+        port. (A shutdown racing a serve_forever that has not yet set the
+        flag closes the socket under the starting loop; that is a test-only
+        shape, and it ends in an exception rather than a hang.)
+        """
         if self._httpd:
-            self._httpd.shutdown()
+            if self._serving.is_set():
+                self._httpd.shutdown()
             self._httpd.server_close()
             self._httpd = None
 

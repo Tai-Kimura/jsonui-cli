@@ -459,6 +459,21 @@ stop it. `--any-project` prints the identity without failing; the endpoint itsel
 "are you mine?" does not hold the token of the server that answers when the
 answer is no.
 
+The payload also carries `swagger` (the sources this corpus was generated
+from, as absolute paths) and `endpointCount`:
+
+```json
+{"pid": 40321, "projectRoot": "/…/client", "mockDir": "/…/client/tests/mocks",
+ "swagger": ["/…/client/api/openapi.yaml"], "endpointCount": 37,
+ "port": 8795, "startedAt": "2026-09-04T03:59:31+00:00"}
+```
+
+`swagger` is absolute because `api/openapi.yaml` is the same string in every
+project and could not tell two servers apart. `endpointCount` separates "the
+wrong corpus" from "an empty one": a server with 0 endpoints answers 404 to
+everything, which reads downstream as a broken app rather than a mock pointed
+at nothing.
+
 ### What the `--check` gates do not compare
 
 Each `--check` compares two things, and the chain stops short of the
