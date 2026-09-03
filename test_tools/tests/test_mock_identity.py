@@ -7,6 +7,7 @@ control panel's 200, and five tests ran against the other project's mocks.
 The failures were reported as regressions of the change under test.
 """
 import json
+import tempfile
 import threading
 import time
 import urllib.error
@@ -217,3 +218,156 @@ class TestIdentityCommand:
             assert "no identity endpoint" in proc.stderr
         finally:
             httpd.shutdown()
+
+class TestTheCorpusFields:
+    """`mockDir` says which tree; these say what came out of it.
+
+    Added after the fact (two lanes implemented this endpoint from the same
+    report, and these two fields were in only one of them).
+    """
+
+    def test_the_swagger_is_anchored_to_the_project_root(self, tmp_path):
+        # "api/openapi.yaml" is the same string in every project. As a bare
+        # relative path it cannot distinguish the two servers this endpoint
+        # exists to distinguish, which is the whole job.
+        root = tmp_path / "projectA"
+        root.mkdir(parents=True)
+        spec_file = root / "spec.json"
+        spec_file.write_text(json.dumps(SPEC))
+        out = root / "mocks"
+        generate([str(spec_file)], out)
+        srv = MockServer(MockStore.load(out), RunManager({}, root), port=0,
+                         swagger=["api/openapi.yaml"])
+        srv.bind()
+        threading.Thread(target=srv.serve_forever, daemon=True).start()
+        time.sleep(0.1)
+        try:
+            _, body = _identity(srv.port)
+            assert body["swagger"] == [str(root / "api/openapi.yaml")]
+            assert Path(body["swagger"][0]).is_absolute()
+        finally:
+            srv.shutdown()
+
+    def test_an_absolute_swagger_is_left_alone(self, tmp_path):
+        root = tmp_path / "projectA"
+        root.mkdir(parents=True)
+        spec_file = root / "spec.json"
+        spec_file.write_text(json.dumps(SPEC))
+        out = root / "mocks"
+        generate([str(spec_file)], out)
+        srv = MockServer(MockStore.load(out), RunManager({}, root), port=0,
+                         swagger=[str(spec_file)])
+        srv.bind()
+        threading.Thread(target=srv.serve_forever, daemon=True).start()
+        time.sleep(0.1)
+        try:
+            assert _identity(srv.port)[1]["swagger"] == [str(spec_file)]
+        finally:
+            srv.shutdown()
+
+    def test_a_swagger_path_starts_with_the_projectRoot_beside_it(self, tmp_path):
+        """The two fields must spell the same directory the same way.
+
+        Asserted as a relation, not against a literal: the literal version
+        passed while the payload actually disagreed with itself, because
+        pytest's tmp_path is already resolved and the bug only appears for a
+        caller whose root is not (macOS /var -> /private/var). Found by
+        running the server outside the suite.
+        """
+        import os
+        root = Path(tempfile.mkdtemp()) / "projectA"   # NOT pre-resolved
+        root.mkdir(parents=True)
+        spec_file = root / "spec.json"
+        spec_file.write_text(json.dumps(SPEC))
+        out = root / "mocks"
+        generate([str(spec_file)], out)
+        srv = MockServer(MockStore.load(out), RunManager({}, root), port=0,
+                         swagger=["api/openapi.yaml"])
+        srv.bind()
+        threading.Thread(target=srv.serve_forever, daemon=True).start()
+        time.sleep(0.1)
+        try:
+            _, body = _identity(srv.port)
+            assert body["swagger"][0].startswith(body["projectRoot"]), body
+        finally:
+            srv.shutdown()
+
+    def test_the_endpoint_count_follows_the_corpus(self, own):
+        # The difference between "the wrong corpus" and "an empty one": a
+        # server with 0 endpoints 404s everything, which reads downstream as
+        # a broken app rather than a mock pointed at nothing.
+        assert _identity(own.port)[1]["endpointCount"] == 1
+
+    def test_no_swagger_configured_is_an_empty_list_not_a_missing_key(self, own):
+        # A harness comparing fields should not have to distinguish "absent"
+        # from "none declared".
+        assert _identity(own.port)[1]["swagger"] == []
+
+
+class TestTheTokenGateDidNotMove:
+    """`identity` sits AHEAD of the token check. That is deliberate, and it
+    is also the kind of edit that quietly widens a hole: `/__jsonui__/run`
+    executes shell commands. These arms pin the boundary where it was."""
+
+    def _admin(self, port: int, path: str, token: str | None = None):
+        headers = {"Host": f"127.0.0.1:{port}"}
+        if token:
+            headers["X-JsonUI-Token"] = token
+        req = urllib.request.Request(f"http://127.0.0.1:{port}{path}", headers=headers)
+        with urllib.request.urlopen(req, timeout=5) as resp:
+            return resp.status
+
+    def test_every_other_admin_route_still_demands_the_token(self, own):
+        for path in ("/__jsonui__/mocks", "/__jsonui__/requests",
+                     "/__jsonui__/run/status", "/__jsonui__/contract-violations"):
+            with pytest.raises(urllib.error.HTTPError) as caught:
+                self._admin(own.port, path)
+            assert caught.value.code == 401, path
+            assert self._admin(own.port, path, token=own.token) == 200, path
+
+    def test_identity_is_still_refused_from_a_foreign_host_header(self, own):
+        # Unauthenticated is not unguarded: the DNS-rebinding defence is the
+        # Host check, and it runs before the route.
+        req = urllib.request.Request(
+            f"http://127.0.0.1:{own.port}/__jsonui__/identity",
+            headers={"Host": "evil.example"})
+        with pytest.raises(urllib.error.HTTPError) as caught:
+            urllib.request.urlopen(req, timeout=5)
+        assert caught.value.code == 403
+
+
+class TestShutdownWithoutAServeLoop:
+    """`shutdown()` waits for the serve loop to stop, so on a server that only
+    ever bound it waited for something that never started — forever. A unit
+    test that binds without serving is exactly that shape, and it is how this
+    was found."""
+
+    def test_it_returns_instead_of_hanging(self, tmp_path):
+        root = tmp_path / "projectA"
+        root.mkdir(parents=True)
+        (root / "mocks").mkdir()
+        srv = MockServer(MockStore.load(root / "mocks"), RunManager({}, root), port=0)
+        port = srv.bind()  # bound, never served
+        done = threading.Event()
+
+        def stop():
+            srv.shutdown()
+            done.set()
+
+        threading.Thread(target=stop, daemon=True).start()
+        assert done.wait(timeout=10), "shutdown() blocked on a serve loop that never started"
+
+        # and the port is actually released
+        import socket
+        probe = socket.socket()
+        try:
+            probe.bind(("127.0.0.1", port))
+        finally:
+            probe.close()
+
+    def test_a_served_server_still_stops(self, tmp_path):
+        # The guard must not skip the real shutdown when there IS a loop.
+        srv = _serve(tmp_path / "projectA")
+        srv.shutdown()
+        with pytest.raises(urllib.error.URLError):
+            _identity(srv.port)

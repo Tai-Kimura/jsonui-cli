@@ -2180,7 +2180,9 @@ def cmd_mock_serve(args):
     server = MockServer(store, RunManager(run_targets, project_root,
                                           post_run_hook=post_run_hook,
                                           contract_log=contract_log),
-                        port=port, contract=contract, contract_log=contract_log)
+                        port=port, contract=contract, contract_log=contract_log,
+                        # For `identity`: which swagger this corpus came from.
+                        swagger=list(config.get("swagger") or []))
     # Bind BEFORE printing the banner: consumers parse the URL/token from
     # stdout as the "server is up" signal, so a banner followed by a bind
     # failure reads as a successful start. Bind also resolves port 0 to
