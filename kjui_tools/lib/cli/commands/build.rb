@@ -45,8 +45,7 @@ module KjuiTools
           # said "Compose build completed!" — the generated file claims to
           # be the layout and is empty. Fail like the other two tools do.
           if @structural_errors.any?
-            Core::Logger.error "Build failed: #{@structural_errors.size} layout(s) hold a non-node child; " \
-                               "their generated views would be empty:"
+            Core::Logger.error structural_failure_headline(@structural_errors)
             @structural_errors.each { |e| Core::Logger.error "  #{e}" }
             exit 1
           end
@@ -63,6 +62,23 @@ module KjuiTools
             Core::Logger.error "Build failed: #{@validation_errors} validation error(s)"
             exit 1
           end
+        end
+
+        # Two counts, because they differ: one layout with two non-node
+        # children is two entries but one file. Saying "2 layout(s)" there
+        # sends the reader looking for a second file.
+        #
+        # And the views are not hypothetical. Generation runs before this
+        # check — as it does for binding errors, measured — so the empty
+        # file is already in the tree and it compiles. "would be empty"
+        # invites the reader to think there is nothing to clean up.
+        def structural_failure_headline(entries)
+          # `map { }.compact`, not `filter_map`: the vendored tools run under
+          # whatever ruby the project has, and 2.6 has no filter_map.
+          files = entries.map { |e| e[/\A\[([^\]]+)\]/, 1] }.compact.uniq
+          "Build failed: #{entries.size} non-node child(ren) in #{files.size} layout(s). " \
+            'Their generated views were already written and are empty — ' \
+            'the files are in the tree and compile:'
         end
 
         private

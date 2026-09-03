@@ -247,3 +247,47 @@ RSpec.describe KjuiTools::CLI::Commands::Build do
     end
   end
 end
+
+RSpec.describe KjuiTools::CLI::Commands::Build, '#structural_failure_headline' do
+  # A non-node child is reported per violation, but the file it lives in is
+  # what the reader goes and opens. One layout with two of them is two
+  # entries and one file, and the first version of this line called both
+  # numbers "layout(s)" — sending the reader after a second file that does
+  # not exist. The two counts are asserted separately because a single
+  # fixture where they happen to be equal cannot tell the versions apart.
+  subject(:headline) { described_class.new.structural_failure_headline(entries) }
+
+  context 'two violations in one layout' do
+    let(:entries) do
+      ["[Two.json] [id=two] 'child[0]' in 'View' must be a component node, got string",
+       "[Two.json] [id=two] 'child[2]' in 'View' must be a component node, got string"]
+    end
+
+    it 'counts two children and one layout' do
+      expect(headline).to include('2 non-node child(ren) in 1 layout(s)')
+    end
+  end
+
+  context 'one violation in each of two layouts' do
+    let(:entries) do
+      ["[A1.json] [id=a1] 'child' in 'View' must be a component node, got string",
+       "[A2.json] [id=a2] 'child' in 'View' must be a component node, got string"]
+    end
+
+    it 'counts two children and two layouts' do
+      expect(headline).to include('2 non-node child(ren) in 2 layout(s)')
+    end
+  end
+
+  describe 'what it claims about the files' do
+    let(:entries) { ["[A.json] [id=a] 'child' in 'View' must be a component node, got string"] }
+
+    # Generation runs before this check (measured: binding errors write
+    # their files too and then fail the same way), so the empty view is on
+    # disk. The line must not say "would be".
+    it 'says the empty views are already written, not that they would be' do
+      expect(headline).to include('already written')
+      expect(headline).not_to include('would be')
+    end
+  end
+end
