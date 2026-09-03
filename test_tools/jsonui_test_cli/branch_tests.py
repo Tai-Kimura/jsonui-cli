@@ -2607,9 +2607,20 @@ func assertFieldEquals(_ expected: Any?, _ actual: Any?,
   XCTAssertEqual(e, a, file: file, line: line)
 }
 
+/// Numeric view of a value for comparison; nil for anything that is not a
+/// number — including real Bools. Order matters: a recorded JSON body comes
+/// out of JSONSerialization as NSNumber, and Foundation bridges NSNumber(0)
+/// and NSNumber(1) through `as? Bool` as false / true, so a Bool check that
+/// runs FIRST swallows exactly the JSON 0 and 1 (2 and 0.5 pass it) and a
+/// contract `{item_id: 1}` fails as "expected Optional(1), got 1" on iOS
+/// only. Measured 2026-09-03. So: look at the NSNumber first and let its
+/// CF type decide whether it is a Bool; `is Bool` after that catches a
+/// Swift Bool that did not bridge.
 private func asDouble(_ value: Any?) -> Double? {
-  if let b = value as? Bool { _ = b; return nil }
-  if let n = value as? NSNumber, CFGetTypeID(n) != CFBooleanGetTypeID() { return n.doubleValue }
+  if let n = value as? NSNumber {
+    return CFGetTypeID(n) == CFBooleanGetTypeID() ? nil : n.doubleValue
+  }
+  if value is Bool { return nil }
   if let d = value as? Double { return d }
   if let i = value as? Int { return Double(i) }
   return nil
