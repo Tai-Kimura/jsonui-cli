@@ -87,6 +87,84 @@ class DhashTest(unittest.TestCase):
 
 
 @unittest.skipUnless(HAVE_PILLOW, "Pillow not installed (jui-tools[conformance])")
+class IosLocalChromeCropTest(unittest.TestCase):
+    """What the ios crop buys, on the local lane as well as ci.
+
+    Two "iPhone 16 Pro / iOS 18.6" simulators differing only in UDID rendered
+    the same corpus with 849 of 852 hashes moved while the content was
+    identical; the differing pixels sat in the status-bar rows, and cropping
+    them brought the same pairs to 0-4 (measured 2026-09-04). Android local
+    stays uncropped on purpose — that AVD has no taskbar, so those rows hold
+    real content.
+    """
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.tmp = Path(self._tmp.name)
+
+    def tearDown(self):
+        self._tmp.cleanup()
+
+    def _pair_differing_only_in_chrome(self):
+        """Same content, different status-bar band — the cross-device shape.
+
+        Glyphs drawn black on one and white on the other: the documented real
+        case is exactly that (the clock's colour is inferred from the
+        luminance behind the bar and flipped between two runs of the same
+        image, dhash 23). A gentler contrast does not clear the threshold,
+        which is the arm passing for the wrong reason — the first draft used
+        black vs grey and stayed under it.
+        """
+        a = _write_png(self.tmp / "a.png", size=(603, 1311))
+        b = _write_png(self.tmp / "b.png", size=(603, 1311))
+        # Content well below the band, identical on both.
+        for path in (a, b):
+            img = Image.open(path).convert("RGB")
+            draw = ImageDraw.Draw(img)
+            draw.rectangle([80, 300, 520, 900], fill=(40, 90, 200))
+            img.save(path)
+        for path, fill in ((a, "black"), (b, "white")):
+            img = Image.open(path).convert("RGB")
+            draw = ImageDraw.Draw(img)
+            # glyph-sized marks inside the top band only (rows 39..58 of 1311,
+            # the same fraction of the frame as rows 78..117 of 2622)
+            for x in range(40, 560, 24):
+                draw.rectangle([x, 39, x + 14, 58], fill=fill)
+            img.save(path)
+        return a, b
+
+    def test_a_chrome_only_difference_moves_an_uncropped_hash(self):
+        a, b = self._pair_differing_only_in_chrome()
+        distance = baseline.hamming(baseline.dhash_file(a), baseline.dhash_file(b))
+        self.assertGreater(distance, baseline.DEFAULT_THRESHOLD)
+
+    def test_the_ios_crop_removes_it_on_both_lanes(self):
+        a, b = self._pair_differing_only_in_chrome()
+        for env in ("ci", "local"):
+            crop = baseline.chrome_crop("ios", env)
+            distance = baseline.hamming(
+                baseline.dhash_file(a, crop=crop), baseline.dhash_file(b, crop=crop)
+            )
+            self.assertLessEqual(distance, baseline.DEFAULT_THRESHOLD, env)
+
+    def test_the_crop_still_sees_a_change_below_the_band(self):
+        """The crop must not blind the lane to content. The content here sits
+        BELOW row 160 — the first draft put it at rows 50..149, inside the
+        band, so the arm passed for the wrong reason and proved nothing."""
+        a, b = self._pair_differing_only_in_chrome()
+        img = Image.open(b).convert("RGB")
+        draw = ImageDraw.Draw(img)
+        for x in range(60, 300, 40):
+            draw.rectangle([x, 400, x + 20, 700], fill="black")
+        img.save(b)
+        crop = baseline.chrome_crop("ios", "local")
+        distance = baseline.hamming(
+            baseline.dhash_file(a, crop=crop), baseline.dhash_file(b, crop=crop)
+        )
+        self.assertGreater(distance, baseline.DEFAULT_THRESHOLD)
+
+
+@unittest.skipUnless(HAVE_PILLOW, "Pillow not installed (jui-tools[conformance])")
 class BaselineUpdateTest(unittest.TestCase):
     def setUp(self):
         self._tmp = tempfile.TemporaryDirectory()
@@ -301,13 +379,26 @@ class ChromeCropTests(unittest.TestCase):
 
     The CI android lane draws an opaque status bar and launcher taskbar over an
     inset app; both move on their own (clock ticks, predicted-apps row reorders)
-    and neither can carry fixture pixels there. Local has no taskbar, so the same
-    rows hold real content and must stay in the hash.
+    and neither can carry fixture pixels there. The local AVD has no taskbar, so
+    the same rows hold real content and must stay in the hash.
+
+    A lane is cropped when its chrome is nondeterministic, not because it is a
+    CI lane — this used to be asserted as "local is never cropped", which held
+    only while android was the sole cropped platform.
     """
 
-    def test_local_lanes_are_never_cropped(self):
-        for platform in ("android", "ios", "web"):
-            self.assertEqual(baseline.chrome_crop(platform, "local"), (0, 0))
+    def test_a_lane_is_cropped_when_its_chrome_is_nondeterministic(self):
+        # android/web local: those rows carry fixture pixels and nothing in
+        # them moves on its own, so they stay in the hash.
+        self.assertEqual(baseline.chrome_crop("android", "local"), (0, 0))
+        self.assertEqual(baseline.chrome_crop("web", "local"), (0, 0))
+        # ios local: the same status-bar glyphs as the ci lane, and they are
+        # not stable across simulator INSTANCES either — two iPhone 16 Pro /
+        # iOS 18.6 devices differing only in UDID moved 849 of 852 hashes with
+        # the content identical, and 0-4 once cropped (2026-09-04).
+        self.assertEqual(baseline.chrome_crop("ios", "local"), (160, 0))
+        # an unknown lane still never crops silently
+        self.assertEqual(baseline.chrome_crop("web", "ci"), (0, 0))
         self.assertEqual(baseline.chrome_crop(None, None), (0, 0))
 
     def test_ci_android_excludes_the_measured_chrome_bands(self):
