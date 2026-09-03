@@ -21,7 +21,30 @@ module SwiftCompiler
   class << self
     # Check if Swift compiler is available
     def available?
-      @available ||= system('which swiftc > /dev/null 2>&1')
+      return @available unless @available.nil?
+
+      @available = system('which swiftc > /dev/null 2>&1')
+    end
+
+    # Whether `import SwiftUI` type-checks here. A toolchain can exist
+    # without the SDK: ubuntu's CI image ships swiftc, so `available?` is
+    # true there and every check then fails on its first line with
+    # "no such module 'SwiftUI'" — a toolchain finding wearing a
+    # converter finding's clothes (four label examples, 2026-09-03).
+    # Probed once, by compiling the import itself.
+    def swiftui_available?
+      return @swiftui_available unless @swiftui_available.nil?
+
+      @swiftui_available = available? && run_swiftc("import SwiftUI\n", '-typecheck')[:status].success?
+    end
+
+    # Why a check cannot run here, or nil when it can. The matcher turns
+    # this into a skip — visible in the count — never into a pass.
+    def unavailable_reason
+      return 'swiftc is not on PATH' unless available?
+      return "swiftc cannot import SwiftUI here (SDK: #{sdk_path.empty? ? 'none' : sdk_path})" unless swiftui_available?
+
+      nil
     end
 
     # Perform syntax check only (fast)
@@ -40,41 +63,21 @@ module SwiftCompiler
     # @param mode [Symbol] :parse for syntax only, :typecheck for full type check
     # @return [CompileResult] The result of the compilation
     def compile_check(swift_code, imports: [], mode: :typecheck)
-      unless available?
-        return CompileResult.new(
-          success: true,
-          output: 'Swift compiler not available, skipping check',
-          errors: []
-        )
+      # A check that cannot run is not a check that passed. This used to
+      # answer success when swiftc was missing, which read as "compiles"
+      # to every caller. The matcher skips before it gets here; a direct
+      # caller gets the reason as the error.
+      if (reason = unavailable_reason)
+        return CompileResult.new(success: false, output: reason, errors: [reason])
       end
 
-      temp_file = Tempfile.new(['sjui_test', '.swift'])
-      begin
-        full_code = build_compilable_code(swift_code, imports)
-        temp_file.write(full_code)
-        temp_file.close
-
-        flag = mode == :parse ? '-parse' : '-typecheck'
-
-        # Use SDK path for proper framework resolution
-        sdk_path = `xcrun --show-sdk-path 2>/dev/null`.strip
-        cmd = if sdk_path.empty?
-                "swiftc #{flag} #{temp_file.path} 2>&1"
-              else
-                "swiftc #{flag} -sdk #{sdk_path} #{temp_file.path} 2>&1"
-              end
-
-        stdout, stderr, status = Open3.capture3(cmd)
-        output = stdout + stderr
-
-        CompileResult.new(
-          success: status.success?,
-          output: output,
-          errors: parse_errors(output)
-        )
-      ensure
-        temp_file.unlink
-      end
+      flag = mode == :parse ? '-parse' : '-typecheck'
+      run = run_swiftc(build_compilable_code(swift_code, imports), flag)
+      CompileResult.new(
+        success: run[:status].success?,
+        output: run[:output],
+        errors: parse_errors(run[:output])
+      )
     end
 
     # Check if code compiles (returns boolean)
@@ -83,6 +86,29 @@ module SwiftCompiler
     end
 
     private
+
+    # SDK path for framework resolution; empty where xcrun is absent.
+    def sdk_path
+      @sdk_path ||= `xcrun --show-sdk-path 2>/dev/null`.strip
+    end
+
+    # Run swiftc over `source` with `flag`; returns { status:, output: }.
+    def run_swiftc(source, flag)
+      temp_file = Tempfile.new(['sjui_test', '.swift'])
+      begin
+        temp_file.write(source)
+        temp_file.close
+        cmd = if sdk_path.empty?
+                "swiftc #{flag} #{temp_file.path} 2>&1"
+              else
+                "swiftc #{flag} -sdk #{sdk_path} #{temp_file.path} 2>&1"
+              end
+        stdout, stderr, status = Open3.capture3(cmd)
+        { status: status, output: stdout + stderr }
+      ensure
+        temp_file.unlink
+      end
+    end
 
     def build_compilable_code(code, imports)
       import_statements = (['SwiftUI'] + imports).uniq.map { |i| "import #{i}" }.join("\n")
@@ -123,6 +149,21 @@ end
 # RSpec matcher for Swift compilation
 RSpec::Matchers.define :compile_as_swift do
   match do |swift_code|
+    # Skipped, not passed and not failed: the example asserts what swiftc
+    # says about the emitted Swift, and here swiftc cannot say it. The
+    # skip shows in the count, so a leg that ran none of these says so.
+    # The macOS leg, where the SDK is, still runs every one.
+    if (reason = SwiftCompiler.unavailable_reason)
+      message = "compile_as_swift: #{reason}; this example runs where the SwiftUI SDK is present"
+      # Record the skip BEFORE raising, as `skip` itself does. The runner
+      # treats SkipDeclaredInExample as already recorded and rescues it
+      # as a no-op, so a bare raise ends the example as PASSED — measured:
+      # four label examples went green under an SDK-less swiftc.
+      example = RSpec.current_example
+      RSpec::Core::Pending.mark_skipped!(example, message) if example
+      raise RSpec::Core::Pending::SkipDeclaredInExample, message
+    end
+
     @result = SwiftCompiler.compile_check(swift_code, imports: @imports || [], mode: @mode || :typecheck)
     @result.success?
   end
