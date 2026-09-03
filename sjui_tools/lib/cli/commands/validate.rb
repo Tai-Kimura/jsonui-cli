@@ -1,5 +1,6 @@
 # frozen_string_literal: true
 
+require 'pathname'
 require 'json'
 require_relative '../command_base'
 require_relative '../../core/project_finder'
@@ -46,7 +47,11 @@ module SjuiTools
           else
             # Convert relative paths to absolute
             files = files.map do |file|
-              if File.absolute_path?(file)
+              # Pathname#absolute?, not File.absolute_path? — the latter is
+              # 2.7+, and the vendored tools run under the consumer's ruby,
+              # which is 2.6 on the faces measured. Found by running this
+              # suite under 2.6: `sjui validate` raised NoMethodError there.
+              if Pathname.new(file).absolute?
                 file
               else
                 File.expand_path(file)
