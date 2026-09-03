@@ -55,12 +55,33 @@ RSpec.describe KjuiTools::CLI::Main do
       described_class.run(['b'])
     end
 
-    it 'outputs watch not implemented message' do
-      expect { described_class.run(['watch']) }.to output(/not yet implemented/).to_stdout
+    # `watch` printed a line and exited 0, so a script that called it was told
+    # it had succeeded. It is not coming back — watching is `jui hotload
+    # listen` — so it fails, says where to go, and is gone from the list.
+    it 'fails rather than reporting success for a command it does not have' do
+      expect { described_class.run(['watch']) }.to raise_error(SystemExit) { |e|
+        expect(e.status).to eq(1)
+      }
     end
 
-    it 'outputs w as alias for watch' do
-      expect { described_class.run(['w']) }.to output(/not yet implemented/).to_stdout
+    it 'names the command that replaced it, on stderr' do
+      expect {
+        expect { described_class.run(['watch']) }.to raise_error(SystemExit)
+      }.to output(/jui hotload listen/).to_stderr
+    end
+
+    it 'treats the w alias the same way' do
+      expect {
+        expect { described_class.run(['w']) }.to raise_error(SystemExit) { |e|
+          expect(e.status).to eq(1)
+        }
+      }.to output(/jui hotload listen/).to_stderr
+    end
+
+    it 'does not advertise watch in the command list' do
+      # The list is read as a promise; docs are generated from it.
+      expect { described_class.run(['help']) }.to output(/Commands:/).to_stdout
+      expect { described_class.run(['help']) }.not_to output(/watch/).to_stdout
     end
 
     it 'outputs version' do
