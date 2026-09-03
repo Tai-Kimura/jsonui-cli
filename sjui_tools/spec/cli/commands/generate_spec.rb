@@ -100,7 +100,9 @@ RSpec.describe SjuiTools::CLI::Commands::Generate do
     end
 
     context 'with UIKit mode' do
-      let(:temp_dir) { File.join(Dir.tmpdir, 'sjui_test_uikit_converter') }
+      # Per-example directory, not a fixed name shared by concurrent rspec
+      # processes (see converter_generator_spec).
+      let(:temp_dir) { File.realpath(Dir.mktmpdir('sjui_test_uikit_converter')) }
       # The converter generator writes handlers into sjui_tools/lib/uikit/handlers/extensions
       # when it detects a 'sjui_tools' directory beside the cwd (test-app layout).
       let(:handlers_dir) { File.join(temp_dir, 'sjui_tools', 'lib', 'uikit', 'handlers', 'extensions') }

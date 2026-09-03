@@ -5,7 +5,9 @@ require 'json'
 require 'fileutils'
 
 RSpec.describe SjuiTools::SwiftUI::StyleLoader do
-  let(:temp_dir) { File.join(Dir.tmpdir, 'style_loader_test') }
+  # Per-example directory, not a fixed name shared by concurrent rspec
+  # processes (see converter_generator_spec).
+  let(:temp_dir) { File.realpath(Dir.mktmpdir('style_loader_test')) }
   let(:styles_dir) { File.join(temp_dir, 'Styles') }
 
   before do

@@ -6,7 +6,9 @@ require 'fileutils'
 
 RSpec.describe SjuiTools::SwiftUI::ViewUpdater do
   let(:updater) { described_class.new }
-  let(:temp_dir) { File.join(Dir.tmpdir, 'view_updater_test') }
+  # Per-example directory, not a fixed name shared by concurrent rspec
+  # processes (see converter_generator_spec).
+  let(:temp_dir) { File.realpath(Dir.mktmpdir('view_updater_test')) }
 
   before do
     FileUtils.mkdir_p(temp_dir)

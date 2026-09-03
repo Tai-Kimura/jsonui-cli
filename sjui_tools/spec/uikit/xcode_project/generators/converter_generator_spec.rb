@@ -7,7 +7,12 @@ require 'fileutils'
 require 'json'
 
 RSpec.describe SjuiTools::UIKit::XcodeProject::Generators::ConverterGenerator do
-  let(:temp_dir) { File.join(Dir.tmpdir, 'sjui_converter_test') }
+  # One directory per example (`Dir.mktmpdir`), never a fixed name: with
+  # `Dir.tmpdir/sjui_converter_test` two rspec processes (the 3.3 and 2.6
+  # suites side by side) shared the path and each `after { rm_rf }` deleted
+  # the other's files — 5 of 5 concurrent pairs red, 2026-09-03. realpath,
+  # because the spec chdirs here and macOS's /var is a symlink to /private/var.
+  let(:temp_dir) { File.realpath(Dir.mktmpdir('sjui_converter_test')) }
   # Generator writes handler files to handlers/extensions (new layout) within the test app structure
   # when the current directory contains a `sjui_tools` subdirectory.
   let(:handlers_dir) { File.join(temp_dir, 'sjui_tools', 'lib', 'uikit', 'handlers', 'extensions') }
