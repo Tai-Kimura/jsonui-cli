@@ -4,6 +4,7 @@ require 'json'
 require 'fileutils'
 require 'set'
 require_relative 'converter_factory'
+require_relative 'scrolling_cell_index'
 require_relative 'views/base_view_converter'
 require_relative 'views/responsive_helper'
 require_relative 'action_manager'
@@ -66,6 +67,7 @@ module SjuiTools
 
         # includeを処理
         json_data = process_includes(json_data, File.dirname(json_file_path))
+        mark_root_if_scrolling_cell(json_data, json_file_path)
 
         # ファイル名からビュー名を生成
         base_name = File.basename(json_file_path, '.json')
@@ -106,10 +108,29 @@ module SjuiTools
       # What it cannot see: a layout used as a Collection cell — that file is
       # converted on its own, and its root has no ancestor here even though
       # on the device it sits inside a scrolling Collection.
+      # Screen ids (ScrollingCellIndex.build) whose layouts render inside a
+      # vertically scrolling Collection of ANOTHER layout. Set by `sjui
+      # build`, which sees the whole project; a single-file conversion (a
+      # spec, `sjui convert`) has none, and converts as before.
+      attr_accessor :scrolling_cell_ids
+
+      # The project-wide half of the mark: a layout that is a cell / header /
+      # footer of a vertically scrolling Collection is under a scrolling
+      # ancestor from its root, though its own tree shows none.
+      def mark_root_if_scrolling_cell(json_data, json_file_path)
+        return unless json_data.is_a?(Hash) && scrolling_cell_ids
+
+        id = JsonUIShared::ScreenIndex.screen_id_for_path(json_file_path)
+        json_data[SCROLLING_ANCESTOR_KEY] = true if scrolling_cell_ids.include?(id)
+      end
+
       def mark_scrolling_ancestors(component, inside = false)
         return unless component.is_a?(Hash)
         return if component.key?('data') && !component.key?('type')
 
+        # A root already marked (a cell of a scrolling Collection in another
+        # layout) is inside for everything below it.
+        inside ||= component[SCROLLING_ANCESTOR_KEY] == true
         component[SCROLLING_ANCESTOR_KEY] = true if inside
         inside ||= SCROLLING_ANCESTOR_TYPES.include?(component['type'].to_s.downcase)
         child_data = component['child'] || component['children']
@@ -156,6 +177,7 @@ module SjuiTools
 
         # Process includes
         json_data = process_includes(json_data, File.dirname(json_file_path))
+        mark_root_if_scrolling_cell(json_data, json_file_path)
 
         # Convert to SwiftUI code
         @state_variables = []
