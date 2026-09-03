@@ -52,9 +52,18 @@ RSpec.describe KjuiTools::Core::AttributeValidator do
       'a boolean' => true
     }.each do |label, value|
       it "says #{label} is not a node, in one message" do
+        # Since `acceptsSingle` put the declaration back in charge of the
+        # shape, the DECLARED-TYPE check reports a scalar child and the node
+        # sentence stays on the structural channel — one defect, one warning.
+        # Both halves are asserted: a version that dropped the structural
+        # record would still pass the warning half, and the build would stop
+        # failing.
         found = warnings_for(value)
         expect(found.size).to eq(1)
-        expect(found.first).to include("'child' in 'View' must be a component node")
+        expect(found.first).to include("'child' in 'View' expects array")
+        expect(structural_errors_for(value).size).to eq(1)
+        expect(structural_errors_for(value).first)
+          .to include('must be a component node')
       end
     end
 
@@ -132,21 +141,24 @@ RSpec.describe KjuiTools::Core::AttributeValidator do
       expect(validator).not_to be_structural_errors
     end
 
-    it 'also reaches the warning summary, where a reader is already looking' do
+    it 'reaches the warning summary for what nothing else reports' do
+      # A non-node INSIDE an array is invisible to the declared-type check —
+      # an array is what it is — so this one has to carry its own warning.
       validator = described_class.new(:compose)
-      warnings = validator.validate({ 'type' => 'View', 'id' => 'v', 'child' => 'bad' })
+      warnings = validator.validate({ 'type' => 'View', 'id' => 'v',
+                                      'child' => ['bad'] })
       expect(warnings.grep(/must be a component node/).size).to eq(1)
     end
 
-    # Counting alone cannot decide this: with the defect there is also
-    # exactly one warning about `child` — the generic "expects array, got
-    # string". What changed is which one, so the arm asserts the content.
-    it 'says the defect once, and the generic type warning is not the one' do
+    it 'says the defect once, whichever channel owns it' do
+      # Two checks can see a scalar child — the declared type and the node
+      # rule — and for a while both spoke. One defect, one sentence: the
+      # type check warns, the node rule records without warning again.
       validator = described_class.new(:compose)
+      validator.reset_structural_errors!
       warnings = validator.validate({ 'type' => 'View', 'id' => 'v', 'child' => 'bad' })
-      about_child = warnings.grep(/child/)
-      expect(about_child.size).to eq(1)
-      expect(about_child.first).not_to include('expects')
+      expect(warnings.grep(/child/).size).to eq(1)
+      expect(validator.structural_errors.size).to eq(1)
     end
   end
 end

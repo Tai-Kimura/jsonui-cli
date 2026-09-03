@@ -3444,11 +3444,13 @@
     },
     "child": {
       "type": "array",
-      "description": "Child component(s)"
+      "acceptsSingle": true,
+      "description": "Child component(s). A single component node (object) is accepted as a one-element array."
     },
     "children": {
       "type": "array",
-      "description": "Child components (alias for child)"
+      "acceptsSingle": true,
+      "description": "Child components (alias for child). A single component node (object) is accepted as a one-element array."
     },
     "distribution": {
       "type": "string",
@@ -3573,21 +3575,25 @@
     "_comment": "Sparse by design, not an alias: only the Kotlin dynamic runtime dispatches CircleView (DynamicCircleViewComponent, CircleShape clip) - P18 audit 2026-08-01. Everything it renders beyond child/children comes from common. component_metadata.json carries the per-platform truth.",
     "child": {
       "type": "array",
-      "description": "Child component(s)"
+      "acceptsSingle": true,
+      "description": "Child component(s). A single component node (object) is accepted as a one-element array."
     },
     "children": {
       "type": "array",
-      "description": "Child components (alias for child)"
+      "acceptsSingle": true,
+      "description": "Child components (alias for child). A single component node (object) is accepted as a one-element array."
     }
   },
   "ScrollView": {
     "child": {
       "type": "array",
-      "description": "Child component(s)"
+      "acceptsSingle": true,
+      "description": "Child component(s). A single component node (object) is accepted as a one-element array."
     },
     "children": {
       "type": "array",
-      "description": "Child components"
+      "acceptsSingle": true,
+      "description": "Child components. A single component node (object) is accepted as a one-element array."
     },
     "orientation": {
       "type": "string",
@@ -4402,11 +4408,13 @@
     },
     "child": {
       "type": "array",
-      "description": "Child component(s). Declared from the implementation, which already read it: sjui gradient_view_converter.rb:16 (plan 51-E)."
+      "acceptsSingle": true,
+      "description": "Child component(s). Declared from the implementation, which already read it: sjui gradient_view_converter.rb:16 (plan 51-E). A single component node (object) is accepted as a one-element array."
     },
     "children": {
       "type": "array",
-      "description": "Child components (alias for child). Declared from the implementation, which already read it: sjui gradient_view_converter.rb:16 (child || children) (plan 51-E)."
+      "acceptsSingle": true,
+      "description": "Child components (alias for child). Declared from the implementation, which already read it: sjui gradient_view_converter.rb:16 (child || children) (plan 51-E). A single component node (object) is accepted as a one-element array."
     },
     "startPoint": {
       "type": [
@@ -4469,11 +4477,13 @@
     },
     "child": {
       "type": "array",
-      "description": "Child component(s). Declared from the implementation, which already read it: sjui blur_converter.rb:16 (plan 51-E)."
+      "acceptsSingle": true,
+      "description": "Child component(s). Declared from the implementation, which already read it: sjui blur_converter.rb:16 (plan 51-E). A single component node (object) is accepted as a one-element array."
     },
     "children": {
       "type": "array",
-      "description": "Child components (alias for child). Declared from the implementation, which already read it: sjui blur_converter.rb:16 (child || children) (plan 51-E)."
+      "acceptsSingle": true,
+      "description": "Child components (alias for child). Declared from the implementation, which already read it: sjui blur_converter.rb:16 (child || children) (plan 51-E). A single component node (object) is accepted as a one-element array."
     }
   },
   "IconLabel": {
@@ -4609,11 +4619,13 @@
     },
     "child": {
       "type": "array",
-      "description": "Child component(s)"
+      "acceptsSingle": true,
+      "description": "Child component(s). A single component node (object) is accepted as a one-element array."
     },
     "children": {
       "type": "array",
-      "description": "Child components (alias for child)"
+      "acceptsSingle": true,
+      "description": "Child components (alias for child). A single component node (object) is accepted as a one-element array."
     },
     "direction": {
       "type": "string",

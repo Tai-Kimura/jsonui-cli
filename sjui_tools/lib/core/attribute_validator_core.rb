@@ -65,25 +65,18 @@ module JsonUIShared
 
     # Keys that hold nested component nodes.
     #
-    # check_child_structure is the authority for their shape, NOT the
-    # declared type: the definitions say `"type": "array"`, but every
-    # renderer also accepts a single node object as shorthand for a
-    # one-element array (164 nodes across 12 layout trees rely on it), so
-    # the declaration would reject working layouts. The generic type check
-    # is skipped for these keys for that reason — see validate_attribute.
+    # The declaration is the authority for their SHAPE: `"type": "array"`
+    # plus `"acceptsSingle": true`, which validate_attribute reads. This
+    # constant exists for check_child_structure, which asks the further
+    # question the declared type cannot: whether what is in there is a node.
     #
-    # Widening the declaration to ["array", "object"] is the honest fix and
-    # is tracked separately: it changes the generated Kotlin/Swift tables
-    # from `List<Any?>?` to `Any?` (an AttrCoerce.array call disappears),
-    # which is a source-breaking signature change in two libraries and does
-    # not belong in a bug fix. Until then the declaration is not the gate
-    # here, and this comment is the reason why.
-    #
-    # The shorthand is implemented everywhere as
-    # `[value] unless value.is_a?(Array)` — a negation of Array where it
-    # means "a node". A String, number, null or boolean is wrapped just as
-    # happily and then iterated over, matching nothing, which is how a
-    # layout that cannot be rendered becomes an empty view and a green run.
+    # A renderer can skip an attribute it does not understand and still draw
+    # the screen. It cannot skip a child — the child IS the screen — and the
+    # shorthand is implemented everywhere as `[value] unless is_a?(Array)`,
+    # a negation of Array where it means "a node". A String, number, null or
+    # boolean was wrapped just as happily and then iterated over, matching
+    # nothing, which is how a layout that cannot be rendered became an empty
+    # view and a green run.
     CHILD_KEYS = %w[child children].freeze
 
     def initialize(mode = :all, styles_dir = nil)
@@ -258,10 +251,16 @@ module JsonUIShared
             )
           end
         elsif !value.is_a?(Hash)
+          # `warn: false`: the declared type is `array`, so validate_attribute
+          # has already said `expects array, got string` for this same value.
+          # Two sentences about one defect only teaches readers to skim. The
+          # structural record is still made — it is what fails the build,
+          # which a type warning on its own does not do.
           add_structural_error(
             "'#{key}' in '#{component_type}' must be a component node or an " \
             "array of them, got #{get_value_type(value)} — it cannot be " \
-            "rendered and would be dropped silently"
+            "rendered and would be dropped silently",
+            warn: false
           )
         end
       end
@@ -478,6 +477,20 @@ module JsonUIShared
       # Skip validation for binding expressions
       return if is_binding
 
+      # `acceptsSingle` on an array attribute declares that a single node
+      # object stands for a one-element array. Every renderer already reads
+      # it that way (`[value] unless value.is_a?(Array)`); this is the same
+      # rule stated once on the tool side, at the boundary, so the declared
+      # type stays `array` and the declaration is what the check consults.
+      #
+      # Only an object is wrapped. Wrapping a scalar too would move the
+      # complaint about `"child": "notalist"` from `'child'` to `'child[0]'`
+      # — an index the author never wrote — and the author is the reader.
+      if definition['acceptsSingle'] && value.is_a?(Hash) &&
+         Array(definition['type']).include?('array')
+        value = [value]
+      end
+
       # Check type
       expected_types = Array(definition['type'])
       actual_type = get_value_type(value)
@@ -490,12 +503,6 @@ module JsonUIShared
         # is tracked separately.
         if actual_type == 'array' && edge_inset_array?(name, value)
           # accepted
-        elsif CHILD_KEYS.include?(name)
-          # check_child_structure owns this key (see CHILD_KEYS). It accepts
-          # the single-node shorthand the declaration does not, and reports
-          # the real violations in terms of nodes. Warning here too would
-          # both reject working layouts and say one defect twice.
-          return
         else
           add_warning("Attribute '#{current_path}' in '#{component_type}' expects #{format_expected_types(expected_types)}, got #{actual_type}")
           return # Don't validate nested properties if type is wrong
@@ -669,10 +676,12 @@ module JsonUIShared
     # Structural violations are warnings too — they belong in the same
     # summary a reader already looks at — but they are also kept on their own
     # channel so a build can act on them without matching warning text.
-    def add_structural_error(message)
+    def add_structural_error(message, warn: true)
       context = build_context_prefix
       full_message = context.empty? ? message : "#{context}#{message}"
       @structural_errors << full_message unless @structural_errors.include?(full_message)
+      return unless warn
+
       @warnings << full_message unless @warnings.include?(full_message)
     end
 

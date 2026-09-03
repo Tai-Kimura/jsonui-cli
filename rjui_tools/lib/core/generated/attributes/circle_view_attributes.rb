@@ -14,9 +14,9 @@ module JsonUI
       # contract together with `rows` / `declared?` / `alias_map`
       # (see the directory README).
       ATTRS = [
-        # Child component(s)
+        # Child component(s). A single component node (object) is accepted as a one-element array.
         { name: 'child', kind: :array }.freeze,
-        # Child components (alias for child)
+        # Child components (alias for child). A single component node (object) is accepted as a one-element array.
         { name: 'children', kind: :array }.freeze,
       ].freeze
 
