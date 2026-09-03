@@ -35,8 +35,12 @@ push せず、rsync/sync_tool による同期のみ。
     consumer コピー単体動作のためのリテラル複製で、
     `jui_tools/tests/test_version_lockstep.py` が root との一致を強制
     （バンプは root + Ruby 側 3 箇所を同時更新。漏れると python-suite が落ちる）。
-  - **`sjui_tools/VERSION` には絶対に CLI 版数を書かない** — そこは
-    SwiftJsonUI **ライブラリ**版数のスロット（`library_setup.rb` が読む）。
+  - ~~`sjui_tools/VERSION` には絶対に CLI 版数を書かない~~ **（2026-09-03 訂正: そのファイルは
+    存在しない）**。SwiftJsonUI のライブラリ版数は **消費側プロジェクトの `.sjui-version`**（無ければ
+    installer が置く VERSION）を `library_setup.rb#get_current_version` が読む。**jsonui-cli の追跡ファイルは
+    SwiftJsonUI / KotlinJsonUI の版を 1 箇所も pin していない**（現行版数で `git grep` して 0）⇒
+    ライブラリ列車はツール側の commit を要しない。要るのは両ライブラリ repo の
+    `JSONUI_CLI_MANIFEST_REF`（attr 表の再ベンダーと同じ commit）と、消費側の SPM / Gradle の pin（lib 取り込みレーン）。
   - **バンプ対象にもう 1 箇所**: `document_tools/pyproject.toml` の
     `jsonui-test-cli @ git+…@vX.Y.Z#subdirectory=test_tools`。同一リポの兄弟を
     直 git URL で入れているため、**rev を書かないとタグ指定でインストールしても
