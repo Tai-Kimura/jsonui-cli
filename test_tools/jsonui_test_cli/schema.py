@@ -261,7 +261,8 @@ SUPPORTED_ASSERTIONS = {
 VALID_DIRECTIONS = ["up", "down", "left", "right"]
 
 # Common step attributes accepted on every action/assertion.
-# NOTE: on selectOption, 'label' keeps its legacy meaning (option text to select).
+# NOTE: on selectOption, 'label' keeps its legacy meaning (option text to select),
+# and is the lowest of its three selectors (index, then value, then label).
 COMMON_STEP_ATTRIBUTES = ["label", "optional", "when"]
 
 # Valid keys in a condition object (when / repeat.while). Unknown keys are errors.
@@ -419,7 +420,7 @@ PARAMETER_DESCRIPTIONS = {
     "screen": "Screen identifier (for flow tests)",
     "text": "Specific text portion to tap within element (for tap action)",
     "button": "Button text to tap in alert dialog (for alertTap action)",
-    "label": "Human-readable step name for logs/reports. On selectOption: option label (visible text) to select",
+    "label": "Human-readable step name for logs/reports. On selectOption: option label (visible text) to select — lowest precedence after index and value",
     "index": "Item/option/tab index, 0-based",
     "args": "Arguments for variable substitution. In screen test cases, defines default values. In flow file references, overrides defaults",
     "optional": "When true, a failure of this step is recorded as a warning and execution continues",

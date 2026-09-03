@@ -551,6 +551,7 @@ Test files must be valid JSON with `.test.json` extension.
 **Direction values:** `up`, `down`, `left`, `right`
 
 **Platform notes:**
+- `selectOption`: `index`, `value` and `label` are three ways to name ONE option, with precedence `index` → `value` → `label` (a lower one is ignored when a higher one is present — same on iOS, Android and web). Write exactly one; `validate` warns when a step carries two or more. On this action `label` is the option's visible text, **not** the step note it is everywhere else — a note written there is the option the driver selects.
 - `selectTab`: For `ios-uikit`, `id` is optional (uses UITabBarController directly). For `ios-swiftui`/`android`/`web`, `id` is required (uses `{id}_tab_{index}` pattern).
 
 ## Supported Assertions
