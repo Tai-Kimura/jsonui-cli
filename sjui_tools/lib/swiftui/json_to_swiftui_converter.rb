@@ -92,8 +92,34 @@ module SjuiTools
         output_path
       end
 
+      # In-tree containers that scroll their content. A Collection is not
+      # here: its cells are other layout files, not `child` nodes, so a
+      # Collection never has in-tree descendants to mark.
+      SCROLLING_ANCESTOR_TYPES = %w[scroll scrollview].freeze
+      SCROLLING_ANCESTOR_KEY = Views::BaseViewConverter::SCROLLING_ANCESTOR_KEY
+
+      # Mark every node that has a scrolling ancestor in THIS tree. The
+      # converters are built one node at a time and see only their own hash,
+      # the way `parent_orientation` is handed down by injection; this walks
+      # once from the root (after includes are expanded) so a node three
+      # levels under a ScrollView knows it as well as a direct child does.
+      # What it cannot see: a layout used as a Collection cell — that file is
+      # converted on its own, and its root has no ancestor here even though
+      # on the device it sits inside a scrolling Collection.
+      def mark_scrolling_ancestors(component, inside = false)
+        return unless component.is_a?(Hash)
+        return if component.key?('data') && !component.key?('type')
+
+        component[SCROLLING_ANCESTOR_KEY] = true if inside
+        inside ||= SCROLLING_ANCESTOR_TYPES.include?(component['type'].to_s.downcase)
+        child_data = component['child'] || component['children']
+        children = child_data.is_a?(Array) ? child_data : [child_data]
+        children.each { |child| mark_scrolling_ancestors(child, inside) }
+      end
+
       def convert_component(json_data, indent_level = 0)
         @indent_level = indent_level
+        mark_scrolling_ancestors(json_data)
         converter = @converter_factory.create_converter(json_data, @indent_level, @action_manager)
 
         # Skip if converter is nil (e.g., data definition objects)

@@ -106,7 +106,7 @@ module SjuiTools
           #   "eager" -> ScrollView + VStack/HStack          (no virtualization, smooth for heavy cells)
           #   "none"  -> VStack/HStack only                  (parent already scrollable)
           # `@{prop}` bindings resolve at runtime via CollectionStackMode.
-          is_lazy = collection_lazy_mode != :none
+          is_lazy = collection_lazy_mode != :none && !flow_defers_to_scrolling_ancestor?
 
           # Check if sections are defined
           sections = @component['sections'] || []
@@ -1797,7 +1797,33 @@ module SjuiTools
         # addresses silently. SwiftJsonUI's Dynamic renderer wraps flow in a
         # ScrollView today and needs nothing; the same applies there.
         def accessibility_container?
-          super || collection_lazy_mode == :none
+          super || collection_lazy_mode == :none || flow_defers_to_scrolling_ancestor?
+        end
+
+        # A flow Collection with `lazy` in effect scrolls inside its own bounds
+        # (2026-09-03 ruling) — and "its own bounds" is literal. A wrapContent
+        # flow has none: under a scrolling ancestor the ScrollView this arm
+        # used to emit unconditionally grew to the outer viewport's height
+        # inside the outer ScrollView (the corpus's flowOverflow__wrap picture
+        # on iOS), while Android wraps and lets the parent scroll. So when
+        # the tree shows a scrolling ancestor (marked once from the root by
+        # JsonToSwiftUIConverter#mark_scrolling_ancestors), a wrapping flow
+        # takes the non-lazy container — VStack + FlowLayout, anchor + .contain
+        # so its cells keep their addresses — and the ancestor scrolls. No
+        # ancestor in the tree (a full-screen chip destination, a converter
+        # built on a bare component, a layout used as a Collection cell whose
+        # parent is another file) keeps the ScrollView: the static emit can
+        # only defer to what it can see. A numeric or matchParent height is
+        # unchanged: those have bounds to scroll inside.
+        def flow_defers_to_scrolling_ancestor?
+          return false unless @component[SCROLLING_ANCESTOR_KEY]
+          return false if collection_lazy_mode == :none
+
+          layout = @component['layout'] || @component['orientation'] || 'vertical'
+          return false unless %w[flow leftaligned].include?(layout.to_s.downcase)
+
+          height = @component['height']
+          height.nil? || height == 'wrapContent'
         end
 
         def collection_lazy_mode

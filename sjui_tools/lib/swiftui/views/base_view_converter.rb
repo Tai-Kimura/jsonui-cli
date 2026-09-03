@@ -60,6 +60,12 @@ module SjuiTools
 
         attr_reader :state_variables, :modifier_bag
 
+        # Injected onto every node under a scrolling container by
+        # JsonToSwiftUIConverter#mark_scrolling_ancestors (one walk from the
+        # root, after includes are expanded) — the same channel as
+        # `parent_orientation`: a converter sees only its own hash.
+        SCROLLING_ANCESTOR_KEY = '_scrolling_ancestor'
+
         def initialize(component, indent_level = 0, action_manager = nil, binding_registry = nil)
           @component = component
           @indent_level = indent_level
