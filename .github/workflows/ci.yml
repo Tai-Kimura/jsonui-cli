@@ -192,9 +192,15 @@ jobs:
           # under 2.6 with no bundler (the lockfiles pin gems that do not
           # exist for 2.6 — consumers never use them either). `rspec_args`
           # excludes what cannot run on 2.6 for reasons that are not the
-          # lib's: sjui's Swift-compiling specs (no SDK here) and the `watch`
-          # command (its `listen` gem needs ffi ≥ Ruby 3.0 — a separate,
-          # real consumer finding), kjui's frozen XML mode (nokogiri).
+          # lib's: the `watch` command (its `listen` gem needs ffi ≥ Ruby
+          # 3.0 — a separate, real consumer finding), kjui's frozen XML mode
+          # (nokogiri). sjui's Swift-compiling specs are NOT excluded here:
+          # this image has swiftc but no SwiftUI SDK, and the
+          # `compile_as_swift` matcher skips itself (visibly, in the count)
+          # where `import SwiftUI` does not type-check. A `--tag '~swift'`
+          # used to stand here; the tag is `:swift_compile` and is derived
+          # onto all of spec/swiftui, so the exclusion matched nothing and
+          # the four compile examples ran and failed on the first line.
           # 2.6 builds exist for ubuntu-22.04 only.
           - tool: sjui_tools
             platform: ios
@@ -202,7 +208,7 @@ jobs:
             os: ubuntu-22.04
             ruby: "2.6"
             gems: "rspec simplecov:0.22.0 xcodeproj"
-            rspec_args: "--tag '~swift' --exclude-pattern 'spec/**/*{watch,file_watcher}*_spec.rb'"
+            rspec_args: "--exclude-pattern 'spec/**/*{watch,file_watcher}*_spec.rb'"
           - tool: kjui_tools
             platform: android
             bundler: false

@@ -127,8 +127,16 @@ RSpec.describe SjuiTools::SwiftUI::Generators::ViewGenerator do
         json_file = File.join(temp_dir, 'Layouts', 'settings', 'profile.json')
         expect(File.exist?(json_file)).to be true
 
-        view_file = File.join(temp_dir, 'View', 'settings', 'Profile', 'ProfileView.swift')
+        # Swift directories are PascalCase (the generator's own rule, and
+        # the shape of every consumer View/ tree); only Layouts keep the
+        # snake_case subdirectory. This expectation spelled `settings` and
+        # passed for four months on macOS, whose default filesystem folds
+        # case — it first went red on the Linux leg (2026-09-03).
+        view_file = File.join(temp_dir, 'View', 'Settings', 'Profile', 'ProfileView.swift')
         expect(File.exist?(view_file)).to be true
+        # The spelling on disk, which a case-folding filesystem would not show
+        # through File.exist?.
+        expect(Dir.children(File.join(temp_dir, 'View'))).to eq(['Settings'])
       end
     end
 
