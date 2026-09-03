@@ -170,6 +170,8 @@ def cmd_build(args: argparse.Namespace) -> int:
             distributed=_distributed_file_count(config_mgr),
             dropped=manifest["summary"].get("dropped", 0),
             untracked=manifest["summary"].get("untracked", 0),
+        dropped_versions=manifest["summary"].get("droppedVersions"),
+        untracked_versions=manifest["summary"].get("untrackedVersions"),
             collisions=manifest["summary"].get("collisions", 0),
             collision_keys=manifest["summary"].get("collisionKeys", ()),
             recorded_versions=_recorded_versions(manifest)))
@@ -263,6 +265,8 @@ def cmd_build(args: argparse.Namespace) -> int:
             distributed=_distributed_file_count(config_mgr),
             dropped=manifest["summary"].get("dropped", 0),
             untracked=manifest["summary"].get("untracked", 0),
+        dropped_versions=manifest["summary"].get("droppedVersions"),
+        untracked_versions=manifest["summary"].get("untrackedVersions"),
             collisions=manifest["summary"].get("collisions", 0),
             collision_keys=manifest["summary"].get("collisionKeys", ()),
             recorded_versions=_recorded_versions(manifest)))

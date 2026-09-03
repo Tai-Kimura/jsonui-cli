@@ -928,3 +928,87 @@ class WhyAnEntryLeftTests(unittest.TestCase):
         self.assertEqual(45, summary["untracked"])
         self.assertEqual(20, len(summary["untrackedKeys"]))
         self.assertEqual("first 20 of 45", summary["untrackedKeysNote"])
+
+
+class TheTwoLinesShareAQuantityTests(unittest.TestCase):
+    """A version leaving the record can be traced from the block alone.
+
+    `released 231` says how many left; `recorded versions` says what
+    remains. Neither says which versions left, so a face watching 1.8.12
+    disappear from the tally had to compute separately that 215 of the 231
+    released entries were that version. Adjacency put the two lines next to
+    each other and that was not enough — what was missing is a quantity
+    they both speak about.
+
+    Not another denial appended to a line. This file has tried that twice
+    and recorded both times that it does not reach a reading already
+    formed. This is a number that was absent.
+    """
+
+    def _run_line(self, **kwargs):
+        base = dict(written=0, total=492, version="1.8.15", distributed=80,
+                    recorded_versions={"1.8.10": 294, "1.8.7": 198})
+        base.update(kwargs)
+        block = gm.coverage_line(**base).split("\n")
+        return next(l for l in block if "this run" in l), block
+
+    def test_the_versions_that_left_are_named(self):
+        run, _ = self._run_line(
+            untracked=231,
+            untracked_versions={"1.8.12": 215, "1.8.10": 16})
+        self.assertIn("215 at 1.8.12", run)
+        self.assertIn("16 at 1.8.10", run)
+
+    def test_a_vanished_version_appears_in_exactly_one_line(self):
+        # The reader's question — where did 1.8.12 go — is answerable
+        # because the name occurs on the line that says it left and not on
+        # the line that says what remains.
+        run, block = self._run_line(
+            untracked=231,
+            untracked_versions={"1.8.12": 215, "1.8.10": 16})
+        versions = next(l for l in block if "recorded versions" in l)
+        self.assertIn("1.8.12", run)
+        self.assertNotIn("1.8.12", versions)
+
+    def test_a_surviving_version_appears_in_both_so_it_can_be_reconciled(self):
+        # 294 remaining + 16 released = the 310 that went in. That check is
+        # only possible because the same name is on both lines.
+        run, block = self._run_line(
+            untracked=231,
+            untracked_versions={"1.8.12": 215, "1.8.10": 16})
+        versions = next(l for l in block if "recorded versions" in l)
+        self.assertIn("1.8.10", run)
+        self.assertIn("294 at 1.8.10", versions)
+
+    def test_the_gone_ones_get_the_same_treatment(self):
+        run, _ = self._run_line(dropped=3, dropped_versions={"1.8.7": 3})
+        self.assertIn("whose file is gone — 3 at 1.8.7", run)
+
+    def test_nothing_is_added_when_nothing_left(self):
+        # A healthy run's line is unchanged, which is what keeps this off
+        # every downstream baseline.
+        run, _ = self._run_line()
+        self.assertEqual("  this run (jui 1.8.15): recorded/updated 0", run)
+
+    def test_the_breakdown_is_ordered_for_a_baseline(self):
+        a = self._run_line(untracked=2,
+                           untracked_versions={"1.8.7": 1, "1.8.10": 1})[0]
+        b = self._run_line(untracked=2,
+                           untracked_versions={"1.8.10": 1, "1.8.7": 1})[0]
+        self.assertEqual(a, b)
+
+    def test_save_records_which_versions_left(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "gen").mkdir()
+            (root / "gen" / "here.ts").write_text("x\n", encoding="utf-8")
+            path = gm.manifest_path(root)
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(json.dumps({"schemaVersion": 1, "files": {
+                "gen/here.ts": {"version": "1.8.12"},
+                "gen/gone.ts": {"version": "1.8.7"},
+            }}), encoding="utf-8")
+            summary = gm.save(root, "1.8.15", [],
+                              present_keys=[], scope={})["summary"]
+            self.assertEqual({"1.8.12": 1}, summary["untrackedVersions"])
+            self.assertEqual({"1.8.7": 1}, summary["droppedVersions"])

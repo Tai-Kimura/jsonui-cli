@@ -395,13 +395,27 @@ def save(
     # assumed.
     dropped: list[str] = []
     untracked: list[str] = []
+    dropped_versions: dict = {}
+    untracked_versions: dict = {}
     if present_keys is not None:
         present = set(present_keys)
         for key in sorted(k for k in files if k not in present):
+            # The version goes with the count. `released 231` and a list of
+            # the versions still on record share no quantity, so a reader
+            # watching a version vanish from that list cannot get from one
+            # line to the other: one says how many left, the other says
+            # what remains, and the fact joining them — that 215 of the 231
+            # were the version that disappeared — is in neither. Adjacency
+            # was not enough; what was missing is something both lines
+            # speak about.
+            entry = files.get(key) or {}
+            name = entry.get("version") or "unknown"
             if (Path(project_root) / key).exists():
                 untracked.append(key)
+                untracked_versions[name] = untracked_versions.get(name, 0) + 1
             else:
                 dropped.append(key)
+                dropped_versions[name] = dropped_versions.get(name, 0) + 1
         files = {k: v for k, v in files.items() if k in present}
 
     stamp = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
@@ -439,6 +453,10 @@ def save(
             # finding, the other is this tool's own scope changing.
             "untracked": len(untracked),
             "untrackedKeys": untracked[:20],
+            # What versions left, so the surviving distribution above can
+            # be reconciled with it rather than guessed at.
+            "droppedVersions": dict(sorted(dropped_versions.items())),
+            "untrackedVersions": dict(sorted(untracked_versions.items())),
             # Entries lost when two spellings normalised onto one key. The
             # prune never saw these, so `dropped` says nothing about them.
             "collisions": sum(collisions.values()),
@@ -463,6 +481,7 @@ def coverage_line(
     written: int, total: int, version: str, distributed: int | None = None,
     dropped: int = 0, collisions: int = 0, collision_keys=(),
     recorded_versions=None, untracked: int = 0,
+    dropped_versions=None, untracked_versions=None,
 ) -> str:
     """One line per subject, one population, one number.
 
@@ -544,13 +563,15 @@ def coverage_line(
     if dropped:
         # Stays on this line: a dropped entry means a generated file was
         # deleted, and those are tracked, so a diff shows it.
-        run += f", dropped {dropped} entr(y/ies) whose file is gone"
+        run += (f", dropped {dropped} entr(y/ies) whose file is gone"
+                f"{_left_at(dropped_versions)}")
     if untracked:
         # Deliberately not the same words. Reported as a drop, this reads
         # as the build having deleted them, and on a face that keeps the
         # manifest in git that explanation goes into the commit message.
         run += (f", released {untracked} entr(y/ies) that left the tracked "
-                f"set (their files are still there)")
+                f"set{_left_at(untracked_versions)} (their files are still "
+                f"there)")
     lines.append(run)
 
     # The caveat sits beside the thing it qualifies. Put at the end of the
@@ -570,6 +591,25 @@ def coverage_line(
     if collisions:
         lines.extend(_collision_warning(collisions, collision_keys))
     return "\n".join(lines)
+
+
+def _left_at(versions) -> str:
+    """` — 215 at 1.8.12, 16 at 1.8.10`, or nothing when unknown.
+
+    The quantity the two lines share. Without it, a version disappearing
+    from `recorded versions` has no explanation anywhere in the block: the
+    count of what left is on one line, the tally of what remains is on
+    another, and the join between them — which versions left — is on
+    neither. Reported by one face, which had to compute it separately to
+    read its own build output.
+
+    Not a denial appended to a line, which this file has tried twice and
+    which does not reach a reading already formed. A missing number.
+    """
+    if not versions:
+        return ""
+    ordered = sorted(dict(versions).items(), key=lambda kv: (-kv[1], kv[0]))
+    return " — " + ", ".join(f"{n} at {name}" for name, n in ordered)
 
 
 def _versions_phrase(recorded_versions) -> str:
