@@ -27,6 +27,8 @@ RSpec.describe KjuiTools::Compose::Components::CollectionComponent do
   ).freeze
   LAZY_VALUES = ((DEFS.dig('Collection', 'lazy', 'enum') || []) + [nil]).uniq.freeze
   SCROLL = '.verticalScroll(rememberScrollState())'
+  BOX = 'BoxWithConstraints('
+  GUARD = 'if (constraints.hasBoundedHeight)'
 
   def build(layout:, lazy:, height: 100, extra: {})
     json = { 'type' => 'Collection', 'id' => 'target', 'layout' => layout, 'width' => 150,
@@ -65,7 +67,6 @@ RSpec.describe KjuiTools::Compose::Components::CollectionComponent do
       ['100', {}, true, 'a numeric string is still a number'],
       ['wrapContent', { 'maxHeight' => 200 }, true, 'maxHeight bounds a wrapping height'],
       ['wrapContent', {}, false, 'wrapContent has no bounds: measured with infinite max height under a scrolling parent'],
-      ['matchParent', {}, false, 'matchParent borrows the parent bounds, which the static emit cannot see'],
       [nil, {}, false, 'an undeclared height is not a bound'],
       ['@{h}', {}, false, 'a bound height is unknown here'],
     ].each do |height, extra, scrolls, why|
@@ -78,12 +79,81 @@ RSpec.describe KjuiTools::Compose::Components::CollectionComponent do
           expect(code).not_to include(SCROLL)
           expect(imports).not_to include(:vertical_scroll)
         end
+        # The static arms never defer to the device.
+        expect(code).not_to include(BOX)
       end
     end
 
     it 'lazy:"none" never scrolls, bounded or not' do
       code, = build(layout: 'flow', lazy: 'none', height: 100, extra: { 'maxHeight' => 200 })
       expect(code).not_to include(SCROLL)
+    end
+  end
+
+  describe 'matchParent asks the parent, on the device' do
+    # The static emit cannot see the parent, and the parent decides whether
+    # a matchParent flow has bounds to scroll inside. KotlinJsonUI's dynamic
+    # renderer (db891a9) resolves exactly this shape with BoxWithConstraints
+    # — scroll only when the box was measured with a bounded height — so
+    # under a finite parent the same JSON scrolled there and not here. This
+    # arm emits the same box: the node's own modifiers on it, a FlowRow
+    # inside that fills and scrolls only when `constraints.hasBoundedHeight`.
+    it 'emits BoxWithConstraints with the scroll behind hasBoundedHeight' do
+      code, imports = build(layout: 'flow', lazy: nil, height: 'matchParent')
+      expect(code).to include(BOX)
+      expect(code).to include(GUARD)
+      expect(code).to include(SCROLL)
+      expect(imports).to include(:box_with_constraints, :vertical_scroll)
+      # the guard is what the scroll hangs on: same line
+      guarded = code.lines.find { |l| l.include?(GUARD) }
+      expect(guarded).to include(SCROLL)
+      expect(guarded).to include('Modifier.fillMaxSize()')
+      expect(guarded).to include('else Modifier.fillMaxWidth()')
+    end
+
+    it 'puts the node on the box and the content padding on the FlowRow' do
+      code, = build(layout: 'flow', lazy: nil, height: 'matchParent',
+                    extra: { 'background' => '#DDDDDD', 'padding' => 4 })
+      box = code.index(BOX)
+      flow = code.index('FlowRow(')
+      expect(box).to be < flow
+      %w[.testTag("target") .fillMaxHeight() .background(].each do |on_box|
+        expect(code.index(on_box)).to be > box
+        expect(code.index(on_box)).to be < flow
+      end
+      expect(code.index('.padding(4.dp)')).to be > flow
+    end
+
+    it 'closes the box after the FlowRow (balanced braces)' do
+      code, = build(layout: 'flow', lazy: nil, height: 'matchParent')
+      expect(code.count('{')).to eq(code.count('}'))
+      expect(code.rstrip).to end_with("}\n}")
+    end
+
+    LAZY_VALUES.each do |lazy|
+      it "lazy=#{lazy || '(default)'}: the box arm follows lazy like the static arm" do
+        code, imports = build(layout: 'flow', lazy: lazy, height: 'matchParent')
+        if lazy == 'none'
+          expect(code).not_to include(BOX)
+          expect(code).not_to include(SCROLL)
+          expect(imports).not_to include(:box_with_constraints)
+        else
+          expect(code).to include(BOX)
+          expect(code).to include(GUARD)
+        end
+      end
+    end
+
+    it 'a self-bounded matchParent (maxHeight) keeps the static modifier' do
+      code, imports = build(layout: 'flow', lazy: nil, height: 'matchParent', extra: { 'maxHeight' => 200 })
+      expect(code).to include(SCROLL)
+      expect(code).not_to include(BOX)
+      expect(imports).not_to include(:box_with_constraints)
+    end
+
+    it 'still tags every cell' do
+      code, = build(layout: 'flow', lazy: nil, height: 'matchParent')
+      expect(code).to include('testTag("target_item_')
     end
   end
 

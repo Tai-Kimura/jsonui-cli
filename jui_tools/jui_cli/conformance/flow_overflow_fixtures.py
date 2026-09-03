@@ -38,6 +38,17 @@ self-bounded at 100pt: the control clips at the box, the fixture lays every
 row out at content height and the ScrollView scrolls — and a renderer that
 scrolls the wrapping node instead of the parent either crashes (Android)
 or renders the fixture like its control.
+
+The fourth member, ``fill``, is the shape the static Android emit left with
+the parent: a ``height: matchParent`` flow Collection inside a FINITE
+parent (the root is the 150×100 box). The rule says it scrolls — the parent
+handed it bounds — and the dynamic renderer resolves that on the device
+(BoxWithConstraints, scroll when ``hasBoundedHeight``) while the codegen,
+which cannot see the parent statically, emitted no scroll: the same JSON
+scrolled in one Android mode and not the other. Its control is the same
+tree with ``lazy: "none"``, as for ``scroll``: a platform that never scrolls
+a matchParent flow renders the fixture like its control, and the inert
+verdict names it.
 """
 from __future__ import annotations
 
@@ -61,6 +72,7 @@ _ITEM_COUNT = 12
 _SHAPES = (("scroll", None), ("none", "none"))
 
 _WRAP_CASE = "wrap"
+_FILL_CASE = "fill"
 
 
 def _marker(source_label: str) -> dict:
@@ -117,6 +129,24 @@ def _scrolling_parent_layout(source_label: str, height) -> dict:
         "width": "matchParent",
         "height": "matchParent",
         "child": [_collection(None, height)],
+        "data": _items(),
+    }
+
+
+def _finite_parent_layout(source_label: str, lazy: str | None) -> dict:
+    # The root IS the finite parent: the same 150×100 box, now the parent
+    # of a matchParent Collection rather than the Collection itself. The
+    # box paints the background so the clip (or its absence) reads.
+    collection = _collection(lazy, "matchParent")
+    collection.pop("background")
+    return {
+        "_generated": _marker(source_label),
+        "type": "View",
+        "id": "root",
+        "width": _BOX_WIDTH,
+        "height": _BOX_HEIGHT,
+        "background": "#DDDDDD",
+        "child": [collection],
         "data": _items(),
     }
 
@@ -273,5 +303,37 @@ def build_flow_overflow_fixtures(
     entries.append(_fixture_entry(
         wrap_case, "height", "height", "wrapContent",
         wrap_layout_rel, wrap_test_rel, wrap_control_id,
+    ))
+
+    # --- the matchParent child of a finite parent, and its lazy:"none" twin.
+    fill_stem = "Collection__flow-overflow-fill"
+    fill_control_id = f"__control/{fill_stem}"
+    fill_control_layout_rel = f"fixtures/__control/{fill_stem}.layout.json"
+    fill_control_test_rel = f"fixtures/__control/{fill_stem}.test.json"
+    files.append((fill_control_layout_rel, _finite_parent_layout(source_label, "none")))
+    files.append((fill_control_test_rel, _test(
+        fill_stem,
+        "Control for the flow-overflow fill fixture: the same matchParent flow "
+        f"Collection in the same {_BOX_WIDTH}x{_BOX_HEIGHT} parent with lazy \"none\" "
+        "(it only wraps; the parent clips or the cells spill).",
+        fill_control_layout_rel,
+    )))
+    entries.append(_control_entry(fill_control_id, fill_stem, fill_control_layout_rel, fill_control_test_rel))
+
+    fill_case = f"flowOverflow__{_FILL_CASE}"
+    fill_layout_rel = f"fixtures/Collection/{fill_case}.layout.json"
+    fill_test_rel = f"fixtures/Collection/{fill_case}.test.json"
+    fill_description = (
+        f"A matchParent flow Collection with lazy in effect, holding {_ITEM_COUNT} cells "
+        f"inside a finite {_BOX_WIDTH}x{_BOX_HEIGHT} parent, is bounded by that parent and "
+        "scrolls inside it: the cells are clipped at the box. A platform that decides the "
+        "scroll from the node's own declaration alone renders this like its lazy \"none\" "
+        "control."
+    )
+    files.append((fill_layout_rel, _finite_parent_layout(source_label, None)))
+    files.append((fill_test_rel, _test(fill_case, fill_description, fill_layout_rel)))
+    entries.append(_fixture_entry(
+        fill_case, "lazy", None, None,
+        fill_layout_rel, fill_test_rel, fill_control_id,
     ))
     return files, entries

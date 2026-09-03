@@ -967,6 +967,23 @@ module KjuiTools
           finite_dimension?(json_data['height']) || finite_dimension?(json_data['maxHeight'])
         end
 
+        # The shape the static predicate above leaves with the parent because it
+        # cannot see the parent: `height: matchParent` with `lazy` in effect.
+        # KotlinJsonUI's dynamic renderer (db891a9) resolves it at runtime —
+        # BoxWithConstraints, scroll only when the parent handed it a bounded
+        # height — so under a finite parent the same JSON scrolled there and not
+        # here (the residue the parity ticket recorded). Emitting the same
+        # BoxWithConstraints closes it: the decision moves to the device, where
+        # the parent is visible. wrapContent stays out (nothing to scroll
+        # inside, and the crash shape); a bound `@{...}` height stays out (the
+        # value is unknown here); numbers keep the static modifier.
+        def self.flow_scrolls_if_parent_bounded?(json_data)
+          return false if json_data['lazy'] == 'none'
+          return false if flow_scrolls_in_own_bounds?(json_data)
+
+          json_data['height'] == 'matchParent'
+        end
+
         def self.finite_dimension?(value)
           case value
           when Numeric then true
@@ -1029,11 +1046,30 @@ module KjuiTools
             modifiers << ".verticalScroll(rememberScrollState())"
           end
           modifiers.concat(Helpers::ModifierBuilder.build_clickable(json_data, required_imports))
-          modifiers.concat(Helpers::ModifierBuilder.build_padding(json_data))
+          padding_modifiers = Helpers::ModifierBuilder.build_padding(json_data)
+          modifiers.concat(padding_modifiers) unless flow_scrolls_if_parent_bounded?(json_data)
           modifiers.concat(Helpers::ModifierBuilder.build_weight(json_data, parent_type))
 
-          code = indent("FlowRow(", depth)
-          code += Helpers::ModifierBuilder.format(modifiers, depth)
+          outer_depth = depth
+          if flow_scrolls_if_parent_bounded?(json_data)
+            # matchParent: the node's own modifiers (address, size, background,
+            # click, weight) sit on a BoxWithConstraints; the FlowRow fills it
+            # and scrolls only when the box was measured with a bounded height
+            # — the same arm the dynamic renderer takes. Padding stays on the
+            # FlowRow so it pads the content, not the viewport.
+            required_imports&.add(:box_with_constraints)
+            required_imports&.add(:vertical_scroll)
+            code = indent("BoxWithConstraints(", depth)
+            code += Helpers::ModifierBuilder.format(modifiers, depth)
+            code += "\n" + indent(") {", depth)
+            depth += 1
+            code += "\n" + indent("FlowRow(", depth)
+            code += "\n" + indent("modifier = (if (constraints.hasBoundedHeight) Modifier.fillMaxSize().verticalScroll(rememberScrollState()) else Modifier.fillMaxWidth())", depth + 1)
+            padding_modifiers.each { |mod| code += "\n" + indent(indent(mod, 1), depth + 1) }
+          else
+            code = indent("FlowRow(", depth)
+            code += Helpers::ModifierBuilder.format(modifiers, depth)
+          end
           code += ",\n" + indent("horizontalArrangement = Arrangement.spacedBy(#{h_spacing}.dp),", depth + 1)
           code += "\n" + indent("verticalArrangement = Arrangement.spacedBy(#{v_spacing}.dp)", depth + 1)
           code += "\n" + indent(") {", depth)
@@ -1108,6 +1144,7 @@ module KjuiTools
           end
 
           code += "\n" + indent("}", depth)
+          code += "\n" + indent("}", outer_depth) if depth > outer_depth
           code
         end
 

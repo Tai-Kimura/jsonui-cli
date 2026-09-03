@@ -37,18 +37,19 @@ def _target(files, entry):
 
 
 class FamilyShape(unittest.TestCase):
-    def test_three_fixtures_three_controls_and_nothing_else(self):
+    def test_four_fixtures_four_controls_and_nothing_else(self):
         _, entries = _fixtures()
         fixtures = sorted(i for i, e in entries.items() if not e.get("isControl"))
         controls = sorted(i for i, e in entries.items() if e.get("isControl"))
         self.assertEqual(
             fixtures,
-            ["Collection/flowOverflow__none", "Collection/flowOverflow__scroll",
-             "Collection/flowOverflow__wrap"],
+            ["Collection/flowOverflow__fill", "Collection/flowOverflow__none",
+             "Collection/flowOverflow__scroll", "Collection/flowOverflow__wrap"],
         )
         self.assertEqual(
             controls,
-            ["__control/Collection__flow-overflow-none",
+            ["__control/Collection__flow-overflow-fill",
+             "__control/Collection__flow-overflow-none",
              "__control/Collection__flow-overflow-scroll",
              "__control/Collection__flow-overflow-wrap"],
         )
@@ -107,6 +108,49 @@ class WrapShape(unittest.TestCase):
         self.assertEqual(mine, theirs)
         self.assertEqual(self.wrap["writtenKey"], "height")
         self.assertEqual(self.wrap["value"], "wrapContent")
+
+
+class FillShape(unittest.TestCase):
+    """The parent is finite and the child borrows its bounds — the two facts
+    that make it the shape the static emit could not decide."""
+
+    def setUp(self):
+        self.files, self.entries = _fixtures()
+        self.fill = self.entries["Collection/flowOverflow__fill"]
+        self.control = self.entries[self.fill["control"]]
+
+    def test_the_parent_is_the_finite_box_and_the_child_matches_it(self):
+        layout = self.files[self.fill["layout"]]
+        self.assertEqual(layout["type"], "View")
+        self.assertIsInstance(layout["height"], int)
+        self.assertIsInstance(layout["width"], int)
+        self.assertIn("background", layout, "the box paints itself so the clip reads")
+        target = _target(self.files, self.fill)
+        self.assertEqual(target["height"], "matchParent")
+        self.assertNotIn("maxHeight", target, "a maxHeight would make it self-bounded, the static arm")
+        self.assertNotIn("lazy", target, "lazy must be IN EFFECT")
+        self.assertEqual(target["layout"], "flow")
+
+    def test_the_same_box_as_the_other_members(self):
+        scroll = self.files[self.entries["Collection/flowOverflow__scroll"]["layout"]]
+        box = scroll["child"][0]
+        layout = self.files[self.fill["layout"]]
+        self.assertEqual((layout["width"], layout["height"]), (box["width"], box["height"]))
+        self.assertEqual(len(layout["data"][0]["defaultValue"]), len(scroll["data"][0]["defaultValue"]))
+
+    def test_the_control_is_the_same_tree_with_lazy_none(self):
+        control_layout = self.files[self.control["layout"]]
+        control_target = _target(self.files, self.control)
+        self.assertEqual(control_target.get("lazy"), "none")
+        mine = dict(_target(self.files, self.fill)); theirs = dict(control_target)
+        theirs.pop("lazy")
+        self.assertEqual(mine, theirs)
+        mine_root = dict(self.files[self.fill["layout"]]); theirs_root = dict(control_layout)
+        mine_root.pop("child"); theirs_root.pop("child")
+        self.assertEqual(mine_root, theirs_root)
+        # as for `scroll`: the undeclared shape writes nothing
+        self.assertIsNone(self.fill["writtenKey"])
+        self.assertEqual(self.fill["attribute"], "lazy")
 
 
 class OverflowArithmetic(unittest.TestCase):

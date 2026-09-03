@@ -155,6 +155,11 @@ module KjuiTools
             # LazyColumn — "scrolls" is the whole contract, not virtualization.
             vertical_scroll: ["import androidx.compose.foundation.verticalScroll",
                               "import androidx.compose.foundation.rememberScrollState"],
+            # The matchParent flow arm: scroll decided by the parent's
+            # constraints on the device, as the dynamic renderer decides it.
+            box_with_constraints: ["import androidx.compose.foundation.layout.BoxWithConstraints",
+                                   "import androidx.compose.foundation.layout.fillMaxSize",
+                                   "import androidx.compose.foundation.layout.fillMaxWidth"],
             color_manager: "import com.kotlinjsonui.generated.ColorManager",
             # Collection listStyle chrome — the shared library composable
             # both paths render (CollectionCellChrome).
