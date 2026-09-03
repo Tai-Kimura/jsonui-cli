@@ -202,6 +202,33 @@ skipped / 0 fail) with the status bar frozen.
 Runner prerequisite: freeze the status bar before `run_conformance.sh`, or
 per-run clock drift will exceed the threshold on the status-bar band.
 
+**2026-09-04, ci env, run 33807187183.** Baking the four new flow fixtures
+into `ci/ios.hashes.json` re-hashed all 852 existing entries against that
+run's artifacts. 846 reproduced exactly; six moved, every one below the
+threshold, so the gate counted no regressions (`ios: 0 fail / 0 error`, both
+before and after the four were added):
+
+| distance | screenshot |
+|---|---|
+| 4 | `control_NetworkImage__no-defaultImage_url-efd3e3a7.png` |
+| 3 | `Indicator_indicatorStyle__large.png` |
+| 2 | `Indicator_color__static.png` |
+| 2 | `Indicator_indicatorStyle__medium.png` |
+| 2 | `control_Web.png` |
+| 1 | `Indicator_color__binding.png` |
+
+The max, 4, is inside the measured ceiling of 6 above — but **the set is not
+the one recorded there**, and that is the part worth keeping. `Indicator`
+went from three screenshots at distance 1 to four spanning 1–3;
+`control_NetworkImage__no-defaultImage` and `control_Web` do not appear in
+the calibration at all; and `SelectBox_selectedValue`, the distance-6 entry,
+did not move this time. **Cause undetermined** — this is a single run's
+observation, not a re-calibration, and no attempt was made here to explain
+why these six and not others. None of the six was re-baked: they keep their
+committed hashes, so anything that reads this file still compares against
+the calibrated pictures. Recorded so that if any of them later crosses 8,
+the reader knows it was already moving on 2026-09-04.
+
 ## File format
 
 ```json
