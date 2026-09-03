@@ -680,6 +680,9 @@ class StepValidator:
             ))
 
         # Action-specific validation
+        if action == "selectOption":
+            self._check_select_option_selectors(step, path, result)
+
         if action == "readText":
             variable = step.get("variable")
             if variable is not None and (not isinstance(variable, str) or not variable.strip()):
@@ -887,6 +890,42 @@ class StepValidator:
                 level="warning",
                 kind=PLATFORM_CONSTRAINT,
             ))
+
+    # The order the schema declares (jsonui-test-runner 169ad16, selectOption
+    # value/label/index descriptions). The drift test reads the vendored copy
+    # and checks the schema still says this.
+    SELECT_OPTION_PRECEDENCE = ("index", "value", "label")
+
+    def _check_select_option_selectors(self, step: dict, path: str, result: ValidationResult):
+        """Warn when a selectOption step carries more than one selector.
+
+        The schema declares the order — index, then value, then label — and
+        that a lower selector is ignored when a higher one is present. On
+        selectOption 'label' is the option text, not the step note it is on
+        every other step, so the shape this catches most often is `index`
+        plus a note written into 'label': the note is dead under the declared
+        order, and before the order was declared iOS read label first and
+        tried to select the note (measured 2026-09-03 on a consumer step).
+
+        One selector is silent, a lone 'label' included: that step selects
+        by text, which is what the schema says it does.
+        """
+        present = [k for k in self.SELECT_OPTION_PRECEDENCE if k in step]
+        if len(present) < 2:
+            return
+        winner = present[0]
+        ignored = " and ".join(f"'{k}'" for k in present[1:])
+        verb = "is" if len(present) == 2 else "are"
+        result.warnings.append(ValidationMessage(
+            path=path,
+            message=(
+                f"selectOption carries {len(present)} selectors ({', '.join(present)}); "
+                f"precedence is index, then value, then label, so '{winner}' selects and "
+                f"{ignored} {verb} ignored. Write exactly one — on selectOption 'label' is the "
+                "option text to select, not a step note"
+            ),
+            level="warning",
+        ))
 
     def _validate_assertion(self, step: dict, path: str, result: ValidationResult):
         """Validate an assertion step."""

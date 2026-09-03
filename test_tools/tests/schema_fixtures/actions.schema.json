@@ -877,16 +877,16 @@
         },
         "value": {
           "type": "string",
-          "description": "Option value to select"
+          "description": "Option value (machine key) to select. Precedence when more than one selector is given: index, then value, then label — a step carrying 'index' selects by index and ignores 'value'/'label'; a step carrying 'value' without 'index' selects by value and ignores 'label'. All three drivers (ios, android, web) resolve in this order. Write exactly one selector per step."
         },
         "label": {
           "type": "string",
-          "description": "Option label (visible text) to select. NOTE: for selectOption, 'label' keeps its original meaning (option text), NOT the universal step-name attribute"
+          "description": "Option label (visible text) to select. NOTE: for selectOption, 'label' keeps its original meaning (option text), NOT the universal step-name attribute — a free-text note placed here is treated as the option to select. Lowest precedence: used only when neither 'index' nor 'value' is present (order: index, value, label)."
         },
         "index": {
           "type": "integer",
           "minimum": 0,
-          "description": "Option index to select (0-based)"
+          "description": "Option index to select (0-based). Highest precedence: when present, 'value' and 'label' are ignored (order: index, value, label)."
         },
         "timeout": {
           "type": "integer",
