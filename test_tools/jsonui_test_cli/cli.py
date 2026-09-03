@@ -2101,6 +2101,19 @@ def cmd_mock_identity(args):
         req = urllib.request.Request(url, headers={"Host": f"127.0.0.1:{port}"})
         with urllib.request.urlopen(req, timeout=5) as resp:
             identity = json.loads(resp.read().decode())
+    except urllib.error.HTTPError as e:
+        # Something IS listening, it just has no identity to give. Measured
+        # 2026-09-04 against a server from before this endpoint existed: the
+        # path fell through to the admin router and came back 401, and
+        # reporting that as "nothing answered" would send the caller to start
+        # a server that is already running. Distinct outcome, distinct code.
+        print(
+            f"mock identity: port {port} answered {e.code} — a server is running but has no "
+            "identity endpoint (it predates it, or it is not a jsonui mock). Whose corpus it "
+            "serves cannot be determined; upgrade it or stop it.",
+            file=sys.stderr,
+        )
+        return 3
     except (urllib.error.URLError, OSError) as e:
         # Nothing listening is a distinct outcome from the wrong mock
         # listening, and the caller must be able to tell them apart.
@@ -2879,7 +2892,7 @@ def main():
 
     mock_identity_parser = mock_subparsers.add_parser(
         "identity",
-        help="Ask the running mock server whose corpus it serves (exit 1 on another project, 2 if nothing answers)")
+        help="Ask the running mock server whose corpus it serves (1 = another project, 2 = nothing answers, 3 = answered without an identity)")
     mock_identity_parser.add_argument("--port", type=int, help="Port (default: mock.server.port or 8790)")
     mock_identity_parser.add_argument("--config", help="Config file (default: jui.config.json)")
     mock_identity_parser.add_argument("--expect-root", help="Project root to require (default: this project's)")
