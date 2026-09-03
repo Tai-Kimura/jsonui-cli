@@ -541,8 +541,25 @@ def cmd_generate_spec(args):
 
 
 def cmd_generate_spec_batch(args, input_dir: Path):
-    """Handle batch generation of spec HTML from a directory."""
+    """Handle batch generation of spec docs from a directory.
+
+    `--format` is honoured here as it is for a single file. It used to be
+    read only on the single-file path, so `--format markdown` over a
+    directory wrote HTML into `.html` files and said nothing.
+
+    Its ABSENCE still means HTML, which is not what the single-file path
+    does. There is nothing to infer from: the output is a directory, so
+    there is no extension to read a format off. Everything about the batch
+    form says HTML — the default output directory is `<parent>/html`, the
+    documented invocation is `generate spec docs/specs/ -o docs/html`, and
+    the progress line announces HTML — so defaulting to markdown would
+    change what that documented command produces rather than fix anything.
+    The help text is what was wrong, and it now says this.
+    """
     output_dir = Path(args.output) if args.output else input_dir.parent / "html"
+    output_format = args.format or "html"
+    to_html = output_format == "html"
+    suffix = ".html" if to_html else ".md"
 
     # Find all .spec.json files (recursive to support subdirectories)
     spec_files = list(input_dir.rglob("*.spec.json"))
@@ -556,7 +573,7 @@ def cmd_generate_spec_batch(args, input_dir: Path):
     else:
         layouts_dir = _resolve_layouts_dir_from_config()
 
-    print(f"Generating HTML for {len(spec_files)} spec files...")
+    print(f"Generating {output_format} for {len(spec_files)} spec files...")
     print(f"  Input: {input_dir}")
     print(f"  Output: {output_dir}")
     print()
@@ -577,12 +594,14 @@ def cmd_generate_spec_batch(args, input_dir: Path):
             error_count += 1
             continue
 
-        # Generate HTML with layouts_dir so layoutFile import works
-        content = generate_spec_html(result.spec_data, layouts_dir=layouts_dir)
+        # layouts_dir is passed either way so layoutFile import works
+        content = (generate_spec_html(result.spec_data, layouts_dir=layouts_dir)
+                   if to_html
+                   else generate_spec_markdown(result.spec_data, layouts_dir=layouts_dir))
 
         # Preserve subdirectory structure in output
         rel_path = spec_file.relative_to(input_dir)
-        output_name = rel_path.with_name(rel_path.name.replace(".spec.json", ".html"))
+        output_name = rel_path.with_name(rel_path.name.replace(".spec.json", suffix))
         output_path = output_dir / output_name
 
         output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -1480,7 +1499,8 @@ def main():
     gen_spec_parser.add_argument(
         "--format",
         choices=["markdown", "html"],
-        help="Output format (default: inferred from output or markdown)"
+        help="Output format (default: for a single file, inferred from the "
+             "output extension, else markdown; for a directory, html)"
     )
     gen_spec_parser.add_argument(
         "--layouts-dir",
