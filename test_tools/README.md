@@ -464,6 +464,19 @@ is corrected, so no test count moves and no diff appears. Errors in an
 ungated stretch do not arrive at a commit; they sit there from the start,
 which is why `git diff` and range comparisons do not find them.
 
+### `seedableState` on a view model built from `init` arguments
+
+`branchContracts.seedableState` names ViewModel-internal state a branch may
+arrange; its value may be a scalar, an object or a list, and the read-back is
+a partial match on every platform (the seed's keys only, nested, lists
+element-wise). One consumer-side consequence, measured on a screen whose
+seeded value is a `let` init argument on iOS: the harness cannot assign it,
+so its `setState` **rebuilds the view model**. Any data keys the same
+arrange step wrote before the seed then live on the old instance — the
+harness must replay them onto the new one (or apply the seed first). This
+is the harness's contract, not the runtime's: the read-back only tells you
+the seed took.
+
 ### Legacy Syntax
 
 For backwards compatibility, the old syntax still works:
