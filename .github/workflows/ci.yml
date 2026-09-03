@@ -76,32 +76,15 @@ jobs:
             echo "::error::docs/dev-guide reappeared — dev-guide/ is the only master (see docs/README.md)"
             exit 1
           fi
-      - name: No name-matching process kills in tool sources
-        # `pkill -f` / `killall` signal by COMMAND LINE, which cannot tell
-        # whether the caller owns what it kills. `rjui hotload stop` carried
-        # two such sweeps after its PID-file kill; they read as harmless
-        # because they matched nothing, but measured on the maintainer's
-        # machine that day a control pattern matched 64 unrelated processes
-        # — the zero was the process list, not a property of the patterns —
-        # and an outside SIGTERM mid-run turned a consumer's E2E suite red
-        # three times. These tools are vendored into every consumer, so the
-        # sweep ships with them.
-        #
-        # A stop command has a PID file or a port owner. A name has neither.
-        # Comment lines are allowed: saying why we do not do this is the
-        # point, and the rule would otherwise forbid its own explanation.
-        run: |
-          # -w, not \b: git's regex engine is POSIX ERE, where \b is not a
-          # word boundary. Written with \b this guard matched NOTHING —
-          # including a deliberately planted `system("pkill -f something")`
-          # — and would have shipped as a check that could never fire.
-          hits=$(git grep -I -n -w -E '(pkill|killall)' -- '*.rb' '*.py' '*.sh' '*.mjs' '*.js' \
-                 ':(exclude).github/workflows/*' | grep -vE ':[0-9]+:[[:space:]]*(#|//)' || true)
-          if [ -n "$hits" ]; then
-            echo "::error::name-matching process kills — use the PID file or the port owner:"
-            echo "$hits"
-            exit 1
-          fi
+      - name: No unowned-process kills in tool sources
+        # The rule is a PROPERTY — do not signal a process this repo's tools
+        # did not start — and the script holds both the spellings that have
+        # meant it and the note that the list is an approximation expected to
+        # grow. It lives in a file rather than inline here because it is
+        # tested (jui_tools/tests/test_unowned_kill_guard.py plants every
+        # spelling and asserts each one fires): the first version of this
+        # check, written inline with `\b`, could not fire at all.
+        run: dev-guide/ci/check-unowned-kills.py .
 
       - name: No absolute home paths in tracked files
         run: |
