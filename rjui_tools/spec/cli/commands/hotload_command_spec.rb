@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require 'fileutils'
+require 'rbconfig'
 require 'tmpdir'
 require 'cli/commands/hotload_command'
 
@@ -45,6 +46,60 @@ RSpec.describe RjuiTools::CLI::Commands::HotloadCommand do
 
   def stop_command
     described_class.new(['stop'])
+  end
+
+  describe 'loading' do
+    # `hotload stop` and `status` need no file watcher, but the command
+    # required one at the top of the file, and the watcher requires the
+    # `listen` gem (ffi >= Ruby 3.0). On ruby 2.6 — the system ruby on
+    # macOS, and the oldest these tools are vendored into — `require` of
+    # this file therefore raised LoadError, so `rjui hotload stop` could not
+    # run at all there. The fix for "stop only what you own" would have
+    # reached every consumer except the ones on 2.6.
+    it 'loads with no gems available at all' do
+      # Measured in a subprocess with an empty GEM_HOME/GEM_PATH rather than
+      # only on 2.6: that way this arm is red on ANY ruby if the require
+      # moves back, instead of only on the leg that has no `listen`.
+      lib = File.expand_path('../../../lib', __dir__)
+      Dir.mktmpdir('rjui_no_gems') do |empty|
+        cmd = [
+          'env', '-u', 'RUBYOPT', '-u', 'BUNDLE_GEMFILE', '-u', 'BUNDLE_BIN_PATH',
+          "GEM_HOME=#{empty}", "GEM_PATH=#{empty}", RbConfig.ruby,
+          '-I', lib, '-e', "require 'cli/commands/hotload_command'; puts :loaded"
+        ]
+        out = IO.popen(cmd, err: [:child, :out], &:read)
+        expect(out).to include('loaded'), "the command needs a gem to load:\n#{out}"
+      end
+    end
+  end
+
+  describe 'listen' do
+    before do
+      # The watcher is deliberately not loaded by requiring the command any
+      # more, so this arm loads it itself — and says so where it cannot be
+      # loaded, rather than passing quietly. On ruby 2.6 there is no
+      # `listen` (ffi >= 3.0), and `hotload listen` genuinely cannot work
+      # there; `stop` and `status`, which the rest of this file covers, now
+      # can. A skip is the honest verdict, and it shows in the count.
+      begin
+        require 'core/file_watcher'
+      rescue LoadError => e
+        skip "no file watcher on this ruby (#{e.message}) — `listen` needs ffi >= ruby 3.0"
+      end
+    end
+
+    it 'still starts the watcher (the lazy require is on the path that uses it)' do
+      Dir.mkdir('Layouts')
+      allow(RjuiTools::Core::ConfigManager).to receive(:load_config)
+        .and_return({ 'layouts_directory' => 'Layouts' })
+      cmd = described_class.new(['listen'])
+      allow(cmd).to receive(:run_build)
+      allow(cmd).to receive(:trap) # do not install signal handlers in the suite
+      allow(cmd).to receive(:sleep).and_raise(Interrupt) # ends run_listen through its own rescue
+      watcher = instance_double(RjuiTools::Core::FileWatcher, start: nil, stop: nil)
+      expect(RjuiTools::Core::FileWatcher).to receive(:new).and_return(watcher)
+      cmd.execute
+    end
   end
 
   describe 'stop' do

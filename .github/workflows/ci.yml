@@ -249,17 +249,7 @@ jobs:
             os: ubuntu-22.04
             ruby: "2.6"
             gems: "rspec simplecov:0.22.0"
-            # hotload's spec loads the command, which eagerly requires the
-            # file watcher, which requires `listen` — the same gem (ffi >=
-            # Ruby 3.0) that keeps sjui's watch specs off this leg. Excluded
-            # for the same reason: not the lib's problem, and not what this
-            # leg is here to measure.
-            #
-            # It follows that `rjui hotload stop|status` cannot even load on
-            # a 2.6 consumer today, since the require is at the top of the
-            # file rather than inside `run_listen`. Reported separately; the
-            # fix is a moved require, not an exclusion.
-            rspec_args: "--exclude-pattern 'spec/**/*hotload*_spec.rb'"
+            rspec_args: ""
     steps:
       - uses: actions/checkout@v4
       - uses: ruby/setup-ruby@v1
