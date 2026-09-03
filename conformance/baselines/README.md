@@ -26,6 +26,33 @@ Each manifest records its `environment`; the loader refuses to compare a
 manifest under a different env key than it was baked for. Ratchet ceilings
 (`../gate_ratchet.json`) nest by the same env keys.
 
+### The device behind `local/`
+
+An env key names a class of renderer, and within `local/` the class has to be
+narrow enough that a re-bake means something. The manifests carry no device
+field, so the reference devices are declared here:
+
+| platform | reference device |
+|---|---|
+| ios | **iPhone 16 Pro, iOS 18.6, simulator `C13F2A69-CA88-45A8-87C9-412FAADFFCCA`** — the device the driver gates run on |
+| android | AVD **`conf_ci`** (android-35 google_apis_playstore_tablet arm64-v8a, 10G data) |
+
+Bake `local/` from that device and no other. Two simulators of the *same*
+model and OS version are not interchangeable: `D6A1DD42` and `C13F2A69`, both
+"iPhone 16 Pro / iOS 18.6", rendered the same corpus with 849 of 852 hashes
+moved while the content was byte-identical below the status bar (2026-09-04).
+Since the ios lane now crops that band (`PLATFORM_ENV_CHROME_CROP`), a
+sibling device no longer reads as a whole-corpus regression — but everything
+outside the band is still a fact about one device, so the declaration stands.
+
+Record what rendered a set with `--rendered-by`, which is the other half of
+the same question:
+
+```sh
+jui conformance baseline update --platform ios --env local \
+  --artifacts <run>/artifacts/ios --rendered-by swiftjsonui=<sha>
+```
+
 ```sh
 # bake the ci set from downloaded CI artifacts:
 jui conformance baseline update --platform ios --env ci --artifacts <downloaded>/artifacts/ios

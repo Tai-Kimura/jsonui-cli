@@ -109,10 +109,17 @@ def _load_pillow():
 #: the threshold with a mean distance of 16.45; excluding the two bands brings
 #: the same comparison to 0/478 at mean 0.36.
 #:
-#: Local runs are NOT cropped and must not be: that AVD has no taskbar, so the
-#: same rows hold real content there (the TabView tab bar, alignBottom, fill
-#: clamps). This is exactly the asymmetry the env key exists to carry —
-#: baselines never cross environments, so the crop never has to either.
+#: ANDROID local runs are NOT cropped and must not be: that AVD has no
+#: taskbar, so the same rows hold real content there (the TabView tab bar,
+#: alignBottom, fill clamps). This is exactly the asymmetry the env key exists
+#: to carry — baselines never cross environments, so the crop never has to
+#: either. Measured 2026-09-04, one android fixture: inverting every row of
+#: both bands moves the hash by 9 against a threshold of 8, so the exposure
+#: is real in principle — but across every local android run pair taken this
+#: cycle (two library revisions, two full 804-shot runs on conf_ci) the bands
+#: were byte-identical, and the 48/120 rows carry 6 and 13 distinct values
+#: across the corpus. Nothing has ridden; cropping would trade those away for
+#: no measured gain. Revisit if the local AVD is ever replaced.
 #: Bounds come from the measured bands (status bar 11–36, taskbar 1495–1583)
 #: with margin, and stop short of the tab bar at 1300–1450.
 #:
@@ -137,9 +144,26 @@ def _load_pillow():
 #: top edge continue below it. Neither the Dynamic Island nor the home
 #: indicator is rendered in these captures (measured, same runs), so the
 #: bottom stays 0.
+#:
+#: ios LOCAL takes the same crop, for the same glyphs. The band is not stable
+#: across simulator INSTANCES either: two "iPhone 16 Pro / iOS 18.6" devices
+#: differing only in UDID rendered the same corpus with 849 of 852 hashes
+#: moved (distance median 18, max 255) while the content was identical —
+#: cropped to (160, 0) the same pairs fall to 0–4, and the differing pixels
+#: sit at rows 78–117 with a few at 2595 (measured 2026-09-04, D6A1DD42 vs
+#: C13F2A69, both frozen to 9:41). Uncropped, a local baseline is a fact
+#: about one simulator instance rather than about the renderer: the same
+#: library re-rendered on a sibling device reads as a whole-corpus
+#: regression, which is how two bakes were spent this cycle. The trade is the
+#: one the ci entry already makes and it is not free here either: 139 of 852
+#: fixtures draw something inside those rows (SafeAreaView_direction is the
+#: sharpest case — the top edge IS its subject), so a deviation confined to
+#: rows 0–159 is invisible on this lane too. Prefer the assertable arms for
+#: those; a picture cannot carry both this band and a stable baseline.
 PLATFORM_ENV_CHROME_CROP: dict[tuple[str, str], tuple[int, int]] = {
     ("android", "ci"): (48, 120),
     ("ios", "ci"): (160, 0),
+    ("ios", "local"): (160, 0),
 }
 
 
