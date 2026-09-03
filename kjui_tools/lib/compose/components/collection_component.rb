@@ -972,6 +972,23 @@ module KjuiTools
         # scroll and padding — the same place KotlinJsonUI's dynamic renderer
         # applies it (renderFlowLayout). `clipToBounds: true` keeps its opt-in
         # `.clipToBounds()` from build_background, which is now what decides.
+        # APPENDED, NOT SUBSTITUTED, and that is deliberate: `build_size` still
+        # emits its own `.wrapContentHeight()` when the layout declares
+        # `height: "wrapContent"`, so that shape renders through two stacked
+        # wrapContentHeight modifiers. Measured rather than assumed
+        # (flowOverflow__noneWrap{InBox,InScroll}, whose controls are the same
+        # layouts with the height key absent — one modifier instead of two):
+        # the pictures are byte-identical, on the dynamic host and the codegen
+        # host, under a finite 150x100 parent and under a ScrollView. Twelve
+        # cells, six rows, drawn TOP-aligned and spilling below the parent in
+        # every one.
+        #
+        # That also disposes of the reason to substitute. The worry was that
+        # the outer modifier's default alignment (CenterVertically) would win
+        # over the Top this one asks for and split the overflow above and
+        # below; it does not — the corpus arms say so in pictures. Leaving the
+        # append also keeps this arm independent of what `build_size` chooses
+        # to emit, which substitution would couple.
         FLOW_OVERFLOW_MODIFIER = '.wrapContentHeight(Alignment.Top, unbounded = true)'
 
         # See generate_flow_layout: `lazy` in effect AND a height that is finite
