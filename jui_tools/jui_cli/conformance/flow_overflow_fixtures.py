@@ -11,11 +11,11 @@ never overflows on any platform. So the platform that ignored the rule
 ``21ff76b1``) rendered its ``layout__flow`` identically to the platforms
 that honour it, and no picture in the corpus could tell them apart.
 
-One family: the same overflowing flow Collection twice — a 150×100 box
-holding twelve cells, two per row, six rows (~168pt) against a 100pt
-height — with ``lazy`` undeclared (``scroll``: clipped at the box) and
-``lazy: "none"`` (``none``: cells spill below the box). Both ``class:
-visual``; each platform's baseline pins its own picture of the rule.
+Two members share one overflowing flow Collection — a 150×100 box holding
+twelve cells, two per row, six rows (~168pt) against a 100pt height — with
+``lazy`` undeclared (``scroll``: clipped at the box) and ``lazy: "none"``
+(``none``: cells spill below the box). Both ``class: visual``; each
+platform's baseline pins its own picture of the rule.
 
 Controls, in the bounds_fixtures shape (every visual fixture names an
 ``isControl`` entry that differs from it in the attribute under test): the
@@ -25,6 +25,19 @@ default body — inert when a platform scrolls regardless of ``lazy`` — and
 scrolls a flow Collection, the defect above. The two comparisons look at
 the same pair of pictures from either side; what they buy over one is that
 each fixture's inert verdict names the direction its platform is wrong in.
+
+The third member, ``wrap``, is the shape the first two could not see: a
+``wrapContent`` flow Collection inside a vertical ScrollView. "Its own
+bounds" is literal — a node without bounds of its own has nothing to scroll
+inside, the parent scrolls — and on Android it is also the crash: Compose
+throws when a vertically scrollable node is measured with an infinite max
+height, which is what a scrolling parent hands a wrapping child. A
+consumer's tree had it (a flow inside a LazyColumn cell) while the corpus
+held only the fixed box. Its control is the same tree with the Collection
+self-bounded at 100pt: the control clips at the box, the fixture lays every
+row out at content height and the ScrollView scrolls — and a renderer that
+scrolls the wrapping node instead of the parent either crashes (Android)
+or renders the fixture like its control.
 """
 from __future__ import annotations
 
@@ -47,17 +60,19 @@ _ITEM_COUNT = 12
 #: (case suffix, `lazy` value or None for undeclared).
 _SHAPES = (("scroll", None), ("none", "none"))
 
+_WRAP_CASE = "wrap"
+
 
 def _marker(source_label: str) -> dict:
     return json_marker(source=source_label, generator=GENERATOR_NAME)
 
 
-def _layout(source_label: str, lazy: str | None) -> dict:
+def _collection(lazy: str | None, height) -> dict:
     target = {
         "type": "Collection",
         "id": "target",
         "width": _BOX_WIDTH,
-        "height": _BOX_HEIGHT,
+        "height": height,
         # The box is what the cells are clipped to or spill past; without a
         # background the spill reads as a taller Collection.
         "background": "#DDDDDD",
@@ -67,20 +82,42 @@ def _layout(source_label: str, lazy: str | None) -> dict:
     }
     if lazy is not None:
         target["lazy"] = lazy
+    return target
+
+
+def _items() -> list[dict]:
+    return [
+        {
+            "name": "items",
+            "class": "CollectionDataSource",
+            "defaultValue": [{"title": f"Cell {i}"} for i in range(_ITEM_COUNT)],
+        }
+    ]
+
+
+def _layout(source_label: str, lazy: str | None) -> dict:
     return {
         "_generated": _marker(source_label),
         "type": "View",
         "id": "root",
         "width": "matchParent",
         "height": "matchParent",
-        "child": [target],
-        "data": [
-            {
-                "name": "items",
-                "class": "CollectionDataSource",
-                "defaultValue": [{"title": f"Cell {i}"} for i in range(_ITEM_COUNT)],
-            }
-        ],
+        "child": [_collection(lazy, _BOX_HEIGHT)],
+        "data": _items(),
+    }
+
+
+def _scrolling_parent_layout(source_label: str, height) -> dict:
+    # The root IS the scrolling parent: what a wrapping child is measured
+    # against is the ScrollView's infinite max height.
+    return {
+        "_generated": _marker(source_label),
+        "type": "ScrollView",
+        "id": "root",
+        "width": "matchParent",
+        "height": "matchParent",
+        "child": [_collection(None, height)],
+        "data": _items(),
     }
 
 
@@ -108,52 +145,79 @@ def _test(name: str, description: str, layout_rel: str) -> dict:
     }
 
 
+def _control_entry(control_id: str, stem: str, layout_rel: str, test_rel: str) -> dict:
+    return {
+        "id": control_id,
+        "component": "__control",
+        "attribute": None,
+        "case": stem,
+        "class": rules.CLASS_VISUAL,
+        "host": "Collection",
+        "writtenKey": None,
+        "aliasOf": None,
+        "value": None,
+        "platforms": list(_PLATFORMS),
+        "mode": None,
+        "deprecated": None,
+        "layout": layout_rel,
+        "test": test_rel,
+        "state": None,
+        "promotedFrom": None,
+        "control": None,
+        "isControl": True,
+        "companions": list(rules.BASE_COMPANIONS["Collection"]),
+    }
+
+
+def _fixture_entry(case: str, attribute: str, written_key, value, layout_rel: str,
+                   test_rel: str, control_id: str) -> dict:
+    return {
+        "id": f"Collection/{case}",
+        "component": "Collection",
+        "attribute": attribute,
+        "case": case,
+        "class": rules.CLASS_VISUAL,
+        "host": "Collection",
+        "writtenKey": written_key,
+        "aliasOf": None,
+        "value": value,
+        "platforms": list(_PLATFORMS),
+        "mode": None,
+        "deprecated": None,
+        "layout": layout_rel,
+        "test": test_rel,
+        "state": None,
+        "promotedFrom": None,
+        "peerGroup": None,
+        "control": control_id,
+        "companions": list(rules.BASE_COMPANIONS["Collection"]),
+    }
+
+
 def build_flow_overflow_fixtures(
     source_label: str,
 ) -> tuple[list[tuple[str, dict]], list[dict]]:
     """``(files, manifest entries)`` for the flow-overflow family."""
     files: list[tuple[str, dict]] = []
     entries: list[dict] = []
-    # One control per shape, holding that shape's body; each fixture names
-    # the control of the OTHER shape.
+
+    # --- the fixed box, twice: one control per shape, each fixture names
+    # --- the control of the OTHER shape.
     control_ids: dict[str, str] = {}
     for shape, lazy in _SHAPES:
-        control_stem = f"Collection__flow-overflow-{shape}"
-        control_id = f"__control/{control_stem}"
+        stem = f"Collection__flow-overflow-{shape}"
+        control_id = f"__control/{stem}"
         control_ids[shape] = control_id
-        control_layout_rel = f"fixtures/__control/{control_stem}.layout.json"
-        control_test_rel = f"fixtures/__control/{control_stem}.test.json"
-        files.append((control_layout_rel, _layout(source_label, lazy)))
-        files.append((
-            control_test_rel,
-            _test(
-                control_stem,
-                "Control for the flow-overflow family: the same overflowing flow "
-                f"Collection with lazy {'undeclared' if lazy is None else repr(lazy)}.",
-                control_layout_rel,
-            ),
-        ))
-        entries.append({
-            "id": control_id,
-            "component": "__control",
-            "attribute": None,
-            "case": control_stem,
-            "class": rules.CLASS_VISUAL,
-            "host": "Collection",
-            "writtenKey": None,
-            "aliasOf": None,
-            "value": None,
-            "platforms": list(_PLATFORMS),
-            "mode": None,
-            "deprecated": None,
-            "layout": control_layout_rel,
-            "test": control_test_rel,
-            "state": None,
-            "promotedFrom": None,
-            "control": None,
-            "isControl": True,
-            "companions": list(rules.BASE_COMPANIONS["Collection"]),
-        })
+        layout_rel = f"fixtures/__control/{stem}.layout.json"
+        test_rel = f"fixtures/__control/{stem}.test.json"
+        files.append((layout_rel, _layout(source_label, lazy)))
+        files.append((test_rel, _test(
+            stem,
+            "Control for the flow-overflow family: the same overflowing flow "
+            f"Collection with lazy {'undeclared' if lazy is None else repr(lazy)}.",
+            layout_rel,
+        )))
+        entries.append(_control_entry(control_id, stem, layout_rel, test_rel))
 
     for shape, lazy in _SHAPES:
         case = f"flowOverflow__{shape}"
@@ -175,26 +239,39 @@ def build_flow_overflow_fixtures(
             )
         files.append((layout_rel, _layout(source_label, lazy)))
         files.append((test_rel, _test(case, description, layout_rel)))
-        entries.append({
-            "id": f"Collection/{case}",
-            "component": "Collection",
-            "attribute": "lazy",
-            "case": case,
-            "class": rules.CLASS_VISUAL,
-            "host": "Collection",
-            "writtenKey": None if lazy is None else "lazy",
-            "aliasOf": None,
-            "value": lazy,
-            "platforms": list(_PLATFORMS),
-            "mode": None,
-            "deprecated": None,
-            "layout": layout_rel,
-            "test": test_rel,
-            "state": None,
-            "promotedFrom": None,
-            "peerGroup": None,
-            # The other shape's body — see the module docstring.
-            "control": control_ids[other],
-            "companions": list(rules.BASE_COMPANIONS["Collection"]),
-        })
+        entries.append(_fixture_entry(
+            case, "lazy", None if lazy is None else "lazy", lazy,
+            layout_rel, test_rel, control_ids[other],
+        ))
+
+    # --- the wrapping child of a scrolling parent, and its self-bounded twin.
+    wrap_stem = "Collection__flow-overflow-wrap"
+    wrap_control_id = f"__control/{wrap_stem}"
+    wrap_control_layout_rel = f"fixtures/__control/{wrap_stem}.layout.json"
+    wrap_control_test_rel = f"fixtures/__control/{wrap_stem}.test.json"
+    files.append((wrap_control_layout_rel, _scrolling_parent_layout(source_label, _BOX_HEIGHT)))
+    files.append((wrap_control_test_rel, _test(
+        wrap_stem,
+        "Control for the flow-overflow wrap fixture: the same flow Collection inside "
+        f"the same ScrollView, self-bounded at {_BOX_HEIGHT}pt (it clips at the box).",
+        wrap_control_layout_rel,
+    )))
+    entries.append(_control_entry(wrap_control_id, wrap_stem, wrap_control_layout_rel, wrap_control_test_rel))
+
+    wrap_case = f"flowOverflow__{_WRAP_CASE}"
+    wrap_layout_rel = f"fixtures/Collection/{wrap_case}.layout.json"
+    wrap_test_rel = f"fixtures/Collection/{wrap_case}.test.json"
+    wrap_description = (
+        f"A wrapContent flow Collection with lazy in effect, holding {_ITEM_COUNT} cells "
+        "inside a vertical ScrollView, has no bounds of its own: every row is laid out at "
+        "content height and the ScrollView scrolls. A renderer that scrolls the wrapping "
+        "node instead of the parent renders this like its 100pt control — or, on Android, "
+        "throws (a vertically scrollable node measured with an infinite max height)."
+    )
+    files.append((wrap_layout_rel, _scrolling_parent_layout(source_label, "wrapContent")))
+    files.append((wrap_test_rel, _test(wrap_case, wrap_description, wrap_layout_rel)))
+    entries.append(_fixture_entry(
+        wrap_case, "height", "height", "wrapContent",
+        wrap_layout_rel, wrap_test_rel, wrap_control_id,
+    ))
     return files, entries
