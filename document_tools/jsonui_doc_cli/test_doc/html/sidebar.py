@@ -29,6 +29,34 @@ def _get_rel_root(current_path: str | None) -> str:
     return "../" * depth
 
 
+def _contains(items: list[dict] | None, path: str | None) -> bool:
+    """True when *path* is one of the entries in *items*."""
+    if not items or not path:
+        return False
+    return any(i.get('path') == path for i in items)
+
+
+def _app_owning(all_tests_nav: dict | None, current_path: str | None) -> str | None:
+    """Name of the app whose nav lists *current_path*, or None.
+
+    Asks the nav data which app claims this page rather than reading the
+    app name off the front of the path. The two agree today only because
+    ``generator.py`` passes ``path_prefix=app_name`` when it builds the
+    per-app lists — that is a consequence of how the paths are made, not
+    something declared anywhere, and a page whose app name and directory
+    ever differ would silently get the wrong list. Containment cannot.
+    """
+    if not all_tests_nav or not current_path:
+        return None
+    for app_name, app_data in (all_tests_nav.get('apps') or {}).items():
+        if not isinstance(app_data, dict):
+            continue
+        if _contains(app_data.get('specs'), current_path) or \
+           _contains(app_data.get('components'), current_path):
+            return app_name
+    return None
+
+
 def _render_tests_sidebar_section(
     tests: list[dict],
     label: str,
@@ -550,17 +578,28 @@ def generate_spec_sidebar(
     """
     rel_root = _get_rel_root(current_path)
 
+    # Which app, if any, this page belongs to. The top-level `specs` list and
+    # the per-app lists are siblings in the nav, and this function used to
+    # expand the top-level one on every spec page — so a page under an app
+    # opened a list it is not in, and the app's own list sat collapsed below
+    # it. The reader arrives from the index having chosen an app and loses
+    # that choice on the first click.
+    owning_app = _app_owning(all_tests_nav, current_path)
+
     parts = []
     parts.append("  <nav class='sidebar'>")
     parts.append(f"    <a href='{rel_root}index.html' class='back-link'>&larr; Back to Index</a>")
     parts.append(f"    <h2>{escape_html(title)}</h2>")
 
-    # Screen Specs navigation (collapsible, expanded by default for spec pages)
+    # Screen Specs navigation (collapsible, expanded by default for spec
+    # pages — but collapsed on a page that belongs to an app, whose own
+    # list is expanded below instead)
     if all_tests_nav and all_tests_nav.get('specs'):
         specs = all_tests_nav['specs']
+        top_cls = " collapsed" if owning_app else ""
         parts.append("    <div class='sidebar-section'>")
-        parts.append(f"      <div class='sidebar-title spec' id='specs-title' onclick=\"toggleSection('specs')\"><span class='arrow'>▼</span> Screen Specs <span class='count'>{len(specs)}</span></div>")
-        parts.append("      <div class='sidebar-list' id='specs-list'>")
+        parts.append(f"      <div class='sidebar-title spec{top_cls}' id='specs-title' onclick=\"toggleSection('specs')\"><span class='arrow'>▼</span> Screen Specs <span class='count'>{len(specs)}</span></div>")
+        parts.append(f"      <div class='sidebar-list{top_cls}' id='specs-list'>")
         parts.append("        <ul>")
         for s in specs:
             is_current = current_path and s['path'] == current_path
@@ -589,20 +628,28 @@ def generate_spec_sidebar(
     if all_tests_nav and all_tests_nav.get('apps'):
         for app_name, app_data in all_tests_nav['apps'].items():
             safe_app_id = _make_safe_id(app_name)
+            # The app this page lives in opens; every other app stays shut,
+            # exactly as before. Order is untouched — with the top-level
+            # list collapsed above, the first EXPANDED section is this one.
+            is_owner = app_name == owning_app
+            app_cls = "" if is_owner else " collapsed"
             total_items = sum(
                 sum(len(files) for files in v.values()) if isinstance(v, dict) else len(v)
                 for v in app_data.values()
             )
             parts.append("    <div class='sidebar-section'>")
-            parts.append(f"      <div class='sidebar-title app collapsed' id='app-{safe_app_id}-title' onclick=\"toggleSection('app-{safe_app_id}')\"><span class='arrow'>▼</span> {escape_html(app_name)} <span class='count'>{total_items}</span></div>")
-            parts.append(f"      <div class='sidebar-list collapsed' id='app-{safe_app_id}-list'>")
+            parts.append(f"      <div class='sidebar-title app{app_cls}' id='app-{safe_app_id}-title' onclick=\"toggleSection('app-{safe_app_id}')\"><span class='arrow'>▼</span> {escape_html(app_name)} <span class='count'>{total_items}</span></div>")
+            parts.append(f"      <div class='sidebar-list{app_cls}' id='app-{safe_app_id}-list'>")
 
             if app_data.get('specs'):
                 app_specs = app_data['specs']
                 spec_id = f"app-{safe_app_id}-specs"
+                # Opening the app alone is not enough — the list the reader
+                # needs is one level further in.
+                spec_cls = "" if is_owner and _contains(app_specs, current_path) else " collapsed"
                 parts.append(f"        <div class='sidebar-subsection'>")
-                parts.append(f"          <div class='sidebar-subtitle collapsed' id='{spec_id}-title' onclick=\"toggleSection('{spec_id}')\"><span class='arrow'>▼</span> Screen Specs <span class='count'>{len(app_specs)}</span></div>")
-                parts.append(f"          <div class='sidebar-list collapsed' id='{spec_id}-list'>")
+                parts.append(f"          <div class='sidebar-subtitle{spec_cls}' id='{spec_id}-title' onclick=\"toggleSection('{spec_id}')\"><span class='arrow'>▼</span> Screen Specs <span class='count'>{len(app_specs)}</span></div>")
+                parts.append(f"          <div class='sidebar-list{spec_cls}' id='{spec_id}-list'>")
                 parts.append("            <ul>")
                 for s in app_specs:
                     is_current = current_path and s['path'] == current_path
@@ -615,9 +662,10 @@ def generate_spec_sidebar(
             if app_data.get('components'):
                 app_comps = app_data['components']
                 comp_id = f"app-{safe_app_id}-components"
+                comp_cls = "" if is_owner and _contains(app_comps, current_path) else " collapsed"
                 parts.append(f"        <div class='sidebar-subsection'>")
-                parts.append(f"          <div class='sidebar-subtitle collapsed' id='{comp_id}-title' onclick=\"toggleSection('{comp_id}')\"><span class='arrow'>▼</span> Components <span class='count'>{len(app_comps)}</span></div>")
-                parts.append(f"          <div class='sidebar-list collapsed' id='{comp_id}-list'>")
+                parts.append(f"          <div class='sidebar-subtitle{comp_cls}' id='{comp_id}-title' onclick=\"toggleSection('{comp_id}')\"><span class='arrow'>▼</span> Components <span class='count'>{len(app_comps)}</span></div>")
+                parts.append(f"          <div class='sidebar-list{comp_cls}' id='{comp_id}-list'>")
                 parts.append("            <ul>")
                 for c in app_comps:
                     is_current = current_path and c['path'] == current_path
