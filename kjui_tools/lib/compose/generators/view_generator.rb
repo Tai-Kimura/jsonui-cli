@@ -244,16 +244,18 @@ module KjuiTools
             import androidx.compose.runtime.Composable
             import androidx.compose.runtime.collectAsState
             import androidx.compose.runtime.getValue
+            import androidx.compose.ui.Modifier
             import androidx.lifecycle.viewmodel.compose.viewModel
             import #{package_name}.viewmodels.#{view_name}ViewModel
 
             @Composable
             fun #{view_name}View(
-                viewModel: #{view_name}ViewModel = viewModel()
+                viewModel: #{view_name}ViewModel = viewModel(),
+                modifier: Modifier = Modifier
             ) {
                 val data by viewModel.data.collectAsState()
 
-                #{view_name}GeneratedView(data = data, viewModel = viewModel)
+                #{view_name}GeneratedView(data = data, viewModel = viewModel, modifier = modifier)
             }
           KOTLIN
           
