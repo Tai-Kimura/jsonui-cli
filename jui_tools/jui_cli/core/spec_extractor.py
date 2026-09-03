@@ -526,6 +526,14 @@ def resolve_canonical_marks(spec_data: dict, spec_path) -> None:
 
     # Before resolution — see the note in jsonui-doc's validator.
     errors = canon.check_divergences(spec_data, index, convention)
+
+    # Also before resolution, and for the same reason: `resolve_spec_marks`
+    # rewrites `params` in place, so a method that carried a mark stops
+    # looking like one and this walk finds nothing. It shipped below the
+    # resolve call in 1.8.17 and printed nothing on every real project while
+    # the function it calls returned 13 on the same specs.
+    widened = canon.iter_widened_enums(spec_data, index, convention)
+
     mark_errors, warnings = canon.resolve_spec_marks(spec_data, index, convention)
     errors.extend(mark_errors)
     for path, message in warnings:
@@ -544,7 +552,6 @@ def resolve_canonical_marks(spec_data: dict, spec_path) -> None:
     # Two counts because they differ: one route declared by ten methods is
     # ten expansions and one gap. Both are printed so a project comparing
     # numbers with another knows which it is holding.
-    widened = canon.iter_widened_enums(spec_data, index, convention)
     if widened:
         routes = {(w[1], w[3]) for w in widened}
         shown = ", ".join(sorted(f"{n} → {e}" for n, e in routes))

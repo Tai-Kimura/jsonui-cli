@@ -292,3 +292,89 @@ class TheNameMatchesTheGeneratorS(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TheNoteActuallyPrints(unittest.TestCase):
+    """Drives the real entry point, in the real order.
+
+    Every arm above calls `iter_widened_enums` on a spec straight from a
+    literal. The CLI never has one: `resolve_canonical_marks` runs
+    `resolve_spec_marks` first, which expands `params` IN PLACE, so a method
+    that carried a mark stops looking like one. Shipped in 1.8.17 with the
+    call below that line — the function returned 13 on a real project's
+    specs and the build printed nothing, and 20 green arms said nothing
+    about it because none of them had been through resolution.
+
+    So this one asserts on stdout from `extract_screen_spec`. It is the
+    order that has to be tested, and the order only exists here.
+    """
+
+    SWAGGER = {
+        "openapi": "3.0.3",
+        "paths": {"/api/me/locale": {"put": {"requestBody": {
+            "required": True, "content": {"application/json": {"schema": {
+                "$ref": "#/components/schemas/LocaleUpdateRequest"}}}}}}},
+        "components": {"schemas": {"LocaleUpdateRequest": {
+            "type": "object", "required": ["locale"],
+            "properties": {"locale": {"type": "string", "enum": ["ja", "en"]}}}}},
+    }
+
+    def _spec(self, methods):
+        return {
+            "type": "screen",
+            "metadata": {"name": "MyPage", "description": "F.", "screen": "my_page"},
+            "dataFlow": {"repositories": [
+                {"name": "UserRepository", "methods": methods}]},
+        }
+
+    def _run(self, methods):
+        import contextlib
+        import io
+        import json
+        from tempfile import TemporaryDirectory
+
+        from jui_cli.core.spec_extractor import extract_screen_spec
+
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "docs" / "api").mkdir(parents=True)
+            (root / "docs" / "api" / "swagger.json").write_text(
+                json.dumps(self.SWAGGER), encoding="utf-8")
+            (root / "docs" / "screens").mkdir(parents=True)
+            spec_path = root / "docs" / "screens" / "my_page.spec.json"
+            spec_path.write_text(json.dumps(self._spec(methods)), encoding="utf-8")
+            (root / "jui.config.json").write_text("{}", encoding="utf-8")
+
+            out = io.StringIO()
+            with contextlib.redirect_stdout(out):
+                spec = extract_screen_spec(
+                    json.loads(spec_path.read_text()), spec_path)
+            return out.getvalue(), spec
+
+    METHOD = {"name": "updateLocale", "endpoint": "PUT /api/me/locale",
+              "params": "@canonical"}
+
+    def test_the_note_reaches_stdout(self):
+        printed, _ = self._run([dict(self.METHOD)])
+        self.assertIn("NOTE:", printed)
+        self.assertIn("LocaleUpdateRequestLocale", printed)
+
+    def test_it_reports_both_counts_from_the_real_walk(self):
+        # The shape that made this worth two numbers: one route, three
+        # methods declaring it — the real project had ten.
+        printed, _ = self._run([
+            dict(self.METHOD, name=f"updateLocale{i}") for i in range(3)])
+        self.assertIn("1 argument(s) in 3 '@canonical' expansion(s)", printed)
+
+    def test_the_mark_still_expanded_alongside_it(self):
+        # The inventory must not cost the expansion, and running it first
+        # must not leave the mark unresolved.
+        _, spec = self._run([dict(self.METHOD)])
+        params = spec.repositories[0].methods[0].params
+        self.assertEqual([(p.name, p.type) for p in params], [("locale", "String")])
+
+    def test_a_spec_with_nothing_to_report_prints_no_note(self):
+        method = {"name": "updateLocale", "endpoint": "PUT /api/me/locale",
+                  "params": [{"name": "locale", "type": "String"}]}
+        printed, _ = self._run([method])
+        self.assertNotIn("NOTE:", printed)
