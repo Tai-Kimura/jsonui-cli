@@ -7,7 +7,7 @@
     "web"
   ],
   "counts": {
-    "entries": 64,
+    "entries": 66,
     "unreviewed": 0
   },
   "entries": [
@@ -42,6 +42,34 @@
       "note": "",
       "adjudicatedFamily": "off-face-equals-control",
       "controlDiffExclusion": "off-face-equals-control"
+    },
+    {
+      "fixture": "Collection/flowOverflow__noneWrapInBox",
+      "component": "Collection",
+      "attribute": "height",
+      "inertOn": [
+        "android",
+        "ios",
+        "web"
+      ],
+      "kind": "uniform-inert-undeclared-value",
+      "family": "sibling-value-active",
+      "reason": "Rendering identically to the control IS this fixture's finding, not a coverage gap. The pair was built to measure whether the second wrapContentHeight modifier does anything: the control is the same layout with the height key absent (one modifier), and this fixture declares height: wrapContent, which makes build_size emit its own .wrapContentHeight() on top of the flow overflow modifier (two). Measured byte-identical on BOTH the dynamic host and the codegen host, under a finite 150x100 parent and under a ScrollView — so the appended modifier is inert and the fixture says so on purpose. The attribute is read: the sibling Collection/flowOverflow__wrap is active on ios, android and web, so this is a value-level result, not a dropped attribute. No adjudicatedFamily slug is set deliberately — common.height declares no 'default' in attribute_definitions.json, so 'value-is-default' is unsupported; and the two emits are not structurally identical (they differ by one stacked modifier), so 'off-face-equals-control' would overclaim a structural impossibility where the evidence is a measured no-op. Whoever owns that vocabulary should pick the slug.",
+      "note": ""
+    },
+    {
+      "fixture": "Collection/flowOverflow__noneWrapInScroll",
+      "component": "Collection",
+      "attribute": "height",
+      "inertOn": [
+        "android",
+        "ios",
+        "web"
+      ],
+      "kind": "uniform-inert-undeclared-value",
+      "family": "sibling-value-active",
+      "reason": "Rendering identically to the control IS this fixture's finding, not a coverage gap. The pair was built to measure whether the second wrapContentHeight modifier does anything: the control is the same layout with the height key absent (one modifier), and this fixture declares height: wrapContent, which makes build_size emit its own .wrapContentHeight() on top of the flow overflow modifier (two). Measured byte-identical on BOTH the dynamic host and the codegen host, under a finite 150x100 parent and under a ScrollView — so the appended modifier is inert and the fixture says so on purpose. The attribute is read: the sibling Collection/flowOverflow__wrap is active on ios, android and web, so this is a value-level result, not a dropped attribute. No adjudicatedFamily slug is set deliberately — common.height declares no 'default' in attribute_definitions.json, so 'value-is-default' is unsupported; and the two emits are not structurally identical (they differ by one stacked modifier), so 'off-face-equals-control' would overclaim a structural impossibility where the evidence is a measured no-op. Whoever owns that vocabulary should pick the slug.",
+      "note": ""
     },
     {
       "fixture": "Collection/hideSeparator__false",
