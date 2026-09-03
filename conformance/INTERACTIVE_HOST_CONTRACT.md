@@ -125,6 +125,15 @@ share is the **layout root `data` section**, so that is the contract:
   for multi-section fixtures. The renderer takes each section's cell view
   name from the Collection node's own `sections` declaration; a `cell` name
   here is carried only for data-source fidelity.
+- **nested** (2026-09-03) — a value inside a cell dictionary written in the
+  explicit shape (`"items": {"sections": [...]}`) is itself a Collection's
+  data: the iOS host materializes it into a nested `CollectionDataSource`, so
+  a Collection inside a cell layout (`items: "@{items}"` in the cell file) is
+  fed through the cell dictionary. That is the only channel that reaches a
+  cell file — a cell is rendered from its own layout with the cell dictionary
+  as its data, and the root `data` section is not visible there. Plain arrays
+  inside a cell dictionary are left as they are (a string list looks the
+  same). Implemented: `ConformanceStateProvider.materializeNestedCollections`.
 
 Host obligation per path (the host plays the consumer ViewModel's role):
 
