@@ -866,8 +866,20 @@ def cmd_generate_component(args):
 
 
 def cmd_generate_component_batch(args, input_dir: Path):
-    """Handle batch generation of component HTML from a directory."""
+    """Handle batch generation of component docs from a directory.
+
+    The sibling of `cmd_generate_spec_batch`, and it had the same defect for
+    the same reason: `cmd_generate_component` dispatches here on `is_dir()`
+    before it works out a format, and this never read `args.format`.
+
+    Same resolution too — an explicit `--format` is honoured, its absence
+    still means HTML. See the note on the spec batch for why the default
+    stays put.
+    """
     output_dir = Path(args.output) if args.output else input_dir.parent / "html"
+    output_format = args.format or "html"
+    to_html = output_format == "html"
+    suffix = ".html" if to_html else ".md"
 
     # Find all .component.json files (recursive to support subdirectories)
     component_files = list(input_dir.rglob("*.component.json"))
@@ -875,7 +887,7 @@ def cmd_generate_component_batch(args, input_dir: Path):
         print(f"Error: No .component.json files found in {input_dir}", file=sys.stderr)
         return 1
 
-    print(f"Generating HTML for {len(component_files)} component files...")
+    print(f"Generating {output_format} for {len(component_files)} component files...")
     print(f"  Input: {input_dir}")
     print(f"  Output: {output_dir}")
     print()
@@ -896,12 +908,12 @@ def cmd_generate_component_batch(args, input_dir: Path):
             error_count += 1
             continue
 
-        # Generate HTML
-        content = generate_component_html(result.spec_data)
+        content = (generate_component_html(result.spec_data) if to_html
+                   else generate_component_markdown(result.spec_data))
 
         # Preserve subdirectory structure in output
         rel_path = component_file.relative_to(input_dir)
-        output_name = rel_path.with_name(rel_path.name.replace(".component.json", ".html"))
+        output_name = rel_path.with_name(rel_path.name.replace(".component.json", suffix))
         output_path = output_dir / output_name
 
         output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -1523,7 +1535,8 @@ def main():
     gen_component_parser.add_argument(
         "--format",
         choices=["markdown", "html"],
-        help="Output format (default: inferred from output or markdown)"
+        help="Output format (default: for a single file, inferred from the "
+             "output extension, else markdown; for a directory, html)"
     )
 
     # Figma command
