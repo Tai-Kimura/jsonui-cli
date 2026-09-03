@@ -25,6 +25,7 @@ module KjuiTools
           @validation_errors = 0
           @binding_errors = []
           @structural_errors = []
+          @collection_cells = []
 
           case mode
           when 'xml', 'all'
@@ -293,6 +294,7 @@ module KjuiTools
               # Read and parse JSON
               json_content = File.read(json_file)
               json_data = JSON.parse(json_content)
+              collect_collection_cells(json_data)
 
               # Validate attributes if enabled
               if validator
@@ -405,6 +407,16 @@ module KjuiTools
             exit 1
           end
 
+          missing_modifier = cell_views_missing_modifier(source_path, config)
+          unless missing_modifier.empty?
+            Core::Logger.error "#{missing_modifier.length} cell view(s) take no `modifier` parameter, " \
+                               "but every Collection passes one (the cell's test address):"
+            missing_modifier.each { |f| Core::Logger.error "  #{f}" }
+            Core::Logger.error "  add `modifier: Modifier = Modifier` and forward it to the " \
+                               "GeneratedView — `jui generate cell` emits that shape."
+            exit 1
+          end
+
           # Belt and braces for the same failure mode arriving another way:
           # whatever the reason, a view still carrying the scaffold
           # placeholder has no generated code in it.
@@ -421,6 +433,73 @@ module KjuiTools
           JsonUI::StageFailures.report!(Core::Logger)
 
           Core::Logger.success "Compose build completed!"
+        end
+
+        # Cell views a Collection renders, by class name. Collected while the
+        # layouts are parsed because that is the only place that knows which
+        # views are used AS CELLS — the same file used as a screen has no such
+        # requirement.
+        def collect_collection_cells(node)
+          case node
+          when Hash
+            if node['type'].to_s.casecmp('Collection').zero?
+              Array(node['sections']).each do |section|
+                next unless section.is_a?(Hash)
+                cell = section['cell']
+                @collection_cells << cell if cell.is_a?(String) && !cell.empty?
+              end
+            end
+            node.each_value { |v| collect_collection_cells(v) }
+          when Array
+            node.each { |v| collect_collection_cells(v) }
+          end
+        end
+
+        # Every Collection arm passes `modifier = Modifier.testTag(...)` into
+        # the cell view, so a cell view that takes no `modifier` does not
+        # compile — 11 errors out of kotlinc, naming the call sites rather
+        # than the four files to change.
+        #
+        # `jui generate cell` has always emitted the parameter; the screen
+        # scaffold did not until now, so a View created as a screen and later
+        # used as a cell is missing it. That was survivable while two arms
+        # (flow, non-lazy horizontal) passed no modifier at all — they were
+        # the last place such a view could still be used. Giving those arms
+        # their cell addresses took that away, which is how a consumer found
+        # this.
+        #
+        # Named here so the build says which files to fix instead of leaving
+        # it to the Kotlin compiler's call-site errors.
+        def cell_views_missing_modifier(source_path, config)
+          return [] if @collection_cells.nil? || @collection_cells.empty?
+
+          require_relative '../../compose/components/collection_component'
+
+          view_dir = File.join(source_path, config['source_directory'] || 'src/main',
+                               config['view_directory'] || 'kotlin/views')
+          return [] unless Dir.exist?(view_dir)
+
+          # `map { }.compact`, not `filter_map`: the vendored tools run under
+          # whatever ruby the project has, and 2.6 has no filter_map. Second
+          # time today in this file — the first is three methods up.
+          @collection_cells.uniq.map do |cell|
+            # Same derivation CollectionComponent uses to name the call
+            # it emits — reused rather than re-spelled, so the check
+            # looks for the file the generated code will reference.
+            class_name = Compose::Components::CollectionComponent.cell_class_name(cell)
+            next nil unless class_name
+            file = Dir.glob(File.join(view_dir, '**', "#{class_name}View.kt")).first
+            next nil unless file
+
+            body = File.read(file)
+            # Anchored on the `) {` that opens the body: a non-greedy match to
+            # the first `)` stops inside `viewModel = viewModel()` and reports
+            # every compliant cell.
+            signature = body[/fun\s+#{Regexp.escape(class_name)}View\s*\((.*?)\)\s*\{/m, 1]
+            next nil if signature.nil? || signature.include?('modifier')
+
+            file.sub("#{source_path}/", '')
+          end.compact
         end
 
         # Views whose GENERATED_CODE block still holds the scaffold
