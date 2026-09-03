@@ -535,6 +535,24 @@ def resolve_canonical_marks(spec_data: dict, spec_path) -> None:
     if errors:
         raise CanonicalMarkError("; ".join(f"{p}: {m}" for p, m in errors))
 
+    # Inventory, not a warning — see `iter_widened_enums`. Printed without the
+    # WARNING prefix on purpose: a project that gates its build at zero
+    # warnings cannot act on this one (typing the argument means giving up
+    # `@canonical`), so putting it on that channel would only raise the
+    # accepted baseline and hide the next real warning behind it.
+    #
+    # Two counts because they differ: one route declared by ten methods is
+    # ten expansions and one gap. Both are printed so a project comparing
+    # numbers with another knows which it is holding.
+    widened = canon.iter_widened_enums(spec_data, index, convention)
+    if widened:
+        routes = {(w[1], w[3]) for w in widened}
+        shown = ", ".join(sorted(f"{n} → {e}" for n, e in routes))
+        print(f"NOTE: {spec_path}: {len(routes)} argument(s) in "
+              f"{len(widened)} '@canonical' expansion(s) are enums in the "
+              f"canon and expand as String; the generated DTO types them "
+              f"({shown}). Signatures are unchanged.")
+
 
 def _parse_params(params_data) -> list[MethodParam]:
     """Parse params (supports both string and structured array)."""
