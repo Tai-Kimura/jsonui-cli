@@ -149,6 +149,12 @@ module KjuiTools
             lazy_list_state: "import androidx.compose.foundation.lazy.rememberLazyListState",
             # The one-shot anchor scroll (suspend, item-agnostic).
             scroll_by: "import androidx.compose.foundation.gestures.scrollBy",
+            # A flow Collection with `lazy` in effect scrolls vertically inside
+            # its own bounds (2026-09-03 ruling). FlowRow is not a lazy
+            # container, so the scroll is a modifier on it rather than a
+            # LazyColumn — "scrolls" is the whole contract, not virtualization.
+            vertical_scroll: ["import androidx.compose.foundation.verticalScroll",
+                              "import androidx.compose.foundation.rememberScrollState"],
             color_manager: "import com.kotlinjsonui.generated.ColorManager",
             # Collection listStyle chrome — the shared library composable
             # both paths render (CollectionCellChrome).

@@ -989,6 +989,18 @@ module KjuiTools
           modifiers.concat(Helpers::ModifierBuilder.build_offset(json_data, required_imports))
           modifiers.concat(Helpers::ModifierBuilder.build_alpha(json_data, required_imports))
           modifiers.concat(Helpers::ModifierBuilder.build_background(json_data, required_imports))
+          # A flow Collection with `lazy` in effect (default or "eager") scrolls
+          # vertically inside its own bounds; `lazy: "none"` only wraps and the
+          # parent must scroll (Collection.layout / lazy descriptions, 2026-09-03
+          # ruling). sjui's default-lazy flow arm and iOS Dynamic already wrap
+          # in a ScrollView; this arm emitted a bare FlowRow, so the same JSON
+          # scrolled on iOS and did not on Android. After size and background —
+          # the size is the viewport, the background paints it, the content
+          # scrolls inside.
+          if json_data['lazy'] != 'none'
+            required_imports&.add(:vertical_scroll)
+            modifiers << ".verticalScroll(rememberScrollState())"
+          end
           modifiers.concat(Helpers::ModifierBuilder.build_clickable(json_data, required_imports))
           modifiers.concat(Helpers::ModifierBuilder.build_padding(json_data))
           modifiers.concat(Helpers::ModifierBuilder.build_weight(json_data, parent_type))
