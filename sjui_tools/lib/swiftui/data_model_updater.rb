@@ -160,7 +160,10 @@ module SjuiTools
           # Add each property with correct type and default value
           data_properties.each do |prop|
             name = prop['name']
-            class_type = prop['class']  # Use class name directly
+            # Class names are emitted as written — they are the project's own
+            # model types — EXCEPT the JSON container spellings, which name a
+            # shape and have no Swift type of their own to emit.
+            class_type = swift_data_type(prop['class'])
             default_value = prop['defaultValue']
 
             # If no default value or nil, make it optional
@@ -407,7 +410,21 @@ module SjuiTools
             # face resolves best-effort and never gates the build.
             get_text_with_string_manager("\"#{value}\"", warnings: false)
           end
-        elsif json_class == 'CollectionDataSource' && (value.is_a?(Array) || value.is_a?(Hash))
+        elsif value.is_a?(Hash) || value.is_a?(Array)
+          # ANY declared dictionary/array default, not just the classes that
+          # happen to fail today. What decides is the SHAPE of the value:
+          # `{"name"=>"Grace"}` is Hash#to_s and not Swift, while
+          # `["alpha", "beta"]` is Array#to_s that happens to READ as Swift —
+          # so an array of scalars was passing by coincidence, on the same
+          # broken path, and would not have reported a regression in it.
+          # Routing every container through the emitter removes the
+          # coincidence.
+          if json_class == 'CollectionDataSource'
+            collection_data_source_literal(value)
+          else
+            swift_json_literal(value)
+          end
+        elsif false
           # Materialize the declared defaultValue (INTERACTIVE_HOST_CONTRACT
           # §4 shapes: shorthand cell array / explicit sections object) into
           # a real initializer — passing the raw Ruby value through emitted
@@ -426,6 +443,53 @@ module SjuiTools
           end
           value
         end
+      end
+
+      # The declared class as Swift spells it. Only JSON container classes are
+      # translated; a name the project defines is its own type.
+      def swift_data_type(raw_class)
+        return raw_class unless raw_class.is_a?(String)
+
+        base = raw_class.end_with?('?') ? raw_class[0...-1] : raw_class
+        return raw_class unless Core::TypeConverter::JSON_CONTAINER_CLASSES.include?(base)
+
+        mapped = Core::TypeConverter::TYPE_MAPPING[base]
+        raw_class.end_with?('?') ? "#{mapped}?" : mapped
+      end
+
+      # A JSON value as a Swift literal.
+      def swift_json_literal(value)
+        case value
+        when Hash
+          return '[:]' if value.empty?
+
+          pairs = value.map { |k, v| "#{swift_string_literal(k.to_s)}: #{swift_json_literal(v)}" }
+          "[#{pairs.join(', ')}]"
+        when Array
+          return '[]' if value.empty?
+
+          "[#{value.map { |v| swift_json_literal(v) }.join(', ')}]"
+        when String then swift_string_literal(value)
+        when true, false then value.to_s
+        when nil then 'nil'
+        when Numeric then value.to_s
+        else swift_string_literal(value.to_s)
+        end
+      end
+
+      # A Swift string literal.
+      #
+      # Block form on purpose: gsub with a STRING replacement reads a
+      # backslash pair as a back-reference escape, so the obvious spelling
+      # emitted ONE backslash where two were meant and a value containing a
+      # backslash produced an invalid Swift escape. A block replacement is
+      # taken literally.
+      #
+      # Backslash first, or the one added for the quote is escaped again.
+      def swift_string_literal(str)
+        escaped = str.gsub(0x5c.chr) { 0x5c.chr * 2 }
+                     .gsub(0x22.chr) { 0x5c.chr + 0x22.chr }
+        0x22.chr + escaped + 0x22.chr
       end
 
       # CollectionDataSource defaultValue → Swift initializer literal.
