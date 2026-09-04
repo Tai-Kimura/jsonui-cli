@@ -120,4 +120,22 @@ RSpec.describe SjuiTools::SwiftUI::Views::CollectionConverter do
         .not_to include('collection')
     end
   end
+
+  # See collection_converter_characterization_spec: emitted TEXT was asserted
+  # here for years while the Swift did not compile. This arm hands the same
+  # emission to a compiler.
+  describe 'the emitted Swift type-checks', :swift_compile do
+    it 'accepts the collection with its accessibility wrapping' do
+      code = described_class.new(
+        { 'type' => 'Collection', 'id' => 'target', 'columns' => 1,
+          'sections' => [{ 'cell' => 'FooCell' }], 'items' => '@{items}' }
+      ).convert.to_s
+      stubs = EmittedSwift::COLLECTION_DATA_SOURCE_STUB +
+              EmittedSwift::COLLECTION_STACK_VIEW_STUB +
+              cell_view_stub('FooCellView')
+      expect(
+        compilable_view(code, data: ['var items: CollectionDataSource? = nil'], stubs: stubs)
+      ).to compile_as_swift
+    end
+  end
 end
