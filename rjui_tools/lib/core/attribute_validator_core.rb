@@ -469,6 +469,7 @@ module JsonUIShared
 
       # Check for invalid binding syntax
       check_invalid_binding_syntax(value, current_path, component_type)
+      check_scalar_items(name, value, current_path, component_type)
 
       # Check if value is a binding expression (full-string @{...} only —
       # a string merely containing @{ is template text and still validates)
@@ -773,6 +774,34 @@ module JsonUIShared
     #: denominator that means anything here.
     BINDING_JUXTAPOSED_VALUES = /[A-Za-z0-9_$)\]"']\s+[A-Za-z0-9_$"']/.freeze
 
+    #: Array attributes whose elements the SSoT declares as plain labels —
+    #: no element sub-schema, so nothing else here checks them.
+    #:
+    #: `Segment.items` is "Static labels; an entry may be a strings key".
+    #: An object element is therefore undeclared, and every generator used
+    #: to stringify it: iOS and Android shipped `Text("{\"label\"=>\"opt_a\",
+    #: …}")` on screen and web wrote a Ruby hash into JSX, which does not
+    #: parse (measured 2026-09-04). Both dynamic runtimes already drop such
+    #: an element — Android `DynamicSegmentComponent` keeps primitives only,
+    #: iOS `asStrings` compacts to String/NSNumber — so dropping it in the
+    #: generators is what makes the four agree.
+    #:
+    #: Deliberately NOT a general rule over every element-schema-less array:
+    #: `Collection.items` is a data source, where an object element is
+    #: exactly what a face may legitimately pass. Widening this needs its
+    #: own measurement.
+    SCALAR_ITEM_ATTRIBUTES = { 'Segment' => %w[items].freeze }.freeze
+
+    #: Indices of elements a generator must not emit. Public so the
+    #: converters decide with the same predicate that warns — a warning and
+    #: an emit that disagree is how this defect stayed invisible.
+    def self.non_scalar_item_indices(component_type, attribute_name, value)
+      return [] unless SCALAR_ITEM_ATTRIBUTES[component_type.to_s]&.include?(attribute_name.to_s)
+      return [] unless value.is_a?(Array)
+
+      value.each_index.select { |index| value[index].is_a?(Hash) || value[index].is_a?(Array) }
+    end
+
     # The delimiters were only ever half the check.
     #
     # `@{ bad name }` closes correctly, so the old check passed it, and each
@@ -794,6 +823,19 @@ module JsonUIShared
       return :juxtaposed if text.match?(BINDING_JUXTAPOSED_VALUES)
 
       nil
+    end
+
+    #: Name every undeclared element by index: the generator drops it, and
+    #: a segment that silently renders one fewer tab is worse than a named
+    #: warning.
+    def check_scalar_items(name, value, path, component_type)
+      self.class.non_scalar_item_indices(component_type, name, value).each do |index|
+        add_warning(
+          "Attribute '#{path}[#{index}]' in '#{component_type}' is an object; " \
+          "items are string labels (literal text or a strings key) per the declaration — " \
+          "dropped from the generated output, as both runtimes already drop it"
+        )
+      end
     end
 
     def check_binding_content(content, path, component_type)

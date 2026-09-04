@@ -294,5 +294,41 @@ RSpec.describe SjuiTools::SwiftUI::Views::SegmentConverter do
         expect(code).not_to include('123456')
       end
     end
+
+    context 'with an object item (undeclared)' do
+      # It reached the screen as `Text("{\"label\"=>\"opt_a\", …}")` —
+      # swiftc parses it, so nothing caught it before the pixels (measured
+      # 2026-09-04). The declaration says static labels and both runtimes
+      # drop a non-primitive element.
+      let(:component) do
+        {
+          'type' => 'Segment',
+          'items' => ['Tab 1', { 'label' => 'opt_a', 'value' => 'a' }, 'Tab 3']
+        }
+      end
+
+      it 'emits no hash and no entry for it' do
+        code = described_class.new(component).convert
+        expect(code).not_to include('=>')
+        expect(code).not_to include('label')
+        expect(code.scan(/\.tag\(/).length).to eq(2)
+      end
+
+      it 'keeps the remaining tags contiguous' do
+        # The runtimes compact (asStrings / mapNotNull), so a hole here
+        # would put the generated tags out of step with them.
+        code = described_class.new(component).convert
+        expect(code).to include('.tag(0)')
+        expect(code).to include('.tag(1)')
+        expect(code).not_to include('.tag(2)')
+      end
+
+      it 'still emits the declared items' do
+        # The control: dropping one element must not drop the others.
+        code = described_class.new(component).convert
+        expect(code).to include('Tab 1')
+        expect(code).to include('Tab 3')
+      end
+    end
   end
 end
