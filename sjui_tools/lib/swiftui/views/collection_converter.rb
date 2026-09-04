@@ -317,9 +317,7 @@ module SjuiTools
                             apply_cell_frame
 
                             # Add accessibilityIdentifier for test automation (tapItem action)
-                            if @component['id']
-                              add_modifier_line ".accessibilityIdentifier(\"#{@component['id']}_item_\\(#{vars[:index_var]})\")"
-                            end
+                            apply_cell_item_identifier(vars[:index_var])
                           end
                           add_line "}"
                         end
@@ -337,9 +335,7 @@ module SjuiTools
                         apply_cell_frame
 
                         # Add accessibilityIdentifier for test automation (tapItem action)
-                        if @component['id']
-                          add_modifier_line ".accessibilityIdentifier(\"#{@component['id']}_item_\\(#{vars[:index_var]})\")"
-                        end
+                        apply_cell_item_identifier(vars[:index_var])
                       end
                       add_line "}"
                     end
@@ -363,9 +359,7 @@ module SjuiTools
                           generate_cell_identity(vars[:index_var])
                           apply_cell_frame
                           # Add accessibilityIdentifier for test automation (tapItem action)
-                          if @component['id']
-                            add_modifier_line ".accessibilityIdentifier(\"#{@component['id']}_item_\\(#{vars[:index_var]})\")"
-                          end
+                          apply_cell_item_identifier(vars[:index_var])
                         end
                         add_line "}"
                       end
@@ -446,9 +440,7 @@ module SjuiTools
                               apply_cell_frame(grid: true)
 
                               # Add accessibilityIdentifier for test automation (tapItem action)
-                              if @component['id']
-                                add_modifier_line ".accessibilityIdentifier(\"#{@component['id']}_item_\\(#{vars[:index_var]})\")"
-                              end
+                              apply_cell_item_identifier(vars[:index_var])
                             end
                             add_line "}"
                           end
@@ -646,6 +638,26 @@ module SjuiTools
         # out of its lane (Collection_cellWidth__static parity d=50, run
         # 31202080745). Web anchors the cell at its leading edge and hides
         # the overflow; the frame here reads the same way.
+        # `{collectionId}_item_{index}` on the cell wrapper — the address the
+        # test drivers use (`tapItem`, `waitFor`), and the same spelling the
+        # dynamic renderer emits.
+        #
+        # One helper, not sixteen copies. Every cell path used to carry its
+        # own guarded copy of this line: sixteen sites across nine shape
+        # methods (non-responsive, non-lazy horizontal / grid / flow, paging,
+        # flow layout, sections vertical, sections, legacy), each identical
+        # byte for byte. The dynamic side already learned this — its comment
+        # says the identifier was moved onto the one builder every cell path
+        # calls "so a tenth inherits it rather than having to remember, which
+        # is exactly how the static side lost two arms". The static side had
+        # not been consolidated, so a change here had to be made sixteen
+        # times or be silently partial.
+        def apply_cell_item_identifier(index_var)
+          return unless @component['id']
+
+          add_modifier_line ".accessibilityIdentifier(\"#{@component['id']}_item_\\(#{index_var})\")"
+        end
+
         def apply_cell_frame(grid: false)
           clipped = false
           if grid
@@ -767,9 +779,7 @@ module SjuiTools
                       add_line "#{cell_view_name}(data: #{vars[:data_var]}).equatable()"
                       generate_cell_identity(vars[:index_var])
                       apply_cell_frame
-                      if @component['id']
-                        add_modifier_line ".accessibilityIdentifier(\"#{@component['id']}_item_\\(#{vars[:index_var]})\")"
-                      end
+                      apply_cell_item_identifier(vars[:index_var])
                     end
                     add_line "}"
                   end
@@ -792,9 +802,7 @@ module SjuiTools
                     add_line "#{cell_class_name}(data: #{vars[:data_var]})"
                     generate_cell_identity(vars[:index_var])
                     apply_cell_frame
-                    if @component['id']
-                      add_modifier_line ".accessibilityIdentifier(\"#{@component['id']}_item_\\(#{vars[:index_var]})\")"
-                    end
+                    apply_cell_item_identifier(vars[:index_var])
                   end
                   add_line "}"
                 end
@@ -853,9 +861,7 @@ module SjuiTools
                             add_line "#{cell_view_name}(data: #{vars[:data_var]}).equatable()"
                             generate_cell_identity(vars[:index_var])
                             apply_cell_frame(grid: true)
-                            if @component['id']
-                              add_modifier_line ".accessibilityIdentifier(\"#{@component['id']}_item_\\(#{vars[:index_var]})\")"
-                            end
+                            apply_cell_item_identifier(vars[:index_var])
                           end
                           add_line "}"
                         end
@@ -931,9 +937,7 @@ module SjuiTools
                           add_line "#{cell_view_name}(data: #{vars[:data_var]}).equatable()"
                           generate_cell_identity(vars[:index_var])
                           apply_cell_frame
-                          if @component['id']
-                            add_modifier_line ".accessibilityIdentifier(\"#{@component['id']}_item_\\(#{vars[:index_var]})\")"
-                          end
+                          apply_cell_item_identifier(vars[:index_var])
                         end
                         add_line "}"
                       end
@@ -962,9 +966,7 @@ module SjuiTools
                       add_line "#{cell_class_name}(data: #{vars[:data_var]})"
                       generate_cell_identity(vars[:index_var])
                       apply_cell_frame
-                      if @component['id']
-                        add_modifier_line ".accessibilityIdentifier(\"#{@component['id']}_item_\\(#{vars[:index_var]})\")"
-                      end
+                      apply_cell_item_identifier(vars[:index_var])
                     end
                     add_line "}"
                   end
@@ -1021,9 +1023,7 @@ module SjuiTools
                       if spacing > 0
                         add_modifier_line ".padding(.horizontal, #{spacing / 2.0})"
                       end
-                      if @component['id']
-                        add_modifier_line ".accessibilityIdentifier(\"#{@component['id']}_item_\\(#{vars[:index_var]})\")"
-                      end
+                      apply_cell_item_identifier(vars[:index_var])
                       add_modifier_line ".tag(#{vars[:index_var]})"
                     end
                     add_line "}"
@@ -1101,9 +1101,7 @@ module SjuiTools
                         add_line "#{cell_view_name}(data: #{vars[:data_var]}).equatable()"
                         generate_cell_identity(vars[:index_var])
                         apply_cell_frame
-                        if @component['id']
-                          add_modifier_line ".accessibilityIdentifier(\"#{@component['id']}_item_\\(#{vars[:index_var]})\")"
-                        end
+                        apply_cell_item_identifier(vars[:index_var])
                       end
                       add_line "}"
                     end
@@ -1132,9 +1130,7 @@ module SjuiTools
                       add_line "#{cell_class_name}(data: #{vars[:data_var]})"
                       generate_cell_identity(vars[:index_var])
                       apply_cell_frame
-                      if @component['id']
-                        add_modifier_line ".accessibilityIdentifier(\"#{@component['id']}_item_\\(#{vars[:index_var]})\")"
-                      end
+                      apply_cell_item_identifier(vars[:index_var])
                     end
                     add_line "}"
                   end
@@ -1507,9 +1503,7 @@ module SjuiTools
                     generate_cell_identity(vars[:index_var])
                     apply_cell_frame
                     # Add accessibilityIdentifier for test automation (tapItem action)
-                    if @component['id']
-                      add_modifier_line ".accessibilityIdentifier(\"#{@component['id']}_item_\\(#{vars[:index_var]})\")"
-                    end
+                    apply_cell_item_identifier(vars[:index_var])
                   end
                   add_line "}"
                 end
@@ -1581,9 +1575,7 @@ module SjuiTools
                         generate_cell_identity(vars[:index_var])
                         apply_cell_frame
                         # Add accessibilityIdentifier for test automation (tapItem action)
-                        if @component['id']
-                          add_modifier_line ".accessibilityIdentifier(\"#{@component['id']}_item_\\(#{vars[:index_var]})\")"
-                        end
+                        apply_cell_item_identifier(vars[:index_var])
                       end
                       add_line "}"
                     end
@@ -1625,9 +1617,7 @@ module SjuiTools
                         apply_cell_frame(grid: columns_is_multi?)
 
                         # Add accessibilityIdentifier for test automation (tapItem action)
-                        if @component['id']
-                          add_modifier_line ".accessibilityIdentifier(\"#{@component['id']}_item_\\(#{vars[:index_var]})\")"
-                        end
+                        apply_cell_item_identifier(vars[:index_var])
                       end
                       add_line "}"
                     end
@@ -1725,9 +1715,7 @@ module SjuiTools
               apply_cell_frame(grid: columns_is_multi?)
 
               # Add accessibilityIdentifier for test automation (tapItem action)
-              if @component['id']
-                add_modifier_line ".accessibilityIdentifier(\"#{@component['id']}_item_\\(#{vars[:index_var]})\")"
-              end
+              apply_cell_item_identifier(vars[:index_var])
             end
             add_line "}"
           else
