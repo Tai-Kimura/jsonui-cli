@@ -19,9 +19,17 @@ VALID_RESULT_STATUSES = ["passed", "failed", "skipped"]
 # Why a skipped result was skipped (platform gate vs responsive gate).
 # Only meaningful when status == "skipped"; a reason on any other status is an error.
 VALID_SKIP_REASONS = ["platform", "responsive"]
+# Machine-readable counterpart to the prose in "error". Only meaningful when
+# status == "failed"; the failure's STAGE, not the exception class, because the
+# three drivers share no taxonomy to map (see results.schema.json). "other" is
+# unclassified and a rising count of it is the signal that this list is short.
+VALID_FAILURE_REASONS = [
+    "element-not-found", "timeout", "assertion", "invalid-test",
+    "mock", "setup", "teardown", "launch", "action", "other",
+]
 VALID_RESULTS_TOP_LEVEL_KEYS = ["format", "version", "platform", "generatedAt", "suites"]
 VALID_SUITE_KEYS = ["suiteName", "totalDurationMs", "results"]
-VALID_RESULT_KEYS = ["testName", "caseName", "status", "skipReason", "error", "warnings", "durationMs", "attempts", "flaky"]
+VALID_RESULT_KEYS = ["testName", "caseName", "status", "skipReason", "failureReason", "error", "warnings", "durationMs", "attempts", "flaky"]
 
 
 def validate_results_data(data, source: str) -> list[str]:
@@ -88,6 +96,23 @@ def validate_results_data(data, source: str) -> list[str]:
                     errors.append(
                         f"{case_path}: 'skipReason' is only meaningful when status is 'skipped', "
                         f"got status: {case.get('status')!r}"
+                    )
+            if "failureReason" in case:
+                reason = case["failureReason"]
+                if reason not in VALID_FAILURE_REASONS:
+                    errors.append(f"{case_path}: 'failureReason' must be one of {VALID_FAILURE_REASONS}, got: {reason!r}")
+                if case.get("status") != "failed":
+                    errors.append(
+                        f"{case_path}: 'failureReason' is only meaningful when status is 'failed', "
+                        f"got status: {case.get('status')!r}"
+                    )
+                # "other" says the driver could not classify it, so the prose is
+                # the only thing left carrying the reason. Emitting it bare turns
+                # an unclassified failure into one that looks classified.
+                if reason == "other" and not str(case.get("error") or "").strip():
+                    errors.append(
+                        f"{case_path}: 'failureReason' is 'other' but 'error' is empty — "
+                        f"'other' means unclassified, so the prose is the only reason left"
                     )
             duration = case.get("durationMs")
             if not isinstance(duration, (int, float)) or isinstance(duration, bool) or duration < 0:

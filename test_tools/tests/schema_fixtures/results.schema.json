@@ -35,6 +35,11 @@
                   "enum": ["passed", "failed", "skipped"]
                 },
                 "error": { "type": "string" },
+                "failureReason": {
+                  "type": "string",
+                  "enum": ["element-not-found", "timeout", "assertion", "invalid-test", "mock", "setup", "teardown", "launch", "action", "other"],
+                  "description": "Machine-readable counterpart to 'error', which is prose and changes between releases: consumers matched on sentences and one aggregation went silent when a sentence was deleted. Optional, and absent on drivers that predate it — absent means unknown, never 'no reason'. The vocabulary is the failure's STAGE, not the exception class: the three drivers do not share a taxonomy (ios has a typed action error, android throws IllegalArgumentException 75 times, web throws bare Error 80 times), so mapping classes would have produced three different enums. 'setup' and 'teardown' are the case's own fixture steps, which all three drivers record on separate code paths — a teardown failure says nothing about the behaviour under test. 'action' is an action that ran without achieving its effect; 'other' is unclassified and must carry prose in 'error' — a rising 'other' count is the signal that this list is short."
+                },
                 "skipReason": {
                   "type": "string",
                   "enum": ["platform", "responsive"],

@@ -56,6 +56,47 @@ class TestSkipReasonValidation:
             errors = validate_results_data(data, "test")
             assert any("only meaningful when status is 'skipped'" in e for e in errors), status
 
+    def test_failure_reason_mirrors_the_skip_reason_rules(self):
+        # skipReason has been an enum since it existed; failures had only
+        # prose, so consumers matched on sentences and one aggregation went
+        # silent when a sentence was deleted. Same shape, same rules.
+        for reason in ["element-not-found", "timeout", "assertion", "invalid-test",
+                       "mock", "launch", "action"]:
+            data = _run([_result(status="failed", failureReason=reason)])
+            assert validate_results_data(data, "test") == [], reason
+
+    def test_failed_without_a_reason_stays_valid(self):
+        # Optional: a driver that predates the field emits nothing, and absent
+        # has to read as unknown rather than as "no reason".
+        data = _run([_result(status="failed")])
+        assert validate_results_data(data, "test") == []
+
+    def test_invalid_failure_reason_value(self):
+        data = _run([_result(status="failed", failureReason="flaky")])
+        errors = validate_results_data(data, "test")
+        assert any("'failureReason' must be one of" in e for e in errors)
+
+    def test_failure_reason_without_failed_status(self):
+        for status in ["passed", "skipped"]:
+            data = _run([_result(status=status, failureReason="timeout")])
+            errors = validate_results_data(data, "test")
+            assert any("only meaningful when status is 'failed'" in e for e in errors), status
+
+    def test_other_without_prose_is_rejected(self):
+        # 'other' means the driver could not classify it, so the prose is the
+        # only thing still carrying the reason. Bare, it turns an unclassified
+        # failure into one that looks classified.
+        data = _run([_result(status="failed", failureReason="other")])
+        errors = validate_results_data(data, "test")
+        assert any("'other' means unclassified" in e for e in errors)
+
+    def test_other_with_prose_is_accepted(self):
+        # Positive control for the arm above: 'other' is a legitimate value,
+        # it just may not travel alone.
+        data = _run([_result(status="failed", failureReason="other",
+                             error="screenshot comparison returned a null image")])
+        assert validate_results_data(data, "test") == []
+
     def test_version_must_stay_1(self):
         data = _run([_result()])
         data["version"] = 2
