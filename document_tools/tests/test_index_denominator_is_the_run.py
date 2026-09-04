@@ -136,6 +136,19 @@ class MultiApp(_Site):
         self.assertIn(f"across {scanned} spec file(s) scanned", line)
         self.assertIn(f"({declaring} spec file(s) carrying", line)
 
+    def test_the_denominator_is_exactly_what_the_shared_aggregate_says(self):
+        # The sentence is worded once, in `jsonui_test_cli`. Asserting the
+        # string this way — rather than re-listing the words here — means a
+        # change to the wording moves both sides or fails, instead of leaving
+        # the site and the gate describing one run differently.
+        from jsonui_test_cli.unit_contracts import aggregate_unit_totals, unit_contract_pages
+
+        out, html = self.build(self.APPS)
+        root = out.parent          # build() hands back the OUTPUT dir
+        totals = [unit_contract_pages(root / name)["totals"] for name in self.APPS]
+        self.assertEqual(self.denominator(html),
+                         aggregate_unit_totals(totals)["summary_line"])
+
     def test_each_app_still_gets_its_own_line(self):
         # The aggregate cannot say WHICH app is empty, and that is the thing
         # someone reading a four-app site actually wants.
