@@ -5,6 +5,7 @@ require 'fileutils'
 require 'set'
 require_relative 'converter_factory'
 require_relative 'scrolling_cell_index'
+require_relative 'collection_cell_index'
 require_relative 'views/base_view_converter'
 require_relative 'views/responsive_helper'
 require_relative 'action_manager'
@@ -68,6 +69,7 @@ module SjuiTools
         # includeを処理
         json_data = process_includes(json_data, File.dirname(json_file_path))
         mark_root_if_scrolling_cell(json_data, json_file_path)
+        mark_root_if_collection_cell(json_data, json_file_path)
 
         # ファイル名からビュー名を生成
         base_name = File.basename(json_file_path, '.json')
@@ -99,6 +101,7 @@ module SjuiTools
       # Collection never has in-tree descendants to mark.
       SCROLLING_ANCESTOR_TYPES = %w[scroll scrollview].freeze
       SCROLLING_ANCESTOR_KEY = Views::BaseViewConverter::SCROLLING_ANCESTOR_KEY
+      COLLECTION_CELL_ROOT_KEY = Views::BaseViewConverter::COLLECTION_CELL_ROOT_KEY
 
       # Mark every node that has a scrolling ancestor in THIS tree. The
       # converters are built one node at a time and see only their own hash,
@@ -114,6 +117,12 @@ module SjuiTools
       # spec, `sjui convert`) has none, and converts as before.
       attr_accessor :scrolling_cell_ids
 
+      # Screen ids (CollectionCellIndex.build) whose layouts render as a
+      # Collection's cell / header / footer anywhere in the project — ANY
+      # Collection, not only a vertically scrolling one: the host wraps every
+      # cell with `{collectionId}_item_{index}` regardless of direction.
+      attr_accessor :collection_cell_ids
+
       # The project-wide half of the mark: a layout that is a cell / header /
       # footer of a vertically scrolling Collection is under a scrolling
       # ancestor from its root, though its own tree shows none.
@@ -122,6 +131,17 @@ module SjuiTools
 
         id = JsonUIShared::ScreenIndex.screen_id_for_path(json_file_path)
         json_data[SCROLLING_ANCESTOR_KEY] = true if scrolling_cell_ids.include?(id)
+      end
+
+      # The cell root's own file cannot see that a Collection wraps it.
+      # Marks the ROOT only — deliberately NOT propagated, unlike the
+      # scrolling mark: what must become an accessibility container is the
+      # one node the wrapper's identifier would otherwise be pushed onto.
+      def mark_root_if_collection_cell(json_data, json_file_path)
+        return unless json_data.is_a?(Hash) && collection_cell_ids
+
+        id = JsonUIShared::ScreenIndex.screen_id_for_path(json_file_path)
+        json_data[COLLECTION_CELL_ROOT_KEY] = true if collection_cell_ids.include?(id)
       end
 
       def mark_scrolling_ancestors(component, inside = false)
@@ -178,6 +198,7 @@ module SjuiTools
         # Process includes
         json_data = process_includes(json_data, File.dirname(json_file_path))
         mark_root_if_scrolling_cell(json_data, json_file_path)
+        mark_root_if_collection_cell(json_data, json_file_path)
 
         # Convert to SwiftUI code
         @state_variables = []
