@@ -111,7 +111,7 @@ class TestDenominator:
         root = _project(tmp_path, [{"name": "a_case", "platforms": ["ios"]}])
         _swift(root, "a_case")
         lines = "\n".join(uc.format_report(uc.check_unit_contracts(root)))
-        assert "1 case(s) declared across 1 spec(s) scanned" in lines
+        assert "1 case(s) declared across 1 spec file(s) scanned" in lines
         assert "file(s) read" in lines
 
     def test_an_undeclared_test_root_is_not_checked_rather_than_clean(self, tmp_path):
@@ -128,7 +128,7 @@ class TestDenominator:
         root = _project(tmp_path, [])
         report = uc.check_unit_contracts(root)
         lines = "\n".join(uc.format_report(report))
-        assert "0 case(s) declared across 1 spec(s) scanned" in lines
+        assert "0 case(s) declared across 1 spec file(s) scanned" in lines
 
 
 class TestStubGeneration:
@@ -249,7 +249,7 @@ class TestATypoCannotDeleteTheDeclaration:
         )
         report = uc.check_unit_contracts(tmp_path)
         assert report.ok, uc.format_report(report)
-        assert "0 carrying a unitContracts block" in "\n".join(uc.format_report(report))
+        assert "0 spec file(s) carrying a unitContracts block" in "\n".join(uc.format_report(report))
 
 
 class TestZeroWithTwoMeanings:
@@ -521,7 +521,7 @@ class TestSplitScreens:
     def test_a_sub_spec_block_is_read(self, tmp_path):
         root = _split_project(tmp_path, sub_blocks=[
             {"target": "H", "cases": [{"name": "a"}, {"name": "b"}]}])
-        cases, scanned, declaring, problems = uc.discover_unit_contracts(root)
+        cases, scanned, declaring, problems, _files = uc.discover_unit_contracts(root)
         assert sorted(c.name for c in cases) == ["a", "b"]
         assert problems == []
 
@@ -535,7 +535,7 @@ class TestSplitScreens:
         """
         root = _split_project(tmp_path, sub_blocks=[
             {"target": "H", "cases": [{"name": "a"}]}])
-        cases, scanned, declaring, problems = uc.discover_unit_contracts(root)
+        cases, scanned, declaring, problems, _files = uc.discover_unit_contracts(root)
         assert declaring == ["chat"]
         assert len(cases) == 1
 
@@ -543,7 +543,7 @@ class TestSplitScreens:
         root = _split_project(tmp_path, second_sub=True, sub_blocks=[
             {"target": "H", "cases": [{"name": "a"}]},
             {"target": "H", "cases": [{"name": "b"}]}])
-        cases, _, declaring, problems = uc.discover_unit_contracts(root)
+        cases, _, declaring, problems, _files = uc.discover_unit_contracts(root)
         assert sorted(c.name for c in cases) == ["a", "b"]
         assert declaring == ["chat"]
         assert problems == []
@@ -572,7 +572,7 @@ class TestSplitScreens:
             return spec
 
         monkeypatch.setattr(uc, "_load_spec", stripped)
-        cases, _, declaring, problems = uc.discover_unit_contracts(root)
+        cases, _, declaring, problems, _files = uc.discover_unit_contracts(root)
         assert cases == []
         assert declaring == []
         assert len(problems) == 1
@@ -587,8 +587,69 @@ class TestSplitScreens:
         always wrong is the defect fixed in 1.8.27, not a fix.
         """
         root = _split_project(tmp_path, sub_blocks=[None])
-        cases, _, declaring, problems = uc.discover_unit_contracts(root)
+        cases, _, declaring, problems, _files = uc.discover_unit_contracts(root)
         assert (cases, declaring, problems) == ([], [], [])
+
+
+class TestDeclaringDenominatorIsCountedInFiles:
+    """`D` counts spec FILES, not screens — so a reader can check it.
+
+    The two units differ by exactly the folding rule: a parent and its
+    sub-specs are one screen but several files. Reported in a single line
+    beside a file-counted `K`, the screen-counted `D` made `U - D` look like
+    a missing declaration, and the mismatch was read as a defect twice (once
+    in each direction) before anyone noticed the units were different.
+
+    A file count is reproducible from outside the tool — `grep -l
+    unitContracts` over the spec tree returns exactly these files. A screen
+    count is not: reproducing it means knowing that a parent absorbs its
+    subs, which is precisely the knowledge a reader checking the number does
+    not have.
+    """
+
+    def _tree(self, tmp_path):
+        # Parent + 2 declaring subs (= 1 screen, 2 files), plus 3 standalone
+        # declaring specs (= 3 screens, 3 files). Files 5, screens 4.
+        root = _split_project(tmp_path, second_sub=True, sub_blocks=[
+            {"target": "H", "cases": [{"name": "a"}]},
+            {"target": "H", "cases": [{"name": "b"}]}])
+        for i, name in enumerate(("one", "two", "three")):
+            (tmp_path / "docs" / "screens" / f"{name}.spec.json").write_text(
+                json.dumps({"type": "screen", "unitContracts": {
+                    "target": f"T{i}", "cases": [{"name": f"case_{i}"}]}}),
+                encoding="utf-8")
+        return root
+
+    def test_the_denominator_counts_files_not_screens(self, tmp_path):
+        report = uc.check_unit_contracts(self._tree(tmp_path))
+        assert len(report.declaring_files) == 5
+        assert len(report.declaring_specs) == 4, "screens still fold; only the report unit changed"
+        assert "5 spec file(s) carrying a unitContracts block" in uc.summary_line(report)
+
+    def test_the_file_count_is_what_grep_would_find(self, tmp_path):
+        # The property that makes the number checkable from outside.
+        root = self._tree(tmp_path)
+        specs = root / "docs" / "screens"
+        grep = sorted(
+            f.relative_to(specs).as_posix()
+            for f in specs.rglob("*.spec.json")
+            if "unitContracts" in f.read_text(encoding="utf-8")
+        )
+        report = uc.check_unit_contracts(root)
+        assert sorted(report.declaring_files) == grep
+
+    def test_an_unreadable_spec_is_scanned_but_not_counted_as_declaring(self, tmp_path):
+        root = self._tree(tmp_path)
+        (root / "docs" / "screens" / "broken.spec.json").write_text(
+            "{ not json", encoding="utf-8")
+        report = uc.check_unit_contracts(root)
+        assert len(report.declaring_files) == 5
+        assert "broken" in report.scanned_specs, "unreadable is not 'declares nothing'"
+        assert any("could not be read" in p for p in report.problems)
+
+    def test_pages_report_the_file_count(self, tmp_path):
+        pages = uc.unit_contract_pages(self._tree(tmp_path))
+        assert pages["totals"]["specs_declaring"] == 5
 
 
 class TestUnitContractPages:

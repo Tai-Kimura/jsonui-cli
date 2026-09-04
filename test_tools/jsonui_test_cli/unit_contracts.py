@@ -193,8 +193,18 @@ class UnitContractReport:
     scanned_files: dict[str, list[str]] = field(default_factory=dict)
     #: platforms named by a case but with no configured test root
     unscannable: dict[str, str] = field(default_factory=dict)
-    #: specs that carry a `unitContracts` key at all
+    #: SCREENS whose merged view carries a `unitContracts` key. Kept because
+    #: `declared_in_sub` compares against it to catch a sub-spec block that
+    #: never reached its parent. Not the reported denominator — see below.
     declaring_specs: list[str] = field(default_factory=list)
+    #: FILES whose raw JSON carries a `unitContracts` key, spec-root-relative.
+    #: This is what the summary line reports, because it is the count a reader
+    #: can check independently: `grep -l unitContracts` over the spec tree
+    #: returns exactly these. The screen count cannot be checked that way — it
+    #: folds a parent and its sub-specs into one, so reproducing it means
+    #: knowing the folding rule, and a reader who does not ends up comparing
+    #: two different units and reading the difference as a missing block.
+    declaring_files: list[str] = field(default_factory=list)
     #: input this scan could not read, one line each
     problems: list[str] = field(default_factory=list)
     #: platform -> method names that exist but the runner will never execute
@@ -232,7 +242,7 @@ class UnitContractReport:
 def discover_unit_contracts(
     project_root: Path, spec_dir: str | None = None
 ) -> tuple[list[UnitCase], list[str], list[str], list[str]]:
-    """``(cases, specs scanned, specs declaring a block, problems)``.
+    """``(cases, specs scanned, screens declaring, problems, files declaring)``.
 
     Both halves, for the same reason ``discover_branch_screens`` returns
     both: a caller that reports "0 declared" has to be able to say whether
@@ -253,6 +263,7 @@ def discover_unit_contracts(
     cases: list[UnitCase] = []
     scanned: list[str] = []
     declaring: list[str] = []
+    declaring_files: list[str] = []
     problems: list[str] = []
     # Sub-specs that declare a block, by the parent that owns them. They are
     # skipped AS SCREENS (parent + subs is one screen), and their blocks are
@@ -272,6 +283,18 @@ def discover_unit_contracts(
             # cannot be parsed from reading as one that declares nothing.
             problems.append(f"{screen}: spec could not be read ({e})")
             continue
+        try:
+            rel_file = path.resolve().relative_to(spec_path).as_posix()
+        except ValueError:
+            rel_file = path.name
+        # Counted off the RAW file, before the sub-spec skip and before the
+        # merge: a file declares a block or it does not, and that is the fact
+        # `grep -l` reproduces. A parent that only RECEIVES blocks from its
+        # subs does not carry one itself, so it is not counted here — its subs
+        # are. A file that could not be parsed is not counted either; it is
+        # still in `scanned`, because unreadable is not "declares nothing".
+        if raw.get("unitContracts") is not None:
+            declaring_files.append(rel_file)
         if raw.get("type") != PARENT_SPEC_TYPE and _is_sub_spec_of_a_parent(path, spec_path):
             if raw.get("unitContracts") is not None:
                 parent = _parent_declaring(path, spec_path)
@@ -302,7 +325,7 @@ def discover_unit_contracts(
             f"— the declaration was not read. This is a tool defect, not a "
             f"spec error; the cases are NOT being checked."
         )
-    return cases, scanned, declaring, problems
+    return cases, scanned, declaring, problems, declaring_files
 
 
 #: Keys a unitContracts block and a case may carry. Anything else is a
@@ -470,7 +493,9 @@ def check_unit_contracts(
     """Compare declared cases against implemented ones, per platform."""
     project_root = Path(project_root)
     config = load_project_config(project_root)
-    cases, scanned, declaring, problems = discover_unit_contracts(project_root, spec_dir)
+    cases, scanned, declaring, problems, declaring_files = discover_unit_contracts(
+        project_root, spec_dir
+    )
     roots = _test_roots(project_root, config)
     if project_platforms is None:
         project_platforms = sorted(roots)
@@ -478,6 +503,7 @@ def check_unit_contracts(
     report = UnitContractReport(
         cases=cases, scanned_specs=scanned,
         declaring_specs=declaring, problems=problems,
+        declaring_files=declaring_files,
     )
     for case in cases:
         targets = case.platforms or tuple(project_platforms)
@@ -522,8 +548,9 @@ def summary_line(report: UnitContractReport) -> str:
     """
     return (
         f"unit contracts: {len(report.cases)} case(s) declared across "
-        f"{len(report.scanned_specs)} spec(s) scanned "
-        f"({len(report.declaring_specs)} carrying a unitContracts block)"
+        f"{len(report.scanned_specs)} spec file(s) scanned "
+        f"({len(report.declaring_files)} spec file(s) carrying a "
+        f"unitContracts block)"
     )
 
 
@@ -691,7 +718,7 @@ def unit_contract_pages(
         "totals": {
             "cases": len(report.cases),
             "specs_scanned": len(report.scanned_specs),
-            "specs_declaring": len(report.declaring_specs),
+            "specs_declaring": len(report.declaring_files),
             "targets": len(targets),
             "summary_line": summary_line(report),
         },
