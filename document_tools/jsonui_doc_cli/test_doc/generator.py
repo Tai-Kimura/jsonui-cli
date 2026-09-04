@@ -1225,7 +1225,15 @@ def generate_html_directory(
     # `0 case(s) declared` four lines under `Unit Targets 5`. A denominator
     # exists to stop a zero being mistaken for "nothing to find"; picking one
     # app's zero out of several does exactly the harm it was added to prevent.
-    unit_summary = _aggregate_unit_summary(unit_by_app)
+    #
+    # Summed and worded by `jsonui_test_cli`, which owns the sentence for a
+    # single scan too. Composing it here as well would put one fact in two
+    # places, and the per-app lines below print that function's output
+    # verbatim — so both halves of the page now come from one speller.
+    from jsonui_test_cli.unit_contracts import aggregate_unit_totals
+    _run_totals = aggregate_unit_totals(
+        [(p.get("totals") or {}) for p in unit_by_app.values()])
+    unit_summary = _run_totals["summary_line"] if unit_by_app else None
 
     # Generate markdown pages from docs directories
     md_files_by_dir = {}
@@ -1379,11 +1387,8 @@ def generate_html_directory(
                        for p in unit_by_app.values()),
         specs_declaring=sum((p.get('totals') or {}).get('specs_declaring', 0)
                             for p in unit_by_app.values()),
-        specs_unreadable=sum((p.get('totals') or {}).get('specs_unreadable', 0)
-                             for p in unit_by_app.values()),
-        unreadable_files=sorted(
-            f for p in unit_by_app.values()
-            for f in ((p.get('totals') or {}).get('unreadable_files') or [])),
+        specs_unreadable=_run_totals.get('specs_unreadable', 0),
+        unreadable_files=sorted(_run_totals.get('unreadable_files') or []),
     )
 
     _report_stale_pages(output_path, started_at)
@@ -1971,30 +1976,6 @@ def _unit_spec_href(spec_files_info: list[dict]) -> tuple[Any, list[str]]:
         return f"../{target}"
 
     return href, misses
-
-
-def _aggregate_unit_summary(unit_by_app: dict) -> str | None:
-    """The run's denominator sentence, summed across every app.
-
-    ⚠️ This is the ONE place the aggregate is worded. `summary_line` for a
-    single scan belongs to `jsonui_test_cli`, and the per-app lines print it
-    verbatim so that half stays where it is counted; there is no per-run
-    equivalent to borrow, so the wording is reproduced here once. Keep the
-    counts and the words identical to that function — two places phrasing one
-    fact is how a site and a gate come to disagree about how much was
-    scanned, which is the defect this whole line was added to prevent.
-    """
-    if not unit_by_app:
-        return None
-    cases = scanned = declaring = 0
-    for pages in unit_by_app.values():
-        totals = pages.get("totals") or {}
-        cases += totals.get("cases", 0)
-        scanned += totals.get("specs_scanned", 0)
-        declaring += totals.get("specs_declaring", 0)
-    return (f"unit contracts: {cases} case(s) declared across {scanned} "
-            f"spec file(s) scanned ({declaring} spec file(s) carrying a "
-            f"unitContracts block)")
 
 
 def _unit_page_rel(target_name: str, app: str | None = None) -> str:
