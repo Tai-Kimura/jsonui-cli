@@ -107,9 +107,17 @@ class ParentPageNamesItsShape(unittest.TestCase):
         """
         html = generate_spec_html(PARENT)
         md = generate_spec_markdown(PARENT)
-        self.assertIn("split across the sub-specs", html)
-        self.assertIn("split across the sub-specs", md)
-        self.assertNotIn("dataFlow", html.split("Declares")[1].split("</table>")[0])
+        for page in (html, md):
+            # The notice still stands — it needs no file access.
+            self.assertIn("split across the sub-specs", page)
+            # The COLUMN is gone, not blank. An empty cell under a `Declares`
+            # heading asserts "this sub-spec declares nothing", which is a
+            # wrong answer to the only question the index answers. Raised by
+            # the docsite lane, which also measured that all four CLI call
+            # sites do pass `spec_dir`, so this is reachable only from library
+            # callers.
+            self.assertNotIn("Declares", page)
+            self.assertIn("Basic", page)
 
     def test_an_unsplit_screen_gets_no_index_and_no_notice(self):
         """Control. The notice must not appear on a screen that has no parts —

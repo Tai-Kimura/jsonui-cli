@@ -109,14 +109,19 @@ def generate_spec_markdown(spec_data: dict, layouts_dir: Path | None = None,
             "declare those sections itself."
         )
         lines.append("")
-        lines.append("| Name | File | Declares | Description |")
-        lines.append("|---|---|---|---|")
+        show_declares = spec_dir is not None
+        if show_declares:
+            lines.append("| Name | File | Declares | Description |")
+            lines.append("|---|---|---|---|")
+        else:
+            lines.append("| Name | File | Description |")
+            lines.append("|---|---|---|")
         for sub in sub_specs:
-            declares = _sub_spec_sections(spec_dir, sub.get("file", ""))
-            lines.append(
-                f"| {sub.get('name', '-')} | `{sub.get('file', '')}` | "
-                f"{declares or '-'} | {sub.get('description', '-')} |"
-            )
+            cells = [sub.get("name", "-"), f"`{sub.get('file', '')}`"]
+            if show_declares:
+                cells.append(_sub_spec_sections(spec_dir, sub.get("file", "")) or "-")
+            cells.append(sub.get("description", "-"))
+            lines.append("| " + " | ".join(cells) + " |")
         lines.append("")
 
     # Screen Structure
