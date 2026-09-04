@@ -106,7 +106,8 @@ def generate_index_html(
     apps_nav: dict[str, dict] | None = None,
     unit_files: list[dict] | None = None,
     unit_summary: str | None = None,
-    unit_undeclared: dict[str, list[str]] | None = None
+    unit_undeclared: dict[str, list[str]] | None = None,
+    unit_app_summaries: list[tuple[str, str]] | None = None
 ) -> None:
     """
     Generate index.html with collapsible categories and sidebar navigation.
@@ -125,6 +126,8 @@ def generate_index_html(
         unit_files: List of unit contract target dicts (one per `unitContracts.target`)
         unit_summary: The `--check` denominator line, passed through verbatim
         unit_undeclared: face -> case names implemented but declared in no spec
+        unit_app_summaries: (app, that app's own denominator line) pairs,
+            rendered under the aggregate when the site holds more than one app
 
     Every unit addition is conditional on `unit_files`, so a project that
     declares no `unitContracts` renders the index it rendered before —
@@ -204,6 +207,16 @@ def generate_index_html(
     # identically.
     if unit_summary:
         html_parts.append(f"    <p class='denominator'>{escape_html(unit_summary)}</p>")
+    # Per app, under the run's total, and only when there is more than one:
+    # the aggregate answers "did the run read anything", and a site with four
+    # apps still needs to show WHICH of them declares nothing. A single-app
+    # project would just repeat the line above it.
+    if unit_app_summaries and len(unit_app_summaries) > 1:
+        html_parts.append("    <ul class='denominator'>")
+        for app_name, line in unit_app_summaries:
+            label = f"{escape_html(app_name)}: " if app_name else ""
+            html_parts.append(f"      <li>{label}{escape_html(line)}</li>")
+        html_parts.append("    </ul>")
 
     # Flow Tests category first (collapsible, starts collapsed)
     if flow_files:
