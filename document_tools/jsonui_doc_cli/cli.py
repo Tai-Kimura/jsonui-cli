@@ -104,6 +104,8 @@ from .test_doc import (
     generate_html_directory,
     get_page_failures,
     get_pages_written,
+    generation_summary_line,
+    generation_warnings,
     generate_mermaid_diagram,
     generate_mermaid_html,
     generate_adapter,
@@ -272,8 +274,13 @@ def cmd_generate_html(args):
         print()
         # Count every page written, not just the test pages in the return
         # value — the old number was smaller than the lines printed above it,
-        # so it could not serve as a "did everything come out?" signal.
-        print(f"Generated {get_pages_written()} HTML files")
+        # so it could not serve as a "did everything come out?" signal. The
+        # denominators come with it: a page count alone cannot separate an
+        # empty input, a mistyped path, a project declaring no contracts, and
+        # a half-updated install, all of which end in a small number and 0.
+        print(generation_summary_line())
+        for line in generation_warnings():
+            print(f"  {line}")
         print(f"Open {output_dir}/index.html to view documentation")
 
         failures = get_page_failures()

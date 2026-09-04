@@ -51,10 +51,69 @@ _page_failures: list[dict] = []
 _pages_written: set[Path] = set()
 
 
+#: What the last run read, for the closing line. Recorded once at the end of
+#: `generate_html_directory` and phrased in ONE place, the same reason
+#: `unit-stubs --check` hands its denominator over as a sentence rather than
+#: as numbers for each caller to word again.
+_generation_counts: dict = {}
+
+
 def reset_page_failures() -> None:
     """Start a fresh accounting run."""
     _page_failures.clear()
     _pages_written.clear()
+    _generation_counts.clear()
+
+
+def note_generation_counts(**counts) -> None:
+    """Record what this run read, for `generation_summary_line`."""
+    _generation_counts.update(counts)
+
+
+def generation_summary_line() -> str:
+    """`Generated N HTML files (...)` — the count WITH its denominator.
+
+    A bare page count cannot tell an empty input, a mistyped path, a project
+    that declares no contracts, and a half-updated install apart: all four
+    produce a small number and exit 0. So the line carries what was read, not
+    only what was written.
+
+    `unit targets U from K spec(s) read` is one clause on purpose — U alone is
+    the number that was ambiguous, and K is what disambiguates it.
+    """
+    n = get_pages_written()
+    c = _generation_counts
+    head = f"Generated {n} HTML files"
+    if not c:
+        return head
+    parts = [f"screens {c.get('screens', 0)}", f"flows {c.get('flows', 0)}"]
+    if c.get("unit_scanned"):
+        parts.append(
+            f"unit targets {c.get('unit_targets', 0)} from "
+            f"{c.get('specs_read', 0)} spec(s) read, "
+            f"{c.get('specs_declaring', 0)} declaring unitContracts"
+        )
+    else:
+        # Not "0 read". A scan that did not happen and a scan that found
+        # nothing are the two things this line exists to separate.
+        parts.append("unitContracts not read")
+    return f"{head} ({' / '.join(parts)})"
+
+
+def generation_warnings() -> list[str]:
+    """Warnings about the denominator itself, in the counted spelling.
+
+    Zero specs read is the shape a wrong path makes, and it is also the shape
+    an empty project makes; the difference matters enough to say out loud,
+    because everything downstream of it reports a legitimate-looking zero.
+    """
+    c = _generation_counts
+    if c.get("unit_scanned") and not c.get("specs_read"):
+        return ["WARNING [doc]: 0 spec(s) read while looking for unitContracts "
+                "— the spec directory is empty or `spec_directory` points "
+                "somewhere else, so `unit targets 0` is not evidence that none "
+                "are declared"]
+    return []
 
 
 def get_page_failures() -> list[dict]:
@@ -1277,6 +1336,20 @@ def generate_html_directory(
     if (spec_files_info or component_files_info or md_files_by_dir
             or figma_files_info or apps_nav or unit_files_info):
         generate_index_html(output_path, generated_files, title, mermaid_generated, document_files, api_doc_categories, spec_files_info, component_files_info, md_files_by_dir, figma_files_info, apps_nav=apps_nav, unit_files=unit_files_info, unit_summary=unit_summary, unit_undeclared=unit_undeclared)
+
+    # Recorded here, once, where every number is in scope. Summed across
+    # roots: a split tree reads a config per app, and the closing line names
+    # the run rather than any one of them.
+    note_generation_counts(
+        screens=sum(1 for f in generated_files if f.get('type') == 'screen'),
+        flows=sum(1 for f in generated_files if f.get('type') == 'flow'),
+        unit_targets=len(unit_files_info),
+        unit_scanned=bool(unit_by_app),
+        specs_read=sum((p.get('totals') or {}).get('specs_scanned', 0)
+                       for p in unit_by_app.values()),
+        specs_declaring=sum((p.get('totals') or {}).get('specs_declaring', 0)
+                            for p in unit_by_app.values()),
+    )
 
     _report_stale_pages(output_path, started_at)
 
