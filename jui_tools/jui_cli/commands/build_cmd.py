@@ -1051,7 +1051,14 @@ def _merge_strings_into(src_file, dest) -> "tuple[int, list[str]]":
 
 def _report_strings_merge(platform: str, kept, shadowed, emptied) -> None:
     """One line for what the append area kept, and a named line per key the
-    SSoT took back. Silence when there was nothing to say."""
+    SSoT took back. Silence when there was nothing to say.
+
+    The ⚠ lines are one per key and each one counts as a build warning
+    under the consumers' rule (measured: the rulebook expression counts
+    2 for 2 such lines and 0 for the summary lines, in three locales).
+    So do not truncate them for readability ("… and N more") — that
+    would lower a gate's count, not just shorten the display. They stay
+    until the key is declared in the SSoT; that is the only way out."""
     if kept:
         print(f"  strings.json → {platform}: kept {len(kept)} face-local "
               f"section(s) ({len(shadowed)} key(s) shadowed by SSoT → dropped, "
