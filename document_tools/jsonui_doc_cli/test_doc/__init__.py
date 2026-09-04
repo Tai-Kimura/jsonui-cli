@@ -6,6 +6,8 @@ from .generator import (
     generate_html_directory,
     get_page_failures,
     get_pages_written,
+    generation_summary_line,
+    generation_warnings,
 )
 from .mermaid import generate_mermaid_diagram, generate_mermaid_html
 from .adapter import generate_adapter, SUPPORTED_PLATFORMS as ADAPTER_PLATFORMS
@@ -16,6 +18,8 @@ __all__ = [
     "generate_html_directory",
     "get_page_failures",
     "get_pages_written",
+    "generation_summary_line",
+    "generation_warnings",
     "generate_mermaid_diagram",
     "generate_mermaid_html",
     "generate_adapter",
