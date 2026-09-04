@@ -103,7 +103,10 @@ def generate_index_html(
     component_files: list[dict] | None = None,
     md_files_by_dir: dict[str, list[dict]] | None = None,
     figma_files: list[dict] | None = None,
-    apps_nav: dict[str, dict] | None = None
+    apps_nav: dict[str, dict] | None = None,
+    unit_files: list[dict] | None = None,
+    unit_summary: str | None = None,
+    unit_undeclared: dict[str, list[str]] | None = None
 ) -> None:
     """
     Generate index.html with collapsible categories and sidebar navigation.
@@ -119,6 +122,13 @@ def generate_index_html(
         component_files: List of component specification file dicts
         md_files_by_dir: Dict of directory name -> list of markdown file dicts
         figma_files: List of Figma screen file dicts
+        unit_files: List of unit contract target dicts (one per `unitContracts.target`)
+        unit_summary: The `--check` denominator line, passed through verbatim
+        unit_undeclared: face -> case names implemented but declared in no spec
+
+    Every unit addition is conditional on `unit_files`, so a project that
+    declares no `unitContracts` renders the index it rendered before —
+    byte for byte. The section appears when there is something to put in it.
     """
     screen_files = [f for f in files if f['type'] == 'screen']
     flow_files = [f for f in files if f['type'] == 'flow']
@@ -177,8 +187,23 @@ def generate_index_html(
         f"        <div class='summary-value'>{total_steps}</div>",
         "        <div class='summary-label'>Total Steps</div>",
         "      </div>",
-        "    </div>",
     ])
+    if unit_files:
+        html_parts.extend([
+            "      <div class='summary-item'>",
+            f"        <div class='summary-value'>{len(unit_files)}</div>",
+            "        <div class='summary-label'>Unit Targets</div>",
+            "      </div>",
+        ])
+    html_parts.append("    </div>")
+
+    # The denominator, passed through verbatim from `unit_contract_pages()`
+    # rather than rebuilt from the numbers above. Two places composing the
+    # same sentence is how an index and a gate come to disagree about how
+    # much was scanned, and "0 declared" over one spec and over forty read
+    # identically.
+    if unit_summary:
+        html_parts.append(f"    <p class='denominator'>{escape_html(unit_summary)}</p>")
 
     # Flow Tests category first (collapsible, starts collapsed)
     if flow_files:
@@ -197,6 +222,54 @@ def generate_index_html(
             badge_class='screen', item_class='screen',
             meta_fn=lambda f: f"{f['case_count']} cases, {f['step_count']} steps",
         )
+
+    # Unit Tests category — the third kind of test, beside Screen and Flow
+    # rather than under either. A unit contract is declared by a screen spec
+    # but is not a screen test: it names hand-written business logic cases
+    # and the faces that must carry them.
+    if unit_files:
+        _render_test_category(
+            html_parts, unit_files,
+            category_id='units', label='Unit Tests',
+            badge_class='unit', item_class='unit',
+            meta_fn=lambda f: f"{f['case_count']} cases, {f['faces_summary']}",
+        )
+
+    # Implementations that no spec declares. Deliberately outside the target
+    # list above: the target name comes from the declaration, so a case with
+    # no declaration has no target and therefore no page it belongs on.
+    # Reported here so it is visible somewhere rather than nowhere.
+    if unit_undeclared:
+        html_parts.append("    <div class='category'>")
+        html_parts.append(
+            "      <div class='category-header collapsed' id='units-undeclared-header' "
+            "onclick=\"toggleCategory('units-undeclared')\">"
+        )
+        total = sum(len(v) for v in unit_undeclared.values())
+        html_parts.append(
+            f"        <h2><span class='arrow'>▼</span> Undeclared unit tests "
+            f"<span class='category-badge unit'>{total}</span></h2>"
+        )
+        html_parts.append("      </div>")
+        html_parts.append(
+            "      <div class='category-content collapsed' id='units-undeclared-content'>"
+        )
+        html_parts.append(
+            "        <p class='denominator'>Implemented in a face's test sources but "
+            "declared in no spec. Either the case belongs in a "
+            "<code>unitContracts</code> block, or the method is named like one and "
+            "is not.</p>"
+        )
+        for face in sorted(unit_undeclared):
+            html_parts.append("        <ul class='test-list'>")
+            for name in unit_undeclared[face]:
+                html_parts.append(
+                    f"          <li class='test-item unit'><span class='test-name'>"
+                    f"<code>{escape_html(str(name))}</code></span> "
+                    f"<span class='badge badge-platform'>{escape_html(face)}</span></li>"
+                )
+            html_parts.append("        </ul>")
+        html_parts.extend(["      </div>", "    </div>"])
 
     # Documents category (collapsible, starts collapsed)
     if document_files:

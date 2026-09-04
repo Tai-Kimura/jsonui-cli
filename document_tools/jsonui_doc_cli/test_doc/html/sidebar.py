@@ -378,6 +378,14 @@ def generate_screen_sidebar(
             all_tests_nav['screens'], 'Screen Tests', 'screens', '',
             href_prefix=rel_root, current_path=current_test_path))
 
+    # Unit Tests navigation. Unit contract pages use THIS sidebar, so this is
+    # also how a reader moves from one target to the next — the targets are
+    # siblings, and without it each page is reachable only through the index.
+    if all_tests_nav and all_tests_nav.get('units'):
+        parts.extend(_render_tests_sidebar_section(
+            all_tests_nav['units'], 'Unit Tests', 'units', 'unit',
+            href_prefix=rel_root, current_path=current_test_path))
+
     # Documents navigation (collapsible, collapsed by default)
     if all_tests_nav and all_tests_nav.get('documents'):
         documents = all_tests_nav['documents']

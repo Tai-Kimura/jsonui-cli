@@ -12,6 +12,7 @@ from .sidebar import (
 )
 from .screen import generate_screen_html
 from .flow import generate_flow_html
+from .unit import generate_unit_html
 from .index import generate_index_html
 from .document import generate_document_html
 from .swagger import (
@@ -35,6 +36,7 @@ __all__ = [
     "generate_index_sidebar",
     "generate_screen_html",
     "generate_flow_html",
+    "generate_unit_html",
     "generate_index_html",
     "generate_document_html",
     "is_swagger_file",
