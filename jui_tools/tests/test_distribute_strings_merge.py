@@ -28,7 +28,7 @@ class DistributeStringsByMerge(unittest.TestCase):
             dest = self._write(Path(tmp) / "face" / "strings.json",
                                {"home": {"title": "OLD"},
                                 "_poc_chip": {"add": "+ Add chip"}})
-            distributed, kept = _merge_strings_into(src, dest)
+            distributed, kept, _shadowed, _emptied = _merge_strings_into(src, dest)
             merged = json.loads(dest.read_text(encoding="utf-8"))
             self.assertEqual(merged["home"], {"title": "Home"},
                              "an SSoT section is the SSoT's — overwritten")
@@ -55,7 +55,7 @@ class DistributeStringsByMerge(unittest.TestCase):
             src = self._write(Path(tmp) / "docs" / "strings.json",
                               {"home": {"title": "Home"}})
             dest = Path(tmp) / "face" / "strings.json"
-            distributed, kept = _merge_strings_into(src, dest)
+            distributed, kept, _shadowed, _emptied = _merge_strings_into(src, dest)
             self.assertEqual(json.loads(dest.read_text(encoding="utf-8")),
                              {"home": {"title": "Home"}})
             self.assertEqual((distributed, kept), (1, []))
@@ -69,7 +69,7 @@ class DistributeStringsByMerge(unittest.TestCase):
             dest = Path(tmp) / "face" / "strings.json"
             dest.parent.mkdir(parents=True)
             dest.write_text("{ not json", encoding="utf-8")
-            _, kept = _merge_strings_into(src, dest)
+            _, kept, _shadowed, _emptied = _merge_strings_into(src, dest)
             self.assertEqual(json.loads(dest.read_text(encoding="utf-8")),
                              {"home": {"title": "Home"}})
             self.assertEqual(kept, [])
@@ -103,3 +103,70 @@ class DistributeStringsByMerge(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class FaceLocalKeysLoseToTheSsot(unittest.TestCase):
+    """A section minted under one spelling of a layout's name kept keys the
+    SSoT declares under the other spelling, and the Android resolver
+    preferred the face-local copy — so a layout corrected in the SSoT went
+    on resolving to the stale one, in a gitignored file (measured
+    2026-09-04 on a face: `store_info_store_edit_sheet` over
+    `store_edit_sheet`). The append area may hold only what the SSoT does
+    not."""
+
+    def _write(self, path: Path, data) -> Path:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(data), encoding="utf-8")
+        return path
+
+    def test_a_shadowing_key_is_dropped_and_named(self):
+        with TemporaryDirectory() as tmp:
+            src = self._write(Path(tmp) / "docs" / "strings.json",
+                              {"store_edit_sheet": {"enter_name": "Enter store name"}})
+            dest = self._write(Path(tmp) / "face" / "strings.json",
+                               {"store_edit_sheet": {"enter_name": "Enter store name"},
+                                "store_info_store_edit_sheet": {"enter_name": "OLD",
+                                                                "only_here": "kept"}})
+            _, kept, shadowed, emptied = _merge_strings_into(src, dest)
+            merged = json.loads(dest.read_text(encoding="utf-8"))
+            self.assertEqual(merged["store_info_store_edit_sheet"], {"only_here": "kept"},
+                             "the shadowing key loses; the face-only key stays")
+            self.assertEqual(shadowed, ["store_info_store_edit_sheet.enter_name"])
+            self.assertEqual(kept, ["store_info_store_edit_sheet"])
+            self.assertEqual(emptied, 0)
+
+    def test_a_section_that_only_shadowed_disappears(self):
+        """What 'never goes away' becomes: nothing of its own left, so it is
+        not carried at all."""
+        with TemporaryDirectory() as tmp:
+            src = self._write(Path(tmp) / "docs" / "strings.json",
+                              {"store_edit_sheet": {"enter_name": "Enter store name"}})
+            dest = self._write(Path(tmp) / "face" / "strings.json",
+                               {"store_info_store_edit_sheet": {"enter_name": "OLD"}})
+            _, kept, shadowed, emptied = _merge_strings_into(src, dest)
+            merged = json.loads(dest.read_text(encoding="utf-8"))
+            self.assertNotIn("store_info_store_edit_sheet", merged)
+            self.assertEqual((kept, shadowed, emptied),
+                             ([], ["store_info_store_edit_sheet.enter_name"], 1))
+
+    def test_an_empty_face_local_section_is_not_kept_and_is_counted(self):
+        with TemporaryDirectory() as tmp:
+            src = self._write(Path(tmp) / "docs" / "strings.json", {"home": {"title": "Home"}})
+            dest = self._write(Path(tmp) / "face" / "strings.json",
+                               {"home": {"title": "Home"}, "_empty": {}})
+            _, kept, shadowed, emptied = _merge_strings_into(src, dest)
+            merged = json.loads(dest.read_text(encoding="utf-8"))
+            self.assertNotIn("_empty", merged)
+            self.assertEqual((kept, shadowed, emptied), ([], [], 1))
+
+    def test_a_face_local_section_the_ssot_shares_no_key_with_is_untouched(self):
+        """The control: without it, a rule that dropped everything would
+        satisfy the arms above."""
+        with TemporaryDirectory() as tmp:
+            src = self._write(Path(tmp) / "docs" / "strings.json", {"home": {"title": "Home"}})
+            dest = self._write(Path(tmp) / "face" / "strings.json",
+                               {"home": {"title": "Home"}, "_poc": {"add": "+ Add"}})
+            _, kept, shadowed, emptied = _merge_strings_into(src, dest)
+            merged = json.loads(dest.read_text(encoding="utf-8"))
+            self.assertEqual(merged["_poc"], {"add": "+ Add"})
+            self.assertEqual((kept, shadowed, emptied), (["_poc"], [], 0))

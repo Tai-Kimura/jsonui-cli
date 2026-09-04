@@ -973,12 +973,40 @@ def _merge_strings_into(src_file, dest) -> "tuple[int, list[str]]":
 
     An unreadable destination is replaced wholesale — merge needs a
     readable base, and preserving bytes we cannot parse would preserve a
-    corruption. Returns (sections distributed, face-local section names
-    kept)."""
+    corruption.
+
+    Keeping a face-only section WHOLE was too generous. Measured 2026-09-04
+    on a face: a section minted under one spelling of a layout's name
+    (`store_info_store_edit_sheet`) kept keys the SSoT also declares under
+    the other spelling (`store_edit_sheet`), and the Android resolver
+    preferred the face-local one — so a layout corrected in the SSoT kept
+    resolving to the stale copy, forever, in a file that is gitignored and
+    therefore invisible to everyone but the machine that built it.
+
+    So the append area may hold only what the SSoT does not: a face-local
+    key whose NAME the SSoT declares anywhere is dropped and named. A
+    section left with nothing is not carried at all, which is what finally
+    removes a stale one.
+
+    ⚠ The comparison is by key name across the whole SSoT, not within a
+    matching section: section names differ precisely in the case this
+    fixes, so there is no section to match on. A face-local key that
+    innocently shares a name with an unrelated SSoT key is therefore
+    dropped too — visibly, by name, on every build.
+
+    Returns (sections distributed, kept section names, shadowed
+    "section.key" names, count of sections emptied)."""
     src_data = json.loads(src_file.read_text(encoding="utf-8"))
     dest.parent.mkdir(parents=True, exist_ok=True)
     kept: "list[str]" = []
+    shadowed: "list[str]" = []
+    emptied = 0
     merged = dict(src_data)
+    ssot_keys = {
+        name
+        for section in src_data.values() if isinstance(section, dict)
+        for name in section
+    }
     if dest.exists():
         try:
             existing = json.loads(dest.read_text(encoding="utf-8"))
@@ -987,9 +1015,22 @@ def _merge_strings_into(src_file, dest) -> "tuple[int, list[str]]":
             existing = {}
         if isinstance(existing, dict):
             for key, value in existing.items():
-                if key not in merged:
+                if key in merged:
+                    continue
+                if not isinstance(value, dict):
+                    # Not a section shape; nothing to compare key-wise.
                     merged[key] = value
                     kept.append(key)
+                    continue
+                surviving = {k: v for k, v in value.items() if k not in ssot_keys}
+                shadowed.extend(f"{key}.{k}" for k in value if k in ssot_keys)
+                if surviving:
+                    merged[key] = surviving
+                    kept.append(key)
+                else:
+                    # Everything it held is the SSoT's, or it held nothing:
+                    # not carried, which is how a stale section disappears.
+                    emptied += 1
     # No face-local sections -> distribute the SOURCE BYTES verbatim. Four
     # web-only faces have nothing appended, and re-serialising for them
     # would move every byte-hashing gate (face fingerprints) once for a
@@ -1001,11 +1042,26 @@ def _merge_strings_into(src_file, dest) -> "tuple[int, list[str]]":
         text = json.dumps(merged, ensure_ascii=False, indent=2) + "\n"
     try:
         if dest.read_text(encoding="utf-8") == text:
-            return (len(src_data), kept)
+            return (len(src_data), kept, shadowed, emptied)
     except (OSError, ValueError, UnicodeDecodeError):
         pass
     dest.write_text(text, encoding="utf-8")
-    return (len(src_data), kept)
+    return (len(src_data), kept, shadowed, emptied)
+
+
+def _report_strings_merge(platform: str, kept, shadowed, emptied) -> None:
+    """One line for what the append area kept, and a named line per key the
+    SSoT took back. Silence when there was nothing to say."""
+    if kept:
+        print(f"  strings.json → {platform}: kept {len(kept)} face-local "
+              f"section(s) ({len(shadowed)} key(s) shadowed by SSoT → dropped, "
+              f"{emptied} empty section(s) skipped): {', '.join(sorted(kept))}")
+    elif shadowed or emptied:
+        print(f"  strings.json → {platform}: kept 0 face-local section(s) "
+              f"({len(shadowed)} key(s) shadowed by SSoT → dropped, "
+              f"{emptied} empty section(s) skipped)")
+    for name in sorted(shadowed):
+        print(f"  ⚠ {name} shadowed by SSoT → dropped")
 
 
 def _distribute_resources(config_mgr: ConfigManager, platforms: dict, args) -> None:
@@ -1039,11 +1095,8 @@ def _distribute_resources(config_mgr: ConfigManager, platforms: dict, args) -> N
                 rel = src_file.relative_to(resources_src)
                 dest = resources_dest / rel
                 if src_file.name == "strings.json":
-                    _, kept = _merge_strings_into(src_file, dest)
-                    if kept:
-                        print(f"  strings.json → {platform}: kept "
-                              f"{len(kept)} face-local section(s): "
-                              f"{', '.join(sorted(kept))}")
+                    _, kept, shadowed, emptied = _merge_strings_into(src_file, dest)
+                    _report_strings_merge(platform, kept, shadowed, emptied)
                     count += 1
                     continue
                 dest.parent.mkdir(parents=True, exist_ok=True)
@@ -1054,10 +1107,8 @@ def _distribute_resources(config_mgr: ConfigManager, platforms: dict, args) -> N
         if strings_src and strings_src.exists():
             if not resources_src.exists() or resources_src not in strings_src.parents:
                 dest = resources_dest / "strings.json"
-                _, kept = _merge_strings_into(strings_src, dest)
-                if kept:
-                    print(f"  strings.json → {platform}: kept {len(kept)} "
-                          f"face-local section(s): {', '.join(sorted(kept))}")
+                _, kept, shadowed, emptied = _merge_strings_into(strings_src, dest)
+                _report_strings_merge(platform, kept, shadowed, emptied)
                 count += 1
 
         if count:
