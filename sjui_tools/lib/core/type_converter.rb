@@ -44,8 +44,24 @@ module SjuiTools
         'EdgeInsets' => 'EdgeInsets',
         # Kotlin-specific types mapped to Swift equivalents
         'Unit' => 'Void',
-        'unit' => 'Void'
+        'unit' => 'Void',
+        # JSON container classes. These name a SHAPE, not a Swift type, and
+        # without an entry the declared name was emitted verbatim —
+        # `var profile: Object = ...` does not compile. The web face already
+        # maps the same spellings (Object/object/Hash/hash ->
+        # Record<string, any>).
+        'Object' => '[String: Any]',
+        'object' => '[String: Any]',
+        'Hash' => '[String: Any]',
+        'hash' => '[String: Any]',
+        'Array' => '[Any]',
+        'array' => '[Any]'
       }.freeze
+
+      # Declared classes naming a JSON container rather than a model type.
+      # Only these are re-spelled for the data model; every other class name is
+      # a type the project declares and is emitted as written.
+      JSON_CONTAINER_CLASSES = %w[Object object Hash hash Array array].freeze
 
       # Mode-specific type mapping (types that differ between swiftui and uikit)
       # NOTE: These are kept for backward compatibility, but type_mapping.json is preferred
