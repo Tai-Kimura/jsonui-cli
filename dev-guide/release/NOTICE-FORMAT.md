@@ -436,6 +436,17 @@ parent_spec_rules.py            → **どの面にも vendor されていない*
 ——**映らないものは映らない。** 依拠すべきは `jui build` の `recorded/updated 0` と build 前後の
 `git status` 一致のほう。
 
+### 5.11 追補: `shared/` は拡張子まで書く（1.8.34）
+`shared/core/` には .py / .rb / .json が同居し、**到達する読み手が拡張子で違う**:
+```
+.py    document_tools / jui_tools が shared_core.load() で動的 import（1.8.29 の parent_spec_rules.py が実例）
+.json  Python と Ruby の両方が読む（属性表・MCP snapshot も）
+.rb    Ruby の 3 ツール（正本 → lib/core の mirror 経由で vendored）だけ
+```
+1.8.34 で「shared/ の .rb 2 本、.json 0」と numstat は正しく書いたのに、括弧で「Python が読むのは JSON 経由だけ」と**受け手の狭い主張
+（今回の 2 本は .rb だから到達しない）を広い規則に化けさせて**書いた。**その規則を信じると、次に .py が動いた版で「document_tools 0 件だから無関係」と
+読める** — 反例が 1.8.29。⇒ shared/ の行は**拡張子ごとの本数**で書き、到達の主張は上の表から引く。
+
 ## 5.12 **範囲は import 連鎖で決まる。そしてその連鎖は grep では出ない**
 
 §5.9 の「実装が同じ」を測るには**どこを見れば実装なのか**が先に要る。
