@@ -165,15 +165,26 @@ module SjuiTools
         # Read the path through the canonical resolver rather than deriving a
         # subscript chain here.
         #
-        # ⚠️ The type named MUST be `JsonUIBindingPath`, never
-        # `DynamicBindingResolver`. The latter is inside `#if DEBUG`, and
-        # generated code is distributed and built for RELEASE: referencing it
-        # compiles under DEBUG — so every gate goes green — and breaks in the
-        # consumer's release build. Measured 2026-09-05: the conformance host
-        # compiles SwiftJsonUI with DEBUG undefined and failed five views with
-        # "Type 'SwiftJsonUI' has no member 'DynamicBindingResolver'".
-        # `JsonUIBindingPath` exists outside the guard for exactly this
-        # caller, and requires SwiftJsonUI >= 10.20.1.
+        # ⚠️ TWO spelling rules, and they have separate reasons.
+        #
+        # 1. The type is `JsonUIBindingPath`, never `DynamicBindingResolver`.
+        #    The latter is inside `#if DEBUG`, and generated code is
+        #    distributed and built for RELEASE, so referencing it compiles
+        #    under DEBUG — every gate goes green — and breaks in the
+        #    consumer's release build. `JsonUIBindingPath` exists outside the
+        #    guard for exactly this caller (SwiftJsonUI >= 10.20.1).
+        #
+        # 2. The reference is UNQUALIFIED. `SwiftJsonUI.JsonUIBindingPath`
+        #    does not name the module: `SwiftJsonUI.swift:6` declares
+        #    `public struct SwiftJsonUI`, which shadows the module name, so
+        #    the qualified form resolves to that struct and fails with "Type
+        #    'SwiftJsonUI' has no member ..." — Type, not Module, which is
+        #    the tell. Measured 2026-09-05 in the conformance host. The rest
+        #    of the generated corpus already knows this: 1825 unqualified
+        #    `SwiftJsonUIConfiguration` references, 0 qualified.
+        #
+        # Unqualified needs `import SwiftJsonUI` in the generated file, which
+        # the emitter has always written.
         #
         # Calling it keeps ONE implementation of the rules a hand-written
         # chain would have to restate: an out-of-range index is unresolved and
@@ -188,10 +199,10 @@ module SjuiTools
         # requires zero warnings.
         def canonical_resolve_expr(path, coercion, prefix: 'data')
           root = path_root(path)
-          lookup = 'SwiftJsonUI.JsonUIBindingPath.resolve(' \
+          lookup = 'JsonUIBindingPath.resolve(' \
                    "path: #{swift_string_literal(path)}, " \
                    "in: [#{swift_string_literal(root)}: #{prefix}.#{root} as Any])"
-          "SwiftJsonUI.JsonUIBindingPath.#{coercion}(#{lookup})"
+          "JsonUIBindingPath.#{coercion}(#{lookup})"
         end
 
         # Canonical text form of a number literal, mirroring

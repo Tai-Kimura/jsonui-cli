@@ -42,15 +42,24 @@ RSpec.describe 'binding paths through JSON containers' do
   # Mirrors the real declarations (SwiftJsonUI JsonUIBindingPath.swift). The
   # swiftc arm type-checks the emitted CALL SITE against these, so a call that
   # names a wrong label or coalesces against the wrong type fails here.
+  # ⚠️ The `struct SwiftJsonUI` is NOT filler. `SwiftJsonUI.swift:6` really
+  # declares one, and it SHADOWS THE MODULE NAME: a generated
+  # `SwiftJsonUI.JsonUIBindingPath.resolve(...)` resolves to this struct, not
+  # to the module, and fails with "Type 'SwiftJsonUI' has no member ..." —
+  # Type, not Module, which is the tell. Reproducing the struct here is what
+  # makes the compile arm below catch a return to the qualified spelling
+  # instead of type-checking happily against a stub that has no such clash.
   RESOLVER_STUB = <<~SWIFT
-    enum SwiftJsonUI {
-        enum JsonUIBindingPath {
-            static func resolve(path: String, in data: [String: Any],
-                                unwrap: (Any?) -> Any? = { $0 }) -> Any? { nil }
-            static func stringify(_ value: Any?) -> String? { nil }
-            static func bool(_ value: Any?) -> Bool? { nil }
-            static func double(_ value: Any?) -> Double? { nil }
-        }
+    public struct SwiftJsonUI {
+        public private(set) var text = "Hello, World!"
+    }
+
+    enum JsonUIBindingPath {
+        static func resolve(path: String, in data: [String: Any],
+                            unwrap: (Any?) -> Any? = { $0 }) -> Any? { nil }
+        static func stringify(_ value: Any?) -> String? { nil }
+        static func bool(_ value: Any?) -> Bool? { nil }
+        static func double(_ value: Any?) -> Double? { nil }
     }
   SWIFT
 
@@ -59,8 +68,7 @@ RSpec.describe 'binding paths through JSON containers' do
   end
 
   def resolve_call(path, coercion, root)
-    'SwiftJsonUI.JsonUIBindingPath.' \
-      "#{coercion}(SwiftJsonUI.JsonUIBindingPath.resolve(path: \"#{path}\", " \
+    "JsonUIBindingPath.#{coercion}(JsonUIBindingPath.resolve(path: \"#{path}\", " \
       "in: [\"#{root}\": data.#{root} as Any]))"
   end
 
@@ -156,9 +164,17 @@ RSpec.describe 'binding paths through JSON containers' do
         BE.swift_visibility_param('@{!profile.hidden}')
       ]
       expect(emitted).to all(include('JsonUIBindingPath'))
-      offenders = emitted.select { |e| e.include?('DynamicBindingResolver') }
-      expect(offenders).to be_empty,
-                           "these name the #if DEBUG type:\n#{offenders.join("\n")}"
+
+      debug_only = emitted.select { |e| e.include?('DynamicBindingResolver') }
+      expect(debug_only).to be_empty,
+                            "these name the #if DEBUG type:\n#{debug_only.join("\n")}"
+
+      # The second, independent spelling rule: `SwiftJsonUI.X` resolves to the
+      # struct of that name, not to the module.
+      qualified = emitted.select { |e| e.include?('SwiftJsonUI.') }
+      expect(qualified).to be_empty,
+                           "module-qualified, which resolves to `struct " \
+                           "SwiftJsonUI`:\n#{qualified.join("\n")}"
     end
   end
 
