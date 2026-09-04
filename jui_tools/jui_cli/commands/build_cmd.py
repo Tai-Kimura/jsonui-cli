@@ -68,8 +68,9 @@ def register_build_command(subparsers: argparse._SubParsersAction) -> None:
     build_parser.add_argument(
         "--lint-strings",
         action="store_true",
-        help="Run the localize gate (jui lint-strings) and report findings "
-             "as build warnings (also: \"lint\": {\"strings\": true} in "
+        help="Print localize findings as build warnings (jui lint-strings); "
+             "the build's exit code does not change — run `jui lint-strings` "
+             "alone to fail on them (also: \"lint\": {\"strings\": true} in "
              "jui.config.json)",
     )
 
