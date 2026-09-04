@@ -80,19 +80,61 @@ _ALL_TESTS_PATTERNS = {
 
 #: `class Foo: XCTestCase {` / `final class Foo : XCTestCase, Bar {`
 _SWIFT_TESTCASE_RE = re.compile(r"\bclass\s+\w+\s*:[^{]*\bXCTestCase\b[^{]*\{")
-#: a method declaration inside one. Arguments are not matched at all: the
-#: previous pattern used `[^)]*`, which stopped at the first `)` and so
-#: silently skipped any function with a closure parameter — the reason the
-#: false positive looked like it depended on arity.
-_SWIFT_FUNC_RE = re.compile(r"\bfunc\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(")
+#: a method declaration inside one, with the modifiers that precede it and
+#: whether its parameter list is empty.
+#:
+#: The parameter list is deliberately probed one character deep — `\(\s*\)?`
+#: — rather than matched. An earlier pattern used `[^)]*`, which stops at the
+#: first `)` and so skipped any function with a closure parameter, which made
+#: a false positive look as though it depended on arity. Emptiness is all
+#: that is needed and it cannot be fooled by nesting.
+_SWIFT_FUNC_RE = re.compile(
+    r"(?P<mods>(?:\b(?:private|fileprivate|internal|public|open|final|static|class|override|mutating|nonisolated)\b\s+|@\w+(?:\([^)]*\))?\s+)*)"
+    r"\bfunc\s+(?P<name>[A-Za-z_][A-Za-z0-9_]*)\s*\(\s*(?P<empty>\))?"
+)
+
+#: Modifiers that put a method outside XCTest's reach whatever it is called.
+#: XCTest enumerates NO-ARGUMENT INSTANCE methods through the ObjC runtime, so
+#: `private` hides it and `static`/`class` makes it not an instance method.
+_UNREACHABLE_MODIFIERS = ("private", "fileprivate", "static", "class")
+
+#: XCTest's own lifecycle hooks. They take no arguments and are not private,
+#: so the reachability test above admits them — and they legitimately carry no
+#: `test` prefix, which would make every file that overrides one report a
+#: method that "never runs" while XCTest calls it on every single case. Found
+#: by reading the predicate rather than from a report: it is the same false
+#: positive as the three already fixed here, one shape further along.
+_XCTEST_LIFECYCLE = frozenset({
+    "setUp", "setUpWithError", "tearDown", "tearDownWithError",
+    "addTeardownBlock", "record", "invokeTest", "perform",
+    "continueAfterFailure", "setUpTestCaseWithError", "tearDownTestCaseWithError",
+})
+
+
+def _could_ever_run(mods: str, empty_params: bool) -> bool:
+    """Could XCTest discover this method if it were named `test…`?
+
+    Reported by a consumer on the third false positive from this one warning:
+    a method taking parameters, or marked `private`, CANNOT be a mis-named
+    test — the name is not what stops it — so telling its author that it
+    "never runs" gives them nothing they can act on. They declined to rename
+    round it, correctly: renaming would not change the predicate, only make
+    the source worse to suit the tool.
+
+    So the warning now covers exactly the set it was written for: methods that
+    WOULD run if they carried the prefix, and do not.
+    """
+    if not empty_params:
+        return False
+    return not any(re.search(rf"\b{m}\b", mods) for m in _UNREACHABLE_MODIFIERS)
 
 
 def _swift_test_methods(text: str) -> list[str]:
     """Method names declared inside XCTestCase subclasses, in order.
 
-    Brace-matched rather than regex-scoped, because a regex cannot tell where
-    a class body ends and the file-scope helpers begin — which is exactly the
-    distinction the false positive turned on.
+    Only methods XCTest could actually execute are returned: brace-matched to
+    the class body (a regex cannot tell where the body ends and the
+    file-scope helpers begin), then filtered by `_could_ever_run`.
     """
     names: list[str] = []
     for match in _SWIFT_TESTCASE_RE.finditer(text):
@@ -110,7 +152,12 @@ def _swift_test_methods(text: str) -> list[str]:
                     break
             i += 1
         if start is not None:
-            names.extend(m.group(1) for m in _SWIFT_FUNC_RE.finditer(text[start:i]))
+            names.extend(
+                m.group("name")
+                for m in _SWIFT_FUNC_RE.finditer(text[start:i])
+                if m.group("name") not in _XCTEST_LIFECYCLE
+                and _could_ever_run(m.group("mods"), m.group("empty") is not None)
+            )
     return names
 
 

@@ -404,15 +404,60 @@ class TestOnlyTestMethodsAreScanned:
         report = uc.check_unit_contracts(root)
         assert report.undiscoverable.get("ios") == ["a_case"]
 
-    def test_helpers_inside_the_test_class_are_seen_regardless_of_arity(self, tmp_path):
-        # The old pattern stopped at the first ')', so a closure parameter
-        # hid the declaration entirely. Scope, not arity, is the rule.
+    def test_an_in_class_helper_that_could_never_be_a_test_is_not_flagged(self, tmp_path):
+        """Third false positive from this warning, reported by a consumer.
+
+        The rule used to be "scope, not arity" — anything in the class body,
+        whatever its signature. That over-fires: XCTest enumerates NO-ARGUMENT,
+        NON-PRIVATE INSTANCE methods, so a helper taking a parameter or marked
+        `private` cannot be a mis-named test. Its NAME is not what stops it,
+        and renaming would not silence the warning — only make the source
+        worse to suit the tool.
+
+        The reporter declined to rename round it and said so, which is what
+        made the predicate rather than the source the thing to fix. A warning
+        the reader can do nothing about is the defect closed in 1.8.27, in a
+        new place: the only way to keep using the gate is to stop reading its
+        exit code, and then the gate is gone.
+        """
         tests = ("import XCTest\nfinal class VMTests: XCTestCase {\n"
                  "    func test_a_case() throws { }\n"
-                 "    func withRoutes(_ body: () -> Void) { }\n}\n")
+                 "    func withRoutes(_ body: () -> Void) { }\n"          # parameter
+                 "    private func loadedViewModel() { }\n"               # private
+                 "    static func makeSubject() { }\n}\n")                # not an instance
         root = self._ios_project(tmp_path, self._SUPPORT, tests)
         report = uc.check_unit_contracts(root)
-        assert report.undiscoverable.get("ios") == ["withRoutes"]
+        assert report.undiscoverable == {}, uc.format_report(report)
+
+    def test_xctest_lifecycle_overrides_are_not_flagged(self, tmp_path):
+        """`setUp` has no arguments, is not private, and carries no prefix.
+
+        So the reachability rule above admits it — and XCTest calls it on
+        every case. Flagging it would report "never runs" about the one method
+        that runs most. Found by reading the new predicate rather than from a
+        report, which is the whole reason to write the predicate down.
+        """
+        tests = ("import XCTest\nfinal class VMTests: XCTestCase {\n"
+                 "    override func setUp() { }\n"
+                 "    override func tearDownWithError() throws { }\n"
+                 "    func test_a_case() throws { }\n}\n")
+        root = self._ios_project(tmp_path, self._SUPPORT, tests)
+        report = uc.check_unit_contracts(root)
+        assert report.undiscoverable == {}, uc.format_report(report)
+
+    def test_a_reachable_bare_method_is_still_flagged(self, tmp_path):
+        """Positive control for both arms above.
+
+        Without it, "nothing is flagged" would be satisfied by a predicate
+        that flags nothing at all — which is how a gate dies quietly rather
+        than loudly.
+        """
+        tests = ("import XCTest\nfinal class VMTests: XCTestCase {\n"
+                 "    func test_a_case() throws { }\n"
+                 "    func meant_to_be_a_test() throws { }\n}\n")
+        root = self._ios_project(tmp_path, self._SUPPORT, tests)
+        report = uc.check_unit_contracts(root)
+        assert report.undiscoverable.get("ios") == ["meant_to_be_a_test"]
 
 
 def _split_project(tmp_path, *, sub_blocks, second_sub=False):
