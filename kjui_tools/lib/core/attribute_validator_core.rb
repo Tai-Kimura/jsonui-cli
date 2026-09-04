@@ -792,6 +792,20 @@ module JsonUIShared
     #: own measurement.
     SCALAR_ITEM_ATTRIBUTES = { 'Segment' => %w[items].freeze }.freeze
 
+    #: True when a labels-only attribute was given a binding string.
+    #:
+    #: `Segment.items` is declared `type: "array"` — no binding — yet kjui
+    #: resolved `@{options}` into a `forEachIndexed` and sjui raised
+    #: `NoMethodError: undefined method 'each_with_index' for String`
+    #: (measured 2026-09-04). One face invented a feature, the other
+    #: crashed, and nothing warned: the type check lets a binding string
+    #: stand in for any declared type. Usage across seven faces: 0.
+    def self.binding_in_scalar_items?(component_type, attribute_name, value)
+      return false unless SCALAR_ITEM_ATTRIBUTES[component_type.to_s]&.include?(attribute_name.to_s)
+
+      value.is_a?(String) && value.strip.start_with?('@{') && value.strip.end_with?('}')
+    end
+
     #: Indices of elements a generator must not emit. Public so the
     #: converters decide with the same predicate that warns — a warning and
     #: an emit that disagree is how this defect stayed invisible.
@@ -829,6 +843,14 @@ module JsonUIShared
     #: a segment that silently renders one fewer tab is worse than a named
     #: warning.
     def check_scalar_items(name, value, path, component_type)
+      if self.class.binding_in_scalar_items?(component_type, name, value)
+        add_warning(
+          "Attribute '#{path}' in '#{component_type}' is a binding; items are static labels " \
+          "per the declaration (type: array, no binding) — ignored, and no items are generated"
+        )
+        return
+      end
+
       self.class.non_scalar_item_indices(component_type, name, value).each do |index|
         add_warning(
           "Attribute '#{path}[#{index}]' in '#{component_type}' is an object; " \

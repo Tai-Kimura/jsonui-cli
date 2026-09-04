@@ -15,9 +15,13 @@ module SjuiTools
           # index is taken so `.tag(n)` stays contiguous — the runtimes
           # compact too (asStrings / mapNotNull), and a hole here would put
           # the tags out of step with them.
-          items = @component['items'] || []
-          # Only an ARRAY has elements to judge; a binding string has none.
-          items = items.reject { |item| item.is_a?(Hash) || item.is_a?(Array) } if items.is_a?(Array)
+          # Declared `type: "array"`, so only an array is items. A binding
+          # string reached `each_with_index` and raised NoMethodError —
+          # the build died on input the validator accepted silently
+          # (measured 2026-09-04). Now it generates nothing and the
+          # validator names it.
+          raw_items = @component['items']
+          items = raw_items.is_a?(Array) ? raw_items.reject { |item| item.is_a?(Hash) || item.is_a?(Array) } : []
           
           # selectedTabIndex プロパティの処理
           initial_selection = @component['selectedTabIndex'] || @component['selectedIndex'] || 0
