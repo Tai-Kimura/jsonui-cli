@@ -56,7 +56,7 @@ MERGED_SECTIONS = ("structure", "stateManagement", "dataFlow")
 MERGER_BUILDS_FROM_SUB_SPECS = frozenset({
     "structure", "stateManagement", "dataFlow",
     "branchContracts", "unitContracts", "task_cancellation",
-    "error_handling", "userActions", "transitions",
+    "error_handling", "userActions", "transitions", "validation",
     "relatedFiles", "notes",
 })
 

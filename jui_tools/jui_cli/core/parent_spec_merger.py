@@ -170,11 +170,14 @@ class ParentSpecMerger:
         # defect `unitContracts` exists to prevent, and the readers report it
         # by name. Swallowing it here would restore the silence.
         unit_unkeyable: list = []
+        # {"clientSide": [...], "serverSide": [...]} collected across sub-specs.
+        validation: dict[str, list] = {}
         task_cancellation: dict[str, Any] = {}
         error_handling: list = []
         root_components: list = []
         seen_branch: dict[str, str] = {}
         seen_unit: dict[tuple[str, str], tuple[str, dict]] = {}
+        seen_validation: dict[tuple[str, str], tuple[str, dict]] = {}
         seen_cancellation: dict[str, str] = {}
 
         # ---- other top-level sections collected by list concat ----
@@ -463,6 +466,48 @@ class ParentSpecMerger:
                         seen_unit[key] = (source_name, case)
                         entry["cases"].append(case)
 
+            # validation — two fixed sub-sections (`clientSide`, `serverSide`)
+            # holding LISTS of rules, so the merge key is the individual rule
+            # one level down: `field` for a client rule, `condition` for a
+            # server one. Same granularity branchContracts needed.
+            #
+            # Reported 2026-09-04 by a lane whose four sub-specs each declare
+            # it: the section is validated by `validate spec` and rendered by
+            # both doc generators, and was dropped from the merged parent
+            # anyway. The same defect as `unitContracts`, still live, in a
+            # section that had been shipping — found by the lane asking which
+            # of its six declared sections actually arrive.
+            validation_block = sub.get("validation")
+            if isinstance(validation_block, dict):
+                for subsection, key_field in (("clientSide", "field"),
+                                              ("serverSide", "condition")):
+                    entries = validation_block.get(subsection)
+                    if not isinstance(entries, list):
+                        continue
+                    for entry in entries:
+                        if not isinstance(entry, dict):
+                            validation.setdefault(subsection, []).append(entry)
+                            continue
+                        name = entry.get(key_field)
+                        if not name:
+                            # No key to compare on; keep it rather than drop
+                            # it — `validate spec` names the missing field.
+                            validation.setdefault(subsection, []).append(entry)
+                            continue
+                        key = (subsection, name)
+                        if key in seen_validation:
+                            prev_src, prev = seen_validation[key]
+                            if _stripped_equal(prev, entry):
+                                continue
+                            record_conflict(
+                                path=(f"validation.{subsection}"
+                                      f"[{key_field}={name}]"),
+                                message=(f"Defined differently in "
+                                         f"'{prev_src}' and '{source_name}'"))
+                            continue
+                        seen_validation[key] = (source_name, entry)
+                        validation.setdefault(subsection, []).append(entry)
+
             # task_cancellation — keyed dict at the top level (its keys ARE
             # the entries; there is no fixed sub-section layer to descend).
             block = sub.get("task_cancellation")
@@ -609,6 +654,8 @@ class ParentSpecMerger:
             # shape, and a list says "collected from N sources" truthfully
             # where a bare object would imply a single author.
             merged["unitContracts"] = list(unit_contracts.values()) + unit_unkeyable
+        if validation:
+            merged["validation"] = validation
         if task_cancellation:
             merged["task_cancellation"] = task_cancellation
         if error_handling:
