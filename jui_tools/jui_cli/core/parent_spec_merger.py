@@ -163,10 +163,18 @@ class ParentSpecMerger:
         seen_vm_methods: dict[str, tuple[str, dict]] = {}
         seen_vm_vars: dict[str, tuple[str, dict]] = {}
         branch_contracts: dict[str, Any] = {}
+        # target -> {"target": t, "cases": [...]}, insertion-ordered.
+        unit_contracts: dict[str, dict[str, Any]] = {}
+        # Blocks this merger cannot key (no `target`, or `cases` not a list).
+        # Carried through rather than dropped: a misspelled key is exactly the
+        # defect `unitContracts` exists to prevent, and the readers report it
+        # by name. Swallowing it here would restore the silence.
+        unit_unkeyable: list = []
         task_cancellation: dict[str, Any] = {}
         error_handling: list = []
         root_components: list = []
         seen_branch: dict[str, str] = {}
+        seen_unit: dict[tuple[str, str], tuple[str, dict]] = {}
         seen_cancellation: dict[str, str] = {}
 
         # ---- other top-level sections collected by list concat ----
@@ -401,6 +409,60 @@ class ParentSpecMerger:
                         seen_branch[key] = source_name
                         branch_contracts.setdefault(subsection, {})[name] = value
 
+            # unitContracts — a block, or a list of them, of
+            # `{target, cases: [{name, ...}]}`.
+            #
+            # It had no arm here at all, which left a split screen with NO
+            # legal place to declare one: the parent is refused by
+            # `_reject_parent_declarations` (default-deny, with a message
+            # promising the merger builds this from the sub-specs) and a
+            # sub-spec's block was read by nobody. Reported from a consumer
+            # whose 3 declared cases came back as `3 declared / 1 carrying`
+            # — the count of ANOTHER screen's block, indistinguishable from
+            # having declared nothing. Same trap branchContracts was in.
+            #
+            # Keyed at (target, case name), NOT at target: several sub-specs
+            # naming one handler is the normal shape for a split screen, and
+            # keying on `target` alone would call the second "Defined
+            # differently" and drop its cases wholesale — the 2/2/2/6 defect
+            # branchContracts had, one level too shallow.
+            unit_block = sub.get("unitContracts")
+            if isinstance(unit_block, dict):
+                unit_block = [unit_block]
+            if isinstance(unit_block, list):
+                for block in unit_block:
+                    if not isinstance(block, dict):
+                        unit_unkeyable.append(block)
+                        continue
+                    target = str(block.get("target") or "").strip()
+                    cases = block.get("cases")
+                    if not target or not isinstance(cases, list):
+                        unit_unkeyable.append(block)
+                        continue
+                    entry = unit_contracts.setdefault(
+                        target, {"target": target, "cases": []})
+                    for case in cases:
+                        name = (str(case.get("name") or "").strip()
+                                if isinstance(case, dict) else "")
+                        if not name:
+                            # Unkeyable case: the readers name the block and
+                            # index it is missing from, so keep its position.
+                            entry["cases"].append(case)
+                            continue
+                        key = (target, name)
+                        if key in seen_unit:
+                            prev_src, prev = seen_unit[key]
+                            if _stripped_equal(prev, case):
+                                continue
+                            record_conflict(
+                                path=(f"unitContracts[target={target}]"
+                                      f".cases[name={name}]"),
+                                message=(f"Defined differently in "
+                                         f"'{prev_src}' and '{source_name}'"))
+                            continue
+                        seen_unit[key] = (source_name, case)
+                        entry["cases"].append(case)
+
             # task_cancellation — keyed dict at the top level (its keys ARE
             # the entries; there is no fixed sub-section layer to descend).
             block = sub.get("task_cancellation")
@@ -542,6 +604,11 @@ class ParentSpecMerger:
             merged["notes"] = notes_parts
         if branch_contracts:
             merged["branchContracts"] = branch_contracts
+        if unit_contracts or unit_unkeyable:
+            # Always a list, even for one block: the readers accept either
+            # shape, and a list says "collected from N sources" truthfully
+            # where a bare object would imply a single author.
+            merged["unitContracts"] = list(unit_contracts.values()) + unit_unkeyable
         if task_cancellation:
             merged["task_cancellation"] = task_cancellation
         if error_handling:

@@ -106,6 +106,76 @@ class SubSpecsSupplyEverythingTests(unittest.TestCase):
         self.assertEqual(
             len(result.spec["dataFlow"]["viewModel"]["methods"]), 1)
 
+    def test_unit_contracts_come_from_sub_specs(self):
+        """The same defect, found again in a section added after this file.
+
+        Reported 2026-09-04: `unitContracts` was default-denied in the parent
+        (the message promising, from a template, that the merger builds it
+        from the sub-specs) while no arm here built it. A split screen had no
+        legal home for the block — parent a hard error, sub-spec read by
+        nobody — which is precisely what the docstring above says was fixed
+        for the other six sections.
+        """
+        result = self.merge(
+            {"unitContracts": {"target": "Handler",
+                               "cases": [{"name": "a"}, {"name": "b"}]}})
+        self.assertEqual(
+            [c["name"] for c in result.spec["unitContracts"][0]["cases"]],
+            ["a", "b"])
+
+    def test_two_sub_specs_naming_one_target_keep_both_case_sets(self):
+        """Keyed at (target, case), not at target.
+
+        Several sub-specs contributing cases for one handler is the normal
+        shape for a split screen — it is why the block belongs in the
+        sub-specs at all. Keying on `target` would call the second block
+        "Defined differently" and drop its cases wholesale, which is the
+        2/2/2/6 defect `branchContracts` had one level too shallow.
+        """
+        result = self.merge(
+            {"unitContracts": {"target": "H", "cases": [{"name": "a"}]}},
+            {"unitContracts": {"target": "H", "cases": [{"name": "b"}]}})
+        self.assertFalse(result.has_conflicts, result.conflicts)
+        blocks = result.spec["unitContracts"]
+        self.assertEqual(len(blocks), 1, blocks)
+        self.assertEqual([c["name"] for c in blocks[0]["cases"]], ["a", "b"])
+
+    def test_one_case_defined_differently_in_two_sub_specs_conflicts(self):
+        """Named at the case, so the message says which one to look at."""
+        result = self.merge(
+            {"unitContracts": {"target": "H",
+                               "cases": [{"name": "a", "platforms": ["ios"]}]}},
+            {"unitContracts": {"target": "H",
+                               "cases": [{"name": "a", "platforms": ["android"]}]}})
+        self.assertTrue(result.has_conflicts)
+        self.assertIn("unitContracts[target=H].cases[name=a]",
+                      result.conflicts[0].path)
+
+    def test_an_identical_case_in_two_sub_specs_does_not_conflict(self):
+        """Control for the arm above: same shape, same value, no complaint.
+
+        Without it, "it conflicts" could mean the merger conflicts on every
+        second block rather than on disagreement — which is the exact defect
+        the granularity test guards, seen from the other side.
+        """
+        case = {"unitContracts": {"target": "H",
+                                  "cases": [{"name": "a", "platforms": ["ios"]}]}}
+        result = self.merge(case, json.loads(json.dumps(case)))
+        self.assertFalse(result.has_conflicts, result.conflicts)
+        self.assertEqual(len(result.spec["unitContracts"][0]["cases"]), 1)
+
+    def test_a_block_the_merger_cannot_key_is_carried_not_dropped(self):
+        """A misspelled `cases` must still reach the readers.
+
+        `unitContracts` exists to stop a declaration going missing quietly,
+        so the merger silently discarding a malformed block would reproduce
+        the very defect one layer down — and `validate spec` / `unit-stubs`
+        are the two that name the bad key, so they have to receive it.
+        """
+        result = self.merge({"unitContracts": {"target": "H", "caes": []}})
+        self.assertEqual(result.spec["unitContracts"],
+                         [{"target": "H", "caes": []}])
+
     def test_branch_contracts_and_task_cancellation_come_from_sub_specs(self):
         result = self.merge(
             {"branchContracts": {"methods": {"onLoad": {"branches": []}}},
