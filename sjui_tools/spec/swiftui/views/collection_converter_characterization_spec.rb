@@ -281,4 +281,36 @@ RSpec.describe SjuiTools::SwiftUI::Views::CollectionConverter do
       expect(code).not_to include('ScrollView(')
     end
   end
+
+  # ⚠️ Every example above reads the emitted TEXT. That is what a
+  # characterization spec is for, and it is also how this file spent years
+  # asserting `data.collectionDataSource.getCellData(for: "ItemCell")` —
+  # a property nothing declares, calling a method that exists nowhere in
+  # SwiftJsonUI. Uncompilable Swift, green the whole time, because no
+  # compiler ever read it.
+  #
+  # `-parse` would not have caught it either: that string is syntactically
+  # perfect. Only `-typecheck` rejects it, and type-checking needs the types
+  # the fragment refers to — which is why this arm declares them.
+  describe 'the emitted Swift type-checks', :swift_compile do
+    it 'accepts the sections path and the legacy grid path' do
+      sections = convert(
+        { 'type' => 'Collection', 'columns' => 1,
+          'sections' => [{ 'cell' => 'FooCell' }], 'items' => '@{items}' }
+      )
+      grid = convert(
+        { 'type' => 'Collection', 'lazy' => 'none', 'columns' => 2,
+          'cellClasses' => ['GCell'], 'items' => '@{rows}' }
+      )
+
+      stubs = EmittedSwift::COLLECTION_DATA_SOURCE_STUB +
+              EmittedSwift::COLLECTION_STACK_VIEW_STUB +
+              cell_view_stub('FooCellView', 'GCellView')
+      data = ['var items: CollectionDataSource? = nil',
+              'var rows: CollectionDataSource? = nil']
+
+      expect(compilable_view(sections, data: data, stubs: stubs)).to compile_as_swift
+      expect(compilable_view(grid, data: data, stubs: stubs)).to compile_as_swift
+    end
+  end
 end

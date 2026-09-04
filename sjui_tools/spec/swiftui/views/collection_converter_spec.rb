@@ -729,4 +729,24 @@ RSpec.describe SjuiTools::SwiftUI::Views::CollectionConverter do
       expect(converter.send(:to_camel_case, nil)).to be_nil
     end
   end
+
+  # ⚠️ Every example above asserts emitted TEXT. Three sibling examples did
+  # exactly that for `data.collectionDataSource.getCellData(...)` — a property
+  # nothing declares, calling a method that exists nowhere — and stayed green
+  # for years. `-parse` accepts that string too; only `-typecheck` rejects it,
+  # and type-checking needs the types the fragment names.
+  describe 'the emitted Swift type-checks', :swift_compile do
+    it 'accepts the single-cellClass collection' do
+      code = described_class.new(
+        { 'type' => 'Collection', 'id' => 'target', 'columns' => 1,
+          'cellClasses' => ['ItemCollectionViewCell'], 'items' => '@{rows}' }
+      ).convert
+      stubs = EmittedSwift::COLLECTION_DATA_SOURCE_STUB +
+              EmittedSwift::COLLECTION_STACK_VIEW_STUB +
+              cell_view_stub('ItemView')
+      expect(
+        compilable_view(code, data: ['var rows: CollectionDataSource? = nil'], stubs: stubs)
+      ).to compile_as_swift
+    end
+  end
 end

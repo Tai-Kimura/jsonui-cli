@@ -153,4 +153,18 @@ RSpec.describe 'Collection cell root accessibility container' do
       expect(index_for({ 'type' => 'View', 'child' => [{ 'type' => 'Label', 'text' => 'x' }] })).to eq([])
     end
   end
+
+  # The cell root's emitted Swift, handed to a compiler. Sibling Collection
+  # specs asserted emitted TEXT for years while that text did not compile
+  # (`data.collectionDataSource.getCellData(...)`), and `-parse` would not
+  # have caught it — only `-typecheck`, which needs the types below.
+  describe 'the emitted Swift type-checks', :swift_compile do
+    it 'accepts a cell root with and without an id' do
+      bare = convert(cell_root).to_s
+      with_id = convert(cell_root('id' => 'cell_root')).to_s
+
+      expect(compilable_view(bare)).to compile_as_swift
+      expect(compilable_view(with_id)).to compile_as_swift
+    end
+  end
 end
