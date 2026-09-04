@@ -460,7 +460,31 @@ module SjuiTools
             end
             add_modifier_line ".accessibilityElement(children: .contain)"
           end
-          add_modifier_line ".accessibilityIdentifier(\"#{@component['id']}\")"
+          # Third candidate for a BOUND `hidden` (the first two were measured
+          # wrong and reverted). The static spelling returns above and emits no
+          # identifier at all — that is what makes a statically hidden view
+          # unfindable, and the dynamic face does the same thing
+          # (`applyAccessibilityId` returns early for visibility "invisible").
+          #
+          # A binding cannot return early at codegen time, and the two things
+          # tried instead both failed on the host: `.accessibilityHidden` after
+          # the identifier, and collapsing the container with `children:
+          # .ignore`. The library says why — an explicit accessibility
+          # container ignores `.accessibilityHidden` — but collapsing it was
+          # not enough either, and the one difference left against the working
+          # dynamic recipe is that dynamic emits NO IDENTIFIER while hidden.
+          #
+          # A flat modifier chain cannot skip a line conditionally, so the
+          # identifier itself carries the condition: the declared id while
+          # visible, and an empty one while hidden, which no query for the id
+          # matches.
+          hidden_binding = @component['hidden'] if is_binding?(@component['hidden'])
+          if hidden_binding
+            expr = binding_data_expr(hidden_binding)
+            add_modifier_line ".accessibilityIdentifier(#{expr} ? \"\" : \"#{@component['id']}\")"
+          else
+            add_modifier_line ".accessibilityIdentifier(\"#{@component['id']}\")"
+          end
         end
 
         # Whether the container this converter EMITS becomes an accessibility
