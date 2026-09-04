@@ -696,6 +696,24 @@ class TestUnitContractPages:
         assert pages["undiscoverable"]["ios"] == ["a_case"]
         assert pages["ok"] is False
 
+    def test_implementation_files_are_project_relative_never_absolute(self, tmp_path):
+        # These paths go into a generated site that consumers commit. An
+        # absolute path bakes the developer's home directory — username and
+        # all — into it. `_test_roots` resolves its roots, so absolute is what
+        # arrives here unless this layer relativises it.
+        root = _project(tmp_path, [{"name": "a_case", "platforms": ["ios", "android"]}])
+        _swift(root, "a_case")
+        _kotlin(root, "a_case")
+        pages = uc.unit_contract_pages(root)
+        files = [f for t in pages["targets"] for face in t["faces"].values()
+                 for f in face["files"]]
+        assert files, "fixture produced no file references, so this asserts nothing"
+        for path in files:
+            assert not Path(path).is_absolute(), path
+            assert str(tmp_path) not in path, path
+            assert "\\" not in path, path
+        assert sorted(files) == ["android/test/ChatTest.kt", "ios/Tests/ChatTests.swift"]
+
     def test_spec_file_is_relative_to_the_spec_root_and_keeps_nesting(self, tmp_path):
         # The docs site builds a spec page URL from the spec's PATH, so a
         # nested spec cannot be reached from the screen id alone.

@@ -29,6 +29,7 @@ Three behaviours, and no more:
 from __future__ import annotations
 
 import json
+import os
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -582,6 +583,26 @@ CASE_NOT_DECLARED_FOR_FACE = "not_declared_for_face"
 CASE_NEVER_RUNS = "never_runs"
 
 
+def _relative_to_project(path: str, project_root: Path) -> str:
+    """A project-relative, POSIX path — never an absolute one.
+
+    `_test_roots` resolves its roots, so every implementing file arrives here
+    absolute even when the caller passed a relative project root. Handing that
+    to the docs generator bakes the developer's home directory — username and
+    all — into a generated site that consumers commit. `spec_file` is already
+    relativised at its source; this is the same rule for the other half.
+
+    A root configured outside the project still relativises (`../sibling/...`),
+    which keeps the link usable without naming anyone's home. Only a path with
+    no relative expression at all (a different Windows drive) falls back, and
+    it falls back to the bare filename rather than to something absolute.
+    """
+    try:
+        return Path(os.path.relpath(Path(path), project_root)).as_posix()
+    except ValueError:
+        return Path(path).name
+
+
 def unit_contract_pages(
     project_root: Path,
     spec_dir: str | None = None,
@@ -604,6 +625,7 @@ def unit_contract_pages(
     that is implemented but declared nowhere has no target by definition,
     so there is no page it could belong to.
     """
+    project_root = Path(project_root)
     report = check_unit_contracts(project_root, spec_dir, project_platforms)
     platforms = report.platforms
 
@@ -644,8 +666,9 @@ def unit_contract_pages(
             else:
                 bucket["missing"].append(case.name)
             for path in report.implemented_files.get(platform, {}).get(case.name, []):
-                if path not in bucket["files"]:
-                    bucket["files"].append(path)
+                rel = _relative_to_project(path, project_root)
+                if rel not in bucket["files"]:
+                    bucket["files"].append(rel)
         entry["cases"].append({
             "name": case.name,
             "intent": case.intent,
