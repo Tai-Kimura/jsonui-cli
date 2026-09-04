@@ -523,9 +523,11 @@ def cmd_generate_spec(args):
 
     # Generate content
     if output_format == "html":
-        content = generate_spec_html(spec_data, layouts_dir=layouts_dir)
+        content = generate_spec_html(spec_data, layouts_dir=layouts_dir,
+                                     spec_dir=file_path.parent)
     else:
-        content = generate_spec_markdown(spec_data, layouts_dir=layouts_dir)
+        content = generate_spec_markdown(spec_data, layouts_dir=layouts_dir,
+                                         spec_dir=file_path.parent)
 
     # Output
     if args.output:
@@ -595,9 +597,11 @@ def cmd_generate_spec_batch(args, input_dir: Path):
             continue
 
         # layouts_dir is passed either way so layoutFile import works
-        content = (generate_spec_html(result.spec_data, layouts_dir=layouts_dir)
+        content = (generate_spec_html(result.spec_data, layouts_dir=layouts_dir,
+                                      spec_dir=spec_file.parent)
                    if to_html
-                   else generate_spec_markdown(result.spec_data, layouts_dir=layouts_dir))
+                   else generate_spec_markdown(result.spec_data, layouts_dir=layouts_dir,
+                                               spec_dir=spec_file.parent))
 
         # Preserve subdirectory structure in output
         rel_path = spec_file.relative_to(input_dir)

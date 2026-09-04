@@ -38,7 +38,11 @@ def _format_platform_md(value) -> str:
     return "-"
 
 
-def generate_spec_markdown(spec_data: dict, layouts_dir: Path | None = None) -> str:
+from .html_generator import _sub_spec_sections
+
+
+def generate_spec_markdown(spec_data: dict, layouts_dir: Path | None = None,
+                           spec_dir: Path | None = None) -> str:
     """
     Generate Markdown documentation from screen specification JSON.
 
@@ -88,6 +92,31 @@ def generate_spec_markdown(spec_data: dict, layouts_dir: Path | None = None) -> 
             lines.append(f"| Created | {metadata['createdAt']} |")
         if metadata.get("updatedAt"):
             lines.append(f"| Updated | {metadata['updatedAt']} |")
+        lines.append("")
+
+    # Sub-Specs (for screen_parent_spec). The HTML side has carried this
+    # index since parents existed; markdown had none at all, so a split
+    # screen's markdown page named neither its parts nor where its behaviour
+    # is declared.
+    sub_specs = spec_data.get("subSpecs") or []
+    if sub_specs:
+        lines.append("## Sub Specifications")
+        lines.append("")
+        lines.append(
+            "This screen is split across the sub-specs below. Its behaviour — "
+            "data flow, state, user actions, validation — is declared in them "
+            "and documented on their pages, not here. A parent spec may not "
+            "declare those sections itself."
+        )
+        lines.append("")
+        lines.append("| Name | File | Declares | Description |")
+        lines.append("|---|---|---|---|")
+        for sub in sub_specs:
+            declares = _sub_spec_sections(spec_dir, sub.get("file", ""))
+            lines.append(
+                f"| {sub.get('name', '-')} | `{sub.get('file', '')}` | "
+                f"{declares or '-'} | {sub.get('description', '-')} |"
+            )
         lines.append("")
 
     # Screen Structure
