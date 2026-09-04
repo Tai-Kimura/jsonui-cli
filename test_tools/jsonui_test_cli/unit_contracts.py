@@ -170,6 +170,12 @@ class UnitCase:
     name: str
     platforms: tuple[str, ...]
     intent: str = ""
+    #: Path of the spec this case was read from, relative to the spec root
+    #: and POSIX-separated. For a split screen this is the PARENT: the cases
+    #: arrive through the merged view, which is also the page a reader has to
+    #: get back to. A screen id cannot stand in for it — the docs site builds
+    #: spec URLs from the path, so a nested spec is unreachable from the id.
+    spec_file: str = ""
 
 
 @dataclass
@@ -192,6 +198,8 @@ class UnitContractReport:
     problems: list[str] = field(default_factory=list)
     #: platform -> method names that exist but the runner will never execute
     undiscoverable: dict[str, list[str]] = field(default_factory=dict)
+    #: platform -> case name -> the file(s) that implement it
+    implemented_files: dict[str, dict[str, list[str]]] = field(default_factory=dict)
 
     def missing(self, platform: str) -> list[str]:
         """Declared for this platform, not implemented on it."""
@@ -270,7 +278,11 @@ def discover_unit_contracts(
                     declared_in_sub.setdefault(_screen_of(parent), []).append(screen)
             continue
         spec = _load_spec(path)
-        found, issues = _cases_of(spec, screen)
+        try:
+            rel = path.resolve().relative_to(spec_path).as_posix()
+        except ValueError:
+            rel = path.name
+        found, issues = _cases_of(spec, screen, rel)
         cases.extend(found)
         problems.extend(issues)
         # Read off the spec AS READ, not the raw file. A parent may not
@@ -298,7 +310,7 @@ _BLOCK_KEYS = {"target", "cases"}
 _CASE_KEYS = {"name", "intent", "platforms"}
 
 
-def _cases_of(spec: dict, screen: str) -> tuple[list[UnitCase], list[str]]:
+def _cases_of(spec: dict, screen: str, spec_file: str = "") -> tuple[list[UnitCase], list[str]]:
     """``(cases, problems)`` for one spec.
 
     Every path that drops input reports it. The first cut silently skipped
@@ -367,6 +379,7 @@ def _cases_of(spec: dict, screen: str) -> tuple[list[UnitCase], list[str]]:
                     name=name,
                     platforms=tuple(str(p) for p in platforms),
                     intent=str(case.get("intent") or ""),
+                    spec_file=spec_file,
                 )
             )
     return out, problems
@@ -408,8 +421,18 @@ def _discoverable(platform: str, found: str) -> str | None:
     return None
 
 
-def _implemented_names(root: Path, platform: str) -> tuple[set[str], list[str], set[str]]:
-    """``(case names found, files read, names present but undiscoverable)``."""
+def _implemented_names(
+    root: Path, platform: str
+) -> tuple[set[str], list[str], set[str], dict[str, list[str]]]:
+    """``(case names found, files read, undiscoverable names, name -> files)``.
+
+    The name -> files map is what lets a caller link a case to the file that
+    implements it. The scan used to collapse every file into one set of names
+    and return only a flat list of files read, so "which file carries this
+    case" was not answerable from the result at all -- a doc page could only
+    have guessed it from the filename convention, which is exactly the guess
+    that breaks for a project that does not follow it.
+    """
     suffix = PLATFORM_TEST_SUFFIX.get(platform)
     pattern = _ALL_TESTS_PATTERNS.get(platform)
     if suffix is None or not root.is_dir() or (platform != "ios" and pattern is None):
@@ -417,6 +440,7 @@ def _implemented_names(root: Path, platform: str) -> tuple[set[str], list[str], 
     names: set[str] = set()
     undiscoverable: set[str] = set()
     read: list[str] = []
+    by_name: dict[str, list[str]] = {}
     for path in sorted(root.rglob(f"*{suffix}")):
         try:
             text = path.read_text(encoding="utf-8")
@@ -431,7 +455,10 @@ def _implemented_names(root: Path, platform: str) -> tuple[set[str], list[str], 
                 undiscoverable.add(raw)
             else:
                 names.add(mapped)
-    return names, read, undiscoverable
+                where = by_name.setdefault(mapped, [])
+                if str(path) not in where:
+                    where.append(str(path))
+    return names, read, undiscoverable, by_name
 
 
 def check_unit_contracts(
@@ -476,21 +503,32 @@ def check_unit_contracts(
                     f"check that before suspecting the path"
                 )
             continue
-        found, read, undiscoverable = _implemented_names(root, platform)
+        found, read, undiscoverable, by_name = _implemented_names(root, platform)
         report.implemented[platform] = found
         report.scanned_files[platform] = read
+        report.implemented_files[platform] = by_name
         if undiscoverable:
             report.undiscoverable[platform] = sorted(undiscoverable)
     return report
 
 
-def format_report(report: UnitContractReport) -> list[str]:
-    """Human-readable lines, always naming the denominator."""
-    lines = [
+def summary_line(report: UnitContractReport) -> str:
+    """The denominator line, in one place.
+
+    `--check` prints it and the generated docs index shows it. Requirement 3
+    of the docs ticket is that the two carry the SAME numbers, and the only
+    way two call sites cannot drift is for there to be one call site.
+    """
+    return (
         f"unit contracts: {len(report.cases)} case(s) declared across "
         f"{len(report.scanned_specs)} spec(s) scanned "
         f"({len(report.declaring_specs)} carrying a unitContracts block)"
-    ]
+    )
+
+
+def format_report(report: UnitContractReport) -> list[str]:
+    """Human-readable lines, always naming the denominator."""
+    lines = [summary_line(report)]
     for problem in report.problems:
         lines.append(f"  PROBLEM  {problem}")
     if report.declaring_specs and not report.cases:
@@ -527,6 +565,121 @@ def format_report(report: UnitContractReport) -> list[str]:
                 f"as present, and executes zero times)"
             )
     return lines
+
+
+#: Per-case status on one face. `missing` and `not_declared_for_face` are
+#: kept apart deliberately: a case declared for ios only is NOT an android
+#: failure, and collapsing the two makes a correct project's page read red.
+CASE_IMPLEMENTED = "implemented"
+CASE_MISSING = "missing"
+CASE_NOT_DECLARED_FOR_FACE = "not_declared_for_face"
+#: Written, compiles, reads as present -- and executes zero times, because
+#: the runner will not discover it (XCTest needs a `test` prefix). It is NOT
+#: `missing`: a reader told "missing" goes and writes a test that already
+#: exists, and it still will not run. `--check` has a dedicated NEVER RUNS
+#: line for it, so collapsing it here would lose on the site what the CLI
+#: already says.
+CASE_NEVER_RUNS = "never_runs"
+
+
+def unit_contract_pages(
+    project_root: Path,
+    spec_dir: str | None = None,
+    project_platforms: list[str] | None = None,
+) -> dict:
+    """The `unit-stubs --check` judgment, grouped by target, as plain data.
+
+    For `document_tools`, which generates one page per target and needs the
+    per-face implementation state on it. Returns JSON-safe values only (no
+    sets; every list sorted) so the caller can serialise or template it
+    directly.
+
+    The judgment itself is NOT reimplemented here -- this calls
+    `check_unit_contracts` and regroups its result. Two generations of
+    "is this case implemented" is exactly the drift the unitContracts
+    mechanism exists to prevent, and a second copy living in the docs
+    generator would be invisible to `--check`'s own tests.
+
+    `undeclared` is returned at the TOP LEVEL, not under a target: a case
+    that is implemented but declared nowhere has no target by definition,
+    so there is no page it could belong to.
+    """
+    report = check_unit_contracts(project_root, spec_dir, project_platforms)
+    platforms = report.platforms
+
+    by_target: dict[str, dict] = {}
+    for case in report.cases:
+        entry = by_target.setdefault(
+            case.target,
+            {"target": case.target, "screens": [], "cases": [],
+             "spec_files": [],
+             "faces": {p: {"declared": [], "implemented": [], "missing": [],
+                           "never_runs": [], "files": []}
+                       for p in platforms}},
+        )
+        if case.screen not in entry["screens"]:
+            entry["screens"].append(case.screen)
+        if case.spec_file and case.spec_file not in entry["spec_files"]:
+            entry["spec_files"].append(case.spec_file)
+        faces = case.platforms or tuple(platforms)
+        status = {}
+        for platform in platforms:
+            if platform not in faces:
+                status[platform] = CASE_NOT_DECLARED_FOR_FACE
+                continue
+            implemented = case.name in report.implemented.get(platform, set())
+            never_runs = case.name in report.undiscoverable.get(platform, [])
+            if implemented:
+                status[platform] = CASE_IMPLEMENTED
+            elif never_runs:
+                status[platform] = CASE_NEVER_RUNS
+            else:
+                status[platform] = CASE_MISSING
+            bucket = entry["faces"][platform]
+            bucket["declared"].append(case.name)
+            if implemented:
+                bucket["implemented"].append(case.name)
+            elif never_runs:
+                bucket["never_runs"].append(case.name)
+            else:
+                bucket["missing"].append(case.name)
+            for path in report.implemented_files.get(platform, {}).get(case.name, []):
+                if path not in bucket["files"]:
+                    bucket["files"].append(path)
+        entry["cases"].append({
+            "name": case.name,
+            "intent": case.intent,
+            "platforms": sorted(faces),
+            "status": status,
+        })
+
+    targets = []
+    for target in sorted(by_target):
+        entry = by_target[target]
+        entry["screens"] = sorted(entry["screens"])
+        entry["spec_files"] = sorted(entry["spec_files"])
+        entry["cases"] = sorted(entry["cases"], key=lambda c: c["name"])
+        for bucket in entry["faces"].values():
+            for key in ("declared", "implemented", "missing", "never_runs", "files"):
+                bucket[key] = sorted(set(bucket[key]))
+        targets.append(entry)
+
+    return {
+        "totals": {
+            "cases": len(report.cases),
+            "specs_scanned": len(report.scanned_specs),
+            "specs_declaring": len(report.declaring_specs),
+            "targets": len(targets),
+            "summary_line": summary_line(report),
+        },
+        "platforms": platforms,
+        "ok": report.ok,
+        "problems": list(report.problems),
+        "unscannable": dict(report.unscannable),
+        "undiscoverable": {p: list(v) for p, v in sorted(report.undiscoverable.items())},
+        "undeclared": {p: report.undeclared(p) for p in platforms if report.undeclared(p)},
+        "targets": targets,
+    }
 
 
 #: Marker pair a generated stub file carries. Everything outside it is the
