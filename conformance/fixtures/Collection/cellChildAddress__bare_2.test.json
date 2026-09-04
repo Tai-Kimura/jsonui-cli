@@ -1,0 +1,40 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/Collection/cellChildAddress__bare_2.layout.json"
+  },
+  "metadata": {
+    "name": "conformance cellChildAddress__bare_2",
+    "description": "A cell whose root declares no id keeps its 2 child identifiers, while the cell is addressable as target_item_0.",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "Collection"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "cellChildAddress__bare_2",
+      "description": "A cell whose root declares no id keeps its 2 child identifiers, while the cell is addressable as target_item_0.",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "waitFor",
+          "id": "target_item_0"
+        },
+        {
+          "action": "waitFor",
+          "id": "cell_child_a"
+        },
+        {
+          "action": "waitFor",
+          "id": "cell_child_b"
+        }
+      ]
+    }
+  ]
+}

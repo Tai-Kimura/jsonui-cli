@@ -2691,7 +2691,13 @@ BASE_DATA: dict[str, list[dict[str, Any]]] = {
 #: into the directory its production loader reads (assets/Layouts on Android,
 #: Resources/Layouts on iOS, Layouts/pages on web) under the bare file name.
 BASE_COMPANIONS: dict[str, list[str]] = {
-    "Collection": ["fixtures/Collection/__cells/conformance_cell.layout.json"],
+    "Collection": [
+        "fixtures/Collection/__cells/conformance_cell.layout.json",
+        # Cells whose ROOT declares no id — the shape the corpus lacked, and
+        # the reason the cell-address suite was green through the defect.
+        "fixtures/Collection/__cells/conformance_cell_bare.layout.json",
+        "fixtures/Collection/__cells/conformance_cell_bare_single.layout.json",
+    ],
 }
 
 #: Companion layout payloads the generator writes once per run, keyed by
@@ -2707,6 +2713,60 @@ BASE_COMPANIONS: dict[str, list[str]] = {
 #: dynamic renderers infer/resolve the binding either way; the declared
 #: empty default is overridden by each rendered cell's data.
 SUPPORT_LAYOUTS: dict[str, dict[str, Any]] = {
+    #: A cell root with NO id and two identified children. `conformance_cell`
+    #: declares `id: "cell_root"`, which already made it an explicit
+    #: accessibility container — so every Collection fixture in the corpus
+    #: rendered the one shape the defect cannot occur in.
+    "fixtures/Collection/__cells/conformance_cell_bare.layout.json": {
+        "type": "View",
+        "width": 60,
+        "height": 40,
+        "background": "#3366CC",
+        "data": [
+            {"name": "title", "class": "String", "defaultValue": ""}
+        ],
+        "child": [
+            {
+                "type": "Label",
+                "id": "cell_child_a",
+                "text": "@{title}",
+                "fontSize": 11,
+                "fontColor": "#FFFFFF",
+                "padding": 2,
+            },
+            {
+                "type": "Label",
+                "id": "cell_child_b",
+                "text": "b",
+                "fontSize": 11,
+                "fontColor": "#FFFFFF",
+                "padding": 2,
+            },
+        ],
+    },
+    #: The single-child shape. SwiftUI merges a container holding one
+    #: accessibility child, which would put the wrapper's address back onto
+    #: that child; this is the fixture that decides whether each renderer
+    #: needs the anchor overlay against that merge.
+    "fixtures/Collection/__cells/conformance_cell_bare_single.layout.json": {
+        "type": "View",
+        "width": 60,
+        "height": 28,
+        "background": "#3366CC",
+        "data": [
+            {"name": "title", "class": "String", "defaultValue": ""}
+        ],
+        "child": [
+            {
+                "type": "Label",
+                "id": "cell_only_child",
+                "text": "@{title}",
+                "fontSize": 11,
+                "fontColor": "#FFFFFF",
+                "padding": 4,
+            }
+        ],
+    },
     "fixtures/Collection/__cells/conformance_cell.layout.json": {
         "type": "View",
         "id": "cell_root",

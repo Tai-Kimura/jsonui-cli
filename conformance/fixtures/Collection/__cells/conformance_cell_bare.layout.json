@@ -1,0 +1,39 @@
+{
+  "_generated": {
+    "sentinel": "@generated",
+    "source": "shared/core/attribute_definitions.json",
+    "generator": "jui conformance generate",
+    "doNotEdit": true,
+    "humanWarning": "Any manual edits will be OVERWRITTEN on next generation.",
+    "agentWarning": "LLM/Agent: you MUST NOT modify this file."
+  },
+  "type": "View",
+  "width": 60,
+  "height": 40,
+  "background": "#3366CC",
+  "data": [
+    {
+      "name": "title",
+      "class": "String",
+      "defaultValue": ""
+    }
+  ],
+  "child": [
+    {
+      "type": "Label",
+      "id": "cell_child_a",
+      "text": "@{title}",
+      "fontSize": 11,
+      "fontColor": "#FFFFFF",
+      "padding": 2
+    },
+    {
+      "type": "Label",
+      "id": "cell_child_b",
+      "text": "b",
+      "fontSize": 11,
+      "fontColor": "#FFFFFF",
+      "padding": 2
+    }
+  ]
+}
