@@ -2361,6 +2361,39 @@ def cmd_artifacts_status(args):
     return 0
 
 
+def cmd_artifacts_prune_legacy(args):
+    """List (default) or delete (--yes) the suites left in the flat legacy Android mirror."""
+    from . import artifacts
+
+    test_cfg, _cfg_path = _load_test_config(getattr(args, "config", None))
+    info = artifacts.prune_legacy_android(test_cfg, serial_override=args.serial, yes=args.yes)
+
+    if args.json:
+        print(json.dumps(info, ensure_ascii=False, indent=2))
+    else:
+        print(f"Legacy mirror: {info['root']}")
+        if info["suites"]:
+            verb = "deleted" if not info["dryRun"] else "would delete"
+            print(f"  suite dirs ({verb}, {len(info['suites'])}):")
+            for name in info["suites"]:
+                mark = "  x" if name in info["deleted"] else "   "
+                print(f"  {mark} {name}")
+        else:
+            print("  suite dirs: none")
+        if info["packages"]:
+            print(f"  left alone (other apps' scoped mirrors, {len(info['packages'])}):")
+            for name in info["packages"]:
+                print(f"      {name}")
+        for reason in info["skipped"]:
+            print(f"  skipped ({reason})")
+        if info["dryRun"] and info["suites"]:
+            print("  dry run — nothing deleted. This root has no app dimension: entries can belong to any app "
+                  "that ran on this device with an android driver < 1.8.9. Re-run with --yes only once every "
+                  "app on the device writes the scoped mirror (driver >= 1.8.9).")
+
+    return 1 if info["skipped"] and not info["suites"] and not info["packages"] else 0
+
+
 def _steps_use_add_media(steps):
     """True if any step (or nested repeat/retry step) is an addMedia step
     reachable on iOS (i.e. not gated off ios by its own `when.platform`)."""
@@ -3018,6 +3051,18 @@ def main():
     artifacts_status_parser.add_argument("--json", action="store_true",
                                          help="Print status as a single JSON object")
 
+    artifacts_prune_parser = artifacts_subparsers.add_parser(
+        "prune-legacy",
+        help="List (default) or delete (--yes) the suites left in the flat legacy Android mirror "
+             "/data/local/tmp/jsonui-artifacts — the one deliberate exit from it; pull --clean never touches it")
+    artifacts_prune_parser.add_argument("--serial",
+                                        help="adb device serial (overrides test.artifacts.android.serial)")
+    artifacts_prune_parser.add_argument("--yes", action="store_true",
+                                        help="Actually delete the listed suite dirs (default is a dry run)")
+    artifacts_prune_parser.add_argument("--config", help="Config file (default: jui.config.json)")
+    artifacts_prune_parser.add_argument("--json", action="store_true",
+                                        help="Print result as a single JSON object")
+
     # Pregrant command (iOS addMedia)
     pregrant_parser = subparsers.add_parser(
         "pregrant",
@@ -3076,6 +3121,8 @@ def main():
             return cmd_artifacts_pull(args)
         elif getattr(args, "artifacts_action", None) == "status":
             return cmd_artifacts_status(args)
+        elif getattr(args, "artifacts_action", None) == "prune-legacy":
+            return cmd_artifacts_prune_legacy(args)
         artifacts_parser.print_help()
         return 0
     elif args.command == "pregrant":

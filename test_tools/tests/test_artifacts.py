@@ -445,6 +445,70 @@ class TestPullAndroidMirrorScope:
         assert artifacts._legacy_entries("Suite\n") == (["Suite"], [])
 
 
+class TestPruneLegacyAndroid:
+    """The one deliberate exit from the flat legacy mirror: a person lists
+    what is there and, having decided every app on the device writes the
+    scoped mirror, deletes the suite entries. Never the scoped dirs, never
+    the root, never without --yes.
+    """
+
+    LISTING = "LoginSmokeTest\ncom.other.app\nProfiling_Resume\ncom.example.app\n"
+
+    @pytest.fixture(autouse=True)
+    def _pin(self, monkeypatch):
+        monkeypatch.setattr(artifacts, "find_adb", lambda cfg=None: "adb")
+
+    def test_dry_run_lists_and_deletes_nothing(self, monkeypatch):
+        calls = []
+        monkeypatch.setattr(artifacts, "_run", make_adb_fake(
+            {TMP_ROOT}, calls, listings={TMP_ROOT: self.LISTING}))
+
+        info = artifacts.prune_legacy_android(ANDROID_CFG)
+
+        assert info["dryRun"] is True
+        assert info["suites"] == ["LoginSmokeTest", "Profiling_Resume"]
+        assert info["packages"] == ["com.other.app", "com.example.app"]
+        assert info["deleted"] == []
+        assert _rms(calls) == []
+
+    def test_yes_deletes_only_suite_entries(self, monkeypatch):
+        calls = []
+        monkeypatch.setattr(artifacts, "_run", make_adb_fake(
+            {TMP_ROOT}, calls, listings={TMP_ROOT: self.LISTING}))
+
+        info = artifacts.prune_legacy_android(ANDROID_CFG, yes=True)
+
+        assert info["deleted"] == ["LoginSmokeTest", "Profiling_Resume"]
+        assert [c[-1] for c in _rms(calls)] == [
+            f"{TMP_ROOT}/LoginSmokeTest", f"{TMP_ROOT}/Profiling_Resume"]
+        # the other apps' scoped dirs and the root itself are never removed
+        assert not any(c[-1] in (TMP_ROOT, f"{TMP_ROOT}/com.other.app", f"{TMP_ROOT}/com.example.app")
+                       for c in _rms(calls))
+
+    def test_no_legacy_root_is_reported_not_raised(self, monkeypatch):
+        calls = []
+        monkeypatch.setattr(artifacts, "_run", make_adb_fake(set(), calls))
+
+        info = artifacts.prune_legacy_android(ANDROID_CFG, yes=True)
+
+        assert info["suites"] == [] and info["deleted"] == []
+        assert any("no legacy mirror" in s for s in info["skipped"])
+        assert _rms(calls) == []
+
+    def test_serial_override_and_no_device(self, monkeypatch):
+        calls = []
+        monkeypatch.setattr(artifacts, "_run", make_adb_fake(
+            {TMP_ROOT}, calls, listings={TMP_ROOT: self.LISTING}))
+        artifacts.prune_legacy_android(ANDROID_CFG, serial_override="emulator-5554")
+        assert all(c[:3] == ["adb", "-s", "emulator-5554"] for c in calls)
+
+        def no_device(cmd, **kw):
+            return _cp(cmd, 1, "", "adb: no devices/emulators found")
+        monkeypatch.setattr(artifacts, "_run", no_device)
+        info = artifacts.prune_legacy_android(ANDROID_CFG, yes=True)
+        assert info["deleted"] == [] and any("no devices" in s for s in info["skipped"])
+
+
 # -- tests: status / symlink / exit codes ------------------------------------------
 
 class TestStatus:
@@ -671,6 +735,32 @@ class TestCliArgv:
         assert data["artifactsDir"] == str((tmp_path / "arts").resolve())
         assert data["android"]["appId"] == "com.example.app"
         assert data["existing"] == []
+
+    def test_prune_legacy_dry_run_json_then_yes(self, tmp_path, monkeypatch, capsys):
+        cfg_file = _write_config(tmp_path, {"android": {"appId": "com.example.app"}})
+        monkeypatch.setattr(artifacts, "find_adb", lambda cfg=None: "adb")
+        calls = []
+        monkeypatch.setattr(artifacts, "_run", make_adb_fake(
+            {TMP_ROOT}, calls, listings={TMP_ROOT: "LoginSmokeTest\ncom.other.app\n"}))
+
+        with patch.object(sys, "argv", [
+                "jsonui-test", "artifacts", "prune-legacy", "--json", "--config", str(cfg_file)]):
+            rc = main()
+        assert rc == 0
+        data = json.loads(capsys.readouterr().out)
+        assert data["dryRun"] is True
+        assert data["suites"] == ["LoginSmokeTest"] and data["packages"] == ["com.other.app"]
+        assert data["deleted"] == [] and _rms(calls) == []
+
+        with patch.object(sys, "argv", [
+                "jsonui-test", "a", "prune-legacy", "--yes", "--serial", "emulator-5554",
+                "--config", str(cfg_file)]):
+            rc = main()
+        assert rc == 0
+        out = capsys.readouterr().out
+        assert "deleted" in out and "LoginSmokeTest" in out and "com.other.app" in out
+        assert [c[-1] for c in _rms(calls)] == [f"{TMP_ROOT}/LoginSmokeTest"]
+        assert all(c[:3] == ["adb", "-s", "emulator-5554"] for c in calls[-2:])
 
     def test_bare_artifacts_prints_help(self, tmp_path, capsys):
         with patch.object(sys, "argv", ["jsonui-test", "artifacts"]):
