@@ -18,6 +18,19 @@ module SjuiTools
 
         module_function
 
+        # A path the emitters may put after `data.`: identifier segments,
+        # dots, and array indices. Anything else — a space, an operator, an
+        # empty inner — is not a path, and interpolating it produces code
+        # that does not compile. Measured 2026-09-04: `@{ bad name }` emitted
+        # "\(data.bad name ?? \"\")", which `swiftc -parse` rejects, from a
+        # build that exited 0 and reported only "undefined variable".
+        PATH_RE = /\A[a-zA-Z_][a-zA-Z0-9_]*(?:\[[0-9]+\])?(?:\.[a-zA-Z_][a-zA-Z0-9_]*(?:\[[0-9]+\])?)*\z/.freeze
+
+        # True when the parsed path can be emitted as Swift.
+        def emittable_path?(path)
+          path.to_s.match?(PATH_RE)
+        end
+
         def binding?(value)
           value.is_a?(String) && value.start_with?('@{') && value.end_with?('}')
         end
@@ -64,6 +77,12 @@ module SjuiTools
           end
         end
 
+        # A Swift string literal carrying the author's own text.
+        def swift_literal_for(text)
+          escaped = text.to_s.gsub('\\', '\\\\').gsub('"', '\\"')
+          "\"#{escaped}\""
+        end
+
         # Swift literal for the parsed default, or nil when none/null.
         def swift_default_literal(parsed)
           case parsed.default_kind
@@ -94,6 +113,8 @@ module SjuiTools
         # properties (dead code otherwise, see non_optional?).
         def swift_value_expr(inner, prefix: 'data')
           parsed = parse(inner)
+          return swift_literal_for("@{#{inner}}") unless emittable_path?(parsed.path)
+
           base = "#{prefix}.#{parsed.path}"
 
           if parsed.negated
@@ -115,6 +136,10 @@ module SjuiTools
         # default (or false) so the emitted condition always compiles.
         def swift_bool_expr(inner, prefix: 'data')
           parsed = parse(inner)
+          # No literal fits every value position; `false` is the safest
+          # compilable thing in a boolean one.
+          return 'false' unless emittable_path?(parsed.path)
+
           base = "#{prefix}.#{parsed.path}"
           if non_optional?(parsed.path)
             parsed.negated ? "!#{base}" : base
@@ -132,6 +157,9 @@ module SjuiTools
         def swift_text_expr(inner, prefix: 'data')
           parsed = parse(inner)
           return nil if parsed.negated
+          # Not a path: refuse rather than emit code that will not compile.
+          # Callers already have a no-expression branch.
+          return nil unless emittable_path?(parsed.path)
 
           base = "#{prefix}.#{parsed.path}"
           return base if non_optional?(parsed.path)
