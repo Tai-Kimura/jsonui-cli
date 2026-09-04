@@ -42,7 +42,7 @@ module JsonUI
         { name: 'inView', kind: :string }.freeze,
         # Include prompt in binding
         { name: 'includePromptWhenDataBinding', kind: :boolean }.freeze,
-        # List of items for normal picker (can be template variable)
+        # List of items for normal picker (can be template variable). Data (usually bound): entries are rendered as given and are NOT looked up in strings.
         { name: 'items', kind: :array, bindable: true }.freeze,
         # Label styling attributes
         { name: 'labelAttributes', kind: :object }.freeze,

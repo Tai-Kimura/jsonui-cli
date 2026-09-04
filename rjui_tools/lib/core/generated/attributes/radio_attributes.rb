@@ -32,7 +32,7 @@ module JsonUI
         { name: 'iconColor', kind: :color }.freeze,
         # Icon size (pt / dp).
         { name: 'iconSize', kind: :number }.freeze,
-        # List of items for normal picker (can be template variable). Declared from the implementation, which already read it: sjui radio_converter.rb:13 — the option list a radio GROUP renders; with it the converter emits a group, without it a single radio (plan 51-E).
+        # List of items for normal picker (can be template variable). Declared from the implementation, which already read it: sjui radio_converter.rb:13 — the option list a radio GROUP renders; with it the converter emits a group, without it a single radio (plan 51-E). Data (usually bound): entries are rendered as given and are NOT looked up in strings.
         { name: 'items', kind: :array, bindable: true }.freeze,
         # Radio label (can be data binding)
         { name: 'label', kind: :string, bindable: true }.freeze,
