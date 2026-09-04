@@ -196,6 +196,90 @@ class BaselineUpdateTest(unittest.TestCase):
 
 
 @unittest.skipUnless(HAVE_PILLOW, "Pillow not installed (jui-tools[conformance])")
+class AdditiveBakeTest(unittest.TestCase):
+    """`--only-new`: insert what is missing, touch nothing else.
+
+    The wholesale rewrite is right for a recalibration and wrong for "these
+    fixtures never got baselines", because it also writes every drifted
+    picture into the baseline in the same pass. On 2026-09-04 two lanes did
+    that job with a hand-written merge and a `git diff --numstat` check; the
+    check was what made it safe, not the command. These arms are that check,
+    moved into the tool.
+    """
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.conf = Path(self._tmp.name)
+        self.art = self.conf / "artifacts" / "web"
+        _write_png(self.art / "stable.png")
+        _write_png(self.art / "drifts.png", gradient_horizontal=True)
+        _write_png(self.art / "goes_away.png")
+        baseline.update_baseline(
+            self.conf, "web", rendered_by={"rjui": "tree:abc123"}
+        )
+        self.committed = json.loads(
+            baseline.baseline_path(self.conf, "web").read_text(encoding="utf-8")
+        )
+        # Second run: one picture changed, one vanished, one is brand new.
+        _write_png(self.art / "drifts.png", gradient_horizontal=False)
+        (self.art / "goes_away.png").unlink()
+        _write_png(self.art / "brand_new.png", gradient_horizontal=True)
+
+    def tearDown(self):
+        self._tmp.cleanup()
+
+    def _hashes(self):
+        return json.loads(
+            baseline.baseline_path(self.conf, "web").read_text(encoding="utf-8")
+        )["hashes"]
+
+    def test_only_new_inserts_the_missing_entry(self):
+        s = baseline.update_baseline(self.conf, "web", only_new=True)
+        self.assertIn("brand_new.png", self._hashes())
+        self.assertEqual(list(s.new), ["brand_new.png"])
+
+    def test_only_new_keeps_a_drifted_picture_at_its_committed_hash(self):
+        # The arm that matters: absorbing this silently is how a regression
+        # stops being a regression.
+        before = self.committed["hashes"]["drifts.png"]
+        baseline.update_baseline(self.conf, "web", only_new=True)
+        self.assertEqual(self._hashes()["drifts.png"], before)
+
+    def test_only_new_does_not_remove_a_vanished_entry(self):
+        baseline.update_baseline(self.conf, "web", only_new=True)
+        self.assertIn("goes_away.png", self._hashes())
+
+    def test_only_new_keeps_the_committed_provenance_it_did_not_redraw(self):
+        # An additive bake did not draw the old pictures, so it must not
+        # restate — or blank — who drew them.
+        baseline.update_baseline(self.conf, "web", only_new=True)
+        payload = json.loads(
+            baseline.baseline_path(self.conf, "web").read_text(encoding="utf-8")
+        )
+        self.assertEqual(payload["rendered_by"], {"rjui": "tree:abc123"})
+
+    def test_the_wholesale_default_still_rewrites_everything(self):
+        # Not a defect: recalibration needs it. Pinned so that "only-new is
+        # the default now" cannot happen by accident.
+        baseline.update_baseline(self.conf, "web")
+        h = self._hashes()
+        self.assertNotEqual(h["drifts.png"], self.committed["hashes"]["drifts.png"])
+        self.assertNotIn("goes_away.png", h)
+
+    def test_classification_is_reported_before_the_mode_is_applied(self):
+        # The counts describe what the run FOUND, not what it wrote, so a
+        # reader can see what a wholesale bake would have changed while
+        # running the additive one. Both modes classify against the same
+        # committed baseline, so both must report the same four sets.
+        additive = baseline.update_baseline(self.conf, "web", only_new=True)
+        self.assertEqual(list(additive.new), ["brand_new.png"])
+        self.assertEqual([n for n, _ in additive.moved], ["drifts.png"])
+        self.assertEqual(list(additive.dropped), ["goes_away.png"])
+        self.assertEqual(list(additive.same), ["stable.png"])
+        self.assertTrue(all(d > 0 for _, d in additive.moved))
+
+
+@unittest.skipUnless(HAVE_PILLOW, "Pillow not installed (jui-tools[conformance])")
 class ComparePlatformTest(unittest.TestCase):
     def setUp(self):
         self._tmp = tempfile.TemporaryDirectory()

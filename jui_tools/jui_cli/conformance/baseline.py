@@ -236,6 +236,18 @@ class BaselineUpdateSummary:
     platform: str
     hashed: int = 0
     env: str = DEFAULT_ENV
+    #: Classification against the baseline that was already committed. Always
+    #: computed, because "what else would this write have changed" is the
+    #: question a bake cannot answer after the fact.
+    new: tuple[str, ...] = ()
+    same: tuple[str, ...] = ()
+    moved: tuple[tuple[str, int], ...] = ()   # (name, hamming distance)
+    dropped: tuple[str, ...] = ()
+    only_new: bool = False
+
+    @property
+    def written(self) -> int:
+        return self.hashed
 
 
 def update_baseline(
@@ -245,6 +257,7 @@ def update_baseline(
     env: str = DEFAULT_ENV,
     threshold: int | None = None,
     rendered_by: dict[str, str] | None = None,
+    only_new: bool = False,
 ) -> BaselineUpdateSummary:
     """Hash every PNG under the platform's artifacts dir into the manifest.
 
@@ -253,6 +266,19 @@ def update_baseline(
     per-(env, platform) recalibration is the anticipated path when a
     renderer's measured repeat-run noise differs from the shared default
     (baselines/README.md records each calibration; measure before changing).
+
+    *only_new* inserts entries the baseline does not have and touches nothing
+    else. Without it this rewrites the manifest wholesale, which is the right
+    thing for a recalibration and the wrong thing for "the four new fixtures
+    never got baselines" — the wholesale write absorbs every drifted picture
+    into the baseline at the same time, and a regression that gets absorbed
+    stops being a regression. That default cost two lanes a hand-written merge
+    script and a `git diff --numstat` check on 2026-09-04; the check was what
+    made those bakes safe, not the command.
+
+    Either way the summary carries the full classification (new / same / moved
+    / dropped) so the caller can see what a wholesale write *would* have
+    changed, before deciding it wanted one.
     """
     conformance_dir = Path(conformance_dir)
     if artifacts_dir is None:
@@ -268,7 +294,27 @@ def update_baseline(
         raise BaselineError(f"no screenshots under {artifacts_dir} — nothing to baseline")
 
     crop = chrome_crop(platform, env)
-    hashes = {png.name: dhash_file(png, crop) for png in pngs}
+    measured = {png.name: dhash_file(png, crop) for png in pngs}
+
+    # Classify against what is already committed, whichever mode we are in.
+    previous = load_baseline(conformance_dir, platform, env) or {}
+    prior: dict[str, str] = dict(previous.get("hashes") or {})
+    new_names = sorted(n for n in measured if n not in prior)
+    same_names = sorted(n for n in measured if n in prior and prior[n] == measured[n])
+    moved_pairs = tuple(
+        (n, hamming(prior[n], measured[n]))
+        for n in sorted(measured)
+        if n in prior and prior[n] != measured[n]
+    )
+    dropped_names = sorted(n for n in prior if n not in measured)
+
+    if only_new:
+        # Existing entries keep their committed hash; nothing is removed.
+        hashes = dict(prior)
+        hashes.update({n: measured[n] for n in new_names})
+        hashes = {k: hashes[k] for k in sorted(hashes)}
+    else:
+        hashes = measured
 
     out_path = baseline_path(conformance_dir, platform, env)
     out_path.parent.mkdir(parents=True, exist_ok=True)
@@ -293,7 +339,16 @@ def update_baseline(
         # participates in a comparison. Folding it in would make a library
         # bump read as "the picture changed", which is the confusion this
         # exists to end.
-        "rendered_by": dict(sorted((rendered_by or {}).items())),
+        # An additive bake did not re-draw the pictures that were already
+        # here, so it must not restate who drew them. Passing nothing in
+        # only-new mode keeps the committed provenance rather than blanking it.
+        "rendered_by": (
+            dict(sorted(rendered_by.items()))
+            if rendered_by
+            else dict(sorted((previous.get("rendered_by") or {}).items()))
+            if only_new
+            else {}
+        ),
         "hashes": hashes,
     }
     out_path.write_text(
@@ -301,7 +356,15 @@ def update_baseline(
         encoding="utf-8",
     )
     return BaselineUpdateSummary(
-        out_path=out_path, platform=platform, hashed=len(hashes), env=env
+        out_path=out_path,
+        platform=platform,
+        hashed=len(hashes),
+        env=env,
+        new=tuple(new_names),
+        same=tuple(same_names),
+        moved=moved_pairs,
+        dropped=tuple(dropped_names),
+        only_new=only_new,
     )
 
 
