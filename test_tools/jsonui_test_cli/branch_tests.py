@@ -2582,18 +2582,75 @@ final class BranchURLProtocol: URLProtocol {
 /// never consult it. Swizzle the `default`/`ephemeral` getters (the
 /// OHHTTPStubs-proven approach) so every new configuration carries the
 /// branch protocol at the front of protocolClasses.
-private let installConfigurationSwizzle: Void = {
-  for selector in [#selector(getter: URLSessionConfiguration.default),
-                   #selector(getter: URLSessionConfiguration.ephemeral)] {
-    let swizzled = selector == #selector(getter: URLSessionConfiguration.default)
-      ? #selector(URLSessionConfiguration.branchTestDefault)
-      : #selector(URLSessionConfiguration.branchTestEphemeral)
-    guard let original = class_getClassMethod(URLSessionConfiguration.self, selector),
-          let replacement = class_getClassMethod(URLSessionConfiguration.self, swizzled)
-    else { continue }
-    method_exchangeImplementations(original, replacement)
+/// ⚠️ `method_exchangeImplementations` TOGGLES. Running this twice puts the
+/// original getters back and silently un-intercepts everything — and because
+/// the branch suite and any hand-written unit tests share one process, that
+/// showed up only for some class execution orders. So the exchange happens
+/// exactly once per process, behind a flag, and every entry point goes
+/// through `installBranchURLInterception()` rather than touching it directly.
+private final class BranchSwizzleState {
+  static let shared = BranchSwizzleState()
+  private var installed = false
+  private let lock = NSLock()
+  /// Idempotent: N calls leave interception installed exactly once.
+  func installOnce() {
+    lock.lock()
+    defer { lock.unlock() }
+    if installed { return }
+    installed = true
+    for selector in [#selector(getter: URLSessionConfiguration.default),
+                     #selector(getter: URLSessionConfiguration.ephemeral)] {
+      let swizzled = selector == #selector(getter: URLSessionConfiguration.default)
+        ? #selector(URLSessionConfiguration.branchTestDefault)
+        : #selector(URLSessionConfiguration.branchTestEphemeral)
+      guard let original = class_getClassMethod(URLSessionConfiguration.self, selector),
+            let replacement = class_getClassMethod(URLSessionConfiguration.self, swizzled)
+      else { continue }
+      method_exchangeImplementations(original, replacement)
+    }
   }
-}()
+}
+
+/// Install HTTP interception for hand-written tests that do not go through
+/// `runBranchTest` — spec `unitContracts` cases, for instance.
+///
+/// `URLProtocol.registerClass` alone is NOT enough: it only reaches
+/// `URLSession.shared`, and a consumer stack building sessions from
+/// `URLSessionConfiguration.default` never consults it. Call this instead.
+///
+/// Safe to call from any number of tests and in any order with respect to
+/// `runBranchTest`: both routes lead to the same one-shot installer.
+///
+/// Internal, not public: this file is compiled INTO the test target, and
+/// `RouteSpec` is internal — `public` here is a compile error, not a wider
+/// audience (measured: "function cannot be declared public because its
+/// parameter uses an internal type").
+func installBranchURLInterception() {
+  BranchSwizzleState.shared.installOnce()
+}
+
+/// Serve `routes` for the duration of `body`, outside `runBranchTest`.
+///
+/// Restores the previous routes afterwards rather than clearing them, so a
+/// nested use inside a branch test cannot strip the outer one's stubs.
+func withBranchRoutes<T>(
+  _ routes: [RouteSpec],
+  overrides: [String: String] = [:],
+  _ body: () throws -> T
+) rethrows -> T {
+  installBranchURLInterception()
+  let previousRoutes = BranchURLProtocol.routes
+  let previousOverrides = BranchURLProtocol.overrides
+  BranchURLProtocol.routes = routes
+  BranchURLProtocol.overrides = overrides
+  URLProtocol.registerClass(BranchURLProtocol.self)
+  defer {
+    URLProtocol.unregisterClass(BranchURLProtocol.self)
+    BranchURLProtocol.routes = previousRoutes
+    BranchURLProtocol.overrides = previousOverrides
+  }
+  return try body()
+}
 
 extension URLSessionConfiguration {
   @objc class func branchTestDefault() -> URLSessionConfiguration {
@@ -2614,7 +2671,7 @@ func runBranchTest(
   harnessFactory: () -> BranchHarness,
   block: (BranchHarness, Recorder) throws -> Void
 ) rethrows {
-  _ = installConfigurationSwizzle
+  installBranchURLInterception()
   let recorder = Recorder()
   BranchURLProtocol.routes = routes
   BranchURLProtocol.overrides = overrides
