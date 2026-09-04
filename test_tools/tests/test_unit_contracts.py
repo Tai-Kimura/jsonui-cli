@@ -589,3 +589,135 @@ class TestSplitScreens:
         root = _split_project(tmp_path, sub_blocks=[None])
         cases, _, declaring, problems = uc.discover_unit_contracts(root)
         assert (cases, declaring, problems) == ([], [], [])
+
+
+class TestUnitContractPages:
+    """The grouped-by-target view `document_tools` generates pages from.
+
+    The judgment is not reimplemented there, so these tests are about the
+    REGROUPING: that a target owns the right cases, that a face's state is
+    per-case and not per-target, and that the two states which look alike
+    from a distance stay apart.
+    """
+
+    def test_groups_cases_under_their_target_with_per_face_status(self, tmp_path):
+        root = _project(tmp_path, [{"name": "a_case", "platforms": ["ios", "android"]}])
+        _swift(root, "a_case")
+        _kotlin(root, "a_case")
+        pages = uc.unit_contract_pages(root)
+        assert [t["target"] for t in pages["targets"]] == ["ChatViewModel"]
+        target = pages["targets"][0]
+        assert target["screens"] == ["chat"]
+        assert target["cases"][0]["status"] == {"ios": "implemented", "android": "implemented"}
+        assert pages["ok"] is True
+
+    def test_a_case_missing_on_one_face_only_is_missing_on_that_face_alone(self, tmp_path):
+        # The state the docs ticket exists to make visible: "declared, but
+        # implemented on only one side" must be readable off the page.
+        root = _project(tmp_path, [{"name": "a_case", "platforms": ["ios", "android"]}])
+        _swift(root, "a_case")
+        _kotlin(root)  # android has the file, not the case
+        pages = uc.unit_contract_pages(root)
+        target = pages["targets"][0]
+        assert target["cases"][0]["status"] == {"ios": "implemented", "android": "missing"}
+        assert target["faces"]["android"]["missing"] == ["a_case"]
+        assert target["faces"]["ios"]["missing"] == []
+        assert pages["ok"] is False
+
+    def test_declared_for_one_face_is_not_missing_on_the_other(self, tmp_path):
+        # `missing` and `not_declared_for_face` are different facts. Collapsing
+        # them would paint an ios-only case red on the android column of a
+        # project that is entirely correct.
+        root = _project(tmp_path, [{"name": "ios_only", "platforms": ["ios"]}])
+        _swift(root, "ios_only")
+        _kotlin(root)
+        pages = uc.unit_contract_pages(root)
+        target = pages["targets"][0]
+        assert target["cases"][0]["status"] == {
+            "ios": "implemented",
+            "android": "not_declared_for_face",
+        }
+        assert target["faces"]["android"]["declared"] == []
+        assert target["faces"]["android"]["missing"] == []
+        assert pages["ok"] is True
+
+    def test_undeclared_is_top_level_because_it_belongs_to_no_target(self, tmp_path):
+        root = _project(tmp_path, [{"name": "a_case", "platforms": ["ios", "android"]}])
+        _swift(root, "a_case", "a_stray")
+        _kotlin(root, "a_case")
+        pages = uc.unit_contract_pages(root)
+        assert pages["undeclared"] == {"ios": ["a_stray"]}
+        for target in pages["targets"]:
+            for face in target["faces"].values():
+                assert "a_stray" not in face["declared"]
+                assert "a_stray" not in face["implemented"]
+
+    def test_the_file_reference_comes_from_content_not_from_the_filename(self, tmp_path):
+        # The fixture's file is `ChatTests.swift` while the target is
+        # `ChatViewModel`, so the naming convention would predict
+        # `ChatViewModelContractTests.swift`. Guessing from the name would
+        # link to a file that does not exist.
+        root = _project(tmp_path, [{"name": "a_case", "platforms": ["ios", "android"]}])
+        _swift(root, "a_case")
+        _kotlin(root, "a_case")
+        pages = uc.unit_contract_pages(root)
+        faces = pages["targets"][0]["faces"]
+        assert [Path(p).name for p in faces["ios"]["files"]] == ["ChatTests.swift"]
+        assert [Path(p).name for p in faces["android"]["files"]] == ["ChatTest.kt"]
+
+    def test_the_denominator_line_is_the_one_check_prints(self, tmp_path):
+        # Requirement 3 of the docs ticket: the index shows the same numbers
+        # as `--check`. One call site is the only way that cannot drift.
+        root = _project(tmp_path, [{"name": "a_case", "platforms": ["ios", "android"]}])
+        _swift(root, "a_case")
+        _kotlin(root, "a_case")
+        report = uc.check_unit_contracts(root)
+        assert pages_line(root) == uc.format_report(report)[0]
+
+    def test_the_result_is_json_safe(self, tmp_path):
+        # document_tools serialises this straight into a template; a set()
+        # anywhere raises only at render time, in the caller's repo.
+        root = _project(tmp_path, [{"name": "a_case", "platforms": ["ios"]}])
+        _swift(root, "a_case")
+        pages = uc.unit_contract_pages(root)
+        json.dumps(pages)
+
+    def test_a_method_that_never_runs_is_not_reported_as_missing(self, tmp_path):
+        # An XCTest method without the `test` prefix exists, compiles, and
+        # executes zero times. Calling that `missing` sends the reader to
+        # write a test that is already there — and it still will not run.
+        root = _project(tmp_path, [{"name": "a_case", "platforms": ["ios"]}])
+        _swift(root, "a_case", discoverable=False)
+        pages = uc.unit_contract_pages(root)
+        target = pages["targets"][0]
+        assert target["cases"][0]["status"]["ios"] == "never_runs"
+        assert target["faces"]["ios"]["never_runs"] == ["a_case"]
+        assert target["faces"]["ios"]["missing"] == []
+        assert pages["undiscoverable"]["ios"] == ["a_case"]
+        assert pages["ok"] is False
+
+    def test_spec_file_is_relative_to_the_spec_root_and_keeps_nesting(self, tmp_path):
+        # The docs site builds a spec page URL from the spec's PATH, so a
+        # nested spec cannot be reached from the screen id alone.
+        (tmp_path / "docs" / "screens" / "settings").mkdir(parents=True)
+        (tmp_path / "docs" / "screens" / "settings" / "profile.spec.json").write_text(
+            json.dumps({
+                "type": "screen",
+                "unitContracts": {"target": "ProfileViewModel",
+                                  "cases": [{"name": "a_case", "platforms": ["ios"]}]},
+            }),
+            encoding="utf-8",
+        )
+        (tmp_path / "ios" / "Tests").mkdir(parents=True)
+        (tmp_path / "jui.config.json").write_text(
+            json.dumps({"spec_directory": "docs/screens",
+                        "platforms": {"ios": {"root": "ios", "unitTestsDir": "Tests"}}}),
+            encoding="utf-8",
+        )
+        pages = uc.unit_contract_pages(tmp_path)
+        target = pages["targets"][0]
+        assert target["spec_files"] == ["settings/profile.spec.json"]
+
+
+def pages_line(root):
+    return uc.unit_contract_pages(root)["totals"]["summary_line"]
