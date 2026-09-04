@@ -150,15 +150,23 @@ def generate_spec_html(
             'declared in them and documented on their pages, not here. A '
             'parent spec may not declare those sections itself.</p>'
         )
+        # The column is DROPPED, not blanked, when the sub-specs cannot be
+        # read: an empty cell under a `Declares` heading asserts "this
+        # sub-spec declares nothing", which is a wrong answer to the only
+        # question the index exists to answer. No column asks the reader to
+        # open the pages — slower, but true.
+        show_declares = spec_dir is not None
         parts.append('<table>')
-        parts.append('<thead><tr><th>Name</th><th>File</th><th>Declares</th>'
-                     '<th>Description</th></tr></thead>')
+        parts.append('<thead><tr><th>Name</th><th>File</th>'
+                     + ('<th>Declares</th>' if show_declares else '')
+                     + '<th>Description</th></tr></thead>')
         parts.append('<tbody>')
         for sub in sub_specs:
             sub_name = _e(sub.get("name", "-"))
             sub_file = sub.get("file", "")
             sub_desc = _e(sub.get("description", "-"))
-            declares = _e(_sub_spec_sections(spec_dir, sub_file))
+            declares = (f"<td>{_e(_sub_spec_sections(spec_dir, sub_file))}</td>"
+                        if show_declares else "")
             # Create link to sub-spec HTML if current_path is available
             sub_html = sub_file.replace(".spec.json", ".html").split("/")[-1] if sub_file else ""
             sub_dir = "/".join(sub_file.split("/")[:-1]) if "/" in sub_file else ""
@@ -170,9 +178,9 @@ def generate_spec_html(
                     link = f"{sub_dir}/{sub_html}"
                 else:
                     link = sub_html
-                parts.append(f'<tr><td><a href="{link}">{sub_name}</a></td><td><code>{_e(sub_file)}</code></td><td>{declares}</td><td>{sub_desc}</td></tr>')
+                parts.append(f'<tr><td><a href="{link}">{sub_name}</a></td><td><code>{_e(sub_file)}</code></td>{declares}<td>{sub_desc}</td></tr>')
             else:
-                parts.append(f'<tr><td>{sub_name}</td><td><code>{_e(sub_file)}</code></td><td>{declares}</td><td>{sub_desc}</td></tr>')
+                parts.append(f'<tr><td>{sub_name}</td><td><code>{_e(sub_file)}</code></td>{declares}<td>{sub_desc}</td></tr>')
         parts.append('</tbody></table>')
         parts.append('</section>')
 
