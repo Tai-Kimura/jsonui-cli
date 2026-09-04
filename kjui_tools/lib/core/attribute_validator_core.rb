@@ -765,8 +765,12 @@ module JsonUIShared
     #:
     #: Operators are deliberately NOT refused: `a ?? "x"`, `cond ? a : b`
     #: and `x + y` all put something between their operands, so none of them
-    #: match. That is the shape real bindings take — a corpus of 1980 held 8
-    #: with whitespace and every one was an operator form.
+    #: match. That is the shape real bindings take: measured with THIS rule
+    #: over a consumer's layouts, 1877 live bindings contained 0 juxtaposed
+    #: pairs (4 held whitespace, all operator forms). A first count of 1980
+    #: added 103 prose examples from strings.json — text the site renders to
+    #: explain binding syntax, not bindings that run — and 1877 is the
+    #: denominator that means anything here.
     BINDING_JUXTAPOSED_VALUES = /[A-Za-z0-9_$)\]"']\s+[A-Za-z0-9_$"']/.freeze
 
     # The delimiters were only ever half the check.

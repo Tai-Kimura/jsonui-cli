@@ -16,8 +16,11 @@
 #
 # What is refused is only what cannot be an expression anywhere: two values
 # with nothing between them. Operators are untouched, which is what real
-# bindings use — a corpus of 1980 held 8 with whitespace and every one was an
-# operator form.
+# bindings use. Measured with THIS rule over a consumer's layouts: 1877 live
+# bindings, 0 juxtaposed pairs, 4 with whitespace and all of them operator
+# forms. (A first count said 1980, which had folded in 103 prose examples
+# from strings.json — text the site renders to explain binding syntax, not
+# bindings that run. Same answer, wrong denominator.)
 require_relative '../../lib/core/attribute_validator'
 
 RSpec.describe RjuiTools::Core::AttributeValidator do
