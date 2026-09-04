@@ -20,16 +20,17 @@ So the predicate is what the host's limitation actually is — it has no driver:
 This pins the three populations that follow from that, so a change to the
 corpus that moves them has to move these numbers deliberately.
 
-⚠️ The predicate is implemented TWICE: here, and in
+⚠️ The predicate itself lives in ONE place —
 `SwiftJsonUI/ConformanceHost/scripts/generate_codegen_host.rb`
-(`DRIVER_ACTIONS` / `drives_input?`), with a third copy in
-`ConformanceUITests.swift` (`driverActions` / `requiresDriver`) deciding what
-to RUN rather than what to STAGE. Two of those live in another repository, so
-this test cannot import them. That is a real coupling, not a tidy one: if the
-verb list changes in one place and not the others, a fixture is staged and
-skipped (or the reverse) and the count silently stops meaning anything. The
-verb list is asserted here explicitly so a change to it fails rather than
-drifts.
+(`DRIVER_ACTIONS` / `drives_input?`). The run side asks the generator's record
+(`codegen-map.json`) rather than deciding again, so it cannot disagree about
+which fixtures exist.
+
+This file holds the second copy of the verb list, and it is in another
+repository, so it cannot import the first. It is asserted explicitly below so
+that adding a verb there without adding it here fails rather than drifts —
+what it pins is the POPULATIONS the generator produces, which is the thing a
+corpus change moves.
 """
 from __future__ import annotations
 
@@ -38,7 +39,7 @@ import pathlib
 import unittest
 
 #: Action verbs that need a driver. MUST equal `DRIVER_ACTIONS` in
-#: generate_codegen_host.rb and `driverActions` in ConformanceUITests.swift.
+#: generate_codegen_host.rb — the only other copy, and the one that decides.
 DRIVER_ACTIONS = {"tap", "longPress", "swipe", "input", "selectOption"}
 
 _CONFORMANCE = pathlib.Path(__file__).resolve().parents[2] / "conformance"
@@ -131,9 +132,10 @@ class CodegenHostStagingSet(unittest.TestCase):
                       {f["id"] for f in hostable})
 
     def test_the_driver_verbs_are_the_ones_the_host_scripts_use(self):
-        # The verb list is duplicated across two repositories (see the module
-        # docstring). Asserting it here turns a silent divergence into a
-        # failure the next time someone adds a verb in one place.
+        # The verb list exists here and in generate_codegen_host.rb, in
+        # different repositories, so neither can import the other. Asserting it
+        # turns a silent divergence into a failure the next time someone adds a
+        # verb on one side only.
         self.assertEqual(
             DRIVER_ACTIONS,
             {"tap", "longPress", "swipe", "input", "selectOption"})
