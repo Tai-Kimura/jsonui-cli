@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import pathlib
 import json
 import os
 import shutil
@@ -246,6 +247,34 @@ class ConformanceGeneratorTest(unittest.TestCase):
     def test_manifest_hash_matches_definitions_file(self):
         expected = hashlib.sha256(self.defs_path.read_bytes()).hexdigest()
         self.assertEqual(self.manifest["generatedFrom"], expected)
+
+    def test_every_family_tallies_assertable_by_class(self):
+        """No family may count its entries as assertable with `len(...)`.
+
+        `summary.assertable_count += len(entries)` is correct exactly while a
+        family is uniformly assertable, and wrong the moment it is not — the
+        manifest then claims one more assertable fixture than it lists. Two
+        families carried that line; the first declaration-only entry added to
+        one of them produced `assertable 28 != 27`.
+
+        A source gate, because the arithmetic is invisible until some future
+        family stops being uniform: `test_manifest_counts_are_consistent`
+        catches it only for families that ALREADY hold a non-assertable
+        entry, so it cannot speak for the ones that do not yet.
+        """
+        source = (
+            pathlib.Path(__file__).resolve().parents[1]
+            / "jui_cli" / "conformance" / "fixture_generator.py"
+        ).read_text(encoding="utf-8")
+        offenders = [
+            line.strip()
+            for line in source.splitlines()
+            if "assertable_count" in line and "+= len(" in line
+        ]
+        self.assertEqual(
+            offenders, [],
+            "count assertable entries by class, not by family size:\n  "
+            + "\n  ".join(offenders))
 
     def test_manifest_counts_are_consistent(self):
         counts = self.manifest["counts"]

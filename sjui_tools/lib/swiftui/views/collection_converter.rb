@@ -1525,126 +1525,28 @@ module SjuiTools
 
         def generate_collection_content_sections(property_name)
           # If sections are defined in JSON, use those
-          if @component['sections'] && !@component['sections'].empty?
-            # Generate based on predefined sections structure
-            is_optional = is_property_optional?(property_name)
+          # No `sections` branch: this function is only called from
+          # `generate_collection_content`, and all five of ITS callers sit in
+          # branches that require `sections` to be absent — so the
+          # sections-shaped body that used to live here could not run. Two
+          # cell-address emit sites went with it (they were 2 of the 16, and
+          # the only 2 that no declaration reached).
+          # Fallback to dynamic sections from data (when sections not defined in JSON)
+          is_optional_fallback = is_property_optional?(property_name)
+          data_source_ref = if is_optional_fallback
+                              "dataSource"
+                            else
+                              "data.#{property_name}"
+                            end
 
-            @component['sections'].each_with_index do |section, index|
-              cell_view_name = extract_view_name(section['cell']) if section['cell']
-              header_view_name = extract_view_name(section['header']) if section['header']
-              footer_view_name = extract_view_name(section['footer']) if section['footer']
-
-              # Generate section - use section-specific columns if specified.
-              # A binding-form top-level `columns` ALWAYS routes through the
-              # grid path here (`section_columns == 1` evaluates false on
-              # the sentinel 2) because the runtime column count is unknown.
-              # An explicit literal `section['columns'] = 1` still picks the
-              # list-style path.
-              section_columns = section['columns'] || columns_info[:literal] || (columns_info[:is_binding] ? 2 : 1)
-              if section_columns == 1
-                # List-style section with header/footer
-                # Wrap in optional check
-                if is_optional
-                  add_line "if let dataSource = data.#{property_name}, dataSource.sections.count > #{index} {"
-                else
-                  add_line "if data.#{property_name}.sections.count > #{index} {"
-                end
-                indent do
-                  if is_optional
-                    add_line "let section = dataSource.sections[#{index}]"
-                  else
-                    add_line "let section = data.#{property_name}.sections[#{index}]"
-                  end
-
-                  # Header
-                  if header_view_name
-                    add_line "if let headerData = section.header?.data {"
-                    indent do
-                      add_line "#{header_view_name}(data: headerData)"
-                    end
-                    add_line "}"
-                  end
-
-                  # Cells
-                  if cell_view_name
-                    add_line "if let cellsData = section.cells?.data {"
-                    indent do
-                      vars = open_cell_foreach('cellsData')
-                      indent do
-                        add_line "#{cell_view_name}(data: #{vars[:data_var]}).equatable()"
-                        generate_cell_identity(vars[:index_var])
-                        apply_cell_frame
-                        # Add accessibilityIdentifier for test automation (tapItem action)
-                        apply_cell_item_identifier(vars[:index_var])
-                      end
-                      add_line "}"
-                    end
-                    add_line "}"
-                  end
-
-                  # Footer
-                  if footer_view_name
-                    add_line "if let footerData = section.footer?.data {"
-                    indent do
-                      add_line "#{footer_view_name}(data: footerData)"
-                    end
-                    add_line "}"
-                  end
-                end
-                add_line "}"
-              else
-                # Grid-style sections don't work the same way - cells go in the grid
-                # This shouldn't happen in grid layout with sections
-                add_line "// Warning: Section-based rendering in grid layout"
-                if is_optional
-                  add_line "if let dataSource = data.#{property_name}, dataSource.sections.count > #{index} {"
-                else
-                  add_line "if data.#{property_name}.sections.count > #{index} {"
-                end
-                indent do
-                  if cell_view_name
-                    if is_optional
-                      add_line "if let cellsData = dataSource.sections[#{index}].cells?.data {"
-                    else
-                      add_line "if let cellsData = data.#{property_name}.sections[#{index}].cells?.data {"
-                    end
-                    indent do
-                      vars = open_cell_foreach('cellsData')
-                      indent do
-                        add_line "#{cell_view_name}(data: #{vars[:data_var]}).equatable()"
-                        generate_cell_identity(vars[:index_var])
-
-                        apply_cell_frame(grid: columns_is_multi?)
-
-                        # Add accessibilityIdentifier for test automation (tapItem action)
-                        apply_cell_item_identifier(vars[:index_var])
-                      end
-                      add_line "}"
-                    end
-                    add_line "}"
-                  end
-                end
-                add_line "}"
-              end
-            end
-          else
-            # Fallback to dynamic sections from data (when sections not defined in JSON)
-            is_optional_fallback = is_property_optional?(property_name)
-            data_source_ref = if is_optional_fallback
-                                "dataSource"
-                              else
-                                "data.#{property_name}"
-                              end
-
-            if is_optional_fallback
-              add_line "if let dataSource = data.#{property_name} {"
-              indent do
-                generate_fallback_foreach(data_source_ref)
-              end
-              add_line "}"
-            else
+          if is_optional_fallback
+            add_line "if let dataSource = data.#{property_name} {"
+            indent do
               generate_fallback_foreach(data_source_ref)
             end
+            add_line "}"
+          else
+            generate_fallback_foreach(data_source_ref)
           end
         end
         

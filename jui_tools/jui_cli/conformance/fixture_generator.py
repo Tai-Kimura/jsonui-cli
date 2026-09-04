@@ -923,7 +923,13 @@ def generate_conformance(definitions_path: Path, out_dir: Path) -> GenerationSum
         summary.files_written += 1
     fixture_entries.extend(child_entries)
     summary.fixture_count += len(child_entries)
-    summary.assertable_count += len(child_entries)
+    # By CLASS, like every other family. `len(...)` is right only while a
+    # family is uniformly assertable, and it fails the moment it stops being
+    # — silently, as a manifest that counts one more assertable fixture than
+    # it lists. The address family carried the same line and produced exactly
+    # that the first time a declaration-only entry was added to it.
+    summary.assertable_count += sum(
+        1 for e in child_entries if e["class"] == rules.CLASS_ASSERTABLE)
 
     # Flow Collection overflow fixtures (flow track): the rule that a flow
     # Collection scrolls when `lazy` is in effect and only wraps under
