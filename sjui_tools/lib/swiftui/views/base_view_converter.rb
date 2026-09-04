@@ -65,6 +65,9 @@ module SjuiTools
         # root, after includes are expanded) — the same channel as
         # `parent_orientation`: a converter sees only its own hash.
         SCROLLING_ANCESTOR_KEY = '_scrolling_ancestor'
+        # Set on the ROOT of a layout that some Collection renders as a cell
+        # / header / footer (CollectionCellIndex). Not propagated.
+        COLLECTION_CELL_ROOT_KEY = '_collection_cell_root'
 
         def initialize(component, indent_level = 0, action_manager = nil, binding_registry = nil)
           @component = component
@@ -300,8 +303,48 @@ module SjuiTools
           if @component['id'] && !@accessibility_identifier_added
             apply_accessibility_identifier
             @accessibility_identifier_added = true
+          elsif collection_cell_root_without_id?
+            apply_collection_cell_root_container
           end
           @generated_code.join("\n")
+        end
+
+        # A Collection wraps every cell it renders with
+        # `.accessibilityIdentifier("{collectionId}_item_{index}")`. A plain
+        # SwiftUI container is not an accessibility element, so that
+        # identifier is pushed down onto the nearest descendants — the cell
+        # root's own direct children — and they answer to `{id}_item_{N}`
+        # instead of the identifiers they declared.
+        #
+        # A cell root that declares an `id` never had this problem: the
+        # id-bearing path above makes it an explicit container first, and the
+        # wrapper's identifier then lands on the wrapper. That is the whole
+        # discriminator, measured across 8 cells of one consumer: 8/8
+        # explained by "does the cell root declare an id".
+        #
+        # So a cell root becomes a container whether or not it has an id.
+        # WITHOUT an identifier of its own — it has none to emit, and the
+        # wrapper's `{id}_item_{N}` is the address the drivers use.
+        #
+        # Scope is deliberately the cell ROOT only, not every id-less
+        # container: emitting accessibility scaffolding for all of them is
+        # what exhausted a device's main-thread stack once already (see the
+        # DEPTH BUDGET note below).
+        def apply_collection_cell_root_container
+          add_modifier_line ".accessibilityElement(children: .contain)"
+        end
+
+        # The root of a layout some Collection renders as a cell, which
+        # declares no id of its own. The mark is set on the root only, by
+        # JsonToSwiftUIConverter, from the project-wide CollectionCellIndex.
+        def collection_cell_root_without_id?
+          return false unless @component[COLLECTION_CELL_ROOT_KEY] == true
+          return false if @component['id']
+          # Same suppression as the id path: a statically invisible node must
+          # not become an accessibility element.
+          return false if @component['visibility'] == 'invisible' || @component['hidden'] == true
+
+          accessibility_container?
         end
 
         # Emit the accessibilityIdentifier for this component, matching the

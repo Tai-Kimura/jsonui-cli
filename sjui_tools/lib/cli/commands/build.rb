@@ -349,6 +349,7 @@ module SjuiTools
           # screen index below, so a wrapping flow inside such a cell lets
           # the host scroll (the in-tree mark cannot see across files).
           converter.scrolling_cell_ids = SjuiTools::SwiftUI::ScrollingCellIndex.build(layouts_dir)
+          converter.collection_cell_ids = SjuiTools::SwiftUI::CollectionCellIndex.build(layouts_dir)
           updater = SjuiTools::SwiftUI::ViewUpdater.new
 
           # Screen identity: only screens carry a marker (cells and partials
