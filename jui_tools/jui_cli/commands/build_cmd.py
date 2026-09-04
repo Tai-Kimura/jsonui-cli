@@ -97,9 +97,17 @@ def cmd_build(args: argparse.Namespace) -> int:
     if _check_variant_constraints(config_mgr) is False:
         return 1
 
-    # Localize gate (opt-in). Findings ride the warning stream, where the
-    # zero-warnings invariant makes them gate; the flag-off path never
-    # imports the linter.
+    # Localize scan (opt-in). Findings are PRINTED as build warnings and
+    # do NOT change the exit code: this command has no warning tally and no
+    # path that fails on one. To fail on findings, run `jui lint-strings`
+    # separately — it exits 2. The flag-off path never imports the linter.
+    #
+    # This comment used to say the findings "gate" via a zero-warnings
+    # invariant. No such invariant exists in this repository (no CI step
+    # greps the build output, no tally is kept); the rule of that name lives
+    # in the agents' rulebook and binds an agent's workflow, not this
+    # process's exit code. A consumer read the old wording as a mechanism
+    # here and told another lane the build would gate.
     if _lint_strings_enabled(config, args):
         from .lint_strings_cmd import run_for_build
 
@@ -2016,9 +2024,10 @@ def _sync_viewmodel_protocols(
                     impl_writes += 1
 
         # Findings raised while emitting (e.g. a var the generated Base can
-        # only declare with `!`). They ride the warning stream, where the
-        # zero-warnings invariant makes them gate — same channel as the
-        # localize findings above.
+        # only declare with `!`). Same channel as the localize findings
+        # above: printed to stderr, exit code unchanged. `emit_warnings`
+        # only formats and prints (spec_validator.py) — nothing counts these
+        # or fails on them.
         emit_warnings(getattr(generator, "warnings", []))
 
     if errors:
