@@ -545,7 +545,7 @@ module SjuiTools
 
           if value.start_with?('@{') && value.end_with?('}')
             # @{propertyName [?? default]} -> data.propertyName [?? default]
-            SwiftUI::Binding::BindingExpression.swift_value_expr(value[2..-2])
+            SwiftUI::Binding::BindingExpression.swift_value_expr(value[2..-2], kind: :number)
           else
             value
           end

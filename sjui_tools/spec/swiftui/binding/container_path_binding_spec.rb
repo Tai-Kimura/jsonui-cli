@@ -26,32 +26,42 @@ require 'swiftui/binding/binding_expression'
 # which is why these examples set the definitions store rather than passing
 # paths alone.
 #
-# The traversal is not reimplemented here. `DynamicBindingResolver` is
-# documented as the ONE implementation of the canonical binding-resolution
-# semantics, it is `public`, and it is unconditionally compiled, so the static
-# face calls it: the bounds check (`items[99]` is unresolved, not a crash), the
-# flat-key rule, AnyCodable unwrapping and the canonical text stringification
-# (an integral Double renders "1", not "1.0") come with it instead of becoming
-# a second copy to keep in step.
+# ⚠️⚠️ The traversal is resolved by `JsonUIBindingPath` and NEVER by
+# `DynamicBindingResolver`. Both are `public` and both carry the canonical
+# semantics, but `DynamicBindingResolver` is inside `#if DEBUG`, and generated
+# code is distributed and built for RELEASE. Emitting a reference to it
+# compiles under DEBUG — so every gate goes green — and breaks in the
+# consumer's release build. Measured 2026-09-05: the conformance host builds
+# SwiftJsonUI with DEBUG undefined and failed five views with "Type
+# 'SwiftJsonUI' has no member 'DynamicBindingResolver'", which is the same
+# condition a consumer's release build is in. There is an explicit example
+# below asserting the DEBUG-only spelling never appears.
 RSpec.describe 'binding paths through JSON containers' do
   BE = SjuiTools::SwiftUI::Binding::BindingExpression
 
-  # Mirrors the real declarations verbatim (SwiftJsonUI
-  # DynamicBindingResolver.swift:357/378/392). The swiftc arm type-checks the
-  # emitted CALL SITE against these, so a call that names the wrong argument
-  # label or coalesces against the wrong type fails here.
+  # Mirrors the real declarations (SwiftJsonUI JsonUIBindingPath.swift). The
+  # swiftc arm type-checks the emitted CALL SITE against these, so a call that
+  # names a wrong label or coalesces against the wrong type fails here.
   RESOLVER_STUB = <<~SWIFT
     enum SwiftJsonUI {
-        enum DynamicBindingResolver {
-            static func resolveString(expression innerRaw: String, data: [String: Any]) -> String? { nil }
-            static func resolveBool(expression innerRaw: String, data: [String: Any]) -> Bool? { nil }
-            static func resolveDouble(expression innerRaw: String, data: [String: Any]) -> Double? { nil }
+        enum JsonUIBindingPath {
+            static func resolve(path: String, in data: [String: Any],
+                                unwrap: (Any?) -> Any? = { $0 }) -> Any? { nil }
+            static func stringify(_ value: Any?) -> String? { nil }
+            static func bool(_ value: Any?) -> Bool? { nil }
+            static func double(_ value: Any?) -> Double? { nil }
         }
     }
   SWIFT
 
   def define(defs)
     Thread.current[:sjui_data_definitions] = defs
+  end
+
+  def resolve_call(path, coercion, root)
+    'SwiftJsonUI.JsonUIBindingPath.' \
+      "#{coercion}(SwiftJsonUI.JsonUIBindingPath.resolve(path: \"#{path}\", " \
+      "in: [\"#{root}\": data.#{root} as Any]))"
   end
 
   after { Thread.current[:sjui_data_definitions] = nil }
@@ -93,7 +103,9 @@ RSpec.describe 'binding paths through JSON containers' do
 
     it 'leaves a bracket index on a declared array as one too' do
       # `data.items[0]` is `Any`, which cannot be coalesced or interpolated
-      # usefully either — the defect does not need a trailing member.
+      # usefully either — the defect does not need a trailing member. It is
+      # also the case that COMPILED before this change while trapping at
+      # runtime on an out-of-range index.
       expect(BE.container_traversal?('items[0]')).to be true
     end
 
@@ -123,36 +135,59 @@ RSpec.describe 'binding paths through JSON containers' do
     end
   end
 
+  describe 'the DEBUG-only resolver is never named' do
+    before { define(containers) }
+
+    # The regression this file exists to prevent a second time. Every context
+    # that can emit a container read is checked, because one context left on
+    # the old spelling produces generated code that passes every gate the
+    # project runs and fails in the consumer's release build.
+    it 'emits JsonUIBindingPath, never DynamicBindingResolver' do
+      emitted = [
+        BE.swift_text_expr('profile.name'),
+        BE.swift_text_expr('profile.meta.age ?? "x"'),
+        BE.swift_bool_expr('profile.enabled'),
+        BE.swift_bool_expr('!profile.enabled'),
+        BE.swift_number_expr('profile.width'),
+        BE.swift_value_expr('profile.name'),
+        BE.swift_value_expr('profile.enabled', kind: :bool),
+        BE.swift_value_expr('profile.width', kind: :number),
+        BE.swift_visibility_param('@{profile.state}'),
+        BE.swift_visibility_param('@{!profile.hidden}')
+      ]
+      expect(emitted).to all(include('JsonUIBindingPath'))
+      offenders = emitted.select { |e| e.include?('DynamicBindingResolver') }
+      expect(offenders).to be_empty,
+                           "these name the #if DEBUG type:\n#{offenders.join("\n")}"
+    end
+  end
+
   describe 'the emitted text expression' do
     before { define(containers) }
 
     it 'resolves a container path through the canonical resolver' do
-      expect(BE.swift_text_expr('profile.name')).to eq(
-        'SwiftJsonUI.DynamicBindingResolver.resolveString(expression: "profile.name", ' \
-        'data: ["profile": data.profile as Any]) ?? ""'
-      )
+      expect(BE.swift_text_expr('profile.name'))
+        .to eq("(#{resolve_call('profile.name', 'stringify', 'profile')} ?? \"\")")
     end
 
     it 'passes the whole nested path, not just the first hop' do
-      expect(BE.swift_text_expr('profile.meta.age')).to include('expression: "profile.meta.age"')
+      expect(BE.swift_text_expr('profile.meta.age')).to include('path: "profile.meta.age"')
     end
 
     it 'passes a bracket index through unchanged' do
       out = BE.swift_text_expr('items[0].title')
-      expect(out).to include('expression: "items[0].title"')
+      expect(out).to include('path: "items[0].title"')
       expect(out).to include('["items": data.items as Any]')
     end
 
-    it 'hands the inline default to the resolver rather than coalescing twice' do
-      # The resolver parses '??' itself, so the emitted trailing '?? ""' is
-      # only the unresolved-and-no-default case. A second Swift coalesce of
-      # the default here would apply it at the wrong precedence.
-      out = BE.swift_text_expr('profile.name ?? "anon"')
-      expect(out).to include('expression: "profile.name ?? \\"anon\\""')
-      # Count the Swift coalesces OUTSIDE the expression literal — the
-      # literal carries a '??' of its own, which is the point.
-      outside = out.sub(/expression: "(?:[^"\\]|\\.)*"/, 'expression: <>')
-      expect(outside.scan('??').length).to eq(1)
+    it 'applies the inline default here, in canonical text form' do
+      # The release-available core is resolution and coercion only — it has
+      # no expression parser — so the default is emitted rather than passed
+      # along. It still has to render the way a resolved value would.
+      expect(BE.swift_text_expr('profile.name ?? "anon"')).to end_with('?? "anon")')
+      expect(BE.swift_text_expr('profile.age ?? 42')).to end_with('?? "42")')
+      expect(BE.swift_text_expr('profile.age ?? 42.0')).to end_with('?? "42")')
+      expect(BE.swift_text_expr('profile.ok ?? true')).to end_with('?? "true")')
     end
 
     it 'keeps plain member access for a model-typed root' do
@@ -194,22 +229,19 @@ RSpec.describe 'binding paths through JSON containers' do
   describe 'the other value contexts' do
     before { define(containers) }
 
-    it 'uses the bool resolver in a bool context' do
-      expect(BE.swift_bool_expr('profile.enabled')).to eq(
-        '(SwiftJsonUI.DynamicBindingResolver.resolveBool(expression: "profile.enabled", ' \
-        'data: ["profile": data.profile as Any]) ?? false)'
-      )
+    it 'uses the bool coercion in a bool context' do
+      expect(BE.swift_bool_expr('profile.enabled'))
+        .to eq("(#{resolve_call('profile.enabled', 'bool', 'profile')} ?? false)")
     end
 
-    it 'passes negation to the resolver, which is where it is canonical' do
-      expect(BE.swift_bool_expr('!profile.enabled')).to include('expression: "!profile.enabled"')
+    it 'applies negation here, since the core coerces rather than parses' do
+      expect(BE.swift_bool_expr('!profile.enabled'))
+        .to eq("!(#{resolve_call('profile.enabled', 'bool', 'profile')} ?? false)")
     end
 
-    it 'uses the double resolver in a numeric context' do
-      expect(BE.swift_number_expr('profile.width')).to eq(
-        'SwiftJsonUI.DynamicBindingResolver.resolveDouble(expression: "profile.width", ' \
-        'data: ["profile": data.profile as Any]) ?? 0'
-      )
+    it 'uses the double coercion in a numeric context' do
+      expect(BE.swift_number_expr('profile.width'))
+        .to eq("#{resolve_call('profile.width', 'double', 'profile')} ?? 0")
     end
 
     it 'refuses a non-path in a numeric context instead of interpolating it' do
@@ -221,19 +253,35 @@ RSpec.describe 'binding paths through JSON containers' do
     it 'passes an unresolved container path straight to VisibilityWrapper' do
       # It takes `String?` and Visibility(from:) maps nil to .visible, so no
       # fallback literal is invented here.
-      expect(BE.swift_visibility_param('@{profile.state}')).to eq(
-        'SwiftJsonUI.DynamicBindingResolver.resolveString(expression: "profile.state", ' \
-        'data: ["profile": data.profile as Any])'
-      )
+      expect(BE.swift_visibility_param('@{profile.state}'))
+        .to eq(resolve_call('profile.state', 'stringify', 'profile'))
     end
 
-    it 'fails closed in the generic value context' do
-      # KNOWN GAP, asserted so it is a decision rather than an oversight:
-      # swift_value_expr feeds String positions (hint, colour hex, url) and
-      # Bool ones (enabled) from one expression, so there is no resolver to
-      # choose. It emits the literal token — the same fail-closed answer a
-      # non-path already gets — instead of member access that cannot compile.
-      expect(BE.swift_value_expr('profile.name')).to eq('"@{profile.name}"')
+    it 'resolves a container path in the generic value context by kind' do
+      # This position feeds String (hint, colour hex, url) and Bool
+      # (`isEnabled:`) and numeric (relative positioning) alike, so the
+      # caller names the type it is about to consume. Emitting the literal
+      # token instead COMPILES, which is worse than failing: the view renders
+      # "@{profile.name}" as its own text and every gate stays green.
+      expect(BE.swift_value_expr('profile.name'))
+        .to eq("(#{resolve_call('profile.name', 'stringify', 'profile')} ?? \"\")")
+      expect(BE.swift_value_expr('profile.enabled', kind: :bool))
+        .to eq("(#{resolve_call('profile.enabled', 'bool', 'profile')} ?? false)")
+      expect(BE.swift_value_expr('profile.width', kind: :number))
+        .to eq("(#{resolve_call('profile.width', 'double', 'profile')} ?? 0)")
+    end
+
+    it 'never leaves a raw @{ } token in a value position' do
+      # The shape that looks green and is not: it compiles, and the literal
+      # is rendered to the user.
+      %i[string bool number].each do |kind|
+        expect(BE.swift_value_expr('profile.name', kind: kind)).not_to include('@{')
+      end
+    end
+
+    it 'still emits the literal for something that is not a path at all' do
+      # Control: fail-closed is still right where no path exists.
+      expect(BE.swift_value_expr('bad name')).to eq('"@{bad name}"')
     end
   end
 
@@ -244,13 +292,30 @@ RSpec.describe 'binding paths through JSON containers' do
     before { define(containers) }
 
     it 'type-checks every emitted form' do
-      text_container  = BE.swift_text_expr('profile.meta.age')
-      text_indexed    = BE.swift_text_expr('items[0].title')
-      text_optional   = BE.swift_text_expr('missing.name')
-      text_default    = BE.swift_text_expr('label ?? 42')
-      bool_container  = BE.swift_bool_expr('profile.enabled')
-      number_container = BE.swift_number_expr('profile.width')
-      visibility      = BE.swift_visibility_param('@{profile.state}')
+      exprs = {
+        'String' => [
+          BE.swift_text_expr('profile.meta.age'),
+          BE.swift_text_expr('items[0].title'),
+          BE.swift_text_expr('missing.name'),
+          BE.swift_text_expr('label ?? 42'),
+          BE.swift_text_expr('profile.age ?? 42'),
+          BE.swift_value_expr('profile.name')
+        ],
+        'Bool' => [
+          BE.swift_bool_expr('profile.enabled'),
+          BE.swift_bool_expr('!profile.enabled'),
+          BE.swift_value_expr('profile.enabled', kind: :bool)
+        ],
+        'Double' => [
+          BE.swift_number_expr('profile.width'),
+          BE.swift_value_expr('profile.width', kind: :number)
+        ],
+        'String?' => [BE.swift_visibility_param('@{profile.state}')]
+      }
+      n = 0
+      body = exprs.flat_map do |type, list|
+        list.map { |e| n += 1; "    let v#{n}: #{type} = #{e}" }
+      end.join("\n")
 
       expect(<<~SWIFT).to compile_as_swift
         #{RESOLVER_STUB}
@@ -265,14 +330,7 @@ RSpec.describe 'binding paths through JSON containers' do
         }
 
         func check(_ data: TestData) {
-            let a: String = #{text_container}
-            let b: String = #{text_indexed}
-            let c: String = #{text_optional}
-            let d: String = #{text_default}
-            let e: Bool = #{bool_container}
-            let f: Double = #{number_container}
-            let g: String? = #{visibility}
-            _ = (a, b, c, d, e, f, g)
+        #{body}
         }
       SWIFT
     end
