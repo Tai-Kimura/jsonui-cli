@@ -78,8 +78,16 @@ def generation_summary_line() -> str:
     produce a small number and exit 0. So the line carries what was read, not
     only what was written.
 
-    `unit targets U from K spec(s) read` is one clause on purpose — U alone is
-    the number that was ambiguous, and K is what disambiguates it.
+    `unit targets U from K spec file(s) scanned` is one clause on purpose — U
+    alone is the number that was ambiguous, and K is what disambiguates it.
+
+    ⚠️ U is a different unit from K and D, and the words say which: U counts
+    TARGETS while K and D both count spec FILES. The first reader of this
+    line took K for screens and D for targets and published both wrong, which
+    is what these words are for. K and D are deliberately the same unit so
+    that D <= K reads as true, and both are the gate's own quantities —
+    `unit-stubs --check` counts the same files with the same words, so the
+    site and the gate cannot drift.
     """
     n = get_pages_written()
     c = _generation_counts
@@ -90,8 +98,8 @@ def generation_summary_line() -> str:
     if c.get("unit_scanned"):
         parts.append(
             f"unit targets {c.get('unit_targets', 0)} from "
-            f"{c.get('specs_read', 0)} spec(s) read, "
-            f"{c.get('specs_declaring', 0)} declaring unitContracts"
+            f"{c.get('specs_read', 0)} spec file(s) scanned, "
+            f"{c.get('specs_declaring', 0)} spec file(s) declaring unitContracts"
         )
     else:
         # Not "0 read". A scan that did not happen and a scan that found
@@ -109,7 +117,8 @@ def generation_warnings() -> list[str]:
     """
     c = _generation_counts
     if c.get("unit_scanned") and not c.get("specs_read"):
-        return ["WARNING [doc]: 0 spec(s) read while looking for unitContracts "
+        return ["WARNING [doc]: 0 spec file(s) scanned while looking for "
+                "unitContracts "
                 "— the spec directory is empty or `spec_directory` points "
                 "somewhere else, so `unit targets 0` is not evidence that none "
                 "are declared"]
