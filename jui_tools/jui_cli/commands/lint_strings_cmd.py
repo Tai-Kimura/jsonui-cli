@@ -75,9 +75,10 @@ Exit codes:
        allowlist entry with no reason, or (opted in) a usage finding
 
 ``jui build`` runs the same scan when opted in (``--lint-strings`` or
-``"lint": {"strings": true}`` in jui.config.json) and reports findings
-through the build warning stream, where the zero-warnings invariant
-makes them gate. The default build path never invokes this module.
+``"lint": {"strings": true}`` in jui.config.json) and PRINTS findings as
+build warnings — it does not fail on them, and its exit code is unchanged.
+Failing on findings is this command's job: run it directly and it exits 2.
+The default build path never invokes this module.
 """
 from __future__ import annotations
 
