@@ -55,7 +55,7 @@ module KjuiTools
           # raised NoMethodError on the same input, iOS dynamic takes
           # strings only, and no face uses it). The validator names it.
           raw_items = json_data['items']
-          segments = raw_items.is_a?(Array) ? raw_items.reject { |item| item.is_a?(Hash) || item.is_a?(Array) } : []
+          segments = raw_items.is_a?(Array) ? raw_items.select { |item| JsonUIShared::AttributeValidatorCore.scalar_item?(item) } : []
           
           code = indent("Segment(", depth)
           # For display in Segment parameter, always output as string

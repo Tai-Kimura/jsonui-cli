@@ -21,7 +21,7 @@ module SjuiTools
           # (measured 2026-09-04). Now it generates nothing and the
           # validator names it.
           raw_items = @component['items']
-          items = raw_items.is_a?(Array) ? raw_items.reject { |item| item.is_a?(Hash) || item.is_a?(Array) } : []
+          items = raw_items.is_a?(Array) ? raw_items.select { |item| JsonUIShared::AttributeValidatorCore.scalar_item?(item) } : []
           
           # selectedTabIndex プロパティの処理
           initial_selection = @component['selectedTabIndex'] || @component['selectedIndex'] || 0

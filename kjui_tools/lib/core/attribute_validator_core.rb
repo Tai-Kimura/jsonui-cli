@@ -790,6 +790,10 @@ module JsonUIShared
     #: `Collection.items` is a data source, where an object element is
     #: exactly what a face may legitimately pass. Widening this needs its
     #: own measurement.
+    #: A `null` element passed this rule when it only named Hash and Array,
+    #: and web emitted an empty `<button>` whose id was real — so every
+    #: later `s_tab_n` sat one index off the runtimes, which drop it
+    #: (reported by the rjui lane, 2026-09-04).
     SCALAR_ITEM_ATTRIBUTES = { 'Segment' => %w[items].freeze }.freeze
 
     #: True when a labels-only attribute was given a binding string.
@@ -813,7 +817,32 @@ module JsonUIShared
       return [] unless SCALAR_ITEM_ATTRIBUTES[component_type.to_s]&.include?(attribute_name.to_s)
       return [] unless value.is_a?(Array)
 
-      value.each_index.select { |index| value[index].is_a?(Hash) || value[index].is_a?(Array) }
+      value.each_index.reject { |index| scalar_item?(value[index]) }
+    end
+
+    #: What both runtimes keep: a JSON scalar. Android tests
+    #: `element.isJsonPrimitive` (string, number, boolean — Gson's JsonNull
+    #: is not one) and iOS casts to `String` / `NSNumber` (a Bool bridges to
+    #: NSNumber, an NSNull casts to neither).
+    #:
+    #: Booleans are kept deliberately, though `[true]` renders "true" on web
+    #: and Android and "1" on iOS: BOTH runtimes render it, so dropping it
+    #: here would make the generated screen show fewer tabs than the running
+    #: one — the divergence this rule exists to close. That rendering split
+    #: is a real defect, and it belongs to whoever owns the declaration and
+    #: the runtimes, not to a unilateral drop in the generators.
+    def self.scalar_item?(item)
+      item.is_a?(String) || item.is_a?(Numeric) || item == true || item == false
+    end
+
+    #: The word the warning uses for what was found.
+    def self.item_kind(item)
+      case item
+      when nil then 'null'
+      when Hash then 'an object'
+      when Array then 'an array'
+      else item.class.name.downcase
+      end
     end
 
     # The delimiters were only ever half the check.
@@ -853,9 +882,10 @@ module JsonUIShared
 
       self.class.non_scalar_item_indices(component_type, name, value).each do |index|
         add_warning(
-          "Attribute '#{path}[#{index}]' in '#{component_type}' is an object; " \
-          "items are string labels (literal text or a strings key) per the declaration — " \
-          "dropped from the generated output, as both runtimes already drop it"
+          "Attribute '#{path}[#{index}]' in '#{component_type}' is " \
+          "#{self.class.item_kind(value[index])}; items are string labels (literal text or a " \
+          "strings key) per the declaration — dropped from the generated output, as both " \
+          "runtimes already drop it"
         )
       end
     end
