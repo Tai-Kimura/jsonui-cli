@@ -83,7 +83,9 @@ module SjuiTools
               options[:validate] = false
             end
 
-            opts.on('--strict', 'Fail build on validation errors') do
+            opts.on('--strict',
+                    'Fail build on validation findings (attribute and binding warnings; ' \
+                    'canonical binding errors fail with or without it)') do
               options[:strict] = true
             end
 
@@ -393,6 +395,12 @@ module SjuiTools
                 @binding_errors.concat(binding_validator.errors)
                 if binding_warnings.any?
                   @validation_warnings.concat(binding_warnings)
+                  # --strict gates on these too. The flag says "validation
+                  # errors" and a binding warning is a validation finding, but
+                  # only attribute warnings were counted: measured 2026-09-04,
+                  # a tree reporting four findings still exited 0 under
+                  # --strict because all four came from the binding validator.
+                  @validation_errors += binding_warnings.length
                   Core::Logger.warn "  #{binding_warnings.length} binding warning(s) in #{relative_path}"
                 end
               end
@@ -504,6 +512,8 @@ module SjuiTools
                   @binding_errors.concat(binding_validator.errors)
                   if binding_warnings.any?
                     @validation_warnings.concat(binding_warnings)
+                    # Same as the primary path: --strict counts binding findings.
+                    @validation_errors += binding_warnings.length
                     Core::Logger.warn "  #{binding_warnings.length} binding warning(s) in #{variant_rel}"
                   end
                 end

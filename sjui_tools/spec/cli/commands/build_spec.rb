@@ -122,6 +122,60 @@ RSpec.describe SjuiTools::CLI::Commands::Build do
     end
   end
 
+  describe '--strict and binding findings' do
+    # A build reporting four findings still exited 0 under --strict, because
+    # only attribute warnings reached the counter the flag reads (measured
+    # 2026-09-04 on a Label with undefined variables). The flag says
+    # "validation errors"; a binding warning is one.
+    before do
+      allow(SjuiTools::Core::ConfigManager).to receive(:detect_mode).and_return('swiftui')
+      allow(SjuiTools::Core::ProjectFinder).to receive(:setup_paths).and_return(true)
+      allow(SjuiTools::Core::ProjectFinder).to receive(:get_full_source_path).and_return(temp_dir)
+      allow(SjuiTools::Core::ConfigManager).to receive(:load_config).and_return({
+        'layouts_directory' => 'Layouts',
+        'view_directory' => 'View'
+      })
+      allow(command).to receive(:process_strings_extraction)
+      allow(SjuiTools::Core::Logger).to receive(:info)
+      allow(SjuiTools::Core::Logger).to receive(:warn)
+      allow(SjuiTools::Core::Logger).to receive(:error)
+      FileUtils.mkdir_p(File.join(temp_dir, 'Layouts'))
+      FileUtils.mkdir_p(File.join(temp_dir, 'View'))
+    end
+
+    def write_layout(text)
+      File.write(File.join(temp_dir, 'Layouts', 'sample.json'), JSON.generate(
+        { 'type' => 'SafeAreaView', 'width' => 'matchParent', 'height' => 'matchParent',
+          'child' => [
+            { 'type' => 'Label', 'id' => 'lbl', 'width' => 'wrapContent',
+              'height' => 'wrapContent', 'text' => text }
+          ] }
+      ))
+    end
+
+    # `@{title}` with no data section is a binding finding and nothing else.
+    it 'fails the build when --strict is given' do
+      write_layout('@{title}')
+      expect { command.run(['--strict']) }.to raise_error(SystemExit) { |e| expect(e.status).to eq(1) }
+      expect(command.instance_variable_get(:@validation_warnings).join("\n")).to match(/title/)
+    end
+
+    it 'reports the same finding without --strict and still exits 0' do
+      # The finding is not new; only whether it gates is.
+      write_layout('@{title}')
+      expect { command.run([]) }.not_to raise_error
+      expect(command.instance_variable_get(:@validation_warnings).join("\n")).to match(/title/)
+    end
+
+    it 'does not fail --strict on a tree with no findings' do
+      # Control: without it, a counter that always incremented would pass
+      # the first arm.
+      write_layout('plain text')
+      expect { command.run(['--strict']) }.not_to raise_error
+      expect(command.instance_variable_get(:@validation_warnings)).to be_empty
+    end
+  end
+
   describe '#build_uikit (private)' do
     before do
       allow(SjuiTools::Core::ProjectFinder).to receive(:setup_paths).and_return(true)
