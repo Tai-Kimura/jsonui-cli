@@ -168,3 +168,81 @@ class TestExtraction:
         report = uc.check_unit_contracts(root)
         assert report.implemented["android"] == {"real"}
         assert report.ok, uc.format_report(report)
+
+
+class TestATypoCannotDeleteTheDeclaration:
+    """A mechanism that exists to stop drift must not be removable by one
+    misspelled key.
+
+    Measured on the shipped 1.8.24: `"caes"` for `"cases"` made the block
+    vanish, `--check` printed "0 case(s) declared" and exited 0, and
+    `validate spec` printed 0 errors. Neither output was false — the block
+    really did declare nothing readable — which is exactly why it was
+    dangerous. Found by a face before it had written a single declaration.
+    """
+
+    def _spec(self, tmp_path, block):
+        (tmp_path / "docs" / "screens").mkdir(parents=True)
+        (tmp_path / "docs" / "screens" / "chat.spec.json").write_text(
+            json.dumps({"type": "screen", "unitContracts": block}), encoding="utf-8"
+        )
+        (tmp_path / "ios" / "Tests").mkdir(parents=True)
+        (tmp_path / "jui.config.json").write_text(
+            json.dumps({
+                "spec_directory": "docs/screens",
+                "platforms": {"ios": {"root": "ios", "unitTestsDir": "Tests"}},
+            }),
+            encoding="utf-8",
+        )
+        return tmp_path
+
+    def test_a_misspelled_cases_key_is_named_not_ignored(self, tmp_path):
+        root = self._spec(tmp_path, {"target": "VM", "caes": [{"name": "x"}]})
+        report = uc.check_unit_contracts(root)
+        assert not report.ok
+        joined = "\n".join(uc.format_report(report))
+        assert "unknown key 'caes'" in joined
+        assert "drops the declaration" in joined
+
+    def test_a_block_that_reads_as_empty_is_called_out(self, tmp_path):
+        # The aggregate guard: even if the specific typo were not enumerable,
+        # "specs carry the key and zero cases came out" is itself the signal.
+        root = self._spec(tmp_path, {"target": "VM", "cases": []})
+        report = uc.check_unit_contracts(root)
+        assert not report.ok
+        assert "no case could be read" in "\n".join(uc.format_report(report))
+
+    def test_a_misspelled_case_key_is_named(self, tmp_path):
+        root = self._spec(tmp_path, {"target": "VM", "cases": [{"nmae": "x"}]})
+        report = uc.check_unit_contracts(root)
+        assert not report.ok
+        joined = "\n".join(uc.format_report(report))
+        assert "unknown key 'nmae'" in joined
+        assert "'name' is missing" in joined
+
+    def test_wrong_types_are_named_rather_than_skipped(self, tmp_path):
+        root = self._spec(tmp_path, {"target": "VM", "cases": "not-an-array"})
+        report = uc.check_unit_contracts(root)
+        assert not report.ok
+        assert "'cases' must be an array" in "\n".join(uc.format_report(report))
+
+    def test_a_missing_target_is_named(self, tmp_path):
+        root = self._spec(tmp_path, {"cases": [{"name": "x", "platforms": ["ios"]}]})
+        report = uc.check_unit_contracts(root)
+        assert not report.ok
+        assert "'target' is missing" in "\n".join(uc.format_report(report))
+
+    def test_a_project_that_declares_nothing_at_all_is_still_clean(self, tmp_path):
+        # Positive control. The guard fires on "carries the key but reads as
+        # empty", NOT on "has no unitContracts anywhere" — otherwise every
+        # project without the feature would fail.
+        (tmp_path / "docs" / "screens").mkdir(parents=True)
+        (tmp_path / "docs" / "screens" / "chat.spec.json").write_text(
+            json.dumps({"type": "screen"}), encoding="utf-8"
+        )
+        (tmp_path / "jui.config.json").write_text(
+            json.dumps({"spec_directory": "docs/screens", "platforms": {}}), encoding="utf-8"
+        )
+        report = uc.check_unit_contracts(tmp_path)
+        assert report.ok, uc.format_report(report)
+        assert "0 carrying a unitContracts block" in "\n".join(uc.format_report(report))
