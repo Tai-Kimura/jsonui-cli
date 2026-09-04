@@ -73,6 +73,7 @@ pyenv local 3.11.0
 | `generate html` | `g html` | Generate HTML directory with index for all test files |
 | `artifacts pull` | `a pull` | Pull test artifacts (screenshots/recordings) from devices and xcresults |
 | `artifacts status` | `a status` | Show resolved artifacts config and existing artifact files |
+| `artifacts prune-legacy` | `a prune-legacy` | List (default) or delete (`--yes`) the suites left in the flat legacy Android mirror |
 
 ### validate (v)
 
@@ -348,6 +349,17 @@ jsonui-test a pull --json
 **Exit codes:**
 - `0`: Pull succeeded (with `--platform all`, per-platform skips are benign)
 - `1`: An explicitly requested single platform produced no files, or config error (e.g. missing `appId`)
+
+### artifacts prune-legacy (a prune-legacy)
+
+The one deliberate exit from the flat legacy mirror `/data/local/tmp/jsonui-artifacts`. `pull --clean` never removes it (it has no app dimension, so on a shared device the entries can belong to any app that ran with an android driver < 1.8.9), and a device still running an older driver keeps refilling it. Once every app on the device writes the scoped mirror (driver ≥ 1.8.9), a person runs this to close the migration:
+
+```bash
+jsonui-test artifacts prune-legacy                 # dry run: lists the suite dirs it would delete
+jsonui-test artifacts prune-legacy --serial emulator-5554 --yes   # deletes them
+```
+
+Only suite-shaped entries are deleted. Package-shaped entries (other apps' scoped mirrors) and the root itself are never touched. The command cannot tell whether an older driver is still in use on the device — that is what the dry run and `--yes` are for.
 
 ### artifacts status (a status)
 

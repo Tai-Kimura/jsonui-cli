@@ -452,6 +452,60 @@ def pull_android(test_cfg: dict, project_root, out_root,
     return result
 
 
+def prune_legacy_android(test_cfg: dict, serial_override=None, yes=False) -> dict:
+    """List — and with ``yes`` delete — the suites left in the flat legacy mirror.
+
+    The flat root has no app dimension, so no lane can clean it safely on its
+    own: ``pull --clean`` never touches it (1.8.32) and every pull from a
+    device still running a driver < 1.8.9 re-reads it. Somebody has to close
+    the migration once every app on the device writes the scoped mirror, and
+    that is a decision people make (the command cannot tell whether an older
+    driver is still in use), so the default is a dry run that names what
+    would go. Package-shaped entries — other apps' scoped mirrors — and the
+    root itself are never removed.
+    """
+    android_cfg = _artifacts_cfg(test_cfg).get("android", {}) or {}
+    info = {"root": LEGACY_MIRROR_ROOT, "suites": [], "packages": [],
+            "deleted": [], "dryRun": not yes, "skipped": []}
+
+    adb_path = find_adb(android_cfg)
+    if not adb_path:
+        info["skipped"].append(
+            "adb not found (PATH, $ANDROID_HOME/$ANDROID_SDK_ROOT, default SDK "
+            "locations); set test.artifacts.android.adb to an explicit path")
+        return info
+    serial = serial_override or android_cfg.get("serial")
+    adb = [adb_path] + (["-s", str(serial)] if serial else [])
+
+    try:
+        ls = _run(adb + ["shell", "ls", LEGACY_MIRROR_ROOT])
+    except FileNotFoundError:
+        info["skipped"].append("adb not found on PATH")
+        return info
+    combined = (getattr(ls, "stdout", "") or "") + (getattr(ls, "stderr", "") or "")
+    if any(m in combined for m in _ADB_NO_DEVICE_MARKERS):
+        first_line = next((l for l in combined.strip().splitlines() if l.strip()), "no device")
+        info["skipped"].append(f"adb: {first_line.strip()}")
+        return info
+    if ls.returncode != 0 or "No such file" in combined:
+        info["skipped"].append(f"no legacy mirror at {LEGACY_MIRROR_ROOT} on this device")
+        return info
+
+    suites, packages = _legacy_entries(getattr(ls, "stdout", "") or "")
+    info["suites"], info["packages"] = suites, packages
+    if not yes or not suites:
+        return info
+    for name in suites:
+        rm = _run(adb + ["shell", "rm", "-rf", f"{LEGACY_MIRROR_ROOT}/{name}"])
+        if rm.returncode == 0:
+            info["deleted"].append(name)
+        else:
+            stderr = (getattr(rm, "stderr", "") or "").strip()
+            info["skipped"].append(f"rm failed for {LEGACY_MIRROR_ROOT}/{name}"
+                                   + (f": {stderr}" if stderr else ""))
+    return info
+
+
 # -- Web ------------------------------------------------------------------------
 
 def _resolve_rel(project_root, raw) -> Path:
