@@ -11,6 +11,7 @@ require 'core/attribute_validator'
 # disagreed.
 RSpec.describe 'Segment items are scalars' do
   let(:described_module) { JsonUIShared::AttributeValidatorCore }
+  let(:described_validator) { SjuiTools::Core::AttributeValidator }
 
   subject(:indices) do
     ->(type, name, value) { JsonUIShared::AttributeValidatorCore.non_scalar_item_indices(type, name, value) }
@@ -87,6 +88,48 @@ RSpec.describe 'Segment items are scalars' do
       expect(described_module.binding_in_scalar_items?('Collection', 'items', '@{rows}')).to be(false)
       expect(described_module.binding_in_scalar_items?('Segment', 'selectedIndex', '@{i}')).to be(false)
       expect(described_module.binding_in_scalar_items?('Segment', 'items', '@{options}')).to be(true)
+    end
+  end
+
+  describe 'a null element' do
+    # It passed a rule that named only Hash and Array, and web emitted an
+    # empty <button> with a real id — so every later s_tab_n sat one index
+    # off the runtimes, which drop it (rjui lane, 2026-09-04). Android
+    # tests isJsonPrimitive, and Gson's JsonNull is not one; iOS casts to
+    # String/NSNumber, and NSNull is neither.
+    it 'is named by its kind, not called an object' do
+      validator = described_validator.new
+      validator.validate({ 'type' => 'Segment', 'items' => ['opt_a', nil] }, 'Segment')
+      warning = validator.warnings.find { |w| w.include?('items[1]') }
+      expect(warning).not_to be_nil, validator.warnings.inspect
+      expect(warning).to include('is null')
+      expect(warning).not_to include('is an object')
+    end
+
+    it 'is dropped by the same predicate the converters use' do
+      expect(described_module.non_scalar_item_indices('Segment', 'items', ['a', nil, 'b'])).to eq([1])
+    end
+  end
+
+  describe 'a boolean element' do
+    # Kept on purpose. BOTH runtimes render it — Android through
+    # isJsonPrimitive, iOS because a Bool bridges to NSNumber — so
+    # dropping it here would show fewer tabs than the running screen,
+    # which is the divergence this rule exists to close. That it renders
+    # "true" on web and Android and "1" on iOS is a real defect, and it
+    # belongs to the declaration and the runtimes.
+    it 'is not dropped' do
+      expect(described_module.non_scalar_item_indices('Segment', 'items', ['a', true, false])).to eq([])
+      expect(described_module.scalar_item?(true)).to be(true)
+    end
+  end
+
+  describe 'what counts as a scalar' do
+    it 'matches what the runtimes keep' do
+      [['text', true], [1, true], [1.5, true], [true, true], [false, true],
+       [nil, false], [{}, false], [[], false]].each do |item, expected|
+        expect(described_module.scalar_item?(item)).to be(expected), item.inspect
+      end
     end
   end
 
