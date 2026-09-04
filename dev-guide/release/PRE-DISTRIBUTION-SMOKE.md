@@ -540,3 +540,14 @@ v1.8.16  タグ → 直後に実装レーンが 3a169dff を積んだ   ⇒ 1.8.
 「この版で verify が NOTE を出し始めた」は、前版の worktree launcher と新版の launcher を同じ消費側 tree に当てて
 NOTE 行数を比べれば 1 コマンドで決まる（`jui verify` は書き込まない）。今回は両方 10 で、変更ではなく基準値の古さだった。
 **相手に falsifier（worktree のパス）を返す。**
+
+## 6 スイートは `run-suites.sh` で撃つ —— `tail -1` は拒否を空行にする（1.8.41）
+
+document_tools の suite は、`jsonui_test_cli` が `~/.jsonui-cli` の配布コピーに解決すると **exit 4 で拒否**する
+（「配布コピーを測る罠」の自衛。正しい挙動）。列車のその場しのぎの runner は各スイートを `| tail -1` に通していたので、
+その拒否は**空行 1 本**になり、緑の見出しの下に並んだ。パイプの左が死んでも右は「答えの顔をした出力」を返す
+（`tail -1` → 空行 / `shasum` → 空文字列の sha `da39a3ee…` / `wc -l` → 0）。
+⇒ `dev-guide/release/run-suites.sh`: 各スイートが **どの木の package を import したか**（解決したパス）と **exit code** を印字し、
+`pipefail` で集計する。パスが checkout の外なら失敗として数える。
+⚠️ jui_tools 側は `jsonui_test_cli` をパス指定 / PYTHONPATH つき subprocess で checkout に固定済み（triage 担当の実測）。
+ruby 3 面は `require_relative` 前提で、配布コピーに逃げる経路は**測っていない**（安全とも言っていない）。
