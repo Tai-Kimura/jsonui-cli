@@ -70,4 +70,37 @@ RSpec.describe 'Collection cellClasses with items and no sections' do
       expect(errors_for(base.merge('cellClasses' => ['AlphaCard']))).to be_empty
     end
   end
+
+  # ⚠️ Every example above asserts emitted TEXT, and until this arm existed
+  # nothing in the rjui suite handed emitted TypeScript to a compiler at all.
+  # `compile-emitted-kotlin.sh` said "`tsc --noEmit` ... run in the suite";
+  # that was false for this face.
+  #
+  # Parsing would not be enough. Measured on the Swift side: `-parse` accepted
+  # `data.collectionDataSource.getCellData(...)` — a property nothing declares
+  # calling a method that exists nowhere — with zero errors. The rjui suite's
+  # one existing check is a `@babel/parser` parse, which has the same blind
+  # spot.
+  describe 'the emitted TypeScript type-checks', :typescript_compile do
+    it 'accepts the single-cellClass collection under --strict' do
+      code = convert(base.merge('cellClasses' => ['ItemCard']))
+
+      # The types the fragment names, declared by the spec that emits it —
+      # not inferred, because a permissive stub accepts output a consumer's
+      # strict build would reject.
+      ambient = <<~TS
+        interface ItemCardData { readonly title?: string }
+        declare const ItemCard: (props: {
+          key?: number; id?: string; data: ItemCardData
+        }) => JSX.Element;
+        declare const data: { rows?: ItemCardData[] };
+      TS
+
+      expect(<<~TSX).to compile_as_typescript.with_ambient(ambient)
+        export const Emitted = (): JSX.Element => (
+        #{code}
+        );
+      TSX
+    end
+  end
 end
