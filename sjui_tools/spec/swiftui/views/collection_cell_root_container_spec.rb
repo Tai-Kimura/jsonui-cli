@@ -54,6 +54,32 @@ RSpec.describe 'Collection cell root accessibility container' do
     end
   end
 
+  describe 'the single-child merge' do
+    ANCHOR = '.overlay(alignment: .topLeading) {'
+
+    it 'anchors a cell root that has only one accessibility child' do
+      # Without the anchor SwiftUI collapses a single-child container into
+      # that child, and the WRAPPER's `{id}_item_{N}` lands on the child
+      # after all — the defect surviving in one-child cells. The id-bearing
+      # path guards this; so must this one.
+      code = convert({ 'type' => 'View', CELL_ROOT_KEY => true,
+                       'child' => [{ 'type' => 'Label', 'id' => 'only', 'text' => 'x' }] })
+      expect(code).to include(ANCHOR)
+      expect(code).to include('.accessibilityElement(children: .contain)')
+    end
+
+    it 'does not anchor a cell root with two accessibility children' do
+      # The anchor costs view-tree depth (the device stack-overflow
+      # regression), so it is emitted only where the hazard is.
+      code = convert(cell_root('child' => [
+                                 { 'type' => 'Label', 'id' => 'a', 'text' => 'x' },
+                                 { 'type' => 'Label', 'id' => 'b', 'text' => 'y' }
+                               ]))
+      expect(code).not_to include(ANCHOR)
+      expect(code).to include('.accessibilityElement(children: .contain)')
+    end
+  end
+
   describe 'what must not change' do
     it 'a cell root WITH an id keeps the id-bearing shape' do
       code = convert(cell_root('id' => 'holiday_row_root'))

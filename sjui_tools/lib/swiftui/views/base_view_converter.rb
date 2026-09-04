@@ -331,6 +331,23 @@ module SjuiTools
         # what exhausted a device's main-thread stack once already (see the
         # DEPTH BUDGET note below).
         def apply_collection_cell_root_container
+          # The same single-child merge the id path guards against, for the
+          # same reason and by the same means. `.contain` alone is not enough
+          # when the container can end up with fewer than two accessibility
+          # children: SwiftUI collapses it into that single child, and the
+          # WRAPPER's `{id}_item_{N}` then lands on the child after all —
+          # the defect this method exists to remove, surviving in cells with
+          # one child. Found by reading the id path's own hazard check rather
+          # than by a failing test; the arms below pin both sides.
+          if accessibility_merge_hazard?
+            add_modifier_line ".overlay(alignment: .topLeading) {"
+            indent do
+              add_modifier_line "Color.clear"
+              add_modifier_line "    .frame(width: 0.5, height: 0.5)"
+              add_modifier_line "    .accessibilityElement(children: .ignore)"
+            end
+            add_modifier_line "}"
+          end
           add_modifier_line ".accessibilityElement(children: .contain)"
         end
 
