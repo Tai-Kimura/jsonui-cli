@@ -163,10 +163,21 @@ class SpecPageLink(unittest.TestCase):
                                   unit_href="../unit/ItemDetailViewModel.html")
         self.assertIn("../unit/ItemDetailViewModel.html", html)
 
-    def test_a_spec_without_contracts_gets_no_link_even_if_one_is_offered(self):
-        html = generate_spec_html(_spec(False), title="item_detail",
-                                  unit_href="../unit/ItemDetailViewModel.html")
+    def test_no_link_when_the_caller_offers_none(self):
+        html = generate_spec_html(_spec(False), title="item_detail")
         self.assertNotIn("unit-contract-link", html)
+
+    def test_the_caller_decides_not_the_specs_own_key(self):
+        # Inverted 2026-09-05. This used to require `spec_data['unitContracts']`
+        # as well, which read as a safety check and was wrong in both
+        # directions for a SPLIT screen: the parent's file carries no block
+        # (the merger forbids one) while the target is recorded against the
+        # parent, and a sub-spec carries a block whose target belongs to the
+        # parent's page. Gating on the file's own key left exactly the split
+        # screens — the ones with the most pages to join up — unlinked.
+        html = generate_spec_html(_spec(False), title="chat",
+                                  unit_href="../unit/ChatHandler.html")
+        self.assertIn("../unit/ChatHandler.html", html)
 
 
 if __name__ == "__main__":

@@ -1688,9 +1688,22 @@ def _generate_spec_pages(
 
                 # Generate HTML with navigation if available
                 spec_layouts_dir = _resolve_layouts_dir_for_spec(spec_file, layouts_dir)
-                # Depth-aware: a nested spec page sits further from unit/.
+                # A split screen declares its contracts in the SUB-specs, and
+                # they are read through the merged parent — so the target is
+                # recorded against the parent's screen name, and neither page
+                # finds it by its own stem: the parent's file carries no
+                # `unitContracts` at all, and the sub-spec's stem is not a
+                # screen anything was recorded against. Splitting puts the
+                # sub-specs in `<spec_dir>/<parent>/`, which is the same
+                # convention the contract discovery uses, so the directory
+                # name is the parent's key.
                 unit_href = (unit_hrefs or {}).get(spec_file.stem.replace(".spec", ""))
+                if not unit_href:
+                    rel_dir = spec_file.parent.relative_to(spec_docs_path)
+                    if rel_dir.name:
+                        unit_href = (unit_hrefs or {}).get(rel_dir.name)
                 if unit_href:
+                    # Depth-aware: a nested spec page sits further from unit/.
                     up = "../" * len(Path(current_path).parts[:-1])
                     unit_href = f"{up}{unit_href}"
                 content = generate_spec_html(
@@ -1941,8 +1954,15 @@ def _generate_unit_pages(
         try:
             (output_path / rel).write_text(content, encoding="utf-8")
         except OSError as exc:
-            record_page_failure(output_path / rel, f"unit contract page: {exc}")
+            record_page_failure("unit contract", name, exc,
+                                source=", ".join(target.get("screens") or []),
+                                output=output_path / rel)
             continue
+        # The same counter every other page increments. `Generated N HTML
+        # files` exists to answer "did everything come out?", so a page that
+        # is written and not counted makes the printed denominator smaller
+        # than the tree — which is the defect that counter was added to fix.
+        note_page_generated(output_path / rel)
         written.append(meta)
 
     entries = written
