@@ -331,7 +331,10 @@ def check_unit_contracts(
             if report.declared.get(platform):
                 report.unscannable[platform] = (
                     f"unit test directory not found: {root} — declared cases for "
-                    f"{platform} cannot be compared against anything"
+                    f"{platform} cannot be compared against anything. This is "
+                    f"also what a project looks like before its first stub is "
+                    f"generated (git does not track empty directories), so "
+                    f"check that before suspecting the path"
                 )
             continue
         found, read = _implemented_names(root, platform)

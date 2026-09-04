@@ -246,3 +246,46 @@ class TestATypoCannotDeleteTheDeclaration:
         report = uc.check_unit_contracts(tmp_path)
         assert report.ok, uc.format_report(report)
         assert "0 carrying a unitContracts block" in "\n".join(uc.format_report(report))
+
+
+class TestZeroWithTwoMeanings:
+    """`missing == 0` is two opposite facts: everything is implemented, or
+    nothing was compared.
+
+    Reported against 1.8.24: with the test directory absent, `--check` said
+    NOT CHECKED and failed while `--dry-run` said "every declared case has an
+    implementation" and exited 0, about the same tree with zero
+    implementations. `--dry-run` is the first command anyone runs, so a
+    mistyped unitTestsDir read as "done".
+    """
+
+    def _declared_but_no_dir(self, tmp_path):
+        (tmp_path / "docs" / "screens").mkdir(parents=True)
+        (tmp_path / "docs" / "screens" / "a.spec.json").write_text(
+            json.dumps({"type": "screen", "unitContracts": {
+                "target": "VM", "cases": [{"name": "a_case", "platforms": ["android"]}]}}),
+            encoding="utf-8")
+        (tmp_path / "jui.config.json").write_text(
+            json.dumps({"spec_directory": "docs/screens", "platforms": {
+                "android": {"root": "android", "unitTestsDir": "does/not/exist"}}}),
+            encoding="utf-8")
+        return tmp_path
+
+    def test_an_absent_directory_is_not_checked_not_complete(self, tmp_path):
+        report = uc.check_unit_contracts(self._declared_but_no_dir(tmp_path))
+        assert not report.ok
+        assert "android" in report.unscannable
+
+    def test_write_stubs_produces_nothing_for_a_platform_it_cannot_scan(self, tmp_path):
+        # The mechanism behind the wrong claim: no work is produced, which
+        # the caller then has to be careful not to read as "no work needed".
+        report = uc.check_unit_contracts(self._declared_but_no_dir(tmp_path))
+        assert uc.write_stubs(tmp_path, report, dry_run=True) == []
+
+    def test_the_absent_directory_message_names_both_causes(self, tmp_path):
+        # git does not track empty directories, so a fresh clone of a project
+        # that has declared but not yet generated looks identical to a typo.
+        report = uc.check_unit_contracts(self._declared_but_no_dir(tmp_path))
+        text = "\n".join(uc.format_report(report))
+        assert "before its first stub is generated" in text
+        assert "suspecting the path" in text
