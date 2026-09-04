@@ -29,6 +29,39 @@ def _config_for(start: Path) -> Path | None:
     return find_jui_config(Path(start))
 
 
+def _declares_specs(config: Path) -> bool:
+    """Whether this config can enumerate specs at all."""
+    try:
+        return bool(json.loads(config.read_text(encoding="utf-8")).get("spec_directory"))
+    except (OSError, ValueError, AttributeError):
+        return False
+
+
+def _config_for_app(app_name: str, docs_path: Path) -> Path | None:
+    """The config governing one app's specs.
+
+    An app's DOCS and its CONFIG need not share a tree. The reported shape has
+    the specs at `docs/<app>/screens/json` and the config at
+    `<app>/jui.config.json` pointing back out at them, so walking up from the
+    docs directory leaves the app's subtree entirely and lands on the
+    repository root — whose config carries only `checks`.
+
+    So when the config found that way cannot enumerate specs, one more
+    candidate is tried: `<app_name>/jui.config.json` beside it. That is not
+    searching harder — `app_name` is the name the caller just supplied in
+    `--app`, so it is a named candidate rather than a guess, and a config that
+    also cannot enumerate is kept as the answer so the warning names the file
+    that was actually read.
+    """
+    cfg = _config_for(docs_path)
+    if cfg is None or _declares_specs(cfg):
+        return cfg
+    beside = cfg.parent / app_name / "jui.config.json"
+    if beside.is_file() and _declares_specs(beside):
+        return beside.resolve()
+    return cfg
+
+
 def _resolve_unit_roots(
     config_arg: str | None, apps: list[dict] | None, fallback_start: Path
 ) -> list[dict]:
@@ -57,7 +90,7 @@ def _resolve_unit_roots(
     if apps:
         roots: list[dict] = []
         for app in apps:
-            cfg = _config_for(Path(app["docs_path"]))
+            cfg = _config_for_app(app["name"], Path(app["docs_path"]))
             if cfg is not None:
                 roots.append({"app": app["name"], "config": cfg, "root": cfg.parent})
         if roots:
