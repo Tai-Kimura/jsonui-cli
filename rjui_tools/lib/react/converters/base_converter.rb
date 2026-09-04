@@ -2217,7 +2217,16 @@ module RjuiTools
 
         # An array stays an array literal; a binding becomes the expression
         # (it may yield either shape at runtime, and the helper accepts
-        # both); anything else is a text pattern to find.
+        # both); a strings key becomes the SAME runtime accessor the body
+        # takes (text_runtime_expression → convert_string_key), so the
+        # pattern is matched against the localized text of the current
+        # locale — what iOS (`textPattern: StringManager…`) and Android
+        # (`stringResource(R.string…)`) do. It used to be emitted as the
+        # bare key: partialText then ran indexOf('imported_by') over the
+        # translated body and skipped, silently, on every site (a consumer
+        # counted 6 of 6). Folding the key to a literal at build time would
+        # only move that to "matches in the source language only".
+        # Anything else is a literal text pattern to find.
         def partial_range_expression(partial)
           range = partial['range']
           case range
@@ -2226,6 +2235,8 @@ module RjuiTools
             if is_binding_format?(range)
               inner = range[/\A@\{(.+)\}\z/, 1] || range
               add_viewmodel_data_prefix(inner)
+            elsif (resolved = convert_string_key(range))
+              resolved.sub(/\A\{/, '').sub(/\}\z/, '')
             else
               "'#{range.gsub("\\", "\\\\").gsub("'", "\\'")}'"
             end

@@ -542,6 +542,40 @@ RSpec.describe RjuiTools::React::Converters::LabelConverter do
       expect(result).to include("className: 'text-[#FF0000]'")
     end
 
+    # A strings key in `range` takes the SAME runtime accessor the body
+    # takes, so partialText matches it against the localized text of the
+    # current locale (iOS: textPattern: StringManager…, Android:
+    # stringResource(...)). It used to be emitted as the bare key, and
+    # indexOf('imported_by') over the translated body skipped on every site.
+    it 'resolves a strings key in range to the runtime accessor, not the bare key' do
+      converter = create_converter({
+        'type' => 'Label',
+        'text' => 'Imported by Foo',
+        'partialAttributes' => [
+          { 'range' => 'imported_by', 'fontWeight' => 'bold' }
+        ]
+      })
+      allow(converter).to receive(:lookup_string_manager_key) do |text, **|
+        text == 'imported_by' ? '{StringManager.currentLanguage.importedBy}' : nil
+      end
+      result = converter.convert
+      expect(result).to include('range: StringManager.currentLanguage.importedBy,')
+      expect(result).not_to include("range: 'imported_by'")
+    end
+
+    it 'keeps a range that is not a strings key as a literal pattern' do
+      converter = create_converter({
+        'type' => 'Label',
+        'text' => 'Imported by Foo',
+        'partialAttributes' => [
+          { 'range' => 'Imported by ', 'fontWeight' => 'bold' }
+        ]
+      })
+      allow(converter).to receive(:lookup_string_manager_key).and_return(nil)
+      result = converter.convert
+      expect(result).to include("range: 'Imported by '")
+    end
+
     it 'handles multiple partial attributes' do
       converter = create_converter({
         'type' => 'Label',
