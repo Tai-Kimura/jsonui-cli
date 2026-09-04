@@ -52,6 +52,11 @@ module SjuiTools
             expr = BindingExpression.swift_text_expr(text_value[2..-2], prefix: 'data')
             if expr
               "\"\\(#{expr})\""
+            elsif !BindingExpression.emittable_path?(BindingExpression.parse(text_value[2..-2]).path)
+              # Not a path at all: show the author's own text instead of
+              # emitting Swift that will not compile. Silence would hide a
+              # typo that the screen can now display.
+              BindingExpression.swift_literal_for(text_value)
             else
               # Negation is not valid in text contexts — canonical runtimes
               # treat the token as unresolved (empty string)

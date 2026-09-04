@@ -135,4 +135,42 @@ RSpec.describe KjuiTools::Compose::Helpers::BindingExpression do
       expect(described_class.two_way_path('!flag')).to eq('flag')
     end
   end
+  # `@{ bad name }` compiled to `"${data.bad name ?: \"\"}"` — a Kotlin
+  # syntax error — from a build that exited 0 (measured 2026-09-04, same
+  # shape as iOS and web). The validator had already reported 'bad' and
+  # 'name' as undefined variables; the emitter wrote the file anyway.
+  describe 'an inner that is not a property path' do
+    it 'accepts the shapes the grammar allows' do
+      %w[title user.name items[0] items[10].label _x9].each do |path|
+        expect(described_class.emittable_path?(path)).to be(true), path
+      end
+    end
+
+    it 'rejects anything that is not a path' do
+      ['bad name', '', ' ', 'a b.c', 'x +', 'foo()', '1abc', 'a..b', 'a.'].each do |path|
+        expect(described_class.emittable_path?(path)).to be(false), path.inspect
+      end
+    end
+
+    it 'emits the author text as a literal in a text context' do
+      expect(described_class.interpolated_access('bad name')).to eq('"@{bad name}"')
+    end
+
+    it 'emits a literal in a value context and false where a boolean is wanted' do
+      expect(described_class.value_access('bad name')).to eq('"@{bad name}"')
+      expect(described_class.value_access('bad name', negatable: true)).to eq('false')
+    end
+
+    it 'never emits data. followed by a space' do
+      # The property that matters, whatever the fallback is.
+      ['bad name', 'a b.c', 'x +'].each do |inner|
+        [described_class.interpolated_access(inner),
+         described_class.value_access(inner),
+         described_class.value_access(inner, negatable: true)].each do |emitted|
+          expect(emitted).not_to match(/data\.\S*\s/), "#{inner.inspect} -> #{emitted}"
+        end
+      end
+    end
+  end
+
 end

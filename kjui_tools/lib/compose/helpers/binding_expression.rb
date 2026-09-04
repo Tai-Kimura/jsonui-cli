@@ -46,6 +46,13 @@ module KjuiTools
         BINDING_RE = /@\{([^}]+)\}/.freeze
         WHOLE_BINDING_RE = /\A@\{[^}]+\}\z/.freeze
         FLAT_IDENTIFIER_RE = /\A[a-zA-Z_][a-zA-Z0-9_]*\z/.freeze
+        # A path the emitters may put after `data.`: identifier segments,
+        # dots, and array indices. Anything else — a space, an operator, an
+        # empty inner — is not a path, and interpolating it produces code
+        # that does not parse. Measured 2026-09-04: `@{ bad name }` emitted
+        # `"${data.bad name ?: \"\"}"`, which is a Kotlin syntax error, from a
+        # build that exited 0.
+        PATH_RE = /\A[a-zA-Z_][a-zA-Z0-9_]*(?:\[[0-9]+\])?(?:\.[a-zA-Z_][a-zA-Z0-9_]*(?:\[[0-9]+\])?)*\z/.freeze
 
         Parsed = Struct.new(:path, :negated, :default, :has_default, keyword_init: true)
 
@@ -109,8 +116,19 @@ module KjuiTools
 
           # C1 text (string interpolation). Returns the full quoted Kotlin
           # string literal, e.g. "\"${data.name ?: \"Guest\"}\"".
+          # True when the parsed path can be emitted as Kotlin. False means
+          # the author wrote something that is not a property path.
+          def emittable_path?(path)
+            path.to_s.match?(PATH_RE)
+          end
+
           def interpolated_access(inner)
             p = parse(inner)
+            # Not a path: emit the author's own text as a literal instead of
+            # invalid Kotlin. The build still reports the finding; what it
+            # must not do is write a file that cannot be parsed.
+            return quote("@{#{inner}}") unless emittable_path?(p.path)
+
             base = "data.#{p.path}"
             if !property_nullable?(p.path)
               "\"${#{base}}\""
@@ -126,6 +144,14 @@ module KjuiTools
           # `@{!flag}` emits a real Kotlin negation (`!data.flag`).
           def value_access(inner, negatable: false)
             p = parse(inner)
+            # Same rule as the text context, one step weaker: there is no
+            # literal that fits every value position, so emit the safest
+            # compilable thing for the shape asked for. Either way the
+            # generated file parses.
+            unless emittable_path?(p.path)
+              return negatable ? 'false' : quote("@{#{inner}}")
+            end
+
             base = "data.#{p.path}"
             expr =
               if p.has_default && property_nullable?(p.path)
