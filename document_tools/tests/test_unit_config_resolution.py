@@ -90,6 +90,84 @@ class _SplitTree(unittest.TestCase):
         return out, buf.getvalue()
 
 
+class _DocsOutsideTheApp(_SplitTree):
+    """The reported shape: specs live OUTSIDE the app, config points back out.
+
+        jui.config.json                     checks only
+        admin/jui.config.json               spec_directory: ../docs/admin/screens/json
+        docs/admin/screens/json/*.spec.json the specs
+
+    `--app admin:docs/admin` therefore starts the search in a tree the app's
+    config is not in, and walking up leaves the app's subtree entirely.
+    """
+
+    def build(self) -> Path:
+        root = Path(tempfile.mkdtemp()).resolve()
+        self.addCleanup(shutil.rmtree, root, ignore_errors=True)
+        (root / "jui.config.json").write_text(
+            json.dumps({"checks": {"doc": {"command": "echo ok"}}}), encoding="utf-8")
+        (root / "admin" / "ios" / "Tests").mkdir(parents=True)
+        (root / "admin" / "jui.config.json").write_text(json.dumps({
+            "spec_directory": "../docs/admin/screens/json",
+            "platforms": {"ios": {"root": "ios", "unitTestsDir": "Tests",
+                                  "testModule": "App"}},
+        }), encoding="utf-8")
+        specs = root / "docs" / "admin" / "screens" / "json"
+        specs.mkdir(parents=True)
+        (specs / "dashboard.spec.json").write_text(json.dumps({
+            "type": "screen_spec", "version": "1.0",
+            "metadata": {"screenName": "dashboard", "name": "Dash",
+                         "displayName": "Dash", "description": "d."},
+            "structure": {"components": [{"type": "View", "id": "root",
+                                          "description": "r"}],
+                          "layout": {"root": "root", "children": []}},
+            "unitContracts": {"target": "DashboardViewModel",
+                              "cases": [{"name": "loads", "intent": "i",
+                                         "platforms": ["ios"]}]},
+        }), encoding="utf-8")
+        (root / "admin" / "ios" / "Tests" / "DashboardViewModelContractTests.swift"
+         ).write_text("import XCTest\n@testable import App\n"
+                      "final class DashboardViewModelContractTests: XCTestCase "
+                      "{ func test_loads() throws {} }\n", encoding="utf-8")
+        (root / "tests" / "screens").mkdir(parents=True)
+        (root / "tests" / "screens" / "s.test.json").write_text(json.dumps({
+            "type": "screen", "platform": "ios", "source": {"layout": "s"},
+            "metadata": {"name": "s", "description": "d"},
+            "cases": [{"name": "opens", "description": "o",
+                       "steps": [{"action": "tap", "id": "x"}]}],
+        }), encoding="utf-8")
+        return root
+
+    def test_the_apps_config_is_found_though_it_is_not_above_the_docs(self):
+        root = self.build()
+        got = _resolve_unit_roots(
+            None, [{"name": "admin", "docs_path": root / "docs" / "admin"}],
+            root / "tests")
+        self.assertEqual([e["config"] for e in got],
+                         [root / "admin" / "jui.config.json"])
+
+    def test_the_contracts_are_enumerated_end_to_end(self):
+        root = self.build()
+        out, _ = self.generate(
+            root, apps=[{"name": "admin", "docs_path": root / "docs" / "admin"}])
+        page = out / "admin" / "unit" / "DashboardViewModel.html"
+        self.assertTrue(page.is_file(), "the app's target got no page")
+        self.assertNotIn("could not be generated",
+                         page.read_text(encoding="utf-8"))
+
+    def test_a_named_candidate_that_also_cannot_enumerate_is_not_preferred(self):
+        # Control on the extra candidate: it is taken only when it can do the
+        # job the found one could not. Otherwise the config actually read
+        # stays the answer, so the warning names the file someone must fix.
+        root = self.build()
+        (root / "admin" / "jui.config.json").write_text(
+            json.dumps({"checks": {}}), encoding="utf-8")
+        got = _resolve_unit_roots(
+            None, [{"name": "admin", "docs_path": root / "docs" / "admin"}],
+            root / "tests")
+        self.assertEqual([e["config"] for e in got], [root / "jui.config.json"])
+
+
 class ResolutionPicksTheConfigThatDeclaresSpecs(_SplitTree):
     def test_the_bare_walk_up_still_lands_on_the_checks_only_root(self):
         # Not a regression to fix by changing the walk-up: a config holding
