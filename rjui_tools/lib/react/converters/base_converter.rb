@@ -1,6 +1,9 @@
 # frozen_string_literal: true
 
 require_relative '../../core/typed_attributes'
+# For the one judgment the validator and the generator must share: whether a
+# binding's content can be an expression at all.
+require_relative '../../core/attribute_validator_core'
 require_relative '../tailwind_mapper'
 require_relative '../responsive_helper'
 require_relative '../helpers/string_manager_helper'
@@ -843,6 +846,13 @@ module RjuiTools
         # write one as an example here: this comment did, and the coverage spec
         # promptly recorded the placeholder as a consumed attribute.)
 
+        # True when any `@{…}` in the string cannot be an expression.
+        def unusable_binding_content?(str)
+          str.scan(/@\{([^}]*)\}/).any? do |(content)|
+            JsonUIShared::AttributeValidatorCore.binding_content_problem(content)
+          end
+        end
+
         # The JS expression that produces `value` at runtime, or nil when the
         # value carries no binding.
         #
@@ -854,6 +864,15 @@ module RjuiTools
         def bound_value_expr(value)
           str = value.to_s
           return nil unless has_binding?(str)
+
+          # A binding whose content is not an expression compiles to
+          # JavaScript that does not parse: `@{ bad name }` became
+          # `${data.bad name}` in a build that exited 0. Treated here as NO
+          # binding, so the value falls back to its literal text — the same
+          # thing an unclosed `@{…` already does, and the validator names it
+          # by attribute. Judged by the shared predicate, so the warning and
+          # the emit cannot disagree.
+          return nil if unusable_binding_content?(str)
 
           # Whole-value binding: `@{…}` and nothing else. Tested by "no SECOND
           # `@{` opener" rather than by scanning for `}`, so a default literal
@@ -1450,8 +1469,18 @@ module RjuiTools
 
           body = value.split(/(@\{[^}]+\})/).map do |part|
             if (inner = part[/\A@\{([^}]+)\}\z/, 1])
-              expr = text_binding_expression(inner)
-              expr.nil? ? '' : "${#{expr}}"
+              if JsonUIShared::AttributeValidatorCore.binding_content_problem(inner)
+                # Not an expression: interpolating it writes JavaScript that
+                # does not parse (`${data.bad name}`, from a build that exited
+                # 0). Keep the author's text instead — the same thing an
+                # unclosed `@{…` already does — while the validator names the
+                # attribute. Same predicate as the warning, so the two cannot
+                # disagree about which bindings are broken.
+                escape_template_literal_segment(part)
+              else
+                expr = text_binding_expression(inner)
+                expr.nil? ? '' : "${#{expr}}"
+              end
             else
               escape_template_literal_segment(part)
             end
