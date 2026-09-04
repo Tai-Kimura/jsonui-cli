@@ -749,9 +749,57 @@ module JsonUIShared
     def check_invalid_binding_syntax(value, path, component_type)
       return unless value.is_a?(String)
       return unless value.start_with?('@{')
-      return if value.end_with?('}')
+      unless value.end_with?('}')
+        add_warning("Attribute '#{path}' in '#{component_type}' has invalid binding syntax (starts with '@{' but doesn't end with '}')")
+        return
+      end
 
-      add_warning("Attribute '#{path}' in '#{component_type}' has invalid binding syntax (starts with '@{' but doesn't end with '}')")
+      check_binding_content(value[2..-2].to_s, path, component_type)
+    end
+
+    #: Two values with nothing between them — `bad name`, `items[0] count`,
+    #: `"a" "b"`. Every generator interpolates a binding's CONTENT into its
+    #: own language, so this reaches the output as `${data.bad name}` (JS),
+    #: `\(data.bad name ?? "")` (Swift) and `${data.bad name ?: ""}`
+    #: (Kotlin), none of which parse.
+    #:
+    #: Operators are deliberately NOT refused: `a ?? "x"`, `cond ? a : b`
+    #: and `x + y` all put something between their operands, so none of them
+    #: match. That is the shape real bindings take — a corpus of 1980 held 8
+    #: with whitespace and every one was an operator form.
+    BINDING_JUXTAPOSED_VALUES = /[A-Za-z0-9_$)\]"']\s+[A-Za-z0-9_$"']/.freeze
+
+    # The delimiters were only ever half the check.
+    #
+    # `@{ bad name }` closes correctly, so the old check passed it, and each
+    # generator then interpolated the content verbatim into a syntax error
+    # while the build exited 0. Measured 2026-09-04 on 1.8.36 and again on
+    # 1.8.37, same input on three faces: web reported NOTHING; iOS and
+    # Android split the content on the space and reported two undefined
+    # variables — noticing, and writing the broken code anyway.
+    #
+    # Only what cannot be an expression in any target is refused here. A
+    # padded identifier is not refused, because it is not broken: `@{ title
+    # }` is trimmed and emits `${data.title ?? ""}` (measured, not assumed).
+    # The same judgment the generators need, so the two cannot disagree:
+    # a validator that warns while a converter still emits is how this
+    # reached a release. Returns :empty, :juxtaposed, or nil.
+    def self.binding_content_problem(content)
+      text = content.to_s
+      return :empty if text.strip.empty?
+      return :juxtaposed if text.match?(BINDING_JUXTAPOSED_VALUES)
+
+      nil
+    end
+
+    def check_binding_content(content, path, component_type)
+      if content.strip.empty?
+        add_warning("Attribute '#{path}' in '#{component_type}' is an empty binding '@{}' — it is emitted as the literal text '@{}', not as a value")
+        return
+      end
+      return unless content.match?(BINDING_JUXTAPOSED_VALUES)
+
+      add_warning("Attribute '#{path}' in '#{component_type}' has a binding that is not an expression: '#{content.strip}' puts two values side by side with nothing between them. The generators interpolate this verbatim, so the generated JavaScript/Swift/Kotlin does not parse")
     end
 
     # Check for conflicting distribution and gravity attributes.
