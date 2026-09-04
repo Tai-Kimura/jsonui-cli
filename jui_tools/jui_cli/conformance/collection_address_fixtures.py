@@ -131,4 +131,82 @@ def build_collection_address_fixtures(
                 "control": None,
                 "companions": list(rules.BASE_COMPANIONS["Collection"]),
             })
+
+    files.extend(_no_items_files(source_label))
+    entries.append(_no_items_entry())
     return files, entries
+
+
+#: A horizontal sectioned Collection that declares NO `items`.
+#:
+#: The sjui converter has an emit site for exactly this — `elsif cell_view_name`
+#: inside the horizontal sections loop, taken when `extract_property_name`
+#: returns nil — and the corpus had no declaration that reached it: every
+#: Collection fixture carried `items`, so the branch emitted its cell address
+#: under no gate at all. Measured over 288 generated shapes, this is one of two
+#: that reach it (the other spells `items` as a non-binding literal, which is
+#: the same nil through a different door).
+#:
+#: `declaration-only` rather than `assertable`: the cells here come from
+#: `collectionDataSource.getCellData(for:)` rather than a named binding, and
+#: whether the conformance host supplies that has NOT been measured — asserting
+#: `target_item_0` without knowing would make a red gate out of an untested
+#: assumption. Generated and compiled still guards the emit through the
+#: codegen-effect comparison, which is what the branch lacked entirely.
+_NO_ITEMS_CASE = "cellAddress__horizontalSectionsNoItems"
+
+
+def _no_items_layout(source_label: str) -> dict:
+    return {
+        "_generated": _marker(source_label),
+        "type": "View",
+        "id": "root",
+        "width": "matchParent",
+        "height": "matchParent",
+        "child": [{
+            "type": "Collection",
+            "id": "target",
+            "width": 150,
+            "height": 200,
+            "background": "#DDDDDD",
+            "layout": "horizontal",
+            "sections": [{"cell": "conformance_cell"}],
+        }],
+    }
+
+
+def _no_items_files(source_label: str) -> list[tuple[str, dict]]:
+    layout_rel = f"fixtures/Collection/{_NO_ITEMS_CASE}.layout.json"
+    test_rel = f"fixtures/Collection/{_NO_ITEMS_CASE}.test.json"
+    description = (
+        "A horizontal sectioned Collection declaring no items renders from the "
+        "collection data source; the cell-address emit for that branch is "
+        "generated and compiled."
+    )
+    test = _test(_NO_ITEMS_CASE, description, layout_rel, 0)
+    return [(layout_rel, _no_items_layout(source_label)), (test_rel, test)]
+
+
+def _no_items_entry() -> dict:
+    layout_rel = f"fixtures/Collection/{_NO_ITEMS_CASE}.layout.json"
+    return {
+        "id": f"Collection/{_NO_ITEMS_CASE}",
+        "component": "Collection",
+        "attribute": "layout",
+        "case": _NO_ITEMS_CASE,
+        "class": rules.CLASS_DECLARATION_ONLY,
+        "host": "Collection",
+        "writtenKey": "layout",
+        "aliasOf": None,
+        "value": "horizontal",
+        "platforms": list(_PLATFORMS),
+        "mode": None,
+        "deprecated": None,
+        "layout": layout_rel,
+        "test": f"fixtures/Collection/{_NO_ITEMS_CASE}.test.json",
+        "state": None,
+        "promotedFrom": None,
+        "peerGroup": None,
+        "control": None,
+        "companions": list(rules.BASE_COMPANIONS["Collection"]),
+    }

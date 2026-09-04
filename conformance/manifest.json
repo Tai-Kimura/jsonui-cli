@@ -10,7 +10,7 @@
   "schemaVersion": 2,
   "generatedFrom": "8d8edefbd443c70ab1a130a983b250cc2e613906e414d1d1dd9f9fe7dcc22e7e",
   "counts": {
-    "fixtures": 1087,
+    "fixtures": 1088,
     "assertable": 49,
     "visual": 812,
     "interactive": 37,
@@ -26073,6 +26073,35 @@
       "deprecated": null,
       "layout": "fixtures/Collection/cellAddress__none_2.layout.json",
       "test": "fixtures/Collection/cellAddress__none_2.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": null,
+      "control": null,
+      "companions": [
+        "fixtures/Collection/__cells/conformance_cell.layout.json",
+        "fixtures/Collection/__cells/conformance_cell_bare.layout.json",
+        "fixtures/Collection/__cells/conformance_cell_bare_single.layout.json"
+      ]
+    },
+    {
+      "id": "Collection/cellAddress__horizontalSectionsNoItems",
+      "component": "Collection",
+      "attribute": "layout",
+      "case": "cellAddress__horizontalSectionsNoItems",
+      "class": "declaration-only",
+      "host": "Collection",
+      "writtenKey": "layout",
+      "aliasOf": null,
+      "value": "horizontal",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/Collection/cellAddress__horizontalSectionsNoItems.layout.json",
+      "test": "fixtures/Collection/cellAddress__horizontalSectionsNoItems.test.json",
       "state": null,
       "promotedFrom": null,
       "peerGroup": null,
