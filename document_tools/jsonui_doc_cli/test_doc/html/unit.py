@@ -20,6 +20,7 @@ from pathlib import Path
 
 from .styles import get_unit_styles, get_toggle_script
 from .sidebar import generate_screen_sidebar, escape_html
+from ...reproducible import build_datetime
 
 
 #: Per-face case states, in the order a reader should scan them, with the
@@ -128,7 +129,7 @@ def generate_unit_html(
     )
     html_parts.append(f"      <strong>Cases declared:</strong> {len(cases)}<br>")
     html_parts.append(
-        f"      <strong>Generated:</strong> {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
+        f"      <strong>Generated:</strong> {build_datetime().strftime('%Y-%m-%d %H:%M:%S')}"
     )
     html_parts.append("    </div>")
 

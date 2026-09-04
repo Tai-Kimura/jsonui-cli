@@ -8,6 +8,7 @@ from typing import Any
 
 from .styles import get_screen_styles, get_toggle_script
 from .sidebar import generate_screen_sidebar, escape_html
+from ...reproducible import build_datetime
 
 
 def generate_screen_html(
@@ -65,7 +66,7 @@ def generate_screen_html(
     html_parts.append(f"      <strong>Platform:</strong> {data.get('platform', 'all')}<br>")
     if "source" in data:
         html_parts.append(f"      <strong>Layout:</strong> <code>{escape_html(data['source'].get('layout', 'N/A'))}</code><br>")
-    html_parts.append(f"      <strong>Generated:</strong> {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    html_parts.append(f"      <strong>Generated:</strong> {build_datetime().strftime('%Y-%m-%d %H:%M:%S')}")
     html_parts.append("    </div>")
 
     # Test cases

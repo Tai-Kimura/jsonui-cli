@@ -12,6 +12,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, List, Set, Tuple
 
+from ..reproducible import build_datetime_utc
 from .api_client import (
     FigmaAPIError,
     download_url,
@@ -297,7 +298,7 @@ def fetch_and_download_images(
     manifest = {
         "version": 1,
         "file_key": file_key,
-        "fetched_at": datetime.now(timezone.utc).isoformat(),
+        "fetched_at": build_datetime_utc().isoformat(),
         "fills": fills_map,
         "renders": renders_map,
     }

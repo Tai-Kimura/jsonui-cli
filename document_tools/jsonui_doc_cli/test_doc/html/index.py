@@ -8,6 +8,7 @@ from pathlib import Path
 
 from .styles import get_index_styles, get_index_scripts
 from .sidebar import generate_index_sidebar, escape_html
+from ...reproducible import build_datetime
 
 
 def _render_test_items(
@@ -661,7 +662,7 @@ def generate_index_html(
 
     # Footer
     html_parts.extend([
-        f"    <p class='generated'>Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}</p>",
+        f"    <p class='generated'>Generated: {build_datetime().strftime('%Y-%m-%d %H:%M:%S')}</p>",
         "  </main>",
         "</body>",
         "</html>",
