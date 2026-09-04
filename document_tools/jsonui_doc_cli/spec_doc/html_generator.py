@@ -51,7 +51,7 @@ def generate_spec_html(
     current_path: str | None = None,
     layouts_dir: Path | None = None,
     spec_dir: Path | None = None,
-    unit_href: str | None = None,
+    unit_links: list[dict] | None = None,
 ) -> str:
     """
     Generate HTML documentation from screen specification JSON.
@@ -116,22 +116,24 @@ def generate_spec_html(
     # Hand-written unit tests are declared HERE and documented on their own
     # page. This is a link, not a copy: the declaration renders once, on the
     # Unit Tests side, and the spec page stays a screen specification. Absent
-    # `unit_href` the page is byte-identical to what it was, so a project
-    # with no unitContracts — and any caller that does not pass it — is
+    # `unit_links` the page is byte-identical to what it was, so a project
+    # with no unitContracts — and any caller that does not pass them — is
     # unaffected.
     #
-    # The caller decides, and this deliberately does NOT also require
-    # `spec_data['unitContracts']`. A split screen breaks that test in both
-    # directions: the parent's own file carries no block (the merger forbids
-    # it) while the target is recorded against the parent, and a sub-spec
-    # carries the block while the target belongs to the parent's page. Gating
-    # on the file's own key left exactly the split screens unlinked.
-    if unit_href:
+    # A list because one spec may declare several targets (`unitContracts`
+    # takes an array of blocks). The caller resolves which targets have a
+    # page; this renders what it is given.
+    if unit_links:
         parts.append('<p class="unit-contract-link">')
-        parts.append(
-            f'Hand-written unit tests for this screen: '
-            f'<a href="{_e(unit_href)}">Unit Tests</a>'
+        anchors = ", ".join(
+            f'<a href="{_e(str(link.get("href", "")))}">'
+            f'{_e(str(link.get("target") or "Unit Tests"))}</a>'
+            for link in unit_links
         )
+        label = ("Hand-written unit tests for this screen: "
+                 if len(unit_links) == 1 else
+                 "Hand-written unit tests for this screen — ")
+        parts.append(f'{label}{anchors}')
         parts.append('</p>')
 
     # Overview
