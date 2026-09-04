@@ -521,7 +521,7 @@ class TestSplitScreens:
     def test_a_sub_spec_block_is_read(self, tmp_path):
         root = _split_project(tmp_path, sub_blocks=[
             {"target": "H", "cases": [{"name": "a"}, {"name": "b"}]}])
-        cases, scanned, declaring, problems, _files = uc.discover_unit_contracts(root)
+        cases, scanned, declaring, problems, _files, _unread = uc.discover_unit_contracts(root)
         assert sorted(c.name for c in cases) == ["a", "b"]
         assert problems == []
 
@@ -535,7 +535,7 @@ class TestSplitScreens:
         """
         root = _split_project(tmp_path, sub_blocks=[
             {"target": "H", "cases": [{"name": "a"}]}])
-        cases, scanned, declaring, problems, _files = uc.discover_unit_contracts(root)
+        cases, scanned, declaring, problems, _files, _unread = uc.discover_unit_contracts(root)
         assert declaring == ["chat"]
         assert len(cases) == 1
 
@@ -543,7 +543,7 @@ class TestSplitScreens:
         root = _split_project(tmp_path, second_sub=True, sub_blocks=[
             {"target": "H", "cases": [{"name": "a"}]},
             {"target": "H", "cases": [{"name": "b"}]}])
-        cases, _, declaring, problems, _files = uc.discover_unit_contracts(root)
+        cases, _, declaring, problems, _files, _unread = uc.discover_unit_contracts(root)
         assert sorted(c.name for c in cases) == ["a", "b"]
         assert declaring == ["chat"]
         assert problems == []
@@ -572,7 +572,7 @@ class TestSplitScreens:
             return spec
 
         monkeypatch.setattr(uc, "_load_spec", stripped)
-        cases, _, declaring, problems, _files = uc.discover_unit_contracts(root)
+        cases, _, declaring, problems, _files, _unread = uc.discover_unit_contracts(root)
         assert cases == []
         assert declaring == []
         assert len(problems) == 1
@@ -587,7 +587,7 @@ class TestSplitScreens:
         always wrong is the defect fixed in 1.8.27, not a fix.
         """
         root = _split_project(tmp_path, sub_blocks=[None])
-        cases, _, declaring, problems, _files = uc.discover_unit_contracts(root)
+        cases, _, declaring, problems, _files, _unread = uc.discover_unit_contracts(root)
         assert (cases, declaring, problems) == ([], [], [])
 
 
@@ -650,6 +650,66 @@ class TestDeclaringDenominatorIsCountedInFiles:
     def test_pages_report_the_file_count(self, tmp_path):
         pages = uc.unit_contract_pages(self._tree(tmp_path))
         assert pages["totals"]["specs_declaring"] == 5
+
+
+class TestUnreadableSpecsAreNamed:
+    """A spec that could not be parsed stays in the denominator and is named.
+
+    Keeping it in `scanned` is deliberate — dropping it would make "could not
+    be read" indistinguishable from "declares nothing", which is the failure
+    this mechanism exists to prevent. But `declaring` counts only files that
+    parsed, so an unreadable spec silently widens `scanned - declaring`, and
+    the closing line of a generated site would look entirely normal.
+    """
+
+    def _tree(self, tmp_path, *, extra_problem=False):
+        specs = tmp_path / "docs" / "screens"
+        specs.mkdir(parents=True, exist_ok=True)
+        (specs / "ok.spec.json").write_text(json.dumps({
+            "type": "screen",
+            "unitContracts": {"target": "T", "cases": [{"name": "a_case"}]},
+        }), encoding="utf-8")
+        (specs / "broken.spec.json").write_text("{ not json", encoding="utf-8")
+        if extra_problem:
+            # A DIFFERENT kind of problem: parses fine, declares badly.
+            (specs / "typo.spec.json").write_text(json.dumps({
+                "type": "screen",
+                "unitContracts": {"target": "U", "cases": [{"name": "b"}],
+                                  "caes": "misspelled"},
+            }), encoding="utf-8")
+        (tmp_path / "jui.config.json").write_text(
+            json.dumps({"spec_directory": "docs/screens", "platforms": {}}),
+            encoding="utf-8")
+        return tmp_path
+
+    def test_an_unreadable_spec_is_counted_and_named(self, tmp_path):
+        pages = uc.unit_contract_pages(self._tree(tmp_path))
+        assert pages["totals"]["specs_scanned"] == 2
+        assert pages["totals"]["specs_declaring"] == 1
+        assert pages["totals"]["specs_unreadable"] == 1
+        assert pages["totals"]["unreadable_files"] == ["broken.spec.json"]
+
+    def test_the_count_is_not_the_number_of_problems(self, tmp_path):
+        """The shortcut this exists to forbid.
+
+        `len(problems)` is the tempting stand-in and it is a different
+        question: `problems` also carries malformed-block lines. With one
+        unreadable file and one badly-declared file it reads 2 where the
+        answer is 1, and it would drift again on any new problem kind.
+        """
+        root = self._tree(tmp_path, extra_problem=True)
+        pages = uc.unit_contract_pages(root)
+        report = uc.check_unit_contracts(root)
+        assert pages["totals"]["specs_unreadable"] == 1
+        assert len(report.problems) > 1, "fixture must mix problem kinds or this asserts nothing"
+        assert pages["totals"]["specs_unreadable"] != len(report.problems)
+
+    def test_a_clean_tree_reports_none(self, tmp_path):
+        root = _project(tmp_path, [{"name": "a_case", "platforms": ["ios"]}])
+        _swift(root, "a_case")
+        pages = uc.unit_contract_pages(root)
+        assert pages["totals"]["specs_unreadable"] == 0
+        assert pages["totals"]["unreadable_files"] == []
 
 
 class TestUnitContractPages:
