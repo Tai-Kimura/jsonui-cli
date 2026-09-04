@@ -71,10 +71,12 @@ STRINGS = {
     },
 }
 
-PLURAL_VALIDATOR_SNIPPET = """
-module Shared
-  class PluralValidator
-    STRING_PROPS = %w[text hint placeholder label prompt].freeze
+# The vocabulary now lives in string_manager_core.rb's STRING_PROPERTIES;
+# plural_validator.rb references it instead of repeating it (2026-09-04).
+STRING_MANAGER_CORE_SNIPPET = """
+module JsonUIShared
+  class StringManagerCore
+    STRING_PROPERTIES = %w[text hint placeholder label prompt].freeze
   end
 end
 """
@@ -93,17 +95,32 @@ def _scanner(strings=None) -> LayoutScanner:
 class StringPropsTest(unittest.TestCase):
     def test_parses_vocabulary_from_ruby(self):
         with tempfile.TemporaryDirectory() as tmp:
-            rb = Path(tmp) / "plural_validator.rb"
-            rb.write_text(PLURAL_VALIDATOR_SNIPPET, encoding="utf-8")
+            rb = Path(tmp) / "string_manager_core.rb"
+            rb.write_text(STRING_MANAGER_CORE_SNIPPET, encoding="utf-8")
             self.assertEqual(load_string_props(rb), VOCABULARY)
+
+    def test_a_word_added_to_the_ruby_reaches_the_vocabulary(self):
+        """Mutation control: without this, a parser that silently returned a
+        hardcoded set would pass every other test in this class."""
+        with tempfile.TemporaryDirectory() as tmp:
+            rb = Path(tmp) / "string_manager_core.rb"
+            rb.write_text(
+                STRING_MANAGER_CORE_SNIPPET.replace(
+                    "%w[text hint placeholder label prompt]",
+                    "%w[text hint placeholder label prompt caption]",
+                ),
+                encoding="utf-8",
+            )
+            self.assertIn("caption", load_string_props(rb))
+            self.assertNotIn("caption", VOCABULARY)
 
     def test_missing_file_is_a_setup_error(self):
         with self.assertRaises(LintStringsSetupError):
-            load_string_props(Path("/nonexistent/plural_validator.rb"))
+            load_string_props(Path("/nonexistent/string_manager_core.rb"))
 
     def test_missing_constant_is_a_setup_error(self):
         with tempfile.TemporaryDirectory() as tmp:
-            rb = Path(tmp) / "plural_validator.rb"
+            rb = Path(tmp) / "string_manager_core.rb"
             rb.write_text("module Empty; end\n", encoding="utf-8")
             with self.assertRaises(LintStringsSetupError):
                 load_string_props(rb)
@@ -384,8 +401,8 @@ class ProjectFixture:
         )
         self.defs_path = root / "attribute_definitions.json"
         self.defs_path.write_text(json.dumps(SYNTH_DEFS), encoding="utf-8")
-        self.props_path = root / "plural_validator.rb"
-        self.props_path.write_text(PLURAL_VALIDATOR_SNIPPET, encoding="utf-8")
+        self.props_path = root / "string_manager_core.rb"
+        self.props_path.write_text(STRING_MANAGER_CORE_SNIPPET, encoding="utf-8")
         self.write_strings(STRINGS)
 
     def write_strings(self, data) -> None:
