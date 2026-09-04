@@ -237,6 +237,16 @@ def test_results_skip_reason_enum_matches():
     )
 
 
+def test_results_failure_reason_enum_matches():
+    schema = _load("results")
+    reasons = set(_result_item_props(schema)["failureReason"]["enum"])
+    assert reasons == set(rp.VALID_FAILURE_REASONS), (
+        "results.schema.json failureReason enum drifted from report.VALID_FAILURE_REASONS.\n"
+        f"  only in schema: {sorted(reasons - set(rp.VALID_FAILURE_REASONS))}\n"
+        f"  only in const : {sorted(set(rp.VALID_FAILURE_REASONS) - reasons)}"
+    )
+
+
 def test_results_version_is_const_1():
     schema = _load("results")
     assert schema["properties"]["version"] == {"const": 1}, (
