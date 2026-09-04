@@ -119,7 +119,14 @@ def generate_spec_html(
     # `unit_href` the page is byte-identical to what it was, so a project
     # with no unitContracts — and any caller that does not pass it — is
     # unaffected.
-    if unit_href and spec_data.get("unitContracts") is not None:
+    #
+    # The caller decides, and this deliberately does NOT also require
+    # `spec_data['unitContracts']`. A split screen breaks that test in both
+    # directions: the parent's own file carries no block (the merger forbids
+    # it) while the target is recorded against the parent, and a sub-spec
+    # carries the block while the target belongs to the parent's page. Gating
+    # on the file's own key left exactly the split screens unlinked.
+    if unit_href:
         parts.append('<p class="unit-contract-link">')
         parts.append(
             f'Hand-written unit tests for this screen: '
