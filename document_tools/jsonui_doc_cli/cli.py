@@ -37,6 +37,54 @@ def _declares_specs(config: Path) -> bool:
         return False
 
 
+def _extends_target(config: Path) -> Path | None:
+    """The config this one extends, resolved against its own directory."""
+    try:
+        raw = json.loads(config.read_text(encoding="utf-8"))
+        extends = raw.get("extends")
+    except (OSError, ValueError, AttributeError):
+        return None
+    if not isinstance(extends, str) or not extends:
+        return None
+    return (config.parent / extends).resolve()
+
+
+#: How far `extends` is followed. Bounded because the chain is data: a config
+#: that extends itself, or two that extend each other, must end the search
+#: rather than the process.
+_MAX_EXTENDS_HOPS = 8
+
+
+def _follow_extends(config: Path) -> tuple[Path | None, Path]:
+    """``(a config that declares specs, the last file actually read)``.
+
+    A config that cannot enumerate but declares `extends` is not a dead end —
+    it is a POINTER, and the project wrote it deliberately. The real tree
+    keeps a stub at `docs/<app>/jui.config.json` carrying only
+    `layouts_directory` and `extends: ../../<app>/jui.config.json`, so a
+    search that stops at the first file it finds stops on a signpost and
+    reports that the destination does not exist.
+
+    The second element is what to name when nothing declares: the file the
+    search actually ended on, so the warning points at something real rather
+    than at where the search began.
+    """
+    seen: set[Path] = set()
+    current, last = config, config
+    for _ in range(_MAX_EXTENDS_HOPS):
+        if current in seen:
+            break
+        seen.add(current)
+        last = current
+        if _declares_specs(current):
+            return current, current
+        nxt = _extends_target(current)
+        if nxt is None or not nxt.is_file():
+            break
+        current = nxt
+    return None, last
+
+
 def _config_for_app(app_name: str, docs_path: Path) -> Path | None:
     """The config governing one app's specs.
 
@@ -54,12 +102,17 @@ def _config_for_app(app_name: str, docs_path: Path) -> Path | None:
     that was actually read.
     """
     cfg = _config_for(docs_path)
-    if cfg is None or _declares_specs(cfg):
-        return cfg
+    if cfg is None:
+        return None
+    found, last = _follow_extends(cfg)
+    if found is not None:
+        return found
     beside = cfg.parent / app_name / "jui.config.json"
-    if beside.is_file() and _declares_specs(beside):
-        return beside.resolve()
-    return cfg
+    if beside.is_file():
+        found, _ = _follow_extends(beside.resolve())
+        if found is not None:
+            return found
+    return last
 
 
 def _resolve_unit_roots(
@@ -85,7 +138,12 @@ def _resolve_unit_roots(
         if not cfg.is_file():
             print(f"Error: --config not found: {cfg}", file=sys.stderr)
             return []
-        return [{"app": None, "config": cfg, "root": cfg.parent}]
+        # Named explicitly, and `extends` is followed anyway: naming a file is
+        # a declaration, and so is the pointer inside it. Someone who points
+        # at the stub beside their docs means the config it extends.
+        found, last = _follow_extends(cfg.resolve())
+        use = found if found is not None else last
+        return [{"app": None, "config": use, "root": use.parent}]
 
     if apps:
         roots: list[dict] = []
@@ -97,7 +155,11 @@ def _resolve_unit_roots(
             return roots
 
     cfg = _config_for(fallback_start)
-    return [{"app": None, "config": cfg, "root": cfg.parent}] if cfg else []
+    if cfg is None:
+        return []
+    found, last = _follow_extends(cfg)
+    use = found if found is not None else last
+    return [{"app": None, "config": use, "root": use.parent}]
 
 
 def _resolve_layouts_dir_from_config() -> Path | None:
