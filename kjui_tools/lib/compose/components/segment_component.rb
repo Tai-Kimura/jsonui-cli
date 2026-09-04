@@ -40,8 +40,13 @@ module KjuiTools
             0  # Default to 0 as integer
           end
           
-          # Support both 'items' and 'segments' attribute names
-          segments = json_data['items'] || json_data['segments'] || []
+          # `items` only. `segments` was an undeclared alias -- absent from
+          # attribute_definitions.json, read by no other face, and used by no
+          # consumer layout (measured across six faces: 0). It is gone from the
+          # extract vocabulary in the same commit, so a layout still writing it
+          # now renders nothing rather than rendering from strings nobody
+          # collected.
+          segments = json_data['items'] || []
           
           code = indent("Segment(", depth)
           # For display in Segment parameter, always output as string
