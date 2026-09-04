@@ -168,6 +168,112 @@ class _DocsOutsideTheApp(_SplitTree):
         self.assertEqual([e["config"] for e in got], [root / "jui.config.json"])
 
 
+class _StubBesideTheDocs(_SplitTree):
+    """The real tree: a POINTER config sits where the search starts.
+
+        jui.config.json                 checks only
+        docs/<app>/jui.config.json      {"extends": "../../<app>/jui.config.json",
+                                         "layouts_directory": …}   ← a stub, for
+                                                                     layoutFile resolution
+        <app>/jui.config.json           spec_directory: ../docs/<app>/screens/json
+        docs/<app>/screens/json/…       the specs
+
+    `--app <app>:docs/<app>` starts in `docs/<app>/`, which HAS a config — so
+    the search stops on the signpost and reports that the destination does not
+    exist. The stub is not an obstacle to route around: it names where to go.
+    """
+
+    def build(self, *, stub: bool = True, extends: str | None = None) -> Path:
+        root = Path(tempfile.mkdtemp()).resolve()
+        self.addCleanup(shutil.rmtree, root, ignore_errors=True)
+        (root / "jui.config.json").write_text(
+            json.dumps({"checks": {}}), encoding="utf-8")
+        (root / "admin" / "ios" / "Tests").mkdir(parents=True)
+        (root / "admin" / "jui.config.json").write_text(json.dumps({
+            "spec_directory": "../docs/admin/screens/json",
+            "platforms": {"ios": {"root": "ios", "unitTestsDir": "Tests",
+                                  "testModule": "App"}},
+        }), encoding="utf-8")
+        specs = root / "docs" / "admin" / "screens" / "json"
+        specs.mkdir(parents=True)
+        if stub:
+            (root / "docs" / "admin" / "jui.config.json").write_text(json.dumps({
+                "_note": "layoutFile resolution only",
+                "extends": extends if extends is not None else "../../admin/jui.config.json",
+                "layouts_directory": "screens/layouts",
+            }), encoding="utf-8")
+        (specs / "dashboard.spec.json").write_text(json.dumps({
+            "type": "screen_spec", "version": "1.0",
+            "metadata": {"screenName": "dashboard", "name": "Dash",
+                         "displayName": "Dash", "description": "d."},
+            "structure": {"components": [{"type": "View", "id": "root",
+                                          "description": "r"}],
+                          "layout": {"root": "root", "children": []}},
+            "unitContracts": {"target": "DashboardViewModel",
+                              "cases": [{"name": "loads", "intent": "i",
+                                         "platforms": ["ios"]}]},
+        }), encoding="utf-8")
+        (root / "admin" / "ios" / "Tests" / "DashboardViewModelContractTests.swift"
+         ).write_text("import XCTest\n@testable import App\n"
+                      "final class DashboardViewModelContractTests: XCTestCase "
+                      "{ func test_loads() throws {} }\n", encoding="utf-8")
+        (root / "tests" / "screens").mkdir(parents=True)
+        (root / "tests" / "screens" / "s.test.json").write_text(json.dumps({
+            "type": "screen", "platform": "ios", "source": {"layout": "s"},
+            "metadata": {"name": "s", "description": "d"},
+            "cases": [{"name": "opens", "description": "o",
+                       "steps": [{"action": "tap", "id": "x"}]}],
+        }), encoding="utf-8")
+        return root
+
+    def _app(self, root: Path):
+        return [{"name": "admin", "docs_path": root / "docs" / "admin"}]
+
+    def test_the_stub_is_followed_to_the_config_that_declares(self):
+        root = self.build()
+        got = _resolve_unit_roots(None, self._app(root), root / "tests")
+        self.assertEqual([e["config"] for e in got],
+                         [root / "admin" / "jui.config.json"])
+
+    def test_without_the_stub_the_same_tree_still_resolves(self):
+        # Control: the stub is what broke it, so removing the stub must not
+        # be what makes the test pass.
+        root = self.build(stub=False)
+        got = _resolve_unit_roots(None, self._app(root), root / "tests")
+        self.assertEqual([e["config"] for e in got],
+                         [root / "admin" / "jui.config.json"])
+
+    def test_the_contracts_are_enumerated_end_to_end_through_the_stub(self):
+        root = self.build()
+        out, _ = self.generate(root, apps=self._app(root))
+        page = out / "admin" / "unit" / "DashboardViewModel.html"
+        self.assertTrue(page.is_file(), "the app's target got no page")
+        self.assertNotIn("could not be generated",
+                         page.read_text(encoding="utf-8"))
+
+    def test_config_pointed_at_the_stub_is_followed_too(self):
+        # Naming a file is a declaration; so is the pointer inside it.
+        root = self.build()
+        got = _resolve_unit_roots(
+            str(root / "docs" / "admin" / "jui.config.json"), None, root / "tests")
+        self.assertEqual([e["config"] for e in got],
+                         [root / "admin" / "jui.config.json"])
+
+    def test_a_broken_pointer_names_the_file_the_search_ended_on(self):
+        # `extends` to nowhere: the warning has to point at something real,
+        # and the last file actually read is the only such thing.
+        root = self.build(extends="../../nope/jui.config.json")
+        got = _resolve_unit_roots(None, self._app(root), root / "tests")
+        self.assertEqual([e["config"] for e in got],
+                         [root / "docs" / "admin" / "jui.config.json"])
+
+    def test_a_cycle_ends_the_search_rather_than_the_process(self):
+        # The chain is data, so it can point at itself.
+        root = self.build(extends="jui.config.json")
+        got = _resolve_unit_roots(None, self._app(root), root / "tests")
+        self.assertEqual(len(got), 1)
+
+
 class ResolutionPicksTheConfigThatDeclaresSpecs(_SplitTree):
     def test_the_bare_walk_up_still_lands_on_the_checks_only_root(self):
         # Not a regression to fix by changing the walk-up: a config holding
