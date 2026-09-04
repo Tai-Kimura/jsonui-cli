@@ -1636,6 +1636,16 @@ def _generate_spec_pages(
         error_count = 0
 
         for spec_file, spec_docs_path in sorted(spec_files_found, key=lambda x: x[0]):
+            # Reset per ITERATION, not once before the loop. The handler below
+            # reads this, and it is assigned after the `collect_only` return —
+            # so on the collect pass it was never assigned at all and one bad
+            # spec raised UnboundLocalError out of the whole run, losing the
+            # real error. Initialising once outside the loop would fix that
+            # crash and leave the worse half: a later iteration failing before
+            # the assignment would still hold the PREVIOUS spec's path, and
+            # `record_page_failure` writes a placeholder there — one spec's
+            # error silently overwriting another spec's page.
+            output_spec_path = None
             try:
                 result = _validator_for(spec_file).validate_file(spec_file)
 
@@ -1714,6 +1724,8 @@ def _generate_spec_pages(
         error_count = 0
 
         for comp_file, comp_docs_path in sorted(component_files_found, key=lambda x: x[0]):
+            # Same shape, same reason as the screen loop above.
+            output_comp_path = None
             try:
                 result = _validator_for(comp_file).validate_file(comp_file)
 
