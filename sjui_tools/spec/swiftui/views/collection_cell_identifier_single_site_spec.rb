@@ -47,11 +47,22 @@ RSpec.describe 'Collection cell identifier emit sites' do
   it 'keeps every cell path routed through that helper' do
     # Nine shape methods call it; the count is asserted as "more than one
     # caller" rather than a fixed number, because adding a Collection shape
-    # is legitimate and adding a SEVENTEENTH inlined copy is not.
+    # is legitimate and adding an inlined copy is not.
     callers = File.readlines(CONVERTER_SOURCE).count { |l| l.include?('apply_cell_item_identifier(') }
-    # 16 call sites + 1 definition
+    # 14 call sites + 1 definition.
+    #
+    # Was 16 + 1. Two of the sixteen sat in the `sections` branch of
+    # `generate_collection_content_sections`, which no declaration can reach:
+    # that branch requires `sections` to be present, and all five callers of
+    # the function sit in branches requiring them absent. Measured before
+    # removing it — 288 generated shapes reach neither site, and the emitted
+    # Swift for all 288 is byte-identical with the branch gone.
+    #
+    # An inlined copy is caught by the first example here (exactly one line
+    # carries the address). What this number guards is the opposite: a call
+    # site disappearing quietly.
     expect(callers).to be >= 2
-    expect(callers).to eq(17)
+    expect(callers).to eq(15)
   end
 
   it 'still emits the address for an id-bearing Collection' do
