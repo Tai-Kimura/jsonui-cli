@@ -361,6 +361,8 @@ jsonui-test artifacts prune-legacy --serial emulator-5554 --yes   # deletes them
 
 Only suite-shaped entries are deleted. Package-shaped entries (other apps' scoped mirrors) and the root itself are never touched. The command cannot tell whether an older driver is still in use on the device — that is what the dry run and `--yes` are for.
 
+With more than one device or emulator attached, `--serial` (or `test.artifacts.android.serial`) is required: adb refuses to pick one, the listing is never reached, and the command reports `skipped (adb: more than one device/emulator)` with exit 1. On a shared device, compare the dry-run listing between the lanes that use it before anyone passes `--yes` — a suite name alone (`Login_Smoke_Test`) does not say which app wrote it.
+
 ### artifacts status (a status)
 
 Show the resolved artifacts configuration (artifacts dir, discovered xcresult, Android appId/serial and the resolved adb path) and every file currently under the artifacts directory.
