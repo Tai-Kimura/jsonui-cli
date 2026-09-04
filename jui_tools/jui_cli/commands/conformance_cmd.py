@@ -293,6 +293,29 @@ def register_conformance_command(subparsers: argparse._SubParsersAction) -> None
         ),
     )
     baseline_update.add_argument(
+        "--only-new",
+        dest="only_new",
+        action="store_true",
+        help=(
+            "Insert only the entries the baseline does not have; leave every "
+            "existing hash at its committed value and remove nothing. This is "
+            "the right mode for 'new fixtures never got baselines'. The "
+            "default rewrites the whole manifest, which also writes every "
+            "drifted picture into the baseline — a regression that gets "
+            "absorbed stops being a regression."
+        ),
+    )
+    baseline_update.add_argument(
+        "--fail-on-moved",
+        dest="fail_on_moved",
+        action="store_true",
+        help=(
+            "Exit non-zero if any existing entry's picture changed. For "
+            "scripted bakes that must stop and let a person look, rather than "
+            "deciding on their own that the drift was noise."
+        ),
+    )
+    baseline_update.add_argument(
         "--rendered-by",
         dest="rendered_by",
         action="append",
@@ -1263,6 +1286,9 @@ def _cmd_baseline(args: argparse.Namespace) -> int:
     env = getattr(args, "env", None) or DEFAULT_ENV
     threshold = getattr(args, "threshold", None)
 
+    only_new = bool(getattr(args, "only_new", False))
+    fail_on_moved = bool(getattr(args, "fail_on_moved", False))
+
     try:
         summary = update_baseline(
             conformance_dir,
@@ -1271,9 +1297,35 @@ def _cmd_baseline(args: argparse.Namespace) -> int:
             env=env,
             threshold=threshold,
             rendered_by=_parse_rendered_by(getattr(args, "rendered_by", None)),
+            only_new=only_new,
         )
     except BaselineError as e:
         print(f"ERROR: {e}")
+        return 1
+
+    # Always say what the run classified, in both modes. A wholesale bake that
+    # prints only "written" cannot be told from one that absorbed a regression.
+    print(
+        f"  new {len(summary.new)}  same {len(summary.same)}  "
+        f"moved {len(summary.moved)}  dropped {len(summary.dropped)}"
+    )
+    for name in summary.new:
+        print(f"    NEW      {name}")
+    for name, dist in summary.moved:
+        verb = "kept (only-new)" if only_new else "REWRITTEN"
+        print(f"    MOVED    {name}  hamming={dist}  -> {verb}")
+    for name in summary.dropped:
+        verb = "kept (only-new)" if only_new else "REMOVED"
+        print(f"    DROPPED  {name}  -> {verb}")
+
+    if summary.moved and not only_new:
+        print(
+            "  ⚠️  a wholesale bake rewrote the moved entries above — every one of them "
+            "is now the baseline, including any that were regressions. Use --only-new "
+            "to insert the new entries and leave the rest alone."
+        )
+    if fail_on_moved and summary.moved:
+        print(f"ERROR: --fail-on-moved and {len(summary.moved)} entr(y/ies) moved")
         return 1
 
     print(f"baseline written to {summary.out_path}")

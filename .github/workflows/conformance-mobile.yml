@@ -34,6 +34,9 @@ jobs:
   web:
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    outputs:
+      library_sha: ${{ steps.library_sha.outputs.sha }}
+      chromium: ${{ steps.library_sha.outputs.chromium }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -60,6 +63,17 @@ jobs:
       - name: Install Playwright Chromium
         working-directory: conformance/hosts/web
         run: npx playwright install --with-deps chromium
+      - name: Record the web renderer these pixels were drawn by
+        id: library_sha
+        # web had no provenance at all — ci/web.hashes.json carried an empty
+        # rendered_by, so "did the renderer move since the bake" could not be
+        # answered for this platform even in principle. Two things draw here:
+        # the rjui codegen in this repo, and the browser.
+        run: |
+          rjui=$(git rev-parse HEAD:rjui_tools/lib)
+          chromium=$(npx --yes playwright --version 2>/dev/null | tr -d '\n' || echo unknown)
+          echo "sha=tree:$rjui" >> "$GITHUB_OUTPUT"
+          echo "chromium=$chromium" >> "$GITHUB_OUTPUT"
       - name: Generate fixtures into the host (rjui codegen)
         working-directory: conformance/hosts/web
         run: ./generate.sh
@@ -101,9 +115,15 @@ jobs:
           repository: Tai-Kimura/SwiftJsonUI
           ref: master
           path: SwiftJsonUI
-      - name: Record the SwiftJsonUI commit these pixels were drawn by
+      - name: Record the SwiftJsonUI SOURCE these pixels were drawn by
         id: library_sha
-        run: echo "sha=$(git -C SwiftJsonUI rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+        # The tree hash of Sources/, not `rev-parse HEAD`. The checkout SHA
+        # moves for commits that cannot change a pixel — on 2026-09-04 three
+        # ConformanceHost-only commits would have reported "the library moved"
+        # with Sources/ byte-identical, and a lane was one bake away from
+        # investigating it. Identical drawing code gives an identical tree
+        # hash whatever the history above it looks like.
+        run: echo "sha=tree:$(git -C SwiftJsonUI rev-parse HEAD:Sources)" >> "$GITHUB_OUTPUT"
       - uses: actions/checkout@v4
         with:
           repository: Tai-Kimura/jsonui-test-runner
@@ -283,9 +303,14 @@ jobs:
           repository: Tai-Kimura/KotlinJsonUI
           ref: main
           path: KotlinJsonUI
-      - name: Record the KotlinJsonUI commit these pixels were drawn by
+      - name: Record the KotlinJsonUI SOURCE these pixels were drawn by
         id: library_sha
-        run: echo "sha=$(git -C KotlinJsonUI rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+        # Both published modules draw: `library` (codegen) and
+        # `library-dynamic`. See the ios note for why this is a tree hash.
+        run: |
+          lib=$(git -C KotlinJsonUI rev-parse HEAD:library/src)
+          dyn=$(git -C KotlinJsonUI rev-parse HEAD:library-dynamic/src)
+          echo "sha=tree:$lib+$dyn" >> "$GITHUB_OUTPUT"
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
@@ -520,7 +545,7 @@ jobs:
         # drawn by a different library, the gate says so — a notice, not a
         # failure. Thirteen regressions in one run were neither fixture nor
         # codegen and two lanes reached "the library moved" by elimination.
-        run: python3 -c "import sys; from jui_cli.cli import main; sys.exit(main(['conformance','gate','--platform','ios','--platform','android','--platform','web','--env','ci','--parity','--cross-effect','--inert-complete','--value-discrimination','--rendered-by','swiftjsonui=${{ needs.ios.outputs.library_sha }}','--rendered-by','kotlinjsonui=${{ needs.android.outputs.library_sha }}']))"
+        run: python3 -c "import sys; from jui_cli.cli import main; sys.exit(main(['conformance','gate','--platform','ios','--platform','android','--platform','web','--env','ci','--parity','--cross-effect','--inert-complete','--value-discrimination','--rendered-by','swiftjsonui.src=${{ needs.ios.outputs.library_sha }}','--rendered-by','kotlinjsonui.src=${{ needs.android.outputs.library_sha }}','--rendered-by','rjui.src=${{ needs.web.outputs.library_sha }}','--rendered-by','chromium=${{ needs.web.outputs.chromium }}']))"
       - name: Upload combined report
         if: always()
         uses: actions/upload-artifact@v4

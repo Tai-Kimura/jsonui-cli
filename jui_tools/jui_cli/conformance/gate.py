@@ -636,6 +636,18 @@ def judge_ledger_keys(conformance_dir: Path, semantics_path: Path | None = None)
     return problems
 
 
+def _short_rendered_by(value: str) -> str:
+    """Render a rendered_by value short enough to read, keeping its kind.
+
+    Values are `tree:<hash>` (the drawing source) or, on baselines baked
+    before 2026-09-04, a bare checkout SHA. Truncating blindly would hide
+    which kind it is, and the two are not comparable.
+    """
+    if value.startswith("tree:"):
+        return "tree:" + "+".join(part[:8] for part in value[5:].split("+"))
+    return value[:8]
+
+
 def library_drift_notices(
     conformance_dir: Path,
     platforms: Sequence[str],
@@ -644,6 +656,13 @@ def library_drift_notices(
     env: str = DEFAULT_ENV,
 ) -> list[str]:
     """Say when a regression might be the library moving, not the code.
+
+    What identifies a library here is the **tree hash of its drawing source**
+    (`tree:<hash>`), not the commit that happened to be checked out. Those are
+    different questions and this field answers the first: on 2026-09-04 three
+    commits that touched only the conformance host would have moved a checkout
+    SHA while `Sources/` stayed byte-identical, which reads as "the library
+    moved" and starts an investigation with nothing at the end of it.
 
     conformance-mobile checks the libraries out at `master` / `main`, so the
     pictures a baseline holds were drawn by whatever was on those branches
@@ -674,8 +693,12 @@ def library_drift_notices(
                 f"the library moved since the bake cannot be answered from it"
             )
             continue
+        # `name in baked` also carries the migration: entries baked under the
+        # old key (a checkout SHA) are simply not compared against the new one
+        # (a source tree hash), instead of reporting a move on the first run
+        # after the meaning changed.
         moved = [
-            f"{name} {baked[name][:8]}->{sha[:8]}"
+            f"{name} {_short_rendered_by(baked[name])}->{_short_rendered_by(sha)}"
             for name, sha in sorted(rendered_by.items())
             if name in baked and baked[name] != sha
         ]
