@@ -2,6 +2,7 @@
 
 require_relative '../helpers/modifier_builder'
 require_relative '../helpers/resource_resolver'
+require_relative '../../core/attribute_validator_core'
 
 module KjuiTools
   module Compose

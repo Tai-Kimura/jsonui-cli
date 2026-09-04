@@ -2,6 +2,7 @@
 
 require_relative 'base_view_converter'
 require_relative '../helpers/string_manager_helper'
+require_relative '../../core/attribute_validator_core'
 
 module SjuiTools
   module SwiftUI
