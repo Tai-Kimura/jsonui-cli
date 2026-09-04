@@ -471,7 +471,18 @@ module SjuiTools
           "[#{value.map { |v| swift_json_literal(v) }.join(', ')}]"
         when String then swift_string_literal(value)
         when true, false then value.to_s
-        when nil then 'nil'
+        when nil
+          # NOT `nil`. A dictionary or array default lands in `[String: Any]`
+          # / `[Any]`, and `Any` is not optional: `["z": nil]` is "'nil' is
+          # not compatible with expected dictionary value type 'Any'".
+          # `NSNull()` is how Foundation represents a JSON null, and
+          # JsonUIBindingPath already reads it as unresolved, so the runtime
+          # meaning is unchanged.
+          #
+          # Measured 2026-09-05, after the fact: the unit example pinned
+          # `nil` and passed, because the swiftc arm had no null in it. The
+          # compile gate only covers the shapes it is given.
+          'NSNull()'
         when Numeric then value.to_s
         else swift_string_literal(value.to_s)
         end

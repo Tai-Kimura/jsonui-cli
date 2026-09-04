@@ -86,9 +86,21 @@ RSpec.describe 'data model JSON defaults' do
       expect(value_for([], 'Array')).to eq('[]')
     end
 
-    it 'emits numbers, booleans and null unquoted' do
+    it 'emits numbers and booleans unquoted, and JSON null as NSNull()' do
+      # NOT `nil`. The literal lands in `[String: Any]`, and `Any` is not
+      # optional: `["z": nil]` is "'nil' is not compatible with expected
+      # dictionary value type 'Any'". `NSNull()` is Foundation's JSON null
+      # and `JsonUIBindingPath` already reads it as unresolved.
+      #
+      # ⚠️ This example asserted `nil` and passed. What let it through is
+      # that the compile arm below had no null in it — a compile gate covers
+      # exactly the shapes it is handed, so `null` is now in both places.
       expect(value_for({ 'n' => 1, 'f' => 2.5, 'b' => true, 'z' => nil }, 'Object'))
-        .to eq('["n": 1, "f": 2.5, "b": true, "z": nil]')
+        .to eq('["n": 1, "f": 2.5, "b": true, "z": NSNull()]')
+    end
+
+    it 'emits a null array element the same way' do
+      expect(value_for([1, nil], 'Array')).to eq('[1, NSNull()]')
     end
 
     it 'escapes quotes and backslashes' do
@@ -122,7 +134,13 @@ RSpec.describe 'data model JSON defaults' do
         { 'name' => 'mixed',    'class' => 'Object',
           'defaultValue' => { 'n' => 1, 'f' => 2.5, 'b' => true, 's' => 'x' } },
         { 'name' => 'escaped',  'class' => 'Object',
-          'defaultValue' => { 'a"b' => 'c\\d' } }
+          'defaultValue' => { 'a"b' => 'c\\d' } },
+        # The shape this arm was missing. A JSON null in a container default
+        # is the one value `Any` cannot hold, so it is the one that has to be
+        # compiled rather than merely asserted.
+        { 'name' => 'nulled',   'class' => 'Object',
+          'defaultValue' => { 'n' => 1, 'z' => nil } },
+        { 'name' => 'nullList', 'class' => 'Array', 'defaultValue' => [1, nil] }
       ]
       body = props.map do |p|
         "    var #{p['name']}: #{type_for(p['class'])} = " \

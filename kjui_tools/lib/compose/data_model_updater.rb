@@ -367,6 +367,17 @@ module KjuiTools
         when 'CollectionDataSource'
           # Use the actual CollectionDataSource type
           'com.kotlinjsonui.data.CollectionDataSource'
+        when 'Object', 'object', 'Hash', 'hash'
+          # Untyped JSON object. Without this the declared spelling was
+          # emitted verbatim — `var profile: Object = ...` — and `Object` is
+          # not a Kotlin type.
+          # `Any?`, not `Any`: JSON permits null, and `mapOf("z" to null)`
+          # infers a nullable value type that does not satisfy
+          # `Map<String, Any>` ("initializer type mismatch"). Measured with
+          # the cached Kotlin compiler.
+          'Map<String, Any?>'
+        when 'Array', 'array'
+          'List<Any?>'
         when /^\(\) -> Unit$/
           # Non-optional callback becomes optional in data class
           '(() -> Unit)?'
@@ -484,28 +495,76 @@ module KjuiTools
           # CollectionDataSource(), silently dropping declared cells
           # (31 F4 Phase 2).
           collection_data_source_literal(value)
-        when /^List<.*>$/
-          # Handle generic List types
-          if value.is_a?(Array) && value.empty?
-            'emptyList()'
-          elsif value == '[]' || value == []
-            'emptyList()'
-          else
-            'emptyList()'
-          end
-        when /^Map<.*>$/
-          # Handle generic Map types
-          if value.is_a?(Hash) && value.empty?
-            'emptyMap()'
-          elsif value == '{}' || value == {} || value == '{}'
-            'emptyMap()'
-          else
-            'emptyMap()'
+        when 'Object', 'object', 'Hash', 'hash', 'Array', 'array',
+             /^List<.*>$/, /^Map<.*>$/
+          # Untyped JSON container.
+          #
+          # Every one of these arms used to return `emptyList()` /
+          # `emptyMap()` on all three of its branches — declared contents
+          # were dropped silently, the same defect the CollectionDataSource
+          # arm above was fixed for. And the class spellings never reached
+          # them at all, because `Object` did not map to `Map<String, Any>`,
+          # so a declared dictionary was interpolated as a Ruby Hash:
+          #
+          #     var profile: Object = {"name"=>"Grace", "meta"=>{"age"=>36}}
+          #
+          # Neither half is Kotlin. sjui had the identical defect (fixed in
+          # d2342ecc); the literal spelling is what differs between them.
+          #
+          # The STRING forms come first: a defaultValue written as `"[]"` or
+          # `"{}"` means an empty container, not the two-character string.
+          # The old arms handled that and nothing else, and the suite pinned
+          # it — an example written before today, which is why it caught this.
+          case value
+          when '[]' then 'emptyList()'
+          when '{}' then 'emptyMap()'
+          else kotlin_json_literal(value)
           end
         else
           # For all other cases, use value as-is
           value
         end
+      end
+
+      # A declared dictionary / array default as a Kotlin literal.
+      #
+      # Kotlin spelling differs from Swift's, so the sjui emitter cannot be
+      # copied: `mapOf("k" to v)` rather than `["k": v]`, `listOf(...)`
+      # rather than `[...]`, and empty forms are `emptyMap()` / `emptyList()`
+      # rather than `[:]` / `[]`.
+      def kotlin_json_literal(value)
+        case value
+        when Hash
+          return 'emptyMap()' if value.empty?
+
+          pairs = value.map do |k, v|
+            "#{kotlin_string_literal(k.to_s)} to #{kotlin_json_literal(v)}"
+          end
+          "mapOf(#{pairs.join(', ')})"
+        when Array
+          return 'emptyList()' if value.empty?
+
+          "listOf(#{value.map { |v| kotlin_json_literal(v) }.join(', ')})"
+        when String then kotlin_string_literal(value)
+        when Numeric, TrueClass, FalseClass then value.to_s
+        when NilClass then 'null'
+        else kotlin_string_literal(value.to_s)
+        end
+      end
+
+      # A Kotlin string literal.
+      #
+      # `$` must be escaped as well as `\` and `"`: Kotlin expands `$name`
+      # and `${...}` inside a string, so an unescaped `$` in declared data
+      # either fails to compile or silently interpolates something else.
+      # Written with block replacements — gsub with a STRING replacement
+      # reads a backslash pair as a back-reference and emits one backslash
+      # where two were meant.
+      def kotlin_string_literal(str)
+        escaped = str.to_s.gsub(0x5c.chr) { 0x5c.chr * 2 }
+                     .gsub(0x22.chr) { 0x5c.chr + 0x22.chr }
+                     .gsub('$') { 0x5c.chr + '$' }
+        0x22.chr + escaped + 0x22.chr
       end
 
       # CollectionDataSource defaultValue → Kotlin constructor literal.
