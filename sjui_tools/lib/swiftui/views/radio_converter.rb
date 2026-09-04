@@ -139,6 +139,27 @@ module SjuiTools
             add_modifier_line ".opacity(0.6)"
           end
           
+          # One element carrying the label, the way the dynamic face forms it
+          # (RadioConverter.swift: `.accessibilityElement(children: .ignore)`
+          # + `.accessibilityLabel(text)`).
+          #
+          # A radio is in CERTAIN_ACCESSIBILITY_ELEMENT_TYPES — classified a
+          # LEAF — but it renders as `HStack { Image; Text }`, which is two
+          # elements. Without this the id lands on a container whose
+          # accessibility resolves to its first child, so the radio read as
+          # the SF Symbol's name ("circle") instead of its own text. The
+          # classification said leaf, the emission said container, and nothing
+          # reconciled them.
+          #
+          # `.ignore` rather than `.combine`, matching the dynamic face: the
+          # glyph carries nothing a reader needs, and combining would prepend
+          # its name to every label.
+          a11y_text = @component['label'] || @component['text']
+          if a11y_text.is_a?(String) && !a11y_text.empty?
+            add_modifier_line ".accessibilityElement(children: .ignore)"
+            add_modifier_line ".accessibilityLabel(#{label_expression(a11y_text)})"
+          end
+
           # 共通のモディファイアを適用
           apply_modifiers
           
