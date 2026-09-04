@@ -709,6 +709,19 @@ A だけ書くと、露出 0 の面が「非該当」と自己判定して測ら
 何が「文字列」かは diff で機械的に出ない（help 文・warn 文・docstring の中の式）。**その列車の diff を読んだ人が 1 度だけ名指す**のが
 一番安い。名指しが無いと、受け手は全ファイルの全文字列を自分の文書と突き合わせるしかなく、誰もやらない。
 
+### 5.17 追補: 文字列が **ソースの literal か、実行時の合成か** を添える（1.8.39）
+
+1.8.39 の warning 文面 3 種（"is null" / "is an object" / "is an array"）は `"… is #{kind}; items are …"` の**実行時合成**で、
+ソースに literal としては存在しない。2 面が独立に「出た版で撃ち直そう」として `grep` で **0 件**を得た —— 1 面は「配布物に 0 件なのに
+『陽性対照 OK』を無条件で印字するスクリプト」で危うく docs の 0 を報告し、もう 1 面は仕込み（layout にオブジェクト要素を 1 個挿して
+build）で実物を発火させて取った。**探した語がそもそも存在しない語なら、0 は何も意味しない。**
+```
+書く   文面: `Attribute 'items[1]' in 'Segment' is an object; …`（実行時合成 — literal は `items are string labels` / `dropped from the generated output`）
+       ⇒ 受け手は literal 部分で grep、全文が要るなら仕込みで発火させる
+書かない 「warning 文面 3 種」だけ（受け手が合成前の断片を知らない）
+```
+⇒ 文字列を名指すときは **(a) literal か合成か (b) 合成なら grep できる断片** を添える。
+
 ## 7.8 予告と bootstrap を同じ応答で撃つと、予告にならない
 
 1.8.32 で予告の送信と bootstrap の起動を同じターンに置いた。受け手（admin backend）:
