@@ -549,19 +549,65 @@ def check_unit_contracts(
     return report
 
 
+def summary_line_for(cases: int, scanned: int, declaring: int) -> str:
+    """The denominator sentence, from counts alone.
+
+    Takes numbers rather than a report because the docs index says the same
+    thing about a whole RUN — several scans, one line — and it has no report
+    to hand. Composing that sentence there would put the wording in two
+    places, which is the shape this line was extracted to avoid: the index and
+    `--check` would then be able to disagree about how a count is phrased
+    while agreeing about the count.
+    """
+    return (
+        f"unit contracts: {cases} case(s) declared across "
+        f"{scanned} spec file(s) scanned "
+        f"({declaring} spec file(s) carrying a unitContracts block)"
+    )
+
+
 def summary_line(report: UnitContractReport) -> str:
-    """The denominator line, in one place.
+    """The denominator line for one scan.
 
     `--check` prints it and the generated docs index shows it. Requirement 3
     of the docs ticket is that the two carry the SAME numbers, and the only
     way two call sites cannot drift is for there to be one call site.
     """
-    return (
-        f"unit contracts: {len(report.cases)} case(s) declared across "
-        f"{len(report.scanned_specs)} spec file(s) scanned "
-        f"({len(report.declaring_files)} spec file(s) carrying a "
-        f"unitContracts block)"
+    return summary_line_for(
+        len(report.cases), len(report.scanned_specs), len(report.declaring_files)
     )
+
+
+#: Keys `aggregate_unit_totals` adds up. Named so a new total added to
+#: `unit_contract_pages` fails loudly here rather than being dropped from an
+#: aggregate that silently keeps reporting the old set.
+_SUMMABLE_TOTALS = ("cases", "specs_scanned", "specs_declaring",
+                    "specs_unreadable", "targets")
+
+
+def aggregate_unit_totals(totals_list: list[dict]) -> dict:
+    """One run's totals from several scans' totals.
+
+    A multi-app site scans once per app and shows ONE denominator. Summing
+    those in the docs generator would mean composing the sentence there too,
+    so the sum and its wording both live here.
+
+    `targets` is summed like the rest: each scan reads a different app's
+    specs, so two scans naming a target the same way are two targets, not one
+    seen twice. `unreadable_files` is concatenated rather than counted again,
+    so the names survive into the warning the generator prints.
+    """
+    out = {key: 0 for key in _SUMMABLE_TOTALS}
+    unreadable: list[str] = []
+    for totals in totals_list:
+        for key in _SUMMABLE_TOTALS:
+            out[key] += totals.get(key, 0)
+        unreadable.extend(totals.get("unreadable_files", []))
+    out["unreadable_files"] = unreadable
+    out["summary_line"] = summary_line_for(
+        out["cases"], out["specs_scanned"], out["specs_declaring"]
+    )
+    return out
 
 
 def format_report(report: UnitContractReport) -> list[str]:
