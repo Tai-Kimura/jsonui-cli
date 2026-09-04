@@ -121,7 +121,21 @@ def cmd_build(args: argparse.Namespace) -> int:
     #
     # Counting them:
     #
-    #     grep -icE 'warning \[|warning:|\[warn|⚠'
+    #     jui build 2>&1 | grep -iE 'warning \[|warning:|\[warn|⚠' \
+    #                    | grep -vic 'warnings found'
+    #
+    # The second filter drops the build's OWN summary line,
+    # `[WARN] Validation warnings found: N`, which goes through the same
+    # logger and would otherwise be counted as one more finding than there
+    # are. Measured on a log holding two findings plus that line: 3 without
+    # the filter, 2 with it.
+    #
+    # ⚠ The filter is a heuristic, and its failure direction is to UNDER-count:
+    # a finding whose own message contains "warnings found" is dropped with
+    # the summary line. Measured: a single finding reading
+    # `WARNING [lint-strings]: 3 warnings found in …` counts 0, not 1. Nothing
+    # emitted today has that shape, but a future message could, so treat the
+    # number as a floor rather than an exact count.
     #
     # Each half of that is load-bearing, measured against one line of each
     # shape plus three lines of prose that must not count:
