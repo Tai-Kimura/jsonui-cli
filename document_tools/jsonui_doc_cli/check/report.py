@@ -19,6 +19,7 @@ import json
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
+from ..reproducible import build_local_datetime
 
 SCHEMA_VERSION = 1
 
@@ -91,7 +92,7 @@ class CheckReport:
 
     def __post_init__(self):
         if not self.executed_at:
-            self.executed_at = datetime.now().astimezone().isoformat(timespec="seconds")
+            self.executed_at = build_local_datetime().isoformat(timespec="seconds")
 
     @property
     def summary(self) -> dict:

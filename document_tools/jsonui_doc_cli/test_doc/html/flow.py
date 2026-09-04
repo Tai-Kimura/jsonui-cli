@@ -9,6 +9,7 @@ from typing import Any
 
 from .styles import get_flow_styles, get_toggle_script
 from .sidebar import generate_flow_sidebar, escape_html
+from ...reproducible import build_datetime
 
 
 def generate_flow_html(
@@ -114,7 +115,7 @@ def generate_flow_html(
         html_parts.append(f"      <strong>Teardown:</strong> {len(teardown_steps)} steps<br>")
     if checkpoints:
         html_parts.append(f"      <strong>Checkpoints:</strong> {len(checkpoints)}<br>")
-    html_parts.append(f"      <strong>Generated:</strong> {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    html_parts.append(f"      <strong>Generated:</strong> {build_datetime().strftime('%Y-%m-%d %H:%M:%S')}")
     html_parts.append("    </div>")
 
     # Setup section

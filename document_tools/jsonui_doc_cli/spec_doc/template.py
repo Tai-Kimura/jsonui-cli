@@ -4,6 +4,7 @@ import json
 import re
 from datetime import date
 from pathlib import Path
+from ..reproducible import build_date
 
 
 def _pascal_to_kebab(name: str) -> str:
@@ -31,7 +32,7 @@ def generate_spec_template(screen_name: str, display_name: str = None) -> dict:
     Returns:
         Dictionary containing the specification template
     """
-    today = date.today().isoformat()
+    today = build_date().isoformat()
 
     return {
         "type": "screen_spec",
@@ -141,7 +142,7 @@ def generate_component_template(component_name: str, display_name: str = None, c
     Returns:
         Dictionary containing the component specification template
     """
-    today = date.today().isoformat()
+    today = build_date().isoformat()
 
     return {
         "type": "component_spec",

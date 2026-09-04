@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any
 
 # Schema constants come from the single in-repo test validator (plan D3).
+from ...reproducible import build_datetime
 from jsonui_test_cli.schema import (
     SUPPORTED_ACTIONS,
     SUPPORTED_ASSERTIONS,
@@ -53,7 +54,7 @@ def generate_markdown(
     lines.append(f"- **Platform:** {data.get('platform', 'all')}")
     if "source" in data:
         lines.append(f"- **Layout:** `{data['source'].get('layout', 'N/A')}`")
-    lines.append(f"- **Generated:** {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    lines.append(f"- **Generated:** {build_datetime().strftime('%Y-%m-%d %H:%M:%S')}")
     lines.append("")
 
     # Test cases

@@ -9,6 +9,7 @@ from datetime import datetime
 from typing import Any
 
 from ..html.sidebar import escape_html
+from ...reproducible import build_datetime
 from .flow_graph import (
     EDGE_BACK,
     ScreenResolver,
@@ -981,7 +982,7 @@ def _generate_mermaid_html_page(mermaid_code: str, title: str) -> str:
                 <button onclick="resetZoom()" title="Reset Zoom" style="font-size: 12px; width: auto; padding: 0 8px;">Reset</button>
                 <button onclick="fitToScreen()" title="Fit to Screen" style="font-size: 12px; width: auto; padding: 0 8px;">Fit</button>
             </div>
-            <span class="info">Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}</span>
+            <span class="info">Generated: {build_datetime().strftime('%Y-%m-%d %H:%M:%S')}</span>
         </div>
 
         <div class="diagram-wrapper" id="diagramWrapper">
@@ -1400,7 +1401,7 @@ def _generate_tabbed_mermaid_html_page(diagrams: dict[str, str], title: str) -> 
                 <button onclick="resetZoom()" title="Reset Zoom" style="font-size: 12px; width: auto; padding: 0 8px;">Reset</button>
                 <button onclick="fitToScreen()" title="Fit to Screen" style="font-size: 12px; width: auto; padding: 0 8px;">Fit</button>
             </div>
-            <span class="info">Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}</span>
+            <span class="info">Generated: {build_datetime().strftime('%Y-%m-%d %H:%M:%S')}</span>
         </div>
 
         <div class="tabs">
