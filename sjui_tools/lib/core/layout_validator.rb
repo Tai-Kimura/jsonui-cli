@@ -24,6 +24,31 @@ module JsonUIShared
         }
       end
 
+      # Several cell layouts, and no `sections` to say which goes where.
+      #
+      # SSoT (`/Collection/cellClasses`): with `items` and no `sections`, ONE
+      # declared cell layout renders every item. All three faces implement
+      # that by taking `cellClasses.first` — kjui `cell_classes.first`, rjui
+      # `cell_classes.first`, sjui the same — so declaring several renders the
+      # first and drops the rest silently, on every face.
+      #
+      # Rendering the first is a guess at which one the author meant, and a
+      # silent guess is the shape that cost a whole night elsewhere in this
+      # corpus: the layout looks accepted and the output is wrong. The
+      # declaration is refused instead, naming the count and the fix.
+      cell_classes = component['cellClasses'] || []
+      sections = component['sections'] || []
+      if cell_classes.length > 1 && sections.empty?
+        component_id = component['id'] ? " (id=#{component['id']})" : ''
+        warnings << {
+          level: :error,
+          message: "Collection#{component_id}: #{cell_classes.length} cellClasses " \
+                   'declared without sections — only the first would render. ' \
+                   'Fix: assign cells via sections[].cell, or declare a single cellClass.',
+          location: source_path
+        }
+      end
+
       warnings
     end
 

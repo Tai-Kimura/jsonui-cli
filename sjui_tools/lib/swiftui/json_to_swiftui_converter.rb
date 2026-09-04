@@ -473,6 +473,12 @@ module SjuiTools
                "CollectionDataSource property.\e[0m"
         end
 
+        # NOTE: "several cellClasses with no sections" is NOT checked here.
+        # It lives in JsonUIShared::LayoutValidator#check_collection, which
+        # this file already runs (below) and which kjui and rjui run too — the
+        # rule is identical on all three faces, so it gets one implementation
+        # rather than three copies that drift.
+
         # Validate this component (without style-merged attributes)
         if component['type']
           @validator.validate(component, nil, parent_orientation,
