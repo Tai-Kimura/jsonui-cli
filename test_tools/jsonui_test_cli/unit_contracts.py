@@ -207,6 +207,14 @@ class UnitContractReport:
     declaring_files: list[str] = field(default_factory=list)
     #: input this scan could not read, one line each
     problems: list[str] = field(default_factory=list)
+    #: FILES that could not be parsed, spec-root-relative. Collected at the
+    #: parse site, NOT derived from `problems`: `problems` also carries
+    #: malformed-block and never-landed-sub-spec lines, so its length answers
+    #: a different question and would drift the moment any other problem is
+    #: reported. These files stay in `scanned` — unreadable is not "declares
+    #: nothing" — which is exactly why they need naming somewhere: otherwise
+    #: they widen `scanned - declaring` silently.
+    unreadable_files: list[str] = field(default_factory=list)
     #: platform -> method names that exist but the runner will never execute
     undiscoverable: dict[str, list[str]] = field(default_factory=dict)
     #: platform -> case name -> the file(s) that implement it
@@ -242,7 +250,7 @@ class UnitContractReport:
 def discover_unit_contracts(
     project_root: Path, spec_dir: str | None = None
 ) -> tuple[list[UnitCase], list[str], list[str], list[str]]:
-    """``(cases, specs scanned, screens declaring, problems, files declaring)``.
+    """``(cases, scanned, screens declaring, problems, files declaring, unreadable)``.
 
     Both halves, for the same reason ``discover_branch_screens`` returns
     both: a caller that reports "0 declared" has to be able to say whether
@@ -264,6 +272,7 @@ def discover_unit_contracts(
     scanned: list[str] = []
     declaring: list[str] = []
     declaring_files: list[str] = []
+    unreadable_files: list[str] = []
     problems: list[str] = []
     # Sub-specs that declare a block, by the parent that owns them. They are
     # skipped AS SCREENS (parent + subs is one screen), and their blocks are
@@ -275,6 +284,10 @@ def discover_unit_contracts(
         screen = _screen_of(path)
         scanned.append(screen)
         try:
+            rel_file = path.resolve().relative_to(spec_path).as_posix()
+        except ValueError:
+            rel_file = path.name
+        try:
             with open(path, "r", encoding="utf-8") as f:
                 raw = json.load(f)
         except (OSError, json.JSONDecodeError) as e:
@@ -282,11 +295,8 @@ def discover_unit_contracts(
             # keeps the denominator honest, and saying so keeps a spec that
             # cannot be parsed from reading as one that declares nothing.
             problems.append(f"{screen}: spec could not be read ({e})")
+            unreadable_files.append(rel_file)
             continue
-        try:
-            rel_file = path.resolve().relative_to(spec_path).as_posix()
-        except ValueError:
-            rel_file = path.name
         # Counted off the RAW file, before the sub-spec skip and before the
         # merge: a file declares a block or it does not, and that is the fact
         # `grep -l` reproduces. A parent that only RECEIVES blocks from its
@@ -325,7 +335,7 @@ def discover_unit_contracts(
             f"— the declaration was not read. This is a tool defect, not a "
             f"spec error; the cases are NOT being checked."
         )
-    return cases, scanned, declaring, problems, declaring_files
+    return cases, scanned, declaring, problems, declaring_files, unreadable_files
 
 
 #: Keys a unitContracts block and a case may carry. Anything else is a
@@ -493,9 +503,8 @@ def check_unit_contracts(
     """Compare declared cases against implemented ones, per platform."""
     project_root = Path(project_root)
     config = load_project_config(project_root)
-    cases, scanned, declaring, problems, declaring_files = discover_unit_contracts(
-        project_root, spec_dir
-    )
+    (cases, scanned, declaring, problems, declaring_files,
+     unreadable_files) = discover_unit_contracts(project_root, spec_dir)
     roots = _test_roots(project_root, config)
     if project_platforms is None:
         project_platforms = sorted(roots)
@@ -504,6 +513,7 @@ def check_unit_contracts(
         cases=cases, scanned_specs=scanned,
         declaring_specs=declaring, problems=problems,
         declaring_files=declaring_files,
+        unreadable_files=unreadable_files,
     )
     for case in cases:
         targets = case.platforms or tuple(project_platforms)
@@ -719,6 +729,8 @@ def unit_contract_pages(
             "cases": len(report.cases),
             "specs_scanned": len(report.scanned_specs),
             "specs_declaring": len(report.declaring_files),
+            "specs_unreadable": len(report.unreadable_files),
+            "unreadable_files": sorted(report.unreadable_files),
             "targets": len(targets),
             "summary_line": summary_line(report),
         },
