@@ -72,7 +72,12 @@ RSpec.describe 'Collection cell identifier emit sites' do
     # `reconfigured` — there is no lookup-by-cell-name method and never was.
     # Uncompilable Swift, unnoticed because every other Collection declares
     # `items`; the first fixture to reach it failed the build.
-    expect(callers).to eq(13)
+    #
+    # Now 13 + 1 definition. The added site is the single-cellClass cell loop
+    # (`generate_fallback_foreach`): it renders a real cell view now instead
+    # of printing the runtime view name, and every path that renders a cell
+    # owes the address.
+    expect(callers).to eq(14)
   end
 
   it 'still emits the address for an id-bearing Collection' do

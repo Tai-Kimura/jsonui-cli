@@ -3765,7 +3765,7 @@
   "Collection": {
     "cellClasses": {
       "type": "array",
-      "description": "Cell class definitions"
+      "description": "Cell layouts this Collection may use. With `items` and no `sections`, a single cellClass renders every item; several cellClasses need `sections[].cell` to assign them."
     },
     "headerClasses": {
       "type": "array",

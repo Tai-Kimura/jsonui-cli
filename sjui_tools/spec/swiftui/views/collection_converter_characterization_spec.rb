@@ -135,7 +135,14 @@ RSpec.describe SjuiTools::SwiftUI::Views::CollectionConverter do
   end
 
   describe 'legacy cellClasses grid with items binding' do
-    it 'unwraps the optional data source and falls back to the viewName TODO placeholder' do
+    it 'unwraps the optional data source and renders the declared cell' do
+      # Was pinned as "falls back to the viewName TODO placeholder". That was
+      # a faithful characterization of what the code did and a wrong
+      # description of what the declaration means: SSoT
+      # (`/Collection/cellClasses`) says a single cellClass renders every
+      # item, which is what kjui and rjui already did. iOS printed the
+      # runtime view name instead, so one layout rendered cells on two faces
+      # and debug text on the third.
       code = convert(
         { 'type' => 'Collection', 'id' => 'lg', 'columns' => 2,
           'cellWidth' => 90, 'cellHeight' => 40,
@@ -143,8 +150,9 @@ RSpec.describe SjuiTools::SwiftUI::Views::CollectionConverter do
       )
       expect(code).to include('if let dataSource = data.rows {')
       expect(code).to include('ForEach(Array(dataSource.sections.enumerated()), id: \\.offset) { sectionIndex, section in')
-      expect(code).to include('// TODO: Implement dynamic view instantiation based on viewName')
-      expect(code).to include('Text("\\(viewName): \\(cellIndex)")')
+      expect(code).to include('GridCellView(data: cellData)')
+      expect(code).not_to include('TODO')
+      expect(code).not_to include('Text("\\(viewName)')
       expect(code).to include('.frame(height: 40, alignment: .topLeading)')
     end
 

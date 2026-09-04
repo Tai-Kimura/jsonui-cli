@@ -313,15 +313,17 @@ RSpec.describe SjuiTools::SwiftUI::Views::CollectionConverter do
         }
       end
 
-      it 'ignores cellClasses when a data source is declared' do
-        # Measured, and not what the old example implied. With `items`, the
-        # section-driven path runs and reads the cell view name from the DATA
-        # (`section.cells?.viewName`), so `cellClasses` never reaches the
-        # emit — it renders a placeholder instead.
+      it 'renders every item with the single declared cellClass' do
+        # This example was written earlier the same day asserting the
+        # OPPOSITE — that `cellClasses` never reached the emit and a
+        # placeholder rendered instead. That was a correct measurement of the
+        # code and a wrong reading of the declaration: SSoT
+        # (`/Collection/cellClasses`) says one cellClass renders every item,
+        # and kjui and rjui already did exactly that. iOS was the outlier.
         code = described_class.new(component.merge('items' => '@{rows}')).convert
 
-        expect(code).not_to include('ItemView')
-        expect(code).to include('TODO: Implement dynamic view instantiation')
+        expect(code).to include('ItemView(data: cellData)')
+        expect(code).not_to include('TODO')
       end
 
       it 'emits no cells when nothing declares the data source' do

@@ -1559,19 +1559,52 @@ module SjuiTools
           end
         end
         
+        # The single `cellClasses` entry to render every item with, or nil.
+        #
+        # SSoT (`/Collection/cellClasses`): with `items` and no `sections`, one
+        # declared cell layout renders every item. Several need `sections[].cell`
+        # to say which goes where, and that case is refused by the validator
+        # rather than silently rendering the first.
+        def single_declared_cell_view
+          declared = @component['cellClasses'] || []
+          return nil unless declared.length == 1
+
+          extract_view_name(declared.first)
+        end
+
         def generate_fallback_foreach(data_source_ref)
+          # A declared cell class IS the view name, known at compile time.
+          # Without one there is nothing to instantiate: `section.cells?.viewName`
+          # is a runtime string, so this face could only print it.
+          cell_view = single_declared_cell_view
           add_line "ForEach(Array(#{data_source_ref}.sections.enumerated()), id: \\.offset) { sectionIndex, section in"
           indent do
-            # Generate cells for this section - need to dynamically instantiate view based on viewName
-            add_line "if let cellsData = section.cells?.data, let viewName = section.cells?.viewName {"
+            guard = if cell_view
+                      'if let cellsData = section.cells?.data {'
+                    else
+                      'if let cellsData = section.cells?.data, let viewName = section.cells?.viewName {'
+                    end
+            add_line guard
             indent do
               add_line "ForEach(Array(cellsData.enumerated()), id: \\.offset) { cellIndex, cellData in"
               indent do
-                # Since we don't know the view name at compile time, we need to use AnyView or a ViewBuilder
-                add_line "// TODO: Implement dynamic view instantiation based on viewName"
-                add_line "Text(\"\\(viewName): \\(cellIndex)\")"
+                if cell_view
+                  # What Android and Web already do for this shape:
+                  # kjui emits `<cellClass>View(data = itemData)`, rjui
+                  # `<CellView data={item} />`. iOS printed a placeholder,
+                  # so the same layout rendered cells on two faces and
+                  # debug text on the third.
+                  add_line "#{cell_view}(data: cellData)"
+                  generate_cell_identity('cellIndex')
+                  apply_cell_frame(grid: columns_is_multi?)
+                  apply_cell_item_identifier('cellIndex')
+                else
+                  add_line "// No cellClasses declared — the cell view name is only"
+                  add_line "// known at runtime, so nothing can be instantiated here."
+                  add_line "Text(\"\\(viewName): \\(cellIndex)\")"
 
-                apply_cell_frame(grid: columns_is_multi?)
+                  apply_cell_frame(grid: columns_is_multi?)
+                end
               end
               add_line "}"
             end
