@@ -330,6 +330,24 @@ module SjuiTools
         # container: emitting accessibility scaffolding for all of them is
         # what exhausted a device's main-thread stack once already (see the
         # DEPTH BUDGET note below).
+        #
+        # WHY THE TWO FACES DIFFER (declared, so it reads as design and not
+        # as drift). Here the container goes on the cell ROOT, which is
+        # possible because `sjui build` sees the whole project and marks the
+        # layouts some Collection renders (CollectionCellIndex) before
+        # conversion. The dynamic renderer has no such pass at the point it
+        # wraps a cell: the cell's JSON is loaded inside DynamicView, so the
+        # root's `id` is not knowable there without reading a file per cell.
+        # It makes the WRAPPER the element instead
+        # (CollectionConverter.buildCellView). Same outcome for the
+        # children; different node carries the container.
+        #
+        # The consequence of that difference is the single-child merge: this
+        # side can compute `accessibility_merge_hazard?` from the root's
+        # declaration and emits the anchor only where it is needed, while
+        # the dynamic side cannot, and an unconditional anchor there would
+        # be the DEPTH BUDGET regression on every cell. Whether dynamic
+        # needs one is left to the conformance fixtures that run through it.
         def apply_collection_cell_root_container
           # The same single-child merge the id path guards against, for the
           # same reason and by the same means. `.contain` alone is not enough
