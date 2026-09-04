@@ -37,6 +37,7 @@ from .branch_tests import (
     BranchTestGenerationError,
     _is_sub_spec_of_a_parent,
     _load_spec,
+    _parent_declaring,
     _screen_of,
     _spec_files,
     load_project_config,
@@ -197,6 +198,12 @@ def discover_unit_contracts(
     scanned: list[str] = []
     declaring: list[str] = []
     problems: list[str] = []
+    # Sub-specs that declare a block, by the parent that owns them. They are
+    # skipped AS SCREENS (parent + subs is one screen), and their blocks are
+    # meant to arrive through the parent's merged view. When they do not, the
+    # loss used to be silent — the reported defect — so the two are compared
+    # after the sweep and a block that never landed is named.
+    declared_in_sub: dict[str, list[str]] = {}
     for path in _spec_files(spec_path):
         screen = _screen_of(path)
         scanned.append(screen)
@@ -210,13 +217,31 @@ def discover_unit_contracts(
             problems.append(f"{screen}: spec could not be read ({e})")
             continue
         if raw.get("type") != PARENT_SPEC_TYPE and _is_sub_spec_of_a_parent(path, spec_path):
+            if raw.get("unitContracts") is not None:
+                parent = _parent_declaring(path, spec_path)
+                if parent is not None:
+                    declared_in_sub.setdefault(_screen_of(parent), []).append(screen)
             continue
         spec = _load_spec(path)
         found, issues = _cases_of(spec, screen)
         cases.extend(found)
         problems.extend(issues)
-        if raw.get("unitContracts") is not None:
+        # Read off the spec AS READ, not the raw file. A parent may not
+        # declare `unitContracts` itself (the merger refuses it), so counting
+        # raw declarations reported "0 carrying" for a split screen whose
+        # sub-specs had just contributed every case in `cases` — a summary
+        # line that contradicted its own numerator.
+        if spec.get("unitContracts") is not None:
             declaring.append(screen)
+    for parent_screen, subs in sorted(declared_in_sub.items()):
+        if parent_screen in declaring:
+            continue
+        problems.append(
+            f"{parent_screen}: {len(subs)} sub-spec(s) declare unitContracts "
+            f"({', '.join(sorted(subs))}) but the merged parent carries none "
+            f"— the declaration was not read. This is a tool defect, not a "
+            f"spec error; the cases are NOT being checked."
+        )
     return cases, scanned, declaring, problems
 
 

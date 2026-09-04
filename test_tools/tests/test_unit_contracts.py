@@ -413,3 +413,134 @@ class TestOnlyTestMethodsAreScanned:
         root = self._ios_project(tmp_path, self._SUPPORT, tests)
         report = uc.check_unit_contracts(root)
         assert report.undiscoverable.get("ios") == ["withRoutes"]
+
+
+def _split_project(tmp_path, *, sub_blocks, second_sub=False):
+    """A parent spec plus sub-specs — the shape a large screen is authored in.
+
+    The parent may not declare `unitContracts` (the merger refuses it), so
+    the sub-specs are the only legal home and this is the only fixture that
+    exercises the path a split screen actually takes.
+    """
+    specs = tmp_path / "docs" / "screens"
+    (specs / "chat").mkdir(parents=True)
+    subs = [{"file": "chat/reco.spec.json"}]
+    if second_sub:
+        subs.append({"file": "chat/subs.spec.json"})
+    (specs / "chat.spec.json").write_text(json.dumps({
+        "type": "screen_parent_spec", "version": "1.0",
+        "metadata": {"name": "Chat", "displayName": "Chat",
+                     "description": "d", "layoutFile": "chat"},
+        "subSpecs": subs,
+    }), encoding="utf-8")
+
+    def sub(name, block):
+        spec = {
+            "type": "screen_spec", "version": "1.0",
+            "metadata": {"name": name, "displayName": name,
+                         "description": "d", "layoutFile": name},
+            "structure": {"components": [], "layout": {}},
+            "dataFlow": {"viewModel": {"description": "V", "methods": [], "vars": []}},
+            "stateManagement": {"uiVariables": [], "eventHandlers": []},
+        }
+        if block is not None:
+            spec["unitContracts"] = block
+        return spec
+
+    (specs / "chat" / "reco.spec.json").write_text(
+        json.dumps(sub("Reco", sub_blocks[0])), encoding="utf-8")
+    if second_sub:
+        (specs / "chat" / "subs.spec.json").write_text(
+            json.dumps(sub("Subs", sub_blocks[1])), encoding="utf-8")
+    (tmp_path / "jui.config.json").write_text(
+        json.dumps({"spec_directory": "docs/screens"}), encoding="utf-8")
+    return tmp_path
+
+
+class TestSplitScreens:
+    """Reported 2026-09-04: a sub-spec's block was read by nobody.
+
+    The consumer's A/B was decisive — the same block, the same command, only
+    the file it sits in changes:
+
+        in a sub-spec:  3 case(s) declared across 55 spec(s) (1 carrying)
+        in the parent:  6 case(s) declared across 55 spec(s) (2 carrying)
+
+    and the `3 / 1` was a DIFFERENT screen's block. What makes it worse than
+    a missing feature is that the output is shaped exactly like the correct
+    answer for someone who declared nothing: `--check` then reported
+    `missing 0` and exited 0, so the gate agreed the declaration was
+    satisfied while never having read it.
+    """
+
+    def test_a_sub_spec_block_is_read(self, tmp_path):
+        root = _split_project(tmp_path, sub_blocks=[
+            {"target": "H", "cases": [{"name": "a"}, {"name": "b"}]}])
+        cases, scanned, declaring, problems = uc.discover_unit_contracts(root)
+        assert sorted(c.name for c in cases) == ["a", "b"]
+        assert problems == []
+
+    def test_the_carrying_count_names_the_screen_that_carries(self, tmp_path):
+        """The numerator and the denominator have to agree.
+
+        `declaring` used to be read off the raw file. A parent is forbidden
+        from declaring the block, so a split screen reported "0 carrying"
+        beside a non-zero case count — a summary line contradicting itself,
+        and the line the consumer read to conclude the block was ignored.
+        """
+        root = _split_project(tmp_path, sub_blocks=[
+            {"target": "H", "cases": [{"name": "a"}]}])
+        cases, scanned, declaring, problems = uc.discover_unit_contracts(root)
+        assert declaring == ["chat"]
+        assert len(cases) == 1
+
+    def test_two_sub_specs_contributing_to_one_target_both_land(self, tmp_path):
+        root = _split_project(tmp_path, second_sub=True, sub_blocks=[
+            {"target": "H", "cases": [{"name": "a"}]},
+            {"target": "H", "cases": [{"name": "b"}]}])
+        cases, _, declaring, problems = uc.discover_unit_contracts(root)
+        assert sorted(c.name for c in cases) == ["a", "b"]
+        assert declaring == ["chat"]
+        assert problems == []
+
+    def test_a_sub_spec_declaration_that_never_lands_is_named(self, tmp_path,
+                                                              monkeypatch):
+        """The safety net, for the day the merge stops carrying it.
+
+        `_load_spec` falls back to the unmerged parent whenever jui_cli is
+        not importable in the synced tree, and that fallback is silent. The
+        whole complaint was that silence here is indistinguishable from
+        success, so the sweep now compares what the sub-specs declared
+        against what the parent came back with and says so.
+
+        Asserted on the MESSAGE, not just on a non-empty list: a problem line
+        that named the wrong file would satisfy `problems != []`.
+        """
+        root = _split_project(tmp_path, sub_blocks=[
+            {"target": "H", "cases": [{"name": "a"}]}])
+
+        real = uc._load_spec
+
+        def stripped(path):
+            spec = dict(real(path))
+            spec.pop("unitContracts", None)
+            return spec
+
+        monkeypatch.setattr(uc, "_load_spec", stripped)
+        cases, _, declaring, problems = uc.discover_unit_contracts(root)
+        assert cases == []
+        assert declaring == []
+        assert len(problems) == 1
+        assert "chat" in problems[0] and "reco" in problems[0]
+        assert "NOT being checked" in problems[0]
+
+    def test_a_split_screen_with_no_block_says_nothing(self, tmp_path):
+        """Control for the arm above.
+
+        Without it, the safety net could fire on every split screen and the
+        message would be noise rather than a finding — and a warning that is
+        always wrong is the defect fixed in 1.8.27, not a fix.
+        """
+        root = _split_project(tmp_path, sub_blocks=[None])
+        cases, _, declaring, problems = uc.discover_unit_contracts(root)
+        assert (cases, declaring, problems) == ([], [], [])
