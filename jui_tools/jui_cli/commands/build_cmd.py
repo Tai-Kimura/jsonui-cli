@@ -108,6 +108,36 @@ def cmd_build(args: argparse.Namespace) -> int:
     # in the agents' rulebook and binds an agent's workflow, not this
     # process's exit code. A consumer read the old wording as a mechanism
     # here and told another lane the build would gate.
+    #
+    # "PRINTED" is what a consumer then translates into a grep, so the
+    # spellings matter. A build prints warnings in FOUR shapes, and no
+    # single naive pattern catches them all:
+    #
+    #     WARNING [<origin>]: ...   the common one (this call site, and most others)
+    #     warning: ...              older emitters
+    #     ⚠ / ⚠️  ...               the Ruby tools
+    #     \e[33m[WARN]\e[0m ...     rjui_tools/lib/core/logger.rb — ANSI FIRST on the line
+    #
+    # Counting them:
+    #
+    #     grep -icE 'warning \[|warning:|\[warn|⚠'
+    #
+    # Each half of that is load-bearing, measured against one line of each
+    # shape plus three lines of prose that must not count:
+    #
+    #     grep -c 'warning:'                 1 — case-sensitive, so only the lowercase shape
+    #     grep -c '^\[WARN'                  0 — the ANSI escape sits before the bracket
+    #     grep -icE 'warning:|\[WARN|⚠'      3 — misses `WARNING [origin]:`, the COMMONEST
+    #     grep -icE 'warn|⚠'                 4 — but also matches "no warnings" in prose
+    #     the expression above               4, and 0 on the prose
+    #
+    # (On a whole distributed tree `grep -c 'warning:'` returns 0, because
+    # the lowercase shape is rare there — a different measurement from the
+    # four-line sample above, and worth not conflating with it.)
+    #
+    # Site counts in one distributed tree were WARNING: 19 / ⚠ 13 /
+    # warning: 2 / [WARN 1 — indicative only, since the number moves with
+    # how the scan defines a "print site".
     if _lint_strings_enabled(config, args):
         from .lint_strings_cmd import run_for_build
 
