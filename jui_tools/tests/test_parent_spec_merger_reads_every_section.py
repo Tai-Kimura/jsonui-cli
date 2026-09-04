@@ -435,12 +435,24 @@ class TheVocabularyCoversWhatConsumersRead(unittest.TestCase):
     false positives here.
     """
 
-    GENERATORS = (
-        ("document_tools/jsonui_doc_cli/spec_doc/html_generator.py",
-         "generate_spec_html"),
-        ("document_tools/jsonui_doc_cli/spec_doc/markdown_generator.py",
-         "generate_spec_markdown"),
-    )
+    SPEC_DOC = Path("document_tools/jsonui_doc_cli/spec_doc")
+    #: `def generate_spec_<kind>(spec_data…` at module scope — the screen
+    #: renderers' shared shape.
+    ENTRY_RE = re.compile(r"^def (generate_spec_[A-Za-z0-9_]+)\(\s*spec_data", re.M)
+
+    def _generators(self) -> list[tuple[Path, str]]:
+        """Every screen generator in the package, DERIVED not listed.
+
+        A hand-written pair would go blind the day a third renderer is added —
+        the same shape as the vocabulary it exists to check, one level further
+        along. Asked by the triage lane, which had already counted three
+        levels of it and looked for a fourth.
+        """
+        out = []
+        for path in sorted((REPO_ROOT / self.SPEC_DOC).glob("*_generator.py")):
+            for m in self.ENTRY_RE.finditer(path.read_text(encoding="utf-8")):
+                out.append((path, m.group(1)))
+        return out
 
     @staticmethod
     def _function_body(path: Path, name: str) -> str:
@@ -452,12 +464,22 @@ class TheVocabularyCoversWhatConsumersRead(unittest.TestCase):
     def _sections_rendered(self) -> dict[str, str]:
         pat = re.compile(r'\bspec_data\.get\(\s*"([A-Za-z_][A-Za-z0-9_]*)"')
         out: dict[str, str] = {}
-        for rel, func in self.GENERATORS:
-            path = REPO_ROOT / rel
-            self.assertTrue(path.is_file(), f"generator moved: {rel}")
+        for path, func in self._generators():
             for m in pat.finditer(self._function_body(path, func)):
-                out.setdefault(m.group(1), rel)
+                out.setdefault(m.group(1), path.name)
         return out
+
+    def test_the_generator_set_is_not_empty(self):
+        """Control on the derivation itself.
+
+        `glob` over a renamed directory returns [], and every arm below then
+        passes by measuring nothing. This is the fourth level of one shape:
+        the vocabulary, its containment, the scan, and now the scan's own
+        population — each one blind to what the next one up omits.
+        """
+        found = self._generators()
+        self.assertTrue(found, f"no screen generators found under {self.SPEC_DOC}")
+        self.assertIn("generate_spec_html", [name for _, name in found])
 
     def test_the_scan_finds_the_known_sections(self):
         """Control. A scan that matched nothing would make the arm below

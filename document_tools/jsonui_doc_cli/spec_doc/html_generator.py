@@ -3,8 +3,45 @@
 from __future__ import annotations
 
 import html
+import json
 from pathlib import Path
 from typing import Any
+
+
+#: Top-level keys that say nothing about what a sub-spec CONTRIBUTES — they are
+#: bookkeeping every spec carries.
+_SUB_SPEC_BOOKKEEPING = frozenset({
+    "$schema", "type", "version", "metadata", "subSpecs", "notes", "relatedFiles",
+})
+
+
+def _sub_spec_sections(spec_dir: "Path | None", sub_file: str) -> str:
+    """The sections a sub-spec declares, for the parent index's `Declares` cell.
+
+    The index has to answer "which page is validation on?". Without this the
+    parent lists names and files and leaves the reader to open all of them —
+    an index with no table of contents.
+
+    Read from the sub-spec itself rather than from the parent's `subSpecs`
+    entry, because the entry carries only name/file/description; the parent is
+    forbidden from declaring the sections, so it cannot list them either.
+
+    Degrades to "" when the directory is not known or the file cannot be read:
+    a wrong list is worse than none here, since the whole point is telling a
+    reader where to look.
+    """
+    if spec_dir is None or not sub_file:
+        return ""
+    try:
+        path = Path(spec_dir) / sub_file
+        if not path.is_file():
+            path = Path(spec_dir) / Path(sub_file).name
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return ""
+    if not isinstance(data, dict):
+        return ""
+    return ", ".join(sorted(k for k in data if k not in _SUB_SPEC_BOOKKEEPING))
 
 
 def generate_spec_html(
@@ -13,6 +50,7 @@ def generate_spec_html(
     all_tests_nav: dict | None = None,
     current_path: str | None = None,
     layouts_dir: Path | None = None,
+    spec_dir: Path | None = None,
 ) -> str:
     """
     Generate HTML documentation from screen specification JSON.
@@ -96,13 +134,31 @@ def generate_spec_html(
     if sub_specs:
         parts.append('<section id="sub-specs">')
         parts.append('<h2>Sub Specifications</h2>')
+        # A parent page is an INDEX, and the absence of Data Flow / Validation
+        # here is the design rather than a gap. Saying so is not decoration: a
+        # lane read the four missing sections as a defect and filed it, and
+        # nothing on the page could have told them otherwise. Absence is only
+        # legible where the absence is.
+        #
+        # The index deliberately does not reproduce the sections. A merged view
+        # would teach readers a shape the tools refuse — the parent may not
+        # declare these sections at all — and a second copy of each one would
+        # drift from the first.
+        parts.append(
+            '<p class="note">This screen is split across the sub-specs below. '
+            'Its behaviour — data flow, state, user actions, validation — is '
+            'declared in them and documented on their pages, not here. A '
+            'parent spec may not declare those sections itself.</p>'
+        )
         parts.append('<table>')
-        parts.append('<thead><tr><th>Name</th><th>File</th><th>Description</th></tr></thead>')
+        parts.append('<thead><tr><th>Name</th><th>File</th><th>Declares</th>'
+                     '<th>Description</th></tr></thead>')
         parts.append('<tbody>')
         for sub in sub_specs:
             sub_name = _e(sub.get("name", "-"))
             sub_file = sub.get("file", "")
             sub_desc = _e(sub.get("description", "-"))
+            declares = _e(_sub_spec_sections(spec_dir, sub_file))
             # Create link to sub-spec HTML if current_path is available
             sub_html = sub_file.replace(".spec.json", ".html").split("/")[-1] if sub_file else ""
             sub_dir = "/".join(sub_file.split("/")[:-1]) if "/" in sub_file else ""
@@ -114,9 +170,9 @@ def generate_spec_html(
                     link = f"{sub_dir}/{sub_html}"
                 else:
                     link = sub_html
-                parts.append(f'<tr><td><a href="{link}">{sub_name}</a></td><td><code>{_e(sub_file)}</code></td><td>{sub_desc}</td></tr>')
+                parts.append(f'<tr><td><a href="{link}">{sub_name}</a></td><td><code>{_e(sub_file)}</code></td><td>{declares}</td><td>{sub_desc}</td></tr>')
             else:
-                parts.append(f'<tr><td>{sub_name}</td><td><code>{_e(sub_file)}</code></td><td>{sub_desc}</td></tr>')
+                parts.append(f'<tr><td>{sub_name}</td><td><code>{_e(sub_file)}</code></td><td>{declares}</td><td>{sub_desc}</td></tr>')
         parts.append('</tbody></table>')
         parts.append('</section>')
 
