@@ -293,3 +293,118 @@ class SubSpecsSupplyEverythingTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TheRefusalsPromiseIsKept(unittest.TestCase):
+    """Every section the refusal sends to a sub-spec must actually be built.
+
+    The refusal is DEFAULT-DENY — any top-level key outside
+    `PARENT_READS_TOP_LEVEL` — while construction is hand-written, one arm at
+    a time. So adding a section switches the refusal on for free and leaves
+    the promise unbacked, and the author is left with no legal home: the
+    parent errors, the sub-spec is read by nobody.
+
+    That has happened twice (`branchContracts` before v1.7.3, `unitContracts`
+    before 1.8.28). This walks the declared vocabulary through a real merge so
+    a third one has to fail here first.
+
+    Proposed by the triage lane on the day the second occurrence shipped:
+    "if the wording and the implementation can be tied together by one test,
+    a pattern that has appeared twice does not appear a third time."
+    """
+
+    SAMPLES = {
+        "structure": {"components": [{"id": "c1"}], "layout": {}},
+        "stateManagement": {"uiVariables": [{"name": "v", "type": "Bool"}],
+                            "eventHandlers": []},
+        "dataFlow": {"viewModel": {"methods": [{"name": "m"}], "vars": []}},
+        "branchContracts": {"methods": {"onLoad": {"branches": []}}},
+        "unitContracts": {"target": "T", "cases": [{"name": "a"}]},
+        "task_cancellation": {"onLoad": "cancel"},
+        "error_handling": [{"case": "network"}],
+        "userActions": [{"name": "tap"}],
+        "transitions": [{"to": "next"}],
+        "relatedFiles": ["a.swift"],
+        "notes": "hello",
+    }
+
+    def setUp(self):
+        self._tmp = TemporaryDirectory()
+        self.root = Path(self._tmp.name)
+
+    def tearDown(self):
+        self._tmp.cleanup()
+
+    def _merged_with(self, sections):
+        sub = {"type": "screen_spec", "metadata": {"name": "S0", "description": "s"}}
+        sub.update(sections)
+        (self.root / "p").mkdir(exist_ok=True)
+        (self.root / "p" / "0.spec.json").write_text(json.dumps(sub), encoding="utf-8")
+        (self.root / "p.spec.json").write_text(json.dumps({
+            "type": "screen_parent_spec", "version": "1.0",
+            "metadata": {"name": "P", "displayName": "P", "description": "P."},
+            "subSpecs": [{"file": "p/0.spec.json", "name": "S0"}]}), encoding="utf-8")
+        return ParentSpecMerger().merge_from_file(self.root / "p.spec.json").spec
+
+    def test_the_vocabulary_is_covered_by_a_sample(self):
+        """Guards the arm below: an uncovered name would pass by not being run.
+
+        Without this, adding a section to the vocabulary and forgetting the
+        sample makes the suite greener rather than redder — the failure mode
+        this whole class exists to stop, one level up.
+        """
+        rules = _rules()
+        self.assertEqual(set(rules.MERGER_BUILDS_FROM_SUB_SPECS) - set(self.SAMPLES),
+                         set(), "vocabulary entries with no sample to merge")
+
+    def test_every_promised_section_survives_a_sub_spec(self):
+        merged = self._merged_with(self.SAMPLES)
+        missing = [k for k in _rules().MERGER_BUILDS_FROM_SUB_SPECS
+                   if not merged.get(k)]
+        self.assertEqual(missing, [], f"promised but not built: {missing}")
+
+    def test_every_section_the_merger_builds_is_in_the_vocabulary(self):
+        """The converse, and the arm the first draft was missing.
+
+        Membership only ever gated the WORDING, so deleting a name left every
+        other arm green while authors of that section started being told it is
+        "NOT built from the sub-specs" — a false statement pointing them at
+        the removal of a declaration that works. Set containment has two
+        directions and one of them was unguarded.
+        """
+        merged = self._merged_with(self.SAMPLES)
+        built = {k for k in self.SAMPLES if merged.get(k)}
+        stray = sorted(built - set(_rules().MERGER_BUILDS_FROM_SUB_SPECS))
+        self.assertEqual(stray, [], f"built but the message disowns them: {stray}")
+
+    def test_a_section_outside_the_vocabulary_is_not_sent_to_a_sub_spec(self):
+        """The message must not name a destination that drops the value.
+
+        "Move it into a sub-spec" for something nobody builds is worse than
+        the error it replaces: the author complies, the declaration vanishes
+        quietly, and silence reads as acceptance.
+        """
+        rules = _rules()
+        dropped = dict(rules.dropped_parent_declarations({
+            "type": "screen_parent_spec", "somethingNobodyBuilds": [{"a": 1}]}))
+        message = dropped["somethingNobodyBuilds"]
+        self.assertIn("NOT built from", message)
+        self.assertNotIn("Move the declaration into the sub-spec", message)
+
+    def test_a_section_inside_the_vocabulary_still_names_the_sub_spec(self):
+        """Positive control. Without it the arm above passes if the promise
+        is never made at all, which would be a different defect wearing the
+        same green."""
+        rules = _rules()
+        dropped = dict(rules.dropped_parent_declarations({
+            "type": "screen_parent_spec",
+            "branchContracts": {"methods": {"onLoad": {"branches": []}}}}))
+        self.assertIn("Move the declaration into the sub-spec",
+                      dropped["branchContracts"])
+
+
+def _rules():
+    from jui_cli.core import shared_core
+    rules = shared_core.load("parent_spec_rules")
+    assert rules is not None, "shared/core/parent_spec_rules.py did not load"
+    return rules

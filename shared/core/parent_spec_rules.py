@@ -42,6 +42,29 @@ PARENT_MUST_NOT_DECLARE = {"dataFlow": ("viewModel",)}
 
 MERGED_SECTIONS = ("structure", "stateManagement", "dataFlow")
 
+#: Sections the merger BUILDS from the sub-specs. The rejection message below
+#: promises exactly this, so a section named here without an arm in
+#: `ParentSpecMerger` leaves a declaration with no legal home at all: the
+#: parent refuses it and nobody reads the sub-spec's copy.
+#:
+#: That has now happened twice — `branchContracts` before v1.7.3 and
+#: `unitContracts` before 1.8.28 — because the rejection is DEFAULT-DENY (any
+#: key outside `PARENT_READS_TOP_LEVEL`) while construction is hand-written.
+#: Adding a section therefore switches the refusal on automatically and the
+#: promise stays unbacked. The paired test walks this set through a real merge,
+#: so a new section must either build or not claim it does.
+MERGER_BUILDS_FROM_SUB_SPECS = frozenset({
+    "structure", "stateManagement", "dataFlow",
+    "branchContracts", "unitContracts", "task_cancellation",
+    "error_handling", "userActions", "transitions",
+    "relatedFiles", "notes",
+})
+
+
+def _built_from_sub_specs(path: str) -> bool:
+    """Is *path* (`section` or `section.key`) something the merger builds?"""
+    return path.split(".", 1)[0] in MERGER_BUILDS_FROM_SUB_SPECS
+
 
 def dropped_parent_declarations(parent_spec) -> list:
     """`[(path, message)]` for everything this parent declares in vain.
@@ -80,10 +103,21 @@ def dropped_parent_declarations(parent_spec) -> list:
 
 
 def _message(path: str) -> str:
+    if _built_from_sub_specs(path):
+        return (
+            f"a screen_parent_spec cannot declare '{path}' — it is a "
+            "container, and the merger builds this section from the sub-specs "
+            "in `subSpecs`. Anything written here is discarded, silently, and "
+            "the generated code keeps whatever the sub-specs say. Move the "
+            "declaration into the sub-spec it belongs to."
+        )
+    # Do NOT promise a destination that does not exist. Telling an author to
+    # "move it into a sub-spec" for a section nobody builds sends them to a
+    # place where the declaration is dropped in silence — which reads as
+    # acceptance, and is strictly worse than the error they started with.
     return (
         f"a screen_parent_spec cannot declare '{path}' — it is a container, "
-        "and the merger builds this section from the sub-specs in `subSpecs`. "
-        "Anything written here is discarded, silently, and the generated code "
-        "keeps whatever the sub-specs say. Move the declaration into the "
-        "sub-spec it belongs to."
+        "and nothing reads this section from a parent. It is NOT built from "
+        "the sub-specs either, so moving it there would drop it silently: "
+        "remove it, or add a merge arm for it first."
     )
