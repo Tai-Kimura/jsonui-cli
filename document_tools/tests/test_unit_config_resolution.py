@@ -267,6 +267,51 @@ class _StubBesideTheDocs(_SplitTree):
         self.assertEqual([e["config"] for e in got],
                          [root / "docs" / "admin" / "jui.config.json"])
 
+    def test_extends_naming_a_directory_is_completed(self):
+        # `openapi_canonical._follow_extends` completes a directory with
+        # `jui.config.json`, so a consumer writing `extends: "../../admin"`
+        # resolves there. If it did not resolve here, one `extends` written
+        # once would work on one face and fail on the other — and the face
+        # that works shows no symptom.
+        root = self.build(extends="../../admin")
+        got = _resolve_unit_roots(None, self._app(root), root / "tests")
+        self.assertEqual([e["config"] for e in got],
+                         [root / "admin" / "jui.config.json"])
+
+    def _chain(self, root: Path, hops: int) -> None:
+        """Make `docs/admin/jui.config.json` reach the real config in *hops*."""
+        # hop 1 leaves the stub; the last hop lands on admin/jui.config.json.
+        links = [root / "docs" / "admin" / f"link{i}.json" for i in range(1, hops)]
+        first = links[0] if links else (root / "admin" / "jui.config.json")
+        (root / "docs" / "admin" / "jui.config.json").write_text(json.dumps({
+            "extends": first.name if links else "../../admin/jui.config.json",
+            "layouts_directory": "screens/layouts",
+        }), encoding="utf-8")
+        for i, link in enumerate(links):
+            nxt = links[i + 1].name if i + 1 < len(links) else "../../admin/jui.config.json"
+            link.write_text(json.dumps({"extends": nxt}), encoding="utf-8")
+
+    def test_a_chain_within_the_bound_resolves(self):
+        root = self.build()
+        self._chain(root, hops=4)
+        got = _resolve_unit_roots(None, self._app(root), root / "tests")
+        self.assertEqual([e["config"] for e in got],
+                         [root / "admin" / "jui.config.json"])
+
+    def test_a_chain_past_the_bound_stops(self):
+        # Pins the bound itself. Without this, raising it to 8 — which is what
+        # it was before the two readers were aligned — changes nothing that
+        # any test can see, and the divergence returns silently. Measured:
+        # the whole suite stayed green under exactly that mutation.
+        root = self.build()
+        self._chain(root, hops=6)
+        got = _resolve_unit_roots(None, self._app(root), root / "tests")
+        self.assertNotEqual([e["config"] for e in got],
+                            [root / "admin" / "jui.config.json"],
+                            "a chain longer than `openapi_canonical`'s four "
+                            "hops must stop, or the two readers disagree "
+                            "about the same `extends`")
+
     def test_a_cycle_ends_the_search_rather_than_the_process(self):
         # The chain is data, so it can point at itself.
         root = self.build(extends="jui.config.json")

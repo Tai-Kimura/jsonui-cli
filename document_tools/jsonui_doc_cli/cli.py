@@ -38,25 +38,46 @@ def _declares_specs(config: Path) -> bool:
 
 
 def _extends_target(config: Path) -> Path | None:
-    """The config this one extends, resolved against its own directory."""
+    """The config this one extends, resolved against its own directory.
+
+    ⚠️ Same rule as `shared/core/openapi_canonical._follow_extends`, which
+    resolves against the directory of the config it is reading. Both accept a
+    DIRECTORY and complete it with `jui.config.json`: a consumer writing
+    `extends: "../../admin"` must not resolve on one face and fail on the
+    other. Change one and change the other.
+    """
     try:
         raw = json.loads(config.read_text(encoding="utf-8"))
         extends = raw.get("extends")
     except (OSError, ValueError, AttributeError):
         return None
-    if not isinstance(extends, str) or not extends:
+    if not isinstance(extends, str) or not extends.strip():
         return None
-    return (config.parent / extends).resolve()
+    resolved = (config.parent / extends).resolve()
+    if resolved.is_dir():
+        resolved = resolved / "jui.config.json"
+    return resolved
 
 
-#: How far `extends` is followed. Bounded because the chain is data: a config
-#: that extends itself, or two that extend each other, must end the search
-#: rather than the process.
-_MAX_EXTENDS_HOPS = 8
+#: How far `extends` is followed, matching
+#: `openapi_canonical._follow_extends`'s `_depth > 4`: four hops past the
+#: first config, so five files at most. Bounded because the chain is data —
+#: a config that extends itself, or two that extend each other, must end the
+#: search rather than the process.
+_MAX_EXTENDS_HOPS = 4
 
 
 def _follow_extends(config: Path) -> tuple[Path | None, Path]:
     """``(a config that declares specs, the last file actually read)``.
+
+    ⚠️ Shares a name with `shared/core/openapi_canonical._follow_extends` and
+    does a different job: that one MERGES — it walks the chain and returns the
+    config that owns the tree, for reading settings out of. This one only
+    RESOLVES A PATH, and stops at the first config that can enumerate specs.
+    The traversal rules are deliberately identical (resolve against the
+    config's own directory, complete a directory with `jui.config.json`, four
+    hops), because a consumer writes one `extends` and both faces read it.
+    Change the rules in one and change them in the other.
 
     A config that cannot enumerate but declares `extends` is not a dead end —
     it is a POINTER, and the project wrote it deliberately. The real tree
@@ -71,7 +92,10 @@ def _follow_extends(config: Path) -> tuple[Path | None, Path]:
     """
     seen: set[Path] = set()
     current, last = config, config
-    for _ in range(_MAX_EXTENDS_HOPS):
+    # hops + 1 visits: the first config is not a hop, matching
+    # `openapi_canonical._follow_extends`, which refuses at `_depth > 4`
+    # having already read five files.
+    for _ in range(_MAX_EXTENDS_HOPS + 1):
         if current in seen:
             break
         seen.add(current)
