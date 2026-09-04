@@ -309,7 +309,11 @@ RSpec.describe 'container accessibilityIdentifier emission' do
                        'hidden' => '@{isRootHidden}',
                        'child' => [{ 'type' => 'Label', 'text' => 'Hi' }] })
 
-      expect(code).to include('.accessibilityIdentifier("root")')
+      # Conditional now: the declared id while the binding says visible, an
+      # empty one while it says hidden. The example's claim — that a BOUND
+      # hidden still gets an identifier, unlike the static spelling above —
+      # holds in the visible arm, which is the arm that must stay findable.
+      expect(code).to include('.accessibilityIdentifier(data.isRootHidden ? "" : "root")')
       expect(code).to include('.accessibilityElement(children: .contain)')
     end
 
