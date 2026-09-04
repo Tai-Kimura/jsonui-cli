@@ -253,6 +253,17 @@ jobs:
         # to the last line that supports 2.6.
         if: ${{ matrix.ruby == '2.6' }}
         run: gem install ${{ matrix.gems }} --no-document
+      - name: Install TypeScript (rjui emitted-TS type-check)
+        # The rjui specs type-check emitted TSX with a tsc pinned in
+        # rjui_tools/spec/support/package.json. It lives under spec/ so it
+        # never reaches a consumer — `jui sync_tool` deletes spec/ by default
+        # and the distribution does not ship it.
+        #
+        # Without this the `compile_as_typescript` matcher SKIPS rather than
+        # passing (mark_skipped!, visible in the count) — but a skipped gate
+        # gates nothing, so CI installs it.
+        if: ${{ matrix.tool == 'rjui_tools' && !matrix.ruby }}
+        run: npm ci --prefix rjui_tools/spec/support
       - name: rspec (bundle)
         if: ${{ matrix.bundler }}
         working-directory: ${{ matrix.tool }}

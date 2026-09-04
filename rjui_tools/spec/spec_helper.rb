@@ -1,5 +1,10 @@
 require 'rspec'
 
+# Support files (matchers, compiler harnesses). sjui and kjui load theirs
+# the same way; rjui had no support directory until the TypeScript
+# type-check arm needed one.
+Dir[File.join(__dir__, 'support', '**', '*.rb')].sort.each { |f| require f }
+
 RSpec.configure do |config|
   config.expect_with :rspec do |expectations|
     expectations.include_chain_clauses_in_custom_matcher_descriptions = true

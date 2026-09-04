@@ -5,9 +5,27 @@
 # Two blockers in one day were emitted Kotlin that did not compile: an
 # untyped empty `listOf()` that broke a whole test source set, and a
 # collapsed `\"` inside a non-raw Python literal. Both reached consumers
-# because the Kotlin emitter is the only one of the three whose output no
-# check on this machine ever compiled — `tsc --noEmit` and `swiftc -parse`
-# run in the suite, and nothing answers for Kotlin.
+# because no check on this machine compiled emitted Kotlin.
+#
+# ⚠️ This header used to add "— `tsc --noEmit` and `swiftc -parse` run in the
+# suite, and nothing answers for Kotlin." Measured 2026-09-05: FALSE on both
+# counts, and in the direction that reassures.
+#
+#   tsc     rjui had no matcher, no spec/support directory, and no spec that
+#           invoked a compiler. Its one check parsed JSX with @babel/parser,
+#           env-gated so it skipped by default. Zero files type-checked.
+#   swiftc  sjui did run it — but `-parse`, and parse is not the check that
+#           matters. `-parse` accepts
+#           `data.collectionDataSource.getCellData(for: "X")` with zero
+#           errors: a property nothing declares calling a method that exists
+#           nowhere. Only `-typecheck` rejects it, and it sat behind three
+#           passing specs for years.
+#
+# Both faces now have real type-check arms and a source gate naming what is
+# still unconverted (spec/emitted_{swift,typescript}_reaches_a_compiler_spec.rb,
+# and the Kotlin one beside them). The sentence is corrected rather than
+# deleted because a script that justifies itself by what other faces cover
+# should be checkable, and this one was not.
 #
 # This is a RELEASE PROCEDURE, not a CI step and not a shipped feature:
 # compiling generated artifacts is something the toolchain must eliminate

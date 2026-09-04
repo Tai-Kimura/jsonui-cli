@@ -1,0 +1,8 @@
+{
+  "name": "rjui-tools-spec-support",
+  "private": true,
+  "description": "TypeScript compiler for the rjui spec suite. Lives under spec/ so it never reaches a consumer: `jui sync_tool` deletes spec/ by default, and the distribution does not ship it.",
+  "devDependencies": {
+    "typescript": "5.9.2"
+  }
+}
