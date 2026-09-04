@@ -180,6 +180,46 @@ def get_screen_styles() -> list[str]:
     return styles
 
 
+def get_unit_styles() -> list[str]:
+    """CSS for unit contract (hand-written business logic) pages.
+
+    Built on the screen page's styles rather than beside them: a unit target
+    page is the same shape — a sidebar of case names and a table of cases —
+    and a second theme would make two pages that document the same project
+    look like two products.
+
+    Only the per-face status badges are new. Their colours carry the one
+    distinction the page exists to make, so `missing` and `never_runs` are
+    deliberately NOT the same red: a case that is declared and unwritten and
+    a case that is written but which the runner will never execute need
+    opposite actions from the reader.
+    """
+    styles = get_screen_styles()
+    styles.extend([
+        # Only unit pages render this sidebar section, so the rule lives here
+        # rather than in the shared sidebar base — adding it there would
+        # restyle every screen and flow page for a section they do not have.
+        "    .sidebar-title.unit { color: #a5b4fc; }",
+        "    /* Unit contract status badges */",
+        "    .status { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 0.8em; font-weight: 600; white-space: nowrap; }",
+        "    .status-implemented { background: #e6f7ed; color: #1d7a44; }",
+        "    .status-missing { background: #fdeaea; color: #b3261e; }",
+        "    .status-never_runs { background: #fff3e0; color: #a15c00; }",
+        "    .status-not_declared_for_face { background: #f1f3f5; color: #6b7280; }",
+        "    .status-undeclared { background: #f3e8fd; color: #7b2cbf; }",
+        "    .status-unknown { background: #f1f3f5; color: #6b7280; }",
+        "    /* Per-face roll-up */",
+        "    .face-table td.num { text-align: right; font-variant-numeric: tabular-nums; }",
+        "    .face-table td.zero { color: #9ca3af; }",
+        "    .impl-files { margin: 8px 0 0 0; padding-left: 20px; }",
+        "    .impl-files li { margin: 3px 0; font-size: 0.9em; }",
+        "    .problem { background: #fdeaea; border-left: 3px solid #b3261e; padding: 10px 15px; border-radius: 5px; margin: 10px 0; }",
+        "    .not-checked { background: #fff3e0; border-left: 3px solid #a15c00; padding: 10px 15px; border-radius: 5px; margin: 10px 0; }",
+        "    .denominator { color: #666; font-size: 0.9em; margin: 5px 0 20px 0; }",
+    ])
+    return styles
+
+
 def get_flow_styles() -> list[str]:
     """Get CSS styles for flow test HTML pages."""
     styles = get_common_styles()
@@ -303,6 +343,7 @@ def get_index_styles() -> list[str]:
         "    .category-badge.api { background: #fff3e0; color: #f57c00; }",
         "    .category-badge.spec { background: #e0f7fa; color: #00838f; }",
         "    .category-badge.component { background: #fce4ec; color: #c2185b; }",
+        "    .category-badge.unit { background: #e8eaf6; color: #3949ab; }",
         "    .category-badge.app { background: #e0f2fe; color: #0369a1; }",
         "    .category-badge.md { background: #fff8e1; color: #f57c00; }",
         "    .category-badge.figma { background: #fce4ec; color: #e91e63; }",
@@ -360,6 +401,12 @@ def get_index_styles() -> list[str]:
         "    .erd-text { font-size: 1.1em; font-weight: 600; }",
         "    .erd-desc { font-size: 0.8em; opacity: 0.9; margin-left: auto; }",
         "    .generated { color: #999; font-size: 0.85em; margin-top: 30px; text-align: center; }",
+        # Reads directly under the summary, so it cannot borrow `.generated`
+        # (centred, 30px above). Emitted unconditionally with the rest of the
+        # stylesheet, as `.category-badge.unit` above is: measured, a project
+        # with no unitContracts gains exactly these TWO CSS lines in
+        # index.html and nothing else — no markup, no section, no counts.
+        "    .denominator { color: #666; font-size: 0.9em; margin: -20px 0 25px 0; }",
     ])
     styles.extend(get_responsive_styles())
     return styles

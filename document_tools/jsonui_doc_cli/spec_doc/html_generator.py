@@ -51,6 +51,7 @@ def generate_spec_html(
     current_path: str | None = None,
     layouts_dir: Path | None = None,
     spec_dir: Path | None = None,
+    unit_href: str | None = None,
 ) -> str:
     """
     Generate HTML documentation from screen specification JSON.
@@ -111,6 +112,20 @@ def generate_spec_html(
 
     # Title
     parts.append(f'<h1>{_e(name)} - {_e(display_name)}</h1>')
+
+    # Hand-written unit tests are declared HERE and documented on their own
+    # page. This is a link, not a copy: the declaration renders once, on the
+    # Unit Tests side, and the spec page stays a screen specification. Absent
+    # `unit_href` the page is byte-identical to what it was, so a project
+    # with no unitContracts — and any caller that does not pass it — is
+    # unaffected.
+    if unit_href and spec_data.get("unitContracts") is not None:
+        parts.append('<p class="unit-contract-link">')
+        parts.append(
+            f'Hand-written unit tests for this screen: '
+            f'<a href="{_e(unit_href)}">Unit Tests</a>'
+        )
+        parts.append('</p>')
 
     # Overview
     parts.append('<section id="overview">')

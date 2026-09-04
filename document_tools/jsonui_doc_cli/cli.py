@@ -183,6 +183,15 @@ def cmd_generate_html(args):
         print(f"Error: Input directory not found: {input_dir}", file=sys.stderr)
         return 1
 
+    # The project root for unitContracts. Named in the banner below rather
+    # than resolved silently: this is a walk-up, and a walk-up that lands on
+    # the wrong config in a split tree reports "0 declared" — which is
+    # indistinguishable from a project that declares nothing. Printing the
+    # file makes the wrong pick visible in the one place someone would look.
+    from .project_config import find_jui_config
+    unit_config = find_jui_config(input_dir if input_dir.exists() else Path.cwd())
+    project_root = unit_config.parent if unit_config else None
+
     print(f"Generating HTML documentation...")
     print(f"  Input: {input_dir}")
     print(f"  Output: {output_dir}")
@@ -193,10 +202,12 @@ def cmd_generate_html(args):
     if apps:
         for app in apps:
             print(f"  App: {app['name']} -> {app['docs_path']}")
+    if unit_config:
+        print(f"  Unit contracts: {unit_config}")
     print()
 
     try:
-        generate_html_directory(input_dir, output_dir, title, docs_dirs if docs_dirs else None, figma_dir=figma_dir, apps=apps, layouts_dir=layouts_dir_override)
+        generate_html_directory(input_dir, output_dir, title, docs_dirs if docs_dirs else None, figma_dir=figma_dir, apps=apps, layouts_dir=layouts_dir_override, project_root=project_root)
         print()
         # Count every page written, not just the test pages in the return
         # value — the old number was smaller than the lines printed above it,

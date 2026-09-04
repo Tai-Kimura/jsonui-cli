@@ -13,6 +13,7 @@ from ..spec_doc.rules_config import load_rules_for_path
 from .html import (
     generate_screen_html,
     generate_flow_html,
+    generate_unit_html,
     generate_index_html,
     generate_document_html,
     is_swagger_file,
@@ -769,6 +770,7 @@ def generate_html_directory(
     figma_dir: Path | None = None,
     apps: list[dict] | None = None,
     layouts_dir: Path | None = None,
+    project_root: Path | None = None,
 ) -> list[dict]:
     """
     Generate HTML documentation for all test files in a directory.
@@ -786,6 +788,10 @@ def generate_html_directory(
         title: Title for the index page
         docs_dirs: Optional list of additional directories containing OpenAPI/Swagger files
         figma_dir: Optional directory containing Figma JSON files (overrides auto-detection)
+        project_root: Directory holding jui.config.json. Required for the Unit
+            Tests section — `unitContracts` are read from `spec_directory` and
+            compared against the per-platform `unitTestsDir`, both declared
+            there. Omitted, the section is skipped and the rest is unaffected.
 
     Returns:
         List of generated file info dicts with 'name', 'path', 'type', 'cases'
@@ -1071,6 +1077,11 @@ def generate_html_directory(
     # Generate screen specification HTML pages from docs directories
     spec_files_info = []
     component_files_info = []
+    # Loaded before the spec pages are written so each spec that declares
+    # `unitContracts` can link to its target's page; the pages themselves are
+    # written after, when the spec pages they link back to exist.
+    unit_pages = _load_unit_contract_pages(project_root) if project_root is not None else None
+    unit_hrefs = _unit_hrefs_by_screen(unit_pages)
     # Include screens/json and components/json directories for spec pages
     spec_search_dirs = list(unique_docs_dirs)
     if spec_json_dir.exists():
@@ -1089,7 +1100,18 @@ def generate_html_directory(
         # Generate HTML with full navigation
         _generate_spec_pages(
             spec_search_dirs, output_path, all_tests_nav=all_tests_nav,
-            layouts_dir=layouts_dir,
+            layouts_dir=layouts_dir, unit_hrefs=unit_hrefs,
+        )
+
+    # Unit contract pages. After the spec pages, because each target links to
+    # the spec that declares it and the link is built from the pages this run
+    # actually wrote.
+    unit_files_info: list[dict] = []
+    unit_summary: str | None = None
+    unit_undeclared: dict[str, list[str]] = {}
+    if unit_pages is not None:
+        unit_files_info, unit_summary, unit_undeclared = _generate_unit_pages(
+            unit_pages, output_path, spec_files_info, all_tests_nav
         )
 
     # Generate markdown pages from docs directories
@@ -1220,8 +1242,15 @@ def generate_html_directory(
                         )
 
     # Re-generate index.html with updated navigation (if specs, components, markdown, figma, or apps were added)
-    if spec_files_info or component_files_info or md_files_by_dir or figma_files_info or apps_nav:
-        generate_index_html(output_path, generated_files, title, mermaid_generated, document_files, api_doc_categories, spec_files_info, component_files_info, md_files_by_dir, figma_files_info, apps_nav=apps_nav)
+    # `unit_files_info` is part of the condition rather than assumed to ride
+    # along with `spec_files_info`: unitContracts are read from
+    # `spec_directory` in jui.config.json, while the spec PAGES come from the
+    # docs directory that was scanned. Those are usually the same tree and are
+    # not required to be, and when they are not, the section would be built
+    # and then never rendered.
+    if (spec_files_info or component_files_info or md_files_by_dir
+            or figma_files_info or apps_nav or unit_files_info):
+        generate_index_html(output_path, generated_files, title, mermaid_generated, document_files, api_doc_categories, spec_files_info, component_files_info, md_files_by_dir, figma_files_info, apps_nav=apps_nav, unit_files=unit_files_info, unit_summary=unit_summary, unit_undeclared=unit_undeclared)
 
     _report_stale_pages(output_path, started_at)
 
@@ -1560,6 +1589,7 @@ def _generate_spec_pages(
     collect_only: bool = False,
     path_prefix: str | None = None,
     layouts_dir: Path | None = None,
+    unit_hrefs: dict[str, str] | None = None,
 ) -> tuple[list[dict], list[dict]]:
     """
     Generate HTML pages from screen and component specification JSON files.
@@ -1648,11 +1678,17 @@ def _generate_spec_pages(
 
                 # Generate HTML with navigation if available
                 spec_layouts_dir = _resolve_layouts_dir_for_spec(spec_file, layouts_dir)
+                # Depth-aware: a nested spec page sits further from unit/.
+                unit_href = (unit_hrefs or {}).get(spec_file.stem.replace(".spec", ""))
+                if unit_href:
+                    up = "../" * len(Path(current_path).parts[:-1])
+                    unit_href = f"{up}{unit_href}"
                 content = generate_spec_html(
                     result.spec_data,
                     all_tests_nav=all_tests_nav,
                     current_path=current_path,
                     layouts_dir=spec_layouts_dir,
+                    unit_href=unit_href,
                 )
 
                 with open(output_spec_path, 'w', encoding='utf-8') as f:
@@ -1740,6 +1776,170 @@ def _generate_spec_pages(
             print(f"  Component pages: {success_count} generated, {error_count} failed")
 
     return spec_files_info, component_files_info
+
+
+def _unit_spec_href(spec_files_info: list[dict]) -> tuple[Any, list[str]]:
+    """``(href_fn, misses)`` mapping a declaring spec to its generated page.
+
+    The link is built from the pages this run actually WROTE rather than by
+    reapplying the spec -> URL rule to `unit_contract_pages()`'s paths. The
+    two are rooted differently — `spec_files` is relative to
+    `spec_directory` in jui.config.json, while the pages are written relative
+    to the docs directory that was scanned — and when those roots differ,
+    recomputing the rule produces a link that resolves to nothing. Matching
+    on what exists cannot drift from what exists.
+
+    Unresolved links are COLLECTED, not swallowed: a target whose spec page
+    was not generated renders its screen as plain text, and the caller says
+    how many did that. A silently missing href looks identical to a screen
+    that simply has no page.
+    """
+    # 'specs/settings/profile.html' -> 'settings/profile'
+    by_key: dict[str, str] = {}
+    for info in spec_files_info or []:
+        path = str(info.get("path") or "")
+        if not path.endswith(".html"):
+            continue
+        parts = path[: -len(".html")].split("/")
+        if "specs" in parts:
+            parts = parts[parts.index("specs") + 1:]
+        if parts:
+            by_key["/".join(parts)] = path
+    misses: list[str] = []
+
+    def href(screen: str, spec_file: str | None) -> str | None:
+        key = None
+        if spec_file and spec_file.endswith(".spec.json"):
+            key = spec_file[: -len(".spec.json")]
+        target = by_key.get(key) if key else None
+        if target is None:
+            target = by_key.get(str(screen))
+        if target is None:
+            misses.append(str(spec_file or screen))
+            return None
+        # Unit pages live one directory down, beside specs/.
+        return f"../{target}"
+
+    return href, misses
+
+
+def _unit_page_rel(target_name: str) -> str:
+    """Where a target's page is written, relative to the output root."""
+    return f"unit/{str(target_name).replace('/', '_')}.html"
+
+
+def _load_unit_contract_pages(project_root: Path) -> dict | None:
+    """The unit contract judgment, or None when it cannot be evaluated.
+
+    Read BEFORE the spec pages are written, because each spec that declares
+    `unitContracts` links to its target's page and needs the target's name to
+    do it. The pages themselves are written afterwards, when the spec pages
+    they link back to exist.
+    """
+    from jsonui_test_cli.unit_contracts import unit_contract_pages
+
+    try:
+        return unit_contract_pages(project_root)
+    except Exception as exc:  # noqa: BLE001
+        # Not a page failure — nothing has been promised in the index yet.
+        # Say so and carry on: the rest of the site is still worth writing.
+        print(f"  Unit contracts: not generated ({exc})")
+        return None
+
+
+def _unit_hrefs_by_screen(pages: dict | None) -> dict[str, str]:
+    """``screen -> that screen's unit page``, for the link on the spec page.
+
+    A target declared across several screens (a split spec) is reachable from
+    each of them; they are different doors to one page, not different pages.
+    """
+    out: dict[str, str] = {}
+    for target in (pages or {}).get("targets") or []:
+        rel = _unit_page_rel(target.get("target") or "Unit")
+        for screen in target.get("screens") or []:
+            out.setdefault(str(screen), rel)
+    return out
+
+
+def _generate_unit_pages(
+    pages: dict,
+    output_path: Path,
+    spec_files_info: list[dict],
+    all_tests_nav: dict | None = None,
+) -> tuple[list[dict], str | None, dict[str, list[str]]]:
+    """Write one page per ``unitContracts.target``.
+
+    Returns ``(nav entries, the denominator line, undeclared by face)``.
+
+    The judgment comes from `jsonui_test_cli.unit_contracts`, the same
+    function `jsonui-test generate unit-stubs --check` calls, so a case
+    cannot read as implemented on the site and missing at the gate.
+    """
+    targets = pages.get("targets") or []
+    if not targets:
+        return [], pages.get("totals", {}).get("summary_line"), pages.get("undeclared") or {}
+
+    href_fn, misses = _unit_spec_href(spec_files_info)
+    platforms = pages.get("platforms") or []
+    unit_dir = output_path / "unit"
+    unit_dir.mkdir(parents=True, exist_ok=True)
+
+    # Built before any page is rendered so each page's sidebar can list its
+    # siblings, and so the nav carrying them can be a LOCAL copy. Adding
+    # 'units' to the shared `all_tests_nav` would put the section into every
+    # screen, flow and spec page's sidebar too — output those pages did not
+    # have before, on every project that declares a unitContract.
+    entries: list[dict] = []
+    for target in targets:
+        name = str(target.get("target") or "Unit")
+        faces = target.get("faces") or {}
+        summary_bits = []
+        for face in platforms:
+            entry = faces.get(face) or {}
+            declared = len(entry.get("declared") or [])
+            if declared:
+                summary_bits.append(
+                    f"{face} {len(entry.get('implemented') or [])}/{declared}"
+                )
+        entries.append({
+            "name": name,
+            "path": _unit_page_rel(name),
+            "platform": ", ".join(platforms) or "all",
+            "description": ", ".join(target.get("screens") or []),
+            "group": "",
+            "case_count": len(target.get("cases") or []),
+            "faces_summary": " / ".join(summary_bits) or "no face declares it",
+        })
+    unit_nav = dict(all_tests_nav or {})
+    unit_nav["units"] = entries
+
+    written: list[dict] = []
+    for target, meta in zip(targets, entries):
+        name = meta["name"]
+        rel = meta["path"]
+        faces = target.get("faces") or {}
+        content = generate_unit_html(
+            target, platforms,
+            spec_href_fn=href_fn,
+            all_tests_nav=unit_nav,
+            current_path=rel,
+            unscannable=pages.get("unscannable") or {},
+            undiscoverable=pages.get("undiscoverable") or {},
+        )
+        try:
+            (output_path / rel).write_text(content, encoding="utf-8")
+        except OSError as exc:
+            record_page_failure(output_path / rel, f"unit contract page: {exc}")
+            continue
+        written.append(meta)
+
+    entries = written
+    if misses:
+        print(
+            f"  Unit contracts: {len(misses)} target(s) could not be linked to a "
+            f"spec page ({', '.join(sorted(set(misses))[:5])})"
+        )
+    return entries, pages.get("totals", {}).get("summary_line"), pages.get("undeclared") or {}
 
 
 def _pre_generate_spec_docs(
