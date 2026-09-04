@@ -12,7 +12,10 @@ module RjuiTools
           id_attr = build_id_attr
           testid_attr = build_testid_attr
           tag_attr = build_tag_attr
-          items = attributes['items'] || []
+          # Dropped entries are removed BEFORE the index is taken, so the
+          # React `key` and the `{id}_tab_{n}` ids stay consecutive — the
+          # runtimes compact too (mapNotNull / compactMap).
+          items = declared_segment_items(attributes['items'] || [])
 
           selected_binding = build_selected_binding
           on_change = build_on_change
@@ -26,7 +29,11 @@ module RjuiTools
             on_click_attr = on_change ? " onClick={() => #{on_change}?.(#{index})}" : ''
             # Item labels go through the same string resolution as Label.text
             # (string key -> binding -> literal), matching sjui's per-item
-            # get_text_with_string_manager.
+            # get_text_with_string_manager. The TEXT is taken first: an entry
+            # in the canonical `{label, value}` form is a Hash, and a Hash
+            # reached convert_text_binding, which passes non-Strings through
+            # untouched — so Ruby's Hash#inspect went into the JSX as
+            # `{"label"=>"opt_a", "value"=>"a"}` and the file did not parse.
             "#{indent_str(indent + 2)}<button key={#{index}}#{segment_item_id_attr(index)} className={`#{button_class}`}#{on_click_attr}#{button_disabled}>#{convert_text_binding(item)}</button>"
           end.join("\n")
 
@@ -79,6 +86,65 @@ module RjuiTools
           end
 
           finalize_classes(classes)
+        end
+
+        # `Segment.items` is DECLARED as static label strings: the SSoT entry
+        # carries no `items` sub-schema, where TabView.tabs and
+        # Collection.sections declare `{"type": "object"}` explicitly when
+        # they mean an object. Both dynamic runtimes agree — Android's
+        # DynamicSegmentComponent keeps `isJsonPrimitive` and maps the rest to
+        # null, iOS's `asStrings` keeps String/NSNumber and compacts the rest
+        # away — so an object entry renders as nothing at runtime.
+        #
+        # Only the generator disagreed, and it did so by handing the Hash to
+        # a text helper that passes non-Strings through: Ruby's Hash#inspect
+        # went into the JSX as `{"label"=>"opt_a", "value"=>"a"}` and the
+        # generated file stopped parsing, from a build that exited 0.
+        #
+        # So: keep what the declaration describes and drop the rest, as the
+        # runtimes do. Taking `label` instead would give meaning to an input
+        # the SSoT does not declare — that decision belongs to the
+        # declaration, not to this converter.
+        #
+        # The drop is not silent: the shared validator names the entry, with
+        # the layout path, on every path that reaches this converter (build /
+        # watch / hotload all run BuildCommand, which validates). This
+        # converter deliberately prints nothing of its own — two warnings for
+        # one drop is noise, and only the validator has the path.
+        #
+        # The judgment is the shared one — `non_scalar_item_indices` is what
+        # the validator uses to warn, so what is dropped here and what is
+        # named there cannot drift apart. It is a no-op for every attribute
+        # other than Segment.items, and for a non-Array value (`items` also
+        # takes a binding string, which has no elements to drop).
+        def declared_segment_items(items)
+          # A bound `items` generates nothing. The declaration gives `items`
+          # type array with NO binding, so there is no element list to walk;
+          # sjui and kjui land on zero elements too, and the validator says
+          # so. Measured on the extraction layer: `attributes['items']` is
+          # already `[]` for a binding, so this asks the RAW value — the
+          # emit decision comes from the shared rule, not from a coercion
+          # that could change underneath it.
+          if JsonUIShared::AttributeValidatorCore.binding_in_scalar_items?(
+            'Segment', 'items', attributes.raw('items')
+          )
+            return []
+          end
+
+          return items unless items.is_a?(Array)
+
+          drop = JsonUIShared::AttributeValidatorCore.non_scalar_item_indices(
+            'Segment', 'items', items
+          )
+          return items if drop.empty?
+
+          kept = []
+          items.each_with_index do |item, index|
+            next if drop.include?(index)
+
+            kept << item
+          end
+          kept
         end
 
         def build_button_class(index)
