@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require_relative 'base_converter'
+require_relative '../../core/attribute_validator_core'
 
 module RjuiTools
   module React
