@@ -101,6 +101,8 @@ class UnitContractReport:
     declaring_specs: list[str] = field(default_factory=list)
     #: input this scan could not read, one line each
     problems: list[str] = field(default_factory=list)
+    #: platform -> method names that exist but the runner will never execute
+    undiscoverable: dict[str, list[str]] = field(default_factory=dict)
 
     def missing(self, platform: str) -> list[str]:
         """Declared for this platform, not implemented on it."""
@@ -120,7 +122,7 @@ class UnitContractReport:
         # nothing readable: "0 declared" over specs that DO carry the key is
         # the shape a single misspelling produces, and it is indistinguishable
         # from a clean run unless it is called out here.
-        if self.problems or self.unscannable:
+        if self.problems or self.unscannable or self.undiscoverable:
             return False
         if self.declaring_specs and not self.cases:
             return False
@@ -277,13 +279,30 @@ def _test_roots(project_root: Path, config: dict) -> dict[str, Path | None]:
     return roots
 
 
-def _implemented_names(root: Path, platform: str) -> tuple[set[str], list[str]]:
-    """``(case names found, files read)`` under *root* for *platform*."""
+def _discoverable(platform: str, found: str) -> str | None:
+    """Map a found method name back to the declared case name it implements.
+
+    Returns None when the method exists but the platform's runner will never
+    execute it — an XCTest method without the `test` prefix compiles, reads
+    as present to any name-matching scan, and silently never runs.
+    """
+    if platform != "ios":
+        return found
+    if found.startswith(IOS_TEST_PREFIX):
+        return found[len(IOS_TEST_PREFIX):]
+    if found.startswith("test"):
+        return found
+    return None
+
+
+def _implemented_names(root: Path, platform: str) -> tuple[set[str], list[str], set[str]]:
+    """``(case names found, files read, names present but undiscoverable)``."""
     suffix = PLATFORM_TEST_SUFFIX.get(platform)
     pattern = _ALL_TESTS_PATTERNS.get(platform)
     if suffix is None or pattern is None or not root.is_dir():
-        return set(), []
+        return set(), [], set()
     names: set[str] = set()
+    undiscoverable: set[str] = set()
     read: list[str] = []
     for path in sorted(root.rglob(f"*{suffix}")):
         try:
@@ -291,8 +310,14 @@ def _implemented_names(root: Path, platform: str) -> tuple[set[str], list[str]]:
         except OSError:
             continue
         read.append(str(path))
-        names.update(m.group(1) for m in pattern.finditer(text))
-    return names, read
+        for m in pattern.finditer(text):
+            raw = m.group(1)
+            mapped = _discoverable(platform, raw)
+            if mapped is None:
+                undiscoverable.add(raw)
+            else:
+                names.add(mapped)
+    return names, read, undiscoverable
 
 
 def check_unit_contracts(
@@ -337,9 +362,11 @@ def check_unit_contracts(
                     f"check that before suspecting the path"
                 )
             continue
-        found, read = _implemented_names(root, platform)
+        found, read, undiscoverable = _implemented_names(root, platform)
         report.implemented[platform] = found
         report.scanned_files[platform] = read
+        if undiscoverable:
+            report.undiscoverable[platform] = sorted(undiscoverable)
     return report
 
 
@@ -379,6 +406,12 @@ def format_report(report: UnitContractReport) -> list[str]:
             lines.append(f"    MISSING     {name}  (declared, no implementation)")
         for name in undeclared:
             lines.append(f"    UNDECLARED  {name}  (implemented, declared nowhere)")
+        for name in report.undiscoverable.get(platform, []):
+            lines.append(
+                f"    NEVER RUNS  {name}  (method exists but the runner will not "
+                f"discover it — XCTest needs a 'test' prefix; it compiles, reads "
+                f"as present, and executes zero times)"
+            )
     return lines
 
 
@@ -388,22 +421,38 @@ def format_report(report: UnitContractReport) -> list[str]:
 STUB_BEGIN = "// >>> GENERATED_STUBS_START"
 STUB_END = "// <<< GENERATED_STUBS_END"
 
+#: ⚠️ ios method names are prefixed. XCTest discovers only `test`-prefixed
+#: methods, so a stub named exactly as declared compiles, is counted by a
+#: naive scan, and never runs — the mechanism manufacturing the failure it
+#: exists to prevent. Declared names stay platform-neutral; the prefix is
+#: added here and understood by the scanner.
+IOS_TEST_PREFIX = "test_"
+
 _STUB_BODY = {
-    "ios": '    func {name}() throws {{\n        XCTFail("not implemented: {intent}")\n    }}',
+    "ios": '    func ' + IOS_TEST_PREFIX + '{name}() throws {{\n        XCTFail("not implemented: {intent}")\n    }}',
     "android": '    @Test\n    fun `{name}`() {{\n        fail("not implemented: {intent}")\n    }}',
     "web": "  it('{name}', () => {{\n    throw new Error('not implemented: {intent}');\n  }});",
 }
 
+#: ⚠️ `@testable import` takes the MODULE, and a Kotlin file needs its
+#: package. Neither is derivable from `target`, which is a class name — an
+#: earlier cut emitted `@testable import <ClassName>` and did not compile.
+#: These come from config, and generation refuses without them rather than
+#: emitting a file that cannot build.
 _STUB_FILE = {
-    "ios": "import XCTest\n@testable import {target}\n\nfinal class {target}ContractTests: XCTestCase {{\n"
+    "ios": "import XCTest\n@testable import {module}\n\nfinal class {target}ContractTests: XCTestCase {{\n"
            + STUB_BEGIN + "\n{body}\n" + STUB_END + "\n}}\n",
-    "android": "import org.junit.Test\nimport org.junit.Assert.fail\n\nclass {target}ContractTest {{\n"
+    "android": "package {package}\n\nimport org.junit.Test\nimport org.junit.Assert.fail\n\n"
+               "class {target}ContractTest {{\n"
                + STUB_BEGIN + "\n{body}\n" + STUB_END + "\n}}\n",
     "web": "describe('{target}', () => {{\n" + STUB_BEGIN + "\n{body}\n" + STUB_END + "\n}});\n",
 }
 
 
-def stub_text(platform: str, target: str, cases: list[UnitCase]) -> str:
+def stub_text(
+    platform: str, target: str, cases: list[UnitCase],
+    module: str | None = None, package: str | None = None,
+) -> str:
     """A stub file for *cases*, in *platform*'s convention.
 
     The body is a deliberate failure, not a pass: a stub that passes is a
@@ -414,11 +463,25 @@ def stub_text(platform: str, target: str, cases: list[UnitCase]) -> str:
     body_template = _STUB_BODY.get(platform)
     if template is None or body_template is None:
         raise UnitContractError(f"no stub convention for platform {platform!r}")
+    if platform == "ios" and not module:
+        raise UnitContractError(
+            "ios stubs need the module for `@testable import`; declare "
+            "platforms.ios.testModule in jui.config.json. Emitting the class "
+            "name there produces a file that does not compile"
+        )
+    if platform == "android" and not package:
+        raise UnitContractError(
+            "android stubs need a package; declare platforms.android.testPackage "
+            "in jui.config.json. Without it the class lands in the default "
+            "package and drops out of package-scoped test filters"
+        )
     body = "\n\n".join(
         body_template.format(name=c.name, intent=(c.intent or c.name).replace('"', "'"))
         for c in cases
     )
-    return template.format(target=target or "Unit", body=body)
+    return template.format(
+        target=target or "Unit", body=body, module=module or "", package=package or ""
+    )
 
 
 def merge_stubs(existing: str, generated: str) -> str:
@@ -477,7 +540,11 @@ def write_stubs(
         if filename is None:
             continue
         path = root / filename.format(target=target)
-        generated = stub_text(platform, target, sorted(cases, key=lambda c: c.name))
+        entry = (config.get("platforms") or {}).get(platform) or {}
+        generated = stub_text(
+            platform, target, sorted(cases, key=lambda c: c.name),
+            module=entry.get("testModule"), package=entry.get("testPackage"),
+        )
         if path.exists():
             existing = path.read_text(encoding="utf-8")
             merged = merge_stubs(existing, generated)

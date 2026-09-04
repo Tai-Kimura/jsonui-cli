@@ -44,8 +44,12 @@ def _project(tmp_path, cases, *, ios=True, android=True, unit_dirs=True):
     return tmp_path
 
 
-def _swift(tmp_path, *names):
-    body = "\n".join(f"    func {n}() throws {{ }}" for n in names)
+def _swift(tmp_path, *names, discoverable=True):
+    # XCTest runs only `test`-prefixed methods, so that is what an
+    # implementation looks like. `discoverable=False` writes the bare name,
+    # which compiles, reads as present, and never runs.
+    prefix = "test_" if discoverable else ""
+    body = "\n".join(f"    func {prefix}{n}() throws {{ }}" for n in names)
     (tmp_path / "ios" / "Tests" / "ChatTests.swift").write_text(
         f"import XCTest\nfinal class ChatTests: XCTestCase {{\n{body}\n}}\n", encoding="utf-8"
     )
@@ -132,26 +136,26 @@ class TestStubGeneration:
         # A stub that passes is a case reporting success without a body,
         # which is worse than a missing one because it is counted.
         case = uc.UnitCase("chat", "ChatViewModel", "a_case", ("ios",), "keeps the draft")
-        assert "XCTFail" in uc.stub_text("ios", "ChatViewModel", [case])
-        assert "fail(" in uc.stub_text("android", "ChatViewModel", [case])
+        assert "XCTFail" in uc.stub_text("ios", "ChatViewModel", [case], module="App")
+        assert "fail(" in uc.stub_text("android", "ChatViewModel", [case], package="com.x")
 
     def test_regeneration_keeps_the_body_outside_the_markers(self, tmp_path):
         case = uc.UnitCase("chat", "ChatViewModel", "b_case", ("ios",), "")
         existing = (
             "import XCTest\nfinal class T: XCTestCase {\n"
-            + uc.STUB_BEGIN + "\n    func a_case() throws { }\n" + uc.STUB_END
+            + uc.STUB_BEGIN + "\n    func test_a_case() throws { }\n" + uc.STUB_END
             + "\n    func hand_written() throws { XCTAssertTrue(true) }\n}\n"
         )
-        merged = uc.merge_stubs(existing, uc.stub_text("ios", "ChatViewModel", [case]))
+        merged = uc.merge_stubs(existing, uc.stub_text("ios", "ChatViewModel", [case], module="App"))
         assert "hand_written" in merged
         assert "b_case" in merged
-        assert "a_case() throws { }" not in merged
+        assert "test_a_case() throws { }" not in merged
 
     def test_a_file_without_markers_is_left_alone(self, tmp_path):
         # The author removed them; overwriting on that basis deletes work.
         existing = "final class T: XCTestCase {\n    func mine() throws { }\n}\n"
         case = uc.UnitCase("chat", "ChatViewModel", "x", ("ios",), "")
-        assert uc.merge_stubs(existing, uc.stub_text("ios", "T", [case])) == existing
+        assert uc.merge_stubs(existing, uc.stub_text("ios", "T", [case], module="App")) == existing
 
 
 class TestExtraction:
@@ -289,3 +293,59 @@ class TestZeroWithTwoMeanings:
         text = "\n".join(uc.format_report(report))
         assert "before its first stub is generated" in text
         assert "suspecting the path" in text
+
+
+class TestAStubMustActuallyRun:
+    """The mechanism must not manufacture the failure it prevents.
+
+    Reported as a blocker against 1.8.25: generated ios stubs were named
+    exactly as declared, so XCTest — which discovers only `test`-prefixed
+    methods — never ran them, while `--check` counted the names as
+    implemented and went green. Three declared cases, three "implementations",
+    zero executions.
+
+    Third instance of the same family: `implemented` had two states, really
+    present and present-but-never-run.
+    """
+
+    def test_a_bare_swift_name_is_not_counted_as_implemented(self, tmp_path):
+        root = _project(tmp_path, [{"name": "a_case", "platforms": ["ios"]}], android=False)
+        _swift(root, "a_case", discoverable=False)
+        report = uc.check_unit_contracts(root)
+        assert not report.ok
+        assert report.missing("ios") == ["a_case"]
+        assert report.undiscoverable.get("ios") == ["a_case"]
+
+    def test_the_prefixed_form_is_counted(self, tmp_path):
+        # Positive control for the arm above: the discoverable spelling must
+        # still satisfy the declaration, or the guard would just break it.
+        root = _project(tmp_path, [{"name": "a_case", "platforms": ["ios"]}], android=False)
+        _swift(root, "a_case")
+        report = uc.check_unit_contracts(root)
+        assert report.ok, uc.format_report(report)
+
+    def test_generated_ios_stubs_carry_the_prefix(self, tmp_path):
+        case = uc.UnitCase("chat", "VM", "a_case", ("ios",), "")
+        text = uc.stub_text("ios", "VM", [case], module="App")
+        assert "func test_a_case()" in text
+
+    def test_ios_stubs_refuse_to_emit_without_a_module(self, tmp_path):
+        # `@testable import <class name>` does not compile. Refusing beats
+        # emitting a file that cannot build.
+        case = uc.UnitCase("chat", "VM", "a_case", ("ios",), "")
+        with pytest.raises(uc.UnitContractError) as e:
+            uc.stub_text("ios", "VM", [case])
+        assert "testModule" in str(e.value)
+
+    def test_android_stubs_refuse_to_emit_without_a_package(self, tmp_path):
+        # Compiles either way, but a default-package class drops out of
+        # package-scoped test filters — present and not run, again.
+        case = uc.UnitCase("chat", "VM", "a_case", ("android",), "")
+        with pytest.raises(uc.UnitContractError) as e:
+            uc.stub_text("android", "VM", [case])
+        assert "testPackage" in str(e.value)
+
+    def test_android_stubs_declare_their_package(self, tmp_path):
+        case = uc.UnitCase("chat", "VM", "a_case", ("android",), "")
+        text = uc.stub_text("android", "VM", [case], package="com.example.unittests")
+        assert text.startswith("package com.example.unittests")

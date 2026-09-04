@@ -300,6 +300,14 @@ class SpecValidator:
             self._validate_branch_contracts(data["branchContracts"], result)
             self._validate_branch_cross_faces(data, result)
 
+        # Validate unitContracts (opt-in). Checked here as well as in
+        # `jsonui-test generate unit-stubs --check` because the person writing
+        # a spec runs THIS gate: a typo that passes here is not found until
+        # someone runs the other command, and the whole point of the section
+        # is that a declaration cannot go missing quietly.
+        if "unitContracts" in data:
+            self._validate_unit_contracts(data["unitContracts"], result)
+
         # Validate relatedFiles
         if "relatedFiles" in data:
             self._validate_related_files(data["relatedFiles"], result)
@@ -1366,6 +1374,127 @@ class SpecValidator:
     # (cannot prove a reference dangling without a contract). Unknown KEYS in
     # the closed sets are always errors; unknown data-field NAMES are
     # warnings (VM-internal state may intentionally stay undeclared).
+
+    # unitContracts declares the SET of hand-written unit test cases a screen
+    # owns, so two platforms implementing one spec cannot drift apart. The
+    # bodies are hand-written; only the set is machine-checked.
+    #
+    # The vocabulary is CLOSED, and that is the point: `"caes"` for `"cases"`
+    # made an entire declaration vanish in 1.8.24 while both gates printed
+    # clean zeros. A mechanism whose only job is stopping drift must not be
+    # removable by one misspelling, and the shape check belongs where the
+    # author already looks.
+
+    _UNIT_BLOCK_KEYS = ("target", "cases")
+    _UNIT_CASE_KEYS = ("name", "intent", "platforms")
+    _UNIT_PLATFORMS = ("ios", "android", "web")
+
+    def _validate_unit_contracts(self, uc: Any, result: SpecValidationResult):
+        blocks = [uc] if isinstance(uc, dict) else uc
+        if not isinstance(blocks, list):
+            result.errors.append(SpecValidationMessage(
+                path="unitContracts",
+                message=f"unitContracts must be an object or an array, got {type(uc).__name__}",
+            ))
+            return
+        if not blocks:
+            result.errors.append(SpecValidationMessage(
+                path="unitContracts",
+                message="unitContracts is empty — a block that declares nothing "
+                        "reads the same as no block at all",
+            ))
+            return
+
+        seen: dict[str, str] = {}
+        for i, block in enumerate(blocks):
+            base = "unitContracts" if isinstance(uc, dict) else f"unitContracts[{i}]"
+            if not isinstance(block, dict):
+                result.errors.append(SpecValidationMessage(
+                    path=base,
+                    message=f"must be an object, got {type(block).__name__}",
+                ))
+                continue
+            for key in block:
+                if key not in self._UNIT_BLOCK_KEYS:
+                    result.errors.append(SpecValidationMessage(
+                        path=f"{base}.{key}",
+                        message=(
+                            "Unknown unitContracts key — allowed: "
+                            f"{', '.join(repr(k) for k in self._UNIT_BLOCK_KEYS)}. "
+                            "A misspelling here drops the whole declaration"
+                        ),
+                    ))
+            target = block.get("target")
+            if not isinstance(target, str) or not target.strip():
+                result.errors.append(SpecValidationMessage(
+                    path=f"{base}.target",
+                    message="'target' is required and must be a non-empty string "
+                            "(the class the cases are written against)",
+                ))
+            cases = block.get("cases")
+            if cases is None:
+                result.errors.append(SpecValidationMessage(
+                    path=f"{base}.cases",
+                    message="'cases' is required — this block declares nothing without it",
+                ))
+                continue
+            if not isinstance(cases, list):
+                result.errors.append(SpecValidationMessage(
+                    path=f"{base}.cases",
+                    message=f"'cases' must be an array, got {type(cases).__name__}",
+                ))
+                continue
+            for j, case in enumerate(cases):
+                spot = f"{base}.cases[{j}]"
+                if not isinstance(case, dict):
+                    result.errors.append(SpecValidationMessage(
+                        path=spot,
+                        message=f"must be an object, got {type(case).__name__}",
+                    ))
+                    continue
+                for key in case:
+                    if key not in self._UNIT_CASE_KEYS:
+                        result.errors.append(SpecValidationMessage(
+                            path=f"{spot}.{key}",
+                            message=(
+                                "Unknown case key — allowed: "
+                                f"{', '.join(repr(k) for k in self._UNIT_CASE_KEYS)}"
+                            ),
+                        ))
+                name = case.get("name")
+                if not isinstance(name, str) or not name.strip():
+                    result.errors.append(SpecValidationMessage(
+                        path=f"{spot}.name",
+                        message="'name' is required and must be a non-empty string — "
+                                "it is what the two platforms are compared on",
+                    ))
+                elif name in seen:
+                    result.errors.append(SpecValidationMessage(
+                        path=f"{spot}.name",
+                        message=f"Duplicate case name {name!r} (already declared in {seen[name]}) "
+                                "— the set is compared by name, so a duplicate hides one of them",
+                    ))
+                else:
+                    seen[name] = spot
+                platforms = case.get("platforms")
+                if platforms is None:
+                    continue
+                if not isinstance(platforms, list) or not platforms:
+                    result.errors.append(SpecValidationMessage(
+                        path=f"{spot}.platforms",
+                        message="'platforms' must be a non-empty array when present "
+                                "(omit it to mean every platform the project builds)",
+                    ))
+                    continue
+                for p in platforms:
+                    if p not in self._UNIT_PLATFORMS:
+                        result.errors.append(SpecValidationMessage(
+                            path=f"{spot}.platforms",
+                            message=(
+                                f"Unknown platform {p!r} — allowed: "
+                                f"{', '.join(repr(k) for k in self._UNIT_PLATFORMS)}"
+                            ),
+                        ))
 
     _BRANCH_THEN_API_VERDICTS = ("called", "not-called")
 
