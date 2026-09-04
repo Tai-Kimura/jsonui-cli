@@ -37,15 +37,18 @@ RSpec.describe KjuiTools::Compose::Components::SegmentComponent do
       expect(result).to include('Third')
     end
 
-    it 'uses segments attribute as alias' do
+    # Inverted 2026-09-04. `segments` was an undeclared alias: absent from
+    # attribute_definitions.json, read by no other face, used by no consumer
+    # layout. This example asserted it worked; it now asserts it does not, so
+    # the removal is pinned by the test that used to prove the opposite.
+    it 'does not accept segments as an alias for items' do
       json_data = {
         'type' => 'Segment',
         'segments' => ['A', 'B']
       }
       result = described_class.generate(json_data, 0, required_imports)
-      expect(result).to include('Tab(')
-      expect(result).to include('"A"')
-      expect(result).to include('"B"')
+      expect(result).not_to include('"A"')
+      expect(result).not_to include('"B"')
     end
 
     it 'handles dynamic segments binding' do
