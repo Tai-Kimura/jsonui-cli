@@ -1081,7 +1081,7 @@ def generate_html_directory(
     # `unitContracts` can link to its target's page; the pages themselves are
     # written after, when the spec pages they link back to exist.
     unit_pages = _load_unit_contract_pages(project_root) if project_root is not None else None
-    unit_hrefs = _unit_hrefs_by_screen(unit_pages)
+    unit_targets = _generated_unit_targets(unit_pages)
     # Include screens/json and components/json directories for spec pages
     spec_search_dirs = list(unique_docs_dirs)
     if spec_json_dir.exists():
@@ -1100,7 +1100,7 @@ def generate_html_directory(
         # Generate HTML with full navigation
         _generate_spec_pages(
             spec_search_dirs, output_path, all_tests_nav=all_tests_nav,
-            layouts_dir=layouts_dir, unit_hrefs=unit_hrefs,
+            layouts_dir=layouts_dir, unit_targets=unit_targets,
         )
 
     # Unit contract pages. After the spec pages, because each target links to
@@ -1589,7 +1589,7 @@ def _generate_spec_pages(
     collect_only: bool = False,
     path_prefix: str | None = None,
     layouts_dir: Path | None = None,
-    unit_hrefs: dict[str, str] | None = None,
+    unit_targets: set[str] | None = None,
 ) -> tuple[list[dict], list[dict]]:
     """
     Generate HTML pages from screen and component specification JSON files.
@@ -1688,30 +1688,21 @@ def _generate_spec_pages(
 
                 # Generate HTML with navigation if available
                 spec_layouts_dir = _resolve_layouts_dir_for_spec(spec_file, layouts_dir)
-                # A split screen declares its contracts in the SUB-specs, and
-                # they are read through the merged parent — so the target is
-                # recorded against the parent's screen name, and neither page
-                # finds it by its own stem: the parent's file carries no
-                # `unitContracts` at all, and the sub-spec's stem is not a
-                # screen anything was recorded against. Splitting puts the
-                # sub-specs in `<spec_dir>/<parent>/`, which is the same
-                # convention the contract discovery uses, so the directory
-                # name is the parent's key.
-                unit_href = (unit_hrefs or {}).get(spec_file.stem.replace(".spec", ""))
-                if not unit_href:
-                    rel_dir = spec_file.parent.relative_to(spec_docs_path)
-                    if rel_dir.name:
-                        unit_href = (unit_hrefs or {}).get(rel_dir.name)
-                if unit_href:
-                    # Depth-aware: a nested spec page sits further from unit/.
-                    up = "../" * len(Path(current_path).parts[:-1])
-                    unit_href = f"{up}{unit_href}"
+                # Read off THIS file's own declaration; a target with no page
+                # is not linked, so a link cannot dangle. Depth-aware: a
+                # nested spec page sits further from unit/.
+                up = "../" * len(Path(current_path).parts[:-1])
+                unit_links = [
+                    {"target": t, "href": f"{up}{_unit_page_rel(t)}"}
+                    for t in _declared_targets(result.spec_data)
+                    if t in (unit_targets or set())
+                ]
                 content = generate_spec_html(
                     result.spec_data,
                     all_tests_nav=all_tests_nav,
                     current_path=current_path,
                     layouts_dir=spec_layouts_dir,
-                    unit_href=unit_href,
+                    unit_links=unit_links,
                 )
 
                 with open(output_spec_path, 'w', encoding='utf-8') as f:
@@ -1872,17 +1863,41 @@ def _load_unit_contract_pages(project_root: Path) -> dict | None:
         return None
 
 
-def _unit_hrefs_by_screen(pages: dict | None) -> dict[str, str]:
-    """``screen -> that screen's unit page``, for the link on the spec page.
+def _generated_unit_targets(pages: dict | None) -> set[str]:
+    """Target names that have a page, so a link cannot dangle."""
+    return {str(t.get("target")) for t in (pages or {}).get("targets") or []
+            if t.get("target")}
 
-    A target declared across several screens (a split spec) is reachable from
-    each of them; they are different doors to one page, not different pages.
+
+def _declared_targets(spec_data: dict) -> list[str]:
+    """Target names a spec's OWN file declares, in order.
+
+    This is the only exact answer available, and both earlier attempts at it
+    were one-to-many. Keying by SCREEN fails because a split screen's cases
+    are read through the merged parent, so every target under it is recorded
+    against the parent's screen name. Keying by the declaring SPEC PATH fails
+    for the same reason — `UnitCase.spec_file` is the parent's path for every
+    sub-spec, measured — and keying by DIRECTORY fails whenever one directory
+    holds two targets, which is the shape that shipped a page linking nine
+    specs to one arbitrary target.
+
+    A file's own `unitContracts` block, however, names its own target, and a
+    sub-spec carries its block in its own file. So the page being rendered
+    reads its own declaration and needs no map.
     """
-    out: dict[str, str] = {}
-    for target in (pages or {}).get("targets") or []:
-        rel = _unit_page_rel(target.get("target") or "Unit")
-        for screen in target.get("screens") or []:
-            out.setdefault(str(screen), rel)
+    raw = spec_data.get("unitContracts")
+    if raw is None:
+        return []
+    blocks = [raw] if isinstance(raw, dict) else raw
+    if not isinstance(blocks, list):
+        return []
+    out: list[str] = []
+    for block in blocks:
+        if not isinstance(block, dict):
+            continue
+        target = str(block.get("target") or "").strip()
+        if target and target not in out:
+            out.append(target)
     return out
 
 

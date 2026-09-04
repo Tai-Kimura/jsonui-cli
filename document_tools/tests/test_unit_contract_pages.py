@@ -159,25 +159,39 @@ class SpecPageLink(unittest.TestCase):
             self.assertNotIn(token, html, token)
 
     def test_a_spec_that_declares_contracts_links_to_the_unit_page(self):
-        html = generate_spec_html(_spec(True), title="item_detail",
-                                  unit_href="../unit/ItemDetailViewModel.html")
+        html = generate_spec_html(
+            _spec(True), title="item_detail",
+            unit_links=[{"target": "ItemDetailViewModel",
+                         "href": "../unit/ItemDetailViewModel.html"}])
         self.assertIn("../unit/ItemDetailViewModel.html", html)
 
     def test_no_link_when_the_caller_offers_none(self):
         html = generate_spec_html(_spec(False), title="item_detail")
         self.assertNotIn("unit-contract-link", html)
 
-    def test_the_caller_decides_not_the_specs_own_key(self):
-        # Inverted 2026-09-05. This used to require `spec_data['unitContracts']`
-        # as well, which read as a safety check and was wrong in both
-        # directions for a SPLIT screen: the parent's file carries no block
-        # (the merger forbids one) while the target is recorded against the
-        # parent, and a sub-spec carries a block whose target belongs to the
-        # parent's page. Gating on the file's own key left exactly the split
-        # screens — the ones with the most pages to join up — unlinked.
-        html = generate_spec_html(_spec(False), title="chat",
-                                  unit_href="../unit/ChatHandler.html")
-        self.assertIn("../unit/ChatHandler.html", html)
+    def test_several_declared_targets_each_get_their_own_anchor(self):
+        # `unitContracts` takes an array of blocks, so one spec may own more
+        # than one target. Rendering only the first would make the second
+        # reachable from nowhere — the shape that shipped once already, by a
+        # different route.
+        html = generate_spec_html(
+            _spec(True), title="chat",
+            unit_links=[{"target": "ChatUserActionHandler",
+                         "href": "../unit/ChatUserActionHandler.html"},
+                        {"target": "ChatRecommendationHandler",
+                         "href": "../unit/ChatRecommendationHandler.html"}])
+        self.assertIn("../unit/ChatUserActionHandler.html", html)
+        self.assertIn("../unit/ChatRecommendationHandler.html", html)
+
+    def test_the_anchor_names_the_target_when_there_are_several(self):
+        # With one link the anchor reads "Unit Tests"; with several the reader
+        # has to be able to tell which is which.
+        html = generate_spec_html(
+            _spec(True), title="chat",
+            unit_links=[{"target": "A", "href": "../unit/A.html"},
+                        {"target": "B", "href": "../unit/B.html"}])
+        self.assertIn(">A</a>", html)
+        self.assertIn(">B</a>", html)
 
 
 if __name__ == "__main__":
