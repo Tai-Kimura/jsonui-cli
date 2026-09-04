@@ -303,10 +303,35 @@ module SjuiTools
           if @component['id'] && !@accessibility_identifier_added
             apply_accessibility_identifier
             @accessibility_identifier_added = true
+            apply_outer_disabled
           elsif collection_cell_root_without_id?
             apply_collection_cell_root_container
           end
           @generated_code.join("\n")
+        end
+
+        # `.disabled` again, OUTSIDE the accessibility element.
+        #
+        # The bag emits `.disabled(...)` before the identifier, and
+        # `apply_accessibility_identifier` then forms the container's
+        # accessibility element ON TOP of it. An element formed outside the
+        # disabled environment never receives the notEnabled trait, so
+        # XCUITest reads the target as enabled while the view really is
+        # disabled.
+        #
+        # Not a deduction: the dynamic face hit this on the same fixture and
+        # wrote the finding down. `DynamicModifierHelper.standardOrder` carries
+        # a second `Stage("disabledOuter")` after `Stage("accessibilityId")`,
+        # annotated "measured: the View-hosted enabled__false conformance
+        # fixture". This mirrors that stage.
+        #
+        # Double application is harmless — `.disabled(true)` is idempotent and
+        # the inner one still governs the subtree's own controls — and this is
+        # NOT a duplicate to be tidied away.
+        def apply_outer_disabled
+          return unless @modifier_bag.key?(:disabled)
+
+          add_modifier_line @modifier_bag[:disabled]
         end
 
         # A Collection wraps every cell it renders with
