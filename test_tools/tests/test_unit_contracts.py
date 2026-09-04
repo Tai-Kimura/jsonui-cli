@@ -712,6 +712,70 @@ class TestUnreadableSpecsAreNamed:
         assert pages["totals"]["unreadable_files"] == []
 
 
+class TestAggregatedTotals:
+    """One line for a whole run, composed where the wording already lives.
+
+    A multi-app site scans once per app and shows one denominator. The docs
+    generator was building that sentence itself, which is the two-call-sites
+    shape `summary_line` was extracted to prevent — the index and `--check`
+    could then phrase the same count differently while both being "right".
+    """
+
+    def test_the_aggregate_line_is_worded_exactly_like_a_single_scan(self, tmp_path):
+        # Pinned as a string comparison against the per-scan wording, so a
+        # change to one cannot pass while the other keeps the old phrasing.
+        root = _project(tmp_path, [{"name": "a_case", "platforms": ["ios"]}])
+        _swift(root, "a_case")
+        single = uc.unit_contract_pages(root)["totals"]
+        aggregate = uc.aggregate_unit_totals([single])
+        assert aggregate["summary_line"] == single["summary_line"]
+
+    def test_counts_add_up_and_unreadable_names_survive(self):
+        a = {"cases": 14, "specs_scanned": 55, "specs_declaring": 5,
+             "specs_unreadable": 0, "targets": 5, "unreadable_files": []}
+        b = {"cases": 3, "specs_scanned": 23, "specs_declaring": 2,
+             "specs_unreadable": 1, "targets": 2, "unreadable_files": ["b/x.spec.json"]}
+        out = uc.aggregate_unit_totals([a, b])
+        assert out["cases"] == 17
+        assert out["specs_scanned"] == 78
+        assert out["specs_declaring"] == 7
+        assert out["specs_unreadable"] == 1
+        assert out["targets"] == 7
+        assert out["unreadable_files"] == ["b/x.spec.json"]
+        assert "17 case(s) declared across 78 spec file(s) scanned" in out["summary_line"]
+        assert "(7 spec file(s) carrying" in out["summary_line"]
+
+    def test_an_empty_run_is_a_zero_line_not_a_missing_one(self):
+        # A site with no unit contracts still has a denominator. Returning
+        # nothing here would make "0 declared" and "not measured" look alike
+        # on the index — the distinction this whole line exists to carry.
+        out = uc.aggregate_unit_totals([])
+        assert out["cases"] == 0
+        assert out["unreadable_files"] == []
+        assert out["summary_line"] == uc.summary_line_for(0, 0, 0)
+        assert "0 case(s) declared across 0 spec file(s) scanned" in out["summary_line"]
+
+    def test_every_numeric_total_the_scan_reports_is_summed(self, tmp_path):
+        """The contract with `unit_contract_pages`, derived not restated.
+
+        A numeric total added there and forgotten here would not raise: the
+        aggregate would keep reporting the old set and look correct. So the
+        expected set is read off an actual scan rather than typed out again —
+        a hand-written copy would agree with itself forever.
+        """
+        root = _project(tmp_path, [{"name": "a_case", "platforms": ["ios"]}])
+        _swift(root, "a_case")
+        totals = uc.unit_contract_pages(root)["totals"]
+        numeric = {k for k, v in totals.items() if isinstance(v, int)}
+        assert numeric, "scan reported no numeric totals, so this asserts nothing"
+        assert numeric == set(uc._SUMMABLE_TOTALS)
+
+    def test_missing_keys_are_treated_as_zero_not_an_error(self):
+        out = uc.aggregate_unit_totals([{"cases": 2}])
+        assert out["cases"] == 2
+        assert out["specs_scanned"] == 0
+
+
 class TestUnitContractPages:
     """The grouped-by-target view `document_tools` generates pages from.
 
