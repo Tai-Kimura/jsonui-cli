@@ -189,6 +189,38 @@ class SplitScreenReachability(_Site):
             self.assertNotIn("unit-contract-link", page.read_text(encoding="utf-8"))
 
 
+class TheClosingLineCountsTheRightThings(_Site):
+    """D and K are spec FILES; U is targets. A mix-up must be red here.
+
+    The fixture is chosen so the two candidate units give different numbers:
+    three files carry a `unitContracts` block (chat-core, chat-recommendation,
+    flat) but only two SCREENS declare, because a split screen's sub-specs
+    fold into the one parent that carries them. Any assertion that passes for
+    both numbers would not have caught the mistake this line was reworded for
+    — its first reader took K for screens and D for targets and published
+    both wrong.
+    """
+
+    def test_declaring_counts_files_not_screens(self):
+        from jsonui_doc_cli.test_doc.generator import generation_summary_line
+        self.build(split=True, flat_target="FlatHandler")
+        line = generation_summary_line()
+        self.assertIn("3 spec file(s) declaring unitContracts", line,
+                      f"D should be the 3 files that carry a block, not the "
+                      f"2 screens that declare after folding: {line}")
+        self.assertNotIn("2 spec file(s) declaring", line)
+
+    def test_targets_and_files_are_named_as_different_units(self):
+        from jsonui_doc_cli.test_doc.generator import generation_summary_line
+        self.build(split=True, flat_target="FlatHandler")
+        line = generation_summary_line()
+        # 3 targets and 3 declaring files coincide here; the words are what
+        # keeps them apart, so the words are what is asserted.
+        self.assertIn("unit targets 3 from", line)
+        self.assertIn("spec file(s) scanned", line)
+        self.assertRegex(line, r"unit targets \d+ from \d+ spec file\(s\) scanned")
+
+
 class PagesWrittenCount(_Site):
     def test_the_count_includes_the_unit_pages(self):
         out = self.build(split=True, flat_target="FlatHandler")
