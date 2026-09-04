@@ -313,11 +313,28 @@ RSpec.describe SjuiTools::SwiftUI::Views::CollectionConverter do
         }
       end
 
-      it 'uses cell class name' do
-        converter = described_class.new(component)
-        code = converter.convert
+      it 'ignores cellClasses when a data source is declared' do
+        # Measured, and not what the old example implied. With `items`, the
+        # section-driven path runs and reads the cell view name from the DATA
+        # (`section.cells?.viewName`), so `cellClasses` never reaches the
+        # emit — it renders a placeholder instead.
+        code = described_class.new(component.merge('items' => '@{rows}')).convert
 
-        expect(code).to include('ItemView')
+        expect(code).not_to include('ItemView')
+        expect(code).to include('TODO: Implement dynamic view instantiation')
+      end
+
+      it 'emits no cells when nothing declares the data source' do
+        # Was asserted as "uses cell class name" with no `items`, which
+        # emitted `data.collectionDataSource.getCellData(for:)` — a property
+        # nothing declares calling a method that does not exist on
+        # `CollectionDataSource` (its API is `sections` / `init` /
+        # `reconfigured`). The example passed because it read the emitted
+        # string, which no compiler had checked.
+        code = described_class.new(component).convert
+
+        expect(code).not_to include('getCellData')
+        expect(code).to include("no 'items' data source declared")
       end
     end
 

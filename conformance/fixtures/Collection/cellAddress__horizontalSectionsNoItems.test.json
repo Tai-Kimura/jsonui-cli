@@ -5,7 +5,7 @@
   },
   "metadata": {
     "name": "conformance cellAddress__horizontalSectionsNoItems",
-    "description": "A horizontal sectioned Collection declaring no items renders from the collection data source; the cell-address emit for that branch is generated and compiled.",
+    "description": "A horizontal sectioned Collection declaring no items emits no cells and still compiles; the layout is named by a build warning.",
     "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
     "tags": [
       "conformance",
@@ -16,7 +16,7 @@
   "cases": [
     {
       "name": "cellAddress__horizontalSectionsNoItems",
-      "description": "A horizontal sectioned Collection declaring no items renders from the collection data source; the cell-address emit for that branch is generated and compiled.",
+      "description": "A horizontal sectioned Collection declaring no items emits no cells and still compiles; the layout is named by a build warning.",
       "steps": [
         {
           "action": "waitFor",
