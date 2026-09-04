@@ -904,6 +904,22 @@ def generate_conformance(definitions_path: Path, out_dir: Path) -> GenerationSum
     summary.fixture_count += len(address_entries)
     summary.assertable_count += len(address_entries)
 
+    # Cells whose ROOT declares no id: the corpus rendered one cell layout,
+    # and its root declared an id, which is the very thing that stopped the
+    # wrapper's identifier being pushed onto the children — see
+    # collection_cell_child_fixtures module docstring.
+    from .collection_cell_child_fixtures import build_collection_cell_child_fixtures
+
+    child_files, child_entries = build_collection_cell_child_fixtures(source_label)
+    for rel_path, payload in child_files:
+        target = out_dir / rel_path
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(_dump_json(payload), encoding="utf-8")
+        summary.files_written += 1
+    fixture_entries.extend(child_entries)
+    summary.fixture_count += len(child_entries)
+    summary.assertable_count += len(child_entries)
+
     # Flow Collection overflow fixtures (flow track): the rule that a flow
     # Collection scrolls when `lazy` is in effect and only wraps under
     # lazy:"none" is visible only when the cells overflow the box, and the

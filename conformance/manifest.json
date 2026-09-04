@@ -10,8 +10,8 @@
   "schemaVersion": 2,
   "generatedFrom": "8d8edefbd443c70ab1a130a983b250cc2e613906e414d1d1dd9f9fe7dcc22e7e",
   "counts": {
-    "fixtures": 1084,
-    "assertable": 46,
+    "fixtures": 1087,
+    "assertable": 49,
     "visual": 812,
     "interactive": 37,
     "control": 112,
@@ -18415,7 +18415,9 @@
       "peerGroup": "Collection/lazy@Collection",
       "control": "__control/Collection",
       "companions": [
-        "fixtures/Collection/__cells/conformance_cell.layout.json"
+        "fixtures/Collection/__cells/conformance_cell.layout.json",
+        "fixtures/Collection/__cells/conformance_cell_bare.layout.json",
+        "fixtures/Collection/__cells/conformance_cell_bare_single.layout.json"
       ]
     },
     {
@@ -18442,7 +18444,9 @@
       "peerGroup": "Collection/lazy@Collection",
       "control": "__control/Collection",
       "companions": [
-        "fixtures/Collection/__cells/conformance_cell.layout.json"
+        "fixtures/Collection/__cells/conformance_cell.layout.json",
+        "fixtures/Collection/__cells/conformance_cell_bare.layout.json",
+        "fixtures/Collection/__cells/conformance_cell_bare_single.layout.json"
       ]
     },
     {
@@ -18469,7 +18473,9 @@
       "peerGroup": "Collection/lazy@Collection",
       "control": "__control/Collection",
       "companions": [
-        "fixtures/Collection/__cells/conformance_cell.layout.json"
+        "fixtures/Collection/__cells/conformance_cell.layout.json",
+        "fixtures/Collection/__cells/conformance_cell_bare.layout.json",
+        "fixtures/Collection/__cells/conformance_cell_bare_single.layout.json"
       ]
     },
     {
@@ -18496,7 +18502,9 @@
       "peerGroup": "Collection/lazy@Collection",
       "control": "__control/Collection",
       "companions": [
-        "fixtures/Collection/__cells/conformance_cell.layout.json"
+        "fixtures/Collection/__cells/conformance_cell.layout.json",
+        "fixtures/Collection/__cells/conformance_cell_bare.layout.json",
+        "fixtures/Collection/__cells/conformance_cell_bare_single.layout.json"
       ]
     },
     {
@@ -18523,7 +18531,9 @@
       "peerGroup": "Collection/columns@Collection",
       "control": "__control/Collection",
       "companions": [
-        "fixtures/Collection/__cells/conformance_cell.layout.json"
+        "fixtures/Collection/__cells/conformance_cell.layout.json",
+        "fixtures/Collection/__cells/conformance_cell_bare.layout.json",
+        "fixtures/Collection/__cells/conformance_cell_bare_single.layout.json"
       ]
     },
     {
@@ -18550,7 +18560,9 @@
       "peerGroup": "Collection/columns@Collection",
       "control": "__control/Collection",
       "companions": [
-        "fixtures/Collection/__cells/conformance_cell.layout.json"
+        "fixtures/Collection/__cells/conformance_cell.layout.json",
+        "fixtures/Collection/__cells/conformance_cell_bare.layout.json",
+        "fixtures/Collection/__cells/conformance_cell_bare_single.layout.json"
       ]
     },
     {
@@ -18577,7 +18589,9 @@
       "peerGroup": null,
       "control": "__control/Collection__columns-2",
       "companions": [
-        "fixtures/Collection/__cells/conformance_cell.layout.json"
+        "fixtures/Collection/__cells/conformance_cell.layout.json",
+        "fixtures/Collection/__cells/conformance_cell_bare.layout.json",
+        "fixtures/Collection/__cells/conformance_cell_bare_single.layout.json"
       ]
     },
     {
@@ -18604,7 +18618,9 @@
       "peerGroup": null,
       "control": "__control/Collection",
       "companions": [
-        "fixtures/Collection/__cells/conformance_cell.layout.json"
+        "fixtures/Collection/__cells/conformance_cell.layout.json",
+        "fixtures/Collection/__cells/conformance_cell_bare.layout.json",
+        "fixtures/Collection/__cells/conformance_cell_bare_single.layout.json"
       ]
     },
     {
@@ -18631,7 +18647,9 @@
       "peerGroup": null,
       "control": "__control/Collection",
       "companions": [
-        "fixtures/Collection/__cells/conformance_cell.layout.json"
+        "fixtures/Collection/__cells/conformance_cell.layout.json",
+        "fixtures/Collection/__cells/conformance_cell_bare.layout.json",
+        "fixtures/Collection/__cells/conformance_cell_bare_single.layout.json"
       ]
     },
     {
@@ -18658,7 +18676,9 @@
       "peerGroup": null,
       "control": "__control/Collection",
       "companions": [
-        "fixtures/Collection/__cells/conformance_cell.layout.json"
+        "fixtures/Collection/__cells/conformance_cell.layout.json",
+        "fixtures/Collection/__cells/conformance_cell_bare.layout.json",
+        "fixtures/Collection/__cells/conformance_cell_bare_single.layout.json"
       ]
     },
     {
@@ -18685,7 +18705,9 @@
       "peerGroup": "Collection/horizontalScroll@Collection",
       "control": "__control/Collection",
       "companions": [
-        "fixtures/Collection/__cells/conformance_cell.layout.json"
+        "fixtures/Collection/__cells/conformance_cell.layout.json",
+        "fixtures/Collection/__cells/conformance_cell_bare.layout.json",
+        "fixtures/Collection/__cells/conformance_cell_bare_single.layout.json"
       ]
     },
     {
@@ -18712,7 +18734,9 @@
       "peerGroup": "Collection/horizontalScroll@Collection",
       "control": "__control/Collection",
       "companions": [
-        "fixtures/Collection/__cells/conformance_cell.layout.json"
+        "fixtures/Collection/__cells/conformance_cell.layout.json",
+        "fixtures/Collection/__cells/conformance_cell_bare.layout.json",
+        "fixtures/Collection/__cells/conformance_cell_bare_single.layout.json"
       ]
     },
     {
@@ -18739,7 +18763,9 @@
       "peerGroup": "Collection/orientation@Collection",
       "control": "__control/Collection",
       "companions": [
-        "fixtures/Collection/__cells/conformance_cell.layout.json"
+        "fixtures/Collection/__cells/conformance_cell.layout.json",
+        "fixtures/Collection/__cells/conformance_cell_bare.layout.json",
+        "fixtures/Collection/__cells/conformance_cell_bare_single.layout.json"
       ]
     },
     {
@@ -18766,7 +18792,9 @@
       "peerGroup": "Collection/orientation@Collection",
       "control": "__control/Collection",
       "companions": [
-        "fixtures/Collection/__cells/conformance_cell.layout.json"
+        "fixtures/Collection/__cells/conformance_cell.layout.json",
+        "fixtures/Collection/__cells/conformance_cell_bare.layout.json",
+        "fixtures/Collection/__cells/conformance_cell_bare_single.layout.json"
       ]
     },
     {
@@ -18793,7 +18821,9 @@
       "peerGroup": "Collection/layout@Collection__width-150",
       "control": "__control/Collection__width-150",
       "companions": [
-        "fixtures/Collection/__cells/conformance_cell.layout.json"
+        "fixtures/Collection/__cells/conformance_cell.layout.json",
+        "fixtures/Collection/__cells/conformance_cell_bare.layout.json",
+        "fixtures/Collection/__cells/conformance_cell_bare_single.layout.json"
       ]
     },
     {
@@ -18820,7 +18850,9 @@
       "peerGroup": "Collection/layout@Collection__width-150",
       "control": "__control/Collection__width-150",
       "companions": [
-        "fixtures/Collection/__cells/conformance_cell.layout.json"
+        "fixtures/Collection/__cells/conformance_cell.layout.json",
+        "fixtures/Collection/__cells/conformance_cell_bare.layout.json",
+        "fixtures/Collection/__cells/conformance_cell_bare_single.layout.json"
       ]
     },
     {
@@ -18847,7 +18879,9 @@
       "peerGroup": "Collection/layout@Collection__width-150",
       "control": "__control/Collection__width-150",
       "companions": [
-        "fixtures/Collection/__cells/conformance_cell.layout.json"
+        "fixtures/Collection/__cells/conformance_cell.layout.json",
+        "fixtures/Collection/__cells/conformance_cell_bare.layout.json",
+        "fixtures/Collection/__cells/conformance_cell_bare_single.layout.json"
       ]
     },
     {
@@ -18879,7 +18913,9 @@
       "peerGroup": null,
       "control": "__control/Collection",
       "companions": [
-        "fixtures/Collection/__cells/conformance_cell.layout.json"
+        "fixtures/Collection/__cells/conformance_cell.layout.json",
+        "fixtures/Collection/__cells/conformance_cell_bare.layout.json",
+        "fixtures/Collection/__cells/conformance_cell_bare_single.layout.json"
       ]
     },
     {
@@ -18906,7 +18942,9 @@
       "peerGroup": null,
       "control": "__control/Collection",
       "companions": [
-        "fixtures/Collection/__cells/conformance_cell.layout.json"
+        "fixtures/Collection/__cells/conformance_cell.layout.json",
+        "fixtures/Collection/__cells/conformance_cell_bare.layout.json",
+        "fixtures/Collection/__cells/conformance_cell_bare_single.layout.json"
       ]
     },
     {
@@ -18933,7 +18971,9 @@
       "peerGroup": null,
       "control": "__control/Collection__orientation-horizontal",
       "companions": [
-        "fixtures/Collection/__cells/conformance_cell.layout.json"
+        "fixtures/Collection/__cells/conformance_cell.layout.json",
+        "fixtures/Collection/__cells/conformance_cell_bare.layout.json",
+        "fixtures/Collection/__cells/conformance_cell_bare_single.layout.json"
       ]
     },
     {
@@ -18960,7 +19000,9 @@
       "peerGroup": null,
       "control": "__control/Collection",
       "companions": [
-        "fixtures/Collection/__cells/conformance_cell.layout.json"
+        "fixtures/Collection/__cells/conformance_cell.layout.json",
+        "fixtures/Collection/__cells/conformance_cell_bare.layout.json",
+        "fixtures/Collection/__cells/conformance_cell_bare_single.layout.json"
       ]
     },
     {
@@ -18990,7 +19032,9 @@
       "peerGroup": null,
       "control": "__control/Collection",
       "companions": [
-        "fixtures/Collection/__cells/conformance_cell.layout.json"
+        "fixtures/Collection/__cells/conformance_cell.layout.json",
+        "fixtures/Collection/__cells/conformance_cell_bare.layout.json",
+        "fixtures/Collection/__cells/conformance_cell_bare_single.layout.json"
       ]
     },
     {
@@ -19015,7 +19059,9 @@
       "peerGroup": null,
       "control": "__control/Collection__columns-2",
       "companions": [
-        "fixtures/Collection/__cells/conformance_cell.layout.json"
+        "fixtures/Collection/__cells/conformance_cell.layout.json",
+        "fixtures/Collection/__cells/conformance_cell_bare.layout.json",
+        "fixtures/Collection/__cells/conformance_cell_bare_single.layout.json"
       ]
     },
     {
@@ -19041,7 +19087,9 @@
       "peerGroup": "Collection/showsHorizontalScrollIndicator@Collection__orientation-horizontal",
       "control": "__control/Collection__orientation-horizontal",
       "companions": [
-        "fixtures/Collection/__cells/conformance_cell.layout.json"
+        "fixtures/Collection/__cells/conformance_cell.layout.json",
+        "fixtures/Collection/__cells/conformance_cell_bare.layout.json",
+        "fixtures/Collection/__cells/conformance_cell_bare_single.layout.json"
       ]
     },
     {
@@ -19067,7 +19115,9 @@
       "peerGroup": "Collection/showsHorizontalScrollIndicator@Collection__orientation-horizontal",
       "control": "__control/Collection__orientation-horizontal",
       "companions": [
-        "fixtures/Collection/__cells/conformance_cell.layout.json"
+        "fixtures/Collection/__cells/conformance_cell.layout.json",
+        "fixtures/Collection/__cells/conformance_cell_bare.layout.json",
+        "fixtures/Collection/__cells/conformance_cell_bare_single.layout.json"
       ]
     },
     {
@@ -19093,7 +19143,9 @@
       "peerGroup": null,
       "control": null,
       "companions": [
-        "fixtures/Collection/__cells/conformance_cell.layout.json"
+        "fixtures/Collection/__cells/conformance_cell.layout.json",
+        "fixtures/Collection/__cells/conformance_cell_bare.layout.json",
+        "fixtures/Collection/__cells/conformance_cell_bare_single.layout.json"
       ]
     },
     {
@@ -19119,7 +19171,9 @@
       "peerGroup": null,
       "control": null,
       "companions": [
-        "fixtures/Collection/__cells/conformance_cell.layout.json"
+        "fixtures/Collection/__cells/conformance_cell.layout.json",
+        "fixtures/Collection/__cells/conformance_cell_bare.layout.json",
+        "fixtures/Collection/__cells/conformance_cell_bare_single.layout.json"
       ]
     },
     {
@@ -19144,7 +19198,9 @@
       "peerGroup": null,
       "control": "__control/Collection",
       "companions": [
-        "fixtures/Collection/__cells/conformance_cell.layout.json"
+        "fixtures/Collection/__cells/conformance_cell.layout.json",
+        "fixtures/Collection/__cells/conformance_cell_bare.layout.json",
+        "fixtures/Collection/__cells/conformance_cell_bare_single.layout.json"
       ]
     },
     {
@@ -19171,7 +19227,9 @@
       "peerGroup": "Collection/scrollAnchor@Collection__scrollTo--scrollTarget",
       "control": "__control/Collection__scrollTo--scrollTarget",
       "companions": [
-        "fixtures/Collection/__cells/conformance_cell.layout.json"
+        "fixtures/Collection/__cells/conformance_cell.layout.json",
+        "fixtures/Collection/__cells/conformance_cell_bare.layout.json",
+        "fixtures/Collection/__cells/conformance_cell_bare_single.layout.json"
       ]
     },
     {
@@ -19198,7 +19256,9 @@
       "peerGroup": "Collection/scrollAnchor@Collection__scrollTo--scrollTarget",
       "control": "__control/Collection__scrollTo--scrollTarget",
       "companions": [
-        "fixtures/Collection/__cells/conformance_cell.layout.json"
+        "fixtures/Collection/__cells/conformance_cell.layout.json",
+        "fixtures/Collection/__cells/conformance_cell_bare.layout.json",
+        "fixtures/Collection/__cells/conformance_cell_bare_single.layout.json"
       ]
     },
     {
@@ -19225,7 +19285,9 @@
       "peerGroup": "Collection/scrollAnchor@Collection__scrollTo--scrollTarget",
       "control": "__control/Collection__scrollTo--scrollTarget",
       "companions": [
-        "fixtures/Collection/__cells/conformance_cell.layout.json"
+        "fixtures/Collection/__cells/conformance_cell.layout.json",
+        "fixtures/Collection/__cells/conformance_cell_bare.layout.json",
+        "fixtures/Collection/__cells/conformance_cell_bare_single.layout.json"
       ]
     },
     {
@@ -19252,7 +19314,9 @@
       "peerGroup": "Collection/defaultScrollAnchor@Collection",
       "control": "__control/Collection",
       "companions": [
-        "fixtures/Collection/__cells/conformance_cell.layout.json"
+        "fixtures/Collection/__cells/conformance_cell.layout.json",
+        "fixtures/Collection/__cells/conformance_cell_bare.layout.json",
+        "fixtures/Collection/__cells/conformance_cell_bare_single.layout.json"
       ]
     },
     {
@@ -19279,7 +19343,9 @@
       "peerGroup": "Collection/defaultScrollAnchor@Collection",
       "control": "__control/Collection",
       "companions": [
-        "fixtures/Collection/__cells/conformance_cell.layout.json"
+        "fixtures/Collection/__cells/conformance_cell.layout.json",
+        "fixtures/Collection/__cells/conformance_cell_bare.layout.json",
+        "fixtures/Collection/__cells/conformance_cell_bare_single.layout.json"
       ]
     },
     {
@@ -19306,7 +19372,9 @@
       "peerGroup": "Collection/defaultScrollAnchor@Collection",
       "control": "__control/Collection",
       "companions": [
-        "fixtures/Collection/__cells/conformance_cell.layout.json"
+        "fixtures/Collection/__cells/conformance_cell.layout.json",
+        "fixtures/Collection/__cells/conformance_cell_bare.layout.json",
+        "fixtures/Collection/__cells/conformance_cell_bare_single.layout.json"
       ]
     },
     {
@@ -19331,7 +19399,9 @@
       "peerGroup": "Collection/reverseLayout@Collection",
       "control": "__control/Collection",
       "companions": [
-        "fixtures/Collection/__cells/conformance_cell.layout.json"
+        "fixtures/Collection/__cells/conformance_cell.layout.json",
+        "fixtures/Collection/__cells/conformance_cell_bare.layout.json",
+        "fixtures/Collection/__cells/conformance_cell_bare_single.layout.json"
       ]
     },
     {
@@ -19356,7 +19426,9 @@
       "peerGroup": "Collection/reverseLayout@Collection",
       "control": "__control/Collection",
       "companions": [
-        "fixtures/Collection/__cells/conformance_cell.layout.json"
+        "fixtures/Collection/__cells/conformance_cell.layout.json",
+        "fixtures/Collection/__cells/conformance_cell_bare.layout.json",
+        "fixtures/Collection/__cells/conformance_cell_bare_single.layout.json"
       ]
     },
     {
@@ -19386,7 +19458,9 @@
       "peerGroup": null,
       "control": "__control/Collection",
       "companions": [
-        "fixtures/Collection/__cells/conformance_cell.layout.json"
+        "fixtures/Collection/__cells/conformance_cell.layout.json",
+        "fixtures/Collection/__cells/conformance_cell_bare.layout.json",
+        "fixtures/Collection/__cells/conformance_cell_bare_single.layout.json"
       ]
     },
     {
@@ -19413,7 +19487,9 @@
       "peerGroup": null,
       "control": "__control/Collection",
       "companions": [
-        "fixtures/Collection/__cells/conformance_cell.layout.json"
+        "fixtures/Collection/__cells/conformance_cell.layout.json",
+        "fixtures/Collection/__cells/conformance_cell_bare.layout.json",
+        "fixtures/Collection/__cells/conformance_cell_bare_single.layout.json"
       ]
     },
     {
@@ -19440,7 +19516,9 @@
       "peerGroup": null,
       "control": "__control/Collection",
       "companions": [
-        "fixtures/Collection/__cells/conformance_cell.layout.json"
+        "fixtures/Collection/__cells/conformance_cell.layout.json",
+        "fixtures/Collection/__cells/conformance_cell_bare.layout.json",
+        "fixtures/Collection/__cells/conformance_cell_bare_single.layout.json"
       ]
     },
     {
@@ -19467,7 +19545,9 @@
       "peerGroup": "Collection/hideSeparator@Collection__listStyle-grouped",
       "control": "__control/Collection__listStyle-grouped",
       "companions": [
-        "fixtures/Collection/__cells/conformance_cell.layout.json"
+        "fixtures/Collection/__cells/conformance_cell.layout.json",
+        "fixtures/Collection/__cells/conformance_cell_bare.layout.json",
+        "fixtures/Collection/__cells/conformance_cell_bare_single.layout.json"
       ]
     },
     {
@@ -19494,7 +19574,9 @@
       "peerGroup": "Collection/hideSeparator@Collection__listStyle-grouped",
       "control": "__control/Collection__listStyle-grouped",
       "companions": [
-        "fixtures/Collection/__cells/conformance_cell.layout.json"
+        "fixtures/Collection/__cells/conformance_cell.layout.json",
+        "fixtures/Collection/__cells/conformance_cell_bare.layout.json",
+        "fixtures/Collection/__cells/conformance_cell_bare_single.layout.json"
       ]
     },
     {
@@ -19521,7 +19603,9 @@
       "peerGroup": "Collection/listStyle@Collection__no-sections",
       "control": "__control/Collection__no-sections",
       "companions": [
-        "fixtures/Collection/__cells/conformance_cell.layout.json"
+        "fixtures/Collection/__cells/conformance_cell.layout.json",
+        "fixtures/Collection/__cells/conformance_cell_bare.layout.json",
+        "fixtures/Collection/__cells/conformance_cell_bare_single.layout.json"
       ]
     },
     {
@@ -19548,7 +19632,9 @@
       "peerGroup": "Collection/listStyle@Collection__no-sections",
       "control": "__control/Collection__no-sections",
       "companions": [
-        "fixtures/Collection/__cells/conformance_cell.layout.json"
+        "fixtures/Collection/__cells/conformance_cell.layout.json",
+        "fixtures/Collection/__cells/conformance_cell_bare.layout.json",
+        "fixtures/Collection/__cells/conformance_cell_bare_single.layout.json"
       ]
     },
     {
@@ -19575,7 +19661,9 @@
       "peerGroup": "Collection/listStyle@Collection__no-sections",
       "control": "__control/Collection__no-sections",
       "companions": [
-        "fixtures/Collection/__cells/conformance_cell.layout.json"
+        "fixtures/Collection/__cells/conformance_cell.layout.json",
+        "fixtures/Collection/__cells/conformance_cell_bare.layout.json",
+        "fixtures/Collection/__cells/conformance_cell_bare_single.layout.json"
       ]
     },
     {
@@ -19602,7 +19690,9 @@
       "peerGroup": "Collection/listStyle@Collection__no-sections",
       "control": "__control/Collection__no-sections",
       "companions": [
-        "fixtures/Collection/__cells/conformance_cell.layout.json"
+        "fixtures/Collection/__cells/conformance_cell.layout.json",
+        "fixtures/Collection/__cells/conformance_cell_bare.layout.json",
+        "fixtures/Collection/__cells/conformance_cell_bare_single.layout.json"
       ]
     },
     {
@@ -23049,7 +23139,9 @@
       "control": null,
       "isControl": true,
       "companions": [
-        "fixtures/Collection/__cells/conformance_cell.layout.json"
+        "fixtures/Collection/__cells/conformance_cell.layout.json",
+        "fixtures/Collection/__cells/conformance_cell_bare.layout.json",
+        "fixtures/Collection/__cells/conformance_cell_bare_single.layout.json"
       ]
     },
     {
@@ -23076,7 +23168,9 @@
       "control": null,
       "isControl": true,
       "companions": [
-        "fixtures/Collection/__cells/conformance_cell.layout.json"
+        "fixtures/Collection/__cells/conformance_cell.layout.json",
+        "fixtures/Collection/__cells/conformance_cell_bare.layout.json",
+        "fixtures/Collection/__cells/conformance_cell_bare_single.layout.json"
       ]
     },
     {
@@ -23103,7 +23197,9 @@
       "control": null,
       "isControl": true,
       "companions": [
-        "fixtures/Collection/__cells/conformance_cell.layout.json"
+        "fixtures/Collection/__cells/conformance_cell.layout.json",
+        "fixtures/Collection/__cells/conformance_cell_bare.layout.json",
+        "fixtures/Collection/__cells/conformance_cell_bare_single.layout.json"
       ]
     },
     {
@@ -23130,7 +23226,9 @@
       "control": null,
       "isControl": true,
       "companions": [
-        "fixtures/Collection/__cells/conformance_cell.layout.json"
+        "fixtures/Collection/__cells/conformance_cell.layout.json",
+        "fixtures/Collection/__cells/conformance_cell_bare.layout.json",
+        "fixtures/Collection/__cells/conformance_cell_bare_single.layout.json"
       ]
     },
     {
@@ -23157,7 +23255,9 @@
       "control": null,
       "isControl": true,
       "companions": [
-        "fixtures/Collection/__cells/conformance_cell.layout.json"
+        "fixtures/Collection/__cells/conformance_cell.layout.json",
+        "fixtures/Collection/__cells/conformance_cell_bare.layout.json",
+        "fixtures/Collection/__cells/conformance_cell_bare_single.layout.json"
       ]
     },
     {
@@ -23184,7 +23284,9 @@
       "control": null,
       "isControl": true,
       "companions": [
-        "fixtures/Collection/__cells/conformance_cell.layout.json"
+        "fixtures/Collection/__cells/conformance_cell.layout.json",
+        "fixtures/Collection/__cells/conformance_cell_bare.layout.json",
+        "fixtures/Collection/__cells/conformance_cell_bare_single.layout.json"
       ]
     },
     {
@@ -23211,7 +23313,9 @@
       "control": null,
       "isControl": true,
       "companions": [
-        "fixtures/Collection/__cells/conformance_cell.layout.json"
+        "fixtures/Collection/__cells/conformance_cell.layout.json",
+        "fixtures/Collection/__cells/conformance_cell_bare.layout.json",
+        "fixtures/Collection/__cells/conformance_cell_bare_single.layout.json"
       ]
     },
     {
@@ -25887,7 +25991,9 @@
       "peerGroup": null,
       "control": null,
       "companions": [
-        "fixtures/Collection/__cells/conformance_cell.layout.json"
+        "fixtures/Collection/__cells/conformance_cell.layout.json",
+        "fixtures/Collection/__cells/conformance_cell_bare.layout.json",
+        "fixtures/Collection/__cells/conformance_cell_bare_single.layout.json"
       ]
     },
     {
@@ -25914,7 +26020,9 @@
       "peerGroup": null,
       "control": null,
       "companions": [
-        "fixtures/Collection/__cells/conformance_cell.layout.json"
+        "fixtures/Collection/__cells/conformance_cell.layout.json",
+        "fixtures/Collection/__cells/conformance_cell_bare.layout.json",
+        "fixtures/Collection/__cells/conformance_cell_bare_single.layout.json"
       ]
     },
     {
@@ -25941,7 +26049,9 @@
       "peerGroup": null,
       "control": null,
       "companions": [
-        "fixtures/Collection/__cells/conformance_cell.layout.json"
+        "fixtures/Collection/__cells/conformance_cell.layout.json",
+        "fixtures/Collection/__cells/conformance_cell_bare.layout.json",
+        "fixtures/Collection/__cells/conformance_cell_bare_single.layout.json"
       ]
     },
     {
@@ -25968,7 +26078,96 @@
       "peerGroup": null,
       "control": null,
       "companions": [
-        "fixtures/Collection/__cells/conformance_cell.layout.json"
+        "fixtures/Collection/__cells/conformance_cell.layout.json",
+        "fixtures/Collection/__cells/conformance_cell_bare.layout.json",
+        "fixtures/Collection/__cells/conformance_cell_bare_single.layout.json"
+      ]
+    },
+    {
+      "id": "Collection/cellChildAddress__bare_2",
+      "component": "Collection",
+      "attribute": "layout",
+      "case": "cellChildAddress__bare_2",
+      "class": "assertable",
+      "host": "Collection",
+      "writtenKey": "layout",
+      "aliasOf": null,
+      "value": "flow",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/Collection/cellChildAddress__bare_2.layout.json",
+      "test": "fixtures/Collection/cellChildAddress__bare_2.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": null,
+      "control": null,
+      "companions": [
+        "fixtures/Collection/__cells/conformance_cell.layout.json",
+        "fixtures/Collection/__cells/conformance_cell_bare.layout.json",
+        "fixtures/Collection/__cells/conformance_cell_bare_single.layout.json"
+      ]
+    },
+    {
+      "id": "Collection/cellChildTap__bare_2",
+      "component": "Collection",
+      "attribute": "layout",
+      "case": "cellChildTap__bare_2",
+      "class": "assertable",
+      "host": "Collection",
+      "writtenKey": "layout",
+      "aliasOf": null,
+      "value": "flow",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/Collection/cellChildTap__bare_2.layout.json",
+      "test": "fixtures/Collection/cellChildTap__bare_2.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": null,
+      "control": null,
+      "companions": [
+        "fixtures/Collection/__cells/conformance_cell.layout.json",
+        "fixtures/Collection/__cells/conformance_cell_bare.layout.json",
+        "fixtures/Collection/__cells/conformance_cell_bare_single.layout.json"
+      ]
+    },
+    {
+      "id": "Collection/cellChildAddress__bare_1",
+      "component": "Collection",
+      "attribute": "layout",
+      "case": "cellChildAddress__bare_1",
+      "class": "assertable",
+      "host": "Collection",
+      "writtenKey": "layout",
+      "aliasOf": null,
+      "value": "flow",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/Collection/cellChildAddress__bare_1.layout.json",
+      "test": "fixtures/Collection/cellChildAddress__bare_1.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": null,
+      "control": null,
+      "companions": [
+        "fixtures/Collection/__cells/conformance_cell.layout.json",
+        "fixtures/Collection/__cells/conformance_cell_bare.layout.json",
+        "fixtures/Collection/__cells/conformance_cell_bare_single.layout.json"
       ]
     },
     {
@@ -25995,7 +26194,9 @@
       "control": null,
       "isControl": true,
       "companions": [
-        "fixtures/Collection/__cells/conformance_cell.layout.json"
+        "fixtures/Collection/__cells/conformance_cell.layout.json",
+        "fixtures/Collection/__cells/conformance_cell_bare.layout.json",
+        "fixtures/Collection/__cells/conformance_cell_bare_single.layout.json"
       ]
     },
     {
@@ -26022,7 +26223,9 @@
       "control": null,
       "isControl": true,
       "companions": [
-        "fixtures/Collection/__cells/conformance_cell.layout.json"
+        "fixtures/Collection/__cells/conformance_cell.layout.json",
+        "fixtures/Collection/__cells/conformance_cell_bare.layout.json",
+        "fixtures/Collection/__cells/conformance_cell_bare_single.layout.json"
       ]
     },
     {
@@ -26049,7 +26252,9 @@
       "peerGroup": null,
       "control": "__control/Collection__flow-overflow-none",
       "companions": [
-        "fixtures/Collection/__cells/conformance_cell.layout.json"
+        "fixtures/Collection/__cells/conformance_cell.layout.json",
+        "fixtures/Collection/__cells/conformance_cell_bare.layout.json",
+        "fixtures/Collection/__cells/conformance_cell_bare_single.layout.json"
       ]
     },
     {
@@ -26076,7 +26281,9 @@
       "peerGroup": null,
       "control": "__control/Collection__flow-overflow-scroll",
       "companions": [
-        "fixtures/Collection/__cells/conformance_cell.layout.json"
+        "fixtures/Collection/__cells/conformance_cell.layout.json",
+        "fixtures/Collection/__cells/conformance_cell_bare.layout.json",
+        "fixtures/Collection/__cells/conformance_cell_bare_single.layout.json"
       ]
     },
     {
@@ -26103,7 +26310,9 @@
       "control": null,
       "isControl": true,
       "companions": [
-        "fixtures/Collection/__cells/conformance_cell.layout.json"
+        "fixtures/Collection/__cells/conformance_cell.layout.json",
+        "fixtures/Collection/__cells/conformance_cell_bare.layout.json",
+        "fixtures/Collection/__cells/conformance_cell_bare_single.layout.json"
       ]
     },
     {
@@ -26130,7 +26339,9 @@
       "peerGroup": null,
       "control": "__control/Collection__flow-overflow-wrap",
       "companions": [
-        "fixtures/Collection/__cells/conformance_cell.layout.json"
+        "fixtures/Collection/__cells/conformance_cell.layout.json",
+        "fixtures/Collection/__cells/conformance_cell_bare.layout.json",
+        "fixtures/Collection/__cells/conformance_cell_bare_single.layout.json"
       ]
     },
     {
@@ -26157,7 +26368,9 @@
       "control": null,
       "isControl": true,
       "companions": [
-        "fixtures/Collection/__cells/conformance_cell.layout.json"
+        "fixtures/Collection/__cells/conformance_cell.layout.json",
+        "fixtures/Collection/__cells/conformance_cell_bare.layout.json",
+        "fixtures/Collection/__cells/conformance_cell_bare_single.layout.json"
       ]
     },
     {
@@ -26184,7 +26397,9 @@
       "peerGroup": null,
       "control": "__control/Collection__flow-overflow-fill",
       "companions": [
-        "fixtures/Collection/__cells/conformance_cell.layout.json"
+        "fixtures/Collection/__cells/conformance_cell.layout.json",
+        "fixtures/Collection/__cells/conformance_cell_bare.layout.json",
+        "fixtures/Collection/__cells/conformance_cell_bare_single.layout.json"
       ]
     },
     {
@@ -26211,7 +26426,9 @@
       "peerGroup": null,
       "control": null,
       "companions": [
-        "fixtures/Collection/__cells/conformance_cell.layout.json"
+        "fixtures/Collection/__cells/conformance_cell.layout.json",
+        "fixtures/Collection/__cells/conformance_cell_bare.layout.json",
+        "fixtures/Collection/__cells/conformance_cell_bare_single.layout.json"
       ]
     },
     {
@@ -26238,7 +26455,9 @@
       "control": null,
       "isControl": true,
       "companions": [
-        "fixtures/Collection/__cells/conformance_cell.layout.json"
+        "fixtures/Collection/__cells/conformance_cell.layout.json",
+        "fixtures/Collection/__cells/conformance_cell_bare.layout.json",
+        "fixtures/Collection/__cells/conformance_cell_bare_single.layout.json"
       ]
     },
     {
@@ -26265,7 +26484,9 @@
       "peerGroup": null,
       "control": "__control/Collection__flow-overflow-none-wrapInBox",
       "companions": [
-        "fixtures/Collection/__cells/conformance_cell.layout.json"
+        "fixtures/Collection/__cells/conformance_cell.layout.json",
+        "fixtures/Collection/__cells/conformance_cell_bare.layout.json",
+        "fixtures/Collection/__cells/conformance_cell_bare_single.layout.json"
       ]
     },
     {
@@ -26292,7 +26513,9 @@
       "control": null,
       "isControl": true,
       "companions": [
-        "fixtures/Collection/__cells/conformance_cell.layout.json"
+        "fixtures/Collection/__cells/conformance_cell.layout.json",
+        "fixtures/Collection/__cells/conformance_cell_bare.layout.json",
+        "fixtures/Collection/__cells/conformance_cell_bare_single.layout.json"
       ]
     },
     {
@@ -26319,7 +26542,9 @@
       "peerGroup": null,
       "control": "__control/Collection__flow-overflow-none-wrapInScroll",
       "companions": [
-        "fixtures/Collection/__cells/conformance_cell.layout.json"
+        "fixtures/Collection/__cells/conformance_cell.layout.json",
+        "fixtures/Collection/__cells/conformance_cell_bare.layout.json",
+        "fixtures/Collection/__cells/conformance_cell_bare_single.layout.json"
       ]
     }
   ],
