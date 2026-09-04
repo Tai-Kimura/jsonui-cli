@@ -49,10 +49,13 @@ module KjuiTools
           # Objects are not items — the declaration says static labels, and
           # the dynamic runtime keeps primitives only (DynamicSegmentComponent
           # mapNotNull). Dropped before anything indexes them.
-          segments = json_data['items'] || []
-          # Only an ARRAY has elements to judge: `items` also accepts a
-          # binding string (`@{options}`), which the code below resolves.
-          segments = segments.reject { |item| item.is_a?(Hash) || item.is_a?(Array) } if segments.is_a?(Array)
+          # Declared `type: "array"` with no binding, so only an array is
+          # items. A binding string used to be resolved here into a
+          # `forEachIndexed` — a feature this face invented alone (sjui
+          # raised NoMethodError on the same input, iOS dynamic takes
+          # strings only, and no face uses it). The validator names it.
+          raw_items = json_data['items']
+          segments = raw_items.is_a?(Array) ? raw_items.reject { |item| item.is_a?(Hash) || item.is_a?(Array) } : []
           
           code = indent("Segment(", depth)
           # For display in Segment parameter, always output as string

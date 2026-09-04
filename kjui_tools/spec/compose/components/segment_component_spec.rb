@@ -51,13 +51,20 @@ RSpec.describe KjuiTools::Compose::Components::SegmentComponent do
       expect(result).not_to include('"B"')
     end
 
-    it 'handles dynamic segments binding' do
+    it 'generates nothing for a binding, which the declaration does not allow' do
+      # This used to emit `data.segmentOptions.forEachIndexed` — a feature
+      # only this face had. `Segment.items` is declared `type: "array"`
+      # with no binding; sjui raised NoMethodError on the same input and
+      # iOS dynamic takes strings only. Usage across seven faces: 0. The
+      # validator names it; the generator emits no items.
       json_data = {
         'type' => 'Segment',
         'items' => '@{segmentOptions}'
       }
       result = described_class.generate(json_data, 0, required_imports)
-      expect(result).to include('data.segmentOptions.forEachIndexed')
+      expect(result).not_to include('forEachIndexed')
+      expect(result).not_to include('segmentOptions')
+      expect(result).to include('Segment(')
     end
 
     it 'generates Segment with static selectedIndex' do

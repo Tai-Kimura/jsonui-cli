@@ -10,6 +10,8 @@ require 'core/attribute_validator'
 # drop a non-primitive element, so the generators were the only layer that
 # disagreed.
 RSpec.describe 'Segment items are scalars' do
+  let(:described_module) { JsonUIShared::AttributeValidatorCore }
+
   subject(:indices) do
     ->(type, name, value) { JsonUIShared::AttributeValidatorCore.non_scalar_item_indices(type, name, value) }
   end
@@ -59,4 +61,33 @@ RSpec.describe 'Segment items are scalars' do
       expect(validator.warnings.grep(/items\[/)).to be_empty
     end
   end
+  describe 'a binding where labels are declared' do
+    # `Segment.items` is `type: "array"` with no binding, yet kjui resolved
+    # `@{options}` into a forEachIndexed and sjui raised NoMethodError on
+    # the same input — one face invented a feature, the other crashed, and
+    # the type check said nothing because a binding string stands in for
+    # any declared type. Usage across seven faces: 0.
+    let(:validator) { KjuiTools::Core::AttributeValidator.new }
+
+    it 'names it and says it is ignored' do
+      validator.validate({ 'type' => 'Segment', 'items' => '@{options}' }, 'Segment')
+      warning = validator.warnings.find { |w| w.include?("'items'") && w.include?('binding') }
+      expect(warning).not_to be_nil, validator.warnings.inspect
+      expect(warning).to include('ignored')
+    end
+
+    it 'says nothing for a declared array' do
+      validator.validate({ 'type' => 'Segment', 'items' => %w[a b] }, 'Segment')
+      expect(validator.warnings.grep(/is a binding/)).to be_empty
+    end
+
+    it 'is scoped to the labels-only attribute' do
+      # The control: bindings are legitimate almost everywhere, including
+      # on items of a data-source component.
+      expect(described_module.binding_in_scalar_items?('Collection', 'items', '@{rows}')).to be(false)
+      expect(described_module.binding_in_scalar_items?('Segment', 'selectedIndex', '@{i}')).to be(false)
+      expect(described_module.binding_in_scalar_items?('Segment', 'items', '@{options}')).to be(true)
+    end
+  end
+
 end
