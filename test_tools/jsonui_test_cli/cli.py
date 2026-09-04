@@ -1504,6 +1504,49 @@ def _branch_check_summary(reports: list, scanned: int, orphans=()) -> int:
     return 0
 
 
+def cmd_generate_unit_stubs(args):
+    """Handle 'generate unit-stubs' — declared-vs-implemented case sets."""
+    from pathlib import Path as _Path
+
+    from .unit_contracts import (
+        UnitContractError,
+        check_unit_contracts,
+        format_report,
+    )
+
+    project_root = _Path.cwd()
+    try:
+        report = check_unit_contracts(project_root, getattr(args, "spec_dir", None))
+    except UnitContractError as e:
+        print(f"ERROR: {e}")
+        return 1
+
+    for line in format_report(report):
+        print(line)
+
+    if getattr(args, "check", False):
+        # Non-zero on drift OR on anything that could not be checked: a
+        # platform whose test root is undeclared produces no findings, and
+        # reporting that as clean is the shape this whole command exists to
+        # stop.
+        return 0 if report.ok else 1
+
+    from .unit_contracts import write_stubs
+
+    touched = write_stubs(project_root, report, dry_run=getattr(args, "dry_run", False))
+    if not touched:
+        print("  no stubs to write — every declared case has an implementation")
+        return 0
+    verb = "would write" if getattr(args, "dry_run", False) else "wrote"
+    for path, action, count in touched:
+        print(f"  {action:9s} {path}  ({count} stub(s)) [{verb}]")
+    print(
+        "  ⚠️  stubs fail rather than pass: a stub that passes is a case "
+        "reporting success without a body"
+    )
+    return 0
+
+
 def cmd_generate_branch_tests(args):
     """Handle 'generate branch-tests' — vitest tests from branchContracts."""
     from .branch_tests import (
@@ -2783,6 +2826,31 @@ def main():
         help="App module name for @testable import (required for ios)"
     )
 
+    # Unit contracts: the spec declares the SET of hand-written cases; the
+    # bodies stay hand-written. Generating bodies was measured and does not
+    # reach the target (branchContracts moves the contracted methods by 4.3
+    # points), so what the spec buys here is that two faces cannot drift.
+    gen_unit_parser = generate_subparsers.add_parser(
+        "unit-stubs",
+        help="Write stubs for spec-declared unitContracts cases that have no "
+             "implementation yet; never touches an existing body"
+    )
+    gen_unit_parser.add_argument(
+        "--check", action="store_true",
+        help="Compare the declared set against the implemented one and exit "
+             "non-zero on drift (declared-but-missing, implemented-but-"
+             "undeclared, declared for two platforms and present on one). "
+             "Writes nothing"
+    )
+    gen_unit_parser.add_argument(
+        "--dry-run", action="store_true",
+        help="Report what would be written without writing it"
+    )
+    gen_unit_parser.add_argument(
+        "--spec-dir",
+        help="Spec directory (default: spec_directory from jui.config.json)"
+    )
+
     # Generate description subcommand with screen/flow subcommands
     gen_desc_parser = generate_subparsers.add_parser(
         "description",
@@ -3007,6 +3075,8 @@ def main():
                 return 0
             elif args.generate_type == "branch-tests":
                 return cmd_generate_branch_tests(args)
+            elif args.generate_type == "unit-stubs":
+                return cmd_generate_unit_stubs(args)
             elif args.generate_type in ["description", "d", "desc"]:
                 # Check for test type subcommand
                 if hasattr(args, 'test_type') and args.test_type:
