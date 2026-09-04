@@ -27,6 +27,7 @@ nowhere else.
 from __future__ import annotations
 
 import json
+import re
 import sys
 import unittest
 from pathlib import Path
@@ -324,6 +325,8 @@ class TheRefusalsPromiseIsKept(unittest.TestCase):
         "error_handling": [{"case": "network"}],
         "userActions": [{"name": "tap"}],
         "transitions": [{"to": "next"}],
+        "validation": {"clientSide": [{"field": "email", "rule": "required"}],
+                       "serverSide": [{"condition": "409", "handling": "toast"}]},
         "relatedFiles": ["a.swift"],
         "notes": "hello",
     }
@@ -408,3 +411,68 @@ def _rules():
     rules = shared_core.load("parent_spec_rules")
     assert rules is not None, "shared/core/parent_spec_rules.py did not load"
     return rules
+
+
+class TheVocabularyCoversWhatConsumersRead(unittest.TestCase):
+    """The vocabulary is hand-written, so derive a check on it from consumers.
+
+    `MERGER_BUILDS_FROM_SUB_SPECS` is a list somebody maintains. The class
+    above proves every name ON it is built — it cannot notice a section
+    MISSING from it, which is precisely how `validation` stayed broken:
+    declared by four sub-specs of one screen, validated by `validate spec`,
+    rendered by both doc generators, and dropped by the merger. It surfaced
+    only because a lane asked which of its six declared sections arrive.
+
+    So this reads the two SCREEN generators — the ones whose whole input is a
+    screen spec — and requires every top-level section they render to be
+    either read from the parent or built from the sub-specs. Anything else is
+    a section an author can write, a generator will render, and the merge will
+    silently drop on a split screen.
+
+    Scoped to `generate_spec_html` / `generate_spec_markdown` bodies: further
+    down the same module are the COMPONENT-spec renderers, whose `props`,
+    `slots` and `usage` belong to a different document type and would be
+    false positives here.
+    """
+
+    GENERATORS = (
+        ("document_tools/jsonui_doc_cli/spec_doc/html_generator.py",
+         "generate_spec_html"),
+        ("document_tools/jsonui_doc_cli/spec_doc/markdown_generator.py",
+         "generate_spec_markdown"),
+    )
+
+    @staticmethod
+    def _function_body(path: Path, name: str) -> str:
+        text = path.read_text(encoding="utf-8")
+        start = text.index(f"\ndef {name}(")
+        nxt = text.find("\ndef ", start + 1)
+        return text[start:nxt if nxt != -1 else len(text)]
+
+    def _sections_rendered(self) -> dict[str, str]:
+        pat = re.compile(r'\bspec_data\.get\(\s*"([A-Za-z_][A-Za-z0-9_]*)"')
+        out: dict[str, str] = {}
+        for rel, func in self.GENERATORS:
+            path = REPO_ROOT / rel
+            self.assertTrue(path.is_file(), f"generator moved: {rel}")
+            for m in pat.finditer(self._function_body(path, func)):
+                out.setdefault(m.group(1), rel)
+        return out
+
+    def test_the_scan_finds_the_known_sections(self):
+        """Control. A scan that matched nothing would make the arm below
+        pass by reading an empty file — the failure this whole class is
+        about, one level up again."""
+        found = self._sections_rendered()
+        for expected in ("structure", "stateManagement", "dataFlow", "validation"):
+            self.assertIn(expected, found, f"scan missed {expected}: {sorted(found)}")
+
+    def test_every_rendered_section_has_a_home(self):
+        rules = _rules()
+        homeless = sorted(
+            f"{k} (rendered by {v})"
+            for k, v in self._sections_rendered().items()
+            if k not in rules.MERGER_BUILDS_FROM_SUB_SPECS
+            and k not in rules.PARENT_READS_TOP_LEVEL
+        )
+        self.assertEqual(homeless, [], f"rendered but dropped on a split screen: {homeless}")
