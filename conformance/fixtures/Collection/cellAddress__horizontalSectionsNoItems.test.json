@@ -1,0 +1,28 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/Collection/cellAddress__horizontalSectionsNoItems.layout.json"
+  },
+  "metadata": {
+    "name": "conformance cellAddress__horizontalSectionsNoItems",
+    "description": "A horizontal sectioned Collection declaring no items renders from the collection data source; the cell-address emit for that branch is generated and compiled.",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "Collection"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "cellAddress__horizontalSectionsNoItems",
+      "description": "A horizontal sectioned Collection declaring no items renders from the collection data source; the cell-address emit for that branch is generated and compiled.",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        }
+      ]
+    }
+  ]
+}

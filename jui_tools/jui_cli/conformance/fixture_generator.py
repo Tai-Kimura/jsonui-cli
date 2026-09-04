@@ -902,7 +902,12 @@ def generate_conformance(definitions_path: Path, out_dir: Path) -> GenerationSum
         summary.files_written += 1
     fixture_entries.extend(address_entries)
     summary.fixture_count += len(address_entries)
-    summary.assertable_count += len(address_entries)
+    # Counted by CLASS, like every other family. `len(...)` was right only
+    # while the family happened to be all-assertable, and it made the manifest
+    # claim one more assertable fixture than it listed the moment one was not
+    # — a count that disagrees with the thing it counts.
+    summary.assertable_count += sum(
+        1 for e in address_entries if e["class"] == rules.CLASS_ASSERTABLE)
 
     # Cells whose ROOT declares no id: the corpus rendered one cell layout,
     # and its root declared an id, which is the very thing that stopped the
