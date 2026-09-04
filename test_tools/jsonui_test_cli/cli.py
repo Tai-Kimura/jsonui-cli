@@ -1535,6 +1535,25 @@ def cmd_generate_unit_stubs(args):
 
     touched = write_stubs(project_root, report, dry_run=getattr(args, "dry_run", False))
     if not touched:
+        # `missing == 0` has two states and they are opposite facts: every
+        # case is implemented, or nothing was compared. write_stubs skips
+        # platforms it could not scan, so an undeclared or absent test
+        # directory reaches here looking exactly like a finished project —
+        # and this is the first command anyone runs, so a mistyped
+        # unitTestsDir would read as "done".
+        if report.unscannable or report.problems:
+            print(
+                "  no stubs written — but nothing was compared on "
+                f"{len(report.unscannable)} platform(s); this is NOT "
+                "'every case is implemented'. See the lines above"
+            )
+            return 1
+        if report.declaring_specs and not report.cases:
+            print(
+                "  no stubs written — no case could be read from the "
+                "unitContracts block(s) above, so there was nothing to write"
+            )
+            return 1
         print("  no stubs to write — every declared case has an implementation")
         return 0
     verb = "would write" if getattr(args, "dry_run", False) else "wrote"
