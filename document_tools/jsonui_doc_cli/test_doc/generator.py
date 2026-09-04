@@ -1203,7 +1203,7 @@ def generate_html_directory(
     # the spec that declares it and the link is built from the pages this run
     # actually wrote.
     unit_files_info: list[dict] = []
-    unit_summary: str | None = None
+    unit_app_summaries: list[tuple[str, str]] = []
     unit_undeclared: dict[str, list[str]] = {}
     for _app, _pages in sorted(unit_by_app.items(), key=lambda kv: (kv[0] or "")):
         _files, _summary, _undeclared = _generate_unit_pages(
@@ -1215,10 +1215,17 @@ def generate_html_directory(
         for _f in _files:
             if _app:
                 _f["group"] = _app
-        if _summary and unit_summary is None:
-            unit_summary = _summary
+        if _summary:
+            unit_app_summaries.append((_app or "", _summary))
         for _face, _names in (_undeclared or {}).items():
             unit_undeclared.setdefault(_face, []).extend(_names)
+    # ONE app's line is not the run's line. This used to keep the first
+    # summary it saw, so on a multi-app site the index reported whichever app
+    # sorted first — and when that app declared nothing, the page carried
+    # `0 case(s) declared` four lines under `Unit Targets 5`. A denominator
+    # exists to stop a zero being mistaken for "nothing to find"; picking one
+    # app's zero out of several does exactly the harm it was added to prevent.
+    unit_summary = _aggregate_unit_summary(unit_by_app)
 
     # Generate markdown pages from docs directories
     md_files_by_dir = {}
@@ -1358,7 +1365,7 @@ def generate_html_directory(
     # and then never rendered.
     if (spec_files_info or component_files_info or md_files_by_dir
             or figma_files_info or apps_nav or unit_files_info):
-        generate_index_html(output_path, generated_files, title, mermaid_generated, document_files, api_doc_categories, spec_files_info, component_files_info, md_files_by_dir, figma_files_info, apps_nav=apps_nav, unit_files=unit_files_info, unit_summary=unit_summary, unit_undeclared=unit_undeclared)
+        generate_index_html(output_path, generated_files, title, mermaid_generated, document_files, api_doc_categories, spec_files_info, component_files_info, md_files_by_dir, figma_files_info, apps_nav=apps_nav, unit_files=unit_files_info, unit_summary=unit_summary, unit_undeclared=unit_undeclared, unit_app_summaries=unit_app_summaries)
 
     # Recorded here, once, where every number is in scope. Summed across
     # roots: a split tree reads a config per app, and the closing line names
@@ -1964,6 +1971,30 @@ def _unit_spec_href(spec_files_info: list[dict]) -> tuple[Any, list[str]]:
         return f"../{target}"
 
     return href, misses
+
+
+def _aggregate_unit_summary(unit_by_app: dict) -> str | None:
+    """The run's denominator sentence, summed across every app.
+
+    ⚠️ This is the ONE place the aggregate is worded. `summary_line` for a
+    single scan belongs to `jsonui_test_cli`, and the per-app lines print it
+    verbatim so that half stays where it is counted; there is no per-run
+    equivalent to borrow, so the wording is reproduced here once. Keep the
+    counts and the words identical to that function — two places phrasing one
+    fact is how a site and a gate come to disagree about how much was
+    scanned, which is the defect this whole line was added to prevent.
+    """
+    if not unit_by_app:
+        return None
+    cases = scanned = declaring = 0
+    for pages in unit_by_app.values():
+        totals = pages.get("totals") or {}
+        cases += totals.get("cases", 0)
+        scanned += totals.get("specs_scanned", 0)
+        declaring += totals.get("specs_declaring", 0)
+    return (f"unit contracts: {cases} case(s) declared across {scanned} "
+            f"spec file(s) scanned ({declaring} spec file(s) carrying a "
+            f"unitContracts block)")
 
 
 def _unit_page_rel(target_name: str, app: str | None = None) -> str:
