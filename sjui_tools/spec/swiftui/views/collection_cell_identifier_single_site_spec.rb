@@ -62,7 +62,17 @@ RSpec.describe 'Collection cell identifier emit sites' do
     # carries the address). What this number guards is the opposite: a call
     # site disappearing quietly.
     expect(callers).to be >= 2
-    expect(callers).to eq(15)
+    # 12 call sites + 1 definition.
+    #
+    # Was 14 + 1. The two removed sat in the `collectionDataSource` fallback
+    # — the sections branch with no `items`, and the legacy `cellClasses`
+    # branch. Both emitted `data.collectionDataSource.getCellData(for:)`, and
+    # NEITHER half of that exists: nothing declares `collectionDataSource`,
+    # and `CollectionDataSource`'s public API is `sections` / `init` /
+    # `reconfigured` — there is no lookup-by-cell-name method and never was.
+    # Uncompilable Swift, unnoticed because every other Collection declares
+    # `items`; the first fixture to reach it failed the build.
+    expect(callers).to eq(13)
   end
 
   it 'still emits the address for an id-bearing Collection' do

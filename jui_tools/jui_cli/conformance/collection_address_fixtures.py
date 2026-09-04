@@ -147,12 +147,25 @@ def build_collection_address_fixtures(
 #: that reach it (the other spells `items` as a non-binding literal, which is
 #: the same nil through a different door).
 #:
-#: `declaration-only` rather than `assertable`: the cells here come from
-#: `collectionDataSource.getCellData(for:)` rather than a named binding, and
-#: whether the conformance host supplies that has NOT been measured — asserting
-#: `target_item_0` without knowing would make a red gate out of an untested
-#: assumption. Generated and compiled still guards the emit through the
-#: codegen-effect comparison, which is what the branch lacked entirely.
+#: `declaration-only` rather than `assertable`: this Collection renders no
+#: cells at all, so there is no `target_item_0` to assert.
+#:
+#: ⚠️ It was written believing the cells came from
+#: `collectionDataSource.getCellData(for:)`, with a note that whether the host
+#: supplies that had NOT been measured. Measured now: BOTH halves are absent.
+#: No layout in the corpus or in either consuming iOS face declares
+#: `collectionDataSource`, and `CollectionDataSource`'s public API is
+#: `sections` / `init` / `reconfigured` — there is no lookup-by-cell-name
+#: method and there never was. That branch emitted Swift which could not
+#: compile, and this fixture was the first thing ever to reach it: the codegen
+#: host failed the build on it. The branch is gone; the shape now emits no
+#: cells and a build warning names the layout.
+#:
+#: So what this fixture pins is the opposite of what it was written to pin —
+#: that a Collection naming cells with no `items` still COMPILES. That is
+#: worth keeping: it is the only fixture with the shape, and the defect it
+#: found was invisible to every unit spec because they asserted the emitted
+#: TEXT, which no compiler had read.
 _NO_ITEMS_CASE = "cellAddress__horizontalSectionsNoItems"
 
 
@@ -179,9 +192,8 @@ def _no_items_files(source_label: str) -> list[tuple[str, dict]]:
     layout_rel = f"fixtures/Collection/{_NO_ITEMS_CASE}.layout.json"
     test_rel = f"fixtures/Collection/{_NO_ITEMS_CASE}.test.json"
     description = (
-        "A horizontal sectioned Collection declaring no items renders from the "
-        "collection data source; the cell-address emit for that branch is "
-        "generated and compiled."
+        "A horizontal sectioned Collection declaring no items emits no cells "
+        "and still compiles; the layout is named by a build warning."
     )
     test = _test(_NO_ITEMS_CASE, description, layout_rel, 0)
     return [(layout_rel, _no_items_layout(source_label)), (test_rel, test)]

@@ -452,6 +452,27 @@ module SjuiTools
           puts "\e[33m⚠️  [SJUI Warning] [#{@current_validation_file} #{loc}] Collection has 'items' binding but no 'sections' defined. In SwiftUI mode, collections with 'items' should define 'sections' for proper cell rendering.\e[0m"
         end
 
+        # Warn if a Collection names cells but no data source to read them
+        # from. There is no emit for this shape: the old fallback wrote
+        # `data.collectionDataSource.getCellData(for:)`, and NEITHER half of
+        # that exists — no layout in the corpus or in either consuming iOS
+        # face declares `collectionDataSource`, and `getCellData` has no
+        # implementation anywhere in SwiftJsonUI. It was uncompilable Swift
+        # that nothing had ever compiled, because every other Collection
+        # declares `items`. Naming it here is what the old fallback owed:
+        # silence produced a file that failed at build with an error pointing
+        # at the generated line rather than at the layout.
+        if component['type']&.downcase == 'collection' &&
+           !component['items'] &&
+           (!(component['sections'] || []).empty? || !(component['cellClasses'] || []).empty?)
+          loc = hierarchy || 'root'
+          id = component['id'] ? " '#{component['id']}'" : ''
+          puts "\e[33m⚠️  [SJUI Warning] [#{@current_validation_file} #{loc}] " \
+               "Collection#{id} names cells but declares no 'items' data source, " \
+               "so no cells are emitted. Add 'items' bound to a " \
+               "CollectionDataSource property.\e[0m"
+        end
+
         # Validate this component (without style-merged attributes)
         if component['type']
           @validator.validate(component, nil, parent_orientation,

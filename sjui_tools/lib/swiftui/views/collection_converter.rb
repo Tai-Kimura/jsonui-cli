@@ -325,19 +325,19 @@ module SjuiTools
                       end
                       add_line "}"
                     elsif cell_view_name
-                      # Fallback: use collectionDataSource
-                      original_class_name = section['cell'].is_a?(Hash) ? section['cell']['className'] : section['cell']
-                      vars = open_cell_foreach("data.collectionDataSource.getCellData(for: \"#{original_class_name}\")")
-                      indent do
-                        add_line "#{cell_view_name}(data: #{vars[:data_var]}).equatable()"
-                        generate_cell_identity(vars[:index_var])
-
-                        apply_cell_frame
-
-                        # Add accessibilityIdentifier for test automation (tapItem action)
-                        apply_cell_item_identifier(vars[:index_var])
-                      end
-                      add_line "}"
+                      # No 'items' data source: emit no cells.
+                      #
+                      # This used to write
+                      # `data.collectionDataSource.getCellData(for: "X")`, and
+                      # NEITHER half of that exists — nothing in the corpus or
+                      # in either consuming iOS face declares
+                      # `collectionDataSource`, and `getCellData` has no
+                      # implementation anywhere in SwiftJsonUI. It was
+                      # uncompilable Swift, unnoticed because every other
+                      # Collection declares `items`; the first fixture to
+                      # reach this branch failed the build. The layout is
+                      # named by a validator warning instead.
+                      emit_no_cells_without_items
                     end
                   end
                 else
@@ -1335,6 +1335,15 @@ module SjuiTools
         # source is wrapped with `.reconfigured(...)` so CellIdGenerator
         # enriches each cell with a `"cellId"` = `"<primary>_<hash>"` entry.
         # Idempotent: safe to combine with Mode A (VM pre-sets attributes).
+        # A Collection that names cells but declares no `items` data source
+        # has nothing to iterate. Emit a comment rather than a cell loop: a
+        # ViewBuilder closure may be empty (it becomes EmptyView), and the
+        # layout is named by the validator warning in
+        # json_to_swiftui_converter#validate_component_recursive.
+        def emit_no_cells_without_items
+          add_line "// no 'items' data source declared — no cells emitted"
+        end
+
         def open_cell_foreach(data_source_expr)
           cell_id_property = @component['cellIdProperty']
           auto_tracking = @component['autoChangeTrackingId'] == true
@@ -1608,18 +1617,13 @@ module SjuiTools
                                     cell_class_name.sub('View', '')
                                   end
             
+            # Same dead fallback as the sections branch: `collectionDataSource`
+            # is declared nowhere and `getCellData` is implemented nowhere, so
+            # this emitted Swift that cannot compile. `original_class_name` is
+            # kept because the warning and future emit both need it.
+            _ = original_class_name
             add_line "// Legacy non-section based collection"
-            vars = open_cell_foreach("data.collectionDataSource.getCellData(for: \"#{original_class_name}\")")
-            indent do
-              add_line "#{cell_class_name}(data: #{vars[:data_var]})"
-              generate_cell_identity(vars[:index_var])
-
-              apply_cell_frame(grid: columns_is_multi?)
-
-              # Add accessibilityIdentifier for test automation (tapItem action)
-              apply_cell_item_identifier(vars[:index_var])
-            end
-            add_line "}"
+            emit_no_cells_without_items
           else
             # Declaration-faithful (2026-08-02 ruling): no cell class
             # declared → nothing rendered (was a 10-item placeholder).

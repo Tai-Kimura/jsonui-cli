@@ -42,9 +42,20 @@ RSpec.describe SjuiTools::SwiftUI::Views::CollectionConverter do
           'cellClasses' => ['ItemCell'], 'footerClasses' => ['MyFooter'] }
       )
       expect(code).to include('List {')
-      expect(code).to include('data.collectionDataSource.getCellData(for: "ItemCell")')
       expect(code).to include('MyFooterView()')
       expect(code).to include('.listStyle(PlainListStyle())')
+
+      # This example used to assert
+      # `data.collectionDataSource.getCellData(for: "ItemCell")`. That string
+      # is not Swift: nothing declares `collectionDataSource`, and
+      # `CollectionDataSource`'s public API is `sections` / `init` /
+      # `reconfigured` — there is no lookup-by-cell-name method. The
+      # characterization pinned emitted TEXT that no compiler had ever read,
+      # so it stayed green for years while the branch could not build.
+      # A Collection with no `items` now emits no cells, and the layout is
+      # named by a validator warning.
+      expect(code).not_to include('getCellData')
+      expect(code).to include("no 'items' data source declared")
     end
   end
 
