@@ -162,27 +162,59 @@ module SjuiTools
           0x22.chr + escaped + 0x22.chr
         end
 
-        # Hand the WHOLE expression — path, '??' default and all — to the
-        # canonical resolver, rather than deriving a subscript chain here.
+        # Read the path through the canonical resolver rather than deriving a
+        # subscript chain here.
         #
-        # DynamicBindingResolver is documented as the ONE implementation of
-        # the canonical binding-resolution semantics, and it is `public` and
-        # unconditionally compiled, so the static face can call it instead of
-        # growing a second copy that has to be kept in step. That buys the
-        # bounds check (`items[99]` is unresolved, not a crash), the flat-key
-        # rule, AnyCodable unwrapping and the canonical text stringification
-        # (an integral Double renders "1", not "1.0") by construction.
+        # ⚠️ The type named MUST be `JsonUIBindingPath`, never
+        # `DynamicBindingResolver`. The latter is inside `#if DEBUG`, and
+        # generated code is distributed and built for RELEASE: referencing it
+        # compiles under DEBUG — so every gate goes green — and breaks in the
+        # consumer's release build. Measured 2026-09-05: the conformance host
+        # compiles SwiftJsonUI with DEBUG undefined and failed five views with
+        # "Type 'SwiftJsonUI' has no member 'DynamicBindingResolver'".
+        # `JsonUIBindingPath` exists outside the guard for exactly this
+        # caller, and requires SwiftJsonUI >= 10.20.1.
         #
-        # The container is passed as a one-key map under its own root name so
-        # the resolver sees the same shape it sees on the dynamic face. The
+        # Calling it keeps ONE implementation of the rules a hand-written
+        # chain would have to restate: an out-of-range index is unresolved and
+        # not a trap, the flat key "a.b" shadows the nested path, an integral
+        # Double renders "1" and not "1.0", and a container has no text form
+        # (interpolating one would render '["name": "Grace"]' into the UI).
+        #
+        # The container is passed as a one-key map under its own root name, so
+        # the resolver sees the shape it sees on the dynamic face. The
         # `as Any` is not decoration: an optional container would otherwise be
         # implicitly coerced to Any, which is a warning, and the build gate
         # requires zero warnings.
-        def canonical_resolve_expr(inner, path, resolver, prefix: 'data')
+        def canonical_resolve_expr(path, coercion, prefix: 'data')
           root = path_root(path)
-          "SwiftJsonUI.DynamicBindingResolver.#{resolver}(" \
-            "expression: #{swift_string_literal(inner.to_s.strip)}, " \
-            "data: [#{swift_string_literal(root)}: #{prefix}.#{root} as Any])"
+          lookup = 'SwiftJsonUI.JsonUIBindingPath.resolve(' \
+                   "path: #{swift_string_literal(path)}, " \
+                   "in: [#{swift_string_literal(root)}: #{prefix}.#{root} as Any])"
+          "SwiftJsonUI.JsonUIBindingPath.#{coercion}(#{lookup})"
+        end
+
+        # Canonical text form of a number literal, mirroring
+        # JsonUIBindingPath.stringify: integral values render without a
+        # fractional part, so `?? 42` and a resolved 42 read the same.
+        def canonical_number_text(raw)
+          value = raw.to_f
+          return value.truncate.to_s if value == value.truncate && value.abs < 1e15
+
+          value.to_s
+        end
+
+        # The '??' default as a Swift literal for a TEXT position. The
+        # release-available core is path resolution and coercion only — it
+        # carries no expression parser — so the default is applied here. It
+        # has already been parsed, so nothing is lost, but it has to be
+        # rendered the canonical way rather than passed through.
+        def text_default_literal(parsed)
+          case parsed.default_kind
+          when :string then swift_default_literal(parsed)
+          when :bool then swift_string_literal(parsed.default_value.to_s)
+          when :number then swift_string_literal(canonical_number_text(parsed.default_value))
+          end
         end
 
         # The Swift kind a declared class coerces to, or nil when the class
@@ -219,21 +251,37 @@ module SjuiTools
           nil
         end
 
+        # Resolver and fallback per value KIND, for container paths.
+        RESOLVER_BY_KIND = {
+          string: %w[stringify ""],
+          bool: %w[bool false],
+          number: %w[double 0]
+        }.freeze
+
         # Read-only Swift value expression for a whole-value binding.
         # Boolean negation emits '!' (wrapping optionals so it always
         # compiles); inline defaults emit '?? <literal>' only for optional
         # properties (dead code otherwise, see non_optional?).
-        def swift_value_expr(inner, prefix: 'data')
+        #
+        # `kind` selects the resolver for a CONTAINER path only; every other
+        # path is emitted identically whatever it says. This one method feeds
+        # three different Swift types — `isEnabled:` is Bool, relative
+        # positioning is numeric, hint / colour hex / url are String — so the
+        # caller names the type it is about to consume. Defaulting to :string
+        # rather than requiring it keeps the generic callers working.
+        def swift_value_expr(inner, prefix: 'data', kind: :string)
           parsed = parse(inner)
           return swift_literal_for("@{#{inner}}") unless emittable_path?(parsed.path)
 
-          # A container traversal has no single target type HERE: this one
-          # expression feeds String positions (hint, colour hex, url) and Bool
-          # ones (enabled) alike, so there is no resolver to choose. It fails
-          # closed the same way a non-path does, rather than emitting member
-          # access that cannot compile. The text, bool and numeric contexts
-          # DO resolve container paths; this position is the known gap.
-          return swift_literal_for("@{#{inner}}") if container_traversal?(parsed.path)
+          # Emitting the literal token here instead COMPILES, which is worse
+          # than failing: the view renders "@{profile.name}" as its own text
+          # and every gate stays green. Resolve it.
+          if container_traversal?(parsed.path)
+            coercion, fallback = RESOLVER_BY_KIND.fetch(kind, RESOLVER_BY_KIND[:string])
+            call = canonical_resolve_expr(parsed.path, coercion, prefix: prefix)
+            default = kind == :string ? text_default_literal(parsed) : swift_default_literal(parsed)
+            return "(#{call} ?? #{default || fallback})"
+          end
 
           base = "#{prefix}.#{parsed.path}"
 
@@ -260,12 +308,13 @@ module SjuiTools
           # compilable thing in a boolean one.
           return 'false' unless emittable_path?(parsed.path)
 
-          # `inner` still carries the '!' — negation in a bool value context
-          # is canonical and the resolver applies it.
+          # Negation is applied here: the release-available core coerces a
+          # value, it does not parse '!path'.
           if container_traversal?(parsed.path)
-            call = canonical_resolve_expr(inner, parsed.path, 'resolveBool',
-                                          prefix: prefix)
-            return "(#{call} ?? false)"
+            call = canonical_resolve_expr(parsed.path, 'bool', prefix: prefix)
+            fallback = parsed.default_kind == :bool ? swift_default_literal(parsed) : 'false'
+            resolved = "(#{call} ?? #{fallback})"
+            return parsed.negated ? "!#{resolved}" : resolved
           end
 
           base = "#{prefix}.#{parsed.path}"
@@ -289,13 +338,9 @@ module SjuiTools
           # Callers already have a no-expression branch.
           return nil unless emittable_path?(parsed.path)
 
-          # The resolver applies the inline default itself, so the trailing
-          # '?? ""' covers only an unresolved path with no default — the
-          # canonical text behaviour.
           if container_traversal?(parsed.path)
-            call = canonical_resolve_expr(inner, parsed.path, 'resolveString',
-                                          prefix: prefix)
-            return "#{call} ?? \"\""
+            call = canonical_resolve_expr(parsed.path, 'stringify', prefix: prefix)
+            return "(#{call} ?? #{text_default_literal(parsed) || '""'})"
           end
 
           base = "#{prefix}.#{parsed.path}"
@@ -323,9 +368,9 @@ module SjuiTools
           return '0' unless emittable_path?(parsed.path)
 
           if container_traversal?(parsed.path)
-            call = canonical_resolve_expr(inner, parsed.path, 'resolveDouble',
-                                          prefix: prefix)
-            return "#{call} ?? 0"
+            call = canonical_resolve_expr(parsed.path, 'double', prefix: prefix)
+            fallback = parsed.default_kind == :number ? swift_default_literal(parsed) : '0'
+            return "#{call} ?? #{fallback}"
           end
 
           base = "#{prefix}.#{parsed.path}"
@@ -360,12 +405,12 @@ module SjuiTools
           # container path needs no fallback literal invented here.
           if container_traversal?(parsed.path)
             if parsed.negated
-              call = canonical_resolve_expr(inner, parsed.path, 'resolveBool',
-                                            prefix: prefix)
-              return "(#{call} ?? false) ? \"visible\" : \"gone\""
+              call = canonical_resolve_expr(parsed.path, 'bool', prefix: prefix)
+              return "!(#{call} ?? false) ? \"visible\" : \"gone\""
             end
-            return canonical_resolve_expr(inner, parsed.path, 'resolveString',
-                                          prefix: prefix)
+            call = canonical_resolve_expr(parsed.path, 'stringify', prefix: prefix)
+            default = text_default_literal(parsed)
+            return default ? "(#{call} ?? #{default})" : call
           end
 
           base = "#{prefix}.#{parsed.path}"

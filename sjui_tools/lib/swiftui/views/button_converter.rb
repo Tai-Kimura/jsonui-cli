@@ -252,7 +252,7 @@ module SjuiTools
             if @component['enabled'] != nil
               enabled_value = @component['enabled']
               if enabled_value.is_a?(String) && enabled_value.start_with?('@{') && enabled_value.end_with?('}')
-                enabled_expr = SwiftUI::Binding::BindingExpression.swift_value_expr(enabled_value[2..-2])
+                enabled_expr = SwiftUI::Binding::BindingExpression.swift_value_expr(enabled_value[2..-2], kind: :bool)
                 add_line "isEnabled: #{enabled_expr},"
               elsif enabled_value == false
                 add_line "isEnabled: false,"
