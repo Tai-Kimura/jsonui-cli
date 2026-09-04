@@ -10,7 +10,14 @@ module SjuiTools
         include SjuiTools::SwiftUI::Helpers::StringManagerHelper
         def convert
           id = @component['id'] || 'segment'
+          # Objects are not items: the declaration says static labels, and
+          # both runtimes drop a non-primitive element. Dropped BEFORE the
+          # index is taken so `.tag(n)` stays contiguous — the runtimes
+          # compact too (asStrings / mapNotNull), and a hole here would put
+          # the tags out of step with them.
           items = @component['items'] || []
+          # Only an ARRAY has elements to judge; a binding string has none.
+          items = items.reject { |item| item.is_a?(Hash) || item.is_a?(Array) } if items.is_a?(Array)
           
           # selectedTabIndex プロパティの処理
           initial_selection = @component['selectedTabIndex'] || @component['selectedIndex'] || 0

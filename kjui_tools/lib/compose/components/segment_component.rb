@@ -46,7 +46,13 @@ module KjuiTools
           # extract vocabulary in the same commit, so a layout still writing it
           # now renders nothing rather than rendering from strings nobody
           # collected.
+          # Objects are not items — the declaration says static labels, and
+          # the dynamic runtime keeps primitives only (DynamicSegmentComponent
+          # mapNotNull). Dropped before anything indexes them.
           segments = json_data['items'] || []
+          # Only an ARRAY has elements to judge: `items` also accepts a
+          # binding string (`@{options}`), which the code below resolves.
+          segments = segments.reject { |item| item.is_a?(Hash) || item.is_a?(Array) } if segments.is_a?(Array)
           
           code = indent("Segment(", depth)
           # For display in Segment parameter, always output as string

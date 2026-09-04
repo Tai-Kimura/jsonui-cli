@@ -384,4 +384,28 @@ RSpec.describe KjuiTools::Compose::Components::SegmentComponent do
       end
     end
   end
+  # It reached the screen as `Text("{\"label\"=>\"opt_a\", …}")` in Compose
+  # (measured 2026-09-04). The declaration says static labels and the
+  # dynamic runtime keeps primitives only (DynamicSegmentComponent
+  # mapNotNull), so the generator was the only layer that disagreed.
+  describe 'an object item (undeclared)' do
+    let(:json) do
+      { 'type' => 'Segment', 'id' => 'seg',
+        'items' => ['Tab 1', { 'label' => 'opt_a', 'value' => 'a' }, 'Tab 3'] }
+    end
+
+    it 'emits no hash for it' do
+      code = described_class.generate(json, 0)
+      expect(code).not_to include('=>')
+      expect(code).not_to include('label')
+    end
+
+    it 'still emits the declared items' do
+      # The control: one dropped element must not drop the others.
+      code = described_class.generate(json, 0)
+      expect(code).to include('Tab 1')
+      expect(code).to include('Tab 3')
+    end
+  end
+
 end
