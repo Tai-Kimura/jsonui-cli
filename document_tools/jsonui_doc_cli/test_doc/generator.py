@@ -771,6 +771,7 @@ def generate_html_directory(
     apps: list[dict] | None = None,
     layouts_dir: Path | None = None,
     project_root: Path | None = None,
+    unit_roots: list[dict] | None = None,
 ) -> list[dict]:
     """
     Generate HTML documentation for all test files in a directory.
@@ -792,6 +793,11 @@ def generate_html_directory(
             Tests section — `unitContracts` are read from `spec_directory` and
             compared against the per-platform `unitTestsDir`, both declared
             there. Omitted, the section is skipped and the rest is unaffected.
+        unit_roots: For a split tree, one `{'app': name, 'root': dir}` per
+            place contracts are declared, because such a project keeps each
+            app's spec config beside the app rather than at the repository
+            root. Takes precedence over `project_root`, which stays the
+            single-root spelling.
 
     Returns:
         List of generated file info dicts with 'name', 'path', 'type', 'cases'
@@ -1080,8 +1086,16 @@ def generate_html_directory(
     # Loaded before the spec pages are written so each spec that declares
     # `unitContracts` can link to its target's page; the pages themselves are
     # written after, when the spec pages they link back to exist.
-    unit_pages = _load_unit_contract_pages(project_root) if project_root is not None else None
-    unit_targets = _generated_unit_targets(unit_pages)
+    # One entry per place unitContracts are declared. A split tree keeps each
+    # app's spec config beside the app, so there is no single root to walk up
+    # to — see `normalise_unit_roots`.
+    unit_by_app: dict[str | None, dict] = {}
+    for _entry in normalise_unit_roots(unit_roots, project_root):
+        _pages = _load_unit_contract_pages(_entry["root"])
+        if _pages is not None:
+            unit_by_app[_entry["app"]] = _pages
+    unit_pages = unit_by_app.get(None)
+    unit_pages_by_target = _unit_pages_by_target(unit_pages, None)
     # Include screens/json and components/json directories for spec pages
     spec_search_dirs = list(unique_docs_dirs)
     if spec_json_dir.exists():
@@ -1100,7 +1114,7 @@ def generate_html_directory(
         # Generate HTML with full navigation
         _generate_spec_pages(
             spec_search_dirs, output_path, all_tests_nav=all_tests_nav,
-            layouts_dir=layouts_dir, unit_targets=unit_targets,
+            layouts_dir=layouts_dir, unit_pages_by_target=unit_pages_by_target,
         )
 
     # Unit contract pages. After the spec pages, because each target links to
@@ -1109,10 +1123,20 @@ def generate_html_directory(
     unit_files_info: list[dict] = []
     unit_summary: str | None = None
     unit_undeclared: dict[str, list[str]] = {}
-    if unit_pages is not None:
-        unit_files_info, unit_summary, unit_undeclared = _generate_unit_pages(
-            unit_pages, output_path, spec_files_info, all_tests_nav
+    for _app, _pages in sorted(unit_by_app.items(), key=lambda kv: (kv[0] or "")):
+        _files, _summary, _undeclared = _generate_unit_pages(
+            _pages, output_path, spec_files_info, all_tests_nav, app=_app
         )
+        unit_files_info.extend(_files)
+        # An app's targets are grouped under its name, the same level the
+        # index already uses for a multi-app project.
+        for _f in _files:
+            if _app:
+                _f["group"] = _app
+        if _summary and unit_summary is None:
+            unit_summary = _summary
+        for _face, _names in (_undeclared or {}).items():
+            unit_undeclared.setdefault(_face, []).extend(_names)
 
     # Generate markdown pages from docs directories
     md_files_by_dir = {}
@@ -1223,6 +1247,8 @@ def generate_html_directory(
                         all_tests_nav=all_tests_nav,
                         path_prefix=app_name,
                         layouts_dir=layouts_dir,
+                        unit_pages_by_target=_unit_pages_by_target(
+                            unit_by_app.get(app_name), app_name),
                     )
 
                 # Generate app-specific markdown pages
@@ -1589,7 +1615,7 @@ def _generate_spec_pages(
     collect_only: bool = False,
     path_prefix: str | None = None,
     layouts_dir: Path | None = None,
-    unit_targets: set[str] | None = None,
+    unit_pages_by_target: dict[str, str] | None = None,
 ) -> tuple[list[dict], list[dict]]:
     """
     Generate HTML pages from screen and component specification JSON files.
@@ -1693,9 +1719,9 @@ def _generate_spec_pages(
                 # nested spec page sits further from unit/.
                 up = "../" * len(Path(current_path).parts[:-1])
                 unit_links = [
-                    {"target": t, "href": f"{up}{_unit_page_rel(t)}"}
+                    {"target": t, "href": f"{up}{(unit_pages_by_target or {})[t]}"}
                     for t in _declared_targets(result.spec_data)
-                    if t in (unit_targets or set())
+                    if t in (unit_pages_by_target or {})
                 ]
                 content = generate_spec_html(
                     result.spec_data,
@@ -1839,9 +1865,15 @@ def _unit_spec_href(spec_files_info: list[dict]) -> tuple[Any, list[str]]:
     return href, misses
 
 
-def _unit_page_rel(target_name: str) -> str:
-    """Where a target's page is written, relative to the output root."""
-    return f"unit/{str(target_name).replace('/', '_')}.html"
+def _unit_page_rel(target_name: str, app: str | None = None) -> str:
+    """Where a target's page is written, relative to the output root.
+
+    App-scoped when the project holds several, the same split the spec pages
+    use — two apps may own a target of the same name, and one `unit/` would
+    make the second overwrite the first.
+    """
+    stem = str(target_name).replace("/", "_")
+    return f"{app}/unit/{stem}.html" if app else f"unit/{stem}.html"
 
 
 def _load_unit_contract_pages(project_root: Path) -> dict | None:
@@ -1851,6 +1883,13 @@ def _load_unit_contract_pages(project_root: Path) -> dict | None:
     `unitContracts` links to its target's page and needs the target's name to
     do it. The pages themselves are written afterwards, when the spec pages
     they link back to exist.
+
+    A config that cannot be used is a WARNING, not a note. The common shape is
+    a config carrying only `checks` — legitimate for `jsonui-doc check`, and
+    with no `spec_directory` it cannot enumerate anything — and the result is
+    an exit 0 whose Unit section is simply absent. That is indistinguishable
+    from a project which declares no contracts unless it is said in the
+    spelling the zero-warnings gate counts.
     """
     from jsonui_test_cli.unit_contracts import unit_contract_pages
 
@@ -1859,14 +1898,37 @@ def _load_unit_contract_pages(project_root: Path) -> dict | None:
     except Exception as exc:  # noqa: BLE001
         # Not a page failure — nothing has been promised in the index yet.
         # Say so and carry on: the rest of the site is still worth writing.
-        print(f"  Unit contracts: not generated ({exc})")
+        print(f"  WARNING [doc]: unit contracts not read from {project_root} ({exc})")
         return None
 
 
-def _generated_unit_targets(pages: dict | None) -> set[str]:
-    """Target names that have a page, so a link cannot dangle."""
-    return {str(t.get("target")) for t in (pages or {}).get("targets") or []
-            if t.get("target")}
+def normalise_unit_roots(
+    unit_roots: list[dict] | None, project_root: Path | None
+) -> list[dict]:
+    """The places to read unitContracts from, as ``{app, root}`` entries.
+
+    A split tree keeps its spec config beside each app rather than at the
+    repository root, and the root often holds a config of its own carrying
+    only `checks`. A single walk-up from the tests directory stops at that
+    one, so the apps' contracts were unreachable however the command was
+    invoked. Hence a list: the caller resolves one root per app, and `app`
+    names the sub-directory its pages belong under.
+
+    `project_root` remains the single-root spelling, and normalises to one
+    unnamed entry, so a single-tree project produces exactly the paths and
+    output it produced before.
+    """
+    if unit_roots:
+        return [{"app": e.get("app"), "root": Path(e["root"])} for e in unit_roots]
+    if project_root is not None:
+        return [{"app": None, "root": Path(project_root)}]
+    return []
+
+
+def _unit_pages_by_target(pages: dict | None, app: str | None = None) -> dict[str, str]:
+    """``target -> its page``, so a spec links only to a page that exists."""
+    return {str(t.get("target")): _unit_page_rel(str(t.get("target")), app)
+            for t in (pages or {}).get("targets") or [] if t.get("target")}
 
 
 def _declared_targets(spec_data: dict) -> list[str]:
@@ -1906,6 +1968,7 @@ def _generate_unit_pages(
     output_path: Path,
     spec_files_info: list[dict],
     all_tests_nav: dict | None = None,
+    app: str | None = None,
 ) -> tuple[list[dict], str | None, dict[str, list[str]]]:
     """Write one page per ``unitContracts.target``.
 
@@ -1921,8 +1984,13 @@ def _generate_unit_pages(
 
     href_fn, misses = _unit_spec_href(spec_files_info)
     platforms = pages.get("platforms") or []
-    unit_dir = output_path / "unit"
-    unit_dir.mkdir(parents=True, exist_ok=True)
+    # Per page, not one fixed directory: an app-scoped target lives under
+    # `<app>/unit/`, and creating only `unit/` made the write fail — which
+    # then wrote a failure PLACEHOLDER at the app path, so the file existed
+    # and the page looked generated.
+    def _ensure(path: Path) -> Path:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        return path
 
     # Built before any page is rendered so each page's sidebar can list its
     # siblings, and so the nav carrying them can be a LOCAL copy. Adding
@@ -1943,7 +2011,7 @@ def _generate_unit_pages(
                 )
         entries.append({
             "name": name,
-            "path": _unit_page_rel(name),
+            "path": _unit_page_rel(name, app),
             "platform": ", ".join(platforms) or "all",
             "description": ", ".join(target.get("screens") or []),
             "group": "",
@@ -1967,7 +2035,7 @@ def _generate_unit_pages(
             undiscoverable=pages.get("undiscoverable") or {},
         )
         try:
-            (output_path / rel).write_text(content, encoding="utf-8")
+            _ensure(output_path / rel).write_text(content, encoding="utf-8")
         except OSError as exc:
             record_page_failure("unit contract", name, exc,
                                 source=", ".join(target.get("screens") or []),

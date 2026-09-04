@@ -14,6 +14,59 @@ import warnings
 from pathlib import Path
 
 
+def _config_for(start: Path) -> Path | None:
+    """The config governing *start*: itself if it holds one, else walk up.
+
+    Resolved either way. `find_jui_config` resolves and the direct hit did
+    not, so the same file came back in two spellings depending on which
+    branch found it — and on macOS those differ by a `/private` prefix, which
+    is the kind of difference that shows up in a banner and in nothing else.
+    """
+    from .project_config import find_jui_config
+    here = Path(start) / "jui.config.json"
+    if here.is_file():
+        return here.resolve()
+    return find_jui_config(Path(start))
+
+
+def _resolve_unit_roots(
+    config_arg: str | None, apps: list[dict] | None, fallback_start: Path
+) -> list[dict]:
+    """``{app, config, root}`` for every place unitContracts may be declared.
+
+    Three inputs, in order of how directly they say what to read:
+
+    ``--config``  an explicit file. No walk-up at all — the reason it exists
+                  is that the walk-up cannot be steered from outside.
+    ``--app``     one root per app, resolved from that app's own directory. A
+                  split tree keeps the spec config beside each app while the
+                  repository root carries a different config (commonly just
+                  `checks`, which is legitimate and declares no
+                  `spec_directory`). A single walk-up from the tests directory
+                  stops at that root, so before this the apps' contracts were
+                  unreachable no matter where the command was run from.
+    neither       the historical single walk-up, unchanged.
+    """
+    if config_arg:
+        cfg = Path(config_arg)
+        if not cfg.is_file():
+            print(f"Error: --config not found: {cfg}", file=sys.stderr)
+            return []
+        return [{"app": None, "config": cfg, "root": cfg.parent}]
+
+    if apps:
+        roots: list[dict] = []
+        for app in apps:
+            cfg = _config_for(Path(app["docs_path"]))
+            if cfg is not None:
+                roots.append({"app": app["name"], "config": cfg, "root": cfg.parent})
+        if roots:
+            return roots
+
+    cfg = _config_for(fallback_start)
+    return [{"app": None, "config": cfg, "root": cfg.parent}] if cfg else []
+
+
 def _resolve_layouts_dir_from_config() -> Path | None:
     """Auto-detect layouts_directory from jui.config.json.
 
@@ -183,14 +236,13 @@ def cmd_generate_html(args):
         print(f"Error: Input directory not found: {input_dir}", file=sys.stderr)
         return 1
 
-    # The project root for unitContracts. Named in the banner below rather
-    # than resolved silently: this is a walk-up, and a walk-up that lands on
-    # the wrong config in a split tree reports "0 declared" — which is
-    # indistinguishable from a project that declares nothing. Printing the
-    # file makes the wrong pick visible in the one place someone would look.
-    from .project_config import find_jui_config
-    unit_config = find_jui_config(input_dir if input_dir.exists() else Path.cwd())
-    project_root = unit_config.parent if unit_config else None
+    # Where to read unitContracts from. Named in the banner below rather than
+    # resolved silently: a walk-up that lands on the wrong config reports
+    # "0 declared", which is indistinguishable from a project that declares
+    # nothing, so the file it read is printed where someone would look.
+    unit_roots = _resolve_unit_roots(
+        getattr(args, "config", None), apps,
+        input_dir if input_dir.exists() else Path.cwd())
 
     print(f"Generating HTML documentation...")
     print(f"  Input: {input_dir}")
@@ -202,12 +254,21 @@ def cmd_generate_html(args):
     if apps:
         for app in apps:
             print(f"  App: {app['name']} -> {app['docs_path']}")
-    if unit_config:
-        print(f"  Unit contracts: {unit_config}")
+    for entry in unit_roots:
+        where = f"{entry['app']}: " if entry.get("app") else ""
+        print(f"  Unit contracts: {where}{entry['config']}")
+    if not unit_roots:
+        # Counted spelling, not a note: with no config there is no scan, and
+        # an absent Unit section then reads exactly like a project that
+        # declares no contracts. `--config` is the way out, so name it.
+        print("  WARNING [doc]: no jui.config.json found for unitContracts "
+              "(pass --config <path>, or --app <name>:<dir> for a split tree) "
+              "— the Unit Tests section will be absent, which is NOT evidence "
+              "that none are declared")
     print()
 
     try:
-        generate_html_directory(input_dir, output_dir, title, docs_dirs if docs_dirs else None, figma_dir=figma_dir, apps=apps, layouts_dir=layouts_dir_override, project_root=project_root)
+        generate_html_directory(input_dir, output_dir, title, docs_dirs if docs_dirs else None, figma_dir=figma_dir, apps=apps, layouts_dir=layouts_dir_override, unit_roots=[{"app": e.get("app"), "root": e["root"]} for e in unit_roots])
         print()
         # Count every page written, not just the test pages in the return
         # value — the old number was smaller than the lines printed above it,
@@ -1429,6 +1490,14 @@ def main():
         action="append",
         metavar="NAME:DIR",
         help="App with docs directory in 'name:path' format (can be specified multiple times for multi-app docs)"
+    )
+    gen_html_parser.add_argument(
+        "--config",
+        metavar="PATH",
+        help="jui.config.json to read unitContracts from (default: walk up from "
+             "the input directory, or per --app directory). Use this when the "
+             "config governing specs is not the first one above the tests tree "
+             "— a split tree often has an unrelated config at the repository root"
     )
     gen_html_parser.add_argument(
         "--layouts-dir",
