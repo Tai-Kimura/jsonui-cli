@@ -22,8 +22,14 @@ Resolution:
 5. Copy every file from source into target, skipping anything whose path
    contains a ``/extensions/`` segment. Files in the target that are under
    ``extensions/`` are left alone.
-6. With ``--prune``, also delete files in target (outside ``extensions/``)
-   that don't exist in source — keeps the target in strict parity.
+6. Delete top-level ``spec/`` and ``coverage/`` in the target when the
+   SOURCE does not ship them (it never does from the distribution; a pin
+   checkout does, and then they are kept). These are residue from an older
+   sync, tracked in the consumer's repo, and run in no gate.
+7. With ``--prune``, also delete files in target (outside ``extensions/``)
+   that don't exist in source — keeps the target in strict parity. This is
+   the whole-tree version and stays opt-in: on one measured face it would
+   remove 2006 files, 1647 of them a vendored ``node_modules``.
 
 Notes:
 - ``.pyc`` / ``__pycache__`` / ``.DS_Store`` / ``.git`` are always skipped.
@@ -68,6 +74,28 @@ SYNC_META_FILENAME = "sync-meta.json"
 SHARED_CORE_PAYLOADS = (
     "font_weight_mapping.json",
 )
+
+#: Top-level directories inside a vendored tool tree that the source never
+#: ships, deleted by default when the source does not have them.
+#:
+#: Both are residue, not content: `spec/` is not in the distribution at all
+#: (bootstrap carries none), and `coverage/` is a generated report. A face
+#: that has them got them from an older sync whose source was a git
+#: CHECKOUT — and a checkout does ship `spec/`, which is why the rule is
+#: "absent from THIS source" rather than a name blacklist: syncing from a
+#: pin checkout keeps them.
+#:
+#: Measured 2026-09-04 across the vendored faces: 74-338 files each, all
+#: git-tracked, in no consumer gate, one holding an rspec `examples.txt`
+#: (a pass/fail record) 100 KB long.
+#:
+#: Deliberately only these two. A whole-tree `--prune` on one face would
+#: have deleted 2006 files, 1647 of them under `lib/hotloader/node_modules/`
+#: — which breaks hot reload. `extensions/` is the consumer's own by
+#: design. Neither name is here, and neither is reachable: this prunes
+#: TOP-LEVEL directories only, so a nested `node_modules` is out of scope
+#: by construction.
+ALWAYS_PRUNED_TOP_LEVEL = ("spec", "coverage")
 
 # Dirs never synced. Anything install/build-derived that each project
 # regenerates via its own toolchain stays out of the copy.
@@ -255,6 +283,34 @@ def _distribute_shared_core(
     return changed
 
 
+def _prune_undistributed_top_level(source_tool_dir: Path, target_tool_dir: Path,
+                                   *, dry_run: bool) -> int:
+    """Delete top-level trees the source does not ship. Returns files removed.
+
+    See ALWAYS_PRUNED_TOP_LEVEL. The test is "absent from this source", not
+    the name alone: a face that syncs from a pin checkout gets `spec/` from
+    it legitimately, and deleting that would fight the very source it just
+    copied from.
+    """
+    removed = 0
+    if not target_tool_dir.exists():
+        return removed
+    for name in ALWAYS_PRUNED_TOP_LEVEL:
+        target_dir = target_tool_dir / name
+        if not target_dir.is_dir():
+            continue
+        if (source_tool_dir / name).exists():
+            continue  # this source ships it — not residue
+        files = [p for p in target_dir.rglob("*") if p.is_file()]
+        if dry_run:
+            print(f"  would prune:  {name}/ ({len(files)} file(s), not shipped by this source)")
+        else:
+            shutil.rmtree(target_dir)
+            print(f"  pruned:       {name}/ ({len(files)} file(s), not shipped by this source)")
+        removed += len(files)
+    return removed
+
+
 def _sync_one_tool(
     source_tool_dir: Path,
     target_tool_dir: Path,
@@ -346,6 +402,12 @@ def _sync_one_tool(
         )
         for rel in SHARED_CORE_PAYLOADS:
             source_rels.add(Path("shared") / "core" / rel)
+
+    # Trees the source does not ship are removed by default (see
+    # ALWAYS_PRUNED_TOP_LEVEL). Before the opt-in `--prune` below so the two
+    # do not count the same files twice.
+    counters["pruned"] += _prune_undistributed_top_level(
+        source_tool_dir, target_tool_dir, dry_run=dry_run)
 
     # Prune target files not present in source (but never inside extensions/).
     if prune and target_tool_dir.exists():
@@ -672,7 +734,7 @@ def cmd_sync_tool(args: argparse.Namespace) -> int:
             f"  preserved-in-extensions: {counters['preserved']}"
             f"  ruby-pin: {counters['ruby_pin']}"
             f"  shared-core: {counters['shared_core']}"
-            + (f"  pruned: {counters['pruned']}" if args.prune else "")
+            + (f"  pruned: {counters['pruned']}" if (args.prune or counters['pruned']) else "")
         )
 
     # Toolchain-coordinate stamp — with it, a consumer bug report can say
@@ -704,7 +766,7 @@ def cmd_sync_tool(args: argparse.Namespace) -> int:
         f"  preserved-in-extensions: {totals['preserved']}"
         f"  ruby-pin: {totals['ruby_pin']}"
         f"  shared-core: {totals['shared_core']}"
-        + (f"  pruned: {totals['pruned']}" if args.prune else "")
+        + (f"  pruned: {totals['pruned']}" if (args.prune or totals['pruned']) else "")
     )
     # These counters have a denominator the numbers do not name, and `0` is
     # the reading that goes wrong: it is a true statement about the vendored

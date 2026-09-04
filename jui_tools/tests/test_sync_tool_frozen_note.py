@@ -23,6 +23,13 @@ of them `shared/`, which THIS COMMAND WRITES (from the CLI root, so it is
 absent from the source tool directory and a naive test calls it unsynced),
 and 8 `coverage/`, a generated HTML report nobody mistakes for a check.
 With both excluded: 15 lines, one per tree, every one `spec/`.
+
+Since the default prune landed, the two names the source is KNOWN never to
+ship (`spec/`, `coverage/`) are DELETED rather than named: the note was the
+right answer while nothing could remove them, and removing beats a line
+asking someone else to remove. What is left for the note is every OTHER
+unsynced top-level directory — the ones nobody in here can classify.
+See test_sync_tool_prunes_undistributed.py.
 """
 from __future__ import annotations
 
@@ -71,11 +78,16 @@ class FrozenTreeIsNamed(unittest.TestCase):
             )
         return out.getvalue(), counters
 
-    def test_a_spec_tree_the_source_does_not_have_is_named_with_its_date(self):
+    def test_a_tree_the_source_does_not_have_is_named_with_its_date(self):
+        # `legacy/`, not `spec/`: the two names the source is KNOWN never to
+        # ship are deleted by default now (see
+        # test_sync_tool_prunes_undistributed.py). The note is what remains
+        # for everything else — a directory nobody in here can classify,
+        # which is still not something to delete.
         frozen = time.mktime((2026, 8, 10, 12, 0, 0, 0, 0, -1))
-        _write(self.dst / "spec" / "thing_spec.rb", "describe Thing", mtime=frozen)
+        _write(self.dst / "legacy" / "thing.rb", "class Thing; end", mtime=frozen)
         text, counters = self._sync()
-        self.assertIn("spec/ is not synced", text)
+        self.assertIn("legacy/ is not synced", text)
         self.assertIn("frozen 2026-08-10", text)
         self.assertIn("does not run against the lib just synced", text)
         self.assertEqual(counters["unsynced"], 1)
@@ -83,8 +95,8 @@ class FrozenTreeIsNamed(unittest.TestCase):
     def test_the_date_is_the_newest_file_in_the_tree(self):
         old = time.mktime((2026, 1, 1, 12, 0, 0, 0, 0, -1))
         new = time.mktime((2026, 8, 10, 12, 0, 0, 0, 0, -1))
-        _write(self.dst / "spec" / "a_spec.rb", "a", mtime=old)
-        _write(self.dst / "spec" / "b_spec.rb", "b", mtime=new)
+        _write(self.dst / "legacy" / "a.rb", "a", mtime=old)
+        _write(self.dst / "legacy" / "b.rb", "b", mtime=new)
         text, _ = self._sync()
         self.assertIn("frozen 2026-08-10", text)
 
@@ -125,14 +137,16 @@ class FrozenTreeIsNamed(unittest.TestCase):
     def test_a_generated_report_is_not_named(self):
         # `coverage/` is stale too, but nobody reads an HTML report as a
         # check, and a second line costs the first one its attention.
-        _write(self.dst / "coverage" / "index.html", "<html>")
-        _write(self.dst / "coverage" / "assets" / "app.js", "//")
+        # `htmlcov/`, not `coverage/`: that one is deleted outright now, and
+        # this arm is about what the NOTE says, not what prune removes.
+        _write(self.dst / "htmlcov" / "index.html", "<html>")
+        _write(self.dst / "htmlcov" / "assets" / "app.js", "//")
         text, counters = self._sync()
-        self.assertNotIn("coverage/", text)
+        self.assertNotIn("htmlcov/", text)
         self.assertEqual(counters["unsynced"], 0)
 
     def test_an_empty_directory_is_not_named(self):
-        (self.dst / "spec").mkdir(parents=True)
+        (self.dst / "legacy").mkdir(parents=True)
         text, counters = self._sync()
         self.assertNotIn("not synced", text)
         self.assertEqual(counters["unsynced"], 0)
@@ -142,14 +156,14 @@ class FrozenTreeIsNamed(unittest.TestCase):
         # that writes is a trap of its own (a sibling command's --dry-run
         # rewrites a tracked cache file). Both halves are asserted here.
         frozen = time.mktime((2026, 8, 10, 12, 0, 0, 0, 0, -1))
-        _write(self.dst / "spec" / "thing_spec.rb", "describe Thing", mtime=frozen)
+        _write(self.dst / "legacy" / "thing.rb", "class Thing; end", mtime=frozen)
         _write(self.src / "lib" / "new_file.rb", "class New; end")
         before = {
             p: p.stat().st_mtime_ns
             for p in self.dst.rglob("*") if p.is_file()
         }
         text, counters = self._sync(dry_run=True)
-        self.assertIn("spec/ is not synced", text)
+        self.assertIn("legacy/ is not synced", text)
         self.assertEqual(counters["unsynced"], 1)
         after = {p: p.stat().st_mtime_ns for p in self.dst.rglob("*") if p.is_file()}
         self.assertEqual(before, after, "the dry run wrote to the target tree")
