@@ -1,6 +1,11 @@
 # frozen_string_literal: true
 
 require 'json'
+# The item-array vocabulary lives in StringManagerCore, which requires THIS
+# file. The cycle is safe because the constant is read inside a method body
+# (resolved at call time, not load time), and this require guarantees it is
+# defined for callers that load the validator alone (build_command does).
+require_relative 'string_manager_core'
 
 module JsonUIShared
   # Build-time validation + shared helpers for CLDR-cardinal plural entries
@@ -59,9 +64,12 @@ module JsonUIShared
       'zu' => %w[one]
     }.freeze
 
-    # Layout string attributes the three builders resolve against
-    # strings.json (must match the extraction walks in the string managers).
-    STRING_PROPS = %w[text hint placeholder label prompt].freeze
+    # The layout string-attribute vocabulary is StringManagerCore's
+    # STRING_PROPERTIES. It used to be repeated here as STRING_PROPS, so
+    # "must match the extraction walk" was a comment where a reference
+    # belonged. Read at call time -- a constant assignment here would run at
+    # LOAD time and fail when string_manager_core.rb is required first (it
+    # requires this file before defining its class).
 
     # True when a strings.json value is a plural entry
     # ({ lang => { "plural" => { ... } } }).
@@ -213,7 +221,7 @@ module JsonUIShared
     def scan_layout_node(node, &block)
       case node
       when Hash
-        STRING_PROPS.each do |prop|
+        StringManagerCore::STRING_PROPERTIES.each do |prop|
           yield(prop, node[prop]) if node[prop].is_a?(String) && !node[prop].empty?
         end
         %w[partialAttributes partial_attributes].each do |pa_key|
@@ -236,7 +244,7 @@ module JsonUIShared
             value.each do |item|
               if item.is_a?(Hash) || item.is_a?(Array)
                 scan_layout_node(item, &block)
-              elsif item.is_a?(String) && %w[items segments].include?(key) && !item.empty?
+              elsif item.is_a?(String) && StringManagerCore::STRING_ITEM_ARRAYS.include?(key) && !item.empty?
                 yield(key, item)
               end
             end

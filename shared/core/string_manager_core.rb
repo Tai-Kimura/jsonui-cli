@@ -44,6 +44,11 @@ module JsonUIShared
 
     # Array attributes whose String items are user-visible text
     # (e.g. Segment items).
+    # `segments` is undeclared in attribute_definitions.json but IS read by
+    # kjui's Segment (segment_component.rb: `json_data['items'] ||
+    # json_data['segments']`). Undeclared is not unread -- count the receiving
+    # ends in the implementations, and search them by the accessor spelling
+    # each face actually uses.
     STRING_ITEM_ARRAYS = %w[items segments].freeze
 
     # The strings.json section spellings that belong to one layout.

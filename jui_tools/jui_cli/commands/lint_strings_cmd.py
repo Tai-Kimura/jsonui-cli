@@ -11,11 +11,14 @@ unlocalizable string.
 What counts as "user-visible" is derived from the SSoT, not hardcoded
 here:
 
-- The attribute-name vocabulary is ``STRING_PROPS`` in
-  ``shared/core/plural_validator.rb`` — the existing single authority on
-  "layout string attributes the three builders resolve against". Reading
+- The attribute-name vocabulary is ``STRING_PROPERTIES`` in
+  ``shared/core/string_manager_core.rb`` — the constant the extraction walk
+  itself uses, so this lint reads the same list the extractor does. Reading
   it at runtime means extending that list (a shared/core change) extends
-  this lint automatically, and the two checks cannot drift.
+  this lint automatically, and the two checks cannot drift. It was read
+  from ``plural_validator.rb``'s ``STRING_PROPS`` until 2026-09-04; that
+  was a SECOND hand-written copy of the same five names, and it is now a
+  reference rather than a literal, which a regex cannot read.
 - The per-component attribute sets come from
   ``attribute_definitions.json`` via the same lookup the normalizer uses
   (exact section match, then cross-platform type synonyms), so only
@@ -96,13 +99,13 @@ ALLOWLIST_FILENAME = ".jui-strings-allowlist.json"
 # uses for attribute_definitions.json: full checkout first, then the
 # per-platform vendored copies of a project-local install.
 _STRING_PROPS_RELPATHS = (
-    Path("shared") / "core" / "plural_validator.rb",
-    Path("kjui_tools") / "lib" / "core" / "plural_validator.rb",
-    Path("sjui_tools") / "lib" / "core" / "plural_validator.rb",
-    Path("rjui_tools") / "lib" / "core" / "plural_validator.rb",
+    Path("shared") / "core" / "string_manager_core.rb",
+    Path("kjui_tools") / "lib" / "core" / "string_manager_core.rb",
+    Path("sjui_tools") / "lib" / "core" / "string_manager_core.rb",
+    Path("rjui_tools") / "lib" / "core" / "string_manager_core.rb",
 )
 
-_STRING_PROPS_RE = re.compile(r"STRING_PROPS\s*=\s*%w\[([^\]]*)\]")
+_STRING_PROPS_RE = re.compile(r"STRING_PROPERTIES\s*=\s*%w\[([^\]]*)\]")
 
 # Node keys whose value is a `{scope: {attr: value}}` patch map applied
 # to the enclosing component (platform overrides / responsive size
@@ -129,17 +132,17 @@ def _locate_ssot_file(relpaths) -> Path | None:
 
 def load_string_props(path: Path | None = None) -> frozenset[str]:
     """The user-visible attribute-name vocabulary, from
-    ``plural_validator.rb``'s ``STRING_PROPS`` (see module docstring)."""
+    ``string_manager_core.rb``'s ``STRING_PROPERTIES`` (see module docstring)."""
     resolved = path or _locate_ssot_file(_STRING_PROPS_RELPATHS)
     if resolved is None or not resolved.exists():
         raise LintStringsSetupError(
-            "plural_validator.rb not found near the installed jui_tools — "
+            "string_manager_core.rb not found near the installed jui_tools — "
             "cannot derive the user-visible attribute vocabulary"
         )
     match = _STRING_PROPS_RE.search(resolved.read_text(encoding="utf-8"))
     if not match or not match.group(1).split():
         raise LintStringsSetupError(
-            f"STRING_PROPS not found in {resolved} — the SSoT vocabulary "
+            f"STRING_PROPERTIES not found in {resolved} — the SSoT vocabulary "
             "moved or changed shape; update lint_strings_cmd to follow it"
         )
     return frozenset(match.group(1).split())
