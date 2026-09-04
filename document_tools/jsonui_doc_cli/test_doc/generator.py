@@ -116,13 +116,27 @@ def generation_warnings() -> list[str]:
     because everything downstream of it reports a legitimate-looking zero.
     """
     c = _generation_counts
+    out: list[str] = []
     if c.get("unit_scanned") and not c.get("specs_read"):
-        return ["WARNING [doc]: 0 spec file(s) scanned while looking for "
-                "unitContracts "
-                "— the spec directory is empty or `spec_directory` points "
-                "somewhere else, so `unit targets 0` is not evidence that none "
-                "are declared"]
-    return []
+        out.append(
+            "WARNING [doc]: 0 spec file(s) scanned while looking for "
+            "unitContracts "
+            "— the spec directory is empty or `spec_directory` points "
+            "somewhere else, so `unit targets 0` is not evidence that none "
+            "are declared")
+    # K counts every file looked at, unreadable ones included, while D counts
+    # only files that could be read AND declare. So a spec that will not parse
+    # widens K - D by one and changes nothing else: from the closing line it
+    # is indistinguishable from a file that simply declares nothing. Named
+    # here, with the files, because "declares nothing" and "could not be
+    # asked" are the pair this whole line exists to keep apart.
+    unreadable = c.get("specs_unreadable") or 0
+    if unreadable:
+        names = ", ".join(c.get("unreadable_files") or []) or "(not named)"
+        out.append(
+            f"WARNING [doc]: {unreadable} spec file(s) could not be read while "
+            f"looking for unitContracts: {names}")
+    return out
 
 
 def get_page_failures() -> list[dict]:
@@ -1358,6 +1372,11 @@ def generate_html_directory(
                        for p in unit_by_app.values()),
         specs_declaring=sum((p.get('totals') or {}).get('specs_declaring', 0)
                             for p in unit_by_app.values()),
+        specs_unreadable=sum((p.get('totals') or {}).get('specs_unreadable', 0)
+                             for p in unit_by_app.values()),
+        unreadable_files=sorted(
+            f for p in unit_by_app.values()
+            for f in ((p.get('totals') or {}).get('unreadable_files') or [])),
     )
 
     _report_stale_pages(output_path, started_at)

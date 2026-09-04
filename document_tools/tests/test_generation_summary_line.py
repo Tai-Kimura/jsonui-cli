@@ -96,6 +96,30 @@ class SummaryLine(unittest.TestCase):
         self.assertIn("0 spec file(s) declaring unitContracts", generation_summary_line())
         self.assertEqual(generation_warnings(), [])
 
+    def test_a_spec_that_could_not_be_read_is_named(self):
+        # K counts every file looked at, unreadable included; D counts only
+        # files read AND declaring. So a spec that will not parse widens
+        # K - D by one and changes nothing else — from the line alone it is
+        # identical to a file that simply declares nothing, which is the pair
+        # this whole line exists to keep apart.
+        self._pages(3)
+        note_generation_counts(screens=1, flows=0, unit_targets=1,
+                               unit_scanned=True, specs_read=2,
+                               specs_declaring=1, specs_unreadable=1,
+                               unreadable_files=["broken.spec.json"])
+        warnings = generation_warnings()
+        self.assertEqual(len(warnings), 1, warnings)
+        self.assertRegex(warnings[0].lower(), WARNING_RE)
+        self.assertIn("broken.spec.json", warnings[0])
+
+    def test_no_unreadable_specs_means_no_such_warning(self):
+        self._pages(3)
+        note_generation_counts(screens=1, flows=0, unit_targets=1,
+                               unit_scanned=True, specs_read=2,
+                               specs_declaring=1, specs_unreadable=0,
+                               unreadable_files=[])
+        self.assertEqual(generation_warnings(), [])
+
     def test_without_counts_the_line_is_the_bare_one(self):
         # A caller that never recorded counts still gets a valid sentence
         # rather than a parenthesis full of zeroes it did not measure.
