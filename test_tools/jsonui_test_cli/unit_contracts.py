@@ -65,11 +65,52 @@ _DECL_PATTERNS = {
 #: Every test-method name a file declares, used to find implementations the
 #: spec does not know about. Deliberately per-platform: a regex that matched
 #: all three would also match things that are not tests in two of them.
+#:
+#: ⚠️ ios is NOT a bare `func` scan. The first cut was, and it flagged a
+#: consumer's file-scope helper `func settle()` as a mis-named test that
+#: "never runs" — always wrong for that shape, which is worse than silence:
+#: a line that is always wrong teaches the reader to skip it, and the next
+#: real finding on it is skipped too. Only functions inside an XCTestCase
+#: subclass can be test methods, so only those are scanned.
 _ALL_TESTS_PATTERNS = {
-    "ios": re.compile(r"\bfunc\s+(test[A-Za-z0-9_]*|[a-z][A-Za-z0-9_]*)\s*\([^)]*\)\s*(?:throws\s*)?\{"),
     "android": re.compile(r"@Test[\s\S]{0,200}?\bfun\s+`?([^`(\s]+)`?\s*\("),
     "web": re.compile(r"\b(?:it|test)\s*\(\s*[\'\"]([^\'\"]+)[\'\"]"),
 }
+
+#: `class Foo: XCTestCase {` / `final class Foo : XCTestCase, Bar {`
+_SWIFT_TESTCASE_RE = re.compile(r"\bclass\s+\w+\s*:[^{]*\bXCTestCase\b[^{]*\{")
+#: a method declaration inside one. Arguments are not matched at all: the
+#: previous pattern used `[^)]*`, which stopped at the first `)` and so
+#: silently skipped any function with a closure parameter — the reason the
+#: false positive looked like it depended on arity.
+_SWIFT_FUNC_RE = re.compile(r"\bfunc\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(")
+
+
+def _swift_test_methods(text: str) -> list[str]:
+    """Method names declared inside XCTestCase subclasses, in order.
+
+    Brace-matched rather than regex-scoped, because a regex cannot tell where
+    a class body ends and the file-scope helpers begin — which is exactly the
+    distinction the false positive turned on.
+    """
+    names: list[str] = []
+    for match in _SWIFT_TESTCASE_RE.finditer(text):
+        depth, i = 0, match.end() - 1
+        start = None
+        while i < len(text):
+            ch = text[i]
+            if ch == "{":
+                depth += 1
+                if start is None:
+                    start = i + 1
+            elif ch == "}":
+                depth -= 1
+                if depth == 0:
+                    break
+            i += 1
+        if start is not None:
+            names.extend(m.group(1) for m in _SWIFT_FUNC_RE.finditer(text[start:i]))
+    return names
 
 
 @dataclass(frozen=True)
@@ -299,7 +340,7 @@ def _implemented_names(root: Path, platform: str) -> tuple[set[str], list[str], 
     """``(case names found, files read, names present but undiscoverable)``."""
     suffix = PLATFORM_TEST_SUFFIX.get(platform)
     pattern = _ALL_TESTS_PATTERNS.get(platform)
-    if suffix is None or pattern is None or not root.is_dir():
+    if suffix is None or not root.is_dir() or (platform != "ios" and pattern is None):
         return set(), [], set()
     names: set[str] = set()
     undiscoverable: set[str] = set()
@@ -310,8 +351,9 @@ def _implemented_names(root: Path, platform: str) -> tuple[set[str], list[str], 
         except OSError:
             continue
         read.append(str(path))
-        for m in pattern.finditer(text):
-            raw = m.group(1)
+        raws = (_swift_test_methods(text) if platform == "ios"
+                else [m.group(1) for m in pattern.finditer(text)])
+        for raw in raws:
             mapped = _discoverable(platform, raw)
             if mapped is None:
                 undiscoverable.add(raw)

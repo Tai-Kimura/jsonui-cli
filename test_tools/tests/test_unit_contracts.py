@@ -349,3 +349,67 @@ class TestAStubMustActuallyRun:
         case = uc.UnitCase("chat", "VM", "a_case", ("android",), "")
         text = uc.stub_text("android", "VM", [case], package="com.example.unittests")
         assert text.startswith("package com.example.unittests")
+
+
+class TestOnlyTestMethodsAreScanned:
+    """A file-scope helper is not a mis-named test method.
+
+    Reported against 1.8.26: `--check` flagged a consumer's
+    `func settle()` — a free function in their own support file — as NEVER
+    RUNS, so the gate was red with nothing wrong. Their point is the reason
+    this is not cosmetic: a finding that is always wrong for a legitimate
+    shape is worse than no finding, because it teaches the reader to skip
+    that line and the next real one goes with it.
+
+    The old scan also looked arity-dependent, which was a second bug wearing
+    the first one's clothes: its argument pattern stopped at the first `)`,
+    so any helper with a closure parameter escaped by accident.
+    """
+
+    def _ios_project(self, tmp_path, support: str, tests: str):
+        (tmp_path / "docs" / "screens").mkdir(parents=True)
+        (tmp_path / "docs" / "screens" / "s.spec.json").write_text(
+            json.dumps({"type": "screen", "unitContracts": {
+                "target": "VM", "cases": [{"name": "a_case", "platforms": ["ios"]}]}}),
+            encoding="utf-8")
+        (tmp_path / "ios" / "Tests").mkdir(parents=True)
+        (tmp_path / "ios" / "Tests" / "Support.swift").write_text(support, encoding="utf-8")
+        (tmp_path / "ios" / "Tests" / "VMTests.swift").write_text(tests, encoding="utf-8")
+        (tmp_path / "jui.config.json").write_text(
+            json.dumps({"spec_directory": "docs/screens", "platforms": {
+                "ios": {"root": "ios", "unitTestsDir": "Tests", "testModule": "App"}}}),
+            encoding="utf-8")
+        return tmp_path
+
+    _SUPPORT = (
+        "import XCTest\n"
+        "func settle() { }\n"                                  # no args — the reported one
+        "func servingRoutes(_ r: [Int], _ body: () -> Void) { }\n"   # closure arg
+        "func usageRoute(tier: String) -> Int { 0 }\n"
+    )
+    _TESTS = ("import XCTest\nfinal class VMTests: XCTestCase {\n"
+              "    func test_a_case() throws { }\n}\n")
+
+    def test_a_file_scope_helper_is_not_flagged(self, tmp_path):
+        root = self._ios_project(tmp_path, self._SUPPORT, self._TESTS)
+        report = uc.check_unit_contracts(root)
+        assert report.undiscoverable == {}, uc.format_report(report)
+        assert report.ok, uc.format_report(report)
+
+    def test_a_bare_method_inside_the_test_class_is_still_flagged(self, tmp_path):
+        # Positive control: the guard must keep firing where it was right.
+        tests = ("import XCTest\nfinal class VMTests: XCTestCase {\n"
+                 "    func a_case() throws { }\n}\n")
+        root = self._ios_project(tmp_path, self._SUPPORT, tests)
+        report = uc.check_unit_contracts(root)
+        assert report.undiscoverable.get("ios") == ["a_case"]
+
+    def test_helpers_inside_the_test_class_are_seen_regardless_of_arity(self, tmp_path):
+        # The old pattern stopped at the first ')', so a closure parameter
+        # hid the declaration entirely. Scope, not arity, is the rule.
+        tests = ("import XCTest\nfinal class VMTests: XCTestCase {\n"
+                 "    func test_a_case() throws { }\n"
+                 "    func withRoutes(_ body: () -> Void) { }\n}\n")
+        root = self._ios_project(tmp_path, self._SUPPORT, tests)
+        report = uc.check_unit_contracts(root)
+        assert report.undiscoverable.get("ios") == ["withRoutes"]
