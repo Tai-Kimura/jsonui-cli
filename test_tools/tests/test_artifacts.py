@@ -86,18 +86,29 @@ def stamp_of(xcresult):
 
 # -- Android helpers -----------------------------------------------------------
 
-def make_adb_fake(existing_roots, calls, pulled_files=("shot.png", "clip.mp4")):
-    """Fake _run for adb: ls succeeds only for existing_roots, pull writes files."""
+def make_adb_fake(existing_roots, calls, pulled_files=("shot.png", "clip.mp4"),
+                  listings=None):
+    """Fake _run for adb: ls succeeds only for existing_roots, pull writes files.
+
+    ``listings`` maps a root to the ``ls`` stdout it should answer with (default
+    ``shot.png``). A pull of ``<root>/.`` writes ``pulled_files`` into the
+    destination; a pull of ``<root>/<entry>`` — the entry-wise legacy path —
+    writes them under ``<dest>/<entry>/`` the way adb materialises a directory.
+    """
+    listings = listings or {}
+
     def fake(cmd, **kw):
         calls.append(list(cmd))
         assert cmd[0] == "adb", cmd
         if "shell" in cmd and "ls" in cmd:
             root = cmd[-1]
             if root in existing_roots:
-                return _cp(cmd, 0, "shot.png\n")
+                return _cp(cmd, 0, listings.get(root, "shot.png\n"))
             return _cp(cmd, 1, "", f"ls: {root}: No such file or directory")
         if "pull" in cmd:
-            dest = Path(cmd[-1])
+            src, dest = cmd[-2], Path(cmd[-1])
+            if not src.endswith("/."):
+                dest = dest / src.rsplit("/", 1)[-1]
             dest.mkdir(parents=True, exist_ok=True)
             for name in pulled_files:
                 (dest / name).write_bytes(b"x")
@@ -111,6 +122,15 @@ def make_adb_fake(existing_roots, calls, pulled_files=("shot.png", "clip.mp4")):
 ANDROID_CFG = {"artifacts": {"android": {"appId": "com.example.app"}}}
 SDCARD_ROOT = "/sdcard/Android/data/com.example.app/files/jsonui-artifacts"
 TMP_ROOT = "/data/local/tmp/jsonui-artifacts"
+SCOPED_ROOT = f"{TMP_ROOT}/com.example.app"
+
+
+def _pulls(calls):
+    return [c for c in calls if "pull" in c]
+
+
+def _rms(calls):
+    return [c for c in calls if "rm" in c]
 
 
 # -- tests: iOS ------------------------------------------------------------------
@@ -316,6 +336,113 @@ class TestPullAndroid:
         assert result.files == []
         assert result.stamp_dir is None
         assert any("no jsonui-artifacts" in s for s in result.skipped)
+
+
+class TestPullAndroidMirrorScope:
+    """The uninstall-surviving mirror lives outside the app dir, so the path is
+    the only thing that can say whose runs they are. Consumer measurement on a
+    shared emulator (2026-09-04): one app's ``pull --clean`` took 74 dirs /
+    71 MB of the OTHER app's runs off the device, because the flat legacy root
+    ``/data/local/tmp/jsonui-artifacts`` had no app dimension. Driver >= 1.8.9
+    writes ``<root>/<package>``; the CLI pulls and cleans only that, and reads
+    the flat root suite-by-suite without ever cleaning it.
+    """
+
+    @pytest.fixture(autouse=True)
+    def _pin(self, monkeypatch):
+        monkeypatch.setattr(artifacts, "find_adb", lambda cfg=None: "adb")
+        monkeypatch.setattr(artifacts, "_now_stamp", lambda: FIXED_STAMP)
+
+    def test_roots_are_own_app_only_except_the_flat_legacy_root(self):
+        roots = artifacts._android_roots("com.example.app")
+        assert roots == [
+            (SDCARD_ROOT, True),
+            (SCOPED_ROOT, True),
+            (TMP_ROOT, False),
+        ]
+        # the ONLY root that is not cleanable is the one without an app dimension
+        assert [r for r, cleanable in roots if not cleanable] == [TMP_ROOT]
+
+    def test_scoped_mirror_is_pulled_and_cleaned(self, tmp_path, monkeypatch):
+        calls = []
+        monkeypatch.setattr(artifacts, "_run", make_adb_fake({SCOPED_ROOT}, calls))
+
+        result = pull_android(ANDROID_CFG, tmp_path, tmp_path / "out", clean=True)
+
+        assert [p[-2] for p in _pulls(calls)] == [f"{SCOPED_ROOT}/."]
+        assert (tmp_path / "out" / "android" / FIXED_STAMP / "shot.png").is_file()
+        assert _rms(calls) == [["adb", "shell", "rm", "-rf", SCOPED_ROOT]]
+        assert result.skipped == []
+
+    def test_legacy_root_is_not_even_read_when_the_scoped_mirror_exists(self, tmp_path, monkeypatch):
+        # A 1.8.9 driver wrote the scoped dir, so whatever is flat in the legacy
+        # root is other apps' (or pre-upgrade leftovers): not this app's business.
+        calls = []
+        monkeypatch.setattr(artifacts, "_run", make_adb_fake(
+            {SCOPED_ROOT, TMP_ROOT}, calls,
+            listings={TMP_ROOT: "com.example.app\ncom.other.app\nOldSuite\n"}))
+
+        pull_android(ANDROID_CFG, tmp_path, tmp_path / "out", clean=True)
+
+        assert [p[-2] for p in _pulls(calls)] == [f"{SCOPED_ROOT}/."]
+        assert not any(c[-1] == TMP_ROOT for c in calls if "ls" in c)
+        assert _rms(calls) == [["adb", "shell", "rm", "-rf", SCOPED_ROOT]]
+
+    def test_legacy_root_is_pulled_suite_by_suite_leaving_other_apps_scoped_dirs(self, tmp_path, monkeypatch):
+        # Pre-1.8.9 driver on the device: its suites sit flat next to a newer
+        # app's scoped dir. The scoped dir is the OTHER app's — it must not move.
+        calls = []
+        monkeypatch.setattr(artifacts, "_run", make_adb_fake(
+            {TMP_ROOT}, calls,
+            listings={TMP_ROOT: "LoginSmokeTest\ncom.other.app\nProfiling_Resume\n"}))
+        out = tmp_path / "out"
+
+        result = pull_android(ANDROID_CFG, tmp_path, out)
+
+        assert sorted(p[-2] for p in _pulls(calls)) == [
+            f"{TMP_ROOT}/LoginSmokeTest", f"{TMP_ROOT}/Profiling_Resume"]
+        stamp_dir = out / "android" / FIXED_STAMP
+        assert (stamp_dir / "LoginSmokeTest" / "shot.png").is_file()
+        assert (stamp_dir / "Profiling_Resume" / "shot.png").is_file()
+        assert not (stamp_dir / "com.other.app").exists()
+        assert len(result.files) == 4
+        assert any("com.other.app" in s and "alone" in s for s in result.skipped)
+        assert any("no app dimension" in s and "< 1.8.9" in s for s in result.skipped)
+
+    def test_clean_never_removes_the_legacy_root(self, tmp_path, monkeypatch):
+        # This is the exact action that deleted the other app's 74 directories.
+        calls = []
+        monkeypatch.setattr(artifacts, "_run", make_adb_fake(
+            {SDCARD_ROOT, TMP_ROOT}, calls, listings={TMP_ROOT: "LoginSmokeTest\n"}))
+
+        result = pull_android(ANDROID_CFG, tmp_path, tmp_path / "out", clean=True)
+
+        assert _rms(calls) == [["adb", "shell", "rm", "-rf", SDCARD_ROOT]]
+        assert not any(c[-1] == TMP_ROOT for c in _rms(calls))
+        assert any("not cleaned" in s and "upgrade the driver" in s for s in result.skipped)
+
+    def test_legacy_root_holding_only_other_apps_yields_nothing(self, tmp_path, monkeypatch):
+        calls = []
+        monkeypatch.setattr(artifacts, "_run", make_adb_fake(
+            {TMP_ROOT}, calls, listings={TMP_ROOT: "com.other.app\ncom.third.app\n"}))
+
+        result = pull_android(ANDROID_CFG, tmp_path, tmp_path / "out", clean=True)
+
+        assert _pulls(calls) == []
+        assert _rms(calls) == []
+        assert result.files == []
+        assert result.stamp_dir is None
+        assert not (tmp_path / "out").exists()  # no empty stamp dir left behind
+        assert any("left 2 other app(s)" in s for s in result.skipped)
+        assert any("no jsonui-artifacts" in s and "com.example.app" in s for s in result.skipped)
+
+    def test_legacy_entry_classification(self):
+        suites, packages = artifacts._legacy_entries(
+            "LoginSmokeTest\ncom.other.app\n\nProfiling_Resume\ncom.example.app.dev\nv1.2\n")
+        assert suites == ["LoginSmokeTest", "Profiling_Resume", "v1.2"]
+        assert packages == ["com.other.app", "com.example.app.dev"]
+        # a bare suite name with no dot is never mistaken for a package
+        assert artifacts._legacy_entries("Suite\n") == (["Suite"], [])
 
 
 # -- tests: status / symlink / exit codes ------------------------------------------

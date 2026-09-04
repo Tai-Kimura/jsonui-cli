@@ -276,11 +276,42 @@ def pull_ios(test_cfg: dict, project_root, out_root, xcresult_override=None) -> 
 
 # -- Android ------------------------------------------------------------------
 
+#: Flat mirror root that android drivers < 1.8.9 wrote into. It has no app
+#: dimension: on a shared device it holds EVERY app's suites side by side.
+LEGACY_MIRROR_ROOT = "/data/local/tmp/jsonui-artifacts"
+
+# A top-level entry under the legacy root that looks like a package name is
+# another app's scoped mirror (driver >= 1.8.9 writes <root>/<appId>/...).
+# Suite directories are sanitized test names and never contain dots between
+# lowercase segments, so this is a safe way to keep a legacy pull from
+# sweeping up the neighbours it was created to be separated from.
+_PACKAGE_LIKE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*(\.[A-Za-z_][A-Za-z0-9_]*)+$")
+
+
 def _android_roots(app_id: str) -> list:
+    """``[(path, cleanable), ...]`` in read order.
+
+    Two of the three are this app's own — the app-specific external dir and
+    the package-scoped mirror — and may be removed by ``--clean``. The third
+    is the flat legacy mirror, which is read (for devices still running an
+    older driver) but NEVER cleaned: nothing in that path says whose suites
+    they are, and a consumer measured exactly that — one app's
+    ``pull --clean`` took 74 directories / 71 MB of another app's runs off
+    the device. ``--serial`` cannot help; it narrows the device, not the app.
+    """
     return [
-        f"/sdcard/Android/data/{app_id}/files/jsonui-artifacts",
-        "/data/local/tmp/jsonui-artifacts",
+        (f"/sdcard/Android/data/{app_id}/files/jsonui-artifacts", True),
+        (f"{LEGACY_MIRROR_ROOT}/{app_id}", True),
+        (LEGACY_MIRROR_ROOT, False),
     ]
+
+
+def _legacy_entries(listing: str) -> tuple:
+    """``(suite entries, package-like entries)`` from an ``ls`` of the legacy root."""
+    names = [l.strip() for l in (listing or "").splitlines() if l.strip()]
+    suites = [n for n in names if not _PACKAGE_LIKE.match(n)]
+    packages = [n for n in names if _PACKAGE_LIKE.match(n)]
+    return suites, packages
 
 _ADB_NO_DEVICE_MARKERS = ("no devices", "device offline", "device unauthorized",
                           "device not found", "more than one device")
@@ -341,8 +372,15 @@ def pull_android(test_cfg: dict, project_root, out_root,
     stamp = _now_stamp()
     stamp_dir = Path(out_root) / "android" / stamp
     pulled_any = False
+    pull_failed = False
+    scoped_mirror_seen = False
 
-    for root in _android_roots(app_id):
+    for root, cleanable in _android_roots(app_id):
+        is_legacy = root == LEGACY_MIRROR_ROOT
+        if is_legacy and scoped_mirror_seen:
+            # A driver >= 1.8.9 wrote the scoped mirror, so the flat root holds
+            # only OTHER apps' scoped dirs (plus pre-upgrade leftovers): not ours.
+            continue
         try:
             ls = _run(adb + ["shell", "ls", root])
         except FileNotFoundError:
@@ -355,6 +393,40 @@ def pull_android(test_cfg: dict, project_root, out_root,
             return result
         if ls.returncode != 0 or "No such file" in combined:
             continue  # this root simply doesn't exist on the device
+        if not is_legacy and root.startswith(LEGACY_MIRROR_ROOT + "/"):
+            scoped_mirror_seen = True
+
+        if is_legacy:
+            # Pre-1.8.9 driver on the device: its suites sit flat in the root,
+            # next to any newer apps' scoped dirs. Pull the suites one by one
+            # and leave the package-like entries alone — they are somebody else's.
+            suites, packages = _legacy_entries(getattr(ls, "stdout", "") or "")
+            if packages:
+                shown = ", ".join(packages[:3]) + (", …" if len(packages) > 3 else "")
+                result.skipped.append(
+                    f"legacy mirror {root}: left {len(packages)} other app(s)' "
+                    f"scoped dir(s) alone ({shown})")
+            if not suites:
+                continue
+            stamp_dir.mkdir(parents=True, exist_ok=True)
+            pulled_suites = 0
+            for name in suites:
+                pull = _run(adb + ["pull", f"{root}/{name}", str(stamp_dir)])
+                if pull.returncode != 0:
+                    stderr = (getattr(pull, "stderr", "") or "").strip()
+                    result.skipped.append(f"adb pull failed for {root}/{name}"
+                                          + (f": {stderr}" if stderr else ""))
+                    pull_failed = True
+                    continue
+                pulled_suites += 1
+            if not pulled_suites:
+                continue
+            pulled_any = True
+            result.skipped.append(
+                f"legacy mirror {root} has no app dimension (android driver < 1.8.9): "
+                f"pulled {pulled_suites} suite dir(s) that may include other apps' runs; "
+                "not cleaned" + (" — upgrade the driver to scope --clean" if clean else ""))
+            continue
 
         stamp_dir.mkdir(parents=True, exist_ok=True)
         pull = _run(adb + ["pull", f"{root}/.", str(stamp_dir)])
@@ -362,14 +434,16 @@ def pull_android(test_cfg: dict, project_root, out_root,
             stderr = (getattr(pull, "stderr", "") or "").strip()
             result.skipped.append(f"adb pull failed for {root}"
                                   + (f": {stderr}" if stderr else ""))
+            pull_failed = True
             continue
         pulled_any = True
-        if clean:
+        if clean and cleanable:
             _run(adb + ["shell", "rm", "-rf", root])
 
     if not pulled_any:
-        if not result.skipped:
-            result.skipped.append("no jsonui-artifacts directory found on device")
+        if not pull_failed:
+            result.skipped.append(
+                f"no jsonui-artifacts directory found on device for {app_id}")
         return result
 
     result.files = collect_files(stamp_dir)
