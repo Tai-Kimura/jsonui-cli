@@ -97,6 +97,41 @@ fresh=$(git -C "$C" status --porcelain -- conformance/ | wc -l | tr -d ' ')
 say "   files changed by generate: $fresh"
 [ "$fresh" = 0 ] || { git -C "$C" diff --stat -- conformance/ | tail -3; bad "conformance fixtures are stale (generate changed $fresh file(s))"; }
 
+# --- the rest of CI's ssot-guards job --------------------------------------
+# The second 1.8.43 candidate went red on "Vendored ruby attr tables match
+# fresh emit": the generated rjui table carries each attribute's description
+# as a comment, so a one-line description change in the SSoT moves it, and
+# the committed copy had not followed. Same job, same order as ci.yml.
+say "== attr-bindings determinism (two runs emit identical output)"
+gen_attr() { (cd "$C/jui_tools" && PYTHONPATH="$C/jui_tools" python3 -c "import sys; from jui_cli.cli import main; sys.exit(main(['generate','attr-bindings','--lang','all']))" >/dev/null 2>&1); }
+gen_attr; rc=$?; [ "$rc" = 0 ] || bad "attr-bindings run 1: exit $rc"
+rm -rf "$C/build/attr_codegen.run1"; cp -R "$C/build/attr_codegen" "$C/build/attr_codegen.run1"
+gen_attr; rc=$?; [ "$rc" = 0 ] || bad "attr-bindings run 2: exit $rc"
+d=$(diff -r "$C/build/attr_codegen.run1" "$C/build/attr_codegen" | wc -l | tr -d ' ')
+rm -rf "$C/build/attr_codegen.run1"
+say "   run1 vs run2 diff lines: $d"; [ "$d" = 0 ] || bad "attr-bindings emit is not deterministic ($d diff lines)"
+
+say "== vendored ruby attr tables match fresh emit"
+d=$(diff -r -x README.md "$C/build/attr_codegen/ruby" "$C/rjui_tools/lib/core/generated/attributes" | wc -l | tr -d ' ')
+say "   diff lines: $d"; [ "$d" = 0 ] || { diff -r -x README.md "$C/build/attr_codegen/ruby" "$C/rjui_tools/lib/core/generated/attributes" | head -5; bad "vendored ruby attr tables are stale (regenerate: jui generate attr-bindings --lang ruby, then copy build/attr_codegen/ruby/*.rb into rjui_tools/lib/core/generated/attributes/)"; }
+
+say "== attr-codegen manifest freshness (committed manifest matches fresh emit)"
+m=$(git -C "$C" status --porcelain -- build/attr_codegen/manifest.json | wc -l | tr -d ' ')
+say "   manifest changed by emit: $m"; [ "$m" = 0 ] || bad "build/attr_codegen/manifest.json is stale (commit the regenerated manifest)"
+
+say "== attribute coverage ratchet (declared attributes each platform reads)"
+(cd "$C/jui_tools" && PYTHONPATH="$C/jui_tools" python3 -c "import sys; from jui_cli.cli import main; sys.exit(main(['conformance','coverage']))" 2>&1 | tail -1)
+rc=$?; say "   exit=$rc"; [ "$rc" = 0 ] || bad "coverage ratchet: exit $rc"
+
+say "== canonical sync (mock schema bytes, condition keys per driver)"
+CANON=${JSONUI_CANONICAL_CHECKOUT:-$HOME/resource/jsonui-test-runner}
+if [ -d "$CANON" ]; then
+  (cd "$C" && python3 dev-guide/ci/check-canonical-sync.py "$CANON" 2>&1 | tail -1)
+  rc=$?; say "   exit=$rc"; [ "$rc" = 0 ] || bad "canonical sync: exit $rc"
+else
+  bad "canonical sync NOT RUN (no checkout at $CANON — set JSONUI_CANONICAL_CHECKOUT)"
+fi
+
 # --- emitted Kotlin compiles ------------------------------------------------
 say "== emitted kotlin"
 bash "$C/dev-guide/release/compile-emitted-kotlin.sh" 2>&1 | tail -1
