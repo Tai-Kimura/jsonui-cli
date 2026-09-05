@@ -113,6 +113,52 @@ stored in each baseline manifest, so recalibration is per-platform when the
 iOS/Android hosts land (expect more anti-aliasing variance on device
 renderers; measure before changing).
 
+### Fixtures whose picture is not stable (2026-09-05)
+
+Two shapes do not draw the same thing twice, so `baseline update
+--fail-on-moved` cannot hold them to an exact match. Measured on ONE host
+(`Sources/` = f4cca50), ONE device (iPhone 16 Pro `C13F2A69`), ONE corpus,
+four runs — hamming against the committed baseline:
+
+| fixture | run 1 | run 2 | run 3 | run 4 |
+|---|---|---|---|---|
+| `Indicator/color__alias_tint` | 1 | 0 | 3 | 3 |
+| `__control/NetworkImage__no-defaultImage_url-efd3e3a7` | 1 | 0 | 0 | 2 |
+
+Raw PNG bytes differed in every run. The NetworkImage control matched the
+baseline EXACTLY on one run and differed on the next, so a single
+observation cannot separate "flaky" from "the library moved it one bit" —
+both predict that reading. Two runs is the minimum.
+
+This is the second sighting of the class, not the first: the iOS calibration
+above measured distance 1 on **3 Indicator activity-spinner frames** out of
+490 on 2026-07-03, with the clock already frozen.
+
+**The set, and what is NOT in it.** `visual_stability.py` derives it from
+what each fixture's layout DECLARES — an `Indicator` anywhere (animated), or
+a `NetworkImage` with no `defaultImage` (async) — never from a list of
+names, so a rename cannot drop a fixture out and a new fixture of the same
+shape joins without maintenance. On the current corpus that is **18
+screenshots**.
+
+⚠️ **Two of those 18 are measured; the other 16 are unmeasured members of a
+measured class.** `SelectBox_selectedValue` sits at distance 6 in the
+07-03 calibration — ONE observation, not reproduced on 09-05 — and is
+deliberately NOT in the set. It is named here so the next person sees it.
+
+**What the narrow set costs.** A fixture outside it that wobbles still fails
+the exact check, by name. The next unstable class arrives as a named
+refusal, not as a repeat of the 09-05 investigation.
+
+**Procedure when `moved > 0`.** Attribute before baking. Re-run the SAME
+corpus and device on the library the baseline was drawn from; entries that
+move there too are environment drift, not a regression. On 2026-09-05 that
+separated 84 into 82 drift (identical hamming on both libraries: 1x3, 2x6,
+4x73, 7x2 — families margin / align / weight / min-max / center, and not one
+Collection fixture) and 2 flaky. Then rebake wholesale from a run of that
+same library, so `rendered_by` is true of every entry, and check the bake
+against the run it came from (expect regressions 0 / no_baseline 0).
+
 ### Android calibration (2026-07-03)
 
 Pixel_Tablet emulator (API 35, 2560x1600), Compose dynamic host,
