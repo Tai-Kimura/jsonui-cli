@@ -1314,6 +1314,15 @@ def _cmd_baseline(args: argparse.Namespace) -> int:
     for name, dist in summary.moved:
         verb = "kept (only-new)" if only_new else "REWRITTEN"
         print(f"    MOVED    {name}  hamming={dist}  -> {verb}")
+    total = getattr(summary, "unstable_total", 0)
+    if total:
+        # The denominator, every run: N screenshots are not held to an exact
+        # match. Without this line the exemption is only ever visible on the
+        # runs where something wobbled.
+        print(
+            f"  visual-stability: {total} screenshot(s) exempt from the exact check "
+            f"(animated / async); {len(getattr(summary, 'tolerated', ()))} differed this run"
+        )
     for name, dist, reason in getattr(summary, "tolerated", ()):
         # Printed every run: a tolerance nobody sees is an exemption nobody
         # can review. These did move — they are simply not held to an exact
