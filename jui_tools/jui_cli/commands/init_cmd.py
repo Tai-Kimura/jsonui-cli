@@ -115,23 +115,34 @@ def cmd_init(args: argparse.Namespace) -> int:
     if args.ios:
         ios_root = project_root / args.ios
         ios_root.mkdir(parents=True, exist_ok=True)
-        if not _run_tool(["sjui", "init", "--mode", args.ios_mode], ios_root):
-            failed.append("ios (sjui init)")
+        _reason = _run_tool(["sjui", "init", "--mode", args.ios_mode], ios_root)
+        if _reason:
+            failed.append(("ios (sjui init)", _reason))
 
     if args.android:
         android_root = project_root / args.android
         android_root.mkdir(parents=True, exist_ok=True)
-        if not _run_tool(["kjui", "init", "--mode", args.android_mode], android_root):
-            failed.append("android (kjui init)")
+        _reason = _run_tool(["kjui", "init", "--mode", args.android_mode], android_root)
+        if _reason:
+            failed.append(("android (kjui init)", _reason))
 
     if args.web:
         web_root = project_root / args.web
         web_root.mkdir(parents=True, exist_ok=True)
-        if not _run_tool(["rjui", "init"], web_root):
-            failed.append("web (rjui init)")
+        _reason = _run_tool(["rjui", "init"], web_root)
+        if _reason:
+            failed.append(("web (rjui init)", _reason))
 
+    # Printed at ERROR and returned as a non-zero exit at the end of this
+    # function. It used to print WARNING and `return 0`: a caller that asked
+    # for `--ios` and got no `sjui.config.json` was told the init succeeded.
+    # Measured 2026-09-05 — a CI runner without `sjui` on PATH exited 0 here,
+    # so a spec's `raise "jui init failed"` never fired and three examples
+    # died later on `File.read('sjui.config.json')` with ENOENT, one step
+    # removed from the cause.
     if failed:
-        print(f"\nWARNING: Init failed for: {', '.join(failed)}")
+        for label, reason in failed:
+            print(f"\n[ERROR] jui init: {label} did not run — {reason}")
         print("You can run these commands manually.")
 
     # Copy platform tools (sjui_tools / kjui_tools / rjui_tools) from the home
@@ -178,23 +189,36 @@ def cmd_init(args: argparse.Namespace) -> int:
                     f"shared-core={counters['shared_core']}"
                 )
 
-    print("\nProject initialized successfully!")
+    if failed:
+        print(f"\n[ERROR] exit 1: {len(failed)} platform init(s) did not run.")
+    else:
+        print("\nProject initialized successfully!")
     print(f"  Spec directory: {spec_dir}")
     print(f"  Component directory: {component_dir}")
     for platform, pconfig in config["platforms"].items():
         print(f"  {platform}: {pconfig['root']}")
 
-    return 0
+    # The whole point of the ticket: the exit code is what a script reads,
+    # and it disagreed with every line printed above it.
+    return 1 if failed else 0
 
 
-def _run_tool(cmd: list[str], cwd: Path) -> bool:
-    """Run a platform tool, handling missing executables gracefully."""
+def _run_tool(cmd: list[str], cwd: Path) -> str | None:
+    """Run a platform tool. ``None`` on success, else WHY it did not run.
+
+    It used to return a bool, which folded two different outcomes — the tool
+    is absent, and the tool ran and failed — into one False. The caller then
+    printed "Init failed for: ios (sjui init)" with no way to say which, and
+    the operator could not tell a missing PATH entry from a broken project.
+    The reason travels back so the error names it.
+    """
     try:
         result = subprocess.run(cmd, cwd=cwd)
-        return result.returncode == 0
     except FileNotFoundError:
-        print(f"  WARNING: '{cmd[0]}' not found in PATH — skipping")
-        return False
+        return f"'{cmd[0]}' not found in PATH"
+    if result.returncode == 0:
+        return None
+    return f"'{' '.join(cmd)}' exited {result.returncode}"
 
 
 def _seed_layouts_tree(project_root: Path, config: dict) -> None:
