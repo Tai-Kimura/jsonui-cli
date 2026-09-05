@@ -115,6 +115,73 @@ module SjuiTools
         # @param file_name [String] The file name for error messages
         # @param parent_orientation [String, nil] The parent's orientation ('horizontal' or 'vertical')
         # @param hierarchy [String, nil] The hierarchy path (e.g., "child[0].child[1]")
+        # Validate the layouts codegen will skip this run.
+        #
+        # Same three checks the conversion loop performs — attributes,
+        # bindings, and the shared layout rules — so a finding does not
+        # depend on whether that file happened to be dirty. The shared
+        # `:error` is recorded in the stage ledger here too: a layout the
+        # generators cannot accept must be named on every run, not only on
+        # the run that tried to convert it.
+        def validate_cached_layouts(files, layouts_dir, validator, binding_validator)
+          return if files.nil? || files.empty?
+
+          files.each do |json_file|
+            relative_path = Pathname.new(json_file).relative_path_from(Pathname.new(layouts_dir)).to_s
+            file_name = File.basename(json_file, '.json')
+
+            begin
+              json_data = JSON.parse(File.read(json_file))
+            rescue JSON::ParserError => e
+              Core::Logger.error("Invalid JSON in #{json_file}: #{e.message}")
+              next
+            end
+
+            if validator
+              validator.normalized = Core::Normalization.canonicalized?(json_data)
+              warnings = validate_json(json_data, validator, file_name)
+              if warnings.any?
+                @validation_warnings.concat(warnings.map { |w| "[#{relative_path}] #{w}" })
+                @validation_errors += warnings.length
+                Core::Logger.warn "  #{warnings.length} attribute warning(s) in #{relative_path}"
+              end
+            end
+
+            if binding_validator
+              binding_warnings = binding_validator.validate(json_data, relative_path)
+              @binding_errors.concat(binding_validator.errors)
+              if binding_warnings.any?
+                @validation_warnings.concat(binding_warnings)
+                @validation_errors += binding_warnings.length
+                Core::Logger.warn "  #{binding_warnings.length} binding warning(s) in #{relative_path}"
+              end
+            end
+
+            # Styles are merged first, exactly as the conversion path does:
+            # a rule reads the layout the generators would see, not the raw
+            # file.
+            merged = SjuiTools::SwiftUI::StyleLoader.load_and_merge(json_data)
+            shared_warnings = JsonUIShared::LayoutValidator.validate_layout(
+              merged, source_path: File.basename(json_file)
+            )
+            next if shared_warnings.empty?
+
+            JsonUIShared::LayoutValidator.print_warnings(shared_warnings)
+            next unless JsonUIShared::LayoutValidator.blocking?(shared_warnings)
+
+            reason = shared_warnings.select { |w| w[:level] == :error }
+                                    .map { |w| w[:message] }.join('; ')
+            begin
+              require_relative '../../core/stage_failures'
+              JsonUI::StageFailures.record(
+                'layout', "#{json_file} was not generated: #{reason}"
+              )
+            rescue LoadError
+              nil
+            end
+          end
+        end
+
         def validate_json(json_data, validator, file_name, parent_orientation = nil, hierarchy = nil)
           return [] unless json_data.is_a?(Hash)
 
@@ -328,6 +395,28 @@ module SjuiTools
             end
           end
 
+          # Initialize validators if validation is enabled
+          styles_dir = File.join(source_path, config['styles_directory'] || 'Styles')
+          validator = options[:validate] ? Core::AttributeValidator.new(:swiftui, styles_dir) : nil
+          binding_validator = options[:validate] ? Core::BindingValidator.new : nil
+
+          # Validation is a function of the TREE, not of build history.
+          #
+          # The cache used to skip the whole run when nothing changed, and
+          # validation lived inside the codegen loop — so a second `sjui
+          # build --strict` over an unchanged tree printed
+          # "No files need updating (all cached)", found nothing, and exited
+          # 0 where the first run exited 1. The gate answered "when did this
+          # last run" instead of "what does this tree say". Measured on
+          # 1.8.44: runs 4-6 over an untouched tree, exit 0 with zero finding
+          # lines, after a --clean run exited 1 with six.
+          #
+          # Cached layouts are validated here; the rest are validated inside
+          # the loop below as they are converted, so every layout is checked
+          # exactly once per run and nothing is reported twice.
+          cached_files = json_files - files_to_update
+          validate_cached_layouts(cached_files, layouts_dir, validator, binding_validator)
+
           # Update Data models if any files need updating
           if files_to_update.any?
             Core::Logger.info "Updating #{files_to_update.length} of #{json_files.length} files..."
@@ -335,13 +424,10 @@ module SjuiTools
             data_updater.update_data_models
           else
             Core::Logger.info "No files need updating (all cached)"
-            return
+            # Deliberately NOT `return`: the codegen below is what the cache
+            # may skip, and the caller still has to see this run's findings,
+            # its stage failures, and a --strict exit that matches the tree.
           end
-
-          # Initialize validators if validation is enabled
-          styles_dir = File.join(source_path, config['styles_directory'] || 'Styles')
-          validator = options[:validate] ? Core::AttributeValidator.new(:swiftui, styles_dir) : nil
-          binding_validator = options[:validate] ? Core::BindingValidator.new : nil
 
           converter = SjuiTools::SwiftUI::JsonToSwiftUIConverter.new
           # Which layouts are cells / headers / footers of a vertically
