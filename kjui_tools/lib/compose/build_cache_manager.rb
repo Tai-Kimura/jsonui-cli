@@ -8,8 +8,22 @@ require 'digest'
 module KjuiTools
   module Compose
     class BuildCacheManager
-      def initialize(source_path)
+      # `layouts_dir` / `styles_dir` come from the caller, which is the only
+      # place that knows them: build.rb resolves
+      # `<source_path>/<source_directory>/<layouts_directory>`, while this
+      # class used to rebuild the path as `<source_path>/assets/Layouts`.
+      # With a stock `source_directory` of `app/src/main` those are different
+      # directories, `File.exist?` was false for every layout, and
+      # `last_updated.json` stayed `{}` — the mtime cache was never written,
+      # so nothing was ever cached (measured: 12 consecutive builds, "all
+      # cached" 0 times).
+      #
+      # The old hard-coded paths remain as the fallback so an existing caller
+      # that passes only `source_path` behaves exactly as before.
+      def initialize(source_path, layouts_dir: nil, styles_dir: nil)
         @source_path = source_path
+        @layouts_dir = layouts_dir || File.join(source_path, 'assets', 'Layouts')
+        @styles_dir = styles_dir || File.join(source_path, 'assets', 'Styles')
         @cache_dir = File.join(source_path, '.kjui_cache')
         @last_updated_file = File.join(@cache_dir, 'last_updated.json')
         @including_files_cache = File.join(@cache_dir, 'including_files.json')
@@ -63,9 +77,8 @@ module KjuiTools
         
         # Check if any style dependencies have been modified
         if style_dependencies[file_name]
-          styles_dir = File.join(@source_path, 'assets', 'Styles')
           style_dependencies[file_name].each do |style_file|
-            style_path = File.join(styles_dir, "#{style_file}.json")
+            style_path = File.join(@styles_dir, "#{style_file}.json")
             if File.exist?(style_path)
               style_mtime = File.mtime(style_path).to_i
               return true if style_mtime > last_updated[file_name]['mtime'].to_i
@@ -139,16 +152,17 @@ module KjuiTools
         styles.to_a
       end
       
-      def save_cache(including_files, style_dependencies)
+      def save_cache(including_files, style_dependencies, layout_names = nil)
         # Update last_updated with current timestamps
         last_updated = {}
         
-        # Get all processed files
-        all_files = (including_files.keys + style_dependencies.keys).uniq
-        
+        # Every layout the build processed — not only the ones that happen to
+        # have includes or styles. Keyed on those two maps alone, a plain
+        # layout was never recorded and so was dirty on every run.
+        all_files = (including_files.keys + style_dependencies.keys + Array(layout_names)).uniq
+
         all_files.each do |file_name|
-          layouts_dir = File.join(@source_path, 'assets', 'Layouts')
-          json_file = File.join(layouts_dir, "#{file_name}.json")
+          json_file = File.join(@layouts_dir, "#{file_name}.json")
           
           if File.exist?(json_file)
             last_updated[file_name] = {

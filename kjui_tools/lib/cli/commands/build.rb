@@ -262,7 +262,14 @@ module KjuiTools
           layouts_dir = File.join(source_path, source_directory, config['layouts_directory'] || 'assets/Layouts')
 
           # Initialize cache manager
-          cache_manager = Compose::BuildCacheManager.new(source_path)
+          # The cache manager is told the directories build.rb resolved; it
+          # must not rebuild them from `source_path` (it used to, and with a
+          # non-empty `source_directory` it looked in a directory that does
+          # not exist, so nothing was ever cached).
+          styles_dir = File.join(source_path, source_directory, config['styles_directory'] || 'assets/Styles')
+          cache_manager = Compose::BuildCacheManager.new(
+            source_path, layouts_dir: layouts_dir, styles_dir: styles_dir
+          )
 
           # Clean cache if --clean option is specified
           if options[:clean]
@@ -459,7 +466,10 @@ module KjuiTools
           end
 
           # Save cache for next build
-          cache_manager.save_cache(new_including_files, new_style_dependencies)
+          cache_manager.save_cache(
+            new_including_files, new_style_dependencies,
+            json_files.map { |f| File.basename(f, '.json') }
+          )
 
           # A per-file failure used to be logged and stepped over, and the
           # build still ended with "completed!". The layout keeps whatever the
