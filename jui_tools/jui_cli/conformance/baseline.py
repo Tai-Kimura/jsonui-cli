@@ -48,6 +48,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from ..core.generated_marker import json_marker
+from .visual_stability import unstable_screenshots
 
 GENERATOR_NAME = "jui conformance baseline update"
 
@@ -242,6 +243,12 @@ class BaselineUpdateSummary:
     new: tuple[str, ...] = ()
     same: tuple[str, ...] = ()
     moved: tuple[tuple[str, int], ...] = ()   # (name, hamming distance)
+    #: Differences accepted WITHOUT failing the exact check, because the
+    #: fixture's own layout says its picture is not stable (animated /
+    #: async). Reported so the tolerance is visible every run rather than
+    #: being an unstated exemption: the count and the names are printed, and
+    #: any of these at or above the threshold is in `moved` instead.
+    tolerated: tuple[tuple[str, int, str], ...] = ()
     dropped: tuple[str, ...] = ()
     only_new: bool = False
 
@@ -301,10 +308,32 @@ def update_baseline(
     prior: dict[str, str] = dict(previous.get("hashes") or {})
     new_names = sorted(n for n in measured if n not in prior)
     same_names = sorted(n for n in measured if n in prior and prior[n] == measured[n])
+    # A fixture whose picture is not a function of the code — a spinning
+    # Indicator, an image still arriving — differs run to run on a correct
+    # machine (measured: four runs, four pictures, one host). Holding those
+    # to an EXACT match makes `--fail-on-moved` fire every time, and a gate
+    # that always fires is one the operator learns to switch off. They are
+    # judged at the same threshold the visual gate uses instead: still
+    # caught when they move for real, not caught for existing.
+    #
+    # Everything else stays exact. A fixture outside this set that wobbles
+    # fails by name, so the narrow set costs a named refusal, not silence.
+    unstable = unstable_screenshots(conformance_dir)
+    limit = DEFAULT_THRESHOLD if threshold is None else int(threshold)
     moved_pairs = tuple(
         (n, hamming(prior[n], measured[n]))
         for n in sorted(measured)
-        if n in prior and prior[n] != measured[n]
+        if n in prior
+        and prior[n] != measured[n]
+        and (n not in unstable or hamming(prior[n], measured[n]) >= limit)
+    )
+    tolerated_pairs = tuple(
+        (n, hamming(prior[n], measured[n]), unstable[n])
+        for n in sorted(measured)
+        if n in prior
+        and prior[n] != measured[n]
+        and n in unstable
+        and hamming(prior[n], measured[n]) < limit
     )
     dropped_names = sorted(n for n in prior if n not in measured)
 
@@ -365,6 +394,7 @@ def update_baseline(
         moved=moved_pairs,
         dropped=tuple(dropped_names),
         only_new=only_new,
+        tolerated=tolerated_pairs,
     )
 
 

@@ -1314,6 +1314,11 @@ def _cmd_baseline(args: argparse.Namespace) -> int:
     for name, dist in summary.moved:
         verb = "kept (only-new)" if only_new else "REWRITTEN"
         print(f"    MOVED    {name}  hamming={dist}  -> {verb}")
+    for name, dist, reason in getattr(summary, "tolerated", ()):
+        # Printed every run: a tolerance nobody sees is an exemption nobody
+        # can review. These did move — they are simply not held to an exact
+        # match, because the fixture declares an unstable picture.
+        print(f"    unstable {name}  hamming={dist}  (not exact-checked: {reason})")
     for name in summary.dropped:
         verb = "kept (only-new)" if only_new else "REMOVED"
         print(f"    DROPPED  {name}  -> {verb}")
