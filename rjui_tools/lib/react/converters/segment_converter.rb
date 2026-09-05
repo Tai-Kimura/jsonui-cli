@@ -119,19 +119,15 @@ module RjuiTools
         # other than Segment.items, and for a non-Array value (`items` also
         # takes a binding string, which has no elements to drop).
         def declared_segment_items(items)
-          # A bound `items` generates nothing. The declaration gives `items`
-          # type array with NO binding, so there is no element list to walk;
-          # sjui and kjui land on zero elements too, and the validator says
-          # so. Measured on the extraction layer: `attributes['items']` is
-          # already `[]` for a binding, so this asks the RAW value — the
-          # emit decision comes from the shared rule, not from a coercion
-          # that could change underneath it.
-          if JsonUIShared::AttributeValidatorCore.binding_in_scalar_items?(
-            'Segment', 'items', attributes.raw('items')
-          )
-            return []
-          end
-
+          # A bound `items` no longer arrives here: `Segment.items` is
+          # `type: array` with no binding, so LayoutValidator refuses the
+          # layout at `:error` before any converter runs. This used to
+          # return [] and emit a Segment with no items while the build
+          # exited 0 — the same "green with a hole" the refusal replaced.
+          #
+          # The `is_a?(Array)` guard stays: it is not the binding case. A
+          # non-array, non-binding value (an object, a number) is still
+          # only caught here.
           return items unless items.is_a?(Array)
 
           drop = JsonUIShared::AttributeValidatorCore.non_scalar_item_indices(

@@ -54,7 +54,11 @@ module KjuiTools
           # items. A binding string used to be resolved here into a
           # `forEachIndexed` — a feature this face invented alone (sjui
           # raised NoMethodError on the same input, iOS dynamic takes
-          # strings only, and no face uses it). The validator names it.
+          # strings only, and no face uses it). A binding no longer
+          # arrives: it is refused at `:error` before conversion (ruled
+          # 2026-09-05). The guard stays for the values that are NOT
+          # bindings — an object, a number — which nothing upstream
+          # refuses.
           raw_items = json_data['items']
           segments = raw_items.is_a?(Array) ? raw_items.select { |item| JsonUIShared::AttributeValidatorCore.scalar_item?(item) } : []
           
