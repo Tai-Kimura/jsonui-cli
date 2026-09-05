@@ -515,6 +515,14 @@ def generate_flow_sidebar(
             all_tests_nav['screens'], 'Screen Tests', 'screens', 'screen',
             href_prefix=rel_root, current_path=current_test_path))
 
+    # Unit Tests navigation. Every sidebar carries it (user ruling
+    # 2026-09-05): a reader who cannot see it here concludes the
+    # hand-written tests were never generated.
+    if all_tests_nav and all_tests_nav.get('units'):
+        parts.extend(_render_tests_sidebar_section(
+            all_tests_nav['units'], 'Unit Tests', 'units', 'unit',
+            href_prefix=rel_root, current_path=current_test_path))
+
     # Documents navigation (collapsible, collapsed by default)
     if all_tests_nav and all_tests_nav.get('documents'):
         documents = all_tests_nav['documents']
@@ -719,6 +727,14 @@ def generate_spec_sidebar(
             all_tests_nav['screens'], 'Screen Tests', 'screens', '',
             href_prefix=rel_root, current_path=current_path))
 
+    # Unit Tests navigation. Every sidebar carries it (user ruling
+    # 2026-09-05): a reader who cannot see it here concludes the
+    # hand-written tests were never generated.
+    if all_tests_nav and all_tests_nav.get('units'):
+        parts.extend(_render_tests_sidebar_section(
+            all_tests_nav['units'], 'Unit Tests', 'units', 'unit',
+            href_prefix=rel_root, current_path=current_path))
+
     # Figma Screens navigation (collapsible, collapsed by default, grouped by canvas)
     if all_tests_nav and all_tests_nav.get('figma_screens'):
         parts.extend(_render_figma_sidebar_section(
@@ -739,7 +755,8 @@ def generate_index_sidebar(
     component_files: list[dict] | None = None,
     md_files_by_dir: dict[str, list[dict]] | None = None,
     figma_files: list[dict] | None = None,
-    apps_nav: dict[str, dict] | None = None
+    apps_nav: dict[str, dict] | None = None,
+    unit_files: list[dict] | None = None
 ) -> list[str]:
     """
     Generate sidebar HTML for index page.
@@ -755,6 +772,7 @@ def generate_index_sidebar(
         component_files: List of component specification file dicts
         md_files_by_dir: Dict of directory name -> list of markdown file dicts
         figma_files: List of Figma screen file dicts
+        unit_files: List of unit contract target dicts, grouped by app
 
     Returns:
         List of HTML strings for the sidebar
@@ -948,6 +966,13 @@ def generate_index_sidebar(
     if screen_files:
         parts.extend(_render_tests_sidebar_section(
             screen_files, 'Screen Tests', 'sidebar-screens', '', href_prefix=''))
+
+    # Sidebar - Unit Tests (collapsible, starts collapsed). The index BODY
+    # already had this group; only the nav was missing it, which is what made
+    # the pages read as ungenerated.
+    if unit_files:
+        parts.extend(_render_tests_sidebar_section(
+            unit_files, 'Unit Tests', 'sidebar-units', 'unit', href_prefix=''))
 
     parts.append("  </nav>")
     return parts

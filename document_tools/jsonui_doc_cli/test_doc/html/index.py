@@ -150,7 +150,7 @@ def generate_index_html(
     component_count = len(component_files) if component_files else 0
 
     html_parts = _get_html_header(title)
-    html_parts.extend(generate_index_sidebar(title, flow_files, screen_files, has_mermaid_diagram, document_files, api_doc_categories, spec_files, component_files, md_files_by_dir, figma_files, apps_nav=apps_nav))
+    html_parts.extend(generate_index_sidebar(title, flow_files, screen_files, has_mermaid_diagram, document_files, api_doc_categories, spec_files, component_files, md_files_by_dir, figma_files, apps_nav=apps_nav, unit_files=unit_files))
 
     # Main content
     html_parts.append("  <main class='main-content'>")
