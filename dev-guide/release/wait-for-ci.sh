@@ -25,8 +25,27 @@ BRANCH="${2:-release-check}"
 BUDGET="${3:-900}"
 DEADLINE=$(( $(date +%s) + BUDGET ))
 
+# `gh run list` resolves the repository from the CALLER's cwd. Run from a
+# scratch directory it fails with "not a git repository", the failure goes
+# to stderr, the function returns an empty list, and the loop below reads
+# that as "no run appeared" — for the whole budget. That is what happened
+# on 1.8.43's first candidate: the run existed (and was red) while this
+# script said NO RUN for 1500s. So the repository is the one this script
+# lives in, whatever the cwd, and a gh failure is reported as such rather
+# than folded into "zero runs".
+REPO_DIR="$(cd "$(dirname "$0")/../.." && pwd)"
+REPO="$(git -C "$REPO_DIR" remote get-url origin)"
+
+# Preflight, outside any $(...) subshell so a failure can stop the script:
+# if gh cannot list runs at all, say so and exit 2 — never let that read
+# as "zero runs on this SHA".
+if ! gh run list -R "$REPO" --branch "$BRANCH" --limit 1 --json databaseId >/dev/null; then
+    echo "gh run list failed for $REPO (branch $BRANCH) — cannot tell 'no run' from 'cannot ask'." >&2
+    exit 2
+fi
+
 runs_json() {
-    gh run list --branch "$BRANCH" --limit 30 \
+    gh run list -R "$REPO" --branch "$BRANCH" --limit 30 \
         --json databaseId,headSha,name,status,conclusion \
         --jq "[.[] | select(.headSha==\"$SHA\")]"
 }
