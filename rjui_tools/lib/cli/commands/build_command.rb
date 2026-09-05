@@ -159,6 +159,22 @@ module RjuiTools
               )
               JsonUIShared::LayoutValidator.print_warnings(shared_warnings) unless shared_warnings.empty?
 
+              # An `:error` means the declaration was violated in a way the
+              # converters cannot survive — they would receive a String where
+              # the declaration promises a list and raise on `.each`. Refusing
+              # the layout here reports the cause; converting it reports
+              # whichever exception the first converter happened to hit.
+              # Recorded, not raised: every other layout still generates, and
+              # the ledger is what turns this into a non-zero exit.
+              if JsonUIShared::LayoutValidator.blocking?(shared_warnings)
+                reason = shared_warnings.select { |w| w[:level] == :error }
+                                        .map { |w| w[:message] }.join('; ')
+                JsonUI::StageFailures.record(
+                  'layout', "#{json_file} was not generated: #{reason}"
+                )
+                next
+              end
+
               # Preserve subdirectory structure from layouts
               # e.g., Layouts/components/home/activity_item.json -> generated/components/home/ActivityItem.tsx
               relative_path = json_file.sub("#{layouts_dir}/", '')
@@ -222,6 +238,16 @@ module RjuiTools
                   v_json, source_path: File.basename(variant_file)
                 )
                 JsonUIShared::LayoutValidator.print_warnings(v_shared_warnings) unless v_shared_warnings.empty?
+
+                # Same rule for a responsive variant: it is a layout too.
+                if JsonUIShared::LayoutValidator.blocking?(v_shared_warnings)
+                  v_reason = v_shared_warnings.select { |w| w[:level] == :error }
+                                              .map { |w| w[:message] }.join('; ')
+                  JsonUI::StageFailures.record(
+                    'layout', "#{variant_file} was not generated: #{v_reason}"
+                  )
+                  next
+                end
 
                 v_name = variant_comps[cls]
                 v_rel = variant_file.sub("#{layouts_dir}/", '')

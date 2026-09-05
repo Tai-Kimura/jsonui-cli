@@ -475,7 +475,18 @@ module JsonUIShared
       # a string merely containing @{ is template text and still validates)
       is_binding = value.is_a?(String) && value.start_with?('@{') && value.end_with?('}')
 
-      # Skip validation for binding expressions
+      # A binding where the declaration does not allow one. The early return
+      # below skips the type check for EVERY binding, so an attribute
+      # declared `type: array` with no `binding` accepted a String and handed
+      # it to a converter that calls `.each` on it: measured as
+      # `NoMethodError: undefined method 'each' for "@{secs}":String` on
+      # `Collection.sections`, which killed that one screen while `jui build`
+      # still exited 0. Same hole 1.8.39 closed for `Segment.items`, but
+      # stated once from the declaration instead of per attribute.
+      # Skip validation for binding expressions. A binding the declaration
+      # does not allow is reported by LayoutValidator instead, at :error —
+      # reported here too it would say the same thing twice, once at a level
+      # that does not stop the build.
       return if is_binding
 
       # `acceptsSingle` on an array attribute declares that a single node
@@ -888,6 +899,24 @@ module JsonUIShared
           "runtimes already drop it"
         )
       end
+    end
+
+    #: Attributes that take a list and never a string. Derived from the
+    #: declaration, never from a hand-written list of names: the defect this
+    #: catches is exactly "the declaration says one thing and the tool
+    #: assumed another", so a second list of names would be a second thing
+    #: to keep in step.
+    #:
+    #: `string` in the declared types is the exemption that matters. A
+    #: binding IS a string, so an attribute that legitimately accepts one —
+    #: `common.onclick`, `common.gravity`, `Collection.insets` — must not be
+    #: reported here. Only an attribute that can accept no string at all is
+    #: unambiguously receiving something undeclared.
+    def self.binding_disallowed_by_declaration?(definition)
+      return false unless definition.is_a?(Hash)
+
+      types = Array(definition['type']).map(&:to_s)
+      types.include?('array') && !types.include?('binding') && !types.include?('string')
     end
 
     def check_binding_content(content, path, component_type)

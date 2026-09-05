@@ -1,5 +1,8 @@
 # frozen_string_literal: true
 
+require 'json'
+require_relative 'attribute_validator_core'
+
 module JsonUIShared
   # Build-time consistency checks for Layout JSON trees. Called by the
   # sjui / kjui / rjui builders so every platform emits the same warnings.
@@ -52,16 +55,88 @@ module JsonUIShared
       warnings
     end
 
+    #: A binding where the declaration takes a list and never a string.
+    #:
+    #: `Collection.sections` is declared `type: array` with no binding, and
+    #: `"@{secs}"` reached the converters as a String: rjui, sjui and kjui
+    #: each call `.each_with_index` / `.any?` on it, so the screen died with
+    #: `NoMethodError: undefined method 'each' for "@{secs}":String` — the
+    #: failure furthest from the cause, and a different exception depending
+    #: on which converter ran first. Reported here, before conversion, so
+    #: the layout is refused by name instead.
+    #:
+    #: The population comes from the declaration (43 attributes), never a
+    #: list of names: the defect IS "the tool assumed something the
+    #: declaration does not say", so a second list would be a second thing
+    #: to keep in step. `string` in the declared types is the exemption that
+    #: matters — a binding is a string, so `common.onclick`, `common.gravity`
+    #: and four others legitimately take one and must not be reported.
+    def check_undeclared_bindings(component, source_path:)
+      component_type = component['type']
+      return [] unless component_type.is_a?(String)
+
+      # `each_with_object`, not `filter_map`: consumers run this on system
+      # ruby 2.6, where `Hash#filter_map` does not exist.
+      component.each_with_object([]) do |(name, value), found|
+        next unless value.is_a?(String)
+
+        stripped = value.strip
+        next unless stripped.start_with?('@{') && stripped.end_with?('}')
+
+        definition = attribute_definition(component_type, name)
+        next unless AttributeValidatorCore.binding_disallowed_by_declaration?(definition)
+
+        component_id = component['id'] ? " (id=#{component['id']})" : ''
+        declared = Array(definition['type']).map(&:to_s).join(', ')
+        found << {
+          level: :error,
+          message: "#{component_type}#{component_id}: '#{name}' is a binding, but the " \
+                   "declaration is type: #{declared} with no binding — the generators " \
+                   "receive the string itself and cannot iterate it. " \
+                   "Fix: pass a literal list, or declare the attribute binding-capable.",
+          location: source_path
+        }
+      end
+    end
+
+    #: Component-specific declaration first, then `common`. Mirrors how the
+    #: attribute validator resolves a key, so both agree about which
+    #: declaration governs an attribute.
+    def attribute_definition(component_type, name)
+      defs = definitions
+      component_defs = defs[component_type]
+      found = component_defs.is_a?(Hash) ? component_defs[name] : nil
+      return found if found.is_a?(Hash)
+
+      common = defs['common']
+      common.is_a?(Hash) ? common[name] : nil
+    end
+
+    def definitions
+      @definitions ||= begin
+        path = File.join(File.dirname(__FILE__), 'attribute_definitions.json')
+        File.exist?(path) ? JSON.parse(File.read(path)) : {}
+      end
+    end
+
     # Walks `layout_json` and returns an aggregated warnings Array for every
     # Collection node found.
     def validate_layout(layout_json, source_path:)
       warnings = []
       walk(layout_json) do |node|
-        if node.is_a?(Hash) && node['type'] == 'Collection'
-          warnings.concat(check_collection(node, source_path: source_path))
-        end
+        next unless node.is_a?(Hash)
+
+        warnings.concat(check_undeclared_bindings(node, source_path: source_path))
+        warnings.concat(check_collection(node, source_path: source_path)) if node['type'] == 'Collection'
       end
       warnings
+    end
+
+    #: True when the layout must not be converted. `:warning` keeps its old
+    #: behaviour (printed, build carries on); `:error` means the screen is
+    #: not generated and the build ends non-zero via the stage ledger.
+    def blocking?(warnings)
+      Array(warnings).any? { |w| w[:level] == :error }
     end
 
     # Prints warnings to stderr. Returns the count printed. Callers pass the

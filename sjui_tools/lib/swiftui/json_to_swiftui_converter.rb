@@ -64,6 +64,24 @@ module SjuiTools
           validate_json_tree(json_data, File.basename(json_file_path))
           Views::BaseViewConverter.validation_enabled = false
           @validation_was_enabled = true
+
+          # A declaration violation the converters cannot survive: they
+          # would receive a String where the declaration promises a list
+          # and raise on `.each`. Refuse the layout by name here; the
+          # ledger turns it into a non-zero exit and every other layout
+          # still generates.
+          if blocking_layout_errors?
+            begin
+              require_relative '../core/stage_failures'
+              JsonUI::StageFailures.record(
+                'layout',
+                "#{json_file_path} was not generated: #{@blocking_layout_reason}"
+              )
+            rescue LoadError
+              nil
+            end
+            return nil
+          end
         end
 
         # includeを処理
@@ -429,6 +447,20 @@ module SjuiTools
           json_data, source_path: file_name || '(unknown)'
         )
         JsonUIShared::LayoutValidator.print_warnings(shared_warnings) unless shared_warnings.empty?
+        @blocking_layout_errors = JsonUIShared::LayoutValidator.blocking?(shared_warnings)
+        @blocking_layout_reason = blocking_layout_reason(shared_warnings)
+      end
+
+      # True when the last validated layout declared something the
+      # converters cannot survive (a binding where the declaration takes a
+      # list). The caller skips conversion and records the layout as not
+      # generated, rather than letting a converter raise on `.each`.
+      def blocking_layout_errors?
+        @blocking_layout_errors == true
+      end
+
+      def blocking_layout_reason(warnings)
+        Array(warnings).select { |w| w[:level] == :error }.map { |w| w[:message] }.join('; ')
       end
 
       # @param component [Hash] The component to validate

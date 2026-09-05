@@ -165,6 +165,28 @@ module KjuiTools
           )
           JsonUIShared::LayoutValidator.print_warnings(shared_warnings) unless shared_warnings.empty?
 
+          # A declaration violation the converters cannot survive: kjui calls
+          # `sections.any?` on what the declaration promises is a list, so a
+          # binding string raises before anything is emitted. Refuse the
+          # layout by name; recorded, not raised, so the other layouts still
+          # generate and the ledger produces the non-zero exit.
+          if JsonUIShared::LayoutValidator.blocking?(shared_warnings)
+            reason = shared_warnings.select { |w| w[:level] == :error }
+                                    .map { |w| w[:message] }.join('; ')
+            begin
+              require_relative '../core/stage_failures'
+              JsonUI::StageFailures.record(
+                'layout', "#{json_file} was not generated: #{reason}"
+              )
+            rescue LoadError
+              nil
+            end
+            # `return`, not `next`: this is the body of `build_file`, a
+            # method, not a block. `next` parses here and raises
+            # LocalJumpError at run time.
+            return
+          end
+
           # Process includes - expand inline with ID prefix support (like SwiftJsonUI)
           json_data = IncludeExpander.process_includes(json_data, File.dirname(json_file))
 
