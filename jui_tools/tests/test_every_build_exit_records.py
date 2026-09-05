@@ -60,7 +60,14 @@ class ExitCountTests(unittest.TestCase):
         # One of two kinds of exit. See the sibling arm for the other.
         # `_halt` records; `return code` is inside `_halt`, after it has;
         # `return 0` is the success path, which records just above it.
-        accepted = {"_halt", "code", "0"}
+        # `_exit_for_incomplete` joined them 2026-09-05. It sits on the
+        # SUCCESS path, after the manifest block has already been printed —
+        # the same ground on which `return 0` is accepted — and it decides
+        # only between 0 and 1 for stages that did not complete. It must NOT
+        # be wrapped in `_halt`: that records a second time with
+        # bootstrap=False and prints a second coverage line, which is a
+        # different record of the same run.
+        accepted = {"_halt", "code", "0", "_exit_for_incomplete"}
         exits = []
         for node in ast.walk(self.fn):
             if not isinstance(node, ast.Return) or node.lineno < self.opened:
@@ -86,6 +93,9 @@ class ExitCountTests(unittest.TestCase):
         # exit is an exception; it has its own arm below, and the
         # behavioural arms in the next class are what actually establish
         # that it records.
+        # 6 -> 6: the success path's `return 0` became
+        # `return _exit_for_incomplete(...)`, so the count is unchanged. If
+        # a future edit adds an exit, this is what fails.
         self.assertEqual(6, len(exits), exits)
 
     def test_the_body_is_guarded_against_the_exits_that_are_not_returns(self):

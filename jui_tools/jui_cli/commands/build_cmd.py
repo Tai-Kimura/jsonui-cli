@@ -66,6 +66,17 @@ def register_build_command(subparsers: argparse._SubParsersAction) -> None:
         help="Build one platform (same vocabulary as the MCP jui_build tool; "
              "equivalent to --ios-only / --android-only / --web-only)")
     build_parser.add_argument(
+        "--allow-partial",
+        action="store_true",
+        dest="allow_partial",
+        help=(
+            "Exit 0 even when some screens failed to generate. Without it a "
+            "failed stage fails the command: an exit-0 run that quietly "
+            "dropped a screen ships a tree with a hole in it, and a CI that "
+            "gates on the exit code goes green over it."
+        ),
+    )
+    build_parser.add_argument(
         "--lint-strings",
         action="store_true",
         help="Print localize findings as build warnings (jui lint-strings); "
@@ -360,7 +371,16 @@ def cmd_build(args: argparse.Namespace) -> int:
             print(f"\nBuild completed successfully — {len(present_keys)} "
                   f"tracked generated file(s)")
         _print_stage_failures(incomplete)
-        return 0
+        # A stage that did not complete is a screen that is not there. The
+        # closing line said so from 1.8.15, and the exit code still said 0
+        # — so a CI gating on the exit code shipped the hole, which is what
+        # a consumer measured on 1.8.42: `[ERROR]` four times, zero screens
+        # generated, exit 0.
+        #
+        # Same judgment `jsonui-doc generate html` already makes, and the
+        # same opt-out name: a partial tree is a failure unless the caller
+        # says otherwise.
+        return _exit_for_incomplete(incomplete, args)
     except BaseException:
         # Record what this run wrote, then let it fail as it would have.
         # Nothing about the failure changes — the exception is re-raised
@@ -388,6 +408,33 @@ def _recorded_versions(manifest: dict) -> dict:
         name = entry.get("version") or "unknown"
         counts[name] = counts.get(name, 0) + 1
     return counts
+
+
+def _exit_for_incomplete(incomplete: list, args) -> int:
+    """The exit code for a build that left stages unfinished.
+
+    Separate and callable so the arms exercise THIS, not a restatement of
+    it. The bug being fixed is precisely that a printed line and an exit
+    code disagreed, so a test that reads the printed line proves nothing.
+
+    Missing `allow_partial` fails closed: other entry points construct their
+    own args (the MCP tool, older callers), and the safe reading of "the
+    caller never heard of this flag" is that it did not ask for a partial
+    tree.
+    """
+    if not incomplete:
+        return 0
+    if getattr(args, "allow_partial", False):
+        print(
+            f"[WARNING] --allow-partial: exiting 0 with {len(incomplete)} "
+            f"stage(s) incomplete"
+        )
+        return 0
+    print(
+        f"[ERROR] exit 1: {len(incomplete)} stage(s) did not complete. "
+        f"Pass --allow-partial to accept a partial tree."
+    )
+    return 1
 
 
 def _stage_failures(ledger: Path) -> list:
