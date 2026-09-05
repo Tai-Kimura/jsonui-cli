@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require 'core/attribute_validator'
+require 'core/layout_validator'
 
 # `items: [{"label":"opt_a","value":"a"}]` was stringified into the output:
 # iOS shipped `Text("{\"label\"=>\"opt_a\", \"value\"=>\"a\"}")` on screen,
@@ -63,31 +64,52 @@ RSpec.describe 'Segment items are scalars' do
     end
   end
   describe 'a binding where labels are declared' do
-    # `Segment.items` is `type: "array"` with no binding, yet kjui resolved
-    # `@{options}` into a forEachIndexed and sjui raised NoMethodError on
-    # the same input — one face invented a feature, the other crashed, and
-    # the type check said nothing because a binding string stands in for
-    # any declared type. Usage across seven faces: 0.
+    # RULED 2026-09-05: refused, not warned-and-ignored.
+    #
+    # This used to add a warning saying the binding was "ignored, and no
+    # items are generated" — and the build then exited 0 having written a
+    # Segment with no items into the app. A declaration violation reported
+    # at a level that stops nothing is the shape of green-with-a-hole this
+    # release spent the night removing, so `Segment.items` is now refused
+    # by the same rule as every other `type: array` attribute that declares
+    # no binding.
     let(:validator) { SjuiTools::Core::AttributeValidator.new }
 
-    it 'names it and says it is ignored' do
+    def findings(node)
+      JsonUIShared::LayoutValidator.validate_layout(node, source_path: 'spec.json')
+    end
+
+    it 'is refused at :error, which stops the build' do
+      w = findings('type' => 'Segment', 'id' => 's', 'items' => '@{options}')
+      expect(w.size).to eq(1)
+      expect(w.first[:level]).to eq(:error)
+      expect(w.first[:message]).to include("'items'")
+      expect(w.first[:message]).to include('type: array')
+      expect(JsonUIShared::LayoutValidator.blocking?(w)).to be true
+    end
+
+    it 'is refused ONCE — the old warning must not still fire beside it' do
+      # Both rules matched the same value for a while: the error refused the
+      # layout while the warning on the next line said the binding was
+      # ignored and generation continued. Two rulings printed together is
+      # how a reader learns to believe neither.
       validator.validate({ 'type' => 'Segment', 'items' => '@{options}' }, 'Segment')
-      warning = validator.warnings.find { |w| w.include?("'items'") && w.include?('binding') }
-      expect(warning).not_to be_nil, validator.warnings.inspect
-      expect(warning).to include('ignored')
+      expect(validator.warnings.grep(/is a binding/)).to be_empty
+      expect(validator.warnings.grep(/ignored, and no items are generated/)).to be_empty
     end
 
     it 'says nothing for a declared array' do
+      expect(findings('type' => 'Segment', 'id' => 's', 'items' => %w[a b])).to be_empty
       validator.validate({ 'type' => 'Segment', 'items' => %w[a b] }, 'Segment')
       expect(validator.warnings.grep(/is a binding/)).to be_empty
     end
 
     it 'is scoped to the labels-only attribute' do
       # The control: bindings are legitimate almost everywhere, including
-      # on items of a data-source component.
-      expect(described_module.binding_in_scalar_items?('Collection', 'items', '@{rows}')).to be(false)
-      expect(described_module.binding_in_scalar_items?('Segment', 'selectedIndex', '@{i}')).to be(false)
-      expect(described_module.binding_in_scalar_items?('Segment', 'items', '@{options}')).to be(true)
+      # on items of a data-source component, which declares
+      # `type: ["array", "binding"]`.
+      expect(findings('type' => 'Collection', 'id' => 'c', 'items' => '@{rows}')).to be_empty
+      expect(findings('type' => 'Segment', 'id' => 's', 'selectedIndex' => '@{i}')).to be_empty
     end
   end
 

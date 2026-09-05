@@ -19,8 +19,10 @@ module SjuiTools
           # Declared `type: "array"`, so only an array is items. A binding
           # string reached `each_with_index` and raised NoMethodError —
           # the build died on input the validator accepted silently
-          # (measured 2026-09-04). Now it generates nothing and the
-          # validator names it.
+          # (measured 2026-09-04). A binding no longer arrives: it is
+          # refused at `:error` before conversion (ruled 2026-09-05). The
+          # guard stays for the values that are NOT bindings — an object,
+          # a number — which nothing upstream refuses.
           raw_items = @component['items']
           items = raw_items.is_a?(Array) ? raw_items.select { |item| JsonUIShared::AttributeValidatorCore.scalar_item?(item) } : []
           

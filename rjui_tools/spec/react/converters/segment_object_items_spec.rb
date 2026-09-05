@@ -28,6 +28,7 @@
 require_relative '../../spec_helper'
 require 'react/converters/segment_converter'
 require 'core/attribute_validator'
+require 'core/layout_validator'
 
 RSpec.describe RjuiTools::React::Converters::SegmentConverter do
   let(:config) { { 'use_tailwind' => true } }
@@ -112,36 +113,33 @@ RSpec.describe RjuiTools::React::Converters::SegmentConverter do
   end
 
   describe 'a bound items' do
-    # `items` is declared type array with NO binding. sjui and kjui emit
-    # zero elements for `"items": "@{…}"`; measured here, rjui does too —
-    # and it did so before this change, because the extraction layer hands
-    # the converter `[]` for a bound array. The converter now asks the
-    # shared predicate about the raw value instead of relying on that.
-    it 'generates no items, and the validator names it' do
-      jsx, printed = emit('@{segmentOptions}')
-      expect(jsx).not_to include('<button')
-      expect(printed).to eq('')
-
-      warnings = RjuiTools::Core::AttributeValidator.new(:react).validate(
-        { 'type' => 'Segment', 'id' => 's', 'items' => '@{segmentOptions}' }
+    # RULED 2026-09-05: refused before conversion, not emitted-empty.
+    #
+    # `items` is declared `type: array` with NO binding. The converter used
+    # to ask a shared predicate and return zero elements, so the build wrote
+    # a Segment with no buttons and exited 0. LayoutValidator now refuses
+    # the layout at `:error`, and `build_command` records it in the stage
+    # ledger instead of converting — so the converter is never reached.
+    it 'is refused by the validator, at a level that stops the build' do
+      w = JsonUIShared::LayoutValidator.validate_layout(
+        { 'type' => 'Segment', 'id' => 's', 'items' => '@{segmentOptions}' },
+        source_path: 'spec.json'
       )
-      expect(warnings.join("\n")).to include('is a binding')
+      expect(w.size).to eq(1)
+      expect(w.first[:level]).to eq(:error)
+      expect(w.first[:message]).to include("'items'")
+      expect(JsonUIShared::LayoutValidator.blocking?(w)).to be true
     end
 
-    it 'obeys the shared rule, not the coercion that happens to empty it' do
-      # Without this the predicate call above is indistinguishable from
-      # absent: the extraction layer already returns `[]`, so removing the
-      # rule would not change a single assertion. Here extraction hands
-      # back a populated list while the raw value is still a binding — only
-      # the shared rule can decide, and it says zero elements.
+    it 'still emits no items if a caller reaches the converter anyway' do
+      # The refusal is the gate, but the converter is public and the dynamic
+      # path does not go through build_command. Emitting `<button>` elements
+      # out of an unwalkable string is the original crash, so this stays
+      # pinned: extraction hands back a populated list while the raw value
+      # is a binding, and nothing is emitted.
       conv = described_class.new(
         { 'class' => 'Segment', 'id' => 's', 'items' => '@{segmentOptions}' }, config
       )
-      attrs = conv.attributes
-      allow(attrs).to receive(:[]).and_wrap_original do |original, key|
-        key == 'items' ? %w[a b] : original.call(key)
-      end
-
       expect(conv.convert).not_to include('<button')
     end
   end
