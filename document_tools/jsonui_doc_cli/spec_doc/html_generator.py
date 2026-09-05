@@ -983,13 +983,38 @@ def _parse_endpoint_ref(ref: str) -> tuple[str, str] | None:
     return method, path
 
 
-def _collect_method_endpoints(method: dict) -> list[str]:
+def _collect_method_calls(method: object) -> list[str]:
+    """Collect the repo refs a method declares in ``calls``.
+
+    Same rule as `_collect_method_endpoints`: `viewModel.methods`,
+    `useCases[].methods` and `repositories[].methods` are ALL declared
+    `oneOf[string, ...]` (schema lines 566 / 644 / 664), so any of the three
+    may hold a bare signature string, which declares no calls.
+    """
+    if not isinstance(method, dict):
+        return []
+    return [r for r in (method.get("calls") or []) if isinstance(r, str)]
+
+
+def _collect_method_endpoints(method: object) -> list[str]:
     """Collect declared endpoint refs for a repo method.
 
     Accepts either ``endpoint`` (single str) or ``endpoints`` (list of str),
     or both.
+
+    A method may also be a bare SIGNATURE STRING: the schema declares
+    ``methods.items`` as ``oneOf[string, repositoryMethod]``, "Method
+    signatures (string or structured object)". A string carries no endpoint
+    field, so it contributes no refs — empty is the declared answer, not a
+    fallback. The annotation said `dict` and the body called `.get`
+    unconditionally, so 5 spec pages died with `'str' object has no
+    attribute 'get'` while `_format_method_html`, reading the SAME list,
+    branched on the type correctly. One of two consumers had read the
+    declaration.
     """
     refs: list[str] = []
+    if not isinstance(method, dict):
+        return refs
     single = method.get("endpoint")
     if isinstance(single, str):
         refs.append(single)
@@ -1048,8 +1073,8 @@ def _build_dataflow_mermaid(metadata: dict, data_flow: dict) -> str | None:
         deps = list(uc.get("repositories") or uc.get("dependencies") or [])
         # Merge in repos referenced from method-level ``calls`` lists.
         for m in uc.get("methods") or []:
-            for ref in m.get("calls") or []:
-                if not isinstance(ref, str) or "." not in ref:
+            for ref in _collect_method_calls(m):
+                if "." not in ref:
                     continue
                 repo_name = ref.split(".", 1)[0]
                 if repo_name and repo_name not in deps:
