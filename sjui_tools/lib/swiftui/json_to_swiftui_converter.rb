@@ -213,6 +213,38 @@ module SjuiTools
         # Apply styles
         json_data = StyleLoader.load_and_merge(json_data)
 
+        # The shared layout checks, on the path `jui build` actually takes.
+        # `validate_json_tree` runs them too, but only `convert_file` calls
+        # it and only the `convert` command calls that — so on iOS a build
+        # reached the converters with no shared check at all, and a binding
+        # where the declaration takes a list came back as
+        # `NoMethodError: undefined method 'each' for String` from whichever
+        # converter touched it first.
+        #
+        # Deliberately outside `validation_enabled?`: that flag is a
+        # once-per-run toggle for the convert command (set false after the
+        # first file, restored at the end), and a declaration violation has
+        # to be caught in every file, not just the first one seen.
+        shared_warnings = JsonUIShared::LayoutValidator.validate_layout(
+          json_data, source_path: File.basename(json_file_path)
+        )
+        JsonUIShared::LayoutValidator.print_warnings(shared_warnings) unless shared_warnings.empty?
+        if JsonUIShared::LayoutValidator.blocking?(shared_warnings)
+          reason = blocking_layout_reason(shared_warnings)
+          begin
+            require_relative '../core/stage_failures'
+            JsonUI::StageFailures.record(
+              'layout', "#{json_file_path} was not generated: #{reason}"
+            )
+          rescue LoadError
+            nil
+          end
+          # nil, so the caller writes nothing for this layout. Returning a
+          # partial tuple would let `update_generated_body` run with a nil
+          # body and damage the GeneratedView that is already on disk.
+          return nil
+        end
+
         # Process includes
         json_data = process_includes(json_data, File.dirname(json_file_path))
         mark_root_if_scrolling_cell(json_data, json_file_path)

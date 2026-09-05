@@ -443,6 +443,13 @@ module SjuiTools
               # Convert JSON to SwiftUI code
               swiftui_code, _, state_variables, root_children, responsive_functions = converter.convert_json_to_view(json_file)
 
+              # nil means the layout was refused (a declaration violation the
+              # converters cannot survive) and is already in the stage ledger.
+              # Skip it: destructuring nil yields a nil body, and
+              # `update_generated_body` with a nil body would rewrite the
+              # GeneratedView that is already on disk.
+              next if swiftui_code.nil?
+
               # Update the existing Swift file's generatedBody
               updater.update_generated_body(swift_file, swiftui_code, state_variables: state_variables || [], root_children: root_children, responsive_functions: responsive_functions || [], screen_id: screen_id_for(screen_index, json_file), **variant_kwargs)
 
@@ -483,6 +490,13 @@ module SjuiTools
 
               # Now process the newly created file
               swiftui_code, _, state_variables, root_children, responsive_functions = converter.convert_json_to_view(json_file)
+
+              # nil means the layout was refused (a declaration violation the
+              # converters cannot survive) and is already in the stage ledger.
+              # Skip it: destructuring nil yields a nil body, and
+              # `update_generated_body` with a nil body would rewrite the
+              # GeneratedView that is already on disk.
+              next if swiftui_code.nil?
               updater.update_generated_body(swift_file, swiftui_code, state_variables: state_variables || [], root_children: root_children, responsive_functions: responsive_functions || [], screen_id: screen_id_for(screen_index, json_file), **variant_kwargs)
               Core::Logger.info "  Created and updated: #{swift_file}"
             end
@@ -543,6 +557,13 @@ module SjuiTools
               end
 
               v_code, _, v_state, v_children, v_responsive = converter.convert_json_to_view(variant_file)
+
+              # nil means the layout was refused (a declaration violation the
+              # converters cannot survive) and is already in the stage ledger.
+              # Skip it: destructuring nil yields a nil body, and
+              # `update_generated_body` with a nil body would rewrite the
+              # GeneratedView that is already on disk.
+              next if v_code.nil?
               updater.update_generated_body(variant_swift_file, v_code, state_variables: v_state || [], root_children: v_children, responsive_functions: v_responsive || [], force_typed_view_model: true, view_model_type: "#{view_name}ViewModel", source_name: variant_source)
               Core::Logger.info "  Updated variant: #{variant_swift_file}"
             end
