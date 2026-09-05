@@ -249,6 +249,11 @@ class BaselineUpdateSummary:
     #: being an unstated exemption: the count and the names are printed, and
     #: any of these at or above the threshold is in `moved` instead.
     tolerated: tuple[tuple[str, int, str], ...] = ()
+    #: How many screenshots are exempt from the EXACT check at all, whether
+    #: or not any of them moved this run. Printed unconditionally: an
+    #: exemption that only appears when it fires is invisible on the runs
+    #: where it matters least and unreviewable on the rest.
+    unstable_total: int = 0
     dropped: tuple[str, ...] = ()
     only_new: bool = False
 
@@ -395,6 +400,7 @@ def update_baseline(
         dropped=tuple(dropped_names),
         only_new=only_new,
         tolerated=tolerated_pairs,
+        unstable_total=len(unstable),
     )
 
 

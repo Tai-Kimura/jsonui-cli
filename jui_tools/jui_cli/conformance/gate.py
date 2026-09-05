@@ -52,6 +52,7 @@ from pathlib import Path
 from typing import Sequence
 
 from .baseline import DEFAULT_ENV
+from .visual_stability import screenshot_name
 from . import cross_effect as cross_effect_mod
 from .report import ReportSummary, generate_report
 
@@ -357,26 +358,6 @@ ADJUDICATION_LEDGERS = (
     ("value_discrimination.json", ("owner", "reason")),
     ("codegen_effect.json", ("owner", "reason")),
 )
-
-
-def screenshot_name(fixture_id: str) -> str:
-    """Fixture id -> the file the runners actually write.
-
-    Control fixtures are the exception, and it is not cosmetic: their ids
-    carry the `__control` component that keeps them sorted out of the way,
-    but all three runners drop the leading underscores and write
-    `control_<host>.png`. There are 166 of them across the three committed
-    ci baselines and not one `__control_*.png`, so deriving the name
-    verbatim meant NO control screenshot could ever be matched — every
-    screenshot-keyed ledger row naming a control read as dangling, forever,
-    which is the opposite of what this check is for. `control_TabView.png`
-    was the row that surfaced it: a PERMANENT accepted deviation (the
-    TabView glyph source, 2026-08-03 user ruling) reported as stale, where
-    "cleaning it up" would have silently un-accepted the ruling.
-    """
-    if fixture_id.startswith("__"):
-        fixture_id = fixture_id[2:]
-    return fixture_id.replace("/", "_") + ".png"
 
 
 def judge_adjudication_backlog(

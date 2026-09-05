@@ -54,9 +54,29 @@ ANIMATED = "animated (Indicator draws a different frame each capture)"
 ASYNC = "async (NetworkImage without defaultImage — the frame depends on load timing)"
 
 
+# Moved here from gate.py so there is ONE spelling. The two had already
+# drifted: gate strips exactly a leading "__", the copy written for this
+# module used lstrip("_"), which also eats a single leading underscore.
+# Neither corpus has such an id today, so nothing was wrong yet — which
+# is what a second spelling looks like right up until it matters.
 def screenshot_name(fixture_id: str) -> str:
-    """`__control/NetworkImage__x` -> `control_NetworkImage__x.png`."""
-    return fixture_id.lstrip("_").replace("/", "_") + ".png"
+    """Fixture id -> the file the runners actually write.
+
+    Control fixtures are the exception, and it is not cosmetic: their ids
+    carry the `__control` component that keeps them sorted out of the way,
+    but all three runners drop the leading underscores and write
+    `control_<host>.png`. There are 166 of them across the three committed
+    ci baselines and not one `__control_*.png`, so deriving the name
+    verbatim meant NO control screenshot could ever be matched — every
+    screenshot-keyed ledger row naming a control read as dangling, forever,
+    which is the opposite of what this check is for. `control_TabView.png`
+    was the row that surfaced it: a PERMANENT accepted deviation (the
+    TabView glyph source, 2026-08-03 user ruling) reported as stale, where
+    "cleaning it up" would have silently un-accepted the ruling.
+    """
+    if fixture_id.startswith("__"):
+        fixture_id = fixture_id[2:]
+    return fixture_id.replace("/", "_") + ".png"
 
 
 def _declares(node, predicate) -> bool:
