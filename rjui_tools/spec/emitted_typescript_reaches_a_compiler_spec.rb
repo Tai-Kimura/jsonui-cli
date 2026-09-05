@@ -101,12 +101,16 @@ RSpec.describe 'emitted TypeScript reaches a compiler' do
   let(:root) { File.expand_path(__dir__) }
 
   def emit_specs(root)
-    Dir.glob(File.join(root, '**', '*_spec.rb')).sort.filter_map do |path|
+    # `map { }.compact`, not `filter_map`: CI runs this suite on Ruby 2.6 as
+    # well (the consumer floor), where Array#filter_map does not exist —
+    # 1.8.43's first candidate went red on exactly this line, on all three
+    # faces, after six green suites on Ruby 3.2.
+    Dir.glob(File.join(root, '**', '*_spec.rb')).sort.map do |path|
       body = File.read(path)
       next unless EMIT_MARKERS_TS.any? { |m| body.include?(m) }
 
       [path.sub("#{root}/", ''), body]
-    end
+    end.compact
   end
 
   it 'has no spec asserting emitted TypeScript that neither compiles nor is listed' do
