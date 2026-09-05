@@ -1824,6 +1824,13 @@ def _get_html_footer(has_sidebar: bool = False) -> str:
     """Get HTML footer with Mermaid script."""
     toggle_script = ""
     if has_sidebar:
+        # The reveal is appended from `styles`, not written out again here:
+        # a spec page had the collapsible sidebar and no way to open itself
+        # to the entry for the page you are on, so a reader landing on
+        # `client/specs/x.html` saw a sidebar scrolled to the top with every
+        # group shut. That is the same omission the Unit Tests section had —
+        # the markup was there, the behaviour was not.
+        from ..test_doc.html.styles import get_current_nav_reveal_script
         toggle_script = '''
 <script>
     function toggleSection(sectionId) {
@@ -1835,7 +1842,7 @@ def _get_html_footer(has_sidebar: bool = False) -> str:
         }
     }
 </script>
-'''
+''' + "\n" + "\n".join(get_current_nav_reveal_script()) + "\n"
     tree_script = '''
 <script>
 (function() {

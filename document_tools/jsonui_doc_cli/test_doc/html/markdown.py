@@ -4,7 +4,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from .sidebar import escape_html, _render_api_docs_with_subgroups
+from .sidebar import escape_html, _render_api_docs_with_subgroups, _render_tests_sidebar_section
+from .styles import get_current_nav_reveal_script
 
 
 def generate_markdown_html(
@@ -173,6 +174,16 @@ def generate_markdown_sidebar(
         parts.append("        </ul>")
         parts.append("      </div>")
         parts.append("    </div>")
+
+    # Unit Tests navigation. Rendered through the shared helper rather than
+    # by hand like the two blocks above: the section needs the app subgroups
+    # those blocks never grew, and a third hand-rolled copy is a third place
+    # to fix. The blocks above are left alone deliberately — rewriting them
+    # would change markup on pages this ticket is not about.
+    if all_tests_nav and all_tests_nav.get('units'):
+        parts.extend(_render_tests_sidebar_section(
+            all_tests_nav['units'], 'Unit Tests', 'units', 'unit',
+            href_prefix=rel_prefix, current_path=current_path))
 
     parts.append("  </nav>")
     return parts
@@ -395,7 +406,7 @@ def _get_html_footer(has_sidebar: bool = False) -> str:
         }
     }
 </script>
-'''
+'''  + "\n" + "\n".join(get_current_nav_reveal_script()) + "\n"
     return f'''
 <!-- marked.js + highlight.js CDN -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/marked/12.0.0/marked.min.js"></script>

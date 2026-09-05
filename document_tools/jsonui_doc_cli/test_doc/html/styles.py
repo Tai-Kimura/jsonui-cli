@@ -117,6 +117,19 @@ def get_toggle_script() -> list[str]:
         "      title.classList.toggle('collapsed');",
         "      list.classList.toggle('collapsed');",
         "    }",
+    ] + _current_nav_reveal_lines() + [
+        "  </script>",
+    ]
+
+
+def _current_nav_reveal_lines() -> list[str]:
+    """Expand the collapsed groups above the current entry, then centre it.
+
+    The BODY of the reveal, without the enclosing <script>, so the templates
+    that build their own script block can reuse it instead of growing a
+    third copy. Two copies had already diverged once in this file.
+    """
+    return [
         "    document.addEventListener('DOMContentLoaded', function() {",
         "      var cur = document.querySelector('.sidebar .nav-link.current');",
         "      if (!cur) return;",
@@ -133,8 +146,13 @@ def get_toggle_script() -> list[str]:
         "      }",
         "      setTimeout(function() { cur.scrollIntoView({block:'center',behavior:'smooth'}); }, 100);",
         "    });",
-        "  </script>",
     ]
+
+
+def get_current_nav_reveal_script() -> list[str]:
+    """The reveal as a standalone <script>, for templates that already
+    define their own `toggleSection` and only lack the reveal."""
+    return ["  <script>"] + _current_nav_reveal_lines() + ["  </script>"]
 
 
 def get_screen_styles() -> list[str]:
@@ -434,5 +452,6 @@ def get_index_scripts() -> list[str]:
         "      title.classList.toggle('collapsed');",
         "      list.classList.toggle('collapsed');",
         "    }",
+    ] + _current_nav_reveal_lines() + [
         "  </script>",
     ]

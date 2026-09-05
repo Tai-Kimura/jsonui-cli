@@ -402,6 +402,10 @@ def generate_figma_screen_page(screen_node, screen_name, canvas_name,
             ('components', 'Components', 'component'),
             ('flows', 'Flow Tests', 'flow'),
             ('screens', 'Screen Tests', ''),
+            # A figma page already carries Flow and Screen Tests, so it is
+            # one of the pages a reader navigates from; leaving Unit Tests
+            # off it would reproduce the ticket on 12 pages.
+            ('units', 'Unit Tests', 'unit'),
         ]:
             items = all_tests_nav.get(key, [])
             if items:

@@ -7,7 +7,7 @@ from datetime import datetime
 from pathlib import Path
 
 from .styles import get_screen_styles, get_toggle_script
-from .sidebar import escape_html
+from .sidebar import _render_tests_sidebar_section, escape_html
 
 
 def _get_relative_root(doc_path: str) -> str:
@@ -72,6 +72,16 @@ def generate_document_sidebar(
         parts.append("        </ul>")
         parts.append("      </div>")
         parts.append("    </div>")
+
+    # Unit Tests navigation. Rendered through the shared helper rather than
+    # by hand like the two blocks above: the section needs the app subgroups
+    # those blocks never grew, and a third hand-rolled copy is a third place
+    # to fix. The blocks above are left alone deliberately — rewriting them
+    # would change markup on pages this ticket is not about.
+    if all_tests_nav and all_tests_nav.get('units'):
+        parts.extend(_render_tests_sidebar_section(
+            all_tests_nav['units'], 'Unit Tests', 'units', 'unit',
+            href_prefix=rel_root, current_path=current_doc_path))
 
     # Documents navigation (collapsible, collapsed by default)
     if all_tests_nav and all_tests_nav.get('documents'):

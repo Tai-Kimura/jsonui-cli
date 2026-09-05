@@ -1081,6 +1081,22 @@ def generate_html_directory(
         unique_docs_dirs, api_doc_categories)
 
     # Build navigation data for sidebar
+    # Loaded HERE, above `all_tests_nav`, because every page's sidebar now
+    # carries the Unit Tests section and the screen and flow pages are
+    # written before any unit page exists. See `_unit_nav_entries` for why
+    # the sidebar is built from the DECLARED targets rather than the written
+    # ones. Pure reads — `normalise_unit_roots` and `_load_unit_contract_pages`
+    # take only arguments, so nothing between here and the old position fed it.
+    #
+    # One entry per place unitContracts are declared. A split tree keeps each
+    # app's spec config beside the app, so there is no single root to walk up
+    # to — see `normalise_unit_roots`.
+    unit_by_app: dict[str | None, dict] = {}
+    for _entry in normalise_unit_roots(unit_roots, project_root):
+        _pages = _load_unit_contract_pages(_entry["root"])
+        if _pages is not None:
+            unit_by_app[_entry["app"]] = _pages
+
     all_tests_nav = {
         'screens': [{'name': f['name'], 'path': f['path'].as_posix(), 'group': f['group']} for f in file_infos if f['type'] == 'screen'],
         'flows': [{'name': f['name'], 'path': f['path'].as_posix(), 'group': f['group']} for f in file_infos if f['type'] == 'flow'],
@@ -1088,6 +1104,16 @@ def generate_html_directory(
         'api_docs': [{'name': d['name'], 'path': d['path'], 'subdir': d.get('subdir', '')} for d in all_api_doc_files],
         'api_doc_categories': {k: [{'name': d['name'], 'path': d['path'], 'subdir': d.get('subdir', '')} for d in v] for k, v in api_doc_categories.items()},
     }
+
+    # The Unit Tests section belongs to EVERY page's sidebar (user ruling
+    # 2026-09-05). It used to be a local copy handed only to the unit pages,
+    # deliberately, so the section would not appear on screen, flow and spec
+    # pages — the reader then had no way to reach a unit page except the
+    # index body, and read the site as having no hand-written tests at all.
+    # That is the report this reverses.
+    _unit_nav = _unit_nav_entries(unit_by_app)
+    if _unit_nav:
+        all_tests_nav['units'] = _unit_nav
 
     # Second pass: generate HTML with navigation
     for file_info in file_infos:
@@ -1171,11 +1197,6 @@ def generate_html_directory(
     # One entry per place unitContracts are declared. A split tree keeps each
     # app's spec config beside the app, so there is no single root to walk up
     # to — see `normalise_unit_roots`.
-    unit_by_app: dict[str | None, dict] = {}
-    for _entry in normalise_unit_roots(unit_roots, project_root):
-        _pages = _load_unit_contract_pages(_entry["root"])
-        if _pages is not None:
-            unit_by_app[_entry["app"]] = _pages
     unit_pages = unit_by_app.get(None)
     unit_pages_by_target = _unit_pages_by_target(unit_pages, None)
     # Include screens/json and components/json directories for spec pages
@@ -2076,6 +2097,35 @@ def _declared_targets(spec_data: dict) -> list[str]:
     return out
 
 
+def _unit_nav_entries(unit_by_app: dict) -> list[dict]:
+    """The Unit Tests sidebar list: one entry per DECLARED target.
+
+    Declared, not written, and the ordering forces it: a screen or flow page
+    is rendered long before any unit page exists, and a unit page's own
+    sidebar needs the screen and flow lists — so no single pass can build
+    both sidebars out of pages that already exist. The circularity is the
+    reason, not an oversight.
+
+    A target that then fails to write is not a dead link: `record_page_failure`
+    puts a placeholder at the same path precisely so navigation does not
+    dead-end on a 404, and the run prints the failure.
+
+    `path` and `group` come from `_unit_page_rel` and the app key — the same
+    two facts `_generate_unit_pages` builds its own entries from, so the
+    sidebar href and the file that gets written cannot drift apart.
+    """
+    entries: list[dict] = []
+    for app, pages in sorted(unit_by_app.items(), key=lambda kv: (kv[0] or "")):
+        for target in (pages.get("targets") or []):
+            name = str(target.get("target") or "Unit")
+            entries.append({
+                "name": name,
+                "path": _unit_page_rel(name, app),
+                "group": app or "",
+            })
+    return entries
+
+
 def _generate_unit_pages(
     pages: dict,
     output_path: Path,
@@ -2131,8 +2181,14 @@ def _generate_unit_pages(
             "case_count": len(target.get("cases") or []),
             "faces_summary": " / ".join(summary_bits) or "no face declares it",
         })
+    # The shared nav already carries every declared target, grouped by app
+    # (`_unit_nav_entries`). Overriding it here with this app's own entries
+    # is what made a unit page show a FLAT list while every other page showed
+    # the app subgroups — two spellings of the same section, differing only
+    # on the pages the section is about.
     unit_nav = dict(all_tests_nav or {})
-    unit_nav["units"] = entries
+    if not unit_nav.get("units"):
+        unit_nav["units"] = entries
 
     written: list[dict] = []
     for target, meta in zip(targets, entries):
