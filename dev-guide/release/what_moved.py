@@ -66,7 +66,18 @@ SURFACES = [
 ]
 
 
+# The tree this script reads is the one it LIVES in (dev-guide/release/ ->
+# repo root), never the caller's cwd. Measured 2026-09-05 on 1.8.43: run
+# from a scratch directory, `git diff` raised CalledProcessError 128 on a
+# perfectly good clone — the same cwd dependence that made wait-for-ci.sh
+# report NO RUN for 1500s that morning. `git -C` removes the cwd from the
+# question.
+REPO = Path(__file__).resolve().parents[2]
+
+
 def _run(*args: str) -> str:
+    if args and args[0] == "git":
+        args = ("git", "-C", str(REPO), *args[1:])
     return subprocess.run(args, capture_output=True, text=True,
                           check=True).stdout
 
@@ -79,7 +90,7 @@ def _run(*args: str) -> str:
 # not one it can read. Arriving and being runnable are different things —
 # say which one is missing.
 def _needs_a_git_tree() -> str | None:
-    proc = subprocess.run(("git", "rev-parse", "--git-dir"),
+    proc = subprocess.run(("git", "-C", str(REPO), "rev-parse", "--git-dir"),
                           capture_output=True, text=True)
     if proc.returncode == 0:
         return None
