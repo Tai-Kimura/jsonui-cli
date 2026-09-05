@@ -16,7 +16,7 @@ module JsonUI
       ATTRS = [
         # When true (and cellIdProperty is set), the library auto-computes each cellId as '<primary>_<hash>' so differential updates work without a manual hashForCell helper. If cellIdProperty is missing, the build emits a warning and cells fall back to index-based identity.
         { name: 'autoChangeTrackingId', kind: :boolean }.freeze,
-        # Cell class definitions
+        # Cell layouts this Collection may use. With `items` and no `sections`, a single cellClass renders every item; several cellClasses need `sections[].cell` to assign them.
         { name: 'cellClasses', kind: :array }.freeze,
         # Fixed height for every cell, in pt / dp / px. Applied to the cell view AFTER it is built, so it overrides whatever height the cell layout asked for; leave it out to let each cell size itself. Declared from the implementation, which already read it: sjui collection_converter.rb:260,286,318,402 (plan 51-E).
         { name: 'cellHeight', kind: :number }.freeze,
