@@ -23,6 +23,7 @@ from __future__ import annotations
 import re
 import subprocess
 import sys
+from pathlib import Path
 
 # `v?` because the sibling pin is spelled `...git@vX.Y.Z#...`: `\b` finds
 # no boundary between `v` and `1`, so the pin line failed the stamp test
