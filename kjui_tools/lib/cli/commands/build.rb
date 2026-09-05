@@ -132,6 +132,64 @@ module KjuiTools
         # @param validator [AttributeValidator] The validator instance
         # @param file_name [String] The name of the file being validated
         # @param parent_orientation [String, nil] The orientation of the parent component
+        # Validate the layouts codegen will skip this run — the Compose
+        # counterpart of the sjui pass, same three checks the conversion loop
+        # performs, so a finding does not depend on which files were dirty.
+        def validate_cached_layouts(files, layouts_dir, validator, binding_validator)
+          return if files.nil? || files.empty?
+
+          files.each do |json_file|
+            relative_path = Pathname.new(json_file).relative_path_from(Pathname.new(layouts_dir)).to_s
+
+            begin
+              json_data = JSON.parse(File.read(json_file))
+            rescue JSON::ParserError => e
+              Core::Logger.error("Invalid JSON in #{json_file}: #{e.message}")
+              next
+            end
+
+            if validator
+              validator.normalized = Core::Normalization.canonicalized?(json_data)
+              warnings = validate_json(json_data, validator, File.basename(json_file, '.json'))
+              if warnings.any?
+                @validation_warnings.concat(warnings.map { |w| "[#{relative_path}] #{w}" })
+                @validation_errors += warnings.length
+                Core::Logger.warn "  #{warnings.length} attribute warning(s) in #{relative_path}"
+              end
+            end
+
+            if binding_validator
+              binding_warnings = binding_validator.validate(json_data, relative_path)
+              @binding_errors.concat(binding_validator.errors) if @binding_errors
+              if binding_warnings.any?
+                @validation_warnings.concat(binding_warnings)
+                @validation_errors += binding_warnings.length
+                Core::Logger.warn "  #{binding_warnings.length} binding warning(s) in #{relative_path}"
+              end
+            end
+
+            merged = Compose::StyleLoader.load_and_merge(json_data)
+            shared_warnings = JsonUIShared::LayoutValidator.validate_layout(
+              merged, source_path: File.basename(json_file)
+            )
+            next if shared_warnings.empty?
+
+            JsonUIShared::LayoutValidator.print_warnings(shared_warnings)
+            next unless JsonUIShared::LayoutValidator.blocking?(shared_warnings)
+
+            reason = shared_warnings.select { |w| w[:level] == :error }
+                                    .map { |w| w[:message] }.join('; ')
+            begin
+              require_relative '../../core/stage_failures'
+              JsonUI::StageFailures.record(
+                'layout', "#{json_file} was not generated: #{reason}"
+              )
+            rescue LoadError
+              nil
+            end
+          end
+        end
+
         def validate_json(json_data, validator, file_name, parent_orientation = nil)
           return [] unless json_data.is_a?(Hash)
 
@@ -273,16 +331,35 @@ module KjuiTools
           data_updater = Compose::DataModelUpdater.new
           data_updater.update_data_models(files_to_update)
 
-          if files_to_update.empty?
-            Core::Logger.info "No files need updating (all cached)"
-            return
-          end
-
-          Core::Logger.info "Updating #{files_to_update.length} of #{json_files.length} files..."
-
           # Initialize validators if validation is enabled
           validator = options[:validate] ? Core::AttributeValidator.new(:compose) : nil
           binding_validator = options[:validate] ? Core::BindingValidator.new : nil
+
+          # Validation is a function of the TREE, not of build history.
+          #
+          # The `return` below used to sit ahead of these validators AND of
+          # `StageFailures.report!`, so an all-cached run built no validator,
+          # found nothing, and wrote no ledger — the same gate iOS was missing
+          # until 1.8.44, reachable here through the cache instead.
+          #
+          # ⚠️ Latent rather than active on this face today: `save_cache`
+          # looks for layouts under `<source_path>/assets/Layouts` while
+          # `layouts_dir` is `<source_path>/<source_directory>/…`, so with a
+          # non-empty `source_directory` (`app/src/main` in a stock project)
+          # `last_updated.json` stays `{}` and nothing is ever cached —
+          # measured on a probe project: 12 consecutive runs, "all cached" 0
+          # times. Filed separately; this keeps the cache from silencing the
+          # gates on the day it starts working.
+          cached_files = json_files - files_to_update
+          validate_cached_layouts(cached_files, layouts_dir, validator, binding_validator)
+
+          if files_to_update.empty?
+            Core::Logger.info "No files need updating (all cached)"
+            # Deliberately NOT `return`: `StageFailures.report!` is below, and
+            # a refused layout has to be named on every run.
+          else
+            Core::Logger.info "Updating #{files_to_update.length} of #{json_files.length} files..."
+          end
 
           builder = Compose::ComposeBuilder.new
 
