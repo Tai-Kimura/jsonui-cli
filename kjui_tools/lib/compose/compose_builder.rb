@@ -1241,6 +1241,22 @@ module KjuiTools
         )
         JsonUIShared::LayoutValidator.print_warnings(shared_warnings) unless shared_warnings.empty?
 
+        # A responsive variant is a layout too: same refusal, same ledger.
+        # `return`, not `next` — this is a method body, not a block.
+        if JsonUIShared::LayoutValidator.blocking?(shared_warnings)
+          reason = shared_warnings.select { |w| w[:level] == :error }
+                                  .map { |w| w[:message] }.join('; ')
+          begin
+            require_relative '../core/stage_failures'
+            JsonUI::StageFailures.record(
+              'layout', "#{variant_file} was not generated: #{reason}"
+            )
+          rescue LoadError
+            nil
+          end
+          return
+        end
+
         json_data = IncludeExpander.process_includes(json_data, File.dirname(variant_file))
 
         @required_imports = Set.new
