@@ -20,6 +20,7 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 from jui_cli.conformance import baseline
 from jui_cli.conformance.visual_stability import screenshot_name, unstable_screenshots
@@ -108,14 +109,19 @@ class MovedJudgment(unittest.TestCase):
     def tearDown(self):
         self._tmp.cleanup()
 
-    def _png(self, name: str, shade: int):
-        from PIL import Image
+    #: What `dhash_file` returns for every artifact in these arms. The
+    #: distance is the quantity under test and it is constructed below, so
+    #: the PIXELS are irrelevant — and drawing them cost the CI gate: the
+    #: first version built images with Pillow, which is not installed on the
+    #: python-suite runner, so these three arms raised ModuleNotFoundError
+    #: and the gate they exist to be was absent exactly where it matters.
+    #: Skipping without PIL would have been the same absence, quieter.
+    MEASURED = "0" * (baseline.HASH_SIZE * baseline.HASH_SIZE // 4)
 
-        img = Image.new("RGB", (64, 64), (255, 255, 255))
-        for x in range(0, shade):
-            for y in range(64):
-                img.putpixel((x, y), (0, 0, 0))
-        img.save(self.dir / "artifacts" / "ios" / name)
+    def _artifact(self, name: str):
+        # Only has to exist and end in .png: update_baseline globs the
+        # directory, and dhash_file is patched below.
+        (self.dir / "artifacts" / "ios" / name).write_bytes(b"not a real png")
 
     def _corpus(self, fid: str, layout: dict):
         rel = f"fixtures/{fid.replace('/', '_')}.layout.json"
@@ -139,23 +145,22 @@ class MovedJudgment(unittest.TestCase):
     def _at_distance(digest: str, bits: int) -> str:
         """A hash exactly `bits` away from `digest`.
 
-        Building the prior from a second IMAGE was the first attempt and it
-        does not work: dhash compares each pixel with its right neighbour, so
-        moving one column of a 64x64 fixture flips 256 bits, and every arm
-        landed far above the threshold. The distance is the quantity under
-        test, so it is constructed directly.
+        Built directly rather than by drawing a second picture: dhash
+        compares each pixel with its right neighbour, so moving one column
+        of a 64x64 image flips 256 bits and every arm landed far above the
+        threshold. The distance IS the quantity under test.
         """
         value = int(digest, 16) ^ ((1 << bits) - 1)
         return f"{value:0{len(digest)}x}"
 
     def _run(self, fid: str, layout: dict, distance: int):
-        """Commit a baseline `distance` bits from what this run draws."""
+        """Commit a baseline `distance` bits from what this run 'draws'."""
         name = screenshot_name(fid)
         self._corpus(fid, layout)
-        self._png(name, 8)
-        measured = baseline.dhash_file(self.dir / "artifacts" / "ios" / name, (0, 0))
-        self._commit_baseline(name, self._at_distance(measured, distance))
-        summary = baseline.update_baseline(self.dir, "ios", env="local")
+        self._artifact(name)
+        self._commit_baseline(name, self._at_distance(self.MEASURED, distance))
+        with mock.patch.object(baseline, "dhash_file", return_value=self.MEASURED):
+            summary = baseline.update_baseline(self.dir, "ios", env="local")
         return name, summary
 
     def test_a_stable_fixture_moving_ONE_BIT_is_reported_moved(self):
