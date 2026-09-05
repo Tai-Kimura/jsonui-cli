@@ -486,17 +486,21 @@ module SjuiTools
                 }
               SWIFT
 
-              File.write(swift_file, stub_content)
-
-              # Now process the newly created file
+              # Convert BEFORE writing the stub. The stub is a placeholder
+              # body (`Text("Placeholder")`) that exists only so
+              # `update_generated_body` has a file to update — nothing reads
+              # it. Written first, a refused layout left that placeholder on
+              # disk: the build reported an error, generated nothing, and
+              # still shipped a screen saying "Placeholder".
               swiftui_code, _, state_variables, root_children, responsive_functions = converter.convert_json_to_view(json_file)
 
               # nil means the layout was refused (a declaration violation the
               # converters cannot survive) and is already in the stage ledger.
-              # Skip it: destructuring nil yields a nil body, and
-              # `update_generated_body` with a nil body would rewrite the
-              # GeneratedView that is already on disk.
+              # Nothing has been written for it yet, so there is nothing to
+              # undo — skip before the stub exists.
               next if swiftui_code.nil?
+
+              File.write(swift_file, stub_content)
               updater.update_generated_body(swift_file, swiftui_code, state_variables: state_variables || [], root_children: root_children, responsive_functions: responsive_functions || [], screen_id: screen_id_for(screen_index, json_file), **variant_kwargs)
               Core::Logger.info "  Created and updated: #{swift_file}"
             end
@@ -536,8 +540,12 @@ module SjuiTools
                 Core::Logger.warn "Failed to parse #{variant_file}: #{ex.message}"
               end
 
+              # Reset per iteration: this is assigned only inside the
+              # `unless` below, and a block local keeps its value across
+              # iterations — a stale stub would be written to the next
+              # variant's file.
+              variant_stub_pending = nil
               unless File.exist?(variant_swift_file)
-                FileUtils.mkdir_p(File.dirname(variant_swift_file))
                 stub_content = <<~SWIFT
                   import SwiftUI
                   import SwiftJsonUI
@@ -553,17 +561,21 @@ module SjuiTools
                       }
                   }
                 SWIFT
-                File.write(variant_swift_file, stub_content)
+                variant_stub_pending = stub_content
               end
 
               v_code, _, v_state, v_children, v_responsive = converter.convert_json_to_view(variant_file)
 
               # nil means the layout was refused (a declaration violation the
               # converters cannot survive) and is already in the stage ledger.
-              # Skip it: destructuring nil yields a nil body, and
-              # `update_generated_body` with a nil body would rewrite the
-              # GeneratedView that is already on disk.
+              # Skip before the stub is written, for the same reason as the
+              # base branch: a refused variant must not leave a placeholder.
               next if v_code.nil?
+
+              if variant_stub_pending
+                FileUtils.mkdir_p(File.dirname(variant_swift_file))
+                File.write(variant_swift_file, variant_stub_pending)
+              end
               updater.update_generated_body(variant_swift_file, v_code, state_variables: v_state || [], root_children: v_children, responsive_functions: v_responsive || [], force_typed_view_model: true, view_model_type: "#{view_name}ViewModel", source_name: variant_source)
               Core::Logger.info "  Updated variant: #{variant_swift_file}"
             end
@@ -572,7 +584,26 @@ module SjuiTools
           # Save cache for next build
           cache_manager.save_cache(new_including_files, new_style_dependencies)
 
-          Core::Logger.success "SwiftUI build completed!"
+          # Stages that failed while the build carried on. `record` only fills
+          # an in-memory array — the ledger file `jui build` reads is written
+          # by `report!`, and this face never called it, so a refused layout
+          # was recorded, never written, and the orchestrator saw an empty
+          # ledger and exited 0. kjui does this at build.rb:187/:433 and rjui
+          # at build_command.rb:319; iOS was the only face without it.
+          require_relative '../../core/stage_failures'
+          JsonUI::StageFailures.report!(Core::Logger)
+
+          # The closing line does not say completed when it did not. The exit
+          # code is left alone deliberately, as on the other faces: `jui build`
+          # turns the ledger into the non-zero exit.
+          if JsonUI::StageFailures.any?
+            Core::Logger.error(
+              "Build finished with #{JsonUI::StageFailures.entries.size} " \
+              'stage(s) incomplete — see above'
+            )
+          else
+            Core::Logger.success "SwiftUI build completed!"
+          end
         end
 
         def process_strings_extraction
