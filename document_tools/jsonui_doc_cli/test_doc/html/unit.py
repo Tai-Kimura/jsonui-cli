@@ -186,9 +186,13 @@ def generate_unit_html(
     # Cases
     if cases:
         html_parts.append("    <h2>Declared cases</h2>")
-        html_parts.append("    <table>")
-        header = ["<th>#</th>", "<th>Case</th>", "<th>Intent</th>"]
-        header.extend(f"<th>{escape_html(f)}</th>" for f in platforms)
+        # `cases-table` carries the column rules (see get_unit_styles): the
+        # case name is a long identifier that never wraps on its own, so
+        # without them it takes the width and Intent — the one column a
+        # reader actually reads — is squeezed to a few words per line.
+        html_parts.append("    <table class='cases-table'>")
+        header = ["<th class='num'>#</th>", "<th class='case'>Case</th>", "<th class='intent'>Intent</th>"]
+        header.extend(f"<th class='face'>{escape_html(f)}</th>" for f in platforms)
         html_parts.append(f"      <tr>{''.join(header)}</tr>")
         for i, case in enumerate(cases, 1):
             case_name = str(case.get("name") or f"case {i}")
@@ -199,12 +203,12 @@ def generate_unit_html(
             # declares >=3.10 (CI runs 3.11).
             intent_cell = escape_html(intent) if intent else "<span class='zero'>&mdash;</span>"
             row = [
-                f"<td>{i}</td>",
-                f"<td id='case-{i}'><code>{escape_html(case_name)}</code></td>",
-                f"<td>{intent_cell}</td>",
+                f"<td class='num'>{i}</td>",
+                f"<td class='case' id='case-{i}'><code>{escape_html(case_name)}</code></td>",
+                f"<td class='intent'>{intent_cell}</td>",
             ]
             for face in platforms:
-                row.append(f"<td>{_status_badge(str(status.get(face) or 'unknown'))}</td>")
+                row.append(f"<td class='face'>{_status_badge(str(status.get(face) or 'unknown'))}</td>")
             html_parts.append(f"      <tr>{''.join(row)}</tr>")
         html_parts.append("    </table>")
 

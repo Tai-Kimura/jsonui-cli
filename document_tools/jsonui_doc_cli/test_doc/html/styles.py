@@ -234,6 +234,21 @@ def get_unit_styles() -> list[str]:
         "    .problem { background: #fdeaea; border-left: 3px solid #b3261e; padding: 10px 15px; border-radius: 5px; margin: 10px 0; }",
         "    .not-checked { background: #fff3e0; border-left: 3px solid #a15c00; padding: 10px 15px; border-radius: 5px; margin: 10px 0; }",
         "    .denominator { color: #666; font-size: 0.9em; margin: 5px 0 20px 0; }",
+        # The screen page caps its column at 900px because a screen page is
+        # prose. A unit page is a table whose Intent column is the prose,
+        # and at 900px, next to a case name that never wraps and two badge
+        # columns, Intent got a few words per line (measured on a real
+        # project: ~170px of a 960px table). So: the unit page may use the
+        # window, the case name may break anywhere, the badge and number
+        # columns take only what they need, and Intent takes the rest with
+        # a floor it cannot be squeezed below.
+        "    .main-content { max-width: 1500px; }",
+        "    .cases-table { table-layout: auto; }",
+        "    .cases-table th.num, .cases-table td.num { width: 1%; white-space: nowrap; }",
+        "    .cases-table th.face, .cases-table td.face { width: 1%; white-space: nowrap; }",
+        "    .cases-table td.case { max-width: 28ch; }",
+        "    .cases-table td.case code { overflow-wrap: anywhere; word-break: break-all; display: inline-block; }",
+        "    .cases-table th.intent, .cases-table td.intent { min-width: 32ch; width: 55%; line-height: 1.5; }",
     ])
     return styles
 

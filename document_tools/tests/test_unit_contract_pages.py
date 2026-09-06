@@ -152,6 +152,34 @@ class UnitTargetPage(unittest.TestCase):
         self.assertIn("unitTestsDir is not declared", html)
 
 
+class CasesTableColumns(unittest.TestCase):
+    """The Intent column is the one a reader reads; the markup and the
+    stylesheet must give it the room. Pinning the class names and the rules
+    together: a rule without its class, or a class without its rule, both
+    render as the old squeezed table and nothing else fails."""
+
+    def test_each_column_carries_its_class(self):
+        html = generate_unit_html(_target(), ["android", "ios"])
+        self.assertIn("<table class='cases-table'>", html)
+        self.assertIn("<th class='intent'>Intent</th>", html)
+        self.assertIn("<td class='intent'>ok</td>", html)
+        self.assertIn("<td class='case' id='case-1'><code>written</code></td>", html)
+        self.assertEqual(html.count("<th class='face'>"), 2)
+        self.assertEqual(html.count("<td class='face'>"), 4)
+
+    def test_the_stylesheet_widens_intent_and_breaks_the_case_name(self):
+        html = generate_unit_html(_target(), ["android", "ios"])
+        css = html[html.index("<style>"):html.index("</style>")]
+        # The unit page's override must come AFTER the screen page's 900px
+        # cap it inherits, or the cascade keeps the cap.
+        cap = css.index("max-width: 900px")
+        widen = css.index(".main-content { max-width: 1500px; }")
+        self.assertGreater(widen, cap)
+        self.assertIn(".cases-table th.intent, .cases-table td.intent { min-width: 32ch; width: 55%;", css)
+        self.assertIn(".cases-table td.case code { overflow-wrap: anywhere;", css)
+        self.assertIn(".cases-table th.face, .cases-table td.face { width: 1%; white-space: nowrap; }", css)
+
+
 class SpecPageLink(unittest.TestCase):
     def test_the_declaration_is_not_copied_onto_the_spec_page(self):
         html = generate_spec_html(_spec(True), title="item_detail")
