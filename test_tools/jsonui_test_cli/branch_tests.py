@@ -99,29 +99,67 @@ def _merge_parent_spec(parent_path: Path) -> dict | None:
     it): a split project then behaves as it did before, which is the
     failure this removes rather than a new one.
     """
+    return _merge_parent_spec_result(parent_path)[0]
+
+
+def _merge_parent_spec_result(parent_path: Path) -> tuple[dict | None, str | None]:
+    """``(merged spec, refusal)`` — the two ways a merge can produce nothing.
+
+    They used to be the same value. `merge_from_file` raises on a parent that
+    declares a section the merger builds from the sub-specs, and that refusal
+    was swallowed into the same `None` a tool tree WITHOUT jui_cli returns.
+    `_load_spec` then fell back to the raw parent — handing the caller the
+    very block the exception was about, so the declaration counted as read
+    while the merger had refused it and the generated code kept the
+    sub-specs' view. Measured 2026-09-07: a parent declaring `unitContracts`
+    reported `declared 4, missing 0, undeclared 0` and exit 0, on the same
+    tree where `jui verify` exits 1 with the message raised right here.
+
+    So the refusal is returned instead of dropped, IN THE MERGER'S OWN WORDS.
+    Not re-authored here: a second wording of one rule is a second rule, and
+    this one is already stated once, in `shared/core/parent_spec_rules.py`,
+    which is what `jui verify` prints.
+
+    `(None, None)` still means "no merger in this tree" — a real state, and
+    the only one the old return value was entitled to mean.
+    """
     _prefer_sibling_jui_cli()
     try:
         from jui_cli.core.parent_spec_merger import ParentSpecMerger
     except ImportError:
-        return None
+        return None, None
     try:
         return ParentSpecMerger(spec_dir=parent_path.parent).merge_from_file(
-            parent_path).spec
-    except (OSError, ValueError, KeyError, json.JSONDecodeError):
-        # merge_from_file raises on a parent that declares what it may not;
-        # that is `jui build`'s error to report, in its own words.
-        return None
+            parent_path).spec, None
+    except ValueError as e:
+        # A declaration the parent may not carry. `jui build` reports this in
+        # its own run; a read-only caller needs to know its input was refused,
+        # because the fallback below is about to give it that input anyway.
+        return None, str(e)
+    except (OSError, KeyError, json.JSONDecodeError):
+        return None, None
 
 
 def _load_spec(spec_file: Path) -> dict:
     """The spec as this generator should read it — merged when it is a parent."""
+    return _load_spec_result(spec_file)[0]
+
+
+def _load_spec_result(spec_file: Path) -> tuple[dict, str | None]:
+    """``(spec, refusal)`` — the spec as read, and why it is not the merged one.
+
+    A refusal means the returned dict is the RAW parent, including whatever
+    the merger declined. Callers that count declarations must report it:
+    counting a refused block reads as "the declaration was checked".
+    """
     with open(spec_file, "r", encoding="utf-8") as f:
         spec = json.load(f)
     if spec.get("type") == PARENT_SPEC_TYPE:
-        merged = _merge_parent_spec(spec_file)
+        merged, refusal = _merge_parent_spec_result(spec_file)
         if merged is not None:
-            return merged
-    return spec
+            return merged, None
+        return spec, refusal
+    return spec, None
 
 
 def _parent_declaring(path: Path, spec_path: Path) -> Path | None:

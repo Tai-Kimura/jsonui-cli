@@ -552,26 +552,31 @@ class TestSplitScreens:
                                                               monkeypatch):
         """The safety net, for the day the merge stops carrying it.
 
-        `_load_spec` falls back to the unmerged parent whenever jui_cli is
-        not importable in the synced tree, and that fallback is silent. The
+        `_load_spec_result` falls back to the unmerged parent whenever jui_cli
+        is not importable in the synced tree, and that fallback is silent. The
         whole complaint was that silence here is indistinguishable from
         success, so the sweep now compares what the sub-specs declared
         against what the parent came back with and says so.
 
         Asserted on the MESSAGE, not just on a non-empty list: a problem line
         that named the wrong file would satisfy `problems != []`.
+
+        Patched at `_load_spec_result`, which is the seam the sweep reads —
+        `_load_spec` is now a wrapper, and patching a wrapper the code under
+        test does not call is an arm that runs nothing.
         """
         root = _split_project(tmp_path, sub_blocks=[
             {"target": "H", "cases": [{"name": "a"}]}])
 
-        real = uc._load_spec
+        real = uc._load_spec_result
 
         def stripped(path):
-            spec = dict(real(path))
+            spec, refusal = real(path)
+            spec = dict(spec)
             spec.pop("unitContracts", None)
-            return spec
+            return spec, refusal
 
-        monkeypatch.setattr(uc, "_load_spec", stripped)
+        monkeypatch.setattr(uc, "_load_spec_result", stripped)
         cases, _, declaring, problems, _files, _unread = uc.discover_unit_contracts(root)
         assert cases == []
         assert declaring == []
@@ -924,3 +929,176 @@ class TestUnitContractPages:
 
 def pages_line(root):
     return uc.unit_contract_pages(root)["totals"]["summary_line"]
+
+
+def _parent_declaring_project(tmp_path, block, *, subs=4, platform="web"):
+    """The shape reported 2026-09-07: a split screen whose PARENT carries the
+    block, and sub-specs that carry none.
+
+    Deliberately not `_split_project`: that fixture puts the block where it
+    belongs, so it cannot produce the state the report describes. A fixture
+    simpler than the report is a different specimen.
+    """
+    specs = tmp_path / "docs" / "screens"
+    (specs / "chat").mkdir(parents=True)
+    names = [f"s{i}" for i in range(subs)]
+    parent = {
+        "type": "screen_parent_spec", "version": "1.0",
+        "metadata": {"name": "Chat", "displayName": "Chat",
+                     "description": "d", "layoutFile": "chat"},
+        "subSpecs": [{"file": f"chat/{n}.spec.json"} for n in names],
+    }
+    if block is not None:
+        parent["unitContracts"] = block
+    (specs / "chat.spec.json").write_text(json.dumps(parent), encoding="utf-8")
+    for n in names:
+        (specs / "chat" / f"{n}.spec.json").write_text(json.dumps({
+            "type": "screen_spec", "version": "1.0",
+            "metadata": {"name": n, "displayName": n,
+                         "description": "d", "layoutFile": n},
+            "structure": {"components": [], "layout": {}},
+            "dataFlow": {"viewModel": {"description": "V", "methods": [], "vars": []}},
+            "stateManagement": {"uiVariables": [], "eventHandlers": []},
+        }), encoding="utf-8")
+    (tmp_path / platform / "tests").mkdir(parents=True)
+    (tmp_path / "jui.config.json").write_text(json.dumps({
+        "spec_directory": "docs/screens",
+        "platforms": {platform: {"root": platform, "unitTestsDir": "tests"}},
+    }), encoding="utf-8")
+    return tmp_path
+
+
+class TestAParentDeclaringTheBlock:
+    """Reported 2026-09-07: `--check` green while the merger discarded 34 cases.
+
+    The same tree, the same moment, two instruments:
+
+        unit-stubs --check   declared 65, missing 0, undeclared 0   EXIT 0
+        jui verify           a screen_parent_spec cannot declare …  EXIT 1
+
+    The mechanism is not "the merged spec keeps it". `_merge_parent_spec`
+    RAISES on a parent that declares a section the merger builds, and the
+    refusal was caught and returned as the same `None` a tool tree without
+    jui_cli returns — after which `_load_spec` fell back to the raw parent and
+    handed back the very block the exception was about. Two events, one value:
+    the shape that shipped `jui init` exiting 0 for a platform it never ran.
+    """
+
+    def test_the_declaration_is_reported_not_silently_counted(self, tmp_path):
+        root = _parent_declaring_project(tmp_path, {
+            "target": "ChatViewModel",
+            "cases": [{"name": f"case_{i}", "platforms": ["web"]} for i in range(4)],
+        })
+        body = "\n".join(f'  it("case_{i}", () => {{}});' for i in range(4))
+        (root / "web" / "tests" / "chat.test.ts").write_text(
+            f'describe("Chat", () => {{\n{body}\n}});\n', encoding="utf-8")
+
+        _cases, _scanned, _declaring, problems, _f, _u = uc.discover_unit_contracts(root)
+        assert len(problems) == 1, problems
+        # The merger's own words, not a second wording of the same rule.
+        assert "cannot declare 'unitContracts'" in problems[0]
+        assert "NOT being checked" in problems[0]
+        # And the gate has to move: the whole complaint was the exit code.
+        assert uc.check_unit_contracts(root).ok is False
+
+    def test_a_parent_that_declares_nothing_stays_clean(self, tmp_path):
+        """The control. Without it, a check that always fires reads the same."""
+        root = _parent_declaring_project(tmp_path, None)
+        _c, _s, _d, problems, _f, _u = uc.discover_unit_contracts(root)
+        assert problems == []
+        assert uc.check_unit_contracts(root).ok is True
+
+
+def _web_project(tmp_path, source, cases, *, platform="web", filename=None):
+    (tmp_path / "docs" / "screens").mkdir(parents=True)
+    (tmp_path / "docs" / "screens" / "s.spec.json").write_text(json.dumps({
+        "type": "screen",
+        "unitContracts": {"target": "T", "cases": cases},
+    }), encoding="utf-8")
+    d = tmp_path / platform / "tests"
+    d.mkdir(parents=True)
+    (d / (filename or ("s.test.ts" if platform == "web" else "T.kt"))).write_text(
+        source, encoding="utf-8")
+    (tmp_path / "jui.config.json").write_text(json.dumps({
+        "spec_directory": "docs/screens",
+        "platforms": {platform: {"root": platform, "unitTestsDir": "tests"}},
+    }), encoding="utf-8")
+    return tmp_path
+
+
+class TestCommentsAreNotImplementations:
+    """Reported 2026-09-07: the comment describing this scan was counted by it.
+
+    `// names are written as it("x")` reported `UNDECLARED x (implemented,
+    declared nowhere)` and exit 1 — for a name that exists in no file as a
+    test, so the reader cannot find it and the search has no end. The author
+    who triggers it is the one documenting the tool.
+
+    Direction matters: this one is always RED, and the ios false positives
+    already fixed here taught the cost — a line that is always wrong trains
+    the reader to skip it, and the next real finding on it is skipped too.
+    """
+
+    ONE_CASE = [{"name": "real", "platforms": ["web"]}]
+
+    def test_a_line_comment_is_not_an_implementation(self, tmp_path):
+        root = _web_project(tmp_path, (
+            'describe("S", () => {\n  it("real", () => {});\n});\n'
+            '// names are written as it("x") — literal strings only\n'
+        ), self.ONE_CASE)
+        rep = uc.check_unit_contracts(root)
+        assert rep.undeclared("web") == []
+        assert rep.ok is True
+
+    def test_a_block_comment_is_not_an_implementation(self, tmp_path):
+        root = _web_project(tmp_path, (
+            'describe("S", () => {\n  it("real", () => {});\n});\n'
+            '/*\n  it("x") would be counted here\n*/\n'
+        ), self.ONE_CASE)
+        assert uc.check_unit_contracts(root).undeclared("web") == []
+
+    def test_a_case_name_containing_a_slash_pair_survives(self, tmp_path):
+        """The arm that stops the cure being worse than the disease.
+
+        Blanking `//` without stepping over string literals deletes the rest
+        of the line, and `it("https://…")` is a real case name. That turns a
+        false positive into a false NEGATIVE — declared-but-unimplemented,
+        reported against an implementation that is right there — and the
+        false negative is the direction that reads as green.
+        """
+        root = _web_project(tmp_path, (
+            'describe("S", () => {\n'
+            '  it("https://example.com is reachable", () => {});\n});\n'
+        ), [{"name": "https://example.com is reachable", "platforms": ["web"]}])
+        rep = uc.check_unit_contracts(root)
+        assert rep.missing("web") == []
+        assert rep.ok is True
+
+    def test_android_has_the_same_hole_and_the_same_fix(self, tmp_path):
+        """The report called android "same shape, unverified". Measured here.
+
+        Kotlin block comments nest, so the stripper is told so; a scan that
+        closes on the first `*/` would resume inside a comment.
+        """
+        root = _web_project(tmp_path, (
+            'import org.junit.Test\n'
+            'class T {\n  @Test\n  fun `real`() { }\n}\n'
+            '/* outer /* inner */ @Test fun `x`() {} */\n'
+            '// @Test fun `y`() {}\n'
+        ), [{"name": "real", "platforms": ["android"]}], platform="android")
+        rep = uc.check_unit_contracts(root)
+        assert rep.undeclared("android") == []
+        assert rep.ok is True
+
+    def test_a_slash_pair_inside_a_string_does_not_blank_the_line(self, tmp_path):
+        """Stepping over literals, checked from the other side.
+
+        `const s = "… // …"` is not a comment. If the scan treated it as one
+        it would blank everything after it, including a real `it(...)` that
+        follows on the same line.
+        """
+        root = _web_project(tmp_path, (
+            'describe("S", () => {\n'
+            '  const s = "a // b"; it("real", () => {});\n});\n'
+        ), self.ONE_CASE)
+        assert uc.check_unit_contracts(root).ok is True

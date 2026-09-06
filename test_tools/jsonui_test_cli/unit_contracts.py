@@ -38,6 +38,7 @@ from .branch_tests import (
     BranchTestGenerationError,
     _is_sub_spec_of_a_parent,
     _load_spec,
+    _load_spec_result,
     _parent_declaring,
     _screen_of,
     _spec_files,
@@ -78,6 +79,85 @@ _ALL_TESTS_PATTERNS = {
     "android": re.compile(r"@Test[\s\S]{0,200}?\bfun\s+`?([^`(\s]+)`?\s*\("),
     "web": re.compile(r"\b(?:it|test)\s*\(\s*[\'\"]([^\'\"]+)[\'\"]"),
 }
+
+#: Platforms whose scan runs over source with comments blanked out first.
+#: ios is not here: it does not regex the raw text — `_swift_test_methods`
+#: brace-matches a class body — and adding it would need its own measurement.
+_COMMENT_STRIPPED = {"web": False, "android": True}
+
+
+def _without_comments(text: str, *, nested_blocks: bool = False) -> str:
+    r"""*text* with `//` and `/* */` comments replaced by spaces.
+
+    Reported 2026-09-07: a comment EXPLAINING this scan was counted by it —
+    `// names are written as it("x")` produced `UNDECLARED x (implemented,
+    declared nowhere)` and a non-zero exit, for a case that exists in no file
+    as a test. The harm points at "always red", and the name it reports cannot
+    be found by the person who receives it, so the search it starts has no end.
+    Worse, the comment that triggers it is the one a careful author writes:
+    documenting the scan is what breaks the scan.
+
+    String literals are stepped over rather than skipped by regex, because
+    blanking `//` inside one would silently delete the REST OF THE LINE —
+    `it("https://…")` is a real case name, and losing it would turn a false
+    positive into a false negative, which is the direction that goes green.
+
+    Length and line breaks are preserved (comment bytes become spaces), so
+    the android pattern's bounded `[\s\S]{0,200}` window still spans what it
+    spanned before.
+
+    `nested_blocks` is Kotlin's rule — `/* /* */ */` closes once, not twice.
+    """
+    out = list(text)
+    i, n = 0, len(text)
+    depth = 0
+    while i < n:
+        ch = text[i]
+        if depth:
+            if nested_blocks and text.startswith("/*", i):
+                depth += 1
+                out[i] = out[i + 1] = " "
+                i += 2
+                continue
+            if text.startswith("*/", i):
+                depth -= 1
+                out[i] = out[i + 1] = " "
+                i += 2
+                continue
+            if ch != "\n":
+                out[i] = " "
+            i += 1
+            continue
+        if text.startswith("//", i):
+            while i < n and text[i] != "\n":
+                out[i] = " "
+                i += 1
+            continue
+        if text.startswith("/*", i):
+            depth = 1
+            out[i] = out[i + 1] = " "
+            i += 2
+            continue
+        if text.startswith('"""', i):
+            end = text.find('"""', i + 3)
+            i = n if end < 0 else end + 3
+            continue
+        if ch in "\"'`":
+            quote, i = ch, i + 1
+            while i < n:
+                if text[i] == "\\":
+                    i += 2
+                    continue
+                if text[i] == quote:
+                    i += 1
+                    break
+                if text[i] == "\n" and quote != "`":
+                    break  # unterminated: a quote in prose, not a literal
+                i += 1
+            continue
+        i += 1
+    return "".join(out)
+
 
 #: `class Foo: XCTestCase {` / `final class Foo : XCTestCase, Bar {`
 _SWIFT_TESTCASE_RE = re.compile(r"\bclass\s+\w+\s*:[^{]*\bXCTestCase\b[^{]*\{")
@@ -311,7 +391,23 @@ def discover_unit_contracts(
                 if parent is not None:
                     declared_in_sub.setdefault(_screen_of(parent), []).append(screen)
             continue
-        spec = _load_spec(path)
+        spec, refusal = _load_spec_result(path)
+        if refusal is not None:
+            # The merger REFUSED this parent, and `spec` is therefore the raw
+            # file — including the block that was refused. Counting it is how
+            # `--check` came to print "declared 65, missing 0, undeclared 0"
+            # and exit 0 on a tree where `jui verify` exits 1: 34 of those 65
+            # were written in the parent and discarded by the merge.
+            #
+            # The mirror of the sub-spec message below, and the same promise:
+            # a declaration nobody reads is NOT being checked, and a gate that
+            # says otherwise is worse than no gate.
+            problems.append(
+                f"{screen}: the parent spec was refused by the merger, so the "
+                f"declaration below is NOT being checked — the cases counted "
+                f"here are read from the raw parent and discarded by the "
+                f"merge. {refusal}"
+            )
         try:
             rel = path.resolve().relative_to(spec_path).as_posix()
         except ValueError:
@@ -319,11 +415,12 @@ def discover_unit_contracts(
         found, issues = _cases_of(spec, screen, rel)
         cases.extend(found)
         problems.extend(issues)
-        # Read off the spec AS READ, not the raw file. A parent may not
-        # declare `unitContracts` itself (the merger refuses it), so counting
-        # raw declarations reported "0 carrying" for a split screen whose
-        # sub-specs had just contributed every case in `cases` — a summary
-        # line that contradicted its own numerator.
+        # Read off the spec AS READ, not the raw file. A parent spec may not
+        # declare `unitContracts`; its sub-specs must, and the merger builds
+        # the parent's block from them. Counting RAW declarations therefore
+        # reported "0 carrying" for a split screen whose sub-specs had just
+        # contributed every case in `cases` — a summary line contradicting its
+        # own numerator.
         if spec.get("unitContracts") is not None:
             declaring.append(screen)
     for parent_screen, subs in sorted(declared_in_sub.items()):
@@ -481,6 +578,9 @@ def _implemented_names(
         except OSError:
             continue
         read.append(str(path))
+        if platform in _COMMENT_STRIPPED:
+            text = _without_comments(
+                text, nested_blocks=_COMMENT_STRIPPED[platform])
         raws = (_swift_test_methods(text) if platform == "ios"
                 else [m.group(1) for m in pattern.finditer(text)])
         for raw in raws:
