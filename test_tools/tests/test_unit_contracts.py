@@ -1102,3 +1102,28 @@ class TestCommentsAreNotImplementations:
             '  const s = "a // b"; it("real", () => {});\n});\n'
         ), self.ONE_CASE)
         assert uc.check_unit_contracts(root).ok is True
+
+
+class TestEveryExitHasTheSameShape:
+    """The early return said three where the signature and the caller say four.
+
+    Not reachable through `check_unit_contracts` today: it answers `root is
+    None` and `not root.is_dir()` before calling, so the remaining conditions
+    cannot be met. That is precisely why it lasted — an exit no run reaches is
+    an exit no run can distinguish from a correct one, and the cost lands on
+    whoever adds the next platform.
+
+    Called directly for that reason. An end-to-end arm here would assert on
+    the caller's guards rather than on this function's contract.
+    """
+
+    def test_the_missing_directory_exit_returns_four(self, tmp_path):
+        found, read, undiscoverable, by_name = uc._implemented_names(
+            tmp_path / "does-not-exist", "web")
+        assert (found, read, undiscoverable, by_name) == (set(), [], set(), {})
+
+    def test_a_platform_with_no_pattern_returns_four(self, tmp_path):
+        (tmp_path / "tests").mkdir()
+        found, read, undiscoverable, by_name = uc._implemented_names(
+            tmp_path / "tests", "flutter")
+        assert (found, read, undiscoverable, by_name) == (set(), [], set(), {})

@@ -567,7 +567,15 @@ def _implemented_names(
     suffix = PLATFORM_TEST_SUFFIX.get(platform)
     pattern = _ALL_TESTS_PATTERNS.get(platform)
     if suffix is None or not root.is_dir() or (platform != "ios" and pattern is None):
-        return set(), [], set()
+        # Four elements, like every other exit. This one returned three, and
+        # the sole caller unpacks four — so reaching it raises ValueError
+        # rather than returning "nothing found". It is unreachable from that
+        # caller today (`root is None` and `not root.is_dir()` are both
+        # answered above it), which is why it survived: nothing that runs
+        # today can tell a correct early exit from a crash here. The next
+        # platform added to PLATFORM_TEST_SUFFIX without a pattern is what
+        # finds it, and it would find it as a traceback in a --check run.
+        return set(), [], set(), {}
     names: set[str] = set()
     undiscoverable: set[str] = set()
     read: list[str] = []
