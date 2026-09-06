@@ -643,7 +643,13 @@ RSpec.describe RjuiTools::React::Converters::LabelConverter do
       expect(result).to include("fontSize: '24px'")
     end
 
-    it 'applies background to partial' do
+    it 'ignores `background`, which partialAttributes does not declare' do
+      # Was 'applies background to partial', asserting `bg-[#FFFF00]`.
+      # RULED 2026-09-07: dropped. The SSoT lists no `background` under
+      # partialAttributes on Label or Button, the validator already reports
+      # `Unknown property`, iOS never implemented it, and no consumer layout
+      # uses one — web was the only face reading it. The arm is kept, and
+      # inverted, so the removal is asserted rather than merely absent.
       converter = create_converter({
         'type' => 'Label',
         'text' => 'Highlighted',
@@ -652,7 +658,8 @@ RSpec.describe RjuiTools::React::Converters::LabelConverter do
         ]
       })
       result = converter.convert
-      expect(result).to include("bg-[#FFFF00]")
+      expect(result).not_to include('bg-[#FFFF00]')
+      expect(result).not_to include('backgroundColor')
     end
   end
 
@@ -787,8 +794,10 @@ RSpec.describe RjuiTools::React::Converters::LabelConverter do
       # `color: 'accent'` is not a CSS color — the browser drops it and the
       # text comes out unstyled.
       expect(result).to include('text-accent')
-      expect(result).to include('bg-surface')
       expect(result).not_to include("color: 'accent'")
+      # `background` is no longer read at all (ruled 2026-09-07), so the
+      # token neither becomes a class nor an inline style.
+      expect(result).not_to include('bg-surface')
       expect(result).not_to include("backgroundColor: 'surface'")
     end
   end

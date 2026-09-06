@@ -52,10 +52,20 @@ RSpec.describe 'a bound colour in partialAttributes' do
         expect(out).not_to include('text-@{')
       end
 
-      it 'resolves a bound background at runtime' do
-        out = emit(klass, { 'range' => '@{r}', 'background' => '@{b}' }, type)
-        expect(out).to include('backgroundColor: ColorManager.resolveColor(data.b)')
-        expect(out).not_to include('bg-@{')
+      it 'emits nothing at all for `background`, declared or bound' do
+        # RULED 2026-09-07: dropped, not fixed. The SSoT declares no
+        # `background` under partialAttributes on either component, the
+        # validator already reports `Unknown property`, iOS never
+        # implemented it, and no consumer layout uses one. Web reading it
+        # was a reimplementation of an attribute that does not exist, so
+        # neither channel may carry it.
+        bound = emit(klass, { 'range' => '@{r}', 'background' => '@{b}' }, type)
+        expect(bound).not_to include('backgroundColor')
+        expect(bound).not_to include('bg-@{')
+
+        static = emit(klass, { 'range' => '@{r}', 'background' => 'surface' }, type)
+        expect(static).not_to include('backgroundColor')
+        expect(static).not_to include('bg-surface')
       end
 
       it 'still maps a STATIC palette token to a class' do

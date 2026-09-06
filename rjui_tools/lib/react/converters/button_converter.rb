@@ -256,9 +256,6 @@ module RjuiTools
           styles << "fontSize: '#{partial['fontSize']}px'" if partial['fontSize']
           styles << "fontWeight: '#{partial['fontWeight']}'" if partial['fontWeight']
           styles << "color: #{color_style_expr(partial['fontColor'])}" if has_binding?(partial['fontColor'])
-          if has_binding?(partial['background'])
-            styles << "backgroundColor: #{color_style_expr(partial['background'])}"
-          end
           styles.join(', ')
         end
 
@@ -274,9 +271,14 @@ module RjuiTools
           if partial['fontColor'] && !has_binding?(partial['fontColor'])
             classes << TailwindMapper.map_color(partial['fontColor'], 'text')
           end
-          if partial['background'] && !has_binding?(partial['background'])
-            classes << TailwindMapper.map_color(partial['background'], 'bg')
-          end
+          # `background` is NOT read: the SSoT declares no such key under
+          # partialAttributes (Label and Button both list font, fontColor,
+          # fontSize, lineBreakMode, lineHeightMultiple, lineSpacing,
+          # onClick/onclick, range, textAlign, textShadow, underline), the
+          # validator already reports `Unknown property`, iOS never
+          # implemented it, and no consumer layout uses it. Web reading it
+          # was a divergent reimplementation of an attribute that does not
+          # exist. Ruled 2026-09-07.
           classes << 'underline' if partial['underline']
           classes << 'line-through' if partial['strikethrough']
           classes << 'cursor-pointer' if partial['onclick']
