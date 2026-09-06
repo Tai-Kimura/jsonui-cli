@@ -231,12 +231,53 @@ module KjuiTools
             if color_key
               # Return colorResource reference
               "colorResource(R.color.#{color_key})"
-            else
-              # Return Color.parseColor
+            elsif parseable_color_literal?(color)
+              # A hex string or one of the names android.graphics.Color knows.
+              # These have always worked and keep their exact emitted form.
               "Color(android.graphics.Color.parseColor(#{quote(color)}))"
+            else
+              # A palette name that is in no palette. `parseColor` accepts hex
+              # and its own 23 names and throws IllegalArgumentException on
+              # anything else, so emitting it here moved an authoring mistake
+              # to the moment the composable is composed — and a colour behind
+              # a `visibility` binding crashes only once the error it styles
+              # is finally shown. Say it at build time and emit a colour that
+              # composes.
+              warn_undefined_color(color)
+              'Color.Unspecified'
             end
           end
-          
+
+          # The names android.graphics.Color.parseColor resolves (AOSP
+          # Color.sColorNameMap). Anything else it throws on.
+          ANDROID_COLOR_NAMES = %w[
+            black darkgray gray lightgray white red green blue yellow cyan
+            magenta aqua fuchsia darkgrey grey lightgrey lime maroon navy
+            olive purple silver teal
+          ].freeze
+
+          def parseable_color_literal?(color)
+            return true if color.start_with?('#')
+
+            ANDROID_COLOR_NAMES.include?(color.downcase)
+          end
+
+          # Once per name per build. The same undefined colour across forty
+          # layouts is one mistake, and forty copies of one finding is how a
+          # build log stops being read.
+          def warn_undefined_color(color)
+            warned = (Thread.current[:kjui_warned_colors] ||= {})
+            return if warned[color]
+
+            warned[color] = true
+            Core::Logger.warn(
+              "Color '#{color}' is not defined in colors.json — " \
+              'android.graphics.Color.parseColor would throw at runtime, so ' \
+              'Color.Unspecified is emitted instead. Add it to colors.json ' \
+              '(every mode) or use a hex value.'
+            )
+          end
+
           private
           
           def cached_strings_data
