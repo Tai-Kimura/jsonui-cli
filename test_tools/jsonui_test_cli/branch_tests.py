@@ -314,8 +314,8 @@ def resolve_spec_path(screen: str, project_root: Path, explicit: str | None) -> 
 
 def discover_branch_screens(
     project_root: Path, spec_dir: str | None = None,
-) -> tuple[list[str], list[str]]:
-    """``(screens declaring branchContracts.methods, every spec scanned)``.
+) -> tuple[list[str], list[str], list[str]]:
+    """``(screens declaring branchContracts.methods, every spec scanned, problems)``.
 
     Both halves are returned because the caller has to name a denominator.
     "0 drifted" over an empty scan and "0 drifted" over nine screens are the
@@ -339,6 +339,7 @@ def discover_branch_screens(
         )
     scanned: list[str] = []
     declaring: list[str] = []
+    problems: list[str] = []
     for path in _spec_files(spec_path):
         screen = _screen_of(path)
         scanned.append(screen)
@@ -354,11 +355,29 @@ def discover_branch_screens(
                 path, spec_path):
             # Part of a screen, not a screen. Its parent carries it.
             continue
-        spec = _load_spec(path)
+        spec, refusal = _load_spec_result(path)
+        if refusal is not None:
+            # The merger refused this parent, so `spec` is the RAW file — and
+            # a raw parent carries no `branchContracts`: the block lives in the
+            # sub-specs and only exists after a merge. The screen therefore
+            # dropped out of `declaring` in silence, and the denominator shrank
+            # by one while every remaining number stayed internally consistent.
+            # Measured 2026-09-07 on a parent that declared `unitContracts`:
+            # `declaring` went ['chat'] -> [], which is the reported 15 -> 14.
+            #
+            # A smaller denominator is the one failure this function exists to
+            # prevent — it returns `scanned` precisely so "0 drifted" cannot be
+            # read over a scan that reached nothing.
+            problems.append(
+                f"{screen}: the parent spec was refused by the merger, so its "
+                f"branchContracts were NOT read — this screen has dropped out "
+                f"of the count below rather than failing. {refusal}"
+            )
+            continue
         bc = spec.get("branchContracts")
         if isinstance(bc, dict) and bc.get("methods"):
             declaring.append(screen)
-    return declaring, scanned
+    return declaring, scanned, problems
 
 
 def collect_endpoint_ops(spec: dict) -> dict[str, dict]:

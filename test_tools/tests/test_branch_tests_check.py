@@ -237,7 +237,7 @@ def test_enumeration_separates_declaring_from_scanned(project):
     _second_screen(project, "cart")
     _plain_screen(project, "landing")
 
-    declaring, scanned = discover_branch_screens(project)
+    declaring, scanned, _problems = discover_branch_screens(project)
 
     assert declaring == ["cart", "checkout"]
     assert scanned == ["cart", "checkout", "landing"]
@@ -246,7 +246,7 @@ def test_enumeration_separates_declaring_from_scanned(project):
 def test_an_unreadable_spec_stays_in_the_denominator(project):
     (project / "docs/specs/broken.spec.json").write_text("{ not json",
                                                          encoding="utf-8")
-    declaring, scanned = discover_branch_screens(project)
+    declaring, scanned, _problems = discover_branch_screens(project)
 
     # Dropping it from `scanned` too would shrink the denominator to match
     # the numerator and report full coverage of what happened to parse.
@@ -281,7 +281,7 @@ def test_a_screen_in_a_subdirectory_resolves(project):
 def test_a_subdirectory_screen_is_enumerated(project):
     _split_out(project, "catalog", "price_tiers")
 
-    declaring, scanned = discover_branch_screens(project)
+    declaring, scanned, _problems = discover_branch_screens(project)
 
     # An enumeration that stops at the top level reports "0 drifted" for a
     # project whose screens it never looked at.
@@ -666,7 +666,7 @@ def test_a_split_screen_generates_under_the_parent_name(project):
 def test_sub_specs_are_not_enumerated_as_screens(project):
     _split_family(project)
 
-    declaring, scanned = discover_branch_screens(project)
+    declaring, scanned, _problems = discover_branch_screens(project)
 
     assert declaring == ["checkout"]
     assert "checkout-panel" in scanned  # scanned, so the denominator is honest
@@ -693,7 +693,7 @@ def test_the_family_is_the_declaration_not_the_directory(project):
     stray["metadata"]["name"] = "Stray"
     _write(project / "docs/specs/checkout/stray.spec.json", stray)
 
-    declaring, _ = discover_branch_screens(project)
+    declaring, _scanned, _problems = discover_branch_screens(project)
 
     assert sorted(declaring) == ["checkout", "stray"]
 
@@ -756,3 +756,95 @@ def test_every_platform_check_digs_nothing(project, platform, kwargs,
                           **kwargs)
 
     assert {p for p in project.rglob("*")} == before
+
+
+# --------------------------------------------------------------------- #
+# A refused parent must not shrink the denominator in silence
+# --------------------------------------------------------------------- #
+
+def _split_family_of_four(root: Path, *, parent_declares: dict | None = None) -> None:
+    """The reported shape: a parent and FOUR sub-specs.
+
+    Two sub-specs would exercise the same code, but the report is a screen
+    split four ways and a fixture simpler than the report is a different
+    specimen — the contract here is that the count drops by exactly one
+    SCREEN however many files the screen is made of.
+    """
+    spec = json.loads((root / "docs/specs/checkout.spec.json").read_text())
+
+    core = json.loads(json.dumps(spec))
+    core["metadata"]["name"] = "CheckoutCore"
+    _write(root / "docs/specs/checkout/checkout-core.spec.json", core)
+    for extra in ("panel", "summary", "footer"):
+        part = json.loads(json.dumps(spec))
+        part.pop("branchContracts")
+        part["dataFlow"].pop("repositories")
+        part["metadata"]["name"] = f"Checkout{extra.capitalize()}"
+        _write(root / f"docs/specs/checkout/checkout-{extra}.spec.json", part)
+
+    parent = {
+        "type": "screen_parent_spec", "version": "1.0",
+        "metadata": {"name": "Checkout", "displayName": "Checkout",
+                     "description": "d", "layoutFile": "checkout"},
+        "subSpecs": [{"file": "checkout/checkout-core.spec.json"}] + [
+            {"file": f"checkout/checkout-{n}.spec.json"}
+            for n in ("panel", "summary", "footer")],
+    }
+    if parent_declares:
+        parent.update(parent_declares)
+    _write(root / "docs/specs/checkout.spec.json", parent)
+
+
+def test_a_refused_parent_is_named_rather_than_dropped(project):
+    """Reported 2026-09-07 as a side effect of the unit-stubs defect.
+
+    The merger REFUSES a parent that declares a section it builds from the
+    sub-specs, and that refusal used to be swallowed into the same `None` a
+    tool tree without jui_cli returns. `_load_spec` then returned the RAW
+    parent — and a raw parent carries no `branchContracts`, because the block
+    lives in the sub-specs and only exists after a merge.
+
+    So the screen left `declaring` and nothing said so. Measured before the
+    fix, on this fixture: `['checkout'] -> []`, which is the consumer's
+    15 -> 14. Every other number stayed consistent with itself, which is why
+    it read as a clean run over a project one screen shorter.
+    """
+    _split_family_of_four(project, parent_declares={
+        "unitContracts": {"target": "CheckoutViewModel",
+                          "cases": [{"name": "a"}]}})
+
+    declaring, scanned, problems = discover_branch_screens(project)
+
+    assert declaring == []            # still unreadable — that part is honest
+    assert len(problems) == 1, problems
+    assert "checkout" in problems[0]
+    assert "NOT read" in problems[0]
+    # The merger's own words, so the reader is told what to move and where.
+    assert "cannot declare 'unitContracts'" in problems[0]
+    # The denominator itself must not shrink: the screen was scanned.
+    assert "checkout" in scanned
+
+
+def test_a_clean_parent_of_four_says_nothing(project):
+    """The control. A check that fires on every split screen is noise, and
+    this one has to stay silent for the shape it was written beside."""
+    _split_family_of_four(project)
+
+    declaring, _scanned, problems = discover_branch_screens(project)
+
+    assert declaring == ["checkout"]
+    assert problems == []
+
+
+def test_the_gate_fails_when_a_spec_was_not_read(project, monkeypatch, capsys):
+    """The exit code, not just the list.
+
+    Without this the screen count is one smaller and `--check` still returns
+    0 — a pass over a project that lost a screen between two runs.
+    """
+    _split_family_of_four(project, parent_declares={
+        "unitContracts": {"target": "CheckoutViewModel",
+                          "cases": [{"name": "a"}]}})
+
+    assert _cli(project, "--check", monkeypatch=monkeypatch) == 1
+    assert "PROBLEM" in capsys.readouterr().err

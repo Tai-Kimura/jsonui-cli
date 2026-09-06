@@ -1583,11 +1583,22 @@ def cmd_generate_branch_tests(args):
                   file=sys.stderr)
             return 1
         try:
-            screens, scanned = discover_branch_screens(Path.cwd())
+            screens, scanned, spec_problems = discover_branch_screens(Path.cwd())
         except BranchTestGenerationError as e:
             print(f"Error: {e}", file=sys.stderr)
             return 1
         scanned_count = len(scanned)
+        if spec_problems:
+            # Reported before the count, and fatal on its own. A refused
+            # parent leaves this scan with a SMALLER denominator and no other
+            # symptom: every remaining number agrees with every other, and the
+            # run reads as a clean pass over a project one screen shorter.
+            for problem in spec_problems:
+                print(f"  PROBLEM  {problem}", file=sys.stderr)
+            print(f"{len(spec_problems)} spec(s) were not read, so the "
+                  f"{scanned_count} spec(s) scanned below do not cover them.",
+                  file=sys.stderr)
+            return 1
         if not screens:
             # Not a green: a scan that reaches nothing and a project with
             # nothing to generate produce the same "0 drifted", and this is
