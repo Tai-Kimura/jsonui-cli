@@ -582,16 +582,29 @@ module RjuiTools
           lines.join("\n")
         end
 
-        # Colors are deliberately NOT emitted inline here: they go through
+        # A STATIC color is deliberately NOT emitted inline: it goes through
         # build_partial_class -> TailwindMapper.map_color, the same route the
         # main fontColor path takes. L1 normalization rewrites a palette hex
         # to its TOKEN name (#2563EB -> accent), and a token is not a CSS
         # color — `style: { color: 'accent' }` is silently ignored by the
         # browser, so the text simply came out unstyled.
+        #
+        # A BINDING is the exception, and for the same reason. There is no
+        # class name to compute at build time: `map_color` saw `@{x}`, found
+        # no such key in colors.json, warned once per layout and emitted
+        # `text-@{x}` — a dead class, plus a [WARN] on every build. It goes
+        # through `color_style_expr`, which resolves the palette key at
+        # RUNTIME, exactly as the top-level fontColor on this same Label
+        # already did. The token problem above is what that helper exists to
+        # solve, so the inline style is safe here and only here.
         def build_partial_style(partial)
           styles = []
           styles << "fontSize: '#{partial['fontSize']}px'" if partial['fontSize']
           styles << "fontWeight: '#{partial['fontWeight']}'" if partial['fontWeight']
+          styles << "color: #{color_style_expr(partial['fontColor'])}" if has_binding?(partial['fontColor'])
+          if has_binding?(partial['background'])
+            styles << "backgroundColor: #{color_style_expr(partial['background'])}"
+          end
           styles.join(', ')
         end
 
@@ -675,8 +688,15 @@ module RjuiTools
           # a palette TOKEN becomes a Tailwind class, an off-palette name is
           # reported once. Emitting the raw value inline would produce
           # `color: 'accent'`, which no browser understands.
-          classes << TailwindMapper.map_color(partial['fontColor'], 'text') if partial['fontColor']
-          classes << TailwindMapper.map_color(partial['background'], 'bg') if partial['background']
+          # A bound color has no class: it is resolved at runtime in
+          # build_partial_style. Handing `@{x}` to map_color made it a
+          # colors.json miss, which warned and emitted a dead `text-@{x}`.
+          if partial['fontColor'] && !has_binding?(partial['fontColor'])
+            classes << TailwindMapper.map_color(partial['fontColor'], 'text')
+          end
+          if partial['background'] && !has_binding?(partial['background'])
+            classes << TailwindMapper.map_color(partial['background'], 'bg')
+          end
           # partialAttributes[].underline carries the same two faces as the
           # component-level attribute (attribute_semantics -> textDecoration).
           classes.concat(text_decoration_classes(underline: partial['underline'],
