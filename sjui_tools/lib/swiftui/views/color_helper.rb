@@ -1,4 +1,5 @@
 require_relative '../binding/binding_expression'
+require_relative 'color_palette'
 
 module SjuiTools
   module SwiftUI
@@ -80,6 +81,18 @@ module SjuiTools
           # SwiftJsonUIConfiguration.shared.getColor(for:) を使用して色を取得
           # これにより、colorProviderが設定されていればそれを使用し、
           # そうでなければhex変換にフォールバックする
+          #
+          # The fallback is only reachable when getColor returns nil, and for
+          # a name in colors.json it never does — so `Color.black` there is a
+          # dead branch and rewriting it would churn every generated file on
+          # a healthy project (measured on a consumer: 1307 sites, 102 files,
+          # none of them a defect). Only the undefined name gets the new
+          # fallback, and it gets the warning in the same breath.
+          if ColorPalette.undefined?(color_value)
+            ColorPalette.warn_once(color_value)
+            return "SwiftJsonUIConfiguration.shared.getColor(for: \"#{color_value}\") ?? Color.clear"
+          end
+
           "SwiftJsonUIConfiguration.shared.getColor(for: \"#{color_value}\") ?? Color.black"
         end
         
