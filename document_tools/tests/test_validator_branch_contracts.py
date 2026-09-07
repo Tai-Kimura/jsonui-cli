@@ -1279,15 +1279,15 @@ class BranchRequestScalarLists(unittest.TestCase):
 
 
 _TWO_OWNERS = [
-    {"name": "UserRepository", "methods": [
-        {"name": "getProfile", "endpoint": "GET /api/user/profile"}]},
-    {"name": "ProfilingRepository", "methods": [
-        {"name": "getProfile", "endpoint": "GET /api/profiling/profile"}]},
+    {"name": "AccountRepository", "methods": [
+        {"name": "getProfile", "endpoint": "GET /api/account/profile"}]},
+    {"name": "PreferencesRepository", "methods": [
+        {"name": "getProfile", "endpoint": "GET /api/preferences/profile"}]},
 ]
 
 _ONE_OWNER = [
-    {"name": "UserRepository", "methods": [
-        {"name": "getProfile", "endpoint": "GET /api/user/profile"}]},
+    {"name": "AccountRepository", "methods": [
+        {"name": "getProfile", "endpoint": "GET /api/account/profile"}]},
 ]
 
 
@@ -1323,30 +1323,30 @@ class BranchApiOpQualification(unittest.TestCase):
             "when.api.getProfile")
         self.assertTrue(errs)
         msg = errs[0].message
-        self.assertIn("UserRepository.getProfile", msg)
-        self.assertIn("ProfilingRepository.getProfile", msg)
+        self.assertIn("AccountRepository.getProfile", msg)
+        self.assertIn("PreferencesRepository.getProfile", msg)
 
     def test_a_qualified_reference_resolves(self):
         result = self._result(
-            {"api.UserRepository.getProfile": "failure"}, {"api": "none"})
+            {"api.AccountRepository.getProfile": "failure"}, {"api": "none"})
         self.assertEqual(
-            _errors_at(result, "when.api.UserRepository.getProfile"), [])
+            _errors_at(result, "when.api.AccountRepository.getProfile"), [])
         self.assertEqual(
-            _warnings_at(result, "when.api.UserRepository.getProfile"), [])
+            _warnings_at(result, "when.api.AccountRepository.getProfile"), [])
 
     def test_the_then_side_takes_the_same_qualification(self):
         result = self._result(
-            {"api.UserRepository.getProfile": "failure"},
-            {"api.ProfilingRepository.getProfile": "not-called"})
+            {"api.AccountRepository.getProfile": "failure"},
+            {"api.PreferencesRepository.getProfile": "not-called"})
         self.assertEqual(
-            _errors_at(result, "then.api.ProfilingRepository.getProfile"), [])
+            _errors_at(result, "then.api.PreferencesRepository.getProfile"), [])
 
     def test_a_qualified_request_match_is_accepted(self):
         result = self._result(
-            {"api.UserRepository.getProfile": "success"},
-            {"api.UserRepository.getProfile.request": {"scope": "full"}})
+            {"api.AccountRepository.getProfile": "success"},
+            {"api.AccountRepository.getProfile.request": {"scope": "full"}})
         self.assertEqual(
-            _errors_at(result, "then.api.UserRepository.getProfile.request"), [])
+            _errors_at(result, "then.api.AccountRepository.getProfile.request"), [])
 
     def test_a_bare_then_reference_to_a_duplicated_name_is_an_error(self):
         """Both sides, not just `when` — an error on one side only would let
@@ -1355,7 +1355,7 @@ class BranchApiOpQualification(unittest.TestCase):
             self._result({"cond": "always"}, {"api.getProfile": "called"}),
             "then.api.getProfile")
         self.assertTrue(errs)
-        self.assertIn("UserRepository.getProfile", errs[0].message)
+        self.assertIn("AccountRepository.getProfile", errs[0].message)
 
     def test_a_third_segment_is_still_rejected(self):
         errs = _errors_at(
@@ -1376,12 +1376,12 @@ class BranchApiOpQualification(unittest.TestCase):
 
     def test_an_unambiguous_name_may_still_be_qualified(self):
         result = self._result(
-            {"api.UserRepository.getProfile": "failure"}, {"api": "none"},
+            {"api.AccountRepository.getProfile": "failure"}, {"api": "none"},
             _ONE_OWNER)
         self.assertEqual(
-            _errors_at(result, "when.api.UserRepository.getProfile"), [])
+            _errors_at(result, "when.api.AccountRepository.getProfile"), [])
         self.assertEqual(
-            _warnings_at(result, "when.api.UserRepository.getProfile"), [])
+            _warnings_at(result, "when.api.AccountRepository.getProfile"), [])
 
     def test_an_undeclared_op_still_only_warns(self):
         """Ambiguity is an error; absence stays a warning.

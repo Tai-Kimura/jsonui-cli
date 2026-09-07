@@ -2,7 +2,7 @@
 
 `collect_endpoint_ops` keyed a flat `name -> endpoint` dict, so the second
 declaration overwrote the first: a spec declaring `getProfile` on both
-UserRepository and ProfilingRepository bound `api.getProfile` to whichever
+AccountRepository and PreferencesRepository bound `api.getProfile` to whichever
 came last, generated no route for the other endpoint, and said nothing. The
 screen's contract could not name the endpoint it meant, the unrouted call
 599'd during the act, and the spec validated clean — the failure looked like
@@ -34,17 +34,17 @@ def _write(path: Path, data) -> None:
 
 _TWO_OWNERS = {
     "repositories": [
-        {"name": "UserRepository", "methods": [
-            {"name": "getProfile", "endpoint": "GET /api/user/profile"}]},
-        {"name": "ProfilingRepository", "methods": [
-            {"name": "getProfile", "endpoint": "GET /api/profiling/profile"}]},
+        {"name": "AccountRepository", "methods": [
+            {"name": "getProfile", "endpoint": "GET /api/account/profile"}]},
+        {"name": "PreferencesRepository", "methods": [
+            {"name": "getProfile", "endpoint": "GET /api/preferences/profile"}]},
     ],
 }
 
 _ONE_OWNER = {
     "repositories": [
-        {"name": "UserRepository", "methods": [
-            {"name": "getProfile", "endpoint": "GET /api/user/profile"}]},
+        {"name": "AccountRepository", "methods": [
+            {"name": "getProfile", "endpoint": "GET /api/account/profile"}]},
     ],
 }
 
@@ -57,18 +57,18 @@ def _project(tmp_path: Path, data_flow_extra, branches) -> Path:
         "viewModel": {"methods": [{"name": "onAppear"}], "vars": []},
     }
     data_flow.update(data_flow_extra)
-    _write(root / "docs/specs/mypage.spec.json", {
+    _write(root / "docs/specs/settings.spec.json", {
         "type": "screen_spec",
         "version": "1.0",
-        "metadata": {"name": "Mypage", "displayName": "Mypage",
-                     "description": "d", "layoutFile": "mypage"},
+        "metadata": {"name": "Settings", "displayName": "Settings",
+                     "description": "d", "layoutFile": "settings"},
         "structure": {"components": [], "layout": {}},
         "dataFlow": data_flow,
         "stateManagement": {"uiVariables": []},
         "branchContracts": {"methods": {"onAppear": {"branches": branches}}},
     })
-    for name, path in (("user", "/api/user/profile"),
-                       ("profiling", "/api/profiling/profile")):
+    for name, path in (("account", "/api/account/profile"),
+                       ("preferences", "/api/preferences/profile")):
         _write(root / f"tests/mocks/{name}.mock.json", {
             "source": {"method": "GET", "path": path},
             "activeScenario": "success",
@@ -80,7 +80,7 @@ def _project(tmp_path: Path, data_flow_extra, branches) -> Path:
 
 def _generate(root: Path, platform="web", **kw):
     return generate_branch_tests(
-        "mypage", platform=platform, out_dir=root / "out",
+        "settings", platform=platform, out_dir=root / "out",
         harness_dir=root / "harness", project_root=root, **kw,
     )
 
@@ -104,21 +104,21 @@ class TestCollectEndpointOps:
 
     def test_the_qualified_spelling_also_resolves_when_unique(self):
         ops = collect_endpoint_ops({"dataFlow": _ONE_OWNER})
-        assert ops.resolve("UserRepository.getProfile") == "getProfile"
+        assert ops.resolve("AccountRepository.getProfile") == "getProfile"
 
     def test_a_duplicated_name_keeps_both_endpoints(self):
         """The whole defect: two declarations used to leave one key."""
         ops = collect_endpoint_ops({"dataFlow": _TWO_OWNERS})
         assert sorted(ops.canonical) == [
-            "ProfilingRepository.getProfile", "UserRepository.getProfile"]
+            "AccountRepository.getProfile", "PreferencesRepository.getProfile"]
         assert {v["path"] for v in ops.canonical.values()} == {
-            "/api/user/profile", "/api/profiling/profile"}
+            "/api/account/profile", "/api/preferences/profile"}
 
     def test_the_bare_name_stops_resolving_and_is_recorded(self):
         ops = collect_endpoint_ops({"dataFlow": _TWO_OWNERS})
         assert ops.resolve("getProfile") is None
         assert ops.collisions["getProfile"] == [
-            "UserRepository.getProfile", "ProfilingRepository.getProfile"]
+            "AccountRepository.getProfile", "PreferencesRepository.getProfile"]
 
 
 class TestGeneration:
@@ -129,23 +129,23 @@ class TestGeneration:
         with pytest.raises(BranchTestGenerationError) as e:
             _generate(root)
         msg = str(e.value)
-        assert "UserRepository.getProfile" in msg
-        assert "ProfilingRepository.getProfile" in msg
+        assert "AccountRepository.getProfile" in msg
+        assert "PreferencesRepository.getProfile" in msg
 
     def test_qualified_references_bind_both_endpoints(self, tmp_path):
         root = _project(tmp_path, _TWO_OWNERS, [
-            {"when": {"api.UserRepository.getProfile": "failure"},
-             "then": {"api.UserRepository.getProfile": "called"}},
-            {"when": {"api.ProfilingRepository.getProfile": "failure"},
-             "then": {"api.ProfilingRepository.getProfile": "called"}},
+            {"when": {"api.AccountRepository.getProfile": "failure"},
+             "then": {"api.AccountRepository.getProfile": "called"}},
+            {"when": {"api.PreferencesRepository.getProfile": "failure"},
+             "then": {"api.PreferencesRepository.getProfile": "called"}},
         ])
         _generate(root)
-        content = (root / "out" / "mypage.branches.test.ts").read_text()
-        assert '"UserRepository.getProfile"' in content
-        assert '"ProfilingRepository.getProfile"' in content
+        content = (root / "out" / "settings.branches.test.ts").read_text()
+        assert '"AccountRepository.getProfile"' in content
+        assert '"PreferencesRepository.getProfile"' in content
         # Both endpoints reach the route table — the half that used to vanish.
-        assert "/api/user/profile" in content
-        assert "/api/profiling/profile" in content
+        assert "/api/account/profile" in content
+        assert "/api/preferences/profile" in content
 
     def test_a_request_match_can_be_qualified_too(self, tmp_path):
         """`then` must take the same qualification as `when`.
@@ -154,12 +154,12 @@ class TestGeneration:
         leave the contract unable to say anything about the one it selected.
         """
         root = _project(tmp_path, _TWO_OWNERS, [
-            {"when": {"api.UserRepository.getProfile": "success"},
-             "then": {"api.UserRepository.getProfile.request": {"scope": "full"}}},
+            {"when": {"api.AccountRepository.getProfile": "success"},
+             "then": {"api.AccountRepository.getProfile.request": {"scope": "full"}}},
         ])
         _generate(root)
-        content = (root / "out" / "mypage.branches.test.ts").read_text()
-        assert '"UserRepository.getProfile"' in content
+        content = (root / "out" / "settings.branches.test.ts").read_text()
+        assert '"AccountRepository.getProfile"' in content
         assert '"scope": "full"' in content
 
     def test_an_unreferenced_duplicate_still_joins_the_table_once(self, tmp_path):
@@ -171,13 +171,13 @@ class TestGeneration:
         under the other spelling would count zero.
         """
         root = _project(tmp_path, _TWO_OWNERS, [
-            {"when": {"api.UserRepository.getProfile": "failure"},
-             "then": {"api.UserRepository.getProfile": "called"}},
+            {"when": {"api.AccountRepository.getProfile": "failure"},
+             "then": {"api.AccountRepository.getProfile": "called"}},
         ])
         _generate(root)
-        content = (root / "out" / "mypage.branches.test.ts").read_text()
-        assert content.count('op: "UserRepository.getProfile"') == 1
-        assert content.count('op: "ProfilingRepository.getProfile"') == 1
+        content = (root / "out" / "settings.branches.test.ts").read_text()
+        assert content.count('op: "AccountRepository.getProfile"') == 1
+        assert content.count('op: "PreferencesRepository.getProfile"') == 1
 
     def test_mixing_two_spellings_for_one_endpoint_is_refused(self, tmp_path):
         """One endpoint, one name.
@@ -189,7 +189,7 @@ class TestGeneration:
         """
         root = _project(tmp_path, _ONE_OWNER, [
             {"when": {"api.getProfile": "failure"},
-             "then": {"api.UserRepository.getProfile": "called"}},
+             "then": {"api.AccountRepository.getProfile": "called"}},
         ])
         with pytest.raises(BranchTestGenerationError) as e:
             _generate(root)
@@ -216,9 +216,9 @@ class TestRegistrationAndReferenceAgree:
     ])
     def test_every_referenced_op_is_a_registered_op(self, tmp_path, platform, kwargs):
         root = _project(tmp_path, _TWO_OWNERS, [
-            {"when": {"api.UserRepository.getProfile": "failure"},
-             "then": {"api.UserRepository.getProfile": "called",
-                      "api.ProfilingRepository.getProfile": "not-called"}},
+            {"when": {"api.AccountRepository.getProfile": "failure"},
+             "then": {"api.AccountRepository.getProfile": "called",
+                      "api.PreferencesRepository.getProfile": "not-called"}},
         ])
         _generate(root, platform, **kwargs)
         content = "\n".join(
