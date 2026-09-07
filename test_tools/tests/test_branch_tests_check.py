@@ -1000,3 +1000,32 @@ def test_both_output_paths_fold_the_same_way(project, monkeypatch, capsys):
         # and silencing the other leaves each path individually defensible.
         assert out.count("press a handler whose destination differs by route") == 1
         assert out.count("has no `invoke(`") == 1                # one harness here
+
+
+def test_the_generate_path_folds_at_more_than_one_screen(project, monkeypatch,
+                                                         capsys):
+    """The generate path repeats too — it just needs two screens to show it.
+
+    Before the fold the note lived inside `_print_branch_generation`, which
+    the generate flow calls once per report, so N stale harnesses printed the
+    paragraph N times there as well. A single-screen run cannot tell "folded"
+    from "only ever printed once", which is why this case exists at n=2.
+    """
+    _second_screen(project, "cart")
+    _cli(project, monkeypatch=monkeypatch)
+    stale = "export interface BranchHarness {\n  readField(n: string): unknown;\n}\n"
+    for name in ("checkout.ts", "cart.ts"):
+        next(project.rglob(name)).write_text(stale, encoding="utf-8")
+    capsys.readouterr()
+
+    _cli(project, monkeypatch=monkeypatch)
+    out = capsys.readouterr().out
+
+    assert out.count("press a handler whose destination differs by route") == 1
+    # One line per file, counted BY NAME rather than by the sentence — the
+    # count that matters is how many harnesses are named, not how many times
+    # the prose appears.
+    named = [l for l in out.splitlines() if "has no `invoke(`" in l]
+    assert len(named) == 2, named
+    assert any("checkout.ts" in l for l in named)
+    assert any("cart.ts" in l for l in named)
