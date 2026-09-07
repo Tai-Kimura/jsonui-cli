@@ -1680,7 +1680,7 @@ export function createHarness(): BranchHarness {
   // TODO: construct the ViewModel with a router recorder and a data store;
   // invoke should call `invokeFromStore(data, name, ...args)` and settle
   // should call the runtime's `settle` — both are exported from
-  // ./jsonui-branch-runtime, and neither is worth re-implementing here;
+  // "%(runtime_import)s", and neither is worth re-implementing here;
   // resolveString should look the key up in %(screen_const)s_BRANCH_STRING_KEYS
   // (throw on a missing entry — same contract as SCREEN_ROUTES), pass the full
   // key to the project's StringManager, and RETURN WHAT THAT RESOLVES TO —
@@ -3362,8 +3362,17 @@ def generate_branch_tests(
             report.harness_absent = True
         else:
             harness_file.write_text(
-                HARNESS_SKELETON % {"screen": screen,
-                                    "screen_const": screen.upper()},
+                # The path is RESOLVED, not a literal. The harness and the
+                # runtime land in DIFFERENT directories on web
+                # (`branch-harness/` beside `generated/`), and both are
+                # configurable, so the fixed `./…` was the TEST file's
+                # correct path copied into the harness's prose — where it
+                # does not resolve. Reported by a consumer: tsc TS2307 on
+                # the very import the TODO asks the reader to write.
+                render_harness_skeleton(
+                    screen,
+                    _relative_import(harness_path,
+                                     out_path / "jsonui-branch-runtime")),
                 encoding="utf-8",
             )
             created = True
@@ -3515,6 +3524,22 @@ def _skip_for_platform(report: "GenerationReport") -> bool:
         return False
     report.platform_applicable = False
     return True
+
+
+def render_harness_skeleton(screen: str, runtime_import: str = "./jsonui-branch-runtime") -> str:
+    """The web harness skeleton, filled in.
+
+    A function rather than `HARNESS_SKELETON % {...}` at each call site: the
+    placeholder set changed once (a resolved runtime path was added) and
+    every caller that formatted the template by hand broke at once — the
+    same shape as the hand-written report stub that broke when the report
+    grew a field. One renderer, and a new placeholder is one edit.
+    """
+    return HARNESS_SKELETON % {
+        "screen": screen,
+        "screen_const": screen.upper(),
+        "runtime_import": runtime_import,
+    }
 
 
 def _relative_import(from_dir: Path, to_module: Path) -> str:

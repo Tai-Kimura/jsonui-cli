@@ -156,8 +156,7 @@ class TestTheToolNamesWhatTheFixCannotReach:
         """It has the member by construction. Reporting it would put the note
         on every first generation, which is the same as hiding it."""
         harness = tmp_path / "some_screen.ts"
-        harness.write_text(bt.HARNESS_SKELETON % {
-            "screen": "some_screen", "screen_const": "SOME_SCREEN"},
+        harness.write_text(bt.render_harness_skeleton("some_screen"),
             encoding="utf-8")
         assert bt._harness_predates_invoke(harness, created=True) is False
 
@@ -166,8 +165,7 @@ class TestTheToolNamesWhatTheFixCannotReach:
         the predicate, every project would be told to port from a template
         that lacks the member."""
         harness = tmp_path / "some_screen.ts"
-        harness.write_text(bt.HARNESS_SKELETON % {
-            "screen": "some_screen", "screen_const": "SOME_SCREEN"},
+        harness.write_text(bt.render_harness_skeleton("some_screen"),
             encoding="utf-8")
         assert bt._harness_predates_invoke(harness, created=False) is False
 

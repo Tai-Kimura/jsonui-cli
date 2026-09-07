@@ -63,8 +63,7 @@ def _emit(into: Path, *, runtime: str | None = None,
     (into / "jsonui-branch-runtime.ts").write_text(
         runtime if runtime is not None else bt.RUNTIME_TS, encoding="utf-8")
     (into / "some_screen.ts").write_text(
-        skeleton if skeleton is not None else bt.HARNESS_SKELETON % {
-            "screen": "some_screen", "screen_const": "SOME_SCREEN"},
+        skeleton if skeleton is not None else bt.render_harness_skeleton("some_screen"),
         encoding="utf-8")
 
 
@@ -103,8 +102,7 @@ class TestTheEmittedPairTypeChecks:
         present, spelled correctly, in the right block. Only a type-checker
         knows the call is wrong.
         """
-        broken = bt.HARNESS_SKELETON % {"screen": "some_screen",
-                                        "screen_const": "SOME_SCREEN"}
+        broken = bt.render_harness_skeleton("some_screen")
         broken += (
             "\nexport function press(h: BranchHarness): void {\n"
             "  h.invoke(42);\n"
@@ -132,3 +130,62 @@ class TestTheCompilerIsReallyReached:
         _tsc()  # skips or fails before asserting anything about the path
         assert _TSC.parts[-4:] == ("support", "node_modules", ".bin", "tsc")
         assert shutil.which("tsc") is None or _TSC.is_file()
+
+
+class TestTheSkeletonsOwnAdviceCompiles:
+    """Reported 2026-09-07: the TODO named a path that does not resolve.
+
+    The harness and the runtime are written to DIFFERENT directories on web
+    — `tests/unit/branch-harness/` and `tests/unit/generated/` — and the
+    skeleton's TODO carried `./jsonui-branch-runtime`, which is the path the
+    generated TEST needs, because the test sits beside the runtime. A reader
+    following the instruction got TS2307.
+
+    Compiled in the real two-directory layout rather than asserted as text.
+    The defect is not in the string; it is in the string's relationship to
+    where the two files land, and only a compiler run from the harness's own
+    directory can see that.
+    """
+
+    def _layout(self, tmp_path, documented_path):
+        gen = tmp_path / "tests/unit/generated"
+        harness = tmp_path / "tests/unit/branch-harness"
+        gen.mkdir(parents=True)
+        harness.mkdir(parents=True)
+        (gen / "jsonui-branch-runtime.ts").write_text(bt.RUNTIME_TS, encoding="utf-8")
+        body = (f'import {{ invokeFromStore, settle }} from "{documented_path}";\n'
+                "void invokeFromStore;\nvoid settle;\n"
+                + bt.render_harness_skeleton("some_screen", documented_path))
+        f = harness / "some_screen.ts"
+        f.write_text(body, encoding="utf-8")
+        return f
+
+    def _check(self, tmp_path, f):
+        return subprocess.run([str(_tsc()), *_TSC_ARGS, str(f)],
+                              cwd=tmp_path, capture_output=True, text=True)
+
+    def test_the_documented_import_resolves(self):
+        """The path the emitter now writes, checked from the harness's dir."""
+        from pathlib import Path as P
+        resolved = bt._relative_import(
+            P("tests/unit/branch-harness"),
+            P("tests/unit/generated/jsonui-branch-runtime"))
+        assert resolved == "../generated/jsonui-branch-runtime", resolved
+
+    def test_following_the_todo_compiles(self, tmp_path):
+        from pathlib import Path as P
+        resolved = bt._relative_import(
+            P("tests/unit/branch-harness"),
+            P("tests/unit/generated/jsonui-branch-runtime"))
+        done = self._check(tmp_path, self._layout(tmp_path, resolved))
+        assert done.returncode == 0, done.stdout + done.stderr
+
+    def test_the_old_advice_would_not_have(self, tmp_path):
+        """The control, and the reported failure reproduced.
+
+        Without it, "it compiles" says nothing: a layout where BOTH paths
+        resolve would pass the case above and hide the defect entirely.
+        """
+        done = self._check(tmp_path, self._layout(tmp_path, "./jsonui-branch-runtime"))
+        assert done.returncode != 0
+        assert "TS2307" in done.stdout + done.stderr

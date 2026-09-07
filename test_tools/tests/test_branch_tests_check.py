@@ -875,6 +875,11 @@ def test_generate_names_a_harness_that_predates_invoke(project, monkeypatch,
     # after invoke shipped, where the throw was read as a broken invoke.
     assert "per-row closure" in out
     assert "meant to throw" in out
+    # How to tell the port worked, since nothing generated calls invoke:
+    # reported by a consumer whose coverage was byte-identical before and
+    # after porting all nine harnesses.
+    assert "no test count and no coverage number" in out
+    assert "destination differs by route" in out
 
 
 def test_check_names_it_too(project, monkeypatch, capsys):
@@ -889,6 +894,9 @@ def test_check_names_it_too(project, monkeypatch, capsys):
     out = capsys.readouterr().out
     assert "no `invoke(`" in out
     assert "per-row closure" in out
+    # Both note paths carry it. Asserted on only the generate path first,
+    # and a mutation that emptied the CHECK path's copy stayed green.
+    assert "no test count and no coverage number" in out
 
 
 def test_a_current_harness_is_not_named(project, monkeypatch, capsys):
@@ -900,3 +908,28 @@ def test_a_current_harness_is_not_named(project, monkeypatch, capsys):
     _cli(project, monkeypatch=monkeypatch)
 
     assert "no `invoke(`" not in capsys.readouterr().out
+
+
+def test_the_written_harness_points_at_the_runtime_this_run_wrote(project,
+                                                                  monkeypatch):
+    """The emitter's own choice of path, read off the file it wrote.
+
+    The compile arm in test_emitted_typescript_compiles.py hands the path IN,
+    so it proves the resolved path works — and stays green if the emitter
+    goes back to hard-coding `./`. Measured: reverting the emitter passed all
+    seven of those cases. This one reads the emitted harness instead.
+    """
+    _cli(project, monkeypatch=monkeypatch)
+    harness = next(project.rglob("checkout.ts"))
+    runtime = next(project.rglob("jsonui-branch-runtime.ts"))
+
+    line = next(l for l in harness.read_text(encoding="utf-8").splitlines()
+                if "jsonui-branch-runtime" in l)
+    documented = line.split('"')[1]
+
+    # The path the file names must resolve, FROM THE HARNESS'S OWN DIRECTORY,
+    # to the runtime this same run emitted. Compared as resolved paths rather
+    # than as text so the assertion cannot pass on a coincidence of spelling.
+    assert (harness.parent / documented).resolve() == \
+        runtime.with_suffix("").resolve(), documented
+
