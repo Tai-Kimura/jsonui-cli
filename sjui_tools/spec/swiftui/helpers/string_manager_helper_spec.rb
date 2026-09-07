@@ -239,4 +239,48 @@ RSpec.describe SjuiTools::SwiftUI::Helpers::StringManagerHelper do
       end
     end
   end
+
+  describe 'the advice for a string that resolves to another section' do
+    # Reported 2026-09-07: the two warnings' repairs regenerated each other.
+    # "Register it under your own section" makes a second declaration, which
+    # is the duplicate warning; deleting the duplicate brings this one back.
+    # A user following the tool could not reach zero warnings, so a project
+    # whose invariant is `jui build` warning 0 could not share a string.
+    let(:shared) { { 'intro' => { 'product_name' => 'Acme' } } }
+
+    before do
+      allow(helper_instance).to receive(:load_strings_json).and_return(shared)
+      allow(SjuiTools::Core::Logger).to receive(:warn)
+      described_class.current_namespaces = %w[messages]
+    end
+
+    it 'names the key form, which is the spelling that reaches zero' do
+      helper_instance.get_text_with_string_manager('"Acme"')
+      expect(SjuiTools::Core::Logger).to have_received(:warn)
+        .with(/name the KEY instead of the value/)
+        .with(/"defaultValue": "<section>_<key>"/)
+    end
+
+    it 'says why the obvious repair loops' do
+      helper_instance.get_text_with_string_manager('"Acme"')
+      expect(SjuiTools::Core::Logger).to have_received(:warn)
+        .with(/the two repairs\s+regenerate each other|regenerate each other/)
+    end
+
+    it 'is silent for the spelling it recommends' do
+      # The arm that makes the advice worth giving: following it reaches 0.
+      expect(helper_instance.get_text_with_string_manager('"intro_product_name"'))
+        .to eq('StringManager.Intro.productName()')
+      expect(SjuiTools::Core::Logger).not_to have_received(:warn)
+    end
+
+    it 'emits the same reference for the value and for the key' do
+      # If the two spellings emitted different code the advice would be a
+      # behaviour change, not a wording change.
+      by_value = helper_instance.get_text_with_string_manager('"Acme"')
+      by_key = helper_instance.get_text_with_string_manager('"intro_product_name"')
+      expect(by_value).to eq(by_key)
+    end
+  end
+
 end

@@ -143,7 +143,7 @@ module SjuiTools
           Core::Logger.warn(
             "String #{text.inspect} resolved to section #{resolved['namespace']}, which " \
             "this layout does not own (#{own.join(' / ')}) — the SSoT never declared it " \
-            'here. Register the string under the layout\'s own section (jsonui-localize).'
+            "here. To share one string across layouts, name the KEY instead of the value: \"text\": \"<section>_<key>\" or \"defaultValue\": \"<section>_<key>\". Writing the value makes the reverse lookup land in another section; declaring it here as well makes a second declaration, which is the duplicate warning — the two repairs regenerate each other. If the string is this layout's own, declare it here (jsonui-localize)."
           )
         end
 
