@@ -32,9 +32,16 @@ RSpec.describe KjuiTools::Compose::Helpers::ResourceResolver, 'shared-string adv
 
   it 'names the key form, which is the spelling that reaches zero' do
     resolve('Acme')
-    expect(KjuiTools::Core::Logger).to have_received(:warn)
-      .with(/name the KEY instead of the value/)
-      .with(/"defaultValue": "<section>_<key>"/)
+    expect(KjuiTools::Core::Logger).to have_received(:warn).with(
+      satisfy do |m|
+        # ONE matcher, not two: `.with(a).with(b)` keeps only the LAST,
+        # so the chained form asserted the second pattern and silently
+        # dropped the first. Removing "name the KEY instead of the value"
+        # from both faces left this arm green (measured 2026-09-07).
+        m =~ /name the KEY instead of the value/ &&
+          m =~ /"defaultValue": "<section>_<key>"/
+      end
+    )
   end
 
   it 'says why the obvious repair loops' do
