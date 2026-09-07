@@ -1380,13 +1380,166 @@ class TestEveryExitHasTheSameShape:
     the caller's guards rather than on this function's contract.
     """
 
-    def test_the_missing_directory_exit_returns_four(self, tmp_path):
-        found, read, undiscoverable, by_name = uc._implemented_names(
-            tmp_path / "does-not-exist", "web")
-        assert (found, read, undiscoverable, by_name) == (set(), [], set(), {})
+    def test_the_missing_directory_exit_has_the_full_shape(self, tmp_path):
+        assert uc._implemented_names(
+            tmp_path / "does-not-exist", "web") == (set(), [], set(), {}, 0)
 
-    def test_a_platform_with_no_pattern_returns_four(self, tmp_path):
+    def test_a_platform_with_no_pattern_has_the_full_shape(self, tmp_path):
+        # `web` is no longer here: it has no entry in _ALL_TESTS_PATTERNS but
+        # is scanned by `_web_test_names`, so a platform with genuinely no
+        # scanner is needed to reach this exit at all.
         (tmp_path / "tests").mkdir()
-        found, read, undiscoverable, by_name = uc._implemented_names(
-            tmp_path / "tests", "flutter")
-        assert (found, read, undiscoverable, by_name) == (set(), [], set(), {})
+        assert uc._implemented_names(
+            tmp_path / "tests", "flutter") == (set(), [], set(), {}, 0)
+
+
+class TestWebTitlesAreReadWhole:
+    """Reported 2026-09-08 — `[^'\"]+` ended a title at the other quote.
+
+    The report is one ticket because it is one line of code, but it names
+    three different silences, and each gets its own arm here: a title CUT
+    (green on both sides once the short name is declared), a title MISSED
+    entirely (`it.each`, absent from both columns), and a non-title CAPTURED
+    (`/re/.test("x")`, an undeclared name that exists nowhere).
+    """
+
+    def test_an_apostrophe_does_not_end_a_double_quoted_title(self):
+        names, _ = uc._web_test_names(
+            'it("names it with the app\'s own wording", fn)')
+        assert names == ["names it with the app's own wording"]
+
+    def test_the_title_that_used_to_end_in_a_space_is_read_whole(self):
+        # The one case in the report that stood in BOTH columns of one run:
+        # cut at the inner quote it became `says ` — trailing space — and the
+        # declaring side strips, so no spec text could ever match it.
+        names, _ = uc._web_test_names(
+            'it("says \'until entry\' for zero hours", fn)')
+        assert names == ["says 'until entry' for zero hours"]
+        assert not any(n != n.strip() for n in names)
+
+    def test_plain_titles_read_exactly_as_they_did_before(self):
+        # The control. A fix that changes what SIMPLE titles produce is not a
+        # fix, and both quote styles have to keep working.
+        names, _ = uc._web_test_names(
+            'it("plain double", fn)\ntest(\'plain single\', fn)')
+        assert names == ["plain double", "plain single"]
+
+    def test_an_escaped_quote_is_part_of_the_title(self):
+        # The `\\.` branch. Registered by the triage lane as NOT exercised by
+        # their samples — they could say neither that it works nor that it
+        # does not — so it gets an arm of its own rather than riding on the
+        # apostrophe case, which does not reach it.
+        names, _ = uc._web_test_names(r'it("an escaped \" inside", fn)')
+        assert names == ['an escaped " inside']
+
+    def test_it_each_is_a_test_and_not_an_absence(self):
+        # 21 executing tests behind 3 `it.each` calls were seen as 3 titles;
+        # the other 18 were in NEITHER column, which `missing 0 / undeclared
+        # 0` cannot express.
+        names, unreadable = uc._web_test_names(
+            'it.each(TABLE)("%s is registered", fn)\n'
+            'test.each([[1, 2], [3, 4]])("adds %i and %i", fn)'
+        )
+        assert names == ["%s is registered", "adds %i and %i"]
+        assert unreadable == 0
+
+    def test_a_modifier_without_arguments_still_names_its_title(self):
+        names, _ = uc._web_test_names(
+            'it.skip("not right now", fn)\nit.only("just this", fn)')
+        assert names == ["not right now", "just this"]
+
+    def test_a_template_title_without_interpolation_is_a_title(self):
+        names, unreadable = uc._web_test_names("it(`a static template`, fn)")
+        assert names == ["a static template"]
+        assert unreadable == 0
+
+    def test_an_interpolated_title_is_counted_because_it_cannot_be_named(self):
+        # It runs, so it is not "missing"; it has no static spelling, so it
+        # cannot be declared. Counting it is the only honest report.
+        names, unreadable = uc._web_test_names("it(`built ${at} run time`, fn)")
+        assert names == []
+        assert unreadable == 1
+
+    def test_a_regexp_test_call_is_not_a_test_title(self):
+        # `\b` sits between `.` and `test`, so the old pattern read the
+        # argument of `/re/.test("abc")` as a case name — a name that exists
+        # in no spec and in no test, reported as UNDECLARED forever. This
+        # file already refuses that shape for ios; the reason applies here.
+        names, unreadable = uc._web_test_names(
+            'expect(/^a/.test("abc")).toBe(true)\nit("real one", fn)')
+        assert names == ["real one"]
+        assert unreadable == 0
+
+    def test_the_word_it_outside_a_call_is_not_counted_as_unreadable(self):
+        # Otherwise the new NOTE line fires on ordinary prose and code, and a
+        # line that always prints is a line nobody reads.
+        names, unreadable = uc._web_test_names(
+            "for (const it of items) { use(it); }\nconst it = 1;")
+        assert names == []
+        assert unreadable == 0
+
+
+class TestWebTitlesAgreeWithWhatASpecCanDeclare:
+    """The two sides are compared as strings, so they must be spelled alike."""
+
+    def test_declaring_the_truncated_name_is_drift_not_a_pass(self, tmp_path):
+        # ⚠️ The arm that kills the wrong fix. Generating declarations FROM
+        # the tool's own output made 13 of the 14 cut titles agree with
+        # themselves — `missing 0 / undeclared 0` — while the doc site showed
+        # the cut title. An implementation that truncates BOTH sides passes
+        # every other arm in this class and fails only this one.
+        root = _web_project(
+            tmp_path,
+            'it("names it with the app\'s own wording", fn)',
+            [{"name": "names it with the app", "platforms": ["web"]}],
+        )
+        report = uc.check_unit_contracts(root)
+        assert not report.ok, uc.format_report(report)
+        assert report.missing("web") == ["names it with the app"]
+        assert report.undeclared("web") == ["names it with the app's own wording"]
+
+    def test_the_whole_title_declares_cleanly(self, tmp_path):
+        root = _web_project(
+            tmp_path,
+            'it("names it with the app\'s own wording", fn)',
+            [{"name": "names it with the app's own wording", "platforms": ["web"]}],
+        )
+        report = uc.check_unit_contracts(root)
+        assert report.ok, uc.format_report(report)
+
+    def test_a_title_written_with_padding_can_still_be_declared(self, tmp_path):
+        # `_cases_of` strips the declared name and the scan did not strip
+        # what it captured, so a padded title was undeclarable: with the
+        # padding the spec strips it off, without it the scan never matched.
+        root = _web_project(
+            tmp_path,
+            'it("  padded  ", fn)',
+            [{"name": "padded", "platforms": ["web"]}],
+        )
+        report = uc.check_unit_contracts(root)
+        assert report.ok, uc.format_report(report)
+
+    def test_an_unreadable_title_is_named_in_the_report(self, tmp_path):
+        root = _web_project(
+            tmp_path,
+            'it("readable", fn)\nit(`built ${at} run time`, fn)',
+            [{"name": "readable", "platforms": ["web"]}],
+        )
+        report = uc.check_unit_contracts(root)
+        assert report.unreadable_titles.get("web") == 1
+        text = "\n".join(uc.format_report(report))
+        assert "1 test call(s) have a title this check cannot read" in text
+        # It is a note, not a failure: generating titles is allowed.
+        assert report.ok, text
+
+    def test_a_run_with_nothing_unreadable_says_nothing(self, tmp_path):
+        # The complement. The note exists to make an absence visible; a note
+        # that prints on every run makes the next real one invisible instead.
+        root = _web_project(
+            tmp_path,
+            'it("readable", fn)',
+            [{"name": "readable", "platforms": ["web"]}],
+        )
+        report = uc.check_unit_contracts(root)
+        assert report.unreadable_titles == {}
+        assert "cannot read" not in "\n".join(uc.format_report(report))

@@ -57,17 +57,6 @@ class UnitContractError(RuntimeError):
 #: Platforms a case may name, and the file extension its tests live in.
 PLATFORM_TEST_SUFFIX = {"ios": ".swift", "android": ".kt", "web": ".ts"}
 
-#: How a test case's name appears in each platform's source. Declared names
-#: are explicit strings, so these match the name rather than a convention.
-_DECL_PATTERNS = {
-    # func sendMessage_whenOffline_setsError() / func test...()
-    "ios": lambda n: re.compile(r"\bfunc\s+" + re.escape(n) + r"\s*\("),
-    # fun name() or fun `name with spaces`()
-    "android": lambda n: re.compile(r"\bfun\s+`?" + re.escape(n) + r"`?\s*\("),
-    # it('name') / test("name")
-    "web": lambda n: re.compile(r"\b(?:it|test)\s*\(\s*[\'\"]" + re.escape(n) + r"[\'\"]"),
-}
-
 #: Every test-method name a file declares, used to find implementations the
 #: spec does not know about. Deliberately per-platform: a regex that matched
 #: all three would also match things that are not tests in two of them.
@@ -79,9 +68,28 @@ _DECL_PATTERNS = {
 #: real finding on it is skipped too. Only functions inside an XCTestCase
 #: subclass can be test methods, so only those are scanned.
 _ALL_TESTS_PATTERNS = {
-    "android": re.compile(r"@Test[\s\S]{0,200}?\bfun\s+`?([^`(\s]+)`?\s*\("),
-    "web": re.compile(r"\b(?:it|test)\s*\(\s*[\'\"]([^\'\"]+)[\'\"]"),
+    "android": re.compile(r"@Test[\s\S]{0,200}?\bfun\s+`?(?P<name>[^`(\s]+)`?\s*\("),
 }
+
+#: Where a web test's title STARTS. The title itself is not matched here --
+#: `_web_test_names` reads the literal that follows, because a regex that
+#: also spans the literal cannot both respect quote pairing and step over an
+#: `it.each(TABLE)` argument without nesting quantifiers.
+#:
+#: `(?<![.\w$])` is what keeps `url.test("x")` from being read as a test.
+#: The modifier chain is what keeps `it.each(...)("title")` from being
+#: skipped: reported 2026-09-08, a project had 21 executing tests behind 3
+#: `it.each` calls and the scan saw 3 titles, so 18 tests were invisible to
+#: BOTH columns -- not "undeclared", simply absent, which is the one state
+#: this check cannot report.
+_WEB_TEST_HEAD = re.compile(r"(?<![.\w$])(?:it|test)\b")
+_WEB_MODIFIER = re.compile(r"\s*\.\s*(?P<mod>[A-Za-z_$][\w$]*)")
+
+#: The one modifier that TAKES an argument list of its own. `it.skip("x")`
+#: and `it.each(TABLE)("x")` look alike up to the first `(`, and consuming
+#: that `(` for every modifier swallows the title of every skipped and
+#: focused test -- which is how the first cut of this scanner lost them.
+_WEB_TABLE_MODIFIERS = {"each"}
 
 #: Platforms whose scan runs over source with comments blanked out first.
 #: ios is not here: it does not regex the raw text — `_swift_test_methods`
@@ -421,6 +429,12 @@ class UnitContractReport:
     undiscoverable: dict[str, list[str]] = field(default_factory=dict)
     #: platform -> case name -> the file(s) that implement it
     implemented_files: dict[str, dict[str, list[str]]] = field(default_factory=dict)
+    #: platform -> how many test calls have a title this check cannot read.
+    #: A count, not names: these have no static name to report, which is
+    #: exactly why they were invisible. Absent when zero, so the common run
+    #: gains no line -- a line that always prints is a line nobody reads, and
+    #: the next real finding on it is skipped with it.
+    unreadable_titles: dict[str, int] = field(default_factory=dict)
 
     def missing(self, platform: str) -> list[str]:
         """Declared for this platform, not implemented on it."""
@@ -658,6 +672,194 @@ def _test_roots(project_root: Path, config: dict) -> dict[str, Path | None]:
     return roots
 
 
+#: `\n` and friends, as the JS runtime reads them out of a string literal.
+_JS_ESCAPES = {"n": "\n", "r": "\r", "t": "\t", "b": "\b",
+               "f": "\f", "v": "\v", "0": "\0"}
+
+
+def _unescape_js(text: str) -> str:
+    r"""A JS string literal's BODY, decoded to the characters it denotes.
+
+    The spec declares the character; the source spells the escape. Comparing
+    the two as written makes `it("an escaped \" inside")` a name that cannot
+    be declared at all -- the same shape as the trailing-space case in
+    `_as_declared`, reached by a different route.
+
+    An escape this does not know decodes to the character after the
+    backslash, which is what JS does for every escape that is not special.
+    """
+    out: list[str] = []
+    i, n = 0, len(text)
+    while i < n:
+        c = text[i]
+        if c != "\\" or i + 1 >= n:
+            out.append(c)
+            i += 1
+            continue
+        nxt = text[i + 1]
+        if nxt == "u" and i + 2 < n and text[i + 2] == "{":
+            end = text.find("}", i + 3)
+            if end != -1:
+                try:
+                    out.append(chr(int(text[i + 3:end], 16)))
+                    i = end + 1
+                    continue
+                except ValueError:
+                    pass
+        if nxt in ("u", "x"):
+            width = 4 if nxt == "u" else 2
+            digits = text[i + 2:i + 2 + width]
+            if len(digits) == width:
+                try:
+                    out.append(chr(int(digits, 16)))
+                    i += 2 + width
+                    continue
+                except ValueError:
+                    pass
+        out.append(_JS_ESCAPES.get(nxt, nxt))
+        i += 2
+    return "".join(out)
+
+
+def _as_declared(platform: str, found: str) -> str:
+    r"""A scanned name, spelled the way a spec would have to declare it.
+
+    `_cases_of` strips the declared name; the scan did not strip what it
+    captured, and the two are compared as strings. A name whose source
+    spelling has a leading or trailing space was therefore IMPOSSIBLE to
+    declare: write it with the space and the spec strips it back off, write
+    it without and the scan never matches.
+
+    That is not hypothetical. Reported 2026-09-08: the old web pattern cut
+    `it("says 'until entry' for zero hours")` at the inner quote, leaving
+    `says ` with a trailing space, and the same case then stood in BOTH
+    columns of one run --
+
+        MISSING     says   (declared, no implementation)
+        UNDECLARED  says   (implemented, declared nowhere)
+
+    -- two lines that are the same string on screen and differ by one byte.
+    Fixing only the pattern rescues the other 13 truncated titles and leaves
+    this one undeclarable, so both sides are made symmetric here.
+    """
+    if platform == "web":
+        found = _unescape_js(found)
+    return found.strip()
+
+
+def _read_js_literal(text: str, i: int) -> tuple[str | None, bool, int]:
+    r"""``(value, dynamic, index after the literal)`` for the literal at *i*.
+
+    ``value`` is None when there is no literal there, or when the literal is a
+    template with an interpolation -- a title assembled at run time has no
+    static spelling, so no spec can declare it. ``dynamic`` separates those two
+    cases: one is "not a title", the other is "a title this check cannot see",
+    and only the second is worth reporting.
+    """
+    if i >= len(text):
+        return None, False, i
+    quote = text[i]
+    if quote not in "'\"`":
+        return None, False, i
+    j = i + 1
+    body: list[str] = []
+    while j < len(text):
+        c = text[j]
+        if c == "\\" and j + 1 < len(text):
+            body.append(c)
+            body.append(text[j + 1])
+            j += 2
+            continue
+        if c == quote:
+            raw = "".join(body)
+            if quote == "`" and "${" in raw:
+                return None, True, j + 1
+            return _unescape_js(raw), False, j + 1
+        body.append(c)
+        j += 1
+    # Unterminated: the file does not parse, and guessing where the title ends
+    # would invent a name that exists nowhere.
+    return None, False, len(text)
+
+
+def _skip_call_args(text: str, i: int) -> int:
+    """Index just past the ``)`` matching the ``(`` at *i*.
+
+    Literals are stepped over rather than scanned, so a `)` inside a string in
+    an `it.each([...])` table does not end the argument list early.
+    """
+    depth = 0
+    while i < len(text):
+        c = text[i]
+        if c in "'\"`":
+            _, _, i = _read_js_literal(text, i)
+            continue
+        if c == "(":
+            depth += 1
+        elif c == ")":
+            depth -= 1
+            if depth == 0:
+                return i + 1
+        i += 1
+    return i
+
+
+def _web_test_names(text: str) -> tuple[list[str], int]:
+    """``(static titles, calls whose title could not be read)``.
+
+    Replaces the regex this used to be. A single expression cannot both pair
+    the title's quotes and step over an `it.each(TABLE)` argument, and the
+    version that tried did three separate wrong things, all reported
+    2026-09-08:
+
+      `it("... the app's own wording")`  ended the title at the apostrophe
+      `it.each(TABLE)("%s ...")`         matched nothing at all
+      `/^a/.test("abc")`                 captured `abc` as a test title
+
+    The first two are silent in opposite directions and the third is the
+    "always wrong" shape this file already refuses for ios: a line that is
+    always wrong teaches the reader to skip the next real one.
+
+    The second element is a COUNT, not names, because the things it counts
+    have no name to give -- that is what makes them invisible today. A caller
+    that prints it only when it is non-zero turns "18 tests are absent from
+    both columns" into something the reader can see without knowing to look.
+    """
+    names: list[str] = []
+    unreadable = 0
+    for m in _WEB_TEST_HEAD.finditer(text):
+        i = m.end()
+        while True:
+            mod = _WEB_MODIFIER.match(text, i)
+            if not mod:
+                break
+            i = mod.end()
+            if mod.group("mod") not in _WEB_TABLE_MODIFIERS:
+                continue
+            while i < len(text) and text[i] in " \t\r\n":
+                i += 1
+            if i < len(text) and text[i] == "(":
+                i = _skip_call_args(text, i)
+            elif i < len(text) and text[i] == "`":
+                # `it.each` also takes a tagged template table.
+                _, _, i = _read_js_literal(text, i)
+        while i < len(text) and text[i] in " \t\r\n":
+            i += 1
+        if i >= len(text) or text[i] != "(":
+            # `it` that is not called: a variable, a property, a word in a
+            # string. Not a test, and not something we failed to read.
+            continue
+        i += 1
+        while i < len(text) and text[i] in " \t\r\n":
+            i += 1
+        value, dynamic, _ = _read_js_literal(text, i)
+        if value is not None:
+            names.append(value)
+        else:
+            unreadable += 1
+    return names, unreadable
+
+
 def _discoverable(platform: str, found: str) -> str | None:
     """Map a found method name back to the declared case name it implements.
 
@@ -676,8 +878,8 @@ def _discoverable(platform: str, found: str) -> str | None:
 
 def _implemented_names(
     root: Path, platform: str
-) -> tuple[set[str], list[str], set[str], dict[str, list[str]]]:
-    """``(case names found, files read, undiscoverable names, name -> files)``.
+) -> tuple[set[str], list[str], set[str], dict[str, list[str]], int]:
+    """``(names, files read, undiscoverable, name -> files, unreadable titles)``.
 
     The name -> files map is what lets a caller link a case to the file that
     implements it. The scan used to collapse every file into one set of names
@@ -688,7 +890,8 @@ def _implemented_names(
     """
     suffix = PLATFORM_TEST_SUFFIX.get(platform)
     pattern = _ALL_TESTS_PATTERNS.get(platform)
-    if suffix is None or not root.is_dir() or (platform != "ios" and pattern is None):
+    if (suffix is None or not root.is_dir()
+            or (platform not in ("ios", "web") and pattern is None)):
         # Four elements, like every other exit. This one returned three, and
         # the sole caller unpacks four — so reaching it raises ValueError
         # rather than returning "nothing found". It is unreachable from that
@@ -697,8 +900,9 @@ def _implemented_names(
         # today can tell a correct early exit from a crash here. The next
         # platform added to PLATFORM_TEST_SUFFIX without a pattern is what
         # finds it, and it would find it as a traceback in a --check run.
-        return set(), [], set(), {}
+        return set(), [], set(), {}, 0
     names: set[str] = set()
+    unreadable_titles = 0
     undiscoverable: set[str] = set()
     read: list[str] = []
     by_name: dict[str, list[str]] = {}
@@ -711,9 +915,14 @@ def _implemented_names(
         if platform in _COMMENT_STRIPPED:
             text = _without_comments(
                 text, nested_blocks=_COMMENT_STRIPPED[platform])
-        raws = (_swift_test_methods(text) if platform == "ios"
-                else [m.group(1) for m in pattern.finditer(text)])
-        for raw in raws:
+        if platform == "web":
+            raws, unreadable = _web_test_names(text)
+            unreadable_titles += unreadable
+        else:
+            raws = (_swift_test_methods(text) if platform == "ios"
+                    else [m.group("name") for m in pattern.finditer(text)])
+        for found in raws:
+            raw = _as_declared(platform, found)
             mapped = _discoverable(platform, raw)
             if mapped is None:
                 undiscoverable.add(raw)
@@ -722,7 +931,7 @@ def _implemented_names(
                 where = by_name.setdefault(mapped, [])
                 if str(path) not in where:
                     where.append(str(path))
-    return names, read, undiscoverable, by_name
+    return names, read, undiscoverable, by_name, unreadable_titles
 
 
 def check_unit_contracts(
@@ -770,12 +979,15 @@ def check_unit_contracts(
                     f"check that before suspecting the path"
                 )
             continue
-        found, read, undiscoverable, by_name = _implemented_names(root, platform)
+        (found, read, undiscoverable, by_name,
+         unreadable_titles) = _implemented_names(root, platform)
         report.implemented[platform] = found
         report.scanned_files[platform] = read
         report.implemented_files[platform] = by_name
         if undiscoverable:
             report.undiscoverable[platform] = sorted(undiscoverable)
+        if unreadable_titles:
+            report.unreadable_titles[platform] = unreadable_titles
     return report
 
 
@@ -877,6 +1089,20 @@ def format_report(report: UnitContractReport) -> list[str]:
                 f"    NEVER RUNS  {name}  (method exists but the runner will not "
                 f"discover it — XCTest needs a 'test' prefix; it compiles, reads "
                 f"as present, and executes zero times)"
+            )
+        # Only when non-zero. `declared/implemented/missing/undeclared` are
+        # four numbers that cannot say "and N tests are in neither column":
+        # a test whose title is built at run time is absent from BOTH, so the
+        # run reads as complete. This does not fail the check — a project may
+        # legitimately generate titles — it just stops the absence from being
+        # silent.
+        unreadable = report.unreadable_titles.get(platform, 0)
+        if unreadable:
+            lines.append(
+                f"    NOTE  {unreadable} test call(s) have a title this check "
+                f"cannot read (a template with an interpolation, or a name "
+                f"passed as a variable). They are counted in neither column, "
+                f"so 'undeclared 0' does not cover them."
             )
     return lines
 
@@ -1015,6 +1241,7 @@ def unit_contract_pages(
         "problems": list(report.problems),
         "unscannable": dict(report.unscannable),
         "undiscoverable": {p: list(v) for p, v in sorted(report.undiscoverable.items())},
+        "unreadableTitles": dict(sorted(report.unreadable_titles.items())),
         "undeclared": {p: report.undeclared(p) for p in platforms if report.undeclared(p)},
         "targets": targets,
     }
