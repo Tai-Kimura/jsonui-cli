@@ -13,6 +13,29 @@ from .component_spec_schema import COMPONENT_SPEC_SCHEMA
 from .rules_config import CustomRules, load_rules_for_path
 from .. import shared_core
 
+#: The three types the merger treats as one screen's documents.
+SCREEN_SPEC_TYPES = ("screen_spec", "screen_sub_spec", "screen_parent_spec")
+
+#: A declaration site owned by the FACE rather than by any one screen.
+#:
+#: It exists because ownership and declaration site had been the same thing:
+#: a unit target belonged to whichever spec happened to declare it, so a
+#: target belonging to no single screen (a shared client, a formatting
+#: utility) had to be filed under an unrelated screen or not declared at all.
+#: Neither records the truth, and a checker for "declared in the wrong place"
+#: cannot exist while the place IS the definition.
+#:
+#: ⚠️ This literal is also needed by `test_tools` when it learns to read this
+#: type. It is NOT hoisted to `shared/core/` because
+#: `shared_core.load()` returns None when `shared/core/` is absent from a
+#: distributed tool tree, and a validator that cannot resolve the name would
+#: reject a valid document. The two packages therefore hold the same string,
+#: and an agreement test — not a shared import — is what keeps them equal.
+FACE_CONTRACTS_SPEC = "face_contracts_spec"
+
+#: Every type a spec document may declare. Ordered as the message prints it.
+KNOWN_SPEC_TYPES = SCREEN_SPEC_TYPES + ("component_spec", FACE_CONTRACTS_SPEC)
+
 
 def _has_external_layout_ref(node: dict) -> bool:
     """True when a cellNode/header/footer references an external Layout JSON.
@@ -202,10 +225,7 @@ class SpecValidator:
         self._spec_type = spec_type
         self._spec_data = data
 
-        if spec_type == "component_spec":
-            self._validate_component_spec(data, result)
-        else:
-            self._validate_spec(data, result)
+        self._dispatch_by_type(spec_type, data, result)
         return result
 
     def validate_data(self, data: dict, name: str = "spec") -> SpecValidationResult:
@@ -217,11 +237,43 @@ class SpecValidator:
         self._spec_type = spec_type
         self._spec_data = data
 
+        self._dispatch_by_type(spec_type, data, result)
+        return result
+
+    def _dispatch_by_type(
+        self, spec_type: str, data: dict, result: SpecValidationResult
+    ) -> None:
+        """Route to the validator for *spec_type*, or refuse an unknown one.
+
+        Both entry points route through here so the two cannot drift; they
+        had the same three-line `if` copied into each.
+
+        The refusal below used to live inside `_validate_spec`, which was the
+        `else` arm for EVERY non-component type. An unknown type was therefore
+        validated as a screen spec, and the author was told `structure` was
+        missing — four errors describing a document they never claimed to be
+        writing. The type error was one of the four, and read as a detail.
+        That matters most for a MISSPELLED known type (`face_contract` for
+        `face_contracts_spec`): the author sees screen-spec complaints and
+        concludes they mis-wrote the body, not the type. Deciding it here
+        keeps "an unknown type is not a screen spec" a live check rather than
+        an unreachable one, and stops at a single error that names the type.
+        """
         if spec_type == "component_spec":
             self._validate_component_spec(data, result)
-        else:
+            return
+        if spec_type == FACE_CONTRACTS_SPEC:
+            self._validate_face_contracts_spec(data, result)
+            return
+        if spec_type in SCREEN_SPEC_TYPES:
             self._validate_spec(data, result)
-        return result
+            return
+        result.errors.append(SpecValidationMessage(
+            path="type",
+            message=(
+                f"Expected one of {KNOWN_SPEC_TYPES}, got '{spec_type}'"
+            ),
+        ))
 
     def _validate_spec(self, data: dict, result: SpecValidationResult):
         """Validate the specification structure."""
@@ -235,13 +287,12 @@ class SpecValidator:
         else:
             self._validate_required_fields(data, ["type", "version", "metadata", "structure"], "", result)
 
-        # Validate type
-        valid_types = ("screen_spec", "screen_sub_spec", "screen_parent_spec")
-        if spec_type not in valid_types:
-            result.errors.append(SpecValidationMessage(
-                path="type",
-                message=f"Expected one of {valid_types}, got '{spec_type}'"
-            ))
+        # The type check that used to sit here has moved to
+        # `_dispatch_by_type`. Here it was unreachable for anything it could
+        # reject — this method is only entered for a type already known to be
+        # a screen type — and reaching it at all meant the document had first
+        # been measured against screen-spec required fields. See the dispatch
+        # docstring for why the refusal has to happen before that.
 
         # Validate version format
         version = data.get("version", "")
@@ -323,6 +374,67 @@ class SpecValidator:
 
         # Cross-reference validation
         self._validate_cross_references(data, result)
+
+    #: Sections a face contracts spec must not carry. Each belongs to a
+    #: screen, and the merger builds it from that screen's own documents;
+    #: allowing one here would give a screen-owned declaration a second legal
+    #: home, which is the "escape hatch" this spec type exists to avoid.
+    #:
+    #: `branchContracts` is refused for a different reason and deliberately:
+    #: the ownership predicate is defined for unit targets, and nothing yet
+    #: decides which face owns a branch that belongs to no screen. Leaving it
+    #: writable-but-unread would be the exact failure this type was added to
+    #: remove, so it is refused until that question has an answer.
+    _FACE_SPEC_FORBIDDEN = (
+        "structure", "dataFlow", "stateManagement", "userActions",
+        "transitions", "validation", "subSpecs", "branchContracts",
+    )
+
+    def _validate_face_contracts_spec(self, data: dict, result: SpecValidationResult):
+        """Validate a `face_contracts_spec`.
+
+        A container for declarations the face owns and no screen does. It
+        carries `unitContracts` and nothing that describes a screen.
+        """
+        self._validate_required_fields(
+            data, ["type", "version", "metadata", "unitContracts"], "", result)
+
+        version = data.get("version", "")
+        if not re.match(r"^\d+\.\d+$", version):
+            result.errors.append(SpecValidationMessage(
+                path="version",
+                message=f"Invalid version format: '{version}'. Expected 'X.Y' (e.g., '1.0')"
+            ))
+
+        metadata = data.get("metadata")
+        if isinstance(metadata, dict):
+            # `name` identifies the FACE, not a type: it is not PascalCase and
+            # has no `displayName`. Applying the screen rules here would tell
+            # the author their face name is malformed for looking like a face
+            # name.
+            self._validate_required_fields(
+                metadata, ["name", "description"], "metadata", result)
+        elif "metadata" in data:
+            result.errors.append(SpecValidationMessage(
+                path="metadata", message="metadata must be an object"))
+
+        for key in self._FACE_SPEC_FORBIDDEN:
+            if key in data and data[key]:
+                result.errors.append(SpecValidationMessage(
+                    path=key,
+                    message=(
+                        f"a {FACE_CONTRACTS_SPEC} cannot declare '{key}' — it "
+                        "records what the face owns, and this section belongs "
+                        "to a screen. Declare it in that screen's spec, where "
+                        "the merger reads it from."
+                    ),
+                ))
+
+        if "unitContracts" in data:
+            self._validate_unit_contracts(data["unitContracts"], result)
+
+        if "relatedFiles" in data:
+            self._validate_related_files(data["relatedFiles"], result)
 
     def _validate_required_fields(
         self, data: Any, required: list[str], path_prefix: str, result: SpecValidationResult
