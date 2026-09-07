@@ -60,7 +60,13 @@ class RepositoryAggregator:
     """
 
     def __init__(self):
-        self._repo_methods: dict[str, dict[str, tuple[MethodDef, str]]] = {}
+        self._repo_methods: dict[
+            str, dict[tuple[str, tuple[str, ...]], tuple[MethodDef, str]]
+        ] = {}
+        #: (use case, method) -> the spec that declared THAT method. The use
+        #: case's own source names the first spec to mention the use case,
+        #: which is a different file whenever methods arrive from several.
+        self._uc_method_sources: dict[tuple[str, str], str] = {}
         # repo_name -> {method_name: (MethodDef, source_file)}
         self._repo_descriptions: dict[str, str] = {}
         self._use_cases: dict[str, tuple[UseCaseDef, str]] = {}
@@ -75,7 +81,14 @@ class RepositoryAggregator:
                 self._repo_descriptions[repo.name] = repo.description
 
             for method in repo.methods:
-                existing = self._repo_methods[repo.name].get(method.name)
+                entries = self._repo_methods[repo.name]
+                existing_key = next(
+                    (k for k, (m, _) in entries.items()
+                     if k[0] == method.name
+                     and _platforms_overlap(m.platforms, method.platforms)),
+                    None,
+                )
+                existing = entries.get(existing_key) if existing_key else None
                 if existing is not None:
                     existing_method, existing_source = existing
                     conflict = _check_signature_conflict(existing_method, method)
@@ -95,7 +108,9 @@ class RepositoryAggregator:
                         existing_method.platforms, method.platforms
                     )
                 else:
-                    self._repo_methods[repo.name][method.name] = (method, source_file)
+                    entries[(method.name, _platform_key(method.platforms))] = (
+                        method, source_file
+                    )
 
         for uc in spec.use_cases:
             if uc.name in self._use_cases:
@@ -103,7 +118,12 @@ class RepositoryAggregator:
                 existing_uc, existing_source = self._use_cases[uc.name]
                 # Merge methods (same conflict check)
                 for method in uc.methods:
-                    existing_method = next((m for m in existing_uc.methods if m.name == method.name), None)
+                    existing_method = next(
+                        (m for m in existing_uc.methods
+                         if m.name == method.name
+                         and _platforms_overlap(m.platforms, method.platforms)),
+                        None,
+                    )
                     if existing_method:
                         conflict = _check_signature_conflict(existing_method, method)
                         if conflict:
@@ -111,7 +131,9 @@ class RepositoryAggregator:
                                 kind="UseCase",
                                 owner=uc.name,
                                 method=method.name,
-                                existing_source=existing_source,
+                                existing_source=self._uc_method_sources.get(
+                                    (uc.name, method.name), existing_source
+                                ),
                                 new_source=source_file,
                                 existing_signature=_format_signature(existing_method),
                                 new_signature=_format_signature(method),
@@ -123,12 +145,15 @@ class RepositoryAggregator:
                         )
                     else:
                         existing_uc.methods.append(method)
+                        self._uc_method_sources[(uc.name, method.name)] = source_file
                 # Merge repository dependencies
                 for dep in uc.repositories:
                     if dep not in existing_uc.repositories:
                         existing_uc.repositories.append(dep)
             else:
                 self._use_cases[uc.name] = (uc, source_file)
+                for method in uc.methods:
+                    self._uc_method_sources[(uc.name, method.name)] = source_file
 
     def aggregate(self) -> AggregatedResult:
         """Build the aggregated result. Call after all specs are added."""
@@ -211,6 +236,41 @@ def _union_platforms(a: list[str], b: list[str]) -> list[str]:
     return merged
 
 
+#: Return-type spellings that name the same thing on different faces. The
+#: aggregator compares the RAW spec strings, before any platform mapping, so
+#: `Void` and `Unit` read as a conflict even though one declaration of
+#: `returnType: "Void"` generates `Unit` on Android correctly. Comparing the
+#: spellings is what made a per-face declaration look like a contradiction.
+_VOID_SPELLINGS = {"void", "unit", "none", ""}
+
+
+def _same_return_type(a: str | None, b: str | None) -> bool:
+    if not a or not b:
+        return True
+    if a == b:
+        return True
+    return a.strip().lower() in _VOID_SPELLINGS and b.strip().lower() in _VOID_SPELLINGS
+
+
+def _platforms_overlap(a: list[str], b: list[str]) -> bool:
+    """Can both declarations be live for one platform at once?
+
+    An empty list means every platform, so it overlaps everything. Two
+    declarations whose platform sets are disjoint are not two definitions of
+    one method — they are the per-face declarations of a method whose
+    implementation genuinely differs, and `platforms` is the only way a spec
+    can say so. Treating them as a conflict dropped one face's declaration
+    and generated a protocol its implementation could not satisfy.
+    """
+    if not a or not b:
+        return True
+    return bool(set(a) & set(b))
+
+
+def _platform_key(platforms: list[str]) -> tuple[str, ...]:
+    return tuple(sorted(platforms))
+
+
 def _check_signature_conflict(a: MethodDef, b: MethodDef) -> str | None:
     """Check if two method definitions conflict. Returns description or None."""
     # Check param count
@@ -223,7 +283,7 @@ def _check_signature_conflict(a: MethodDef, b: MethodDef) -> str | None:
             return f"param[{i}] type mismatch ({pa.name}: {pa.type} vs {pb.name}: {pb.type})"
 
     # Check return type
-    if a.return_type and b.return_type and a.return_type != b.return_type:
+    if not _same_return_type(a.return_type, b.return_type):
         return f"return type mismatch ({a.return_type} vs {b.return_type})"
 
     return None

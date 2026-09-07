@@ -200,3 +200,112 @@ class RepositoryAggregatorConflictTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+def _uc_spec(spec_name: str, method: MethodDef, uc_name: str = "AccountUseCase") -> ScreenSpec:
+    return ScreenSpec(
+        name=spec_name,
+        display_name=spec_name,
+        description="",
+        use_cases=[UseCaseDef(name=uc_name, methods=[method], description="")],
+    )
+
+
+def _per_face(platforms: list[str], *, return_type: str, is_async: bool) -> MethodDef:
+    return MethodDef(
+        name="openBillingPage",
+        params=[],
+        return_type=return_type,
+        is_async=is_async,
+        platforms=platforms,
+    )
+
+
+class PerPlatformDeclarationsAreNotConflicts(unittest.TestCase):
+    """Reported 2026-09-07: `platforms` is the only way a spec can say that a
+    method's implementation genuinely differs per face — one face needs an
+    async call into a system API, the other is synchronous. The aggregator
+    compared the two declarations as if they defined one method, recorded a
+    conflict, and dropped the second. The face whose declaration was dropped
+    generated a protocol its implementation could not satisfy, so the build
+    broke rather than the generation warning.
+
+    Merging them would be no better: the union touched `platforms` only, so
+    `isAsync` and `returnType` stayed with whichever spec was read first.
+    """
+
+    def test_disjoint_platforms_both_survive(self):
+        agg = RepositoryAggregator()
+        agg.add_spec("a.spec.json", _uc_spec(
+            "A", _per_face(["ios"], return_type="Void", is_async=True)))
+        agg.add_spec("b.spec.json", _uc_spec(
+            "B", _per_face(["android"], return_type="Unit", is_async=False)))
+
+        result = agg.aggregate()
+        methods = result.use_cases["AccountUseCase"].methods
+        self.assertEqual([], result.conflicts)
+        self.assertEqual(2, len(methods))
+        by_platform = {tuple(m.platforms): m for m in methods}
+        # Each face keeps its OWN modifiers — the half a union never copied.
+        self.assertTrue(by_platform[("ios",)].is_async)
+        self.assertFalse(by_platform[("android",)].is_async)
+
+    def test_disjoint_platforms_both_survive_for_repositories(self):
+        # The same merge is written twice in add_spec; fixing one leaves the
+        # other, and a repository method is reached by a different path.
+        agg = RepositoryAggregator()
+        agg.add_spec("a.spec.json", _spec_with_repo(
+            "A", _per_face(["ios"], return_type="Void", is_async=True)))
+        agg.add_spec("b.spec.json", _spec_with_repo(
+            "B", _per_face(["android"], return_type="Unit", is_async=False)))
+
+        result = agg.aggregate()
+        self.assertEqual([], result.conflicts)
+        self.assertEqual(2, len(result.repositories["HistoryRepository"].methods))
+
+    def test_overlapping_platforms_still_conflict(self):
+        # The control. Narrowing the check must not make it stop firing: two
+        # declarations that CAN both be live for one platform are still a
+        # contradiction, and dropping this arm would let the fix pass by
+        # accepting everything.
+        agg = RepositoryAggregator()
+        agg.add_spec("a.spec.json", _uc_spec(
+            "A", _per_face(["ios", "web"], return_type="Token", is_async=True)))
+        agg.add_spec("b.spec.json", _uc_spec(
+            "B", _per_face(["web"], return_type="Session", is_async=True)))
+
+        result = agg.aggregate()
+        self.assertEqual(1, len(result.conflicts))
+        self.assertIn("return type mismatch", result.conflicts[0].reason)
+
+    def test_void_and_unit_are_one_return_type(self):
+        # Compared as raw spec strings, the two spellings of "returns
+        # nothing" read as a mismatch. A single declaration of `Void` already
+        # generates `Unit` on Android, so the spellings were never in
+        # disagreement about anything.
+        agg = RepositoryAggregator()
+        agg.add_spec("a.spec.json", _uc_spec(
+            "A", _per_face([], return_type="Void", is_async=False)))
+        agg.add_spec("b.spec.json", _uc_spec(
+            "B", _per_face([], return_type="Unit", is_async=False)))
+
+        self.assertEqual([], agg.aggregate().conflicts)
+
+    def test_a_conflict_names_the_spec_that_declared_the_method(self):
+        # The use-case branch reported the use case's own source, which is
+        # the first spec to mention the USE CASE — a different file whenever
+        # its methods arrive from several specs. The reader was sent to a
+        # file that does not contain the declaration.
+        agg = RepositoryAggregator()
+        agg.add_spec("first_seen.spec.json", _uc_spec(
+            "First", MethodDef(name="unrelated", params=[], return_type="Void",
+                               is_async=False, platforms=[])))
+        agg.add_spec("declares_it.spec.json", _uc_spec(
+            "Second", _per_face([], return_type="Token", is_async=False)))
+        agg.add_spec("collides.spec.json", _uc_spec(
+            "Third", _per_face([], return_type="Session", is_async=False)))
+
+        conflicts = agg.aggregate().conflicts
+        self.assertEqual(1, len(conflicts))
+        self.assertEqual("declares_it.spec.json", conflicts[0].existing_source)
+        self.assertEqual("collides.spec.json", conflicts[0].new_source)
