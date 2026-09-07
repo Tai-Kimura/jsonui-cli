@@ -848,3 +848,48 @@ def test_the_gate_fails_when_a_spec_was_not_read(project, monkeypatch, capsys):
 
     assert _cli(project, "--check", monkeypatch=monkeypatch) == 1
     assert "PROBLEM" in capsys.readouterr().err
+
+
+# --------------------------------------------------------------------- #
+# The note that reaches the projects the fix cannot
+# --------------------------------------------------------------------- #
+
+def test_generate_names_a_harness_that_predates_invoke(project, monkeypatch,
+                                                       capsys):
+    """The harness is consumer-owned and never overwritten, so the projects
+    that hit the defect are exactly the ones the new skeleton does not
+    reach. A release note is not a mechanism; the tool says the file."""
+    _cli(project, monkeypatch=monkeypatch)          # writes a fresh skeleton
+    harness = next(project.rglob("checkout.ts"))
+    harness.write_text(
+        "export interface BranchHarness {\n"
+        "  readField(name: string): unknown;\n}\n", encoding="utf-8")
+
+    _cli(project, monkeypatch=monkeypatch)
+    out = capsys.readouterr().out
+
+    assert "no `invoke(`" in out
+    assert "readField" in out
+
+
+def test_check_names_it_too(project, monkeypatch, capsys):
+    _cli(project, monkeypatch=monkeypatch)
+    harness = next(project.rglob("checkout.ts"))
+    harness.write_text(
+        "export interface BranchHarness {\n"
+        "  readField(name: string): unknown;\n}\n", encoding="utf-8")
+
+    _cli(project, "--check", monkeypatch=monkeypatch)
+
+    assert "no `invoke(`" in capsys.readouterr().out
+
+
+def test_a_current_harness_is_not_named(project, monkeypatch, capsys):
+    """The control. A note on every run is a note nobody reads — the ios
+    false positives in this generator already paid for that lesson."""
+    _cli(project, monkeypatch=monkeypatch)
+    capsys.readouterr()
+
+    _cli(project, monkeypatch=monkeypatch)
+
+    assert "no `invoke(`" not in capsys.readouterr().out

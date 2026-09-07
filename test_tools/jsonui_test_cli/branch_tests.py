@@ -509,6 +509,12 @@ class GenerationReport:
     harness_file: Path | None = None
     harness_created: bool = False
     harness_absent: bool = False
+    #: An EXISTING consumer harness predating `invoke` on this platform.
+    #: The harness is consumer-owned and never overwritten, so shipping the
+    #: fix does not reach the projects that hit the defect — the population
+    #: it does not reach has to be named by the tool rather than left to a
+    #: release note nobody re-reads. Never a failure: it is their file.
+    harness_lacks_invoke: bool = False
     declared_branches: int = 0
     note_branches: int = 0
     platform_skipped: int = 0
@@ -1467,6 +1473,40 @@ export function applyDeclaredKeys(
   }
 }
 
+/** Press a callback the way the rendered Layout does.
+ *
+ * The Layout calls what `initializeEventHandlers` registered in the DATA
+ * STORE — an arrow that closes over the ViewModel — so that arrow is the
+ * subject a contract about pressing something is written against.
+ *
+ * Reaching the callback through `readField` instead does not press it. That
+ * read consults the ViewModel first (it must: see applyDeclaredKeys), and a
+ * screen whose handler is `onX: () => this.onX()` has a same-named method on
+ * the prototype. `readField` therefore returns the METHOD, unbound: calling
+ * it throws `TypeError` deep inside the ViewModel, and binding it with
+ * `.call(vm)` makes the test pass while the registered arrow NEVER RUNS.
+ * The second one is the dangerous half — coverage shows the handler
+ * unexecuted next to a green test that reads as "the button was pressed".
+ * Two independent consumers hit this within days of each other, and one had
+ * already invented the binding workaround before the other reported it.
+ *
+ * A missing name throws rather than falling back to the ViewModel, because
+ * the fallback is exactly the mistake above wearing this function's name.
+ */
+export function invokeFromStore(
+  data: Record<string, unknown>,
+  name: string,
+  ...args: unknown[]
+): unknown {
+  const fn = data[name];
+  if (typeof fn !== "function") {
+    throw new Error(
+      `branch-harness: '${name}' is not bound in the data store`
+    );
+  }
+  return (fn as (...a: unknown[]) => unknown)(...args);
+}
+
 /** Seed `branchContracts.seedableState` names, then READ THEM BACK.
  *
  * The lenient write above is correct for data keys: assigning a data-only
@@ -1567,8 +1607,22 @@ const SCREEN_ROUTES: Record<string, RegExp> = {
 
 export interface BranchHarness {
   vm: unknown;
-  /** VM field first, then the data store — the `data.*` read surface. */
+  /** VM field first, then the data store — the `data.*` read surface.
+   *
+   * READING A CALLBACK NAME DOES NOT GIVE YOU THE CALLBACK. The same
+   * ViewModel-first order that setState warns about below applies here: a
+   * handler registered as `onX: () => this.onX()` has a same-named method
+   * on the ViewModel, and this returns the METHOD, not the registered
+   * arrow. Press callbacks with `invoke` instead. */
   readField(name: string): unknown;
+  /** Press a callback through the data store, as the rendered Layout does.
+   *
+   * Delegate to `invokeFromStore(data, name, ...args)` from the runtime —
+   * the semantics are not this file's to re-decide, and the one obvious
+   * hand-written version (fall back to the ViewModel when the store has no
+   * such key) reintroduces the defect this exists to remove. Throws when
+   * the name is not bound in the store. */
+  invoke(name: string, ...args: unknown[]): unknown;
   /** Apply a witness/baseline object onto the VM + data store.
    *
    * Write the ViewModel through `applyDeclaredKeys(vm, state)` from the
@@ -1585,10 +1639,20 @@ export interface BranchHarness {
   expectTransition(destination: string): void;
 //<<resolve-string harness doc>>
   resolveString(key: string): string;
+  /** Drain queued macrotasks — delegate to `settle` from the runtime.
+   *
+   * Declared here for the same reason `invoke` is: the three platforms'
+   * harnesses are read side by side, and a member missing from one is read
+   * as "this platform cannot do that" rather than "it is imported from
+   * somewhere else on this platform". */
+  settle(): Promise<void>;
 }
 
 export function createHarness(): BranchHarness {
   // TODO: construct the ViewModel with a router recorder and a data store;
+  // invoke should call `invokeFromStore(data, name, ...args)` and settle
+  // should call the runtime's `settle` — both are exported from
+  // ./jsonui-branch-runtime, and neither is worth re-implementing here;
   // resolveString should look the key up in %(screen_const)s_BRANCH_STRING_KEYS
   // (throw on a missing entry — same contract as SCREEN_ROUTES), pass the full
   // key to the project's StringManager, and RETURN WHAT THAT RESOLVES TO —
@@ -3280,8 +3344,31 @@ def generate_branch_tests(
     report.runtime_file = runtime_file
     report.harness_file = harness_file
     report.harness_created = created
+    report.harness_lacks_invoke = _harness_predates_invoke(harness_file, created)
     emitter.apply_to(report)
     return report
+
+
+def _harness_predates_invoke(harness_file: Path, created: bool) -> bool:
+    """Does an EXISTING harness lack the `invoke` this skeleton now emits?
+
+    Searched for as a member declaration rather than the bare word: `invoke`
+    appears in prose, and a note that fires on a harness which already has
+    the member is the "always wrong" line that trains its reader to skip it.
+
+    A freshly created skeleton is never reported — it has the member by
+    construction, and reporting it would make the note arrive on every first
+    generation, which is the same thing as making it invisible.
+    """
+    if created or not harness_file.exists():
+        return False
+    try:
+        text = harness_file.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError):
+        # Unreadable is not "has it". Saying nothing here would answer the
+        # question with the reassuring value on no evidence.
+        return True
+    return "invoke(" not in text
 
 
 def _emit_ios(

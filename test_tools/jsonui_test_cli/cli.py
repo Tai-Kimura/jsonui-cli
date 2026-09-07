@@ -1481,6 +1481,17 @@ def _branch_check_summary(reports: list, scanned: int, orphans=()) -> int:
             print(f"  [WARN]    {report.harness_file} — harness missing; "
                   "the generated test imports it (run without --check to "
                   "emit a skeleton)")
+        if report.harness_lacks_invoke:
+            # A note, never a failure: the file is the consumer's. But the
+            # fix ships in a skeleton that never overwrites an existing
+            # harness, so without naming the file the release reaches only
+            # projects that scaffold a NEW screen — and the projects that
+            # hit the defect are precisely the ones with harnesses already.
+            print(f"  note: {report.harness_file} has no `invoke(` — it "
+                  "predates the harness member for pressing callbacks. "
+                  "Reading a callback with readField returns the ViewModel "
+                  "method, not the registered arrow; port `invoke` and "
+                  "`settle` from a freshly generated skeleton.")
 
     screens = len(reports)
     skipped = (f", {len(not_applicable)} not applicable to this platform"
@@ -1777,6 +1788,13 @@ def _print_branch_generation(report, show_siblings: bool = True) -> None:
         print(f"  {report.harness_file}  (NEW harness skeleton — implement createHarness())")
     else:
         print(f"  {report.harness_file}  (existing harness kept)")
+        if report.harness_lacks_invoke:
+            print("  note: that harness has no `invoke(` — it predates the "
+                  "member for pressing callbacks. Reading a callback with "
+                  "readField returns the ViewModel method, not the "
+                  "registered arrow, and binding it with .call(vm) passes "
+                  "while the arrow never runs. Port `invoke` and `settle` "
+                  "from a freshly generated skeleton.")
     # Named with its source. Two readers, on the same day, one working from a
     # real corpus and one writing a fixture, both predicted this list from the
     # contract's `when: {api.<op>: …}` clauses and both were wrong — the

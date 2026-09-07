@@ -29,6 +29,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from jsonui_test_cli.branch_tests import (
     orphaned_sub_spec_artefacts, sub_spec_screen_names,
 )
+from jsonui_test_cli.branch_tests import GenerationReport
 from jsonui_test_cli.cli import _branch_check_summary
 
 
@@ -95,17 +96,21 @@ class TestFindingTheLeftovers:
         assert [p.name for p in android] == ["checkout_formBranchTest.kt"]
 
 
-class _Report:
-    """The shape `_branch_check_summary` reads."""
+def _Report(screen, absent=(), drifted=(), matched=()):
+    """A real `GenerationReport`, not a hand-written stand-in.
 
-    def __init__(self, screen, absent=(), drifted=(), matched=()):
-        self.screen = screen
-        self.absent = list(absent)
-        self.drifted = list(drifted)
-        self.matched = list(matched)
-        self.platform_applicable = True
-        self.harness_absent = False
-        self.harness_file = None
+    This was a class listing the six attributes `_branch_check_summary`
+    happened to read. Adding a seventh field to the real report broke all
+    four tests here with AttributeError — the stub had become a second
+    declaration of the same shape, kept in step by nobody, and its failure
+    mode is a suite that goes red for a reason that has nothing to do with
+    what it tests.
+
+    Building the real dataclass instead means a new field arrives with its
+    default and these tests keep asserting what they are about.
+    """
+    return GenerationReport(screen=screen, absent=list(absent),
+                            drifted=list(drifted), matched=list(matched))
 
 
 class TestTheNote:
