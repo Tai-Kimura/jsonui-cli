@@ -15,6 +15,7 @@ the generated Repository interface and break the hand-written Impl.
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 
 import pytest
@@ -77,11 +78,16 @@ def _project(tmp_path: Path, data_flow_extra, branches) -> Path:
     return root
 
 
-def _generate(root: Path):
+def _generate(root: Path, platform="web", **kw):
     return generate_branch_tests(
-        "mypage", platform="web", out_dir=root / "out",
-        harness_dir=root / "harness", project_root=root,
+        "mypage", platform=platform, out_dir=root / "out",
+        harness_dir=root / "harness", project_root=root, **kw,
     )
+
+
+# `RouteSpec(op: "x")` on iOS, `RouteSpec("x")` on Android, `op: "x"` on web.
+_REGISTERED = re.compile(r'(?:RouteSpec\(op:\s*|RouteSpec\(|op:\s*)"([^"]+)"')
+_REFERENCED = re.compile(r'countFor\("([^"]+)"\)')
 
 
 class TestCollectEndpointOps:
@@ -188,3 +194,42 @@ class TestGeneration:
         with pytest.raises(BranchTestGenerationError) as e:
             _generate(root)
         assert "one endpoint by one name" in str(e.value)
+
+
+class TestRegistrationAndReferenceAgree:
+    """The op string is registered in one place and looked up in another.
+
+    `countFor` / `lastBodyFor` match recorded calls by op STRING, so the name
+    the route is registered under and the name the assert passes have to be
+    the same value. Qualifying only one of them would produce a contract that
+    reads correctly, generates, compiles, and counts zero for ever — the
+    shape this whole ticket is about, reintroduced by the fix for it.
+
+    Checked on all three faces because each emits its own route table and its
+    own asserts.
+    """
+
+    @pytest.mark.parametrize("platform,kwargs", [
+        ("web", {}),
+        ("ios", {"module": "App"}),
+        ("android", {"package": "com.example.app"}),
+    ])
+    def test_every_referenced_op_is_a_registered_op(self, tmp_path, platform, kwargs):
+        root = _project(tmp_path, _TWO_OWNERS, [
+            {"when": {"api.UserRepository.getProfile": "failure"},
+             "then": {"api.UserRepository.getProfile": "called",
+                      "api.ProfilingRepository.getProfile": "not-called"}},
+        ])
+        _generate(root, platform, **kwargs)
+        content = "\n".join(
+            f.read_text() for f in (root / "out").rglob("*") if f.is_file())
+
+        registered = set(_REGISTERED.findall(content))
+        referenced = set(_REFERENCED.findall(content))
+
+        assert referenced, "no countFor call was emitted; this asserts nothing"
+        assert referenced <= registered, (
+            f"{platform}: asserts reference ops with no route: "
+            f"{sorted(referenced - registered)}"
+        )
+
