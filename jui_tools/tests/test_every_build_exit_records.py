@@ -96,7 +96,13 @@ class ExitCountTests(unittest.TestCase):
         # 6 -> 6: the success path's `return 0` became
         # `return _exit_for_incomplete(...)`, so the count is unchanged. If
         # a future edit adds an exit, this is what fails.
-        self.assertEqual(6, len(exits), exits)
+        #
+        # 6 -> 7 (2026-09-07): `_sync_usecase_protocols` joined
+        # `_sync_viewmodel_protocols` on the same footing — a hard failure in
+        # either one has to stop the build, so it exits through `_halt` like
+        # its sibling. The ratchet did its job here: the exit was added
+        # deliberately and this line is where saying so is required.
+        self.assertEqual(7, len(exits), exits)
 
     def test_the_body_is_guarded_against_the_exits_that_are_not_returns(self):
         # An exception is an exit too, and it was the one that was missed.

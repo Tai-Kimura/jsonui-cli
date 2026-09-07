@@ -295,6 +295,12 @@ def cmd_build(args: argparse.Namespace) -> int:
                 config_mgr, config, platforms, args, specs=all_specs) is False:
             return _halt(1)
 
+        # The UseCase layer had no counterpart, so a spec-declared method
+        # reached neither protocol nor compiler. Same specs, same platforms.
+        if _sync_usecase_protocols(
+                config_mgr, config, platforms, args, specs=all_specs) is False:
+            return _halt(1)
+
         # Hard gate for navigationMode:"isolated" — the embedded screen's spec
         # must not declare present-type transitions (sheet/modal/dialog/dismiss).
         if _check_isolated_embed_constraints(config_mgr, specs=all_specs) is False:
@@ -1935,6 +1941,144 @@ def _vm_subdir_for(spec: ScreenSpec) -> str:
     return ""
 
 
+def _platform_generator(project_root, platform: str, pconfig: dict, type_mapper):
+    """The generator for one platform, rooted where that platform lives.
+
+    ONE definition, because two of them diverged. The UseCase sync grew its
+    own copy that rooted at the project instead of at
+    `project_root / pconfig["root"]`, so every path it computed pointed at a
+    file that does not exist — and since it only rewrites files that DO
+    exist, it skipped everything and returned success. Nothing printed,
+    exit 0, and the symptom was identical to the defect it had just fixed.
+    A second copy of a path rule is a second path rule.
+    """
+    from ..generators.android_generator import AndroidGenerator
+    from ..generators.ios_generator import IosGenerator
+    from ..generators.web_generator import WebGenerator
+
+    root = project_root / pconfig["root"]
+    if platform == "ios":
+        return IosGenerator(root, pconfig, type_mapper)
+    if platform == "android":
+        return AndroidGenerator(root, pconfig, type_mapper)
+    if platform == "web":
+        return WebGenerator(root, pconfig, type_mapper)
+    return None
+
+
+def _sync_usecase_protocols(
+    config_mgr: ConfigManager,
+    config: dict,
+    platforms: dict,
+    args,
+    specs: list | None = None,
+) -> bool:
+    """Regenerate UseCase protocol files from `dataFlow.useCases`.
+
+    `jui build` synced the ViewModel protocols and nothing else, so a method
+    added to `dataFlow.useCases[].methods` reached the generated code only if
+    someone re-ran `jui g project` — and that command REFUSES to overwrite an
+    existing protocol, so in practice it never arrived at all. The declaration
+    sat in the spec, the implementation carried `override`, and Android failed
+    to compile with `overrides nothing`; iOS accepted it, because a Swift type
+    can implement a method the protocol does not declare. One spec edit, one
+    face broken, and the spec-is-the-source-of-truth rule quietly not holding
+    for this one layer.
+
+    The protocol file is fully derived, so regenerating it gives the rule the
+    ticket asks for without a merge step: a method added to the spec appears,
+    a method removed disappears, and `platforms` is honoured because the
+    aggregate is filtered per platform before rendering — the same filter the
+    scaffold uses.
+
+    OWNERSHIP IS CHECKED, NOT ASSUMED. A file is rewritten only when it
+    carries the `@generated` banner this tool writes. Anything else is left
+    alone and reported: the scaffold warns rather than overwrites when a
+    protocol has drifted, so a consumer may be holding a hand-edited file
+    there, and silently overwriting it is the one outcome worse than the
+    defect being fixed.
+    """
+    from ..core.generated_marker import SENTINEL
+    from ..core.repository_aggregator import RepositoryAggregator
+    from ..core.type_mapper import TypeMapper
+
+    if specs is None:
+        specs = _load_all_specs(config_mgr)
+    if not specs:
+        return True
+
+    aggregator = RepositoryAggregator()
+    for spec_file, screen_spec in specs:
+        aggregator.add_spec(spec_file.name, screen_spec)
+    try:
+        aggregated = aggregator.aggregate()
+    except ValueError as e:
+        print(f"ERROR: use case aggregation failed: {e}")
+        return False
+    if not aggregated.use_cases:
+        return True
+
+    type_mapper = TypeMapper(config_mgr.type_map_file)
+
+    def _for_platform(definition, platform: str):
+        # A method with no `platforms` runs everywhere, which is the default
+        # the scaffold applies; kept identical so the two paths cannot drift.
+        from dataclasses import replace
+        kept = [m for m in definition.methods
+                if not m.platforms or platform in m.platforms]
+        return replace(definition, methods=kept)
+
+    writes = 0
+    unowned: list[str] = []
+    for platform, pconfig in platforms.items():
+        generator = _platform_generator(
+            config_mgr.project_root, platform, pconfig, type_mapper)
+        if generator is None:
+            continue
+        if not getattr(generator, "has_separate_protocol", True):
+            continue
+        for uc_name, uc_def in aggregated.use_cases.items():
+            filtered = _for_platform(uc_def, platform)
+            if not filtered.methods:
+                continue
+            path = generator.usecase_protocol_path(uc_name)
+            if not path.exists():
+                # SYNC, NOT CREATE. Creating is `jui g project`'s job, and
+                # doing it here would be actively wrong on a project that
+                # spells its methods as signature strings: the spec parser
+                # puts the WHOLE string in `name`
+                # (`fetchPnl(month?: string): Promise<PnlResponse>`), so a
+                # rendered protocol reads
+                # `func fetchPnl(month?: string): Promise<PnlResponse>()
+                # async throws` — a file that cannot compile, in a project
+                # that has no protocol files today and therefore no symptom.
+                # Measured 2026-09-07: one face declares 129 methods that way.
+                continue
+            content = generator.generate_usecase_protocol(uc_name, filtered)
+            try:
+                current = path.read_text(encoding="utf-8")
+            except OSError as e:
+                print(f"WARNING: could not read {path}: {e}")
+                continue
+            if SENTINEL not in current:
+                unowned.append(str(path))
+                continue
+            if current == content:
+                continue
+            if getattr(args, "dry_run", False):
+                writes += 1
+                continue
+            path.write_text(content, encoding="utf-8")
+            writes += 1
+
+    for path in unowned:
+        print(f"WARNING: {path} has no @generated banner — UseCase protocol "
+              f"left untouched; the spec's declarations are NOT reaching it")
+    if writes:
+        print(f"UseCase protocol sync: updated {writes} protocol(s)")
+    return True
+
+
 def _sync_viewmodel_protocols(
     config_mgr: ConfigManager,
     config: dict,
@@ -2005,6 +2149,11 @@ def _sync_viewmodel_protocols(
 
     # Map platform name → (generator_factory, Impl-patch helpers)
     def _get_gen(platform: str, pconfig: dict):
+        # Delegates so the two syncs cannot root differently again.
+        gen = _platform_generator(
+            config_mgr.project_root, platform, pconfig, type_mapper)
+        if gen is not None:
+            return gen
         root = config_mgr.project_root / pconfig["root"]
         if platform == "ios":
             return IosGenerator(root, pconfig, type_mapper)
