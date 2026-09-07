@@ -139,7 +139,15 @@ class TestStubGeneration:
         assert "XCTFail" in uc.stub_text("ios", "ChatViewModel", [case], module="App")
         assert "fail(" in uc.stub_text("android", "ChatViewModel", [case], package="com.x")
 
-    def test_regeneration_keeps_the_body_outside_the_markers(self, tmp_path):
+    def test_regeneration_keeps_bodies_inside_and_outside_the_markers(self, tmp_path):
+        """INVERTED 2026-09-07: this asserted `test_a_case` was GONE.
+
+        That was the defect, written down as an expectation — the region was
+        replaced by whatever the run generated, and a run generates only the
+        missing cases, so adding one deleted the rest. Kept as an inverted
+        arm rather than deleted: removing it would let the replacing form
+        come back with the suite silent.
+        """
         case = uc.UnitCase("chat", "ChatViewModel", "b_case", ("ios",), "")
         existing = (
             "import XCTest\nfinal class T: XCTestCase {\n"
@@ -147,15 +155,152 @@ class TestStubGeneration:
             + "\n    func hand_written() throws { XCTAssertTrue(true) }\n}\n"
         )
         merged = uc.merge_stubs(existing, uc.stub_text("ios", "ChatViewModel", [case], module="App"))
-        assert "hand_written" in merged
-        assert "b_case" in merged
-        assert "test_a_case() throws { }" not in merged
+        assert "hand_written" in merged          # outside the markers
+        assert "test_a_case() throws { }" in merged   # inside them, and kept
+        assert "b_case" in merged                # the new stub, appended
+        # Order: what was there stays first, the addition follows.
+        assert merged.index("test_a_case") < merged.index("b_case")
 
     def test_a_file_without_markers_is_left_alone(self, tmp_path):
         # The author removed them; overwriting on that basis deletes work.
         existing = "final class T: XCTestCase {\n    func mine() throws { }\n}\n"
         case = uc.UnitCase("chat", "ChatViewModel", "x", ("ios",), "")
         assert uc.merge_stubs(existing, uc.stub_text("ios", "T", [case], module="App")) == existing
+
+
+class TestStubGenerationConverges:
+    """Reported 2026-09-07 (docsite face, all three platforms on 1.8.47).
+
+    `merge_stubs` REPLACED the marker region, and a run generates only the
+    cases that are missing. So the run that added one case deleted every
+    case already in the region — hand-written bodies included, which is
+    where the first generation puts everything and therefore where a reader
+    is invited to write.
+
+    It could not converge either. The deleted cases were missing next run
+    and came back; the case just written was then implemented and dropped
+    out. The file oscillated with period two, so `--check` never reached 0
+    — and reading only every other run showed a file that agreed with
+    itself. That is why the runs below go to five and not to two.
+    """
+
+    CASES = [
+        {"name": "save_whenOffline_setsError", "platforms": ["web", "ios", "android"]},
+        {"name": "save_whenValid_clearsDirty", "platforms": ["web", "ios", "android"]},
+        {"name": "load_whenForbidden_signsOut", "platforms": ["ios"]},
+    ]
+
+    def _root(self, tmp_path, cases):
+        (tmp_path / "docs" / "screens").mkdir(parents=True, exist_ok=True)
+        (tmp_path / "docs" / "screens" / "profile.spec.json").write_text(
+            json.dumps({"type": "screen",
+                        "unitContracts": {"target": "ProfileViewModel",
+                                          "cases": cases}}),
+            encoding="utf-8")
+        for rel in ("web/tests", "ios/Tests", "android/test"):
+            (tmp_path / rel).mkdir(parents=True, exist_ok=True)
+        (tmp_path / "jui.config.json").write_text(json.dumps({
+            "spec_directory": "docs/screens",
+            "platforms": {
+                "web": {"root": "web", "unitTestsDir": "tests"},
+                "ios": {"root": "ios", "unitTestsDir": "Tests",
+                        "testModule": "App"},
+                "android": {"root": "android", "unitTestsDir": "test",
+                            "testPackage": "com.example.app"},
+            }}), encoding="utf-8")
+        return tmp_path
+
+    def _generate(self, root):
+        """One `generate unit-stubs`, the way the CLI runs it."""
+        report = uc.check_unit_contracts(root)
+        return report, uc.write_stubs(root, report)
+
+    def _files(self, root):
+        return {
+            "web": root / "web/tests/ProfileViewModel.contract.test.ts",
+            "ios": root / "ios/Tests/ProfileViewModelContractTests.swift",
+            "android": root / "android/test/ProfileViewModelContractTest.kt",
+        }
+
+    def _names_present(self, root):
+        return {face: [c["name"] for c in self.CASES
+                       if c["name"] in path.read_text(encoding="utf-8")]
+                for face, path in self._files(root).items() if path.exists()}
+
+    def test_a_hand_written_body_and_the_declared_cases_survive_a_new_case(
+            self, tmp_path):
+        root = self._root(tmp_path, list(self.CASES))
+        self._generate(root)
+        assert uc.check_unit_contracts(root).ok
+
+        # Two ordinary edits, together: implement one case in place, and
+        # declare one more.
+        web = self._files(root)["web"]
+        text = web.read_text(encoding="utf-8")
+        assert "save_whenOffline_setsError" in text
+        text = text.replace(
+            "throw new Error('not implemented: save_whenOffline_setsError');",
+            "expect(vm.error).toBe('offline');  // hand-written body",
+            1)
+        web.write_text(text, encoding="utf-8")
+        self._root(tmp_path, list(self.CASES) + [
+            {"name": "save_whenConflict_reloads",
+             "platforms": ["web", "ios", "android"]}])
+
+        self._generate(root)
+
+        after = web.read_text(encoding="utf-8")
+        assert "hand-written body" in after
+        for name in ("save_whenOffline_setsError", "save_whenValid_clearsDirty",
+                     "save_whenConflict_reloads"):
+            assert name in after, name
+        # Every face keeps what it had, not just the one that was edited.
+        for face, path in self._files(root).items():
+            body = path.read_text(encoding="utf-8")
+            for case in self.CASES:
+                if face in case["platforms"]:
+                    assert case["name"] in body, (face, case["name"])
+
+    def test_five_consecutive_runs_converge_and_check_stays_green(self, tmp_path):
+        root = self._root(tmp_path, list(self.CASES))
+        self._generate(root)
+        settled = {f: p.read_text(encoding="utf-8")
+                   for f, p in self._files(root).items()}
+
+        for run in range(2, 6):          # runs 2..5: odd and even both
+            report, touched = self._generate(root)
+            assert report.ok, f"run {run}: {uc.format_report(report)}"
+            assert all(action == "unchanged" for _, action, _ in touched), \
+                f"run {run} rewrote: {touched}"
+            now = {f: p.read_text(encoding="utf-8")
+                   for f, p in self._files(root).items()}
+            assert now == settled, f"run {run} changed the files"
+
+    def test_the_report_counts_do_not_move_across_runs(self, tmp_path):
+        """The denominator is the other half of the claim: a file that stops
+        oscillating while the counts drift would still be wrong."""
+        root = self._root(tmp_path, list(self.CASES))
+        self._generate(root)
+        first = uc.check_unit_contracts(root)
+        baseline = (len(first.cases), dict(first.implemented))
+        for _ in range(4):
+            self._generate(root)
+            again = uc.check_unit_contracts(root)
+            assert (len(again.cases), dict(again.implemented)) == baseline
+
+    def test_a_case_the_spec_no_longer_declares_is_kept(self, tmp_path):
+        """Append-only means nothing is removed, including this. `check`
+        reports it as undeclared; deleting someone's test because a spec
+        edit stopped naming it is a different act, and it is theirs."""
+        root = self._root(tmp_path, list(self.CASES))
+        self._generate(root)
+        self._root(tmp_path, [c for c in self.CASES
+                              if c["name"] != "save_whenValid_clearsDirty"])
+        self._generate(root)
+        web = self._files(root)["web"].read_text(encoding="utf-8")
+        assert "save_whenValid_clearsDirty" in web
+        assert "save_whenValid_clearsDirty" in \
+            uc.check_unit_contracts(root).undeclared("web")
 
 
 class TestExtraction:

@@ -17,7 +17,10 @@ because the only thing that could is a person reading both trees.
 Three behaviours, and no more:
 
 1. ``generate`` writes stubs for declared cases that have no implementation,
-   in each platform's own convention, and never touches an existing body.
+   in each platform's own convention. It only ever ADDS to the marker
+   region: a case already present there — stub or hand-written body — is
+   left exactly as it is, and nothing is ever removed, including a case the
+   spec no longer declares. Removing one is the author's edit to make.
 2. ``check`` fails when the sets disagree: declared but unimplemented,
    implemented but undeclared, or declared for two platforms and present on
    one.
@@ -968,7 +971,28 @@ def stub_text(
 
 
 def merge_stubs(existing: str, generated: str) -> str:
-    """Replace only the region between the markers; keep everything else.
+    """Append the generated stubs to the marker region; remove nothing.
+
+    This REPLACED the region with whatever the run generated, and the run
+    generates only the cases that are missing. So a run that added one case
+    deleted every case already there — including hand-written bodies, which
+    the first generation puts inside the markers and therefore invites.
+
+    It also could not converge. The cases it deleted were missing on the
+    next run and came back, and the case it had just written was then
+    implemented and dropped out, so the file oscillated with period two and
+    ``--check`` never reached 0. Reading only every other run showed a file
+    that agreed with itself.
+
+    Appending makes the operation idempotent for the reason the oscillation
+    existed: a case present in the region is found by the scanner, so it is
+    never missing again, so it is never regenerated. A second run has
+    nothing to add and reports ``unchanged``.
+
+    Nothing is removed, and that includes a case the spec no longer
+    declares. ``check`` already reports those as ``undeclared``; deleting a
+    test because a spec edit stopped naming it is a different act from
+    filling in a stub, and it is the author's.
 
     A file whose markers are gone is returned untouched: the author removed
     them, and overwriting on that basis would delete work.
@@ -977,8 +1001,13 @@ def merge_stubs(existing: str, generated: str) -> str:
         return existing
     head = existing.split(STUB_BEGIN)[0]
     tail = existing.split(STUB_END, 1)[1]
-    new_body = generated.split(STUB_BEGIN, 1)[1].split(STUB_END, 1)[0]
-    return head + STUB_BEGIN + new_body + STUB_END + tail
+    kept = existing.split(STUB_BEGIN, 1)[1].split(STUB_END, 1)[0].strip("\n")
+    added = generated.split(STUB_BEGIN, 1)[1].split(STUB_END, 1)[0].strip("\n")
+    if kept and added:
+        body = kept + "\n\n" + added
+    else:
+        body = kept or added
+    return head + STUB_BEGIN + "\n" + body + "\n" + STUB_END + tail
 
 
 #: Where a target's stub file lives, per platform. A convention rather than a
@@ -998,9 +1027,11 @@ def write_stubs(
 ) -> list[tuple[str, str, int]]:
     """Write or refresh stub files for cases with no implementation.
 
-    Returns ``(path, action, case_count)`` per file touched. Only the region
-    between the markers is rewritten; a file without them is left alone,
-    because the author removed them and overwriting would delete work.
+    Returns ``(path, action, case_count)`` per file touched, where the count
+    is the number of stubs ADDED. Missing stubs are appended to the marker
+    region and nothing in it is removed, so the count is the whole change; a
+    file without markers is left alone, because the author removed them and
+    overwriting would delete work.
     """
     config = load_project_config(project_root)
     roots = _test_roots(Path(project_root), config)
