@@ -1630,7 +1630,26 @@ export interface BranchHarness {
    * the name is not bound in the store — which is the right answer for a
    * per-row closure carrying a row id, because `initializeEventHandlers`
    * only ever registers the screen's own handler names. Call the ViewModel
-   * method directly for those. */
+   * method directly for those.
+   *
+   * WHICH NAMES ARE IN THE STORE, mechanically: the ones THIS SCREEN'S
+   * layout declares as an `@{...}` binding. Those are the function-typed
+   * fields on the screen's own generated Data type — the object `data`
+   * IS. A closure the ViewModel builds inside `.map()` is declared
+   * nowhere, so it is neither a field nor a store entry.
+   *
+   * NOT "any generated Data type". A cell layout is its own file and gets
+   * its OWN Data model (one model per layout file), so a row handler is a
+   * function field on `<Cell>Data` and lives at `data.rows[i].onX` — a
+   * field, and still not a store key, so `invoke` throwing for it is
+   * right. Measured on a consumer face: 14 such handlers across 11 row
+   * types beside 214 on the screen types, which is the shape that makes
+   * "is it on a generated Data type" the wrong question and "is it on THIS
+   * one" the right one.
+   *
+   * It breaks in one direction, and usefully: a name that IS a field on
+   * the screen's own Data type and still throws means the ViewModel never
+   * registered it — a registration bug found, not a mistake in the port. */
   invoke(name: string, ...args: unknown[]): unknown;
   /** Apply a witness/baseline object onto the VM + data store.
    *

@@ -218,3 +218,27 @@ class TestThePerRowCaseIsNamed:
     # call sites wrap the sentence at different points and adjacent string
     # literals put quotes inside it, so a source match tests the formatting.
     # The rendered line is what a reader is handed.
+
+    def test_the_doc_gives_a_mechanical_test_not_only_prose(self):
+        """Contributed by a consumer face 2026-09-07, mechanism verified here.
+
+        "a per-row closure with a row id" is a description; "is it a field on
+        the generated Data type" is something a reader can check. The second
+        one is correct for a reason worth stating in the doc, because the
+        obvious reading of it is wrong: a handler declared inside a CELL
+        layout is also on the top-level Data type (the extractor accumulates
+        the whole tree into one flat set), so the line is not
+        screen-vs-cell. It is declared-vs-undeclared, and the Data type is
+        how you see that.
+        """
+        flat = self._flat(bt.HARNESS_SKELETON)
+        # THIS screen's type, not "a generated Data type" — the first
+        # wording was a false positive for row handlers, which are fields on
+        # the cell layout's own Data model and still not store keys.
+        # No possessive in the needle: `_flat` collapses wrapping, not
+        # punctuation, and "screen's" survives it.
+        assert "own generated data type" in flat
+        assert "a cell layout is its own file" in flat
+        # The direction it breaks in, which turns a false alarm into a finding.
+        assert "registration bug found" in flat
+
