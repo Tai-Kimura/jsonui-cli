@@ -336,4 +336,112 @@ RSpec.describe KjuiTools::Core::Resources::StringManager do
       manager.apply_to_strings_files
     end
   end
+
+  # ------------------------------------------------------------------ #
+  # Reported 2026-09-07 (client, Android): the SSoT value was trimmed and
+  # its whitespace runs folded on the way into strings.xml, so a string
+  # written with a leading space reached iOS intact and Android without it.
+  # The same key then held two different strings on two faces, and the SSoT
+  # could not fix it, because the SSoT was what was being discarded.
+  #
+  # Android's own mechanism for this is the quoted value; sjui does no
+  # trimming at all (`.strip` appears nowhere in its string manager), so
+  # preserving here is what makes the faces agree rather than a new
+  # convention.
+  # ------------------------------------------------------------------ #
+  describe 'whitespace that the SSoT declares' do
+    let(:res_values_dir) { File.join(temp_dir, 'src/main/res/values') }
+    let(:strings_xml) { File.join(res_values_dir, 'strings.xml') }
+    let(:layouts_dir) { File.join(temp_dir, 'src/main/assets/Layouts') }
+
+    def extract(*relative_paths)
+      files = relative_paths.map do |rel|
+        path = File.join(layouts_dir, rel)
+        FileUtils.mkdir_p(File.dirname(path))
+        File.write(path, '{"type": "View"}')
+        path
+      end
+      manager.process_strings(files, files.size, 0)
+    end
+
+    def build(strings)
+      File.write(File.join(resources_dir, 'strings.json'), JSON.generate(strings))
+      FileUtils.mkdir_p(res_values_dir)
+      File.write(strings_xml, <<~XML)
+        <?xml version="1.0" encoding="utf-8"?>
+        <resources>
+        </resources>
+      XML
+      allow(KjuiTools::Core::Logger).to receive(:info)
+      allow(KjuiTools::Core::Logger).to receive(:debug)
+      extract(*strings.keys.map { |k| "#{k}.json" })
+      manager.send(:update_strings_xml, 'values')
+      File.read(strings_xml)
+    end
+
+    # The assertions read PARSED text, not the serialization: REXML writes
+    # the quote as `&quot;`, and pinning that spelling would test REXML
+    # rather than this file. The parsed value is what aapt sees.
+    def value_of(xml, name)
+      REXML::Document.new(xml).root.elements.to_a('string')
+        .find { |e| e.attributes['name'] == name }&.text
+    end
+
+    it 'keeps a trailing space, by quoting the value the way Android does' do
+      xml = build('signup' => { 'prompt' => 'Have an account? ' })
+      expect(value_of(xml, 'signup_prompt')).to eq('"Have an account? "')
+    end
+
+    it 'keeps a leading space' do
+      xml = build('listing' => { 'suffix' => ' (next day)' })
+      expect(value_of(xml, 'listing_suffix')).to eq('" (next day)"')
+    end
+
+    it 'leaves a string with no significant whitespace exactly as it was' do
+      # The arm that keeps this from rewriting the whole file: quoting is
+      # applied where it changes something and nowhere else. Without it the
+      # next build rewrites thousands of lines and buries the real diff.
+      xml = build('login' => { 'title' => 'Login' })
+      expect(value_of(xml, 'login_title')).to eq('Login')
+    end
+
+    it 'keeps the apostrophe escape inside a value it has to quote' do
+      # The reported string carries both a quote-forcing space and an
+      # apostrophe; the escape has to survive the wrapping.
+      xml = build('signup' => { 'prompt' => "Don't have an account? " })
+      expect(value_of(xml, 'signup_prompt')).to eq(%q("Don\\'t have an account? "))
+    end
+
+    it 'applies the same rule to plurals, so the two sites cannot diverge' do
+      # Fixing one site and not the other leaves the asymmetry inside this
+      # file instead of between the two faces.
+      xml = build('cart' => { 'items' => {
+        'en' => { 'plural' => { 'one' => '{count} item ', 'other' => '{count} items ' } }
+      } })
+      items = REXML::Document.new(xml).root
+                .elements["plurals[@name='cart_items']"].elements.to_a('item')
+      by_q = items.to_h { |i| [i.attributes['quantity'], i.text] }
+      expect(by_q['one']).to eq('"%d item "')
+      expect(by_q['other']).to eq('"%d items "')
+    end
+
+    it 'does NOT preserve a run of spaces, because REXML folds it downstream' do
+      # A limit, pinned so it is a recorded fact rather than an assumption.
+      # The ticket asked for the `[ \t\r]+ -> ' '` fold to be dropped too,
+      # and it was — but dropping it changes nothing: REXML normalizes
+      # whitespace when the Text node is built, before any formatter runs,
+      # so `a  b` reaches the file as `a b` either way. Preserving runs
+      # would mean replacing the writer, which would reformat every
+      # strings.xml in every consumer.
+      #
+      # Measured 2026-09-07 on the files the generator actually reads
+      # (<android>/app/src/main/assets/Layouts/Resources/strings.json,
+      # 2,548 strings across the live faces): strings with an internal run
+      # = 0. Every real case is a single leading or trailing space, which
+      # the quoting above does preserve.
+      xml = build('report' => { 'gap' => 'a  b' })
+      expect(value_of(xml, 'report_gap')).to eq('"a b"')
+    end
+  end
+
 end

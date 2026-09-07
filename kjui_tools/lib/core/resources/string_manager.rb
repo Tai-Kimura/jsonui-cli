@@ -219,6 +219,26 @@ module KjuiTools
         end
 
         # Update strings.xml file for a specific language
+        # Android's resource compiler trims leading and trailing whitespace
+        # from a <string> and folds internal runs, UNLESS the value is
+        # wrapped in double quotes. Reported 2026-09-07: this file trimmed
+        # and folded the value itself, so a SSoT string written with a
+        # leading space reached iOS intact and Android without it, and the
+        # same key held two different strings on two faces. There was no way
+        # to fix it from the SSoT, because the SSoT is what was being
+        # discarded.
+        #
+        # Quoting is applied only where it changes something. Wrapping every
+        # value would rewrite the whole file on the next build and bury the
+        # real change in thousands of lines of noise, and `"` inside a quoted
+        # value then needs escaping — a second edit to every string that
+        # contains one.
+        def quote_whitespace_edges(text)
+          return text if text.nil? || text.empty?
+          return text unless text != text.strip || text.match?(/[ \t]{2,}/)
+          %("#{text.gsub('"') { '\\"' }}")
+        end
+
         def update_strings_xml(lang_dir)
           Core::Logger.debug "Updating strings.xml for #{lang_dir}..."
           res_dir = File.join(@source_path, @config['source_directory'] || 'src/main', 'res', lang_dir)
@@ -269,9 +289,10 @@ module KjuiTools
 
               # Use translated value if available for this language
               translated_value = get_translated_value(full_key, value, lang_dir)
-              # Trim whitespace and normalize the string for XML
-              # Preserve \n as literal \\n for Android (renders as newline at runtime)
-              normalized_value = translated_value.strip.gsub("\n", "\\n").gsub(/[ \t\r]+/, ' ')
+              # Preserve \n as literal \\n for Android (renders as newline at runtime).
+              # The value is NOT trimmed and its whitespace runs are NOT folded:
+              # see quote_whitespace_edges for why, and what replaces it.
+              normalized_value = translated_value.gsub("\n", "\\n")
               # Escape for Android XML strings:
               # - Apostrophes must be backslash-escaped for Android resource compiler
               # - &, <, > are handled by REXML's .text= (auto-escapes to &amp; etc.)
@@ -279,6 +300,7 @@ module KjuiTools
               # Convert iOS format specifiers to Android format
               # %@ -> %s, %N$@ -> %N$s (positional)
               normalized_value = convert_ios_to_android_format(normalized_value)
+              normalized_value = quote_whitespace_edges(normalized_value)
 
               if existing_strings[full_key]
                 # Update existing string element
@@ -422,11 +444,12 @@ module KjuiTools
           JsonUIShared::PluralValidator::CATEGORIES.each do |cat|
             body = forms[cat]
             next unless body.is_a?(String)
-            normalized = body.strip.gsub("\n", "\\n").gsub(/[ \t\r]+/, ' ')
+            normalized = body.gsub("\n", "\\n")
             normalized = normalized.gsub("'") { "\\'" }
             normalized = JsonUIShared::PluralValidator.substitute_count(
               normalized, token: '%d', positional_token: '%1$d'
             )
+            normalized = quote_whitespace_edges(normalized)
             item = REXML::Element.new('item')
             item.add_attribute('quantity', cat)
             item.text = normalized
