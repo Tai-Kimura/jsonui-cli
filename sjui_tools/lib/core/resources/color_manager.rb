@@ -38,7 +38,7 @@ module SjuiTools
 
             save_colors_json if any_extracted? || @migrated
 
-            save_defined_colors_json if @undefined_colors.any?
+            save_defined_colors_json
           end
 
           generate_color_manager_swift if @config['resource_manager_directory']
@@ -46,7 +46,7 @@ module SjuiTools
 
         def apply_to_color_assets
           save_colors_json if any_extracted? || @migrated
-          save_defined_colors_json if @undefined_colors.any?
+          save_defined_colors_json
 
           generate_color_manager_swift if @config['resource_manager_directory']
         end

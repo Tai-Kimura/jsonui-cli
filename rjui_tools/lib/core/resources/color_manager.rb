@@ -43,7 +43,7 @@ module RjuiTools
 
           save_colors_json if any_extracted? || @migrated
 
-          save_defined_colors_json if @undefined_colors.any?
+          save_defined_colors_json
 
           generate_color_manager if @config['generated_directory']
           generate_theme_css if @config['generated_directory']
@@ -52,7 +52,7 @@ module RjuiTools
         # Apply extracted colors to color asset files.
         def apply_to_color_assets
           save_colors_json if any_extracted? || @migrated
-          save_defined_colors_json if @undefined_colors.any?
+          save_defined_colors_json
         end
 
         private

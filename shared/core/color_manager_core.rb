@@ -318,9 +318,44 @@ module JsonUIShared
       return if load_failed?
 
       @defined_colors_data.merge!(@undefined_colors)
+
+      # The ledger is a picture of what is STILL undefined, not a log of what
+      # ever was. `merge!` only ever added, so a key kept its `null` line
+      # after the colour was defined and the file answered the question it
+      # exists to answer — "which names does no palette define?" — wrongly,
+      # and more wrongly the longer a project lived. Measured on a consumer:
+      # both faces' ledgers, untouched since April, still listed 7 and 8
+      # names that colors.json now defines.
+      #
+      # Palette membership is the whole test. A key that any mode defines is
+      # resolvable at runtime (resolution is mode-agnostic from the layout
+      # side), so it does not belong here — and `process_and_replace_color`
+      # already answers from the palette before it ever consults this hash,
+      # which is why dropping the key changes no emitted colour.
+      # No palette to judge against is not "nothing is defined". With
+      # colors.json absent or unreadable every key would look undefined and
+      # the ledger would be left exactly as it is — which is the safe answer,
+      # but say so rather than arriving at it by accident.
+      resolved = if @palettes.any? { |_, palette| palette.any? }
+                   @defined_colors_data.keys.select { |key| color_key_exists_anywhere?(key) }
+                 else
+                   []
+                 end
+      resolved.each { |key| @defined_colors_data.delete(key) }
+
+      # Write only on a real change. The caller used to gate this whole
+      # method on `@undefined_colors.any?`, which is why a project with
+      # nothing NEW undefined never rewrote the file and consumers carried
+      # April's answer into September. The gate is gone, so this method now
+      # runs every build — and the content check is what keeps that from
+      # touching the mtime of a tracked file on every build.
+      body = JSON.pretty_generate(@defined_colors_data)
+      return if File.exist?(@defined_colors_file) && File.read(@defined_colors_file) == body
+
       FileUtils.mkdir_p(@resources_dir)
-      File.write(@defined_colors_file, JSON.pretty_generate(@defined_colors_data))
-      logger.info "Updated defined_colors.json with #{@undefined_colors.size} undefined color keys"
+      File.write(@defined_colors_file, body)
+      logger.info "Updated defined_colors.json with #{@undefined_colors.size} undefined color keys" \
+                  "#{resolved.empty? ? '' : ", dropped #{resolved.size} now defined"}"
       @undefined_colors.clear
     end
 

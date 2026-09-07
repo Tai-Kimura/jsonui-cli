@@ -39,7 +39,7 @@ module KjuiTools
 
           extract_colors(processed_files)
           save_colors_json if any_extracted? || @migrated
-          save_defined_colors_json if @undefined_colors.any?
+          save_defined_colors_json
 
           # Unconditional: see generate_color_manager_kotlin. The emit
           # references ColorManager whether or not this key is configured.
@@ -48,7 +48,7 @@ module KjuiTools
 
         def apply_to_color_assets
           save_colors_json if any_extracted? || @migrated
-          save_defined_colors_json if @undefined_colors.any?
+          save_defined_colors_json
           apply_to_colors_xml
         end
 
