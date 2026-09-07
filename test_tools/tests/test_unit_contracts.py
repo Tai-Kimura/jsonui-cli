@@ -227,39 +227,54 @@ class TestStubGenerationConverges:
                        if c["name"] in path.read_text(encoding="utf-8")]
                 for face, path in self._files(root).items() if path.exists()}
 
+    #: The stub line each face emits for `save_whenOffline_setsError`, and
+    #: what a person replaces it with. The replacement text is DIFFERENT on
+    #: every face on purpose: one shared marker is satisfied by whichever
+    #: face still has it, so a mutation that erases the body on one face
+    #: alone would keep the assertion green. Asked another way — this test
+    #: has to fail three separate ways, not one.
+    HAND_WRITTEN = {
+        "web": ("throw new Error('not implemented: save_whenOffline_setsError');",
+                "expect(vm.error).toBe('offline');  // hand-written body: web"),
+        "ios": ('XCTFail("not implemented: save_whenOffline_setsError")',
+                'XCTAssertEqual(vm.error, "offline")  // hand-written body: ios'),
+        "android": ('fail("not implemented: save_whenOffline_setsError")',
+                    'assertEquals("offline", vm.error)  // hand-written body: android'),
+    }
+
+    def _hand_write(self, root):
+        """Implement one case in place, on every face, inside the markers."""
+        for face, path in self._files(root).items():
+            stub, written = self.HAND_WRITTEN[face]
+            text = path.read_text(encoding="utf-8")
+            assert stub in text, (face, "stub line not found — fixture drifted")
+            path.write_text(text.replace(stub, written, 1), encoding="utf-8")
+
     def test_a_hand_written_body_and_the_declared_cases_survive_a_new_case(
             self, tmp_path):
         root = self._root(tmp_path, list(self.CASES))
         self._generate(root)
         assert uc.check_unit_contracts(root).ok
 
-        # Two ordinary edits, together: implement one case in place, and
-        # declare one more.
-        web = self._files(root)["web"]
-        text = web.read_text(encoding="utf-8")
-        assert "save_whenOffline_setsError" in text
-        text = text.replace(
-            "throw new Error('not implemented: save_whenOffline_setsError');",
-            "expect(vm.error).toBe('offline');  // hand-written body",
-            1)
-        web.write_text(text, encoding="utf-8")
+        # Two ordinary edits, together: implement one case in place on each
+        # face, and declare one more case.
+        self._hand_write(root)
         self._root(tmp_path, list(self.CASES) + [
             {"name": "save_whenConflict_reloads",
              "platforms": ["web", "ios", "android"]}])
 
         self._generate(root)
 
-        after = web.read_text(encoding="utf-8")
-        assert "hand-written body" in after
-        for name in ("save_whenOffline_setsError", "save_whenValid_clearsDirty",
-                     "save_whenConflict_reloads"):
-            assert name in after, name
-        # Every face keeps what it had, not just the one that was edited.
         for face, path in self._files(root).items():
             body = path.read_text(encoding="utf-8")
+            # The body, per face — not one marker that any face can satisfy.
+            assert self.HAND_WRITTEN[face][1] in body, (face, "body lost")
+            assert self.HAND_WRITTEN[face][0] not in body, (face, "stub returned")
+            # And the declared cases it already had.
             for case in self.CASES:
                 if face in case["platforms"]:
                     assert case["name"] in body, (face, case["name"])
+            assert "save_whenConflict_reloads" in body, (face, "new case missing")
 
     def test_five_consecutive_runs_converge_and_check_stays_green(self, tmp_path):
         root = self._root(tmp_path, list(self.CASES))
