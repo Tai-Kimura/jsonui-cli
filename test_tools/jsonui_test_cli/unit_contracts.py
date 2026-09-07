@@ -92,9 +92,18 @@ _WEB_MODIFIER = re.compile(r"\s*\.\s*(?P<mod>[A-Za-z_$][\w$]*)")
 _WEB_TABLE_MODIFIERS = {"each"}
 
 #: Platforms whose scan runs over source with comments blanked out first.
+#: MEMBERSHIP decides that; the VALUE is Kotlin's nested-block rule
+#: (`/* /* */ */` closes once, not twice) and says nothing about whether
+#: stripping happens.
+#:
+#: It used to be called `_COMMENT_STRIPPED`, and a reader took `"web": False`
+#: to mean web comments are NOT stripped — they are. Two readings of one
+#: line, which is what this release is named for; the name now describes the
+#: value it holds.
+#:
 #: ios is not here: it does not regex the raw text — `_swift_test_methods`
 #: brace-matches a class body — and adding it would need its own measurement.
-_COMMENT_STRIPPED = {"web": False, "android": True}
+_NESTED_COMMENT_BLOCKS = {"web": False, "android": True}
 
 
 def _without_comments(text: str, *, nested_blocks: bool = False) -> str:
@@ -852,11 +861,23 @@ def _web_test_names(text: str) -> tuple[list[str], int]:
         i += 1
         while i < len(text) and text[i] in " \t\r\n":
             i += 1
-        value, dynamic, _ = _read_js_literal(text, i)
-        if value is not None:
-            names.append(value)
-        else:
+        value, dynamic, after = _read_js_literal(text, i)
+        if value is None:
             unreadable += 1
+            continue
+        # The literal has to BE the argument, not start it. `it("a" + b, fn)`
+        # otherwise yields `a` — a truncated title entering `implemented`,
+        # which is the exact shape this commit exists to remove, reached by a
+        # different route. Reported by the triage lane against this scanner
+        # before it shipped; no consumer face writes one today (0 across
+        # three trees, against 2998/3287/10072 plain literals), so this is
+        # closing the class rather than fixing a live break.
+        while after < len(text) and text[after] in " \t\r\n":
+            after += 1
+        if after < len(text) and text[after] not in ",)":
+            unreadable += 1
+            continue
+        names.append(value)
     return names, unreadable
 
 
@@ -912,9 +933,9 @@ def _implemented_names(
         except OSError:
             continue
         read.append(str(path))
-        if platform in _COMMENT_STRIPPED:
+        if platform in _NESTED_COMMENT_BLOCKS:
             text = _without_comments(
-                text, nested_blocks=_COMMENT_STRIPPED[platform])
+                text, nested_blocks=_NESTED_COMMENT_BLOCKS[platform])
         if platform == "web":
             raws, unreadable = _web_test_names(text)
             unreadable_titles += unreadable

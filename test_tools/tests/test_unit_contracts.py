@@ -1470,6 +1470,35 @@ class TestWebTitlesAreReadWhole:
         assert names == ["real one"]
         assert unreadable == 0
 
+    def test_a_literal_that_only_starts_the_argument_is_not_a_title(self):
+        # `it("a" + b, fn)` used to yield `a`: a truncated title entering
+        # `implemented`, the same shape as the reported cut reached by a
+        # different route. It is not "missing" either — it has no static
+        # spelling, so it belongs in the count.
+        names, unreadable = uc._web_test_names('it("prefix " + name, fn)')
+        assert names == []
+        assert unreadable == 1
+
+    def test_a_literal_followed_by_a_comma_is_a_title(self):
+        # The control for the arm above: the check must not reject the
+        # ordinary shape it is meant to leave alone.
+        names, unreadable = uc._web_test_names(
+            'it("plain", fn)\ntest("only argument")')
+        assert names == ["plain", "only argument"]
+        assert unreadable == 0
+
+    def test_the_scanner_alone_does_not_strip_comments_the_pipeline_does(self):
+        # ⚠️ A reader measured `_web_test_names` directly, saw a commented-out
+        # test in the result, and concluded web comments are not stripped.
+        # They are — `_implemented_names` blanks them first. Both halves are
+        # pinned here so the next reader sees WHERE the stripping lives.
+        src = '// it("commented", fn)\nit("real", fn)\n'
+        assert uc._web_test_names(src)[0] == ["commented", "real"]
+        assert "web" in uc._NESTED_COMMENT_BLOCKS
+        stripped = uc._without_comments(
+            src, nested_blocks=uc._NESTED_COMMENT_BLOCKS["web"])
+        assert uc._web_test_names(stripped)[0] == ["real"]
+
     def test_the_word_it_outside_a_call_is_not_counted_as_unreadable(self):
         # Otherwise the new NOTE line fires on ordinary prose and code, and a
         # line that always prints is a line nobody reads.
