@@ -1396,6 +1396,194 @@ class BranchApiOpQualification(unittest.TestCase):
 
 
 
+_ENDPOINT_OWNER = [
+    {"name": "CatalogRepository", "methods": [
+        {"name": "listEntries", "endpoint": "GET /api/catalog/entries"}]},
+]
+_ENDPOINTLESS_USE_CASES = [
+    {"name": "OverviewUseCase", "methods": [
+        {"name": "listEntries", "endpoint": None}]},
+]
+
+
+class BranchApiOpAmbiguityCountsOnlyEndpointOwners(unittest.TestCase):
+    """Who counts as a second owner: the endpoint decides, not the name.
+
+    1.8.48 answered two questions off one denominator. `listEntries` was
+    DECLARED by every method spelling it, and it was called AMBIGUOUS on the
+    same count — so a `endpoint: null` UseCase method sharing the
+    Repository's name produced
+
+        API operation 'listEntries' is declared by CatalogRepository.listEntries
+        and OverviewUseCase.listEntries — the bare name does not say which endpoint
+        this means, and the generator would bind it to one of them.
+
+    about a method that names no endpoint at all. The generator
+    (`branch_tests.collect_endpoint_ops`) drops such declarations, so the
+    hazard the sentence describes cannot occur. Two consumer faces rewrote
+    108 references between them to satisfy it.
+
+    The failure was not that the check was wrong to fire on real collisions
+    — it fires on those correctly, and `BranchApiOpQualification` above
+    holds that down. It was that a check and the generator it describes had
+    two implementations of one predicate, and nothing compared them.
+    ``AmbiguityAgreesWithTheGenerator`` below is that comparison.
+    """
+
+    def _result(self, when, then, repositories, use_cases=None):
+        return _validate(_base_spec(
+            {"methods": {"onAppear": {"branches": [
+                {"when": when, "then": then}]}}},
+            vm_methods=["onAppear"],
+            repositories=repositories,
+            use_cases=use_cases,
+        ))
+
+    def test_a_use_case_without_an_endpoint_is_not_a_second_owner(self):
+        """The reported shape, on both sides of the branch.
+
+        This is the arm that inverts: if the denominator ever widens back to
+        every declaration, this goes red instead of the change landing
+        silently.
+        """
+        result = self._result(
+            {"api.listEntries": "success"}, {"api.listEntries": "called"},
+            _ENDPOINT_OWNER, _ENDPOINTLESS_USE_CASES)
+        self.assertEqual(_errors_at(result, "when.api.listEntries"), [])
+        self.assertEqual(_errors_at(result, "then.api.listEntries"), [])
+
+    def test_the_bare_name_is_still_declared_so_it_does_not_warn(self):
+        """The collateral the narrowing must not cause.
+
+        Dropping the twin from the ambiguity denominator must not drop the
+        bare name from the DECLARED set — that would trade an error for a
+        `not declared in dataFlow` warning and look like the fix worked.
+        """
+        result = self._result(
+            {"api.listEntries": "success"}, {"api": "none"},
+            _ENDPOINT_OWNER, _ENDPOINTLESS_USE_CASES)
+        self.assertEqual(_warnings_at(result, "when.api.listEntries"), [])
+
+    def test_a_free_text_signature_is_not_a_second_owner(self):
+        """`methods: ["listEntries() -> [Job]"]` carries no endpoint either."""
+        result = self._result(
+            {"api.listEntries": "success"}, {"api": "none"},
+            _ENDPOINT_OWNER,
+            [{"name": "OverviewUseCase", "methods": ["listEntries() -> [Job]"]}])
+        self.assertEqual(_errors_at(result, "when.api.listEntries"), [])
+        self.assertEqual(_warnings_at(result, "when.api.listEntries"), [])
+
+    def test_an_endpoint_that_is_not_method_and_path_is_not_an_owner(self):
+        """The generator requires `<METHOD> <path>`; a bare path gives it
+        no route, so it cannot be the wrong half of an `api.<op>`."""
+        result = self._result(
+            {"api.listEntries": "success"}, {"api": "none"},
+            _ENDPOINT_OWNER,
+            [{"name": "OverviewUseCase", "methods": [
+                {"name": "listEntries", "endpoint": "/api/home/jobs"}]}])
+        self.assertEqual(_errors_at(result, "when.api.listEntries"), [])
+
+    def test_two_real_endpoints_are_still_ambiguous(self):
+        """The population the check IS for, kept load-bearing."""
+        errs = _errors_at(self._result(
+            {"api.getProfile": "failure"}, {"api": "none"}, _TWO_OWNERS),
+            "when.api.getProfile")
+        self.assertTrue(errs)
+
+    def test_the_error_names_only_the_owners_that_could_be_bound(self):
+        """A third, endpointless owner must not appear in the advice.
+
+        The message tells the author which spelling to use. Naming an owner
+        the generator would never bind sends them to a qualification that
+        routes to nothing.
+        """
+        errs = _errors_at(self._result(
+            {"api.getProfile": "failure"}, {"api": "none"}, _TWO_OWNERS,
+            [{"name": "ProfileUseCase", "methods": [
+                {"name": "getProfile", "endpoint": None}]}]),
+            "when.api.getProfile")
+        self.assertTrue(errs)
+        msg = errs[0].message
+        self.assertIn("AccountRepository.getProfile", msg)
+        self.assertIn("PreferencesRepository.getProfile", msg)
+        self.assertNotIn("ProfileUseCase", msg)
+
+
+class AmbiguityAgreesWithTheGenerator(unittest.TestCase):
+    """The validator and the generator must call the same specs ambiguous.
+
+    The 1.8.48 defect was not visible in either tool's own suite: each was
+    green against its own predicate. It was only visible in the comparison,
+    which nothing performed. So perform it here, over the shapes that
+    distinguish the two denominators — a shared corpus, both tools, one
+    assertion per shape.
+
+    If the two ever diverge again, this fails naming the shape, rather than
+    a consumer face discovering it as 108 references it must rewrite.
+    """
+
+    CORPUS = {
+        "two endpoints — a real collision": (
+            [{"name": "A", "methods": [{"name": "op", "endpoint": "GET /a"}]},
+             {"name": "B", "methods": [{"name": "op", "endpoint": "GET /b"}]}],
+            None, True),
+        "repository endpoint + endpointless use case": (
+            [{"name": "A", "methods": [{"name": "op", "endpoint": "GET /a"}]}],
+            [{"name": "U", "methods": [{"name": "op", "endpoint": None}]}],
+            False),
+        "repository endpoint + free-text use case": (
+            [{"name": "A", "methods": [{"name": "op", "endpoint": "GET /a"}]}],
+            [{"name": "U", "methods": ["op() -> [X]"]}], False),
+        "repository endpoint + path-only endpoint": (
+            [{"name": "A", "methods": [{"name": "op", "endpoint": "GET /a"}]}],
+            [{"name": "U", "methods": [{"name": "op", "endpoint": "/a"}]}],
+            False),
+        "one owner": (
+            [{"name": "A", "methods": [{"name": "op", "endpoint": "GET /a"}]}],
+            None, False),
+        "two endpointless owners": (
+            [{"name": "A", "methods": [{"name": "op", "endpoint": None}]}],
+            [{"name": "U", "methods": [{"name": "op", "endpoint": None}]}],
+            False),
+        "two use cases with endpoints": (
+            None,
+            [{"name": "U", "methods": [{"name": "op", "endpoint": "GET /u"}]},
+             {"name": "V", "methods": [{"name": "op", "endpoint": "GET /v"}]}],
+            True),
+    }
+
+    def test_both_tools_agree_on_every_shape(self):
+        from jsonui_test_cli.branch_tests import collect_endpoint_ops
+
+        for label, (repos, use_cases, expected) in self.CORPUS.items():
+            with self.subTest(label):
+                spec = _base_spec(
+                    {"methods": {"onAppear": {"branches": [
+                        {"when": {"api.op": "success"},
+                         "then": {"api": "none"}}]}}},
+                    vm_methods=["onAppear"],
+                    repositories=repos, use_cases=use_cases)
+
+                result = _validate(spec)
+                validator_says = bool(_errors_at(result, "when.api.op"))
+
+                # The generator's answer: a bare name is ambiguous exactly
+                # when it does not resolve while some qualified spelling of
+                # it does.
+                ops = collect_endpoint_ops(spec)
+                qualified = [
+                    k for k in ops.canonical if k.endswith(".op")]
+                generator_says = (
+                    ops.resolve("op") is None and len(qualified) > 1)
+
+                self.assertEqual(
+                    validator_says, expected,
+                    f"validator disagrees with the ruling for {label!r}")
+                self.assertEqual(
+                    generator_says, expected,
+                    f"generator disagrees with the ruling for {label!r}")
+
+
 class BranchThenDataNestedPath(unittest.TestCase):
     """`then data.<a>.<b>` names a value inside a nested data structure.
 

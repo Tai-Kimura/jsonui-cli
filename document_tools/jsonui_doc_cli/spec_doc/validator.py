@@ -1568,11 +1568,11 @@ class SpecValidator:
     def _collect_branch_api_ops(self) -> set[str]:
         """Op names a contract may reference, and the ambiguous ones.
 
-        Returns every spelling that RESOLVES: a bare method name while only
-        one repository/useCase declares it, and always the owner-qualified
-        `<Owner>.<method>`. A bare name two owners declare resolves to
-        neither — it is recorded in ``self._ambiguous_api_ops`` and
-        ``_check_branch_api_op`` turns it into an error naming both owners.
+        Returns every spelling the spec DECLARES: each bare method name and
+        each owner-qualified `<Owner>.<method>`. Separately, a bare name that
+        two owners declare WITH AN HTTP ENDPOINT resolves to neither — it is
+        recorded in ``self._ambiguous_api_ops`` and ``_check_branch_api_op``
+        turns it into an error naming those owners.
 
         Before this, names were collected into a flat set, so a duplicate was
         indistinguishable from a unique one here and the generator's flat
@@ -1583,8 +1583,22 @@ class SpecValidator:
         (Reference checks stay warning-level: an op may legitimately be an
         operation id the spec never lists. The AMBIGUITY is an error, because
         there the spec does list it — twice.)
+
+        The two denominators are deliberately different (2026-09-08). A name
+        is DECLARED by every method that spells it; it is AMBIGUOUS only when
+        two owners declare it WITH AN HTTP ENDPOINT, because only those are
+        candidates the generator could bind. Until this, both questions were
+        answered off the declaration count, so `api.listEntries` errored whenever
+        a `endpoint: null` UseCase method happened to share the Repository's
+        name — and the error said "the bare name does not say which endpoint
+        this means" about a method that names no endpoint at all. Two faces
+        rewrote 108 references between them to satisfy a check whose own
+        stated reason did not hold. `branch_tests.collect_endpoint_ops` has
+        always used the endpoint-bearing denominator; this is the validator
+        catching up to the generator it is describing, not a relaxation.
         """
         owners_of: dict[str, list[str]] = {}
+        endpoint_owners_of: dict[str, list[str]] = {}
         data_flow = (self._spec_data or {}).get("dataFlow") or {}
         for section in ("repositories", "useCases"):
             for entry in data_flow.get(section, []) or []:
@@ -1594,28 +1608,53 @@ class SpecValidator:
                 owner = owner if isinstance(owner, str) and owner else ""
                 for method in entry.get("methods", []) or []:
                     name = None
+                    has_endpoint = False
                     if isinstance(method, str):
                         # Free-text signature — take the leading identifier.
+                        # It carries no endpoint, so it can name a method but
+                        # can never be a candidate the generator binds to.
                         m = re.match(r"^\s*([A-Za-z_][A-Za-z0-9_]*)", method)
                         if m:
                             name = m.group(1)
                     elif isinstance(method, dict) and isinstance(method.get("name"), str):
                         name = method["name"]
+                        has_endpoint = self._declares_http_endpoint(method)
                     if name:
                         owners_of.setdefault(name, []).append(owner)
+                        if has_endpoint:
+                            endpoint_owners_of.setdefault(name, []).append(owner)
 
         names: set[str] = set()
         ambiguous: dict[str, list[str]] = {}
         for name, owners in owners_of.items():
-            if len(owners) == 1:
-                names.add(name)
-            else:
-                ambiguous[name] = [f"{o}.{name}" for o in owners]
+            # Declared at all -> the bare name is a spelling the spec knows,
+            # so it never earns the "not declared" warning. Whether it
+            # RESOLVES is the ambiguity question below, decided on a
+            # different denominator.
+            names.add(name)
             for owner in owners:
                 if owner:
                     names.add(f"{owner}.{name}")
+            endpoint_owners = endpoint_owners_of.get(name, [])
+            if len(endpoint_owners) > 1:
+                ambiguous[name] = [f"{o}.{name}" for o in endpoint_owners]
         self._ambiguous_api_ops = ambiguous
         return names
+
+    @staticmethod
+    def _declares_http_endpoint(method: dict) -> bool:
+        """Whether this method declares an endpoint the generator can bind.
+
+        The same predicate as ``branch_tests.collect_endpoint_ops``: the
+        value must be a string shaped ``<METHOD> <path>``. Anything else --
+        ``null``, a bare path, a free-text signature -- gives the generator
+        no route, so such a method can never be the wrong half of an
+        ``api.<op>``.
+        """
+        endpoint = method.get("endpoint")
+        if not isinstance(endpoint, str):
+            return False
+        return bool(re.match(r"^([A-Z]+)\s+(\S+)$", endpoint.strip()))
 
     def _collect_transition_destinations(self) -> set[str]:
         names: set[str] = set()
