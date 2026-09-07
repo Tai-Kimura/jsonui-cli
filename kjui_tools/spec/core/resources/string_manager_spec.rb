@@ -440,7 +440,21 @@ RSpec.describe KjuiTools::Core::Resources::StringManager do
       # = 0. Every real case is a single leading or trailing space, which
       # the quoting above does preserve.
       xml = build('report' => { 'gap' => 'a  b' })
-      expect(value_of(xml, 'report_gap')).to eq('"a b"')
+      expect(value_of(xml, 'report_gap')).to eq('a b')
+    end
+
+    it 'does not quote a value whose only oddity is a run it cannot save' do
+      # Quotes mean one thing: the leading or trailing whitespace survived.
+      # Quoting for a run would put quotes on a value that is folded anyway,
+      # so the file would claim a preservation that did not happen.
+      xml = build('report' => { 'gap' => 'a  b' })
+      expect(value_of(xml, 'report_gap')).not_to include('"')
+    end
+
+    it 'still quotes when an edge and a run appear together' do
+      # The edge is saved, the run is not; the quotes are earned by the edge.
+      xml = build('report' => { 'both' => ' a  b ' })
+      expect(value_of(xml, 'report_both')).to eq('" a b "')
     end
   end
 

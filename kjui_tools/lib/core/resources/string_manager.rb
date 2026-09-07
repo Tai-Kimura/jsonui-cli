@@ -233,9 +233,16 @@ module KjuiTools
         # real change in thousands of lines of noise, and `"` inside a quoted
         # value then needs escaping — a second edit to every string that
         # contains one.
+        #
+        # The condition is the EDGE only, deliberately. An internal run is
+        # not saved by quoting — REXML folds it when the Text node is built,
+        # before any formatter runs — so quoting a value for its run would
+        # produce a file where the quotes say "preserved" and the value is
+        # folded anyway. Quotes here mean exactly one thing: this value's
+        # leading or trailing whitespace survived.
         def quote_whitespace_edges(text)
           return text if text.nil? || text.empty?
-          return text unless text != text.strip || text.match?(/[ \t]{2,}/)
+          return text if text == text.strip
           %("#{text.gsub('"') { '\\"' }}")
         end
 
