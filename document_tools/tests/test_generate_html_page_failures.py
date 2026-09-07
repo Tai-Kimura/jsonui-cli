@@ -42,8 +42,21 @@ class PageFailureAccountingTests(unittest.TestCase):
     def _site(self, tmp: Path, *, broken: bool) -> Path:
         tests_dir = tmp / "tests"
         tests_dir.mkdir(parents=True)
+        # ⚠️ This fixture used to be `{"name": "sample", "cases": []}`, which
+        # is not a test file at all — no `type`, no `metadata`, no `source`.
+        # It never validated, and the generator's own silent skip meant this
+        # suite ran for its whole life with its input dropped on the floor:
+        # a test named "clean input records nothing" whose input was not
+        # clean, passing because nothing counted the thing it discarded.
+        # Making the skip a recorded failure is what surfaced it.
         (tests_dir / "sample.test.json").write_text(
-            json.dumps({"name": "sample", "cases": []}), encoding="utf-8"
+            json.dumps({
+                "type": "screen",
+                "metadata": {"name": "sample", "description": "sample."},
+                "source": {"layout": "sample"},
+                "cases": [{"name": "c", "description": "c.", "steps": []}],
+            }),
+            encoding="utf-8",
         )
         db_dir = tmp / "db"
         db_dir.mkdir()

@@ -165,6 +165,25 @@ def note_page_generated(path: Path | str, suffix: str = "", indent: str = "    "
     print(f"{indent}Generated: {path}{suffix}")
 
 
+def _validation_failure_text(result, limit: int = 5) -> str:
+    """The errors themselves, not the fact that there were errors.
+
+    `(validation errors)` sent the reader back to run the validator by hand
+    to find out which ones. The placeholder page and the stderr summary both
+    render this string, so the message has to carry the errors with it.
+    """
+    errors = list(getattr(result, "errors", []) or [])
+    if not errors:
+        return "the spec did not validate"
+    head = "; ".join(
+        f"{getattr(e, 'path', '') or '(spec)'}: {getattr(e, 'message', e)}"
+        for e in errors[:limit]
+    )
+    if len(errors) > limit:
+        head += f"; … and {len(errors) - limit} more error(s)"
+    return f"{len(errors)} validation error(s) — {head}"
+
+
 def record_page_failure(
     kind: str,
     name: str,
@@ -944,7 +963,18 @@ def generate_html_directory(
         try:
             result = generator.validator.validate_file(test_file)
             if not result.is_valid:
-                print(f"  Skipping {test_file} (validation errors)")
+                # The third site with this shape, found while measuring the
+                # other two. A test file that will not validate drops its
+                # page from the index and leaves last run's copy on disk,
+                # and the run still exited 0. No placeholder here: the page
+                # path is derived from `test_data` this file could not
+                # supply, and a leftover under `-o` is named by
+                # `_warn_about_leftovers`, which spec pages (written outside
+                # `-o`) do not get.
+                record_page_failure(
+                    'test', test_file.name,
+                    _validation_failure_text(result),
+                    source=test_file, indent="  ")
                 continue
 
             test_type = result.test_data.get('type', 'unknown')
@@ -2259,18 +2289,26 @@ def _pre_generate_spec_docs(
 
             for spec_file in sorted(spec_files):
                 try:
-                    result = _validator_for(spec_file).validate_file(spec_file)
-                    if not result.is_valid:
-                        print(f"    SKIP: {spec_file.name} (validation errors)")
-                        continue
-
-                    # Generate HTML - preserve subdirectory structure
+                    # Preserve subdirectory structure. Computed BEFORE the
+                    # validity check so an invalid spec can still name the
+                    # page it owns: without the path there is nowhere to put
+                    # the placeholder, and the stale page from the last run
+                    # stays where it is, presented as current.
                     rel_to_json = spec_file.parent.relative_to(spec_json_dir)
                     output_name = spec_file.stem.replace(".spec", "")
                     html_subdir = html_dir / rel_to_json
                     md_subdir = md_dir / rel_to_json
                     html_subdir.mkdir(parents=True, exist_ok=True)
                     md_subdir.mkdir(parents=True, exist_ok=True)
+
+                    result = _validator_for(spec_file).validate_file(spec_file)
+                    if not result.is_valid:
+                        record_page_failure(
+                            'screen spec', spec_file.name,
+                            _validation_failure_text(result),
+                            source=spec_file,
+                            output=html_subdir / f"{output_name}.html")
+                        continue
 
                     spec_layouts_dir = _resolve_layouts_dir_for_spec(spec_file, layouts_dir)
                     html_content = generate_spec_html(result.spec_data, layouts_dir=spec_layouts_dir)
@@ -2304,14 +2342,18 @@ def _pre_generate_spec_docs(
 
             for comp_file in sorted(comp_files):
                 try:
+                    output_name = comp_file.stem.replace(".component", "")
                     result = _validator_for(comp_file).validate_file(comp_file)
                     if not result.is_valid:
-                        print(f"    SKIP: {comp_file.name} (validation errors)")
+                        record_page_failure(
+                            'component spec', comp_file.name,
+                            _validation_failure_text(result),
+                            source=comp_file,
+                            output=html_dir / f"{output_name}.html")
                         continue
 
                     # Generate HTML
                     html_content = generate_component_html(result.spec_data)
-                    output_name = comp_file.stem.replace(".component", "")
                     html_path = html_dir / f"{output_name}.html"
                     with open(html_path, 'w', encoding='utf-8') as f:
                         f.write(html_content)
