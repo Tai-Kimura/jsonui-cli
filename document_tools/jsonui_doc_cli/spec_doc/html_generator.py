@@ -196,9 +196,24 @@ def generate_spec_html(
             sub_html = sub_file.replace(".spec.json", ".html").split("/")[-1] if sub_file else ""
             sub_dir = "/".join(sub_file.split("/")[:-1]) if "/" in sub_file else ""
             if current_path and sub_html:
-                # Compute relative link from current page to sub-spec
-                from pathlib import Path
-                current_dir = str(Path(current_path).parent)
+                # `sub.file` is resolved against the PARENT's own directory
+                # (`_sub_spec_sections` reads `spec_dir / sub_file`, and the
+                # callers pass the parent spec's parent), and the sub page is
+                # written at the same relative offset. Both sides share the
+                # frame, so the app prefix and the parent's own nesting cancel
+                # and no part of the output layout is written down here.
+                #
+                # ⚠️ This looked like the defect fixed one commit earlier —
+                # a link built by reapplying a rule — and a
+                # `current_dir = Path(current_path).parent` stood here,
+                # assigned and never read, which is what made it look that
+                # way: a reader (two, on 2026-09-08) takes a computed
+                # variable as evidence that the path needs adjusting. It was
+                # measured across four shapes the corpus does not contain
+                # (nested parent x nested child, with and without an app
+                # prefix): 4 links, 0 dangling in every one. The variable is
+                # gone so the next reader is not told a story the code does
+                # not tell.
                 if sub_dir:
                     link = f"{sub_dir}/{sub_html}"
                 else:
