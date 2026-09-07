@@ -642,10 +642,26 @@ def cmd_validate_spec_batch(input_dir: Path):
                 print(f"    {source}: {description}")
         total_errors += len(cross)
 
+    # Component declarations, both directions. Batch mode for the same reason
+    # as the cross-spec check above: neither direction is visible from one
+    # file — one needs every spec in the face, the other needs the component
+    # directory beside it.
+    comp_errors, comp_warnings = _component_declaration_gaps(spec_files, input_dir)
+    if comp_errors or comp_warnings:
+        print()
+        for line in comp_errors:
+            print(line)
+        for line in comp_warnings:
+            print(line)
+        total_errors += len(comp_errors)
+        total_warnings += len(comp_warnings)
+
     print()
-    if failed or cross:
+    if failed or cross or comp_errors:
         print(f"Result: FAILED ({len(failed)} of {len(spec_files)} spec file(s)"
               + (f", {len(cross)} cross-spec disagreement(s)" if cross else "")
+              + (f", {len(comp_errors)} component declaration gap(s)"
+                 if comp_errors else "")
               + ")")
         for spec_file in failed:
             print(f"  - {spec_file}")
@@ -653,7 +669,136 @@ def cmd_validate_spec_batch(input_dir: Path):
         print(f"Result: PASSED ({len(spec_files)} spec file(s))")
     print(f"Errors: {total_errors}, Warnings: {total_warnings}")
 
-    return 1 if (failed or cross) else 0
+    return 1 if (failed or cross or comp_errors) else 0
+
+
+def _component_sibling_dirs(input_dir: Path):
+    """``(components/json, screens/layouts)`` for the face *input_dir* sits in.
+
+    Both are read from the same root as `input_dir`, which is the layout this
+    tool already writes to — `docs/<face>/screens/json` beside
+    `docs/<face>/components/json`. Written once here so the check and the
+    generator do not grow two spellings of it; that is the defect this release
+    has now repaired three times.
+
+    Returns ``(None, None)`` when the shape does not match, so a project laid
+    out differently gets no check rather than a wrong one.
+    """
+    d = Path(input_dir).resolve()
+    if d.name != "json" or d.parent.name != "screens":
+        return None, None
+    face = d.parent.parent
+    comps = face / "components" / "json"
+    layouts = face / "screens" / "layouts"
+    return (comps if comps.is_dir() else None,
+            layouts if layouts.is_dir() else None)
+
+
+def _component_declaration_gaps(spec_files, input_dir):
+    """Component specs and the screens that declare them, reconciled.
+
+    Ruled 2026-09-08. Two faces had four component pages that no screen
+    declared: the pages were generated and nothing linked to them, so they
+    were unreachable from the site. Two other faces had the opposite —
+    declarations naming a `specFile` that does not exist.
+
+    ⚠️ The two directions are independent. A check for one is silent on the
+    other, which is how both survived: the reporting lane found the first and
+    the delivery lane found the second, on different faces, hours apart.
+
+    Ownership here does NOT come from where the declaration sits — that is
+    what makes this checkable today while the same question for unit
+    contracts is not. A component's users are the layouts that name it, which
+    is a fact about the tree rather than about the declaration being checked.
+
+    Severity follows the evidence:
+      declared, file missing        error — the reference resolves to nothing
+      file exists, layouts use it   error — it IS used and nobody declared it
+      file exists, no layout uses   warning — possibly not wired up yet
+    Without a layouts directory the second and third cannot be separated, so
+    everything undeclared degrades to a warning and the message says which
+    check did not run. A severity assigned without the evidence for it is the
+    line that is always wrong.
+    """
+    comps_dir, layouts_dir = _component_sibling_dirs(input_dir)
+    if comps_dir is None:
+        return [], []
+
+    declared: dict[str, list[str]] = {}
+    for spec_file in spec_files:
+        try:
+            with open(spec_file, "r", encoding="utf-8") as f:
+                data = json.load(f)
+        except (OSError, ValueError):
+            continue
+        if not isinstance(data, dict):
+            continue
+        for cc in ((data.get("structure") or {}).get("customComponents") or []):
+            name = (cc or {}).get("specFile")
+            if isinstance(name, str) and name:
+                declared.setdefault(name, []).append(str(spec_file))
+
+    on_disk = {f.name: f for f in sorted(comps_dir.glob("*.component.json"))}
+
+    errors: list[str] = []
+    warnings: list[str] = []
+
+    for name in sorted(set(declared) - set(on_disk)):
+        where = ", ".join(sorted(declared[name]))
+        errors.append(
+            f"[ERROR] customComponents declares {name!r}, which does not exist "
+            f"in {comps_dir} — the link built from it resolves to nothing "
+            f"(declared by: {where})")
+
+    for name in sorted(set(on_disk) - set(declared)):
+        users = _layouts_naming_component(on_disk[name], layouts_dir)
+        if users is None:
+            warnings.append(
+                f"[WARNING] {name} is declared by no screen spec, so its page "
+                f"is generated and nothing links to it. Whether any screen "
+                f"USES it could not be checked: no layouts directory beside "
+                f"{comps_dir.parent.parent}")
+        elif users:
+            shown = ", ".join(users[:3]) + ("..." if len(users) > 3 else "")
+            errors.append(
+                f"[ERROR] {name} is used by {len(users)} layout(s) and declared "
+                f"by no screen spec — its page is generated and unreachable "
+                f"({shown})")
+        else:
+            warnings.append(
+                f"[WARNING] {name} is declared by no screen spec and named by "
+                f"no layout — its page is generated and unreachable, and "
+                f"nothing appears to use it yet")
+
+    return errors, warnings
+
+
+def _layouts_naming_component(component_file: Path, layouts_dir):
+    """Layout files that name this component, or None when unknowable.
+
+    None rather than an empty list when there is no layouts directory: "no
+    layout uses it" and "nobody looked" are different answers and the caller
+    picks a different severity for each.
+    """
+    if layouts_dir is None:
+        return None
+    try:
+        data = json.loads(component_file.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    name = ((data.get("metadata") or {}).get("name")
+            if isinstance(data, dict) else None)
+    if not isinstance(name, str) or not name:
+        return None
+    needle = f'"{name}"'
+    hits = []
+    for layout in sorted(Path(layouts_dir).rglob("*.json")):
+        try:
+            if needle in layout.read_text(encoding="utf-8", errors="ignore"):
+                hits.append(layout.name)
+        except OSError:
+            continue
+    return hits
 
 
 def _cross_spec_disagreements(spec_files):
