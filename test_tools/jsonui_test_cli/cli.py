@@ -1481,23 +1481,13 @@ def _branch_check_summary(reports: list, scanned: int, orphans=()) -> int:
             print(f"  [WARN]    {report.harness_file} — harness missing; "
                   "the generated test imports it (run without --check to "
                   "emit a skeleton)")
-        if report.harness_lacks_invoke:
-            # A note, never a failure: the file is the consumer's. But the
-            # fix ships in a skeleton that never overwrites an existing
-            # harness, so without naming the file the release reaches only
-            # projects that scaffold a NEW screen — and the projects that
-            # hit the defect are precisely the ones with harnesses already.
-            print(f"  note: {report.harness_file} has no `invoke(` — it "
-                  "predates the harness member for pressing callbacks. "
-                  "Reading a callback with readField returns the ViewModel "
-                  "method, not the registered arrow; port `invoke` and "
-                  "`settle` from a freshly generated skeleton. A per-row "
-                  "closure carrying a row id is not in the store and is "
-                  "meant to throw — call the ViewModel method for "
-                  "those. Nothing the generator emits calls `invoke`, "
-                  "so porting shows up in no test count and no "
-                  "coverage number — press a handler whose "
-                  "destination differs by route to see it.")
+    # A note, never a failure: the file is the consumer's. But the fix ships
+    # in a skeleton that never overwrites an existing harness, so without
+    # naming the file the release reaches only projects that scaffold a NEW
+    # screen — and the projects that hit the defect are precisely the ones
+    # with harnesses already.
+    _print_invoke_port_notes(r.harness_file for r in reports
+                             if r.harness_lacks_invoke)
 
     screens = len(reports)
     skipped = (f", {len(not_applicable)} not applicable to this platform"
@@ -1662,6 +1652,8 @@ def cmd_generate_branch_tests(args):
     if failures:
         for report in reports:
             _print_branch_generation(report, show_siblings=False)
+        _print_invoke_port_notes(r.harness_file for r in reports
+                                 if r.harness_lacks_invoke)
         print(f"\nGenerated {len(reports)} screen(s); {len(failures)} failed.",
               file=sys.stderr)
         # Said on this path too: files were written, so the question "which
@@ -1672,6 +1664,8 @@ def cmd_generate_branch_tests(args):
         # The "regenerate the siblings too" note answers a question that
         # only arises when one screen was regenerated on its own.
         _print_branch_generation(report, show_siblings=len(reports) == 1)
+    _print_invoke_port_notes(r.harness_file for r in reports
+                             if r.harness_lacks_invoke)
     _print_branch_toolchain(len(reports))
     return 0
 
@@ -1756,6 +1750,40 @@ def _generate_one_branch_test(args, screen: str):
     return 0, report, ""
 
 
+def _print_invoke_port_notes(paths, stream=None) -> None:
+    """Say WHY once, then name each file on its own line.
+
+    Measured on a consumer face with thirteen harnesses: the explanation was
+    printed verbatim thirteen times — 13 of 16 lines, 5,390 bytes, and
+    exactly ONE distinct body. A paragraph repeated per file is not thirteen
+    findings; it is one finding and twelve copies, and the copies are what
+    push the real lines off a reader's screen.
+
+    The per-file line keeps `has no \u0060invoke(\u0060` and stays one line per
+    file, because a consumer counts the work with
+    `grep -c 'has no .invoke('`. Folding the prose must not change that
+    count — the number of lines IS the number of files, before and after.
+    """
+    paths = list(paths)
+    if not paths:
+        return
+    out = stream if stream is not None else sys.stdout
+    print(
+        "  note: %d harness(es) below predate `invoke`. Reading a callback "
+        "with readField returns the ViewModel method, not the registered "
+        "arrow, and binding it with .call(vm) passes while the arrow never "
+        "runs. Port `invoke` and `settle` from a freshly generated skeleton. "
+        "A per-row closure carrying a row id is not in the store and is "
+        "meant to throw — call the ViewModel method for those. Nothing the "
+        "generator emits calls `invoke`, so porting shows up in no test "
+        "count and no coverage number — press a handler whose destination "
+        "differs by route to see it." % len(paths),
+        file=out,
+    )
+    for path in paths:
+        print(f"  note: {path} has no `invoke(`", file=out)
+
+
 def _print_branch_generation(report, show_siblings: bool = True) -> None:
     if not report.platform_applicable:
         print(f"Skipped '{report.screen}': every branch it declares belongs "
@@ -1794,19 +1822,6 @@ def _print_branch_generation(report, show_siblings: bool = True) -> None:
         print(f"  {report.harness_file}  (NEW harness skeleton — implement createHarness())")
     else:
         print(f"  {report.harness_file}  (existing harness kept)")
-        if report.harness_lacks_invoke:
-            print("  note: that harness has no `invoke(` — it predates the "
-                  "member for pressing callbacks. Reading a callback with "
-                  "readField returns the ViewModel method, not the "
-                  "registered arrow, and binding it with .call(vm) passes "
-                  "while the arrow never runs. Port `invoke` and `settle` "
-                  "from a freshly generated skeleton. A per-row closure "
-                  "carrying a row id is not in the store and is meant to "
-                  "throw — call the ViewModel method for those. "
-                  "Nothing the generator emits calls `invoke`, so "
-                  "porting shows up in no test count and no coverage "
-                  "number — press a handler whose destination differs "
-                  "by route to see it.")
     # Named with its source. Two readers, on the same day, one working from a
     # real corpus and one writing a fixture, both predicted this list from the
     # contract's `when: {api.<op>: …}` clauses and both were wrong — the

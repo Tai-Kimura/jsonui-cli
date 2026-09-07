@@ -933,3 +933,70 @@ def test_the_written_harness_points_at_the_runtime_this_run_wrote(project,
     assert (harness.parent / documented).resolve() == \
         runtime.with_suffix("").resolve(), documented
 
+
+
+# --------------------------------------------------------------------- #
+# The porting note: say why once, name every file
+# --------------------------------------------------------------------- #
+
+def _notes(paths):
+    import io
+    from jsonui_test_cli import cli as _cli_mod
+    buf = io.StringIO()
+    _cli_mod._print_invoke_port_notes(paths, stream=buf)
+    return buf.getvalue()
+
+
+def test_the_explanation_is_printed_once_however_many_files():
+    """Measured on a consumer face with 13 harnesses: the paragraph was
+    repeated verbatim 13 times — 13 of 16 lines, 5,390 bytes, ONE distinct
+    body. That is one finding and twelve copies, and the copies push the
+    real lines off the screen."""
+    out = _notes([f"h/{i}.ts" for i in range(13)])
+    assert out.count("press a handler whose destination differs by route") == 1
+    assert out.count("predate `invoke`") == 1
+
+
+def test_every_file_still_gets_its_own_line_with_the_grep_key():
+    """The consumer counts the work with `grep -c 'has no .invoke('`.
+
+    Folding the prose must not change that count: the number of lines IS the
+    number of files, before and after. Asserted with the consumer's own
+    expression rather than a paraphrase of it.
+    """
+    import re
+    paths = [f"h/{i}.ts" for i in range(13)]
+    lines = _notes(paths).rstrip("\n").split("\n")
+    keyed = [l for l in lines if re.search(r"has no .invoke\(", l)]
+    assert len(keyed) == len(paths)
+    for p in paths:
+        assert any(p in l for l in keyed), p
+
+
+def test_nothing_is_printed_when_no_harness_is_stale():
+    """The control. A header with no files under it is a finding that is not
+    there, and this note fires on most runs of a healthy project otherwise."""
+    assert _notes([]) == ""
+
+
+def test_both_output_paths_fold_the_same_way(project, monkeypatch, capsys):
+    _cli(project, monkeypatch=monkeypatch)
+    harness = next(project.rglob("checkout.ts"))
+    harness.write_text(
+        "export interface BranchHarness {\n"
+        "  readField(name: string): unknown;\n}\n", encoding="utf-8")
+    capsys.readouterr()
+
+    _cli(project, monkeypatch=monkeypatch)                       # generate
+    gen = capsys.readouterr().out
+    _cli(project, "--check", monkeypatch=monkeypatch)            # check
+    chk = capsys.readouterr().out
+
+    for out in (gen, chk):
+        # `== 1` covers both directions the folding can fail in: 0 is the
+        # regression that matters here (folding is a "less output" change, so
+        # deleting too much has no symptom of its own), and >1 is the repeat
+        # this commit removes. Asserted on BOTH paths, because folding one
+        # and silencing the other leaves each path individually defensible.
+        assert out.count("press a handler whose destination differs by route") == 1
+        assert out.count("has no `invoke(`") == 1                # one harness here
