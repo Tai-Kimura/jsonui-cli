@@ -101,6 +101,31 @@ class HtmlRendering(unittest.TestCase):
         self.assertIn("&quot;a&lt;b&quot;", html)
         self.assertIn("@key_one", html)
 
+    def test_a_request_list_leaf_reaches_the_rendered_table(self):
+        """The doc surface for the widened request-leaf grammar.
+
+        `api.<op>.request` leaves take lists of scalars (empty included) as of
+        2026-09-07. There is no prose describing the grammar anywhere — the
+        decision table IS the documentation — so a list that rendered as a
+        Python repr, or not at all, would leave the new shape undocumented
+        while the validator accepted it.
+        """
+        contract = {
+            "methods": {
+                "onSave": {
+                    "branches": [
+                        {"when": {"api.update": "success"},
+                         "then": {"api.update.request": {
+                             "tags": [], "ids": [1, 2]}}},
+                    ],
+                },
+            },
+        }
+        html = generate_spec_html(_spec(contract))
+        self.assertIn("&quot;tags&quot;: []", html)
+        self.assertIn("&quot;ids&quot;: [1, 2]", html)
+        self.assertNotIn("'tags'", html)
+
 
 _SCOPED_CONTRACT = {
     "methods": {

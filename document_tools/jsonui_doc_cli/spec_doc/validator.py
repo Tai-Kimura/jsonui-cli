@@ -2281,24 +2281,80 @@ class SpecValidator:
     def _validate_branch_then_value(
         self, value: Any, path: str, data_fields: set[str],
         result: SpecValidationResult, *, allow_empty_list: bool = False,
+        allow_scalar_list: bool = False,
     ) -> None:
         """then data.* / request-leaf value: scalar literal, '@strings_key',
         '@data.<field>' or '@response.<path>' reference.
 
-        ``allow_empty_list`` opens exactly one exception, for
-        ``then data.<field>``: ``[]``, meaning "this collection is empty
-        afterwards". Contracts that clear a list on failure had no way to say
-        so, and the scalar witness they fell back on — a visibility flag set
-        in the same update — stays satisfied when only the clearing is
-        removed, so the guarantee never reached the observable surface.
+        Lists are allowed in two different widths, because the two sides make
+        two different statements.
 
-        Non-empty lists stay rejected: matching elements would bind the
-        contract to the mock body. Request-match leaves never take the
-        exception either — ``[]`` there would be a claim about a request,
-        which is a different statement with no defined partial-match meaning.
+        ``allow_empty_list`` (``then data.<field>``) accepts ``[]`` only,
+        meaning "this collection is empty afterwards". Contracts that clear a
+        list on failure had no way to say so, and the scalar witness they fell
+        back on — a visibility flag set in the same update — stays satisfied
+        when only the clearing is removed, so the guarantee never reached the
+        observable surface. Non-empty lists stay rejected on this side:
+        matching elements would bind the contract to the mock body.
+
+        ``allow_scalar_list`` (``api.<op>.request`` leaves) accepts a list of
+        scalars, empty included, and means WHOLE-ARRAY equality, order
+        included.
+
+        Superseded ruling (2026-08, kept here because the reasoning is still
+        half right): request leaves took no list at all. It rested on two
+        reasons, and they do not travel together.
+
+        * "matching elements binds the contract to the mock body" — true, and
+          still the rule on the ``data.*`` side, where the list being compared
+          is what the mock handed back. A request list is what the app SENT.
+          It is the thing under test, not the fixture, so this reason never
+          reached this side.
+        * ``[]`` under a request leaf is "a claim about a request, a different
+          statement with no defined partial-match meaning" — the meaning was
+          undefined, which is a gap to close rather than a property to
+          preserve. It is defined now: whole array, order included.
+
+        Measured before widening (2026-09-07): all three generated runtimes
+        already compare arrays that way — web ``partialMismatches``
+        ``Array.isArray`` branch, Android ``exp is List<*>``, iOS
+        ``exp as? [Any]``, each comparing length and then recursing per index.
+        The old ruling cost real coverage: an endpoint whose field means
+        "absent/null = leave alone, [] = detach everything" had no way to
+        state the ``[]`` half, so a regression dropping it from the wire was
+        undetectable.
+
+        ⚠️ Elements must be PLAIN scalars. ``'@data.<field>'`` inside a list
+        is rejected because the generators only resolve references directly
+        under a dict key: in a list the element falls through to the literal
+        renderer and is emitted as the string ``"@data.foo"`` on all three
+        faces (measured 2026-09-07). Accepting it would produce a contract
+        that reads like a reference and compares like a string.
         """
-        if allow_empty_list and isinstance(value, list) and not value:
-            return
+        if isinstance(value, list):
+            if allow_scalar_list:
+                for index, item in enumerate(value):
+                    if isinstance(item, str) and item.startswith("@"):
+                        result.errors.append(SpecValidationMessage(
+                            path=f"{path}[{index}]",
+                            message=(
+                                f"'{item}' cannot be a list element — references "
+                                "resolve only directly under a key, and inside a "
+                                "list this is emitted as the literal string "
+                                f"'{item}'. Use a plain scalar."
+                            ),
+                        ))
+                    elif not self._is_scalar(item):
+                        result.errors.append(SpecValidationMessage(
+                            path=f"{path}[{index}]",
+                            message=(
+                                "list elements must be scalar literals, got "
+                                f"{type(item).__name__}"
+                            ),
+                        ))
+                return
+            if allow_empty_list and not value:
+                return
         if not self._is_scalar(value):
             result.errors.append(SpecValidationMessage(
                 path=path,
@@ -2361,6 +2417,10 @@ class SpecValidator:
 
     @staticmethod
     def _branch_then_value_error(value: Any, allow_empty_list: bool) -> str:
+        # No `allow_scalar_list` arm here on purpose: on the request side a
+        # dict is taken by the caller and a list is taken above, so the only
+        # values that reach this builder are scalars, which do not error.
+        # An arm for it would be an explanation nothing can ever read.
         base = ("Value must be a scalar literal, '@strings_key', "
                 "'@data.<field>' or '@response.<path>'")
         if allow_empty_list:
@@ -2378,8 +2438,9 @@ class SpecValidator:
         self, value: Any, path: str, data_fields: set[str],
         result: SpecValidationResult,
     ) -> None:
-        """api.<op>.request partial match: object whose leaves are scalars
-        or '@data.<field>' references. Nested objects allowed."""
+        """api.<op>.request partial match: object whose leaves are scalars,
+        '@data.<field>' references, or lists of scalars (whole-array equality,
+        order included). Nested objects allowed."""
         if not isinstance(value, dict) or not value:
             result.errors.append(SpecValidationMessage(
                 path=path,
@@ -2394,7 +2455,9 @@ class SpecValidator:
             if isinstance(v, dict):
                 self._validate_branch_request_match(v, leaf_path, data_fields, result)
             else:
-                self._validate_branch_then_value(v, leaf_path, data_fields, result)
+                self._validate_branch_then_value(
+                    v, leaf_path, data_fields, result, allow_scalar_list=True,
+                )
 
     # ---- Cross-face correlation (weak phase — warnings only) ----
     #

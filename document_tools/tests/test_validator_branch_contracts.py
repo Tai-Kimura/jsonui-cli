@@ -434,11 +434,18 @@ class BranchThenVocabulary(unittest.TestCase):
         result = _validate(self._spec({"api.confirmBooking.request": "card"}))
         self.assertTrue(_errors_at(result, "then.api.confirmBooking.request"))
 
-    def test_api_request_array_leaf_is_error(self):
+    def test_api_request_scalar_list_leaf_passes(self):
+        """Superseded 2026-09-07: this leaf used to be an error.
+
+        The old ruling was that a list under a request leaf had "no defined
+        partial-match meaning". It has one — whole-array equality, order
+        included — and all three generated runtimes already implement it.
+        """
         result = _validate(self._spec({
             "api.confirmBooking.request": {"ids": [1, 2]}
         }))
-        self.assertTrue(_errors_at(result, "then.api.confirmBooking.request.ids"))
+        self.assertEqual(
+            _errors_at(result, "then.api.confirmBooking.request.ids"), [])
 
     def test_transition_matches_declared_destination(self):
         transitions = [{"condition": "success", "destination": "booking_complete"}]
@@ -516,17 +523,18 @@ class BranchThenCollectionEmptiness(unittest.TestCase):
         self.assertIn("empty", msg)
         self.assertIn("element-by-element matching is out of scope", msg)
 
-    def test_a_request_match_leaf_does_not_get_the_exception(self):
-        """`[]` under api.<op>.request is a claim about a request.
+    def test_a_request_match_leaf_takes_a_wider_exception(self):
+        """The two sides allow different widths, on purpose.
 
-        Different statement, no defined partial-match meaning — and the
-        message there must not advertise an exception that does not apply.
+        `data.<field>` takes `[]` only — matching elements there would bind
+        the contract to the mock body. A request leaf takes any list of
+        scalars, because there the list IS the value being sent, and the
+        runtimes compare it whole.
         """
-        errs = _errors_at(
-            _validate(self._spec({"api.confirmBooking.request": {"tags": []}})),
-            "then.api.confirmBooking.request.tags")
-        self.assertTrue(errs)
-        self.assertNotIn("'[]'", errs[0].message)
+        result = _validate(
+            self._spec({"api.confirmBooking.request": {"tags": []}}))
+        self.assertEqual(
+            _errors_at(result, "then.api.confirmBooking.request.tags"), [])
 
     def test_baseline_array_seeds_were_already_allowed(self):
         """Pinned because it is the half that already worked.
@@ -1165,3 +1173,106 @@ class BranchSeedableState(unittest.TestCase):
         """(d) — opt-in. An existing spec validates exactly as before."""
         result = _validate(self._spec({}, {"data.isAgreed": False}))
         self.assertEqual([e.message for e in result.errors], [])
+
+
+class BranchRequestScalarLists(unittest.TestCase):
+    """`then api.<op>.request` leaves take lists of scalars.
+
+    Reported from an endpoint whose field means three things: absent = leave
+    alone, `null` = leave alone, `[]` = detach everything. The `[]` half had
+    no way to be stated, so a regression dropping it from the wire was
+    undetectable — the contract could only witness the other two.
+
+    Superseded ruling (2026-08): request leaves took no list at all, because
+    `[]` there "would be a claim about a request, which is a different
+    statement with no defined partial-match meaning". The meaning is defined
+    now: whole-array equality including order, which is what all three
+    generated runtimes already do (web `Array.isArray(expected)` branch,
+    Android `exp is List<*>`, iOS `exp as? [Any]` — each compares length then
+    recurses per index). Measured before widening, not assumed.
+    """
+
+    def _spec(self, then):
+        return _base_spec(
+            {"methods": {"onConfirmTap": {"branches": [
+                {"when": {"api.confirmBooking": "failure"}, "then": then}]}}},
+            vm_methods=["onConfirmTap"],
+            ui_vars=[_ui_var("fingerprint", "String")],
+            use_cases=[{"name": "ConfirmUseCase",
+                        "methods": [{"name": "confirmBooking"}]}],
+        )
+
+    def _errs(self, leaf_value, at="then.api.confirmBooking.request.tags"):
+        return _errors_at(
+            _validate(self._spec({"api.confirmBooking.request": {"tags": leaf_value}})),
+            at)
+
+    def test_the_reported_three_states(self):
+        """The shape from the report: `[]`, `null`, and a populated list."""
+        self.assertEqual(self._errs([]), [])
+        self.assertEqual(self._errs(None), [])
+        self.assertEqual(self._errs(["a", "b"]), [])
+
+    def test_mixed_scalars_are_accepted(self):
+        self.assertEqual(self._errs([1, "a", True, None]), [])
+
+    def test_a_nested_object_element_is_rejected(self):
+        errs = self._errs([{"id": "1"}], "then.api.confirmBooking.request.tags[0]")
+        self.assertTrue(errs)
+        self.assertIn("scalar", errs[0].message)
+
+    def test_a_nested_list_element_is_rejected(self):
+        errs = self._errs([["a"]], "then.api.confirmBooking.request.tags[0]")
+        self.assertTrue(errs)
+
+    def test_a_reference_element_is_rejected_and_says_why(self):
+        """The generators resolve `@data.<f>` only directly under a key.
+
+        Inside a list the element falls through to the literal renderer and
+        is emitted as the string "@data.fingerprint" on all three faces
+        (measured 2026-09-07). Accepting it would produce a contract that
+        reads like a reference and compares like a string — green for the
+        wrong reason, which is worse than the error.
+        """
+        errs = self._errs(["@data.fingerprint"],
+                          "then.api.confirmBooking.request.tags[0]")
+        self.assertTrue(errs)
+        msg = errs[0].message
+        self.assertIn("@data.fingerprint", msg)
+        self.assertIn("literal string", msg)
+
+    def test_a_strings_key_element_is_rejected_too(self):
+        errs = self._errs(["@some_key"],
+                          "then.api.confirmBooking.request.tags[0]")
+        self.assertTrue(errs)
+
+    def test_data_side_is_unchanged(self):
+        """The widening must not leak to `then data.<field>`.
+
+        There a non-empty list still binds the contract to the mock body,
+        which is the reason the narrow rule exists on that side.
+        """
+        spec = _base_spec(
+            {"methods": {"onConfirmTap": {"branches": [
+                {"when": {"api.confirmBooking": "failure"},
+                 "then": {"data.rows": [1, 2]}}]}}},
+            vm_methods=["onConfirmTap"],
+            ui_vars=[_ui_var("rows", "[Row]")],
+            use_cases=[{"name": "ConfirmUseCase",
+                        "methods": [{"name": "confirmBooking"}]}],
+        )
+        self.assertTrue(_errors_at(_validate(spec), "then.data.rows"))
+
+    def test_a_dict_leaf_is_still_recursed_not_errored(self):
+        """Why there is no "got dict" message on this side.
+
+        `_validate_branch_request_match` takes dicts itself (nested objects
+        are allowed), and lists are taken above, so the only values that reach
+        the scalar error builder are scalars — which do not error. The first
+        cut of this change added a request-side arm to that message; nothing
+        could ever read it.
+        """
+        result = _validate(self._spec({
+            "api.confirmBooking.request": {"nested": {"amount": 1000}}}))
+        self.assertEqual(
+            _errors_at(result, "then.api.confirmBooking.request.nested"), [])
