@@ -1618,7 +1618,7 @@ class SpecValidator:
                             name = m.group(1)
                     elif isinstance(method, dict) and isinstance(method.get("name"), str):
                         name = method["name"]
-                        has_endpoint = self._declares_http_endpoint(method)
+                        has_endpoint = self._declares_bindable_endpoint(method)
                     if name:
                         owners_of.setdefault(name, []).append(owner)
                         if has_endpoint:
@@ -1642,14 +1642,25 @@ class SpecValidator:
         return names
 
     @staticmethod
-    def _declares_http_endpoint(method: dict) -> bool:
+    def _declares_bindable_endpoint(method: dict) -> bool:
         """Whether this method declares an endpoint the generator can bind.
 
         The same predicate as ``branch_tests.collect_endpoint_ops``: the
-        value must be a string shaped ``<METHOD> <path>``. Anything else --
-        ``null``, a bare path, a free-text signature -- gives the generator
-        no route, so such a method can never be the wrong half of an
-        ``api.<op>``.
+        value must be a string shaped ``<UPPERCASE WORD> <no-whitespace>``.
+        Anything else -- ``null``, a bare path, a free-text signature --
+        gives the generator no route, so such a method can never be the
+        wrong half of an ``api.<op>``.
+
+        ⚠️ Not "HTTP". This was named `_declares_http_endpoint` in 1.8.49 and
+        a reader took the name at its word within the day. The pattern also
+        matches a non-HTTP route a spec declares in the same shape --
+        `"RTDB onValue(some/path/{id})"` parses as method `RTDB`, path
+        `onValue(...)` and lands on the same shelf as `GET /x`. Three states
+        exist -- no endpoint, a non-HTTP route, an HTTP route -- and neither
+        tool distinguishes the last two (ruled 2026-09-08: leave it, the
+        behaviour predates the split and no consumer references such a name
+        bare). The name must not claim a distinction the predicate does not
+        make.
         """
         endpoint = method.get("endpoint")
         if not isinstance(endpoint, str):
@@ -1869,9 +1880,20 @@ class SpecValidator:
         """`seedableState: {name: type}` — ViewModel-internal state a branch
         may arrange.
 
-        The layer exists because a value that is neither bound to the UI nor
-        a screen state does not belong on the data surface, yet branches
-        still gate on it. Declaring the names (rather than letting `when` reach for
+        The layer exists because a ViewModel-internal value -- one that is
+        neither bound to the UI nor a screen state -- does not belong on the
+        data surface, yet branches still gate on it.
+
+        ⚠️ Read that sentence with its first clause. Without "ViewModel-
+        internal" it describes every value a branch can gate on that has no
+        declaration, including ones this layer cannot serve at all: the
+        harness's `seedState` asserts the named field EXISTS ON THE VM and
+        reads it back, so a value living outside the VM (a token in the
+        Keychain, a cell coordinate) makes it throw, not seed. A reader took
+        the wider sentence for the layer's scope on 2026-09-08 and concluded
+        a second declaration surface was needed. The read-back is what this
+        layer is worth; a surface without one would re-open arranging that
+        silently does not arrange. Declaring the names (rather than letting `when` reach for
         any property path) keeps the contract off the implementation's
         private vocabulary: a rename breaks a declaration someone has to
         update, not an arrange step that silently stops arranging.

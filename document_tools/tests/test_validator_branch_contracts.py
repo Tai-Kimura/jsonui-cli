@@ -1483,6 +1483,29 @@ class BranchApiOpAmbiguityCountsOnlyEndpointOwners(unittest.TestCase):
                 {"name": "listEntries", "endpoint": "/api/home/jobs"}]}])
         self.assertEqual(_errors_at(result, "when.api.listEntries"), [])
 
+    def test_a_non_http_route_in_the_same_shape_counts_as_an_owner(self):
+        """The predicate is `<UPPERCASE WORD> <no-whitespace>`, not "HTTP".
+
+        A spec may declare a non-HTTP route in that shape --
+        `"RTDB onValue(some/path/{id})"` parses as method `RTDB`, path
+        `onValue(...)` -- and both tools put it on the same shelf as
+        `GET /x`. Ruled 2026-09-08 to leave it that way, so this arm makes
+        the ruling load-bearing: narrowing the predicate to real HTTP verbs
+        would change which names are ambiguous on consumer faces that
+        declare such routes, and it must not happen silently.
+        """
+        rtdb = [{"name": "StreamRepository", "methods": [
+            {"name": "watch", "endpoint": "RTDB onValue(states/{uuid})"}]}]
+        other = [{"name": "PollRepository", "methods": [
+            {"name": "watch", "endpoint": "GET /api/states"}]}]
+        errs = _errors_at(
+            self._result({"api.watch": "success"}, {"api": "none"},
+                         rtdb + other),
+            "when.api.watch")
+        self.assertTrue(
+            errs, "two owners, both with a bindable endpoint -> ambiguous")
+        self.assertIn("StreamRepository.watch", errs[0].message)
+
     def test_two_real_endpoints_are_still_ambiguous(self):
         """The population the check IS for, kept load-bearing."""
         errs = _errors_at(self._result(
