@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import json
+import os
 import posixpath
+import re
 import time
 from pathlib import Path
 from typing import Any
@@ -50,6 +52,15 @@ _page_failures: list[dict] = []
 # Paths, not a tally: knowing which pages this run wrote is what lets the
 # leftovers from previous runs be named at the end.
 _pages_written: set[Path] = set()
+#: Directories this run wrote OUTSIDE `-o`. `generate html` regenerates the
+#: per-spec html/md in the SOURCE tree before it builds the site, for the root
+#: scope and for every `--app` in the same invocation — so one run rewrites
+#: every app's tree, and two lanes pointing `-o` at different directories are
+#: not isolated from each other. Reported 2026-09-08, after two lanes measured
+#: against that assumption for a whole release cycle; the writes were real and
+#: nothing named them. Named at the end of the run now, from what was actually
+#: written rather than from a rule about where it would go.
+_written_outside_output: set[Path] = set()
 
 
 #: What the last run read, for the closing line. Recorded once at the end of
@@ -63,6 +74,7 @@ def reset_page_failures() -> None:
     """Start a fresh accounting run."""
     _page_failures.clear()
     _pages_written.clear()
+    _written_outside_output.clear()
     _generation_counts.clear()
 
 
@@ -1210,9 +1222,6 @@ def generate_html_directory(
     # Generate index.html
     generate_index_html(output_path, generated_files, title, mermaid_generated, document_files, api_doc_categories)
 
-    # Generate document pages (HTML with sidebar) for each document
-    _generate_document_pages(input_path, output_path, generated_files, all_tests_nav)
-
     # Generate Swagger/OpenAPI documentation pages
     _generate_swagger_pages(output_path, all_api_doc_files, all_tests_nav, api_doc_categories)
 
@@ -1440,6 +1449,18 @@ def generate_html_directory(
                             md_files_by_dir=app_md
                         )
 
+    # Document pages LAST of the page writers. Each one embeds the body of a
+    # page from the source tree, and that body's own links have to be rewritten
+    # to the pages THIS run wrote — so those pages have to exist first. It used
+    # to run before the spec and component pages and could only have reapplied
+    # a layout rule, which is the defect this repair removes.
+    #
+    # ⚠️ Their sidebar therefore carries the full navigation now (specs,
+    # components, units, apps) where before it carried only what had been
+    # collected by that earlier point. That is a byte change on every document
+    # page, and it makes them consistent with every other page in the site.
+    _generate_document_pages(input_path, output_path, generated_files, all_tests_nav)
+
     # Re-generate index.html with updated navigation (if specs, components, markdown, figma, or apps were added)
     # `unit_files_info` is part of the condition rather than assumed to ride
     # along with `spec_files_info`: unitContracts are read from
@@ -1468,8 +1489,96 @@ def generate_html_directory(
     )
 
     _report_stale_pages(output_path, started_at)
+    _report_writes_outside_output(output_path)
 
     return generated_files
+
+
+#: An `href` in an embedded body, either spelling. The generator uses BOTH
+#: (nav writes `'`, the component table writes `"`), so a scan that picks one
+#: silently drops the other — that is how the body links were reported as
+#: "0 present" on 2026-09-08.
+_BODY_HREF = re.compile(r"""(href\s*=\s*)(['"])([^'"]+)\2""", re.I)
+
+
+def _component_body_rewriter(page_path: Path, output_path: Path):
+    """Rewrite component links in an embedded body to the pages THIS run wrote.
+
+    The body comes from `docs/<app>/screens/html/`, where
+    `../../components/html/<name>.html` is correct. Embedded at
+    `<site>/docs/<app>/screens/html/`, the same href points at a directory the
+    site never writes — the site's component pages are at
+    `<site>/<app>/components/<name>.html`.
+
+    Resolution is by BASENAME against the set of pages actually written, and
+    only when exactly one candidate matches. Zero means the run wrote no page
+    for that component and the link is left alone rather than pointed
+    somewhere plausible; more than one means the name is ambiguous across
+    apps and guessing would be worse than the dangling link, which at least
+    fails loudly when someone clicks it.
+    """
+    written = {
+        w for w in get_written_pages()
+        if "/components/" in str(w) and w.suffix == ".html"
+    }
+    # ⚠️ Resolved on BOTH sides. `note_page_generated` stores resolved paths,
+    # and on macOS `/var` is a symlink to `/private/var` — mixing the two makes
+    # relpath climb to the filesystem root and emit a link that is absolute in
+    # everything but name. Caught by the arm that checks both quote spellings,
+    # which printed the path.
+    try:
+        page_dir = page_path.parent.resolve()
+    except OSError:
+        page_dir = page_path.parent
+
+    def rewrite(body: str) -> str:
+        def one(m):
+            prefix, quote, href = m.group(1), m.group(2), m.group(3)
+            if "components/" not in href or not href.endswith(".html"):
+                return m.group(0)
+            name = posixpath.basename(href)
+            hits = [w for w in written if w.name == name]
+            if len(hits) != 1:
+                return m.group(0)
+            rel = os.path.relpath(hits[0], page_dir)
+            return f"{prefix}{quote}{rel}{quote}"
+        return _BODY_HREF.sub(one, body)
+
+    return rewrite
+
+
+def _report_writes_outside_output(output_path: Path) -> None:
+    """Name the directories this run wrote that are not under `-o`.
+
+    From what was WRITTEN, not from a rule about where it would go — the same
+    reason the unit and component links are built from the pages this run
+    produced. A rule reapplied here would go stale the moment the layout
+    changes, and this line exists precisely because nothing was telling the
+    truth about the layout.
+
+    Silent when there is nothing to name, so the common `generate spec` shape
+    gains no line. When there IS something, the count of apps matters more
+    than the paths: one run rewrites every `--app` tree, which is what broke
+    two lanes' isolation without either of them being able to see it.
+    """
+    try:
+        out = output_path.resolve()
+    except OSError:
+        out = output_path
+    outside = sorted(
+        d for d in _written_outside_output
+        if not str(d.resolve()).startswith(str(out) + "/")
+    )
+    if not outside:
+        return
+    print(f"  ⚠️ Also written OUTSIDE {output_path} ({len(outside)} directories):")
+    for d in outside:
+        print(f"       {d}")
+    print("     Every --app passed to this run has its source tree rewritten, so "
+          "two runs\n"
+          "     with different -o are not isolated from each other: the last one "
+          "to finish\n"
+          "     leaves its version here.")
 
 
 def _report_stale_pages(output_path: Path, started_at: float | None = None,
@@ -1592,7 +1701,9 @@ def _generate_document_pages(
                 source_path=source_path,
                 title=test_name,
                 all_tests_nav=all_tests_nav,
-                current_doc_path=doc_path
+                current_doc_path=doc_path,
+                body_link_rewriter=_component_body_rewriter(
+                    output_doc_path, output_path),
             )
 
             with open(output_doc_path, 'w', encoding='utf-8') as f:
@@ -2376,6 +2487,7 @@ def _pre_generate_spec_docs(
             md_dir = docs_base / spec_subdir / "md"
             html_dir.mkdir(parents=True, exist_ok=True)
             md_dir.mkdir(parents=True, exist_ok=True)
+            _written_outside_output.update({html_dir, md_dir})
 
             for spec_file in sorted(spec_files):
                 try:
@@ -2429,6 +2541,7 @@ def _pre_generate_spec_docs(
             md_dir = docs_base / "components" / "md"
             html_dir.mkdir(parents=True, exist_ok=True)
             md_dir.mkdir(parents=True, exist_ok=True)
+            _written_outside_output.update({html_dir, md_dir})
 
             for comp_file in sorted(comp_files):
                 try:

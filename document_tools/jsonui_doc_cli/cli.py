@@ -1586,7 +1586,25 @@ def main():
     # Generate html subcommand
     gen_html_parser = generate_subparsers.add_parser(
         "html",
-        help="Generate HTML directory with index for all test files"
+        help="Generate HTML directory with index for all test files "
+             "(ALSO writes outside -o: see --help)",
+        description=(
+            "Generate the documentation site for all test files.\n"
+            "\n"
+            "⚠️ THIS COMMAND WRITES OUTSIDE -o.\n"
+            "Before building the site it regenerates, in the SOURCE tree:\n"
+            "    <docs>/<screens|requirements>/html/  and  .../md/\n"
+            "    <docs>/components/html/              and  .../md/\n"
+            "for the root scope and for EVERY --app passed in the same run.\n"
+            "So one run with two --app flags rewrites both apps' trees, and two\n"
+            "lanes pointing -o at different directories are NOT isolated from\n"
+            "each other -- whichever runs last leaves its version in the source\n"
+            "tree. Reported 2026-09-08 after two lanes measured against that\n"
+            "assumption for a whole release cycle.\n"
+            "\n"
+            "The paths actually written are printed at the end of the run."
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     gen_html_parser.add_argument(
         "input",
@@ -1594,7 +1612,8 @@ def main():
     )
     gen_html_parser.add_argument(
         "-o", "--output",
-        help="Output directory (default: html)"
+        help="Site output directory (default: html). NOT the only place this "
+             "command writes -- see the command description."
     )
     gen_html_parser.add_argument(
         "-t", "--title",

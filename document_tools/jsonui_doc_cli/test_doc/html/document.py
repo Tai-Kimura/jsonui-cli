@@ -173,7 +173,8 @@ def generate_document_html(
     source_path: Path,
     title: str | None = None,
     all_tests_nav: dict | None = None,
-    current_doc_path: str | None = None
+    current_doc_path: str | None = None,
+    body_link_rewriter=None,
 ) -> str:
     """
     Generate HTML documentation page with sidebar from source document.
@@ -209,6 +210,17 @@ def generate_document_html(
         doc_title = title or _extract_title_from_html(source_content)
         body_content = _extract_body_content(source_content)
         original_styles = _extract_head_styles(source_content)
+        # The body was written for the SOURCE tree and is being embedded in a
+        # page at a different depth in a different tree. Its own relative
+        # links were correct where it came from and are not correct here —
+        # reported 2026-09-08 as the site's only dangling link after 1.8.51
+        # fixed the site's own copy of the same screen.
+        #
+        # The caller supplies the rewriter because only the caller knows what
+        # this run wrote. Rewriting by rule here would be the third spelling
+        # of a layout that has already been wrong twice.
+        if body_link_rewriter is not None:
+            body_content = body_link_rewriter(body_content)
 
     # Build HTML with sidebar
     html_parts = _get_html_header(doc_title, original_styles)
