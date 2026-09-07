@@ -380,15 +380,52 @@ def discover_branch_screens(
     return declaring, scanned, problems
 
 
-def collect_endpoint_ops(spec: dict) -> dict[str, dict]:
-    """op name -> {"method": "POST", "path": "/api/..."} from dataFlow
-    repositories/useCases methods that declare `endpoint`."""
-    ops: dict[str, dict] = {}
+@dataclass
+class EndpointOps:
+    """Declared endpoints, addressable two ways.
+
+    ``canonical`` is keyed by the name the route will carry: the BARE method
+    name while it is unambiguous, and ``<Owner>.<method>`` only for a name two
+    owners declare. Keying everything qualified would have renamed the op in
+    every generated file on every project that has no collision at all — the
+    fix has a population, and specs without a duplicate name are not in it.
+    ``aliases`` accepts the other spelling, so a contract may qualify a name
+    that did not need it. A bare name two owners declare resolves to nothing
+    and lands in ``collisions``.
+
+    The flat ``name -> endpoint`` dict this replaces let the second
+    declaration overwrite the first, so a spec declaring `getProfile` on two
+    repositories silently bound `api.getProfile` to whichever came last and
+    the other endpoint had no route at all — its screen's contract could not
+    name it, and the call 599'd at run time with nothing in the spec to say
+    why.
+    """
+
+    canonical: dict[str, dict]
+    aliases: dict[str, str]
+    collisions: dict[str, list[str]]
+
+    def resolve(self, ref: str) -> str | None:
+        """Canonical key for a reference as written, or None if unknown."""
+        if ref in self.canonical:
+            return ref
+        return self.aliases.get(ref)
+
+
+def collect_endpoint_ops(spec: dict) -> EndpointOps:
+    """Declared endpoints from dataFlow repositories/useCases.
+
+    Owner-qualified keys (`UserRepository.getProfile`) are always present;
+    bare keys (`getProfile`) resolve only while they are unambiguous.
+    """
+    declared: list[tuple[str, str, dict]] = []
     data_flow = spec.get("dataFlow") or {}
     for section in ("repositories", "useCases"):
         for entry in data_flow.get(section, []) or []:
             if not isinstance(entry, dict):
                 continue
+            owner = entry.get("name")
+            owner = owner if isinstance(owner, str) and owner else ""
             for method in entry.get("methods", []) or []:
                 if not isinstance(method, dict):
                     continue
@@ -399,8 +436,28 @@ def collect_endpoint_ops(spec: dict) -> dict[str, dict]:
                 m = re.match(r"^([A-Z]+)\s+(\S+)$", endpoint.strip())
                 if not m:
                     continue
-                ops[name] = {"method": m.group(1), "path": m.group(2)}
-    return ops
+                declared.append(
+                    (owner, name, {"method": m.group(1), "path": m.group(2)})
+                )
+
+    owners_of: dict[str, list[str]] = {}
+    for owner, name, _endpoint in declared:
+        owners_of.setdefault(name, []).append(owner)
+
+    canonical: dict[str, dict] = {}
+    aliases: dict[str, str] = {}
+    for owner, name, endpoint in declared:
+        qualified = f"{owner}.{name}" if owner else name
+        key = name if len(owners_of[name]) == 1 else qualified
+        canonical[key] = endpoint
+        if qualified != key:
+            aliases[qualified] = key
+    collisions = {
+        name: [f"{owner}.{name}" for owner in owners]
+        for name, owners in owners_of.items()
+        if len(owners) > 1
+    }
+    return EndpointOps(canonical=canonical, aliases=aliases, collisions=collisions)
 
 
 def path_to_pattern(path: str) -> str:
@@ -710,17 +767,41 @@ def resolve_routes(
     """
     ops = collect_endpoint_ops(spec)
     routes: dict[str, Route] = {}
+    # Which op string already owns an endpoint, so the same endpoint cannot
+    # end up behind two spellings. `countFor` matches recorded calls by op
+    # string, and only the first matching route records — so a second route
+    # over the same path would make every assert under the other spelling
+    # count zero. A contract that is written but never checked is the failure
+    # this whole ticket is about, so mixing spellings is refused outright.
+    endpoint_owner: dict[tuple[str, str], str] = {}
 
     def bind(op: str, where: str) -> Route:
         if op in routes:
             return routes[op]
-        if op not in ops:
+        if op in ops.collisions:
+            raise BranchTestGenerationError(
+                f"{where}: api operation '{op}' is declared by "
+                f"{' and '.join(ops.collisions[op])} — the bare name does not "
+                "say which endpoint the contract means. Qualify it, e.g. "
+                f"'api.{ops.collisions[op][0]}'"
+            )
+        canonical = ops.resolve(op)
+        if canonical is None:
             raise BranchTestGenerationError(
                 f"{where}: api operation '{op}' has no `endpoint` declaration in "
                 "dataFlow.repositories/useCases — declare the method with its "
                 "endpoint (e.g. \"endpoint\": \"POST /api/...\")"
             )
-        endpoint = ops[op]
+        endpoint = ops.canonical[canonical]
+        identity = (endpoint["method"], endpoint["path"])
+        if identity in endpoint_owner and endpoint_owner[identity] != op:
+            raise BranchTestGenerationError(
+                f"{where}: api operation '{op}' and "
+                f"'{endpoint_owner[identity]}' both name {endpoint['method']} "
+                f"{endpoint['path']} — refer to one endpoint by one name, or "
+                "only the first spelling will match recorded calls"
+            )
+        endpoint_owner[identity] = op
         mock = find_mock(mocks, endpoint["method"], endpoint["path"])
         if mock is None:
             raise BranchTestGenerationError(
@@ -749,12 +830,15 @@ def resolve_routes(
                 )
 
     # Every other declared endpoint that has a mock file joins with its
-    # default scenario, so incidental calls during act don't 599.
-    for op, endpoint in ops.items():
-        if op in routes:
+    # default scenario, so incidental calls during act don't 599. Keyed by
+    # ENDPOINT, not by op string: an endpoint already bound under its bare
+    # name would otherwise be added a second time under its canonical one.
+    for op, endpoint in ops.canonical.items():
+        if (endpoint["method"], endpoint["path"]) in endpoint_owner:
             continue
         mock = find_mock(mocks, endpoint["method"], endpoint["path"])
         if mock is not None:
+            endpoint_owner[(endpoint["method"], endpoint["path"])] = op
             routes[op] = Route(
                 op=op, method=endpoint["method"], path=endpoint["path"],
                 pattern=path_to_pattern(endpoint["path"]),

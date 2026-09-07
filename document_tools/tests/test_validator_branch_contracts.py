@@ -1276,3 +1276,121 @@ class BranchRequestScalarLists(unittest.TestCase):
             "api.confirmBooking.request": {"nested": {"amount": 1000}}}))
         self.assertEqual(
             _errors_at(result, "then.api.confirmBooking.request.nested"), [])
+
+
+_TWO_OWNERS = [
+    {"name": "UserRepository", "methods": [
+        {"name": "getProfile", "endpoint": "GET /api/user/profile"}]},
+    {"name": "ProfilingRepository", "methods": [
+        {"name": "getProfile", "endpoint": "GET /api/profiling/profile"}]},
+]
+
+_ONE_OWNER = [
+    {"name": "UserRepository", "methods": [
+        {"name": "getProfile", "endpoint": "GET /api/user/profile"}]},
+]
+
+
+class BranchApiOpQualification(unittest.TestCase):
+    """`api.<Owner>.<op>` when two owners declare the same method name.
+
+    The op set was flat, so a name declared twice looked exactly like a name
+    declared once, and the generator's flat `name -> endpoint` dict kept
+    whichever came last. The spec validated, the contract read as if it named
+    an endpoint, and the other endpoint had no route — its calls 599'd with
+    nothing in the spec to explain why.
+
+    Both sides of a branch have to take the same qualification. Selecting the
+    endpoint in `when` while `then` could only say the bare name would leave
+    the contract unable to state anything about the endpoint it selected.
+    """
+
+    def _spec(self, when, then, repositories):
+        return _base_spec(
+            {"methods": {"onAppear": {"branches": [
+                {"when": when, "then": then}]}}},
+            vm_methods=["onAppear"],
+            repositories=repositories,
+        )
+
+    def _result(self, when, then, repositories=None):
+        return _validate(self._spec(
+            when, then, repositories if repositories is not None else _TWO_OWNERS))
+
+    def test_a_bare_reference_to_a_duplicated_name_is_an_error(self):
+        errs = _errors_at(
+            self._result({"api.getProfile": "failure"}, {"api": "none"}),
+            "when.api.getProfile")
+        self.assertTrue(errs)
+        msg = errs[0].message
+        self.assertIn("UserRepository.getProfile", msg)
+        self.assertIn("ProfilingRepository.getProfile", msg)
+
+    def test_a_qualified_reference_resolves(self):
+        result = self._result(
+            {"api.UserRepository.getProfile": "failure"}, {"api": "none"})
+        self.assertEqual(
+            _errors_at(result, "when.api.UserRepository.getProfile"), [])
+        self.assertEqual(
+            _warnings_at(result, "when.api.UserRepository.getProfile"), [])
+
+    def test_the_then_side_takes_the_same_qualification(self):
+        result = self._result(
+            {"api.UserRepository.getProfile": "failure"},
+            {"api.ProfilingRepository.getProfile": "not-called"})
+        self.assertEqual(
+            _errors_at(result, "then.api.ProfilingRepository.getProfile"), [])
+
+    def test_a_qualified_request_match_is_accepted(self):
+        result = self._result(
+            {"api.UserRepository.getProfile": "success"},
+            {"api.UserRepository.getProfile.request": {"scope": "full"}})
+        self.assertEqual(
+            _errors_at(result, "then.api.UserRepository.getProfile.request"), [])
+
+    def test_a_bare_then_reference_to_a_duplicated_name_is_an_error(self):
+        """Both sides, not just `when` — an error on one side only would let
+        half of a contract name an endpoint it cannot have meant."""
+        errs = _errors_at(
+            self._result({"cond": "always"}, {"api.getProfile": "called"}),
+            "then.api.getProfile")
+        self.assertTrue(errs)
+        self.assertIn("UserRepository.getProfile", errs[0].message)
+
+    def test_a_third_segment_is_still_rejected(self):
+        errs = _errors_at(
+            self._result({"api.A.b.c": "failure"}, {"api": "none"}),
+            "when.api.A.b.c")
+        self.assertTrue(errs)
+
+    def test_an_unambiguous_bare_name_is_unchanged(self):
+        """The population this change is not for.
+
+        One owner, one declaration — the bare name must keep working exactly
+        as before, with no warning and no qualification required.
+        """
+        result = self._result(
+            {"api.getProfile": "failure"}, {"api": "none"}, _ONE_OWNER)
+        self.assertEqual(_errors_at(result, "when.api.getProfile"), [])
+        self.assertEqual(_warnings_at(result, "when.api.getProfile"), [])
+
+    def test_an_unambiguous_name_may_still_be_qualified(self):
+        result = self._result(
+            {"api.UserRepository.getProfile": "failure"}, {"api": "none"},
+            _ONE_OWNER)
+        self.assertEqual(
+            _errors_at(result, "when.api.UserRepository.getProfile"), [])
+        self.assertEqual(
+            _warnings_at(result, "when.api.UserRepository.getProfile"), [])
+
+    def test_an_undeclared_op_still_only_warns(self):
+        """Ambiguity is an error; absence stays a warning.
+
+        An op may legitimately be an operation id the spec never lists, so
+        the widening must not turn every unlisted name into a failure.
+        """
+        result = self._result(
+            {"api.neverDeclared": "failure"}, {"api": "none"})
+        self.assertEqual(_errors_at(result, "when.api.neverDeclared"), [])
+        self.assertTrue(_warnings_at(result, "when.api.neverDeclared"))
+

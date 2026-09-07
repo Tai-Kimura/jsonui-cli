@@ -1566,25 +1566,55 @@ class SpecValidator:
         return names
 
     def _collect_branch_api_ops(self) -> set[str]:
-        """Method names declared under dataFlow repositories/useCases.
+        """Op names a contract may reference, and the ambiguous ones.
 
-        api.<op> references are checked against these (warning-level —
-        an op may legitimately be an operation id the spec never lists).
+        Returns every spelling that RESOLVES: a bare method name while only
+        one repository/useCase declares it, and always the owner-qualified
+        `<Owner>.<method>`. A bare name two owners declare resolves to
+        neither — it is recorded in ``self._ambiguous_api_ops`` and
+        ``_check_branch_api_op`` turns it into an error naming both owners.
+
+        Before this, names were collected into a flat set, so a duplicate was
+        indistinguishable from a unique one here and the generator's flat
+        `name -> endpoint` dict silently kept whichever declaration came last.
+        The spec validated, the contract read as if it named an endpoint, and
+        the other endpoint had no route at all.
+
+        (Reference checks stay warning-level: an op may legitimately be an
+        operation id the spec never lists. The AMBIGUITY is an error, because
+        there the spec does list it — twice.)
         """
-        names: set[str] = set()
+        owners_of: dict[str, list[str]] = {}
         data_flow = (self._spec_data or {}).get("dataFlow") or {}
         for section in ("repositories", "useCases"):
             for entry in data_flow.get(section, []) or []:
                 if not isinstance(entry, dict):
                     continue
+                owner = entry.get("name")
+                owner = owner if isinstance(owner, str) and owner else ""
                 for method in entry.get("methods", []) or []:
+                    name = None
                     if isinstance(method, str):
                         # Free-text signature — take the leading identifier.
                         m = re.match(r"^\s*([A-Za-z_][A-Za-z0-9_]*)", method)
                         if m:
-                            names.add(m.group(1))
+                            name = m.group(1)
                     elif isinstance(method, dict) and isinstance(method.get("name"), str):
-                        names.add(method["name"])
+                        name = method["name"]
+                    if name:
+                        owners_of.setdefault(name, []).append(owner)
+
+        names: set[str] = set()
+        ambiguous: dict[str, list[str]] = {}
+        for name, owners in owners_of.items():
+            if len(owners) == 1:
+                names.add(name)
+            else:
+                ambiguous[name] = [f"{o}.{name}" for o in owners]
+            for owner in owners:
+                if owner:
+                    names.add(f"{owner}.{name}")
+        self._ambiguous_api_ops = ambiguous
         return names
 
     def _collect_transition_destinations(self) -> set[str]:
@@ -2102,10 +2132,26 @@ class SpecValidator:
         self, op: str, path: str, api_ops: set[str],
         result: SpecValidationResult,
     ) -> None:
-        if not re.match(r"^[a-zA-Z_][a-zA-Z0-9_]*$", op):
+        if not re.match(
+            r"^[a-zA-Z_][a-zA-Z0-9_]*(\.[a-zA-Z_][a-zA-Z0-9_]*)?$", op
+        ):
             result.errors.append(SpecValidationMessage(
                 path=path,
-                message=f"API operation name must be an identifier: '{op}'",
+                message=(
+                    "API operation name must be an identifier, optionally "
+                    f"qualified as '<Owner>.<method>': '{op}'"
+                ),
+            ))
+        elif op in getattr(self, "_ambiguous_api_ops", {}):
+            owners = self._ambiguous_api_ops[op]
+            result.errors.append(SpecValidationMessage(
+                path=path,
+                message=(
+                    f"API operation '{op}' is declared by "
+                    f"{' and '.join(owners)} — the bare name does not say "
+                    "which endpoint this means, and the generator would bind "
+                    f"it to one of them. Qualify it, e.g. '{owners[0]}'"
+                ),
             ))
         elif api_ops and op not in api_ops:
             result.warnings.append(SpecValidationMessage(
@@ -2176,12 +2222,13 @@ class SpecValidator:
             return
         if key.startswith("api."):
             op = key[len("api."):]
-            if "." in op:
+            if op.endswith(".request") or op.count(".") > 1:
                 result.errors.append(SpecValidationMessage(
                     path=entry_path,
                     message=(
-                        "when api key must be 'api.<op>' (the value is the "
-                        "named mock scenario) — '.request' matching belongs in 'then'"
+                        "when api key must be 'api.<op>' or "
+                        "'api.<Owner>.<op>' (the value is the named mock "
+                        "scenario) — '.request' matching belongs in 'then'"
                     ),
                 ))
                 return
@@ -2243,12 +2290,13 @@ class SpecValidator:
                     value, entry_path, data_fields, result
                 )
                 return
-            if "." in rest:
+            if rest.count(".") > 1:
                 result.errors.append(SpecValidationMessage(
                     path=entry_path,
                     message=(
-                        "then api key must be 'api.<op>' or 'api.<op>.request', "
-                        f"got '{key}'"
+                        "then api key must be 'api.<op>' or "
+                        "'api.<op>.request', either optionally qualified as "
+                        f"'api.<Owner>.<op>', got '{key}'"
                     ),
                 ))
                 return
