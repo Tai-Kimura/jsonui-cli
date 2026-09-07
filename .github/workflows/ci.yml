@@ -159,6 +159,20 @@ jobs:
         # non-deterministic generation.
         working-directory: jui_tools
         run: python -m unittest tests.test_build_sync_e2e.SyncProtocolE2ETests.test_idempotency
+      # The test_tools suite hands its emitted TypeScript to a compiler, and
+      # the compiler has to be here for that to mean anything. node ships on
+      # the ubuntu runner image; only the pinned tsc is installed, and it is
+      # the same one the rjui specs use — it lives under `spec/`, which `jui
+      # sync_tool` deletes and the distribution does not ship, so pinning it
+      # cannot reach a consumer.
+      #
+      # Without this step the type-check SKIPS. That is deliberate for a
+      # developer machine and useless here: a skipped gate gates nothing, and
+      # it disappears into a green summary. The arm fails outright when `CI`
+      # is set and tsc is missing, so a broken install is reported as a
+      # failure rather than as four quiet skips.
+      - name: Install TypeScript (test_tools emitted-TS type-check)
+        run: npm ci --prefix rjui_tools/spec/support
       - name: Run test_tools tests
         working-directory: test_tools
         run: python -m pytest
