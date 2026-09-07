@@ -1491,7 +1491,9 @@ def _branch_check_summary(reports: list, scanned: int, orphans=()) -> int:
                   "predates the harness member for pressing callbacks. "
                   "Reading a callback with readField returns the ViewModel "
                   "method, not the registered arrow; port `invoke` and "
-                  "`settle` from a freshly generated skeleton.")
+                  "`settle` from a freshly generated skeleton. A per-row "
+                  "closure carrying a row id is not in the store and is "
+                  "meant to throw — call the ViewModel method for those.")
 
     screens = len(reports)
     skipped = (f", {len(not_applicable)} not applicable to this platform"
@@ -1794,7 +1796,9 @@ def _print_branch_generation(report, show_siblings: bool = True) -> None:
                   "readField returns the ViewModel method, not the "
                   "registered arrow, and binding it with .call(vm) passes "
                   "while the arrow never runs. Port `invoke` and `settle` "
-                  "from a freshly generated skeleton.")
+                  "from a freshly generated skeleton. A per-row closure "
+                  "carrying a row id is not in the store and is meant to "
+                  "throw — call the ViewModel method for those.")
     # Named with its source. Two readers, on the same day, one working from a
     # real corpus and one writing a fixture, both predicted this list from the
     # contract's `when: {api.<op>: …}` clauses and both were wrong — the

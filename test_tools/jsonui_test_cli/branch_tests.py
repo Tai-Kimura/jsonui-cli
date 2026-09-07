@@ -1613,7 +1613,13 @@ export interface BranchHarness {
    * ViewModel-first order that setState warns about below applies here: a
    * handler registered as `onX: () => this.onX()` has a same-named method
    * on the ViewModel, and this returns the METHOD, not the registered
-   * arrow. Press callbacks with `invoke` instead. */
+   * arrow. Press callbacks with `invoke` instead.
+   *
+   * NOT EVERY CALLBACK IS IN THE STORE. `initializeEventHandlers` registers
+   * the screen's own handler names and nothing else, so a closure built per
+   * row — one with a row id baked into it — was never a store entry. `invoke`
+   * throwing for that name is correct, not a broken `invoke`; call the
+   * ViewModel method directly and pass the id. */
   readField(name: string): unknown;
   /** Press a callback through the data store, as the rendered Layout does.
    *
@@ -1621,7 +1627,10 @@ export interface BranchHarness {
    * the semantics are not this file's to re-decide, and the one obvious
    * hand-written version (fall back to the ViewModel when the store has no
    * such key) reintroduces the defect this exists to remove. Throws when
-   * the name is not bound in the store. */
+   * the name is not bound in the store — which is the right answer for a
+   * per-row closure carrying a row id, because `initializeEventHandlers`
+   * only ever registers the screen's own handler names. Call the ViewModel
+   * method directly for those. */
   invoke(name: string, ...args: unknown[]): unknown;
   /** Apply a witness/baseline object onto the VM + data store.
    *

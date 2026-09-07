@@ -176,3 +176,45 @@ class TestTheToolNamesWhatTheFixCannotReach:
         harness = tmp_path / "some_screen.ts"
         harness.write_bytes(b"\xff\xfe\x00binary")
         assert bt._harness_predates_invoke(harness, created=False) is True
+
+
+class TestThePerRowCaseIsNamed:
+    """Measured on a consumer face 2026-09-07, after `invoke` shipped.
+
+    A porting reader met `branch-harness: '<name>' is not bound in the data
+    store` on a per-row callback and read it as a broken `invoke`. It is not:
+    `initializeEventHandlers` registers the screen's own handler names and
+    nothing else, so a closure built per row — with a row id closed over —
+    was never a store entry. Throwing is the contract.
+
+    A doc line, so it is pinned as text; there is no behaviour to assert.
+    """
+
+    @staticmethod
+    def _flat(text: str) -> str:
+        """Comment prose with its wrapping removed.
+
+        A doc line is wrapped by the `*` prefix, and a source string is
+        wrapped by the editor, so the sentence a reader sees is never
+        contiguous in the file. Matching the raw text finds a phrase only
+        when the line breaks happen to fall elsewhere — which is an
+        assertion that passes or fails on formatting, not on content. Two of
+        these were written here before this helper existed, and both were
+        wrong in the direction that FAILS, which is the harmless one.
+        """
+        return " ".join(text.replace("*", " ").split()).lower()
+
+    def test_the_read_and_press_docs_both_say_it(self):
+        flat = self._flat(bt.HARNESS_SKELETON)
+        # Both doc blocks: a reader arrives at either one — the one who
+        # reached for readField, and the one who called invoke and got the
+        # throw.
+        assert flat.count("per-row closure") >= 1
+        assert "row id baked into it" in flat
+        assert "call the viewmodel method" in flat
+
+    # The NOTE's copy of this sentence is asserted where the CLI actually
+    # runs (test_branch_tests_check.py), not by scraping cli.py: the two
+    # call sites wrap the sentence at different points and adjacent string
+    # literals put quotes inside it, so a source match tests the formatting.
+    # The rendered line is what a reader is handed.

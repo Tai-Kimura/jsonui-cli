@@ -870,6 +870,11 @@ def test_generate_names_a_harness_that_predates_invoke(project, monkeypatch,
 
     assert "no `invoke(`" in out
     assert "readField" in out
+    # And what NOT to read as a bug: a per-row closure is not in the store,
+    # so invoke throwing for it is the contract. Measured on a consumer face
+    # after invoke shipped, where the throw was read as a broken invoke.
+    assert "per-row closure" in out
+    assert "meant to throw" in out
 
 
 def test_check_names_it_too(project, monkeypatch, capsys):
@@ -881,7 +886,9 @@ def test_check_names_it_too(project, monkeypatch, capsys):
 
     _cli(project, "--check", monkeypatch=monkeypatch)
 
-    assert "no `invoke(`" in capsys.readouterr().out
+    out = capsys.readouterr().out
+    assert "no `invoke(`" in out
+    assert "per-row closure" in out
 
 
 def test_a_current_harness_is_not_named(project, monkeypatch, capsys):
