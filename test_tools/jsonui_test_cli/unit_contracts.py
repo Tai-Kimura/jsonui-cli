@@ -661,23 +661,36 @@ def _cases_of(spec: dict, screen: str, spec_file: str = "") -> tuple[list[UnitCa
     return out, problems
 
 
-def _test_roots(project_root: Path, config: dict) -> dict[str, Path | None]:
-    """``platform -> unit-test directory``, or None when not declared.
+def _test_roots(project_root: Path, config: dict) -> dict[str, list[Path] | None]:
+    """``platform -> unit-test directories``, or None when not declared.
+
+    A LIST per platform, because `unitTestsDir` accepts either one directory
+    or several. Every listed directory is scanned; new stubs are written to
+    the FIRST, so a project that declares a single string keeps exactly the
+    behaviour it had.
 
     None rather than a guess: scanning the wrong directory finds nothing and
     reports every declared case as unimplemented, which reads like drift and
     is a configuration error.
     """
-    roots: dict[str, Path | None] = {}
+    roots: dict[str, list[Path] | None] = {}
     for platform, entry in (config.get("platforms") or {}).items():
         if not isinstance(entry, dict):
             continue
         unit_dir = entry.get("unitTestsDir")
-        if not unit_dir:
+        if unit_dir is None or unit_dir == "":
             roots[platform] = None
             continue
+        # A list is the same declaration, spelled for a project that keeps
+        # hand-written tests in more than one place. It is a LIST rather than
+        # a pattern deliberately: the alternative was to scan one directory
+        # and exclude the generated one, and an exclusion has to guess what
+        # to skip, while a list is what the project already knows.
+        names = unit_dir if isinstance(unit_dir, list) else [unit_dir]
         base = project_root / (entry.get("root") or "")
-        roots[platform] = (base / unit_dir).resolve()
+        # An empty list is not "not declared": someone wrote `[]`. Kept
+        # distinguishable so the message can say which of the two it is.
+        roots[platform] = [(base / str(n)).resolve() for n in names if str(n)]
     return roots
 
 
@@ -981,27 +994,58 @@ def check_unit_contracts(
             report.declared.setdefault(platform, set()).add(case.name)
 
     for platform in sorted(set(report.declared) | set(project_platforms)):
-        root = roots.get(platform)
-        if root is None:
+        dirs = roots.get(platform)
+        if dirs is None:
             if report.declared.get(platform):
                 report.unscannable[platform] = (
                     f"platforms.{platform}.unitTestsDir is not declared in "
                     f"jui.config.json, so the {len(report.declared[platform])} case(s) "
-                    f"declared for it cannot be compared against anything"
+                    f"declared for it cannot be compared against anything "
+                    f"(it takes a directory, or a list of directories)"
                 )
             continue
-        if not root.is_dir():
+        if not dirs:
             if report.declared.get(platform):
                 report.unscannable[platform] = (
-                    f"unit test directory not found: {root} — declared cases for "
-                    f"{platform} cannot be compared against anything. This is "
-                    f"also what a project looks like before its first stub is "
-                    f"generated (git does not track empty directories), so "
-                    f"check that before suspecting the path"
+                    f"platforms.{platform}.unitTestsDir is an empty list in "
+                    f"jui.config.json, so the {len(report.declared[platform])} case(s) "
+                    f"declared for it cannot be compared against anything — "
+                    f"name at least one directory, or remove the key"
                 )
             continue
-        (found, read, undiscoverable, by_name,
-         unreadable_titles) = _implemented_names(root, platform)
+        # EVERY listed directory must exist. Scanning the ones that do and
+        # skipping the rest would let a typo shrink the denominator while the
+        # surviving directories kept the count going up, which reads as
+        # working. The whole platform is unscannable, and the message names
+        # the entries that are missing.
+        missing = [d for d in dirs if not d.is_dir()]
+        if missing:
+            if report.declared.get(platform):
+                names = ", ".join(str(d) for d in missing)
+                report.unscannable[platform] = (
+                    f"unit test directory not found: {names} — declared cases for "
+                    f"{platform} cannot be compared against anything"
+                    + (f" (of {len(dirs)} declared for this platform)"
+                       if len(dirs) > 1 else "")
+                    + f". This is also what a project looks like before its "
+                    f"first stub is generated (git does not track empty "
+                    f"directories), so check that before suspecting the path"
+                )
+            continue
+        found: set[str] = set()
+        read: list[str] = []
+        undiscoverable: set[str] = set()
+        by_name: dict[str, list[str]] = {}
+        unreadable_titles = 0
+        for root in dirs:
+            (d_found, d_read, d_undiscoverable, d_by_name,
+             d_unreadable) = _implemented_names(root, platform)
+            found |= d_found
+            read.extend(d_read)
+            undiscoverable |= d_undiscoverable
+            for name, files in d_by_name.items():
+                by_name.setdefault(name, []).extend(files)
+            unreadable_titles += d_unreadable
         report.implemented[platform] = found
         report.scanned_files[platform] = read
         report.implemented_files[platform] = by_name
@@ -1414,9 +1458,15 @@ def write_stubs(
             by_platform_target.setdefault((platform, case.target or "Unit"), []).append(case)
 
     for (platform, target), cases in sorted(by_platform_target.items()):
-        root = roots[platform]
-        if root is None:
+        # The FIRST declared directory is where new stubs go. A project that
+        # lists several keeps its hand-written tests in the others; writing
+        # into all of them would create the same stub N times, and choosing
+        # by any other rule would move where a single-string project's stubs
+        # have always landed.
+        dirs = roots[platform]
+        if not dirs:
             continue
+        root = dirs[0]
         filename = _STUB_FILENAME.get(platform)
         if filename is None:
             continue
