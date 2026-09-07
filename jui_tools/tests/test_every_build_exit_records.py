@@ -102,7 +102,14 @@ class ExitCountTests(unittest.TestCase):
         # either one has to stop the build, so it exits through `_halt` like
         # its sibling. The ratchet did its job here: the exit was added
         # deliberately and this line is where saying so is required.
-        self.assertEqual(7, len(exits), exits)
+        #
+        # 7 -> 8 (2026-09-07): `_sync_repository_protocols` joined the other
+        # two syncs on the same footing. The Repository protocol had a path
+        # on every generator and no caller, so a spec-declared method
+        # reached it only through `jui g project`, which refuses to
+        # overwrite. A hard failure there stops the build like its siblings,
+        # so it exits through `_halt`.
+        self.assertEqual(8, len(exits), exits)
 
     def test_the_body_is_guarded_against_the_exits_that_are_not_returns(self):
         # An exception is an exit too, and it was the one that was missed.

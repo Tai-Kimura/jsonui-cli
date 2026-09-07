@@ -301,6 +301,11 @@ def cmd_build(args: argparse.Namespace) -> int:
                 config_mgr, config, platforms, args, specs=all_specs) is False:
             return _halt(1)
 
+        # And the layer below it, which had no counterpart either.
+        if _sync_repository_protocols(
+                config_mgr, config, platforms, args, specs=all_specs) is False:
+            return _halt(1)
+
         # Hard gate for navigationMode:"isolated" — the embedded screen's spec
         # must not declare present-type transitions (sheet/modal/dialog/dismiss).
         if _check_isolated_embed_constraints(config_mgr, specs=all_specs) is False:
@@ -2076,6 +2081,112 @@ def _sync_usecase_protocols(
               f"left untouched; the spec's declarations are NOT reaching it")
     if writes:
         print(f"UseCase protocol sync: updated {writes} protocol(s)")
+    return True
+
+
+def _sync_repository_protocols(
+    config_mgr: ConfigManager,
+    config: dict,
+    platforms: dict,
+    args,
+    specs: list | None = None,
+) -> bool:
+    """Regenerate Repository protocol files from `dataFlow.repositories`.
+
+    The same hole as the UseCase layer, one layer down. `jui build` grew a
+    ViewModel sync, then a UseCase sync; the Repository protocol has a
+    `repository_protocol_path` on all three generators and nothing that
+    calls it, so a method added to `dataFlow.repositories[].methods` reached
+    the generated protocol only by re-running `jui g project` — which
+    refuses to overwrite an existing protocol, so in practice never.
+
+    Found while fixing the aggregator: closing one layer is what made the
+    next one visible. The UseCase fix and its tests were both about use
+    cases, so neither the change nor its arms could see that the layer
+    beside it was still open.
+
+    Everything else matches `_sync_usecase_protocols` deliberately, down to
+    the ownership check: a file is rewritten only when it carries the
+    `@generated` banner, and anything else is reported and left alone.
+    """
+    from ..core.generated_marker import SENTINEL
+    from ..core.repository_aggregator import RepositoryAggregator
+    from ..core.type_mapper import TypeMapper
+
+    if specs is None:
+        specs = _load_all_specs(config_mgr)
+    if not specs:
+        return True
+
+    aggregator = RepositoryAggregator()
+    for spec_file, screen_spec in specs:
+        aggregator.add_spec(spec_file.name, screen_spec)
+    try:
+        aggregated = aggregator.aggregate()
+    except ValueError as e:
+        print(f"ERROR: repository aggregation failed: {e}")
+        return False
+    if not aggregated.repositories:
+        return True
+
+    type_mapper = TypeMapper(config_mgr.type_map_file)
+
+    def _for_platform(definition, platform: str):
+        # A method with no `platforms` runs everywhere, which is the default
+        # the scaffold applies; kept identical so the two paths cannot drift.
+        from dataclasses import replace
+        kept = [m for m in definition.methods
+                if not m.platforms or platform in m.platforms]
+        return replace(definition, methods=kept)
+
+    writes = 0
+    unowned: list[str] = []
+    for platform, pconfig in platforms.items():
+        generator = _platform_generator(
+            config_mgr.project_root, platform, pconfig, type_mapper)
+        if generator is None:
+            continue
+        if not getattr(generator, "has_separate_protocol", True):
+            continue
+        for repo_name, repo_def in aggregated.repositories.items():
+            filtered = _for_platform(repo_def, platform)
+            if not filtered.methods:
+                continue
+            path = generator.repository_protocol_path(repo_name)
+            if not path.exists():
+                # SYNC, NOT CREATE. Creating is `jui g project`'s job, and
+                # doing it here would be actively wrong on a project that
+                # spells its methods as signature strings: the spec parser
+                # puts the WHOLE string in `name`
+                # (`fetchPnl(month?: string): Promise<PnlResponse>`), so a
+                # rendered protocol reads
+                # `func fetchPnl(month?: string): Promise<PnlResponse>()
+                # async throws` — a file that cannot compile, in a project
+                # that has no protocol files today and therefore no symptom.
+                # Measured 2026-09-07: one face declares 129 methods that way.
+                continue
+            content = generator.generate_repository_protocol(repo_name, filtered)
+            try:
+                current = path.read_text(encoding="utf-8")
+            except OSError as e:
+                print(f"WARNING: could not read {path}: {e}")
+                continue
+            if SENTINEL not in current:
+                unowned.append(str(path))
+                continue
+            if current == content:
+                continue
+            if getattr(args, "dry_run", False):
+                writes += 1
+                continue
+            path.write_text(content, encoding="utf-8")
+            writes += 1
+
+    for path in unowned:
+        print(f"WARNING: {path} has no @generated banner — Repository protocol "
+              f"left untouched; the spec's declarations are NOT reaching it")
+    if writes:
+        print(f"Repository protocol sync: updated {writes} protocol(s)")
     return True
 
 
