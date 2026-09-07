@@ -1493,6 +1493,29 @@ export function installFetchMock(
  * (empty array = match). `null` expectations also accept absent keys —
  * JSON.stringify drops `undefined`, so a request that omits a field IS
  * the declared "null" outcome. */
+/** Membership comparison for an unordered collection: every expected element
+ *  must match a distinct actual element, in any order. */
+export function setMismatches(
+  actual: unknown[],
+  expected: unknown[],
+  label: string
+): string[] {
+  if (actual.length !== expected.length) {
+    return [`${label}: expected ${expected.length} element(s), got ${actual.length}`];
+  }
+  const remaining = [...actual];
+  for (const want of expected) {
+    const hit = remaining.findIndex(
+      (candidate) => partialMismatches(candidate, want).length === 0
+    );
+    if (hit < 0) {
+      return [`${label}: no element matching ${JSON.stringify(want)} (unordered collection)`];
+    }
+    remaining.splice(hit, 1);
+  }
+  return [];
+}
+
 export function partialMismatches(
   actual: unknown,
   expected: unknown,
@@ -1500,6 +1523,11 @@ export function partialMismatches(
 ): string[] {
   const label = prefix || "$";
   if (Array.isArray(expected)) {
+    // A view model may hold a Set where the contract writes a list. A parsed
+    // JSON body never is one, so body matching is untouched.
+    if (actual instanceof Set) {
+      return setMismatches([...actual], expected, label);
+    }
     if (!Array.isArray(actual)) {
       return [`${label}: expected array, got ${JSON.stringify(actual)}`];
     }
@@ -2144,6 +2172,23 @@ fun seedState(h: BranchHarness, state: Map<String, Any?>) {
  * equal length; StateFlows are read through; numbers compare as doubles;
  * a string also matches an enum constant of that name. Paths in the
  * result are the contract's ("registration.age", "ids[1]"). */
+/** Membership comparison for an unordered collection: every expected element
+ *  must match a distinct actual element, in any order. */
+fun setMismatches(actual: List<Any?>, expected: List<Any?>, label: String): List<String> {
+  if (actual.size != expected.size) {
+    return listOf(label + ": expected " + expected.size + " element(s), got " + actual.size)
+  }
+  val remaining = actual.toMutableList()
+  for (want in expected) {
+    val hit = remaining.indexOfFirst { valueMismatches(it, want).isEmpty() }
+    if (hit < 0) {
+      return listOf(label + ": no element matching " + want + " (unordered collection)")
+    }
+    remaining.removeAt(hit)
+  }
+  return emptyList()
+}
+
 fun valueMismatches(actual: Any?, expected: Any?, prefix: String = ""): List<String> {
   val label = prefix.ifEmpty { "${'$'}" }
   val exp = if (expected is Ref) expected.value else expected
@@ -2164,6 +2209,14 @@ fun valueMismatches(actual: Any?, expected: Any?, prefix: String = ""): List<Str
     return out
   }
   if (exp is List<*>) {
+    // A Set has no index to compare. It used to be folded with toList() and
+    // then compared by position, which passes or fails on the set's
+    // iteration order — insertion order for LinkedHashSet (what setOf gives),
+    // unspecified for HashSet. A one-element seed hid that; a two-element one
+    // would have been a coin flip.
+    if (act is Set<*>) {
+      return setMismatches(act.toList(), exp, label)
+    }
     val list: List<*> = when (act) {
       is List<*> -> act
       is Collection<*> -> act.toList()
@@ -3188,10 +3241,48 @@ func reflectedDictionary(_ value: Any) -> [String: Any]? {
 
 /// Recursive partial match against a recorded JSON body. NSNull/nil
 /// expectations also accept absent keys (encoders drop nils).
+/// Elements of an unordered collection, or nil when the value is not one.
+/// `Mirror` reports `.set` for every `Set<T>` without needing the element
+/// type to bridge; `NSSet` arrives from Objective-C code as a class.
+func unorderedElements(_ value: Any?) -> [Any]? {
+  guard let value = value else { return nil }
+  if let nsset = value as? NSSet { return Array(nsset) }
+  let mirror = Mirror(reflecting: value)
+  guard mirror.displayStyle == .set else { return nil }
+  return mirror.children.map { $0.value }
+}
+
+/// Membership comparison: every expected element must match a distinct
+/// actual element, in any order. Sizes are reported first because "3
+/// element(s), got 2" is the useful message; a per-element diff of an
+/// unordered collection would name indices that mean nothing.
+func setMismatches(_ actual: [Any], _ expected: [Any], _ label: String) -> [String] {
+  if actual.count != expected.count {
+    return ["\\(label): expected \\(expected.count) element(s), got \\(actual.count)"]
+  }
+  var remaining = actual
+  for want in expected {
+    guard let hit = remaining.firstIndex(where: {
+      partialMismatches($0, want).isEmpty
+    }) else {
+      return ["\\(label): no element matching \\(want) (unordered collection)"]
+    }
+    remaining.remove(at: hit)
+  }
+  return []
+}
+
 func partialMismatches(_ actual: Any?, _ expected: Any?, _ prefix: String = "") -> [String] {
   let label = prefix.isEmpty ? "$" : prefix
   let exp = (expected as? Ref).map { $0.value } ?? expected
   if let list = exp as? [Any] {
+    // A view model may hold a Set where the contract writes a list: an
+    // unordered collection has no index to compare, so compare membership.
+    // A recorded JSON body never arrives as a Set — JSONSerialization only
+    // produces arrays — so this branch cannot change body matching.
+    if let unordered = unorderedElements(actual) {
+      return setMismatches(unordered, list, label)
+    }
     guard let actualList = actual as? [Any] else {
       return ["\\(label): expected array, got \\(String(describing: actual))"]
     }
