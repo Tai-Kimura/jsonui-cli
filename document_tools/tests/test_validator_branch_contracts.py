@@ -1394,3 +1394,126 @@ class BranchApiOpQualification(unittest.TestCase):
         self.assertEqual(_errors_at(result, "when.api.neverDeclared"), [])
         self.assertTrue(_warnings_at(result, "when.api.neverDeclared"))
 
+
+
+class BranchThenDataNestedPath(unittest.TestCase):
+    """`then data.<a>.<b>` names a value inside a nested data structure.
+
+    A screen whose Data holds a nested struct — a sheet's own error state,
+    a card's own visibility — could not state the value the contract is
+    actually about. The reported symptom was real; the reported mechanism
+    was not. The gate is the camelCase check, which fires on the dot and
+    returns before the declaration check is ever reached, so the quoted
+    "is not declared" message cannot come from this path. (Measured: the
+    installed copy is byte-identical to the source tree, and the check has
+    been there since branchContracts was introduced, so no shipped version
+    behaved otherwise.)
+
+    Only the READ side opens. `when`, `witness_*`/`baseline` and
+    `'@data.<f>'` are arrange-side or become an identifier, and each fails
+    in silence rather than loudly if a dotted name reaches it — see
+    _check_branch_data_field's docstring.
+    """
+
+    def _spec(self, then, when=None, ui_vars=None):
+        return _base_spec(
+            {"methods": {"onSaveTap": {"branches": [
+                {"when": when or {"data.isBusy": False}, "then": then}]}}},
+            vm_methods=["onSaveTap"],
+            ui_vars=ui_vars if ui_vars is not None else [
+                _ui_var("noticeSheetData", "NoticeSheetData"),
+                _ui_var("isBusy"),
+            ],
+        )
+
+    def test_a_nested_then_path_is_accepted(self):
+        result = _validate(self._spec(
+            {"data.noticeSheetData.errorVisibility": "visible"}))
+        self.assertEqual(_errors_at(result, "branchContracts"), [])
+        self.assertEqual(_warnings_at(result, "branchContracts"), [])
+
+    def test_more_than_two_segments_is_accepted(self):
+        result = _validate(self._spec({"data.noticeSheetData.inner.leaf": "x"}))
+        self.assertEqual(_errors_at(result, "branchContracts"), [])
+
+    def test_only_the_head_is_matched_against_declarations(self):
+        """The tail names members of whatever the head holds, and the spec's
+        declaration surface does not describe those — so an undeclared HEAD
+        still warns, and a declared head with any tail does not."""
+        warns = _warnings_at(
+            _validate(self._spec({"data.ghostField.errorVisibility": "x"})),
+            "then.data.ghostField.errorVisibility")
+        self.assertTrue(warns)
+        self.assertIn("'ghostField'", warns[0].message)
+
+    def test_a_non_camel_segment_is_still_an_error(self):
+        errs = _errors_at(
+            _validate(self._spec({"data.noticeSheetData.Error": "x"})),
+            "then.data.noticeSheetData.Error")
+        self.assertTrue(errs)
+        self.assertIn("'Error'", errs[0].message)
+
+    def test_a_flat_then_field_is_unchanged(self):
+        """The population this change is not for."""
+        result = _validate(self._spec({"data.isBusy": True}))
+        self.assertEqual(_errors_at(result, "branchContracts"), [])
+        self.assertEqual(_warnings_at(result, "branchContracts"), [])
+
+    def test_when_keeps_rejecting_a_dotted_path(self):
+        """setState writes by flat name. Kotlin's looks the key up with
+        findField and then by `copy` parameter name — a dotted key matches
+        neither and is dropped WITH NO ERROR — and Swift's is a hand-written
+        closed map in the consumer. Opening this would arrange nothing and
+        assert the right outcome for an un-arranged branch."""
+        errs = _errors_at(
+            _validate(self._spec(
+                {"api": "none"},
+                when={"data.noticeSheetData.errorVisibility": "visible"})),
+            "when.data.noticeSheetData.errorVisibility")
+        self.assertTrue(errs)
+        self.assertIn("read-back only", errs[0].message)
+
+    def test_a_data_reference_value_keeps_rejecting_a_dotted_path(self):
+        """`'@data.<f>'` becomes the generated identifier `ref_<f>`; a dot
+        there is a syntax error on all three faces."""
+        errs = _errors_at(
+            _validate(self._spec(
+                {"data.isBusy": "@data.noticeSheetData.errorVisibility"})),
+            "then.data.isBusy")
+        self.assertTrue(errs)
+
+    def test_a_witness_field_rejects_a_dotted_path(self):
+        """The fourth site, and the one that had NO name check at all: a
+        dotted witness passed with only the undeclared-warning, and
+        generation then emitted a flat read of a name no face has. Witnesses
+        are arranged, so this closes rather than opens."""
+        spec = _base_spec(
+            {"conditions": {"hasError": {
+                "meaning": "the sheet is showing an error",
+                "witness_true": {"noticeSheetData.errorVisibility": "visible"},
+                "witness_false": {"isBusy": False}}},
+             "methods": {"onSaveTap": {"branches": [
+                 {"when": {"cond": "hasError"}, "then": {"api": "none"}},
+                 {"when": {"cond": "!hasError"}, "then": {"api": "none"}}]}}},
+            vm_methods=["onSaveTap"],
+            ui_vars=[_ui_var("noticeSheetData", "NoticeSheetData"),
+                     _ui_var("isBusy")],
+        )
+        errs = _errors_at(
+            _validate(spec),
+            "witness_true.noticeSheetData.errorVisibility")
+        self.assertTrue(errs)
+        self.assertIn("camelCase", errs[0].message)
+
+    def test_a_flat_witness_field_is_unchanged(self):
+        spec = _base_spec(
+            {"conditions": {"busy": {
+                "meaning": "a save is in flight",
+                "witness_true": {"isBusy": True},
+                "witness_false": {"isBusy": False}}},
+             "methods": {"onSaveTap": {"branches": [
+                 {"when": {"cond": "busy"}, "then": {"api": "none"}},
+                 {"when": {"cond": "!busy"}, "then": {"api": "none"}}]}}},
+            vm_methods=["onSaveTap"], ui_vars=[_ui_var("isBusy")],
+        )
+        self.assertEqual(_errors_at(_validate(spec), "witness"), [])

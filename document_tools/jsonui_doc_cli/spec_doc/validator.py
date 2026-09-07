@@ -1929,6 +1929,22 @@ class SpecValidator:
                     seedable or set(), result,
                 )
                 continue
+            if not self._matches_variable_name(field_name):
+                # Arrange-side, so the flat name is the only one that can be
+                # seeded: `setState` writes by flat key. This loop had no
+                # name check at all, which let a dotted path through with
+                # only the undeclared-warning below — and generation then
+                # emitted a flat read of a name no face has.
+                result.errors.append(SpecValidationMessage(
+                    path=f"{path}.{field_name}",
+                    message=(
+                        f"Witness field must be camelCase: '{field_name}'"
+                        + (" — a dotted path cannot be seeded; witnesses are "
+                           "arranged, not read back"
+                           if "." in field_name else "")
+                    ),
+                ))
+                continue
             if data_fields and field_name not in data_fields:
                 result.warnings.append(SpecValidationMessage(
                     path=f"{path}.{field_name}",
@@ -2110,14 +2126,49 @@ class SpecValidator:
 
     def _check_branch_data_field(
         self, field_name: str, path: str, data_fields: set[str],
-        result: SpecValidationResult,
+        result: SpecValidationResult, *, allow_path: bool = False,
     ) -> None:
-        if not self._matches_variable_name(field_name):
+        """A data-field name, or (``allow_path``) a dotted path into one.
+
+        ``allow_path`` is opened for exactly one caller, ``then data.<...>``,
+        because that caller only READS the field back. The three arrange-side
+        callers keep the flat name:
+
+        - ``when data.<a>.<b>`` would be seeded through ``setState``, which
+          writes by flat name — Kotlin's looks the key up with ``findField``
+          and then by ``copy`` parameter name, so a dotted key matches
+          neither and is dropped with no error, and Swift's is a
+          hand-written closed map in the consumer. The branch would run
+          against un-arranged state and the contract would pass having
+          arranged nothing.
+        - ``witness_*`` / ``baseline`` are arrange-side for the same reason.
+        - ``'@data.<a>.<b>'`` becomes a generated identifier (``ref_<name>``),
+          and a dot there is a syntax error on all three faces.
+
+        Opening those needs nested WRITES, which is a different change; until
+        then a spec that names them is refused rather than silently ignored.
+        """
+        segments = field_name.split(".") if allow_path else [field_name]
+        for segment in segments:
+            if self._matches_variable_name(segment):
+                continue
             result.errors.append(SpecValidationMessage(
                 path=path,
-                message=f"Data field must be camelCase: '{field_name}'",
+                message=(
+                    f"Data field path segment must be camelCase: "
+                    f"'{segment}' in '{field_name}'"
+                    if len(segments) > 1
+                    else f"Data field must be camelCase: '{field_name}'"
+                    + ("  — a dotted path is read-back only, so it is "
+                       "accepted in 'then data.<a>.<b>' and nowhere else"
+                       if "." in field_name else "")
+                ),
             ))
-        elif data_fields and field_name not in data_fields:
+            return
+        # Only the head is declared; the rest names members of whatever the
+        # head holds, which the spec's declaration surface does not describe.
+        field_name = segments[0]
+        if data_fields and field_name not in data_fields:
             result.warnings.append(SpecValidationMessage(
                 path=path,
                 message=(
@@ -2312,7 +2363,8 @@ class SpecValidator:
             return
         if key.startswith("data."):
             self._check_branch_data_field(
-                key[len("data."):], entry_path, data_fields, result
+                key[len("data."):], entry_path, data_fields, result,
+                allow_path=True,
             )
             self._validate_branch_then_value(
                 value, entry_path, data_fields, result, allow_empty_list=True,

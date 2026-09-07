@@ -1338,15 +1338,47 @@ def _render_branch(
                 out.append(f"      expect(rec.countFor({_ts(op)})).toBe(0);")
         elif key.startswith("data."):
             fname = key[len("data."):]
-            out.append(
-                f"      expect(h.readField({_ts(fname)})).toEqual("
-                f"{_render_expected(value)});"
-            )
+            head, *tail = fname.split(".")
+            if tail:
+                out.append(
+                    f"      expect(partialMismatches(h.readField({_ts(head)}), "
+                    f"{_render_expected(_nested_expectation(tail, value))}))"
+                    f".toEqual([]);"
+                )
+            else:
+                out.append(
+                    f"      expect(h.readField({_ts(fname)})).toEqual("
+                    f"{_render_expected(value)});"
+                )
     out.append("    } finally {")
     out.append("      rec.restore();")
     out.append("    }")
     out.append("  });")
     return out
+
+
+def _nested_expectation(tail: list[str], value):
+    """`then data.<head>.<a>.<b>: V` -> the expectation `{a: {b: V}}`.
+
+    The read stays `readField("<head>")` — the harnesses resolve a flat name
+    by reflection and know nothing about paths — and the tail becomes a
+    nested expectation for the comparator that already walks one: Swift's
+    and web's `partialMismatches`, Kotlin's `valueMismatches`. NOT Kotlin's
+    `partialMismatches`, which takes a JsonElement and is the request-body
+    comparator.
+
+    The comparators were measured on all three faces before this was
+    written, on a live object rather than a map, because a nested read that
+    resolves nothing must fail rather than pass: a wrong spelling, a null
+    intermediate and an absent head each produce a mismatch on all three,
+    and the two-level path label (`inner.deep.leaf`) is spelled the same on
+    all three. The message TEXT differs per face (Kotlin says "no such
+    property on X" where Swift says "expected …, got nil"), so arms check
+    the verdict, not the wording.
+    """
+    for segment in reversed(tail):
+        value = {segment: value}
+    return value
 
 
 def _render_expected(value) -> str:
@@ -2014,10 +2046,18 @@ def _render_kotlin_branch(
                 out.append(f"      assertEquals(0, rec.countFor({_kt_str(op)}))")
         elif key.startswith("data."):
             fname = key[len("data."):]
-            out.append(
-                f"      assertFieldEquals({_kt_expected(value)}, "
-                f"h.readField({_kt_str(fname)}))"
-            )
+            head, *tail = fname.split(".")
+            if tail:
+                out.append(
+                    f"      assertEquals(emptyList<String>(), valueMismatches("
+                    f"h.readField({_kt_str(head)}), "
+                    f"{_kt_expected(_nested_expectation(tail, value))}))"
+                )
+            else:
+                out.append(
+                    f"      assertFieldEquals({_kt_expected(value)}, "
+                    f"h.readField({_kt_str(fname)}))"
+                )
     out.append("    }")
     out.append("  }")
     return out
@@ -2751,10 +2791,18 @@ def _render_swift_branch(
                 out.append(f"      XCTAssertEqual(rec.countFor({_swift_str(op)}), 0)")
         elif key.startswith("data."):
             fname = key[len("data."):]
-            out.append(
-                f"      assertFieldEquals({_swift_expected(value)}, "
-                f"h.readField({_swift_str(fname)}))"
-            )
+            head, *tail = fname.split(".")
+            if tail:
+                out.append(
+                    f"      XCTAssertEqual(partialMismatches("
+                    f"h.readField({_swift_str(head)}), "
+                    f"{_swift_expected(_nested_expectation(tail, value))}), [])"
+                )
+            else:
+                out.append(
+                    f"      assertFieldEquals({_swift_expected(value)}, "
+                    f"h.readField({_swift_str(fname)}))"
+                )
     out.append("    }")
     out.append("  }")
     return out
