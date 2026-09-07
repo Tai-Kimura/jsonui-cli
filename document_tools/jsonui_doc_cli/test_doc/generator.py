@@ -1841,6 +1841,83 @@ def _generate_spec_pages(
 
     spec_files_info = []
     component_files_info = []
+    #: component spec FILE -> the page this run wrote for it. Only successful
+    #: writes land here, so a component whose page failed cannot be linked to.
+    component_pages_by_file: dict[str, str] = {}
+
+    # Component pages FIRST. The screen pages link to them, and the link
+    # is built from the pages this run wrote — so they have to exist by
+    # then. The screen loop used to run first and the link was a second,
+    # hard-coded spelling of the layout rule; it pointed at a directory
+    # this generator never writes. Same ordering defect, and same repair,
+    # as the unit back-links: emit the link from what was produced, not
+    # by reapplying a rule to a name.
+    # Generate component specification pages
+    if component_files_found:
+        if not collect_only:
+            print("  Generating component specification pages...")
+
+        success_count = 0
+        error_count = 0
+
+        for comp_file, comp_docs_path in sorted(component_files_found, key=lambda x: x[0]):
+            # Same shape, same reason as the screen loop above.
+            output_comp_path = None
+            try:
+                result = _validator_for(comp_file).validate_file(comp_file)
+
+                if not result.is_valid:
+                    if not collect_only:
+                        print(f"    FAILED: {comp_file.name}")
+                        for error in result.errors:
+                            print(f"      {error}")
+                    error_count += 1
+                    continue
+
+                # Determine output path
+                # e.g., docs/components/json/usercard.component.json -> components/usercard.html
+                # With path_prefix: <app>/components/usercard.html
+                current_path = _component_page_rel(comp_file, comp_docs_path, path_prefix)
+
+                # Add to navigation info
+                metadata = result.spec_data.get('metadata', {})
+                component_files_info.append({
+                    'name': metadata.get('displayName', metadata.get('name', comp_file.stem)),
+                    'path': current_path,
+                    'category': metadata.get('category', 'other'),
+                })
+
+                # Skip HTML generation if collect_only mode
+                if collect_only:
+                    component_pages_by_file[comp_file.name] = current_path
+                    success_count += 1
+                    continue
+
+                output_comp_path = output_path / current_path
+                output_comp_path.parent.mkdir(parents=True, exist_ok=True)
+
+                # Generate HTML using component-specific generator (with sidebar)
+                content = generate_component_html(
+                    result.spec_data,
+                    all_tests_nav=all_tests_nav,
+                    current_path=current_path
+                )
+
+                with open(output_comp_path, 'w', encoding='utf-8') as f:
+                    f.write(content)
+
+                note_page_generated(output_comp_path)
+                component_pages_by_file[comp_file.name] = current_path
+                success_count += 1
+
+            except Exception as e:
+                record_page_failure('component spec', comp_file.name, e,
+                                    source=comp_file, output=output_comp_path)
+                error_count += 1
+
+        if not collect_only and (success_count > 0 or error_count > 0):
+            print(f"  Component pages: {success_count} generated, {error_count} failed")
+
 
     # Generate screen specification pages
     if spec_files_found:
@@ -1907,6 +1984,12 @@ def _generate_spec_pages(
                 # is not linked, so a link cannot dangle. Depth-aware: a
                 # nested spec page sits further from unit/.
                 up = "../" * len(Path(current_path).parts[:-1])
+                # Same shape as unit_links, same reason: the emitter is given
+                # the pages this run writes rather than a rule to reapply.
+                component_links = {
+                    name: f"{up}{rel}"
+                    for name, rel in component_pages_by_file.items()
+                }
                 unit_links = [
                     {"target": t, "href": f"{up}{(unit_pages_by_target or {})[t]}"}
                     for t in _declared_targets(result.spec_data)
@@ -1918,6 +2001,7 @@ def _generate_spec_pages(
                     current_path=current_path,
                     layouts_dir=spec_layouts_dir,
                     unit_links=unit_links,
+                    component_links=component_links,
                 )
 
                 with open(output_spec_path, 'w', encoding='utf-8') as f:
@@ -1933,78 +2017,6 @@ def _generate_spec_pages(
 
         if not collect_only and (success_count > 0 or error_count > 0):
             print(f"  Spec pages: {success_count} generated, {error_count} failed")
-
-    # Generate component specification pages
-    if component_files_found:
-        if not collect_only:
-            print("  Generating component specification pages...")
-
-        success_count = 0
-        error_count = 0
-
-        for comp_file, comp_docs_path in sorted(component_files_found, key=lambda x: x[0]):
-            # Same shape, same reason as the screen loop above.
-            output_comp_path = None
-            try:
-                result = _validator_for(comp_file).validate_file(comp_file)
-
-                if not result.is_valid:
-                    if not collect_only:
-                        print(f"    FAILED: {comp_file.name}")
-                        for error in result.errors:
-                            print(f"      {error}")
-                    error_count += 1
-                    continue
-
-                # Determine output path
-                # e.g., docs/components/json/usercard.component.json -> components/usercard.html
-                # With path_prefix: client/components/usercard.html
-                output_name = comp_file.stem.replace(".component", "") + ".html"
-                # Preserve subdirectory structure
-                rel_to_docs = comp_file.parent.relative_to(comp_docs_path)
-                rel_subdir = str(rel_to_docs) if str(rel_to_docs) != '.' else ''
-                comps_subdir = f"{path_prefix}/components" if path_prefix else "components"
-                if rel_subdir:
-                    current_path = f"{comps_subdir}/{rel_subdir}/{output_name}"
-                else:
-                    current_path = f"{comps_subdir}/{output_name}"
-
-                # Add to navigation info
-                metadata = result.spec_data.get('metadata', {})
-                component_files_info.append({
-                    'name': metadata.get('displayName', metadata.get('name', comp_file.stem)),
-                    'path': current_path,
-                    'category': metadata.get('category', 'other'),
-                })
-
-                # Skip HTML generation if collect_only mode
-                if collect_only:
-                    success_count += 1
-                    continue
-
-                output_comp_path = output_path / current_path
-                output_comp_path.parent.mkdir(parents=True, exist_ok=True)
-
-                # Generate HTML using component-specific generator (with sidebar)
-                content = generate_component_html(
-                    result.spec_data,
-                    all_tests_nav=all_tests_nav,
-                    current_path=current_path
-                )
-
-                with open(output_comp_path, 'w', encoding='utf-8') as f:
-                    f.write(content)
-
-                note_page_generated(output_comp_path)
-                success_count += 1
-
-            except Exception as e:
-                record_page_failure('component spec', comp_file.name, e,
-                                    source=comp_file, output=output_comp_path)
-                error_count += 1
-
-        if not collect_only and (success_count > 0 or error_count > 0):
-            print(f"  Component pages: {success_count} generated, {error_count} failed")
 
     return spec_files_info, component_files_info
 
@@ -2085,6 +2097,26 @@ def _unit_spec_href(
         return posixpath.relpath(target, unit_dir)
 
     return href, misses
+
+
+def _component_page_rel(comp_file, comp_docs_path, path_prefix: str | None) -> str:
+    """Where a component's page is written, relative to the output root.
+
+    The ONE place that knows this. The spec page's link to a component used to
+    be a second, hard-coded spelling of it — `../../components/html/<name>` —
+    which is right for `generate spec` (screens/html/ beside components/html/)
+    and wrong for the site, whose pages are `<app>/specs/` and
+    `<app>/components/`. Reported 2026-09-08: the site's only dangling link,
+    and it survived because the check counted links rather than resolving
+    them. Two spellings of one rule diverge the moment one layout changes;
+    both callers now read this.
+    """
+    from pathlib import Path as _P
+    output_name = _P(comp_file).stem.replace(".component", "") + ".html"
+    rel_to_docs = _P(comp_file).parent.relative_to(comp_docs_path)
+    rel_subdir = str(rel_to_docs) if str(rel_to_docs) != "." else ""
+    base = f"{path_prefix}/components" if path_prefix else "components"
+    return f"{base}/{rel_subdir}/{output_name}" if rel_subdir else f"{base}/{output_name}"
 
 
 def _unit_page_rel(target_name: str, app: str | None = None) -> str:

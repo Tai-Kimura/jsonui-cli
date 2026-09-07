@@ -52,6 +52,7 @@ def generate_spec_html(
     layouts_dir: Path | None = None,
     spec_dir: Path | None = None,
     unit_links: list[dict] | None = None,
+    component_links: dict[str, str] | None = None,
 ) -> str:
     """
     Generate HTML documentation from screen specification JSON.
@@ -380,13 +381,29 @@ def generate_spec_html(
             spec_file = cc.get("specFile", "")
             description = cc.get("description", "-")
             # Generate link to component HTML (convert .component.json to .html)
-            if spec_file:
+            # `component_links` maps a component spec FILE to the page this
+            # run writes for it. When the caller supplies it, it is the only
+            # authority: a component with no page is rendered as text rather
+            # than as a link that resolves to nothing.
+            #
+            # Without it the legacy relative path stands, because `generate
+            # spec` writes screens/html/ beside components/html/ and that path
+            # is correct there. The site generator's layout is `<app>/specs/`
+            # and `<app>/components/`, where it is not — reported 2026-09-08
+            # as the site's only dangling link. It survived a check that
+            # counted links; resolving them with isfile() found it in one run.
+            if not spec_file:
+                spec_link = "-"
+            elif component_links is not None:
+                href = component_links.get(spec_file)
+                spec_link = (
+                    f'<a href="{_e(href)}" class="component-link">{_e(spec_file)}</a>'
+                    if href else f'<code>{_e(spec_file)}</code>'
+                )
+            else:
                 html_file = spec_file.replace(".component.json", ".html")
-                # Link path: ../components/html/{name}.html (relative from screens/html/)
                 link_path = f"../../components/html/{html_file}"
                 spec_link = f'<a href="{_e(link_path)}" class="component-link">{_e(spec_file)}</a>'
-            else:
-                spec_link = "-"
             parts.append(f'<tr><td><span class="custom-component-name">{_e(cc_name)}</span></td><td>{spec_link}</td><td>{_e(description)}</td></tr>')
         parts.append('</tbody></table>')
 
