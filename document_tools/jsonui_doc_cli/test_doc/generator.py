@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import posixpath
 import time
 from pathlib import Path
 from typing import Any
@@ -1253,12 +1254,36 @@ def generate_html_directory(
     # Unit contract pages. After the spec pages, because each target links to
     # the spec that declares it and the link is built from the pages this run
     # actually wrote.
+    #
+    # "After the spec pages" held for the root scope only. An app's spec
+    # pages are written further down, so an app-scoped project reached here
+    # with an EMPTY list and every one of its targets missed — 0 of 19 on the
+    # face that reported it. The app pages are therefore COLLECTED here,
+    # before the unit pages that link to them; collect_only writes nothing
+    # and prints nothing, so no page moves and the write order is unchanged.
+    # `_unit_spec_href` picks its own app's subset out of the combined list.
+    spec_pages_all = list(spec_files_info)
+    for app_info in apps or []:
+        app_docs_path = Path(app_info['docs_path']).resolve()
+        app_dirs = [
+            app_docs_path / sub for sub in
+            ("screens/json", "components/json", "requirements/json")
+            if (app_docs_path / sub).exists()
+        ]
+        if not app_dirs:
+            continue
+        _app_specs, _ = _generate_spec_pages(
+            app_dirs, output_path, collect_only=True,
+            path_prefix=app_info['name'], layouts_dir=layouts_dir,
+        )
+        spec_pages_all.extend(_app_specs or [])
+
     unit_files_info: list[dict] = []
     unit_app_summaries: list[tuple[str, str]] = []
     unit_undeclared: dict[str, list[str]] = {}
     for _app, _pages in sorted(unit_by_app.items(), key=lambda kv: (kv[0] or "")):
         _files, _summary, _undeclared = _generate_unit_pages(
-            _pages, output_path, spec_files_info, all_tests_nav, app=_app
+            _pages, output_path, spec_pages_all, all_tests_nav, app=_app
         )
         unit_files_info.extend(_files)
         # An app's targets are grouped under its name, the same level the
@@ -1984,7 +2009,9 @@ def _generate_spec_pages(
     return spec_files_info, component_files_info
 
 
-def _unit_spec_href(spec_files_info: list[dict]) -> tuple[Any, list[str]]:
+def _unit_spec_href(
+    spec_files_info: list[dict], app: str | None = None,
+) -> tuple[Any, list[str]]:
     """``(href_fn, misses)`` mapping a declaring spec to its generated page.
 
     The link is built from the pages this run actually WROTE rather than by
@@ -1995,12 +2022,34 @@ def _unit_spec_href(spec_files_info: list[dict]) -> tuple[Any, list[str]]:
     recomputing the rule produces a link that resolves to nothing. Matching
     on what exists cannot drift from what exists.
 
-    Unresolved links are COLLECTED, not swallowed: a target whose spec page
-    was not generated renders its screen as plain text, and the caller says
-    how many did that. A silently missing href looks identical to a screen
-    that simply has no page.
+    THE PAGES MUST BE THIS APP'S. A unit page for app `admin` is written at
+    `admin/unit/`, so a href of `../<root-relative path>` resolves inside
+    `admin/`, not at the root — the decision is taken against one tree while
+    the resolution happens in another. Where the two trees share a name it is
+    right by coincidence; where only the root has the name it emits a link
+    that dangles. Measured on two faces: one app-scoped project linked 0 of
+    19 (the root list is empty before the app pages are collected), and
+    another linked 8 of 25 — all 8 being names both trees happened to carry.
+
+    Unresolved links are COLLECTED, not swallowed, and each miss carries the
+    REASON: a target whose spec page was not generated renders its screen as
+    plain text, and the caller says how many did that and why. A silently
+    missing href looks identical to a screen that simply has no page, and
+    "could not be linked" with no reason makes every reader trace the run to
+    find out which of three unrelated repairs applies.
     """
+    # Where this app's unit pages are written. The href is relative to it,
+    # so an app's page never reaches out of its own subtree.
+    unit_dir = f"{app}/unit" if app else "unit"
+
     # 'specs/settings/profile.html' -> 'settings/profile'
+    #
+    # The caller appends each app's pages AFTER the root scope's, so where
+    # both scopes carry a name the app's page wins by overwriting. A filter
+    # on the app's prefix was tried here and removed: with the href computed
+    # relatively it changed no outcome, and an unexercised guard reads as a
+    # rule the code does not actually enforce. The precedence is pinned by an
+    # arm instead.
     by_key: dict[str, str] = {}
     for info in spec_files_info or []:
         path = str(info.get("path") or "")
@@ -2012,6 +2061,7 @@ def _unit_spec_href(spec_files_info: list[dict]) -> tuple[Any, list[str]]:
         if parts:
             by_key["/".join(parts)] = path
     misses: list[str] = []
+    scope_has_no_pages = not by_key
 
     def href(screen: str, spec_file: str | None) -> str | None:
         key = None
@@ -2021,10 +2071,18 @@ def _unit_spec_href(spec_files_info: list[dict]) -> tuple[Any, list[str]]:
         if target is None:
             target = by_key.get(str(screen))
         if target is None:
-            misses.append(str(spec_file or screen))
+            # The reason, not only the name: these are repaired in three
+            # different places, and without it the reader has to trace the
+            # run to tell them apart.
+            if scope_has_no_pages:
+                why = "no spec page was written for this scope"
+            elif not spec_file:
+                why = "the contract names no spec file"
+            else:
+                why = "no spec page of this name in this scope"
+            misses.append(f"{spec_file or screen} ({why})")
             return None
-        # Unit pages live one directory down, beside specs/.
-        return f"../{target}"
+        return posixpath.relpath(target, unit_dir)
 
     return href, misses
 
@@ -2175,7 +2233,7 @@ def _generate_unit_pages(
     if not targets:
         return [], pages.get("totals", {}).get("summary_line"), pages.get("undeclared") or {}
 
-    href_fn, misses = _unit_spec_href(spec_files_info)
+    href_fn, misses = _unit_spec_href(spec_files_info, app)
     platforms = pages.get("platforms") or []
     # Per page, not one fixed directory: an app-scoped target lives under
     # `<app>/unit/`, and creating only `unit/` made the write fail — which
