@@ -16,8 +16,11 @@ from jsonui_test_cli.branch_tests import (
     KOTLIN_RUNTIME,
     BranchTestGenerationError,
     _kt_expected,
+    _kt_str,
     _render_expected,
+    _scenario_body,
     _swift_expected,
+    _swift_str,
     generate_branch_tests,
     path_to_pattern,
 )
@@ -431,6 +434,118 @@ class TestFileBackedScenarios:
         ):
             assert header in runtime
 
+
+#: An NDJSON stream: the shape the defect was reported on. Three records,
+#: so the newline count is a number and not a boolean — a body that keeps
+#: exactly one newline would pass a "has a newline" assertion while a
+#: single-record stream would pass even fully JSON-encoded.
+_NDJSON = ('{"type": "progress", "pct": 10}\n'
+           '{"type": "progress", "pct": 90}\n'
+           '{"type": "done"}\n')
+
+_STRING_BODY_SCENARIOS = {
+    "success": {"status": 200, "body": {"order": {"id": "o1"}}},
+    "conflict": {"status": 409, "body": {"error": {"code": "sold_out"}}},
+    # A streaming response: the body is text, not an object.
+    "stream": {"status": 200, "contentType": "application/x-ndjson",
+               "body": _NDJSON},
+    # An explicit null, which the mock server answers with an empty payload.
+    "drained": {"status": 204, "body": None},
+}
+
+
+class TestScenarioBodySerialization:
+    """`_scenario_body` must serialize the way `mock/server.py` `_send` does.
+
+    It JSON-encoded every body regardless of type. A `str` body — NDJSON,
+    SSE, plain text — came back wrapped in quotes with its newlines turned
+    into `\n`, and the generated Kotlin/Swift then embedded THAT as a
+    string literal. The app received one quoted line, its line parser found
+    no records, and every scenario took the error path — including the
+    default, so no branch of such an endpoint could be contracted at all.
+
+    The failure was invisible from the mock file: `mock serve` writes a
+    `str` body verbatim, so the same file behaved correctly under the UI
+    tests and wrongly under the generated tests. The two serializers
+    disagreeing IS the defect; the assertions below pin them together.
+
+    Web never had the defect and is the control: it serializes the whole
+    scenario structure with `json.dumps`, so a `str` body is already a
+    JSON string value there. Nothing routes web through `_scenario_body`,
+    and nothing should — the direction of any unification is web's.
+    """
+
+    def _project(self, tmp_path):
+        return _project(tmp_path, BASIC, scenarios=_STRING_BODY_SCENARIOS)
+
+    # -- the rule itself, against the server's -------------------------- #
+
+    def test_a_string_body_is_passed_through_unencoded(self):
+        assert _scenario_body({"body": _NDJSON}) == _NDJSON
+        # The count, not the presence: an encoded body has zero newlines.
+        assert _scenario_body({"body": _NDJSON}).count("\n") == 3
+
+    def test_structured_bodies_are_still_json_encoded(self):
+        assert _scenario_body({"body": {"a": 1}}) == '{"a": 1}'
+        assert _scenario_body({"body": [1, 2]}) == "[1, 2]"
+
+    def test_an_absent_or_null_body_sends_no_payload(self):
+        # `server.py` sends b"" for both; the literal "null" is a body no
+        # server ever writes.
+        assert _scenario_body({}) == ""
+        assert _scenario_body({"body": None}) == ""
+
+    # -- what lands in the generated files ------------------------------ #
+
+    def test_kotlin_and_swift_embed_the_stream_with_its_newlines(self, tmp_path):
+        root = self._project(tmp_path)
+        kotlin = generate_branch_tests(
+            "checkout", root, platform="android", package="com.example.x",
+            out_dir="app/src/test/java", harness_dir="app/src/test/java")
+        swift = generate_branch_tests(
+            "checkout", root, platform="ios", module="checkout_app",
+            out_dir="Tests/Generated", harness_dir="Tests/Generated")
+        kt = kotlin.test_file.read_text(encoding="utf-8")
+        sw = swift.test_file.read_text(encoding="utf-8")
+
+        for text, literal in ((kt, _kt_str(_NDJSON)), (sw, _swift_str(_NDJSON))):
+            assert literal in text
+            # Three records => three escaped newlines inside the literal.
+            assert literal.count("\\n") == 3
+            # The reported shape: the body encoded, then quoted again.
+            assert '\\"{\\\\"type' not in text
+
+        # Named as the defect, so re-introducing it fails here and not only
+        # through the newline count.
+        assert _kt_str(json.dumps(_NDJSON, ensure_ascii=False)) not in kt
+        assert _swift_str(json.dumps(_NDJSON, ensure_ascii=False)) not in sw
+
+    def test_the_runtimes_write_the_body_string_unchanged(self, tmp_path):
+        """Pass-through at the far end: whatever is embedded is what the app
+        reads, so the literal above is the whole claim."""
+        root = self._project(tmp_path)
+        kotlin = generate_branch_tests(
+            "checkout", root, platform="android", package="com.example.x",
+            out_dir="app/src/test/java", harness_dir="app/src/test/java")
+        swift = generate_branch_tests(
+            "checkout", root, platform="ios", module="checkout_app",
+            out_dir="Tests/Generated", harness_dir="Tests/Generated")
+        assert ".setBody(sc.second)" in kotlin.runtime_file.read_text(encoding="utf-8")
+        assert "Data(body.utf8)" in swift.runtime_file.read_text(encoding="utf-8")
+
+    def test_web_embeds_the_stream_as_a_json_string_and_is_untouched(self, tmp_path):
+        """The control. Web reaches the same bytes by a different route —
+        an independent producer of the expected value, so the Kotlin and
+        Swift assertions above are not checked against a number this test
+        made up."""
+        report = generate_branch_tests("checkout", self._project(tmp_path))
+        content = report.test_file.read_text(encoding="utf-8")
+        assert json.dumps(_NDJSON, ensure_ascii=False) in content
+        # A structured body stays an OBJECT on web. Routing web through
+        # `_scenario_body` would flatten it to a string — and a str body
+        # alone cannot see that, because flattening a str is a no-op. This
+        # is the assertion that fails if the unification runs backwards.
+        assert '"body": {"order": {"id": "o1"}}' in content
 
 class TestMockDirResolution:
     """`mock.mockDir` is how a project says where its mocks live, and the

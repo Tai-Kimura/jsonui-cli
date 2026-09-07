@@ -656,16 +656,33 @@ def _iter_declared_api_refs(contract: dict):
 
 
 def _scenario_body(scenario: dict) -> str:
-    """Serialized response body, empty when the scenario declares none.
+    """Response body serialized the way the project's mock server serializes it.
+
+    The rule is `mock/server.py`'s `_send`: a `dict`/`list` is JSON-encoded,
+    a `str` is written verbatim, and an absent body sends no payload. This
+    function is what the generated Kotlin/Swift tests embed, so a rule that
+    differs from the server makes the SAME mock file behave differently
+    under `mock serve` than under the generated tests.
+
+    A `str` body must not be JSON-encoded. Encoding it wrapped the payload
+    in quotes and turned every newline into `\n`, so an NDJSON or SSE
+    stream arrived as a single quoted line: the app's line parser saw no
+    records and took its error path, under EVERY scenario including the
+    default. The UI tests, which go through the mock server, kept passing.
 
     A file-backed response (`contentType` + `bodyFile`) has no inline body.
     Serializing the absent value produced the literal `null`, which is a
-    body the server never sends — the project's own mock server answers
-    with an empty payload and the declared content type, so this matches it.
+    body the server never sends — the server answers with an empty payload
+    and the declared content type, so this matches it. An explicit
+    `"body": null` takes the same path for the same reason (`server.py`
+    sends `b""` for either).
     """
-    if "body" not in scenario:
+    body = scenario.get("body")
+    if body is None:
         return ""
-    return json.dumps(scenario.get("body"), ensure_ascii=False)
+    if isinstance(body, str):
+        return body
+    return json.dumps(body, ensure_ascii=False)
 
 
 def _scenario_content_type(scenario: dict) -> str:
