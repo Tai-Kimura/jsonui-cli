@@ -673,25 +673,28 @@ def cmd_validate_spec_batch(input_dir: Path):
 
 
 def _component_sibling_dirs(input_dir: Path):
-    """``(components/json, screens/layouts)`` for the face *input_dir* sits in.
+    """``(component spec files, screens/layouts)`` for the face *input_dir* is in.
 
-    Both are read from the same root as `input_dir`, which is the layout this
-    tool already writes to — `docs/<face>/screens/json` beside
-    `docs/<face>/components/json`. Written once here so the check and the
-    generator do not grow two spellings of it; that is the defect this release
-    has now repaired three times.
+    ⚠️ The component files are FOUND, not computed. The first cut of this
+    check looked in `<face>/components/json` — the layout this tool writes —
+    and two consumer faces keep their `*.component.json` beside the screen
+    specs instead. The check returned `([], [])` there and read as a clean
+    face: a silent skip, in a release whose whole subject is that a rule
+    reapplied in a second place goes wrong the moment a tree differs.
 
-    Returns ``(None, None)`` when the shape does not match, so a project laid
-    out differently gets no check rather than a wrong one.
+    So the face root is derived from `input_dir` and the component specs are
+    whatever `*.component.json` it contains. `None` for the file list means
+    the shape did not match at all, which the caller reports rather than
+    treating as "nothing found" — the two produce the same empty list and
+    mean opposite things.
     """
     d = Path(input_dir).resolve()
     if d.name != "json" or d.parent.name != "screens":
         return None, None
     face = d.parent.parent
-    comps = face / "components" / "json"
+    comps = sorted(face.rglob("*.component.json"))
     layouts = face / "screens" / "layouts"
-    return (comps if comps.is_dir() else None,
-            layouts if layouts.is_dir() else None)
+    return comps, (layouts if layouts.is_dir() else None)
 
 
 def _component_declaration_gaps(spec_files, input_dir):
@@ -720,9 +723,11 @@ def _component_declaration_gaps(spec_files, input_dir):
     check did not run. A severity assigned without the evidence for it is the
     line that is always wrong.
     """
-    comps_dir, layouts_dir = _component_sibling_dirs(input_dir)
-    if comps_dir is None:
-        return [], []
+    comp_files, layouts_dir = _component_sibling_dirs(input_dir)
+    if comp_files is None:
+        return [], [f"[WARNING] component declarations were not checked: "
+                    f"{input_dir} is not a <face>/screens/json directory, so "
+                    f"the face root could not be derived"]
 
     declared: dict[str, list[str]] = {}
     for spec_file in spec_files:
@@ -738,7 +743,7 @@ def _component_declaration_gaps(spec_files, input_dir):
             if isinstance(name, str) and name:
                 declared.setdefault(name, []).append(str(spec_file))
 
-    on_disk = {f.name: f for f in sorted(comps_dir.glob("*.component.json"))}
+    on_disk = {f.name: f for f in comp_files}
 
     errors: list[str] = []
     warnings: list[str] = []
@@ -747,7 +752,8 @@ def _component_declaration_gaps(spec_files, input_dir):
         where = ", ".join(sorted(declared[name]))
         errors.append(
             f"[ERROR] customComponents declares {name!r}, which does not exist "
-            f"in {comps_dir} — the link built from it resolves to nothing "
+            f"anywhere under the face — the link built from it resolves "
+            f"to nothing "
             f"(declared by: {where})")
 
     for name in sorted(set(on_disk) - set(declared)):
@@ -756,8 +762,8 @@ def _component_declaration_gaps(spec_files, input_dir):
             warnings.append(
                 f"[WARNING] {name} is declared by no screen spec, so its page "
                 f"is generated and nothing links to it. Whether any screen "
-                f"USES it could not be checked: no layouts directory beside "
-                f"{comps_dir.parent.parent}")
+                f"USES it could not be checked: this face has no "
+                f"screens/layouts directory")
         elif users:
             shown = ", ".join(users[:3]) + ("..." if len(users) > 3 else "")
             errors.append(

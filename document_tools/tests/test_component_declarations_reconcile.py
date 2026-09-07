@@ -68,7 +68,8 @@ class _Face(unittest.TestCase):
     def face(self, *, components: dict[str, str] | None = None,
              declared: list[str] | None = None,
              layouts: dict[str, list[str]] | None = None,
-             with_layouts_dir: bool = True):
+             with_layouts_dir: bool = True,
+             components_beside_specs: bool = False):
         """components: file -> metadata.name. layouts: file -> names it mentions."""
         root = Path(tempfile.mkdtemp())
         self.addCleanup(shutil.rmtree, root, ignore_errors=True)
@@ -76,8 +77,13 @@ class _Face(unittest.TestCase):
         specs.mkdir(parents=True)
         (specs / "s.spec.json").write_text(
             json.dumps(_screen("s", declared)), encoding="utf-8")
-        comps = root / "docs" / "app" / "components" / "json"
-        comps.mkdir(parents=True)
+        # ⚠️ Two real faces keep their component specs HERE, beside the
+        # screen specs, rather than in `components/json`. The first cut of
+        # this check looked only in `components/json` and returned a clean
+        # result for both of them.
+        comps = specs if components_beside_specs else (
+            root / "docs" / "app" / "components" / "json")
+        comps.mkdir(parents=True, exist_ok=True)
         for file_name, comp_name in (components or {}).items():
             (comps / file_name).write_text(
                 json.dumps(_component(comp_name)), encoding="utf-8")
@@ -161,14 +167,51 @@ class BothDirectionsAreChecked(_Face):
         self.assertTrue(any("unreachable" in e for e in errors))
 
 
+    def test_components_beside_the_specs_are_found(self):
+        # 🚨 The arm the first cut did not have. Its fixture always placed the
+        # component specs in `components/json`, which is where this tool
+        # WRITES them — so every arm passed while two consumer faces, which
+        # keep them beside the screen specs, were silently not checked at all.
+        # The shape a check is built from must come from the trees it runs on,
+        # not from the shape the tool produces.
+        specs = self.face(
+            components={"picker.component.json": "Picker"},
+            declared=None,
+            layouts={"booking.json": ["Picker"]},
+            components_beside_specs=True)
+        errors, _ = self.run_check(specs)
+        self.assertEqual(len(errors), 1, errors)
+        self.assertIn("used by 1 layout", errors[0])
+
+    def test_a_directory_that_is_not_a_face_says_so_instead_of_nothing(self):
+        # ⚠️ Silence and "clean" are the same output. This check returned
+        # `([], [])` for an unrecognised layout, which is how the two faces
+        # above read as clean. A skipped check has to say it was skipped.
+        root = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, root, ignore_errors=True)
+        odd = root / "somewhere" / "else"
+        odd.mkdir(parents=True)
+        errors, warnings = _component_declaration_gaps([], odd)
+        self.assertEqual(errors, [])
+        self.assertEqual(len(warnings), 1, warnings)
+        self.assertIn("were not checked", warnings[0])
+
+
 class TheFaceLayoutIsReadInOnePlace(_Face):
 
-    def test_the_expected_shape_resolves_both_siblings(self):
+    def test_the_expected_shape_finds_the_component_files(self):
         specs = self.face(components={"picker.component.json": "Picker"},
                           layouts={"booking.json": ["Picker"]})
         comps, layouts = _component_sibling_dirs(specs)
-        self.assertIsNotNone(comps)
+        self.assertEqual([c.name for c in comps], ["picker.component.json"])
         self.assertIsNotNone(layouts)
+
+    def test_it_finds_them_wherever_in_the_face_they_are(self):
+        specs = self.face(components={"picker.component.json": "Picker"},
+                          layouts={"booking.json": ["Picker"]},
+                          components_beside_specs=True)
+        comps, _ = _component_sibling_dirs(specs)
+        self.assertEqual([c.name for c in comps], ["picker.component.json"])
 
     def test_an_unexpected_shape_gets_no_check_rather_than_a_wrong_one(self):
         # A project laid out differently must not be measured against this
