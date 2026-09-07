@@ -162,6 +162,94 @@ def _without_comments(text: str, *, nested_blocks: bool = False) -> str:
     return "".join(out)
 
 
+def _swift_code_only(text: str) -> str:
+    r"""*text* with comments AND string literals blanked, same length.
+
+    Brace counting needs both gone. `_without_comments` deliberately keeps
+    string CONTENTS — the web and android scans read case names out of
+    `it("name")`, and blanking them would erase the thing being counted —
+    so it cannot be reused here: a triple-quoted block holding three unmatched `{`
+    would push the depth three levels down for the rest of the file, and
+    every method after it would drop out of the scan. Silently, and in the
+    direction that reports nothing.
+
+    Swift's raw strings are handled because Swift has them and this file did
+    not: `#"a { b"#` and `##"…"##` end only at a quote followed by the same
+    number of `#`, and inside one `\` is not an escape. Measured before use
+    rather than assumed — `_without_comments` steps over `#"…"#` as a plain
+    `"` literal, which ends at the wrong quote.
+
+    Newlines survive so line numbers and the android pattern's bounded
+    window still line up.
+    """
+    out = list(text)
+    i, n = 0, len(text)
+
+    def blank(a: int, b: int) -> None:
+        for j in range(a, min(b, n)):
+            if out[j] != "\n":
+                out[j] = " "
+
+    while i < n:
+        if text.startswith("//", i):
+            end = text.find("\n", i)
+            end = n if end < 0 else end
+            blank(i, end)
+            i = end
+            continue
+        if text.startswith("/*", i):
+            # Swift nests them: `/* /* */ */` closes once, not twice.
+            level, j = 1, i + 2
+            while j < n and level:
+                if text.startswith("/*", j):
+                    level += 1
+                    j += 2
+                elif text.startswith("*/", j):
+                    level -= 1
+                    j += 2
+                else:
+                    j += 1
+            blank(i, j)
+            i = j
+            continue
+        if text.startswith('"""', i):
+            end = text.find('"""', i + 3)
+            end = n if end < 0 else end + 3
+            blank(i, end)
+            i = end
+            continue
+        if text[i] == "#":
+            hashes = 0
+            while i + hashes < n and text[i + hashes] == "#":
+                hashes += 1
+            if text.startswith('"', i + hashes):
+                close = '"' + "#" * hashes
+                end = text.find(close, i + hashes + 1)
+                end = n if end < 0 else end + len(close)
+                blank(i, end)
+                i = end
+                continue
+            i += hashes
+            continue
+        if text[i] == '"':
+            j = i + 1
+            while j < n:
+                if text[j] == "\\":
+                    j += 2
+                    continue
+                if text[j] == '"':
+                    j += 1
+                    break
+                if text[j] == "\n":
+                    break  # unterminated: prose, not a literal
+                j += 1
+            blank(i, j)
+            i = j
+            continue
+        i += 1
+    return "".join(out)
+
+
 #: `class Foo: XCTestCase {` / `final class Foo : XCTestCase, Bar {`
 _SWIFT_TESTCASE_RE = re.compile(r"\bclass\s+\w+\s*:[^{]*\bXCTestCase\b[^{]*\{")
 #: a method declaration inside one, with the modifiers that precede it and
@@ -216,29 +304,60 @@ def _could_ever_run(mods: str, empty_params: bool) -> bool:
 def _swift_test_methods(text: str) -> list[str]:
     """Method names declared inside XCTestCase subclasses, in order.
 
-    Only methods XCTest could actually execute are returned: brace-matched to
-    the class body (a regex cannot tell where the body ends and the
-    file-scope helpers begin), then filtered by `_could_ever_run`.
+    Only methods XCTest could actually execute are returned: brace-matched
+    to the class body (a regex cannot tell where the body ends and the
+    file-scope helpers begin), restricted to the body's own level, then
+    filtered by `_could_ever_run`.
+
+    Reported 2026-09-07: a LOCAL function inside a method body was reported
+    as "method exists but the runner will not discover it". It carries no
+    modifiers and takes no arguments, so `_could_ever_run` — which reads
+    modifiers and arity — said it would run if it were renamed. XCTest does
+    not enumerate local functions at all, so the warning named something
+    that cannot be fixed, on a file where nothing was wrong. That was the
+    fourth false-positive shape for this one line, and this file's own
+    docstring says a line that is always wrong teaches its reader to skip
+    the next real one.
+
+    Depth is what separates them: a method is declared at the class body's
+    own level, a local function is deeper. Counting is done on
+    `_swift_code_only`, because a brace inside a comment or a string counts
+    exactly as much as a real one to a character scan and neither opens a
+    scope.
     """
     names: list[str] = []
-    for match in _SWIFT_TESTCASE_RE.finditer(text):
+    code = _swift_code_only(text)
+    for match in _SWIFT_TESTCASE_RE.finditer(code):
         depth, i = 0, match.end() - 1
         start = None
-        while i < len(text):
-            ch = text[i]
+        spans: list[tuple[int, int]] = []   # regions at the class body level
+        level_start = None
+        while i < len(code):
+            ch = code[i]
             if ch == "{":
                 depth += 1
                 if start is None:
-                    start = i + 1
+                    start = level_start = i + 1
+                elif depth == 2:
+                    # entering a method body: the class level pauses here
+                    if level_start is not None:
+                        spans.append((level_start, i))
+                    level_start = None
             elif ch == "}":
                 depth -= 1
                 if depth == 0:
                     break
+                if depth == 1:
+                    level_start = i + 1
             i += 1
-        if start is not None:
+        if start is None:
+            continue
+        if level_start is not None:
+            spans.append((level_start, i))
+        for span_start, span_end in spans:
             names.extend(
                 m.group("name")
-                for m in _SWIFT_FUNC_RE.finditer(text[start:i])
+                for m in _SWIFT_FUNC_RE.finditer(text[span_start:span_end])
                 if m.group("name") not in _XCTEST_LIFECYCLE
                 and _could_ever_run(m.group("mods"), m.group("empty") is not None)
             )

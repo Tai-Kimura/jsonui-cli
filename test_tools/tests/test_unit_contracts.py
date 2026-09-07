@@ -662,6 +662,109 @@ def _split_project(tmp_path, *, sub_blocks, second_sub=False):
     return tmp_path
 
 
+class TestOnlyClassLevelMethodsAreScanned:
+    """A local function inside a method body is not a method.
+
+    Reported 2026-09-07 (bar, iOS, 1.8.47): a polling helper declared INSIDE
+    a private method — `func poll()`, no modifiers, no arguments — was
+    reported NEVER RUNS. `_could_ever_run` reads modifiers and arity, and by
+    both it looks like a method that would run if it were renamed. XCTest
+    never enumerates local functions, so the warning named something that
+    could not be fixed. Fourth false-positive shape for this one line, and
+    this module's own docstring says a line that is always wrong teaches its
+    reader to skip the next real one.
+
+    Depth separates them, and depth cannot be counted on the raw text: a
+    brace inside a comment or a string closes the class body early. That was
+    not hypothetical — on 1.8.47 a single `// }` in a test file made the
+    scan return NOTHING, and the declared case then landed in `missing`
+    with its implementation sitting right there. The direction is red, not
+    green, which is why it was never noticed as a silent hole.
+    """
+
+    _SHAPES = {
+        "line comment": "    func h() {\n        // }\n    }",
+        "triple quoted": '    func h() {\n        let s = """\n        }\n        """\n    }',
+        "raw string": '    func h() { let s = #"}"# }',
+        "plain string": '    func h() { let s = "}" }',
+        "nested block comment": "    /* outer /* inner } */ still } */\n    func h() { }",
+    }
+
+    def _cls(self, body: str) -> str:
+        return ("import XCTest\nfinal class VMTests: XCTestCase {\n"
+                + body
+                + "\n    func test_a_case() throws { }"
+                  "\n    func test_b_case() throws { }\n}\n")
+
+    def _ios_project(self, tmp_path, tests: str, cases=("a_case",)):
+        (tmp_path / "docs" / "screens").mkdir(parents=True, exist_ok=True)
+        (tmp_path / "docs" / "screens" / "s.spec.json").write_text(
+            json.dumps({"type": "screen", "unitContracts": {
+                "target": "VM",
+                "cases": [{"name": c, "platforms": ["ios"]} for c in cases]}}),
+            encoding="utf-8")
+        (tmp_path / "ios" / "Tests").mkdir(parents=True, exist_ok=True)
+        (tmp_path / "ios" / "Tests" / "VMTests.swift").write_text(tests, encoding="utf-8")
+        (tmp_path / "jui.config.json").write_text(
+            json.dumps({"spec_directory": "docs/screens", "platforms": {
+                "ios": {"root": "ios", "unitTestsDir": "Tests", "testModule": "App"}}}),
+            encoding="utf-8")
+        return tmp_path
+
+    _LOCAL_FUNC = (
+        "    private func load(_ vm: VM) {\n"
+        "        let loaded = expectation(description: \"applied\")\n"
+        "        func poll() {\n"
+        "            DispatchQueue.main.asyncAfter(deadline: .now()) { poll() }\n"
+        "        }\n"
+        "        poll()\n"
+        "    }"
+    )
+
+    def test_a_local_function_is_not_reported_as_never_running(self, tmp_path):
+        text = self._cls(self._LOCAL_FUNC)
+        assert uc._swift_test_methods(text) == ["test_a_case", "test_b_case"]
+        root = self._ios_project(tmp_path, text, cases=("a_case", "b_case"))
+        report = uc.check_unit_contracts(root)
+        assert report.undiscoverable == {}, uc.format_report(report)
+        assert report.ok, uc.format_report(report)
+
+    def test_a_local_function_named_like_a_test_is_not_an_implementation(
+            self, tmp_path):
+        """The other direction. Counting it would report a case as
+        implemented on the strength of a function the runner never calls —
+        a green that means nothing, which is worse than the red."""
+        text = ("import XCTest\nfinal class VMTests: XCTestCase {\n"
+                "    func test_a_case() throws {\n"
+                "        func test_b_case() { }\n"
+                "        test_b_case()\n"
+                "    }\n}\n")
+        assert uc._swift_test_methods(text) == ["test_a_case"]
+        root = self._ios_project(tmp_path, text, cases=("a_case", "b_case"))
+        report = uc.check_unit_contracts(root)
+        assert report.missing("ios") == ["b_case"], uc.format_report(report)
+
+    @pytest.mark.parametrize("shape", sorted(_SHAPES))
+    def test_a_brace_that_is_not_code_does_not_end_the_class(self, shape):
+        """One arm per spelling, because they fail independently: a
+        triple-quoted block is found by a different branch than a raw
+        string, and a scanner can handle either without the other."""
+        found = uc._swift_test_methods(self._cls(self._SHAPES[shape]))
+        assert found == ["h", "test_a_case", "test_b_case"], (shape, found)
+
+    def test_a_comment_brace_no_longer_hides_the_implementation(self, tmp_path):
+        """Gate level, and the arm for the shape that was already broken on
+        1.8.47: the scan returned nothing, so a case whose implementation is
+        in the file was reported missing."""
+        text = ("import XCTest\nfinal class VMTests: XCTestCase {\n"
+                "    // a stray brace: }\n"
+                "    func test_a_case() throws { }\n}\n")
+        root = self._ios_project(tmp_path, text)
+        report = uc.check_unit_contracts(root)
+        assert report.missing("ios") == [], uc.format_report(report)
+        assert report.ok, uc.format_report(report)
+
+
 class TestSplitScreens:
     """Reported 2026-09-04: a sub-spec's block was read by nobody.
 
