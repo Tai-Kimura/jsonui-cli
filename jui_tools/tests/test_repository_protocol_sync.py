@@ -186,20 +186,30 @@ class RepositoryProtocolSync(unittest.TestCase):
         directly. A defect that reaches users — the sync existing and never
         running — was invisible to a file named after the sync.
 
-        This reads the call out of `cmd_build`'s own source. That is weaker than
-        driving `jui build` end to end (it proves the call is written, not
-        that control reaches it), and it is what catches the regression the
-        other arms cannot see. The same gap exists for the UseCase sync
-        added in the previous commit; reported rather than fixed here.
+        Parsed, not grepped. The first cut asserted a SUBSTRING of the
+        source, which a commented-out call satisfies: measured 2026-09-07,
+        commenting the call out left this arm green. `ast` sees calls only.
+
+        Still weaker than driving `jui build` end to end — it proves the
+        call is written, not that control reaches it.
         """
+        import ast
         import inspect
         from jui_cli.commands import build_cmd
-        source = inspect.getsource(build_cmd.cmd_build)
-        self.assertIn("_sync_repository_protocols(", source)
-        # Ordered after the use cases it depends on nothing from, but before
-        # the gates, the same as its sibling.
-        self.assertLess(source.index("_sync_usecase_protocols("),
-                        source.index("_sync_repository_protocols("))
+
+        tree = ast.parse(inspect.getsource(build_cmd.cmd_build))
+        called = {
+            node.func.id for node in ast.walk(tree)
+            if isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
+        }
+        self.assertIn("_sync_repository_protocols", called)
+        # Its siblings, so a refactor that drops one and keeps the others is
+        # visible here. Enumerated by hand in two files — this one and
+        # test_usecase_protocol_sync's WiredIntoTheBuild — so a FOURTH sync
+        # would be caught by neither. The population is not derived from
+        # anything; it is a list two people maintain.
+        self.assertIn("_sync_usecase_protocols", called)
+        self.assertIn("_sync_viewmodel_protocols", called)
 
 
 if __name__ == "__main__":
