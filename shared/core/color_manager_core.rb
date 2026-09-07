@@ -350,6 +350,16 @@ module JsonUIShared
       # runs every build — and the content check is what keeps that from
       # touching the mtime of a tracked file on every build.
       body = JSON.pretty_generate(@defined_colors_data)
+
+      # Do not hand a ledger to a face that never had one. Removing the
+      # caller's `if @undefined_colors.any?` gate made this method run on
+      # every build, and on a project with nothing undefined that would
+      # create an empty `{}` file — a new untracked file appearing in a
+      # consumer that had deliberately never carried one. A face with an
+      # existing ledger keeps it even when it empties out; that file is
+      # somebody's tracked state and its emptiness is the answer.
+      return if @defined_colors_data.empty? && !File.exist?(@defined_colors_file)
+
       return if File.exist?(@defined_colors_file) && File.read(@defined_colors_file) == body
 
       FileUtils.mkdir_p(@resources_dir)

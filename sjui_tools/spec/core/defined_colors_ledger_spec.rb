@@ -68,6 +68,38 @@ RSpec.describe SjuiTools::Core::Resources::ColorManager do
     expect(ledger_after_save).to eq('never_declared' => nil)
   end
 
+  # Removing the caller's gate made this run on every build, which on a face
+  # that never carried a ledger would have created an empty `{}` — a new
+  # untracked file arriving in a consumer that had deliberately never had
+  # one. Measured on a real face: `defined_colors.json` absent, tracked 0.
+  it 'does not create a ledger on a face that has none and nothing undefined' do
+    write_palette('brand_primary' => '#221C10')
+    expect(File.exist?(ledger_path)).to be false
+
+    manager = described_class.new(config, temp_dir, resources_dir)
+    # Silence too: a face whose gate diffs build output verbatim would see a
+    # line about a file it does not have.
+    expect { manager.apply_to_color_assets }
+      .not_to output(/Updated defined_colors\.json/).to_stdout
+
+    expect(File.exist?(ledger_path)).to be false
+  end
+
+  # ...but a face with something undefined still gets one. The guard is
+  # about empty, not about absent.
+  it 'creates a ledger on a face that has none once something is undefined' do
+    write_palette('brand_primary' => '#221C10')
+    json = File.join(temp_dir, 'panel.json')
+    File.write(json, JSON.pretty_generate('type' => 'View', 'background' => 'never_declared'))
+
+    manager = described_class.new(config, temp_dir, resources_dir)
+    manager.process_colors([json], 1, 0, config)
+    manager.apply_to_color_assets
+
+    expect(File.exist?(ledger_path)).to be true
+    expect(JSON.parse(File.read(ledger_path))).to have_key('never_declared')
+  end
+
   it 'writes an empty ledger rather than deleting the file' do
     write_palette('brand_primary' => '#221C10')
     File.write(ledger_path, JSON.pretty_generate('brand_primary' => nil))
