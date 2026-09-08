@@ -237,7 +237,7 @@ class ConfigManager:
             return p
         return self.project_root / p
 
-    def document_tools_path_notes(self) -> list[str]:
+    def document_tools_path_notes(self, applied: bool = True) -> list[str]:
         """What `ensure_document_tools_importable` is about to do, or did not.
 
         🚨 BOTH OUTCOMES WERE SILENT. Reported 2026-09-08 by a consumer lane
@@ -260,9 +260,21 @@ class ConfigManager:
         if not dtp:
             return []
         if not dtp.exists():
+            where = ("the setting had no effect, and `document_tools` will be "
+                     "imported from the installed CLI instead."
+                     if applied else
+                     "the setting has no effect anywhere — nothing can be "
+                     "imported from a path that is not there. This command "
+                     "does not use it; the setting itself is broken.")
             return [f"document_tools_path is set to {dtp} but does not exist — "
-                    f"the setting had no effect, and `document_tools` will be "
-                    f"imported from the installed CLI instead."]
+                    f"{where}"]
+        if not applied:
+            # ⚠️ The present-and-used note belongs to the command that USES the
+            # path. Saying "is prepended to sys.path" from a command that never
+            # prepends it would be a false report — the same shape as naming a
+            # face's behaviour from a version string that does not describe what
+            # ran. Only the broken-state half is command-independent.
+            return []
         return [f"document_tools_path {dtp} is prepended to sys.path — "
                 f"`document_tools` now resolves to that working copy, not the "
                 f"installed distribution, so `jui --version` no longer "

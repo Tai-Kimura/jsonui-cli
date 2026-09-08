@@ -1080,6 +1080,148 @@ def cmd_generate_spec(args):
     return 0
 
 
+#: The producer name this command records in what it writes. NAME ONLY —
+#: no version, no timestamp, no path, no host.
+#:
+#: 🚨 THE THREE CONSTRAINTS ARE NOT STYLE. Measured and supplied by the docs
+#: face, which byte-compares 220 tracked generated files as a gate:
+#:
+#:   deterministic   a timestamp/path/host/pid makes that gate unpassable by
+#:                   construction — regeneration would differ every time
+#:   no version      a version in the mark rewrites all 220 files EVERY
+#:                   RELEASE, and a real change then hides inside the churn
+#:                   (their 1.8.56 uptake needed no regeneration at all:
+#:                   208 files were byte-identical)
+#:   no absolute paths  the face is a public repo and its pre-commit refuses
+#:                   `/Users/`, which currently appears 0 times
+#:
+#: ⚠️ A version is not needed for the question this answers. The collision
+#: this detects is with ANOTHER COMMAND's output, not with an older version
+#: of this command's own.
+PRODUCER_ATTR = "jsonui-doc-producer"
+
+
+def producer_mark(command: str, suffix: str) -> str:
+    """The one line *command* stamps into each file it writes."""
+    if suffix == ".html":
+        return f'<meta name="{PRODUCER_ATTR}" content="{command}">'
+    return f'<!-- {PRODUCER_ATTR}: {command} -->'
+
+
+def stamp_producer(text: str, command: str, suffix: str) -> str:
+    """*text* with this command's mark, or unchanged if it cannot be placed.
+
+    ⚠️ Never raises and never mangles: a document with no `<head>` is written
+    exactly as the emitter produced it. An unmarked file is a file this check
+    cannot speak about, which is a state the caller already reports — far
+    better than a corrupted page.
+    """
+    mark = producer_mark(command, suffix)
+    if mark in text:
+        return text
+    if suffix != ".html":
+        # ⚠️ APPENDED, NOT PREPENDED. The first draft put it first and broke
+        # `test_markdown_writes_markdown_content`, whose discriminator is that
+        # a markdown body starts with `#`. That arm is right and the stamp was
+        # wrong: a mark must not change what the document IS. The gate caught
+        # it — which is the arm doing exactly its job.
+        return f"{text.rstrip(chr(10))}\n\n{mark}\n"
+    i = text.find("<head>")
+    if i < 0:
+        return text
+    j = i + len("<head>")
+    return f"{text[:j]}\n    {mark}{text[j:]}"
+
+
+def read_producer(path: Path) -> str | None:
+    """The command that wrote *path*, or None when it carries no mark.
+
+    🚨 None is NOT "another producer". It is "this check has nothing to go
+    on" — the state every file predating the mark is in. Saying those two
+    with the same word is the confusion this release spent the day removing
+    from the toolchain-version check, where a skipped comparison read
+    exactly like agreement.
+    """
+    try:
+        text = path.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return None
+    # ⚠️ BOTH ENDS. HTML carries the mark in `<head>`; markdown carries it at
+    # the END, because prepending changed what the document starts with and a
+    # real arm caught that. A reader that only looked at the head would report
+    # every marked markdown file as unmarked — the same silence this whole
+    # check exists to remove, reintroduced by the fix for a different one.
+    window = text[:4096] + "\n" + text[-4096:]
+    for opener, closer in ((f'<meta name="{PRODUCER_ATTR}" content="', '"'),
+                           (f'<!-- {PRODUCER_ATTR}: ', ' -->')):
+        i = window.find(opener)
+        if i < 0:
+            continue
+        j = window.find(closer, i + len(opener))
+        if j > 0:
+            return window[i + len(opener):j]
+    return None
+
+
+def report_overwrites_by_another_producer(output_dir: Path, will_write,
+                                          command: str) -> list[str]:
+    """Files this run OVERWRITES that something else wrote, and files it
+    cannot speak about.
+
+    🚨 WHY THIS EXISTS SEPARATELY FROM `report_foreign_output`. That one
+    reports SURPLUS — files left behind. Measured on the very tree the
+    incident happened on:
+
+        existing *.html in the output dir   8
+        this run will write                 8
+        surplus                             0   -> IT SAID NOTHING
+
+    The site route writes one page per component spec and this command
+    writes the same names, so the reported 2755-line clobber produces no
+    surplus at all. **The check shipped as that incident's fix would have
+    been silent for that incident.** Raised by a consumer lane as a
+    question; measured before answering, with a control (dropping one
+    planned file makes the surplus check name it).
+
+    ⚠️ TWO OUTCOMES, TWO WORDINGS, on that lane's insistence:
+
+        a different mark  -> a collision that EXISTS. One line per file.
+        no mark at all    -> this check knows nothing about them; they
+                             predate it. ONE line for the whole directory.
+
+    Saying both with the same word floods the first run of every face, and
+    a reader who has once been shown a flood stops reading the line that
+    finally matters.
+    """
+    if not output_dir.is_dir():
+        return []
+    lines = []
+    foreign, unmarked = [], []
+    for q in sorted(will_write):
+        if not q.is_file():
+            continue
+        who = read_producer(q)
+        if who is None:
+            unmarked.append(q)
+        elif who != command:
+            foreign.append((q, who))
+    for q, who in foreign:
+        lines.append(
+            f"{q.name} in {output_dir} was written by `jsonui-doc {who}` and "
+            f"this run overwrites it with `{command}` output. Nothing is "
+            f"deleted by this warning — check the directory is the one you "
+            f"meant.")
+    if unmarked:
+        shown = ", ".join(q.name for q in unmarked[:5])
+        more = "\u2026" if len(unmarked) > 5 else ""
+        lines.append(
+            f"{len(unmarked)} file(s) in {output_dir} carry no producer mark "
+            f"({shown}{more}), so this run cannot tell whether they came from "
+            f"this command. They predate the mark and will carry it once "
+            f"rewritten. This is not a report of a collision.")
+    return lines
+
+
 def report_foreign_output(output_dir: Path, will_write, suffix: str) -> list[str]:
     """Files already in *output_dir* that this run does NOT write.
 
@@ -1169,6 +1311,9 @@ def cmd_generate_spec_batch(args, input_dir: Path):
     ]
     for _line in report_foreign_output(output_dir, _planned, suffix):
         print(f"WARNING: {_line}", file=sys.stderr)
+    for _line in report_overwrites_by_another_producer(
+            output_dir, _planned, "spec-batch"):
+        print(f"WARNING: {_line}", file=sys.stderr)
 
     validator = SpecValidator()
     success_count = 0
@@ -1208,7 +1353,7 @@ def cmd_generate_spec_batch(args, input_dir: Path):
 
         output_path.parent.mkdir(parents=True, exist_ok=True)
         with open(output_path, 'w', encoding='utf-8') as f:
-            f.write(content)
+            f.write(stamp_producer(content, "spec-batch", suffix))
 
         print(f"  OK: {rel_path} -> {output_name}")
         success_count += 1
@@ -1505,6 +1650,9 @@ def cmd_generate_component_batch(args, input_dir: Path):
     ]
     for _line in report_foreign_output(output_dir, _planned, suffix):
         print(f"WARNING: {_line}", file=sys.stderr)
+    for _line in report_overwrites_by_another_producer(
+            output_dir, _planned, "component-batch"):
+        print(f"WARNING: {_line}", file=sys.stderr)
 
     validator = SpecValidator()
     success_count = 0
@@ -1530,7 +1678,7 @@ def cmd_generate_component_batch(args, input_dir: Path):
 
         output_path.parent.mkdir(parents=True, exist_ok=True)
         with open(output_path, 'w', encoding='utf-8') as f:
-            f.write(content)
+            f.write(stamp_producer(content, "component-batch", suffix))
 
         print(f"  OK: {rel_path} -> {output_name}")
         success_count += 1

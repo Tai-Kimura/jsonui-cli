@@ -43,7 +43,28 @@ py_suite() {
   say "   exit=$rc"
   [ "$rc" = 0 ] || bad "$dir: pytest exit $rc"
 }
-py_suite test_tools jsonui_test_cli
+# 🚨 THE SAME `--ignore` CI USES, AND FOR THE SAME REASON. Reported by a
+# triage lane 2026-09-08 after their gate went red on a branch that touched
+# no Python at all:
+#
+#   ci.yml:184  pytest --ignore=tests/test_stub_name_tables_reach_a_compiler.py
+#   ci.yml:207  stub-identifier-tables:  runs-on: macos-15 + `brew install kotlin`
+#   this runner  no --ignore
+#
+# That arm FAILS (deliberately, not skips) when `CI` is set and `kotlinc` is
+# absent — a skipped gate gates nothing. This machine has no kotlinc, so
+# `CI=1 run-suites.sh` was red for everyone, structurally, forever.
+#
+# ⚠️ The check does not disappear: the macos-15 job still owns it. What
+# changes is that this runner stops pretending to be its owner.
+#
+# ⚠️ DO NOT "fix" this by unsetting CI. That drops the arm into the skipped
+# count, where it vanishes into a green summary — and this runner's own
+# reports said "1635 passed, 1 skipped" for three candidates without anyone
+# asking WHICH ONE. The denominator of a gate is CI's job list.
+say "== CI=${CI:-(unset)} — the test_tools leg mirrors ci.yml:184's --ignore"
+py_suite test_tools jsonui_test_cli \
+    --ignore=tests/test_stub_name_tables_reach_a_compiler.py
 py_suite document_tools jsonui_doc_cli
 py_suite jui_tools jui_cli
 
@@ -148,9 +169,27 @@ rc=$?; say "   exit=$rc"; [ "$rc" = 0 ] || bad "emitted kotlin: exit $rc"
 # `status:`. Measured before choosing — "status: open" misses a ticket left at
 # `investigating`, and "name does not match YYYY-MM-DD-" flags 51 of this
 # lane's own version reports.
+#
+# 🚨 THE GLOB MUST BE (N), AND THE MISSING DIRECTORY MUST SAY SO. Reported by
+# a triage lane against this leg's first version, measured in a worktree:
+# `docs/` is gitignored, so a worktree or a clean clone HAS NO `docs/bugs/`.
+# zsh's default NOMATCH made `for f in "$C"/docs/bugs/reports/*.md` fatal —
+# the runner EXITED HERE, and `== shared/core parity` and the closing
+# `failures=` line never printed. A leg that cannot find its corpus took the
+# whole gate with it, and the abort looked like a short run rather than a
+# failure. The "12 legs" measured before that report were the shared
+# checkout's 12.
+#
+# ⚠️ `scanned 0` and `no corpus` must not print the same thing: `misfiled=0`
+# is produced both by "nothing is misfiled" and by "nothing was looked at".
+# The absent-directory case is named SKIPPED rather than counted.
 say "== misfiled tickets (a ticket under reports/ is invisible to the inbox scan)"
+if [ ! -d "$C/docs/bugs/reports" ]; then
+  say "   SKIPPED: no docs/bugs/reports in this checkout (docs/ is gitignored,"
+  say "            so a worktree or fresh clone does not have it)"
+else
 mis=0
-for f in "$C"/docs/bugs/reports/*.md; do
+for f in "$C"/docs/bugs/reports/*.md(N); do
   [ -f "$f" ] || continue
   # `id:` AND an UNRESOLVED status. Presence of `status:` alone is not enough:
   # a closed investigation's report legitimately keeps ticket-style frontmatter
@@ -163,8 +202,11 @@ for f in "$C"/docs/bugs/reports/*.md; do
     mis=$((mis+1))
   fi
 done
-say "   misfiled=$mis  (scanned $(ls -1 "$C"/docs/bugs/reports/*.md 2>/dev/null | wc -l | tr -d " ") report(s))"
+scanned=$(ls -1 "$C"/docs/bugs/reports/*.md(N) 2>/dev/null | wc -l | tr -d " ")
+say "   misfiled=$mis  (scanned $scanned report(s))"
+[ "$scanned" != 0 ] || bad "misfiled leg scanned 0 reports in a checkout that HAS the directory"
 [ "$mis" = 0 ] || bad "misfiled tickets under reports/: $mis — move them to docs/bugs/"
+fi
 
 # --- shared/core mirrors ----------------------------------------------------
 say "== shared/core parity"

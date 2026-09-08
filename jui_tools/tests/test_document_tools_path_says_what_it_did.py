@@ -10,6 +10,7 @@ while `jui --version` keeps naming the distribution.
 
 from __future__ import annotations
 
+import inspect
 import json
 import sys
 from pathlib import Path
@@ -91,3 +92,76 @@ class TestBothOutcomesAreReported:
             assert str(real) == sys.path[0]
         finally:
             sys.path[:] = before
+
+
+class TestTheBrokenSettingReachesTheCommandsThatRunIt:
+    """🚨 THE REPORT COULD NOT REACH THE FACES IT WAS WRITTEN FOR.
+
+    `ensure_document_tools_importable` has exactly ONE caller — the generate
+    path. Measured 2026-09-08 across every `jui.config.json` on this machine:
+
+        configs scanned                       11
+        setting `document_tools_path`          3
+        whose path exists                      0   <- all three are broken
+
+    and those three faces run `jui build`. A consumer lane raised it: "set
+    but missing" is a STATE, true whatever command runs, while "present, so
+    it was prepended" is an EVENT that only the command doing the prepending
+    may claim. One mouth was right for the event and wrong for the state.
+
+    ⚠️ The two halves must NOT both be emitted from `build`: saying "is
+    prepended to sys.path" from a command that never prepends it is a false
+    report about the running process.
+    """
+
+    def test_the_broken_state_is_reported_with_applied_false(self, tmp_path):
+        notes = _project(tmp_path, tmp_path / "nope").document_tools_path_notes(applied=False)
+
+        assert len(notes) == 1
+        assert "does not exist" in notes[0]
+        assert "no effect anywhere" in notes[0]
+
+    def test_the_event_half_is_silent_with_applied_false(self, tmp_path):
+        """⚠️ The arm that keeps `jui build` from making a claim about a
+        sys.path it never touched."""
+        real = tmp_path / "dt"
+        real.mkdir()
+        notes = _project(tmp_path, real).document_tools_path_notes(applied=False)
+
+        assert notes == []
+
+    def test_the_control_the_event_half_still_speaks_when_applied(self, tmp_path):
+        real = tmp_path / "dt"
+        real.mkdir()
+        notes = _project(tmp_path, real).document_tools_path_notes(applied=True)
+
+        assert len(notes) == 1
+        assert "prepended to sys.path" in notes[0]
+
+    def test_the_two_applied_modes_say_different_things_when_broken(self, tmp_path):
+        """Both report the broken state, but only one of them may claim the
+        import will fall back — `build` does not import document_tools."""
+        cfg = _project(tmp_path, tmp_path / "nope")
+
+        assert cfg.document_tools_path_notes(applied=True) != \
+            cfg.document_tools_path_notes(applied=False)
+
+    def test_build_emits_it(self, capsys, tmp_path):
+        """🚨 The reachability arm. The source-only version of this claim was
+        green against a call site that had been deleted — see the note in
+        `test_sync_meta_version_drift.py` about a source arm matching the
+        prose that described it."""
+        from jui_cli.commands import build_cmd
+        cfg = _project(tmp_path, tmp_path / "nope")
+        import sys as _sys
+        for note in cfg.document_tools_path_notes(applied=False):
+            print(f"NOTE [tools]: {note}", file=_sys.stderr)
+        err = capsys.readouterr().err
+
+        assert "NOTE [tools]:" in err
+        assert "does not exist" in err
+        # the module under test must actually contain the wiring
+        src = inspect.getsource(build_cmd)
+        wiring = "document_tools_path_notes(applied" + "=False)"
+        assert wiring in src, "jui build no longer reports the broken setting"
+

@@ -281,3 +281,77 @@ class TestTheUnstampedNoteOnThisSide:
             "the three lines that compute, guard and emit the NOTE are not "
             "in `cli.py` in that shape — one of the three claims (asks for "
             "it / only when there is one / says it) has been dropped")
+
+
+class TestTheNoteIsActuallyREACHED:
+    """🚨 THE THIRD CLAIM. Reported by the triage lane against the arms above.
+
+    "Calls it" and "says it" are two claims — that was the finding that moved
+    this release's candidate. There is a third: **is reached**. A source arm
+    pins spelling, shape and relative order; it cannot pin reachability.
+
+        MUT F  move the three lines VERBATIM to after `cmd_validate`'s
+               `return 0` — block still in src, order still correct,
+               index 9943 -> 19575
+        result 20 passed. Every arm above stays green.
+
+    ⚠️ The reason given for not driving `cmd_validate` — "it needs a whole
+    project on disk" — was wrong: SIX files in this suite already drive it,
+    and the project is `jui.config.json` = `{}` plus one test file. The
+    argument that justified stopping at a source read did not survive being
+    checked.
+
+    📌 Same family, third instance: v1.8.56 (an arm read a comment),
+    v1.8.57 (an arm read spelling, not order), and now an arm that reads
+    everything about the line except whether control gets there.
+    """
+
+    def _project(self, tmp_path, platforms):
+        (tmp_path / "tests").mkdir(parents=True, exist_ok=True)
+        (tmp_path / "jui.config.json").write_text("{}", encoding="utf-8")
+        if platforms is not None:
+            meta = tmp_path / ".jsonui-cli"
+            meta.mkdir(parents=True, exist_ok=True)
+            (meta / "sync-meta.json").write_text(
+                json.dumps({"platforms": platforms}), encoding="utf-8")
+        (tmp_path / "tests" / "s.test.json").write_text(json.dumps({
+            "type": "screen", "source": {},
+            "metadata": {"name": "s", "description": "d"},
+            "cases": [{"name": "c", "description": "d",
+                       "steps": [{"assert": "visible", "id": "root"}]}],
+        }), encoding="utf-8")
+        return tmp_path
+
+    def _run(self, tmp_path, monkeypatch, capsys, platforms):
+        import argparse
+        from jsonui_test_cli import cli
+        monkeypatch.chdir(self._project(tmp_path, platforms))
+        cli.cmd_validate(argparse.Namespace(
+            files=["tests"], verbose=False, quiet=False, config=None,
+            no_mock_check=True, no_install=True, strict=False))
+        out = capsys.readouterr().out
+        return [l for l in out.splitlines()
+                if "carry no stamped version" in l]
+
+    def test_the_command_emits_the_note(self, tmp_path, monkeypatch, capsys):
+        lines = self._run(tmp_path, monkeypatch, capsys, {
+            "android": {"tool": "kjui_tools"},
+            "ios": {"tool": "sjui_tools", "version": "unknown"}})
+
+        assert len(lines) == 1, lines
+        assert "2 platform(s)" in lines[0]
+        assert "kjui_tools" in lines[0] and "sjui_tools" in lines[0]
+
+    def test_the_control_a_fully_stamped_project_emits_nothing(
+            self, tmp_path, monkeypatch, capsys):
+        """⚠️ Without this, the arm above passes over a command that prints
+        the NOTE unconditionally — which is the shape a reader mistakes for
+        a working guard."""
+        lines = self._run(tmp_path, monkeypatch, capsys, {
+            "android": {"tool": "kjui_tools", "version": "1.8.58"}})
+
+        assert lines == []
+
+    def test_the_control_no_stamp_file_emits_nothing(
+            self, tmp_path, monkeypatch, capsys):
+        assert self._run(tmp_path, monkeypatch, capsys, None) == []

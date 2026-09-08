@@ -170,6 +170,23 @@ def cmd_build(args: argparse.Namespace) -> int:
 
     _report_toolchain_sync(config_mgr)
 
+    # 🚨 A `document_tools_path` that points at nothing is a property of the
+    # CONFIG, not of one command, and until now the only place that said so
+    # was `jui generate` (config_manager's importer has exactly one caller).
+    # Measured 2026-09-08 across every config on this machine: 3 of 11 set the
+    # key and ALL THREE point at a directory that does not exist — and those
+    # three faces run `jui build`, not `jui generate`. The report existed and
+    # could not reach the population it was written for.
+    #
+    # ⚠️ `applied=False` because THIS command does not prepend the path. The
+    # present-and-used half would be a false statement here; only the broken
+    # half is command-independent. Reporting the wrong half from the wrong
+    # command is the same shape as describing a face from a version string
+    # that no longer names what runs.
+    import sys as _sys
+    for _note in config_mgr.document_tools_path_notes(applied=False):
+        print(f"NOTE [tools]: {_note}", file=_sys.stderr)
+
     # Hard gate for responsive variant files (home@regular.json) — refuse
     # to distribute/build while the v1 variant contract is violated
     # (docs/plans/2026-07-24-v1-unsupported/06a-design.md D3).

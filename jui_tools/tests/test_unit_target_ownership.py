@@ -158,30 +158,79 @@ class TheViewModelSpellingMatchesTheGenerator(unittest.TestCase):
     compares the generator's own source rather than restating the convention.
     """
 
-    def test_build_cmd_constructs_the_same_name(self):
-        from jui_cli.commands import build_cmd
+    #: `build_cmd` also writes `f"{spec.name}ViewModelProtocol"`. Both halves
+    #: of a substring test -- "spec.name" and "ViewModel" -- are true of it,
+    #: so a test that asks whether SOME f-string mentions both is satisfied by
+    #: the sibling and cannot see the naming rule disappear. Measured: with
+    #: the rule deleted and only the Protocol f-string left, all twenty arms
+    #: in this file stayed green. Exact match on the unparsed f-string is what
+    #: separates them.
+    NEAR_MISS = "ViewModelProtocol"
 
-        src = inspect.getsource(build_cmd)
-        wanted = ownership.view_model_name("{spec.name}")
-        self.assertIn(
-            wanted, src,
-            f"build_cmd no longer spells a ViewModel as {wanted!r}; source 1 "
-            "of the ownership rule would stop matching without failing")
+    def _generator_fstrings(self) -> set[str]:
+        """Every f-string in `build_cmd`, as source.
 
-    def test_the_generator_builds_it_from_the_screen_name(self):
-        """Not just the suffix: the name is the SCREEN's, which is what makes
-        the owner derivable at all."""
+        From the AST, never from the raw text: a spelling written in a comment
+        or docstring satisfies a text search while the code that produced it
+        is gone. Measured, on this very file -- deleting the rule and leaving
+        the spelling in one comment kept the old text-searching arm green.
+        """
         from jui_cli.commands import build_cmd
 
         tree = ast.parse(inspect.getsource(build_cmd))
-        joined = {
-            ast.unparse(node)
-            for node in ast.walk(tree)
-            if isinstance(node, ast.JoinedStr)
-        }
-        self.assertTrue(
-            any("spec.name" in j and "ViewModel" in j for j in joined),
-            "no f-string in build_cmd joins a spec name to 'ViewModel'")
+        return {ast.unparse(n) for n in ast.walk(tree)
+                if isinstance(n, ast.JoinedStr)}
+
+    def test_build_cmd_builds_exactly_this_name_from_the_screen_name(self):
+        """One arm, exact, and derived from the module's own constant.
+
+        Not just the suffix: the name is the SCREEN's, which is what makes the
+        owner derivable at all. `ast.unparse` normalises quoting, so this
+        compares against one canonical spelling rather than guessing how the
+        generator quotes it.
+        """
+        wanted = "f'{spec.name}" + ownership.VIEW_MODEL_SUFFIX + "'"
+        # Only the candidates, so a failure prints the near misses rather than
+        # every f-string in a 3000-line module. An unreadable failure gets
+        # skimmed, and this one has to be read: the near miss is the point.
+        candidates = sorted(f for f in self._generator_fstrings()
+                            if ownership.VIEW_MODEL_SUFFIX in f)
+        self.assertIn(
+            wanted, candidates,
+            f"no f-string in build_cmd is exactly {wanted}; source 1 of the "
+            f"ownership rule would stop matching without failing. These "
+            f"mention {ownership.VIEW_MODEL_SUFFIX!r} and are NOT substitutes "
+            f"for it: {candidates}")
+
+    def test_the_near_miss_sibling_would_not_satisfy_the_arm(self):
+        """The control for the arm above, and the reason it is exact.
+
+        If this ever passes trivially -- because the Protocol f-string is gone
+        -- the arm above is still correct but is no longer being distinguished
+        from anything, and this file should say so rather than quietly lose a
+        control it was written to have.
+        """
+        exact = "f'{spec.name}" + ownership.VIEW_MODEL_SUFFIX + "'"
+        sibling = "f'{spec.name}" + ownership.VIEW_MODEL_SUFFIX + "Protocol'"
+        self.assertNotEqual(exact, sibling)
+        found = self._generator_fstrings()
+        self.assertIn(sibling, found,
+                      "build_cmd no longer writes the Protocol sibling, so "
+                      "the exactness of the arm above is no longer exercised "
+                      "by the real generator")
+
+    def test_a_spelling_in_prose_alone_does_not_satisfy_the_arm(self):
+        """The other half of what went wrong: the old arm searched raw source.
+
+        A comment carrying the spelling made it pass with the rule deleted.
+        This asserts the reader is the AST, by checking a prose-only mention
+        contributes nothing to the set the arm consults.
+        """
+        prose = f'# historical note: used to write f"{{spec.name}}{ownership.VIEW_MODEL_SUFFIX}"'
+        tree = ast.parse(prose + "\nx = 1\n")
+        self.assertEqual(
+            set(), {ast.unparse(n) for n in ast.walk(tree)
+                    if isinstance(n, ast.JoinedStr)})
 
 
 class TheConstantsHoldTheValuesTheyName(unittest.TestCase):

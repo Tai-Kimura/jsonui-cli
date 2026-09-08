@@ -19,7 +19,10 @@ The specs already carry the facts; nothing was reading them:
                  top-level `name` field, so reading this as one finds None and
                  makes the rule look inapplicable — measured 2026-09-08, that
                  reading cost another lane a decision it could not close.
-    component    ⚠️ NO SUCH FACT EXISTS YET — see the warning below
+    component    a screen's `structure.customComponents[].specFile`,
+                 resolved to that component spec's `metadata.name` —
+                 required, and PascalCase-validated. Ruled 2026-09-08;
+                 see below for why that took a ruling
 
 ⚠️ The viewModel case is the one that looks absent and is not. Reading only
 `dataFlow.viewModel` shows `description`/`methods`/`vars` and no identifier,
@@ -45,55 +48,64 @@ on: discovery has no app concept (one `spec_directory` per project) while the
 doc generator keys by app (`unit_by_app`), so the CALLER supplies the frame
 and this module cannot check it.
 
-🚨 THE COMPONENT SOURCE IS UNDEFINED, NOT MERELY UNWIRED. An earlier
-version of this docstring said a component is `structure.customComponents[]
-.specFile` "resolved to the component spec's `metadata.name`". That was
-written without reading the generator, and it is wrong twice over. Measured
-2026-09-08 at v1.8.52:
+⭐ THE COMPONENT SOURCE IS RULED, AND THE RULE WAS OLDER THAN THE QUESTION.
+Ruled 2026-09-08: a component's identity IS its spec's `metadata.name`, and
+the field is required. The history is kept because it explains the shape of
+the answer, and because a reader who finds only the conclusion cannot tell a
+ruling from an invention.
+
+At v1.8.52 this docstring asserted that NO convention defined a component's
+class name. Measured then:
 
     build_cmd.py references to `custom_components`      0
     `specFile` anywhere in jui_cli                      0
-    any component → class-name convention              0
-    (positive control: `specFile` IS present in document_tools, so the
-     search was working and these zeros are real)
+    any component → class-name convention in jui_tools  0
 
-Nothing in this toolchain decides what a component contributes to an owner
-set. Compare source 1, which HAS such a fact: `jui build` writes
-`f"{spec.name}ViewModel"` (`spec.name` = the JSON's `metadata.name`), and that
-generator rule is what makes a ViewModel's owner derivable at all.
+Those zeros are real, and they are also SCOPED — every one of them was
+measured inside `jui_tools`, and the claim was written as though it covered
+the toolchain. It did not. `document_tools`' validator has required a
+component's `metadata.name` and enforced PascalCase on it since the initial
+commit:
 
-`metadata.name` cannot be taken as that identity AS IT IS READ TODAY. Every
-producer that displays it supplies a default — `"Component"`, `"Screen"`,
-`""`, and in two places the file's own stem — and a string with a default
-cannot be an identity: unnamed components would collapse onto one target, and
-the stem fallback would merge distinct components sharing a filename. No
-production site reads it as a required `metadata["name"]`.
+    _validate_required_fields(metadata, ["name", "displayName",
+                                         "description"], "metadata", result)
+    if name and not re.match(r"^[A-Z][a-zA-Z0-9]*$", name):  # class-shaped
 
-⭐ But the codebase already draws the line this rule needs. The one reader
-that uses the name for MATCHING rather than display supplies no default and
+So a convention existed the whole time, on the validating side, while the
+GENERATING side never consumed it. "No fact exists" was the wrong reading of
+"the generator does not use one". ⚠️ The lesson is not about components: a
+zero says as much about where you looked as about what is there, and this one
+was quoted into a decision before anyone asked what its scan root was.
+
+What made `metadata.name` look unusable was its readers: every producer that
+DISPLAYS it substitutes a default — `"Component"`, `"Screen"`, `""`, and in
+two places the file's own stem — and a defaulted string cannot be an identity,
+because unnamed components collapse onto one target and the stem fallback
+merges distinct components sharing a filename.
+
+But display is not the only reader, and the codebase already drew the line.
+The one reader that uses the name for MATCHING supplies no default and
 declines instead (`document_tools/.../cli.py`, component-usage search):
 
     name = ((data.get("metadata") or {}).get("name") ...)
     if not isinstance(name, str) or not name:
         return None            # "cannot answer", never a substitute
-    needle = f'"{name}"'
 
-while the sibling that reconciles DECLARATIONS matches by file name and never
-opens `metadata.name` at all. So the split is already practised: display may
-substitute, matching may not. A decision to make this source real would
-follow that precedent — require the field where it carries identity — rather
-than invent a convention.
+Display may substitute; matching may not. The ruling follows that line rather
+than crossing it, which is why it required the field instead of blessing a
+default — and why source 1 is sound on the same footing: `spec.name` is read
+as `metadata.get("name", "")`, but the validator requires `metadata.name` on
+a screen spec too, so the default is a reader's fallback and not the identity.
 
-So `components_declared_by_screen` stays a parameter with no production
-caller, and a zero owner count stays `UNDETERMINED` rather than a permission.
-Ruled 2026-09-08: inventing a convention here would add a third spelling to
-the toolchain, so the limit is named instead of filled. Wiring this source
-needs a spec decision about what a component's identity IS — not an
-implementation.
+⚠️ A zero owner count still stays `UNDETERMINED` when the map is not supplied.
+`None` and `{}` are different facts: `None` means the component specs could
+not be read, `{}` means they were read and the project declares none. A caller
+that reports both with one word turns a missing distribution into a clean
+project.
 
-This module is PURE: whatever that identity turns out to be, resolving it
-needs to read component specs, so the caller would do that and pass the
-result in; see `components_declared_by_screen` on `owner_screens`.
+This module is PURE: resolving `specFile` to `metadata.name` reads component
+specs, so the caller does that and passes the result in; see
+`components_declared_by_screen` on `owner_screens`.
 """
 
 from __future__ import annotations
