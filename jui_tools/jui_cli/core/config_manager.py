@@ -153,7 +153,13 @@ class ConfigManager:
     @property
     def component_spec_directory(self) -> Path:
         config = self.load()
-        return self.project_root / config.get("component_spec_directory", "docs/components/json")
+        # The literal used to be written here AND in DEFAULTS above — the
+        # same fact twice in one file, and a third time in init_cmd. Read the
+        # shared default so a fourth reader cannot disagree with the other
+        # three (one already did: jsonui-test's ownership check had none).
+        return self.project_root / config.get(
+            "component_spec_directory",
+            DEFAULT_CONFIG.get("component_spec_directory", "docs/components/json"))
 
     @property
     def strings_file(self) -> Path | None:

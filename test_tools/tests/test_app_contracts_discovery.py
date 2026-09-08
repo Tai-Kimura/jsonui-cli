@@ -211,7 +211,14 @@ class TestTheDeclarationSiteIsJudged:
             app=APP_BLOCK)
         _c, _s, _d, problems, _f, _u, _a, notes = uc.discover_unit_contracts(root)
         assert problems == [], problems
-        assert not [n for n in notes if "SharedHttpClient" in n], notes
+        # ⚠️ Narrowed 2026-09-08. This asserted that NO note mentions the
+        # target, which stopped being the right claim when a separate channel
+        # started counting targets no source owns — `SharedHttpClient` is one,
+        # and that line naming it is correct. What this arm owns is that the
+        # app-level DIRECTION stays silent, so it names that direction's
+        # wording instead of the whole note list.
+        assert not [n for n in notes
+                    if "SharedHttpClient" in n and "may belong in" in n], notes
 
     def test_a_screen_declaring_its_own_target_is_not_reported(self, tmp_path):
         """The second control: the rule must not fire on screen-level sites,
@@ -404,7 +411,15 @@ class TestTheBlindSpotIsPrintedNotCounted:
         the `if app_specs` gate would be silent, and the note would go missing
         for every project that has not adopted the spec type yet."""
         root = _project(tmp_path, screens={"chat": SCREEN_BLOCK})
-        assert uc.check_unit_contracts(root).notes == [uc.OWNERSHIP_PARTIAL]
+        notes = uc.check_unit_contracts(root).notes
+        # Equality was the right assertion while this was the only note. A
+        # second channel now counts targets no source owns, and this fixture
+        # has one (`ChatViewModel` on a screen named `chat` resolves to
+        # `chatViewModel`), so the list is checked for membership and the
+        # extra line is identified rather than tolerated silently.
+        assert uc.OWNERSHIP_PARTIAL in notes, notes
+        assert all(n == uc.OWNERSHIP_PARTIAL or "resolve to NO owner" in n
+                   for n in notes), notes
 
 
 class TestTheComponentSourceIsResolvedByProduction:
@@ -663,3 +678,155 @@ class TestTheScreenLevelDirectionIsWiredToo:
         report = uc.check_unit_contracts(root)
         assert not any("screens own it" in p for p in report.problems), \
             uc.format_report(report)
+
+
+class TestWhatNeitherDirectionReports:
+    """Reported 2026-09-08 by a face that read its own specs by hand.
+
+    ⚠️ The face did that because the note said owner counts were "complete".
+    It meant every SOURCE was consulted; it was read as every TARGET being
+    covered. 14 of that face's 26 declared targets resolved to ZERO owners,
+    and neither direction says anything about zero — one speaks for
+    exactly-one, the other for two-or-more.
+
+    Both halves moved in one commit: the wording no longer claims coverage,
+    and the count is printed instead of being left for someone to compute by
+    hand or never.
+    """
+
+    SCREENS = {"Dashboard": None}
+    #: `SharedHttpClient` is owned by nothing: not a ViewModel name, not in
+    #: dataFlow, not a component. Exactly the shape the face measured.
+    APP = {"target": "SharedHttpClient", "cases": [{"name": "retries_once"}]}
+
+    def test_a_target_no_source_owns_is_counted(self, tmp_path):
+        root = _project(tmp_path, screens=self.SCREENS, components={},
+                        app=self.APP)
+        report = uc.check_unit_contracts(root)
+        assert any("resolve to NO owner" in n and "SharedHttpClient" in n
+                   for n in report.notes), report.notes
+
+    def test_it_is_a_count_not_a_finding(self, tmp_path):
+        """A shared utility that legitimately belongs nowhere and a misspelled
+        target both land here, and this rule cannot tell them apart without
+        `known_targets` — which no caller supplies. Printing a number is
+        honest; failing the run would be inventing a verdict."""
+        root = _project(tmp_path, screens=self.SCREENS, components={},
+                        app=self.APP)
+        report = uc.check_unit_contracts(root)
+        assert report.ok, uc.format_report(report)
+
+    def test_the_control_an_owned_target_is_not_counted(self, tmp_path):
+        """Without this, a rule that counted every target would pass above.
+
+        ⚠️ The screen is `Chat`, not `chat`. The shared `SCREEN_BLOCK` fixture
+        declares `ChatViewModel` on a screen named `chat`, and the generator
+        names that screen's ViewModel `chatViewModel` — so the shared fixture's
+        target is genuinely unowned, and using it here would have made this
+        control assert the opposite of what it means. The first cut did
+        exactly that and failed, which is the fixture being wrong rather than
+        the rule.
+        """
+        root = _project(
+            tmp_path, components={},
+            screens={"Chat": {"target": "ChatViewModel",
+                              "cases": [{"name": "sends"}]}})
+        report = uc.check_unit_contracts(root)
+        assert not any("resolve to NO owner" in n for n in report.notes), \
+            report.notes
+
+    def test_the_marker_is_emitted_not_just_named(self):
+        """⚠️ Reported independently by two faces: the constant NAMES
+        (`OWNERSHIP_COMPLETE`/`_PARTIAL`) live only in this module, so a
+        consumer grepping for them gets 0 hits and reads that as the check not
+        existing — one face wrote exactly that before catching it. Matching the
+        prose instead ties every consumer gate to wording that moves between
+        releases. So the discriminator has to be IN the output."""
+        assert uc.OWNERSHIP_MARKER_COMPLETE in uc.OWNERSHIP_COMPLETE
+        assert uc.OWNERSHIP_MARKER_PARTIAL in uc.OWNERSHIP_PARTIAL
+        assert uc.OWNERSHIP_MARKER_COMPLETE not in uc.OWNERSHIP_PARTIAL
+        assert uc.OWNERSHIP_MARKER_PARTIAL not in uc.OWNERSHIP_COMPLETE
+
+    def test_the_marker_reaches_the_rendered_lines(self, tmp_path):
+        """The pair to the arm above: being in the constant says it was
+        WRITTEN; only reading the rendered output says it reaches a consumer's
+        grep. That gap shipped in v1.8.53 — a field collected and never
+        printed, with every arm green."""
+        root = _project(tmp_path, screens={"chat": SCREEN_BLOCK},
+                        components={}, app=APP_BLOCK)
+        lines = uc.format_report(uc.check_unit_contracts(root))
+        assert any(uc.OWNERSHIP_MARKER_COMPLETE in line for line in lines), lines
+
+    def test_the_complete_wording_no_longer_claims_coverage(self):
+        """The exact misreading, pinned. `complete` next to `owner counts` is
+        what the face read as coverage."""
+        assert "SOURCES complete is not TARGETS covered" in uc.OWNERSHIP_COMPLETE
+        assert "owner counts below are complete" not in uc.OWNERSHIP_COMPLETE
+
+
+class TestTheDefaultIsNotOneReaderShortOfThree:
+    """Reported 2026-09-08 by a face whose directory layout was correct all
+    along — only the config KEY was absent.
+
+    `jui` has applied a default for `component_spec_directory` since before
+    this check existed (`config_manager`), and `init_cmd` writes it into new
+    configs. This module used a bare `.get()` with no default, so a project
+    created before `init_cmd` started writing the key had `jui` working from
+    the default while THIS check alone went to `OWNERSHIP_PARTIAL` — with no
+    problem line, so nothing said why.
+
+    📌 The same fact was a literal in three places and absent from a fourth
+    reader. Four implementations of one default; the one that degraded quietly
+    is the one nobody noticed for a day.
+    """
+
+    DECL = {"Dashboard": [
+        {"name": "Picker", "specFile": "picker.component.json"}]}
+
+    def test_a_config_without_the_key_still_resolves_the_source(self, tmp_path):
+        """The defect. `components=None` on `_project` writes NO
+        `component_spec_directory` into the config, and the default directory
+        is created by hand at the layout `jui` would have assumed."""
+        root = _project(tmp_path, screens={"Dashboard": None},
+                        declares=self.DECL, app=APP_BLOCK)
+        comp = root / "docs" / "components" / "json"
+        comp.mkdir(parents=True)
+        (comp / "picker.component.json").write_text(
+            json.dumps({"type": "component_spec",
+                        "metadata": {"name": "Picker"}}), encoding="utf-8")
+        report = uc.check_unit_contracts(root)
+        assert uc.OWNERSHIP_COMPLETE in report.notes, report.notes
+        assert uc.OWNERSHIP_PARTIAL not in report.notes
+
+    def test_a_project_with_no_components_is_not_scolded(self, tmp_path):
+        """⚠️ The noise the default could have introduced.
+
+        A project that never wrote the key and has no components must not be
+        told every run that its configuration is broken — the problem line is
+        for an EXPLICIT directory that is missing, which is a real config
+        error. Without this arm the fix above would trade a silent gap for a
+        permanent false alarm on every face that has no components.
+        """
+        root = _project(tmp_path, screens={"chat": SCREEN_BLOCK}, app=APP_BLOCK)
+        report = uc.check_unit_contracts(root)
+        assert not any("configured but not a directory" in p
+                       for p in report.problems), report.problems
+
+    def test_an_explicit_but_missing_directory_is_still_reported(self, tmp_path):
+        """The control for the arm above: a config error must stay loud."""
+        root = _project(tmp_path, screens={"chat": SCREEN_BLOCK}, app=APP_BLOCK)
+        cfg = root / "jui.config.json"
+        data = json.loads(cfg.read_text(encoding="utf-8"))
+        data["component_spec_directory"] = "docs/nowhere"
+        cfg.write_text(json.dumps(data), encoding="utf-8")
+        report = uc.check_unit_contracts(root)
+        assert any("configured but not a directory" in p
+                   for p in report.problems), report.problems
+
+    def test_the_default_is_named_once(self):
+        """The SSoT itself. If a reader re-introduces its own literal, this
+        stays green — so the arm below counts the literals instead."""
+        keys = uc._config_keys()
+        assert keys is not None
+        assert keys.default_for("component_spec_directory") == "docs/components/json"
+        assert keys.default_for("a_key_with_no_default") is None

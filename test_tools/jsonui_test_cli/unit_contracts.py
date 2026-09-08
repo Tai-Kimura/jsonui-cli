@@ -86,12 +86,24 @@ OWNERSHIP_UNAVAILABLE = (
 #: the same commit as the promotion below. A message that still calls the
 #: count a lower bound while a finding fires on it tells the reader the tool
 #: does not trust its own result.
+#: ⚠️ Both strings begin with a STABLE machine-readable marker. Reported
+#: independently by two consumer faces on 2026-09-08: the constant names
+#: `OWNERSHIP_COMPLETE` / `OWNERSHIP_PARTIAL` live only in this file, so a
+#: consumer who greps for them gets 0 hits and reads that as "this check does
+#: not exist" — one face wrote exactly that before catching it. Matching the
+#: prose instead makes every consumer's gate depend on wording that moves
+#: between releases. So the discriminator is emitted, not merely intended.
+OWNERSHIP_MARKER_COMPLETE = "[ownership:complete]"
+OWNERSHIP_MARKER_PARTIAL = "[ownership:partial]"
+
 OWNERSHIP_COMPLETE = (
-    "declaration sites were compared against ViewModel, repository, useCase "
-    "and component ownership. A component's identity is its spec's "
-    "`metadata.name` (required — see shared/core/component_identity.py), so "
-    "owner counts below are complete and app-level sites are findings, not "
-    "hints."
+    f"{OWNERSHIP_MARKER_COMPLETE} every ownership SOURCE was consulted — "
+    "ViewModel, repository, useCase and component. A component's identity is "
+    "its spec's `metadata.name` (required — see "
+    "shared/core/component_identity.py), so app-level sites are findings, not "
+    "hints. ⚠️ SOURCES complete is not TARGETS covered: a target that no "
+    "source resolves has zero owners, which is neither 'exactly one' nor 'two "
+    "or more', so NEITHER direction reports it. See the unowned count below."
 )
 
 #: Printed when the component source could NOT be resolved — no
@@ -101,8 +113,11 @@ OWNERSHIP_COMPLETE = (
 #: source could not be consulted" are different facts, and one string for
 #: both is how a distribution problem reads as a clean project.
 OWNERSHIP_PARTIAL = (
-    "declaration sites were compared against ViewModel, repository and "
-    "useCase ownership only — the component source could NOT be resolved, so "
+    f"{OWNERSHIP_MARKER_PARTIAL} declaration sites were compared against "
+    "ViewModel, repository and "
+    "useCase ownership only — the component source could NOT be resolved "
+    "(no `component_spec_directory` in jui.config.json, or it does not "
+    "exist), so "
     "every owner count below is a LOWER BOUND. App-level sites are therefore "
     "HINTS and fail nothing — a target owned by one screen through a "
     "component and another through dataFlow would appear there wrongly. "
@@ -144,6 +159,16 @@ def _identity_rule():
     return shared_core.load("component_identity")
 
 
+def _config_keys():
+    """`shared/core/config_keys`, or None when it is not in this tool tree."""
+    _prefer_sibling_jui_cli()
+    try:
+        from jui_cli.core import shared_core
+    except ImportError:
+        return None
+    return shared_core.load("config_keys")
+
+
 def _component_reader(project_root, config):
     """``(read, component_dir)`` for this project, or ``(None, None)``.
 
@@ -157,11 +182,29 @@ def _component_reader(project_root, config):
     from a face with no components.
     """
     directory = (config or {}).get("component_spec_directory")
+    explicit = bool(directory)
     if not directory:
-        return None, None
+        # 🚨 Until 2026-09-08 this returned immediately, and the run went
+        # silently to PARTIAL. `jui` has applied a default for this key all
+        # along (config_manager), and `init_cmd` writes it into new configs —
+        # so a project created before that started had `jui` working from the
+        # default while THIS check alone reported it could not resolve the
+        # component source. The face that found it had the right directory
+        # layout the whole time; only the config key was absent.
+        #
+        # The default now comes from shared/core, where it is named once
+        # instead of being a literal in three places.
+        keys = _config_keys()
+        directory = keys.default_for("component_spec_directory") if keys else None
+        if not directory:
+            return None, None
     base = (Path(project_root) / directory).resolve()
     if not base.is_dir():
-        return None, base
+        # ⚠️ Only an EXPLICIT directory that is missing is a configuration
+        # error worth a problem line. A project that simply has no components
+        # would otherwise be told its config is broken every run, for a key it
+        # never wrote — noise that arrived with the default, not before it.
+        return None, (base if explicit else None)
 
     def read(spec_file):
         candidate = base / spec_file
@@ -286,6 +329,53 @@ def _app_declarations_in_the_wrong_place(cases, screen_specs, components=None):
                 f"records that no single screen is."
             )
     return findings, hints
+
+
+def _targets_no_source_resolves(cases, screen_specs, components=None) -> list[str]:
+    """One line naming how many declared targets NO source owns, or [].
+
+    ⚠️ This exists because a face measured what the two directions above are
+    blind to and got a number nobody expected: 14 of its 26 declared targets
+    resolved to ZERO owners, and neither direction says a word about them.
+    The app-level direction speaks for `exactly one owner`, the screen-level
+    one for `two or more`; zero is neither.
+
+    📌 The face reached that number by reading its specs by hand after the
+    note claimed owner counts were "complete". The note meant every SOURCE was
+    consulted. It was read as every TARGET being covered — a fair reading of
+    what it said, and the reason both the wording and this line changed
+    together. A count the tool refuses to print is a count someone computes by
+    hand, or never.
+
+    ⚠️ Deliberately NOT a finding, and not a hint that suggests an action.
+    A target no source resolves may be a shared utility that legitimately
+    belongs nowhere, or a typo, and this rule cannot tell those apart without
+    `known_targets`, which no caller supplies. Reporting a number is honest;
+    reporting a verdict would invent one.
+    """
+    rule = _ownership_rule()
+    if rule is None:
+        return []
+    seen = set()
+    unowned = []
+    for case in cases:
+        if case.target in seen:
+            continue
+        seen.add(case.target)
+        _kind, owners = rule.classify(case.target, screen_specs, components)
+        if not owners:
+            unowned.append(case.target)
+    if not unowned:
+        return []
+    shown = ", ".join(sorted(unowned)[:6]) + ("…" if len(unowned) > 6 else "")
+    return [
+        f"{len(unowned)} of {len(seen)} declared target(s) resolve to NO owner "
+        f"({shown}) — no ViewModel name, dataFlow entry or component identity "
+        f"matches them. Neither declaration-site direction reports these: one "
+        f"speaks for exactly-one-owner and the other for two-or-more, and zero "
+        f"is neither. This is a count, not a finding — a shared utility that "
+        f"belongs nowhere and a misspelled target both land here."
+    ]
 
 
 def _screen_declarations_in_the_wrong_place(cases, screen_specs, components=None) -> list[str]:
@@ -932,6 +1022,10 @@ def discover_unit_contracts(
     # not produce the same sentence.
     hints: list[str] = [
         OWNERSHIP_PARTIAL if components is None else OWNERSHIP_COMPLETE]
+    # Printed on every run, app spec or not: the targets this names are
+    # invisible to BOTH directions, so gating it on either one would hide it
+    # exactly where the reader has least other information.
+    hints.extend(_targets_no_source_resolves(cases, screen_specs, components))
     if app_specs:
         found, app_hints = _app_declarations_in_the_wrong_place(
             cases, screen_specs, components)

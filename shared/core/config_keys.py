@@ -23,6 +23,36 @@ and `_comment`, and a config is a reasonable place to explain itself.
 
 from __future__ import annotations
 
+#: Defaults for keys a project may leave out, named ONCE.
+#:
+#: 🚨 Added 2026-09-08 after a consumer measured the cost of not having them.
+#: `component_spec_directory`'s default was written as a literal in THREE
+#: places — `config_manager.DEFAULTS`, `config_manager.component_spec_directory`
+#: (the same file, twice), and `init_cmd` which writes it into new configs —
+#: while a fourth reader, `jsonui-test`'s ownership check, used a bare `.get()`
+#: with no default at all. So a project initialised before `init_cmd` started
+#: writing the key had `jui` working from the default and the ownership check
+#: silently reporting that it could not resolve the component source. The face
+#: that found it had the right directory layout the whole time.
+#:
+#: ⚠️ A default belongs here rather than in any one reader, because the cost
+#: is asymmetric: a reader that forgets to APPLY the default degrades quietly,
+#: and quiet degradation is what took a day to notice.
+DEFAULTS = {
+    "component_spec_directory": "docs/components/json",
+}
+
+
+def default_for(key: str):
+    """The default for *key*, or None when it has none.
+
+    Returns None rather than raising: a caller asking about a key with no
+    default is asking a legitimate question, and every call site here already
+    has to handle "the project did not say".
+    """
+    return DEFAULTS.get(key)
+
+
 #: Read by `jui` itself (see jui_tools/jui_cli/core/config_manager.py).
 _JUI = frozenset({
     "project_name", "platforms", "api", "api_directory",
