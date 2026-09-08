@@ -85,6 +85,13 @@ class TestTheShapeThatWasReported:
         assert "8 file(s)" in lines[0]
         assert "no producer mark" in lines[0]
         assert "not a report of a collision" in lines[0]
+        # 🚨 It must NOT promise a future that will not arrive: files written
+        # by the single-file forms before v1.8.58, and everything from
+        # `generate html`, never gain a mark. v1.8.58 said "will carry it once
+        # rewritten" and a consumer lane found that false for a directory it
+        # maintains with the single-file form.
+        assert "will not" in lines[0]
+        assert "rewritten" not in lines[0]
 
     def test_the_unmarked_case_is_one_line_however_many_files(self, tmp_path):
         """🚨 The anti-flood arm. One line per unmarked file would be 220 on
@@ -107,7 +114,13 @@ class TestACollisionThatExists:
             tmp_path, planned, "component-batch")
 
         assert len(lines) == 2
-        assert all("was written by `jsonui-doc spec-batch`" in l for l in lines)
+        assert all("was written by `jsonui-doc:spec`" in l for l in lines)
+        assert all("with `jsonui-doc:component` output" in l for l in lines)
+        # ⚠️ The prefix must not double. The first draft of the family change
+        # left the message saying "`jsonui-doc jsonui-doc:spec`", because the
+        # sentence still prepended the tool name to a value that already
+        # carried it.
+        assert not any("jsonui-doc jsonui-doc" in l for l in lines)
         assert not any("no producer mark" in l for l in lines)
 
     def test_the_two_outcomes_do_not_share_wording(self, tmp_path):
@@ -174,7 +187,7 @@ class TestTheMarkItself:
     def test_markdown_gets_a_comment_not_a_meta_tag(self):
         out = stamp_producer("# t\n", "spec-batch", ".md")
 
-        assert "<!-- jsonui-doc-producer: spec-batch -->" in out
+        assert "<!-- jsonui-doc-producer: jsonui-doc:spec -->" in out
         assert "<meta" not in out
 
     def test_markdown_still_starts_with_its_own_first_line(self):
@@ -197,13 +210,13 @@ class TestTheMarkItself:
         p.write_text(stamp_producer("# t\n" + ("filler\n" * 3000),
                                     "spec-batch", ".md"), encoding="utf-8")
 
-        assert read_producer(p) == "spec-batch"
+        assert read_producer(p) == "jsonui-doc:spec"
 
     def test_it_round_trips(self, tmp_path):
         p = tmp_path / "a.html"
         p.write_text(stamp_producer(_PAGE, "component-batch", ".html"), encoding="utf-8")
 
-        assert read_producer(p) == "component-batch"
+        assert read_producer(p) == "jsonui-doc:component"
 
     def test_an_unmarked_file_reads_as_none_not_as_a_producer(self, tmp_path):
         """🚨 None is "nothing to go on", never "someone else". The two are
@@ -242,3 +255,155 @@ class TestBothCommandsAreWiredToBoth:
             if other != command:
                 assert f'"{other}"' not in seg, \
                     f"{func} names {other} — the two mouths were crossed"
+
+
+class TestTheFamilyIsTheUnitTheCheckAsksAbout:
+    """🚨 v1.8.58 STAMPED THE SUBCOMMAND, WHICH IS FINER THAN THE QUESTION.
+
+    A consumer lane traced a 6-vs-5 discrepancy in its own uptake and found
+    that `docs/components/md`, maintained with the SINGLE-FILE form, was
+    permanently unmarked while the tool's own output told its reader the mark
+    would arrive "once rewritten". Extending the mark to the single-file form
+    then had no correct spelling:
+
+        single-file says "component-batch"  -> the mark LIES about who wrote it
+        single-file says "component"        -> the batch form rewriting it
+                                               reports a FALSE COLLISION
+
+    The check asks "is this my own output?", never "which subcommand?", so
+    the mark names the family. Extra precision in an identifier does not add
+    information here; it manufactures false positives.
+    """
+
+    def _page(self, d, name, producer):
+        d.mkdir(parents=True, exist_ok=True)
+        (d / name).write_text(stamp_producer(_PAGE, producer, ".html"),
+                              encoding="utf-8")
+        return [d / name]
+
+    @pytest.mark.parametrize("wrote,rewrites", [
+        ("component", "component-batch"),
+        ("component-batch", "component"),
+        ("spec", "spec-batch"),
+        ("spec-batch", "spec"),
+    ])
+    def test_the_two_forms_of_one_family_do_not_collide(self, tmp_path, wrote,
+                                                        rewrites):
+        planned = self._page(tmp_path, "a.html", wrote)
+
+        assert report_overwrites_by_another_producer(
+            tmp_path, planned, rewrites) == []
+
+    def test_v1858s_spelling_still_reads_as_this_tools_own_output(self, tmp_path):
+        """🚨 THE MIGRATION ARM. v1.8.58 shipped `spec-batch` /
+        `component-batch` into 208 files on one face and 5 on another. Without
+        this normalisation the rename would turn them into a foreign
+        producer — a rename becoming a collision.
+
+        ⚠️ THE BLAST RADIUS IS NARROWER THAN THIS LANE FIRST CLAIMED, and the
+        receiving face measured it rather than accepting the claim. Three
+        conditions must hold together:
+
+            the output directory already holds marked files, AND
+            the run does NOT delete before generating, AND
+            those marks carry the old spelling
+
+        The docs face `rm -rf`s its output first, so its 208 files never reach
+        the comparison at all — measured there, and reproduced here:
+
+            marked dir, regenerated in place   -> 0 lines (this arm)
+            emptied dir, regenerated           -> 0 lines (nothing to compare)
+            control: a foreign mark planted    -> 1 line (the check is alive)
+
+        📌 This lane wrote "213 files would ring at once" from the shape of
+        the code, not from how any face actually regenerates. The
+        normalisation is still right — it protects every face that DOES
+        overwrite in place — but the hazard was stated larger than measured.
+        """
+        legacy = '<meta name="jsonui-doc-producer" content="component-batch">'
+        p = tmp_path / "a.html"
+        p.write_text(_PAGE.replace("<head>", "<head>\n    " + legacy),
+                     encoding="utf-8")
+
+        assert read_producer(p) == "jsonui-doc:component"
+        assert report_overwrites_by_another_producer(
+            tmp_path, [p], "component-batch") == []
+
+        # 🚨 SILENCE IS TWO FACTS HERE, AND ONLY ONE OF THEM IS THE GOOD ONE.
+        # Raised by the receiving face when it planned this same check against
+        # its 208 real files: "0 warnings" is produced BOTH by the
+        # normalisation working AND by nothing having been rewritten at all.
+        # So the arm counts the replacement in the same breath.
+        rewritten = stamp_producer(p.read_text(encoding="utf-8"),
+                                   "component-batch", ".html")
+
+        assert "jsonui-doc:component" in rewritten
+        assert "content=\"component-batch\"" not in rewritten, \
+            "the legacy value survived a rewrite — it reads as ours but never migrates"
+
+    def test_a_legacy_markdown_mark_is_replaced_too(self, tmp_path):
+        """⚠️ The html half had an arm; the markdown half did not, and a
+        mutation that stopped removing the markdown mark stayed green. Two
+        formats are two mouths — count the arms per mouth, which is the same
+        lesson this release opened with."""
+        legacy = "# t\n\nbody\n\n<!-- jsonui-doc-producer: spec-batch -->\n"
+
+        out = stamp_producer(legacy, "spec", ".md")
+
+        assert "jsonui-doc:spec" in out
+        assert "spec-batch" not in out, \
+            "the legacy markdown mark survived a rewrite"
+        assert out.count("jsonui-doc-producer") == 1, \
+            "a second mark was appended instead of replacing the first"
+
+    def test_the_removal_touches_only_this_tools_own_mark(self):
+        """🚨 The over-cut control. A mutation widening the pattern to any
+        `<meta …>` stayed green — the removal could have been eating the
+        charset and viewport tags and no arm would have said so."""
+        page = ('<!DOCTYPE html>\n<html>\n<head>\n'
+                '    <meta charset="utf-8">\n'
+                '    <meta name="jsonui-doc-producer" content="spec-batch">\n'
+                '    <meta name="viewport" content="width=device-width">\n'
+                '</head>\n<body>x</body>\n</html>\n')
+
+        out = stamp_producer(page, "spec", ".html")
+
+        assert '<meta charset="utf-8">' in out
+        assert '<meta name="viewport" content="width=device-width">' in out
+        assert 'content="spec-batch"' not in out
+        assert out.count("jsonui-doc-producer") == 1
+
+    def test_the_control_a_rewrite_of_an_unmarked_file_adds_the_mark(self, tmp_path):
+        """⚠️ Pairs with the arm above: proves `stamp_producer` is what puts
+        the value there, rather than the fixture having carried it."""
+        plain = _PAGE
+
+        assert "jsonui-doc-producer" not in plain
+        assert "jsonui-doc:component" in stamp_producer(plain, "component", ".html")
+
+    def test_the_control_a_different_family_still_collides(self, tmp_path):
+        """⚠️ Without this, every arm above passes over a check that stopped
+        reporting collisions entirely."""
+        planned = self._page(tmp_path, "a.html", "spec")
+
+        lines = report_overwrites_by_another_producer(
+            tmp_path, planned, "component-batch")
+
+        assert len(lines) == 1
+        assert "`jsonui-doc:spec`" in lines[0]
+
+    def test_the_single_file_forms_stamp_too(self):
+        """The gap the report named: v1.8.58 stamped only the batch forms."""
+        import ast
+
+        import jsonui_doc_cli.cli as mod
+        src = Path(mod.__file__).read_text(encoding="utf-8")
+        tree = ast.parse(src)
+        for name, family in (("cmd_generate_spec", "spec"),
+                             ("cmd_generate_component", "component")):
+            [fn] = [n for n in tree.body
+                    if isinstance(n, ast.FunctionDef) and n.name == name]
+            seg = ast.get_source_segment(src, fn)
+            assert f'stamp_producer(\n                    content, "{family}"' in seg, \
+                f"{name} writes pages that name no producer"
+

@@ -1072,7 +1072,16 @@ def cmd_generate_spec(args):
         output_path = Path(args.output)
         output_path.parent.mkdir(parents=True, exist_ok=True)
         with open(output_path, 'w', encoding='utf-8') as f:
-            f.write(content)
+            # ⚠️ The single-file form stamps too, with the SAME FAMILY as
+            # the batch form. v1.8.58 stamped only the batch forms, so a
+            # directory maintained by this form stayed permanently unmarked
+            # while the tool's own output told its reader the mark would
+            # arrive 'once rewritten'. Same family, so rewriting with
+            # either form is silent — which is the whole point of naming
+            # the family rather than the subcommand.
+            f.write(stamp_producer(
+                    content, "spec",
+                    ".html" if output_format == "html" else ".md"))
         print(f"Generated: {output_path}")
     else:
         print(content)
@@ -1101,11 +1110,45 @@ def cmd_generate_spec(args):
 PRODUCER_ATTR = "jsonui-doc-producer"
 
 
+#: What v1.8.58 wrote. Read, never written any more — see `producer_family`.
+LEGACY_PRODUCER_VALUES = {
+    "spec-batch": "jsonui-doc:spec",
+    "component-batch": "jsonui-doc:component",
+}
+
+
+def producer_family(command: str) -> str:
+    """The FAMILY *command* belongs to, which is what the check asks about.
+
+    🚨 v1.8.58 STAMPED THE SUBCOMMAND, AND THAT IS FINER THAN THE QUESTION.
+    Reported 2026-09-09 by a consumer lane that traced a 6-vs-5 discrepancy in
+    its own uptake: the mark said `component-batch`, so extending it to the
+    single-file form had no correct spelling —
+
+        single-file says "component-batch"  -> the mark LIES; batch did not
+                                               write it, and the mark exists
+                                               to answer who did
+        single-file says "component"        -> rewriting with the batch form
+                                               reports a FALSE COLLISION
+
+    The check never needed the subcommand. It asks "is this my own output?",
+    so the mark names the family and the comparison is by family. Extra
+    precision in an identifier does not add information here; it manufactures
+    false positives.
+
+    ⚠️ `generate doc` is deliberately absent: it writes one document from one
+    input and has never shared an output directory with the batch forms. Add
+    it when a collision involving it is actually reported, not before.
+    """
+    return "jsonui-doc:" + ("spec" if command.startswith("spec") else "component")
+
+
 def producer_mark(command: str, suffix: str) -> str:
     """The one line *command* stamps into each file it writes."""
+    family = producer_family(command)
     if suffix == ".html":
-        return f'<meta name="{PRODUCER_ATTR}" content="{command}">'
-    return f'<!-- {PRODUCER_ATTR}: {command} -->'
+        return f'<meta name="{PRODUCER_ATTR}" content="{family}">'
+    return f'<!-- {PRODUCER_ATTR}: {family} -->'
 
 
 def stamp_producer(text: str, command: str, suffix: str) -> str:
@@ -1119,6 +1162,20 @@ def stamp_producer(text: str, command: str, suffix: str) -> str:
     mark = producer_mark(command, suffix)
     if mark in text:
         return text
+    # 🚨 REPLACE ANY MARK ALREADY THERE, DO NOT ADD A SECOND ONE. The identity
+    # check reads the FIRST mark it finds, so a leftover would be invisible to
+    # it while sitting in the shipped page forever — and the value the rename
+    # was supposed to migrate would never actually leave the file.
+    #
+    # Found by an arm the receiving face asked for: it wanted the REPLACEMENT
+    # counted, not just the absence of a warning, because "0 warnings" is
+    # produced both by the normalisation working and by nothing having been
+    # rewritten. Stamping v1.8.58's own output left two meta tags.
+    text = re.sub(
+        r'[ \t]*<meta name="' + re.escape(PRODUCER_ATTR) + r'" content="[^"]*">\n?',
+        "", text)
+    text = re.sub(
+        r'\n*<!-- ' + re.escape(PRODUCER_ATTR) + r': [^>]*-->\n?', "", text)
     if suffix != ".html":
         # ⚠️ APPENDED, NOT PREPENDED. The first draft put it first and broke
         # `test_markdown_writes_markdown_content`, whose discriminator is that
@@ -1159,7 +1216,12 @@ def read_producer(path: Path) -> str | None:
             continue
         j = window.find(closer, i + len(opener))
         if j > 0:
-            return window[i + len(opener):j]
+            found = window[i + len(opener):j]
+            # ⚠️ v1.8.58's files say `spec-batch` / `component-batch`. They are
+            # this tool's own output and must not start reporting as a foreign
+            # producer the moment the spelling changes — that would turn a
+            # rename into a collision on every face at once.
+            return LEGACY_PRODUCER_VALUES.get(found, found)
     return None
 
 
@@ -1229,13 +1291,13 @@ def report_overwrites_by_another_producer(output_dir: Path, will_write,
         who = read_producer(q)
         if who is None:
             unmarked.append(q)
-        elif who != command:
+        elif who != producer_family(command):
             foreign.append((q, who))
     for q, who in foreign:
         lines.append(
-            f"{q.name} in {output_dir} was written by `jsonui-doc {who}` and "
-            f"this run overwrites it with `{command}` output. Nothing is "
-            f"deleted by this warning — check the directory is the one you "
+            f"{q.name} in {output_dir} was written by `{who}` and this run "
+            f"overwrites it with `{producer_family(command)}` output. Nothing "
+            f"is deleted by this warning — check the directory is the one you "
             f"meant.")
     if unmarked:
         shown = ", ".join(q.name for q in unmarked[:5])
@@ -1243,8 +1305,10 @@ def report_overwrites_by_another_producer(output_dir: Path, will_write,
         lines.append(
             f"{len(unmarked)} file(s) in {output_dir} carry no producer mark "
             f"({shown}{more}), so this run cannot tell whether they came from "
-            f"this command. They predate the mark and will carry it once "
-            f"rewritten. This is not a report of a collision.")
+            f"this command. Anything `jsonui-doc` wrote before v1.8.58, and "
+            f"anything written by `generate html`, has no mark and will not "
+            f"gain one — expect this line to persist for such directories. "
+            f"This is not a report of a collision.")
     return lines
 
 
@@ -1635,7 +1699,16 @@ def cmd_generate_component(args):
         output_path = Path(args.output)
         output_path.parent.mkdir(parents=True, exist_ok=True)
         with open(output_path, 'w', encoding='utf-8') as f:
-            f.write(content)
+            # ⚠️ The single-file form stamps too, with the SAME FAMILY as
+            # the batch form. v1.8.58 stamped only the batch forms, so a
+            # directory maintained by this form stayed permanently unmarked
+            # while the tool's own output told its reader the mark would
+            # arrive 'once rewritten'. Same family, so rewriting with
+            # either form is silent — which is the whole point of naming
+            # the family rather than the subcommand.
+            f.write(stamp_producer(
+                    content, "component",
+                    ".html" if output_format == "html" else ".md"))
         print(f"Generated: {output_path}")
     else:
         print(content)
