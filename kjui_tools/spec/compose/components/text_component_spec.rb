@@ -435,8 +435,61 @@ RSpec.describe KjuiTools::Compose::Components::TextComponent do
       }
       result = described_class.generate(json_data, 0, required_imports)
       expect(result).to include('PartialAttributesText(')
-      expect(result).to include('partialAttributes = listOf(')
+      expect(result).to include('partialAttributes = listOfNotNull(')
       expect(result).to include('PartialAttribute.fromJsonRange')
+    end
+
+    # 🚨 A shipped screen crashed on a real device (2026-09-08): NPE inside
+    # VisibilityWrapper, from `)!!` on a `fromJsonRange` that returned null.
+    # The generator asserted non-null for something only runtime data decides.
+    it 'never asserts non-null on fromJsonRange' do
+      json_data = {
+        'type' => 'Text',
+        'text' => 'Hello World',
+        'partialAttributes' => [
+          { 'range' => 'Hello', 'fontWeight' => 'bold' }
+        ]
+      }
+      result = described_class.generate(json_data, 0, required_imports)
+      expect(result).to include('PartialAttribute.fromJsonRange')
+      expect(result).not_to include('!!')
+    end
+
+    it 'collects partial attributes with listOfNotNull so a miss degrades' do
+      # `range` is matched against `text` at RUNTIME. Two paths make it miss,
+      # and only one is the face's to fix: an empty text (the face can fix),
+      # and `range` resolving through stringResource() = device locale while
+      # `text` comes from the view model = in-app language (the face cannot,
+      # because the generator chose stringResource). listOfNotNull turns both
+      # into a missing decoration instead of a dead screen.
+      json_data = {
+        'type' => 'Text',
+        'text' => 'Hello World',
+        'partialAttributes' => [
+          { 'range' => 'Hello', 'fontWeight' => 'bold' },
+          { 'range' => 'World', 'fontColor' => '#FF0000' }
+        ]
+      }
+      result = described_class.generate(json_data, 0, required_imports)
+      expect(result).to include('partialAttributes = listOfNotNull(')
+      expect(result).not_to include('partialAttributes = listOf(')
+    end
+
+    it 'still emits every declared attribute, so the fix cannot pass by emitting none' do
+      # ⚠️ The reporter named this: an arm that only checks "no crash" also
+      # passes if the list is emptied. Both ranges must still be there.
+      json_data = {
+        'type' => 'Text',
+        'text' => 'Hello World',
+        'partialAttributes' => [
+          { 'range' => 'Hello', 'fontWeight' => 'bold' },
+          { 'range' => 'World', 'fontColor' => '#FF0000' }
+        ]
+      }
+      result = described_class.generate(json_data, 0, required_imports)
+      expect(result.scan('PartialAttribute.fromJsonRange').length).to eq(2)
+      expect(result).to include('range = "Hello"')
+      expect(result).to include('range = "World"')
     end
 
     it 'emits a Configuration.Font.resolve(FontSpec(...)) block before the component' do

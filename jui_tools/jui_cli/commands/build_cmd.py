@@ -87,6 +87,62 @@ def register_build_command(subparsers: argparse._SubParsersAction) -> None:
 
 
 
+def _report_toolchain_sync(config_mgr) -> None:
+    """Say so when this project's vendored tools are not this CLI's version.
+
+    🚨 `jui build` is the FIRST STAGE OF THE DELIVERY SCRIPT, and until
+    2026-09-08 it was the one command that never asked. The rule lived inside
+    `jsonui_test_cli` with a single production caller, so a face could be
+    measured like this and read it as agreement:
+
+        sync-meta 1.8.54 / running CLI 1.8.55
+        `jui build`  EXIT 0, warnings 0, tree diff 0
+
+    ⚠️ That `warnings 0` did not mean "not split" — it meant the split was
+    never looked at. Reported by the delivery lane, who was baking artifacts
+    in exactly that state.
+
+    Printed to STDERR, like every other build warning, and NOT counted toward
+    the zero-warnings gate. Two reasons, and they are different:
+
+      * The gate. A split is a normal intermediate state — `bootstrap`
+        replaces `~/.jsonui-cli` for every face at once while `jui sync_tool`
+        is per-face, so between them every project is legitimately split. A
+        counted warning would fail builds for a condition the operator
+        already knows about and has decided to accept.
+      * The channel. A face may diff `jui build` output; the delivery lane
+        confirmed it does not, and explicitly said it does not know about
+        other faces. stderr is where warnings already go, so a stdout diff is
+        unaffected either way — which is what makes adding this line safe
+        without first surveying every face.
+
+    Silent when the rule cannot be loaded, rather than claiming agreement: a
+    tree synced without `shared/` has not measured anything.
+    """
+    import sys
+    try:
+        from ..core import shared_core
+        # 🚨 NOT `jui_cli.__version__` — that is the package literal "0.1.0"
+        # and never moves. Comparing a 1.8.x stamp against it would warn on
+        # every project on every build, which is a false alarm loud enough to
+        # teach people to stop reading build warnings. `toolchain_version()`
+        # is what `jui --version` answers with, and it is the value the stamp
+        # is written from, so the two sides are the same quantity.
+        from ..version import toolchain_version
+    except ImportError:
+        return
+    _running = toolchain_version()
+    rule = shared_core.load("toolchain_sync")
+    if rule is None:
+        return
+    try:
+        root = config_mgr.project_root
+    except AttributeError:
+        return
+    for message in rule.sync_meta_mismatches(root, _running):
+        print(f"WARNING [toolchain]: {message}", file=sys.stderr)
+
+
 def cmd_build(args: argparse.Namespace) -> int:
     # One vocabulary from here down: the alias sets the flags every step
     # already reads, so no call site has to know both spellings.
@@ -102,6 +158,8 @@ def cmd_build(args: argparse.Namespace) -> int:
     platforms = config.get("platforms", {})
     clean = ["--clean"] if args.clean else []
     failed = []
+
+    _report_toolchain_sync(config_mgr)
 
     # Hard gate for responsive variant files (home@regular.json) — refuse
     # to distribute/build while the v1 variant contract is violated

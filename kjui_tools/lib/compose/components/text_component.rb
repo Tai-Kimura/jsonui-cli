@@ -778,7 +778,13 @@ module KjuiTools
           code += "\n" + indent("text = #{processed_text},", depth + 1)
 
           # Build partial attributes list
-          code += "\n" + indent("partialAttributes = listOf(", depth + 1)
+          # `listOfNotNull`, not `listOf`. `fromJsonRange` returns null when
+          # the range is not found inside the text, and whether it IS found is
+          # decided by RUNTIME DATA — so the generator cannot promise it at
+          # compile time. Dropping the misses degrades the node to undecorated
+          # text; asserting them crashed a shipped screen (2026-09-08, real
+          # device: NPE raised through VisibilityWrapper on a detail screen).
+          code += "\n" + indent("partialAttributes = listOfNotNull(", depth + 1)
 
           partial_attrs.each_with_index do |attr, index|
             code += "\n" + indent("PartialAttribute.fromJsonRange(", depth + 2)
@@ -852,7 +858,17 @@ module KjuiTools
               code += "\n" + indent("onClick = null", depth + 3)
             end
 
-            code += "\n" + indent(")!!", depth + 2) # !! because fromJsonRange returns nullable
+            # No `!!`. Two independent paths make the range genuinely absent, and
+          # only one of them is the face's to fix:
+          #   A the text is empty (caller uses one predicate for "show" and
+          #     another for "fill") — "".indexOf(x) == -1
+          #   B `range` resolves via stringResource() = DEVICE LOCALE, while
+          #     `text` comes from the view model = in-app language. When those
+          #     differ the match fails, and the face CANNOT fix it, because the
+          #     generated code chose stringResource().
+          # Asserting non-null converts either into a crash of the whole
+          # screen; letting it fall out converts it into a missing decoration.
+          code += "\n" + indent(")", depth + 2)
             code += "," if index < partial_attrs.length - 1
           end
 

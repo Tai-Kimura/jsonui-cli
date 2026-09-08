@@ -250,6 +250,14 @@ module KjuiTools
         def build_compose(options = {})
           Core::Logger.info "Building Compose files..."
 
+          # Converters that predate the v1.8.56 template fix keep the old
+          # shape, and a template fix does not reach them. Reported, never
+          # enforced — see ConverterTestTagAudit for why both numbers print.
+          require_relative '../../compose/converter_test_tag_audit'
+          Compose::ConverterTestTagAudit.findings.each do |line|
+            Core::Logger.warn line
+          end
+
           # Setup project paths
           Core::ProjectFinder.setup_paths
 

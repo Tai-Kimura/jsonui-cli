@@ -1,72 +1,74 @@
-"""Is the toolchain this project vendored the one that is running?
+"""`jsonui-test`'s view of the vendored-toolchain check.
 
-`jui sync_tool` copies the platform tools into a project and stamps
-`<project>/.jsonui-cli/sync-meta.json` with the version it copied. The CLI
-running the gate knows its own version. When the two disagree, the
-distribution arrived and the sync was never run — the project is building
-with one toolchain and being validated by another.
+🚨 THE RULE ITSELF IS NOT HERE ANY MORE. It moved to
+`shared/core/toolchain_sync.py` on 2026-09-08 so that `jui build` could ask
+the same question — until then this module was the only place that knew, and
+its only production caller was `jsonui-test`, which meant the DELIVERY path
+(`deploy.sh` → `jui build`) could not see a version split at all.
 
-Nothing checked it, so consumers were about to. Seven faces asked whether to
-add `sync-meta.version != $(jsonui-test --version)` to their pretest, which
-is the signal that the tool is missing a feature: the same shell line copied
-into N projects is N places to keep in step, and both values already live
-inside the tool. A project should not have to recompute what the tool knows.
+This module is the thin adapter: it finds `shared/core` the way every other
+consumer of it does and re-exports the names this package has always
+imported, so the ten arms that drive `sync_meta_mismatches` keep driving the
+real rule rather than a copy of it.
 
-Reported as a WARNING and counted, unlike the notice a declined check
-prints. The difference is that this one names a command that clears it. A
-warning nobody can act on is the kind that teaches people to stop reading;
-a warning with a one-line remedy is supposed to keep saying so until the
-line is run.
+⚠️ Do not reintroduce the comparison here. Two copies of one rule is exactly
+the shape that let `jui build` and `jsonui-test` disagree about whether a
+project was in step — and the disagreement was invisible, because each side
+was internally consistent.
 """
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
 
+#: Fallback spellings, used only to keep this module importable when
+#: `shared/core` is absent. They are DATA, not the rule.
 SYNC_META_RELPATH = Path(".jsonui-cli") / "sync-meta.json"
-
-#: What `jui sync_tool` writes when it cannot name a version. Comparing
-#: against it would report a mismatch on every run of a project whose stamp
-#: predates versioned stamping, which is not the state this looks for.
 UNKNOWN = "unknown"
 
 
-def sync_meta_mismatches(project_root, running_version: str) -> list[str]:
-    """One message per platform whose stamped version is not the running one.
+def _rule():
+    """`shared/core/toolchain_sync`, or None when it is not in this tree.
 
-    Silent when there is no stamp: a project that does not vendor the tools
-    has nothing to keep in step, and a gate that fires on the absence of an
-    optional file would be reporting on the majority of projects.
+    🚨 Goes through `_prefer_sibling_jui_cli` rather than a plain import. A
+    bare `import jui_cli` SUCCEEDS when a previous release is installed at
+    `~/.jsonui-cli`, and that copy's `shared/core` does not have this module —
+    so the rule would silently come back unavailable while a checkout sat
+    right here. Measured while writing this: the first draft did exactly that
+    and reddened five arms.
+
+    ⚠️ Reuses the helper in this package instead of adding another walk. Two
+    copies of it already exist (`branch_tests`, `screen_ids`); a third would
+    be the same duplication this module was just rewritten to remove.
     """
-    if project_root is None or not running_version:
-        return []
-    meta_path = Path(project_root) / SYNC_META_RELPATH
+    from .screen_ids import _prefer_sibling_jui_cli
+    _prefer_sibling_jui_cli()
     try:
-        meta = json.loads(meta_path.read_text(encoding="utf-8"))
-    except (OSError, ValueError):
-        return []
-    platforms = meta.get("platforms")
-    if not isinstance(platforms, dict):
-        return []
+        from jui_cli.core import shared_core
+    except ImportError:
+        return None
+    return shared_core.load("toolchain_sync")
 
-    out: list[str] = []
-    for platform in sorted(platforms):
-        entry = platforms[platform]
-        if not isinstance(entry, dict):
-            continue
-        stamped = entry.get("version")
-        if not isinstance(stamped, str) or not stamped or stamped == UNKNOWN:
-            continue
-        if stamped == running_version:
-            continue
-        tool = entry.get("tool") or platform
-        out.append(
-            f"{tool} in this project was synced from {stamped}, but this "
-            f"CLI is {running_version} — the distribution arrived and "
-            f"`jui sync_tool` was not run, so the project builds with one "
-            f"toolchain and is validated by another. Run `jui sync_tool` "
-            f"(then re-run this gate), or ignore it if the older tools are "
-            f"deliberate."
-        )
-    return out
+
+def sync_meta_mismatches(project_root, running_version: str) -> list[str]:
+    """Delegates to `shared/core/toolchain_sync.sync_meta_mismatches`.
+
+    ⚠️ Returns [] when the shared rule is unreachable — the same answer it
+    gives for "nothing to compare". That collapse is deliberate here and
+    reported by the CALLER, which is the only place that can say "this check
+    did not run" in a line a reader will see.
+    """
+    rule = _rule()
+    if rule is None:
+        return []
+    return rule.sync_meta_mismatches(project_root, running_version)
+
+
+def rule_is_available() -> bool:
+    """Whether the shared rule could be loaded at all.
+
+    Exists so a caller can tell "in step" from "never asked". Without it the
+    two states print identically, which is the confusion this whole check was
+    created to remove.
+    """
+    return _rule() is not None
