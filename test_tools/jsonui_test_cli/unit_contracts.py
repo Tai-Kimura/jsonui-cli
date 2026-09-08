@@ -46,9 +46,80 @@ from .branch_tests import (
     _screen_of,
     _spec_files,
     load_project_config,
+    _prefer_sibling_jui_cli,
     APP_CONTRACTS_SPEC_TYPE,
     PARENT_SPEC_TYPE,
 )
+
+
+#: Why a declaration site cannot be judged, when it cannot. Never folded
+#: into "the site is fine": the whole point of the rule is that an
+#: unanswered question is not a permission.
+OWNERSHIP_UNAVAILABLE = (
+    "the ownership rule could not be loaded (shared/core/"
+    "unit_target_ownership.py), so app-level declaration sites were NOT "
+    "checked. This is a tool/distribution problem, not a spec error."
+)
+
+#: Stated on every run that reads an app spec. The component source is the
+#: one ownership source this caller does not consult yet, and a limit that
+#: goes unsaid is read as a clean result.
+OWNERSHIP_PARTIAL = (
+    "app-level declaration sites were checked against ViewModel, repository "
+    "and useCase ownership only. Components a screen DECLARES are not "
+    "consulted yet, so a component owned by exactly one screen can sit in an "
+    "app spec without being reported."
+)
+
+
+def _ownership_rule():
+    """`shared/core/unit_target_ownership`, or None when it is not there.
+
+    Loaded through the bootstrap this package already uses rather than a new
+    one, so `jsonui-test` and `jui` cannot end up on different copies of the
+    rule. None is returned, never a substitute: a tool tree synced without
+    `shared/` must say the check did not run.
+    """
+    _prefer_sibling_jui_cli()
+    try:
+        from jui_cli.core import shared_core
+    except ImportError:
+        return None
+    return shared_core.load("unit_target_ownership")
+
+
+def _app_declarations_in_the_wrong_place(cases, screen_specs) -> list[str]:
+    """App-level declarations that exactly one screen owns.
+
+    Only this direction. A screen-level declaration of an app-owned target is
+    the mirror defect and belongs to the check that owns screen sites; two
+    tools reporting the same pair from opposite ends is how a consumer gets
+    the same fact twice with two different remedies.
+
+    `components_declared_by_screen` is deliberately NOT passed: this caller
+    has not resolved it. That is safe in this direction -- an unconsulted
+    source can only LOWER an owner count, and a lower count never manufactures
+    the single owner this reports -- but it does mean component-owned targets
+    are missed, which `OWNERSHIP_PARTIAL` says out loud.
+    """
+    rule = _ownership_rule()
+    if rule is None:
+        return [OWNERSHIP_UNAVAILABLE]
+    out = []
+    seen = set()
+    for case in cases:
+        if not case.app or case.target in seen:
+            continue
+        seen.add(case.target)
+        kind, owners = rule.classify(case.target, screen_specs)
+        if kind == rule.SCREEN_OWNED:
+            out.append(
+                f"{case.app}: '{case.target}' is declared at app level, but "
+                f"exactly one screen owns it ({owners[0]}) -- an app spec "
+                f"records that no single screen does. Declare it in "
+                f"{owners[0]}'s spec instead."
+            )
+    return out
 
 
 class UnitContractError(RuntimeError):
@@ -419,6 +490,10 @@ class UnitContractReport:
     scanned_files: dict[str, list[str]] = field(default_factory=dict)
     #: platforms named by a case but with no configured test root
     unscannable: dict[str, str] = field(default_factory=dict)
+    #: Limits of THIS run that are not defects. Printed, never counted:
+    #: `ok` must not turn red because a check truthfully named its own
+    #: blind spot, and the blind spot must not be silent either.
+    notes: list[str] = field(default_factory=list)
     #: SCREENS whose merged view carries a `unitContracts` key. Kept because
     #: `declared_in_sub` compares against it to catch a sub-spec block that
     #: never reached its parent. Not the reported denominator — see below.
@@ -508,6 +583,8 @@ def discover_unit_contracts(
     declaring_files: list[str] = []
     unreadable_files: list[str] = []
     app_specs: list[str] = []
+    #: screen -> its spec AS READ, for the ownership rule below.
+    screen_specs: dict[str, dict] = {}
     problems: list[str] = []
     # Sub-specs that declare a block, by the parent that owns them. They are
     # skipped AS SCREENS (parent + subs is one screen), and their blocks are
@@ -595,6 +672,7 @@ def discover_unit_contracts(
         # reported "0 carrying" for a split screen whose sub-specs had just
         # contributed every case in `cases` — a summary line contradicting its
         # own numerator.
+        screen_specs[screen] = spec
         if spec.get("unitContracts") is not None:
             declaring.append(screen)
     for parent_screen, subs in sorted(declared_in_sub.items()):
@@ -606,6 +684,8 @@ def discover_unit_contracts(
             f"— the declaration was not read. This is a tool defect, not a "
             f"spec error; the cases are NOT being checked."
         )
+    if app_specs:
+        problems.extend(_app_declarations_in_the_wrong_place(cases, screen_specs))
     return (cases, scanned, declaring, problems, declaring_files,
             unreadable_files, app_specs)
 
@@ -1029,6 +1109,7 @@ def check_unit_contracts(
         declaring_specs=declaring, problems=problems,
         declaring_files=declaring_files,
         unreadable_files=unreadable_files,
+        notes=[OWNERSHIP_PARTIAL] if app_specs else [],
     )
     for case in cases:
         # ⚠️ The check lives HERE and not in `_cases_of`, which is where a
@@ -1175,6 +1256,11 @@ def format_report(report: UnitContractReport) -> list[str]:
     lines = [summary_line(report)]
     for problem in report.problems:
         lines.append(f"  PROBLEM  {problem}")
+    # Printed next to the problems and counted with neither: a limit that
+    # only exists in a docstring is a limit the reader never learns about,
+    # and one that fails the gate is a limit nobody can ship past.
+    for note in report.notes:
+        lines.append(f"  NOTE  {note}")
     if report.declaring_specs and not report.cases:
         lines.append(
             f"  PROBLEM  {len(report.declaring_specs)} spec(s) carry a "

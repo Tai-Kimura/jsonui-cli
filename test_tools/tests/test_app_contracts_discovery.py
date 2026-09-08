@@ -25,13 +25,16 @@ from jsonui_test_cli.branch_tests import APP_CONTRACTS_SPEC_TYPE
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
 
-def _project(tmp_path, *, screens=None, app=None, unreadable=False):
+def _project(tmp_path, *, screens=None, app=None, unreadable=False,
+             data_flow=None):
     specs = tmp_path / "docs" / "screens"
     specs.mkdir(parents=True)
     for name, block in (screens or {}).items():
         spec = {"type": "screen"}
         if block is not None:
             spec["unitContracts"] = block
+        if (data_flow or {}).get(name):
+            spec["dataFlow"] = data_flow[name]
         (specs / f"{name}.spec.json").write_text(json.dumps(spec), encoding="utf-8")
     if app is not None:
         (specs / "storefront.spec.json").write_text(
@@ -144,3 +147,103 @@ class TestTheTwoPackagesSpellTheTypeAlike:
         string in both packages would keep them all green and silently orphan
         every app spec already written. This one reads the literal."""
         assert APP_CONTRACTS_SPEC_TYPE == "app_contracts_spec"
+
+
+class TestTheDeclarationSiteIsJudged:
+    """The production caller for `shared/core/unit_target_ownership`.
+
+    Ownership and declaration site used to be the same thing, so "this is
+    declared in the wrong place" had no meaning: the place WAS the
+    definition. The rule derives ownership from the specs instead, which is
+    what makes the question answerable at all.
+
+    Only ONE direction is reported here -- an app-level declaration that a
+    single screen owns. The mirror defect belongs to the check that owns
+    screen-level sites; reporting both from here would hand a consumer the
+    same pair twice with two different remedies.
+    """
+
+    OWNED = {"chat": {"repositories": [{"name": "ChatRepository",
+                                        "methods": []}]}}
+
+    def test_an_app_declaration_a_single_screen_owns_is_reported(self, tmp_path):
+        root = _project(
+            tmp_path, screens={"chat": SCREEN_BLOCK}, data_flow=self.OWNED,
+            app={"target": "ChatRepository", "cases": [{"name": "loads"}]})
+        _c, _s, _d, problems, _f, _u, _a = uc.discover_unit_contracts(root)
+        assert len(problems) == 1, problems
+        assert "ChatRepository" in problems[0]
+        assert "chat" in problems[0]
+
+    def test_the_control_an_app_owned_target_is_not_reported(self, tmp_path):
+        """`SharedHttpClient` is named by no screen. Without this arm an
+        implementation that reported EVERY app declaration would pass the
+        arm above."""
+        root = _project(
+            tmp_path, screens={"chat": SCREEN_BLOCK}, data_flow=self.OWNED,
+            app=APP_BLOCK)
+        _c, _s, _d, problems, _f, _u, _a = uc.discover_unit_contracts(root)
+        assert problems == [], problems
+
+    def test_a_screen_declaring_its_own_target_is_not_reported(self, tmp_path):
+        """The second control: the rule must not fire on screen-level sites,
+        which are the overwhelming majority and would turn every project
+        red."""
+        root = _project(tmp_path, screens={"chat": SCREEN_BLOCK},
+                        data_flow=self.OWNED)
+        _c, _s, _d, problems, _f, _u, _a = uc.discover_unit_contracts(root)
+        assert problems == []
+
+    def test_the_rule_was_actually_loaded(self, tmp_path):
+        """The positive control for the loader itself.
+
+        Every arm above passes if `_ownership_rule()` silently returns None
+        and the check never runs -- except that it would report
+        OWNERSHIP_UNAVAILABLE. This asserts the rule is REACHABLE, so a tree
+        where `shared/core` cannot be found fails here rather than going
+        quietly green on the arms that expect no problems."""
+        assert uc._ownership_rule() is not None
+        rule = uc._ownership_rule()
+        assert rule.SCREEN_OWNED == "screen_owned"
+
+    def test_an_unloadable_rule_says_so_instead_of_passing(self, tmp_path):
+        """The negative control, and the one that matters at distribution
+        time: `shared/core/unit_target_ownership.py` is NOT in the installed
+        tree until a release carries it there. The check must announce that
+        it did not run -- silence would read as a clean declaration site."""
+        root = _project(tmp_path, screens={"chat": SCREEN_BLOCK},
+                        data_flow=self.OWNED,
+                        app={"target": "ChatRepository",
+                             "cases": [{"name": "loads"}]})
+        real = uc._ownership_rule
+        uc._ownership_rule = lambda: None
+        try:
+            _c, _s, _d, problems, _f, _u, _a = uc.discover_unit_contracts(root)
+        finally:
+            uc._ownership_rule = real
+        assert problems == [uc.OWNERSHIP_UNAVAILABLE]
+        assert "NOT checked" in problems[0]
+
+
+class TestTheBlindSpotIsPrintedNotCounted:
+    def test_a_run_that_read_an_app_spec_names_its_blind_spot(self, tmp_path):
+        root = _project(tmp_path, screens={"chat": SCREEN_BLOCK}, app=APP_BLOCK)
+        report = uc.check_unit_contracts(root)
+        assert uc.OWNERSHIP_PARTIAL in report.notes
+        assert any("NOTE" in line and "Components a screen DECLARES" in line
+                   for line in uc.format_report(report))
+
+    def test_the_blind_spot_does_not_fail_the_gate(self, tmp_path):
+        """A check that truthfully names its own limit must not go red for
+        it -- a limit nobody can ship past gets deleted rather than fixed."""
+        root = _project(tmp_path, screens={"chat": SCREEN_BLOCK}, app=APP_BLOCK)
+        report = uc.check_unit_contracts(root)
+        assert report.notes
+        assert report.ok, uc.format_report(report)
+
+    def test_a_run_with_no_app_spec_says_nothing(self, tmp_path):
+        """The control: the note is about app specs, so a project without
+        one must not carry it. A note printed unconditionally is noise, and
+        noise is how a real one stops being read."""
+        root = _project(tmp_path, screens={"chat": SCREEN_BLOCK})
+        assert uc.check_unit_contracts(root).notes == []
