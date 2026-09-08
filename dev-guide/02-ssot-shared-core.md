@@ -8,6 +8,7 @@
 | `component_metadata.json`（~22KB / 30キー） | コンポーネントの説明・エイリアス・プラットフォーム可用性（swift_generated/swift_dynamic/kotlin_generated/kotlin_dynamic/react）・エージェント向け rules | MCP `lookup_component` 等。codegen は読まない |
 | `font_weight_mapping.json` | weight 名 → swift/kotlin/css enum 対応表 | 各ツールの font_spec_helper（3箇所探索: ツール内コピー → repo ルート → `~/.jsonui-cli`） |
 | `layout_validator.rb` / `responsive_resolver.rb`（`module JsonUIShared`） | Layout 整合性チェック / responsive 解決の共通 Ruby 実装 | s/k/rjui に**コピー**（symlink ではない）され同一警告・同一解決を保証 |
+| `spec_types.py` | **spec の `type` が画面を表すかの SSoT**（`describes_a_screen()` が True / False / **None** を返す 3 値）。下の 6 節 | `jui verify` の spec coverage、`jui build` の `_load_all_specs`。⚠️ **両方とも `shared_core.load()` で読む。リテラルを書き写さない** |
 | `../schema.py`, `../validation/*.py` | テスト JSON 検証の Python 共通実装 | install 時に test_tools / document_tools へコピー |
 
 ### 消費形態マトリクス（ここを間違えると「直したのに反映されない」）
@@ -98,3 +99,63 @@ A=conformance / B=normalizer / C=attr-codegen）。フェーズ 14（enablement�
 normalizer はデフォルト有効、conformance は CI 常設（web は per-push、mobile は週次）。
 新しい修正はこの枠組みを前提にする — 例えば「エイリアス追加」は emitter の分岐追加ではなく
 `aliases` 配列 + normalizer の仕事、が正解になっている。
+
+## 6. spec の `type` 語彙 — どの型がどこに属するか
+
+`*.spec.json` の `type` は 4 種類。**画面を表すか**が全ての分かれ目で、その判定は
+`shared/core/spec_types.py` の `describes_a_screen()` **1 箇所**にある。
+
+| `type` | 画面か | 何を書く容器か | `metadata.layoutFile` |
+|---|---|---|---|
+| `screen_spec` | ✅ | 1 画面 | 持つ |
+| `screen_parent_spec` | ✅ | sub-spec を束ねた 1 画面 | 持つ（親が持つ） |
+| `screen_sub_spec` | ❌ | 親にマージされる断片 | 持たない |
+| `app_contracts_spec` | ❌ | **どの画面も単独では所有しない unit target の契約** | **持たない** |
+
+### `app_contracts_spec` を使うのはどんなときか（1.8.52 で新設）
+
+`jsonui-test generate unit-stubs --check` が次の形の指摘を出したときの**正しい移設先**:
+
+```
+'<target>' is declared in N screen spec(s) (...), but M screens own it (...) —
+filing it under any of them records an ownership that does not exist.
+Move ALL N declaration(s) to the app contracts spec, ...
+```
+
+⚠️ **この指摘に「宣言を消す」で応えないこと。**契約は消さずに**移す**。
+複数画面が所有する target を 1 画面の spec に置くと、**存在しない所有関係が記録される**。
+
+置き場所と最小の形:
+
+```jsonc
+// <spec_directory>/app_contracts.spec.json
+{
+  "type": "app_contracts_spec",
+  "version": "1.0",
+  "metadata": {
+    "name": "<アプリの表示名>",     // ⚠️ 画面名ではない。下の注意を読むこと
+    "description": "この面の app が所有し、単一の画面が所有しない unit target の契約"
+  },
+  "unitContracts": [ /* screen spec の unitContracts と同じ形 */ ]
+}
+```
+
+⚠️ **`metadata.name` はアプリの表示名で、画面名ではない。**この型は画面を表さないので、
+`name` から画面の識別子を作ってはいけない。1.8.52 ではこれを守っていない経路が 2 本あり、
+どちらも**同じ 1 つの知識の欠落**だった:
+
+| 経路 | 症状 | 直った版 |
+|---|---|---|
+| `jui verify` の spec coverage | ファイル名を layout id と読み `missing_layouts` が赤 | 1.8.53 |
+| `jui build` の protocol sync | `metadata.name` を画面名と読み、**ハイフンや空白を含む識別子**を `@generated` で 2 OS に出力。`EXIT 0` / warning 0 で素通りし、次のビルドが落ちる | 1.8.53 |
+
+⇒ **新しい `type` を足すときは `spec_types.py` の表だけを更新する。**
+各コマンドに `if type == "..."` を書き足す形にしない —— 上の 2 本は
+「除外する型を名指す」書き方だったので、**新設した型が自動的に「画面」に落ちた**。
+
+### 検出と規約は対で出荷する
+
+⚠️ 1.8.52 は**検出（「app spec へ移せ」）を出荷し、この節を出荷しなかった**。
+指摘された書き手は正しい直し方を調べる先が無く、型名はコードにしかないので
+**綴りを推測することもできなかった**。次に検出を足すときは、
+**その検出が名指す語がこのガイドから引けること**を受入条件に入れる。
