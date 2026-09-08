@@ -14,7 +14,11 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from jui_cli.commands.verify_cmd import _check_spec_coverage
+from jui_cli.commands.verify_cmd import (
+    SpecCoverage,
+    _check_spec_coverage,
+    _coverage_lines,
+)
 
 
 def _write(path: Path, data) -> None:
@@ -128,3 +132,125 @@ class SpecCoverageTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class SpecTypeClassificationTests(SpecCoverageTests):
+    """The type question, asked positively — and what happens to a stranger.
+
+    1.8.52 shipped a remedy and a check in one version and the remedy tripped
+    the check: `app_contracts_spec` was created as the home for a unit target
+    no single screen owns, and this command read it as a screen whose layout
+    had gone missing. The skip test named the one type to skip, so every type
+    invented after it was a screen by default.
+    """
+
+    def test_app_contracts_spec_is_not_a_screen_missing_its_layout(self):
+        # The 1.8.52 regression, in the shape the consumer reported it: the
+        # file has no `metadata.layoutFile` and no layout, because it stands
+        # for no screen. Before the fix its FILENAME became a layout id.
+        self._layout("home")
+        self._spec("home", layout_file="home")
+        _write(self.specs / "app_contracts.spec.json",
+               {"type": "app_contracts_spec", "unitContracts": []})
+        coverage = self._check()
+        self.assertEqual([], coverage.missing_layouts)
+        self.assertEqual([], coverage.unknown_types)
+
+    def test_a_parent_spec_is_a_screen_and_still_claims_its_layout(self):
+        # The positive table has two members and this is the second one. If
+        # `screen_parent_spec` were dropped from SCREEN_TYPES the file would
+        # stop claiming `parent`, and `parent` would be reported as a screen
+        # with no spec — so this arm reddens in the missing_specs direction.
+        self._layout("parent")
+        self._spec("parent", layout_file="parent", spec_type="screen_parent_spec")
+        coverage = self._check()
+        self.assertEqual([], coverage.missing_specs)
+        self.assertEqual([], coverage.unknown_types)
+
+    def test_a_sub_spec_is_still_skipped(self):
+        self._layout("home")
+        self._spec("home", layout_file="home")
+        self._spec("home_header", spec_type="screen_sub_spec")
+        coverage = self._check()
+        self.assertEqual([], coverage.missing_layouts)
+        self.assertEqual([], coverage.unknown_types)
+
+    def test_an_unknown_type_is_skipped_and_named(self):
+        # Skipped AND named. Skipping alone is the failure mode this whole
+        # change exists to remove: it makes a spec that fell out of coverage
+        # indistinguishable from one that passed.
+        self._layout("home")
+        self._spec("home", layout_file="home")
+        _write(self.specs / "gizmo.spec.json",
+               {"type": "some_future_spec", "metadata": {"name": "gizmo"}})
+        coverage = self._check()
+        self.assertEqual([], coverage.missing_layouts)
+        self.assertEqual([], coverage.missing_specs)
+        self.assertEqual(1, len(coverage.unknown_types))
+        path, kind = coverage.unknown_types[0]
+        self.assertTrue(path.endswith("gizmo.spec.json"), path)
+        self.assertEqual("some_future_spec", kind)
+
+    def test_a_spec_with_no_type_is_named_as_none_not_as_a_python_type(self):
+        # `<none>` is the spelling the printed advice explains. `<NoneType>`
+        # would be the same information in a word no author can act on.
+        self._layout("home")
+        self._spec("home", layout_file="home")
+        _write(self.specs / "typeless.spec.json", {"metadata": {"name": "x"}})
+        coverage = self._check()
+        self.assertEqual(["<none>"], [t for _, t in coverage.unknown_types])
+
+
+class CoverageLinesTests(unittest.TestCase):
+    """The paragraphs themselves.
+
+    `unknown_types` was collected and printed from inside a 300-line command,
+    which is a field that reports nothing: no test could reach the print, and
+    the suite was green with the list going nowhere. These arms exist because
+    the collection arms above passed while the output did not exist.
+    """
+
+    def _coverage(self, **kw):
+        cov = SpecCoverage()
+        for k, v in kw.items():
+            setattr(cov, k, v)
+        return cov
+
+    def test_unknown_types_reach_the_output(self):
+        lines = _coverage_lines(
+            self._coverage(unknown_types=[("specs/gizmo.spec.json", "future_spec")]),
+            require_coverage=False)
+        text = "\n".join(lines)
+        self.assertIn("NOTICE", text)
+        self.assertIn("specs/gizmo.spec.json", text)
+        self.assertIn("future_spec", text)
+
+    def test_no_unknown_types_says_nothing(self):
+        self.assertEqual([], _coverage_lines(self._coverage(), require_coverage=False))
+
+    def test_the_notice_is_a_notice_in_both_modes(self):
+        # The two lists above swing ERROR/WARNING with requireSpecPerScreen.
+        # This one does not, and does not move the exit code: an unknown type
+        # is what a doc tool shipping a type first looks like, and a gate that
+        # fires on the normal order of two releases gets switched off.
+        cov = self._coverage(unknown_types=[("a.spec.json", "future_spec")])
+        for require in (True, False):
+            text = "\n".join(_coverage_lines(cov, require_coverage=require))
+            self.assertIn("NOTICE", text)
+            self.assertNotIn("ERROR", text)
+            self.assertNotIn("WARNING", text)
+
+    def test_the_two_failing_lists_still_say_error_when_coverage_is_required(self):
+        text = "\n".join(_coverage_lines(
+            self._coverage(missing_specs=["admin"], missing_layouts=["gone"]),
+            require_coverage=True))
+        self.assertIn("ERROR", text)
+        self.assertIn("admin", text)
+        self.assertIn("gone", text)
+        self.assertNotIn("requireSpecPerScreen", text)
+
+    def test_the_hint_appears_only_when_coverage_is_not_required(self):
+        text = "\n".join(_coverage_lines(
+            self._coverage(missing_specs=["admin"]), require_coverage=False))
+        self.assertIn("WARNING", text)
+        self.assertIn("requireSpecPerScreen", text)

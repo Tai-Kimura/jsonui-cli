@@ -8,6 +8,8 @@ from collections import OrderedDict
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from ..core import shared_core
+
 
 # Identifiers that look like type names (PascalCase, no separators).
 _TYPE_IDENT_RE = re.compile(r"\b([A-Z][A-Za-z0-9_]*)\b")
@@ -283,41 +285,8 @@ def cmd_verify(args: argparse.Namespace) -> int:
             "regeneration is idempotent."
         )
 
-    # Screens with no spec at all. Every other gate compares things that
-    # exist: build generates from the Layout, verify diffs declared against
-    # actual, validate checks the specs on disk. A screen shipped without a
-    # spec is absent from all three inputs, so nothing was ever in a
-    # position to notice it — one went five days unremarked.
-    if coverage.missing_specs:
-        print(
-            f"\n**{'ERROR' if require_coverage else 'WARNING'}: "
-            f"{len(coverage.missing_specs)} screen layout(s) have no spec:**"
-        )
-        for name in coverage.missing_specs:
-            print(f"- {name}")
-        print(
-            "  → author the spec (`jsonui-doc init spec`), or if the layout "
-            "is not a screen, declare that on the layout root with "
-            '`"role": "cell"` so the classification says so rather than a '
-            "list here having to."
-        )
-    if coverage.missing_layouts:
-        print(
-            f"\n**{'ERROR' if require_coverage else 'WARNING'}: "
-            f"{len(coverage.missing_layouts)} spec(s) name a layout that "
-            "does not exist:**"
-        )
-        for name in coverage.missing_layouts:
-            print(f"- {name}")
-        print(
-            "  → a rename that moved only one side leaves exactly this. "
-            "Fix `metadata.layoutFile` or restore the layout."
-        )
-    if (coverage.missing_specs or coverage.missing_layouts) and not require_coverage:
-        print(
-            '  (set `"verify": {"requireSpecPerScreen": true}` in '
-            "jui.config.json to make this fail `--fail-on-diff`)"
-        )
+    for line in _coverage_lines(coverage, require_coverage):
+        print(line)
 
     # A layout edit that moves the screen id space breaks references this
     # command does not read. Advisory, never fatal: adding a layout is
@@ -437,12 +406,111 @@ def _verified_line(
     return f"{line} — {skipped} skipped ({detail})"
 
 
+def _coverage_lines(coverage, require_coverage) -> list[str]:
+    """The coverage paragraphs, as lines, so that they can be read by a test.
+
+    Extracted from `cmd_verify` for one reason: the `unknown_types` list was
+    written and then printed from inside a 300-line command, and there is no
+    way to reach that print without standing up a whole project. A field that
+    is collected but not reachably printed is a field that reports nothing,
+    and this file already carries one comment about a check going quiet.
+
+    The text is unchanged from when it was inline. `require_coverage` picks
+    ERROR vs WARNING for the two lists that can fail the run; the third is a
+    NOTICE in both modes, and does not move the exit code.
+    """
+    severity = "ERROR" if require_coverage else "WARNING"
+    out: list[str] = []
+
+    # Screens with no spec at all. Every other gate compares things that
+    # exist: build generates from the Layout, verify diffs declared against
+    # actual, validate checks the specs on disk. A screen shipped without a
+    # spec is absent from all three inputs, so nothing was ever in a
+    # position to notice it — one went five days unremarked.
+    if coverage.missing_specs:
+        out.append(
+            f"\n**{severity}: "
+            f"{len(coverage.missing_specs)} screen layout(s) have no spec:**"
+        )
+        out += [f"- {name}" for name in coverage.missing_specs]
+        out.append(
+            "  → author the spec (`jsonui-doc init spec`), or if the layout "
+            "is not a screen, declare that on the layout root with "
+            '`"role": "cell"` so the classification says so rather than a '
+            "list here having to."
+        )
+    if coverage.missing_layouts:
+        out.append(
+            f"\n**{severity}: "
+            f"{len(coverage.missing_layouts)} spec(s) name a layout that "
+            "does not exist:**"
+        )
+        out += [f"- {name}" for name in coverage.missing_layouts]
+        out.append(
+            "  → a rename that moved only one side leaves exactly this. "
+            "Fix `metadata.layoutFile` or restore the layout."
+        )
+    if (coverage.missing_specs or coverage.missing_layouts) and not require_coverage:
+        out.append(
+            '  (set `"verify": {"requireSpecPerScreen": true}` in '
+            "jui.config.json to make this fail `--fail-on-diff`)"
+        )
+
+    # Specs this tool could not classify. They were skipped, so they are in
+    # NEITHER list above — which is precisely why they have to be said out
+    # loud. The two lists are counts of judgments made; this is a count of
+    # judgments declined, and without it a spec that fell out of coverage
+    # entirely looks identical to one that passed.
+    #
+    # NOTICE, never fatal: reaching a spec type this build has not heard of is
+    # what happens when the doc tool ships a type first, and a gate that fires
+    # on the normal order of two releases gets switched off. The exit code is
+    # unchanged; the silence is what is being fixed.
+    if coverage.unknown_types:
+        out.append(
+            f"\n**NOTICE: {len(coverage.unknown_types)} spec(s) have a `type` "
+            "this build does not know, and were left out of the coverage "
+            "counts above:**"
+        )
+        out += [f"- {f} (type: {t})" for f, t in coverage.unknown_types]
+        out.append(
+            "  → they are neither counted as screens nor as containers. If "
+            "this build is older than the tool that wrote them, updating it "
+            "(`jui sync_tool`) is the fix; `<none>` means the file carries no "
+            "`type` at all, which every spec is expected to."
+        )
+    return out
+
+
+def _describes_a_screen(spec_type):
+    """`shared/core/spec_types.describes_a_screen`, or None when unreachable.
+
+    Loaded rather than restated. The literal already lives in the document
+    validator and the test gate; a third copy here is what the comment at
+    `branch_tests.py` warns about, and this defect is that warning coming
+    true one package over.
+
+    A tree without `shared/` gets `None` for every type, which routes every
+    spec into `unknown_types` and reports it. That is loud and wrong-in-the-
+    safe-direction: nothing is silently reclassified, and the run says the
+    table could not be read.
+    """
+    core = shared_core.load("spec_types")
+    if core is None:
+        return None
+    return core.describes_a_screen(spec_type)
+
+
 @dataclass
 class SpecCoverage:
     """Screens without a spec, and specs naming a layout that is not there."""
 
     missing_specs: list[str] = field(default_factory=list)
     missing_layouts: list[str] = field(default_factory=list)
+    #: `(file, type)` for every spec whose type this tool does not recognise.
+    #: They were NOT counted as screens, and saying so is the whole point:
+    #: silence here is what let `app_contracts_spec` be read as a screen.
+    unknown_types: list[tuple[str, str]] = field(default_factory=list)
 
 
 def _check_spec_coverage(config_mgr, config, spec_dir, layouts_root) -> SpecCoverage:
@@ -486,7 +554,38 @@ def _check_spec_coverage(config_mgr, config, spec_dir, layouts_root) -> SpecCove
                 data = json.load(f)
         except (OSError, ValueError):
             continue
-        if not isinstance(data, dict) or data.get("type") == "screen_sub_spec":
+        if not isinstance(data, dict):
+            continue
+        # ⚠️ Asked POSITIVELY, and that is the fix. This named the one type to
+        # SKIP, so 1.8.52 shipped a remedy (`app_contracts_spec`, the home for
+        # a unit target no single screen owns) that tripped this check: the new
+        # file has no `metadata.layoutFile` and no layout, so the `else` below
+        # read its FILENAME as a layout id and reported a layout that was never
+        # supposed to exist. The tool told the author to write a file and then
+        # failed them for writing it.
+        #
+        # An allow-list of skips has to be updated by whoever adds a type, and
+        # this one was not — while a screen table has to be updated by whoever
+        # adds a SCREEN type, which is the rarer edit and the one whose author
+        # is already editing this file's neighbourhood.
+        spec_type = data.get("type")
+        is_screen = _describes_a_screen(spec_type)
+        if is_screen is False:
+            continue
+        if is_screen is None:
+            # Neither guess is safe: treated as a screen it reddens
+            # `missing_layouts` exactly as above, and treated as not-a-screen it
+            # drops out of `missing_specs` and goes quiet. Skipped AND named.
+            coverage.unknown_types.append((
+                str(spec_file),
+                spec_type if isinstance(spec_type, str) and spec_type
+                # `<none>` is the spelling the printer explains. An absent
+                # `type` and an empty one are the same defect to the author,
+                # so they get the same word; any other non-string is a
+                # different mistake and keeps its own name.
+                else "<none>" if spec_type in (None, "")
+                else f"<{type(spec_type).__name__}>",
+            ))
             continue
         layout_file = (data.get("metadata") or {}).get("layoutFile")
         if isinstance(layout_file, str) and layout_file:
