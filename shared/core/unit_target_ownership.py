@@ -19,8 +19,8 @@ The specs already carry the facts; nothing was reading them:
 `dataFlow.viewModel` shows `description`/`methods`/`vars` and no identifier,
 which invites the conclusion that a ViewModel has no derivable owner. It has
 one: the generator's own naming rule. A predicate built without it reports
-every ViewModel as owned by nobody — that is, as face-owned — which is the
-opposite of the truth and arrives as a plausible larger count of face-owned
+every ViewModel as owned by nobody — that is, as app-owned — which is the
+opposite of the truth and arrives as a plausible larger count of app-owned
 targets rather than as an error.
 
 This module is PURE. The include closure needs to read layouts, so the caller
@@ -38,18 +38,18 @@ VIEW_MODEL_SUFFIX = "ViewModel"
 #: Exactly one screen owns it. It must be declared in that screen's spec.
 SCREEN_OWNED = "screen_owned"
 
-#: No screen owns it, or several do. A face-level declaration site is the only
+#: No screen owns it, or several do. A app-level declaration site is the only
 #: one that records this truthfully.
-FACE_OWNED = "face_owned"
+APP_OWNED = "app_owned"
 
 #: Nothing owns it AND nothing in the project defines it — a misspelled target
 #: reaches zero screens exactly as a shared utility does. Kept apart from
-#: `FACE_OWNED` because collapsing them turns a typo into a permission.
+#: `APP_OWNED` because collapsing them turns a typo into a permission.
 UNRESOLVED = "unresolved"
 
-#: The inputs needed to tell `FACE_OWNED` from `UNRESOLVED` were not supplied.
+#: The inputs needed to tell `APP_OWNED` from `UNRESOLVED` were not supplied.
 #: Never silently folded into either: a caller that has not computed the layout
-#: closure would otherwise see every component-owned target as face-owned.
+#: closure would otherwise see every component-owned target as app-owned.
 UNDETERMINED = "undetermined"
 
 
@@ -82,7 +82,7 @@ def owner_screens(
     maps screen name to the set of targets its layout reaches through the
     `include` closure; ``None`` means the closure was not computed, and the
     component source is then simply absent from the answer — which is why
-    `classify` refuses to call a zero result `FACE_OWNED` in that case.
+    `classify` refuses to call a zero result `APP_OWNED` in that case.
     """
     target = (target or "").strip()
     if not target:
@@ -121,24 +121,24 @@ def classify(
         # Several screens own it, so no single screen's spec records the truth.
         # Unlike the zero case this needs no extra input: the target plainly
         # exists, because screens name it.
-        return FACE_OWNED, owners
+        return APP_OWNED, owners
     if components_by_screen is None or known_targets is None:
         return UNDETERMINED, owners
     if target in known_targets:
-        return FACE_OWNED, owners
+        return APP_OWNED, owners
     return UNRESOLVED, owners
 
 
-def face_level_allowed(
+def app_level_allowed(
     target: str,
     screens: dict,
     components_by_screen: dict | None = None,
     known_targets=None,
 ) -> bool:
-    """May *target* be declared at face level?
+    """May *target* be declared at app level?
 
-    True only for `FACE_OWNED`. `UNDETERMINED` and `UNRESOLVED` are both false:
+    True only for `APP_OWNED`. `UNDETERMINED` and `UNRESOLVED` are both false:
     a question that was not answered is not a permission.
     """
     kind, _ = classify(target, screens, components_by_screen, known_targets)
-    return kind == FACE_OWNED
+    return kind == APP_OWNED

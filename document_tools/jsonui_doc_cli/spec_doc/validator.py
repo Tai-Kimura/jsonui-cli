@@ -16,7 +16,14 @@ from .. import shared_core
 #: The three types the merger treats as one screen's documents.
 SCREEN_SPEC_TYPES = ("screen_spec", "screen_sub_spec", "screen_parent_spec")
 
-#: A declaration site owned by the FACE rather than by any one screen.
+#: A declaration site owned by the APP rather than by any one screen.
+#:
+#: Named `app`, not `face`: in `test_tools` and the doc generator `face`
+#: already means a PLATFORM (`entry["faces"]` is keyed by ios/android/web),
+#: while `app` is this codebase's existing word for the unit that spans
+#: screens — `--app`, `{app, root}`, "a split tree keeps its spec config
+#: beside each app". The Japanese term used in the ruling covers both, so the
+#: spelling here follows the code rather than the ruling.
 #:
 #: It exists because ownership and declaration site had been the same thing:
 #: a unit target belonged to whichever spec happened to declare it, so a
@@ -31,10 +38,10 @@ SCREEN_SPEC_TYPES = ("screen_spec", "screen_sub_spec", "screen_parent_spec")
 #: distributed tool tree, and a validator that cannot resolve the name would
 #: reject a valid document. The two packages therefore hold the same string,
 #: and an agreement test — not a shared import — is what keeps them equal.
-FACE_CONTRACTS_SPEC = "face_contracts_spec"
+APP_CONTRACTS_SPEC = "app_contracts_spec"
 
 #: Every type a spec document may declare. Ordered as the message prints it.
-KNOWN_SPEC_TYPES = SCREEN_SPEC_TYPES + ("component_spec", FACE_CONTRACTS_SPEC)
+KNOWN_SPEC_TYPES = SCREEN_SPEC_TYPES + ("component_spec", APP_CONTRACTS_SPEC)
 
 
 def _has_external_layout_ref(node: dict) -> bool:
@@ -253,8 +260,8 @@ class SpecValidator:
         validated as a screen spec, and the author was told `structure` was
         missing — four errors describing a document they never claimed to be
         writing. The type error was one of the four, and read as a detail.
-        That matters most for a MISSPELLED known type (`face_contract` for
-        `face_contracts_spec`): the author sees screen-spec complaints and
+        That matters most for a MISSPELLED known type (`app_contract` for
+        `app_contracts_spec`): the author sees screen-spec complaints and
         concludes they mis-wrote the body, not the type. Deciding it here
         keeps "an unknown type is not a screen spec" a live check rather than
         an unreachable one, and stops at a single error that names the type.
@@ -262,8 +269,8 @@ class SpecValidator:
         if spec_type == "component_spec":
             self._validate_component_spec(data, result)
             return
-        if spec_type == FACE_CONTRACTS_SPEC:
-            self._validate_face_contracts_spec(data, result)
+        if spec_type == APP_CONTRACTS_SPEC:
+            self._validate_app_contracts_spec(data, result)
             return
         if spec_type in SCREEN_SPEC_TYPES:
             self._validate_spec(data, result)
@@ -375,25 +382,25 @@ class SpecValidator:
         # Cross-reference validation
         self._validate_cross_references(data, result)
 
-    #: Sections a face contracts spec must not carry. Each belongs to a
+    #: Sections an app contracts spec must not carry. Each belongs to a
     #: screen, and the merger builds it from that screen's own documents;
     #: allowing one here would give a screen-owned declaration a second legal
     #: home, which is the "escape hatch" this spec type exists to avoid.
     #:
     #: `branchContracts` is refused for a different reason and deliberately:
     #: the ownership predicate is defined for unit targets, and nothing yet
-    #: decides which face owns a branch that belongs to no screen. Leaving it
+    #: decides which app owns a branch that belongs to no screen. Leaving it
     #: writable-but-unread would be the exact failure this type was added to
     #: remove, so it is refused until that question has an answer.
-    _FACE_SPEC_FORBIDDEN = (
+    _APP_SPEC_FORBIDDEN = (
         "structure", "dataFlow", "stateManagement", "userActions",
         "transitions", "validation", "subSpecs", "branchContracts",
     )
 
-    def _validate_face_contracts_spec(self, data: dict, result: SpecValidationResult):
-        """Validate a `face_contracts_spec`.
+    def _validate_app_contracts_spec(self, data: dict, result: SpecValidationResult):
+        """Validate a `app_contracts_spec`.
 
-        A container for declarations the face owns and no screen does. It
+        A container for declarations the app owns and no screen does. It
         carries `unitContracts` and nothing that describes a screen.
         """
         self._validate_required_fields(
@@ -410,7 +417,7 @@ class SpecValidator:
         if isinstance(metadata, dict):
             # `name` identifies the FACE, not a type: it is not PascalCase and
             # has no `displayName`. Applying the screen rules here would tell
-            # the author their face name is malformed for looking like a face
+            # the author their app name is malformed for looking like an app
             # name.
             self._validate_required_fields(
                 metadata, ["name", "description"], "metadata", result)
@@ -418,13 +425,13 @@ class SpecValidator:
             result.errors.append(SpecValidationMessage(
                 path="metadata", message="metadata must be an object"))
 
-        for key in self._FACE_SPEC_FORBIDDEN:
+        for key in self._APP_SPEC_FORBIDDEN:
             if key in data and data[key]:
                 result.errors.append(SpecValidationMessage(
                     path=key,
                     message=(
-                        f"a {FACE_CONTRACTS_SPEC} cannot declare '{key}' — it "
-                        "records what the face owns, and this section belongs "
+                        f"a {APP_CONTRACTS_SPEC} cannot declare '{key}' — it "
+                        "records what the app owns, and this section belongs "
                         "to a screen. Declare it in that screen's spec, where "
                         "the merger reads it from."
                     ),

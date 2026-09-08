@@ -3,7 +3,7 @@
 The controls are the point of this file. A derivation that reads only one of
 the four sources still answers every question — it just answers `0` for
 everything it cannot see, and `0` means "owned by no screen", which reads as
-"face-owned". That failure arrives as a plausible LARGER count of face-owned
+"app-owned". That failure arrives as a plausible LARGER count of app-owned
 targets, never as an error, so each source gets a control that must come back
 `1` and the absence case gets one that must come back `0`.
 
@@ -97,7 +97,7 @@ class TheCardinalityDecidesTheDeclarationSite(unittest.TestCase):
         self.assertEqual(ownership.SCREEN_OWNED, kind)
         self.assertEqual(["Listing"], owners)
 
-    def test_two_owners_is_face_owned(self):
+    def test_two_owners_is_app_owned(self):
         """P3's specimen, built rather than found: no target in the corpus
         measured so far has more than one owner, so running the corpus would
         never exercise this branch."""
@@ -107,15 +107,15 @@ class TheCardinalityDecidesTheDeclarationSite(unittest.TestCase):
                                            "methods": []}]}}
         kind, owners = ownership.classify(
             "ListingRepository", screens, CLOSURE, KNOWN)
-        self.assertEqual(ownership.FACE_OWNED, kind)
+        self.assertEqual(ownership.APP_OWNED, kind)
         self.assertEqual(["Archive", "Listing"], owners)
 
-    def test_zero_owners_with_a_real_symbol_is_face_owned(self):
+    def test_zero_owners_with_a_real_symbol_is_app_owned(self):
         kind, _ = ownership.classify(
             "SharedHttpClient", SCREENS, CLOSURE, KNOWN)
-        self.assertEqual(ownership.FACE_OWNED, kind)
+        self.assertEqual(ownership.APP_OWNED, kind)
 
-    def test_a_symbol_nothing_defines_is_unresolved_not_face_owned(self):
+    def test_a_symbol_nothing_defines_is_unresolved_not_app_owned(self):
         """A misspelled target reaches zero screens exactly as a shared
         utility does. Folding the two together turns a typo into a
         permission."""
@@ -136,17 +136,17 @@ class AMissingInputIsNotAPermission(unittest.TestCase):
             "SharedHttpClient", SCREENS, CLOSURE, None)
         self.assertEqual(ownership.UNDETERMINED, kind)
 
-    def test_neither_undetermined_nor_unresolved_permits_a_face_declaration(self):
+    def test_neither_undetermined_nor_unresolved_permits_an_app_declaration(self):
         for target, closure, known in (
             ("CalendarWidget", None, KNOWN),      # undetermined
             ("SharedHtpClient", CLOSURE, KNOWN),  # unresolved
         ):
             with self.subTest(target=target):
-                self.assertFalse(ownership.face_level_allowed(
+                self.assertFalse(ownership.app_level_allowed(
                     target, SCREENS, closure, known))
 
-    def test_a_face_owned_target_is_permitted(self):
-        self.assertTrue(ownership.face_level_allowed(
+    def test_a_app_owned_target_is_permitted(self):
+        self.assertTrue(ownership.app_level_allowed(
             "SharedHttpClient", SCREENS, CLOSURE, KNOWN))
 
 
