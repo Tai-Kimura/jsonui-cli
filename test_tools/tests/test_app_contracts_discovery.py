@@ -26,7 +26,19 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 
 
 def _project(tmp_path, *, screens=None, app=None, unreadable=False,
-             data_flow=None):
+             data_flow=None, components=None, declares=None):
+    """A face on disk.
+
+    `components` maps a `*.component.json` file name to the `metadata.name`
+    it declares -- or to None, for a component spec that declares no identity.
+    `declares` maps a screen to the `customComponents[]` entries it carries.
+
+    ⚠️ The component directory is written as a SIBLING of the screen
+    directory, not the same one. Both shapes exist on real faces, and a
+    specimen that puts them together cannot tell a resolver that uses the
+    configured directory from one that uses the screen's own -- the defect
+    reported by the face where the two differ.
+    """
     specs = tmp_path / "docs" / "screens"
     specs.mkdir(parents=True)
     for name, block in (screens or {}).items():
@@ -35,7 +47,17 @@ def _project(tmp_path, *, screens=None, app=None, unreadable=False,
             spec["unitContracts"] = block
         if (data_flow or {}).get(name):
             spec["dataFlow"] = data_flow[name]
+        if (declares or {}).get(name):
+            spec["structure"] = {"customComponents": declares[name]}
         (specs / f"{name}.spec.json").write_text(json.dumps(spec), encoding="utf-8")
+    if components is not None:
+        comp_dir = tmp_path / "docs" / "components"
+        comp_dir.mkdir(parents=True, exist_ok=True)
+        for file_name, identity in components.items():
+            body = {"type": "component_spec", "metadata": {}}
+            if identity is not None:
+                body["metadata"]["name"] = identity
+            (comp_dir / file_name).write_text(json.dumps(body), encoding="utf-8")
     if app is not None:
         (specs / "storefront.spec.json").write_text(
             json.dumps({"type": APP_CONTRACTS_SPEC_TYPE, "version": "1.0",
@@ -44,9 +66,10 @@ def _project(tmp_path, *, screens=None, app=None, unreadable=False,
             encoding="utf-8")
     if unreadable:
         (specs / "broken.spec.json").write_text("{ not json", encoding="utf-8")
-    (tmp_path / "jui.config.json").write_text(
-        json.dumps({"spec_directory": "docs/screens", "platforms": {}}),
-        encoding="utf-8")
+    config = {"spec_directory": "docs/screens", "platforms": {}}
+    if components is not None:
+        config["component_spec_directory"] = "docs/components"
+    (tmp_path / "jui.config.json").write_text(json.dumps(config), encoding="utf-8")
     return tmp_path
 
 
@@ -258,6 +281,29 @@ class TestAMissingSourceCanInventASingleOwner:
     DECLARED = {"Dashboard": {"CalendarWidget"}}
 
     def test_the_same_target_classifies_two_ways(self):
+        """The promotion gate. PROMOTED 2026-09-08 -- read the note below.
+
+        This arm used to end with
+
+            assert with_source != without, \
+                "if these ever agree, the hint above can be promoted"
+
+        and it was the thing that told a later reader the promotion was
+        allowed, so that the permission did not live in anyone's memory. The
+        component source is now resolved by production
+        (`_declared_component_identities`), the user ruled that a component's
+        identity is its spec's required `metadata.name`, and the app-level
+        channel emits findings.
+
+        ⚠️ The two answers still differ, and that is not leftover -- it is the
+        whole reason the promotion is sound. `None` means the source was not
+        consulted and the count is a LOWER BOUND; supplying it can only RAISE
+        the count. So the disagreement below is the measurement that says a
+        reported `1` was never trustworthy without the source, and is now.
+        Deleting this arm would leave nothing asserting that the two inputs
+        are distinguishable at all -- and a resolver that silently returned
+        `None` forever would then be invisible.
+        """
         rule = uc._ownership_rule()
         assert rule is not None
         with_source, _ = rule.classify(
@@ -267,7 +313,28 @@ class TestAMissingSourceCanInventASingleOwner:
         assert with_source == rule.APP_OWNED
         assert without == rule.SCREEN_OWNED
         assert with_source != without, (
-            "if these ever agree, the hint above can be promoted to a finding")
+            "supplying the component source must still change the answer; if "
+            "these ever agree, the resolver has stopped contributing and the "
+            "findings below are being made on a lower bound again")
+
+    def test_adding_the_source_can_only_raise_an_owner_count(self):
+        """Condition 3, at the level where the direction is a property.
+
+        The promotion rests entirely on this: a source that could LOWER a
+        count would turn a true 2 into a reported 1, which is exactly how a
+        correct app-level declaration gets reported as belonging to a screen.
+        Asserted over every subset rather than on one specimen, because one
+        specimen agreeing is what a monotone rule and a lucky rule both do.
+        """
+        rule = uc._ownership_rule()
+        assert rule is not None
+        for target in ("CalendarWidget", "Missing", "ListingViewModel"):
+            without = rule.owner_screens(target, self.SCREENS, None)
+            with_source = rule.owner_screens(target, self.SCREENS, self.DECLARED)
+            assert set(without) <= set(with_source), (
+                f"{target}: the component source removed an owner "
+                f"({without} -> {with_source}); every claim that survives "
+                f"adding owners would become unsound")
 
     def test_so_the_check_never_fails_on_a_site_judgment(self, tmp_path):
         """The consequence, asserted where a consumer would feel it: the
@@ -283,11 +350,35 @@ class TestAMissingSourceCanInventASingleOwner:
 
 class TestTheBlindSpotIsPrintedNotCounted:
     def test_a_run_that_read_an_app_spec_names_its_blind_spot(self, tmp_path):
+        """⚠️ The pinned phrase moved on 2026-09-08 and that is the point.
+
+        It used to pin "Components a screen DECLARES", from a sentence that
+        said the source was not consulted YET -- true of every run back then.
+        Now the source usually IS consulted, and this specimen configures no
+        `component_spec_directory`, so the note has to say the source could
+        not be RESOLVED here. Pinning the old phrase would have kept passing
+        while the note said something else, because both sentences mention
+        components.
+        """
         root = _project(tmp_path, screens={"chat": SCREEN_BLOCK}, app=APP_BLOCK)
         report = uc.check_unit_contracts(root)
         assert uc.OWNERSHIP_PARTIAL in report.notes
-        assert any("NOTE" in line and "Components a screen DECLARES" in line
+        assert any("NOTE" in line and "could NOT be resolved" in line
                    for line in uc.format_report(report))
+
+    def test_the_complete_wording_is_printed_too_not_only_stored(self, tmp_path):
+        """The twin. `OWNERSHIP_COMPLETE in report.notes` says it was
+        COLLECTED; only reading the rendered lines says it reaches a human.
+        The defect this pairs with shipped in v1.8.53: a field was collected
+        and never printed, and every arm was green.
+        """
+        root = _project(tmp_path, screens={"chat": SCREEN_BLOCK},
+                        components={}, app=APP_BLOCK)
+        report = uc.check_unit_contracts(root)
+        assert any("NOTE" in line and "component ownership were" not in line
+                   and "metadata.name" in line
+                   for line in uc.format_report(report)), \
+            uc.format_report(report)
 
     def test_the_blind_spot_does_not_fail_the_gate(self, tmp_path):
         """A check that truthfully names its own limit must not go red for
@@ -314,3 +405,261 @@ class TestTheBlindSpotIsPrintedNotCounted:
         for every project that has not adopted the spec type yet."""
         root = _project(tmp_path, screens={"chat": SCREEN_BLOCK})
         assert uc.check_unit_contracts(root).notes == [uc.OWNERSHIP_PARTIAL]
+
+
+class TestTheComponentSourceIsResolvedByProduction:
+    """The wiring ruled on 2026-09-08: a component's identity is its spec's
+    `metadata.name`, required, and production resolves it.
+
+    ⚠️ These arms drive `check_unit_contracts` on a project ON DISK rather
+    than calling the pure rule. The pure rule has been able to accept
+    `components_declared_by_screen` since it was written -- what was missing
+    for months was a production caller passing it, and a unit test of the rule
+    is green either way. The thing under test here is the WIRE.
+    """
+
+    #: Two screens, and the only thing that makes `Picker` app-owned is that
+    #: Dashboard DECLARES it as a component while Listing owns it via
+    #: dataFlow. Drop the component source and the count falls 2 -> 1.
+    SCREENS = {"Dashboard": None, "Listing": None}
+    DECLARES = {"Dashboard": [
+        {"name": "Picker", "specFile": "picker.component.json"}]}
+    DATA_FLOW = {"Listing": {"repositories": [{"name": "Picker", "methods": []}]}}
+
+    def test_a_component_owned_target_stays_app_owned(self, tmp_path):
+        """Condition 3, end to end: the specimen the ticket named.
+
+        Dashboard owns `Picker` through a component, Listing through
+        dataFlow. That is two owners, so an app-level declaration is CORRECT
+        and must not be reported. Before the wiring the component owner was
+        invisible, the count was 1, and this specimen produced
+        "may belong in Listing's spec" -- telling a consumer to move a
+        declaration that was already in the only right place.
+        """
+        root = _project(
+            tmp_path, screens=self.SCREENS, data_flow=self.DATA_FLOW,
+            components={"picker.component.json": "Picker"},
+            declares=self.DECLARES,
+            app={"target": "Picker", "cases": [{"name": "renders"}]})
+        report = uc.check_unit_contracts(root)
+        assert report.ok, uc.format_report(report)
+        assert not any("may belong in" in p or "belongs in" in p
+                       for p in report.problems), report.problems
+
+    def test_the_control_without_the_component_the_same_specimen_is_reported(
+            self, tmp_path):
+        """The arm above passes trivially if nothing is ever reported.
+
+        Same specimen, minus only the component declaration. Now Listing is
+        genuinely the only owner, so the app-level site IS wrong and the
+        finding must fire. This is what proves the first arm measured the
+        component source rather than a check that never speaks.
+        """
+        root = _project(
+            tmp_path, screens=self.SCREENS, data_flow=self.DATA_FLOW,
+            components={"picker.component.json": "Picker"},
+            declares={},
+            app={"target": "Picker", "cases": [{"name": "renders"}]})
+        report = uc.check_unit_contracts(root)
+        assert any("belongs in Listing's spec" in p for p in report.problems), \
+            uc.format_report(report)
+
+    def test_it_is_a_finding_now_not_a_hint(self, tmp_path):
+        """Condition 5, the half that fails the run.
+
+        The app-level channel used to append to `hints`, which never touch
+        `ok`. Promoted in the same commit as the wording; an arm on the text
+        alone would pass while the gate stayed green.
+        """
+        root = _project(
+            tmp_path, screens=self.SCREENS, data_flow=self.DATA_FLOW,
+            components={"picker.component.json": "Picker"}, declares={},
+            app={"target": "Picker", "cases": [{"name": "renders"}]})
+        report = uc.check_unit_contracts(root)
+        assert not report.ok, "an app-level site with one real owner must fail"
+
+    def test_the_wording_moves_with_the_behaviour(self, tmp_path):
+        """Condition 5, the other half.
+
+        A message that still calls the count a lower bound while a finding
+        fires on it tells the reader the tool does not trust its own result.
+        """
+        root = _project(
+            tmp_path, screens=self.SCREENS, data_flow=self.DATA_FLOW,
+            components={"picker.component.json": "Picker"},
+            declares=self.DECLARES, app=APP_BLOCK)
+        report = uc.check_unit_contracts(root)
+        assert uc.OWNERSHIP_COMPLETE in report.notes, report.notes
+        assert uc.OWNERSHIP_PARTIAL not in report.notes
+
+    def test_an_unresolvable_source_says_so_and_stays_a_hint(self, tmp_path):
+        """⚠️ The two states must not share a sentence.
+
+        No `component_spec_directory` in the config -- so the source could not
+        be consulted at all. That is NOT the same as a face whose screens
+        declare no components, and a single string for both is how a
+        distribution missing `shared/` reads as a clean project.
+        """
+        root = _project(tmp_path, screens={"chat": SCREEN_BLOCK}, app=APP_BLOCK)
+        report = uc.check_unit_contracts(root)
+        assert uc.OWNERSHIP_PARTIAL in report.notes, report.notes
+        assert uc.OWNERSHIP_COMPLETE not in report.notes
+
+    def test_the_control_a_face_with_no_components_is_not_the_same_state(
+            self, tmp_path):
+        """The other half of the pair above: consulted, and found nothing.
+
+        Same EMPTY map as a face with no components declared -- and this is
+        the arm that fails if a later edit folds `None` into `{}`.
+        """
+        root = _project(tmp_path, screens={"chat": SCREEN_BLOCK},
+                        components={}, app=APP_BLOCK)
+        report = uc.check_unit_contracts(root)
+        assert uc.OWNERSHIP_COMPLETE in report.notes, report.notes
+        assert uc.OWNERSHIP_PARTIAL not in report.notes
+
+
+class TestTheIdentityIsRequiredAndNeverSubstituted:
+    def test_a_component_with_no_name_is_reported(self, tmp_path):
+        """The ruling, where a writer feels it.
+
+        No default is substituted -- not the file stem, not "Component". A
+        substitute would merge every unnamed component onto one target, and
+        the merge would be invisible because a wrong owner set still
+        classifies.
+        """
+        root = _project(
+            tmp_path, screens={"Dashboard": None},
+            components={"picker.component.json": None},
+            declares={"Dashboard": [
+                {"name": "Picker", "specFile": "picker.component.json"}]},
+            app=APP_BLOCK)
+        report = uc.check_unit_contracts(root)
+        assert any("declares no metadata.name" in p for p in report.problems), \
+            uc.format_report(report)
+
+    def test_the_stem_is_not_used_as_a_fallback(self):
+        """The inversion of the arm above, at the rule.
+
+        If a later edit adds `or path.stem`, the arm above still passes -- the
+        component would resolve, just to the wrong identity. This one names
+        the substitute directly.
+        """
+        identity = uc._identity_rule()
+        assert identity is not None
+        assert identity.identity_of({"metadata": {}}) is None
+        assert identity.identity_of({"metadata": {"name": "   "}}) is None
+        assert identity.identity_of({"metadata": {"name": "Picker"}}) == "Picker"
+
+    def test_a_screen_that_names_it_differently_is_reported(self, tmp_path):
+        """Two spellings of one fact.
+
+        The screen's `customComponents[]` entry carries its own `name`. The
+        component spec is the identity; when they disagree, ownership would be
+        computed from whichever the resolver happened to read.
+        """
+        root = _project(
+            tmp_path, screens={"Dashboard": None},
+            components={"picker.component.json": "Picker"},
+            declares={"Dashboard": [
+                {"name": "Chooser", "specFile": "picker.component.json"}]},
+            app=APP_BLOCK)
+        report = uc.check_unit_contracts(root)
+        assert any("names itself 'Picker'" in p for p in report.problems), \
+            uc.format_report(report)
+
+    def test_ownership_does_not_aggregate_across_apps(self):
+        """Condition 4.
+
+        The rule is scoped to the screens it is GIVEN. Two apps that happen to
+        use the same target must not merge into one owner set -- which would
+        turn a screen-owned target in each app into an app-owned target in
+        both, and silence a real finding on each side.
+        """
+        rule = uc._ownership_rule()
+        identity = uc._identity_rule()
+        assert rule is not None and identity is not None
+        app_a = {"Dashboard": {"structure": {"customComponents": [
+            {"name": "Picker", "specFile": "picker.component.json"}]}}}
+        app_b = {"Console": {"structure": {"customComponents": [
+            {"name": "Picker", "specFile": "picker.component.json"}]}}}
+        read = lambda _f: {"metadata": {"name": "Picker"}}
+        decl_a, _ = identity.resolve_declared_identities(app_a, read)
+        decl_b, _ = identity.resolve_declared_identities(app_b, read)
+        assert rule.owner_screens("Picker", app_a, decl_a) == ["Dashboard"]
+        assert rule.owner_screens("Picker", app_b, decl_b) == ["Console"]
+        # And the control: given BOTH, it is two owners. So the separation
+        # above is the caller's scope, not the rule failing to see them.
+        both = dict(app_a, **app_b)
+        decl_both, _ = identity.resolve_declared_identities(both, read)
+        assert rule.owner_screens("Picker", both, decl_both) == \
+            ["Console", "Dashboard"]
+
+    def test_the_three_controls_a_viewmodel_a_component_and_a_utility(self):
+        """Condition 2: known VM = 1, known component = 1, shared utility = 0.
+
+        One table so the three cannot drift apart, and so a resolver that
+        returned every screen for everything would fail on the utility.
+        """
+        rule = uc._ownership_rule()
+        identity = uc._identity_rule()
+        assert rule is not None and identity is not None
+        screens = {"Dashboard": {"structure": {"customComponents": [
+            {"name": "Picker", "specFile": "picker.component.json"}]}}}
+        declared, problems = identity.resolve_declared_identities(
+            screens, lambda _f: {"metadata": {"name": "Picker"}})
+        assert problems == []
+        assert rule.owner_screens("DashboardViewModel", screens, declared) == \
+            ["Dashboard"]
+        assert rule.owner_screens("Picker", screens, declared) == ["Dashboard"]
+        assert rule.owner_screens("SharedHttpClient", screens, declared) == []
+
+
+class TestTheScreenLevelDirectionIsWiredToo:
+    """⚠️ Written because a mutation proved it was NOT measured.
+
+    Both production call sites were given `components` in the same commit, and
+    unwiring the app-level one reddened two arms while unwiring the
+    screen-level one changed NOTHING. A wire nothing measures is
+    indistinguishable from a wire that was never added -- and this direction
+    is the one that runs on EVERY project, app spec or not.
+
+    The reason no existing specimen covered it: this direction only speaks for
+    `APP_OWNED with >= 2 owners`, and reaching two owners through a component
+    is exactly the shape the source was missing.
+    """
+
+    #: `Picker` is declared in Dashboard's own spec, but Listing owns it
+    #: through dataFlow and Dashboard owns it through a COMPONENT. Two owners,
+    #: so no single screen's spec records the truth -- and without the
+    #: component source it is one owner and the check stays silent.
+    SCREENS = {"Dashboard": {"target": "Picker", "cases": [{"name": "renders"}]},
+               "Listing": None}
+    DATA_FLOW = {"Listing": {"repositories": [{"name": "Picker", "methods": []}]}}
+    DECLARES = {"Dashboard": [
+        {"name": "Picker", "specFile": "picker.component.json"}]}
+
+    def test_a_component_owned_target_declared_on_a_screen_is_reported(
+            self, tmp_path):
+        root = _project(
+            tmp_path, screens=self.SCREENS, data_flow=self.DATA_FLOW,
+            components={"picker.component.json": "Picker"},
+            declares=self.DECLARES)
+        report = uc.check_unit_contracts(root)
+        assert any("2 screens own it" in p and "'Picker'" in p
+                   for p in report.problems), uc.format_report(report)
+
+    def test_the_control_without_the_component_it_stays_silent(self, tmp_path):
+        """The same specimen minus the component declaration.
+
+        Now Listing is the only owner besides the declaring screen's own
+        ViewModel, the count is 1, and this direction correctly says nothing.
+        Without this arm the one above would pass for an implementation that
+        reported every declared target.
+        """
+        root = _project(
+            tmp_path, screens=self.SCREENS, data_flow=self.DATA_FLOW,
+            components={"picker.component.json": "Picker"}, declares={})
+        report = uc.check_unit_contracts(root)
+        assert not any("screens own it" in p for p in report.problems), \
+            uc.format_report(report)

@@ -80,14 +80,34 @@ OWNERSHIP_UNAVAILABLE = (
 #: and so could never manufacture the single owner it reports. Lowering is
 #: exactly how it manufactures one — and the same argument, applied to the
 #: other direction, is sound. One rule, two directions, two severities.
+#: Printed when the component source IS resolved, i.e. the normal case since
+#: the 2026-09-08 ruling. The old text said owner counts were a lower bound
+#: and that app-level sites were therefore hints; both halves had to move in
+#: the same commit as the promotion below. A message that still calls the
+#: count a lower bound while a finding fires on it tells the reader the tool
+#: does not trust its own result.
+OWNERSHIP_COMPLETE = (
+    "declaration sites were compared against ViewModel, repository, useCase "
+    "and component ownership. A component's identity is its spec's "
+    "`metadata.name` (required — see shared/core/component_identity.py), so "
+    "owner counts below are complete and app-level sites are findings, not "
+    "hints."
+)
+
+#: Printed when the component source could NOT be resolved — no
+#: `component_spec_directory` in jui.config.json, or the identity module is
+#: absent from this tool tree. ⚠️ Kept as a SEPARATE string from the complete
+#: case on purpose: "the source was consulted and found nothing" and "the
+#: source could not be consulted" are different facts, and one string for
+#: both is how a distribution problem reads as a clean project.
 OWNERSHIP_PARTIAL = (
     "declaration sites were compared against ViewModel, repository and "
-    "useCase ownership only. Components a screen DECLARES are not consulted "
-    "yet, so every owner count below is a LOWER BOUND. App-level sites are "
-    "therefore HINTS and fail nothing — a target owned by one screen through "
-    "a component and another through dataFlow would appear there wrongly. "
-    "Screen-level sites naming two or more owners are findings: adding the "
-    "missing source can only keep that count at two or more."
+    "useCase ownership only — the component source could NOT be resolved, so "
+    "every owner count below is a LOWER BOUND. App-level sites are therefore "
+    "HINTS and fail nothing — a target owned by one screen through a "
+    "component and another through dataFlow would appear there wrongly. "
+    "Screen-level sites naming two or more owners are still findings: adding "
+    "the missing source can only keep that count at two or more."
 )
 
 
@@ -107,7 +127,114 @@ def _ownership_rule():
     return shared_core.load("unit_target_ownership")
 
 
-def _app_declarations_in_the_wrong_place(cases, screen_specs):
+def _identity_rule():
+    """`shared/core/component_identity`, or None when it is not there.
+
+    Same loader as `_ownership_rule` for the same reason: the two modules
+    answer one question together, so they must come from one tool tree. None
+    is returned, never a substitute — a tree synced without this module must
+    say the component source was NOT consulted, which is what keeps
+    `OWNERSHIP_PARTIAL` distinguishable from `OWNERSHIP_COMPLETE`.
+    """
+    _prefer_sibling_jui_cli()
+    try:
+        from jui_cli.core import shared_core
+    except ImportError:
+        return None
+    return shared_core.load("component_identity")
+
+
+def _component_reader(project_root, config):
+    """``(read, component_dir)`` for this project, or ``(None, None)``.
+
+    ⚠️ The frame is `component_spec_directory`, NOT the screen spec's own
+    directory. Measured on both shapes that exist: one face keeps screens and
+    components in the same directory, and another keeps
+    `../docs/user/screens/json` apart from `../docs/user/components/json`
+    while still naming `headermenu.component.json` with no path. Resolving
+    against the screen's directory happens to work on the first and silently
+    finds nothing on the second — and finding nothing is indistinguishable
+    from a face with no components.
+    """
+    directory = (config or {}).get("component_spec_directory")
+    if not directory:
+        return None, None
+    base = (Path(project_root) / directory).resolve()
+    if not base.is_dir():
+        return None, base
+
+    def read(spec_file):
+        candidate = base / spec_file
+        try:
+            candidate.resolve().relative_to(base)
+        except ValueError:
+            # `../` in a declaration must not reach outside the configured
+            # directory: the frame is the config's, and a declaration cannot
+            # widen it.
+            return None
+        try:
+            with open(candidate, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except (OSError, json.JSONDecodeError):
+            return None
+
+    return read, base
+
+
+def _declared_component_identities(screen_specs, project_root, config):
+    """``(components_declared_by_screen, problems)``; the map is None if unresolved.
+
+    None means "the component source could not be consulted", and callers must
+    keep that apart from an empty map, which means "consulted, and no screen
+    declares a component". Folding them together is exactly the failure this
+    whole rule was held back to avoid: a distribution missing `shared/` would
+    read as a project whose screens declare nothing.
+    """
+    identity = _identity_rule()
+    if identity is None:
+        return None, []
+    read, base = _component_reader(project_root, config)
+    if read is None:
+        problems = []
+        if base is not None:
+            problems.append(
+                f"component_spec_directory is configured but not a directory "
+                f"({base}) — component ownership was NOT consulted."
+            )
+        return None, problems
+    declared, raw = identity.resolve_declared_identities(screen_specs, read)
+    problems = []
+    for kind, screen, spec_file, detail in raw:
+        if kind == identity.NO_IDENTITY:
+            problems.append(
+                f"{screen}: component '{spec_file}' declares no "
+                f"metadata.name. A component's identity IS that field and it "
+                f"is required — no default is substituted, because an unnamed "
+                f"component would merge onto every other unnamed one. Add "
+                f"metadata.name to {spec_file}."
+            )
+        elif kind == identity.DISAGREES:
+            entry_name, real = detail
+            problems.append(
+                f"{screen}: declares component '{entry_name}' but "
+                f"{spec_file} names itself '{real}'. The component spec is "
+                f"the identity; the screen's entry must match it, or the two "
+                f"spellings drift and ownership is computed from the wrong one."
+            )
+        elif kind == identity.UNREADABLE:
+            problems.append(
+                f"{screen}: component spec '{spec_file}' could not be read, "
+                f"so its ownership contribution is missing from this run."
+            )
+        elif kind == identity.NO_SPEC_FILE:
+            problems.append(
+                f"{screen}: a customComponents entry ({detail!r}) names no "
+                f"specFile, so no identity could be resolved for it."
+            )
+    return declared, problems
+
+
+def _app_declarations_in_the_wrong_place(cases, screen_specs, components=None):
     """``(problems, hints)`` for the app-level declaration sites.
 
     Only one direction is examined: an app-level declaration that a single
@@ -128,14 +255,19 @@ def _app_declarations_in_the_wrong_place(cases, screen_specs):
     rule = _ownership_rule()
     if rule is None:
         return [OWNERSHIP_UNAVAILABLE], []
+    findings = []
     hints = []
     seen = set()
     for case in cases:
         if not case.app or case.target in seen:
             continue
         seen.add(case.target)
-        kind, owners = rule.classify(case.target, screen_specs)
-        if kind == rule.SCREEN_OWNED:
+        kind, owners = rule.classify(case.target, screen_specs, components)
+        if kind != rule.SCREEN_OWNED:
+            continue
+        if components is None:
+            # The component source was NOT consulted, so this count is a lower
+            # bound and `1` may really be `2`. A hint, exactly as before.
             hints.append(
                 f"{case.app}: '{case.target}' may belong in {owners[0]}'s "
                 f"spec -- that screen appears to be its only owner, and an "
@@ -143,10 +275,20 @@ def _app_declarations_in_the_wrong_place(cases, screen_specs):
                 f"component-declared ownership was not consulted, and it is "
                 f"the source that would add the second owner."
             )
-    return [], hints
+        else:
+            # Promoted 2026-09-08, in the same commit as the wiring and the
+            # wording. The count is no longer a lower bound: every source the
+            # rule knows about was supplied, so `1` is `1`.
+            findings.append(
+                f"{case.app}: '{case.target}' belongs in {owners[0]}'s spec "
+                f"-- that screen is its only owner (ViewModel, dataFlow and "
+                f"component ownership were all consulted), and an app spec "
+                f"records that no single screen is."
+            )
+    return findings, hints
 
 
-def _screen_declarations_in_the_wrong_place(cases, screen_specs) -> list[str]:
+def _screen_declarations_in_the_wrong_place(cases, screen_specs, components=None) -> list[str]:
     """Screen-level declarations that no single screen owns.
 
     The mirror of `_app_declarations_in_the_wrong_place`, and the reason the
@@ -196,7 +338,7 @@ def _screen_declarations_in_the_wrong_place(cases, screen_specs) -> list[str]:
 
     out = []
     for target, sites in sorted(declared_in.items()):
-        kind, owners = rule.classify(target, screen_specs)
+        kind, owners = rule.classify(target, screen_specs, components)
         if kind != rule.APP_OWNED or len(owners) < 2:
             continue
         shown = ", ".join(owners[:4]) + ("…" if len(owners) > 4 else "")
@@ -777,16 +919,29 @@ def discover_unit_contracts(
     # project and carries the same unresolved source, so tying the limit to
     # `app_specs` would state it only for projects that already have the spec
     # type — the readers least likely to be surprised by it.
-    hints: list[str] = [OWNERSHIP_PARTIAL]
+    # Resolved once and handed to BOTH directions: two call sites computing
+    # the same map is how one rule becomes two implementations, and the
+    # ownership module is pure precisely so this stays the caller's job.
+    components, component_problems = _declared_component_identities(
+        screen_specs, project_root, load_project_config(project_root))
+    problems.extend(component_problems)
+    # ⚠️ Which sentence gets printed is the honest report of whether the
+    # source was consulted — `None` is not an empty map. A face where every
+    # screen declares no component and a face whose tool tree has no
+    # `shared/core/component_identity.py` produce the same EMPTY map and must
+    # not produce the same sentence.
+    hints: list[str] = [
+        OWNERSHIP_PARTIAL if components is None else OWNERSHIP_COMPLETE]
     if app_specs:
         found, app_hints = _app_declarations_in_the_wrong_place(
-            cases, screen_specs)
+            cases, screen_specs, components)
         problems.extend(found)
         hints.extend(app_hints)
     # Not gated on `app_specs`: this direction finds the declarations that are
     # in the wrong place BECAUSE no app spec exists yet, so requiring one first
     # would silence the check exactly where it has something to say.
-    for problem in _screen_declarations_in_the_wrong_place(cases, screen_specs):
+    for problem in _screen_declarations_in_the_wrong_place(
+            cases, screen_specs, components):
         # `OWNERSHIP_UNAVAILABLE` is one sentence about one cause, and both
         # directions raise it. Printed twice it reads as two faults, and a
         # reader counting problems would see the tool's own outage as the
