@@ -24,6 +24,8 @@ import shutil
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from .run_defaults import SIDECAR_FILENAME, build_sidecar
+
 # Keys accepted for a platform's destination directory, in priority order.
 # `target_dir` (iOS synchronized group) / `assets_dir` (Android assets) are the
 # documented spellings; `dir` / `path` are convenience aliases.
@@ -44,6 +46,7 @@ class InstallReport:
     media_copied: dict = field(default_factory=dict)   # platform -> [dest_file_str]
     media_removed: int = 0                             # stale media cleaned
     clean_skipped: bool = False                        # the wipe did not run
+    sidecars: list = field(default_factory=list)       # [(platform, dest_file_str)]
 
     @property
     def has_collision(self) -> bool:
@@ -259,7 +262,7 @@ def _plan_target(files: list, parsed: dict, platform: str, report: InstallReport
 
 
 def flatten_install(test_files, targets, media_files=None,
-                    clean: bool = True) -> InstallReport:
+                    clean: bool = True, sidecar=None) -> InstallReport:
     """Flatten-copy each `.test.json` in `test_files` into every target dir.
 
     Per target, the source set is shaped first (see module docstring): files
@@ -291,6 +294,17 @@ def flatten_install(test_files, targets, media_files=None,
     groups flatten it into the bundle root anyway. Android (adb push, not a
     file copy) and web (paths relative to the test file) are not media targets.
     Media basenames must be unique for the same flat-lookup reason as tests.
+
+    `sidecar` is the run-scoped defaults table (`run_defaults.build_sidecar`),
+    written to every target as `jsonui-test-run.json`. It is written on EVERY
+    install, including when it declares nothing, and it is not behind
+    `clean` — for the same reason the media wipe is not: it comes from config,
+    never from the command line, so narrowing the arguments cannot narrow it.
+    Writing it only when something is declared would make "no default
+    declared" and "installed by a CLI too old to have the feature" the same
+    observation on the device, which is the distinction the file exists to
+    keep. `None` means the caller stated no config; that is a real answer
+    (an empty table), not a reason to skip the file.
     """
     files = [Path(f) for f in test_files]
     media = [Path(f) for f in (media_files or [])]
@@ -390,5 +404,15 @@ def flatten_install(test_files, targets, media_files=None,
                     target = media_dir / m.name
                     shutil.copy2(m, target)
                     report.media_copied.setdefault(platform, []).append(str(target))
+
+        # Run-scoped defaults. Always written — see the `sidecar` paragraph
+        # above. The stale-clean above globs `*.test.json`, which this name
+        # deliberately does not match, so the two do not race.
+        sidecar_path = dest_dir / SIDECAR_FILENAME
+        with open(sidecar_path, "w", encoding="utf-8") as fp:
+            json.dump(sidecar if sidecar is not None else build_sidecar({}),
+                      fp, indent=2, ensure_ascii=False)
+            fp.write("\n")
+        report.sidecars.append((platform, str(sidecar_path)))
 
     return report

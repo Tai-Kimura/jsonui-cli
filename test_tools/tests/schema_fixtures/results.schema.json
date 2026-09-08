@@ -58,6 +58,16 @@
                 "flaky": {
                   "type": "boolean",
                   "description": "True when the case ultimately passed but needed more than one attempt. Absent when the driver does not track attempts; only meaningful when status is 'passed'"
+                },
+                "declaredOrientation": {
+                  "type": "string",
+                  "enum": ["portrait", "landscape"],
+                  "description": "The orientation this case asked for, after resolving the whole chain: a setOrientation step, else the file's top-level 'orientation', else the run default for this device's tier. Absent when the driver does not report orientation."
+                },
+                "observedOrientation": {
+                  "type": "string",
+                  "enum": ["portrait", "landscape"],
+                  "description": "The orientation the device was actually in, asked of the device rather than inferred from the declaration. Reported SEPARATELY from declaredOrientation on purpose: 'portrait' resolves to setOrientationNatural() on Android, and a tablet whose natural orientation is landscape does not turn portrait — so a run that declared landscape and executed in portrait would otherwise pass with nothing recording the difference. One field would assume the agreement this pair exists to measure. Absent when the driver does not report orientation."
                 }
               },
               "required": ["testName", "caseName", "status", "durationMs"],

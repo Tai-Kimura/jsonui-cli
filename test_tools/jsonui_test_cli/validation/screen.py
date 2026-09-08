@@ -10,6 +10,7 @@ from .step import StepValidator
 from .launch import validate_launch
 from .mock import find_mock_index, validate_mock_reference
 from .platform import validate_platform_field
+from .orientation import validate_orientation_field
 from . import declared_paths
 from .required import check_required_top_level
 from .responsive import validate_responsive_field
@@ -150,6 +151,11 @@ class ScreenTestValidator:
         # Validate test-level platform if present
         if "platform" in data:
             validate_platform_field(data["platform"], f"{path}.platform", result)
+
+        # Top-level `orientation`: the orientation the run starts in.
+        if "orientation" in data:
+            validate_orientation_field(
+                data["orientation"], f"{path}.orientation", result)
 
         # Validate launch configuration if present
         if "launch" in data:

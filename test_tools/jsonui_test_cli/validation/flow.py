@@ -10,6 +10,7 @@ from .required import check_required_top_level
 from .step import StepValidator
 from .launch import validate_launch
 from .platform import validate_platform_field
+from .orientation import validate_orientation_field
 from .mock import find_mock_index, validate_mock_reference
 from ..schema import VALID_FLOW_TOP_LEVEL_KEYS, VALID_SCREEN_TOP_LEVEL_KEYS
 
@@ -63,6 +64,11 @@ class FlowTestValidator:
         # Validate test-level platform if present (flow tests have no case objects)
         if "platform" in data:
             validate_platform_field(data["platform"], f"{path}.platform", result)
+
+        # Top-level `orientation`: the orientation the run starts in.
+        if "orientation" in data:
+            validate_orientation_field(
+                data["orientation"], f"{path}.orientation", result)
 
         # Validate root-level mock scenario set. File-level mocks are applied
         # before the first launch by the iOS/Android/Web drivers (parity with

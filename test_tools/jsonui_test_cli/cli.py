@@ -246,6 +246,18 @@ def cmd_validate(args):
         print(f"[ERROR] {message}")
         total_errors += 1
 
+    # Run-scoped defaults live in config, so no test file can carry their
+    # mistakes to this report. They are counted as errors of this run because
+    # the install below is gated on the count: a tier this CLI does not
+    # recognise must not reach a device, where it would simply never match
+    # and leave the lane in whatever orientation it booted in — with every
+    # assertion still passing, in the orientation nobody chose.
+    from .run_defaults import validate_orientation_defaults
+    _run_cfg, _ = _load_test_config(getattr(args, "config", None))
+    for message in validate_orientation_defaults(_run_cfg):
+        print(f"[ERROR] {message}")
+        total_errors += 1
+
     # The mock gate's findings are errors of this run, so they are added to
     # the count rather than carried beside it.
     #
@@ -1208,6 +1220,7 @@ def _declared_test_files(test_config, project_root):
 def _install_validated_tests(valid_test_files, config_path):
     """Flatten-install valid .test.json files per config. Returns exit code."""
     from .install import resolve_targets, flatten_install
+    from .run_defaults import SIDECAR_FILENAME
 
     test_config, cfg_path = _load_test_config(config_path)
     if not cfg_path:
@@ -1240,8 +1253,11 @@ def _install_validated_tests(valid_test_files, config_path):
     covered = {Path(f).resolve() for f in valid_test_files}
     full_sync = declared is not None and declared <= covered
 
+    from .run_defaults import build_sidecar
+
     report = flatten_install(valid_test_files, targets,
-                             media_files=media_files, clean=full_sync)
+                             media_files=media_files, clean=full_sync,
+                             sidecar=build_sidecar(test_config))
 
     if report.has_collision:
         print(f"\n{'='*50}")
@@ -1285,6 +1301,10 @@ def _install_validated_tests(valid_test_files, config_path):
         media = len(report.media_copied.get(platform, []))
         if media:
             details.append(f"{media} media file(s) → media/")
+        if any(pf == platform for pf, _ in report.sidecars):
+            declared = len(build_sidecar(test_config)["orientation"])
+            details.append(
+                f"{SIDECAR_FILENAME} ({declared} orientation default(s))")
         detail = f" ({', '.join(details)})" if details else ""
         print(f"  {platform}: {installed} test(s){detail} → {dest}")
     return 0

@@ -29,7 +29,20 @@ VALID_FAILURE_REASONS = [
 ]
 VALID_RESULTS_TOP_LEVEL_KEYS = ["format", "version", "platform", "generatedAt", "suites"]
 VALID_SUITE_KEYS = ["suiteName", "totalDurationMs", "results"]
-VALID_RESULT_KEYS = ["testName", "caseName", "status", "skipReason", "failureReason", "error", "warnings", "durationMs", "attempts", "flaky"]
+#: Per-case keys a driver may report. `declaredOrientation` /
+#: `observedOrientation` are a PAIR on purpose: 'portrait' resolves to
+#: `setOrientationNatural()` on Android, and a tablet whose natural
+#: orientation is landscape does not turn portrait — so a run that asked for
+#: one orientation and executed in the other is a real, silent outcome. One
+#: field would record the request and assume it was honoured, which is the
+#: agreement the pair exists to measure. Both optional: a driver that does
+#: not report orientation stays valid.
+VALID_RESULT_KEYS = ["testName", "caseName", "status", "skipReason", "failureReason", "error", "warnings", "durationMs", "attempts", "flaky", "declaredOrientation", "observedOrientation"]
+
+#: Values either orientation field may hold. Mirrors
+#: `schema.RESPONSIVE_ORIENTATIONS`; imported rather than restated so the
+#: results side cannot drift from the authoring side.
+from .schema import RESPONSIVE_ORIENTATIONS as VALID_RESULT_ORIENTATIONS
 
 
 def validate_results_data(data, source: str) -> list[str]:
@@ -97,6 +110,11 @@ def validate_results_data(data, source: str) -> list[str]:
                         f"{case_path}: 'skipReason' is only meaningful when status is 'skipped', "
                         f"got status: {case.get('status')!r}"
                     )
+            for field in ("declaredOrientation", "observedOrientation"):
+                if field in case and case[field] not in VALID_RESULT_ORIENTATIONS:
+                    errors.append(
+                        f"{case_path}: '{field}' must be one of "
+                        f"{VALID_RESULT_ORIENTATIONS}, got: {case[field]!r}")
             if "failureReason" in case:
                 reason = case["failureReason"]
                 if reason not in VALID_FAILURE_REASONS:

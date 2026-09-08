@@ -31,6 +31,15 @@ RESPONSIVE_CONSTRAINT_KEYS = ["minWidth", "maxWidth", "minHeight", "maxHeight", 
 # Valid orientation values (responsive constraint 'orientation' / setOrientation action)
 RESPONSIVE_ORIENTATIONS = ["portrait", "landscape"]
 
+# Tiers that can be given a default orientation (`test.orientation` in config,
+# and the sidecar the install writes from it). DERIVED from RESPONSIVE_BUCKETS
+# rather than listed again: the four orientation-bearing buckets already name
+# an orientation, so `regular-landscape: portrait` would be a contradiction,
+# and hand-listing the other three would let a newly added tier be silently
+# undeclarable. test_run_default_orientation.py pins today's answer so that a
+# bucket added with a different spelling is noticed rather than absorbed.
+ORIENTATION_DEFAULT_TIERS = [b for b in RESPONSIVE_BUCKETS if "landscape" not in b]
+
 # Cross-platform supported actions and their required/optional parameters
 SUPPORTED_ACTIONS = {
     "tap": {
@@ -307,9 +316,9 @@ VALID_PERMISSION_VALUES = ["allow", "deny", "unset"]
 # which the validators report with a pointed message. test_schema_drift.py
 # pins both lists to the vendored schemas.
 VALID_SCREEN_TOP_LEVEL_KEYS = [
-    "$schema", "type", "source", "metadata", "platform", "embeddedIn",
-    "initialState", "launch", "mocks", "screenReady", "setup", "teardown",
-    "cases"
+    "$schema", "type", "source", "metadata", "platform", "orientation",
+    "embeddedIn", "initialState", "launch", "mocks", "screenReady", "setup",
+    "teardown", "cases"
 ]
 
 # Minimum driver version per top-level key, mirroring `x-requires-driver` in
@@ -321,6 +330,25 @@ VALID_SCREEN_TOP_LEVEL_KEYS = [
 # test_schema_drift.py pins this to the schemas in both directions.
 KEY_DRIVER_REQUIREMENTS = {
     "screenReady": {"web": "1.8.4"},
+    # A FLOOR, not an exact version — the same reading as `screenReady`,
+    # whose floor is web 1.8.4 while the shipped web driver is 1.8.6. The
+    # floor is "the first driver release that reads this key", and since
+    # `orientation` is a new key, no release before the one that introduces
+    # it reads it at all. All three drivers introduce it together, so one
+    # number answers for all three. Named before those releases exist
+    # because the landing order is schema -> driver; release acceptance
+    # checks what was actually published against this, and a divergence
+    # means the schema is lying.
+    #
+    # LIMIT, so that "it is declared" is not read as "it is enforced": only
+    # `web` is checkable. `runtime_support.DRIVER_PACKAGES` can read a
+    # version for npm alone — the iOS and Android drivers arrive through SPM
+    # and Maven and leave nothing in a project tree to read — so those two
+    # floors produce a note naming the files, never an error. They are
+    # declared anyway: a note that says which files declare the key is more
+    # than silence, and the day either becomes resolvable the declaration is
+    # already here rather than being remembered then.
+    "orientation": {"android": "1.12.0", "ios": "1.12.0", "web": "1.12.0"},
 }
 
 # `screenReady` string forms. The object form is {"marker": "<screen id>"}.
@@ -330,9 +358,9 @@ KEY_DRIVER_REQUIREMENTS = {
 # correctly never going to appear.
 VALID_SCREEN_READY_VALUES = ["auto", "marker", "networkidle", "none"]
 VALID_FLOW_TOP_LEVEL_KEYS = [
-    "$schema", "type", "metadata", "platform", "initialState", "launch",
-    "mocks", "setup", "teardown", "sources", "steps", "checkpoints",
-    "descriptionFile"
+    "$schema", "type", "metadata", "platform", "orientation",
+    "initialState", "launch", "mocks", "setup", "teardown", "sources",
+    "steps", "checkpoints", "descriptionFile"
 ]
 
 # Top-level keys the canonical schemas mark `required`, per test type.

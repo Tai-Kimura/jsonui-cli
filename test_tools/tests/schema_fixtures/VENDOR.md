@@ -24,7 +24,13 @@ turning drift into a CI failure.
 
 - Source repo: `Tai-Kimura/jsonui-test-runner`
 - Source path: `schemas/{actions,screen-test,flow-test,results,description}.schema.json`
-- Vendored at commit: `9c18004`
+- Vendored at commit: `aae3b0a`
+
+  ⚠️ Nothing reads that line. The byte guard is
+  `dev-guide/ci/check-canonical-sync.py`, which compares the FILES; the
+  stamp is prose beside it. If the canonical commit lands under a
+  different SHA — a cherry-pick, a rebase — this line has to be
+  re-pointed by hand and no gate will say it is wrong.
 
 ## `mock.schema.json` is not here
 

@@ -256,6 +256,27 @@ def test_results_version_is_const_1():
     assert rp.RESULTS_VERSION == 1
 
 
+def test_results_orientation_enums_match():
+    """Both orientation fields, in both directions.
+
+    They are a pair, so a schema that grew one of them and a constant that
+    knows only the other is the drift worth catching here — the halves are
+    checked separately rather than as a set, so `only in schema` names which
+    one moved.
+    """
+    props = _result_item_props(_load("results"))
+    for field in ("declaredOrientation", "observedOrientation"):
+        assert field in props, (
+            f"results.schema.json lost {field}; report.VALID_RESULT_KEYS still "
+            f"lists it, so a driver writing it would validate against a schema "
+            f"that rejects it"
+        )
+        assert set(props[field]["enum"]) == set(rp.VALID_RESULT_ORIENTATIONS), (
+            f"results.schema.json {field} enum drifted from "
+            f"report.VALID_RESULT_ORIENTATIONS"
+        )
+
+
 def test_results_item_keys_match():
     schema = _load("results")
     keys = set(_result_item_props(schema).keys())

@@ -216,6 +216,16 @@
       "default": "all",
       "description": "Target platform(s) for this test"
     },
+    "orientation": {
+      "x-requires-driver": {
+        "android": "1.12.0",
+        "ios": "1.12.0",
+        "web": "1.12.0"
+      },
+      "type": "string",
+      "enum": ["portrait", "landscape"],
+      "description": "Orientation this file runs in, applied once when the run starts. Overrides the project-wide default in jui.config.json `test.orientation`; a `setOrientation` step still wins for the rotation it performs, so the order is step > this field > config default. Declared in the file rather than resolved at install time because one installed bundle is shared by every lane — phone and tablet run the same files against different devices — so a value baked in per file could only be right for one of them."
+    },
     "launch": {
       "$ref": "actions.schema.json#/definitions/launch"
     },
