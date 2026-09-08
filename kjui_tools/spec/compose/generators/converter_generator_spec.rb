@@ -84,6 +84,31 @@ RSpec.describe KjuiTools::Compose::Generators::ConverterGenerator do
         expect(template).to include('ModifierBuilder.build_size')
         expect(template).to include('ModifierBuilder.build_padding')
       end
+
+      # 🚨 Reported 2026-09-08. The template listed size / offset / padding /
+      # margins / background and NOT `build_test_tag`, so every custom
+      # component generated from it emitted no `testTag` — and with no
+      # testTag there is no resource-id, so Android UI tests cannot find the
+      # node at all. One consumer face measured 63 nodes becoming reachable
+      # (none lost) after adding the call to their eight converters by hand.
+      #
+      # ⚠️ The gap was invisible to every existing arm here because they
+      # assert what the template DOES contain. Nothing counted what the
+      # built-in components contain that the template does not — which is the
+      # comparison that finds an omission.
+      it 'emits a testTag, as 27 of the 28 built-in components do' do
+        template = generator.send(:converter_template)
+        expect(template).to include('ModifierBuilder.build_test_tag')
+      end
+
+      it 'builds the testTag before the geometry modifiers' do
+        # Same order the built-ins use (see button_component.rb). Asserted
+        # because a modifier list is order-sensitive and "present somewhere"
+        # is a weaker claim than the built-ins actually satisfy.
+        template = generator.send(:converter_template)
+        expect(template.index('ModifierBuilder.build_test_tag'))
+          .to be < template.index('ModifierBuilder.build_size')
+      end
     end
 
     describe '#generate_parameter_collection' do

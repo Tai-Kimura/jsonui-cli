@@ -152,7 +152,26 @@ module KjuiTools
             #{generate_parameter_collection}
 
                         # Build modifiers
+                        #
+                        # 🚨 `build_test_tag` FIRST, and it was absent entirely
+                        # until 2026-09-08. 27 of the 28 built-in components
+                        # emit it; components made from this template emitted
+                        # it ZERO times, so anything a project generated here
+                        # had no resource-id and could not be found by the
+                        # Android UI tests. One consumer face measured 63 nodes
+                        # becoming reachable (and none lost) after adding it to
+                        # their eight generated converters by hand.
+                        #
+                        # ⚠️ iOS never had this gap because its template
+                        # DELEGATES (`apply_modifiers`) instead of listing.
+                        # A list is a place a line can be forgotten; that this
+                        # one was forgotten is the argument for the other
+                        # shape, not for adding one line and moving on. Left as
+                        # a list here because converting this template to
+                        # delegation changes what every generated converter
+                        # emits, and that belongs in its own release.
                         modifiers = []
+                        modifiers.concat(Helpers::ModifierBuilder.build_test_tag(json_data, required_imports))
                         modifiers.concat(Helpers::ModifierBuilder.build_size(json_data, nil, required_imports))
                         modifiers.concat(Helpers::ModifierBuilder.build_offset(json_data, required_imports))
                         modifiers.concat(Helpers::ModifierBuilder.build_padding(json_data))
