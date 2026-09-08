@@ -180,22 +180,33 @@ def _screen_declarations_in_the_wrong_place(cases, screen_specs) -> list[str]:
     rule = _ownership_rule()
     if rule is None:
         return [OWNERSHIP_UNAVAILABLE]
-    out = []
-    seen = set()
+    # ⚠️ Every screen that DECLARES the target, not just the first one seen.
+    # The line is folded to one per target, and the first cut named the screen
+    # of whichever case reached it first -- so a consumer who moved that one
+    # declaration left the others behind, and the check passed. Reported by
+    # the face that hit it: four targets were declared across seven screens,
+    # and the message named four.
+    declared_in: dict[str, list[str]] = {}
     for case in cases:
-        if case.app or not case.screen or case.target in seen:
+        if case.app or not case.screen:
             continue
-        seen.add(case.target)
-        kind, owners = rule.classify(case.target, screen_specs)
+        sites = declared_in.setdefault(case.target, [])
+        if case.screen not in sites:
+            sites.append(case.screen)
+
+    out = []
+    for target, sites in sorted(declared_in.items()):
+        kind, owners = rule.classify(target, screen_specs)
         if kind != rule.APP_OWNED or len(owners) < 2:
             continue
         shown = ", ".join(owners[:4]) + ("…" if len(owners) > 4 else "")
+        where = ", ".join(sorted(sites))
         out.append(
-            f"{case.screen}: '{case.target}' is declared in one screen's "
-            f"spec, but {len(owners)} screens own it ({shown}) — filing it "
-            f"under one of them records an ownership that does not exist. "
-            f"Move it to the app contracts spec, which is where a target no "
-            f"single screen owns belongs."
+            f"{where}: '{target}' is declared in {len(sites)} screen spec(s) "
+            f"({where}), but {len(owners)} screens own it ({shown}) — filing "
+            f"it under any of them records an ownership that does not exist. "
+            f"Move ALL {len(sites)} declaration(s) to the app contracts spec, "
+            f"which is where a target no single screen owns belongs."
         )
     return out
 

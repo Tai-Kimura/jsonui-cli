@@ -119,6 +119,40 @@ def test_a_target_nobody_owns_is_silent(tmp_path):
     assert [p for p in _problems(root) if "SomeHelper" in p] == []
 
 
+def test_every_declaring_screen_is_named_not_just_the_first(tmp_path):
+    """⚠️ The line is folded to one per target, and the first cut named the
+    screen of whichever case reached it first.
+
+    Reported by a face that acted on it: the message said "declared in
+    Settings", the target was also declared in `change_email_sheet`, and
+    moving the named one left the other behind — where it passed the check.
+    A remedy that is followed exactly and still leaves the defect is worse
+    than no remedy, because the author has evidence they are done.
+    """
+    # ⚠️ The declaring screens and the owning screens are kept DISJOINT, and
+    # that is load-bearing. The first version of this arm let one screen be
+    # both, so `assert "Settings" in hits[0]` was satisfied by the OWNERS
+    # list — and the mutation that drops every site but the first left it
+    # green. An arm whose subject appears twice in the output cannot say
+    # which half produced it.
+    root = _repo(tmp_path, {
+        "Alpha": ({}, "SharedUseCase"),          # declares, owns nothing
+        "Beta": ({}, "SharedUseCase"),           # declares, owns nothing
+        "Gamma": (_repo_named("SharedUseCase"), None),   # owns, declares nothing
+        "Delta": (_repo_named("SharedUseCase"), None),   # owns, declares nothing
+    })
+    hits = [p for p in _problems(root) if "SharedUseCase" in p]
+    assert len(hits) == 1, hits
+    # Alpha and Beta appear nowhere else in the sentence, so their presence
+    # can only come from the list of declaration sites.
+    assert "Alpha" in hits[0] and "Beta" in hits[0], hits[0]
+    assert "2 screen spec(s)" in hits[0]
+    assert "Move ALL 2 declaration(s)" in hits[0]
+    # And the owners are the other two, so the two halves are distinguishable
+    # in the output a reader actually sees.
+    assert "Gamma" in hits[0] and "Delta" in hits[0], hits[0]
+
+
 def test_one_line_per_target_not_per_declaring_screen(tmp_path):
     # The same target declared twice is one misplacement, not two. Reported
     # per declaration, a target declared in nine screens would fill the
