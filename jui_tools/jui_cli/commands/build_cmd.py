@@ -1557,6 +1557,21 @@ def _sync_api_models(
     return True
 
 
+def _describes_a_screen(spec_type):
+    """`shared/core/spec_types.describes_a_screen`, or None when unreachable.
+
+    Loaded rather than restated. `jui verify` reads the same table for the same
+    question; the two of them going out of step is exactly how a spec type
+    added for one package became a broken identifier emitted by another.
+    """
+    from ..core import shared_core
+
+    core = shared_core.load("spec_types")
+    if core is None:
+        return None
+    return core.describes_a_screen(spec_type)
+
+
 def _load_all_specs(config_mgr: ConfigManager) -> list[tuple[Path, ScreenSpec]]:
     """Load every ``*.spec.json`` under the project's spec directory.
 
@@ -1597,6 +1612,37 @@ def _load_all_specs(config_mgr: ConfigManager) -> list[tuple[Path, ScreenSpec]]:
         try:
             spec_data = json.loads(sf.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError):
+            continue
+        # ⚠️ Asked before anything is built from this file. Without it a spec
+        # that describes NO screen was loaded as one and `extract_screen_spec`
+        # took `metadata.name` — an app's display name — as a screen name. A
+        # consumer face got a protocol named from an app display name that
+        # carried a hyphen and a space: invalid Swift AND invalid Kotlin, on
+        # both platforms, under an @generated header, with `jui build`
+        # reporting "updated 2 protocol(s)" and exiting 0. Both trees compile
+        # those directories unconditionally, so the next build after `jui
+        # build` failed.
+        #
+        # Same table as `jui verify` reads, from `shared/core/spec_types.py`,
+        # deliberately not a second literal — this defect and the verify one
+        # are the same missing knowledge reached by two paths, and a copy here
+        # would guarantee a third.
+        describes_screen = _describes_a_screen(spec_data.get("type"))
+        if describes_screen is False:
+            continue
+        if describes_screen is None:
+            # Neither guess is safe: built, it can emit an identifier from a
+            # field that is not a screen name; skipped, a real screen loses its
+            # protocol silently. Skipped and SAID, so the run names what it
+            # declined to build rather than differing from a clean run only in
+            # what is absent.
+            print(
+                f"\nWARNING: {sf.name} has type "
+                f"{spec_data.get('type')!r}, which this build does not know. "
+                f"Nothing was generated from it. If it describes a screen, "
+                f"this build is older than the tool that wrote it "
+                f"(`jui sync_tool`)."
+            )
             continue
         if spec_data.get("type") == "screen_parent_spec":
             merge_result = merger.merge_from_file(sf)
