@@ -61,14 +61,15 @@ OWNERSHIP_UNAVAILABLE = (
     "checked. This is a tool/distribution problem, not a spec error."
 )
 
-#: Stated on every run that reads an app spec. The component source is the
-#: one ownership source this caller does not consult yet, and a limit that
-#: goes unsaid is read as a clean result.
+#: Stated on every run, because both declaration-site directions carry the
+#: same unresolved source. A limit that goes unsaid is read as a clean result.
 OWNERSHIP_PARTIAL = (
-    "app-level declaration sites were checked against ViewModel, repository "
-    "and useCase ownership only. Components a screen DECLARES are not "
-    "consulted yet, so a component owned by exactly one screen can sit in an "
-    "app spec without being reported."
+    "declaration sites were checked against ViewModel, repository and useCase "
+    "ownership only. Components a screen DECLARES are not consulted yet, so "
+    "every owner count below is a LOWER BOUND: a component owned by exactly "
+    "one screen can sit in an app spec without being reported, and a target "
+    "several screens own through components alone is not reported as "
+    "misplaced in a screen's spec."
 )
 
 
@@ -119,6 +120,60 @@ def _app_declarations_in_the_wrong_place(cases, screen_specs) -> list[str]:
                 f"records that no single screen does. Declare it in "
                 f"{owners[0]}'s spec instead."
             )
+    return out
+
+
+def _screen_declarations_in_the_wrong_place(cases, screen_specs) -> list[str]:
+    """Screen-level declarations that no single screen owns.
+
+    The mirror of `_app_declarations_in_the_wrong_place`, and the reason the
+    app contracts spec was added: a target several screens own had nowhere to
+    live, so it was filed under whichever screen happened to declare it and
+    was then reported as that screen's. This is the direction that finds the
+    ones already sitting in the wrong place.
+
+    ⚠️ ONLY the two-or-more case is reported, and that restriction is forced
+    rather than cautious. The component source is not resolved by this caller
+    either, so every owner count here is a LOWER BOUND, and only a claim that
+    survives adding owners is sound:
+
+        `>= 2 owners`     adding an owner keeps it >= 2   -> safe
+        `exactly 1 owner` adding an owner makes it 2      -> NOT safe
+
+    So "declared in A's spec but B owns it" is deliberately NOT reported: the
+    full rule might have answered `{A, B}`, which is app-owned and correctly
+    declared nowhere near B.
+
+    📌 That asymmetry runs the other way for the app-level direction, whose
+    docstring argues the opposite -- that an unconsulted source "can only
+    LOWER an owner count, and a lower count never manufactures the single
+    owner this reports". A lower count reaches 1 by descending FROM 2, which
+    is exactly how it is manufactured. Measured on the shared corpus: two
+    targets there have 2 owners and one has 9, so the descent is not
+    hypothetical. Left as it stands here because fixing it belongs to that
+    function, and correcting the same rule from two sides at once is how two
+    tools end up disagreeing about one fact.
+    """
+    rule = _ownership_rule()
+    if rule is None:
+        return [OWNERSHIP_UNAVAILABLE]
+    out = []
+    seen = set()
+    for case in cases:
+        if case.app or not case.screen or case.target in seen:
+            continue
+        seen.add(case.target)
+        kind, owners = rule.classify(case.target, screen_specs)
+        if kind != rule.APP_OWNED or len(owners) < 2:
+            continue
+        shown = ", ".join(owners[:4]) + ("…" if len(owners) > 4 else "")
+        out.append(
+            f"{case.screen}: '{case.target}' is declared in one screen's "
+            f"spec, but {len(owners)} screens own it ({shown}) — filing it "
+            f"under one of them records an ownership that does not exist. "
+            f"Move it to the app contracts spec, which is where a target no "
+            f"single screen owns belongs."
+        )
     return out
 
 
@@ -686,6 +741,17 @@ def discover_unit_contracts(
         )
     if app_specs:
         problems.extend(_app_declarations_in_the_wrong_place(cases, screen_specs))
+    # Not gated on `app_specs`: this direction finds the declarations that are
+    # in the wrong place BECAUSE no app spec exists yet, so requiring one
+    # first would silence the check exactly where it has something to say.
+    for problem in _screen_declarations_in_the_wrong_place(cases, screen_specs):
+        # `OWNERSHIP_UNAVAILABLE` is one sentence about one cause, and both
+        # directions raise it. Printed twice it reads as two faults, and a
+        # reader counting problems would see the tool's own outage as the
+        # larger half of their result.
+        if problem == OWNERSHIP_UNAVAILABLE and problem in problems:
+            continue
+        problems.append(problem)
     return (cases, scanned, declaring, problems, declaring_files,
             unreadable_files, app_specs)
 
@@ -1109,7 +1175,11 @@ def check_unit_contracts(
         declaring_specs=declaring, problems=problems,
         declaring_files=declaring_files,
         unreadable_files=unreadable_files,
-        notes=[OWNERSHIP_PARTIAL] if app_specs else [],
+        # Unconditional now: the screen-level direction runs on every project,
+        # and it carries the same unresolved component source. Tying the limit
+        # to `app_specs` would state it only for projects that already have
+        # the spec type, which are the ones least likely to be surprised.
+        notes=[OWNERSHIP_PARTIAL],
     )
     for case in cases:
         # ⚠️ The check lives HERE and not in `_cases_of`, which is where a

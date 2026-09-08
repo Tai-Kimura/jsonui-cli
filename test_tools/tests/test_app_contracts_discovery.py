@@ -241,9 +241,20 @@ class TestTheBlindSpotIsPrintedNotCounted:
         assert report.notes
         assert report.ok, uc.format_report(report)
 
-    def test_a_run_with_no_app_spec_says_nothing(self, tmp_path):
-        """The control: the note is about app specs, so a project without
-        one must not carry it. A note printed unconditionally is noise, and
-        noise is how a real one stops being read."""
+    def test_a_run_with_no_app_spec_still_says_it(self, tmp_path):
+        """INVERTED 2026-09-08, when the screen-level direction landed.
+
+        This asserted the opposite -- that a project with no app spec carries
+        no note -- and the reasoning behind it still holds in general: a note
+        printed unconditionally is noise, and noise is how a real one stops
+        being read. It stopped applying because the limit stopped being about
+        app specs. The component source is unresolved for BOTH directions, and
+        the screen-level one runs on every project, so a project without an
+        app spec is now judged with lower-bound owner counts too -- and it is
+        precisely the project least likely to expect that.
+
+        Kept and inverted rather than deleted: with the arm gone, restoring
+        the `if app_specs` gate would be silent, and the note would go missing
+        for every project that has not adopted the spec type yet."""
         root = _project(tmp_path, screens={"chat": SCREEN_BLOCK})
-        assert uc.check_unit_contracts(root).notes == []
+        assert uc.check_unit_contracts(root).notes == [uc.OWNERSHIP_PARTIAL]
