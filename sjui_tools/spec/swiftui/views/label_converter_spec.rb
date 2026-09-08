@@ -384,6 +384,57 @@ RSpec.describe SjuiTools::SwiftUI::Views::LabelConverter do
     end
   end
 
+  # `Label.font` IS a weight: the declaration says "Font weight name
+  # (regular/medium/semibold/bold/...)" and "Passed as the `weight` field of
+  # `FontSpec`", and the Android generator does exactly that. The converter
+  # matched the literal 'bold' only, so `medium` and `semibold` emitted no
+  # line and iOS rendered regular while Android rendered the weight — from the
+  # same node, with no `jui build` warning and nothing in any UI test
+  # asserting a weight. Reported from a consumer face; measured across five
+  # faces as bold 421, medium 167, semibold 22, regular 3.
+  #
+  # ⚠️ The arm above could not have caught it: it asserts only that
+  # `PartialAttributedText` appears, which is true whether or not a weight is
+  # emitted. It is kept — it covers a different thing — and these assert the
+  # weight itself.
+  describe 'font as a weight name' do
+    def weight_line_for(font)
+      described_class.new(
+        'type' => 'Label', 'text' => 'T', 'font' => font
+      ).convert
+    end
+
+    %w[bold medium semibold regular].each do |name|
+      it "emits a weight for font: #{name}" do
+        expect(weight_line_for(name)).to include(%(fontWeight: "#{name}"))
+      end
+    end
+
+    it 'keeps fontWeight winning over font' do
+      code = described_class.new(
+        'type' => 'Label', 'text' => 'T', 'font' => 'medium',
+        'fontWeight' => 'semibold'
+      ).convert
+      expect(code).to include(%(fontWeight: "semibold"))
+      expect(code).not_to include(%(fontWeight: "medium"))
+    end
+
+    it 'does NOT turn a non-weight name into a weight' do
+      # The declaration's "or font name" half is real for other components
+      # (`TextField.font`, `TextView.font`, `Button.font` are families with
+      # 'bold' special-cased). A name that is not in the shared vocabulary is
+      # left alone rather than forced into a weight.
+      expect(weight_line_for('Helvetica')).not_to include('fontWeight:')
+    end
+
+    it 'does NOT emit a weight for a binding' do
+      # Whether `@{...}` resolves to a weight name cannot be known at
+      # generation time. Named as a limitation rather than guessed: two such
+      # nodes exist on one consumer face and this change does not reach them.
+      expect(weight_line_for('@{dayNameFont}')).not_to include('fontWeight:')
+    end
+  end
+
   describe 'text binding' do
     it 'handles binding expression' do
       component = { 'type' => 'Label', 'text' => '@{userName}' }

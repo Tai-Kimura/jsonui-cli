@@ -141,10 +141,33 @@ module SjuiTools
             # ("cannot convert value of type 'String' to expected argument type
             # 'Font.Weight'"). StateAwareButtonView has a combined overload,
             # which is why Button never hit this.
+            # ⚠️ `Label.font` IS a weight. The declaration says "Font weight
+            # name (regular/medium/semibold/bold/...) or font name" and then
+            # "Passed as the `weight` field of `FontSpec`", and the Android
+            # generator does exactly that. This branch matched the literal
+            # 'bold' only, so `medium` and `semibold` produced no line at all
+            # and iOS rendered regular while Android rendered the weight —
+            # from the same node, with no warning from `jui build` and no
+            # assertion in any UI test. Measured across five consumer faces:
+            # bold 421 (already right), medium 167, semibold 22, regular 3.
+            #
+            # Matched against the shared vocabulary rather than widened to
+            # "any string", because the declaration's "or font name" half is
+            # real for other components — `TextField.font`, `TextView.font`
+            # and `Button.font` are FAMILIES with 'bold' special-cased. A name
+            # that is not a weight is left alone here rather than forced into
+            # one. (Across those same five faces there are zero such values,
+            # so nothing today depends on that half — but the reading is not
+            # this converter's to delete.)
+            #
+            # A binding (`@{...}`) is not a weight name and still produces no
+            # line: whether it resolves to one cannot be known at generation
+            # time. Two such nodes exist on one face and this does NOT reach
+            # them.
             weight_name = if @component['fontWeight']
                             @component['fontWeight']
-                          elsif @component['font'] == 'bold'
-                            'bold'
+                          elsif weight_vocabulary.include?(@component['font'].to_s.downcase)
+                            @component['font']
                           end
             if weight_name
               # `fontWeight` is declared `["string", "number"]`, and `600` is
