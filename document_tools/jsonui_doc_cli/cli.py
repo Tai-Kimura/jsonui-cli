@@ -829,6 +829,8 @@ def _component_declaration_gaps(spec_files, input_dir):
                     f"the face root could not be derived"]
 
     declared: dict[str, list[str]] = {}
+    #: component NAME -> specs that name it without giving a `specFile`.
+    named_only: dict[str, list[str]] = {}
     for spec_file in spec_files:
         try:
             with open(spec_file, "r", encoding="utf-8") as f:
@@ -841,6 +843,16 @@ def _component_declaration_gaps(spec_files, input_dir):
             name = (cc or {}).get("specFile")
             if isinstance(name, str) and name:
                 declared.setdefault(name, []).append(str(spec_file))
+                continue
+            # ⚠️ An entry with a `name` but no `specFile` matches on nothing
+            # here, because this reconciliation is keyed on the file name. The
+            # component it names then falls into the undeclared branch below
+            # and is reported as "declared by no screen spec" — while its
+            # declaration is sitting in this very list. Kept so that message
+            # can say what is actually wrong instead of what is merely true.
+            by_name = (cc or {}).get("name")
+            if isinstance(by_name, str) and by_name:
+                named_only.setdefault(by_name, []).append(str(spec_file))
 
     on_disk = {f.name: f for f in comp_files}
 
@@ -856,6 +868,20 @@ def _component_declaration_gaps(spec_files, input_dir):
             f"(declared by: {where})")
 
     for name in sorted(set(on_disk) - set(declared)):
+        # A declaration that named this component but gave no `specFile` is
+        # the likelier story, and it points at the field to fix rather than at
+        # a declaration to add that is already there.
+        incomplete = _declared_by_name_only(on_disk[name], named_only)
+        if incomplete:
+            where = ", ".join(sorted(incomplete))
+            errors.append(
+                f"[ERROR] {name} is declared by {len(incomplete)} spec(s) that "
+                f"name it but give no 'specFile', so nothing links the "
+                f"declaration to this file ({where}) — add "
+                f"\"specFile\": \"{name}\" to that entry. Reported as "
+                f"\"declared by no screen spec\" before this check existed, "
+                f"which sent authors to add a declaration they already had.")
+            continue
         users = _layouts_naming_component(on_disk[name], layouts_dir)
         if users is None:
             warnings.append(
@@ -872,10 +898,29 @@ def _component_declaration_gaps(spec_files, input_dir):
         else:
             warnings.append(
                 f"[WARNING] {name} is declared by no screen spec and named by "
-                f"no layout — its page is generated and unreachable, and "
-                f"nothing appears to use it yet")
+                f"no LAYOUT — its page is generated and nothing links to it. "
+                f"⚠️ Only layouts were searched: a component used by another "
+                f"COMPONENT is invisible to this check, so this is not a "
+                f"finding that it is unused. Verify before removing anything "
+                f"— a face read an earlier wording of this line as "
+                f"\"unused\" and came close to deleting a live component.")
 
     return errors, warnings
+
+
+def _declared_by_name_only(component_file: Path, named_only) -> list[str]:
+    """Specs that named this component but gave no `specFile`, or []."""
+    if not named_only:
+        return []
+    try:
+        data = json.loads(component_file.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return []
+    name = ((data.get("metadata") or {}).get("name")
+            if isinstance(data, dict) else None)
+    if not isinstance(name, str) or not name:
+        return []
+    return list(named_only.get(name, []))
 
 
 def _layouts_naming_component(component_file: Path, layouts_dir):

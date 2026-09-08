@@ -131,7 +131,13 @@ class BothDirectionsAreChecked(_Face):
         errors, warnings = self.run_check(specs)
         self.assertEqual(errors, [])
         self.assertEqual(len(warnings), 1, warnings)
-        self.assertIn("no layout", warnings[0])
+        self.assertIn("no LAYOUT", warnings[0])
+        # ⚠️ And it must say so is not a finding of "unused". Only layouts are
+        # searched, so a component used by another COMPONENT is invisible here.
+        # A face read the earlier wording as "unused" and came close to
+        # deleting a live component whose only user was another component.
+        self.assertIn("COMPONENT", warnings[0])
+        self.assertIn("not a finding that it is unused", warnings[0])
 
     def test_with_no_layouts_directory_it_says_which_question_it_skipped(self):
         # "no layout uses it" and "nobody looked" produce the same empty list.

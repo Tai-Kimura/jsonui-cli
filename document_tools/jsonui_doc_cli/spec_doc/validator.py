@@ -579,6 +579,16 @@ class SpecValidator:
                 comp, component_ids, f"structure.components[{i}]", result
             )
 
+        # Validate custom component references. Every other `$defs` entry with
+        # a `required` list has a `_validate_*` counterpart; this one had none,
+        # so its two required fields were the only ones in the schema that
+        # nothing enforced. Probed 13 requirements across the schema: 11 were
+        # caught by this validator, and the two silent ones were both here.
+        for i, cc in enumerate(structure.get("customComponents", []) or []):
+            self._validate_custom_component(
+                cc, f"structure.customComponents[{i}]", result
+            )
+
         # Validate decorative elements (new: A-2)
         for i, elem in enumerate(structure.get("decorativeElements", []) or []):
             self._validate_decorative_element(
@@ -695,6 +705,52 @@ class SpecValidator:
             result.errors.append(SpecValidationMessage(
                 path=f"{path}.children",
                 message=f"'children' must be an array, got {type(children).__name__}"
+            ))
+
+    def _validate_custom_component(
+        self, cc: Any, path: str, result: SpecValidationResult
+    ):
+        """Validate a `structure.customComponents[]` entry.
+
+        ⚠️ Both fields were unchecked, and dropping `specFile` produced a
+        message about a DIFFERENT fact. The component page is matched by file
+        name (`cli.py:743/746`), so an entry carrying only `name` contributes
+        nothing to match on, and the component spec on disk was then reported
+        as "declared by no screen spec" — while its declaration was sitting in
+        this very list. The advice that error gives is to add a declaration,
+        which is already there, so following it exactly changes nothing and
+        never reaches the missing field.
+
+        Reported from a consumer face with the three arms that separate the
+        cases: `specFile` present (silent, correct), `specFile` absent with the
+        component spec on disk (the wrong message above), and `specFile` absent
+        with nothing on disk — which was completely silent and is the arm this
+        check exists for.
+        """
+        if not isinstance(cc, dict):
+            result.errors.append(SpecValidationMessage(
+                path=path,
+                message=f"customComponents entry must be an object, got {type(cc).__name__}"
+            ))
+            return
+        if not self._validate_required_fields(cc, ["name", "specFile"], path, result):
+            return
+
+        name = cc.get("name", "")
+        if name and not re.match(r"^[A-Z][a-zA-Z0-9]*$", name):
+            result.errors.append(SpecValidationMessage(
+                path=f"{path}.name",
+                message=f"Custom component name must be PascalCase: '{name}'"
+            ))
+
+        spec_file = cc.get("specFile", "")
+        if spec_file and not spec_file.endswith(".component.json"):
+            result.errors.append(SpecValidationMessage(
+                path=f"{path}.specFile",
+                message=(
+                    f"specFile must name a component spec ending in "
+                    f"'.component.json': '{spec_file}'"
+                )
             ))
 
     def _validate_decorative_element(
