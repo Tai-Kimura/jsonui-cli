@@ -1540,7 +1540,16 @@ def cmd_generate_unit_stubs(args):
 
     from .unit_contracts import write_stubs
 
-    touched = write_stubs(project_root, report, dry_run=getattr(args, "dry_run", False))
+    try:
+        touched = write_stubs(project_root, report,
+                              dry_run=getattr(args, "dry_run", False))
+    except UnitContractError as e:
+        # Same standing as the refusal above it: a name that cannot be an
+        # identifier, or a missing test module, stops the run with a sentence
+        # rather than a traceback -- which would read as a fault in the tool
+        # rather than in the declaration it is naming.
+        print(f"ERROR: {e}")
+        return 1
     if not touched:
         # `missing == 0` has two states and they are opposite facts: every
         # case is implemented, or nothing was compared. write_stubs skips

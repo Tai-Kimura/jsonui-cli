@@ -763,9 +763,18 @@ def _as_declared(platform: str, found: str) -> str:
     -- two lines that are the same string on screen and differ by one byte.
     Fixing only the pattern rescues the other 13 truncated titles and leaves
     this one undeclarable, so both sides are made symmetric here.
+
+    ⚠️ This used to run `_unescape_js` for web as well, and `_read_js_literal`
+    ALREADY unescapes -- so the sequence was applied twice. A declared name
+    `a\b` was emitted correctly as `a\\b`, read back correctly as `a\b`, and
+    then turned into a backspace, landing in both the missing and undeclared
+    columns. It stayed invisible because it needs a name carrying a backslash,
+    and because the only escape both halves see in practice is `\'`, which is
+    idempotent: unescaping it a second time changes nothing. The reader owns
+    the literal's syntax; this function owns the strip, and nothing else.
+    `platform` stays in the signature because the caller has it and a future
+    per-platform normalisation belongs here, not in the reader.
     """
-    if platform == "web":
-        found = _unescape_js(found)
     return found.strip()
 
 
@@ -989,9 +998,20 @@ def check_unit_contracts(
         unreadable_files=unreadable_files,
     )
     for case in cases:
+        # ⚠️ The check lives HERE and not in `_cases_of`, which is where a
+        # reader looks for it, because `_cases_of` reads one spec and has no
+        # project platform list — and the omitted `platforms` is exactly the
+        # dangerous case. A name is judged against the platforms it actually
+        # reaches, which for an omitted declaration is all of them.
         targets = case.platforms or tuple(project_platforms)
         for platform in targets:
             report.declared.setdefault(platform, set()).add(case.name)
+            why = identifier_problem(platform, case.name)
+            if why:
+                # Reported per platform on purpose: android accepts names ios
+                # refuses, so one line naming both would be wrong for one of
+                # them, and the fix ("declare platforms without ios") differs.
+                report.problems.append(f"{case.spec_file or case.screen}: {why}")
 
     for platform in sorted(set(report.declared) | set(project_platforms)):
         dirs = roots.get(platform)
@@ -1325,6 +1345,156 @@ STUB_END = "// <<< GENERATED_STUBS_END"
 #: added here and understood by the scanner.
 IOS_TEST_PREFIX = "test_"
 
+# ── a declared name reaches the emitted file in one of two positions ──────
+#
+# `web` puts it inside a string literal, so it is DATA and is escaped here.
+# `ios` and `android` put it in an identifier position, so it is CODE: a name
+# that is not a legal identifier there has no spelling that both compiles and
+# still matches the declaration `--check` compares against, and the only
+# honest answer is to refuse it. That asymmetry is the whole of this section.
+#
+# ⚠️ "web is a string literal, therefore safe" is not a claim until the
+# literal's QUOTE is named. The template is single-quoted, and the intent used
+# to be run through `.replace('"', "'")` — written for the double-quoted
+# platforms and exactly backwards here, because it turns a character this
+# literal accepts into the one that closes it. Measured with `node --check`:
+# an intent reading `has "quotes"` emitted a file that did not parse.
+
+#: Swift `identifier-character`, reconciled against the compiler.
+#:
+#: The CHARACTER rule, never the HEAD rule: `IOS_TEST_PREFIX` puts `t` in
+#: front, so a declared name may open with a digit. Measured with
+#: `swiftc -parse` (Xcode 26.5): `func test_1を返す()` parses, and so does an
+#: emoji name — U+1F389 falls in U+10000–U+1FFFD, which is why "restrict it
+#: to ASCII" is the wrong rule and would reject legal Japanese names.
+#:
+#: ⚠️ The table was TRANSCRIBED from the published grammar and then checked
+#: against swiftc itself: 240 code points — every printable ASCII character
+#: and both sides of every range boundary — one file each, one compile.
+#: 238 agreed and **two did not**, and both are kept here in the compiler's
+#: favour, because what ships has to compile, not to match a document:
+#:
+#:   U+0024 `$`   the grammar omits it; swiftc accepts it all the way to an
+#:                object file (`-parse`, `-typecheck` and `-emit-object` all
+#:                exit 0). Following the grammar would REJECT A LEGAL NAME,
+#:                which is the direction this check must never fail in.
+#:   U+FFFD       the grammar's range ends here; swiftc answers "invalid
+#:                character in source file" (`-emit-object` exits 1). So the
+#:                range ends one earlier. Following the grammar would let an
+#:                uncompilable file be written, which is the defect itself.
+#:
+#: Re-run that sweep if the range table is ever edited: a transcription error
+#: inside a range is invisible to every test written from the same table.
+_SWIFT_IDENT_RANGES = (
+    (0x24, 0x24), (0x30, 0x39), (0x41, 0x5A), (0x5F, 0x5F), (0x61, 0x7A),
+    (0xA8, 0xA8), (0xAA, 0xAA), (0xAD, 0xAD), (0xAF, 0xAF),
+    (0xB2, 0xB5), (0xB7, 0xBA), (0xBC, 0xBE), (0xC0, 0xD6),
+    (0xD8, 0xF6), (0xF8, 0xFF),
+    (0x100, 0x2FF), (0x300, 0x36F), (0x370, 0x167F), (0x1681, 0x180D),
+    (0x180F, 0x1DBF), (0x1DC0, 0x1DFF), (0x1E00, 0x1FFF),
+    (0x200B, 0x200D), (0x202A, 0x202E), (0x203F, 0x2040), (0x2054, 0x2054),
+    (0x2060, 0x206F), (0x2070, 0x20CF), (0x20D0, 0x20FF), (0x2100, 0x218F),
+    (0x2460, 0x24FF), (0x2776, 0x2793), (0x2C00, 0x2DFF), (0x2E80, 0x2FFF),
+    (0x3004, 0x3007), (0x3021, 0x302F), (0x3031, 0x303F), (0x3040, 0xD7FF),
+    (0xF900, 0xFD3D), (0xFD40, 0xFDCF), (0xFDF0, 0xFE1F), (0xFE20, 0xFE2F),
+    (0xFE30, 0xFE44), (0xFE47, 0xFFFC),
+    (0x10000, 0x1FFFD), (0x20000, 0x2FFFD), (0x30000, 0x3FFFD),
+    (0x40000, 0x4FFFD), (0x50000, 0x5FFFD), (0x60000, 0x6FFFD),
+    (0x70000, 0x7FFFD), (0x80000, 0x8FFFD), (0x90000, 0x9FFFD),
+    (0xA0000, 0xAFFFD), (0xB0000, 0xBFFFD), (0xC0000, 0xCFFFD),
+    (0xD0000, 0xDFFFD), (0xE0000, 0xEFFFD),
+)
+
+#: What a Kotlin ESCAPED (backticked) identifier cannot carry.
+#:
+#: MEASURED, not read off a spec: kotlinc 2.1.20 under JDK 17, one name per
+#: file, with the `@Test` annotation and `fail()` removed so an unresolved
+#: reference could not be mistaken for an illegal identifier — the same
+#: separation `swiftc -parse` gives on the other side. Every other ASCII
+#: punctuation mark, the space, the tab, a leading digit and every Japanese
+#: name compiled, so android is far more permissive than ios and a rule
+#: shared between them would reject names android accepts.
+_KOTLIN_ESCAPED_IDENT_ILLEGAL = frozenset("/.;[]<>:\\`\n\r")
+
+#: Platforms whose stub puts the declared name in an identifier position.
+#: `web` is deliberately absent: there the name is data, and data is escaped
+#: rather than refused.
+IDENTIFIER_PLATFORMS = ("ios", "android")
+
+
+def _in_swift_identifier(cp: int) -> bool:
+    return any(lo <= cp <= hi for lo, hi in _SWIFT_IDENT_RANGES)
+
+
+def identifier_problem(platform: str, name: str) -> str | None:
+    """Why *name* cannot be an identifier on *platform*, or None.
+
+    None for `web` and for any platform with no stub convention: absent is
+    not the same as legal, and this answers only the question it can.
+    """
+    if platform not in IDENTIFIER_PLATFORMS or not name:
+        return None
+    if platform == "ios":
+        bad = sorted({c for c in name if not _in_swift_identifier(ord(c))})
+        where = f"`func {IOS_TEST_PREFIX}{name}()`"
+        rule = ("Swift identifier. Letters of any script are legal — the "
+                "characters below are not")
+    else:
+        bad = sorted({c for c in name if c in _KOTLIN_ESCAPED_IDENT_ILLEGAL})
+        where = f"`fun `{name}`()`"
+        rule = ("Kotlin escaped identifier. Spaces and punctuation are legal "
+                "there — the characters below are not")
+    if not bad:
+        return None
+    shown = " ".join(repr(c) for c in bad)
+    return (
+        f"case name {name!r} cannot be a {rule}: {shown}. "
+        f"The {platform} stub emits it as {where}, so this name has no "
+        f"spelling that both compiles and matches the declaration. Rename "
+        f"the case, or declare 'platforms' without {platform}"
+    )
+
+
+def _escape_swift(text: str) -> str:
+    """*text*, safe inside a Swift double-quoted literal."""
+    return (text.replace("\\", "\\\\").replace('"', '\\"')
+                .replace("\n", "\\n").replace("\r", "\\r"))
+
+
+def _escape_kotlin(text: str) -> str:
+    """*text*, safe inside a Kotlin double-quoted literal.
+
+    `$` is escaped because it opens a string template. Measured (kotlinc
+    2.1.20): an intent reading `costs $total yen` and one reading `${x}` are
+    both compile errors, while `"` and `\\b` are not — so the old
+    `.replace('"', "'")` was fixing the character that was not the problem.
+    """
+    return (text.replace("\\", "\\\\").replace("$", "\\$").replace('"', '\\"')
+                .replace("\n", "\\n").replace("\r", "\\r"))
+
+
+def _escape_js_single(text: str) -> str:
+    """*text*, safe inside a single-quoted JavaScript literal.
+
+    This is an escape, not a sanitisation, and the difference is what makes
+    it safe to apply to the NAME: `_unescape_js` reverses it, so the name
+    `--check` scans back out of the file is the declared one, verbatim. A
+    transformation without that inverse would make a run write a file whose
+    every case is reported `missing` and `undeclared` at once.
+    """
+    return (text.replace("\\", "\\\\").replace("'", "\\'")
+                .replace("\n", "\\n").replace("\r", "\\r"))
+
+
+#: Per platform, because the literal's quote differs and a shared escaper is
+#: wrong for two of the three.
+_STUB_ESCAPE = {
+    "ios": _escape_swift,
+    "android": _escape_kotlin,
+    "web": _escape_js_single,
+}
+
+
 _STUB_BODY = {
     "ios": '    func ' + IOS_TEST_PREFIX + '{name}() throws {{\n        XCTFail("not implemented: {intent}")\n    }}',
     "android": '    @Test\n    fun `{name}`() {{\n        fail("not implemented: {intent}")\n    }}',
@@ -1372,8 +1542,23 @@ def stub_text(
             "in jui.config.json. Without it the class lands in the default "
             "package and drops out of package-scoped test filters"
         )
+    # Refuse BEFORE writing anything, the same way the missing module and
+    # package are refused above: a file that does not compile is worse than
+    # no file, because it is committed, and the next person reads the error
+    # as a fault in their toolchain rather than in a case name.
+    for c in cases:
+        why = identifier_problem(platform, c.name)
+        if why:
+            raise UnitContractError(why)
+    escape = _STUB_ESCAPE[platform]
     body = "\n\n".join(
-        body_template.format(name=c.name, intent=(c.intent or c.name).replace('"', "'"))
+        body_template.format(
+            # An identifier is not escapable — it was validated instead, just
+            # above. A string literal is, and must be: the name reaches `web`
+            # as data.
+            name=c.name if platform in IDENTIFIER_PLATFORMS else escape(c.name),
+            intent=escape(c.intent or c.name),
+        )
         for c in cases
     )
     return template.format(
@@ -1456,6 +1641,28 @@ def write_stubs(
             if case.name in report.implemented.get(platform, set()):
                 continue
             by_platform_target.setdefault((platform, case.target or "Unit"), []).append(case)
+
+    # Refuse the whole run before touching the first file. `stub_text` refuses
+    # too, but it is called once per (platform, target) inside the loop below,
+    # so a refusal there would land after the earlier files were already
+    # written -- and a half-generated run is the state hardest to reason about
+    # afterwards, because the files that DID appear look like the command
+    # succeeded. Collected rather than raised on the first hit: a run stopped
+    # at name one sends the author back N times for a fault they could have
+    # been shown all of.
+    refusals = [
+        why
+        for (platform, _target), cases in sorted(by_platform_target.items())
+        for case in cases
+        for why in (identifier_problem(platform, case.name),)
+        if why
+    ]
+    if refusals:
+        raise UnitContractError(
+            f"{len(refusals)} declared case name(s) cannot be written as an "
+            f"identifier on the platform they target, so no stub was written:"
+            + "".join(f"\n  - {why}" for why in refusals)
+        )
 
     for (platform, target), cases in sorted(by_platform_target.items()):
         # The FIRST declared directory is where new stubs go. A project that
