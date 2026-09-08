@@ -173,12 +173,61 @@ jobs:
       # failure rather than as four quiet skips.
       - name: Install TypeScript (test_tools emitted-TS type-check)
         run: npm ci --prefix rjui_tools/spec/support
+      # `--ignore` because that file asks swiftc and kotlinc directly and
+      # refuses to skip when `CI` is set; this image has neither, so it would
+      # fail here for the absence of a toolchain rather than for anything
+      # about the tables. The `stub-identifier-tables` job below owns it and
+      # runs it on macos-15 — the arms are NOT dropped, they are moved, and
+      # dropping this line would turn this suite red rather than quiet.
       - name: Run test_tools tests
         working-directory: test_tools
-        run: python -m pytest
+        run: python -m pytest --ignore=tests/test_stub_name_tables_reach_a_compiler.py
       - name: Run document_tools tests
         working-directory: document_tools
         run: python -m pytest
+
+  # ------------------------------------------------------------------ #
+  # The identifier tables in test_tools record what swiftc and kotlinc
+  # accept. `test_stub_name_tables_reach_a_compiler.py` asks the compilers
+  # instead of a second transcript of them, and it REFUSES TO SKIP when `CI`
+  # is set — a skipped gate gates nothing and disappears into a green
+  # summary, the same decision the emitted-TypeScript arm already made.
+  #
+  # ⚠️ So those arms need a job that has both compilers, and python-suite is
+  # not it: ubuntu-latest ships neither reliably. The arms were verified on a
+  # developer machine where swiftc exists and kotlinc does not, so
+  # "5 passed, 1 skipped" there and a red suite here would have been the same
+  # commit. A gate's denominator is the CI job list, not the local one.
+  #
+  # macos-15 rather than ubuntu: swiftc comes with Xcode, so only kotlinc has
+  # to be installed, and the SwiftUI-compiling ruby leg already proves this
+  # image answers for Swift. Separate from python-suite so that a compiler
+  # download never sits on the critical path of the whole Python suite.
+  # ------------------------------------------------------------------ #
+  stub-identifier-tables:
+    name: identifier tables vs. real compilers
+    runs-on: macos-15
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install test_tools (dev)
+        working-directory: test_tools
+        run: python -m pip install --upgrade pip && python -m pip install -e ".[dev]"
+      - name: Install kotlinc
+        run: brew install kotlin
+      # Fails HERE rather than inside a test, so a toolchain problem reads as
+      # a toolchain problem instead of as the tables being wrong.
+      - name: Confirm both compilers answer
+        run: |
+          set -euo pipefail
+          swiftc --version
+          kotlinc -version
+      - name: Identifier tables
+        working-directory: test_tools
+        run: python -m pytest tests/test_stub_name_tables_reach_a_compiler.py -v
 
   # ------------------------------------------------------------------ #
   # Ruby codegen unit suites. sjui_tools has no Gemfile (plain rspec);
