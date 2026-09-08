@@ -159,6 +159,43 @@ def _identity_rule():
     return shared_core.load("component_identity")
 
 
+def _ownership_keyed_screens(screen_specs):
+    """``(screens_keyed_as_the_generator_names_them, fallback_notes)``.
+
+    ⚠️ The fallback is ANNOUNCED, not silent. A spec with no `metadata.name`
+    is keyed by its file stem, which cannot match a generated ViewModel name
+    unless the stem happens to be what the generator was given — and a
+    handful of such specs would land in the unowned count indistinguishable
+    from misspelled targets and shared utilities. The whole-face version of
+    this defect only surfaced because one face showed 25 of 25; a two-of-
+    thirty version would have stayed invisible.
+    """
+    rule = _ownership_rule()
+    if rule is None or not hasattr(rule, "screen_name_from_spec"):
+        # An older shared/ tree: key as before rather than guess. The note
+        # below is not printed, because nothing fell back — the whole map is
+        # the old shape, which `OWNERSHIP_*` already describes.
+        return dict(screen_specs or {}), []
+    keyed = {}
+    fell_back = []
+    for stem, spec in sorted((screen_specs or {}).items()):
+        name, used_fallback = rule.screen_name_from_spec(spec, stem)
+        if used_fallback:
+            fell_back.append(stem)
+        keyed[name] = spec
+    notes = []
+    if fell_back:
+        shown = ", ".join(fell_back[:6]) + ("…" if len(fell_back) > 6 else "")
+        notes.append(
+            f"{len(fell_back)} spec(s) declare no metadata.name, so their "
+            f"owner names came from the FILE STEM instead ({shown}). A stem "
+            f"cannot match a generated ViewModel name unless it happens to be "
+            f"what the generator was given, so targets owned only by those "
+            f"screens will appear in the unowned count above."
+        )
+    return keyed, notes
+
+
 def _config_keys():
     """`shared/core/config_keys`, or None when it is not in this tool tree."""
     _prefer_sibling_jui_cli()
@@ -1009,11 +1046,20 @@ def discover_unit_contracts(
     # project and carries the same unresolved source, so tying the limit to
     # `app_specs` would state it only for projects that already have the spec
     # type — the readers least likely to be surprised by it.
+    # 🚨 The ownership rule must be keyed the way the GENERATOR names screens,
+    # not the way this module names them for humans. `screen_specs` is keyed
+    # by file stem — right for `scanned`, `declaring` and every message a
+    # reader matches against a filename — and WRONG for deriving a ViewModel
+    # name, because `jui build` derives it from `metadata.name`. Two faces
+    # measured the consequence: 25 of 25 and 36 of 44 declared targets
+    # resolving to no owner, with 0 of 56 file stems equal to their
+    # `metadata.name`.
+    ownership_screens, stem_fallbacks = _ownership_keyed_screens(screen_specs)
     # Resolved once and handed to BOTH directions: two call sites computing
     # the same map is how one rule becomes two implementations, and the
     # ownership module is pure precisely so this stays the caller's job.
     components, component_problems = _declared_component_identities(
-        screen_specs, project_root, load_project_config(project_root))
+        ownership_screens, project_root, load_project_config(project_root))
     problems.extend(component_problems)
     # ⚠️ Which sentence gets printed is the honest report of whether the
     # source was consulted — `None` is not an empty map. A face where every
@@ -1025,17 +1071,19 @@ def discover_unit_contracts(
     # Printed on every run, app spec or not: the targets this names are
     # invisible to BOTH directions, so gating it on either one would hide it
     # exactly where the reader has least other information.
-    hints.extend(_targets_no_source_resolves(cases, screen_specs, components))
+    hints.extend(_targets_no_source_resolves(
+        cases, ownership_screens, components))
+    hints.extend(stem_fallbacks)
     if app_specs:
         found, app_hints = _app_declarations_in_the_wrong_place(
-            cases, screen_specs, components)
+            cases, ownership_screens, components)
         problems.extend(found)
         hints.extend(app_hints)
     # Not gated on `app_specs`: this direction finds the declarations that are
     # in the wrong place BECAUSE no app spec exists yet, so requiring one first
     # would silence the check exactly where it has something to say.
     for problem in _screen_declarations_in_the_wrong_place(
-            cases, screen_specs, components):
+            cases, ownership_screens, components):
         # `OWNERSHIP_UNAVAILABLE` is one sentence about one cause, and both
         # directions raise it. Printed twice it reads as two faults, and a
         # reader counting problems would see the tool's own outage as the

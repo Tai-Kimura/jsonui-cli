@@ -1501,6 +1501,35 @@ def generate_html_directory(
 _BODY_HREF = re.compile(r"""(href\s*=\s*)(['"])([^'"]+)\2""", re.I)
 
 
+def _app_of_embedded_page(page_path: Path, output_path: Path) -> str | None:
+    """The app an embedded body belongs to: `docs/<app>/...` under the site.
+
+    Returns None when the page is not under a `docs/<app>/` prefix, which is
+    how a single-app layout reaches this — and there the basename is already
+    unambiguous, so nothing is lost.
+    """
+    try:
+        parts = page_path.resolve().relative_to(Path(output_path).resolve()).parts
+    except (ValueError, OSError):
+        return None
+    if len(parts) >= 2 and parts[0] == "docs":
+        return parts[1]
+    return None
+
+
+def _app_of_component_page(written_page: Path) -> str | None:
+    """The app a written component page belongs to: `<app>/components/<name>`.
+
+    Read from the segment BEFORE `components`, so it holds for both the site
+    layout and any nesting above it.
+    """
+    parts = written_page.parts
+    for i, seg in enumerate(parts):
+        if seg == "components" and i >= 1:
+            return parts[i - 1]
+    return None
+
+
 def _component_body_rewriter(page_path: Path, output_path: Path):
     """Rewrite component links in an embedded body to the pages THIS run wrote.
 
@@ -1513,9 +1542,26 @@ def _component_body_rewriter(page_path: Path, output_path: Path):
     Resolution is by BASENAME against the set of pages actually written, and
     only when exactly one candidate matches. Zero means the run wrote no page
     for that component and the link is left alone rather than pointed
-    somewhere plausible; more than one means the name is ambiguous across
-    apps and guessing would be worse than the dangling link, which at least
-    fails loudly when someone clicks it.
+    somewhere plausible.
+
+    More than one used to mean the same thing, on the reasoning that "guessing
+    would be worse than the dangling link, which at least fails loudly when
+    someone clicks it." ⚠️ That reasoning assumed the app was unknown. It is
+    not: this page sits at `docs/<app>/screens/html/`, and each app writes its
+    own `<app>/components/<name>.html`. Choosing THIS page's app is not a
+    guess — it is the only candidate the page could mean.
+
+    🚨 Measured 2026-09-08 on the two-app specimen: the href was left as the
+    source-tree `../../components/html/picker.html`, which resolves under the
+    site to a directory the run never writes. So the branch that existed to
+    avoid a wrong link was EMITTING a dangling one — while the sibling arm in
+    the same file states the rule it broke ("a component with no page must
+    render as text, not as a link nobody can follow"). Two rules for one
+    situation, and the one that shipped was the unstated one.
+
+    The old reason is kept where it still reaches: if the same app somehow
+    offers two pages for one basename, nothing here can choose, and the link
+    is left alone.
     """
     written = {
         w for w in get_written_pages()
@@ -1531,6 +1577,8 @@ def _component_body_rewriter(page_path: Path, output_path: Path):
     except OSError:
         page_dir = page_path.parent
 
+    app = _app_of_embedded_page(page_path, output_path)
+
     def rewrite(body: str) -> str:
         def one(m):
             prefix, quote, href = m.group(1), m.group(2), m.group(3)
@@ -1538,6 +1586,12 @@ def _component_body_rewriter(page_path: Path, output_path: Path):
                 return m.group(0)
             name = posixpath.basename(href)
             hits = [w for w in written if w.name == name]
+            if len(hits) > 1 and app:
+                # Narrow to THIS page's app before declining. See the docstring:
+                # the app is known, so this is a selection, not a guess.
+                same_app = [w for w in hits if _app_of_component_page(w) == app]
+                if len(same_app) == 1:
+                    hits = same_app
             if len(hits) != 1:
                 return m.group(0)
             rel = os.path.relpath(hits[0], page_dir)
@@ -2221,7 +2275,23 @@ def _component_page_rel(comp_file, comp_docs_path, path_prefix: str | None) -> s
     and it survived because the check counted links rather than resolving
     them. Two spellings of one rule diverge the moment one layout changes;
     🚨 CORRECTED 2026-09-08: this sentence used to end "both callers now read
-    this" — TWO, when `grep -c 'generate_spec_html('` answers FOUR. Three were
+    this" — TWO. There are FOUR production call sites, and they are NAMED here
+    rather than described by a command:
+
+        cli.py                — `generate spec`, batch
+        cli.py                — `generate spec`, single file
+        test_doc/generator.py — the site's spec pages
+        test_doc/generator.py — `_pre_generate_spec_docs`, into the source tree
+
+    ⚠️ Named, because two attempts to give a counting command both failed. A
+    bare `grep -c` over the repo answers 25 (the definition, nineteen test
+    references, the four above, and the comment quoting the pattern). Adding
+    narrowings to that comment made the comment match its own example, and it
+    answered 5. **An expression written where it can match itself is not a
+    count** — so the population is listed, and a reader can check the list
+    against the code instead of trusting an incantation.
+
+    Three of the four were
     wired; the fourth (`_pre_generate_spec_docs`, pre-generation into the
     source tree) passed no `component_links` at all and fell back to the
     legacy template. It stayed invisible because that template is CORRECT at

@@ -184,21 +184,56 @@ class TheEmbeddedBodyPointsAtPagesThisRunWrote(_Site):
         # only for the dangling case.
         out, _ = self.build(with_component_spec=False)
         page = out / "docs" / self.APP / "screens" / "html" / f"{self.SCREEN}.html"
-        for h in self.component_hrefs(self.body_of(page)):
+        body = self.body_of(page)
+        # 🚨 Added 2026-09-08 after the triage lane measured what the loop
+        # below actually iterates: ZERO hrefs in this scenario, so the
+        # assertion inside it was true of an empty list. The mutation that
+        # reddened it added links — which only proves the direction where the
+        # list becomes NON-empty. Nothing held the other direction, so the
+        # page not being written, `body_of` returning nothing, or the
+        # component vanishing from the body would all have passed.
+        #
+        # The previous form's `assertTrue(hrefs, ...)` was carrying that
+        # weight, and re-pointing dropped it without a replacement. This line
+        # is the replacement: the component IS named on the page (as text),
+        # so the observation happened.
+        self.assertIn("Picker", body,
+                      "the component is not on the page at all — this arm "
+                      "cannot say anything about its links")
+        for h in self.component_hrefs(body):
             self.assertTrue(
                 (page.parent / h).resolve().is_file(),
                 f"{h} resolves to {(page.parent / h).resolve()}, which this "
                 f"run did not write — a component with no spec must render as "
                 f"text, not as a link nobody can follow")
 
-    def test_a_name_carried_by_two_apps_is_left_alone(self):
-        # Two apps declare a component of the same name, so the basename does
-        # not identify one page. A link that resolves to the WRONG app is
-        # worse than one that fails when clicked.
+    def test_a_name_carried_by_two_apps_resolves_within_this_page_s_app(self):
+        # Two apps declare a component of the same name, so the BASENAME does
+        # not identify one page — but the page being rewritten does. It sits
+        # at docs/<app>/, and each app writes its own component page.
+        #
+        # 🚨 This arm used to be `..._is_left_alone` and asserted only that
+        # each href contained "components/html/". Measured 2026-09-08: the one
+        # href was `../../components/html/picker.html`, correct in the SOURCE
+        # tree and dangling under the site — is_file() False. The arm was
+        # green while the run emitted exactly the dangling link the sibling
+        # arm below forbids. The substring could not see it, because the
+        # source-tree spelling contains "components/html/" too.
         out, _ = self.build(second_app=True)
         page = out / "docs" / self.APP / "screens" / "html" / f"{self.SCREEN}.html"
-        for h in self.component_hrefs(self.body_of(page)):
-            self.assertIn("components/html/", h)
+        body = self.body_of(page)
+        hrefs = self.component_hrefs(body)
+        # Pins the observation as non-empty: every assertion below is over
+        # this list, so an empty one would make them all vacuously true.
+        self.assertEqual(len(hrefs), 1, f"expected one component link, got {hrefs}")
+        for h in hrefs:
+            target = (page.parent / h).resolve()
+            self.assertTrue(
+                target.is_file(),
+                f"{h} resolves to {target}, which this run did not write")
+            # And it must be THIS app's page, not the other app's.
+            self.assertIn(f"{self.APP}/components/", str(target))
+            self.assertNotIn("admin/components/", str(target))
 
     def test_both_quote_spellings_are_rewritten(self):
         # The generator writes `'` in the nav and `"` in the component table.

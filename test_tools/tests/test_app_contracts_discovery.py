@@ -418,7 +418,14 @@ class TestTheBlindSpotIsPrintedNotCounted:
         # `chatViewModel`), so the list is checked for membership and the
         # extra line is identified rather than tolerated silently.
         assert uc.OWNERSHIP_PARTIAL in notes, notes
-        assert all(n == uc.OWNERSHIP_PARTIAL or "resolve to NO owner" in n
+        # Every other line is identified rather than tolerated. Two channels
+        # add lines here: the unowned count, and — because this shared fixture
+        # writes specs with no `metadata.name` — the line saying owner names
+        # fell back to the file stem. Both are correct for this specimen, and
+        # naming them keeps a THIRD, unexpected line from slipping in.
+        assert all(n == uc.OWNERSHIP_PARTIAL
+                   or "resolve to NO owner" in n
+                   or "came from the FILE STEM" in n
                    for n in notes), notes
 
 
@@ -830,3 +837,109 @@ class TestTheDefaultIsNotOneReaderShortOfThree:
         assert keys is not None
         assert keys.default_for("component_spec_directory") == "docs/components/json"
         assert keys.default_for("a_key_with_no_default") is None
+
+
+class TestTheOwnershipKeyIsTheGeneratorsName:
+    """🚨 Reported 2026-09-08 by two consumer faces, through the count added
+    in v1.8.55.
+
+    `jui build` derives a screen's ViewModel from `extract_screen_spec`, whose
+    `name` is `metadata.get("name", "")`. This module keyed its `screens` dict
+    by the spec FILE NAME — right for `scanned`, `declaring` and every message
+    a reader matches against a filename, wrong for deriving a ViewModel name.
+    On a face whose files are snake_case and whose `metadata.name` is
+    PascalCase they never match:
+
+        widget_detail.spec.json + metadata.name "WidgetDetail"
+          generator -> "WidgetDetailViewModel"
+          ownership -> "widget_detailViewModel"
+
+    Measured: 25 of 25 unowned on one face, 36 of 44 on another, and 0 of 56
+    file stems equal to their `metadata.name`.
+
+    ⚠️ Invisible because the paired arm asserted `VIEW_MODEL_SUFFIX ==
+    "ViewModel"` and nothing else, while the module docstring claimed the
+    paired test "compares this against the generator's own source". The
+    docstring described an intent; the arm compared a string.
+    """
+
+    #: The reported shape: snake_case file, PascalCase metadata.name.
+    SPEC = {"type": "screen_spec",
+            "metadata": {"name": "WidgetDetail", "description": "d"},
+            "unitContracts": {"target": "WidgetDetailViewModel",
+                              "cases": [{"name": "loads"}]}}
+
+    def _face(self, tmp_path, specs):
+        root = tmp_path
+        (root / "docs" / "screens").mkdir(parents=True)
+        for file_name, body in specs.items():
+            (root / "docs" / "screens" / file_name).write_text(
+                json.dumps(body), encoding="utf-8")
+        (root / "jui.config.json").write_text(
+            json.dumps({"spec_directory": "docs/screens", "platforms": {}}),
+            encoding="utf-8")
+        return root
+
+    def test_a_viewmodel_target_resolves_when_the_file_stem_differs(self, tmp_path):
+        root = self._face(tmp_path, {"widget_detail.spec.json": self.SPEC})
+        report = uc.check_unit_contracts(root)
+        assert not any("resolve to NO owner" in n for n in report.notes), \
+            report.notes
+
+    def test_the_control_the_stem_really_does_differ(self, tmp_path):
+        """Without this, a specimen whose stem happened to equal the name
+        would pass the arm above for the wrong reason — which is exactly how
+        the defect survived: the face that exercised this path first had
+        matching names."""
+        rule = uc._ownership_rule()
+        assert rule is not None
+        name, fell_back = rule.screen_name_from_spec(self.SPEC, "widget_detail")
+        assert name == "WidgetDetail" and not fell_back
+        assert rule.view_model_name("widget_detail") != \
+            rule.view_model_name(name), \
+            "the specimen must actually distinguish the two derivations"
+
+    def test_the_generator_and_the_rule_read_the_same_field(self):
+        """⚠️ The arm the docstring always claimed existed.
+
+        `VIEW_MODEL_SUFFIX == "ViewModel"` compares a string. This compares
+        the SOURCE of the base name: the generator's `extract_screen_spec`
+        assigns `name=metadata.get("name", "")`, and the rule must read the
+        same path. Asserted against the generator's own file so that moving
+        that assignment reddens this.
+        """
+        from pathlib import Path as _P
+        rule = uc._ownership_rule()
+        assert rule is not None
+        assert rule.METADATA_NAME_PATH == ("metadata", "name")
+        src = (_P(__file__).resolve().parents[2] / "jui_tools" / "jui_cli"
+               / "core" / "spec_extractor.py").read_text(encoding="utf-8")
+        assert 'name=metadata.get("name", "")' in src, (
+            "the generator no longer names a screen from metadata.name — the "
+            "ownership rule derives ViewModel names from the same field and "
+            "must move with it")
+
+    def test_a_spec_with_no_metadata_name_says_it_fell_back(self, tmp_path):
+        """⚠️ The fallback announces itself.
+
+        Keying by the stem when there is no name is the only thing left to do,
+        but doing it SILENTLY rebuilds the defect one spec at a time: those
+        targets land in the unowned count mixed with misspellings and shared
+        utilities, and nothing separates them. The whole-face version only
+        surfaced because a face happened to show 25 of 25.
+        """
+        root = self._face(tmp_path, {
+            "widget_detail.spec.json": self.SPEC,
+            "panel_info.spec.json": {
+                "type": "screen_spec", "metadata": {"description": "d"},
+                "unitContracts": {"target": "PanelInfoViewModel",
+                                  "cases": [{"name": "loads"}]}}})
+        report = uc.check_unit_contracts(root)
+        assert any("came from the FILE STEM" in n and "panel_info" in n
+                   for n in report.notes), report.notes
+
+    def test_the_control_no_fallback_line_when_every_spec_is_named(self, tmp_path):
+        root = self._face(tmp_path, {"widget_detail.spec.json": self.SPEC})
+        report = uc.check_unit_contracts(root)
+        assert not any("came from the FILE STEM" in n for n in report.notes), \
+            report.notes

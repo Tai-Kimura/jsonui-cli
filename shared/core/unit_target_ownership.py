@@ -13,6 +13,12 @@ The specs already carry the facts; nothing was reading them:
     useCase      `required: ["name", "methods"]` — "UseCase class name"
     viewModel    carries NO name — but `jui build` generates the class as
                  `f"{spec.name}ViewModel"`, so the screen name determines it
+                 ⚠️ `spec` there is the extracted `ScreenSpec` OBJECT, not the
+                 JSON. Its `.name` is assigned `metadata.get("name", "")`
+                 (`jui_cli/core/spec_extractor.py:404`). A spec file has no
+                 top-level `name` field, so reading this as one finds None and
+                 makes the rule look inapplicable — measured 2026-09-08, that
+                 reading cost another lane a decision it could not close.
     component    ⚠️ NO SUCH FACT EXISTS YET — see the warning below
 
 ⚠️ The viewModel case is the one that looks absent and is not. Reading only
@@ -53,8 +59,8 @@ written without reading the generator, and it is wrong twice over. Measured
 
 Nothing in this toolchain decides what a component contributes to an owner
 set. Compare source 1, which HAS such a fact: `jui build` writes
-`f"{spec.name}ViewModel"`, and that generator rule is what makes a
-ViewModel's owner derivable at all.
+`f"{spec.name}ViewModel"` (`spec.name` = the JSON's `metadata.name`), and that
+generator rule is what makes a ViewModel's owner derivable at all.
 
 `metadata.name` cannot be taken as that identity AS IT IS READ TODAY. Every
 producer that displays it supplies a default — `"Component"`, `"Screen"`,
@@ -93,7 +99,8 @@ result in; see `components_declared_by_screen` on `owner_screens`.
 from __future__ import annotations
 
 #: `jui build` names a screen's ViewModel class this way
-#: (`commands/build_cmd.py`, `f"{spec.name}ViewModel"`). Stated here so the
+#: (`commands/build_cmd.py:2447`, `f"{spec.name}ViewModel"`, where `spec.name`
+#: is the JSON's `metadata.name` — see METADATA_NAME_PATH). Stated here so the
 #: ownership rule and the generator cannot disagree about what a ViewModel is
 #: called; the paired test compares this against the generator's own source.
 VIEW_MODEL_SUFFIX = "ViewModel"
@@ -122,6 +129,50 @@ UNRESOLVED = "unresolved"
 #: here needs to read layouts, and a caller that goes looking for one is
 #: answering a question this rule stopped asking.
 UNDETERMINED = "undetermined"
+
+
+#: Where the generator gets the name it puts in front of `ViewModel`.
+#:
+#: 🚨 Added 2026-09-08 after two consumer faces measured that nothing resolved.
+#: `jui build` derives the ViewModel from `extract_screen_spec`, whose `name`
+#: is `metadata.get("name", "")` — while the ownership caller keyed its
+#: `screens` dict by the spec FILE NAME. On a face whose files are snake_case
+#: and whose `metadata.name` is PascalCase, those never match, so EVERY
+#: ViewModel-owned target resolved to zero owners:
+#:
+#:     widget_detail.spec.json + metadata.name "WidgetDetail"
+#:       generator     -> "WidgetDetailViewModel"
+#:       ownership was -> "widget_detailViewModel"
+#:
+#: Measured: one face 25 of 25 unowned, another 36 of 44, and 0 of 56 file
+#: stems equal to their `metadata.name`.
+#:
+#: ⚠️ This stayed invisible because the paired test asserted the SUFFIX and
+#: nothing else. The docstring claimed it "compares this against the
+#: generator's own source"; it compared the string "ViewModel".
+METADATA_NAME_PATH = ("metadata", "name")
+
+
+def screen_name_from_spec(spec, file_stem: str) -> tuple[str, bool]:
+    """``(name, used_fallback)`` — the name the GENERATOR would use.
+
+    Returns the spec's `metadata.name` when it has one, else *file_stem* with
+    ``used_fallback=True``.
+
+    ⚠️ The flag exists because a silent fallback rebuilds the defect it is
+    fixing, one spec at a time. A face where two of thirty specs fall back
+    gets two unowned targets mixed in with every other unowned target, and
+    nothing distinguishes them — which is exactly how the whole-face version
+    of this went unnoticed until a face happened to show 25 of 25. The caller
+    must SAY that it fell back; see the note it prints.
+    """
+    if isinstance(spec, dict):
+        section = spec.get(METADATA_NAME_PATH[0])
+        if isinstance(section, dict):
+            name = section.get(METADATA_NAME_PATH[1])
+            if isinstance(name, str) and name.strip():
+                return name.strip(), False
+    return file_stem, True
 
 
 def view_model_name(screen: str) -> str:
