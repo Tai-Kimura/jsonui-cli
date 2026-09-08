@@ -198,7 +198,11 @@ fi
 
 # Remove unnecessary files for production
 # Keep shared/core/ — jsonui-mcp-server's 4-layer fallback reads
-# attribute_definitions.json and component_metadata.json from there.
+# attribute_definitions.json and component_metadata.json from there, AND the
+# Python loaders in jui_tools/document_tools/test_tools resolve every
+# shared/core/*.py by walking up to this directory. Narrowing this to the two
+# JSON files the MCP server names would delete those modules and turn
+# `shared_core.load()` into a silent None.
 info "Cleaning up development files..."
 rm -rf .git
 rm -rf .github

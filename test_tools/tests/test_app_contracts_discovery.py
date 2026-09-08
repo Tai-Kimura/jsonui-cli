@@ -57,21 +57,21 @@ SCREEN_BLOCK = {"target": "ChatViewModel", "cases": [{"name": "sends"}]}
 class TestTheDenominatorCountsScreensOnly:
     def test_an_app_spec_is_absent_from_scanned(self, tmp_path):
         root = _project(tmp_path, screens={"chat": SCREEN_BLOCK}, app=APP_BLOCK)
-        _c, scanned, _d, _p, _f, _u, _a = uc.discover_unit_contracts(root)
+        _c, scanned, _d, _p, _f, _u, _a, _n = uc.discover_unit_contracts(root)
         assert scanned == ["chat"], scanned
 
     def test_an_app_spec_is_absent_from_declaring(self, tmp_path):
         """`declaring` names SCREENS carrying a block. An app spec carrying
         one is not a screen carrying one."""
         root = _project(tmp_path, screens={"chat": SCREEN_BLOCK}, app=APP_BLOCK)
-        _c, _s, declaring, _p, _f, _u, _a = uc.discover_unit_contracts(root)
+        _c, _s, declaring, _p, _f, _u, _a, _n = uc.discover_unit_contracts(root)
         assert declaring == ["chat"], declaring
 
     def test_the_control_a_screen_spec_is_still_counted(self, tmp_path):
         """Without this, an implementation that dropped EVERY spec from
         `scanned` would satisfy both arms above."""
         root = _project(tmp_path, screens={"chat": SCREEN_BLOCK})
-        _c, scanned, declaring, _p, _f, _u, apps = uc.discover_unit_contracts(root)
+        _c, scanned, declaring, _p, _f, _u, apps, _n = uc.discover_unit_contracts(root)
         assert scanned == ["chat"]
         assert declaring == ["chat"]
         assert apps == []
@@ -81,7 +81,7 @@ class TestTheDenominatorCountsScreensOnly:
         unreadable file has no readable type. It must not leave the
         denominator on the strength of a type nobody could see."""
         root = _project(tmp_path, screens={"chat": SCREEN_BLOCK}, unreadable=True)
-        _c, scanned, _d, problems, _f, unread, _a = uc.discover_unit_contracts(root)
+        _c, scanned, _d, problems, _f, unread, _a, _n = uc.discover_unit_contracts(root)
         assert sorted(scanned) == ["broken", "chat"], scanned
         assert unread == ["broken.spec.json"]
         assert any("could not be read" in p for p in problems)
@@ -90,7 +90,7 @@ class TestTheDenominatorCountsScreensOnly:
 class TestTheCasesStillArrive:
     def test_an_app_spec_contributes_its_cases(self, tmp_path):
         root = _project(tmp_path, screens={"chat": SCREEN_BLOCK}, app=APP_BLOCK)
-        cases, _s, _d, problems, _f, _u, apps = uc.discover_unit_contracts(root)
+        cases, _s, _d, problems, _f, _u, apps, _n = uc.discover_unit_contracts(root)
         assert sorted(c.name for c in cases) == ["retries_once", "sends"]
         assert apps == ["storefront.spec.json"]
         assert problems == []
@@ -113,7 +113,7 @@ class TestTheCasesStillArrive:
         an app spec carrying a block belongs in it even though it is not a
         screen. The two counts answer different questions."""
         root = _project(tmp_path, screens={"chat": SCREEN_BLOCK}, app=APP_BLOCK)
-        _c, _s, _d, _p, files, _u, _a = uc.discover_unit_contracts(root)
+        _c, _s, _d, _p, files, _u, _a, _n = uc.discover_unit_contracts(root)
         assert sorted(files) == ["chat.spec.json", "storefront.spec.json"]
 
 
@@ -166,14 +166,18 @@ class TestTheDeclarationSiteIsJudged:
     OWNED = {"chat": {"repositories": [{"name": "ChatRepository",
                                         "methods": []}]}}
 
-    def test_an_app_declaration_a_single_screen_owns_is_reported(self, tmp_path):
+    def test_an_app_declaration_a_single_screen_owns_is_hinted(self, tmp_path):
+        """A HINT, not a problem, and the distinction is the whole point:
+        see `TestAMissingSourceCanInventASingleOwner` below."""
         root = _project(
             tmp_path, screens={"chat": SCREEN_BLOCK}, data_flow=self.OWNED,
             app={"target": "ChatRepository", "cases": [{"name": "loads"}]})
-        _c, _s, _d, problems, _f, _u, _a = uc.discover_unit_contracts(root)
-        assert len(problems) == 1, problems
-        assert "ChatRepository" in problems[0]
-        assert "chat" in problems[0]
+        _c, _s, _d, problems, _f, _u, _a, notes = uc.discover_unit_contracts(root)
+        assert problems == []
+        hit = [n for n in notes if "ChatRepository" in n]
+        assert len(hit) == 1, notes
+        assert "chat" in hit[0]
+        assert "UNVERIFIED" in hit[0]
 
     def test_the_control_an_app_owned_target_is_not_reported(self, tmp_path):
         """`SharedHttpClient` is named by no screen. Without this arm an
@@ -182,8 +186,9 @@ class TestTheDeclarationSiteIsJudged:
         root = _project(
             tmp_path, screens={"chat": SCREEN_BLOCK}, data_flow=self.OWNED,
             app=APP_BLOCK)
-        _c, _s, _d, problems, _f, _u, _a = uc.discover_unit_contracts(root)
+        _c, _s, _d, problems, _f, _u, _a, notes = uc.discover_unit_contracts(root)
         assert problems == [], problems
+        assert not [n for n in notes if "SharedHttpClient" in n], notes
 
     def test_a_screen_declaring_its_own_target_is_not_reported(self, tmp_path):
         """The second control: the rule must not fire on screen-level sites,
@@ -191,7 +196,7 @@ class TestTheDeclarationSiteIsJudged:
         red."""
         root = _project(tmp_path, screens={"chat": SCREEN_BLOCK},
                         data_flow=self.OWNED)
-        _c, _s, _d, problems, _f, _u, _a = uc.discover_unit_contracts(root)
+        _c, _s, _d, problems, _f, _u, _a, _n = uc.discover_unit_contracts(root)
         assert problems == []
 
     def test_the_rule_was_actually_loaded(self, tmp_path):
@@ -218,11 +223,62 @@ class TestTheDeclarationSiteIsJudged:
         real = uc._ownership_rule
         uc._ownership_rule = lambda: None
         try:
-            _c, _s, _d, problems, _f, _u, _a = uc.discover_unit_contracts(root)
+            _c, _s, _d, problems, _f, _u, _a, _n = uc.discover_unit_contracts(root)
         finally:
             uc._ownership_rule = real
         assert problems == [uc.OWNERSHIP_UNAVAILABLE]
         assert "NOT checked" in problems[0]
+        # A problem, not a hint: this one says the check did not run, which
+        # is the opposite claim from a clean result.
+        assert report_notes_exclude(_n, uc.OWNERSHIP_UNAVAILABLE)
+
+
+def report_notes_exclude(notes, text):
+    return text not in (notes or [])
+
+
+class TestAMissingSourceCanInventASingleOwner:
+    """The specimen for the reason every finding above is a hint.
+
+    `owner_screens` is a UNION over four sources, so leaving one out lowers
+    owner counts. The first draft of this caller argued that lowering could
+    never manufacture the single owner it reports. It can: 2 -> 1 is a
+    decrease, and 1 is the reported count.
+
+    This is not hypothetical and not a corpus question -- it is a property of
+    the union, pinned here so that wiring the component source later cannot
+    quietly reintroduce the argument.
+    """
+
+    SCREENS = {
+        "Dashboard": {"dataFlow": {}},
+        "Listing": {"dataFlow": {"repositories": [
+            {"name": "CalendarWidget", "methods": []}]}},
+    }
+    DECLARED = {"Dashboard": {"CalendarWidget"}}
+
+    def test_the_same_target_classifies_two_ways(self):
+        rule = uc._ownership_rule()
+        assert rule is not None
+        with_source, _ = rule.classify(
+            "CalendarWidget", self.SCREENS, self.DECLARED, {"CalendarWidget"})
+        without, _ = rule.classify(
+            "CalendarWidget", self.SCREENS, None, {"CalendarWidget"})
+        assert with_source == rule.APP_OWNED
+        assert without == rule.SCREEN_OWNED
+        assert with_source != without, (
+            "if these ever agree, the hint above can be promoted to a finding")
+
+    def test_so_the_check_never_fails_on_a_site_judgment(self, tmp_path):
+        """The consequence, asserted where a consumer would feel it: the
+        specimen's shape must not turn a correct app declaration red."""
+        root = _project(
+            tmp_path, screens={"chat": SCREEN_BLOCK},
+            data_flow={"chat": {"repositories": [
+                {"name": "CalendarWidget", "methods": []}]}},
+            app={"target": "CalendarWidget", "cases": [{"name": "renders"}]})
+        report = uc.check_unit_contracts(root)
+        assert report.ok, uc.format_report(report)
 
 
 class TestTheBlindSpotIsPrintedNotCounted:
