@@ -55,7 +55,7 @@ VIEW_MODEL_SUFFIX = "ViewModel"
 #: Exactly one screen owns it. It must be declared in that screen's spec.
 SCREEN_OWNED = "screen_owned"
 
-#: No screen owns it, or several do. A app-level declaration site is the only
+#: No screen owns it, or several do. An app-level declaration site is the only
 #: one that records this truthfully.
 APP_OWNED = "app_owned"
 
@@ -65,8 +65,15 @@ APP_OWNED = "app_owned"
 UNRESOLVED = "unresolved"
 
 #: The inputs needed to tell `APP_OWNED` from `UNRESOLVED` were not supplied.
-#: Never silently folded into either: a caller that has not computed the layout
-#: closure would otherwise see every component-owned target as app-owned.
+#: Never silently folded into either: a caller that has not resolved the
+#: components each screen DECLARES would otherwise see every component-owned
+#: target as app-owned.
+#:
+#: What is missing is `components_declared_by_screen` — the screens'
+#: `structure.customComponents[].specFile` resolved to each component spec's
+#: `metadata.name`. It is NOT a layout closure: nothing here needs to read
+#: layouts, and a caller that goes looking for one is answering a question
+#: this rule stopped asking.
 UNDETERMINED = "undetermined"
 
 
