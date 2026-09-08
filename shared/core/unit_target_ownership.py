@@ -13,7 +13,7 @@ The specs already carry the facts; nothing was reading them:
     useCase      `required: ["name", "methods"]` — "UseCase class name"
     viewModel    carries NO name — but `jui build` generates the class as
                  `f"{spec.name}ViewModel"`, so the screen name determines it
-    component    reached through the layout's `include` closure
+    component    named by a screen's `structure.customComponents[].specFile`
 
 ⚠️ The viewModel case is the one that looks absent and is not. Reading only
 `dataFlow.viewModel` shows `description`/`methods`/`vars` and no identifier,
@@ -23,8 +23,25 @@ every ViewModel as owned by nobody — that is, as app-owned — which is the
 opposite of the truth and arrives as a plausible larger count of app-owned
 targets rather than as an error.
 
-This module is PURE. The include closure needs to read layouts, so the caller
-computes it and passes it in; see `components_by_screen` on `owner_screens`.
+⚠️ A component's owner is the screen that DECLARES it, not the layouts that
+USE it. The two disagree today, and the component reconciliation check reports
+that disagreement — but "the other side is broken" is not the reason to prefer
+declaration, because that check reports BOTH directions and the argument would
+cut equally either way. The reason is purity: a declaration is the spec's own
+statement, readable from the spec set already in hand, while usage needs the
+layout tree. Ownership stays a property of the specs.
+
+🚨 SCOPE — `screens` must be ONE app's screens. A repository holding several
+apps (`--app admin:… --app user:…`) that share a target name would report two
+owners and call the target app-owned, and then no single app's contracts spec
+could hold it. Ownership closes inside an app. Note the asymmetry this sits
+on: discovery has no app concept (one `spec_directory` per project) while the
+doc generator keys by app (`unit_by_app`), so the CALLER supplies the frame
+and this module cannot check it.
+
+This module is PURE. Resolving a `specFile` to the component's class name
+needs to read component specs, so the caller does that and passes the result
+in; see `components_declared_by_screen` on `owner_screens`.
 """
 
 from __future__ import annotations
@@ -74,15 +91,17 @@ def _declared_names(section) -> list[str]:
 def owner_screens(
     target: str,
     screens: dict,
-    components_by_screen: dict | None = None,
+    components_declared_by_screen: dict | None = None,
 ) -> list[str]:
-    """Every screen that owns *target*, sorted.
+    """Every screen in ONE app that owns *target*, sorted.
 
-    `screens` maps screen name to its merged spec dict. `components_by_screen`
-    maps screen name to the set of targets its layout reaches through the
-    `include` closure; ``None`` means the closure was not computed, and the
-    component source is then simply absent from the answer — which is why
-    `classify` refuses to call a zero result `APP_OWNED` in that case.
+    `screens` maps screen name to its merged spec dict, for a SINGLE app —
+    see the scope warning in the module docstring.
+    `components_declared_by_screen` maps screen name to the component class
+    names that screen DECLARES (`structure.customComponents[].specFile`,
+    resolved to each component spec's `metadata.name`); ``None`` means it was
+    not computed, and the component source is then absent from the answer —
+    which is why `classify` refuses to call a zero result `APP_OWNED` then.
     """
     target = (target or "").strip()
     if not target:
@@ -97,7 +116,7 @@ def owner_screens(
                 owners.add(screen)
             if target in _declared_names(flow.get("useCases")):
                 owners.add(screen)
-        if components_by_screen and target in (components_by_screen.get(screen) or ()):
+        if components_declared_by_screen and target in (components_declared_by_screen.get(screen) or ()):
             owners.add(screen)
     return sorted(owners)
 
@@ -105,7 +124,7 @@ def owner_screens(
 def classify(
     target: str,
     screens: dict,
-    components_by_screen: dict | None = None,
+    components_declared_by_screen: dict | None = None,
     known_targets=None,
 ) -> tuple:
     """``(kind, owners)`` for *target*.
@@ -114,7 +133,7 @@ def classify(
     target owned by no screen cannot be told from one that does not exist, so
     the answer is `UNDETERMINED` rather than a guess in either direction.
     """
-    owners = owner_screens(target, screens, components_by_screen)
+    owners = owner_screens(target, screens, components_declared_by_screen)
     if len(owners) == 1:
         return SCREEN_OWNED, owners
     if len(owners) >= 2:
@@ -122,7 +141,7 @@ def classify(
         # Unlike the zero case this needs no extra input: the target plainly
         # exists, because screens name it.
         return APP_OWNED, owners
-    if components_by_screen is None or known_targets is None:
+    if components_declared_by_screen is None or known_targets is None:
         return UNDETERMINED, owners
     if target in known_targets:
         return APP_OWNED, owners
@@ -132,7 +151,7 @@ def classify(
 def app_level_allowed(
     target: str,
     screens: dict,
-    components_by_screen: dict | None = None,
+    components_declared_by_screen: dict | None = None,
     known_targets=None,
 ) -> bool:
     """May *target* be declared at app level?
@@ -140,5 +159,5 @@ def app_level_allowed(
     True only for `APP_OWNED`. `UNDETERMINED` and `UNRESOLVED` are both false:
     a question that was not answered is not a permission.
     """
-    kind, _ = classify(target, screens, components_by_screen, known_targets)
+    kind, _ = classify(target, screens, components_declared_by_screen, known_targets)
     return kind == APP_OWNED
