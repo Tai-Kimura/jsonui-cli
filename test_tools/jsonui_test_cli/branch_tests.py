@@ -54,6 +54,13 @@ def load_project_config(project_root: Path) -> dict:
 
 PARENT_SPEC_TYPE = "screen_parent_spec"
 
+#: A declaration site that belongs to no single screen. Spelled here because
+#: `jsonui-doc`'s validator accepts the same literal: two packages that
+#: disagree about this string would make an app spec validate as a document
+#: and stay invisible to the gate, which is silence rather than an error.
+#: The paired test reads `jsonui_doc_cli`'s constant and compares.
+APP_CONTRACTS_SPEC_TYPE = "app_contracts_spec"
+
 #: The substring every banner this generator writes contains. Ownership is
 #: read from the FILE rather than assumed from its path, so a mistake in
 #: building a filename cannot reach a hand-written harness.

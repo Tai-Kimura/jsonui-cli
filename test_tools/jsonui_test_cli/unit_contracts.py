@@ -46,6 +46,7 @@ from .branch_tests import (
     _screen_of,
     _spec_files,
     load_project_config,
+    APP_CONTRACTS_SPEC_TYPE,
     PARENT_SPEC_TYPE,
 )
 
@@ -396,6 +397,12 @@ class UnitCase:
     #: get back to. A screen id cannot stand in for it — the docs site builds
     #: spec URLs from the path, so a nested spec is unreachable from the id.
     spec_file: str = ""
+    #: The app whose contracts spec declared this case, when it came from one.
+    #: Empty for a case declared by a screen. A case has an `app` or a
+    #: `screen`, never both: an app-level declaration exists precisely because
+    #: no single screen owns the target, so filing it under one would put back
+    #: the false ownership the app spec was added to remove.
+    app: str = ""
 
 
 @dataclass
@@ -474,8 +481,10 @@ class UnitContractReport:
 
 def discover_unit_contracts(
     project_root: Path, spec_dir: str | None = None
-) -> tuple[list[UnitCase], list[str], list[str], list[str]]:
-    """``(cases, scanned, screens declaring, problems, files declaring, unreadable)``.
+) -> tuple[list[UnitCase], list[str], list[str], list[str], list[str],
+           list[str], list[str]]:
+    """``(cases, scanned, declaring, problems, declaring_files, unreadable,
+    app_specs)``.
 
     Both halves, for the same reason ``discover_branch_screens`` returns
     both: a caller that reports "0 declared" has to be able to say whether
@@ -498,6 +507,7 @@ def discover_unit_contracts(
     declaring: list[str] = []
     declaring_files: list[str] = []
     unreadable_files: list[str] = []
+    app_specs: list[str] = []
     problems: list[str] = []
     # Sub-specs that declare a block, by the parent that owns them. They are
     # skipped AS SCREENS (parent + subs is one screen), and their blocks are
@@ -507,7 +517,6 @@ def discover_unit_contracts(
     declared_in_sub: dict[str, list[str]] = {}
     for path in _spec_files(spec_path):
         screen = _screen_of(path)
-        scanned.append(screen)
         try:
             rel_file = path.resolve().relative_to(spec_path).as_posix()
         except ValueError:
@@ -519,9 +528,29 @@ def discover_unit_contracts(
             # Unreadable is not "declares nothing". Keeping it in `scanned`
             # keeps the denominator honest, and saying so keeps a spec that
             # cannot be parsed from reading as one that declares nothing.
+            #
+            # Counted as a screen even though the type was never read: the
+            # alternative is to drop it, and a file that might have been a
+            # screen must not leave the denominator on the strength of a type
+            # nobody could see.
+            scanned.append(screen)
             problems.append(f"{screen}: spec could not be read ({e})")
             unreadable_files.append(rel_file)
             continue
+        if raw.get("type") == APP_CONTRACTS_SPEC_TYPE:
+            # NOT a screen, so it never enters `scanned` or `declaring`.
+            # Those two are the denominator and numerator of "screens
+            # carrying a block"; an app spec in either makes the ratio
+            # describe a population that has one more member than the
+            # project has screens.
+            app_specs.append(rel_file)
+            if raw.get("unitContracts") is not None:
+                declaring_files.append(rel_file)
+            found, issues = _cases_of(raw, "", rel_file, app=screen)
+            cases.extend(found)
+            problems.extend(issues)
+            continue
+        scanned.append(screen)
         # Counted off the RAW file, before the sub-spec skip and before the
         # merge: a file declares a block or it does not, and that is the fact
         # `grep -l` reproduces. A parent that only RECEIVES blocks from its
@@ -577,7 +606,8 @@ def discover_unit_contracts(
             f"— the declaration was not read. This is a tool defect, not a "
             f"spec error; the cases are NOT being checked."
         )
-    return cases, scanned, declaring, problems, declaring_files, unreadable_files
+    return (cases, scanned, declaring, problems, declaring_files,
+            unreadable_files, app_specs)
 
 
 #: Keys a unitContracts block and a case may carry. Anything else is a
@@ -586,7 +616,8 @@ _BLOCK_KEYS = {"target", "cases"}
 _CASE_KEYS = {"name", "intent", "platforms"}
 
 
-def _cases_of(spec: dict, screen: str, spec_file: str = "") -> tuple[list[UnitCase], list[str]]:
+def _cases_of(spec: dict, screen: str, spec_file: str = "",
+              app: str = "") -> tuple[list[UnitCase], list[str]]:
     """``(cases, problems)`` for one spec.
 
     Every path that drops input reports it. The first cut silently skipped
@@ -656,6 +687,7 @@ def _cases_of(spec: dict, screen: str, spec_file: str = "") -> tuple[list[UnitCa
                     platforms=tuple(str(p) for p in platforms),
                     intent=str(case.get("intent") or ""),
                     spec_file=spec_file,
+                    app=app,
                 )
             )
     return out, problems
@@ -986,7 +1018,8 @@ def check_unit_contracts(
     project_root = Path(project_root)
     config = load_project_config(project_root)
     (cases, scanned, declaring, problems, declaring_files,
-     unreadable_files) = discover_unit_contracts(project_root, spec_dir)
+     unreadable_files, app_specs) = discover_unit_contracts(
+        project_root, spec_dir)
     roots = _test_roots(project_root, config)
     if project_platforms is None:
         project_platforms = sorted(roots)
@@ -1263,7 +1296,7 @@ def unit_contract_pages(
                            "never_runs": [], "files": []}
                        for p in platforms}},
         )
-        if case.screen not in entry["screens"]:
+        if case.screen and case.screen not in entry["screens"]:
             entry["screens"].append(case.screen)
         if case.spec_file and case.spec_file not in entry["spec_files"]:
             entry["spec_files"].append(case.spec_file)

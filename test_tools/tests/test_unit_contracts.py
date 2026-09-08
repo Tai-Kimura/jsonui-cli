@@ -784,7 +784,8 @@ class TestSplitScreens:
     def test_a_sub_spec_block_is_read(self, tmp_path):
         root = _split_project(tmp_path, sub_blocks=[
             {"target": "H", "cases": [{"name": "a"}, {"name": "b"}]}])
-        cases, scanned, declaring, problems, _files, _unread = uc.discover_unit_contracts(root)
+        (cases, scanned, declaring, problems, _files, _unread,
+         _apps) = uc.discover_unit_contracts(root)
         assert sorted(c.name for c in cases) == ["a", "b"]
         assert problems == []
 
@@ -798,7 +799,8 @@ class TestSplitScreens:
         """
         root = _split_project(tmp_path, sub_blocks=[
             {"target": "H", "cases": [{"name": "a"}]}])
-        cases, scanned, declaring, problems, _files, _unread = uc.discover_unit_contracts(root)
+        (cases, scanned, declaring, problems, _files, _unread,
+         _apps) = uc.discover_unit_contracts(root)
         assert declaring == ["chat"]
         assert len(cases) == 1
 
@@ -806,7 +808,8 @@ class TestSplitScreens:
         root = _split_project(tmp_path, second_sub=True, sub_blocks=[
             {"target": "H", "cases": [{"name": "a"}]},
             {"target": "H", "cases": [{"name": "b"}]}])
-        cases, _, declaring, problems, _files, _unread = uc.discover_unit_contracts(root)
+        (cases, _, declaring, problems, _files, _unread,
+         _apps) = uc.discover_unit_contracts(root)
         assert sorted(c.name for c in cases) == ["a", "b"]
         assert declaring == ["chat"]
         assert problems == []
@@ -840,7 +843,8 @@ class TestSplitScreens:
             return spec, refusal
 
         monkeypatch.setattr(uc, "_load_spec_result", stripped)
-        cases, _, declaring, problems, _files, _unread = uc.discover_unit_contracts(root)
+        (cases, _, declaring, problems, _files, _unread,
+         _apps) = uc.discover_unit_contracts(root)
         assert cases == []
         assert declaring == []
         assert len(problems) == 1
@@ -855,7 +859,8 @@ class TestSplitScreens:
         always wrong is the defect fixed in 1.8.27, not a fix.
         """
         root = _split_project(tmp_path, sub_blocks=[None])
-        cases, _, declaring, problems, _files, _unread = uc.discover_unit_contracts(root)
+        (cases, _, declaring, problems, _files, _unread,
+         _apps) = uc.discover_unit_contracts(root)
         assert (cases, declaring, problems) == ([], [], [])
 
 
@@ -1256,7 +1261,8 @@ class TestAParentDeclaringTheBlock:
         (root / "web" / "tests" / "chat.test.ts").write_text(
             f'describe("Chat", () => {{\n{body}\n}});\n', encoding="utf-8")
 
-        _cases, _scanned, _declaring, problems, _f, _u = uc.discover_unit_contracts(root)
+        (_cases, _scanned, _declaring, problems, _f, _u,
+         _apps) = uc.discover_unit_contracts(root)
         assert len(problems) == 1, problems
         # The merger's own words, not a second wording of the same rule.
         assert "cannot declare 'unitContracts'" in problems[0]
@@ -1267,7 +1273,8 @@ class TestAParentDeclaringTheBlock:
     def test_a_parent_that_declares_nothing_stays_clean(self, tmp_path):
         """The control. Without it, a check that always fires reads the same."""
         root = _parent_declaring_project(tmp_path, None)
-        _c, _s, _d, problems, _f, _u = uc.discover_unit_contracts(root)
+        (_c, _s, _d, problems, _f, _u,
+         _apps) = uc.discover_unit_contracts(root)
         assert problems == []
         assert uc.check_unit_contracts(root).ok is True
 
