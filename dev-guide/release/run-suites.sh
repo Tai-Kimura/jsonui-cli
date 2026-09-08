@@ -137,6 +137,35 @@ say "== emitted kotlin"
 bash "$C/dev-guide/release/compile-emitted-kotlin.sh" 2>&1 | tail -1
 rc=$?; say "   exit=$rc"; [ "$rc" = 0 ] || bad "emitted kotlin: exit $rc"
 
+# --- misfiled tickets -------------------------------------------------------
+# The inbox scan is `docs/bugs/*.md` and README excludes `reports/` from it, so
+# a ticket dropped into `reports/` is invisible to the pipeline rather than
+# merely unread. Two were found there on 2026-09-08, one of them FOUR DAYS old
+# and 47KB, because nothing counted this.
+#
+# Discriminator: a ticket carries `id:` AND `status:` (README's format); the
+# batch reports that legitimately live here carry `batch:`/`fixed_bugs:` and no
+# `status:`. Measured before choosing — "status: open" misses a ticket left at
+# `investigating`, and "name does not match YYYY-MM-DD-" flags 51 of this
+# lane's own version reports.
+say "== misfiled tickets (a ticket under reports/ is invisible to the inbox scan)"
+mis=0
+for f in "$C"/docs/bugs/reports/*.md; do
+  [ -f "$f" ] || continue
+  # `id:` AND an UNRESOLVED status. Presence of `status:` alone is not enough:
+  # a closed investigation's report legitimately keeps ticket-style frontmatter
+  # (measured — the 2026-09-04 a11y bench report does, and its own body says
+  # "status: closed" while the frontmatter said open, which is how it looked
+  # like an unprocessed ticket for four days).
+  if head -20 "$f" | grep -q '^id:' \
+     && head -20 "$f" | grep -qE '^status: *(open|investigating)'; then
+    say "   MISFILED: $(basename "$f")"
+    mis=$((mis+1))
+  fi
+done
+say "   misfiled=$mis  (scanned $(ls -1 "$C"/docs/bugs/reports/*.md 2>/dev/null | wc -l | tr -d " ") report(s))"
+[ "$mis" = 0 ] || bad "misfiled tickets under reports/: $mis — move them to docs/bugs/"
+
 # --- shared/core mirrors ----------------------------------------------------
 say "== shared/core parity"
 p=0

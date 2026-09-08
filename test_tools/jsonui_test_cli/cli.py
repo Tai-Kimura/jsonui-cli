@@ -15,6 +15,7 @@ from datetime import datetime
 from . import __version__
 from .validator import TestValidator
 from .report import load_results_file, generate_junit, generate_html
+from .validation.toolchain import unstamped_platforms
 
 
 def cmd_validate(args):
@@ -197,7 +198,7 @@ def cmd_validate(args):
     # this CLI's own version — so a consumer comparing them in a pretest is
     # recomputing what the tool already knows, in as many places as it has
     # projects.
-    from .validation.toolchain import sync_meta_mismatches, unstamped_platforms
+    from .validation.toolchain import sync_meta_mismatches
     for message in sync_meta_mismatches(_root, __version__):
         print(f"[WARN] {message}")
         total_warnings += 1
@@ -206,12 +207,9 @@ def cmd_validate(args):
     # Printed, not counted: an unstamped platform is a gap in the record, not
     # a mismatch, and counting it would fail gates for stamps that predate
     # versioned stamping.
-    _unstamped = unstamped_platforms(_root)
-    if _unstamped:
-        print(f"[NOTE] {len(_unstamped)} platform(s) carry no stamped version "
-              f"({', '.join(_unstamped)}), so the toolchain comparison SKIPPED "
-              f"them — this is not a statement that they are in step. Run "
-              f"`jui sync_tool` to stamp them.")
+    _note = unstamped_note(_root)
+    if _note:
+        print(_note)
 
     # A check that declined to run says so. Silence here would be the very
     # confusion this check exists to remove: "no dangling paths" and "the
@@ -391,6 +389,42 @@ def cmd_validate(args):
             return install_rc
 
     return 0
+
+
+def unstamped_note(project_root):
+    """The NOTE line for platforms the version comparison skipped, or None.
+
+    🚨 EXTRACTED 2026-09-08 BECAUSE THE PRINT WAS UNCOVERED. The mouth had
+    one arm — `test_the_cli_actually_calls_it` — and it was a source read for
+    the call spelling. A mutation that kept the call and disabled the `if`
+    left the whole suite green: the NOTE became unreachable and nothing said
+    so. The arm's LABEL was honest ("calls it"); the gap was that "calls it"
+    and "says it" are two claims and only one had an arm.
+
+    ⚠️ THE SPELLING THE ARM LOOKS FOR IS DELIBERATELY NOT WRITTEN OUT HERE.
+    The first draft of this docstring quoted it, and the arm went green
+    against a source that no longer made the call — it was matching this
+    comment. That is the defect v1.8.58 shipped a fix for, reproduced while
+    writing the fix. A source-reading arm cannot tell an implementation from
+    a sentence about one, so prose in the window it scans must not spell the
+    thing it scans for.
+
+    ⚠️ Returning the text instead of printing it is what makes the guard and
+    the wording testable without driving `cmd_validate`, which needs a whole
+    project on disk. The print itself stays a one-liner at the call site so
+    that a source arm can cover the remaining inch.
+
+    Printed, not counted: an unstamped platform is a gap in the record, not a
+    mismatch, and counting it would fail gates for stamps that predate
+    versioned stamping.
+    """
+    names = unstamped_platforms(project_root)
+    if not names:
+        return None
+    return (f"[NOTE] {len(names)} platform(s) carry no stamped version "
+            f"({', '.join(names)}), so the toolchain comparison SKIPPED "
+            f"them — this is not a statement that they are in step. Run "
+            f"`jui sync_tool` to stamp them.")
 
 
 def _print_editor_schema_drift(config_path):

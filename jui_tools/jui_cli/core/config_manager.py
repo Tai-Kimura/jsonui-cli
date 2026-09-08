@@ -237,9 +237,48 @@ class ConfigManager:
             return p
         return self.project_root / p
 
+    def document_tools_path_notes(self) -> list[str]:
+        """What `ensure_document_tools_importable` is about to do, or did not.
+
+        🚨 BOTH OUTCOMES WERE SILENT. Reported 2026-09-08 by a consumer lane
+        after finding three faces configured with a path that does not exist:
+
+            set but missing -> the setting had no effect, and nobody is told
+            set and present -> `document_tools` is imported from a WORKING
+                               COPY instead of the installed distribution,
+                               and nobody is told that either
+
+        ⚠️ The second is the dangerous one. A dirty working copy silently
+        displaces the distribution while `jui --version` keeps naming the
+        distribution — the same shape as reporting a face's behaviour from a
+        version string that no longer describes what runs.
+
+        Notes, never errors: a missing path is a gap in the record, and an
+        intentional development override is a real thing to want.
+        """
+        dtp = self.document_tools_path
+        if not dtp:
+            return []
+        if not dtp.exists():
+            return [f"document_tools_path is set to {dtp} but does not exist — "
+                    f"the setting had no effect, and `document_tools` will be "
+                    f"imported from the installed CLI instead."]
+        return [f"document_tools_path {dtp} is prepended to sys.path — "
+                f"`document_tools` now resolves to that working copy, not the "
+                f"installed distribution, so `jui --version` no longer "
+                f"describes what runs."]
+
     def ensure_document_tools_importable(self) -> None:
-        """Add document_tools_path to sys.path if configured."""
+        """Add document_tools_path to sys.path if configured AND it exists.
+
+        ⚠️ The docstring used to say "if configured", which is not the
+        condition — `dtp.exists()` is also required, and its failure was
+        silent. See `document_tools_path_notes` for why both branches now
+        report.
+        """
         import sys
         dtp = self.document_tools_path
+        for note in self.document_tools_path_notes():
+            print(f"NOTE [tools]: {note}", file=sys.stderr)
         if dtp and dtp.exists() and str(dtp) not in sys.path:
             sys.path.insert(0, str(dtp))

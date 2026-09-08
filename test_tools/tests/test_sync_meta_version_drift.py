@@ -161,3 +161,123 @@ class TestThroughTheGate:
 
         assert "sync_tool" not in out
         assert rc == 0
+
+
+class TestTheUnstampedNoteOnThisSide:
+    """🚨 The same rule has TWO mouths in v1.8.58, and this one had no arms.
+
+    `unstamped_platforms` is called from `jui build` (5 arms, with controls)
+    and from `jsonui-test validate` (`cli.py:209`) — and `grep -rn unstamped
+    test_tools/tests/` answered 0. The sibling rule right beside it,
+    `sync_meta_mismatches`, has ten. Reported by the triage lane before the
+    tag.
+
+    ⚠️ Worse than uncovered: `unstamped_platforms` returns [] when there is no
+    sync-meta file, so nothing in this suite reaches the NOTE branch even by
+    accident, and all seven consumer faces currently stamp every platform.
+    Without these arms the line would ship having never executed anywhere.
+
+    📌 One rule with two mouths needs arms counted PER MOUTH. The version that
+    added the second mouth is the version that must add its arms.
+    """
+
+    def _stamp(self, root, platforms):
+        meta = root / ".jsonui-cli"
+        meta.mkdir(parents=True, exist_ok=True)
+        (meta / "sync-meta.json").write_text(
+            json.dumps({"platforms": platforms}), encoding="utf-8")
+
+    def test_a_platform_with_no_version_is_reported_here_too(self, tmp_path):
+        from jsonui_test_cli.validation.toolchain import unstamped_platforms
+        self._stamp(tmp_path, {"android": {"tool": "kjui_tools"},
+                               "web": {"tool": "rjui_tools", "version": "1.7.41"}})
+        assert unstamped_platforms(tmp_path) == ["kjui_tools"]
+
+    def test_unknown_counts_as_unstamped_here_too(self, tmp_path):
+        from jsonui_test_cli.validation.toolchain import unstamped_platforms
+        self._stamp(tmp_path, {"ios": {"tool": "sjui_tools", "version": "unknown"}})
+        assert unstamped_platforms(tmp_path) == ["sjui_tools"]
+
+    def test_the_control_every_platform_stamped_reports_none(self, tmp_path):
+        from jsonui_test_cli.validation.toolchain import unstamped_platforms
+        self._stamp(tmp_path, {"android": {"tool": "kjui_tools", "version": "1.7.41"},
+                               "web": {"tool": "rjui_tools", "version": "1.7.41"}})
+        assert unstamped_platforms(tmp_path) == []
+
+    def test_no_stamp_file_reports_none(self, tmp_path):
+        from jsonui_test_cli.validation.toolchain import unstamped_platforms
+        assert unstamped_platforms(tmp_path) == []
+
+    def test_both_mouths_resolve_to_the_same_module(self):
+        """⚠️ The pairing arm. Two callers of one rule must not drift onto two
+        copies — the reason the rule was MOVED to shared/core rather than
+        duplicated."""
+        from jsonui_test_cli.validation import toolchain as adapter
+        rule = adapter._rule()
+        assert rule is not None
+        assert adapter.unstamped_platforms.__module__ != rule.__name__
+        assert hasattr(rule, "unstamped_platforms")
+
+    # --- the NOTE the mouth prints, not merely the call it makes -----------
+    #
+    # 🚨 THE ARM BELOW USED TO BE THE ONLY ONE HERE, AND IT COVERED THE CALL
+    # ONLY. Fired 2026-09-08, before the tag: a mutation that KEPT the call
+    # and disabled the `if` left this file green — the NOTE became
+    # unreachable and no arm noticed. "Calls it" and "says it" are two
+    # claims. The three arms that follow drive the text itself, through the
+    # helper the print was extracted into for exactly that reason.
+
+    def test_the_note_names_the_platforms_and_the_remedy(self, tmp_path):
+        from jsonui_test_cli.cli import unstamped_note
+        self._stamp(tmp_path, {"android": {"tool": "kjui_tools"},
+                               "ios": {"tool": "sjui_tools", "version": "unknown"}})
+        note = unstamped_note(tmp_path)
+        assert note is not None
+        assert "kjui_tools" in note and "sjui_tools" in note
+        assert "2 platform(s)" in note
+        # ⚠️ The half that makes it actionable. A line that says a check was
+        # skipped, without saying it is not a clean bill of health, is the
+        # silence this exists to replace.
+        assert "SKIPPED" in note
+        assert "not a statement that they are in step" in note
+        assert "jui sync_tool" in note
+
+    def test_the_control_a_fully_stamped_project_gets_no_note(self, tmp_path):
+        from jsonui_test_cli.cli import unstamped_note
+        self._stamp(tmp_path, {"android": {"tool": "kjui_tools", "version": "1.7.41"}})
+        assert unstamped_note(tmp_path) is None
+
+    def test_the_control_no_stamp_file_gets_no_note(self, tmp_path):
+        """A project that vendors no tools has nothing to be out of step
+        with; a NOTE on every such run is the constant line a real one hides
+        behind."""
+        from jsonui_test_cli.cli import unstamped_note
+        assert unstamped_note(tmp_path) is None
+
+    def test_the_cli_actually_prints_it(self):
+        """The remaining inch: the helper is pure, so only the source says
+        the command emits what it returns.
+
+        ⚠️ Do not write the searched-for spellings into prose anywhere in
+        `cli.py`. The first draft of this fix explained itself in a docstring
+        that quoted the call, and this arm went green against a source that
+        had stopped making it — matching the comment, not the code. That is
+        v1.8.58's own finding ①, reproduced while fixing something else.
+        """
+        from pathlib import Path as _P
+        src = (_P(__file__).resolve().parents[1] / "jsonui_test_cli"
+               / "cli.py").read_text(encoding="utf-8")
+        # ⚠️ Pinned as ONE CONTIGUOUS BLOCK, not as two independent
+        # substrings. Two `in src` checks both survive `if False and _note:`
+        # — the guard is a third claim, and a mutation that kills only the
+        # guard leaves every spelling in place. Three lines whose exact shape
+        # IS the contract are worth pinning exactly; the cost is that a
+        # reformat of these three lines must update this arm, which is the
+        # intended cost.
+        block = ("    _note = unstamped" + "_note(_root)\n"
+                 "    if _note:\n"
+                 "        print(_note)\n")
+        assert block in src, (
+            "the three lines that compute, guard and emit the NOTE are not "
+            "in `cli.py` in that shape — one of the three claims (asks for "
+            "it / only when there is one / says it) has been dropped")
