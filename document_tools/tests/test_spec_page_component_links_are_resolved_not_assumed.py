@@ -256,3 +256,103 @@ class ConfigLookupTests(unittest.TestCase):
         _write(self.root / "docs" / "components" / "html" / "codeblock.html")
         pages = _component_pages_on_disk(self.root / "docs" / "screens" / "html")
         self.assertIn("codeblock.component.json", pages)
+
+
+class TheLinkMustNotDependOnWhereMinusOPoints(unittest.TestCase):
+    """Reported 2026-09-08 against v1.8.53/54 by a face whose generated docs
+    are tracked in a PUBLIC repository.
+
+    The fix that made these links resolve at all gave `_component_pages_on_disk`
+    two candidate roots, and one of them is an ABSOLUTE path in the source
+    checkout (`spec_dir.parent / "html"`). For an in-place render that root and
+    the output tree coincide, so the relative href is short and right. For a
+    render anywhere else — a temp directory, a build area, the gate that
+    renders and diffs against the tracked pages — only that root resolves, and
+    `os.path.relpath` turns it into a chain that climbs to the filesystem root
+    and back down through the user's home:
+
+        href="../../../../../../../Users/<name>/…/components/html/topbar.html"
+
+    Two consequences, and the second is why this is not cosmetic:
+      1 a gate that renders to a temp directory can NEVER match the tracked
+        pages, because the href depends on where `-o` happened to point;
+      2 the OS username and the source tree layout are WRITTEN INTO an
+        artifact the consumer commits.
+
+    ⚠️ The depth arithmetic was never wrong. Only the base point was.
+    """
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.root = Path(self._tmp.name).resolve()
+        (self.root / "docs" / "components" / "json").mkdir(parents=True)
+        (self.root / "docs" / "components" / "json"
+         / "topbar.component.json").write_text("{}", encoding="utf-8")
+        _write(self.root / "docs" / "components" / "html" / "topbar.html")
+        (self.root / "jui.config.json").write_text(json.dumps({
+            "spec_directory": "docs/screens/json",
+            "component_spec_directory": "docs/components/json",
+        }), encoding="utf-8")
+        self._cwd = os.getcwd()
+        os.chdir(self.root)
+        self._elsewhere = tempfile.TemporaryDirectory()
+        self.elsewhere = Path(self._elsewhere.name).resolve()
+
+    def tearDown(self):
+        os.chdir(self._cwd)
+        self._elsewhere.cleanup()
+        self._tmp.cleanup()
+
+    def test_the_in_place_render_still_links(self):
+        """The control. The fix must not silence the case that WORKS —
+        deleting the source root entirely would pass every arm below."""
+        out = self.root / "docs" / "screens" / "html"
+        pages = _component_pages_on_disk(out)
+        self.assertIn("topbar.component.json", pages)
+        href = _component_links_for_page(pages, out)["topbar.component.json"]
+        self.assertEqual(os.path.join("..", "..", "components", "html",
+                                      "topbar.html"), href)
+
+    def test_a_render_outside_the_source_tree_emits_no_source_path(self):
+        """The defect. Rendering elsewhere must not reach back into the
+        checkout — a link out of the generated site is never right."""
+        out = self.elsewhere / "html"
+        out.mkdir(parents=True)
+        pages = _component_pages_on_disk(out)
+        links = _component_links_for_page(pages, out)
+        href = links.get("topbar.component.json")
+        self.assertIsNone(
+            href,
+            f"rendering to {out} produced {href!r} — a component page from the "
+            f"source checkout. With no page inside the output tree the emitter "
+            f"must render text, not a path that leaves the site.")
+
+    def test_the_leak_shape_itself_is_asserted(self):
+        """Named separately from the arm above because THIS is what the
+        consumer reported: not "the link is wrong" but "my source tree's
+        absolute path is in a file I commit to a public repository". An
+        implementation that returned some other wrong-but-relative href would
+        satisfy nobody while passing a laxer test."""
+        out = self.elsewhere / "x" / "y" / "z" / "html"
+        out.mkdir(parents=True)
+        links = _component_links_for_page(_component_pages_on_disk(out), out)
+        for name, href in links.items():
+            resolved = (out / href).resolve()
+            self.assertTrue(
+                str(resolved).startswith(str(self.elsewhere)),
+                f"{name} -> {href!r} resolves to {resolved}, outside the "
+                f"output tree and inside the source checkout")
+
+    def test_the_output_in_source_tree_predicate_is_not_vacuous(self):
+        """The predicate the fix turns on, driven directly.
+
+        Without this, a fix that always returned False would pass the two
+        arms above and quietly kill the in-place case — which the first arm
+        catches, but only for one layout. This says the predicate discriminates.
+        """
+        from jsonui_doc_cli.cli import _output_is_in_the_source_tree
+        spec_dir = self.root / "docs" / "components" / "json"
+        self.assertTrue(_output_is_in_the_source_tree(
+            self.root / "docs" / "screens" / "html", spec_dir))
+        self.assertFalse(_output_is_in_the_source_tree(
+            self.elsewhere / "html", spec_dir))

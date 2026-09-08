@@ -2220,7 +2220,18 @@ def _component_page_rel(comp_file, comp_docs_path, path_prefix: str | None) -> s
     `<app>/components/`. Reported 2026-09-08: the site's only dangling link,
     and it survived because the check counted links rather than resolving
     them. Two spellings of one rule diverge the moment one layout changes;
-    both callers now read this.
+    🚨 CORRECTED 2026-09-08: this sentence used to end "both callers now read
+    this" — TWO, when `grep -c 'generate_spec_html('` answers FOUR. Three were
+    wired; the fourth (`_pre_generate_spec_docs`, pre-generation into the
+    source tree) passed no `component_links` at all and fell back to the
+    legacy template. It stayed invisible because that template is CORRECT at
+    depth 0, and the face that first exercised the path had no nested spec —
+    a face with one measured 18 pages resolving and its single nested page
+    dangling.
+
+    📌 Making one place authoritative and counting the places that must read
+    it are different acts, and only the first leaves a trace in the code.
+    Before trusting a sentence like this one, run the count.
     """
     from pathlib import Path as _P
     output_name = _P(comp_file).stem.replace(".component", "") + ".html"
@@ -2476,6 +2487,33 @@ def _pre_generate_spec_docs(
     from ..spec_doc import generate_spec_html, generate_spec_markdown
     from ..cli import generate_component_html, generate_component_markdown
 
+    # Where each component's page WILL be written by the component loop below.
+    #
+    # ⚠️ Derived from the component JSON files, not from pages on disk. The
+    # spec loop runs BEFORE the component loop in this same function, so
+    # asking the disk here answers from the PREVIOUS run — or from nothing on
+    # a first generation. The layout is this function's own, two lines down,
+    # so it is known without looking.
+    #
+    # Reported 2026-09-08 by a face with a nested spec: this call site passed
+    # no `component_links` at all, so `generate_spec_html` fell to its legacy
+    # `../../components/html/<name>` template — correct only for a page
+    # sitting directly in `screens/html/`, and one `../` short for anything in
+    # a subdirectory. The face measured 18 top-level pages resolving and its
+    # single nested page dangling.
+    #
+    # 🚨 The v1.8.53 fix that made these links resolve reached THREE of the
+    # four `generate_spec_html` call sites. `_component_page_rel`'s docstring
+    # says "both callers now read this" — it counted two. Wiring one place and
+    # counting the places that need it are different acts.
+    _component_json_dir = docs_base / "components" / "json"
+    _component_html_dir = docs_base / "components" / "html"
+    _component_pages: dict[str, Path] = {}
+    if _component_json_dir.is_dir():
+        for _cf in sorted(_component_json_dir.glob("*.component.json")):
+            _component_pages[_cf.name] = (
+                _component_html_dir / f"{_cf.stem.replace('.component', '')}.html")
+
     # Process screen specifications
     spec_json_dir = docs_base / spec_subdir / "json"
     if spec_json_dir.exists():
@@ -2513,7 +2551,16 @@ def _pre_generate_spec_docs(
                         continue
 
                     spec_layouts_dir = _resolve_layouts_dir_for_spec(spec_file, layouts_dir)
-                    html_content = generate_spec_html(result.spec_data, layouts_dir=spec_layouts_dir)
+                    html_content = generate_spec_html(
+                        result.spec_data,
+                        layouts_dir=spec_layouts_dir,
+                        # Computed from THIS page's directory, so a nested
+                        # spec gets the `../` it actually needs instead of the
+                        # two the old template assumed.
+                        component_links={
+                            name: os.path.relpath(target, html_subdir)
+                            for name, target in _component_pages.items()
+                        })
                     html_path = html_subdir / f"{output_name}.html"
                     with open(html_path, 'w', encoding='utf-8') as f:
                         f.write(html_content)

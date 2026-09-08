@@ -168,13 +168,28 @@ class TheEmbeddedBodyPointsAtPagesThisRunWrote(_Site):
         # component spec the run writes no component page, and pointing the
         # link at a plausible path would produce a link that resolves to
         # nothing — the defect being repaired, reintroduced by the repair.
+        #
+        # 🚨 RE-POINTED 2026-09-08. This used to assert the ORIGINAL href was
+        # still present — and that contradicted the comment above it. The href
+        # it was observing came from the legacy `../../components/html/<name>`
+        # template, i.e. from a link that resolves to nothing: exactly what
+        # this arm says must not be produced. It only looked harmless because
+        # the rewriter left it alone rather than making it worse.
+        #
+        # `_pre_generate_spec_docs` now supplies `component_links`, so a
+        # declared component with no spec file renders as TEXT instead. The
+        # subject is unchanged — nothing may point at a page this run did not
+        # write — so the assertion now states that directly, and passes for
+        # both "no link" and "a link that resolves", while the old form passed
+        # only for the dangling case.
         out, _ = self.build(with_component_spec=False)
         page = out / "docs" / self.APP / "screens" / "html" / f"{self.SCREEN}.html"
-        hrefs = self.component_hrefs(self.body_of(page))
-        self.assertTrue(hrefs, "expected the original href to still be there")
-        for h in hrefs:
-            self.assertIn("components/html/", h,
-                          "the untouched source spelling should remain")
+        for h in self.component_hrefs(self.body_of(page)):
+            self.assertTrue(
+                (page.parent / h).resolve().is_file(),
+                f"{h} resolves to {(page.parent / h).resolve()}, which this "
+                f"run did not write — a component with no spec must render as "
+                f"text, not as a link nobody can follow")
 
     def test_a_name_carried_by_two_apps_is_left_alone(self):
         # Two apps declare a component of the same name, so the basename does

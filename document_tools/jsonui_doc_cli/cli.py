@@ -218,6 +218,28 @@ def _component_spec_dir_from_config() -> Path | None:
         return None
 
 
+def _output_is_in_the_source_tree(output_dir: Path, spec_dir: Path) -> bool:
+    """Is *output_dir* an in-place render, beside the specs it came from?
+
+    The docs root is taken as the specs' grandparent — `docs/screens/json`
+    gives `docs`, and an in-place render lands under it (`docs/screens/html`).
+    A render into a temp directory, a build area or anywhere else does not,
+    and for those the source tree must not be used as a link target: the href
+    would leave the generated site entirely and name an absolute path.
+
+    ⚠️ Errs toward FALSE. When the answer cannot be computed, the caller
+    falls back to the output-relative root and, if that has no pages, renders
+    text — which is the behaviour a reader can act on. An href naming
+    somebody's home directory is not.
+    """
+    try:
+        docs_root = spec_dir.resolve().parent.parent
+        output_dir.resolve().relative_to(docs_root)
+    except (ValueError, OSError):
+        return False
+    return True
+
+
 def _component_pages_on_disk(output_dir: Path) -> dict[str, Path]:
     """`<name>.component.json` -> the page that exists for it, or {}.
 
@@ -247,8 +269,22 @@ def _component_pages_on_disk(output_dir: Path) -> dict[str, Path]:
     pages: dict[str, Path] = {}
     spec_dir = _component_spec_dir_from_config()
     roots = []
-    if spec_dir is not None:
+    if spec_dir is not None and _output_is_in_the_source_tree(output_dir, spec_dir):
         # The generated pages sit beside the specs' directory, not inside it.
+        #
+        # ⚠️ ONLY when the output tree IS the source tree. This root is an
+        # ABSOLUTE path in the source checkout, and `relpath` from an output
+        # directory somewhere else turns it into a chain that climbs out to
+        # the filesystem root and back down through the user's home — which
+        # then gets WRITTEN INTO the generated HTML. A consumer whose
+        # generated docs are tracked in a public repository reported it as a
+        # leak, and their gate that renders into a temp directory and diffs
+        # against the tracked pages could never match, because the href
+        # depended on where `-o` happened to point.
+        #
+        # Regression introduced 2026-09-08 (v1.8.53) by the fix that made
+        # these links resolve at all: asking the disk was right, but one of
+        # the two places it asks only answers for the in-place render.
         roots.append(spec_dir.parent / "html")
     # The layout the old template assumed. Kept as a candidate — where it was
     # right it stays right — but now confirmed rather than presumed.
