@@ -213,7 +213,12 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-      - name: Install test_tools (dev)
+      # ⚠️ NOT "Install test_tools (dev)". `test_spec_validation_wiring.py`
+      # identifies the python-suite install ORDER by matching that exact step
+      # name and asserting it finds two lines; a second job reusing the name
+      # made it three and the assertion read `3 != 2`. The step name is load-
+      # bearing, so this one says which job it belongs to.
+      - name: Install test_tools (dev, for the compiler arms)
         working-directory: test_tools
         run: python -m pip install --upgrade pip && python -m pip install -e ".[dev]"
       - name: Install kotlinc
