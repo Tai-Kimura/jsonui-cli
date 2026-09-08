@@ -123,3 +123,60 @@ class TestTheCheckIsActuallyWired:
             if later in src:
                 assert call < src.index(later), (
                     f"the toolchain warning is emitted after {later}")
+
+
+class TestAnUnstampedPlatformSaysItWasSkipped:
+    """🚨 Silence had two causes and one spelling.
+
+    `sync_meta_mismatches` skips a platform whose stamp carries no version —
+    correctly, because comparing against `unknown` would fire on every run of
+    a project stamped before versioned stamping. But the skip printed nothing,
+    and "no line for android" reads as "android is in step". Reported by a
+    consumer lane that decomposed the three ways the check goes quiet.
+    """
+
+    def _stamp(self, root, platforms):
+        meta = root / ".jsonui-cli"
+        meta.mkdir(parents=True, exist_ok=True)
+        (meta / "sync-meta.json").write_text(json.dumps({"platforms": platforms}),
+                                             encoding="utf-8")
+
+    def test_a_platform_with_no_version_is_named_as_skipped(self, tmp_path, capsys):
+        self._stamp(tmp_path, {"android": {"tool": "kjui_tools"},
+                               "web": {"tool": "rjui_tools", "version": "1.8.54"}})
+        build_cmd._report_toolchain_sync(_Cfg(tmp_path))
+        err = capsys.readouterr().err
+        assert "NOTE [toolchain]" in err, err
+        assert "kjui_tools" in err, err
+        assert "SKIPPED" in err, err
+
+    def test_unknown_counts_as_unstamped(self, tmp_path, capsys):
+        self._stamp(tmp_path, {"ios": {"tool": "sjui_tools", "version": "unknown"}})
+        build_cmd._report_toolchain_sync(_Cfg(tmp_path))
+        assert "sjui_tools" in capsys.readouterr().err
+
+    def test_the_control_every_platform_stamped_prints_no_note(self, tmp_path, capsys):
+        """The arm that separates "skipped" from "in step". Without it the fix
+        could print the NOTE unconditionally and still pass everything else."""
+        from jui_cli.version import toolchain_version
+        v = toolchain_version()
+        self._stamp(tmp_path, {"android": {"tool": "kjui_tools", "version": v},
+                               "web": {"tool": "rjui_tools", "version": v}})
+        build_cmd._report_toolchain_sync(_Cfg(tmp_path))
+        err = capsys.readouterr().err
+        assert "NOTE [toolchain]" not in err, err
+        assert err == ""
+
+    def test_a_mismatch_still_reports_when_another_platform_is_unstamped(
+            self, tmp_path, capsys):
+        """⚠️ Regression arm: adding the NOTE must not swallow the WARNING."""
+        self._stamp(tmp_path, {"android": {"tool": "kjui_tools"},
+                               "web": {"tool": "rjui_tools", "version": "1.8.54"}})
+        build_cmd._report_toolchain_sync(_Cfg(tmp_path))
+        err = capsys.readouterr().err
+        assert "WARNING [toolchain]" in err and "rjui_tools" in err, err
+
+    def test_the_note_does_not_change_the_exit_path(self, tmp_path, capsys):
+        """A missing stamp is a gap in the record, not a failure."""
+        self._stamp(tmp_path, {"ios": {"tool": "sjui_tools"}})
+        assert build_cmd._report_toolchain_sync(_Cfg(tmp_path)) is None

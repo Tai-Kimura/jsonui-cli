@@ -1080,6 +1080,46 @@ def cmd_generate_spec(args):
     return 0
 
 
+def report_foreign_output(output_dir: Path, will_write, suffix: str) -> list[str]:
+    """Files already in *output_dir* that this run does NOT write.
+
+    🚨 WHY. A delivery lane pointed `generate component -o` at a directory
+    holding `generate html`'s pages and lost 2755 lines — sidebar and styles
+    replaced by a different format. Nothing looked: `-o` is taken as the
+    output directory and its existing contents are never asked about.
+
+    ⚠️ The discriminator is NOT "the directory is non-empty" — re-running a
+    command over its own output is normal and must stay silent. It is "there
+    are files here this command will not write", which is what a foreign
+    producer leaves behind (that case: component writes 8 pages into a
+    directory holding far more, each with a nav).
+
+    ⚠️ LIMIT, stated because the count cannot state it: a foreign producer
+    whose file names match this command's exactly is INVISIBLE here. The
+    overwrite still happens; only the surplus is detectable. So this lowers
+    the chance of a silent clobber, it does not remove it.
+
+    Reported, never refused, and the exit code is untouched — deliberately
+    overwriting a directory is a real thing to want.
+    """
+    if not output_dir.is_dir():
+        return []
+    planned = {q.resolve() for q in will_write}
+    existing = [q for q in sorted(output_dir.rglob(f"*{suffix}"))
+                if q.is_file() and q.resolve() not in planned]
+    if not existing:
+        return []
+    shown = ", ".join(q.name for q in existing[:5])
+    more = "\u2026" if len(existing) > 5 else ""
+    return [
+        f"{len(existing)} file(s) already in {output_dir} will NOT be written "
+        f"by this command ({shown}{more}). If they came from another generator "
+        f"(`generate html` writes pages here too), this run overwrites the ones "
+        f"whose names DO collide and leaves these behind. Nothing is deleted by "
+        f"this warning \u2014 check the directory is the one you meant."
+    ]
+
+
 def cmd_generate_spec_batch(args, input_dir: Path):
     """Handle batch generation of spec docs from a directory.
 
@@ -1119,6 +1159,16 @@ def cmd_generate_spec_batch(args, input_dir: Path):
     print()
 
     output_dir.mkdir(parents=True, exist_ok=True)
+
+    # What this run will write, computed BEFORE writing, so the comparison is
+    # against the directory as the operator left it.
+    _planned = [
+        output_dir / _f.relative_to(input_dir).with_name(
+            _f.relative_to(input_dir).name.replace(".spec.json", suffix))
+        for _f in spec_files
+    ]
+    for _line in report_foreign_output(output_dir, _planned, suffix):
+        print(f"WARNING: {_line}", file=sys.stderr)
 
     validator = SpecValidator()
     success_count = 0
@@ -1445,6 +1495,16 @@ def cmd_generate_component_batch(args, input_dir: Path):
     print()
 
     output_dir.mkdir(parents=True, exist_ok=True)
+
+    # What this run will write, computed BEFORE writing, so the comparison is
+    # against the directory as the operator left it.
+    _planned = [
+        output_dir / _f.relative_to(input_dir).with_name(
+            _f.relative_to(input_dir).name.replace(".component.json", suffix))
+        for _f in component_files
+    ]
+    for _line in report_foreign_output(output_dir, _planned, suffix):
+        print(f"WARNING: {_line}", file=sys.stderr)
 
     validator = SpecValidator()
     success_count = 0

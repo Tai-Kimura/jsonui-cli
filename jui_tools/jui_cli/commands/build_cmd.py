@@ -141,6 +141,15 @@ def _report_toolchain_sync(config_mgr) -> None:
         return
     for message in rule.sync_meta_mismatches(root, _running):
         print(f"WARNING [toolchain]: {message}", file=sys.stderr)
+    # Platforms the comparison SKIPPED because they carry no stamped version.
+    # Their silence is indistinguishable from agreement, so it gets a line of
+    # its own — NOTE rather than WARNING, because a missing stamp is a gap in
+    # the record, not a version split.
+    unstamped = getattr(rule, "unstamped_platforms", lambda _r: [])(root)
+    if unstamped:
+        print(f"NOTE [toolchain]: {len(unstamped)} platform(s) carry no stamped "
+              f"version ({', '.join(unstamped)}), so the comparison SKIPPED "
+              f"them — not a statement that they are in step.", file=sys.stderr)
 
 
 def cmd_build(args: argparse.Namespace) -> int:

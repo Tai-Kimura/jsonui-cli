@@ -86,8 +86,19 @@ RSpec.describe 'the audit is wired into the build' do
   end
 
   it 'the call sits inside build_compose, before the builder runs' do
-    body = build_rb[/def build_compose.*?\n        end/m]
+    # 🚨 Matches on `ConverterTestTagAudit.findings`, NOT the bare class name.
+    # The bare name also appears in the comment ABOVE the call ("see
+    # ConverterTestTagAudit for why both numbers print"), and a comment does
+    # not move when the call does. Measured 2026-09-08 by the triage lane:
+    # with the bare spelling this arm scored the comment at offset 265 while
+    # the call was at 402, so moving the call BELOW ComposeBuilder.new left it
+    # green. `.findings` is unambiguous because the comment does not contain it.
+    #
+    # ⚠️ Same family as the defect v1.8.56 fixed — a comment being counted as
+    # the thing it describes — shipped again in v1.8.57 in this very file.
+    body = build_rb[/def build_compose\b.*?\n(?=        def |\n        # ---)/m] ||
+           build_rb[/def build_compose.*?\n        end/m]
     expect(body).to include('ConverterTestTagAudit.findings')
-    expect(body.index('ConverterTestTagAudit')).to be < body.index('ComposeBuilder.new')
+    expect(body.index('ConverterTestTagAudit.findings')).to be < body.index('ComposeBuilder.new')
   end
 end

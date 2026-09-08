@@ -39,6 +39,51 @@ SYNC_META_RELPATH = Path(".jsonui-cli") / "sync-meta.json"
 UNKNOWN = "unknown"
 
 
+def _platform_entries(project_root):
+    """``{platform: entry}`` from the stamp, or {} when there is nothing to read."""
+    if project_root is None:
+        return {}
+    try:
+        meta = json.loads((Path(project_root) / SYNC_META_RELPATH)
+                          .read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    platforms = meta.get("platforms")
+    if not isinstance(platforms, dict):
+        return {}
+    return {k: v for k, v in platforms.items() if isinstance(v, dict)}
+
+
+def unstamped_platforms(project_root) -> list[str]:
+    """Platforms whose stamp carries no usable version, sorted.
+
+    🚨 THESE ARE THE ONES `sync_meta_mismatches` DOES NOT COMPARE, AND ITS
+    SILENCE ABOUT THEM LOOKS EXACTLY LIKE AGREEMENT. Reported 2026-09-08 by
+    a consumer lane that decomposed the three ways this module can go quiet:
+
+        1 no `platforms` at all          -> nothing to compare
+        2 `version` empty or "unknown"   -> **skipped, indistinguishable from 3**
+        3 stamped == running             -> genuinely in step
+
+    2 and 3 produce the same output — none — so a reader takes "no line for
+    android" to mean android is fine. It may mean android was never looked at.
+
+    ⚠️ Skipping is still correct: comparing against `unknown` would fire on
+    every run of a project whose stamp predates versioned stamping, which is
+    not the state this looks for. The fix is not to compare them — it is to
+    SAY they were not compared, which is what this exists for.
+
+    Measured the day it was reported: all seven consumer faces had every
+    version filled, so nothing is in this state today. Latent, not absent.
+    """
+    out = []
+    for platform, entry in (_platform_entries(project_root) or {}).items():
+        stamped = entry.get("version")
+        if not isinstance(stamped, str) or not stamped or stamped == UNKNOWN:
+            out.append(entry.get("tool") or platform)
+    return sorted(out)
+
+
 def sync_meta_mismatches(project_root, running_version: str) -> list[str]:
     """One message per platform whose stamped version is not the running one.
 

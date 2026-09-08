@@ -64,6 +64,18 @@ def sync_meta_mismatches(project_root, running_version: str) -> list[str]:
     return rule.sync_meta_mismatches(project_root, running_version)
 
 
+def unstamped_platforms(project_root) -> list[str]:
+    """Delegates to `shared/core/toolchain_sync.unstamped_platforms`.
+
+    The platforms `sync_meta_mismatches` did NOT compare. Silence about them
+    reads as agreement, which is the confusion this reports away.
+    """
+    rule = _rule()
+    if rule is None or not hasattr(rule, "unstamped_platforms"):
+        return []
+    return rule.unstamped_platforms(project_root)
+
+
 def rule_is_available() -> bool:
     """Whether the shared rule could be loaded at all.
 

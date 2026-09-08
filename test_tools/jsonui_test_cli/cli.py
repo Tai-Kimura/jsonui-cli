@@ -197,10 +197,21 @@ def cmd_validate(args):
     # this CLI's own version — so a consumer comparing them in a pretest is
     # recomputing what the tool already knows, in as many places as it has
     # projects.
-    from .validation.toolchain import sync_meta_mismatches
+    from .validation.toolchain import sync_meta_mismatches, unstamped_platforms
     for message in sync_meta_mismatches(_root, __version__):
         print(f"[WARN] {message}")
         total_warnings += 1
+    # A platform with no stamped version is SKIPPED by the comparison above,
+    # and skipping is silent — which reads identically to "in step". Say it.
+    # Printed, not counted: an unstamped platform is a gap in the record, not
+    # a mismatch, and counting it would fail gates for stamps that predate
+    # versioned stamping.
+    _unstamped = unstamped_platforms(_root)
+    if _unstamped:
+        print(f"[NOTE] {len(_unstamped)} platform(s) carry no stamped version "
+              f"({', '.join(_unstamped)}), so the toolchain comparison SKIPPED "
+              f"them — this is not a statement that they are in step. Run "
+              f"`jui sync_tool` to stamp them.")
 
     # A check that declined to run says so. Silence here would be the very
     # confusion this check exists to remove: "no dangling paths" and "the
