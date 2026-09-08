@@ -13,7 +13,7 @@ The specs already carry the facts; nothing was reading them:
     useCase      `required: ["name", "methods"]` — "UseCase class name"
     viewModel    carries NO name — but `jui build` generates the class as
                  `f"{spec.name}ViewModel"`, so the screen name determines it
-    component    named by a screen's `structure.customComponents[].specFile`
+    component    ⚠️ NO SUCH FACT EXISTS YET — see the warning below
 
 ⚠️ The viewModel case is the one that looks absent and is not. Reading only
 `dataFlow.viewModel` shows `description`/`methods`/`vars` and no identifier,
@@ -39,9 +39,55 @@ on: discovery has no app concept (one `spec_directory` per project) while the
 doc generator keys by app (`unit_by_app`), so the CALLER supplies the frame
 and this module cannot check it.
 
-This module is PURE. Resolving a `specFile` to the component's class name
-needs to read component specs, so the caller does that and passes the result
-in; see `components_declared_by_screen` on `owner_screens`.
+🚨 THE COMPONENT SOURCE IS UNDEFINED, NOT MERELY UNWIRED. An earlier
+version of this docstring said a component is `structure.customComponents[]
+.specFile` "resolved to the component spec's `metadata.name`". That was
+written without reading the generator, and it is wrong twice over. Measured
+2026-09-08 at v1.8.52:
+
+    build_cmd.py references to `custom_components`      0
+    `specFile` anywhere in jui_cli                      0
+    any component → class-name convention              0
+    (positive control: `specFile` IS present in document_tools, so the
+     search was working and these zeros are real)
+
+Nothing in this toolchain decides what a component contributes to an owner
+set. Compare source 1, which HAS such a fact: `jui build` writes
+`f"{spec.name}ViewModel"`, and that generator rule is what makes a
+ViewModel's owner derivable at all.
+
+`metadata.name` cannot be taken as that identity AS IT IS READ TODAY. Every
+producer that displays it supplies a default — `"Component"`, `"Screen"`,
+`""`, and in two places the file's own stem — and a string with a default
+cannot be an identity: unnamed components would collapse onto one target, and
+the stem fallback would merge distinct components sharing a filename. No
+production site reads it as a required `metadata["name"]`.
+
+⭐ But the codebase already draws the line this rule needs. The one reader
+that uses the name for MATCHING rather than display supplies no default and
+declines instead (`document_tools/.../cli.py`, component-usage search):
+
+    name = ((data.get("metadata") or {}).get("name") ...)
+    if not isinstance(name, str) or not name:
+        return None            # "cannot answer", never a substitute
+    needle = f'"{name}"'
+
+while the sibling that reconciles DECLARATIONS matches by file name and never
+opens `metadata.name` at all. So the split is already practised: display may
+substitute, matching may not. A decision to make this source real would
+follow that precedent — require the field where it carries identity — rather
+than invent a convention.
+
+So `components_declared_by_screen` stays a parameter with no production
+caller, and a zero owner count stays `UNDETERMINED` rather than a permission.
+Ruled 2026-09-08: inventing a convention here would add a third spelling to
+the toolchain, so the limit is named instead of filled. Wiring this source
+needs a spec decision about what a component's identity IS — not an
+implementation.
+
+This module is PURE: whatever that identity turns out to be, resolving it
+needs to read component specs, so the caller would do that and pass the
+result in; see `components_declared_by_screen` on `owner_screens`.
 """
 
 from __future__ import annotations
@@ -70,10 +116,11 @@ UNRESOLVED = "unresolved"
 #: target as app-owned.
 #:
 #: What is missing is `components_declared_by_screen` — the screens'
-#: `structure.customComponents[].specFile` resolved to each component spec's
-#: `metadata.name`. It is NOT a layout closure: nothing here needs to read
-#: layouts, and a caller that goes looking for one is answering a question
-#: this rule stopped asking.
+#: the component identity a screen's `structure.customComponents[]`
+#: declares — ⚠️ which nothing in this toolchain defines yet; read the
+#: module docstring before building it. It is NOT a layout closure: nothing
+#: here needs to read layouts, and a caller that goes looking for one is
+#: answering a question this rule stopped asking.
 UNDETERMINED = "undetermined"
 
 
@@ -104,11 +151,12 @@ def owner_screens(
 
     `screens` maps screen name to its merged spec dict, for a SINGLE app —
     see the scope warning in the module docstring.
-    `components_declared_by_screen` maps screen name to the component class
-    names that screen DECLARES (`structure.customComponents[].specFile`,
-    resolved to each component spec's `metadata.name`); ``None`` means it was
-    not computed, and the component source is then absent from the answer —
-    which is why `classify` refuses to call a zero result `APP_OWNED` then.
+    `components_declared_by_screen` maps screen name to the component
+    identities that screen DECLARES. ⚠️ No production caller passes it,
+    because nothing defines what that identity is — see the module
+    docstring. ``None`` means it was not computed, and the component source
+    is then absent from the answer, which is why `classify` refuses to call a
+    zero result `APP_OWNED` then.
     """
     target = (target or "").strip()
     if not target:
