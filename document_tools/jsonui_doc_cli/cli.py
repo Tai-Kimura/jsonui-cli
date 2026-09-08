@@ -8,6 +8,7 @@ and specification documents.
 
 import argparse
 import json
+import os
 import re
 import sys
 import warnings
@@ -184,6 +185,104 @@ def _resolve_unit_roots(
     found, last = _follow_extends(cfg)
     use = found if found is not None else last
     return [{"app": None, "config": use, "root": use.parent}]
+
+
+def _component_spec_dir_from_config() -> Path | None:
+    """`component_spec_directory` from jui.config.json, or None.
+
+    ⚠️ Warns rather than returning a quiet None. The first cut swallowed every
+    exception, and because it named two attributes ConfigManager does not have
+    (`config`, `config_path` — they are `load()` and `path`) it returned None
+    for every project. The links then all rendered as text: no dangling link,
+    no error, and a run that looked like the fix working. A helper whose
+    failure and whose correct-but-empty answer are the same value has to say
+    which one happened.
+    """
+    try:
+        here = Path(__file__).resolve()
+        repo_root = here.parents[2]
+        jui_tools_dir = repo_root / "jui_tools"
+        if jui_tools_dir.is_dir() and str(jui_tools_dir) not in sys.path:
+            sys.path.insert(0, str(jui_tools_dir))
+        from jui_cli.core.config_manager import ConfigManager
+        config_mgr = ConfigManager()
+        if not config_mgr.exists():
+            return None
+        return Path(config_mgr.component_spec_directory).resolve()
+    except Exception as exc:  # noqa: BLE001
+        warnings.warn(
+            f"jsonui-doc: component_spec_directory lookup failed ({exc!r}); "
+            "component references will be rendered as text instead of links.",
+            stacklevel=2,
+        )
+        return None
+
+
+def _component_pages_on_disk(output_dir: Path) -> dict[str, Path]:
+    """`<name>.component.json` -> the page that exists for it, or {}.
+
+    ⚠️ Existence is the whole point. The path this replaces was a template —
+    ``f"../../components/html/{html_file}"`` — built from the component's NAME
+    and never checked, so it produced a link for a page that was somewhere
+    else, or nowhere. Measured across five consumer trees on 2026-09-08: of the
+    component links in already-shipped generated docs, 11 pointed at a page
+    that exists at a DIFFERENT path in the same repository, and the template
+    was right for only the one project laid out the way its author's was.
+
+    Three ways it went wrong, all from the same missing step:
+      A the page is a directory deeper, so `../../` leaves the spec tree
+        (a nested spec's page sits further from the component tree, and the
+        template counted the hops for a top-level page only);
+      B there is no sibling `components/html/` at all, because the project
+        keeps component specs in the same directory as screen specs — that
+        project's links were dead at EVERY depth, which is what showed the
+        cause was not depth;
+      C the page has not been generated, which the site path already handles
+        by rendering text instead of a link.
+
+    So this asks the disk instead. A name that is not found here is left out
+    of the map, and `generate_spec_html` renders it as text — the behaviour
+    its own comment describes and the caller never gave it the data for.
+    """
+    pages: dict[str, Path] = {}
+    spec_dir = _component_spec_dir_from_config()
+    roots = []
+    if spec_dir is not None:
+        # The generated pages sit beside the specs' directory, not inside it.
+        roots.append(spec_dir.parent / "html")
+    # The layout the old template assumed. Kept as a candidate — where it was
+    # right it stays right — but now confirmed rather than presumed.
+    roots.append((output_dir.parent / "components" / "html").resolve())
+
+    for root in roots:
+        if not root.is_dir():
+            continue
+        for page in sorted(root.glob("*.html")):
+            spec_name = f"{page.stem}.component.json"
+            # A page is only a component's page if that component's spec is
+            # there too. Without this a project whose component specs share a
+            # directory with its screen specs matches SCREEN pages by name.
+            if spec_dir is not None and not (spec_dir / spec_name).is_file():
+                continue
+            pages.setdefault(spec_name, page)
+    return pages
+
+
+def _component_links_for_page(pages: dict[str, Path], page_dir: Path) -> dict[str, str]:
+    """Relative hrefs from one output page to the component pages that exist.
+
+    Relative to THIS page's own directory, which is what makes a nested spec
+    work: the number of `../` is computed, never assumed.
+    """
+    links: dict[str, str] = {}
+    for spec_name, target in pages.items():
+        try:
+            links[spec_name] = os.path.relpath(target, page_dir)
+        except ValueError:
+            # Different drive on Windows; no relative path exists. Leaving it
+            # out renders text, which beats an href that cannot resolve.
+            continue
+    return links
 
 
 def _resolve_layouts_dir_from_config() -> Path | None:
@@ -872,8 +971,17 @@ def cmd_generate_spec(args):
 
     # Generate content
     if output_format == "html":
-        content = generate_spec_html(spec_data, layouts_dir=layouts_dir,
-                                     spec_dir=file_path.parent)
+        # Where this page will land decides the hrefs, so an -o is read before
+        # the page is built. Without -o the page goes to stdout and there is no
+        # directory to be relative to, so nothing is offered and component
+        # references render as text — the honest answer when the destination
+        # is unknown, and never a link built from a guess.
+        out_dir = Path(args.output).parent if getattr(args, "output", None) else None
+        content = generate_spec_html(
+            spec_data, layouts_dir=layouts_dir, spec_dir=file_path.parent,
+            component_links=(
+                _component_links_for_page(_component_pages_on_disk(out_dir), out_dir)
+                if out_dir is not None else {}))
     else:
         content = generate_spec_markdown(spec_data, layouts_dir=layouts_dir,
                                          spec_dir=file_path.parent)
@@ -934,6 +1042,9 @@ def cmd_generate_spec_batch(args, input_dir: Path):
     validator = SpecValidator()
     success_count = 0
     error_count = 0
+    # Scanned once for the run, not per spec: the answer is the same for every
+    # page, and only the relative path from each page differs.
+    component_pages = _component_pages_on_disk(output_dir) if to_html else {}
 
     for spec_file in sorted(spec_files):
         result = validator.validate_file(spec_file)
@@ -946,16 +1057,23 @@ def cmd_generate_spec_batch(args, input_dir: Path):
             continue
 
         # layouts_dir is passed either way so layoutFile import works
-        content = (generate_spec_html(result.spec_data, layouts_dir=layouts_dir,
-                                      spec_dir=spec_file.parent)
-                   if to_html
-                   else generate_spec_markdown(result.spec_data, layouts_dir=layouts_dir,
-                                               spec_dir=spec_file.parent))
-
         # Preserve subdirectory structure in output
         rel_path = spec_file.relative_to(input_dir)
         output_name = rel_path.with_name(rel_path.name.replace(".spec.json", suffix))
         output_path = output_dir / output_name
+
+        # Computed from where THIS page lands, which is why it is done here
+        # and not inside the emitter: a nested spec's page is further from the
+        # component pages than a top-level one, and the emitter is not told
+        # where it is being written.
+        content = (generate_spec_html(
+                       result.spec_data, layouts_dir=layouts_dir,
+                       spec_dir=spec_file.parent,
+                       component_links=_component_links_for_page(
+                           component_pages, output_path.parent))
+                   if to_html
+                   else generate_spec_markdown(result.spec_data, layouts_dir=layouts_dir,
+                                               spec_dir=spec_file.parent))
 
         output_path.parent.mkdir(parents=True, exist_ok=True)
         with open(output_path, 'w', encoding='utf-8') as f:

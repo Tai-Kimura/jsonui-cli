@@ -401,12 +401,30 @@ def generate_spec_html(
             # authority: a component with no page is rendered as text rather
             # than as a link that resolves to nothing.
             #
-            # Without it the legacy relative path stands, because `generate
-            # spec` writes screens/html/ beside components/html/ and that path
-            # is correct there. The site generator's layout is `<app>/specs/`
-            # and `<app>/components/`, where it is not — reported 2026-09-08
-            # as the site's only dangling link. It survived a check that
-            # counted links; resolving them with isfile() found it in one run.
+            # ⚠️ The legacy relative path below is WRONG far more often than
+            # the comment here used to claim. It said `generate spec` writes
+            # screens/html/ beside components/html/ "and that path is correct
+            # there", blaming only the site generator's `<app>/specs/` layout.
+            # Measured across five consumer trees on 2026-09-08: 11 links in
+            # already-shipped docs pointed at a page that exists at a DIFFERENT
+            # path in the same repository, and the template was right only for
+            # a project laid out the way its author's was.
+            #
+            # It breaks INSIDE the source tree too, which is what disproved the
+            # "only the site layout" reading: a spec in a subdirectory gets a
+            # page one level deeper, so `../../` leaves the screens tree
+            # entirely. Splitting a parent spec is enough to trigger it. And a
+            # project that keeps component specs in the SAME directory as its
+            # screen specs has no `components/html/` sibling at all, so its
+            # links were dead at every depth.
+            #
+            # `generate spec` now passes `component_links` (cli.py), so this
+            # branch is reached only by a caller that has not been given the
+            # pages it writes. It stays because removing it would silently drop
+            # links on that caller's pages; it is not a path to add callers to.
+            # It survived a check that counted links; resolving them with
+            # isfile() found it in one run — count the resolutions, not the
+            # links.
             if not spec_file:
                 spec_link = "-"
             elif component_links is not None:
