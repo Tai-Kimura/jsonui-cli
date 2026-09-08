@@ -71,7 +71,20 @@ class _Site(unittest.TestCase):
              "chat-recommendation": "ChatRecommendationHandler",
              "chat-plain": None}
 
-    def build(self, *, split: bool, flat_target: str | None) -> Path:
+    def build(self, *, split: bool, flat_target: str | None,
+              flat: bool | None = None) -> Path:
+        """Build a site. `flat` writes the flat spec; `flat_target` is what it declares.
+
+        The two were ONE knob until 2026-09-08, and that made
+        `flat_target=None, split=False` a project with **no spec files at all**
+        rather than a project whose specs declare nothing — so the arm that
+        wanted the second built the first, and its loop over `specs/*.html`
+        ran zero times. Separating them is what gives that arm a subject:
+        `flat=True, flat_target=None` writes a screen that declares no
+        contracts. Default keeps every existing call site's meaning.
+        """
+        if flat is None:
+            flat = flat_target is not None
         root = Path(tempfile.mkdtemp())
         self.addCleanup(shutil.rmtree, root, ignore_errors=True)
         specs = root / "docs" / "screens" / "json"
@@ -92,10 +105,11 @@ class _Site(unittest.TestCase):
         }), encoding="utf-8")
 
         targets: list[str] = []
-        if flat_target:
+        if flat:
             (specs / "flat.spec.json").write_text(
                 json.dumps(_screen_spec("flat", flat_target)), encoding="utf-8")
-            targets.append(flat_target)
+            if flat_target:
+                targets.append(flat_target)
         if split:
             (specs / "chat.spec.json").write_text(json.dumps({
                 "type": "screen_parent_spec", "version": "1.0",
@@ -184,8 +198,26 @@ class SplitScreenReachability(_Site):
         self.assertEqual(self.links_of(out / "specs" / "flat.html"), ["FlatHandler"])
 
     def test_a_project_with_no_contracts_has_no_unit_links_anywhere(self):
-        out = self.build(split=False, flat_target=None)
-        for page in (out / "specs").rglob("*.html"):
+        """A screen that declares nothing gets no link — measured on a real page.
+
+        🚨 THIS ARM RAN ITS LOOP ZERO TIMES UNTIL 2026-09-08. It asked for
+        `flat_target=None`, which also suppressed the only spec file, so
+        `out/specs` did not exist and `rglob` yielded nothing: the arm was
+        green because there was no page to read, not because no page linked.
+        Its name says "no contracts"; what it built was "no screens".
+
+        So the page list is pinned before it is read. An empty list here is
+        now a failure with its own message, and the anchor is known to
+        discriminate: measured on this same fixture, a declaring page carries
+        it once and a non-declaring page zero times (`chat-plain` and the
+        split parent are the standing negative examples).
+        """
+        out = self.build(split=False, flat_target=None, flat=True)
+        pages = sorted((out / "specs").rglob("*.html"))
+        self.assertEqual([p.name for p in pages], ["flat.html"],
+                         "the fixture must produce a spec page for the loop to "
+                         "read — an empty list here means the arm proved nothing")
+        for page in pages:
             self.assertNotIn("unit-contract-link", page.read_text(encoding="utf-8"))
 
 

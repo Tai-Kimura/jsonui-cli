@@ -209,13 +209,20 @@ say "   misfiled=$mis  (scanned $scanned report(s))"
 fi
 
 # --- shared/core mirrors ----------------------------------------------------
-say "== shared/core parity"
-p=0
-for t in sjui_tools kjui_tools rjui_tools; do
-  d=$(diff -rq "$C/shared/core" "$C/$t/lib/core" 2>&1 | grep -v "Only in" | wc -l | tr -d ' ')
-  say "   $t differs=$d"; p=$((p+d))
-done
-[ "$p" = 0 ] && say "   parity IDENTICAL" || bad "parity DIFFERS ($p)"
+# ⚠️ NOT `diff -rq | grep -v "Only in"`. That filter deleted a whole DIRECTION
+# of the comparison — a file deleted from one mirror and a new shared/core file
+# nobody mirrors BOTH show up only as `Only in`, and both were dropped, so the
+# leg printed `parity IDENTICAL` over 88 unread lines (33/27/28 on a clean
+# tree at both a4c0e06b and 46fad0cb; 34/28/29 if measured AFTER a run, because
+# the Python suites
+# leave a shared/core/__pycache__ — the count moved with the MOMENT of the
+# measurement as well as the tree, which is why the checker below takes its
+# population from `shared/core/*.rb` and cannot see build droppings at all).
+# It compares bytes on the intersection AND presence on both sides, taking the
+# expected mirror set from each tool's own shared_core_mirror_spec.rb.
+say "== shared/core parity (bytes AND presence, both directions)"
+python3 "$C/dev-guide/release/check-shared-core-parity.py" "$C"
+rc=$?; say "   exit=$rc"; [ "$rc" = 0 ] || bad "shared/core parity: exit $rc"
 
 say "== end $(date -u +%FT%TZ) HEAD $(git -C "$C" rev-parse HEAD) porcelain_lines=$(git -C "$C" status --porcelain | wc -l | tr -d ' ') failures=$fail"
 exit $fail

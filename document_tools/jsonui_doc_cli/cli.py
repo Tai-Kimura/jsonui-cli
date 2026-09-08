@@ -1192,6 +1192,32 @@ def report_overwrites_by_another_producer(output_dir: Path, will_write,
     Saying both with the same word floods the first run of every face, and
     a reader who has once been shown a flood stops reading the line that
     finally matters.
+
+    🚨 WHICH FILES HAVE NO MARK — STATED WIDER THAN THE FIRST DRAFT SAID.
+    A consumer lane read the design and asked whether the limit is really
+    "identical filenames". It is not; that wording understates it. Only
+    `spec-batch` and `component-batch` stamp. Everything below is unmarked
+    and therefore lands in the rolled-up line, never in a per-file warning:
+
+        every page written before this version, on every face
+        every page from `generate html` (11+ write sites in
+            `test_doc/generator.py` — not stamped here, deliberately: a
+            change that size was not worth making at the end of a release
+            this large)
+        every page from the single-file `generate spec` / `generate
+            component` forms
+
+    ⚠️ So a site-route page overwritten by this command is REPORTED, but as
+    "no mark" rather than as a named collision. That is a weaker report, not
+    silence — and the distinction is exactly why the two wordings differ.
+    A reader must not take "no per-file warning" to mean "no collision".
+
+    ⚠️ MIXED VERSIONS MAKE THE MARK COME AND GO. Raised by a consumer lane:
+    regenerating with a CLI older than this one rewrites the page WITHOUT a
+    mark, so the rolled-up line reappears on the next run of a new CLI. That
+    is normal for the transition and is NOT evidence that another tool
+    touched the directory. The toolchain-version NOTE this release also adds
+    is the instrument that says a mixed version is in play.
     """
     if not output_dir.is_dir():
         return []
@@ -1238,8 +1264,13 @@ def report_foreign_output(output_dir: Path, will_write, suffix: str) -> list[str
 
     ⚠️ LIMIT, stated because the count cannot state it: a foreign producer
     whose file names match this command's exactly is INVISIBLE here. The
-    overwrite still happens; only the surplus is detectable. So this lowers
-    the chance of a silent clobber, it does not remove it.
+    overwrite still happens; only the surplus is detectable.
+
+    🚨 AND THAT LIMIT WAS THE REPORTED INCIDENT. Measured on the tree it
+    happened on: 8 existing pages, 8 planned, surplus 0 — this function said
+    nothing. `report_overwrites_by_another_producer` was added to cover it.
+    Do not read this function as the whole check; it answers "what is left
+    behind", not "whose work is being replaced".
 
     Reported, never refused, and the exit code is untouched — deliberately
     overwriting a directory is a real thing to want.

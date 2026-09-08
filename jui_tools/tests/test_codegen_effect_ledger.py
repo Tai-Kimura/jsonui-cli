@@ -170,25 +170,107 @@ class LedgerRoundTripTest(unittest.TestCase):
         self.assertEqual(entry["class"], "bound-frozen")
 
 
+def _missing_field_violations(entries) -> list[str]:
+    """Rows that carry no owner or no reason. ONE implementation, two callers.
+
+    The committed ledger and the synthetic control below must be judged by
+    the SAME code: a control that re-spells the rule proves its own copy
+    works and says nothing about the rule the committed file is held to.
+    """
+    out = []
+    for entry in entries:
+        for field in ce.REQUIRED_FIELDS:
+            if not entry.get(field):
+                out.append(
+                    f"{entry.get('component')}.{entry.get('attribute')} "
+                    f"[{entry.get('platform')}] has no {field}"
+                )
+    return out
+
+
+def _advisory_class_violations(entries) -> list[str]:
+    """Rows recorded under a class the gate treats as advisory. See above."""
+    return [
+        f"{entry.get('component')}.{entry.get('attribute')} "
+        f"[{entry.get('platform')}] is recorded as {entry.get('class')}"
+        for entry in entries
+        if entry.get("class") in ce.ADVISORY_CLASSES
+    ]
+
+
 class CommittedLedgerTest(unittest.TestCase):
-    """The ledger in the repo has to satisfy its own rules."""
+    """The ledger in the repo has to satisfy its own rules.
+
+    ⚠️ AS OF 2026-09-08 THIS FILE HOLDS ZERO ENTRIES, so both arms below pass
+    over an empty sequence. That is the DESIGNED state — the queue was
+    consumed and the module docstring's "the ledger empties" is the goal —
+    so neither arm may assert the file is non-empty; doing that would make
+    the suite fight the outcome the whole plan is aimed at.
+
+    What the emptiness costs is coverage: green here has meant "no row broke
+    a rule" and "no row exists" indistinguishably, and only the second has
+    ever been true. `LedgerRulesAreExercisedTest` therefore runs the SAME two
+    predicates over a synthetic ledger, so the rules have a witness that does
+    not depend on what the repo happens to contain today. When real rows
+    arrive, these arms start carrying their own weight and nothing changes.
+    """
 
     LEDGER = Path(__file__).resolve().parents[2] / "conformance" / ce.LEDGER_NAME
 
+    def _entries(self):
+        return json.loads(self.LEDGER.read_text(encoding="utf-8"))["entries"]
+
     @unittest.skipUnless(LEDGER.is_file(), "no committed ledger yet")
     def test_every_entry_has_an_owner_and_a_reason(self):
-        for entry in json.loads(self.LEDGER.read_text(encoding="utf-8"))["entries"]:
-            for field in ce.REQUIRED_FIELDS:
-                self.assertTrue(
-                    entry.get(field),
-                    f"{entry.get('component')}.{entry.get('attribute')} "
-                    f"[{entry.get('platform')}] has no {field}",
-                )
+        self.assertEqual(_missing_field_violations(self._entries()), [])
 
     @unittest.skipUnless(LEDGER.is_file(), "no committed ledger yet")
     def test_no_advisory_class_is_recorded(self):
-        for entry in json.loads(self.LEDGER.read_text(encoding="utf-8"))["entries"]:
-            self.assertNotIn(entry.get("class"), ce.ADVISORY_CLASSES)
+        self.assertEqual(_advisory_class_violations(self._entries()), [])
+
+
+class LedgerRulesAreExercisedTest(unittest.TestCase):
+    """Positive controls for the two rules `CommittedLedgerTest` applies.
+
+    Written 2026-09-08 after measuring that the committed ledger holds 0
+    entries: both arms above were green over an empty loop, so a rule that
+    had stopped detecting anything would have looked exactly the same. These
+    arms carry a defect on purpose and name what must be caught.
+    """
+
+    def _row(self, **over):
+        row = _entry(_finding())
+        row.update(over)
+        return row
+
+    def test_a_clean_row_violates_neither_rule(self):
+        # Negative control: without it, a predicate that flagged EVERY row
+        # would pass all three positive arms below.
+        rows = [self._row()]
+        self.assertEqual(_missing_field_violations(rows), [])
+        self.assertEqual(_advisory_class_violations(rows), [])
+
+    def test_a_row_with_no_owner_is_caught(self):
+        found = _missing_field_violations([self._row(owner="")])
+        self.assertEqual(len(found), 1, found)
+        self.assertIn("has no owner", found[0])
+
+    def test_a_row_with_no_reason_is_caught(self):
+        # Both REQUIRED_FIELDS get their own arm: one arm covering the tuple
+        # would stay green if the loop only ever read its first element.
+        found = _missing_field_violations([self._row(reason="")])
+        self.assertEqual(len(found), 1, found)
+        self.assertIn("has no reason", found[0])
+
+    def test_a_row_recorded_under_an_advisory_class_is_caught(self):
+        advisory = sorted(ce.ADVISORY_CLASSES)
+        self.assertTrue(advisory, "ADVISORY_CLASSES is empty — this arm would "
+                                  "be vacuous and the rule unmeasurable")
+        for name in advisory:
+            with self.subTest(finding_class=name):
+                found = _advisory_class_violations([self._row(**{"class": name})])
+                self.assertEqual(len(found), 1, found)
+                self.assertIn(name, found[0])
 
 
 if __name__ == "__main__":

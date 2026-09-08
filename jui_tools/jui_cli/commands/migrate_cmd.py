@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import shutil
 from pathlib import Path
 
@@ -49,10 +50,41 @@ def cmd_migrate_layouts(args: argparse.Namespace) -> int:
         # directory the build would never distribute from.
         from ..core.config_manager import DEFAULT_LAYOUTS_DIR
 
-        for candidate in dict.fromkeys(DEFAULT_LAYOUTS_DIR.values()):
-            if (root / candidate).exists():
-                layouts_rel = candidate
-                break
+        # 🚨 THIS PLATFORM'S CONVENTION FIRST. The loop used to walk
+        # `DEFAULT_LAYOUTS_DIR.values()` in dict order, which puts iOS's
+        # bare `Layouts` ahead of everything — so `--source-platform
+        # android` would take the iOS directory if one existed. The guess
+        # ignored the very argument it was guessing for.
+        #
+        # 🚨 AND ON A CASE-INSENSITIVE FILESYSTEM IT COULD PICK THE
+        # DESTINATION. Found 2026-09-09 by the first arm that ever DROVE
+        # this command (a support lane measured 1 arm executing this module
+        # against 121 for `build`): a project whose `layouts_directory` is
+        # `layouts` makes `root / "Layouts"` exist on macOS, so the command
+        # chose the empty destination as its source and reported
+        # "Copied 0 file(s)" with exit 0. Silent, successful, and wrong.
+        dest_dir_for_guard = config_mgr.layouts_directory
+        own = DEFAULT_LAYOUTS_DIR.get(args.source_platform)
+        ordered = dict.fromkeys(
+            ([own] if own else []) + list(DEFAULT_LAYOUTS_DIR.values()))
+        for candidate in ordered:
+            path = root / candidate
+            if not path.exists():
+                continue
+            # ⚠️ Never migrate a directory onto itself, compared by INODE.
+            # `resolve()` does NOT fold case on macOS — it hands back the
+            # spelling it was given — so `Layouts` and `layouts` compare
+            # unequal as paths while naming one directory. Measured: the
+            # first draft of this guard used `resolve()` and did not fire.
+            # `samefile` asks the filesystem, which is the thing that knows.
+            try:
+                if dest_dir_for_guard.exists() and os.path.samefile(
+                        path, dest_dir_for_guard):
+                    continue
+            except OSError:
+                pass
+            layouts_rel = candidate
+            break
     if not layouts_rel:
         print(f"ERROR: Cannot find Layouts directory for {args.source_platform}")
         return 1
