@@ -744,6 +744,160 @@ def generate_spec_sidebar(
     return parts
 
 
+# Every artefact the docs site holds is either scoped to ONE app or to the
+# project. The sidebar used to mix the two: the root pass reads
+# ``<input>/../docs`` and, in a repo whose run is rooted at one app's tests,
+# that IS that app's docs — so its specs and components were rendered once at
+# the top with no owner and again under the app, with the top-level label
+# claiming the whole project while showing a single app. Screen and flow tests
+# were never grouped at all even though every nav entry already carries the
+# app in ``group``.
+#
+# ⚠️ The grouping is not a display choice, it is the fact the entries already
+# state. ``group`` comes off the test's own path (see ``_test_group``), and
+# ``apps_nav`` comes off ``--app``. This function only puts the two together
+# and names the owner of the ungrouped remainder, which is what nothing else
+# could say.
+APP_SECTION_ORDER = ("diagram", "specs", "components", "screens", "flows")
+
+
+def build_app_model(
+    apps_nav: dict[str, dict] | None,
+    flow_files: list[dict] | None,
+    screen_files: list[dict] | None,
+    spec_files: list[dict] | None = None,
+    component_files: list[dict] | None = None,
+    root_app: str | None = None,
+    app_diagrams: dict[str, str] | None = None,
+) -> dict[str, dict]:
+    """Group every app-scoped artefact under the app that owns it.
+
+    *root_app* names the app owning content that carries no group — the run's
+    own tree. When it names an app that ``--app`` also supplied, the two are
+    the same app and merge; the root's specs are then dropped rather than
+    duplicated, because the app pass wrote the pages the app section links to.
+
+    Returns an ordered mapping; a project with one app gets one entry, which is
+    the point — the shape does not change with the number of apps.
+    """
+    model: dict[str, dict] = {}
+
+    def slot(name: str) -> dict:
+        if name not in model:
+            model[name] = {k: ([] if k != "diagram" else None) for k in APP_SECTION_ORDER}
+            model[name]["md_files_by_dir"] = {}
+            model[name]["figma_screens"] = []
+        return model[name]
+
+    # Explicit apps first, in the order they were declared.
+    for app_name, app_data in (apps_nav or {}).items():
+        entry = slot(app_name)
+        entry["specs"] = list(app_data.get("specs") or [])
+        entry["components"] = list(app_data.get("components") or [])
+        entry["md_files_by_dir"] = dict(app_data.get("md_files_by_dir") or {})
+        entry["figma_screens"] = list(app_data.get("figma_screens") or [])
+
+    # The ungrouped root. Only claims a slot when it actually holds something,
+    # so a project with no root-level content does not grow an empty folder.
+    if root_app:
+        root_owns_specs = root_app not in (apps_nav or {})
+        if root_owns_specs and (spec_files or component_files):
+            entry = slot(root_app)
+            entry["specs"] = list(spec_files or [])
+            entry["components"] = list(component_files or [])
+
+    # Tests carry their own app in `group`; '' means the run's own tree.
+    for key, files in (("flows", flow_files), ("screens", screen_files)):
+        for f in files or []:
+            owner = f.get("group") or root_app
+            if not owner:
+                continue
+            slot(owner)[key].append(f)
+
+    for app_name, href in (app_diagrams or {}).items():
+        if href:
+            slot(app_name)["diagram"] = href
+
+    # An app that ended up with nothing is not a folder worth drawing.
+    return {
+        name: data for name, data in model.items()
+        if data["diagram"] or any(data[k] for k in APP_SECTION_ORDER if k != "diagram")
+        or data["md_files_by_dir"] or data["figma_screens"]
+    }
+
+
+def _render_index_app_section(app_name: str, data: dict) -> list[str]:
+    """One app folder, with everything that app owns inside it.
+
+    The order is fixed and is the reading order the site is navigated in:
+    the diagram first because it is the map, then what the screens ARE
+    (specs, components), then what is asserted about them (screen tests,
+    flow tests), then the app's own prose and designs.
+    """
+    parts: list[str] = []
+    safe = _make_safe_id(app_name)
+    total = (
+        len(data.get("specs") or []) + len(data.get("components") or [])
+        + len(data.get("screens") or []) + len(data.get("flows") or [])
+        + sum(len(v) for v in (data.get("md_files_by_dir") or {}).values())
+        + len(data.get("figma_screens") or [])
+    )
+    parts.append("    <div class='sidebar-section'>")
+    parts.append(f"      <div class='sidebar-title app collapsed' id='sidebar-app-{safe}-title' onclick=\"toggleSidebar('app-{safe}')\"><span class='arrow'>▼</span>{escape_html(app_name)} <span class='count'>{total}</span></div>")
+    parts.append(f"      <div class='sidebar-list collapsed' id='sidebar-app-{safe}-list'>")
+
+    if data.get("diagram"):
+        parts.append("        <div class='sidebar-subsection'>")
+        parts.append(f"          <div class='sidebar-diagram-link'><a href='{data['diagram']}'>Flow Diagram</a></div>")
+        parts.append("        </div>")
+
+    def _list(kind: str, label: str, items: list[dict]) -> None:
+        if not items:
+            return
+        sec = f"sidebar-app-{safe}-{kind}"
+        parts.append("        <div class='sidebar-subsection'>")
+        parts.append(f"          <div class='sidebar-subtitle collapsed' id='{sec}-title' onclick=\"toggleSection('{sec}')\"><span class='arrow'>▼</span> {label} <span class='count'>{len(items)}</span></div>")
+        parts.append(f"          <div class='sidebar-list collapsed' id='{sec}-list'>")
+        parts.append("            <ul>")
+        for it in items:
+            parts.append(f"              <li><a href='{it['path']}' title='{escape_html(it['name'])}'>{escape_html(it['name'])}</a></li>")
+        parts.append("            </ul>")
+        parts.append("          </div>")
+        parts.append("        </div>")
+
+    _list("specs", "Screen Specs", data.get("specs") or [])
+    _list("components", "Components", data.get("components") or [])
+    _list("screens", "Screen Tests", data.get("screens") or [])
+    _list("flows", "Flow Tests", data.get("flows") or [])
+
+    for dir_name, md_files in (data.get("md_files_by_dir") or {}).items():
+        md_id = f"sidebar-app-{safe}-md-{_make_safe_id(dir_name)}"
+        clean_name = dir_name.replace('-', ' ').replace('_', ' ')
+        display_name = clean_name.title() if len(dir_name) > 3 else clean_name.upper()
+        parts.append("        <div class='sidebar-subsection'>")
+        parts.append(f"          <div class='sidebar-subtitle collapsed' id='{md_id}-title' onclick=\"toggleSection('{md_id}')\"><span class='arrow'>▼</span> {display_name} <span class='count'>{len(md_files)}</span></div>")
+        parts.append(f"          <div class='sidebar-list collapsed' id='{md_id}-list'>")
+        if any(f.get('subdir') for f in md_files):
+            parts.extend(_render_api_docs_with_subgroups(
+                md_files, href_prefix='', current_path=None, id_prefix=md_id))
+        else:
+            parts.append("            <ul>")
+            for f in md_files:
+                parts.append(f"              <li><a href='{f['path']}' title='{escape_html(f['name'])}'>{escape_html(f['name'])}</a></li>")
+            parts.append("            </ul>")
+        parts.append("          </div>")
+        parts.append("        </div>")
+
+    if data.get("figma_screens"):
+        parts.extend(_render_figma_sidebar_section(
+            data["figma_screens"], href_prefix='', current_path=None,
+            section_id_prefix=f"app-{safe}-figma"))
+
+    parts.append("      </div>")
+    parts.append("    </div>")
+    return parts
+
+
 def generate_index_sidebar(
     title: str,
     flow_files: list[dict],
@@ -756,7 +910,9 @@ def generate_index_sidebar(
     md_files_by_dir: dict[str, list[dict]] | None = None,
     figma_files: list[dict] | None = None,
     apps_nav: dict[str, dict] | None = None,
-    unit_files: list[dict] | None = None
+    unit_files: list[dict] | None = None,
+    root_app: str | None = None,
+    app_diagrams: dict[str, str] | None = None,
 ) -> list[str]:
     """
     Generate sidebar HTML for index page.
@@ -781,16 +937,24 @@ def generate_index_sidebar(
     parts.append("  <nav class='sidebar'>")
     parts.append(f"    <h2>{escape_html(title)}</h2>")
 
-    # Flow Diagram link (if available)
-    if has_mermaid_diagram:
-        parts.append("    <div class='sidebar-diagram-link'>")
-        parts.append("      <a href='diagram.html'>Flow Diagram</a>")
-        parts.append("    </div>")
+    # === One folder per app, first, in declaration order ===
+    #
+    # Screen Specs and Components used to be rendered flat here as well as
+    # inside the app, because the root pass reads the run's own docs and in a
+    # repo rooted at one app's tests that IS that app. The flat copy carried
+    # the project's name while holding one app's contents.
+    app_model = build_app_model(
+        apps_nav, flow_files, screen_files, spec_files, component_files,
+        root_app=root_app, app_diagrams=app_diagrams,
+    )
+    for _app_name, _app_data in app_model.items():
+        parts.extend(_render_index_app_section(_app_name, _app_data))
 
-    # === Other files (top) ===
+    # === Project-wide files: everything not scoped to a single app ===
 
-    # Sidebar - Screen Specs (collapsible, starts collapsed)
-    if spec_files:
+    # Sidebar - Screen Specs (only when no app claimed them, which means the
+    # caller named no root app — the specs then genuinely belong to no folder)
+    if spec_files and not app_model:
         parts.append("    <div class='sidebar-section'>")
         parts.append(f"      <div class='sidebar-title spec collapsed' id='sidebar-specs-title' onclick=\"toggleSidebar('specs')\"><span class='arrow'>▼</span>Screen Specs <span class='count'>{len(spec_files)}</span></div>")
         parts.append("      <div class='sidebar-list collapsed' id='sidebar-specs-list'>")
@@ -801,8 +965,8 @@ def generate_index_sidebar(
         parts.append("      </div>")
         parts.append("    </div>")
 
-    # Sidebar - Components (collapsible, starts collapsed)
-    if component_files:
+    # Sidebar - Components (same condition as Screen Specs above)
+    if component_files and not app_model:
         parts.append("    <div class='sidebar-section'>")
         parts.append(f"      <div class='sidebar-title component collapsed' id='sidebar-components-title' onclick=\"toggleSidebar('components')\"><span class='arrow'>▼</span>Components <span class='count'>{len(component_files)}</span></div>")
         parts.append("      <div class='sidebar-list collapsed' id='sidebar-components-list'>")
@@ -882,90 +1046,18 @@ def generate_index_sidebar(
         parts.extend(_render_figma_sidebar_section(
             figma_files, href_prefix='', current_path=None))
 
-    # === App-specific sections (multi-app mode) ===
-    if apps_nav:
-        parts.append("    <hr class='sidebar-divider'>")
-        for app_name, app_data in apps_nav.items():
-            safe_app_id = _make_safe_id(app_name)
-            total_items = sum(
-                sum(len(files) for files in v.values()) if isinstance(v, dict) else len(v)
-                for v in app_data.values()
-            )
-            parts.append("    <div class='sidebar-section'>")
-            parts.append(f"      <div class='sidebar-title app collapsed' id='sidebar-app-{safe_app_id}-title' onclick=\"toggleSidebar('app-{safe_app_id}')\"><span class='arrow'>▼</span>{escape_html(app_name)} <span class='count'>{total_items}</span></div>")
-            parts.append(f"      <div class='sidebar-list collapsed' id='sidebar-app-{safe_app_id}-list'>")
-
-            # App specs
-            if app_data.get('specs'):
-                app_specs = app_data['specs']
-                spec_id = f"sidebar-app-{safe_app_id}-specs"
-                parts.append(f"        <div class='sidebar-subsection'>")
-                parts.append(f"          <div class='sidebar-subtitle collapsed' id='{spec_id}-title' onclick=\"toggleSection('{spec_id}')\"><span class='arrow'>▼</span> Screen Specs <span class='count'>{len(app_specs)}</span></div>")
-                parts.append(f"          <div class='sidebar-list collapsed' id='{spec_id}-list'>")
-                parts.append("            <ul>")
-                for s in app_specs:
-                    parts.append(f"              <li><a href='{s['path']}' title='{escape_html(s['name'])}'>{escape_html(s['name'])}</a></li>")
-                parts.append("            </ul>")
-                parts.append("          </div>")
-                parts.append("        </div>")
-
-            # App components
-            if app_data.get('components'):
-                app_comps = app_data['components']
-                comp_id = f"sidebar-app-{safe_app_id}-components"
-                parts.append(f"        <div class='sidebar-subsection'>")
-                parts.append(f"          <div class='sidebar-subtitle collapsed' id='{comp_id}-title' onclick=\"toggleSection('{comp_id}')\"><span class='arrow'>▼</span> Components <span class='count'>{len(app_comps)}</span></div>")
-                parts.append(f"          <div class='sidebar-list collapsed' id='{comp_id}-list'>")
-                parts.append("            <ul>")
-                for c in app_comps:
-                    parts.append(f"              <li><a href='{c['path']}' title='{escape_html(c['name'])}'>{escape_html(c['name'])}</a></li>")
-                parts.append("            </ul>")
-                parts.append("          </div>")
-                parts.append("        </div>")
-
-            # App markdown files by directory
-            if app_data.get('md_files_by_dir'):
-                for dir_name, md_files in app_data['md_files_by_dir'].items():
-                    md_id = f"sidebar-app-{safe_app_id}-md-{_make_safe_id(dir_name)}"
-                    clean_name = dir_name.replace('-', ' ').replace('_', ' ')
-                    display_name = clean_name.title() if len(dir_name) > 3 else clean_name.upper()
-                    parts.append(f"        <div class='sidebar-subsection'>")
-                    parts.append(f"          <div class='sidebar-subtitle collapsed' id='{md_id}-title' onclick=\"toggleSection('{md_id}')\"><span class='arrow'>▼</span> {display_name} <span class='count'>{len(md_files)}</span></div>")
-                    parts.append(f"          <div class='sidebar-list collapsed' id='{md_id}-list'>")
-                    has_subdirs = any(f.get('subdir') for f in md_files)
-                    if has_subdirs:
-                        parts.extend(_render_api_docs_with_subgroups(
-                            md_files, href_prefix='', current_path=None, id_prefix=md_id))
-                    else:
-                        parts.append("            <ul>")
-                        for f in md_files:
-                            parts.append(f"              <li><a href='{f['path']}' title='{escape_html(f['name'])}'>{escape_html(f['name'])}</a></li>")
-                        parts.append("            </ul>")
-                    parts.append("          </div>")
-                    parts.append("        </div>")
-
-            # App figma screens
-            if app_data.get('figma_screens'):
-                parts.extend(_render_figma_sidebar_section(
-                    app_data['figma_screens'], href_prefix='', current_path=None,
-                    section_id_prefix=f"app-{safe_app_id}-figma"))
-
-            parts.append("      </div>")
-            parts.append("    </div>")
-
     # === Test files (bottom) ===
 
-    # Sidebar - Flow Tests (collapsible, starts collapsed)
-    # toggleSection takes the full element id, which is what toggleSidebar
-    # built by hand — one helper can serve the index and the test pages alike.
-    if flow_files:
-        parts.extend(_render_tests_sidebar_section(
-            flow_files, 'Flow Tests', 'sidebar-flows', 'flow', href_prefix=''))
-
-    # Sidebar - Screen Tests (collapsible, starts collapsed)
-    if screen_files:
-        parts.extend(_render_tests_sidebar_section(
-            screen_files, 'Screen Tests', 'sidebar-screens', '', href_prefix=''))
+    # Flow Tests and Screen Tests are rendered inside the app that owns them
+    # (every nav entry already carries its app in `group`). They appear here
+    # only when nothing claimed them — no apps and no root app named.
+    if not app_model:
+        if flow_files:
+            parts.extend(_render_tests_sidebar_section(
+                flow_files, 'Flow Tests', 'sidebar-flows', 'flow', href_prefix=''))
+        if screen_files:
+            parts.extend(_render_tests_sidebar_section(
+                screen_files, 'Screen Tests', 'sidebar-screens', '', href_prefix=''))
 
     # Sidebar - Unit Tests (collapsible, starts collapsed). The index BODY
     # already had this group; only the nav was missing it, which is what made

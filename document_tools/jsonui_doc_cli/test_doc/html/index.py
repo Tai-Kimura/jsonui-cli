@@ -105,6 +105,8 @@ def generate_index_html(
     md_files_by_dir: dict[str, list[dict]] | None = None,
     figma_files: list[dict] | None = None,
     apps_nav: dict[str, dict] | None = None,
+    root_app: str | None = None,
+    app_diagrams: dict[str, str] | None = None,
     unit_files: list[dict] | None = None,
     unit_summary: str | None = None,
     unit_undeclared: dict[str, list[str]] | None = None,
@@ -150,7 +152,8 @@ def generate_index_html(
     component_count = len(component_files) if component_files else 0
 
     html_parts = _get_html_header(title)
-    html_parts.extend(generate_index_sidebar(title, flow_files, screen_files, has_mermaid_diagram, document_files, api_doc_categories, spec_files, component_files, md_files_by_dir, figma_files, apps_nav=apps_nav, unit_files=unit_files))
+    html_parts.extend(generate_index_sidebar(title, flow_files, screen_files, has_mermaid_diagram, document_files, api_doc_categories, spec_files, component_files, md_files_by_dir, figma_files, apps_nav=apps_nav, unit_files=unit_files,
+        root_app=root_app, app_diagrams=app_diagrams))
 
     # Main content
     html_parts.append("  <main class='main-content'>")

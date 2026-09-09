@@ -953,6 +953,29 @@ def generate_html_directory(
             seen.add(d_resolved)
             unique_docs_dirs.append(d)
 
+    # The run's own tree is an app like any other; it just never had a name.
+    #
+    # `docs_base` is `<input>/../docs`, so a repo whose run is rooted at one
+    # app's tests has docs_base == that app's docs_path. The root pass then
+    # read the SAME directory as the --app pass and wrote a second copy of the
+    # pages under `specs/` and `components/`, which the sidebar rendered flat,
+    # at the top, under the PROJECT's name while holding ONE app's contents.
+    # Comparing the resolved directories is what tells the duplicate from a
+    # genuine project-level docs tree; the names cannot, because the root has
+    # none. Measured 2026-09-09 on a four-app repo: 55 specs and 8 components
+    # rendered twice, and `docs/html/specs/` was a second copy on disk.
+    _root_app = None
+    for _app_info in (apps or []):
+        if Path(_app_info['docs_path']).resolve() == docs_base.resolve():
+            _root_app = _app_info['name']
+            break
+    _root_is_duplicate = _root_app is not None
+    if _root_app is None:
+        # A single-app project gets a folder too — the shape must not change
+        # with the number of apps, or the reader learns a different site each
+        # time one is added.
+        _root_app = docs_base.parent.name or title
+
     # Pre-generate spec and component documentation (HTML and MD)
     spec_json_dir = docs_base / "screens" / "json"
     component_json_dir = docs_base / "components" / "json"
@@ -1198,26 +1221,47 @@ def generate_html_directory(
                                 source=file_info['test_file'],
                                 output=html_path, indent="  ")
 
-    # Generate Mermaid diagram if there are flow files
+    # Generate Mermaid diagrams — ONE PER APP.
+    #
+    # There used to be a single `diagram.html` built from the run's own flows
+    # and linked at the top of the sidebar, outside every app. In a repo
+    # holding several apps that diagram is one app's flow graph wearing the
+    # project's name, and the other apps had no diagram at all. The flows are
+    # already separated on disk (`_test_group` reads the app off the path and
+    # the pages are written to `flows/<app>/`), so the split costs one call
+    # per group rather than any new declaration.
     mermaid_generated = False
-    flow_files_exist = any(f['type'] == 'flow' for f in generated_files)
-    if flow_files_exist:
+    app_diagrams: dict[str, str] = {}
+    flow_groups = sorted({
+        f.get('group', '') for f in file_infos if f['type'] == 'flow'
+    })
+    for _group in flow_groups:
         try:
-            flows_dir = input_path / "flows" if (input_path / "flows").exists() else input_path
-            screens_dir = input_path / "screens" if (input_path / "screens").exists() else flows_dir.parent / "screens"
-            mermaid_output = output_path / "diagram.html"
+            _base = input_path / _group if _group else input_path
+            _flows_dir = _base / "flows" if (_base / "flows").exists() else _base
+            _screens_dir = (
+                _base / "screens" if (_base / "screens").exists()
+                else _flows_dir.parent / "screens"
+            )
+            _owner = _group or _root_app
+            _rel = f"{_group}/diagram.html" if _group else "diagram.html"
+            _out = output_path / _rel
+            _out.parent.mkdir(parents=True, exist_ok=True)
             diagram = generate_mermaid_html(
-                flows_dir, mermaid_output, "Flow Diagram", screens_dir, layouts_dir
+                _flows_dir, _out, "Flow Diagram", _screens_dir, layouts_dir
             )
             # An empty result means no flow produced a screen — link nothing
             # rather than publishing a page the tab script cannot render.
-            mermaid_generated = bool(diagram)
-            if mermaid_generated:
-                note_page_generated(mermaid_output, indent="  ")
+            if diagram:
+                note_page_generated(_out, indent="  ")
+                app_diagrams[_owner] = _rel
+                if not _group:
+                    mermaid_generated = True
             else:
-                print("  Skipped: flow diagram has no screens")
+                print(f"  Skipped: flow diagram has no screens ({_owner})")
         except Exception as e:
-            print(f"  Warning: Could not generate Mermaid diagram: {e}")
+            print(f"  Warning: Could not generate Mermaid diagram for "
+                  f"{_group or _root_app}: {e}")
 
     # Generate index.html
     generate_index_html(output_path, generated_files, title, mermaid_generated, document_files, api_doc_categories)
@@ -1245,6 +1289,12 @@ def generate_html_directory(
         spec_search_dirs.append(spec_json_dir)
     if component_json_dir.exists():
         spec_search_dirs.append(component_json_dir)
+    if spec_search_dirs and _root_is_duplicate:
+        # The --app pass reads this very directory and writes the pages under
+        # the app's own prefix. Running it here as well produced `specs/` and
+        # `components/` as a second copy with different relative links.
+        print(f"  Skipped: root specs/components are {_root_app}'s (--app covers this directory)")
+        spec_search_dirs = []
     if spec_search_dirs:
         # Two-pass approach: first collect file info, then generate with navigation
         spec_files_info, component_files_info = _generate_spec_pages(
@@ -1470,7 +1520,7 @@ def generate_html_directory(
     # and then never rendered.
     if (spec_files_info or component_files_info or md_files_by_dir
             or figma_files_info or apps_nav or unit_files_info):
-        generate_index_html(output_path, generated_files, title, mermaid_generated, document_files, api_doc_categories, spec_files_info, component_files_info, md_files_by_dir, figma_files_info, apps_nav=apps_nav, unit_files=unit_files_info, unit_summary=unit_summary, unit_undeclared=unit_undeclared, unit_app_summaries=unit_app_summaries)
+        generate_index_html(output_path, generated_files, title, mermaid_generated, document_files, api_doc_categories, spec_files_info, component_files_info, md_files_by_dir, figma_files_info, apps_nav=apps_nav, unit_files=unit_files_info, unit_summary=unit_summary, unit_undeclared=unit_undeclared, unit_app_summaries=unit_app_summaries, root_app=_root_app, app_diagrams=app_diagrams)
 
     # Recorded here, once, where every number is in scope. Summed across
     # roots: a split tree reads a config per app, and the closing line names
