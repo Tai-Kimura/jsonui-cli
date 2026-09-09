@@ -69,16 +69,40 @@ for _ref in main origin/main; do
 done
 
 # --- Python: the package each suite imports must live in THIS checkout ------
+# Every tool directory in the checkout, joined for PYTHONPATH. DERIVED from
+# the tree, like the suite-side guard in document_tools/tests/conftest.py, so
+# a tool added tomorrow is on the path without editing this file.
+#
+# 🚨 WHY THIS IS NOT JUST test_tools. It was, and `jui_cli` therefore resolved
+# to ~/.jsonui-cli/jui_tools — an editable install pointing at the DISTRIBUTED
+# copy. `jsonui_doc_cli/cli.py` imports ConfigManager from there, so this
+# runner was reading a released config resolver while reporting on the
+# checkout. Measured 2026-09-09; the suite-side guard now refuses the run.
+#
+# ⚠️ cwd STILL WINS over these entries (`python -m` puts it at sys.path[0]),
+# which is what keeps each leg's own `tests` package its own: jui_tools/tests
+# and test_tools/tests are both importable as `tests`, and the leg's own copy
+# is the one that resolves. Verified before widening this.
+py_path() {
+  local out=""
+  for d in "$C"/*_tools; do
+    [ -d "$d" ] || continue
+    out="${out:+$out:}$d"
+  done
+  printf '%s' "$out"
+}
+
 py_suite() {
   local dir=$1 pkg=$2; shift 2
-  local where
-  where=$(cd "$C/$dir" && PYTHONPATH="$C/test_tools" python3 -c "import $pkg, os; print(os.path.dirname($pkg.__file__))" 2>&1)
+  local where pp
+  pp=$(py_path)
+  where=$(cd "$C/$dir" && PYTHONPATH="$pp" python3 -c "import $pkg, os; print(os.path.dirname($pkg.__file__))" 2>&1)
   say "== $dir ($pkg from: $where)"
   case "$where" in
     "$C"/*) ;;
     *) bad "$dir: $pkg resolves outside the checkout — the suite would examine another tree" ;;
   esac
-  (cd "$C/$dir" && PYTHONPATH="$C/test_tools" python3 -m pytest -q "$@" 2>&1 | tail -3)
+  (cd "$C/$dir" && PYTHONPATH="$pp" python3 -m pytest -q "$@" 2>&1 | tail -3)
   local rc=$?
   say "   exit=$rc"
   [ "$rc" = 0 ] || bad "$dir: pytest exit $rc"
