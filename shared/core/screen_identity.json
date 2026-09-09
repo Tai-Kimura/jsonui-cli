@@ -297,7 +297,7 @@
   },
   "diagram": {
     "description": "The screen-transition diagram is derived from the same ids.",
-    "nodeSource": "flow test inline step 'screen' values, plus file-reference steps normalized to the same id space",
+    "nodeSource": "TWO sources, both normalized into the same id space: (1) flow test inline step 'screen' values plus file-reference steps; (2) spec 'transitions[].destination' values, through specTransitions below. Naming only one of them here is how an implementation ends up reading a source the canon does not declare.",
     "pipeline": [
       "resolve",
       "canonicalize",
@@ -309,6 +309,42 @@
       "An edge caused by a 'back' action is a return edge and is rendered distinctly from a forward transition.",
       "Node ids are sanitized for the diagram language; a screen id is never emitted raw into a diagram identifier position."
     ],
+    "specTransitions": {
+      "source": "<screen spec>.transitions[].destination",
+      "description": "A spec transition's destination is FREE PROSE, not an identifier. The validator requires only that the key exists (condition + destination), so nothing has ever constrained its shape, and the corpus shows at least six different kinds of value in that one column.",
+      "measured": {
+        "date": "2026-09-09",
+        "scanRoot": "<face>/docs/screens/json/*.spec.json (the generated <face>/docs/html/screens tree is NOT the corpus)",
+        "idSpace": "the spec stems under that root, UNION the layout basenames under <face>/docs/screens/layouts (variant-normalized)",
+        "faces": 4,
+        "transitions": 271,
+        "note": "Two of the four faces carry exactly 93 transitions. A count reported without naming its face is therefore ambiguous, and reads as correct either way."
+      },
+      "kinds": {
+        "description": "CLOSED vocabulary. It exists so that a destination which is not a screen id stops being reported as a defect. Declaring only 'screen' would make 119 of 271 measured destinations spec errors, when they are other kinds of transition — that turns a reporting gap into a rejection of correct input, which is the worse direction.",
+        "values": [
+          {"kind": "screen", "meaning": "resolves to a screen id in this face's id space", "drawn": "a node and an edge"},
+          {"kind": "route", "meaning": "a URL path owned by a web router, e.g. '/admin/login'", "drawn": "an edge once the route is mapped to a screen; until then, reported"},
+          {"kind": "external", "meaning": "leaves the app entirely (browser, tel:, map app, mailer)", "drawn": "a terminal node, never a screen"},
+          {"kind": "none", "meaning": "declares that no screen transition happens (in-page tab switch, SPA state change)", "drawn": "nothing. This is a POSITIVE declaration, not a missing value"},
+          {"kind": "back", "meaning": "returns through the navigation stack (pop, dismiss, previous screen)", "drawn": "a return edge, like a flow test's back action"},
+          {"kind": "unknown", "meaning": "none of the above matched", "drawn": "nothing, and it is COUNTED AND LISTED — see unresolvedReporting"}
+        ]
+      },
+      "normalization": {
+        "description": "Applied in order. Every step is here rather than in a resolver because a rule that lives at one call site is absent from the other two (screen_identity.py, mermaid/flow_graph.py, verify_cmd.py each resolve ids today).",
+        "pipeline": [
+          "compare case-insensitively with whitespace, '_' and '-' removed",
+          "strip a trailing parenthetical, full-width or half-width, then split on ' or ', '/', and '、' and try each part",
+          "apply the face's declared aliases (below)"
+        ],
+        "aliasesNote": "Aliases are per-face conventions, not global rules. Measured: stripping a leading 'Web' before a capital resolves 50 of one face's 93 destinations and 0 of the other three faces'. A rule that helps exactly one face must be declared as that face's, or it becomes a silent global rewrite."
+      },
+      "unresolvedReporting": {
+        "rule": "The count of 'unknown' destinations is reported PER FACE, never only as a total, together with the scanned total it was drawn from.",
+        "rationale": "Measured unresolved rates were 28% / 61% / 50% / 100%. Summed, the face at 100% disappears into the average — and a face that resolves nothing looks exactly like a face with nothing to resolve. A bare zero, or a bare average, cannot tell an instrument that found nothing from one that never reached the corpus."
+      }
+    },
     "fileReferences": {
       "rule": "A file-reference step ({ file, case }) becomes a node for the SCREEN the referenced test covers — resolved through that test's own source.layout — not for the referenced file's name.",
       "rationale": "A test file NAME is not a screen id. One screen routinely has several test files (login_smoke, booking_complete--bank_pending), so naming the node after the file splits one screen into several nodes; the split-off node also carries no metadata, so it loses the group its test declared and drops into the ungrouped bucket. The basename only looked right because it usually happens to equal the screen id.",
