@@ -1,0 +1,200 @@
+"""A `document:` is resolved from the app that declared the test.
+
+The base used to be the directory the run was pointed at. For a single-app run
+those are the same thing; for every other run they are not, and a page that
+exists only under its own app was reported missing because the run's input was
+a different app's tree. Measured on a four-face consumer tree: one face
+declared six documents and five of them printed `Document not found` while the
+files sat exactly where that face's own root says they should.
+
+The map is not a new declaration. `roots` already pairs each declared test
+directory with the app that declared it — v1.8.63 built it — and this call
+site simply was not reading it. That is the same shape as the defect v1.8.63
+repaired one function away, which is why the family was enumerated before
+anything was changed: four sites derive a base from the run's input
+(`docs_base`, the per-group flow base, `figma_dir`, and this one).
+
+⚠️ WHAT THIS DOES NOT FIX, and the arms here must not appear to. Two apps
+declaring the SAME relative path still collapse into one slot: the dict is
+keyed by the path alone, so the last declarer wins the entry before any
+resolution happens. That has its own ticket. `TheCollapseIsStillHere` pins the
+unfixed behaviour deliberately — if it starts failing, the other ticket landed
+and this file's claim about scope is out of date.
+"""
+from __future__ import annotations
+
+import io
+import json
+import re
+import tempfile
+import unittest
+from contextlib import redirect_stdout
+from pathlib import Path
+
+from jsonui_doc_cli.test_doc.generator import generate_html_directory
+
+TITLE = re.compile(r"<title>(.*?)</title>", re.S)
+
+
+def _site(root: Path, docs: dict[str, str]) -> tuple[Path, str]:
+    """Build a two-app tree. `docs` maps app name -> declared relative path.
+
+    Each app's own copy of the page carries its name in the body, because the
+    only way to see WHICH original landed is to make the originals differ. A
+    fixture whose two sides are identical cannot show a resolution defect at
+    all — both answers look the same.
+    """
+    apps = []
+    for app, doc in docs.items():
+        app_docs = root / "docs" / app
+        (app_docs / "screens" / "json").mkdir(parents=True)
+        tests = root / app / "tests"
+        tests.mkdir(parents=True)
+        page = root / app / doc
+        page.parent.mkdir(parents=True, exist_ok=True)
+        page.write_text(
+            f"<html><head><title>ORIGINAL {app}</title></head>"
+            f"<body>{app} body</body></html>", encoding="utf-8")
+        (tests / "t.test.json").write_text(json.dumps({
+            "type": "screen", "platform": "ios",
+            "source": {"layout": "s", "document": doc},
+            "metadata": {"name": f"{app} test", "description": "d"},
+            "cases": [{"name": "c", "description": "c",
+                       "steps": [{"action": "tap", "id": "x"}]}],
+        }), encoding="utf-8")
+        apps.append({"name": app, "docs_path": str(app_docs)})
+
+    out = root / "out"
+    out.mkdir()
+    buf = io.StringIO()
+    with redirect_stdout(buf):
+        # The run is pointed at ONE app's tests. That is the whole point: the
+        # other app's documents must still resolve from its own root.
+        generate_html_directory(
+            root / next(iter(docs)) / "tests", out, "T", apps=apps,
+            test_roots=[{"app": a["name"],
+                         "root": str(root / a["name"] / "tests")} for a in apps],
+        )
+    return out, buf.getvalue()
+
+
+class _Tree(unittest.TestCase):
+    def build(self, docs):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        return _site(Path(tmp.name), docs)
+
+    def body_owner(self, page: Path) -> str:
+        text = page.read_text(encoding="utf-8")
+        for app in ("alpha", "beta"):
+            if f"{app} body" in text:
+                return app
+        return "none"
+
+
+class ADocumentResolvesFromItsOwnAppsRoot(_Tree):
+    OWN = {"alpha": "docs/screens/html/alpha_only.html",
+           "beta": "docs/screens/html/beta_only.html"}
+
+    def test_the_app_the_run_was_not_pointed_at_still_resolves(self):
+        out, log = self.build(self.OWN)
+        page = out / self.OWN["beta"]
+        self.assertTrue(page.is_file(),
+                        "beta's document was not written; the base was still "
+                        "the run's input")
+        self.assertEqual(self.body_owner(page), "beta")
+
+    def test_the_run_s_own_app_still_resolves(self):
+        """The control for the arm above — but NOT for the reason first
+        written here.
+
+        It was labelled "an implementation that resolves only from the map and
+        forgets the run itself passes the arm above". That is false: the run's
+        own input IS in the map, as the `None` key, so this case goes through
+        the same lookup as every other app. A mutation that dropped the
+        separate `input_path` fallback left all six arms green, and the honest
+        reading was that the fallback was redundant, not that the arm was
+        weak. It was removed rather than defended.
+
+        What this still controls is narrower and worth keeping: a resolver
+        that only ever answers for NON-owner apps would fail here.
+        """
+        out, _ = self.build(self.OWN)
+        page = out / self.OWN["alpha"]
+        self.assertTrue(page.is_file())
+        self.assertEqual(self.body_owner(page), "alpha")
+
+    def test_nothing_is_reported_missing(self):
+        _, log = self.build(self.OWN)
+        self.assertNotIn("Document not found", log)
+
+    def test_a_genuinely_missing_document_still_warns(self):
+        """The control for the arm above. A run that reports nothing missing
+        because it stopped looking would satisfy it just as well."""
+        out, log = self.build({"alpha": "docs/screens/html/alpha_only.html",
+                               "beta": "docs/screens/html/beta_only.html"})
+        # Re-run with beta's file removed.
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        root = Path(tmp.name)
+        out, log = _site(root, self.OWN)
+        (root / "beta" / self.OWN["beta"]).unlink()
+        out2 = root / "out2"
+        out2.mkdir()
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            generate_html_directory(
+                root / "alpha" / "tests", out2, "T",
+                apps=[{"name": a, "docs_path": str(root / "docs" / a)}
+                      for a in ("alpha", "beta")],
+                test_roots=[{"app": a, "root": str(root / a / "tests")}
+                            for a in ("alpha", "beta")],
+            )
+        self.assertIn("Document not found", buf.getvalue())
+
+    def test_the_warning_names_every_base_it_tried(self):
+        # "not found" with one path in it sends the reader to move a file that
+        # is already in the right place.
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        root = Path(tmp.name)
+        _site(root, self.OWN)
+        (root / "beta" / self.OWN["beta"]).unlink()
+        out = root / "out3"
+        out.mkdir()
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            generate_html_directory(
+                root / "alpha" / "tests", out, "T",
+                apps=[{"name": a, "docs_path": str(root / "docs" / a)}
+                      for a in ("alpha", "beta")],
+                test_roots=[{"app": a, "root": str(root / a / "tests")}
+                            for a in ("alpha", "beta")],
+            )
+        log = buf.getvalue()
+        self.assertIn("Owner: beta", log)
+        self.assertIn("Tried:", log)
+
+
+class TheCollapseIsStillHere(_Tree):
+    """The OTHER ticket, pinned as unfixed on purpose.
+
+    Two apps declaring one relative path still produce one slot. This arm
+    exists so that the scope claim in this file's docstring cannot go stale
+    silently: when the collapse is repaired, this fails and says so.
+    """
+
+    SHARED = {"alpha": "docs/screens/html/login.html",
+              "beta": "docs/screens/html/login.html"}
+
+    def test_two_apps_sharing_a_path_still_collapse_to_one_slot(self):
+        out, _ = self.build(self.SHARED)
+        slots = sorted(p.relative_to(out).as_posix()
+                       for p in out.rglob("login.html"))
+        self.assertEqual(len(slots), 1,
+                         "the collapse was repaired — update this file's "
+                         "docstring, which says it was not")
+
+
+if __name__ == "__main__":
+    unittest.main()

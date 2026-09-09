@@ -1547,7 +1547,14 @@ def generate_html_directory(
     # components, units, apps) where before it carried only what had been
     # collected by that earlier point. That is a byte change on every document
     # page, and it makes them consistent with every other page in the site.
-    _generate_document_pages(input_path, output_path, generated_files, all_tests_nav)
+    # The map is built from `roots`, which already pairs each declared test
+    # directory with the app that declared it. Nothing new is declared here —
+    # the asset existed and this call site simply was not reading it, which is
+    # the same shape v1.8.63 repaired one function away.
+    _generate_document_pages(
+        input_path, output_path, generated_files, all_tests_nav,
+        roots_by_app={app: root for root, app in roots},
+    )
 
     # Re-generate index.html with updated navigation (if specs, components, markdown, figma, or apps were added)
     # `unit_files_info` is part of the condition rather than assumed to ride
@@ -2008,7 +2015,8 @@ def _generate_document_pages(
     input_path: Path,
     output_path: Path,
     generated_files: list[dict],
-    all_tests_nav: dict
+    all_tests_nav: dict,
+    roots_by_app: dict[str | None, Path] | None = None,
 ) -> None:
     """
     Generate document pages with sidebar for all documents referenced in test files.
@@ -2022,18 +2030,25 @@ def _generate_document_pages(
         all_tests_nav: Navigation data for sidebar
     """
     # Collect unique document paths
-    documents_to_process: dict[str, str] = {}  # doc_path -> test_name
+    # ⚠️ STILL KEYED BY doc_path ALONE, and that is a separate defect with its
+    # own ticket: two apps declaring the same relative path collapse into one
+    # entry here, before any resolution happens. This change carries the OWNER
+    # in the value so the source can be resolved from the app that declared it;
+    # it does NOT stop the collapse. On a tree where two apps share a path,
+    # one slot is still written and the last declarer still wins it.
+    documents_to_process: dict[str, tuple[str, str | None]] = {}
     for f in generated_files:
         doc_path = f.get('document')
         if doc_path:
-            documents_to_process[doc_path] = f.get('name', 'Document')
+            documents_to_process[doc_path] = (
+                f.get('name', 'Document'), f.get('group') or None)
 
     if not documents_to_process:
         return
 
     print("  Generating document pages...")
 
-    for doc_path, test_name in documents_to_process.items():
+    for doc_path, (test_name, owner) in documents_to_process.items():
         # Bound before the try so the failure record can name them even when
         # the exception fires before they are assigned.
         source_path = None
@@ -2048,16 +2063,33 @@ def _generate_document_pages(
             # diagram links to, so it has to be a forward path from a
             # stable root. A test-file-relative '../../..' value would
             # write the page outside the output directory.
-            source_path = input_path / doc_path
-            if not source_path.exists():
-                # Try relative to parent
-                source_path = input_path.parent / doc_path
-            if not source_path.exists():
+            # 🔻 The base is the root of the app that DECLARED the test, not
+            # the directory this run happened to be pointed at. They are the
+            # same thing for a single-app run and differ for every other one:
+            # a path that exists only under its own app was reported as
+            # missing, because the run's input was a different app's tree.
+            # ⚠️ NO `input_path` FALLBACK IN THE LIST, deliberately. The map
+            # already holds it: `roots` starts with `(input_path, None)`, so
+            # the run's own tests — whose group is None — resolve through the
+            # same lookup as everyone else. A mutation dropping `input_path`
+            # from a two-entry list left every arm green, which is what a
+            # redundant element does; arming it would have defended code that
+            # cannot fail. The `or input_path` below is the real fallback, for
+            # a caller that passes no map at all.
+            owner_root = (roots_by_app or {}).get(owner) or input_path
+            bases: list[Path] = [owner_root, owner_root.parent]
+
+            source_path = next(
+                (b / doc_path for b in bases if (b / doc_path).exists()), None)
+            if source_path is None:
+                # Name every base that was tried. "Not found" with one path in
+                # it sends the reader to fix a file that is in the right place.
+                tried = ", ".join(str(b) for b in bases)
                 print(
                     f"    Warning: Document not found: {doc_path}\n"
-                    f"      'document' is resolved from {input_path} or {input_path.parent}, "
-                    f"not from the test file (unlike 'source.layout'). "
-                    f"Write it as a forward path from one of those."
+                    f"      'document' is resolved from the declaring app's test root "
+                    f"(and its parent), not from the test file (unlike 'source.layout'). "
+                    f"Owner: {owner or '(the run itself)'}. Tried: {tried}."
                 )
                 continue
 
