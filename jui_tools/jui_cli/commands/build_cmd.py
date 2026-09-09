@@ -2738,16 +2738,18 @@ def _tracked_scope(present_keys: list[str]) -> dict:
     """Where the tracked files live, counted per top-level directory.
 
     `tracked: 223` on its own is a number a reader cannot reconcile with
-    their own tree — one counted 84 + 30 + 13 = 127 by hand and could not
-    account for the rest, which is the same trouble a bare denominator
-    always causes. The breakdown says which directories the number came
-    from, so a disagreement points at a place instead of a total.
+    their own tree, and one who tried got 127 by hand against a reported 223
+    with no way to find the difference. The breakdown says which directories
+    the number came from, so a disagreement points at a place.
+
+    The rule lives in `shared/core/generation_manifest.tracked_scope` since
+    2026-09-10, because a second producer (`jsonui-doc generate html`) had no
+    breakdown to pass and passed none — and `save()` wrote `{}` over this
+    command's. One rule, two callers; this wrapper stays for the callers that
+    import it by this name.
     """
-    scope: dict[str, int] = {}
-    for key in present_keys:
-        head = key.split("/", 1)[0] if "/" in key else "."
-        scope[head] = scope.get(head, 0) + 1
-    return dict(sorted(scope.items(), key=lambda kv: (-kv[1], kv[0])))
+    from ..core import generation_manifest
+    return generation_manifest.tracked_scope(present_keys)
 
 
 def _apply_platform_alias(args) -> None:

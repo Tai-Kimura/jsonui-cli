@@ -111,6 +111,21 @@ def test_a_quiet_run_records_only_the_facts_that_are_always_true(project):
     assert "leftovers" not in run and "outsideOutput" not in run
 
 
+def test_the_breakdown_of_tracked_is_not_empty_when_tracked_is_not(project):
+    """`trackedByDirectory: {}` beside `tracked: 1464`, reported 2026-09-10.
+
+    This producer passed no scope, and the shared writer turned "nothing to
+    say" into `{}` — over whatever `jui build` had recorded. The breakdown is
+    a breakdown OF the total, so the arm is the reconciliation, not a value.
+    """
+    root, out = project
+    gen._record_generation_manifest(out, root, [], {})
+    summary = _manifest(root)["summary"]
+    by_dir = summary["trackedByDirectory"]
+    assert by_dir, "an empty breakdown beside a non-zero total"
+    assert sum(by_dir.values()) == summary["tracked"]
+
+
 def test_the_git_sense_of_tracked_is_spelled_differently(project):
     """🚨 One file must not carry two meanings of `tracked`.
 

@@ -464,7 +464,19 @@ def save(
             # a reader cannot reconcile against their own tree, and one who
             # tried got 127 by hand against a reported 223 with no way to
             # find the difference.
-            "trackedByDirectory": scope or {},
+            # 🔻 DERIVED WHEN THE CALLER HAS NOTHING TO SAY, not emptied. `scope or
+            # {}` wrote `{}` over whatever the previous producer had recorded:
+            # `jui build` passes its breakdown, `jsonui-doc generate html` passed
+            # none, and a face read `trackedByDirectory: {}` beside
+            # `tracked: 1464` in the same summary — the total counted both
+            # producers' files and the breakdown counted nobody's. The
+            # breakdown is a breakdown OF `tracked`, so when no caller supplies
+            # one it is computed from the same keys `tracked` was.
+            "trackedByDirectory": (
+                scope if scope is not None
+                else tracked_scope(present_keys if present_keys is not None
+                                   else files.keys())
+            ),
             # Entries this run removed because the file is no longer there.
             # A run that drops records while printing "untouched files keep
             # the version that last wrote them" is describing the opposite
@@ -500,6 +512,24 @@ def save(
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(manifest, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
     return manifest
+
+
+def tracked_scope(keys) -> dict:
+    """Per top-level directory, how many of *keys* live there.
+
+    The breakdown `summary.trackedByDirectory` carries. `tracked: 223` on its
+    own is a number a reader cannot reconcile with their own tree, and one who
+    tried got 127 by hand against a reported 223 with no way to find the
+    difference; the breakdown says which directories the total came from, so a
+    disagreement points at a place. One rule, here, for every producer — it
+    lived in `jui build` alone, and the second producer had no breakdown to
+    pass and passed none.
+    """
+    scope: dict[str, int] = {}
+    for key in keys:
+        head = key.split("/", 1)[0] if "/" in key else "."
+        scope[head] = scope.get(head, 0) + 1
+    return dict(sorted(scope.items(), key=lambda kv: (-kv[1], kv[0])))
 
 
 def coverage_line(

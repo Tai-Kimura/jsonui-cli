@@ -419,6 +419,49 @@ class BootstrapTests(unittest.TestCase):
         data = json.loads(gm.manifest_path(self.root).read_text(encoding="utf-8"))
         self.assertEqual({"gen": 2}, data["summary"]["trackedByDirectory"])
 
+    def test_a_save_without_a_scope_derives_the_breakdown_from_what_it_tracks(self):
+        """The breakdown is a breakdown OF `tracked`, so it cannot be empty
+        while `tracked` is not. `scope or {}` made it so for every producer
+        that passed none."""
+        run = gm.GenerationRun(project_root=self.root, version="1.8.10")
+        keys = [run._key(p) for p in self.files]
+        gm.save(self.root, "1.8.10", keys)          # no present_keys, no scope
+        data = json.loads(gm.manifest_path(self.root).read_text(encoding="utf-8"))
+        # Derived from the fixture, not a literal: the first draft wrote 3 for
+        # a fixture holding 2 and was red for a reason the arm is not about.
+        self.assertEqual({"gen": len(self.files)}, data["summary"]["trackedByDirectory"])
+        self.assertEqual(data["summary"]["tracked"],
+                         sum(data["summary"]["trackedByDirectory"].values()))
+
+    def test_a_second_producer_without_a_scope_does_not_erase_the_first_breakdown(self):
+        """The face's observation: `jui build` wrote a breakdown, `generate html`
+        wrote `{}` over it, and the total kept counting both producers' files."""
+        run = gm.GenerationRun(project_root=self.root, version="1.8.10")
+        keys = [run._key(p) for p in self.files]
+        gm.save(self.root, "1.8.10", keys, present_keys=keys,
+                scope={"gen": len(self.files)})
+        page = self.root / "docs" / "html" / "index.html"
+        page.parent.mkdir(parents=True)
+        page.write_text("<html></html>", encoding="utf-8")
+        gm.save(self.root, "1.8.10", ["docs/html/index.html"],
+                generated_by="jsonui-doc generate html")
+        data = json.loads(gm.manifest_path(self.root).read_text(encoding="utf-8"))
+        self.assertEqual({"gen": len(self.files), "docs": 1},
+                         data["summary"]["trackedByDirectory"])
+        self.assertEqual(len(self.files) + 1, data["summary"]["tracked"])
+        self.assertEqual(data["summary"]["tracked"],
+                         sum(data["summary"]["trackedByDirectory"].values()))
+
+    def test_an_explicit_scope_is_still_the_callers_word(self):
+        # The control: a producer that measured its own breakdown keeps it.
+        run = gm.GenerationRun(project_root=self.root, version="1.8.10")
+        keys = [run._key(p) for p in self.files]
+        gm.save(self.root, "1.8.10", keys, present_keys=keys,
+                scope={"gen": len(self.files), "other": 0})
+        data = json.loads(gm.manifest_path(self.root).read_text(encoding="utf-8"))
+        self.assertEqual({"gen": len(self.files), "other": 0},
+                         data["summary"]["trackedByDirectory"])
+
 
 class KeyMigrationTests(unittest.TestCase):
     """Records written under an older spelling survive; gone files do not.
