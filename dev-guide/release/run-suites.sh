@@ -272,5 +272,21 @@ say "== shared/core parity (bytes AND presence, both directions)"
 python3 "$C/dev-guide/release/check-shared-core-parity.py" "$C"
 rc=$?; say "   exit=$rc"; [ "$rc" = 0 ] || bad "shared/core parity: exit $rc"
 
+# --- MCP snapshot drift -----------------------------------------------------
+# 🔻 REPORTS, NEVER FAILS. The mcp-server's bundled snapshot can only be
+# re-pinned AFTER a release exists to pin to, so between a shared/core change
+# and the next bump the two ARE different, every time, by construction. A gate
+# that is red by construction gets switched off, and a switched-off gate does
+# not report that it is off. So this runs under `say` and the release report
+# carries the line — the report is the only exit it has.
+#
+# ⚠️ The snapshot is the LAST fallback in `spec_loader.ts`
+# (JSONUI_CLI_PATH > ./.jsonui-cli/ > ~/.jsonui-cli/ > data/), so drift here
+# never reaches a machine that has the CLI installed. The COUNT is the
+# information; "stale" is not, because "stale" is true on every release.
+say "== mcp snapshot drift (reports only — never fails this run)"
+python3 "$C/dev-guide/release/check-mcp-snapshot-drift.py" "$C"
+say "   exit=$? (informational; this leg does not add to failures)"
+
 say "== end $(date -u +%FT%TZ) HEAD $(git -C "$C" rev-parse HEAD) porcelain_lines=$(git -C "$C" status --porcelain | wc -l | tr -d ' ') failures=$fail"
 exit $fail
