@@ -70,6 +70,15 @@ _written_outside_output: set[Path] = set()
 #: as numbers for each caller to word again.
 _generation_counts: dict = {}
 
+#: What the document-slot report found, for the manifest. The printed report
+#: reaches whoever is watching; its return value reached nobody — the call
+#: site discarded it — and the manifest's own `summary.collisions` counts a
+#: DIFFERENT quantity under the same word (keys whose spellings normalised
+#: onto one entry), so one face read `collisions: 0` beside two SHARED SLOT
+#: lines from the same run. Kept under its own name so the two cannot be
+#: read as one number disagreeing with itself.
+_document_slot_facts: dict = {}
+
 
 def reset_page_failures() -> None:
     """Start a fresh accounting run."""
@@ -77,6 +86,7 @@ def reset_page_failures() -> None:
     _pages_written.clear()
     _written_outside_output.clear()
     _generation_counts.clear()
+    _document_slot_facts.clear()
 
 
 def note_generation_counts(**counts) -> None:
@@ -1619,7 +1629,8 @@ def generate_html_directory(
     # call had already named.
     stale = _report_stale_pages(output_path, started_at)
     outside = _report_writes_outside_output(output_path)
-    _record_generation_manifest(output_path, project_root, stale, outside)
+    _record_generation_manifest(output_path, project_root, stale, outside,
+                                slots=dict(_document_slot_facts))
 
     return generated_files
 
@@ -1875,6 +1886,7 @@ def _record_generation_manifest(
     project_root: Path | None,
     stale: list,
     outside: dict,
+    slots: dict | None = None,
 ) -> None:
     """Write what this run did into `.jsonui-cli/generation-manifest.json`.
 
@@ -1944,6 +1956,12 @@ def _record_generation_manifest(
             facts["leftoverPathsNote"] = f"first 20 of {len(stale)}"
     if outside:
         facts["outsideOutput"] = outside
+    if slots:
+        # Its own key, not `collisions`: that word already belongs to the
+        # manifest's count of keys whose spellings normalised onto one entry,
+        # and one face read the two as a single number disagreeing with the
+        # SHARED SLOT lines on its terminal.
+        facts["documentSlots"] = dict(slots)
     try:
         from .. import __version__ as version
     except ImportError:
@@ -2200,7 +2218,7 @@ def _path_already_names_app(owner: str, doc_path: str) -> bool:
 def _report_document_slot_collisions(
     declarations: list[tuple[str | None, str, str]],
 ) -> int:
-    """Say how many declared documents share one output slot, and who loses.
+    """Say how many declared documents land on one output file, and which tests.
 
     Takes the DECLARATIONS, not a dictionary of them. The first version took a
     dict keyed by (owner, path) and counted its entries, which is the same
@@ -2210,40 +2228,62 @@ def _report_document_slot_collisions(
     survivors, and the survivors are exactly what a collision report is
     supposed to look past.
 
-    ⚠️ AND THE SHARED KEY IS THE PATH, NOT THE APP. Crossing apps was never a
-    precondition — the entry key was the path alone — so two tests in one app
-    collapse identically. Measured on a second consumer tree: 201 declarations
-    over 30 paths, 29 of them shared, 171 declarations lost, and ALL 29 within
-    a single app. The first tree had 1 of each kind, which is how "it needs
-    two apps" survived being written down.
+    🔻 THE SLOT IS THE FILE, AND THE FILE IS `document_output_rel_path`. Until
+    the app segment landed, the slot was the declared path alone, so two apps
+    naming one path collided. Since then each app's page is written under its
+    own segment — two apps naming one path are two files — and a report still
+    keyed on the bare path announced SHARED SLOT for pairs that share nothing,
+    while the manifest beside it said `collisions: 0`, because THAT counter
+    means manifest keys whose spellings normalised onto one entry. Same word,
+    two quantities, one reader. The key here is the function that decides
+    where the page goes, so the report and the writer cannot disagree about
+    what "the same file" means.
 
-    The slot is the relative path, so anything declaring the same one lands on
-    the same file and the last writer keeps it. Nothing said so: the run
-    printed no warning, wrote one page, and reported success.
+    ⚠️ THE SHARED KEY IS STILL NOT THE APP. Two tests in one app declaring one
+    path land on one file today exactly as before — measured on a consumer
+    tree: 201 declarations over 30 paths, 29 shared, ALL inside a single app.
+    The segment separates apps; it does nothing within one.
 
-    🔻 THE COUNT IS PRINTED EVEN WHEN IT IS ZERO. "No collisions" and "nobody
-    checked" produce the same silence otherwise, and this whole family of
-    defects has been silence — five documents reported missing while a sixth
-    was quietly overwritten, and the sixth is the one that mattered.
+    🔻 "N TEST(S) RESOLVE TO THIS PAGE", NOT "KEPT / OVERWRITTEN". The page is
+    generated from the document alone: same owner, same path, same source,
+    same bytes, whichever declaration is processed last. Nothing any test said
+    is lost. The old line named a winner and losers, and the faces went
+    looking for the overwritten content and found identical files. What IS
+    true, and what a person has to act on, is that several tests name one
+    page — so all of them are listed, none as a loser.
 
-    Returns the number of colliding paths, for callers that want to assert on
-    it rather than parse the output.
+    🔻 THE COUNT IS PRINTED EVEN WHEN IT IS ZERO. "No shared slots" and
+    "nobody checked" produce the same silence otherwise, and this whole family
+    of defects has been silence.
+
+    Returns the number of shared files; the full facts go to
+    `_document_slot_facts` for the manifest, because the printed report
+    reaches whoever is watching and the record reaches the next question.
     """
-    by_path: dict[str, list[tuple[str | None, str]]] = {}
+    by_file: dict[str, list[tuple[str | None, str]]] = {}
     for owner, doc_path, test_name in declarations:
-        by_path.setdefault(doc_path, []).append((owner, test_name))
+        out_rel = document_output_rel_path(owner, doc_path)
+        by_file.setdefault(out_rel, []).append((owner, test_name))
 
-    collisions = {p: v for p, v in by_path.items() if len(v) > 1}
-    print(f"  Document slots: {len(by_path)} path(s) from {len(declarations)} "
-          f"declaration(s); {len(collisions)} shared by more than one test.")
-    for doc_path, claimants in sorted(collisions.items()):
-        # The last one in wins the file; every earlier one is overwritten.
-        *losers, winner = claimants
-        print(f"    SHARED SLOT {doc_path}")
-        print(f"      kept:      {winner[1]} ({winner[0] or 'the run itself'})")
-        for owner, name in losers:
-            print(f"      overwritten: {name} ({owner or 'the run itself'})")
-    return len(collisions)
+    shared = {p: v for p, v in by_file.items() if len(v) > 1}
+    print(f"  Document slots: {len(by_file)} path(s) from {len(declarations)} "
+          f"declaration(s); {len(shared)} shared by more than one test.")
+    for out_rel, claimants in sorted(shared.items()):
+        print(f"    SHARED SLOT {out_rel}")
+        print(f"      {len(claimants)} test(s) resolve to this page — same source, "
+              f"same bytes, nothing lost:")
+        for owner, name in claimants:
+            print(f"        {name} ({owner or 'the run itself'})")
+    _document_slot_facts.clear()
+    _document_slot_facts.update({
+        "paths": len(by_file),
+        "declarations": len(declarations),
+        "sharedPaths": len(shared),
+        "sharedPathKeys": sorted(shared)[:20],
+    })
+    if len(shared) > 20:
+        _document_slot_facts["sharedPathKeysNote"] = f"first 20 of {len(shared)}"
+    return len(shared)
 
 
 def _generate_document_pages(

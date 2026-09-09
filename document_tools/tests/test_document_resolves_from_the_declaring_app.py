@@ -194,18 +194,27 @@ class ADocumentResolvesFromItsOwnAppsRoot(_Tree):
         self.assertIn("Tried:", log)
 
 
-class ASharedSlotIsCountedAndItsLoserNamed(_Tree):
-    """The collision is reported before it is repaired.
+class ASharedSlotIsCountedAndItsClaimantsNamed(_Tree):
+    """A slot is the FILE a declaration lands on, and every test naming it is listed.
 
-    Two apps declaring one relative path land on one file and the last writer
-    keeps it. Nothing said so — no warning, one page, and a successful run.
-    The count comes first because a silent collision and no collision are the
-    same observation, and because the repair (every page under its declaring
-    app's segment) is waiting on a separate question.
+    🔻 Inverted 2026-09-10. Until the app segment landed, the slot was the
+    declared path alone, so two apps naming one path collided and this class
+    named a winner and losers. Since then each app's page is written under its
+    own segment: two apps naming one path are two files, and a report keyed on
+    the bare path was announcing SHARED SLOT for pairs that share nothing —
+    while the manifest beside it said `collisions: 0`, a different quantity
+    under the same word. The key is now `document_output_rel_path`, the
+    function that decides where the page goes.
+
+    🔻 "kept / overwritten" is gone with it. The page is generated from the
+    document alone, so same owner + same path = same source = same bytes;
+    whichever declaration is processed last, nothing any test said is lost.
+    The faces went looking for the overwritten content and found identical
+    files. What is true, and actionable, is that several tests name one page
+    — so all of them are listed, none as a loser.
 
     🔻 THE ZERO IS PRINTED TOO. Without it, "we looked and found none" reads
-    exactly like "nobody looked", which is the shape this whole family keeps
-    producing.
+    exactly like "nobody looked".
     """
 
     SHARED = {"alpha": "docs/screens/html/login.html",
@@ -213,52 +222,43 @@ class ASharedSlotIsCountedAndItsLoserNamed(_Tree):
     OWN = {"alpha": "docs/screens/html/alpha_only.html",
            "beta": "docs/screens/html/beta_only.html"}
 
-    def test_a_shared_slot_is_reported_with_both_claimants(self):
+    def test_two_apps_naming_one_path_are_two_files_not_a_shared_slot(self):
+        # The inverted arm. Red again means either the segment stopped being
+        # applied or the report stopped asking the writer where pages go.
         _, log = self.build(self.SHARED)
-        self.assertIn("SHARED SLOT docs/screens/html/login.html", log)
-        self.assertIn("overwritten:", log)
-        self.assertIn("kept:", log)
-
-    def test_the_loser_is_named_not_just_counted(self):
-        # "1 collision" sends nobody anywhere. The declaration that lost is
-        # the thing a person has to go and change.
-        _, log = self.build(self.SHARED)
-        self.assertRegex(log, r"overwritten:\s+alpha test")
-        self.assertRegex(log, r"kept:\s+beta test")
+        self.assertIn("0 shared by more than one test", log)
+        self.assertNotIn("SHARED SLOT", log)
 
     def test_the_count_is_printed_when_it_is_zero(self):
         _, log = self.build(self.OWN)
         self.assertIn("0 shared by more than one test", log,
-                      "a run with no collisions says nothing, so silence "
+                      "a run with no shared slots says nothing, so silence "
                       "cannot be told from not looking")
 
-    def test_the_count_follows_its_input(self):
+    def test_the_count_follows_the_file_not_the_declared_path(self):
         """The 1->0 arm, on the function rather than the whole run."""
-        two = [("alpha", "p.html", "a"), ("beta", "p.html", "b")]
-        one = [("alpha", "p.html", "a"), ("beta", "q.html", "b")]
-        self.assertEqual(_report_document_slot_collisions(two), 1)
-        self.assertEqual(_report_document_slot_collisions(one), 0)
+        two_apps_one_path = [("alpha", "p.html", "a"), ("beta", "p.html", "b")]
+        one_app_one_path_twice = [("alpha", "p.html", "a"), ("alpha", "p.html", "b")]
+        one_app_two_paths = [("alpha", "p.html", "a"), ("alpha", "q.html", "b")]
+        self.assertEqual(_report_document_slot_collisions(two_apps_one_path), 0)
+        self.assertEqual(_report_document_slot_collisions(one_app_one_path_twice), 1)
+        self.assertEqual(_report_document_slot_collisions(one_app_two_paths), 0)
 
-    def test_two_tests_in_ONE_app_collide_just_as_hard(self):
-        """Crossing apps was never a precondition, and the first version of
-        this reporter reproduced that assumption.
+    def test_two_tests_in_ONE_app_still_share_one_file(self):
+        """The segment separates apps; it does nothing inside one.
 
-        The entry key is the path alone, so two tests in one app collapse
-        identically. The reporter was handed a dict keyed by (owner, path),
-        which had already merged them, and it duly announced "1 declaration,
+        Measured on a consumer tree — 201 declarations over 30 paths, 29
+        shared, 171 folded, and every one of the 29 inside a single app. The
+        first version of this reporter was handed a dict keyed by (owner,
+        path), which had already merged them, and announced "1 declaration,
         0 shared" for three colliding tests. It counted the survivors.
-
-        Measured on a second consumer tree — 201 declarations over 30 paths,
-        29 shared, 171 lost, and every one of the 29 inside a single app. The
-        first tree had one collision of each kind, which is how "it needs two
-        apps" got written down and stayed there.
         """
         same_app = [("alpha", "p.html", "one"),
                     ("alpha", "p.html", "two"),
                     ("alpha", "p.html", "three")]
         self.assertEqual(_report_document_slot_collisions(same_app), 1)
 
-    def test_a_same_app_collision_names_both_losers(self):
+    def test_every_test_naming_the_page_is_listed_and_none_is_a_loser(self):
         import contextlib
         import io as _io
         out = _io.StringIO()
@@ -268,14 +268,35 @@ class ASharedSlotIsCountedAndItsLoserNamed(_Tree):
                  ("alpha", "p.html", "three")])
         log = out.getvalue()
         self.assertIn("from 3 declaration(s)", log)
-        self.assertEqual(log.count("overwritten:"), 2)
-        self.assertIn("kept:      three", log)
+        self.assertIn("SHARED SLOT alpha/p.html", log)
+        self.assertIn("3 test(s) resolve to this page", log)
+        for name in ("one", "two", "three"):
+            self.assertRegex(log, rf"\n\s+{name} \(alpha\)\n")
+        # The removed wording. Same bytes whichever declaration lands last, so
+        # there is no loser to name; naming one sent readers to look for
+        # content that was never lost.
+        self.assertNotIn("overwritten", log)
+        self.assertNotIn("kept:", log)
+
+    def test_the_slot_is_spelled_as_the_writer_spells_it(self):
+        """The report and the writer must agree on what "the same file" means."""
+        import contextlib
+        import io as _io
+        from jsonui_doc_cli.test_doc.generator import document_output_rel_path
+        out = _io.StringIO()
+        with contextlib.redirect_stdout(out):
+            _report_document_slot_collisions(
+                [("beta", "docs/beta/x.html", "one"),
+                 ("beta", "docs/beta/x.html", "two")])
+        self.assertIn(
+            f"SHARED SLOT {document_output_rel_path('beta', 'docs/beta/x.html')}",
+            out.getvalue())
 
     def test_the_denominators_are_both_reported(self):
-        # paths AND declarations: 12 declarations over 10 paths is a different
-        # tree from 10 over 10, and only the pair says which.
+        # paths AND declarations: 2 declarations over 2 files is a different
+        # tree from 2 over 1, and only the pair says which.
         _, log = self.build(self.SHARED)
-        self.assertRegex(log, r"Document slots: 1 path\(s\) from 2 declaration\(s\)")
+        self.assertRegex(log, r"Document slots: 2 path\(s\) from 2 declaration\(s\)")
 
 
 class ThePageKeepsItsOwnTitle(_Tree):
