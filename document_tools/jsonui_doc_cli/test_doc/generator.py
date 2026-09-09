@@ -2169,7 +2169,20 @@ def _generate_document_pages(
             # Generate document page with embedded body content and Mermaid CDN
             html_content = generate_document_html(
                 source_path=source_path,
-                title=test_name,
+                # 🚫 NOT `title=test_name`. `generate_document_html` already
+                # takes the page's own <title> when this is None, and passing
+                # a test name overrode it with whichever declaration happened
+                # to win the slot. On one tree that put a test's name —
+                # "…Tier 5 - Responsive Runtime Conditions" — on a page whose
+                # own title says what the screen is.
+                #
+                # ⚠️ The nav label follows this too (the same value reaches
+                # the sidebar), so twelve links that used to carry twelve
+                # different test names now carry one page's title twelve
+                # times. That is more honest and less readable, and the nav
+                # side is a separate item on the same ticket: one page should
+                # appear once.
+                title=None,
                 all_tests_nav=all_tests_nav,
                 current_doc_path=doc_path,
                 body_link_rewriter=_component_body_rewriter(

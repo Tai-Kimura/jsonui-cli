@@ -263,6 +263,58 @@ class ASharedSlotIsCountedAndItsLoserNamed(_Tree):
         self.assertRegex(log, r"Document slots: 1 path\(s\) from 2 declaration\(s\)")
 
 
+class ThePageKeepsItsOwnTitle(_Tree):
+    """The page's title is the page's, not the name of a test that mentions it.
+
+    `generate_document_html` already reads the source's own `<title>` when it
+    is passed none. The generator passed a test name, so whichever declaration
+    won the slot also named the page — and on a real tree that put a test's
+    name on a page whose own title says which screen it documents.
+
+    ⚠️ NO ARM PINNED THIS BEFORE. Changing it left 962 green, which is how the
+    override survived: the value was carried through three functions and
+    asserted nowhere. The count of passing tests said nothing about it.
+    """
+
+    OWN = {"alpha": "docs/screens/html/alpha_only.html",
+           "beta": "docs/screens/html/beta_only.html"}
+
+    def title_of(self, page: Path) -> str:
+        m = TITLE.search(page.read_text(encoding="utf-8"))
+        return m.group(1).strip() if m else ""
+
+    def test_the_title_comes_from_the_source_document(self):
+        out, _ = self.build(self.OWN)
+        self.assertEqual(self.title_of(out / self.OWN["alpha"]),
+                         "ORIGINAL alpha")
+
+    def test_it_is_not_the_name_of_the_test_that_declared_it(self):
+        # The control: the fixture's test names are distinct from its page
+        # titles, so an implementation that still passes the test name fails
+        # here rather than coinciding.
+        out, _ = self.build(self.OWN)
+        self.assertNotEqual(self.title_of(out / self.OWN["beta"]), "beta test")
+        self.assertEqual(self.title_of(out / self.OWN["beta"]), "ORIGINAL beta")
+
+    def test_a_contested_page_is_still_titled_by_a_source_not_by_a_test(self):
+        """Twelve declarations used to mean twelve possible titles, decided by
+        iteration order.
+
+        🚫 THIS DOES NOT SAY THE CONTEST IS RESOLVED. One slot is still
+        written and the last declarer still wins it, so which source names the
+        page still depends on order — the first version of this arm asserted
+        `alpha` and was simply wrong about who wins. What the arm can say, and
+        all it says, is that the winner is a SOURCE and never a test name.
+        The remaining half is the output path, which is a separate item on the
+        same ticket and not yet done.
+        """
+        out, _ = self.build({"alpha": "docs/screens/html/login.html",
+                             "beta": "docs/screens/html/login.html"})
+        title = self.title_of(out / "docs/screens/html/login.html")
+        self.assertIn(title, {"ORIGINAL alpha", "ORIGINAL beta"})
+        self.assertNotIn("test", title)
+
+
 class TheCollapseIsStillHere(_Tree):
     """The OTHER ticket, pinned as unfixed on purpose.
 
