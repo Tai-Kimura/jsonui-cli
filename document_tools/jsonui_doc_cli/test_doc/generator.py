@@ -1749,9 +1749,26 @@ def _report_writes_outside_output(output_path: Path) -> dict:
         out = output_path.resolve()
     except OSError:
         out = output_path
+    # 🔻 ONE DIRECTORY, ONE ENTRY, however it was spelled on the way in. The
+    # root scope records `input_path.parent / "docs"` exactly as the run was
+    # given it, and every `--app` records its docs path `.resolve()`d — so a
+    # run pointed at an app that is ALSO passed as `--app` (the normal shape
+    # for a face listing all of its apps) put one directory in this set twice,
+    # once relative and once absolute, and the manifest said two directories
+    # where there was one. Seen on a single face, because a single face spells
+    # its input relatively; the others were not safe, they were not on the
+    # path. Keyed by the real path here rather than normalised at each of the
+    # writers, so a writer added tomorrow cannot reopen it.
+    by_real: dict[Path, Path] = {}
+    for d in _written_outside_output:
+        try:
+            real = d.resolve()
+        except OSError:
+            real = d
+        by_real.setdefault(real, d)
     outside = sorted(
-        d for d in _written_outside_output
-        if not str(d.resolve()).startswith(str(out) + "/")
+        real for real in by_real
+        if not str(real).startswith(str(out) + "/")
     )
     if not outside:
         return {}
