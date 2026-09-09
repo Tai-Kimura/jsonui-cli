@@ -88,7 +88,7 @@ def register_build_command(subparsers: argparse._SubParsersAction) -> None:
 
 
 def _report_toolchain_sync(config_mgr) -> None:
-    """Say so when this project's vendored tools are not this CLI's version.
+    r"""Say so when this project's vendored tools are not this CLI's version.
 
     🚨 `jui build` is the FIRST STAGE OF THE DELIVERY SCRIPT, and until
     2026-09-08 it was the one command that never asked. The rule lived inside
