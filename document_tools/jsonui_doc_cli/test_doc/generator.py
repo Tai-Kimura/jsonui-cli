@@ -1008,7 +1008,26 @@ def generate_html_directory(
     # beside its docs — not from a path guess, for the same reason unit roots
     # do: a directory named `tests` next to `docs` is a convention, and this
     # file should not be the place that convention is enforced.
-    roots: list[tuple[Path, str | None]] = [(input_path, None)]
+    # 🔻 THE RUN'S OWN ROOT KEEPS ITS NAME. It used to be pinned to None and
+    # the matching declaration was skipped whole, so the app the run was
+    # pointed at lost its name while every other app kept one — from the same
+    # `test_roots` list, in the same call.
+    #
+    # The consequence is one section further on: `unit` resolves its roots
+    # elsewhere and preserves the name, so on a real site one app's unit pages
+    # sit under its own segment while its screen and flow pages sit flat, next
+    # to nobody. 76 of 131 pages on one tree.
+    #
+    # ⚠️ MECHANISM CONFIRMED, SOLE CAUSE NOT MEASURED. That this is the only
+    # reason the two sections differ is not something anyone has shown; what
+    # was measured is that the names match one app's whole corpus exactly and
+    # that `unit` keeps what this discarded.
+    own_app = next(
+        (entry.get("app") for entry in (test_roots or [])
+         if Path(entry["root"]).resolve() == input_path.resolve()),
+        None,
+    )
+    roots: list[tuple[Path, str | None]] = [(input_path, own_app)]
     for entry in (test_roots or []):
         root = Path(entry["root"])
         if root.resolve() == input_path.resolve():
@@ -1107,7 +1126,11 @@ def generate_html_directory(
         if f.get('document'):
             document_files.append({
                 'name': f['name'],
-                'path': f['document'],  # Path to document page
+                # Same rule as the writer, from the same function. A page
+                # moved without its links is a worse state than the one this
+                # repairs: the collision was at least visible in the output.
+                'path': document_output_rel_path(
+                    f.get('group') or None, f['document']),
                 # 🚨 WITHOUT THIS THE RENDERER HAS NOTHING TO GROUP BY. The
                 # sidebar's Documents lists were rewritten to go through
                 # `_render_tests_sidebar_section`, which nests by `group` — and
@@ -1554,7 +1577,14 @@ def generate_html_directory(
     # components, units, apps) where before it carried only what had been
     # collected by that earlier point. That is a byte change on every document
     # page, and it makes them consistent with every other page in the site.
-    _generate_document_pages(input_path, output_path, generated_files, all_tests_nav)
+    # The map is built from `roots`, which already pairs each declared test
+    # directory with the app that declared it. Nothing new is declared here —
+    # the asset existed and this call site simply was not reading it, which is
+    # the same shape v1.8.63 repaired one function away.
+    _generate_document_pages(
+        input_path, output_path, generated_files, all_tests_nav,
+        roots_by_app={app: root for root, app in roots},
+    )
 
     # Re-generate index.html with updated navigation (if specs, components, markdown, figma, or apps were added)
     # `unit_files_info` is part of the condition rather than assumed to ride
@@ -2011,11 +2041,83 @@ def _report_stale_pages(output_path: Path, started_at: float | None = None,
     return stale
 
 
+def document_output_rel_path(owner: str | None, doc_path: str) -> str:
+    """Where a declared document's page is written, relative to the site root.
+
+    The declaring app's name goes in front. Two apps naming the same relative
+    path used to land on one file and the last writer kept it — silently, with
+    a successful run and no warning.
+
+    🔻 EVERY declared page moves, not only the ones that collide today. The
+    ruling was that a page's location must follow its own declaration and
+    nothing else: under 'separate them only when they clash', a path depends on
+    what OTHER apps happen to declare, so an app adding a name tomorrow moves a
+    neighbour's URL that nobody touched. One move now beats a move whenever
+    somebody else writes something.
+
+    🚫 NO SEGMENT WITHOUT A NAME. A run with nothing declared has no app to
+    name, and inventing one — 'default', the directory's name — would put every
+    such site's pages somewhere new for no gain. The absent segment is the
+    honest rendering of an absent declaration.
+    """
+    return f"{owner}/{doc_path}" if owner else doc_path
+
+
+def _report_document_slot_collisions(
+    declarations: list[tuple[str | None, str, str]],
+) -> int:
+    """Say how many declared documents share one output slot, and who loses.
+
+    Takes the DECLARATIONS, not a dictionary of them. The first version took a
+    dict keyed by (owner, path) and counted its entries, which is the same
+    mistake one level up: three tests in ONE app declaring one path arrived as
+    a single entry, and the report said "1 declaration, 0 shared". A counter
+    built on top of a structure that already deduplicates counts the
+    survivors, and the survivors are exactly what a collision report is
+    supposed to look past.
+
+    ⚠️ AND THE SHARED KEY IS THE PATH, NOT THE APP. Crossing apps was never a
+    precondition — the entry key was the path alone — so two tests in one app
+    collapse identically. Measured on a second consumer tree: 201 declarations
+    over 30 paths, 29 of them shared, 171 declarations lost, and ALL 29 within
+    a single app. The first tree had 1 of each kind, which is how "it needs
+    two apps" survived being written down.
+
+    The slot is the relative path, so anything declaring the same one lands on
+    the same file and the last writer keeps it. Nothing said so: the run
+    printed no warning, wrote one page, and reported success.
+
+    🔻 THE COUNT IS PRINTED EVEN WHEN IT IS ZERO. "No collisions" and "nobody
+    checked" produce the same silence otherwise, and this whole family of
+    defects has been silence — five documents reported missing while a sixth
+    was quietly overwritten, and the sixth is the one that mattered.
+
+    Returns the number of colliding paths, for callers that want to assert on
+    it rather than parse the output.
+    """
+    by_path: dict[str, list[tuple[str | None, str]]] = {}
+    for owner, doc_path, test_name in declarations:
+        by_path.setdefault(doc_path, []).append((owner, test_name))
+
+    collisions = {p: v for p, v in by_path.items() if len(v) > 1}
+    print(f"  Document slots: {len(by_path)} path(s) from {len(declarations)} "
+          f"declaration(s); {len(collisions)} shared by more than one test.")
+    for doc_path, claimants in sorted(collisions.items()):
+        # The last one in wins the file; every earlier one is overwritten.
+        *losers, winner = claimants
+        print(f"    SHARED SLOT {doc_path}")
+        print(f"      kept:      {winner[1]} ({winner[0] or 'the run itself'})")
+        for owner, name in losers:
+            print(f"      overwritten: {name} ({owner or 'the run itself'})")
+    return len(collisions)
+
+
 def _generate_document_pages(
     input_path: Path,
     output_path: Path,
     generated_files: list[dict],
-    all_tests_nav: dict
+    all_tests_nav: dict,
+    roots_by_app: dict[str | None, Path] | None = None,
 ) -> None:
     """
     Generate document pages with sidebar for all documents referenced in test files.
@@ -2029,22 +2131,48 @@ def _generate_document_pages(
         all_tests_nav: Navigation data for sidebar
     """
     # Collect unique document paths
-    documents_to_process: dict[str, str] = {}  # doc_path -> test_name
-    for f in generated_files:
-        doc_path = f.get('document')
-        if doc_path:
-            documents_to_process[doc_path] = f.get('name', 'Document')
+    # Keyed by (owner, path). Keying by the path alone dropped one of two
+    # apps that declared the same relative path — before any resolution ran,
+    # so nothing downstream could know it had happened.
+    #
+    # 🚫 THIS DOES NOT YET PRODUCE TWO PAGES. The output path is still built
+    # from the relative path alone, so two entries still write to one file and
+    # the last one still wins it on disk. What changed is that the run now
+    # KNOWS, and says so. The page count is unchanged and the ruling that
+    # changes it — every page under its declaring app's segment — is waiting
+    # on a question this function cannot answer: the app the run itself was
+    # pointed at arrives with no name, because the name is discarded where the
+    # roots are built.
+    #
+    # Reporting it before fixing it is the point. A collision that is silent
+    # is indistinguishable from no collision, and the count below is what
+    # makes "we looked and there were none" a different statement from "we
+    # never looked".
+    declarations: list[tuple[str | None, str, str]] = [
+        (f.get('group') or None, f['document'], f.get('name', 'Document'))
+        for f in generated_files if f.get('document')
+    ]
+    _report_document_slot_collisions(declarations)
+
+    # One slot is one page, so the processing map necessarily deduplicates.
+    # The report above runs on the declarations, BEFORE this, for that exact
+    # reason: counting here would count what survived.
+    documents_to_process: dict[tuple[str | None, str], str] = {
+        (owner, doc_path): test_name
+        for owner, doc_path, test_name in declarations
+    }
 
     if not documents_to_process:
         return
 
     print("  Generating document pages...")
 
-    for doc_path, test_name in documents_to_process.items():
+    for (owner, doc_path), test_name in documents_to_process.items():
         # Bound before the try so the failure record can name them even when
         # the exception fires before they are assigned.
         source_path = None
-        output_doc_path = output_path / Path(doc_path)
+        out_rel = document_output_rel_path(owner, doc_path)
+        output_doc_path = output_path / Path(out_rel)
         try:
             # Resolve source document path.
             #
@@ -2055,29 +2183,59 @@ def _generate_document_pages(
             # diagram links to, so it has to be a forward path from a
             # stable root. A test-file-relative '../../..' value would
             # write the page outside the output directory.
-            source_path = input_path / doc_path
-            if not source_path.exists():
-                # Try relative to parent
-                source_path = input_path.parent / doc_path
-            if not source_path.exists():
+            # 🔻 The base is the root of the app that DECLARED the test, not
+            # the directory this run happened to be pointed at. They are the
+            # same thing for a single-app run and differ for every other one:
+            # a path that exists only under its own app was reported as
+            # missing, because the run's input was a different app's tree.
+            # ⚠️ NO `input_path` FALLBACK IN THE LIST, deliberately. The map
+            # already holds it: `roots` starts with `(input_path, None)`, so
+            # the run's own tests — whose group is None — resolve through the
+            # same lookup as everyone else. A mutation dropping `input_path`
+            # from a two-entry list left every arm green, which is what a
+            # redundant element does; arming it would have defended code that
+            # cannot fail. The `or input_path` below is the real fallback, for
+            # a caller that passes no map at all.
+            owner_root = (roots_by_app or {}).get(owner) or input_path
+            bases: list[Path] = [owner_root, owner_root.parent]
+
+            source_path = next(
+                (b / doc_path for b in bases if (b / doc_path).exists()), None)
+            if source_path is None:
+                # Name every base that was tried. "Not found" with one path in
+                # it sends the reader to fix a file that is in the right place.
+                tried = ", ".join(str(b) for b in bases)
                 print(
                     f"    Warning: Document not found: {doc_path}\n"
-                    f"      'document' is resolved from {input_path} or {input_path.parent}, "
-                    f"not from the test file (unlike 'source.layout'). "
-                    f"Write it as a forward path from one of those."
+                    f"      'document' is resolved from the declaring app's test root "
+                    f"(and its parent), not from the test file (unlike 'source.layout'). "
+                    f"Owner: {owner or '(the run itself)'}. Tried: {tried}."
                 )
                 continue
 
             # Determine output path (preserve relative structure)
             # e.g., docs/screens/login.html -> docs/screens/login.html
-            rel_doc_path = Path(doc_path)
+            rel_doc_path = Path(out_rel)
             output_doc_path = output_path / rel_doc_path
             output_doc_path.parent.mkdir(parents=True, exist_ok=True)
 
             # Generate document page with embedded body content and Mermaid CDN
             html_content = generate_document_html(
                 source_path=source_path,
-                title=test_name,
+                # 🚫 NOT `title=test_name`. `generate_document_html` already
+                # takes the page's own <title> when this is None, and passing
+                # a test name overrode it with whichever declaration happened
+                # to win the slot. On one tree that put a test's name —
+                # "…Tier 5 - Responsive Runtime Conditions" — on a page whose
+                # own title says what the screen is.
+                #
+                # ⚠️ The nav label follows this too (the same value reaches
+                # the sidebar), so twelve links that used to carry twelve
+                # different test names now carry one page's title twelve
+                # times. That is more honest and less readable, and the nav
+                # side is a separate item on the same ticket: one page should
+                # appear once.
+                title=None,
                 all_tests_nav=all_tests_nav,
                 current_doc_path=doc_path,
                 body_link_rewriter=_component_body_rewriter(
