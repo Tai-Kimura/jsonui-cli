@@ -31,7 +31,10 @@ import unittest
 from contextlib import redirect_stdout
 from pathlib import Path
 
-from jsonui_doc_cli.test_doc.generator import generate_html_directory
+from jsonui_doc_cli.test_doc.generator import (
+    _report_document_slot_collisions,
+    generate_html_directory,
+)
 
 TITLE = re.compile(r"<title>(.*?)</title>", re.S)
 
@@ -174,6 +177,58 @@ class ADocumentResolvesFromItsOwnAppsRoot(_Tree):
         log = buf.getvalue()
         self.assertIn("Owner: beta", log)
         self.assertIn("Tried:", log)
+
+
+class ASharedSlotIsCountedAndItsLoserNamed(_Tree):
+    """The collision is reported before it is repaired.
+
+    Two apps declaring one relative path land on one file and the last writer
+    keeps it. Nothing said so — no warning, one page, and a successful run.
+    The count comes first because a silent collision and no collision are the
+    same observation, and because the repair (every page under its declaring
+    app's segment) is waiting on a separate question.
+
+    🔻 THE ZERO IS PRINTED TOO. Without it, "we looked and found none" reads
+    exactly like "nobody looked", which is the shape this whole family keeps
+    producing.
+    """
+
+    SHARED = {"alpha": "docs/screens/html/login.html",
+              "beta": "docs/screens/html/login.html"}
+    OWN = {"alpha": "docs/screens/html/alpha_only.html",
+           "beta": "docs/screens/html/beta_only.html"}
+
+    def test_a_shared_slot_is_reported_with_both_claimants(self):
+        _, log = self.build(self.SHARED)
+        self.assertIn("SHARED SLOT docs/screens/html/login.html", log)
+        self.assertIn("overwritten:", log)
+        self.assertIn("kept:", log)
+
+    def test_the_loser_is_named_not_just_counted(self):
+        # "1 collision" sends nobody anywhere. The declaration that lost is
+        # the thing a person has to go and change.
+        _, log = self.build(self.SHARED)
+        self.assertRegex(log, r"overwritten:\s+alpha test")
+        self.assertRegex(log, r"kept:\s+beta test")
+
+    def test_the_count_is_printed_when_it_is_zero(self):
+        _, log = self.build(self.OWN)
+        self.assertIn("0 shared by more than one app", log,
+                      "a run with no collisions says nothing, so silence "
+                      "cannot be told from not looking")
+
+    def test_the_count_follows_its_input(self):
+        """The 1->0 arm, on the function rather than the whole run."""
+        two = {("alpha", "p.html"): "a", ("beta", "p.html"): "b"}
+        one = {("alpha", "p.html"): "a", ("beta", "q.html"): "b"}
+        self.assertEqual(_report_document_slot_collisions(two), 1)
+        self.assertEqual(_report_document_slot_collisions(one), 0)
+
+    def test_the_denominators_are_both_reported(self):
+        # paths AND declarations: 12 declarations over 10 paths is a different
+        # tree from 10 over 10, and only the pair says which.
+        _, log = self.build(self.SHARED)
+        self.assertRegex(log, r"Document slots: 1 path\(s\) from 2 declaration\(s\)")
 
 
 class TheCollapseIsStillHere(_Tree):

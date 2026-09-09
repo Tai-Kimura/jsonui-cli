@@ -2011,6 +2011,40 @@ def _report_stale_pages(output_path: Path, started_at: float | None = None,
     return stale
 
 
+def _report_document_slot_collisions(
+    documents: dict[tuple[str | None, str], str],
+) -> int:
+    """Say how many declared documents share one output slot, and who loses.
+
+    The slot is the relative path, so two apps declaring the same one land on
+    the same file and the last writer keeps it. Nothing said so: the run
+    printed no warning, wrote one page, and reported success.
+
+    🔻 THE COUNT IS PRINTED EVEN WHEN IT IS ZERO. "No collisions" and "nobody
+    checked" produce the same silence otherwise, and this whole family of
+    defects has been silence — five documents reported missing while a sixth
+    was quietly overwritten, and the sixth is the one that mattered.
+
+    Returns the number of colliding paths, for callers that want to assert on
+    it rather than parse the output.
+    """
+    by_path: dict[str, list[tuple[str | None, str]]] = {}
+    for (owner, doc_path), test_name in documents.items():
+        by_path.setdefault(doc_path, []).append((owner, test_name))
+
+    collisions = {p: v for p, v in by_path.items() if len(v) > 1}
+    print(f"  Document slots: {len(by_path)} path(s) from {len(documents)} "
+          f"declaration(s); {len(collisions)} shared by more than one app.")
+    for doc_path, claimants in sorted(collisions.items()):
+        # The last one in wins the file; every earlier one is overwritten.
+        *losers, winner = claimants
+        print(f"    SHARED SLOT {doc_path}")
+        print(f"      kept:      {winner[1]} ({winner[0] or 'the run itself'})")
+        for owner, name in losers:
+            print(f"      overwritten: {name} ({owner or 'the run itself'})")
+    return len(collisions)
+
+
 def _generate_document_pages(
     input_path: Path,
     output_path: Path,
@@ -2030,25 +2064,38 @@ def _generate_document_pages(
         all_tests_nav: Navigation data for sidebar
     """
     # Collect unique document paths
-    # ⚠️ STILL KEYED BY doc_path ALONE, and that is a separate defect with its
-    # own ticket: two apps declaring the same relative path collapse into one
-    # entry here, before any resolution happens. This change carries the OWNER
-    # in the value so the source can be resolved from the app that declared it;
-    # it does NOT stop the collapse. On a tree where two apps share a path,
-    # one slot is still written and the last declarer still wins it.
-    documents_to_process: dict[str, tuple[str, str | None]] = {}
+    # Keyed by (owner, path). Keying by the path alone dropped one of two
+    # apps that declared the same relative path — before any resolution ran,
+    # so nothing downstream could know it had happened.
+    #
+    # 🚫 THIS DOES NOT YET PRODUCE TWO PAGES. The output path is still built
+    # from the relative path alone, so two entries still write to one file and
+    # the last one still wins it on disk. What changed is that the run now
+    # KNOWS, and says so. The page count is unchanged and the ruling that
+    # changes it — every page under its declaring app's segment — is waiting
+    # on a question this function cannot answer: the app the run itself was
+    # pointed at arrives with no name, because the name is discarded where the
+    # roots are built.
+    #
+    # Reporting it before fixing it is the point. A collision that is silent
+    # is indistinguishable from no collision, and the count below is what
+    # makes "we looked and there were none" a different statement from "we
+    # never looked".
+    documents_to_process: dict[tuple[str | None, str], str] = {}
     for f in generated_files:
         doc_path = f.get('document')
         if doc_path:
-            documents_to_process[doc_path] = (
-                f.get('name', 'Document'), f.get('group') or None)
+            documents_to_process[(f.get('group') or None, doc_path)] = \
+                f.get('name', 'Document')
+
+    _report_document_slot_collisions(documents_to_process)
 
     if not documents_to_process:
         return
 
     print("  Generating document pages...")
 
-    for doc_path, (test_name, owner) in documents_to_process.items():
+    for (owner, doc_path), test_name in documents_to_process.items():
         # Bound before the try so the failure record can name them even when
         # the exception fires before they are assigned.
         source_path = None
