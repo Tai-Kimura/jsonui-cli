@@ -83,10 +83,32 @@ def _section_apps(html: str, section_id: str) -> set[str]:
     return out
 
 
+def _section_entry_paths(html: str, section_id: str) -> list[str]:
+    """Every href a section lists. The ABSOLUTE side of the assertion.
+
+    🚨 `_section_apps` alone is a RELATIVE instrument: comparing two sections'
+    app sets is satisfied when BOTH are empty, so a tree where nothing is
+    grouped passes every comparison. Measured 2026-09-09 on the real site:
+    units carried 44 app-named entries while screens and flows carried 0, and
+    76 of 131 generated pages (58%) sat under no app at all.
+
+    In THIS file the all-empty case is caught, but only by
+    `test_the_instrument_can_see_subsections_at_all` — a different arm. That is
+    a dependency between arms, not a property of the arms that matter: delete
+    or weaken that one and the comparisons below go vacuous in silence. So each
+    arm now asserts existence itself.
+    """
+    m = re.search(rf"id='{section_id}-list'>(.*?)\n      </div>", html, re.S)
+    if not m:
+        return []
+    return re.findall(r"<a href='([^']+)'", m.group(1))
+
+
 class _Run(unittest.TestCase):
     APPS = ("bar", "client")
 
-    def build(self, apps=APPS, per_app_test_dirs=False, declare=True):
+    def build(self, apps=APPS, per_app_test_dirs=False, declare=True,
+              run_root_is=None):
         """A run that DECLARES apps. Tests are flat unless asked otherwise.
 
         ⚠️ Flat is the reported shape: `_test_group` reads the app off the test
@@ -104,7 +126,10 @@ class _Run(unittest.TestCase):
             (base / "ios" / "Tests").mkdir(parents=True)
             (base / "jui.config.json").write_text(json.dumps({
                 "spec_directory": "docs/screens/json",
-                "test": {"src": "tests"},
+                # 🚨 `run_root_is` points THIS app's test.src at the run's own
+                # input directory — the shape every real face has (the same
+                # directory is both `-i` and the app's declared tests).
+                "test": {"src": "../tests" if app == run_root_is else "tests"},
                 "platforms": {"ios": {"root": "ios", "unitTestsDir": "Tests",
                                       "testModule": "App"}}}), encoding="utf-8")
             (base / "docs" / "screens" / "json" / "s.spec.json").write_text(
@@ -122,14 +147,24 @@ class _Run(unittest.TestCase):
             # the reported defect at all (two apps' tests had NO PAGE). The
             # arms were red for a different reason than the site was wrong.
             # `test.src` is read from the config, not guessed from `<app>/tests`.
-            sub = (base / "tests" / app) if per_app_test_dirs else (base / "tests")
+            if app == run_root_is:
+                sub = root / "tests"            # the run's own input directory
+            else:
+                sub = (base / "tests" / app) if per_app_test_dirs else (base / "tests")
             sub.mkdir(parents=True, exist_ok=True)
             (sub / f"{app}_s.test.json").write_text(_test_json("screen", f"{app}_s"),
                                                     encoding="utf-8")
             (sub / f"{app}_f.test.json").write_text(_test_json("flow", f"{app}_f"),
                                                     encoding="utf-8")
-        # The run's own input directory. Its tests belong to no declared app,
-        # so under the ruling they stay ungrouped — that is not a gap.
+        # The run's own input directory.
+        #
+        # ⚠️ CORRECTED 2026-09-09. This comment used to say "its tests belong
+        # to no declared app, so under the ruling they stay ungrouped — that is
+        # not a gap". True only when the run's root IS undeclared. On every
+        # real face it is the SAME directory as a declared app's `test.src`,
+        # and there the entries must carry that app. The comment blessed the
+        # one shape the fixture could not build, which is why the arms were
+        # green while 76 of 131 generated pages sat under no app at all.
         own = root / "tests"
         own.mkdir(parents=True, exist_ok=True)
         # Both kinds, so the flat arm can assert on a flows section that
@@ -183,8 +218,16 @@ class TheSectionsMustNameTheSameApps(_Run):
 
     def test_screen_tests_names_the_same_apps_as_unit_tests(self):
         html = self.unit_page(self.build())
-        self.assertEqual(_section_apps(html, "screens"),
-                         _section_apps(html, "units"),
+        # 🔻 ABSOLUTE first: an empty set equals an empty set, so the
+        # comparison below says nothing unless something is actually grouped.
+        apps = _section_apps(html, "screens")
+        self.assertTrue(apps, "the screens section must group by app at all")
+        paths = _section_entry_paths(html, "screens")
+        self.assertTrue(paths, "the screens section must list entries")
+        grouped = [p for p in paths if any(f"/{a.lower()}/" in p.lower() for a in apps)]
+        self.assertTrue(grouped,
+                        f"no screens entry carries an app segment: {paths[:4]}")
+        self.assertEqual(apps, _section_apps(html, "units"),
                          "the screens section must name the run's apps, not one app's set")
 
     def test_flow_tests_names_the_same_apps_as_unit_tests(self):
@@ -192,8 +235,14 @@ class TheSectionsMustNameTheSameApps(_Run):
         the shape being pinned, and one assertion covering both would go green
         the moment either half landed."""
         html = self.unit_page(self.build())
-        self.assertEqual(_section_apps(html, "flows"),
-                         _section_apps(html, "units"),
+        apps = _section_apps(html, "flows")
+        self.assertTrue(apps, "the flows section must group by app at all")
+        paths = _section_entry_paths(html, "flows")
+        self.assertTrue(paths, "the flows section must list entries")
+        grouped = [p for p in paths if any(f"/{a.lower()}/" in p.lower() for a in apps)]
+        self.assertTrue(grouped,
+                        f"no flows entry carries an app segment: {paths[:4]}")
+        self.assertEqual(apps, _section_apps(html, "units"),
                          "the flows section must name the run's apps too")
 
     def test_a_run_that_declares_no_apps_stays_flat(self):
@@ -305,6 +354,93 @@ class TheGroupingMustNotDependOnWhereTestsSit(_Run):
         self.assertEqual(_section_apps(flat, "screens"),
                          _section_apps(nested, "screens"),
                          "a flat tests/ dir must not change which apps are named")
+
+
+class TheRunsOwnRootCanBeADeclaredApp(_Run):
+    """🚨 The shape every real face has, and the one this file never built.
+
+    `-i <dir>` and one app's declared `test.src` are the SAME directory. The
+    run then has to attribute those tests to that app; nothing else can, since
+    the path carries no app segment.
+
+    Measured on the reporting face AFTER v1.8.63 landed: `docs/html/flows/*`
+    (no app segment) = 61 and `docs/html/screens/*` = 15 — unchanged by the
+    fix — while the same face's `docs/html/client/unit/*` = 44 and
+    `docs/html/unit/*` = 0. So `units` already attributes that app and
+    screens/flows do not, on identical inputs.
+
+    🔻 The expected value is not invented here: it is that face's own `unit`
+    section. If `units` can name the app for these tests, so can the others.
+    """
+
+    def test_tests_under_the_runs_own_root_carry_the_declared_app(self):
+        html = self.unit_page(self.build(run_root_is="client"))
+        for section in ("screens", "flows"):
+            paths = _section_entry_paths(html, section)
+            self.assertTrue(paths, f"{section} must list entries")
+            own = [p for p in paths if "run_own" in p]
+            self.assertTrue(own, "the run's own tests must appear at all")
+            self.assertTrue(
+                [p for p in own if "/client/" in p.lower()],
+                f"{section}: the run's own root is client's declared test.src, "
+                f"so its entries must carry that app — got {own[:3]}")
+
+    def test_units_already_does_this_on_the_same_input(self):
+        """🔻 The positive control, and the source of the expected value.
+
+        Without it, a red arm above could mean "no section can attribute this
+        input" rather than "screens and flows do not, while units does".
+        """
+        html = self.unit_page(self.build(run_root_is="client"))
+        self.assertIn("Client", _section_apps(html, "units"))
+
+
+class WhatTheDocumentsSectionCannotDo(unittest.TestCase):
+    """🚨 `documents` has no grouping path at all — pinned, not filed.
+
+    `flows`, `screens` and `units` are rendered by
+    `_render_tests_sidebar_section`, which nests by `group`. `documents` is a
+    separate inline block that iterates the list and emits one flat `<ul>`. So
+    a document entry CARRYING a group is still rendered flat: the ruling of
+    2026-09-09 ("declaration if present, else path") cannot reach it, because
+    there is no code that would read the declaration.
+
+    ⚠️ Asserted against the renderer with a group SUPPLIED, so it cannot pass
+    for the boring reason that the fixture has no documents. If someone gives
+    `documents` a grouping path, this arm goes red and should be inverted with
+    the date and reason — not deleted.
+
+    🔻 This is a limitation, not a defect report. Whether documents SHOULD be
+    per-app is a separate question from whether they CAN be, and only the
+    second is measured here.
+    """
+
+    def test_a_grouped_document_is_still_rendered_flat(self):
+        from jsonui_doc_cli.test_doc.html.sidebar import generate_screen_sidebar
+        html = "\n".join(generate_screen_sidebar(
+            "t", ["c"],
+            all_tests_nav={"documents": [
+                {"name": "d1", "path": "docs/bar/d1.html", "group": "bar"},
+                {"name": "d2", "path": "docs/client/d2.html", "group": "client"},
+            ]},
+            current_test_path=None))
+        self.assertIn("id='documents-list'>", html, "the section must render at all")
+        self.assertIn("d1", html, "and must list the entries")
+        self.assertEqual(_section_apps(html, "documents"), set(),
+                         "documents has no grouping path; a group on the entry is ignored")
+
+    def test_the_control_shows_the_reader_can_see_groups_here(self):
+        """🔻 Without this, the empty set above is indistinguishable from
+        `_section_apps` being unable to read this markup at all."""
+        from jsonui_doc_cli.test_doc.html.sidebar import generate_screen_sidebar
+        html = "\n".join(generate_screen_sidebar(
+            "t", ["c"],
+            all_tests_nav={"screens": [
+                {"name": "s1", "path": "screens/bar/s1.html", "group": "bar"},
+            ]},
+            current_test_path=None))
+        self.assertEqual(_section_apps(html, "screens"), {"Bar"},
+                         "the same reader DOES see a group when the renderer makes one")
 
 
 if __name__ == "__main__":
