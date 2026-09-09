@@ -213,16 +213,48 @@ class ASharedSlotIsCountedAndItsLoserNamed(_Tree):
 
     def test_the_count_is_printed_when_it_is_zero(self):
         _, log = self.build(self.OWN)
-        self.assertIn("0 shared by more than one app", log,
+        self.assertIn("0 shared by more than one test", log,
                       "a run with no collisions says nothing, so silence "
                       "cannot be told from not looking")
 
     def test_the_count_follows_its_input(self):
         """The 1->0 arm, on the function rather than the whole run."""
-        two = {("alpha", "p.html"): "a", ("beta", "p.html"): "b"}
-        one = {("alpha", "p.html"): "a", ("beta", "q.html"): "b"}
+        two = [("alpha", "p.html", "a"), ("beta", "p.html", "b")]
+        one = [("alpha", "p.html", "a"), ("beta", "q.html", "b")]
         self.assertEqual(_report_document_slot_collisions(two), 1)
         self.assertEqual(_report_document_slot_collisions(one), 0)
+
+    def test_two_tests_in_ONE_app_collide_just_as_hard(self):
+        """Crossing apps was never a precondition, and the first version of
+        this reporter reproduced that assumption.
+
+        The entry key is the path alone, so two tests in one app collapse
+        identically. The reporter was handed a dict keyed by (owner, path),
+        which had already merged them, and it duly announced "1 declaration,
+        0 shared" for three colliding tests. It counted the survivors.
+
+        Measured on a second consumer tree — 201 declarations over 30 paths,
+        29 shared, 171 lost, and every one of the 29 inside a single app. The
+        first tree had one collision of each kind, which is how "it needs two
+        apps" got written down and stayed there.
+        """
+        same_app = [("alpha", "p.html", "one"),
+                    ("alpha", "p.html", "two"),
+                    ("alpha", "p.html", "three")]
+        self.assertEqual(_report_document_slot_collisions(same_app), 1)
+
+    def test_a_same_app_collision_names_both_losers(self):
+        import contextlib
+        import io as _io
+        out = _io.StringIO()
+        with contextlib.redirect_stdout(out):
+            _report_document_slot_collisions(
+                [("alpha", "p.html", "one"), ("alpha", "p.html", "two"),
+                 ("alpha", "p.html", "three")])
+        log = out.getvalue()
+        self.assertIn("from 3 declaration(s)", log)
+        self.assertEqual(log.count("overwritten:"), 2)
+        self.assertIn("kept:      three", log)
 
     def test_the_denominators_are_both_reported(self):
         # paths AND declarations: 12 declarations over 10 paths is a different

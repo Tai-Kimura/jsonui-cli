@@ -2012,11 +2012,26 @@ def _report_stale_pages(output_path: Path, started_at: float | None = None,
 
 
 def _report_document_slot_collisions(
-    documents: dict[tuple[str | None, str], str],
+    declarations: list[tuple[str | None, str, str]],
 ) -> int:
     """Say how many declared documents share one output slot, and who loses.
 
-    The slot is the relative path, so two apps declaring the same one land on
+    Takes the DECLARATIONS, not a dictionary of them. The first version took a
+    dict keyed by (owner, path) and counted its entries, which is the same
+    mistake one level up: three tests in ONE app declaring one path arrived as
+    a single entry, and the report said "1 declaration, 0 shared". A counter
+    built on top of a structure that already deduplicates counts the
+    survivors, and the survivors are exactly what a collision report is
+    supposed to look past.
+
+    ⚠️ AND THE SHARED KEY IS THE PATH, NOT THE APP. Crossing apps was never a
+    precondition — the entry key was the path alone — so two tests in one app
+    collapse identically. Measured on a second consumer tree: 201 declarations
+    over 30 paths, 29 of them shared, 171 declarations lost, and ALL 29 within
+    a single app. The first tree had 1 of each kind, which is how "it needs
+    two apps" survived being written down.
+
+    The slot is the relative path, so anything declaring the same one lands on
     the same file and the last writer keeps it. Nothing said so: the run
     printed no warning, wrote one page, and reported success.
 
@@ -2029,12 +2044,12 @@ def _report_document_slot_collisions(
     it rather than parse the output.
     """
     by_path: dict[str, list[tuple[str | None, str]]] = {}
-    for (owner, doc_path), test_name in documents.items():
+    for owner, doc_path, test_name in declarations:
         by_path.setdefault(doc_path, []).append((owner, test_name))
 
     collisions = {p: v for p, v in by_path.items() if len(v) > 1}
-    print(f"  Document slots: {len(by_path)} path(s) from {len(documents)} "
-          f"declaration(s); {len(collisions)} shared by more than one app.")
+    print(f"  Document slots: {len(by_path)} path(s) from {len(declarations)} "
+          f"declaration(s); {len(collisions)} shared by more than one test.")
     for doc_path, claimants in sorted(collisions.items()):
         # The last one in wins the file; every earlier one is overwritten.
         *losers, winner = claimants
@@ -2081,14 +2096,19 @@ def _generate_document_pages(
     # is indistinguishable from no collision, and the count below is what
     # makes "we looked and there were none" a different statement from "we
     # never looked".
-    documents_to_process: dict[tuple[str | None, str], str] = {}
-    for f in generated_files:
-        doc_path = f.get('document')
-        if doc_path:
-            documents_to_process[(f.get('group') or None, doc_path)] = \
-                f.get('name', 'Document')
+    declarations: list[tuple[str | None, str, str]] = [
+        (f.get('group') or None, f['document'], f.get('name', 'Document'))
+        for f in generated_files if f.get('document')
+    ]
+    _report_document_slot_collisions(declarations)
 
-    _report_document_slot_collisions(documents_to_process)
+    # One slot is one page, so the processing map necessarily deduplicates.
+    # The report above runs on the declarations, BEFORE this, for that exact
+    # reason: counting here would count what survived.
+    documents_to_process: dict[tuple[str | None, str], str] = {
+        (owner, doc_path): test_name
+        for owner, doc_path, test_name in declarations
+    }
 
     if not documents_to_process:
         return
