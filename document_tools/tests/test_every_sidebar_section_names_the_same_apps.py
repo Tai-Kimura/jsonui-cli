@@ -536,3 +536,102 @@ class TheDocumentsSectionGroupsLikeEveryOther(unittest.TestCase):
                     if isinstance(k, ast.Constant)}
             self.assertIn("group", keys,
                           f"the document nav entry must carry the group; got {sorted(keys)}")
+
+
+class ManyDeclarationsOneDestination(unittest.TestCase):
+    """One nav item per DESTINATION, and the count survives the fold.
+
+    Measured read-only on the reporting face: the Documents nav carried 15
+    links to 5 distinct URLs, 11 of them landing on `login.html`. A reader saw
+    eleven differently-named documents and reached one page.
+
+    🚨 THE FOLD IS THE DANGEROUS PART. Those eleven rows are, today, the ONLY
+    visible sign of the collision — there is no printing for shared document
+    slots anywhere (the collisions at generator.py:1077/:1171 are output-NAME
+    collisions, a different event; verified before this was written, and the
+    condition asking me to preserve an existing print was withdrawn once that
+    print turned out not to exist). Folding without replacing that signal would
+    fix the display and hide the defect.
+    """
+
+    def _docs(self, n: int = 11):
+        return ([{"name": f"T{i}", "path": "docs/login.html"} for i in range(n)]
+                + [{"name": "Other", "path": "docs/other.html"}])
+
+    def _render(self, which: str, docs):
+        from jsonui_doc_cli.test_doc.html.sidebar import (
+            generate_screen_sidebar, generate_flow_sidebar, generate_index_sidebar)
+        from jsonui_doc_cli.test_doc.html.document import generate_document_sidebar
+        if which == "screen":
+            return "\n".join(generate_screen_sidebar(
+                "t", [], all_tests_nav={"documents": docs})), "documents"
+        if which == "flow":
+            return "\n".join(generate_flow_sidebar(
+                "t", [], [], all_tests_nav={"documents": docs})), "documents"
+        if which == "index":
+            return "\n".join(generate_index_sidebar(
+                "t", [], [], document_files=docs)), "sidebar-documents"
+        return "\n".join(generate_document_sidebar(
+            "t", all_tests_nav={"documents": docs})), "documents"
+
+    def test_one_item_per_destination_at_every_site(self):
+        """All four, because a site left unfolded shows eleven rows again."""
+        for which in ("screen", "flow", "index", "document"):
+            with self.subTest(site=which):
+                html, _ = self._render(which, self._docs())
+                # ⚠️ href carries a per-page prefix ('../', '' on the index),
+                # so match the tail. An exact-string count was 0 everywhere the
+                # prefix is non-empty and looked like a fold failure.
+                self.assertEqual(html.count("docs/login.html'"), 1,
+                                 f"{which}: eleven declarations, one entry")
+                self.assertIn("docs/other.html", html,
+                              f"{which}: the unshared page must survive")
+
+    def test_the_count_is_visible_where_the_rows_used_to_be(self):
+        html, _ = self._render("screen", self._docs())
+        self.assertIn("<span class='count'>11</span>", html,
+                      "the badge replaces the eleven rows a reader could count")
+        self.assertIn("11 tests share this page", html,
+                      "and the tooltip says what they are")
+        for i in (0, 5, 10):
+            self.assertIn(f"T{i}", html, "every declaration is still named")
+
+    def test_the_run_says_what_the_fold_hid(self):
+        import io
+        from contextlib import redirect_stdout
+        from jsonui_doc_cli.test_doc.html import sidebar
+        sidebar._REPORTED_SHARED_SLOTS.clear()
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            self._render("screen", self._docs())
+        out = buf.getvalue()
+        self.assertIn("11 declaration(s)", out, "N — how many were folded")
+        self.assertIn("1 shared page(s)", out, "M — how many pages they land on")
+        self.assertIn("docs/login.html", out, "and which page")
+        self.assertIn("display only", out,
+                      "the line must deny that anything was dropped")
+
+    def test_the_data_is_not_reduced(self):
+        """The fold is display. If it edited the caller's list, everything
+        upstream that counts collisions would silently count fewer."""
+        docs = self._docs()
+        before = [dict(d) for d in docs]
+        self._render("screen", docs)
+        self.assertEqual(docs, before, "the caller's list must be untouched")
+
+    def test_distinct_paths_are_not_folded(self):
+        """Negative control: folding by name, or folding everything, also
+        passes the arms above."""
+        docs = [{"name": "A", "path": "docs/a.html"},
+                {"name": "B", "path": "docs/b.html"},
+                {"name": "A", "path": "docs/c.html"}]
+        html, _ = self._render("screen", docs)
+        for p in ("docs/a.html", "docs/b.html", "docs/c.html"):
+            self.assertIn(p, html, f"{p} is its own destination")
+        # ⚠️ Scoped to the <li> items: the SECTION HEADING always carries a
+        # count badge, so an unscoped assertNotIn fails on every input and
+        # says nothing about folding.
+        items = re.findall(r"<li>.*?</li>", html, re.S)
+        self.assertEqual(len(items), 3, "three destinations, three items")
+        self.assertFalse([i for i in items if "class='count'" in i],
+                         "no item is a fold, so no item carries a count")

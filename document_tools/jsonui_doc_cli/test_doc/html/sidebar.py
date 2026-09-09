@@ -57,6 +57,31 @@ def _app_owning(all_tests_nav: dict | None, current_path: str | None) -> str | N
     return None
 
 
+#: Slot-sharing already reported, so the line appears once per run rather than
+#: once per generated page. ⚠️ A renderer that printed on every call would emit
+#: the same fact hundreds of times and be switched off, which is how a count
+#: stops being read.
+_REPORTED_SHARED_SLOTS: set = set()
+
+
+def _report_shared_slots(section_id: str, folded) -> None:
+    """Say what the fold hid, because the fold hides the only current signal."""
+    shared = {p: g for p, g in folded.items() if len(g) > 1}
+    if not shared:
+        return
+    key = (section_id, tuple(sorted((p, len(g)) for p, g in shared.items())))
+    if key in _REPORTED_SHARED_SLOTS:
+        return
+    _REPORTED_SHARED_SLOTS.add(key)
+    declared = sum(len(g) for g in shared.values())
+    print(f"  NOTE [{section_id}]: {declared} declaration(s) land on "
+          f"{len(shared)} shared page(s); the sidebar shows one entry each. "
+          f"Nothing is dropped — the run still holds all {sum(len(g) for g in folded.values())} "
+          f"declaration(s), and this fold is display only.")
+    for p, g in sorted(shared.items(), key=lambda kv: -len(kv[1])):
+        print(f"       {len(g)} -> {p}")
+
+
 def _render_tests_sidebar_section(
     tests: list[dict],
     label: str,
@@ -85,14 +110,45 @@ def _render_tests_sidebar_section(
             ungrouped.append(t)
 
     def _links(items: list[dict], pad: str) -> None:
+        """One <li> per DESTINATION, not per declaration.
+
+        🚨 Several tests can declare the same document page. The nav then
+        listed one item per test, each with its own name, all pointing at one
+        URL — measured on the reporting face: 15 Documents links, 5 distinct
+        URLs, and 11 of the 15 landing on `login.html`. A reader sees eleven
+        different documents and reaches one.
+
+        🔻 THE FOLD IS DISPLAY ONLY. `items` is not reduced; the caller still
+        holds every declaration, so anything that counts collisions upstream
+        counts the same number after this as before. What would otherwise
+        vanish is the ONLY signal this defect currently has — eleven entries in
+        a row — so the count is put back, twice: in the page (a badge and the
+        full list in the tooltip) and once on stdout.
+        """
+        folded: OrderedDict[str, list[dict]] = OrderedDict()
+        for _t in items:
+            folded.setdefault(_t['path'], []).append(_t)
+        _report_shared_slots(section_id, folded)
         parts.append(f"{pad}<ul>")
-        for t in items:
+        for t in [group[0] for group in folded.values()]:
+            _sharers = folded[t['path']]
             is_current = current_path and t['path'] == current_path
             current_class = " current" if is_current else ""
+            if len(_sharers) > 1:
+                # The badge is the count a reader can act on; the tooltip is
+                # what they need to tell the declarations apart.
+                _title = escape_html(
+                    f"{len(_sharers)} tests share this page: "
+                    + ", ".join(x['name'] for x in _sharers))
+                _label = (f"{escape_html(t['name'])}"
+                          f" <span class='count'>{len(_sharers)}</span>")
+            else:
+                _title = escape_html(t['name'])
+                _label = escape_html(t['name'])
             parts.append(
                 f"{pad}  <li><a href='{href_prefix}{t['path']}' "
                 f"class='nav-link{current_class}' "
-                f"title='{escape_html(t['name'])}'>{escape_html(t['name'])}</a></li>"
+                f"title='{_title}'>{_label}</a></li>"
             )
         parts.append(f"{pad}</ul>")
 
