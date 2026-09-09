@@ -407,7 +407,30 @@ DESTINATION_KINDS: tuple[str, ...] = (
     "screen", "route", "external", "none", "back", "unknown",
 )
 
-_PAREN = re.compile(r"[（(][^）)]*[）)]")
+#: 🚫 NOT A REGEX. The first version was `[（(][^）)]*[）)]`, which is flat, and
+#: destinations nest: `Name (a=b / onNavigate(Screen.X))` lost the INNER close
+#: to the match and left the OUTER one behind, so the candidate became
+#: `Name )` and matched nothing. The value looked like prose the classifier
+#: could not read; it was prose the classifier had damaged.
+def _strip_parentheticals(text: str) -> str:
+    """Drop every parenthesised span, nesting included.
+
+    Depth-counted rather than matched, because a regex for balanced nesting
+    is not a regular language and the flat approximation fails exactly where
+    the corpus is richest — a transition that explains its arguments.
+    """
+    out: list[str] = []
+    depth = 0
+    for ch in text:
+        if ch in "（(":
+            depth += 1
+        elif ch in "）)":
+            # A closer with nothing open is malformed input, not a name.
+            # Dropping it is what keeps `Name )` from ever being a candidate.
+            depth = max(0, depth - 1)
+        elif depth == 0:
+            out.append(ch)
+    return "".join(out).strip()
 _SPLIT = re.compile(r"\s+or\s+|/|、|,")
 _ROUTE = re.compile(r"\A/[A-Za-z0-9\-_/\[\]:.]*\Z")
 _EXTERNAL = re.compile(
@@ -450,7 +473,7 @@ def _candidates(raw: str) -> list[str]:
     literally named ``a/b`` is not split into two misses.
     """
     out = [raw]
-    cleaned = _PAREN.sub("", raw).strip()
+    cleaned = _strip_parentheticals(raw)
     if cleaned and cleaned != raw:
         out.append(cleaned)
     out.extend(p.strip() for p in _SPLIT.split(cleaned) if p.strip())
