@@ -1108,6 +1108,13 @@ def generate_html_directory(
             document_files.append({
                 'name': f['name'],
                 'path': f['document'],  # Path to document page
+                # 🚨 WITHOUT THIS THE RENDERER HAS NOTHING TO GROUP BY. The
+                # sidebar's Documents lists were rewritten to go through
+                # `_render_tests_sidebar_section`, which nests by `group` — and
+                # that alone changes nothing, because these entries carried
+                # only name and path while `file_infos` had the group all
+                # along. Two halves; either one alone is invisible.
+                'group': f.get('group', ''),
             })
 
     # Find and process Swagger/OpenAPI files from docs_dirs

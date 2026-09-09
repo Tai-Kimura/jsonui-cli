@@ -398,40 +398,48 @@ class TheRunsOwnRootCanBeADeclaredApp(_Run):
         self.assertIn("Client", _section_apps(html, "units"))
 
 
-class WhatTheDocumentsSectionCannotDo(unittest.TestCase):
-    """🚨 `documents` has no grouping path at all — pinned, not filed.
+class TheDocumentsSectionGroupsLikeEveryOther(unittest.TestCase):
+    """⭐ INVERTED 2026-09-09 (ruling: 処方3). This class used to pin the
+    OPPOSITE — that `documents` could not be grouped — and that pin was correct
+    when written.
 
-    `flows`, `screens` and `units` are rendered by
-    `_render_tests_sidebar_section`, which nests by `group`. `documents` is a
-    separate inline block that iterates the list and emits one flat `<ul>`. So
-    a document entry CARRYING a group is still rendered flat: the ruling of
-    2026-09-09 ("declaration if present, else path") cannot reach it, because
-    there is no code that would read the declaration.
+    WHY IT WAS TRUE: `documents` never reached `_render_tests_sidebar_section`.
+    Four functions each built their own flat `<ul>`, one of them nine lines
+    below a call to that very renderer. A group on the entry was ignored
+    because no code read it.
 
-    ⚠️ Asserted against the renderer with a group SUPPLIED, so it cannot pass
-    for the boring reason that the fixture has no documents. If someone gives
-    `documents` a grouping path, this arm goes red and should be inverted with
-    the date and reason — not deleted.
+    WHY IT CHANGED: two halves had to land together, and either alone is
+    invisible —
+      * `generator.py` now carries `group` into the document nav entry (it
+        carried only name and path, while `file_infos` had the group all along)
+      * all four sites now render through `_render_tests_sidebar_section`
 
-    🔻 This is a limitation, not a defect report. Whether documents SHOULD be
-    per-app is a separate question from whether they CAN be, and only the
-    second is measured here.
+    🔻 THE ARM IS NOT DELETED. Deleting it would let the old behaviour return
+    with nothing to notice. It asserts the opposite and says when and why.
+
+    ⚠️ WHAT THIS DOES NOT SHOW. These are synthetic fixtures. Measured
+    read-only on the reporting face BEFORE this change: 125 generated pages
+    carry a Documents list and 0 carry a Documents subsection. The AFTER can
+    only be measured by whoever regenerates that site — this file cannot, and
+    green here is not evidence the site changed.
     """
 
-    #: Every function that builds a Documents list BY HAND. Four, not one.
-    #: ⚠️ `generate_index_sidebar` uses a DIFFERENT id (`sidebar-documents-list`),
-    #: so a reader keyed on the other spelling silently covers three of four.
-    #: `generate_document_sidebar` is the document page's own sidebar — where a
-    #: reader following a Documents link actually lands.
+    #: Every function that renders a Documents list. Four, not one.
+    #: ⚠️ `generate_index_sidebar` keeps a DIFFERENT id prefix and toggle
+    #: function, so a reader keyed on the other spelling covers three of four.
+    #: `generate_document_sidebar` is where a reader following a Documents link
+    #: actually lands — the one site whose omission would be invisible to
+    #: anyone testing from the index.
     DOC_SITES = ("screen", "flow", "index", "document")
 
-    def _render(self, which: str) -> tuple[str, str]:
-        """(html, section_id) for one of the four hand-built Documents lists."""
+    def _render(self, which: str, group: str | None = "bar") -> tuple[str, str]:
         from jsonui_doc_cli.test_doc.html.sidebar import (
             generate_screen_sidebar, generate_flow_sidebar, generate_index_sidebar)
         from jsonui_doc_cli.test_doc.html.document import generate_document_sidebar
-        docs = [{"name": "d1", "path": "docs/bar/d1.html", "group": "bar"},
-                {"name": "d2", "path": "docs/client/d2.html", "group": "client"}]
+        d = {"name": "d1", "path": "docs/bar/d1.html"}
+        if group:
+            d["group"] = group
+        docs = [d]
         if which == "screen":
             return "\n".join(generate_screen_sidebar(
                 "t", ["c"], all_tests_nav={"documents": docs})), "documents"
@@ -444,34 +452,52 @@ class WhatTheDocumentsSectionCannotDo(unittest.TestCase):
         return "\n".join(generate_document_sidebar(
             "t", all_tests_nav={"documents": docs})), "documents"
 
-    def test_a_grouped_document_is_still_rendered_flat(self):
-        """🚨 All four sites, because the ruling reaches none of them.
-
-        Pinning one would leave three call sites saying nothing — the shape
-        this whole ticket is about (`count arms per call site, not per rule`).
-        """
+    def test_every_site_groups_a_document_that_declares_an_app(self):
+        """All four, because one site left behind says nothing about itself."""
         for which in self.DOC_SITES:
             with self.subTest(site=which):
                 html, section = self._render(which)
                 self.assertIn(f"id='{section}-list'>", html,
                               f"{which}: the section must render at all")
-                self.assertIn("d1", html, f"{which}: and must list the entries")
-                self.assertEqual(
-                    _section_apps(html, section), set(),
-                    f"{which}: no grouping path here; a group on the entry is ignored")
+                self.assertEqual(_section_apps(html, section), {"Bar"},
+                                 f"{which}: a declared app must group here")
 
-    def test_the_control_shows_the_reader_can_see_groups_here(self):
-        """🔻 Without this, the empty set above is indistinguishable from
-        `_section_apps` being unable to read this markup at all."""
-        from jsonui_doc_cli.test_doc.html.sidebar import generate_screen_sidebar
-        html = "\n".join(generate_screen_sidebar(
-            "t", ["c"],
-            all_tests_nav={"screens": [
-                {"name": "s1", "path": "screens/bar/s1.html", "group": "bar"},
-            ]},
-            current_test_path=None))
-        self.assertEqual(_section_apps(html, "screens"), {"Bar"},
-                         "the same reader DOES see a group when the renderer makes one")
+    def test_an_undeclared_document_stays_flat_at_every_site(self):
+        """🔻 The other direction. Without this, "always nest" passes too, and
+        the ruling is "declaration if present, else path" — not "always"."""
+        for which in self.DOC_SITES:
+            with self.subTest(site=which):
+                html, section = self._render(which, group=None)
+                self.assertIn("d1", html, f"{which}: the entry must still list")
+                self.assertEqual(_section_apps(html, section), set(),
+                                 f"{which}: no declaration, so no grouping")
+
+    def test_each_site_keeps_its_own_markup_contract(self):
+        """🚨 The index page uses a different id prefix AND a different toggle
+        function, and its heading has no space after the arrow. Routing it
+        through a shared renderer with this file's defaults produced
+        correct-LOOKING markup wired to a handler that page does not call —
+        caught by an arm in another file, not by this one."""
+        html, _ = self._render("index")
+        self.assertIn("id='sidebar-documents-list'>", html)
+        self.assertIn("toggleSidebar('documents')", html)
+        self.assertIn("<span class='arrow'>▼</span>Documents", html,
+                      "no space after the arrow on this page")
+        screen, _ = self._render("screen")
+        self.assertIn("toggleSection('documents')", screen)
+        self.assertIn("<span class='arrow'>▼</span> Documents", screen,
+                      "and a space on the others")
+
+    def test_the_nav_entry_carries_the_group_at_all(self):
+        """The half that is invisible on its own: the renderer can only group
+        what the nav hands it, and these entries used to carry name and path
+        only."""
+        import inspect
+        from jsonui_doc_cli.test_doc import generator
+        src = inspect.getsource(generator)
+        i = src.index("document_files.append(")
+        self.assertIn("'group'", src[i:i + 600],
+                      "the document nav entry must carry the group")
 
 
 if __name__ == "__main__":

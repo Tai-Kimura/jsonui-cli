@@ -64,6 +64,9 @@ def _render_tests_sidebar_section(
     title_class: str,
     href_prefix: str,
     current_path: str | None = None,
+    toggle_fn: str = "toggleSection",
+    id_prefix: str = "",
+    arrow_sep: str = " ",
 ) -> list[str]:
     """Render a Flow/Screen Tests sidebar section.
 
@@ -93,20 +96,24 @@ def _render_tests_sidebar_section(
             )
         parts.append(f"{pad}</ul>")
 
+    # ⚠️ The index page's Documents list uses a DIFFERENT toggle function and
+    # id prefix. Defaulting them here would emit correct-looking markup wired
+    # to a handler that page does not call for it, so both stay caller-supplied.
+    sid = f"{id_prefix}{section_id}"
     classes = f"sidebar-title {title_class} collapsed" if title_class else "sidebar-title collapsed"
     parts.append("    <div class='sidebar-section'>")
     parts.append(
-        f"      <div class='{classes}' id='{section_id}-title' "
-        f"onclick=\"toggleSection('{section_id}')\"><span class='arrow'>▼</span> "
+        f"      <div class='{classes}' id='{sid}-title' "
+        f"onclick=\"{toggle_fn}('{section_id}')\"><span class='arrow'>▼</span>{arrow_sep}"
         f"{label} <span class='count'>{len(tests)}</span></div>"
     )
-    parts.append(f"      <div class='sidebar-list collapsed' id='{section_id}-list'>")
+    parts.append(f"      <div class='sidebar-list collapsed' id='{sid}-list'>")
 
     if ungrouped:
         _links(ungrouped, "        ")
 
     for group_name, group_tests in by_group.items():
-        safe_id = f"{section_id}-{_make_safe_id(group_name)}"
+        safe_id = f"{sid}-{_make_safe_id(group_name)}"
         display = group_name.replace('_', ' ').replace('-', ' ').title()
         parts.append("        <div class='sidebar-subsection'>")
         parts.append(
@@ -386,18 +393,12 @@ def generate_screen_sidebar(
             all_tests_nav['units'], 'Unit Tests', 'units', 'unit',
             href_prefix=rel_root, current_path=current_test_path))
 
-    # Documents navigation (collapsible, collapsed by default)
+    # Documents — through the SAME renderer as the other sections, so an
+    # entry that declares an app groups here too (2026-09-09).
     if all_tests_nav and all_tests_nav.get('documents'):
-        documents = all_tests_nav['documents']
-        parts.append("    <div class='sidebar-section'>")
-        parts.append(f"      <div class='sidebar-title doc collapsed' id='documents-title' onclick=\"toggleSection('documents')\"><span class='arrow'>▼</span> Documents <span class='count'>{len(documents)}</span></div>")
-        parts.append("      <div class='sidebar-list collapsed' id='documents-list'>")
-        parts.append("        <ul>")
-        for d in documents:
-            parts.append(f"          <li><a href='{rel_root}{d['path']}' class='nav-link' title='{escape_html(d['name'])}'>{escape_html(d['name'])}</a></li>")
-        parts.append("        </ul>")
-        parts.append("      </div>")
-        parts.append("    </div>")
+        parts.extend(_render_tests_sidebar_section(
+            all_tests_nav['documents'], 'Documents', 'documents', 'doc',
+            href_prefix=rel_root, current_path=current_test_path))
 
     # API Docs navigation (collapsible, collapsed by default, with subdir grouping)
     if all_tests_nav and all_tests_nav.get('api_doc_categories'):
@@ -523,18 +524,12 @@ def generate_flow_sidebar(
             all_tests_nav['units'], 'Unit Tests', 'units', 'unit',
             href_prefix=rel_root, current_path=current_test_path))
 
-    # Documents navigation (collapsible, collapsed by default)
+    # Documents — through the SAME renderer as the other sections, so an
+    # entry that declares an app groups here too (2026-09-09).
     if all_tests_nav and all_tests_nav.get('documents'):
-        documents = all_tests_nav['documents']
-        parts.append("    <div class='sidebar-section'>")
-        parts.append(f"      <div class='sidebar-title doc collapsed' id='documents-title' onclick=\"toggleSection('documents')\"><span class='arrow'>▼</span> Documents <span class='count'>{len(documents)}</span></div>")
-        parts.append("      <div class='sidebar-list collapsed' id='documents-list'>")
-        parts.append("        <ul>")
-        for d in documents:
-            parts.append(f"          <li><a href='{rel_root}{d['path']}' class='nav-link' title='{escape_html(d['name'])}'>{escape_html(d['name'])}</a></li>")
-        parts.append("        </ul>")
-        parts.append("      </div>")
-        parts.append("    </div>")
+        parts.extend(_render_tests_sidebar_section(
+            all_tests_nav['documents'], 'Documents', 'documents', 'doc',
+            href_prefix=rel_root, current_path=current_test_path))
 
     # API Docs navigation (collapsible, collapsed by default, with subdir grouping)
     if all_tests_nav and all_tests_nav.get('api_doc_categories'):
@@ -989,15 +984,15 @@ def generate_index_sidebar(
 
     # Sidebar - Documents (collapsible, starts collapsed)
     if document_files:
-        parts.append("    <div class='sidebar-section'>")
-        parts.append(f"      <div class='sidebar-title doc collapsed' id='sidebar-documents-title' onclick=\"toggleSidebar('documents')\"><span class='arrow'>▼</span>Documents <span class='count'>{len(document_files)}</span></div>")
-        parts.append("      <div class='sidebar-list collapsed' id='sidebar-documents-list'>")
-        parts.append("        <ul>")
-        for d in document_files:
-            parts.append(f"          <li><a href='{d['path']}' title='{escape_html(d['name'])}'>{escape_html(d['name'])}</a></li>")
-        parts.append("        </ul>")
-        parts.append("      </div>")
-        parts.append("    </div>")
+        # 🔻 This page keeps its own toggle function and id prefix; only the
+        # grouping is shared. See the renderer's note.
+        parts.extend(_render_tests_sidebar_section(
+            document_files, 'Documents', 'documents', 'doc',
+            href_prefix='', current_path=None,
+            toggle_fn='toggleSidebar', id_prefix='sidebar-',
+            # ⚠️ This page's title has NO space after the arrow. An existing arm
+            # compares the exact heading text, and it caught the difference.
+            arrow_sep=''))
 
     # Sidebar - API Doc categories (one section per directory, with subdir grouping)
     if api_doc_categories:

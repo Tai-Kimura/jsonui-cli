@@ -8,6 +8,7 @@ from pathlib import Path
 
 from .styles import get_screen_styles, get_toggle_script
 from .sidebar import _render_tests_sidebar_section, escape_html
+from .sidebar import _render_tests_sidebar_section
 
 
 def _get_relative_root(doc_path: str) -> str:
@@ -83,20 +84,14 @@ def generate_document_sidebar(
             all_tests_nav['units'], 'Unit Tests', 'units', 'unit',
             href_prefix=rel_root, current_path=current_doc_path))
 
-    # Documents navigation (collapsible, collapsed by default)
+    # Documents — through the SAME renderer as the other sections (2026-09-09).
+    # 🔻 This is the sidebar a reader LANDS on after following a Documents link,
+    # so leaving it hand-built would have made the grouping visible everywhere
+    # except where the reader arrives.
     if all_tests_nav and all_tests_nav.get('documents'):
-        documents = all_tests_nav['documents']
-        parts.append("    <div class='sidebar-section'>")
-        parts.append(f"      <div class='sidebar-title doc collapsed' id='documents-title' onclick=\"toggleSection('documents')\"><span class='arrow'>▼</span> Documents <span class='count'>{len(documents)}</span></div>")
-        parts.append("      <div class='sidebar-list collapsed' id='documents-list'>")
-        parts.append("        <ul>")
-        for d in documents:
-            is_current = current_doc_path and d['path'] == current_doc_path
-            current_class = " current" if is_current else ""
-            parts.append(f"          <li><a href='{rel_root}{d['path']}' class='nav-link{current_class}' title='{escape_html(d['name'])}'>{escape_html(d['name'])}</a></li>")
-        parts.append("        </ul>")
-        parts.append("      </div>")
-        parts.append("    </div>")
+        parts.extend(_render_tests_sidebar_section(
+            all_tests_nav['documents'], 'Documents', 'documents', 'doc',
+            href_prefix=rel_root, current_path=current_doc_path))
 
     parts.append("  </nav>")
     return parts
