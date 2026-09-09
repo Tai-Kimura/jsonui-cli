@@ -361,3 +361,190 @@ def load_canon(shared_core_dir: Path | str | None = None) -> dict:
         shared_core_dir = Path(__file__).resolve().parents[3] / "shared" / "core"
     with open(Path(shared_core_dir) / "screen_identity.json", "r", encoding="utf-8") as f:
         return json.load(f)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Spec transitions — canon: diagram.specTransitions
+#
+# A spec's ``transitions[].destination`` is FREE PROSE. The validator requires
+# only that the key is present, so nothing has ever constrained its shape, and
+# one column carries at least six kinds of value.
+#
+# 🚫 THIS LIVES HERE, NOT IN THE DIAGRAM GENERATOR. Three places resolve screen
+# ids today — this module, ``document_tools/.../mermaid/flow_graph.py`` (which
+# reimplements the rules rather than importing them), and an inline expression
+# in ``jui_cli/commands/verify_cmd.py``. A rule added at one of them is absent
+# from the other two, and the absence is silent.
+# ─────────────────────────────────────────────────────────────────────────────
+
+# ⚠️ WHAT THE ARMS DO NOT COVER, said here because the test file is not where
+# someone editing this code will look. The canon entry for this vocabulary is
+# pinned STRUCTURALLY (field names, pipeline length, the kind list) and that is
+# all a machine can do. Its PROSE is unpinned: a mutation prefixing the
+# nodeSource sentence with "flow test only." left the whole suite green, and
+# neither a substring check nor a structural one catches that. A sentence in
+# the canon can contradict the code and ship.
+#
+# ⚠️ AND THE VOCABULARY DOES NOT REACH EVERY FACE EQUALLY. Measured 2026-09-09
+# over four faces of one project, unknown went 8→0, 26→16 and 93→41 — and
+# 42→42 on the fourth, where not one destination was recovered. That is why
+# `summarize_destinations` refuses to print only a total: "169→99" reads like
+# progress everywhere, and one of the four faces got nothing.
+
+#: Closed vocabulary. Canon: diagram.specTransitions.kinds.
+DESTINATION_KINDS: tuple[str, ...] = (
+    "screen", "route", "external", "none", "back", "unknown",
+)
+
+_PAREN = re.compile(r"[（(][^）)]*[）)]")
+_SPLIT = re.compile(r"\s+or\s+|/|、|,")
+_ROUTE = re.compile(r"\A/[A-Za-z0-9\-_/\[\]:.]*\Z")
+_EXTERNAL = re.compile(
+    r"https?://|tel:|mailto:|外部ブラウザ|外部アプリ|ブラウザ[でを]|App ?Store|"
+    r"Google Maps|Apple Maps|メーラー|Phone app"
+)
+_NONE = re.compile(r"同画面|画面内|遷移なし|遷移しない|タブ切替|そのまま|留まる")
+#: Anchored at the start ON PURPOSE — see `classify_destination`. The spelling
+#: list is the part that rots: `前画面` was here and `前の画面` was not, and 7
+#: destinations that plainly say "go back" were filed as `unknown` because of
+#: the の. A marker set is a claim about how people write, and it is only ever
+#: as good as the corpus it was read off.
+_BACK = re.compile(r"\A(?:previous screen|back|dismiss|pop|前の画面|前画面|戻る)",
+                   re.IGNORECASE)
+
+
+@dataclass(frozen=True)
+class TransitionTarget:
+    """One classified ``transitions[].destination``.
+
+    ``why`` is carried even when the kind is obvious, because the unresolved
+    report has to say what it tried — a bare "unknown" tells a spec author
+    nothing about which of the six kinds they were close to.
+    """
+
+    kind: str
+    screen_id: str | None
+    raw: str
+    why: str
+
+
+def _norm_id(value: str) -> str:
+    return re.sub(r"[\s_\-]", "", value).lower()
+
+
+def _candidates(raw: str) -> list[str]:
+    """The raw value first, then its de-parenthesized parts.
+
+    Order matters: the whole string is tried before it is cut up, so a screen
+    literally named ``a/b`` is not split into two misses.
+    """
+    out = [raw]
+    cleaned = _PAREN.sub("", raw).strip()
+    if cleaned and cleaned != raw:
+        out.append(cleaned)
+    out.extend(p.strip() for p in _SPLIT.split(cleaned) if p.strip())
+    return out
+
+
+def classify_destination(
+    raw: str,
+    known_ids: Iterable[str],
+    *,
+    alias_prefixes: Iterable[str] = (),
+) -> TransitionTarget:
+    """Classify one destination. Canon: diagram.specTransitions.
+
+    ⚠️ SCREEN RESOLUTION IS TRIED BEFORE THE PROSE MARKERS. A real transition
+    explains itself in a parenthetical, and the explanation is written in the
+    words the other kinds are detected by:
+
+        "Chat or Mypage（source依存。onDismissコールバックで遷移元に戻る）"
+
+    TWO different mechanisms keep that a ``screen``, and they cover different
+    markers — a mutation that reorders the blocks only proves one of them:
+
+        _BACK is anchored at the start of the string (``\\A``), so 戻る
+        inside a parenthetical never
+        matches it. This case survives marker-first ordering. Measured: a
+        mutation moving the markers above the id loop left the whole suite
+        green, and the arm named "the order is load-bearing" was the thing
+        that was wrong, not the code.
+
+        _NONE and _EXTERNAL are NOT anchored — they match anywhere. For those
+        the ORDER is the only protection: a screen destination whose
+        parenthetical mentions 画面内 or a URL would be filed as ``none`` or
+        ``external`` if the markers ran first.
+
+    The corpus has 0 such values today (measured 2026-09-09 across 4 faces,
+    271 destinations), so the arm for it is PLANTED and says so. An unexercised
+    hazard is still a hazard; it just cannot be found by sampling.
+
+    ``alias_prefixes`` is per-face and defaults to EMPTY. Measured 2026-09-09:
+    stripping a leading ``Web`` resolves 50 of one face's 93 destinations and
+    0 of the other three faces'. A rewrite that helps exactly one face must
+    arrive as that face's declaration, or it silently rewrites everyone's.
+    """
+    text = (raw or "").strip()
+    known = {_norm_id(k): k for k in known_ids}
+
+    if not text or text in {"-", "—", "N/A"}:
+        return TransitionTarget("unknown", None, raw, "no destination declared")
+
+    # Structural, and checked first: a leading "/" is a router path, and the
+    # splitter below would otherwise tear "/admin/login" into two words.
+    if _ROUTE.match(text):
+        return TransitionTarget("route", None, raw, "a router path")
+
+    for candidate in _candidates(text):
+        hit = known.get(_norm_id(candidate))
+        if hit:
+            return TransitionTarget("screen", hit, raw, f"matched `{candidate}`")
+
+    for prefix in alias_prefixes:
+        for candidate in _candidates(text):
+            if not candidate.startswith(prefix):
+                continue
+            stripped = candidate[len(prefix):]
+            hit = known.get(_norm_id(stripped)) if stripped else None
+            if hit:
+                return TransitionTarget(
+                    "screen", hit, raw,
+                    f"matched `{stripped}` after the declared `{prefix}` prefix")
+
+    if _EXTERNAL.search(text):
+        return TransitionTarget("external", None, raw, "leaves the app")
+    if _NONE.search(text):
+        return TransitionTarget("none", None, raw, "declares no screen change")
+    if _BACK.search(text):
+        return TransitionTarget("back", None, raw, "returns through the stack")
+    return TransitionTarget("unknown", None, raw, "matched no id and no kind")
+
+
+def summarize_destinations(per_face: dict[str, list[TransitionTarget]]) -> list[str]:
+    """Report lines for classified destinations. Canon: unresolvedReporting.
+
+    🔻 PER FACE, NEVER ONLY A TOTAL, and always beside the scanned count.
+    Measured unresolved rates were 28% / 61% / 50% / 100%; summed, the face
+    that resolves nothing vanishes into the average. And a face at 100% looks
+    the same whether the instrument found nothing or never reached it — which
+    is why the scanned total sits on the same line as the zero.
+    """
+    lines: list[str] = []
+    totals: dict[str, int] = {k: 0 for k in DESTINATION_KINDS}
+    for face in sorted(per_face):
+        targets = per_face[face]
+        counts = {k: 0 for k in DESTINATION_KINDS}
+        for t in targets:
+            counts[t.kind] = counts.get(t.kind, 0) + 1
+            totals[t.kind] = totals.get(t.kind, 0) + 1
+        body = "  ".join(f"{k}={counts[k]}" for k in DESTINATION_KINDS)
+        lines.append(f"  {face}: scanned {len(targets)}  {body}")
+        for t in targets:
+            if t.kind == "unknown":
+                lines.append(f"      unknown: {t.raw[:78]}   ({t.why})")
+    scanned = sum(len(v) for v in per_face.values())
+    body = "  ".join(f"{k}={totals[k]}" for k in DESTINATION_KINDS)
+    lines.append(f"  ALL {len(per_face)} face(s): scanned {scanned}  {body}")
+    if not per_face:
+        lines.append("  no face was scanned — this is not `0 unresolved`")
+    return lines
