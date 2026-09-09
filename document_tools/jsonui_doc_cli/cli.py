@@ -187,6 +187,42 @@ def _resolve_unit_roots(
     return [{"app": None, "config": use, "root": use.parent}]
 
 
+def _resolve_project_root(config_arg, apps, input_dir):
+    """Where `.jsonui-cli/generation-manifest.json` gets written, and WHY.
+
+    🚨 `generate html` never wrote a manifest. `generate_html_directory` takes
+    `project_root=None` by default and this command never passed it, so every
+    run of every face printed "no project root for this run" and recorded
+    nothing. The `--config` help had documented the fallback for longer than
+    the fallback existed.
+
+    ⚠️ THE SOURCE IS RETURNED, NOT JUST THE PATH. A run that resolved the root
+    from the app's own declaration and a run that drifted into a walk-up look
+    identical once the manifest is written, and the walk-up is the one that
+    silently attaches a face's output to whatever repository happens to sit
+    above it. Three sources, in this order:
+
+        1. --config          the operator said so
+        2. the app's config  the app's own declaration (--app)
+        3. walk-up           LAST resort, never the quiet default
+
+    Returns `(root, source)`; `(None, "unresolved")` when nothing answers,
+    which is a third value and must not print as either of the other two.
+    """
+    if config_arg:
+        cfg = Path(config_arg)
+        if cfg.is_file():
+            return cfg.resolve().parent, "--config"
+    for app in (apps or []):
+        cfg = _config_for_app(app["name"], Path(app["docs_path"]))
+        if cfg is not None:
+            return Path(cfg).resolve().parent, f"--app {app['name']}'s config"
+    cfg = _config_for(Path(input_dir))
+    if cfg is not None:
+        return Path(cfg).resolve().parent, "walk-up from the input directory"
+    return None, "unresolved"
+
+
 def _resolve_test_roots(apps: list[dict] | None) -> list[dict]:
     """``{app, root}`` for every app that declares its own tests directory.
 
@@ -539,6 +575,9 @@ def cmd_generate_html(args):
         getattr(args, "config", None), apps,
         input_dir if input_dir.exists() else Path.cwd())
     test_roots = _resolve_test_roots(apps)
+    project_root, project_root_source = _resolve_project_root(
+        getattr(args, "config", None), apps,
+        input_dir if input_dir.exists() else Path.cwd())
 
     print(f"Generating HTML documentation...")
     print(f"  Input: {input_dir}")
@@ -561,10 +600,18 @@ def cmd_generate_html(args):
               "(pass --config <path>, or --app <name>:<dir> for a split tree) "
               "— the Unit Tests section will be absent, which is NOT evidence "
               "that none are declared")
+    if project_root is not None:
+        print(f"  Project root: {project_root} (from {project_root_source})")
+    else:
+        # Third value. "unresolved" must not read as either of the two ways a
+        # root CAN be found, and must not read as "there was nothing to record".
+        print("  Project root: unresolved (no --config, no --app config, and no "
+              "jui.config.json above the input directory) — nothing will be "
+              "recorded in .jsonui-cli/generation-manifest.json")
     print()
 
     try:
-        generate_html_directory(input_dir, output_dir, title, docs_dirs if docs_dirs else None, figma_dir=figma_dir, apps=apps, layouts_dir=layouts_dir_override, unit_roots=[{"app": e.get("app"), "root": e["root"]} for e in unit_roots], test_roots=test_roots)
+        generate_html_directory(input_dir, output_dir, title, docs_dirs if docs_dirs else None, figma_dir=figma_dir, apps=apps, layouts_dir=layouts_dir_override, unit_roots=[{"app": e.get("app"), "root": e["root"]} for e in unit_roots], test_roots=test_roots, project_root=project_root)
         print()
         # Count every page written, not just the test pages in the return
         # value — the old number was smaller than the lines printed above it,
