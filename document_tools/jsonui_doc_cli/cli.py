@@ -1302,12 +1302,32 @@ def report_overwrites_by_another_producer(output_dir: Path, will_write,
     if unmarked:
         shown = ", ".join(q.name for q in unmarked[:5])
         more = "\u2026" if len(unmarked) > 5 else ""
+        # 🚨 EVERY SENTENCE IS ONE FRAGMENT, DELIBERATELY. The v1.8.59 wording
+        # split `will not gain one` across two f-string pieces, and THREE
+        # people independently grepped the shipped text and got 0 — including
+        # the one whose own index says a phrase can break on a line wrap. A
+        # user quoting this line to support gets a maintainer who cannot find
+        # it. Keep each sentence whole even when the line runs long; this file
+        # already has 35 lines over 88 columns and no line-length gate.
+        #
+        # 🚨 AND THE POPULATIONS MOVE. v1.8.58 said these files "will carry it
+        # once rewritten", which was false for a form that never rewrote them.
+        # v1.8.59 fixed that by asserting the opposite for `generate html` as a
+        # whole — and then c3c74f77 (v1.8.61) made `generate html` stamp the
+        # pages it pre-generates into the source tree, so the new wording went
+        # false in the other direction, and stayed there for two releases.
+        # ⚠️ THE SECOND DIRECTION IS THE WORSE ONE: "no mark here is normal"
+        # CLOSES the reader's search, and after v1.8.61 an unmarked page under
+        # `<docs>/screens/html` may be a page the stamping missed.
+        # Measured by running the command, not by reading it (2026-09-09):
+        # of 8 html/md files one run wrote, 4 carried the mark and 4 did not;
+        # stripping the mark from one of the 4 and re-running put it back.
         lines.append(
             f"{len(unmarked)} file(s) in {output_dir} carry no producer mark "
-            f"({shown}{more}), so this run cannot tell whether they came from "
-            f"this command. Anything `jsonui-doc` wrote before v1.8.58, and "
-            f"anything written by `generate html`, has no mark and will not "
-            f"gain one — expect this line to persist for such directories. "
+            f"({shown}{more}), so this run cannot tell whether they came from this command. "
+            f"Anything `jsonui-doc` wrote before v1.8.58 has no mark and will not gain one. "
+            f"Neither does what `generate html` writes into its own `-o` site directory, as of v1.8.62. "
+            f"Its pre-generated `<docs>/screens/html|md` and `<docs>/components/html|md` pages are the other case: those have carried the mark since v1.8.61, so an unmarked file THERE is worth looking at rather than expected. "
             f"This is not a report of a collision.")
     return lines
 

@@ -36,6 +36,7 @@ absolute path fails its public-repo pre-commit.
 
 from __future__ import annotations
 
+import inspect
 import re
 import sys
 from pathlib import Path
@@ -85,11 +86,17 @@ class TestTheShapeThatWasReported:
         assert "8 file(s)" in lines[0]
         assert "no producer mark" in lines[0]
         assert "not a report of a collision" in lines[0]
-        # 🚨 It must NOT promise a future that will not arrive: files written
-        # by the single-file forms before v1.8.58, and everything from
-        # `generate html`, never gain a mark. v1.8.58 said "will carry it once
-        # rewritten" and a consumer lane found that false for a directory it
-        # maintains with the single-file form.
+        # 🚨 It must NOT promise a future that will not arrive. v1.8.58 said
+        # "will carry it once rewritten" and a consumer lane found that false
+        # for a directory it maintains with the single-file form.
+        #
+        # ⚠️ THIS COMMENT SAID "everything from `generate html` never gains a
+        # mark" UNTIL 2026-09-09, AND THAT HAD BEEN FALSE SINCE v1.8.61.
+        # c3c74f77 made `generate html` stamp the pages it pre-generates into
+        # the source tree; the wording and this comment both kept the old
+        # claim for two releases. The arm stayed green throughout, because an
+        # arm pins behaviour and does not pin the sentence that explains it.
+        # The distinction is pinned below, in its own class.
         assert "will not" in lines[0]
         assert "rewritten" not in lines[0]
 
@@ -407,3 +414,85 @@ class TestTheFamilyIsTheUnitTheCheckAsksAbout:
             assert f'stamp_producer(\n                    content, "{family}"' in seg, \
                 f"{name} writes pages that name no producer"
 
+
+class TestTheTwoGenerateHtmlPopulationsAreNotOne:
+    """`generate html` stamps what it pre-generates, and not its own -o site.
+
+    🚨 THE SAME DEFECT AS THE TICKET, IN THE OTHER DIRECTION. v1.8.58 promised
+    a mark that would never arrive; v1.8.59 fixed that by asserting the
+    opposite for `generate html` as a whole; c3c74f77 (v1.8.61) then made
+    `generate html` stamp the pages it pre-generates, and the wording stayed
+    for two releases.
+
+    ⚠️ The second direction is the worse one. "No mark here is normal" CLOSES
+    the reader's search, and after v1.8.61 an unmarked page under
+    `<docs>/screens/html` may be one the stamping missed.
+
+    Measured by RUNNING the command, not by reading it (2026-09-09): of the 8
+    html/md files one `generate html` run wrote, 4 carried the mark
+    (`<docs>/screens/{html,md}`, `<docs>/components/{html,md}`) and 4 did not
+    (everything under `-o`). Stripping the mark from one of the 4 and
+    re-running put it back — so "will not gain one" was false for it twice
+    over.
+    """
+
+    def _msg(self, tmp_path):
+        planned = _pages(tmp_path, ["c0.html"])
+        lines = report_overwrites_by_another_producer(
+            tmp_path, planned, "component-batch")
+        assert len(lines) == 1, lines
+        return lines[0]
+
+    def test_the_population_with_no_mark_is_named_by_where_it_is_written(
+            self, tmp_path):
+        assert "`-o` site directory" in self._msg(tmp_path)
+
+    def test_the_population_that_does_carry_one_names_the_version(
+            self, tmp_path):
+        assert "since v1.8.61" in self._msg(tmp_path)
+
+    def test_the_reader_is_told_to_look_there_not_to_stop(self, tmp_path):
+        # The whole point: an unmarked file under the pre-generated paths is
+        # NOT the expected state any more, so the notice must not close the
+        # question the way it did for two releases.
+        assert "worth looking at rather than expected" in self._msg(tmp_path)
+
+
+class TestTheNoticeIsGreppableInTheSourceItShipsFrom:
+    """A user quotes a line from the log; a maintainer greps the source for it.
+
+    🚨 v1.8.59 split `will not gain one` across two f-string fragments
+    (`"...will not " f"gain one..."`). THREE people independently grepped the
+    shipped text and got 0 — one of them with "a phrase can break on a line
+    wrap" written verbatim in their own index. A wording defect is also a
+    SUPPORT-PATH defect: the person who can fix it cannot find it.
+
+    ⚠️ This is a claim about the SOURCE, so it reads the source — and reads
+    only the function's own body with comment lines removed, because a check
+    that greps a file matches its own explanation otherwise.
+    """
+
+    def test_every_sentence_it_emits_appears_whole_on_one_source_line(
+            self, tmp_path):
+        planned = _pages(tmp_path, ["c0.html"])
+        msg = report_overwrites_by_another_producer(
+            tmp_path, planned, "component-batch")[0]
+
+        src = inspect.getsource(report_overwrites_by_another_producer)
+        code_lines = [l for l in src.splitlines()
+                      if not l.lstrip().startswith("#")]
+
+        # The first sentence interpolates the count and the directory, so it
+        # cannot appear literally anywhere. Every other one can.
+        _head, *rest = msg.split(". ")
+        checked = 0
+        for sentence in rest:
+            sentence = sentence.strip().rstrip(".")
+            if not sentence:
+                continue
+            checked += 1
+            assert any(sentence in line for line in code_lines), (
+                "a sentence this notice emits is split across source lines, "
+                "so grepping the shipped text finds nothing: "
+                f"{sentence!r}")
+        assert checked >= 3, f"only {checked} sentence(s) were checked"
