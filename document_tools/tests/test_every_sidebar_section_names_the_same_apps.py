@@ -491,14 +491,35 @@ class TheDocumentsSectionGroupsLikeEveryOther(unittest.TestCase):
     def test_the_nav_entry_carries_the_group_at_all(self):
         """The half that is invisible on its own: the renderer can only group
         what the nav hands it, and these entries used to carry name and path
-        only."""
+        only.
+
+        🚨 PARSED, NOT GREPPED. The first version of this arm did
+        `assertIn("'group'", source_window)`. Measured: reverting the
+        implementation and leaving a comment that merely mentions `'group'`
+        turned it GREEN — a source-reading check does not distinguish the
+        implementation from a remark about it. Even `'group':` with the colon
+        passed, because the window ran on into unrelated code.
+
+        So this walks the AST and asks the dict literal for its keys. A comment
+        is not a node.
+        """
+        import ast
         import inspect
         from jsonui_doc_cli.test_doc import generator
-        src = inspect.getsource(generator)
-        i = src.index("document_files.append(")
-        self.assertIn("'group'", src[i:i + 600],
-                      "the document nav entry must carry the group")
 
-
-if __name__ == "__main__":
-    unittest.main()
+        tree = ast.parse(inspect.getsource(generator))
+        appends = [
+            n for n in ast.walk(tree)
+            if isinstance(n, ast.Call)
+            and isinstance(n.func, ast.Attribute) and n.func.attr == "append"
+            and isinstance(n.func.value, ast.Name)
+            and n.func.value.id == "document_files"
+        ]
+        self.assertTrue(appends, "document_files.append must exist to be checked")
+        for call in appends:
+            self.assertTrue(call.args and isinstance(call.args[0], ast.Dict),
+                            "the nav entry must be a dict literal")
+            keys = {k.value for k in call.args[0].keys
+                    if isinstance(k, ast.Constant)}
+            self.assertIn("group", keys,
+                          f"the document nav entry must carry the group; got {sorted(keys)}")
