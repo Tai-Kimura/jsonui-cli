@@ -8,6 +8,7 @@ import re
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
+from ..run_log import warn
 
 CONFIG_FILENAME = ".jsonui-doc-rules.json"
 
@@ -76,7 +77,7 @@ def _validate_patterns(patterns: list, field_name: str) -> list[str]:
             re.compile(p)
             valid.append(p)
         except re.error:
-            print(f"  Warning: Invalid regex in {field_name}: '{p}' (skipped)")
+            warn(f"  WARNING [doc-rules]: invalid regex in {field_name}: '{p}' (skipped)")
     return valid
 
 

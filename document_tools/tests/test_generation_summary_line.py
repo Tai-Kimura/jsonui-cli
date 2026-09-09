@@ -120,11 +120,15 @@ class SummaryLine(unittest.TestCase):
                                unreadable_files=[])
         self.assertEqual(generation_warnings(), [])
 
-    def test_without_counts_the_line_is_the_bare_one(self):
+    def test_without_counts_the_line_carries_only_what_was_measured(self):
         # A caller that never recorded counts still gets a valid sentence
-        # rather than a parenthesis full of zeroes it did not measure.
+        # rather than a parenthesis full of zeroes it did not measure. The
+        # warning tally IS measured — it counts what went through `warn()`,
+        # which is 0 here and says so (changed 2026-09-10: the closing line
+        # carries the count so that "0 warnings" and "nobody counted" stop
+        # printing the same).
         self._pages(4)
-        self.assertEqual(generation_summary_line(), "Generated 4 HTML files")
+        self.assertEqual(generation_summary_line(), "Generated 4 HTML files (warnings 0)")
 
 
 class _quiet:

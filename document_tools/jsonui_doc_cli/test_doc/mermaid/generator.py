@@ -10,6 +10,7 @@ from typing import Any
 
 from ..html.sidebar import escape_html
 from ...reproducible import build_datetime
+from ...run_log import warn
 from .flow_graph import (
     EDGE_BACK,
     ScreenResolver,
@@ -61,7 +62,7 @@ def _collect_flow_graph(
         try:
             flow_nodes, flow_transitions = flow_edges(flow_data.get("steps", []), resolver)
         except Exception as e:  # pragma: no cover - defensive, mirrors old behaviour
-            print(f"  Warning: Error processing {flow_file}: {e}")
+            warn(f"  WARNING [doc-diagram]: error processing {flow_file}: {e}")
             continue
 
         if not flow_nodes:

@@ -31,6 +31,8 @@ from .html import (
 from .html.sidebar import escape_html
 from .markdown import generate_markdown, generate_schema_markdown
 from .mermaid import generate_mermaid_html
+from .. import run_log
+from ..run_log import warn
 
 
 # ── Page-level failure accounting ────────────────────────────────────────
@@ -87,6 +89,7 @@ def reset_page_failures() -> None:
     _written_outside_output.clear()
     _generation_counts.clear()
     _document_slot_facts.clear()
+    run_log.reset()
 
 
 def note_generation_counts(**counts) -> None:
@@ -116,8 +119,14 @@ def generation_summary_line() -> str:
     n = get_pages_written()
     c = _generation_counts
     head = f"Generated {n} HTML files"
+    # 🔻 THE WARNING COUNT IS THE TOOL'S, AND IT PRINTS AT ZERO. This line
+    # never carried one; what a face read as "warning 5" at 1.8.63 was its own
+    # grep over the log, which went to 0 when five lines were respelled — and
+    # from the log alone, "0 warnings" and "the counter is gone" are the same
+    # sentence. Tallied by `run_log.warn`, which every warning goes through.
+    warnings = f"warnings {run_log.count()}"
     if not c:
-        return head
+        return f"{head} ({warnings})"
     parts = [f"screens {c.get('screens', 0)}", f"flows {c.get('flows', 0)}"]
     if c.get("unit_scanned"):
         parts.append(
@@ -129,6 +138,7 @@ def generation_summary_line() -> str:
         # Not "0 read". A scan that did not happen and a scan that found
         # nothing are the two things this line exists to separate.
         parts.append("unitContracts not read")
+    parts.append(warnings)
     return f"{head} ({' / '.join(parts)})"
 
 
@@ -1102,7 +1112,7 @@ def generate_html_directory(
             if html_rel_path in used_test_paths:
                 safe = "_".join(rel_path.parts[:-1]).replace("/", "_") or "dup"
                 html_rel_path = html_dir / f"{safe}_{html_filename}"
-                print(
+                warn(
                     f"  WARNING [doc-collision]: output name collision for {test_file} "
                     f"— writing {html_rel_path}"
                 )
@@ -1200,7 +1210,7 @@ def generate_html_directory(
                             html_rel_path = (
                                 f"{category}/{safe}_{json_file.stem}.html"
                             )
-                            print(
+                            warn(
                                 f"  WARNING [doc-collision]: output name collision for "
                                 f"{json_file} — writing {html_rel_path}"
                             )
@@ -1338,7 +1348,7 @@ def generate_html_directory(
             else:
                 print(f"  Skipped: flow diagram has no screens ({_owner})")
         except Exception as e:
-            print(f"  WARNING [doc-diagram]: could not generate Mermaid diagram for "
+            warn(f"  WARNING [doc-diagram]: could not generate Mermaid diagram for "
                   f"{_group or _root_app}: {e}")
 
     # Generate index.html
@@ -1783,7 +1793,9 @@ def _report_writes_outside_output(output_path: Path) -> dict:
     )
     if not outside:
         return {}
-    print(f"  ⚠️ Also written OUTSIDE {output_path} ({len(outside)} directories):")
+    # Through the tally: the gate's expression counts `⚠`, so this line is a
+    # warning whether or not it was written as one.
+    warn(f"  ⚠️ Also written OUTSIDE {output_path} ({len(outside)} directories):")
     for d in outside:
         print(f"       {d}")
     print("     Every --app passed to this run has its source tree rewritten, so "
@@ -2144,20 +2156,18 @@ def _report_stale_pages(output_path: Path, started_at: float | None = None,
     if not stale:
         return []
     print()
-    print(f"  WARNING [doc-stale]: {len(stale)} page(s) in {output_path} were not written "
+    warn(f"  WARNING [doc-stale]: {len(stale)} page(s) in {output_path} were not written "
           "by this run — leftovers from a deleted or renamed source:")
     for p in stale[:limit]:
         print(f"    {p.relative_to(output_path)}")
     if len(stale) > limit:
         print(f"    … and {len(stale) - limit} more")
-    # 🔻 THE COUNTING EXPRESSION, NEXT TO THE THING IT COUNTS. One face reported
-    # "warning 0" for three consecutive releases while this line was firing
-    # every time: they grepped `WARNING` (upper case, no -i) because the other
-    # legs spell it that way, and this function spelled it `Warning:`. The
-    # spelling is aligned now — but that only fixes greps written after today,
-    # and the rulebook's expression is not open in front of whoever reads this
-    # run. So it ships with the output.
-    print("    count these with:  grep -icE 'warning \\[|warning:|\\[warn|⚠'")
+    # The count of these ships on the closing line (`warnings N`), tallied by
+    # `run_log.warn` — not as a grep recipe printed here. The recipe that used
+    # to follow matched its own text (`warning \[` is in the expression), so a
+    # reader who ran it over this log counted one warning that was the
+    # instruction to count. The reader's expression is the gate's business; the
+    # number is this tool's.
     return stale
 
 
@@ -2390,7 +2400,7 @@ def _generate_document_pages(
                 # Name every base that was tried. "Not found" with one path in
                 # it sends the reader to fix a file that is in the right place.
                 tried = ", ".join(str(b) for b in bases)
-                print(
+                warn(
                     f"    WARNING [doc-missing]: document not found: {doc_path}\n"
                     f"      'document' is resolved from the declaring app's test root "
                     f"(and its parent), not from the test file (unlike 'source.layout'). "
@@ -2581,7 +2591,7 @@ def _discover_check_reports(
         try:
             report = load_report(report_path)
         except Exception as e:  # noqa: BLE001 — a broken artifact must not kill generation
-            print(f"  WARNING [doc-report]: invalid check report {report_path}: {e}")
+            warn(f"  WARNING [doc-report]: invalid check report {report_path}: {e}")
             continue
         if report is None:
             continue
@@ -3011,7 +3021,7 @@ def _load_unit_contract_pages(project_root: Path) -> dict | None:
     except Exception as exc:  # noqa: BLE001
         # Not a page failure — nothing has been promised in the index yet.
         # Say so and carry on: the rest of the site is still worth writing.
-        print(f"  WARNING [doc]: unit contracts not read from {project_root} ({exc})")
+        warn(f"  WARNING [doc]: unit contracts not read from {project_root} ({exc})")
         return None
 
 

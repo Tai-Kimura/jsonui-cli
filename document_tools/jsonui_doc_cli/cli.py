@@ -250,8 +250,8 @@ def _resolve_test_roots(apps: list[dict] | None) -> list[dict]:
         try:
             data = json.loads(cfg.read_text(encoding="utf-8"))
         except (OSError, ValueError) as exc:  # noqa: PERF203
-            print(f"  Warning: cannot read {cfg} for {app['name']}'s tests "
-                  f"({exc}); its tests will not be documented", file=sys.stderr)
+            warn(f"  WARNING [doc-config]: cannot read {cfg} for {app['name']}'s tests "
+                 f"({exc}); its tests will not be documented")
             continue
         src = (data.get("test") or {}).get("src")
         if not src:
@@ -427,6 +427,7 @@ def _resolve_layouts_dir_from_config() -> Path | None:
     return None
 
 from . import __version__
+from .run_log import warn
 from .test_doc import (
     DocumentGenerator,
     generate_schema_reference,
@@ -540,7 +541,7 @@ def cmd_generate_html(args):
     if args.figma:
         figma_dir = Path(args.figma)
         if not figma_dir.exists():
-            print(f"  Warning: Figma directory not found: {figma_dir} (skipping)")
+            warn(f"  WARNING [doc-figma]: Figma directory not found: {figma_dir} (skipping)")
             figma_dir = None
 
     # Process --app options
@@ -596,7 +597,7 @@ def cmd_generate_html(args):
         # Counted spelling, not a note: with no config there is no scan, and
         # an absent Unit section then reads exactly like a project that
         # declares no contracts. `--config` is the way out, so name it.
-        print("  WARNING [doc]: no jui.config.json found for unitContracts "
+        warn("  WARNING [doc]: no jui.config.json found for unitContracts "
               "(pass --config <path>, or --app <name>:<dir> for a split tree) "
               "— the Unit Tests section will be absent, which is NOT evidence "
               "that none are declared")
@@ -619,9 +620,11 @@ def cmd_generate_html(args):
         # denominators come with it: a page count alone cannot separate an
         # empty input, a mistyped path, a project declaring no contracts, and
         # a half-updated install, all of which end in a small number and 0.
-        print(generation_summary_line())
+        # The denominator warnings go through the tally BEFORE the closing line
+        # is built, so the line's `warnings N` includes them and closes the run.
         for line in generation_warnings():
-            print(f"  {line}")
+            warn(f"  {line}")
+        print(generation_summary_line())
         print(f"Open {output_dir}/index.html to view documentation")
 
         failures = get_page_failures()

@@ -107,8 +107,14 @@ class TheLeftoverWarningCanBeCounted(unittest.TestCase):
         # The face's own predicate, which returned 0 for three releases.
         self.assertIn("WARNING", self._run_with_a_leftover())
 
-    def test_the_run_ships_the_counting_expression(self):
-        self.assertIn("grep -icE", self._run_with_a_leftover())
+    def test_the_run_ships_the_count_not_the_counting_expression(self):
+        # Inverted 2026-09-10. The recipe line matched the very expression it
+        # quoted (`warning \[` is in it), so a reader who ran it over this log
+        # counted the instruction to count as a warning. The number now ships
+        # on the closing line (`warnings N`, see run_log); the expression is
+        # the gate's business. A recipe reappearing here would be a second,
+        # self-inflating count beside the tool's own.
+        self.assertNotIn("grep -icE", self._run_with_a_leftover())
 
     def test_a_clean_output_dir_says_nothing(self):
         # 陰性対照: without this, an arm that always printed would pass above.
@@ -126,8 +132,11 @@ class OneSpellingPerModule(unittest.TestCase):
         # Only lines that PRINT. A source scan that counts every occurrence
         # matches this file's own prose about the old spelling — the arm would
         # then be reading its own explanation.
+        # `warn(` since 2026-09-10: every warning goes through `run_log.warn`,
+        # which is how the closing line can count them. A scan that only knew
+        # `print(` would have let the positive control below go vacuous.
         return [ln for ln in GENERATOR.read_text(encoding="utf-8").splitlines()
-                if "print(" in ln or ln.strip().startswith('f"')]
+                if "print(" in ln or "warn(" in ln or ln.strip().startswith('f"')]
 
     def test_no_printed_warning_uses_the_old_spelling(self):
         offenders = [ln.strip() for ln in self._print_lines()

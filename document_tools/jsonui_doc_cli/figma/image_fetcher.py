@@ -20,6 +20,7 @@ from .api_client import (
     fetch_image_renders,
     get_request_interval,
 )
+from ..run_log import warn
 
 # Node types that should be rendered as images
 _VECTOR_TYPES = frozenset({
@@ -210,7 +211,7 @@ def fetch_and_download_images(
         try:
             fill_urls = fetch_file_images(file_key, token)
         except FigmaAPIError as e:
-            print(f"  Warning: Could not fetch image fills: {e}", file=sys.stderr)
+            warn(f"  WARNING [doc-figma]: could not fetch image fills: {e}")
             fill_urls = {}
 
         # Download fills
@@ -257,7 +258,7 @@ def fetch_and_download_images(
         try:
             render_urls = fetch_image_renders(file_key, token, render_ids, request_interval=interval)
         except FigmaAPIError as e:
-            print(f"  Warning: Could not fetch renders: {e}", file=sys.stderr)
+            warn(f"  WARNING [doc-figma]: could not fetch renders: {e}")
             render_urls = {}
 
         # Download renders
