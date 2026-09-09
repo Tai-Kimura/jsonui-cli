@@ -5,7 +5,10 @@ those are the same thing; for every other run they are not, and a page that
 exists only under its own app was reported missing because the run's input was
 a different app's tree. Measured on a four-face consumer tree: one face
 declared six documents and five of them printed `Document not found` while the
-files sat exactly where that face's own root says they should.
+files sat exactly where that face's own root says they should. (That was the
+spelling at the time; since 2026-09-10 the line reads
+`WARNING [doc-missing]: document not found`, so do not grep this file's prose
+for the current output.)
 
 The map is not a new declaration. `roots` already pairs each declared test
 directory with the app that declared it — v1.8.63 built it — and this call
@@ -127,9 +130,21 @@ class ADocumentResolvesFromItsOwnAppsRoot(_Tree):
         self.assertTrue(page.is_file())
         self.assertEqual(self.body_owner(page), "alpha")
 
+    #: The two arms below are a PAIR, and they must share this predicate.
+    #: 2026-09-10 the message was respelled `Document not found` ->
+    #: `WARNING [doc-missing]: document not found`, and only the positive arm
+    #: was updated — which left the negative one asserting the absence of a
+    #: string that no longer appears at all. It passed, for the wrong reason,
+    #: and its own control could no longer catch that because the control is
+    #: the other arm. Case-folded, and named once.
+    MISSING_MARKER = "document not found"
+
+    def _reports_missing(self, text: str) -> bool:
+        return self.MISSING_MARKER in text.lower()
+
     def test_nothing_is_reported_missing(self):
         _, log = self.build(self.OWN)
-        self.assertNotIn("Document not found", log)
+        self.assertFalse(self._reports_missing(log))
 
     def test_a_genuinely_missing_document_still_warns(self):
         """The control for the arm above. A run that reports nothing missing
@@ -153,7 +168,7 @@ class ADocumentResolvesFromItsOwnAppsRoot(_Tree):
                 test_roots=[{"app": a, "root": str(root / a / "tests")}
                             for a in ("alpha", "beta")],
             )
-        self.assertIn("Document not found", buf.getvalue())
+        self.assertTrue(self._reports_missing(buf.getvalue()))
 
     def test_the_warning_names_every_base_it_tried(self):
         # "not found" with one path in it sends the reader to move a file that

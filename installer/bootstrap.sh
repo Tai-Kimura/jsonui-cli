@@ -28,6 +28,7 @@ while [ $# -gt 0 ]; do
             ;;
         -t|--tools)
             JSONUI_TOOLS="$2"
+            TOOLS_SOURCE="--tools"
             shift 2
             ;;
         -h|--help)
@@ -76,7 +77,25 @@ elif [ -n "$JSONUI_INSTALL_DIR" ]; then
 else
     INSTALL_DIR="$HOME/.jsonui-cli"
 fi
-TOOLS="${JSONUI_TOOLS:-all}"
+# 🚨 THE RESOLVED LIST, AND WHERE IT CAME FROM. `JSONUI_TOOLS=… curl … | bash`
+# puts the variable on CURL, not on the bash that reads it — the form the README
+# carried until 2026-09-10. The installer then ran with TOOLS=all and installed
+# the MCP server that the caller believed they had excluded; it succeeded, so
+# the output gave no sign. Printing the resolved value is what makes that
+# visible, and printing WHERE it came from is what separates "I asked for all"
+# from "nothing reached me". A bare `TOOLS=all` line cannot tell those apart,
+# and the failure wears the face of the success.
+if [ -n "${JSONUI_TOOLS:-}" ]; then
+    TOOLS="$JSONUI_TOOLS"
+    TOOLS_SOURCE="${TOOLS_SOURCE:-JSONUI_TOOLS}"
+else
+    TOOLS="all"
+    TOOLS_SOURCE="default — JSONUI_TOOLS was not set in this shell"
+fi
+#: Every name `should_install` answers to. An unknown name must be refused
+#: rather than silently matching nothing: a typo would otherwise install a
+#: subset the caller never asked for, which is the same silence as above.
+KNOWN_TOOLS="all sjui kjui rjui jui test doc mcp"
 
 # Colors
 RED='\033[0;31m'
@@ -95,6 +114,24 @@ echo -e "${BLUE}╔════════════════════�
 echo -e "${BLUE}║     JsonUI CLI Tools Installer         ║${NC}"
 echo -e "${BLUE}╚════════════════════════════════════════╝${NC}"
 echo ""
+
+# Refuse a name nothing answers to, then say what will be installed and why.
+for _t in $(echo "$TOOLS" | tr ',' ' '); do
+    case " $KNOWN_TOOLS " in
+        *" $_t "*) ;;
+        *) error "unknown tool '$_t' in the tools list ('$TOOLS', from $TOOLS_SOURCE).
+   Known: $KNOWN_TOOLS
+   Nothing was installed. A name nothing matches would otherwise install a
+   subset you did not ask for, silently." ;;
+    esac
+done
+info "tools: $TOOLS  (from $TOOLS_SOURCE)"
+if [ "$TOOLS" = "all" ] && [ "$TOOLS_SOURCE" != "--tools" ] && [ -z "${JSONUI_TOOLS:-}" ]; then
+    echo "    all = sjui kjui rjui jui test doc mcp — INCLUDING the MCP server."
+    echo "    If you meant to exclude something, the variable has to reach THIS"
+    echo "    shell: 'curl … | JSONUI_TOOLS=\"…\" bash', or '--tools \"…\"'."
+    echo "    'JSONUI_TOOLS=… curl … | bash' sets it on curl and never gets here."
+fi
 
 # Check dependencies
 info "Checking dependencies..."
@@ -226,7 +263,16 @@ echo ""
 info "Setting up tools..."
 
 should_install() {
-    [ "$TOOLS" = "all" ] || echo "$TOOLS" | grep -q "$1"
+    # 🚫 NOT a substring match. `grep -q jui` is true for `sjui` and `kjui`, so
+    # `JSONUI_TOOLS="sjui kjui"` used to install jui_tools as well — the README
+    # example for "install specific tools only" installed a tool it did not
+    # name. Tokenise on both separators the docs use (space and comma) and
+    # compare whole names.
+    [ "$TOOLS" = "all" ] && return 0
+    for _t in $(echo "$TOOLS" | tr ',' ' '); do
+        [ "$_t" = "$1" ] && return 0
+    done
+    return 1
 }
 
 # sjui_tools

@@ -8,7 +8,7 @@ import posixpath
 import re
 import subprocess
 import time
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Any
 
 from ..validator import TestValidator, ValidationResult
@@ -1093,7 +1093,7 @@ def generate_html_directory(
                 safe = "_".join(rel_path.parts[:-1]).replace("/", "_") or "dup"
                 html_rel_path = html_dir / f"{safe}_{html_filename}"
                 print(
-                    f"  Warning: output name collision for {test_file} "
+                    f"  WARNING [doc-collision]: output name collision for {test_file} "
                     f"— writing {html_rel_path}"
                 )
             used_test_paths.add(html_rel_path)
@@ -1191,7 +1191,7 @@ def generate_html_directory(
                                 f"{category}/{safe}_{json_file.stem}.html"
                             )
                             print(
-                                f"  Warning: output name collision for "
+                                f"  WARNING [doc-collision]: output name collision for "
                                 f"{json_file} — writing {html_rel_path}"
                             )
                         used_html_paths.add(html_rel_path)
@@ -1328,7 +1328,7 @@ def generate_html_directory(
             else:
                 print(f"  Skipped: flow diagram has no screens ({_owner})")
         except Exception as e:
-            print(f"  Warning: Could not generate Mermaid diagram for "
+            print(f"  WARNING [doc-diagram]: could not generate Mermaid diagram for "
                   f"{_group or _root_app}: {e}")
 
     # Generate index.html
@@ -2032,12 +2032,20 @@ def _report_stale_pages(output_path: Path, started_at: float | None = None,
     if not stale:
         return []
     print()
-    print(f"  Warning: {len(stale)} page(s) in {output_path} were not written "
+    print(f"  WARNING [doc-stale]: {len(stale)} page(s) in {output_path} were not written "
           "by this run — leftovers from a deleted or renamed source:")
     for p in stale[:limit]:
         print(f"    {p.relative_to(output_path)}")
     if len(stale) > limit:
         print(f"    … and {len(stale) - limit} more")
+    # 🔻 THE COUNTING EXPRESSION, NEXT TO THE THING IT COUNTS. One face reported
+    # "warning 0" for three consecutive releases while this line was firing
+    # every time: they grepped `WARNING` (upper case, no -i) because the other
+    # legs spell it that way, and this function spelled it `Warning:`. The
+    # spelling is aligned now — but that only fixes greps written after today,
+    # and the rulebook's expression is not open in front of whoever reads this
+    # run. So it ships with the output.
+    print("    count these with:  grep -icE 'warning \\[|warning:|\\[warn|⚠'")
     return stale
 
 
@@ -2059,8 +2067,51 @@ def document_output_rel_path(owner: str | None, doc_path: str) -> str:
     name, and inventing one — 'default', the directory's name — would put every
     such site's pages somewhere new for no gain. The absent segment is the
     honest rendering of an absent declaration.
+
+    🚫 AND NO SECOND COPY OF A NAME THE PATH ALREADY CARRIES. v1.8.64 prepended
+    unconditionally and produced `user/docs/user/screens/html/mypage.html` on a
+    face whose declarations are already app-scoped — measured by that face 10
+    minutes after the release, along with 30 pages left at their old URLs. The
+    convention `docs/<app>/…` is declared one function away in this same file
+    (`_app_of_embedded_page`), so the information needed to not do that was
+    already here.
+
+    ⚠️ THIS IS NOT "separate them only when they clash". The test is whether
+    THIS path already names THIS owner — a property of the one declaration, not
+    of what other apps declared. So the ruling's reason survives: a page's
+    location still depends on nothing but its own declaration, and an app added
+    tomorrow still moves nobody's URL.
     """
-    return f"{owner}/{doc_path}" if owner else doc_path
+    if not owner:
+        return doc_path
+    if _path_already_names_app(owner, doc_path):
+        return doc_path
+    return f"{owner}/{doc_path}"
+
+
+def _path_already_names_app(owner: str, doc_path: str) -> bool:
+    """Does `doc_path` already carry `owner` as its app segment?
+
+    Two shapes, both unambiguous:
+
+        <owner>/…            the segment is already in front
+        docs/<owner>/…       the convention `_app_of_embedded_page` reads
+
+    🚫 WHAT THIS DELIBERATELY DOES NOT DO: search for the name anywhere in the
+    path. `docs/screens/user/x.html` is not app-scoping — `user` there is a
+    directory that happens to share the name — and treating it as one would
+    make two apps whose paths differ only in a middle segment collide again,
+    which is the defect this whole function exists to stop. A face using some
+    third convention gets the segment prepended; that is the honest answer for
+    a shape nothing here can recognise, and it is the safe direction (a
+    redundant segment separates; a missing one collides).
+    """
+    parts = PurePosixPath(doc_path).parts
+    if not parts:
+        return False
+    if parts[0] == owner:
+        return True
+    return len(parts) >= 2 and parts[0] == "docs" and parts[1] == owner
 
 
 def _report_document_slot_collisions(
@@ -2206,7 +2257,7 @@ def _generate_document_pages(
                 # it sends the reader to fix a file that is in the right place.
                 tried = ", ".join(str(b) for b in bases)
                 print(
-                    f"    Warning: Document not found: {doc_path}\n"
+                    f"    WARNING [doc-missing]: document not found: {doc_path}\n"
                     f"      'document' is resolved from the declaring app's test root "
                     f"(and its parent), not from the test file (unlike 'source.layout'). "
                     f"Owner: {owner or '(the run itself)'}. Tried: {tried}."
@@ -2396,7 +2447,7 @@ def _discover_check_reports(
         try:
             report = load_report(report_path)
         except Exception as e:  # noqa: BLE001 — a broken artifact must not kill generation
-            print(f"  Warning: invalid check report {report_path}: {e}")
+            print(f"  WARNING [doc-report]: invalid check report {report_path}: {e}")
             continue
         if report is None:
             continue

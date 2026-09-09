@@ -60,18 +60,31 @@ add to your shell rc.
 Options:
 ```bash
 # Custom base directory (jsonui-cli/ is created inside it)
-JSONUI_INSTALL_DIR=/opt curl -fsSL ... | bash
+curl -fsSL ... | JSONUI_INSTALL_DIR=/opt bash
 
 # Custom full install path
-JSONUI_CLI_DIR=/opt/jsonui-cli curl -fsSL ... | bash
+curl -fsSL ... | JSONUI_CLI_DIR=/opt/jsonui-cli bash
 
-# Install specific tools only
-JSONUI_TOOLS="sjui kjui" curl -fsSL ... | bash
+# Install specific tools only.
+#
+# ⚠️ THE VARIABLE GOES ON `bash`, NOT IN FRONT OF `curl`. A prefix before
+# `curl` sets it for curl, and the bash on the other side of the pipe never
+# sees it — the installer then runs with the default (all) and installs
+# everything you meant to exclude, successfully and without a word. This file
+# carried the broken form until 2026-09-10; it installed the MCP server for a
+# caller who had listed six tools without it.
+curl -fsSL ... | JSONUI_TOOLS="sjui kjui" bash
+
+# Or use the flag, which has no such trap:
+curl -fsSL ... -o /tmp/bootstrap.sh && bash /tmp/bootstrap.sh --tools "sjui kjui"
 
 # Available tools: sjui, kjui, rjui, jui, test, doc, mcp
 # "all" (default) includes mcp — the Claude Code MCP server (jsonui-mcp-server),
 # installed to ~/.jsonui-mcp-server and registered in ~/.claude.json (needs Node.js).
-JSONUI_TOOLS="test doc" curl -fsSL ... | bash
+# Names are matched WHOLE: "sjui" no longer also selects "jui".
+# The installer prints the list it resolved and where it came from, so a
+# variable that did not arrive is visible in the output rather than silent.
+curl -fsSL ... | JSONUI_TOOLS="test doc" bash
 ```
 
 ### Local Install (from cloned repo)
