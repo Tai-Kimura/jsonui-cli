@@ -472,6 +472,36 @@ jobs:
       - name: npm ci
         working-directory: conformance/hosts/web
         run: npm ci
+      # 🔻 `--with-deps` runs `apt-get update`, and apt fails the update
+      # WHOLESALE when any single configured source has an inconsistent index.
+      # The runner image ships Google's chrome repo, and this job does not use
+      # one package from it.
+      #
+      # Measured 2026-09-10 from outside CI, reproducing the failure by hand:
+      #   Release (Date 2026-09-09 17:16:59 UTC) declares
+      #     main/binary-amd64/Packages.gz  sha256 233e56de…  1405 B
+      #   the file actually served was
+      #     sha256 bc1428ab…  1405 B
+      #   and gunzipping it gave an index whose google-chrome-beta is
+      #   154.0.8037.0-1 while the plain (matching) Packages says
+      #   154.0.8037.17-1 — the .gz on the CDN is one release behind its own
+      #   Release file. Three consecutive runs died here before a single test
+      #   executed.
+      #
+      # That repository carries exactly five packages, all `google-chrome-*`
+      # (read off the index itself), and Playwright downloads Chromium from
+      # its own CDN. So nothing this job needs can come from it.
+      #
+      # 🚫 THIS DOES NOT SOFTEN THE GATE. The browser install must still
+      # succeed and every remaining source must still be consistent; `apt-get
+      # update` is not made non-fatal, and no `|| true` is added. What changes
+      # is that an unrelated third party can no longer decide whether this job
+      # runs. Removing the source is narrower than ignoring update failures,
+      # which would also hide a broken Ubuntu mirror.
+      - name: Drop the unused Chrome apt source
+        run: |
+          sudo rm -f /etc/apt/sources.list.d/google-chrome.list \
+                     /etc/apt/sources.list.d/google-chrome.sources
       - name: Install Playwright Chromium
         working-directory: conformance/hosts/web
         run: npx playwright install --with-deps chromium
