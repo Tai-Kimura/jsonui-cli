@@ -377,6 +377,19 @@ class TheRunsOwnRootCanBeADeclaredApp(_Run):
     """
 
     def test_tests_under_the_runs_own_root_carry_the_declared_app(self):
+        """🔻 RED ON PURPOSE, AND NOT BY THIS FILE'S DOING.
+
+        The fix lives in `generator.py`'s test-root collection (`:1011` puts
+        `(input_path, None)` first and then skips the named root that resolves
+        to the same directory), which belongs to another lane. Nothing in the
+        sidebar rendering can turn this green.
+
+        ⚠️ DO NOT REACH FOR THE RENDERING CODE. When a red's cause sits in
+        someone else's subsystem, suspecting your own is the natural move, and
+        here it would mean over-touching the drawing side to chase a defect
+        that is not in it. An arm says what is broken; it does not say who
+        fixes it, so this one says.
+        """
         html = self.unit_page(self.build(run_root_is="client"))
         for section in ("screens", "flows"):
             paths = _section_entry_paths(html, section)
