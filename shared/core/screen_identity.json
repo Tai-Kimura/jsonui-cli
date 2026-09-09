@@ -338,7 +338,17 @@
           "strip a trailing parenthetical, full-width or half-width, then split on ' or ', '/', and '、' and try each part",
           "apply the face's declared aliases (below)"
         ],
-        "aliasesNote": "Aliases are per-face conventions, not global rules. Measured: stripping a leading 'Web' before a capital resolves 50 of one face's 93 destinations and 0 of the other three faces'. A rule that helps exactly one face must be declared as that face's, or it becomes a silent global rewrite."
+        "aliases": {
+          "shape": "each declared alias is (position, affix); position is drawn from the closed set below",
+          "positions": ["prefix", "suffix"],
+          "positionsNote": "THE TWO POSITIONS OBSERVED SO FAR, not all of them. Infix and partial matches are NOT covered, and saying which is which matters: a generalization that names its coverage makes the third example a counterexample that asks for a redesign, while one that says 'all' makes the same example an exception to be pushed in sideways, leaving the mechanism bent.",
+          "measured": "prefix 'Web' resolves 50 of one face's 93 destinations; suffix '画面' resolves 10 (9 distinct spellings) of another face's 69. The two sit at different ends, which is why the mechanism carries a position rather than a bare string.",
+          "scopingIsARiskChoiceNotAMeasuredOne": {
+            "whatWasMeasuredAndFailed": "Applying either affix to ALL FOUR faces unconditionally changes not one count. The other faces' zeros come from having no id that matches after the strip — NOT from the declaration withholding itself. So the corpus cannot tell a per-face declaration from a global rule, and an earlier version of this note claimed it could: it read '0 of the other three faces' as evidence the scoping was working, when that zero was made by the predicate.",
+            "whatCanBeMeasured": "How close the global rule is to going wrong. Ids beginning with 'Web' already exist — `web_view`, in two of the four faces. Strip the prefix and you get `view`, which is no face's id TODAY. The distance is ONE id: a face that adds `view` turns the global rule into a silent misresolution that gets drawn in a diagram.",
+            "conclusion": "Per-face, because the distance is one id — not because the counts said so. The two sentences above are kept apart on purpose: 'we could not measure a difference' and 'we measured how near the failure is' are different claims, and collapsing them is how a withdrawn reason survives a correct decision."
+          }
+        }
       },
       "unresolvedReporting": {
         "rule": "The count of 'unknown' destinations is reported PER FACE, never only as a total, together with the scanned total it was drawn from.",

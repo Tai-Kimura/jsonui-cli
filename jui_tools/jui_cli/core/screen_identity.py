@@ -391,6 +391,17 @@ def load_canon(shared_core_dir: Path | str | None = None) -> dict:
 # `summarize_destinations` refuses to print only a total: "169→99" reads like
 # progress everywhere, and one of the four faces got nothing.
 
+#: Affix positions the alias mechanism can express. Canon:
+#: diagram.specTransitions.normalization.aliases.positions.
+#:
+#: 🚫 THIS IS "THE TWO POSITIONS SEEN SO FAR", NOT "ALL OF THEM". Infix and
+#: partial matches are not covered. The distinction is not pedantry: a
+#: generalization that names what it covers makes the third example a
+#: COUNTEREXAMPLE that asks for a redesign, and one that says "all" makes the
+#: same example an EXCEPTION to be pushed in sideways, leaving the mechanism
+#: bent.
+ALIAS_POSITIONS: tuple[str, ...] = ("prefix", "suffix")
+
 #: Closed vocabulary. Canon: diagram.specTransitions.kinds.
 DESTINATION_KINDS: tuple[str, ...] = (
     "screen", "route", "external", "none", "back", "unknown",
@@ -450,7 +461,7 @@ def classify_destination(
     raw: str,
     known_ids: Iterable[str],
     *,
-    alias_prefixes: Iterable[str] = (),
+    aliases: Iterable[tuple[str, str]] = (),
 ) -> TransitionTarget:
     """Classify one destination. Canon: diagram.specTransitions.
 
@@ -479,10 +490,28 @@ def classify_destination(
     271 destinations), so the arm for it is PLANTED and says so. An unexercised
     hazard is still a hazard; it just cannot be found by sampling.
 
-    ``alias_prefixes`` is per-face and defaults to EMPTY. Measured 2026-09-09:
-    stripping a leading ``Web`` resolves 50 of one face's 93 destinations and
-    0 of the other three faces'. A rewrite that helps exactly one face must
-    arrive as that face's declaration, or it silently rewrites everyone's.
+    ``aliases`` is per-face, defaults to EMPTY, and each entry is
+    ``(position, affix)`` with position drawn from :data:`ALIAS_POSITIONS`.
+    Two shapes have been measured, and they sit at DIFFERENT ends:
+
+        prefix ``Web``   resolves 50 of one face's 93 destinations
+        suffix ``画面``   resolves 10 of another face's 69
+
+    🚫 THE SCOPING IS A RISK CHOICE AND NOT A MEASURED ONE, and saying so is
+    the point. Measured 2026-09-09, applying either affix to ALL FOUR faces
+    unconditionally changes not one count: the other faces' zeros come from
+    having no id that matches after the strip, not from the declaration
+    withholding itself. So the corpus cannot tell a per-face declaration from
+    a global rule.
+
+    What CAN be measured is how close the global rule is to going wrong:
+
+        ids starting with ``Web``   `web_view`, in two of the four faces
+        strip it and you get        ``view``, which is no face's id — today
+
+    The distance is ONE id. A face that adds ``view`` turns the global rule
+    into a silent misresolution that ends up drawn in a diagram. That is why
+    the declaration is per-face; it is not because the numbers said so.
     """
     text = (raw or "").strip()
     known = {_norm_id(k): k for k in known_ids}
@@ -500,16 +529,27 @@ def classify_destination(
         if hit:
             return TransitionTarget("screen", hit, raw, f"matched `{candidate}`")
 
-    for prefix in alias_prefixes:
+    for position, affix in aliases:
+        if position not in ALIAS_POSITIONS:
+            raise ValueError(
+                f"alias position {position!r} is not one of {ALIAS_POSITIONS}; "
+                f"the set is closed, and an unknown position that silently did "
+                f"nothing would look exactly like a face that declared nothing")
         for candidate in _candidates(text):
-            if not candidate.startswith(prefix):
-                continue
-            stripped = candidate[len(prefix):]
+            if position == "prefix":
+                if not candidate.startswith(affix):
+                    continue
+                stripped = candidate[len(affix):]
+            else:
+                if not candidate.endswith(affix):
+                    continue
+                stripped = candidate[: -len(affix)]
             hit = known.get(_norm_id(stripped)) if stripped else None
             if hit:
                 return TransitionTarget(
                     "screen", hit, raw,
-                    f"matched `{stripped}` after the declared `{prefix}` prefix")
+                    f"matched `{stripped}` after the declared "
+                    f"{position} `{affix}`")
 
     if _EXTERNAL.search(text):
         return TransitionTarget("external", None, raw, "leaves the app")

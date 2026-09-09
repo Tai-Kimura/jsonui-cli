@@ -31,6 +31,7 @@ import unittest
 from pathlib import Path
 
 from jui_cli.core.screen_identity import (
+    ALIAS_POSITIONS,
     DESTINATION_KINDS,
     classify_destination,
     load_canon,
@@ -90,32 +91,82 @@ class TheOrderIsLoadBearing(unittest.TestCase):
         self.assertIsNone(t.screen_id)
 
 
-class TheAliasIsOneFacesDeclarationNotAGlobalRule(unittest.TestCase):
-    RAW = "WebLedger（Next.js router.push）"
+class TheAliasCarriesAPositionNotJustAString(unittest.TestCase):
+    """Two affixes were measured and they sit at DIFFERENT ends.
 
-    def test_without_the_declaration_it_does_not_resolve(self):
-        self.assertEqual(kind(self.RAW), "unknown",
-                         "the prefix was stripped for a face that never "
-                         "declared it")
+        prefix ``Web``   50 of one face's 93 destinations
+        suffix ``画面``   10 (9 distinct spellings) of another face's 69
 
-    def test_with_the_declaration_it_resolves(self):
-        t = classify_destination(self.RAW, KNOWN, alias_prefixes=("Web",))
-        self.assertEqual(t.kind, "screen")
-        self.assertEqual(t.screen_id, "ledger")
-        self.assertIn("Web", t.why, "the report does not say an alias was used")
+    ⚠️ SET EQUALITY AND ONE SPECIMEN PER POSITION ARE NOT ENOUGH. An
+    implementation that ignores the position and does `affix in text` passes
+    both: declare ``Web`` as a suffix and it still resolves. The only arm that
+    pins the position as a QUANTITY is the swap — and the swap has to be
+    fired where candidates exist, or its zero is self-evident.
 
-    def test_the_zzz_control(self):
-        """Kept from the measurement: a wrong prefix must resolve nothing.
+    🚫 AND THE SWAP NEEDS ITS OWN POSITIVE HALF, IN THE SAME RUN. A wrong
+    position resolving nothing is also what a completely broken alias
+    mechanism looks like. So each swap arm below asserts the correct position
+    still works on the same input.
+    """
+
+    PREFIXED = "WebLedger（Next.js router.push）"      # prefix face's shape
+    SUFFIXED = "ProductDetail画面"                      # suffix face's shape
+    IDS = KNOWN + ("product_detail",)
+
+    def classify(self, raw, aliases):
+        return classify_destination(raw, self.IDS, aliases=aliases)
+
+    def test_each_declared_position_resolves_its_own_shape(self):
+        self.assertEqual(self.classify(self.PREFIXED, (("prefix", "Web"),)).kind,
+                         "screen")
+        self.assertEqual(self.classify(self.SUFFIXED, (("suffix", "画面"),)).kind,
+                         "screen")
+
+    def test_a_prefix_declared_as_a_suffix_does_not_fire(self):
+        swapped = self.classify(self.PREFIXED, (("suffix", "Web"),))
+        correct = self.classify(self.PREFIXED, (("prefix", "Web"),))
+        self.assertEqual(swapped.kind, "unknown",
+                         "the position was ignored — `affix in text` would do this")
+        self.assertEqual(correct.kind, "screen",
+                         "the positive half: the mechanism itself still works, "
+                         "so the zero above is about position and not about a "
+                         "broken alias path")
+
+    def test_a_suffix_declared_as_a_prefix_does_not_fire(self):
+        swapped = self.classify(self.SUFFIXED, (("prefix", "画面"),))
+        correct = self.classify(self.SUFFIXED, (("suffix", "画面"),))
+        self.assertEqual(swapped.kind, "unknown")
+        self.assertEqual(correct.kind, "screen")
+
+    def test_without_any_declaration_neither_resolves(self):
+        self.assertEqual(self.classify(self.PREFIXED, ()).kind, "unknown")
+        self.assertEqual(self.classify(self.SUFFIXED, ()).kind, "unknown")
+
+    def test_the_wrong_affix_control(self):
+        """Kept from the measurement session: a wrong affix resolves nothing.
 
         Without it, an implementation that strips ANY leading capitalised word
-        passes the arm above and quietly rewrites every face's ids.
+        passes the arms above and quietly rewrites every face's ids.
         """
-        self.assertEqual(kind(self.RAW, alias_prefixes=("Zzz",)), "unknown")
+        self.assertEqual(self.classify(self.PREFIXED, (("prefix", "Zzz"),)).kind,
+                         "unknown")
+        self.assertEqual(self.classify(self.SUFFIXED, (("suffix", "画面X"),)).kind,
+                         "unknown")
 
-    def test_the_alias_does_not_fire_on_a_value_that_already_resolves(self):
-        t = classify_destination("Ledger", KNOWN, alias_prefixes=("Web",))
-        self.assertEqual(t.why, "matched `Ledger`",
-                         "the alias path claimed a plain match")
+    def test_the_report_names_the_position_that_fired(self):
+        why = self.classify(self.SUFFIXED, (("suffix", "画面"),)).why
+        self.assertIn("suffix", why)
+        self.assertIn("画面", why)
+
+    def test_an_unknown_position_is_refused_rather_than_ignored(self):
+        # Silently doing nothing would look exactly like a face that declared
+        # nothing, which is the failure this whole class is about.
+        with self.assertRaises(ValueError):
+            self.classify(self.SUFFIXED, (("infix", "画面"),))
+
+    def test_the_alias_does_not_claim_a_plain_match(self):
+        t = classify_destination("Ledger", self.IDS, aliases=(("prefix", "Web"),))
+        self.assertEqual(t.why, "matched `Ledger`")
 
 
 class TheMarkerSpellingsAreReadOffACorpus(unittest.TestCase):
@@ -174,8 +225,46 @@ class TheVocabularyIsClosedAndTheCanonSaysSo(unittest.TestCase):
         canon = load_canon(REPO_ROOT / "shared" / "core")
         spec = canon["diagram"]["specTransitions"]
         self.assertEqual(spec["source"], "<screen spec>.transitions[].destination")
-        self.assertIn("aliasesNote", spec["normalization"])
+        self.assertIn("aliases", spec["normalization"])
         self.assertIn("rule", spec["unresolvedReporting"])
+
+    def test_the_canon_and_the_mechanism_agree_on_the_alias_positions(self):
+        """BOTH directions, and then each one is fired.
+
+        Set equality alone lets the canon grow a position the code ignores,
+        or the code grow one the canon never declared — and one-directional
+        containment is silent about exactly one of those. Firing each declared
+        position is the third leg: agreeing sets whose members do nothing
+        would still pass.
+        """
+        canon = load_canon(REPO_ROOT / "shared" / "core")
+        declared = canon["diagram"]["specTransitions"]["normalization"]["aliases"]
+        self.assertEqual(tuple(declared["positions"]), ALIAS_POSITIONS)
+        for position in declared["positions"]:
+            with self.subTest(position=position):
+                affix, raw = {"prefix": ("Web", "WebLedger"),
+                              "suffix": ("画面", "ProductDetail画面")}[position]
+                t = classify_destination(raw, KNOWN + ("product_detail",),
+                                         aliases=((position, affix),))
+                self.assertEqual(t.kind, "screen",
+                                 f"the canon declares {position} and it resolves nothing")
+
+    def test_the_canon_says_the_positions_are_not_exhaustive(self):
+        canon = load_canon(REPO_ROOT / "shared" / "core")
+        note = canon["diagram"]["specTransitions"]["normalization"]["aliases"]["positionsNote"]
+        self.assertIn("NOT covered", note,
+                      "the canon reads as `these are all the positions`, which "
+                      "turns the next counterexample into an exception")
+
+    def test_the_canon_separates_what_failed_to_measure_from_what_did(self):
+        # A withdrawn reason survives a correct decision unless the record
+        # keeps the two claims apart.
+        scoping = (load_canon(REPO_ROOT / "shared" / "core")
+                   ["diagram"]["specTransitions"]["normalization"]["aliases"]
+                   ["scopingIsARiskChoiceNotAMeasuredOne"])
+        self.assertIn("whatWasMeasuredAndFailed", scoping)
+        self.assertIn("whatCanBeMeasured", scoping)
+        self.assertIn("web_view", scoping["whatCanBeMeasured"])
 
     def test_the_declared_pipeline_matches_the_order_the_code_runs(self):
         canon = load_canon(REPO_ROOT / "shared" / "core")
