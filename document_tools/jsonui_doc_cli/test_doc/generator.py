@@ -2651,6 +2651,45 @@ def _generate_unit_pages(
     return entries, pages.get("totals", {}).get("summary_line"), pages.get("undeclared") or {}
 
 
+def _write_stamped(path: Path, content: str, command: str) -> None:
+    """Write *content* to *path* carrying the same producer mark `cli.py` writes.
+
+    🚨 TWO GENERATORS WRITE THESE FILES AND ONLY ONE OF THEM STAMPED.
+    `jsonui-doc generate spec` / `generate component` mark what they write, so
+    a later reader can ask "is this my own output?". This function's callers
+    write the SAME files from `generate html`, and had never stamped — so any
+    `generate html` run silently stripped the marks the other command had put
+    there. Measured on a consumer face 2026-09-09: five html and one md lost
+    theirs, and four newly written md files carried none. `generator.py`
+    contained `stamp_producer` zero times, in v1.8.58 where the mark shipped
+    and ever since; `cli.py` contained it five times.
+
+    ⚠️ It is not a regression of the release that exposed it. It is the state
+    since the mark was introduced, first seen the day a `generate html` run
+    reached a tree whose component pages had been marked.
+
+    ⚠️ THE MARK MUST BE THE SAME FAMILY, not a new one naming this path. The
+    check reads the FIRST mark it finds and compares by family, so a second
+    spelling would make every page this writes read as another producer's —
+    exactly the false collision v1.8.59 removed.
+
+    ⚠️ One place, not four call sites. The four sites here are the ones that
+    exist today; a fix applied per-site reaches only the ones someone
+    remembered, which is the argument the driver's own dispatch-level retry
+    makes about itself.
+    """
+    try:
+        from ..cli import stamp_producer
+        content = stamp_producer(content, command, path.suffix)
+    except Exception:
+        # Never fail a page for the mark: an unmarked file is a file the
+        # check cannot speak about, which is a state its reader already
+        # handles. A crashed write is not.
+        pass
+    with open(path, 'w', encoding='utf-8') as f:
+        f.write(content)
+
+
 def _pre_generate_spec_docs(
     docs_base: Path,
     spec_subdir: str = "screens",
@@ -2745,14 +2784,12 @@ def _pre_generate_spec_docs(
                             for name, target in _component_pages.items()
                         })
                     html_path = html_subdir / f"{output_name}.html"
-                    with open(html_path, 'w', encoding='utf-8') as f:
-                        f.write(html_content)
+                    _write_stamped(html_path, html_content, 'spec')
 
                     # Generate Markdown
                     md_content = generate_spec_markdown(result.spec_data, layouts_dir=spec_layouts_dir)
                     md_path = md_subdir / f"{output_name}.md"
-                    with open(md_path, 'w', encoding='utf-8') as f:
-                        f.write(md_content)
+                    _write_stamped(md_path, md_content, 'spec')
 
                     print(f"    OK: {spec_file.name} -> html, md")
 
@@ -2788,14 +2825,12 @@ def _pre_generate_spec_docs(
                     # Generate HTML
                     html_content = generate_component_html(result.spec_data)
                     html_path = html_dir / f"{output_name}.html"
-                    with open(html_path, 'w', encoding='utf-8') as f:
-                        f.write(html_content)
+                    _write_stamped(html_path, html_content, 'component')
 
                     # Generate Markdown
                     md_content = generate_component_markdown(result.spec_data)
                     md_path = md_dir / f"{output_name}.md"
-                    with open(md_path, 'w', encoding='utf-8') as f:
-                        f.write(md_content)
+                    _write_stamped(md_path, md_content, 'component')
 
                     print(f"    OK: {comp_file.name} -> html, md")
 
