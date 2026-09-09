@@ -1008,7 +1008,26 @@ def generate_html_directory(
     # beside its docs — not from a path guess, for the same reason unit roots
     # do: a directory named `tests` next to `docs` is a convention, and this
     # file should not be the place that convention is enforced.
-    roots: list[tuple[Path, str | None]] = [(input_path, None)]
+    # 🔻 THE RUN'S OWN ROOT KEEPS ITS NAME. It used to be pinned to None and
+    # the matching declaration was skipped whole, so the app the run was
+    # pointed at lost its name while every other app kept one — from the same
+    # `test_roots` list, in the same call.
+    #
+    # The consequence is one section further on: `unit` resolves its roots
+    # elsewhere and preserves the name, so on a real site one app's unit pages
+    # sit under its own segment while its screen and flow pages sit flat, next
+    # to nobody. 76 of 131 pages on one tree.
+    #
+    # ⚠️ MECHANISM CONFIRMED, SOLE CAUSE NOT MEASURED. That this is the only
+    # reason the two sections differ is not something anyone has shown; what
+    # was measured is that the names match one app's whole corpus exactly and
+    # that `unit` keeps what this discarded.
+    own_app = next(
+        (entry.get("app") for entry in (test_roots or [])
+         if Path(entry["root"]).resolve() == input_path.resolve()),
+        None,
+    )
+    roots: list[tuple[Path, str | None]] = [(input_path, own_app)]
     for entry in (test_roots or []):
         root = Path(entry["root"])
         if root.resolve() == input_path.resolve():
