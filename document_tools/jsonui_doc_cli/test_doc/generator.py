@@ -1800,22 +1800,48 @@ def _report_writes_outside_output(output_path: Path) -> dict:
     # "not tracked". A count of 0 from a working `git` is a fact; -1 is the
     # absence of the instrument, and they must not print the same.
     tracked, unknown = [], []
+    modified: dict[Path, int] = {}
     for d in outside:
         n = _git_tracked_file_count(d)
         if n > 0:
             tracked.append((d, n))
+            modified[d] = _git_modified_file_count(d)
         elif n < 0:
             unknown.append(d)
     if tracked:
-        print(f"  🚨 {len(tracked)} of those are GIT-TRACKED — this run changed "
+        # 🔻 "WROTE INTO", THEN A MEASURED NUMBER. The first version said "this
+        # run changed files another lane owns" from the tracked count alone,
+        # which had never looked at a byte. On the reporting face all 38
+        # tracked files came back identical and `git status` showed nothing;
+        # the line sent that lane to review a change that did not exist. The
+        # word "changed" is not used here at all — "differ" is, and only next
+        # to the count that measured it.
+        print(f"  🚨 {len(tracked)} of those are GIT-TRACKED — this run wrote into "
               f"files another lane owns:")
         for d, n in tracked:
-            print(f"       {d}  ({n} tracked file(s))")
-        print("     Tell the lane that owns them. They will see the change in "
-              "`git status`\n"
-              "     with no way to tell which run produced it, or which version "
-              "of the tools\n"
-              "     wrote it.")
+            m = modified[d]
+            state = (f"{m} now differ from the index" if m >= 0
+                     else "could not tell whether any differ")
+            print(f"       {d}  ({n} tracked file(s), {state})")
+        differing = sum(m for m in modified.values() if m > 0)
+        unmeasured = sum(1 for m in modified.values() if m < 0)
+        if differing:
+            print(f"     🚨 {differing} tracked file(s) now differ from the index. "
+                  "The owning lane will see them in\n"
+                  "     `git status` with no way to tell which run produced them, "
+                  "or which version of the\n"
+                  "     tools wrote them — tell them. (A change they had pending "
+                  "before this run counts here\n"
+                  "     too: this is a state, not an attribution.)")
+        elif not unmeasured:
+            print("     0 tracked file(s) differ from the index: every rewrite was "
+                  "byte-identical, so the\n"
+                  "     owning lane has nothing to review. The write still happened "
+                  "— a version that renders\n"
+                  "     differently would have landed here.")
+        if unmeasured:
+            print(f"     ⓘ {unmeasured} of the tracked directories could not be "
+                  "checked for differences (git did not answer).")
     if unknown:
         print(f"  ⓘ {len(unknown)} could not be checked for tracking (no git, or "
               f"outside a repository).")
@@ -1835,6 +1861,11 @@ def _report_writes_outside_output(output_path: Path) -> dict:
         # it was reading the file, not this source. Reported by the admin face
         # the day it shipped.
         "gitTrackedDirectories": {str(d): n for d, n in tracked},
+        # Per tracked directory: how many files now differ from the index, or
+        # -1 when git did not answer — the same three values the printed line
+        # carries, so the record cannot say "0" where the terminal said
+        # "could not tell".
+        "gitModifiedDirectories": {str(d): m for d, m in modified.items()},
         "uncheckable": [str(d) for d in unknown],
     }
 
@@ -1997,6 +2028,41 @@ def _git_tracked_file_count(directory: Path) -> int:
     try:
         r = subprocess.run(
             ["git", "-C", str(directory), "ls-files", "--", str(directory)],
+            capture_output=True, text=True, timeout=10,
+        )
+    except (OSError, ValueError, subprocess.SubprocessError):
+        return -1
+    if r.returncode != 0:
+        return -1
+    return sum(1 for line in r.stdout.splitlines() if line.strip())
+
+
+def _git_modified_file_count(directory: Path) -> int:
+    """Tracked files under *directory* that now differ from the index: a count,
+    or -1 when git cannot say.
+
+    The companion of `_git_tracked_file_count`, added because the line using
+    that count said "this run CHANGED files" without ever having looked at a
+    byte. Tracked-and-rewritten-identical is the common case — 38 of 38 on
+    the reporting face — and it is exactly the case where the owning lane has
+    nothing to do; "changed" sent them looking for a diff that was not there.
+
+    ⚠️ A STATE, NOT A CAUSE. `git status` says a file differs now, not which
+    run made it so; a modification the owner had pending before this run
+    counts too. So the printed line says "now differ", never "this run
+    changed", and keeps the tracked count beside it — a directory where the
+    two are equal has had every tracked file touched, which is the shape of a
+    regeneration, while a single difference is more likely the owner's own.
+
+    ⚠️ -1 IS NOT 0, for the reason the companion gives about its own -1.
+    `--untracked-files=no` because a new, untracked file is not a change to
+    anything the owner committed; it is reported through the tracked count's
+    complement, not here.
+    """
+    try:
+        r = subprocess.run(
+            ["git", "-C", str(directory), "status", "--porcelain",
+             "--untracked-files=no", "--", str(directory)],
             capture_output=True, text=True, timeout=10,
         )
     except (OSError, ValueError, subprocess.SubprocessError):

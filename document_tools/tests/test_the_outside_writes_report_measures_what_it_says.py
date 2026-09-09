@@ -111,3 +111,78 @@ def test_the_reported_shape_a_run_pointed_at_an_app_it_also_lists(tmp_path, monk
     listed = facts["directories"]
     assert len(listed) == len({Path(p).resolve() for p in listed}), listed
     assert len(listed) == len(distinct), (listed, sorted(map(str, distinct)))
+
+
+# --- B1: "changed" only ever next to a measurement --------------------------
+
+def _seed(tmp_path, monkeypatch, *, tracked: int, modified: int) -> Path:
+    gen.reset_page_failures()
+    d = (tmp_path / "other" / "docs").resolve()
+    d.mkdir(parents=True)
+    gen._written_outside_output.add(d)
+    monkeypatch.setattr(gen, "_git_tracked_file_count", lambda p: tracked)
+    monkeypatch.setattr(gen, "_git_modified_file_count", lambda p: modified)
+    return d
+
+
+def test_a_byte_identical_rewrite_is_not_called_a_change(tmp_path, monkeypatch, capsys):
+    """The reporting face: 38 tracked, 0 differing, and the line said changed."""
+    d = _seed(tmp_path, monkeypatch, tracked=38, modified=0)
+    facts = gen._report_writes_outside_output(tmp_path / "out")
+    out = capsys.readouterr().out
+    assert "GIT-TRACKED" in out, "the write is still reported — it happened"
+    assert "0 tracked file(s) differ" in out
+    assert "byte-identical" in out
+    assert "changed" not in out.lower(), out
+    assert facts["gitModifiedDirectories"] == {str(d): 0}
+
+
+def test_a_real_difference_is_counted_not_asserted(tmp_path, monkeypatch, capsys):
+    d = _seed(tmp_path, monkeypatch, tracked=38, modified=3)
+    facts = gen._report_writes_outside_output(tmp_path / "out")
+    out = capsys.readouterr().out
+    assert "3 tracked file(s) now differ from the index" in out
+    assert "byte-identical" not in out
+    assert facts["gitModifiedDirectories"] == {str(d): 3}
+
+
+def test_cannot_tell_is_neither_zero_nor_a_difference(tmp_path, monkeypatch, capsys):
+    """Three states, like the tracked count: -1 must not print as 0."""
+    d = _seed(tmp_path, monkeypatch, tracked=38, modified=-1)
+    facts = gen._report_writes_outside_output(tmp_path / "out")
+    out = capsys.readouterr().out
+    assert "could not tell" in out
+    assert "0 tracked file(s) differ" not in out
+    assert "byte-identical" not in out
+    assert facts["gitModifiedDirectories"] == {str(d): -1}
+
+
+def test_the_measurement_is_git_status_over_tracked_files_only(tmp_path):
+    """The helper against a real repository, one state at a time.
+
+    identical rewrite → 0, an untracked newcomer → still 0, a real difference
+    → 1, a directory git cannot answer for → -1. The untracked step is the one
+    that keeps this from being `git status | wc -l`.
+    """
+    import subprocess
+    repo = tmp_path / "repo"
+    (repo / "docs").mkdir(parents=True)
+
+    def git(*args):
+        subprocess.run(["git", "-C", str(repo), "-c", "commit.gpgsign=false",
+                        "-c", "user.email=t@example.invalid", "-c", "user.name=t",
+                        *args], check=True, capture_output=True)
+
+    git("init", "-q")
+    page = repo / "docs" / "a.html"
+    page.write_text("one", encoding="utf-8")
+    git("add", "docs/a.html")
+    git("commit", "-q", "-m", "seed")
+    assert gen._git_modified_file_count(repo / "docs") == 0
+    page.write_text("one", encoding="utf-8")                       # identical rewrite
+    assert gen._git_modified_file_count(repo / "docs") == 0
+    (repo / "docs" / "new.html").write_text("x", encoding="utf-8")  # untracked newcomer
+    assert gen._git_modified_file_count(repo / "docs") == 0
+    page.write_text("two", encoding="utf-8")                       # a real difference
+    assert gen._git_modified_file_count(repo / "docs") == 1
+    assert gen._git_modified_file_count(tmp_path / "does-not-exist") == -1
