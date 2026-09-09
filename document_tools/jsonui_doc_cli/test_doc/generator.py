@@ -1127,6 +1127,11 @@ def generate_html_directory(
             document_files.append({
                 'name': f['name'],
                 'path': f['document'],  # Path to document page
+                # Every other nav list carries the declaring app; this one did
+                # not, so the renderer had nothing to group documents by even
+                # once it could. Five sibling appends in this file set it
+                # (:1093, :1117, :1212, :1213, :1254) and this was the sixth.
+                'group': f.get('group', ''),
             })
 
     # Find and process Swagger/OpenAPI files from docs_dirs
