@@ -102,14 +102,38 @@ def _report_toolchain_sync(config_mgr) -> None:
     never looked at. Reported by the delivery lane, who was baking artifacts
     in exactly that state.
 
-    Printed to STDERR, like every other build warning, and NOT counted toward
-    the zero-warnings gate. Two reasons, and they are different:
+    Printed to STDERR, like every other build warning.
 
-      * The gate. A split is a normal intermediate state — `bootstrap`
-        replaces `~/.jsonui-cli` for every face at once while `jui sync_tool`
-        is per-face, so between them every project is legitimately split. A
-        counted warning would fail builds for a condition the operator
-        already knows about and has decided to accept.
+    🚨 CORRECTED 2026-09-09. This used to say the line was "NOT counted
+    toward the zero-warnings gate", and reasoned from that. It named a tally
+    THAT DOES NOT EXIST: `jui build` keeps no warning count and exits 0 with
+    fifty of them, which the rulebook states about itself — "the build does
+    not count for you … the gate is you reading the output". The gate is the
+    rulebook's own expression, and that expression matches this line:
+
+        grep -iE 'warning \[|warning:|\[warn|⚠'      -> matches `WARNING [`
+
+    So this line IS counted, by the only thing that counts. It is an accepted
+    warning: write the number and the reason, which is what Invariant 1 asks
+    for, rather than reading a promise here that it costs nothing. The
+    user-visible text below already said as much — "(then re-run this gate)"
+    — and the two disagreed inside one function.
+
+    ⚠️ And the reason given for not counting it only ever covered part of the
+    population. "A split is a normal intermediate state" is true between
+    `bootstrap` (every face at once) and `jui sync_tool` (per-face). It is
+    NOT true of a face that was left behind: one was measured three releases
+    back, warning from before that bootstrap ran and after it. Those are not
+    mid-transition. They are just old, and the line is the only thing saying
+    so.
+
+    🚫 Not downgraded to `NOTE [toolchain]:` to make the expression miss it.
+    The sibling line below defines NOTE as "a gap in the record, not a
+    version split", and this is exactly a version split — the message says so
+    itself: the project "builds with one toolchain and is validated by
+    another". Changing the spelling to escape the gate is a change toward the
+    dangerous side.
+
       * The channel. A face may diff `jui build` output; the delivery lane
         confirmed it does not, and explicitly said it does not know about
         other faces. stderr is where warnings already go, so a stdout diff is
