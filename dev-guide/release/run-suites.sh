@@ -27,6 +27,46 @@ bad() { fail=$((fail+1)); say "!! $*"; }
 
 say "== start $(date -u +%FT%TZ) / $(date +%H:%M:%S) local"
 say "== HEAD $(git -C "$C" rev-parse HEAD) porcelain_lines=$(git -C "$C" status --porcelain | wc -l | tr -d ' ')"
+# 🔻 WHICH TREE THIS RUN MEASURED, not just which commit it is on. A branch can
+# be green on its own base while the tree that ships has moved: on 2026-09-09 a
+# lane's gate ran three times on a worktree whose base was the previous release,
+# so it never saw two commits already on `main` — one of which adds a leg to
+# THIS file, changing the leg count the run prints. The gate was working; the
+# target was wrong.
+#
+# ⚠️ THE FOURTH TIME THAT DAY. The others: a suite that resolved its package to
+# `~/.jsonui-cli` and passed against the previous release; a CI run green on the
+# tree from before a history rewrite; an arm red because its fixture could not
+# hold the reported shape. In all four the instrument was correct and the
+# SUBJECT was not — so the fix is not a stricter gate, it is printing what the
+# gate looked at.
+#
+# 🚨 COMPARE AGAINST BOTH `main` AND `origin/main`, AND SAY WHICH IS WHICH.
+# The first cut compared only against `origin/main` — and the release commits
+# are UNPUSHED by design (the tag goes up with them, atomically), so a branch
+# four commits behind the shipping tree reported "ahead by 0". The detector for
+# "measured the wrong target" measured the wrong target. `main` is the tree that
+# ships; `origin/main` is what other machines can see. They are different
+# numbers and they answer different questions.
+#
+# Silent about a ref that does not exist rather than reporting zero: a fresh
+# clone has no local `main`, a detached CI checkout may have neither, and a
+# missing ref is not a base of zero.
+for _ref in main origin/main; do
+  if ! git -C "$C" rev-parse --verify --quiet "$_ref" >/dev/null; then
+    say "== BASE vs $_ref: SKIPPED, no such ref here (not a base of zero)"
+    continue
+  fi
+  _n=$(git -C "$C" rev-list --count "HEAD..$_ref" 2>/dev/null)
+  _s=$(git -C "$C" rev-parse "$_ref")
+  # "behind by 0" reads as a finding to someone skimming; "at" does not. The
+  # number is printed either way — it is the count that carries the information.
+  if [ "$_n" = 0 ]; then
+    say "== BASE vs $_ref: AT $_s (behind by 0)"
+  else
+    say "== BASE vs $_ref: BEHIND $_s by $_n commit(s) — this run did NOT see them"
+  fi
+done
 
 # --- Python: the package each suite imports must live in THIS checkout ------
 py_suite() {
