@@ -1322,6 +1322,20 @@ def report_overwrites_by_another_producer(output_dir: Path, will_write,
         # Measured by running the command, not by reading it (2026-09-09):
         # of 8 html/md files one run wrote, 4 carried the mark and 4 did not;
         # stripping the mark from one of the 4 and re-running put it back.
+        #
+        # ⚠️ NOBODY READS THIS AFTER RUNNING `generate html`. The two call
+        # sites are `cmd_generate_spec_batch` and `cmd_generate_component_batch`
+        # — so the reader arrives by pointing `generate spec -o` at a directory
+        # `generate html` had already written into, and is being told about a
+        # command they did not run. That is why the wording names the PLACE a
+        # file was written rather than the command that wrote it.
+        #
+        # ⚠️ AND THE POPULATION IS NARROWER THAN "unmarked files in the
+        # directory": `unmarked` is built from `will_write`, so it holds only
+        # files THIS run is about to overwrite. An unmarked leftover the run
+        # does not touch surfaces in `report_foreign_output` instead and never
+        # reaches this sentence. Unchanged by this fix, stated so the next
+        # reader does not have to re-derive it.
         lines.append(
             f"{len(unmarked)} file(s) in {output_dir} carry no producer mark "
             f"({shown}{more}), so this run cannot tell whether they came from this command. "
