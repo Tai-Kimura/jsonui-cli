@@ -6,6 +6,7 @@ import json
 import os
 import posixpath
 import re
+import subprocess
 import time
 from pathlib import Path
 from typing import Any
@@ -1683,6 +1684,68 @@ def _report_writes_outside_output(output_path: Path) -> None:
           "     with different -o are not isolated from each other: the last one "
           "to finish\n"
           "     leaves its version here.")
+
+    # 🚨 THE PATHS ALONE DID NOT REACH THE PEOPLE WHO NEEDED THEM.
+    #
+    # Everything above was already printed on 2026-09-09 when one lane's
+    # verification run, with four `--app` flags, rewrote ten files in another
+    # lane's tree. The owning lane found them in `git status` and had to work
+    # out who wrote them; nothing had told it, and the version that landed was
+    # one it had not accepted. The help text names these paths, this notice
+    # lists them, and neither of those is a message to the OWNER.
+    #
+    # ⚠️ So the line that matters is not "where" but "these are tracked, and
+    # the tracking means someone else's next commit". A path under `.gitignore`
+    # costs a regenerate; a tracked path costs a review, a revert, or a
+    # silently committed artifact from a version nobody accepted.
+    #
+    # ⚠️ THREE STATES, NOT TWO. `git` absent, or the directory outside any
+    # repository, is "cannot tell" — printed as such rather than folded into
+    # "not tracked". A count of 0 from a working `git` is a fact; -1 is the
+    # absence of the instrument, and they must not print the same.
+    tracked, unknown = [], []
+    for d in outside:
+        n = _git_tracked_file_count(d)
+        if n > 0:
+            tracked.append((d, n))
+        elif n < 0:
+            unknown.append(d)
+    if tracked:
+        print(f"  🚨 {len(tracked)} of those are GIT-TRACKED — this run changed "
+              f"files another lane owns:")
+        for d, n in tracked:
+            print(f"       {d}  ({n} tracked file(s))")
+        print("     Tell the lane that owns them. They will see the change in "
+              "`git status`\n"
+              "     with no way to tell which run produced it, or which version "
+              "of the tools\n"
+              "     wrote it.")
+    if unknown:
+        print(f"  ⓘ {len(unknown)} could not be checked for tracking (no git, or "
+              f"outside a repository).")
+        for d in unknown:
+            print(f"       {d}")
+
+
+def _git_tracked_file_count(directory: Path) -> int:
+    """Tracked files under *directory*: a count, or -1 when git cannot say.
+
+    ⚠️ -1 IS NOT 0. No git on PATH, or a directory outside any repository,
+    means the question was not answered; 0 means it was answered and nothing
+    there is tracked. Folding them together would report "not tracked" for
+    every machine without git, which is the shape that makes a missing
+    instrument look like a clean result.
+    """
+    try:
+        r = subprocess.run(
+            ["git", "-C", str(directory), "ls-files", "--", str(directory)],
+            capture_output=True, text=True, timeout=10,
+        )
+    except (OSError, ValueError, subprocess.SubprocessError):
+        return -1
+    if r.returncode != 0:
+        return -1
+    return sum(1 for line in r.stdout.splitlines() if line.strip())
 
 
 def _report_stale_pages(output_path: Path, started_at: float | None = None,

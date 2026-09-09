@@ -299,5 +299,56 @@ class TestUnitTestsBelongToTheirApp(unittest.TestCase):
         )
 
 
+class TestWritesOutsideOutputNameTheirOwner(unittest.TestCase):
+    """Reported 2026-09-09: one lane's run rewrote ten files in another's tree.
+
+    `generate html` regenerates per-spec html/md IN THE SOURCE TREE, for the
+    root scope and for every ``--app``. The help says so and the end-of-run
+    notice lists the directories. Neither is a message to the OWNER of those
+    directories, and the owning lane found the change in ``git status`` with
+    no way to tell which run produced it or which version of the tools wrote
+    it — a version it had not accepted.
+
+    ⚠️ The lane that reported it first read the help and confirmed the paths
+    were named. The gap is not the warning's address; it is that a tracked
+    path costs a review or a silently committed artifact, and an ignored one
+    costs a regenerate. Only the notice can tell those apart.
+    """
+
+    def test_tracked_absent_and_unknown_are_three_different_answers(self):
+        from jsonui_doc_cli.test_doc.generator import _git_tracked_file_count
+        repo = Path(__file__).resolve().parents[2]
+        self.assertGreater(_git_tracked_file_count(repo / "document_tools"), 0)
+        # A directory outside any repository cannot be answered, and that is
+        # NOT the same as "nothing there is tracked": folding them together
+        # reports a clean result on every machine without git.
+        with TemporaryDirectory() as tmp:
+            self.assertEqual(_git_tracked_file_count(Path(tmp)), -1)
+
+    def test_a_tracked_outside_write_is_called_out_by_owner_not_just_listed(self):
+        import jsonui_doc_cli.test_doc.generator as gen
+        with TemporaryDirectory() as tmp:
+            out = Path(tmp) / "site"
+            out.mkdir()
+            elsewhere = Path(tmp) / "other-lane" / "docs"
+            elsewhere.mkdir(parents=True)
+            orig_written = set(gen._written_outside_output)
+            orig_count = gen._git_tracked_file_count
+            gen._written_outside_output.add(elsewhere)
+            gen._git_tracked_file_count = lambda d: 10
+            buf = io.StringIO()
+            try:
+                with redirect_stdout(buf):
+                    gen._report_writes_outside_output(out)
+            finally:
+                gen._git_tracked_file_count = orig_count
+                gen._written_outside_output.clear()
+                gen._written_outside_output.update(orig_written)
+            text = buf.getvalue()
+            self.assertIn("GIT-TRACKED", text)
+            self.assertIn("Tell the lane that owns them", text)
+            self.assertIn(str(elsewhere), text)
+
+
 if __name__ == "__main__":
     unittest.main()
