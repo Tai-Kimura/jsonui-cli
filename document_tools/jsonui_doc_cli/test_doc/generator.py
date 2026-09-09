@@ -1126,7 +1126,11 @@ def generate_html_directory(
         if f.get('document'):
             document_files.append({
                 'name': f['name'],
-                'path': f['document'],  # Path to document page
+                # Same rule as the writer, from the same function. A page
+                # moved without its links is a worse state than the one this
+                # repairs: the collision was at least visible in the output.
+                'path': document_output_rel_path(
+                    f.get('group') or None, f['document']),
                 # 🚨 WITHOUT THIS THE RENDERER HAS NOTHING TO GROUP BY. The
                 # sidebar's Documents lists were rewritten to go through
                 # `_render_tests_sidebar_section`, which nests by `group` — and
@@ -2037,6 +2041,28 @@ def _report_stale_pages(output_path: Path, started_at: float | None = None,
     return stale
 
 
+def document_output_rel_path(owner: str | None, doc_path: str) -> str:
+    """Where a declared document's page is written, relative to the site root.
+
+    The declaring app's name goes in front. Two apps naming the same relative
+    path used to land on one file and the last writer kept it — silently, with
+    a successful run and no warning.
+
+    🔻 EVERY declared page moves, not only the ones that collide today. The
+    ruling was that a page's location must follow its own declaration and
+    nothing else: under 'separate them only when they clash', a path depends on
+    what OTHER apps happen to declare, so an app adding a name tomorrow moves a
+    neighbour's URL that nobody touched. One move now beats a move whenever
+    somebody else writes something.
+
+    🚫 NO SEGMENT WITHOUT A NAME. A run with nothing declared has no app to
+    name, and inventing one — 'default', the directory's name — would put every
+    such site's pages somewhere new for no gain. The absent segment is the
+    honest rendering of an absent declaration.
+    """
+    return f"{owner}/{doc_path}" if owner else doc_path
+
+
 def _report_document_slot_collisions(
     declarations: list[tuple[str | None, str, str]],
 ) -> int:
@@ -2145,7 +2171,8 @@ def _generate_document_pages(
         # Bound before the try so the failure record can name them even when
         # the exception fires before they are assigned.
         source_path = None
-        output_doc_path = output_path / Path(doc_path)
+        out_rel = document_output_rel_path(owner, doc_path)
+        output_doc_path = output_path / Path(out_rel)
         try:
             # Resolve source document path.
             #
@@ -2188,7 +2215,7 @@ def _generate_document_pages(
 
             # Determine output path (preserve relative structure)
             # e.g., docs/screens/login.html -> docs/screens/login.html
-            rel_doc_path = Path(doc_path)
+            rel_doc_path = Path(out_rel)
             output_doc_path = output_path / rel_doc_path
             output_doc_path.parent.mkdir(parents=True, exist_ok=True)
 

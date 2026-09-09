@@ -101,7 +101,7 @@ class ADocumentResolvesFromItsOwnAppsRoot(_Tree):
 
     def test_the_app_the_run_was_not_pointed_at_still_resolves(self):
         out, log = self.build(self.OWN)
-        page = out / self.OWN["beta"]
+        page = out / "beta" / self.OWN["beta"]
         self.assertTrue(page.is_file(),
                         "beta's document was not written; the base was still "
                         "the run's input")
@@ -123,7 +123,7 @@ class ADocumentResolvesFromItsOwnAppsRoot(_Tree):
         that only ever answers for NON-owner apps would fail here.
         """
         out, _ = self.build(self.OWN)
-        page = out / self.OWN["alpha"]
+        page = out / "alpha" / self.OWN["alpha"]
         self.assertTrue(page.is_file())
         self.assertEqual(self.body_owner(page), "alpha")
 
@@ -285,7 +285,7 @@ class ThePageKeepsItsOwnTitle(_Tree):
 
     def test_the_title_comes_from_the_source_document(self):
         out, _ = self.build(self.OWN)
-        self.assertEqual(self.title_of(out / self.OWN["alpha"]),
+        self.assertEqual(self.title_of(out / "alpha" / self.OWN["alpha"]),
                          "ORIGINAL alpha")
 
     def test_it_is_not_the_name_of_the_test_that_declared_it(self):
@@ -293,8 +293,8 @@ class ThePageKeepsItsOwnTitle(_Tree):
         # titles, so an implementation that still passes the test name fails
         # here rather than coinciding.
         out, _ = self.build(self.OWN)
-        self.assertNotEqual(self.title_of(out / self.OWN["beta"]), "beta test")
-        self.assertEqual(self.title_of(out / self.OWN["beta"]), "ORIGINAL beta")
+        self.assertNotEqual(self.title_of(out / "beta" / self.OWN["beta"]), "beta test")
+        self.assertEqual(self.title_of(out / "beta" / self.OWN["beta"]), "ORIGINAL beta")
 
     def test_a_contested_page_is_still_titled_by_a_source_not_by_a_test(self):
         """Twelve declarations used to mean twelve possible titles, decided by
@@ -310,29 +310,60 @@ class ThePageKeepsItsOwnTitle(_Tree):
         """
         out, _ = self.build({"alpha": "docs/screens/html/login.html",
                              "beta": "docs/screens/html/login.html"})
-        title = self.title_of(out / "docs/screens/html/login.html")
+        title = self.title_of(out / "alpha" / "docs/screens/html/login.html")
         self.assertIn(title, {"ORIGINAL alpha", "ORIGINAL beta"})
         self.assertNotIn("test", title)
 
 
-class TheCollapseIsStillHere(_Tree):
-    """The OTHER ticket, pinned as unfixed on purpose.
+class TheCollapseIsGone(_Tree):
+    """Was `TheCollapseIsStillHere`, and it did the job it was left for.
 
-    Two apps declaring one relative path still produce one slot. This arm
-    exists so that the scope claim in this file's docstring cannot go stale
-    silently: when the collapse is repaired, this fails and says so.
+    It pinned the unfixed behaviour — two apps declaring one relative path
+    producing one file — so the scope claim in this file could not go stale in
+    silence. When the output path learned to carry the declaring app, this arm
+    failed with "the collapse was repaired", which is the only reason the
+    docstring above is not still describing a defect that no longer exists.
+
+    An arm on an unfixed thing is worth writing for exactly that: it is the
+    only kind of note that reads itself.
     """
 
     SHARED = {"alpha": "docs/screens/html/login.html",
               "beta": "docs/screens/html/login.html"}
 
-    def test_two_apps_sharing_a_path_still_collapse_to_one_slot(self):
+    def test_two_apps_sharing_a_path_get_a_page_each(self):
         out, _ = self.build(self.SHARED)
         slots = sorted(p.relative_to(out).as_posix()
                        for p in out.rglob("login.html"))
-        self.assertEqual(len(slots), 1,
-                         "the collapse was repaired — update this file's "
-                         "docstring, which says it was not")
+        self.assertEqual(slots, ["alpha/docs/screens/html/login.html",
+                                 "beta/docs/screens/html/login.html"])
+
+    def test_each_page_carries_its_own_app_s_body(self):
+        # Two files is not the claim; two RIGHT files is. Splitting the slot
+        # while both copies rendered one app's source would satisfy the arm
+        # above and none of the point.
+        out, _ = self.build(self.SHARED)
+        self.assertEqual(
+            self.body_owner(out / "alpha/docs/screens/html/login.html"), "alpha")
+        self.assertEqual(
+            self.body_owner(out / "beta/docs/screens/html/login.html"), "beta")
+
+    def test_a_run_with_nothing_declared_gets_no_segment(self):
+        """The absent segment is the honest rendering of an absent
+        declaration, not a hole to fill with a made-up name."""
+        from jsonui_doc_cli.test_doc.generator import document_output_rel_path
+        self.assertEqual(document_output_rel_path(None, "a/b.html"), "a/b.html")
+        self.assertEqual(document_output_rel_path("", "a/b.html"), "a/b.html")
+        self.assertEqual(document_output_rel_path("bar", "a/b.html"),
+                         "bar/a/b.html")
+
+    def test_the_nav_points_where_the_page_was_written(self):
+        # A page moved without its links is worse than the collision it
+        # replaces: that one was at least visible in the output.
+        out, _ = self.build(self.SHARED)
+        index = (out / "index.html").read_text(encoding="utf-8")
+        for app in ("alpha", "beta"):
+            self.assertIn(f"{app}/docs/screens/html/login.html", index)
 
 
 if __name__ == "__main__":
