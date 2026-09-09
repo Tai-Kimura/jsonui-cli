@@ -1330,6 +1330,22 @@ def report_overwrites_by_another_producer(output_dir: Path, will_write,
         # command they did not run. That is why the wording names the PLACE a
         # file was written rather than the command that wrote it.
         #
+        # 🚫 AND IT NAMES THE PRODUCER, NOT THE PATHS — THIRD TIME AROUND.
+        # v1.8.58 said "rewrite it and the mark arrives" and had not counted a
+        # form that never rewrites. v1.8.59 said `generate html` never marks
+        # and c3c74f77 made it mark. The first cut of THIS fix listed
+        # `<docs>/screens` and `<docs>/components`, and the code also calls
+        # `_pre_generate_spec_docs(..., spec_subdir="requirements")` at
+        # generator.py:1417 under `--app` — so a `requirements` page would have
+        # landed in the "expected" bucket, which is the direction named twelve
+        # lines up as the worse one. Caught by a triage lane before the tag.
+        # Same mechanism all three times: the population was written from ONE
+        # run instead of derived from the declaration, and the declaration says
+        # `spec_subdir: str = "screens"` with a docstring naming a second value.
+        # An enumeration of paths goes false the next time a path is added; a
+        # sentence naming the producer does not. An arm below requires that
+        # this text enumerate none of them.
+        #
         # ⚠️ AND THE POPULATION IS NARROWER THAN "unmarked files in the
         # directory": `unmarked` is built from `will_write`, so it holds only
         # files THIS run is about to overwrite. An unmarked leftover the run
@@ -1341,7 +1357,7 @@ def report_overwrites_by_another_producer(output_dir: Path, will_write,
             f"({shown}{more}), so this run cannot tell whether they came from this command. "
             f"Anything `jsonui-doc` wrote before v1.8.58 has no mark and will not gain one. "
             f"Neither does what `generate html` writes into its own `-o` site directory, as of v1.8.62. "
-            f"Its pre-generated `<docs>/screens/html|md` and `<docs>/components/html|md` pages are the other case: those have carried the mark since v1.8.61, so an unmarked file THERE is worth looking at rather than expected. "
+            f"The pages it pre-generates back into the source tree are the other case: those have carried the mark since v1.8.61, so an unmarked file among them is worth looking at rather than expected. "
             f"This is not a report of a collision.")
     return lines
 

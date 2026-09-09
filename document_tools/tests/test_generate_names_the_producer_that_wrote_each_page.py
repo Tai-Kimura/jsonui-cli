@@ -496,3 +496,71 @@ class TestTheNoticeIsGreppableInTheSourceItShipsFrom:
                 "so grepping the shipped text finds nothing: "
                 f"{sentence!r}")
         assert checked >= 3, f"only {checked} sentence(s) were checked"
+
+
+class TestTheNoticeNamesTheProducerNotThePaths:
+    """Three releases running, the wording described a subset of what runs.
+
+    🚨 THE SAME MECHANISM EACH TIME: the population was written from ONE run
+    instead of derived from the declaration.
+
+        v1.8.58  "rewrite it and the mark arrives"  — a form that never
+                 rewrites was not counted.
+        v1.8.59  "`generate html` never marks"      — c3c74f77 made it mark.
+        v1.8.62  first cut listed `<docs>/screens` and `<docs>/components`
+                 — `_pre_generate_spec_docs(..., spec_subdir="requirements")`
+                 at generator.py:1417 is a live path under `--app`, so a
+                 `requirements` page would have landed in the "expected"
+                 bucket. Caught by a triage lane before the tag.
+
+    ⚠️ AN ENUMERATION IS THE DEFECT, NOT THE PARTICULAR OMISSION. Adding
+    `requirements` to the list would have shipped the same shape a fourth
+    time. The sentence names the producer instead, and this arm requires that
+    it keep naming the producer: the subdir values are read out of the
+    generator and none of them may appear in the notice.
+    """
+
+    def _msg(self, tmp_path):
+        planned = _pages(tmp_path, ["c0.html"])
+        return report_overwrites_by_another_producer(
+            tmp_path, planned, "component-batch")[0]
+
+    def _subdirs_the_code_passes(self):
+        """Every value `spec_subdir` can take, DERIVED, not listed.
+
+        ⚠️ THE FIRST VERSION OF THIS HELPER READ ONLY THE CALL SITES and found
+        exactly one value — `requirements` — because `screens` is the
+        signature's DEFAULT and never appears as `spec_subdir="screens"`
+        anywhere. The control below caught it: a population built from call
+        sites alone was missing the one the notice had actually named. That is
+        the same defect this class exists to prevent, one level up.
+        """
+        from jsonui_doc_cli.test_doc import generator
+        src = inspect.getsource(generator)
+        explicit = set(re.findall(r'spec_subdir\s*=\s*"([^"]+)"', src))
+        default = set(re.findall(
+            r'def _pre_generate_spec_docs\([^)]*?spec_subdir:\s*str\s*=\s*"([^"]+)"',
+            src, re.S))
+        assert default, "the signature's default moved — this arm stopped measuring"
+        passed = explicit | default
+        assert passed, "no spec_subdir values found — this arm stopped measuring"
+        return passed
+
+    def test_the_generator_really_passes_more_than_one_subdir(self):
+        """The control: if it ever passes only one, the enumeration is safe
+        again and this whole class is measuring nothing."""
+        found = self._subdirs_the_code_passes()
+        assert len(found) >= 2, (
+            f"only {sorted(found)} in the generator; re-check whether the "
+            "notice still needs to avoid naming it")
+
+    def test_the_notice_enumerates_none_of_them(self, tmp_path):
+        msg = self._msg(tmp_path)
+        for sub in sorted(self._subdirs_the_code_passes()):
+            assert f"/{sub}/" not in msg, (
+                f"the notice names the path `{sub}` — an enumeration goes "
+                "false the next time the generator gains a subdir, which is "
+                "how this sentence was wrong three releases running")
+
+    def test_it_names_the_producer_instead(self, tmp_path):
+        assert "pre-generates back into the source tree" in self._msg(tmp_path)
