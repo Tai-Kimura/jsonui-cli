@@ -1539,8 +1539,13 @@ def generate_html_directory(
         unreadable_files=sorted(_run_totals.get('unreadable_files') or []),
     )
 
-    _report_stale_pages(output_path, started_at)
-    _report_writes_outside_output(output_path)
+    # Both of these were called for their printing and their results thrown
+    # away. The printing reaches whoever is watching; the record reaches the
+    # next question. One face shipped 64 unreachable pages that this exact
+    # call had already named.
+    stale = _report_stale_pages(output_path, started_at)
+    outside = _report_writes_outside_output(output_path)
+    _record_generation_manifest(output_path, project_root, stale, outside)
 
     return generated_files
 
@@ -1652,7 +1657,7 @@ def _component_body_rewriter(page_path: Path, output_path: Path):
     return rewrite
 
 
-def _report_writes_outside_output(output_path: Path) -> None:
+def _report_writes_outside_output(output_path: Path) -> dict:
     """Name the directories this run wrote that are not under `-o`.
 
     From what was WRITTEN, not from a rule about where it would go — the same
@@ -1675,7 +1680,7 @@ def _report_writes_outside_output(output_path: Path) -> None:
         if not str(d.resolve()).startswith(str(out) + "/")
     )
     if not outside:
-        return
+        return {}
     print(f"  ⚠️ Also written OUTSIDE {output_path} ({len(outside)} directories):")
     for d in outside:
         print(f"       {d}")
@@ -1725,6 +1730,104 @@ def _report_writes_outside_output(output_path: Path) -> None:
               f"outside a repository).")
         for d in unknown:
             print(f"       {d}")
+    # Returned as well as printed. The print reaches whoever is watching the
+    # run; the return reaches the record. Until 2026-09-09 only the first
+    # existed, and the caller discarded what its sibling returned — so the
+    # stronger the message got, the more was lost when the terminal scrolled.
+    return {
+        "directories": [str(d) for d in outside],
+        "trackedDirectories": {str(d): n for d, n in tracked},
+        "uncheckable": [str(d) for d in unknown],
+    }
+
+
+def _record_generation_manifest(
+    output_path: Path,
+    project_root: Path | None,
+    stale: list,
+    outside: dict,
+) -> None:
+    """Write what this run did into `.jsonui-cli/generation-manifest.json`.
+
+    `jui build` has recorded which version wrote each generated file since
+    2026-09-03. This run did not, and the gap was not academic: answering
+    "which version generated this page" for one face took four separate
+    measurements — the page's own stamp (a time, no version), the bootstrap
+    landing time, the shared checkout's reflog, and an enumeration of every
+    generator reachable on the machine. A first sweep of that last one found
+    one copy; there were five.
+
+    THREE THINGS GO IN, because all three were being lost the same way:
+    the pages written, the leftovers found, and the directories written
+    outside `-o`. The middle one is why this exists — one face was shipping
+    64 pages nothing linked to, and the run that detected them printed the
+    list, discarded the return value, and exited 0. The third was enriched
+    the same day with git-tracked counts, which raised what a scrolled
+    terminal costs rather than lowering it.
+
+    🚫 SAYS NOTHING ABOUT GATES. This writes a record and nothing else — no
+    exit code, no promise about what any check will do with it. The line
+    above it in this file used to carry exactly that kind of promise in
+    `jui build` ("not counted toward the zero-warnings gate"), reasoning
+    from a tally that did not exist; it was corrected on 2026-09-09. A new
+    printer is the moment that trap gets rebuilt, so this one describes only
+    what it did.
+
+    Silent when it cannot write, in the sense of `shared_core.load`'s own
+    contract — "the caller says what it is skipping". The two reasons are
+    kept apart because they call for different responses: no project root is
+    this run's own scope, and no `shared/core` is the tree it was installed
+    into. ⚠️ The second reaches a real population: `shared/` is not part of
+    the pip distribution (`include = ['jsonui_doc_cli*']`), so a face that
+    installed the doc tool from a bare pip has no manifest and this notice is
+    the only thing that says so.
+    """
+    if project_root is None:
+        print("  ⓘ NOTE: no project root for this run, so nothing was recorded "
+              "in .jsonui-cli/generation-manifest.json — not a statement that "
+              "there was nothing to record.")
+        return
+    from .. import shared_core
+    manifest = shared_core.load("generation_manifest")
+    if manifest is None:
+        print("  ⓘ NOTE: shared/core/generation_manifest.py is not in this tree, "
+              "so this run recorded nothing about itself. Pages, leftovers and "
+              "writes outside -o all went to this output and nowhere else.")
+        return
+
+    root = Path(project_root).resolve()
+
+    def _key(p) -> str | None:
+        try:
+            return str(Path(p).resolve().relative_to(root))
+        except ValueError:
+            # Written outside the project being recorded. Counted by the
+            # outside-writes block instead of silently filed under a key
+            # that would resolve to a different tree on the next run.
+            return None
+
+    written = sorted(k for k in (_key(p) for p in get_written_pages()) if k)
+    facts = {}
+    if stale:
+        facts["leftovers"] = len(stale)
+        facts["leftoverPaths"] = [str(p) for p in stale[:20]]
+        if len(stale) > 20:
+            facts["leftoverPathsNote"] = f"first 20 of {len(stale)}"
+    if outside:
+        facts["outsideOutput"] = outside
+    try:
+        from .. import __version__ as version
+    except ImportError:
+        version = "unknown"
+    try:
+        manifest.save(
+            root, version, written,
+            generated_by="jsonui-doc generate html",
+            run_facts=facts or None,
+        )
+    except OSError as exc:
+        print(f"  ⓘ NOTE: could not write the generation manifest ({exc}). "
+              f"The pages were written; the record of them was not.")
 
 
 def _git_tracked_file_count(directory: Path) -> int:
