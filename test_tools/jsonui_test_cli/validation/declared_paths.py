@@ -174,11 +174,21 @@ def resolves(value, kind: str, test_file=None) -> bool:
     Also true when there is nothing to resolve against, so a caller cannot
     turn "we do not know" into a finding.
 
-    The test file's own directory is NOT a candidate. These declarations are
-    project-rooted — the driver resolves a layout from the layouts directory,
-    not from beside the test — and accepting a file that happens to sit next
-    to the test would make the check pass for a reason the runtime does not
-    share.
+    🚨 THE TEST FILE'S OWN DIRECTORY *IS* A CANDIDATE, and this paragraph
+    used to say the opposite. It carried the first version's reasoning —
+    "the driver resolves a layout from the layouts directory, not from beside
+    the test" — which is true and was the wrong thing to reason about. That
+    retraction is written fifteen lines above, at the `yield` this docstring
+    describes; only the docstring was left saying the withdrawn thing.
+
+    The spelling actually in use is an explicit `../../../docs/...` chain
+    FROM THE TEST FILE, 201 times in one project, resolving from no other
+    base. A relative path is written relative to something, and the file it
+    is written in is the one candidate always available.
+
+    ⚠️ A docstring is the copy a reader trusts when the code disagrees with
+    it, because the code looks like an implementation detail and the prose
+    looks like the decision. Its arms had already moved; nothing failed.
     """
     if not isinstance(value, str) or not value.strip():
         return True          # a shape problem, reported by the shape check
