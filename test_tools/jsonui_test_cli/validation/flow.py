@@ -102,6 +102,79 @@ class FlowTestValidator:
                     step_path = f"{path}.{section}[{i}]"
                     self._step_validator.validate_step(step, step_path, result, is_flow=True)
 
+        self._check_steps_name_a_declared_source(data, path, result)
+
+    def _check_steps_name_a_declared_source(self, data: dict, path: str,
+                                            result: ValidationResult):
+        """A step's `screen` should name an alias this file declares.
+
+        ⚠️ THE TEST STILL RUNS. `screen` has two consumers and they are
+        independent: at runtime the driver turns it into a screen-marker id
+        and looks for that marker in the app — it never reads `sources` at
+        all (`alias` appears once in the driver's main sources, as the field
+        declaration, and is never consumed). Static tooling is the other
+        consumer: it resolves `screen` through `sources[].alias` to a layout
+        path, which is how docs and audits know which screen a step runs on.
+
+        🚫 SO THIS IS NOT "the screen name is wrong". The name is right — the
+        test passes, the marker matches. The missing thing is a line in
+        `sources[]`. Saying it the other way sends the reader to rename a
+        screen that is already correct.
+
+        Measured on a consumer face 2026-09-09: 26 of 916 flow steps, in two
+        files, both of which DO declare aliases (8 and 5) and are each short
+        by one. So the shape is a missing entry, not a file that never
+        declared any — which is why this warns per unresolved name rather
+        than per file.
+
+        ⚠️ Silent when `sources` is absent: that form is legal (file
+        reference tests carry no sources), and a check that fired on it would
+        report on the majority of a shape it knows nothing about.
+        """
+        # ⚠️ REDUNDANT WITH THE `not declared` RETURN BELOW, deliberately.
+        # Every input this catches also produces an empty `declared`, so
+        # mutating it away leaves the suite green — which is a mutation
+        # ABSORBED BY A SECOND GUARD, not a missing arm. Said here so the
+        # next person to run mutations does not diagnose a weak test and add
+        # an arm to protect a line that guards nothing on its own.
+        sources = data.get("sources")
+        if not isinstance(sources, list) or not sources:
+            return
+        declared = {
+            s.get("alias") for s in sources
+            if isinstance(s, dict) and isinstance(s.get("alias"), str) and s.get("alias")
+        }
+        if not declared:
+            # Nothing to resolve against. Not "they all fail" — the file is
+            # using a form this check cannot speak about.
+            return
+
+        seen: set[str] = set()
+        for section in ("setup", "steps", "teardown"):
+            for step in (data.get(section) or []):
+                if not isinstance(step, dict):
+                    continue
+                screen = step.get("screen")
+                if not isinstance(screen, str) or not screen or screen in declared:
+                    continue
+                if screen in seen:
+                    continue
+                seen.add(screen)
+                result.warnings.append(ValidationMessage(
+                    path=f"{path}.sources",
+                    message=(
+                        f"steps name screen '{screen}', but no entry in "
+                        f"'sources' declares that alias (declared: "
+                        f"{', '.join(sorted(declared))}). The test still runs "
+                        f"— the driver resolves 'screen' to an app-side "
+                        f"marker and never reads 'sources' — but nothing "
+                        f"static can tell which layout the step runs on. Add "
+                        f"{{\"layout\": \"<path>\", \"alias\": \"{screen}\"}} "
+                        f"to 'sources'; do not rename the screen."
+                    ),
+                    level="warning"
+                ))
+
     def _validate_sources(self, sources, path: str, result: ValidationResult):
         """Validate the sources array.
 
