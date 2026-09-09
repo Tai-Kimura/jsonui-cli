@@ -1736,7 +1736,14 @@ def _report_writes_outside_output(output_path: Path) -> dict:
     # stronger the message got, the more was lost when the terminal scrolled.
     return {
         "directories": [str(d) for d in outside],
-        "trackedDirectories": {str(d): n for d, n in tracked},
+        # 🚨 `gitTracked…`, not `tracked…`. The manifest already uses "tracked"
+        # for a DIFFERENT quantity — `summary.tracked` and
+        # `summary.trackedByDirectory` are files the MANIFEST tracks, nothing to
+        # do with git. Shipping a git-sense `trackedDirectories` into the same
+        # JSON put two meanings of one word in one file, and the reader who hit
+        # it was reading the file, not this source. Reported by the admin face
+        # the day it shipped.
+        "gitTrackedDirectories": {str(d): n for d, n in tracked},
         "uncheckable": [str(d) for d in unknown],
     }
 
@@ -1819,15 +1826,72 @@ def _record_generation_manifest(
         from .. import __version__ as version
     except ImportError:
         version = "unknown"
+    # Whether the record this run just wrote is visible to anyone else.
+    # ⚠️ NOT a reason to make it tracked — `.jsonui-cli/` is the face's call,
+    # and it is genuinely split: measured 2026-09-09, one of three faces on
+    # this machine does not track it. The tool reports the condition and
+    # leaves the choice where it belongs.
+    target = manifest.manifest_path(root)
+    tracked = _git_tracks_file(target, root)
+    facts["manifestIsGitTracked"] = tracked
     try:
         manifest.save(
             root, version, written,
             generated_by="jsonui-doc generate html",
-            run_facts=facts or None,
+            run_facts=facts,
         )
     except OSError as exc:
         print(f"  ⓘ NOTE: could not write the generation manifest ({exc}). "
               f"The pages were written; the record of them was not.")
+        return
+    # Three states, like the outside-writes block above and for the same
+    # reason: "not tracked" is an answer, and "cannot tell" is the absence of
+    # the instrument. Folding them together would tell a face with no git
+    # that its record is private, which is a different claim.
+    if tracked is False:
+        print(f"  ⓘ NOTE: {target} is NOT git-tracked here, so this record "
+              f"will not appear in `git status` or a diff. It is still "
+              f"readable in place — but it cannot serve as evidence to anyone "
+              f"who is looking for a change rather than reading the file.")
+    elif tracked is None:
+        print(f"  ⓘ NOTE: could not tell whether {target} is git-tracked (no "
+              f"git, or outside a repository) — not a statement that it is "
+              f"untracked.")
+
+
+def _git_tracks_file(path: Path, cwd: Path) -> bool | None:
+    """True/False/None — tracked, not tracked, or the question was not answered.
+
+    ⚠️ None IS NOT False, for the reason `_git_tracked_file_count` gives about
+    its own -1: a machine without git would otherwise be told every record it
+    writes is invisible, which is a claim about the repository rather than
+    about the instrument.
+
+    ⚠️ Runs from *cwd* (the project root), NOT from the file's own directory.
+    The first draft used `path.parent`, which does not exist yet on the run
+    that creates the manifest — git then failed for a reason that has nothing
+    to do with tracking, and the helper reported the confident `False`. A
+    directory that is not there is exactly the case this three-valued answer
+    exists to keep apart from "not tracked".
+    """
+    if not cwd.is_dir():
+        return None
+    try:
+        r = subprocess.run(
+            ["git", "-C", str(cwd), "ls-files", "--error-unmatch", str(path)],
+            capture_output=True, text=True, timeout=10,
+        )
+    except (OSError, ValueError, subprocess.SubprocessError):
+        return None
+    if r.returncode == 0:
+        return True
+    # git ran. Only a pathspec that did not match is a fact about the file;
+    # anything else (no repository, a broken index) is the absence of an
+    # answer and must not print as "your record is private".
+    stderr = (r.stderr or "").lower()
+    if "did not match any file" in stderr or "did not match" in stderr:
+        return False
+    return None
 
 
 def _git_tracked_file_count(directory: Path) -> int:

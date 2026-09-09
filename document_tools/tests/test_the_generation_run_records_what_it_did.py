@@ -88,19 +88,90 @@ def test_c_the_writes_outside_output_survive_too(project):
     root, out = project
     outside = {
         "directories": ["/other/lane/docs"],
-        "trackedDirectories": {"/other/lane/docs": 7},
+        "gitTrackedDirectories": {"/other/lane/docs": 7},
         "uncheckable": [],
     }
     gen._record_generation_manifest(out, root, [], outside)
     run = (_manifest(root).get("summary") or {}).get("run") or {}
-    assert run.get("outsideOutput", {}).get("trackedDirectories") == {"/other/lane/docs": 7}
+    assert run.get("outsideOutput", {}).get("gitTrackedDirectories") == {"/other/lane/docs": 7}
 
 
-def test_a_quiet_run_writes_no_run_block(project):
-    """Nothing observed must not look the same as something observed."""
+def test_a_quiet_run_records_only_the_facts_that_are_always_true(project):
+    """Nothing observed must not look the same as something observed.
+
+    ⚠️ Changed 2026-09-09: the run block is now always written, because
+    "is this record visible to anyone else" is a fact about EVERY run, not
+    only about runs that found something. The absence of `leftovers` is what
+    carries "nothing was found".
+    """
     root, out = project
     gen._record_generation_manifest(out, root, [], {})
-    assert "run" not in (_manifest(root).get("summary") or {})
+    run = (_manifest(root).get("summary") or {}).get("run") or {}
+    assert "manifestIsGitTracked" in run
+    assert "leftovers" not in run and "outsideOutput" not in run
+
+
+def test_the_git_sense_of_tracked_is_spelled_differently(project):
+    """🚨 One file must not carry two meanings of `tracked`.
+
+    `summary.tracked` and `summary.trackedByDirectory` count files the
+    MANIFEST tracks. The outside-writes block counts files GIT tracks. Both
+    land in one JSON, and the reader who hit the collision was reading that
+    JSON — not the source, and not any printed line. So the fix has to be in
+    the key, which is why a wording change alone would not have reached them.
+    """
+    root, out = project
+    gen._record_generation_manifest(
+        out, root, [], {"directories": ["/x"], "gitTrackedDirectories": {"/x": 3},
+                        "uncheckable": []})
+    summary = _manifest(root).get("summary") or {}
+    assert "tracked" in summary, "the manifest sense stays where it was"
+    outside = (summary.get("run") or {}).get("outsideOutput") or {}
+    assert "gitTrackedDirectories" in outside
+    assert "trackedDirectories" not in outside, "the colliding spelling is gone"
+
+
+def test_it_records_whether_the_record_itself_is_visible(project):
+    """The gap the admin face reported: a record nothing else can see."""
+    root, out = project
+    gen._record_generation_manifest(out, root, [], {})
+    run = (_manifest(root).get("summary") or {}).get("run") or {}
+    # tmp_path is not a repository, so the honest answer is "cannot tell".
+    assert run.get("manifestIsGitTracked") is None
+
+
+def test_not_tracked_and_cannot_tell_do_not_print_the_same(project, monkeypatch, capsys):
+    """Three states, because two of them make opposite claims."""
+    root, out = project
+
+    monkeypatch.setattr(gen, "_git_tracks_file", lambda p, cwd: False)
+    gen._record_generation_manifest(out, root, [], {})
+    not_tracked = capsys.readouterr().out
+    assert "NOT git-tracked" in not_tracked
+    assert "readable in place" in not_tracked, (
+        "untracked is not unusable — it is unusable AS A DIFF")
+
+    monkeypatch.setattr(gen, "_git_tracks_file", lambda p, cwd: None)
+    gen._record_generation_manifest(out, root, [], {})
+    unknown = capsys.readouterr().out
+    assert "could not tell" in unknown
+    assert "not a statement that it is untracked" in unknown
+    assert not_tracked != unknown
+
+    monkeypatch.setattr(gen, "_git_tracks_file", lambda p, cwd: True)
+    gen._record_generation_manifest(out, root, [], {})
+    assert capsys.readouterr().out == "", "the common case stays quiet"
+
+
+def test_a_directory_that_does_not_exist_yet_is_not_reported_as_untracked(tmp_path):
+    """The first draft of the helper answered False when git could not look.
+
+    On the run that CREATES the manifest, its directory does not exist yet.
+    Running git there fails for a reason that says nothing about tracking,
+    and a confident "not tracked" is the wrong half of the three states.
+    """
+    missing = tmp_path / "nowhere"
+    assert gen._git_tracks_file(missing / "x.json", missing) is None
 
 
 def test_without_shared_core_it_says_what_it_skipped(project, monkeypatch, capsys):
