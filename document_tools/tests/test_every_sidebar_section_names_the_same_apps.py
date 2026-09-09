@@ -14,7 +14,10 @@ one flat list of another app's pages. The renderer is not the defect; the nav
 entries for screens/flows are.
 
 🚨 WHY BOTH SECTIONS. Measured on the reporting face: flows 61 and screens 15
-were BOTH flat. Fixing `screens` alone reproduces the shape this ticket is
+were BOTH flat. ⚠️ STILL 61 AND 15 AT v1.8.64 — re-measured after
+v1.8.63 landed. Those two numbers have not moved; what moved was the OTHER
+faces' declared tests. Read this as a present-tense measurement, not as "the
+value before the fix". Fixing `screens` alone reproduces the shape this ticket is
 about — one of a set of sibling call sites updated, counted as "done".
 See `feedback: count arms per call site, not per rule`.
 
@@ -415,19 +418,47 @@ class WhatTheDocumentsSectionCannotDo(unittest.TestCase):
     second is measured here.
     """
 
+    #: Every function that builds a Documents list BY HAND. Four, not one.
+    #: ⚠️ `generate_index_sidebar` uses a DIFFERENT id (`sidebar-documents-list`),
+    #: so a reader keyed on the other spelling silently covers three of four.
+    #: `generate_document_sidebar` is the document page's own sidebar — where a
+    #: reader following a Documents link actually lands.
+    DOC_SITES = ("screen", "flow", "index", "document")
+
+    def _render(self, which: str) -> tuple[str, str]:
+        """(html, section_id) for one of the four hand-built Documents lists."""
+        from jsonui_doc_cli.test_doc.html.sidebar import (
+            generate_screen_sidebar, generate_flow_sidebar, generate_index_sidebar)
+        from jsonui_doc_cli.test_doc.html.document import generate_document_sidebar
+        docs = [{"name": "d1", "path": "docs/bar/d1.html", "group": "bar"},
+                {"name": "d2", "path": "docs/client/d2.html", "group": "client"}]
+        if which == "screen":
+            return "\n".join(generate_screen_sidebar(
+                "t", ["c"], all_tests_nav={"documents": docs})), "documents"
+        if which == "flow":
+            return "\n".join(generate_flow_sidebar(
+                "t", [], [], all_tests_nav={"documents": docs})), "documents"
+        if which == "index":
+            return "\n".join(generate_index_sidebar(
+                "t", [], [], document_files=docs)), "sidebar-documents"
+        return "\n".join(generate_document_sidebar(
+            "t", all_tests_nav={"documents": docs})), "documents"
+
     def test_a_grouped_document_is_still_rendered_flat(self):
-        from jsonui_doc_cli.test_doc.html.sidebar import generate_screen_sidebar
-        html = "\n".join(generate_screen_sidebar(
-            "t", ["c"],
-            all_tests_nav={"documents": [
-                {"name": "d1", "path": "docs/bar/d1.html", "group": "bar"},
-                {"name": "d2", "path": "docs/client/d2.html", "group": "client"},
-            ]},
-            current_test_path=None))
-        self.assertIn("id='documents-list'>", html, "the section must render at all")
-        self.assertIn("d1", html, "and must list the entries")
-        self.assertEqual(_section_apps(html, "documents"), set(),
-                         "documents has no grouping path; a group on the entry is ignored")
+        """🚨 All four sites, because the ruling reaches none of them.
+
+        Pinning one would leave three call sites saying nothing — the shape
+        this whole ticket is about (`count arms per call site, not per rule`).
+        """
+        for which in self.DOC_SITES:
+            with self.subTest(site=which):
+                html, section = self._render(which)
+                self.assertIn(f"id='{section}-list'>", html,
+                              f"{which}: the section must render at all")
+                self.assertIn("d1", html, f"{which}: and must list the entries")
+                self.assertEqual(
+                    _section_apps(html, section), set(),
+                    f"{which}: no grouping path here; a group on the entry is ignored")
 
     def test_the_control_shows_the_reader_can_see_groups_here(self):
         """🔻 Without this, the empty set above is indistinguishable from
