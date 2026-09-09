@@ -9,6 +9,17 @@ with two screenshots: the index offered four apps of 100 / 78 / 75 / 18
 screens, and a spec page under the smallest of them opened a list of 55
 that is none of them (the top-level `specs/`, which belongs to no app).
 
+⚠️ The names were removed 2026-09-09. The original text carried four app
+names and one screen filename from the reporting project, and shipped that
+way from 2026-09-03 (`f07a90ad`) — six days and four releases. The counts
+are what the report turns on and they are kept; the names never were.
+The pre-push guard did not fire: it matches a pattern list, and three of
+the four names are ordinary English words this repository uses hundreds of
+times (`bar` 481, `client` 336, `admin` 210 by `git grep -w`), so they are
+deliberately not patterns. Only the fourth was distinctive, and one word is
+not a pattern anyone had added. Eye-reading the diff is the control, and it
+had not been run on a docstring.
+
 Two things about that report were not quite right, and both are pinned
 below so the tests do not encode them:
 
