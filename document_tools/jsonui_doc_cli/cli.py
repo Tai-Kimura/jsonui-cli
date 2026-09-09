@@ -187,6 +187,45 @@ def _resolve_unit_roots(
     return [{"app": None, "config": use, "root": use.parent}]
 
 
+def _resolve_test_roots(apps: list[dict] | None) -> list[dict]:
+    """``{app, root}`` for every app that declares its own tests directory.
+
+    🚨 WITHOUT THIS, ONLY THE `-o` RUN'S OWN TESTS DIRECTORY IS DOCUMENTED.
+    Measured on a consumer tree 2026-09-09: the site's Flow Tests (61) and
+    Screen Tests (15) were one app's whole corpus, shown on every app's page,
+    while two other apps' 14 and 41 screen tests had no page at all. The
+    symptom a reader reports is "another app's tests are on my page"; the
+    cause is that their own app's tests were never scanned.
+
+    ⚠️ THE ROOT COMES FROM `test.src` IN THE APP'S OWN CONFIG, not from
+    `<app>/tests`. Every app in the tree that exposed this happens to use
+    `tests`, so a path guess would have passed every arm written against it —
+    and would then be the second place a convention is enforced. Unit roots
+    resolve from the app's config for the same reason; this follows them.
+
+    Silent about apps that declare nothing: an app with no `test.src` and no
+    directory there is not an error, it is an app without tests.
+    """
+    roots: list[dict] = []
+    for app in (apps or []):
+        cfg = _config_for_app(app["name"], Path(app["docs_path"]))
+        if cfg is None:
+            continue
+        try:
+            data = json.loads(cfg.read_text(encoding="utf-8"))
+        except (OSError, ValueError) as exc:  # noqa: PERF203
+            print(f"  Warning: cannot read {cfg} for {app['name']}'s tests "
+                  f"({exc}); its tests will not be documented", file=sys.stderr)
+            continue
+        src = (data.get("test") or {}).get("src")
+        if not src:
+            continue
+        root = (cfg.parent / src)
+        if root.is_dir():
+            roots.append({"app": app["name"], "root": root})
+    return roots
+
+
 def _component_spec_dir_from_config() -> Path | None:
     """`component_spec_directory` from jui.config.json, or None.
 
@@ -499,6 +538,7 @@ def cmd_generate_html(args):
     unit_roots = _resolve_unit_roots(
         getattr(args, "config", None), apps,
         input_dir if input_dir.exists() else Path.cwd())
+    test_roots = _resolve_test_roots(apps)
 
     print(f"Generating HTML documentation...")
     print(f"  Input: {input_dir}")
@@ -524,7 +564,7 @@ def cmd_generate_html(args):
     print()
 
     try:
-        generate_html_directory(input_dir, output_dir, title, docs_dirs if docs_dirs else None, figma_dir=figma_dir, apps=apps, layouts_dir=layouts_dir_override, unit_roots=[{"app": e.get("app"), "root": e["root"]} for e in unit_roots])
+        generate_html_directory(input_dir, output_dir, title, docs_dirs if docs_dirs else None, figma_dir=figma_dir, apps=apps, layouts_dir=layouts_dir_override, unit_roots=[{"app": e.get("app"), "root": e["root"]} for e in unit_roots], test_roots=test_roots)
         print()
         # Count every page written, not just the test pages in the return
         # value — the old number was smaller than the lines printed above it,

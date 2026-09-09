@@ -887,6 +887,7 @@ def generate_html_directory(
     layouts_dir: Path | None = None,
     project_root: Path | None = None,
     unit_roots: list[dict] | None = None,
+    test_roots: list[dict] | None = None,
 ) -> list[dict]:
     """
     Generate HTML documentation for all test files in a directory.
@@ -985,8 +986,40 @@ def generate_html_directory(
         print("Pre-generating specification documentation...")
         _pre_generate_spec_docs(docs_base, layouts_dir=layouts_dir)
 
-    # Collect all test files
-    test_files = list(input_path.rglob("*.test.json"))
+    # Collect all test files, from the run's own tests directory and from every
+    # app that declared one.
+    #
+    # 🚨 ONE INPUT DIRECTORY WAS SCANNED, AND `--app` BROUGHT ONLY SPECS AND
+    # COMPONENTS. Measured on a consumer tree 2026-09-09, from the generated
+    # site rather than from this source: the sidebar's Flow Tests (61) and
+    # Screen Tests (15) were exactly the input directory's own 61 flow + 15
+    # screen tests, on EVERY app's page — and the other two apps' 14 and 41
+    # screen tests had no page at all. A reader on one app's page was shown
+    # another app's tests because those were the only ones that existed.
+    #
+    # ⚠️ THE FIRST THREE DIAGNOSES OF THIS WERE WRONG, all read off the source:
+    # "only one of three sidebar functions is per-app" (the renderer is one
+    # function and already groups), then "the nav does not pass `group`" (it
+    # does, generator.py's nav dict sets it), then "`_test_group` reads the app
+    # off the path and the path has no app segment" (true, and still not the
+    # defect). The counts settled it: 61 + 15 = 76 = one app's whole corpus.
+    #
+    # The app's root comes from its OWN declaration — `test.src` in the config
+    # beside its docs — not from a path guess, for the same reason unit roots
+    # do: a directory named `tests` next to `docs` is a convention, and this
+    # file should not be the place that convention is enforced.
+    roots: list[tuple[Path, str | None]] = [(input_path, None)]
+    for entry in (test_roots or []):
+        root = Path(entry["root"])
+        if root.resolve() == input_path.resolve():
+            continue  # the run's own tests, already first in the list
+        if root.is_dir():
+            roots.append((root, entry.get("app")))
+
+    test_files: list[tuple[Path, Path, str | None]] = []
+    for root, app_name in roots:
+        for f in root.rglob("*.test.json"):
+            test_files.append((f, root, app_name))
 
     if not test_files:
         raise ValueError(f"No .test.json files found in {input_dir}")
@@ -996,7 +1029,7 @@ def generate_html_directory(
     # First pass: collect all file info
     file_infos = []
     used_test_paths: set[Path] = set()
-    for test_file in sorted(test_files):
+    for test_file, test_root, test_app in sorted(test_files, key=lambda t: t[0]):
         try:
             result = generator.validator.validate_file(test_file)
             if not result.is_valid:
@@ -1022,8 +1055,12 @@ def generate_html_directory(
             else:
                 subdir = 'other'
 
-            rel_path = test_file.relative_to(input_path)
-            group = _test_group(rel_path)
+            rel_path = test_file.relative_to(test_root)
+            # A file from an app root is grouped by the app that DECLARED it;
+            # only the run's own tree falls back to reading the app off the
+            # path. `_test_group` returning "" is correct for a single-app
+            # tree and says nothing about an app whose tests live elsewhere.
+            group = test_app or _test_group(rel_path)
             html_filename = rel_path.with_suffix('.html').name
             html_dir = Path(subdir) / group if group else Path(subdir)
             html_rel_path = html_dir / html_filename
