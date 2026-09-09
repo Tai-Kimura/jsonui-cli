@@ -1836,21 +1836,32 @@ def _report_writes_outside_output(output_path: Path) -> dict:
             print(f"       {d}  ({n} tracked file(s), {state})")
         differing = sum(m for m in modified.values() if m > 0)
         unmeasured = sum(1 for m in modified.values() if m < 0)
+        # The owner is told in EVERY state. The write into their tree happened
+        # whether or not a byte moved, and only they can say whether that was
+        # acceptable; what changes with the state is what they are told. The
+        # first draft said it only when files differed, and an arm written for
+        # the 2026-09-09 incident — "called out by owner, not just listed" —
+        # went red for the byte-identical case, which is the common one.
         if differing:
-            print(f"     🚨 {differing} tracked file(s) now differ from the index. "
-                  "The owning lane will see them in\n"
-                  "     `git status` with no way to tell which run produced them, "
-                  "or which version of the\n"
-                  "     tools wrote them — tell them. (A change they had pending "
-                  "before this run counts here\n"
-                  "     too: this is a state, not an attribution.)")
-        elif not unmeasured:
-            print("     0 tracked file(s) differ from the index: every rewrite was "
-                  "byte-identical, so the\n"
-                  "     owning lane has nothing to review. The write still happened "
-                  "— a version that renders\n"
-                  "     differently would have landed here.")
-        if unmeasured:
+            print(f"     Tell the lane that owns them: {differing} tracked file(s) now "
+                  "differ from the index and will show in\n"
+                  "     their `git status` with no way to tell which run produced "
+                  "them, or which version of the\n"
+                  "     tools wrote them. (A change they had pending before this run "
+                  "counts here too: this is a\n"
+                  "     state, not an attribution.)")
+        elif unmeasured:
+            print("     Tell the lane that owns them: the write happened; whether any "
+                  "byte moved could not be\n"
+                  f"     measured here (git did not answer for {unmeasured} of the "
+                  "tracked directories).")
+        else:
+            print("     Tell the lane that owns them: 0 tracked file(s) differ from the "
+                  "index — every rewrite was\n"
+                  "     byte-identical, so there is nothing to review. The write still "
+                  "happened; a version that\n"
+                  "     renders differently would have landed here.")
+        if differing and unmeasured:
             print(f"     ⓘ {unmeasured} of the tracked directories could not be "
                   "checked for differences (git did not answer).")
     if unknown:
