@@ -76,7 +76,18 @@ _COMMENT = (
     "those entries is a claim this file cannot support. "
     "This says what wrote a file; it does not say whether that version's "
     "defects reach this project (measure the layouts for that), and it is "
-    "not evidence of freshness."
+    "not evidence of freshness. "
+    "'tracked' HERE MEANS TRACKED BY THIS MANIFEST, NOT BY GIT. "
+    "'summary.tracked' and 'summary.trackedByDirectory' count generated "
+    "files this record knows about; git is not consulted for either. The "
+    "only git-sense number in this file is "
+    "'summary.run.gitTrackedDirectories', which is spelled differently for "
+    "that reason. The two senses can return the SAME count on a project "
+    "where every generated file happens to be committed — measured on one "
+    "face at 220 and 220 — so a reader who takes 'tracked' for git gets a "
+    "true sentence there and no signal that the reading is wrong. That "
+    "face's own copy of this file was untracked while it said tracked: "
+    "220."
 )
 
 

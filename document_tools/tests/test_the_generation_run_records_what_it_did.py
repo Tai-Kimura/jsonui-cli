@@ -215,3 +215,32 @@ def test_the_notice_promises_nothing_about_gates(project, monkeypatch, capsys):
     said = capsys.readouterr().out.lower()
     for promise in ("gate", "exit", "warning", "does not count", "safe to ignore"):
         assert promise not in said, f"the notice must not promise {promise!r}"
+
+
+def test_the_written_manifest_states_which_tracked_it_means(project):
+    """🚨 One word, two senses, and on some projects the same number.
+
+    Reported by the admin face 2026-09-09. `summary.tracked` counts files
+    THIS RECORD knows about; the outside-writes block counts files GIT knows
+    about. On that face both were 220 — so reading `tracked` as "git tracked"
+    produced a TRUE sentence with nothing to contradict it, while the
+    manifest file itself was untracked. A misreading that never disagrees
+    with anything is the one a reader cannot catch.
+
+    ⚠️ The reporter had not actually misread it: they had shot
+    `git ls-files --error-unmatch` separately. In their words, the clue came
+    from outside the manifest because inside it there was none. So the sense
+    goes INTO the file, where the reader already is.
+
+    🔻 Asserted on the manifest this run WRITES, not on the source constant.
+    A source-reading arm would be satisfied by the sentence sitting in
+    `generation_manifest.py` whether or not it reaches any project's file —
+    which is the shape of three defects filed earlier today.
+    """
+    root, out = project
+    gen._record_generation_manifest(out, root, [], {})
+    comment = _manifest(root).get("_comment") or ""
+    assert "NOT BY GIT" in comment.upper(), "the emitted file must state the sense"
+    assert "gitTrackedDirectories" in comment, "and name the one git-sense key"
+    # The colliding sense is still present and still means what it meant.
+    assert "tracked" in (_manifest(root).get("summary") or {})
