@@ -189,21 +189,69 @@ if [ ! -d "$C/docs/bugs/reports" ]; then
   say "            so a worktree or fresh clone does not have it)"
 else
 mis=0
-for f in "$C"/docs/bugs/reports/*.md(N); do
+unjudgeable=0
+scanned=0
+readme=0
+# 🚨 RECURSIVE AS OF 2026-09-09. The glob used to be one level deep, and
+# `reports/closed/` sat underneath it — invisible to the inbox scan AND to
+# this leg. A better hiding place than the one this leg was written to guard.
+#
+# ⚠️ THE DEPTH CHANGED AND THE PREDICATE DID NOT, deliberately. Widening both
+# at once would have turned two files red the moment the glob reached them,
+# and for whoever goes red the cheapest repair is always to loosen the
+# predicate. Those two were moved back to `docs/bugs/` first — they were live
+# tickets misfiled into `closed/`, not reports whose frontmatter had gone
+# stale, and the first ruling (write `status: closed` onto them) would have
+# closed two tickets whose own bodies say they are not fixed.
+#
+# ⚠️ `**/*.md` ALREADY INCLUDES THE TOP LEVEL. Pairing it with `*.md` counted
+# 405 files twice — measured, 833 for a corpus of 428.
+#
+# ⚠️ AND THE PREDICATE HAS A BLIND SPOT WIDENING CANNOT REACH: it is an AND,
+# so a file with `status:` and no `id:` falls out. Measured under `closed/`:
+# one such file, carrying `status: closed`.
+#
+# 🚫 UNJUDGEABLE IS NOT "HAS NO `id:`". Nearly every report here is a RELEASE
+# report with no frontmatter at all — 398 of 426 — and counting those would
+# report the corpus, not a gap. It is the files shaped like tickets that
+# cannot be judged: one frontmatter field present and the other absent.
+# Measured: both 27, status-only 1, id-only 0, neither 398.
+#
+# 🚫 Do not widen the predicate to swallow that one. It is correctly closed in
+# an older format; reaching for it trades a named silence for an unnamed false
+# positive. Naming the count is the fix — a live ticket in that shape would
+# raise K, and K is read.
+for f in "$C"/docs/bugs/reports/**/*.md(N); do
   [ -f "$f" ] || continue
+  scanned=$((scanned+1))
+  case "$(basename "$f")" in README.md) readme=$((readme+1)); continue ;; esac
+  has_id=$(head -20 "$f" | grep -c '^id:')
+  has_st=$(head -20 "$f" | grep -cE '^status:')
+  if [ "$has_id" = 0 ] && [ "$has_st" = 0 ]; then
+    continue                      # a release report, not a ticket
+  fi
+  if [ "$has_id" = 0 ] || [ "$has_st" = 0 ]; then
+    say "   UNJUDGEABLE (half a ticket frontmatter): ${f#$C/docs/bugs/reports/}"
+    unjudgeable=$((unjudgeable+1))
+    continue
+  fi
   # `id:` AND an UNRESOLVED status. Presence of `status:` alone is not enough:
   # a closed investigation's report legitimately keeps ticket-style frontmatter
-  # (measured — the 2026-09-04 a11y bench report does, and its own body says
+  # (measured — the 2026-09-04 a11y bench report does, and its own body said
   # "status: closed" while the frontmatter said open, which is how it looked
   # like an unprocessed ticket for four days).
-  if head -20 "$f" | grep -q '^id:' \
-     && head -20 "$f" | grep -qE '^status: *(open|investigating)'; then
-    say "   MISFILED: $(basename "$f")"
+  if head -20 "$f" | grep -qE '^status: *(open|investigating)'; then
+    say "   MISFILED: ${f#$C/docs/bugs/reports/}"
     mis=$((mis+1))
   fi
 done
-scanned=$(ls -1 "$C"/docs/bugs/reports/*.md(N) 2>/dev/null | wc -l | tr -d " ")
-say "   misfiled=$mis  (scanned $scanned report(s))"
+# 🚫 `scanned` IS COUNTED BY THE LOOP, NOT BY A SECOND GLOB. It used to be
+# `ls -1 <same glob> | wc -l`, which is the same rule written twice: it counted
+# README.md and the loop did not, so the printed denominator was 428 while the
+# frontmatter tally three comments up says 426. Two implementations of one
+# population disagree silently, and the reader cannot tell which is the corpus.
+# Now the loop is the only counter, and what it drops is printed beside it.
+say "   misfiled=$mis  unjudgeable=$unjudgeable  (scanned $scanned, README skipped $readme, recursive)"
 [ "$scanned" != 0 ] || bad "misfiled leg scanned 0 reports in a checkout that HAS the directory"
 [ "$mis" = 0 ] || bad "misfiled tickets under reports/: $mis — move them to docs/bugs/"
 fi
