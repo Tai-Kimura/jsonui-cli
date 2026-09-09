@@ -333,6 +333,7 @@
       },
       "normalization": {
         "description": "Applied in order. Every step is here rather than in a resolver because a rule that lives at one call site is absent from the other two (screen_identity.py, mermaid/flow_graph.py, verify_cmd.py each resolve ids today).",
+        "parentheticalsNest": "The strip step COUNTS DEPTH; it is not a match. A flat pattern consumes up to the INNER close of `Name (a=b / onNavigate(Screen.X))` and leaves the OUTER one, producing the candidate `Name )`, which resolves to nothing. Measured 2026-09-09: 5 destinations nest, and 3 of them were unresolvable for this reason alone — the value read like prose the classifier could not handle when it was prose the classifier had damaged.",
         "pipeline": [
           "compare case-insensitively with whitespace, '_' and '-' removed",
           "strip a trailing parenthetical, full-width or half-width, then split on ' or ', '/', and '、' and try each part",
@@ -342,7 +343,7 @@
           "shape": "each declared alias is (position, affix); position is drawn from the closed set below",
           "positions": ["prefix", "suffix"],
           "positionsNote": "THE TWO POSITIONS OBSERVED SO FAR, not all of them. Infix and partial matches are NOT covered, and saying which is which matters: a generalization that names its coverage makes the third example a counterexample that asks for a redesign, while one that says 'all' makes the same example an exception to be pushed in sideways, leaving the mechanism bent.",
-          "measured": "prefix 'Web' resolves 50 of one face's 93 destinations; suffix '画面' resolves 10 (9 distinct spellings) of another face's 69. The two sit at different ends, which is why the mechanism carries a position rather than a bare string.",
+          "measured": "prefix 'Web' resolves 50 of one face's 93 destinations; suffix '画面' resolves 10 (9 distinct spellings) of another face's 69. The two sit at different ends, which is why the mechanism carries a position rather than a bare string. A THIRD affix then turned up that does not behave like those two: suffix 'View' resolves 8 on one face and 2 on ANOTHER, so an affix is not necessarily one face's convention. Per-face declaration still expresses it — each face declares it separately — but the earlier reading that 'an affix helps exactly one face' was drawn from a sample of two.",
           "scopingIsARiskChoiceNotAMeasuredOne": {
             "whatWasMeasuredAndFailed": "Applying either affix to ALL FOUR faces unconditionally changes not one count. The other faces' zeros come from having no id that matches after the strip — NOT from the declaration withholding itself. So the corpus cannot tell a per-face declaration from a global rule, and an earlier version of this note claimed it could: it read '0 of the other three faces' as evidence the scoping was working, when that zero was made by the predicate.",
             "whatCanBeMeasured": "How close the global rule is to going wrong. Ids beginning with 'Web' already exist — `web_view`, in two of the four faces. Strip the prefix and you get `view`, which is no face's id TODAY. The distance is ONE id: a face that adds `view` turns the global rule into a silent misresolution that gets drawn in a diagram.",

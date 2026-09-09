@@ -169,6 +169,49 @@ class TheAliasCarriesAPositionNotJustAString(unittest.TestCase):
         self.assertEqual(t.why, "matched `Ledger`")
 
 
+class TheParentheticalStripperCounts(unittest.TestCase):
+    """Nesting, because the corpus nests and the first version did not.
+
+    `Name (a=b / onNavigate(Screen.X))` — a transition explaining its own
+    arguments. A flat `\\(...\\)` match consumes up to the INNER close and
+    leaves the OUTER one, so the candidate becomes `Name )` and matches
+    nothing. The value reads like prose the classifier could not handle; it
+    was prose the classifier had damaged.
+
+    ⚠️ THE ONE-LEVEL CASE PASSES UNDER BOTH IMPLEMENTATIONS, so an arm that
+    only tries `Name (a / b)` proves nothing about nesting. Both are here, and
+    the flat one is the control that says the stripper still works at all.
+    """
+
+    IDS = ("product_scanner", "chat")
+
+    def k(self, raw):
+        return classify_destination(raw, self.IDS).kind
+
+    def test_one_level_still_works(self):
+        self.assertEqual(self.k("ProductScanner (push, uuid)"), "screen")
+
+    def test_a_nested_parenthetical_does_not_leave_a_stray_closer(self):
+        self.assertEqual(
+            self.k("ProductScanner (navigateToScreen=.x / onNavigate(Screen.Y))"),
+            "screen", "the outer `)` survived into the candidate")
+
+    def test_full_width_nesting_too(self):
+        self.assertEqual(self.k("ProductScanner（外（内）外）"), "screen")
+
+    def test_an_unbalanced_closer_is_dropped_not_kept(self):
+        # `Name )` is the exact residue the flat version produced. Keeping a
+        # stray closer would reintroduce the bug from the other direction.
+        self.assertEqual(self.k("ProductScanner )"), "screen")
+
+    def test_text_after_the_parenthetical_survives(self):
+        # The stripper removes the spans, not the tail — otherwise
+        # `A or B（note）` would lose B.
+        t = classify_destination("Nope（note） or Chat", self.IDS)
+        self.assertEqual(t.kind, "screen")
+        self.assertEqual(t.screen_id, "chat")
+
+
 class TheMarkerSpellingsAreReadOffACorpus(unittest.TestCase):
     """A marker set is a claim about how people write, and it rots.
 
