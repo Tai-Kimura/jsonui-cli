@@ -240,5 +240,64 @@ class TestGeneratorRouting(unittest.TestCase):
                              "each app must get its own diagram, not one shared page")
 
 
+class TestUnitTestsBelongToTheirApp(unittest.TestCase):
+    """Ruled 2026-09-09: an app's unit tests go under that app.
+
+    The unit section was the ONLY one already carrying per-app subtitles, and
+    that is exactly why it read as correct while sitting outside every app —
+    it looked grouped. The pages were already written to ``<app>/unit/`` and
+    every nav entry already carried its app in ``group``; the sidebar was the
+    last reader still treating them as project-wide.
+    """
+
+    def test_unit_entries_land_in_the_app_their_group_names(self):
+        model = build_app_model(
+            apps_nav={"client": {}, "bar": {}},
+            flow_files=[], screen_files=[],
+            unit_files=[
+                {"name": "AVM", "path": "client/unit/AVM.html", "group": "client"},
+                {"name": "BVM", "path": "bar/unit/BVM.html", "group": "bar"},
+            ],
+            root_app="client",
+        )
+        self.assertEqual([u["name"] for u in model["client"]["unit"]], ["AVM"])
+        self.assertEqual([u["name"] for u in model["bar"]["unit"]], ["BVM"])
+
+    def test_an_app_holding_only_unit_tests_is_still_drawn(self):
+        # `unit` must be in APP_SECTION_ORDER, or the "is this app empty?"
+        # filter drops an app whose only content is unit pages.
+        model = build_app_model(
+            apps_nav={}, flow_files=[], screen_files=[],
+            unit_files=[{"name": "U", "path": "solo/unit/U.html", "group": "solo"}],
+            root_app=None,
+        )
+        self.assertEqual(list(model), ["solo"])
+
+    def test_the_flat_units_section_is_gone_when_apps_are_drawn(self):
+        html = "\n".join(generate_index_sidebar(
+            title="Proj",
+            flow_files=[], screen_files=[],
+            apps_nav={"client": {}},
+            root_app="client",
+            unit_files=[{"name": "AVM", "path": "client/unit/AVM.html",
+                         "group": "client"}],
+        ))
+        titles = _titles(html)
+        flat = [x for k, x in titles if k == "title" and "Unit Tests" in x]
+        self.assertEqual(flat, [], f"a flat Unit Tests copy survives: {flat}")
+        self.assertIn(("subtitle", "\u25bc Unit Tests 1"), titles)
+
+    def test_a_project_with_no_apps_keeps_the_flat_units_section(self):
+        # Nothing to nest into: dropping it would lose the links entirely.
+        html = "\n".join(generate_index_sidebar(
+            title="Proj", flow_files=[], screen_files=[],
+            unit_files=[{"name": "AVM", "path": "unit/AVM.html"}],
+        ))
+        self.assertTrue(
+            any(k == "title" and "Unit Tests" in x for k, x in _titles(html)),
+            "with no app to hold them the flat section must remain",
+        )
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -111,14 +111,28 @@ def test_no_unit_section_when_nothing_declares_one(name):
     assert "Unit Tests" not in html
 
 
-def test_only_apps_with_targets_get_a_subgroup():
+def test_only_apps_with_targets_get_a_group():
     # Two apps declare contracts, a third does not appear in the data at
     # all — so it must not appear as an empty group.
+    #
+    # ⚠️ INVERTED 2026-09-09. This asserted `"Alpha" in html`: the flat
+    # `Unit Tests` section's per-app SUBTITLE, which title-cased the group
+    # name. Unit tests now sit under the app that owns them (ruled that day:
+    # an app's artefacts go inside the app, and the shape does not change
+    # with the app count), so the group name appears as the APP FOLDER's own
+    # heading and is not title-cased.
+    #
+    # Inverted rather than deleted: with the assertion gone, restoring the
+    # flat section would put a second set of links to the same pages back in
+    # the sidebar and nothing would say so.
     units = UNITS + [{"name": "T", "path": "beta/unit/T.html", "group": "beta"}]
     html = "\n".join(sidebar.generate_index_sidebar(
         "T", NAV["flows"], NAV["screens"], unit_files=units))
-    assert "Alpha" in html and "Beta" in html
-    assert "Gamma" not in html
+    assert "sidebar-app-alpha-title" in html
+    assert "sidebar-app-beta-title" in html
+    assert "gamma" not in html.lower()
+    # ...and the flat copy did not survive beside them.
+    assert "sidebar-units-title" not in html
 
 
 def test_the_current_page_is_marked_so_the_reveal_has_something_to_find():

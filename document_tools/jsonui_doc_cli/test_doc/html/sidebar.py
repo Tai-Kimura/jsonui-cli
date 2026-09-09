@@ -758,7 +758,9 @@ def generate_spec_sidebar(
 # ``apps_nav`` comes off ``--app``. This function only puts the two together
 # and names the owner of the ungrouped remainder, which is what nothing else
 # could say.
-APP_SECTION_ORDER = ("diagram", "specs", "components", "screens", "flows")
+APP_SECTION_ORDER = (
+    "diagram", "specs", "components", "screens", "flows", "unit",
+)
 
 
 def build_app_model(
@@ -769,6 +771,7 @@ def build_app_model(
     component_files: list[dict] | None = None,
     root_app: str | None = None,
     app_diagrams: dict[str, str] | None = None,
+    unit_files: list[dict] | None = None,
 ) -> dict[str, dict]:
     """Group every app-scoped artefact under the app that owns it.
 
@@ -807,7 +810,13 @@ def build_app_model(
             entry["components"] = list(component_files or [])
 
     # Tests carry their own app in `group`; '' means the run's own tree.
-    for key, files in (("flows", flow_files), ("screens", screen_files)):
+    # ⚠️ `unit` joins them by the same route and for the same reason: the unit
+    # generator already stamps `group` with the app it generated for, and the
+    # pages are already written to `<app>/unit/`. The sidebar was the last
+    # place still reading them as project-wide (ruled 2026-09-09: an app's
+    # unit tests belong under that app, like everything else it owns).
+    for key, files in (("flows", flow_files), ("screens", screen_files),
+                       ("unit", unit_files)):
         for f in files or []:
             owner = f.get("group") or root_app
             if not owner:
@@ -869,6 +878,7 @@ def _render_index_app_section(app_name: str, data: dict) -> list[str]:
     _list("components", "Components", data.get("components") or [])
     _list("screens", "Screen Tests", data.get("screens") or [])
     _list("flows", "Flow Tests", data.get("flows") or [])
+    _list("unit", "Unit Tests", data.get("unit") or [])
 
     for dir_name, md_files in (data.get("md_files_by_dir") or {}).items():
         md_id = f"sidebar-app-{safe}-md-{_make_safe_id(dir_name)}"
@@ -945,7 +955,7 @@ def generate_index_sidebar(
     # the project's name while holding one app's contents.
     app_model = build_app_model(
         apps_nav, flow_files, screen_files, spec_files, component_files,
-        root_app=root_app, app_diagrams=app_diagrams,
+        root_app=root_app, app_diagrams=app_diagrams, unit_files=unit_files,
     )
     for _app_name, _app_data in app_model.items():
         parts.extend(_render_index_app_section(_app_name, _app_data))
@@ -1062,7 +1072,12 @@ def generate_index_sidebar(
     # Sidebar - Unit Tests (collapsible, starts collapsed). The index BODY
     # already had this group; only the nav was missing it, which is what made
     # the pages read as ungenerated.
-    if unit_files:
+    # ⚠️ Gated the same way the other flat sections are: with apps drawn, a
+    # flat copy is a SECOND set of links to the same pages. That is what the
+    # 2026-09-09 measurement found for specs and components, and this section
+    # had been the only one already carrying per-app subtitles — which is why
+    # it read as correct while sitting outside every app.
+    if unit_files and not app_model:
         parts.extend(_render_tests_sidebar_section(
             unit_files, 'Unit Tests', 'sidebar-units', 'unit', href_prefix=''))
 
