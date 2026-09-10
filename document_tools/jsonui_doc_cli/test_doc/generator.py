@@ -65,6 +65,13 @@ _pages_written: set[Path] = set()
 #: written rather than from a rule about where it would go.
 _written_outside_output: set[Path] = set()
 
+#: Which source file each written page was rendered from, for the writers
+#: that render a file already on disk (a face's markdown, a spec). The site
+#: copy of a leftover is the page whose SOURCE is the leftover — not a page
+#: that happens to share its name, which on one tree was another face's live
+#: screen (2026-09-10).
+_page_sources: dict = {}
+
 
 #: What the last run read, for the closing line. Recorded once at the end of
 #: `generate_html_directory` and phrased in ONE place, the same reason
@@ -97,6 +104,7 @@ def reset_page_failures() -> None:
     _page_failures.clear()
     _pages_written.clear()
     _written_outside_output.clear()
+    _page_sources.clear()
     _generation_counts.clear()
     _document_slot_facts.clear()
     run_log.reset()
@@ -235,6 +243,14 @@ def note_page_generated(path: Path | str, suffix: str = "", indent: str = "    "
     """Report a successfully written page and count it."""
     _pages_written.add(Path(path).resolve())
     print(f"{indent}Generated: {path}{suffix}")
+
+
+def note_page_source(path: Path | str, source: Path | str) -> None:
+    """Record which file on disk a written page was rendered from."""
+    try:
+        _page_sources[Path(path).resolve()] = Path(source).resolve()
+    except OSError:
+        pass
 
 
 def _validation_failure_text(result, limit: int = 5) -> str:
@@ -2534,21 +2550,24 @@ def _is_leftover(p: Path, written: set, cutoff: "float | None") -> bool:
 
 
 def _site_copies_of(orphan: Path, output_path: Path, written: set) -> list:
-    """Pages this run wrote under `-o` that mirror an orphan (same name, same
-    parent directory name): a site run copies each face's docs into the
-    output, so the orphan travels with them and opens from the site index.
-    Measured by triage 2026-09-10 on a renamed spec."""
-    hits = []
+    """Pages this run rendered under `-o` FROM the orphan — a stale markdown
+    file re-rendered into the site every run. Identified by source, never by
+    name: on a tree where two faces share a screen name, the name matched the
+    other face's live page and named it as a copy (triage, 2026-09-10)."""
     try:
-        candidates = output_path.rglob(orphan.name)
+        src = orphan.resolve()
+        out = output_path.resolve()
     except OSError:
-        return hits
-    for c in candidates:
-        try:
-            if c.parent.name == orphan.parent.name and c.resolve() in written:
-                hits.append(c)
-        except OSError:
+        return []
+    hits = []
+    for page, source in _page_sources.items():
+        if source != src or page not in written:
             continue
+        try:
+            page.relative_to(out)
+        except ValueError:
+            continue
+        hits.append(page)
     return sorted(hits)
 
 
@@ -3332,6 +3351,7 @@ def _generate_spec_pages(
                     f.write(content)
 
                 note_page_generated(output_spec_path)
+                note_page_source(output_spec_path, spec_file)
                 success_count += 1
 
             except Exception as e:
@@ -4002,6 +4022,7 @@ def _generate_markdown_pages(
                     f.write(html_content)
 
                 note_page_generated(output_html_path)
+                note_page_source(output_html_path, source_file)
                 success_count += 1
 
             except Exception as e:

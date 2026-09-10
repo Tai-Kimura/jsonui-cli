@@ -58,9 +58,15 @@ def run(tmp_path, monkeypatch):
     md_dir = site / "docs" / "a" / "screens" / "md"; md_dir.mkdir()
     orphan_md = md_dir / "old_name.md"
     orphan_md.write_text("# old", encoding="utf-8"); os.utime(orphan_md, (old, old))
-    site_copy = out / "docs" / "a" / "screens" / "html" / "old_name.html"
-    site_copy.parent.mkdir(parents=True)
-    site_copy.write_text("<html>old</html>", encoding="utf-8"); written.add(site_copy.resolve())
+    # The run renders every markdown under the faces' docs into the site —
+    # the stale one included. That rendered page is the orphan's site copy,
+    # and its SOURCE is the orphan.
+    monkeypatch.setattr(gen, "_page_sources", {})
+    md_files = gen._collect_markdown_files([docs["a"], docs["b"]])
+    gen._generate_markdown_pages([docs["a"], docs["b"]], out, None, md_files)
+    written |= gen.get_written_pages()
+    site_copy = (out / "md" / "screens" / "md" / "old_name.html").resolve()
+    assert site_copy in written, "fixture: the stale markdown must have been rendered into the site"
     monkeypatch.setattr(gen, "get_written_pages", lambda: set(written))
     monkeypatch.setattr(gen, "_written_outside_output",
                         {site / "docs" / "a" / "screens" / "html", site / "docs" / "b" / "screens" / "html", md_dir})
@@ -71,10 +77,11 @@ def test_the_renamed_faces_old_pages_are_named_per_directory_with_their_site_cop
     site, out, docs, orphan, orphan_md, site_copy = run
     pairs = gen._report_stale_pages_outside(out, started_at=time.time())
     assert {p for p, _c in pairs} == {orphan, orphan_md}
-    assert dict(pairs)[orphan] == [site_copy] and dict(pairs)[orphan_md] == []
+    # The html orphan has no page rendered FROM it; the md orphan has one.
+    assert dict(pairs)[orphan] == [] and dict(pairs)[orphan_md] == [site_copy]
     printed = capsys.readouterr().out
     assert "WARNING [doc-stale]: 2 page(s) outside" in printed
-    assert f"{orphan.parent}: 1" in printed and "old_name.html" in printed
+    assert f"{orphan.parent}: 1" in printed and "old_name.html" in printed and "old_name.md" in printed
     assert f"also copied into the site: {site_copy}" in printed
 
 
@@ -119,3 +126,49 @@ def test_directories_under_the_output_tree_are_left_to_the_other_scanner(run):
     gen._written_outside_output.add(inside)
     pairs = gen._report_stale_pages_outside(out, started_at=time.time())
     assert p not in {q for q, _c in pairs}
+
+
+def test_another_faces_live_page_with_the_same_name_is_not_a_copy(run, monkeypatch):
+    """Two faces share a screen name; only one renamed. The other face's live
+    page — same file name, same parent directory name — has its own source
+    and must not be named as the orphan's copy. This is the shape that
+    produced the false positive (a tree where two faces both hold a screen
+    of one name)."""
+    site, out, docs, orphan, orphan_md, site_copy = run
+    live_dir = docs["b"] / "screens" / "md"; live_dir.mkdir()
+    live = live_dir / "old_name.md"; live.write_text("# live on face b", encoding="utf-8")
+    monkeypatch.setattr(gen, "_page_sources", {})
+    # Same relative path on both faces → one site slot; the live face renders
+    # LAST, so the slot's source is the live file (the shared-slot report
+    # covers the overwrite itself).
+    md_files = gen._collect_markdown_files([docs["a"], docs["b"]])
+    gen._generate_markdown_pages([docs["a"], docs["b"]], out, None, md_files)
+    written = set(gen._pages_written) | {(docs["a"] / "screens" / "html" / "new_name.html").resolve(),
+                                       (docs["b"] / "screens" / "html" / "new_name.html").resolve()}
+    monkeypatch.setattr(gen, "get_written_pages", lambda: set(written))
+    pairs = dict(gen._report_stale_pages_outside(out, started_at=time.time()))
+    live_pages = {page for page, src in gen._page_sources.items() if src == live.resolve()}
+    assert live_pages, "fixture: face b's live markdown must have rendered"
+    # By name the slot would be the orphan's copy; by source it is not.
+    assert pairs[orphan_md] == []
+    assert not (set(pairs[orphan_md]) & live_pages)
+    assert live not in pairs  # b's live file is not a leftover
+
+
+def test_both_faces_renamed_gives_each_orphan_its_own_copy(run, monkeypatch):
+    """Positive control for the source rule: two orphans, two copies."""
+    site, out, docs, orphan, orphan_md, site_copy = run
+    md_b = docs["b"] / "components" / "md"; md_b.mkdir(parents=True)
+    old = time.time() - 3600
+    orphan_b = md_b / "gone.md"; orphan_b.write_text("# gone", encoding="utf-8"); os.utime(orphan_b, (old, old))
+    monkeypatch.setattr(gen, "_page_sources", {})
+    md_files = gen._collect_markdown_files([docs["a"], docs["b"]])
+    gen._generate_markdown_pages([docs["a"], docs["b"]], out, None, md_files)
+    written = set(gen._pages_written) | {(docs["a"] / "screens" / "html" / "new_name.html").resolve(),
+                                       (docs["b"] / "screens" / "html" / "new_name.html").resolve()}
+    monkeypatch.setattr(gen, "get_written_pages", lambda: set(written))
+    gen._written_outside_output.add(md_b)
+    pairs = dict(gen._report_stale_pages_outside(out, started_at=time.time()))
+    assert pairs[orphan_md] == [site_copy]
+    assert pairs[orphan_b] == [(out / "md" / "components" / "md" / "gone.html").resolve()]
+    assert pairs[orphan] == []
