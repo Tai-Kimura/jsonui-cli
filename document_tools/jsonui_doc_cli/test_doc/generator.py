@@ -1483,7 +1483,7 @@ def generate_html_directory(
                     mermaid_generated = True
                 print(f"    diagram {_owner}: specs {result.stats.get('specs', 0)} / "
                       f"transitions {result.stats.get('transitions', 0)} / "
-                      f"edges {result.stats.get('spec_edges', 0)} / "
+                      f"spec edges {result.stats.get('spec_edges', 0)} (all in the All tab) / "
                       f"none inferred from wording {result.stats.get('none_inferred', 0)} / "
                       f"flow tests {result.stats.get('flow_tests', 0)} in {owner['flows_dir']} "
                       f"checked {result.stats.get('flow_edges', 0)} transition(s), absent "

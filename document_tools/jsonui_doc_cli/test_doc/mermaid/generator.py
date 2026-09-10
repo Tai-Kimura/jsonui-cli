@@ -101,6 +101,8 @@ def _collect_flow_graph(
 
 
 NO_SPECS_DIAGRAM = "flowchart LR\n    NO_SPECS[No screen specs found]"
+#: First tab: every node and every resolved edge, whatever the groups.
+ALL_TAB = "All"
 
 
 @dataclass(frozen=True)
@@ -213,8 +215,14 @@ def build_diagram(
 
     if not nodes:
         return result
-    result.diagrams = _group_diagrams(nodes, node_metadata, graph.edges, graph.externals)
     result.combined = _build_mermaid_diagram(nodes, graph.edges, node_metadata, graph.externals)
+    # The group tabs show edges WITHIN a group (plus entry edges into it); an
+    # edge between two groups appeared in none of them and on no list — a
+    # face counted 29 resolved edges on the closing line and 19 drawn on the
+    # page (2026-09-10). The combined diagram is the first tab, so every
+    # resolved edge is drawn somewhere the reader can find it.
+    result.diagrams = {ALL_TAB: result.combined}
+    result.diagrams.update(_group_diagrams(nodes, node_metadata, graph.edges, graph.externals))
     return result
 
 
@@ -1295,7 +1303,8 @@ def _generate_tabbed_mermaid_html_page(
     # Build tab buttons and content
     tab_buttons = []
     tab_contents = []
-    for i, (group_name, mermaid_code) in enumerate(sorted(diagrams.items())):
+    ordered = sorted(diagrams.items(), key=lambda kv: (kv[0] != ALL_TAB, kv[0]))
+    for i, (group_name, mermaid_code) in enumerate(ordered):
         active_class = " active" if i == 0 else ""
         tab_id = f"tab-{i}"
 

@@ -408,7 +408,9 @@ class FileReferenceResolutionTests(unittest.TestCase):
         self.tree.screen_test("booking_confirm_t", "booking_confirm", {"group": "booking"})
         self.tree.screen_test("login_t", "login", {"group": "auth"})
         self.tree.screen_test("mypage_t", "mypage", {"group": "auth"})
-        self.assertEqual(sorted(self.tree.grouped()), ["auth", "booking"])
+        groups = self.tree.grouped()
+        self.assertEqual(sorted(k for k in groups if k != "All"), ["auth", "booking"])
+        self.assertIn("All", groups, "the first tab draws every resolved edge")
 
     def test_a_differently_named_test_file_also_folds_onto_its_screen(self):
         self.tree.screen_test("login_smoke", "login", {"name": "ログイン"})

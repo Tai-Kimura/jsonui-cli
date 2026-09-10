@@ -585,3 +585,30 @@ class TheClosingLineCountsTheWholeCommand(unittest.TestCase):
             self.assertIsNotNone(closing, text)
             self.assertIn("WARNING [doc-figma]", text)
             self.assertEqual(int(closing.group(1)), gate, text)
+
+
+class EveryResolvedEdgeIsDrawnSomewhere(unittest.TestCase):
+    """The group tabs draw edges within a group; an edge between two groups
+    was drawn in no tab and listed nowhere (a face counted 29 resolved and
+    19 drawn, 2026-09-10). The All tab draws all of them, first."""
+
+    def test_a_cross_group_edge_is_in_the_all_tab(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            face = _Face(Path(tmp))
+            face.spec("mypage", ["Catalog"])
+            face.spec("catalog", [])
+            _write(face.screens / "mypage_t.test.json", {
+                "type": "screen", "metadata": {"name": "Mypage", "group": "account"},
+                "source": {"layout": "Layouts/mypage.json"}, "cases": []})
+            _write(face.screens / "catalog_t.test.json", {
+                "type": "screen", "metadata": {"name": "Catalog", "group": "catalog"},
+                "source": {"layout": "Layouts/catalog.json"}, "cases": []})
+            out = face.root / "diagram.html"
+            result = generate_mermaid_html(face.specs, out, "T", face.screens, face.layouts, flows_dir=face.flows)
+            self.assertEqual(list(result.diagrams)[0], "All")
+            self.assertIn("mypage --> catalog", result.diagrams["All"])
+            # and in no group tab — that is what made it invisible
+            self.assertNotIn("mypage --> catalog", result.diagrams["account"])
+            self.assertNotIn("mypage --> catalog", result.diagrams["catalog"])
+            page = out.read_text(encoding="utf-8")
+            self.assertLess(page.index(">All<"), page.index(">account<"))
