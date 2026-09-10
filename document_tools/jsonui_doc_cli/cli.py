@@ -476,6 +476,7 @@ from .test_doc import (
     generate_mermaid_diagram,
     generate_mermaid_html,
     build_diagram,
+    diagram_document_href,
     generate_adapter,
     ADAPTER_PLATFORMS,
 )
@@ -783,8 +784,14 @@ def cmd_generate_mermaid(args):
     aliases, app_owned, owned_transitions = _resolve_diagram_declarations(input_dir)
 
     try:
+        # No declaring app, and this command writes its diagram at the root
+        # of its own output, so the mapping returns the declared value
+        # unchanged. Passed explicitly all the same: the parameter has no
+        # default, so a call site that forgets it fails instead of quietly
+        # emitting the spelling that 404s on a multi-app site.
         kwargs = dict(flows_dir=flows_dir, aliases=aliases, app_owned=app_owned,
-                      app_owned_transitions=owned_transitions)
+                      app_owned_transitions=owned_transitions,
+                      document_href=diagram_document_href(None, "diagram.html"))
         if output_path:
             result = generate_mermaid_html(spec_dir, output_path, title, screens_dir, layouts_dir, **kwargs)
         else:

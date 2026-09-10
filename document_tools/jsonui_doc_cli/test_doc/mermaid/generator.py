@@ -149,6 +149,7 @@ def build_diagram(
     aliases=(),
     app_owned=(),
     app_owned_transitions: dict[str, list[str]] | None = None,
+    document_href,
 ) -> DiagramResult:
     """Draw from the specs under ``spec_dir``; check the flow tests under
     ``flows_dir`` against what was drawn.
@@ -200,9 +201,13 @@ def build_diagram(
     # graph drew. Not a regex over the emitted text — `^\s{4}(\w+)\[` reads
     # only square brackets and drops every round-bracketed entry node, which
     # cost one node per face in the first measurement of this ticket.
+    declared = [m["document"] for m in node_metadata.values() if m.get("document")]
+    result.stats["documents_declared"] = len(declared)
+    result.stats["documents_rebased"] = sum(1 for d in declared if document_href(d) != d)
     result.stats["nodes"] = len(nodes)
     result.stats["click_targets"] = sum(
-        1 for node_id in nodes if _click_href(node_metadata.get(node_id, {})))
+        1 for node_id in nodes
+        if _click_href(node_metadata.get(node_id, {}), document_href))
 
     # ---- the check: what the flow tests do vs what the specs declare ----
     flow_files = sorted(flows_path.rglob("*.test.json")) if flows_path and flows_path.is_dir() else []
@@ -232,7 +237,8 @@ def build_diagram(
 
     if not nodes:
         return result
-    result.combined = _build_mermaid_diagram(nodes, graph.edges, node_metadata, graph.externals)
+    result.combined = _build_mermaid_diagram(nodes, graph.edges, node_metadata, graph.externals,
+                                             document_href=document_href)
     collisions = mermaid_id_problems(result.combined)
     if collisions:  # pragma: no cover - impossible by construction; kept as the tripwire
         raise RuntimeError(
@@ -243,7 +249,8 @@ def build_diagram(
     # page (2026-09-10). The combined diagram is the first tab, so every
     # resolved edge is drawn somewhere the reader can find it.
     result.diagrams = {ALL_TAB: result.combined}
-    result.diagrams.update(_group_diagrams(nodes, node_metadata, graph.edges, graph.externals))
+    result.diagrams.update(
+        _group_diagrams(nodes, node_metadata, document_href, graph.edges, graph.externals))
     return result
 
 
@@ -321,7 +328,7 @@ def _external_lines(externals: list[tuple[str, str]], only_from: set[str] | None
     return lines
 
 
-def _click_href(meta: dict) -> str | None:
+def _click_href(meta: dict, document_href) -> str | None:
     """Where a node's click goes, or ``None`` when it must not have one.
 
     A screen test's ``source.document`` is the author's choice and wins. With
@@ -339,7 +346,11 @@ def _click_href(meta: dict) -> str | None:
     """
     document = meta.get("document")
     if document:
-        return document
+        # The declared value says where the page is WRITTEN, not how to reach
+        # it from here. `document_href` asks the writer's own mapping and says
+        # the answer from the diagram's directory; it is required, never
+        # defaulted, because the identity spelling is exactly the bug.
+        return document_href(document)
     page = meta.get("spec_page")
     return f"specs/{page}" if page else None
 
@@ -347,6 +358,7 @@ def _click_href(meta: dict) -> str | None:
 def _group_diagrams(
     nodes: dict[str, str],
     node_metadata: dict[str, dict],
+    document_href,
     all_edges: list[tuple[str, str, str]],
     externals: list[tuple[str, str]],
 ) -> dict[str, str]:
@@ -415,7 +427,7 @@ def _group_diagrams(
         click_lines = []
         for node_id in sorted(group_nodes | relevant_entry_nodes):
             meta = node_metadata.get(node_id, {})
-            href = _click_href(meta)
+            href = _click_href(meta, document_href)
             if href:
                 safe_tooltip = nodes[node_id].replace('"', "'")
                 click_lines.append(
@@ -850,6 +862,8 @@ def _build_mermaid_diagram(
     edges: list[tuple[str, str, str]],
     node_metadata: dict[str, dict] | None = None,
     externals: list[tuple[str, str]] | None = None,
+    *,
+    document_href,
 ) -> str:
     """
     Build the combined Mermaid flowchart diagram string.
@@ -945,7 +959,7 @@ def _build_mermaid_diagram(
     click_lines = []
     for node_id in sorted(nodes):
         meta = node_metadata.get(node_id, {})
-        href = _click_href(meta)
+        href = _click_href(meta, document_href)
         if href:
             safe_tooltip = nodes[node_id].replace('"', "'")
             click_lines.append(
@@ -972,6 +986,7 @@ def generate_mermaid_html(
     app_owned=(),
     app_owned_transitions: dict[str, list[str]] | None = None,
     site_root: Path | str | None = None,
+    document_href,
 ) -> DiagramResult:
     """Write the tabbed diagram page for one owner and return what happened.
 
@@ -992,6 +1007,7 @@ def generate_mermaid_html(
     result = build_diagram(
         spec_dir, flows_dir=flows_dir, screens_dir=screens_dir, layouts_dir=layouts_dir,
         aliases=aliases, app_owned=app_owned, app_owned_transitions=app_owned_transitions,
+        document_href=document_href,
     )
     if not result.diagrams:
         return result
