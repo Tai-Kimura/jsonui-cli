@@ -880,8 +880,16 @@ def generate_mermaid_html(
     aliases=(),
     app_owned=(),
     app_owned_transitions: dict[str, list[str]] | None = None,
+    site_root: Path | str | None = None,
 ) -> DiagramResult:
     """Write the tabbed diagram page for one owner and return what happened.
+
+    ``site_root`` is the directory holding the site's ``index.html``; the
+    page's "Back to Index" link is written RELATIVE to it. Without it the
+    link is ``index.html`` beside the page — right for a page at the root,
+    a 404 for an app's page under ``<app>/`` (reported by the user
+    2026-09-10: every per-app diagram since v1.8.64 linked to
+    ``<app>/index.html``, which does not exist).
 
     The page is written only when something was drawable
     (``result.combined`` non-empty); callers suppress the link otherwise —
@@ -897,10 +905,10 @@ def generate_mermaid_html(
     if not result.diagrams:
         return result
 
+    output_path = Path(output_path)
     html_content = _generate_tabbed_mermaid_html_page(
         result.diagrams, title, errors=result.errors, unresolved=result.unresolved,
-        nones=result.nones)
-    output_path = Path(output_path)
+        nones=result.nones, index_href=index_href_for(output_path, site_root))
     output_path.parent.mkdir(parents=True, exist_ok=True)
     with open(output_path, 'w', encoding='utf-8') as f:
         f.write(html_content)
@@ -1258,6 +1266,20 @@ def _generate_mermaid_html_page(mermaid_code: str, title: str) -> str:
     return html
 
 
+def index_href_for(page_path: Path | str, site_root: Path | str | None) -> str:
+    """The relative href from a page to the site's ``index.html``.
+
+    ``diagram.html`` at the root → ``index.html``; ``user/diagram.html`` →
+    ``../index.html``. With no site root the page is assumed to sit beside
+    the index (the standalone ``generate mermaid -o`` case).
+    """
+    if site_root is None:
+        return "index.html"
+    import os
+    target = Path(site_root).resolve() / "index.html"
+    return os.path.relpath(target, Path(page_path).resolve().parent).replace(os.sep, "/")
+
+
 def _issues_html(errors, unresolved, nones=()) -> str:
     """The check's findings, on the page the reader is already looking at."""
     parts: list[str] = []
@@ -1300,7 +1322,8 @@ def _issues_html(errors, unresolved, nones=()) -> str:
 
 
 def _generate_tabbed_mermaid_html_page(
-    diagrams: dict[str, str], title: str, errors=(), unresolved=(), nones=()
+    diagrams: dict[str, str], title: str, errors=(), unresolved=(), nones=(),
+    index_href: str = "index.html",
 ) -> str:
     """Generate HTML page with tabs for each group diagram."""
     issues_html = _issues_html(list(errors), list(unresolved), list(nones))
@@ -1632,7 +1655,7 @@ def _generate_tabbed_mermaid_html_page(
         </div>
 
         <div class="toolbar">
-            <a href="index.html">Back to Index</a>
+            <a href="{index_href}">Back to Index</a>
             <div class="zoom-controls">
                 <button onclick="zoomOut()" title="Zoom Out">-</button>
                 <span class="zoom-level" id="zoomLevel">100%</span>

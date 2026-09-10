@@ -733,3 +733,63 @@ class AReturnDeclaredAsBackAcceptsTheFlowsForwardStep(unittest.TestCase):
             face.flow("odd", [_s("settings"), _s("change_email_sheet"), _s("mypage")])
             result = face.build()
             self.assertEqual([(e.from_id, e.to_id) for e in result.errors], [("change_email_sheet", "mypage")])
+
+
+class TheBackToIndexLinkResolves(unittest.TestCase):
+    """Every per-app diagram since v1.8.64 linked to `index.html` beside
+    itself — `<app>/index.html`, which does not exist. Reported by the user
+    2026-09-10 on a distributed site."""
+
+    def test_href_for_root_and_nested_pages(self):
+        from jsonui_doc_cli.test_doc.mermaid.generator import index_href_for
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            self.assertEqual(index_href_for(root / "diagram.html", root), "index.html")
+            self.assertEqual(index_href_for(root / "user" / "diagram.html", root), "../index.html")
+            self.assertEqual(index_href_for(root / "a" / "b" / "diagram.html", root), "../../index.html")
+            self.assertEqual(index_href_for(root / "x" / "diagram.html", None), "index.html")
+
+    def test_an_apps_diagram_page_links_to_the_real_index(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            app = root / "alpha"
+            _write(app / "jui.config.json", {
+                "spec_directory": "../docs/alpha/screens/json",
+                "layouts_directory": "../docs/alpha/screens/layouts",
+                "test": {"src": "tests"}})
+            for name, dests in (("login", ["Mypage"]), ("mypage", [])):
+                _write(root / "docs" / "alpha" / "screens" / "layouts" / f"{name}.json", {"type": "View"})
+                _write(root / "docs" / "alpha" / "screens" / "json" / f"{name}.spec.json", {
+                    "type": "screen_spec", "version": "1.0",
+                    "metadata": {"name": name, "displayName": name, "description": "d"},
+                    "structure": {"components": [{"type": "View", "id": "root", "description": "r"}],
+                                  "layout": {"root": "root", "children": []}},
+                    "transitions": [{"trigger": "t", "condition": "c", "destination": d} for d in dests]})
+            _write(app / "tests" / "screens" / "x.test.json",
+                   {"type": "screen", "source": {"layout": "x.json"}, "metadata": {"name": "X"},
+                    "cases": [{"name": "c", "steps": []}]})
+            out = root / "out"
+            with redirect_stdout(io.StringIO()):
+                generate_html_directory(
+                    app / "tests", out, title="Site",
+                    apps=[{"name": "alpha", "docs_path": root / "docs" / "alpha"}],
+                    unit_roots=[{"app": "alpha", "root": app}],
+                    test_roots=[{"app": "alpha", "root": app / "tests"}])
+            page = out / "alpha" / "diagram.html"
+            self.assertTrue(page.exists())
+            href = re.search(r'<a href="([^"]+)">Back to Index</a>', page.read_text(encoding="utf-8")).group(1)
+            self.assertEqual(href, "../index.html")
+            self.assertTrue((page.parent / href).resolve().exists(), "the link must land on a file")
+
+    def test_a_root_diagram_page_still_links_beside_itself(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            face = _Face(Path(tmp))
+            face.spec("login", ["Mypage"])
+            face.spec("mypage", [])
+            face.flow("nav", [_s("login"), _s("mypage")])  # the run needs at least one test file
+            with redirect_stdout(io.StringIO()):
+                generate_html_directory(face.root / "tests", face.root / "out", title="Root")
+            page = face.root / "out" / "diagram.html"
+            href = re.search(r'<a href="([^"]+)">Back to Index</a>', page.read_text(encoding="utf-8")).group(1)
+            self.assertEqual(href, "index.html")
+            self.assertTrue((page.parent / href).exists())

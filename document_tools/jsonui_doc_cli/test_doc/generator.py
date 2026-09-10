@@ -1490,6 +1490,7 @@ def generate_html_directory(
                 owner["spec_dir"], _out, "Flow Diagram", owner["screens_dir"], owner["layouts_dir"],
                 flows_dir=owner["flows_dir"], aliases=owner["aliases"],
                 app_owned=owner["app_owned"], app_owned_transitions=owner["app_owned_transitions"],
+                site_root=output_path,
             )
             for err in result.errors:
                 print(f"  ERROR [doc-diagram]: {_owner}: {err}")
