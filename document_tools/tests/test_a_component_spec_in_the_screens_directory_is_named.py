@@ -16,10 +16,31 @@ import json
 import sys
 from pathlib import Path
 
+import pytest
+
 REPO = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO / "document_tools"))
 
+from jsonui_doc_cli.test_doc import generator as gen  # noqa: E402
 from jsonui_doc_cli.test_doc.generator import _pre_generate_spec_docs  # noqa: E402
+
+
+@pytest.fixture(autouse=True)
+def _fresh_ledger():
+    """The reported-directories ledger is module state, cleared once per run
+    by the caller. An arm that reaches `_pre_generate_spec_docs` directly does
+    not go through that, so each arm states its own starting point.
+
+    ⚠️ Written after a mutation killed the wrong arm: suppressing every
+    directory after the first was caught by `…_reported_once`, but only
+    because an earlier arm had left a key in the ledger. That arm was passing
+    on the ordering, not on the behaviour it names. With a clean ledger each
+    arm pins one direction — too narrow is caught here, too wide is caught by
+    `…_second_distinct_directory…`.
+    """
+    gen._misfiled_reported.clear()
+    yield
+    gen._misfiled_reported.clear()
 
 
 def _spec(path: Path, screen_id: str) -> None:
