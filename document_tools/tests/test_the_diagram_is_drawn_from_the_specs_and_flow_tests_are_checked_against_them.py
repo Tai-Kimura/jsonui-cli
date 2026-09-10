@@ -646,6 +646,39 @@ class TheClosingLineCountsTheWholeCommand(unittest.TestCase):
             self.assertIn("WARNING [doc-figma]", text)
             self.assertEqual(int(closing.group(1)), gate, text)
 
+    def test_a_warning_printed_after_generation_is_counted_too(self):
+        """The specimen the arm above cannot reach: `generation_warnings()`
+        fires only when a spec directory was scanned and held nothing, which
+        happens AFTER generate_html_directory. Putting the closing line ahead
+        of that warning left every other arm green (verification lane's
+        surviving mutation M1c, 2026-09-10, measured: gate 2 / closing 1)."""
+        import contextlib
+        from jsonui_doc_cli.cli import cmd_generate_html
+        from jsonui_doc_cli.run_log import COUNTING_RE
+        from argparse import Namespace
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _write(root / "tests" / "screens" / "x.test.json",
+                   {"type": "screen", "source": {"layout": "x.json"}, "metadata": {"name": "X"},
+                    "cases": [{"name": "c", "steps": []}]})
+            (root / "specs").mkdir()  # declared, scanned, empty
+            _write(root / "jui.config.json", {"spec_directory": "specs"})
+            args = Namespace(input=str(root / "tests"), output=str(root / "out"), title="Empty",
+                             docs=None, figma=None, app=None, layouts_dir=None,
+                             config=str(root / "jui.config.json"), with_checks=False, allow_partial=False)
+            out, err = io.StringIO(), io.StringIO()
+            with redirect_stdout(out), contextlib.redirect_stderr(err):
+                cmd_generate_html(args)
+            text = out.getvalue() + err.getvalue()
+            # 陽性対照 on the specimen: the after-generation warning did fire.
+            self.assertIn("WARNING [doc]: 0 spec file(s) scanned", text, text)
+            gate = sum(1 for line in text.splitlines() if COUNTING_RE.search(line))
+            closing = re.search(r"warnings (\d+)\)", text)
+            self.assertIsNotNone(closing, text)
+            self.assertEqual(int(closing.group(1)), gate, text)
+            # and the closing line comes AFTER that warning, not before it
+            self.assertLess(text.index("WARNING [doc]: 0 spec file(s) scanned"), text.index("warnings "))
+
 
 class EveryResolvedEdgeIsDrawnSomewhere(unittest.TestCase):
     """The group tabs draw edges within a group; an edge between two groups
