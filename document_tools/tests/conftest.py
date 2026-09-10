@@ -171,12 +171,22 @@ def pytest_configure(config):
 # --------------------------------------------------------------------------
 # Module state, reset where every arm can see it.
 #
-# `generator` keeps nine per-run ledgers (written pages, outside writes, page
-# sources, document referrers, the misfiled-directory set, two counters, the
-# slot facts, the diagram errors). One place resets them —
-# `reset_page_failures()` — and the product calls it once, at the top of a
-# run. An arm that reaches an inner function directly does not go through
-# that call, so it inherits whatever the previous arm left.
+# The package keeps per-run ledgers — written pages, outside writes, page
+# sources, document referrers, the misfiled-directory set, the counters, the
+# slot facts, the diagram errors, the slot-sharing notice's dedupe set. One
+# place resets them, `reset_per_run_ledgers()`, and the product calls it once
+# at the top of a run. An arm that reaches an inner function directly does not
+# go through that call, so it inherits whatever the previous arm left.
+#
+# 🚫 NO COUNT IS WRITTEN HERE ON PURPOSE. This comment used to say "nine",
+# which was the number of `.clear()` CALLS in the old reset — it left out the
+# two integer counters and `run_log`, and it left out `_page_failures`, the
+# ledger the function was named after. A number in prose is a claim nobody
+# re-measures; the next ledger makes it wrong silently. The population is
+# derived instead, at the definitions (`run_state.ledger`) and in
+# `tests/test_every_per_run_ledger_is_reset_in_one_place.py`, which reads the
+# package with `ast` and fails on state that is neither registered nor
+# declared not-per-run.
 #
 # 🚨 That is not hypothetical either. On 2026-09-10 an arm named
 # "one directory reached twice is reported once" was passing on the ledger a
@@ -195,6 +205,6 @@ def pytest_configure(config):
 @pytest.fixture(autouse=True)
 def _fresh_generator_ledgers():
     from jsonui_doc_cli.test_doc import generator as _gen
-    _gen.reset_page_failures()
+    _gen.reset_per_run_ledgers()
     yield
-    _gen.reset_page_failures()
+    _gen.reset_per_run_ledgers()

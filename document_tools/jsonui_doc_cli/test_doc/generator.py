@@ -33,6 +33,7 @@ from .markdown import generate_markdown, generate_schema_markdown
 from .mermaid import generate_mermaid_html
 from .mermaid.spec_graph import spec_page_path
 from .. import run_log
+from . import run_state
 from ..run_log import warn
 
 
@@ -52,10 +53,10 @@ from ..run_log import warn
 #
 # Module-level state is safe: one CLI invocation renders one site, and
 # `generate_html_directory` resets it on entry.
-_page_failures: list[dict] = []
+_page_failures: list[dict] = run_state.ledger(globals(), "_page_failures", list)
 # Paths, not a tally: knowing which pages this run wrote is what lets the
 # leftovers from previous runs be named at the end.
-_pages_written: set[Path] = set()
+_pages_written: set[Path] = run_state.ledger(globals(), "_pages_written", set)
 #: Directories this run wrote OUTSIDE `-o`. `generate html` regenerates the
 #: per-spec html/md in the SOURCE tree before it builds the site, for the root
 #: scope and for every `--app` in the same invocation — so one run rewrites
@@ -64,48 +65,48 @@ _pages_written: set[Path] = set()
 #: against that assumption for a whole release cycle; the writes were real and
 #: nothing named them. Named at the end of the run now, from what was actually
 #: written rather than from a rule about where it would go.
-_written_outside_output: set[Path] = set()
+_written_outside_output: set[Path] = run_state.ledger(globals(), "_written_outside_output", set)
 # Set by `_report_stale_pages_outside`: the number of directories that scan
 # walked. `leftoversOutside: 0` beside `…Scanned: 0` is "nothing to look at";
 # beside `…Scanned: 4` it is "looked at four and found none". Without it the
 # two share one symbol, and a face gating on `leftoversOutside == 0` passes
 # unconditionally on a run that registered no outside directories at all
 # (triage, 2026-09-10, sharpening the scoped-zero ticket).
-_stale_outside_scanned: int = 0
+_stale_outside_scanned: int = run_state.ledger(globals(), "_stale_outside_scanned", int)
 # Set by `_report_colliding_spec_sources`: how many names it found held by
 # more than one live source. That check reports N names in ONE line, so the
 # closing line's `warnings` tally — which counts LINES — cannot express its
 # magnitude: fourteen findings and one finding look the same there. A face that
 # wants to gate on the quantity needs a number, and the record is where the
 # run's numbers already live (triage, 2026-09-10, after reading a 14 as a 1).
-_colliding_sources: int = 0
+_colliding_sources: int = run_state.ledger(globals(), "_colliding_sources", int)
 # Directories already reported by the misfiled-component check. One docs tree
 # is reached from the root scope AND from its own `--app` scope, so the check
 # ran twice on it and named the same ten files under two spellings of one
 # path — relative once, absolute once. A face reading that sees two problem
 # directories where there is one (triage, 2026-09-10, on a four-app run).
-_misfiled_reported: set = set()
+_misfiled_reported: set = run_state.ledger(globals(), "_misfiled_reported", set)
 
 #: Which source file each written page was rendered from, for the writers
 #: that render a file already on disk (a face's markdown, a spec). The site
 #: copy of a leftover is the page whose SOURCE is the leftover — not a page
 #: that happens to share its name, which on one tree was another face's live
 #: screen (2026-09-10).
-_page_sources: dict = {}
+_page_sources: dict = run_state.ledger(globals(), "_page_sources", dict)
 
 #: Which tests name each document (resolved source path → test names), from
 #: the document-page writer. A leftover that tests still name is not a page
 #: to delete but a face-side inconsistency (spec renamed, tests not); the
 #: report says so instead of sending the reader to delete it (triage,
 #: 2026-09-10: one such orphan was named by five tests).
-_document_referrers: dict = {}
+_document_referrers: dict = run_state.ledger(globals(), "_document_referrers", dict)
 
 
 #: What the last run read, for the closing line. Recorded once at the end of
 #: `generate_html_directory` and phrased in ONE place, the same reason
 #: `unit-stubs --check` hands its denominator over as a sentence rather than
 #: as numbers for each caller to word again.
-_generation_counts: dict = {}
+_generation_counts: dict = run_state.ledger(globals(), "_generation_counts", dict)
 
 #: What the document-slot report found, for the manifest. The printed report
 #: reaches whoever is watching; its return value reached nobody — the call
@@ -114,12 +115,12 @@ _generation_counts: dict = {}
 #: onto one entry), so one face read `collisions: 0` beside two SHARED SLOT
 #: lines from the same run. Kept under its own name so the two cannot be
 #: read as one number disagreeing with itself.
-_document_slot_facts: dict = {}
+_document_slot_facts: dict = run_state.ledger(globals(), "_document_slot_facts", dict)
 
 
 #: Flow-test transitions absent from the specs, this run. The CLI reads it
 #: back for the exit code the same way it reads `_page_failures`.
-_diagram_errors: list[dict] = []
+_diagram_errors: list[dict] = run_state.ledger(globals(), "_diagram_errors", list)
 
 
 def get_diagram_errors() -> list[dict]:
@@ -127,21 +128,26 @@ def get_diagram_errors() -> list[dict]:
     return list(_diagram_errors)
 
 
-def reset_page_failures() -> None:
-    """Start a fresh accounting run."""
-    _page_failures.clear()
-    _pages_written.clear()
-    _written_outside_output.clear()
-    global _stale_outside_scanned, _colliding_sources
-    _stale_outside_scanned = 0
-    _colliding_sources = 0
-    _misfiled_reported.clear()
-    _page_sources.clear()
-    _document_referrers.clear()
-    _generation_counts.clear()
-    _document_slot_facts.clear()
-    run_log.reset()
-    _diagram_errors.clear()
+#: `run_log` keeps this run's warning tally and resets itself. Registered so
+#: that `reset_per_run_ledgers` is the whole answer to "what does a fresh run
+#: start from", not the answer for the ledgers this module happens to own.
+run_state.external(run_log.reset, "run_log")
+
+
+def reset_per_run_ledgers() -> None:
+    """Start a fresh accounting run.
+
+    🔻 THE NAME IS THE FIX. This was `reset_page_failures`, which named one
+    of the twelve ledgers it cleared, so nobody looking for "where per-run
+    state is reset" found it by that name — and a tenth module-level ledger
+    was added, cleared itself inside one test file, and stayed out of here.
+    A function whose name states one member of its population cannot be
+    found as the place to add the next one.
+
+    The list it used to carry lives at the definitions now
+    (`run_state.ledger`), so a ledger cannot be created without joining it.
+    """
+    run_state.reset_per_run_ledgers()
 
 
 def note_generation_counts(**counts) -> None:
@@ -1182,7 +1188,7 @@ def generate_html_directory(
     output_path = Path(output_dir)
 
     # One run, one tally: the CLI reads these back to decide the exit code.
-    reset_page_failures()
+    reset_per_run_ledgers()
     # Captured before anything is written: pages touched after this
     # belong to this run, whatever the tally says (see _report_stale_pages).
     started_at = time.time()

@@ -3,6 +3,8 @@
 from __future__ import annotations
 from collections import OrderedDict
 
+from .. import run_state
+
 
 def escape_html(text: str) -> str:
     """Escape HTML special characters."""
@@ -61,7 +63,8 @@ def _app_owning(all_tests_nav: dict | None, current_path: str | None) -> str | N
 #: once per generated page. ⚠️ A renderer that printed on every call would emit
 #: the same fact hundreds of times and be switched off, which is how a count
 #: stops being read.
-_REPORTED_SHARED_SLOTS: set = set()
+_REPORTED_SHARED_SLOTS: set = run_state.ledger(
+    globals(), "_REPORTED_SHARED_SLOTS", set)
 
 
 def _report_shared_slots(section_id: str, folded) -> None:

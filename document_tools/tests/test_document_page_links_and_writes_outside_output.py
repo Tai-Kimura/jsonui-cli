@@ -241,13 +241,13 @@ class TheEmbeddedBodyPointsAtPagesThisRunWrote(_Site):
         # which is exactly how the body links were reported as absent on
         # 2026-09-08, from a scan that only counted one of them.
         from jsonui_doc_cli.test_doc.generator import _component_body_rewriter
-        from jsonui_doc_cli.test_doc.generator import note_page_generated, reset_page_failures
+        from jsonui_doc_cli.test_doc.generator import note_page_generated, reset_per_run_ledgers
         root = Path(tempfile.mkdtemp())
         self.addCleanup(shutil.rmtree, root, ignore_errors=True)
         target = root / "user" / "components" / "picker.html"
         target.parent.mkdir(parents=True)
         target.write_text("x", encoding="utf-8")
-        reset_page_failures()
+        reset_per_run_ledgers()
         note_page_generated(target)
         page = root / "docs" / "user" / "screens" / "html" / "booking.html"
         rewrite = _component_body_rewriter(page, root)
@@ -256,12 +256,12 @@ class TheEmbeddedBodyPointsAtPagesThisRunWrote(_Site):
             "<a href='../../components/html/picker.html'>s</a>")
         self.assertEqual(out.count("../../../../user/components/picker.html"), 2,
                          f"only one spelling was rewritten: {out}")
-        reset_page_failures()
+        reset_per_run_ledgers()
 
     def test_a_non_component_link_in_the_body_is_untouched(self):
         from jsonui_doc_cli.test_doc.generator import _component_body_rewriter
-        from jsonui_doc_cli.test_doc.generator import reset_page_failures
-        reset_page_failures()
+        from jsonui_doc_cli.test_doc.generator import reset_per_run_ledgers
+        reset_per_run_ledgers()
         rewrite = _component_body_rewriter(Path("/a/b/c.html"), Path("/a"))
         body = '<a href="../other/thing.html">x</a><a href=\'#anchor\'>y</a>'
         self.assertEqual(rewrite(body), body)

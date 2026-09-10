@@ -40,7 +40,7 @@ from test_document_page_links_and_writes_outside_output import (  # noqa: E402
 # --- C2: one directory, one entry ------------------------------------------
 
 def test_one_directory_spelled_two_ways_is_named_once(tmp_path, monkeypatch, capsys):
-    gen.reset_page_failures()
+    gen.reset_per_run_ledgers()
     real = (tmp_path / "docs" / "x").resolve()
     real.mkdir(parents=True)
     monkeypatch.chdir(tmp_path)
@@ -57,7 +57,7 @@ def test_one_directory_spelled_two_ways_is_named_once(tmp_path, monkeypatch, cap
 
 def test_two_different_directories_are_still_two(tmp_path, monkeypatch, capsys):
     """The control: deduplication is by identity, not by shortening the list."""
-    gen.reset_page_failures()
+    gen.reset_per_run_ledgers()
     for name in ("x", "y"):
         (tmp_path / "docs" / name).mkdir(parents=True)
     monkeypatch.chdir(tmp_path)
@@ -116,7 +116,7 @@ def test_the_reported_shape_a_run_pointed_at_an_app_it_also_lists(tmp_path, monk
 # --- B1: "changed" only ever next to a measurement --------------------------
 
 def _seed(tmp_path, monkeypatch, *, tracked: int, modified: int) -> Path:
-    gen.reset_page_failures()
+    gen.reset_per_run_ledgers()
     d = (tmp_path / "other" / "docs").resolve()
     d.mkdir(parents=True)
     gen._written_outside_output.add(d)

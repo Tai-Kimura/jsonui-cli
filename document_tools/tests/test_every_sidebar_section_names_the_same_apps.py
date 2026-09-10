@@ -600,7 +600,6 @@ class ManyDeclarationsOneDestination(unittest.TestCase):
         import io
         from contextlib import redirect_stdout
         from jsonui_doc_cli.test_doc.html import sidebar
-        sidebar._REPORTED_SHARED_SLOTS.clear()
         buf = io.StringIO()
         with redirect_stdout(buf):
             self._render("screen", self._docs())

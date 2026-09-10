@@ -27,7 +27,7 @@ from pathlib import Path
 from jsonui_doc_cli.test_doc.generator import (
     _generate_spec_pages,
     get_page_failures,
-    reset_page_failures,
+    reset_per_run_ledgers,
 )
 
 
@@ -52,8 +52,8 @@ def _raises(name: str) -> dict:
 
 class SpecPageErrorHandler(unittest.TestCase):
     def setUp(self):
-        reset_page_failures()
-        self.addCleanup(reset_page_failures)
+        reset_per_run_ledgers()
+        self.addCleanup(reset_per_run_ledgers)
 
     def _run(self, specs: dict[str, dict], collect_only: bool):
         # mkdtemp + cleanup rather than a `with` block: the caller inspects

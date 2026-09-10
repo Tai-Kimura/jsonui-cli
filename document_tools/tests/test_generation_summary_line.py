@@ -33,7 +33,7 @@ from jsonui_doc_cli.test_doc.generator import (
     generation_warnings,
     note_generation_counts,
     note_page_generated,
-    reset_page_failures,
+    reset_per_run_ledgers,
 )
 
 WARNING_RE = r"warning \[|warning:|\[warn|⚠"
@@ -41,8 +41,8 @@ WARNING_RE = r"warning \[|warning:|\[warn|⚠"
 
 class SummaryLine(unittest.TestCase):
     def setUp(self):
-        reset_page_failures()
-        self.addCleanup(reset_page_failures)
+        reset_per_run_ledgers()
+        self.addCleanup(reset_per_run_ledgers)
 
     def _pages(self, n: int):
         for i in range(n):
