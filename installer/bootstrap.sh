@@ -250,8 +250,28 @@ rm -rf */spec
 rm -rf */coverage
 rm -rf */.rspec_status
 rm -f  */.DS_Store
+# 🔻 EVERY TOOL'S TEST TREE, AND THE PYTHON ONES NEED A LINE EACH. `rm -rf
+# */spec` above is a one-level glob, so it covers all three Ruby tools at
+# once; the Python tools keep their tests in `tests/`, which that glob does
+# not reach, so each needs its own line. From the initial commit until
+# 2026-09-11 only `test_tools` had one — `document_tools/tests` (83 files)
+# and `jui_tools/tests` (116) shipped to every machine for four months, and
+# the asymmetry read as deliberate because the `build` / `*.egg-info` lines
+# below ARE paired. Nothing consumed them: measured across the consuming
+# projects, references to the distributed test trees were zero.
+#
+# ⚠️ `jui_tools/tests/test_the_distribution_prunes_every_test_tree.py` derives
+# this population from the repo rather than listing it, so a seventh tool
+# added later fails there instead of shipping its tests.
 rm -rf test_tools/tests
+rm -rf document_tools/tests
+rm -rf jui_tools/tests
 rm -rf test_tools/.pytest_cache
+# 🔻 THESE TWO PAIRS CANNOT CATCH WHAT `pip install -e .` MAKES. The prune
+# runs here; the pip step is ~70 lines further down, so anything it creates
+# arrives after this block has finished. They exist for a source tree that
+# already had the artifacts — which a fresh clone never does, both being
+# git-ignored. Kept as defence, named as inert.
 rm -rf test_tools/build
 rm -rf test_tools/*.egg-info
 rm -rf document_tools/build
