@@ -79,6 +79,12 @@ _stale_outside_scanned: int = 0
 # wants to gate on the quantity needs a number, and the record is where the
 # run's numbers already live (triage, 2026-09-10, after reading a 14 as a 1).
 _colliding_sources: int = 0
+# Directories already reported by the misfiled-component check. One docs tree
+# is reached from the root scope AND from its own `--app` scope, so the check
+# ran twice on it and named the same ten files under two spellings of one
+# path — relative once, absolute once. A face reading that sees two problem
+# directories where there is one (triage, 2026-09-10, on a four-app run).
+_misfiled_reported: set = set()
 
 #: Which source file each written page was rendered from, for the writers
 #: that render a file already on disk (a face's markdown, a spec). The site
@@ -129,6 +135,7 @@ def reset_page_failures() -> None:
     global _stale_outside_scanned, _colliding_sources
     _stale_outside_scanned = 0
     _colliding_sources = 0
+    _misfiled_reported.clear()
     _page_sources.clear()
     _document_referrers.clear()
     _generation_counts.clear()
@@ -4096,6 +4103,18 @@ def _pre_generate_spec_docs(
         # "wrote nothing" and "there was nothing to write" print the same.
         # Reported 2026-09-10 while measuring the leaf directories.
         _misfiled = sorted(spec_json_dir.rglob("*.component.json"))
+        try:
+            _seen_key = spec_json_dir.resolve()
+        except OSError:
+            _seen_key = spec_json_dir
+        if _seen_key in _misfiled_reported:
+            # Reached again through the other scope. Resolving the path is
+            # what makes the two arrivals comparable: they differ only in
+            # spelling, so comparing the directories as given would report
+            # both.
+            _misfiled = []
+        elif _misfiled:
+            _misfiled_reported.add(_seen_key)
         if _misfiled:
             print()
             warn(f"  WARNING [doc]: {len(_misfiled)} component spec(s) under "

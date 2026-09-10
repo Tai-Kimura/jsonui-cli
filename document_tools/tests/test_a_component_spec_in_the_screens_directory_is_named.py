@@ -88,3 +88,47 @@ def test_the_screens_loop_still_ignores_the_misfiled_file(tmp_path, capsys):
     written = sorted(p.name for p in (docs / "screens" / "html").glob("*.html")) \
         if (docs / "screens" / "html").is_dir() else []
     assert written == [], "the misfiled component must not be adopted as a screen"
+
+
+def test_one_directory_reached_twice_is_reported_once(tmp_path, capsys):
+    """triage, 2026-09-10, on a four-app run: the same ten files were named
+    twice in one log — once under a relative path and once under the absolute
+    one. A face reading that sees two problem directories where there is one.
+
+    One docs tree is reached from the root scope AND from its own `--app`
+    scope, so the check ran on it twice. Resolving the path is what makes the
+    two arrivals comparable: compared as given, the two spellings are two
+    directories.
+
+    ⚠️ This does not reproduce on a single-root run — that scope reaches each
+    directory once. It takes a run with both.
+    """
+    docs = tmp_path / "docs"
+    _spec(docs / "screens" / "json" / "home.spec.json", "home")
+    _component(docs / "screens" / "json" / "infopanel.component.json", "infopanel")
+
+    _pre_generate_spec_docs(docs)
+    first = capsys.readouterr().out
+    assert "1 component spec(s) under" in first
+
+    # The second arrival, spelled differently: same directory, other path.
+    other_spelling = tmp_path / "." / "docs"
+    _pre_generate_spec_docs(other_spelling)
+    second = capsys.readouterr().out
+    assert "component spec(s) under" not in second, "the same directory must not be named twice"
+
+
+def test_a_second_distinct_directory_is_still_reported(tmp_path, capsys):
+    """The control. Without it, `_misfiled_reported` could suppress every
+    directory after the first, and the run would name one face out of four."""
+    a = tmp_path / "a" / "docs"
+    b = tmp_path / "b" / "docs"
+    for docs, name in ((a, "infopanel"), (b, "badge")):
+        _spec(docs / "screens" / "json" / "home.spec.json", "home")
+        _component(docs / "screens" / "json" / f"{name}.component.json", name)
+
+    _pre_generate_spec_docs(a)
+    assert "infopanel.component.json" in capsys.readouterr().out
+    _pre_generate_spec_docs(b)
+    printed = capsys.readouterr().out
+    assert "1 component spec(s) under" in printed and "badge.component.json" in printed
