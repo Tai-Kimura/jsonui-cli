@@ -864,3 +864,107 @@ class ASubgraphNeverSharesAnIdWithANode(unittest.TestCase):
             self.assertEqual(list(result.diagrams)[0], "All")
             self.assertIn("All (group)", result.diagrams)
             self.assertIn("subgraph sg_All", result.diagrams["All"])
+
+
+class ASpecCanDeclareItsGroup(unittest.TestCase):
+    """The diagram is drawn from specs, but a node's group came only from a
+    screen test (or an app-owned declaration). A screen with a spec and a
+    layout and no test — a sheet, say — had nowhere to declare one and sat
+    in "その他": 22 of 31 drawn nodes on one face (2026-09-10)."""
+
+    def _spec_with_group(self, face: _Face, name: str, dests: list[str], group) -> None:
+        face.spec(name, dests)
+        path = face.specs / f"{name}.spec.json"
+        data = json.loads(path.read_text(encoding="utf-8"))
+        data["metadata"]["group"] = group
+        _write(path, data)
+
+    def test_a_spec_only_screen_lands_in_the_group_its_spec_declares(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            face = _Face(Path(tmp))
+            self._spec_with_group(face, "store_info", ["StoreEditSheet"], "store")
+            self._spec_with_group(face, "store_edit_sheet", [], "store")
+            result = face.build()
+            self.assertIn("store", result.diagrams)
+            self.assertIn("store_edit_sheet", result.diagrams["store"])
+            self.assertNotIn("その他", result.diagrams)
+
+    def test_a_screen_tests_group_wins_over_the_specs(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            face = _Face(Path(tmp))
+            self._spec_with_group(face, "store_info", ["Settings"], "store")
+            face.spec("settings", [])
+            _write(face.screens / "store_info_t.test.json", {
+                "type": "screen", "metadata": {"name": "Store", "group": "catalog"},
+                "source": {"layout": "Layouts/store_info.json"}, "cases": []})
+            result = face.build()
+            self.assertIn("store_info", result.diagrams["catalog"])
+            self.assertNotIn("store", result.diagrams)
+
+    def test_a_list_of_groups_and_the_undeclared_bucket_stays(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            face = _Face(Path(tmp))
+            self._spec_with_group(face, "store_info", ["Settings"], ["store", "legal"])
+            face.spec("settings", [])  # declares nothing -> その他
+            result = face.build()
+            self.assertIn("store", result.diagrams)
+            self.assertIn("legal", result.diagrams)
+            self.assertIn("settings", result.diagrams["その他"])
+
+
+class TwoIdsThatNormalizeAlikeAreOneScreen(unittest.TestCase):
+    """A layout `forgot_password.json` and a spec `forgotpassword.spec.json`
+    normalize to one key. The classifier saw whichever the set yielded
+    last, the winner followed PYTHONHASHSEED (one face: 3 of 6 seeds each
+    way, 31 or 32 nodes), and the round trip split across two nodes with no
+    warning. The winner is now decided by provenance — layout first — every
+    loser is redirected, and the pair is reported."""
+
+    def _face(self, root: Path) -> _Face:
+        face = _Face(root)
+        face.spec("login", ["ForgotPassword"])
+        face.layout("forgot_password")                      # the layout's id
+        _write(face.specs / "forgotpassword.spec.json", {   # the spec's file name
+            "type": "screen_spec", "version": "1.0",
+            "metadata": {"name": "ForgotPassword", "displayName": "パスワードリセット依頼", "description": "d"},
+            "structure": {"components": [{"type": "View", "id": "root", "description": "r"}],
+                          "layout": {"root": "root", "children": []}},
+            "transitions": [{"trigger": "t", "condition": "c", "destination": "Login"}]})
+        return face
+
+    def test_one_node_is_drawn_and_the_pair_is_reported(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            result = self._face(Path(tmp)).build()
+            self.assertEqual(result.id_collisions,
+                             [("forgot_password", [("forgot_password", "layout"), ("forgotpassword", "spec")])])
+            self.assertIn("login --> forgot_password", result.combined)
+            self.assertIn("forgot_password --> login", result.combined)
+            self.assertNotIn("forgotpassword", result.combined.replace("forgot_password", ""))
+            # the spec's label rides on the winner
+            self.assertIn('forgot_password["パスワードリセット依頼"]', result.combined)
+
+    def test_the_output_is_the_same_on_every_run(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            face = self._face(Path(tmp))
+            first = face.build().combined
+            for _ in range(5):
+                self.assertEqual(face.build().combined, first)
+
+    def test_no_collision_reports_nothing(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            face = _Face(Path(tmp))
+            face.spec("login", ["Mypage"])
+            face.spec("mypage", [])
+            self.assertEqual(face.build().id_collisions, [])
+
+    def test_the_site_run_names_both_ids_and_their_sources(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            face = self._face(Path(tmp))
+            face.flow("nav", [_s("login"), _s("forgot_password")])
+            buf = io.StringIO()
+            with redirect_stdout(buf):
+                generate_html_directory(face.root / "tests", face.root / "out", title="Face")
+            log = buf.getvalue()
+            self.assertIn("WARNING [doc-diagram]", log)
+            self.assertIn("'forgot_password' (layout) and 'forgotpassword' (spec)", log)
+            self.assertEqual(get_diagram_errors(), [], "the flow reaches the winner's id")

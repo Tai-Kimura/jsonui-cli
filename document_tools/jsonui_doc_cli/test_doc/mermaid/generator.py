@@ -135,6 +135,8 @@ class DiagramResult:
     unresolved: list[SpecTransition] = field(default_factory=list)
     #: `none` transitions, all inferred from wording today (see SpecGraph.nones)
     nones: list[SpecTransition] = field(default_factory=list)
+    #: ids that normalize alike, drawn as one: (winner, [(raw, source), ...])
+    id_collisions: list[tuple[str, list[tuple[str, str]]]] = field(default_factory=list)
     stats: dict[str, int] = field(default_factory=dict)
 
 
@@ -168,6 +170,7 @@ def build_diagram(
     )
     result.unresolved = list(graph.unresolved)
     result.nones = list(graph.nones)
+    result.id_collisions = list(graph.id_collisions)
     result.stats = {
         "specs": graph.specs_scanned,
         "transitions": len(graph.transitions),
@@ -181,7 +184,7 @@ def build_diagram(
     node_metadata: dict[str, dict] = {}
     drawn_ids = {n for e in graph.edges for n in e[:2]} | {f for f, _raw in graph.externals}
     for screen_id in sorted(drawn_ids):
-        meta = _resolve_screen_metadata(screen_id, tree)
+        meta = _resolve_screen_metadata(screen_id, tree, spec_groups=graph.groups)
         spec_label = graph.nodes.get(screen_id, "")
         if meta["label"] == screen_id.replace("_", " ").title() and spec_label:
             meta["label"] = spec_label
@@ -629,14 +632,23 @@ def _merge_app_owned_groups(
         out.setdefault(screen_id, groups)
 
 
-def _resolve_screen_metadata(screen_id: str, tree: TestTreeIndex) -> dict:
+def _resolve_screen_metadata(
+    screen_id: str, tree: TestTreeIndex, spec_groups: dict[str, list[str]] | None = None
+) -> dict:
     """Label / entry_screen / group / document for one screen id.
 
     With several tests covering one screen, the display name is left as the
     derived title: picking "the first" silently labels a node with another
     screen's test name. Flags and links are merged instead, since those are
     screen-level facts every test on that screen agrees about.
+
+    Groups, in canon precedence: the screen test's ``metadata.group`` wins;
+    the spec's ``metadata.group`` fills in for a screen no test names (the
+    diagram is drawn from specs, so a screen with a spec and no test needed
+    a place to declare one — 22 of 31 nodes on one face had none); the
+    jui.config.json app-owned declaration comes last.
     """
+    spec_groups = spec_groups or {}
     result = {
         "label": screen_id.replace("_", " ").title(),
         "entry_screen": False,
@@ -646,9 +658,7 @@ def _resolve_screen_metadata(screen_id: str, tree: TestTreeIndex) -> dict:
 
     tests = tree.by_screen_id.get(screen_id) or []
     if not tests:
-        # No test covers it — the only remaining source of a group is a
-        # jui.config.json declaration, which is exactly the app-owned case.
-        result["groups"] = list(tree.app_owned_groups.get(screen_id) or [])
+        result["groups"] = list(spec_groups.get(screen_id) or tree.app_owned_groups.get(screen_id) or [])
         return result
 
     names = {
@@ -678,7 +688,7 @@ def _resolve_screen_metadata(screen_id: str, tree: TestTreeIndex) -> dict:
     # A test's own group wins: one screen, one place to look. The
     # declaration only fills in for a screen whose tests declare none.
     result["groups"] = [g for g in groups if not (g in seen or seen.add(g))] or list(
-        tree.app_owned_groups.get(screen_id) or []
+        spec_groups.get(screen_id) or tree.app_owned_groups.get(screen_id) or []
     )
     return result
 

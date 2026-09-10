@@ -545,6 +545,15 @@ def _norm_id(value: str) -> str:
     return re.sub(r"[\s_\-]", "", value).lower()
 
 
+def normalize_id(value: str) -> str:
+    """The comparison key the classifier uses: whitespace, ``_`` and ``-``
+    removed, lower-cased (canon normalization.pipeline step 1). Public so a
+    caller building an id space can see which raw ids collapse onto one key
+    BEFORE handing the space over — two ids that collapse are a collision
+    the classifier cannot arbitrate (it only sees one of them)."""
+    return _norm_id(value)
+
+
 def destination_parts(raw: str) -> list[str]:
     """The de-parenthesized PARTS of a destination, when there are several.
 
@@ -632,7 +641,17 @@ def classify_destination(
     the declaration is per-face; it is not because the numbers said so.
     """
     text = (raw or "").strip()
-    known = {_norm_id(k): k for k in known_ids}
+    # Deterministic: sorted, first wins. Two ids that collapse onto one key
+    # (forgot_password / forgotpassword) used to resolve to whichever the
+    # caller's set happened to yield last — the winner changed with
+    # PYTHONHASHSEED and so did the diagram (measured on one face: 3 of 6
+    # seeds each way, node count 31 or 32). A caller who can tell the ids'
+    # provenance apart should collapse them BEFORE calling (spec_graph does,
+    # layout id first); this only guarantees the same answer for the same
+    # input.
+    known: dict[str, str] = {}
+    for k in sorted(known_ids):
+        known.setdefault(_norm_id(k), k)
 
     if not text or text in {"-", "—", "N/A"}:
         return TransitionTarget("unknown", None, raw, "no destination declared")

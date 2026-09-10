@@ -744,6 +744,9 @@ def cmd_generate_mermaid(args):
             result = generate_mermaid_html(spec_dir, output_path, title, screens_dir, layouts_dir, **kwargs)
         else:
             result = build_diagram(spec_dir, screens_dir=screens_dir, layouts_dir=layouts_dir, **kwargs)
+        for winner, entries in result.id_collisions:
+            named = " and ".join(f"'{raw}' ({source})" for raw, source in entries)
+            warn(f"  WARNING [doc-diagram]: ids {named} normalize to the same key; drawn as '{winner}'")
         for u in result.unresolved:
             warn(f"  WARNING [doc-diagram]: {u.source}: destination {u.raw!r} could not be "
                  f"resolved ({u.why}) and was treated as absent")

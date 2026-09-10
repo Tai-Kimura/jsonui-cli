@@ -58,6 +58,16 @@ class SpecGraph:
     externals: list[tuple[str, str]] = field(default_factory=list)
     #: ``unknown`` and unmapped ``route`` destinations: treated as ABSENT
     unresolved: list[SpecTransition] = field(default_factory=list)
+    #: screen id -> groups declared in the spec's ``metadata.group`` (string
+    #: or list). A screen with a spec and a layout but no screen test had no
+    #: place to declare a group and sat in "その他" forever (one face: 22 of
+    #: 31 drawn nodes). Precedence stays the canon's: a screen test's group
+    #: wins, the spec fills in, the app-owned declaration comes last.
+    groups: dict[str, list[str]] = field(default_factory=dict)
+    #: Raw ids that collapse onto one normalized key, with the id they were
+    #: drawn as: ``(winner, [(raw, source), ...])``. Reported, never silent:
+    #: the classifier can only see one of them.
+    id_collisions: list[tuple[str, list[tuple[str, str]]]] = field(default_factory=list)
     #: ``none`` destinations. Today every one of them is INFERRED from the
     #: wording ("画面内", "SPA"...) — no spec declares the kind explicitly —
     #: so an author who wrote a screen name that happens to contain such a
@@ -114,6 +124,18 @@ def _screen_ids_from_layouts(layouts_dir: Path | str | None) -> set[str]:
     except OSError:
         return set()
     return set(index.screen_ids)
+
+
+def _spec_groups(data: dict) -> list[str]:
+    metadata = data.get("metadata")
+    if not isinstance(metadata, dict):
+        return []
+    value = metadata.get("group")
+    if isinstance(value, str) and value.strip():
+        return [value.strip()]
+    if isinstance(value, list):
+        return [v.strip() for v in value if isinstance(v, str) and v.strip()]
+    return []
 
 
 def _spec_label(data: dict) -> str:
@@ -207,6 +229,35 @@ def build_spec_graph(
         normalize_screen_ref(k): list(v) for k, v in (app_owned_transitions or {}).items()
     }
 
+    # ---- the id space, collapsed onto the classifier's key BEFORE use ----
+    # Two raw ids that normalize alike (forgot_password from a layout,
+    # forgotpassword from a spec's file name) are ONE screen to the
+    # classifier, which sees only the id it happens to be handed. Left to a
+    # set, the winner followed PYTHONHASHSEED, the same face drew 31 or 32
+    # nodes from the same input, and the round trip split across two nodes.
+    # The winner is decided here, by provenance: the layout's id (the one the
+    # generator knows) > an app-owned declaration > a spec's file name; ties
+    # within a rank by sort. Every loser is redirected to the winner and the
+    # pair is reported.
+    normalize = getattr(screen_identity, "normalize_id", None) or (lambda v: v.lower())
+    spec_stems = [spec_screen_id(p) for p in spec_files if _load_spec(p) is not None]
+    by_key: dict[str, list[tuple[str, str]]] = {}
+    for source, raws in (("layout", sorted(_screen_ids_from_layouts(layouts_dir))),
+                         ("app-owned", sorted(set(owned))),
+                         ("spec", sorted(set(spec_stems)))):
+        for raw in raws:
+            entries = by_key.setdefault(normalize(raw), [])
+            if raw not in [r for r, _s in entries]:
+                entries.append((raw, source))
+    canonical: dict[str, str] = {}
+    for key, entries in by_key.items():
+        winner = entries[0][0]
+        for raw, _source in entries:
+            canonical[raw] = winner
+        if len(entries) > 1:
+            graph.id_collisions.append((winner, list(entries)))
+    graph.id_collisions.sort()
+
     # (screen id, spec file or None, spec data or None, [(transition, origin file)])
     loaded: list[tuple[str, Path | None, dict | None, list[tuple[Any, Path | None]]]] = []
     for path in spec_files:
@@ -217,15 +268,16 @@ def build_spec_graph(
         entries: list[tuple[Any, Path | None]] = [
             (t, path) for t in (own if isinstance(own, list) else [])]
         entries.extend(_sub_spec_transitions(path, data))
-        loaded.append((spec_screen_id(path), path, data, entries))
+        screen_id = canonical.get(spec_screen_id(path), spec_screen_id(path))
+        loaded.append((screen_id, path, data, entries))
+        groups = _spec_groups(data)
+        if groups:
+            graph.groups.setdefault(screen_id, groups)
     for screen_id, raws in owned_transitions.items():
-        loaded.append((screen_id, None, None, [({"destination": r}, None) for r in raws]))
+        loaded.append((canonical.get(screen_id, screen_id), None, None,
+                       [({"destination": r}, None) for r in raws]))
 
-    graph.id_space = (
-        _screen_ids_from_layouts(layouts_dir)
-        | {screen_id for screen_id, _p, _d, _t in loaded if _p is not None}
-        | set(owned)
-    )
+    graph.id_space = set(canonical.values())
     aliases = list(aliases)
 
     backs: set[str] = set()

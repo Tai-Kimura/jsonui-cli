@@ -329,6 +329,7 @@
       "A `back` declaration carries no target: it is drawn as a return edge (dotted) to each screen that has a forward edge into the declaring screen. Derived from the specs, never from a test.",
       "An `external` destination is drawn as a terminal node; `none` draws nothing (a positive declaration); `unknown` and an unmapped `route` draw nothing and are treated as ABSENT — counted and listed, not errors by themselves (ruled 2026-09-10: 解決できない宣言は「無い」扱い)."
     ],
+    "idSpaceCollisions": "The id space (layout screen ids ∪ spec stems ∪ app-owned ids) is collapsed onto the classifier's normalized key BEFORE classification. Two raw ids that normalize alike (a layout forgot_password and a spec file forgotpassword) are one screen: the winner is chosen by provenance — layout > app-owned > spec file name, ties by sort — every loser is redirected to it, and the pair is reported as WARNING [doc-diagram] naming both ids and their sources. Measured 2026-09-10 on one face: left to a set, the winner followed PYTHONHASHSEED (3 of 6 seeds each way), the same input drew 31 or 32 nodes, and the round trip split across two nodes with no warning. The classifier itself is deterministic (sorted, first wins) but cannot see provenance, so the collapse lives in the caller.",
     "flowTestCheck": {
       "rule": "Every FORWARD transition a flow test performs (consecutive distinct screens after resolve/canonicalize/collapse) must be an edge the specs declare: a forward edge, or the return edge derived from a `back` declaration (X returns to each screen that pushes it — a flow that leaves a sheet by tapping save and lands on its opener performs that return as a forward step). One that is neither is an ERROR.",
       "ruledOn": "2026-09-10 — 'flowdiagram は spec だけ見て書く。flow test で遷移が見つかって、それが spec にない時はエラーを吐く'",
@@ -423,7 +424,7 @@
       "ambiguity": "When one file name is claimed by several tests covering DIFFERENT screens, nothing is resolved: picking one would silently label the node with the wrong screen."
     },
     "groups": {
-      "source": "A node's group comes from the screen tests covering it (metadata.group). For an app-owned screen, which has no test, it comes from its jui.config.json declaration (appOwnedScreens.declaration.group).",
+      "source": "A node's group comes, in this precedence, from: the screen tests covering it (metadata.group); the screen spec's metadata.group (string or list) — added 2026-09-10 because the diagram is drawn from specs and a screen with a spec and a layout but no test had nowhere to declare one (one face: 22 of 31 drawn nodes undeclared); the jui.config.json app-owned declaration (appOwnedScreens.declaration.group).",
       "ungrouped": "Nodes with no group land in a catch-all bucket, which must keep reading as 'undeclared'. A screen with no way to declare a group would otherwise live there forever and hide the ones that simply have not been declared yet."
     }
   },

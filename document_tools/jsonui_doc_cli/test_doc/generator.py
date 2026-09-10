@@ -1033,11 +1033,36 @@ def _diagram_owners(
         declared_root = (root / src).resolve() if isinstance(src, str) and src else None
         add(app or root_app, app, spec_dir, layouts, config, declared_root)
 
+    def add_from_discovered_config(name: str, app: str | None, start: Path, default_spec_dir: Path) -> None:
+        """A root or flow group with no unit root: derive the config the way
+        the test tree does (walk-up, then the `tests/<app>` sibling) instead
+        of assuming none. Without this a run that is not given unit roots
+        drew from spec stems alone — no layouts in the id space, so a layout
+        id and a spec file name that normalize alike were never seen as one
+        screen, and the check reported a transition the spec does declare."""
+        config, cfg_path = (None, None)
+        if project_config is not None:
+            config, cfg_path = project_config.find_project_config(start)
+        if isinstance(config, dict) and cfg_path:
+            root = Path(cfg_path).parent
+            spec_rel = config.get("spec_directory")
+            spec_dir = (root / spec_rel).resolve() if isinstance(spec_rel, str) and spec_rel else default_spec_dir
+            layouts = layouts_override
+            if layouts is None:
+                layouts_rel = config.get("layouts_directory")
+                if isinstance(layouts_rel, str) and layouts_rel:
+                    layouts = (root / layouts_rel).resolve()
+            src = (config.get("test") or {}).get("src") if isinstance(config.get("test"), dict) else None
+            declared_root = (root / src).resolve() if isinstance(src, str) and src else None
+            add(name, app, spec_dir, layouts, config, declared_root)
+        else:
+            add(name, app, default_spec_dir, layouts_override, None)
+
     if not owners:
-        add(root_app, None, docs_base / "screens" / "json", layouts_override, None)
+        add_from_discovered_config(root_app, None, input_path, docs_base / "screens" / "json")
     for group in flow_groups:
         if group:
-            add(group, group, docs_base / group / "screens" / "json", layouts_override, None)
+            add_from_discovered_config(group, group, input_path / group, docs_base / group / "screens" / "json")
     return owners
 
 
@@ -1498,6 +1523,10 @@ def generate_html_directory(
                     "owner": _owner, "from": err.from_id, "to": err.to_id,
                     "flow": err.flow_name, "file": err.flow_file, "reason": err.reason,
                 })
+            for winner, entries in result.id_collisions:
+                named = " and ".join(f"'{raw}' ({source})" for raw, source in entries)
+                warn(f"  WARNING [doc-diagram]: {_owner}: ids {named} normalize to the same key; "
+                     f"drawn as '{winner}' — rename the spec (or layout) so one screen has one id")
             if result.unresolved:
                 listed = "; ".join(f"{u.source}: {u.raw!r}" for u in result.unresolved[:6])
                 more = "" if len(result.unresolved) <= 6 else f"; +{len(result.unresolved) - 6} more"

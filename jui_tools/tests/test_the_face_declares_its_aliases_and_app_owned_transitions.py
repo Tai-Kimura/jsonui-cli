@@ -23,6 +23,7 @@ from jui_cli.core.screen_identity import (
     app_owned_transitions,
     classify_destination,
     destination_parts,
+    normalize_id,
     load_canon,
     parse_app_owned_screens,
     parse_transition_aliases,
@@ -171,3 +172,20 @@ class ABareNoneIsANone(unittest.TestCase):
     def test_prose_containing_nashi_is_not_swallowed(self):
         self.assertEqual(classify_destination("ログインなしで閲覧", ("chat",)).kind, "unknown")
         self.assertEqual(classify_destination("Chat（ログインなし）", ("chat",)).kind, "screen")
+
+
+class TheClassifierIsDeterministicUnderCollidingIds(unittest.TestCase):
+    """`known = {_norm_id(k): k for k in known_ids}` let the LAST id win, and
+    a set's order follows PYTHONHASHSEED. Sorted, first wins — the same
+    answer for the same input; a caller who knows the ids' provenance
+    collapses them before calling (spec_graph does)."""
+
+    def test_same_answer_whatever_the_order(self):
+        for ids in (["forgotpassword", "forgot_password"], ["forgot_password", "forgotpassword"],
+                    {"forgotpassword", "forgot_password"}):
+            with self.subTest(ids=list(ids)):
+                self.assertEqual(classify_destination("ForgotPassword", ids).screen_id, "forgot_password")
+
+    def test_normalize_id_is_the_classifiers_key(self):
+        self.assertEqual(normalize_id("Forgot_Password"), normalize_id("forgot-password"))
+        self.assertEqual(normalize_id("Forgot Password"), "forgotpassword")
