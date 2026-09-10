@@ -102,11 +102,15 @@ def test_a_second_run_says_updated_not_created(two_roots, capsys):
 
 
 def test_a_single_root_keeps_the_single_tree_spelling(two_roots, capsys):
-    """One root, one manifest, no per-root line, no `apps` — unchanged."""
+    """One root, one manifest, no per-root line; `apps` is `[]`, said.
+
+    ⚠️ Inverted 2026-09-10: `apps` used to be absent on a single-root run, and
+    a face reading it beside a four-root run's `apps` could not tell "no
+    --app" from "not recorded"."""
     out, roots = two_roots
     gen._record_generation_manifest(out, roots["a"], [], {})
     run = _manifest(roots["a"])["summary"]["run"]
-    assert "apps" not in run
+    assert run["apps"] == []
     assert "Manifest created:" not in capsys.readouterr().out
     assert not (roots["b"] / ".jsonui-cli").exists()
 
@@ -197,15 +201,20 @@ def test_outside_writes_are_scoped_to_each_root(two_roots):
     assert a["scope"] == [str(roots["a"].resolve())] and b["scope"] == [str(roots["b"].resolve())]
 
 
-def test_a_single_root_keeps_the_run_level_outside_record(two_roots):
+def test_a_single_root_block_is_scoped_and_says_so(two_roots):
+    """⚠️ Inverted 2026-09-10: a single-root block used to carry the run-level
+    record with no `scope`, and beside multi-root blocks that had one it read
+    as "unrestricted" — the absence wearing another meaning. Every block is
+    scoped to its face's root (∪ docs) and names the scope."""
     out, roots = two_roots
-    outside = {"directories": ["/elsewhere/docs"], "gitTrackedDirectories": {}, "uncheckable": []}
+    own = str((roots["a"] / "docs" / "html").resolve())
+    outside = {"directories": ["/elsewhere/docs", own], "gitTrackedDirectories": {}, "uncheckable": []}
     gen._record_generation_manifest(out, roots["a"], [], outside)
     block = _manifest(roots["a"])["summary"]["run"]["outsideOutput"]
-    # Unscoped (the run-level record) — plus the relative form every block
-    # carries since the manifest became machine-independent.
-    assert {k: v for k, v in block.items() if k != "directoriesRelative"} == outside
-    assert block["directoriesRelative"] == [None]  # /elsewhere is outside the repository
+    assert block["directories"] == [own]
+    assert block["scope"] == [str(roots["a"].resolve())] and block["scopeRelative"] == ["."]
+    assert block["directoriesRelative"] == ["docs/html"]
+    assert block["elsewhere"] == 1  # /elsewhere/docs: counted, not listed
 
 
 def test_a_docs_directory_outside_the_root_is_still_the_faces_own(two_roots, tmp_path):

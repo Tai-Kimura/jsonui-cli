@@ -1870,11 +1870,12 @@ def generate_html_directory(
     # call had already named.
     stale = _report_stale_pages(output_path, started_at)
     outside = _report_writes_outside_output(output_path)
+    stale_outside = _report_stale_pages_outside(output_path, started_at)
     _record_generation_manifest(
         output_path,
         [{"app": e.get("app"), "root": Path(e["root"]), "docs": e.get("docs")} for e in manifest_roots]
         if manifest_roots else project_root,
-        stale, outside, slots=dict(_document_slot_facts))
+        stale, outside, slots=dict(_document_slot_facts), stale_outside=stale_outside)
 
     return generated_files
 
@@ -2150,6 +2151,7 @@ def _record_generation_manifest(
     stale: list,
     outside: dict,
     slots: dict | None = None,
+    stale_outside: list | None = None,
 ) -> None:
     """Write what this run did into `.jsonui-cli/generation-manifest.json`.
 
@@ -2216,7 +2218,8 @@ def _record_generation_manifest(
     # like every other stamp this package writes.
     recorded_at = build_datetime_utc().strftime("%Y-%m-%dT%H:%M:%SZ")
     for target in targets:
-        _record_into(target, targets, manifest, stale, outside, slots, recorded_at)
+        _record_into(target, targets, manifest, stale, outside, slots, recorded_at,
+                     stale_outside or [])
 
 
 def _git_toplevel(root: Path) -> "Path | None":
@@ -2250,6 +2253,20 @@ def _relative_to_root(directories: list, root: Path) -> list:
             continue
         out.append(os.path.relpath(str(real), str(Path(root).resolve())))
     return out
+
+
+def _under_any(p, scopes: list) -> bool:
+    try:
+        real = Path(p).resolve()
+    except OSError:
+        return False
+    for sc in scopes:
+        try:
+            real.relative_to(Path(sc).resolve())
+            return True
+        except (OSError, ValueError):
+            continue
+    return False
 
 
 def _scope_outside(outside: dict, scopes: list) -> dict:
@@ -2291,11 +2308,17 @@ def _scope_outside(outside: dict, scopes: list) -> dict:
         else:
             scoped[key] = value
     scoped["scope"] = [str(r) for r in roots]
+    # The run also wrote outside this scope — another face's tree, or a tree
+    # in another repository. Counted, not listed: the fact survives in every
+    # block (one run rewrites several lanes' trees, which is what broke two
+    # lanes' isolation), while the paths, which are another face's and
+    # machine-specific, stay in that face's own block and in the run's log.
+    scoped["elsewhere"] = sum(1 for d in (outside.get("directories") or []) if not under(d))
     return scoped
 
 
 def _record_into(target: dict, targets: list, manifest, stale: list, outside: dict,
-                 slots: dict | None, recorded_at: str) -> None:
+                 slots: dict | None, recorded_at: str, stale_outside: list) -> None:
     """Write this run's record into ONE root's manifest; see the caller."""
     root = Path(target["root"]).resolve()
     scopes = [root] + ([Path(target["docs"])] if target.get("docs") else [])
@@ -2317,13 +2340,25 @@ def _record_into(target: dict, targets: list, manifest, stale: list, outside: di
     facts["leftoverPaths"] = [str(p) for p in stale[:20]]
     if len(stale) > 20:
         facts["leftoverPathsNote"] = f"first 20 of {len(stale)}"
+    # Leftovers in the directories this run wrote OUTSIDE -o — a renamed spec's
+    # old pages — under this face's scope, like outsideOutput. A face whose
+    # docs tree another face shares counts the same file too: each block is
+    # that face's view, and the paths say which file it is.
+    mine = [(p, copies) for p, copies in stale_outside if _under_any(p, scopes)]
+    facts["leftoversOutside"] = len(mine)
+    facts["leftoverOutsidePaths"] = [str(p) for p, _c in mine[:20]]
+    facts["leftoverOutsideSiteCopies"] = [str(c) for _p, copies in mine[:20] for c in copies]
+    if len(mine) > 20:
+        facts["leftoverOutsidePathsNote"] = f"first 20 of {len(mine)}"
     if outside:
         # Several roots: each face's block names writes into ITS tree, with
         # an explicit empty list when there were none — one face's block used
         # to carry four faces' directories, and the other three had no block
         # at all. One root: the run-level record, unchanged.
-        block = (_scope_outside(outside, scopes)
-                 if len(targets) > 1 else dict(outside))
+        # Always scoped and always named, one root or many: a block without
+        # `scope` read as "unrestricted" beside blocks that had it (measured on
+        # one face's single-root run next to a four-root run, same version).
+        block = _scope_outside(outside, scopes)
         # The same directories relative to THIS manifest's root, beside the
         # absolute ones. The manifest is a tracked file on some faces, and
         # an absolute path makes it machine-specific: a clone at another
@@ -2332,10 +2367,9 @@ def _record_into(target: dict, targets: list, manifest, stale: list, outside: di
         # record's point — the list is byte-identical across clones. A
         # directory outside this repository has no such form and is None.
         block["directoriesRelative"] = _relative_to_root(block.get("directories") or [], root)
-        if block.get("scope"):
-            # The scope is absolute too; the same block must not hold one key
-            # with a relative twin and another without. The root itself is `.`.
-            block["scopeRelative"] = _relative_to_root(block["scope"], root)
+        # The scope is absolute too; the same block must not hold one key
+        # with a relative twin and another without. The root itself is `.`.
+        block["scopeRelative"] = _relative_to_root(block["scope"], root)
         facts["outsideOutput"] = block
     if slots:
         # Its own key, not `collisions`: that word already belongs to the
@@ -2343,12 +2377,10 @@ def _record_into(target: dict, targets: list, manifest, stale: list, outside: di
         # and one face read the two as a single number disagreeing with the
         # SHARED SLOT lines on its terminal.
         facts["documentSlots"] = dict(slots)
-    apps = [t["app"] for t in targets if t.get("app")]
-    if apps:
-        # Which apps this run covered — the same record lands in each of
-        # their manifests, and a reader of one should know the others hold
-        # the same run.
-        facts["apps"] = apps
+    # Which apps this run covered — the same record lands in each of their
+    # manifests, and a reader of one should know the others hold the same
+    # run. Always written: `[]` is "no --app", an absent key would not be.
+    facts["apps"] = [t["app"] for t in targets if t.get("app")]
     facts["recordedAt"] = recorded_at
     try:
         from .. import __version__ as version
@@ -2485,6 +2517,95 @@ def _git_modified_file_count(directory: Path) -> int:
     return sum(1 for line in r.stdout.splitlines() if line.strip())
 
 
+def _is_leftover(p: Path, written: set, cutoff: "float | None") -> bool:
+    """Not written by this run AND untouched since it started — see the
+    docstring of _report_stale_pages for why both conditions are needed."""
+    try:
+        if p.resolve() in written:
+            return False
+    except OSError:
+        return False
+    if cutoff is None:
+        return True
+    try:
+        return p.stat().st_mtime < cutoff
+    except OSError:
+        return False
+
+
+def _site_copies_of(orphan: Path, output_path: Path, written: set) -> list:
+    """Pages this run wrote under `-o` that mirror an orphan (same name, same
+    parent directory name): a site run copies each face's docs into the
+    output, so the orphan travels with them and opens from the site index.
+    Measured by triage 2026-09-10 on a renamed spec."""
+    hits = []
+    try:
+        candidates = output_path.rglob(orphan.name)
+    except OSError:
+        return hits
+    for c in candidates:
+        try:
+            if c.parent.name == orphan.parent.name and c.resolve() in written:
+                hits.append(c)
+        except OSError:
+            continue
+    return sorted(hits)
+
+
+def _report_stale_pages_outside(output_path: Path, started_at: "float | None" = None,
+                                limit: int = 20) -> list:
+    """The same question for every directory this run wrote OUTSIDE `-o`.
+
+    `_report_stale_pages` scans the output tree, and only that: a face's own
+    docs directory (`--app`), which the run rewrites in place, was never
+    scanned, so a spec renamed on one face left its old pages — html and md —
+    behind with nothing naming them, while the site carried both names.
+    Reported 2026-09-10 by the lane that regenerates four faces at once.
+    The directories come from the outside-writes ledger, so the scan covers
+    exactly what the run touched and nothing the operator keeps elsewhere.
+    Returns `(orphan, [site copies])` pairs.
+    """
+    try:
+        out = output_path.resolve()
+    except OSError:
+        out = output_path
+    written = get_written_pages()
+    cutoff = (started_at - 1) if started_at is not None else None
+    seen: set = set()
+    stale: list = []
+    for d in sorted(_written_outside_output, key=str):
+        try:
+            real = d.resolve()
+        except OSError:
+            continue
+        if str(real).startswith(str(out) + "/") or real in seen or not real.is_dir():
+            continue
+        seen.add(real)
+        for pattern in ("*.html", "*.md"):
+            stale.extend(p for p in real.rglob(pattern) if _is_leftover(p, written, cutoff))
+    stale = sorted(set(stale))
+    if not stale:
+        return []
+    pairs = [(p, _site_copies_of(p, output_path, written)) for p in stale]
+    by_dir: dict = {}
+    for p, copies in pairs:
+        by_dir.setdefault(p.parent, []).append((p, copies))
+    print()
+    warn(f"  WARNING [doc-stale]: {len(stale)} page(s) outside {output_path} were not written "
+         "by this run — leftovers from a deleted or renamed source, in the directories "
+         "this run wrote:")
+    shown = 0
+    for d in sorted(by_dir, key=str):
+        print(f"       {d}: {len(by_dir[d])}")
+        for p, copies in by_dir[d]:
+            if shown < limit:
+                print(f"         {p.name}" + (f"  (also copied into the site: {', '.join(str(c) for c in copies)})" if copies else ""))
+                shown += 1
+    if len(stale) > limit:
+        print(f"       … {len(stale) - limit} more")
+    return pairs
+
+
 def _report_stale_pages(output_path: Path, started_at: float | None = None,
                         limit: int = 20) -> list[Path]:
     """Name the pages sitting in the output directory that this run did not write.
@@ -2513,18 +2634,7 @@ def _report_stale_pages(output_path: Path, started_at: float | None = None,
     # Filesystem timestamps are coarser than the call that captured the
     # start, so a page written in the same instant must not look older.
     cutoff = (started_at - 1) if started_at is not None else None
-
-    def is_leftover(p: Path) -> bool:
-        if p.resolve() in written:
-            return False
-        if cutoff is None:
-            return True
-        try:
-            return p.stat().st_mtime < cutoff
-        except OSError:
-            return False
-
-    stale = sorted(p for p in output_path.rglob("*.html") if is_leftover(p))
+    stale = sorted(p for p in output_path.rglob("*.html") if _is_leftover(p, written, cutoff))
     if not stale:
         return []
     print()

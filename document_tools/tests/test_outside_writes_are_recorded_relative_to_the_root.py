@@ -85,20 +85,25 @@ def test_two_clones_at_different_paths_write_the_same_relative_list(tmp_path, mo
 
 
 def test_a_directory_outside_the_repository_has_no_relative_form(tmp_path, monkeypatch):
-    """Single root, run-level record: an outside-the-repo directory keeps only
-    its absolute form and the relative slot says so with None."""
+    """A face whose --app docs live in ANOTHER repository: the directory is in
+    scope, keeps its absolute form, and the relative slot says None because
+    no path relative to this root can name a file outside this repository."""
     site = _site(tmp_path)
-    elsewhere = tmp_path / "other-repo" / "docs"
-    elsewhere.mkdir(parents=True)
+    elsewhere = tmp_path / "other-repo" / "docs" / "a"
+    (elsewhere / "screens" / "html").mkdir(parents=True)
+    subprocess.run(["git", "init", "-q", str(tmp_path / "other-repo")], check=True)
     out = site / "out"; out.mkdir()
     monkeypatch.setattr(gen, "get_written_pages", lambda: set())
     inside = str((site / "docs" / "a" / "screens" / "html").resolve())
+    far = str((elsewhere / "screens" / "html").resolve())
     gen._record_generation_manifest(
-        out, site / "a", [], {"directories": [inside, str(elsewhere.resolve())],
-                              "gitTrackedDirectories": {}, "uncheckable": []})
+        out, [{"app": "a", "root": site / "a", "docs": elsewhere}], [],
+        {"directories": [inside, far], "gitTrackedDirectories": {}, "uncheckable": []})
     block = _manifest(site / "a")["summary"]["run"]["outsideOutput"]
-    assert block["directoriesRelative"] == ["../docs/a/screens/html", None]
-    assert block["directories"][1] == str(elsewhere.resolve())
+    # `inside` is under neither the root nor the (foreign) docs: out of scope.
+    assert block["directories"] == [far]
+    assert block["directoriesRelative"] == [None]
+    assert block["scopeRelative"] == [".", None]
 
 
 def test_the_relative_form_round_trips_through_json_with_the_parent_segments(tmp_path, monkeypatch):

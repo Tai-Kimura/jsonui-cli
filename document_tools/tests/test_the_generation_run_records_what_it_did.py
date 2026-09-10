@@ -93,7 +93,14 @@ def test_c_the_writes_outside_output_survive_too(project):
     }
     gen._record_generation_manifest(out, root, [], outside)
     run = (_manifest(root).get("summary") or {}).get("run") or {}
-    assert run.get("outsideOutput", {}).get("gitTrackedDirectories") == {"/other/lane/docs": 7}
+    # ⚠️ Changed 2026-09-10: every block is scoped to its face's root, so a
+    # directory in ANOTHER lane's tree is no longer listed here — it is
+    # counted under `elsewhere`, so the fact that this run wrote into
+    # another tree still survives the run, in every block, without that
+    # tree's machine-specific path.
+    block = run["outsideOutput"]
+    assert block["gitTrackedDirectories"] == {} and block["directories"] == []
+    assert block["elsewhere"] == 1
 
 
 def test_a_quiet_run_states_its_zeros(project, monkeypatch):
