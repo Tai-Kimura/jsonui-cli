@@ -87,7 +87,12 @@ _COMMENT = (
     "face at 220 and 220 — so a reader who takes 'tracked' for git gets a "
     "true sentence there and no signal that the reading is wrong. That "
     "face's own copy of this file was untracked while it said tracked: "
-    "220."
+    "220. "
+    "'summary.run' is the record of the last 'jsonui-doc generate html' run "
+    "— what it found and wrote outside its output — and names its writer and "
+    "time inside it ('recordedBy', 'recordedAt'). 'jui build' carries that "
+    "block forward unchanged, so it can be older than the entries around it; "
+    "only a doc run replaces it, and a doc run that found nothing removes it."
 )
 
 
@@ -381,14 +386,25 @@ def save(
     found, directories it wrote outside its own output. It lands in its own
     block rather than beside `tracked`/`recorded`, because those two describe
     the manifest's coverage of the tree and these describe the run's actions;
-    a reader who adds them together gets a number that means nothing. Absent
-    when not given, so a caller that has nothing to say says nothing.
+    a reader who adds them together gets a number that means nothing.
+    Carried forward unchanged when not given (`None`): `jui build` has no run
+    facts of its own, and dropping the previous `jsonui-doc` record made "no
+    outside writes" and "no record" the same absence (measured 2026-09-10:
+    a spec-only commit on one face deleted 43 lines of manifest nobody meant
+    to touch). An EMPTY dict clears it — that is a run saying it found
+    nothing. The block names its writer and time (`recordedBy`,
+    `recordedAt`), so a carried block reads as older than the entries
+    around it.
 
     Added 2026-09-09 for `jsonui-doc generate html`, which detected 64
     leftover pages on one face and had nowhere to put the finding: it printed
     them to stdout, discarded the return value, and the pages shipped anyway.
     """
     files, collisions = load_migrated_with_collisions(project_root)
+    # The previous writer's run record, kept when this caller has none.
+    carried_run = None
+    if run_facts is None:
+        carried_run = (load(project_root).get("summary") or {}).get("run")
 
     # Migration happens in load_migrated, BEFORE the prune below. The prune
     # drops any key not currently present, and it compares strings — so when
@@ -499,8 +515,23 @@ def save(
         },
         "files": {k: files[k] for k in sorted(files)},
     }
+    # 🔻 CARRIED FORWARD WHEN THE CALLER HAS NOTHING TO SAY, not dropped —
+    # the rule `trackedByDirectory` got above, for the same reason. `jui
+    # build` never has run facts; `jsonui-doc generate html` always does.
+    # Placing the block only when handed one meant the next build rewrote
+    # the manifest without the doc run's record, and the v1.8.66 notice
+    # had just told every face to read `summary.run.outsideOutput.*` as
+    # the outside-writes discriminator — a missing block then reads as
+    # "none". The record names who wrote it and when, so a carried block
+    # reads as older than the entries around it. An EMPTY dict is not
+    # None: that is a run saying it found nothing, and it clears the block.
     if run_facts:
-        manifest["summary"]["run"] = run_facts
+        run = dict(run_facts)
+        run.setdefault("recordedBy", generated_by)
+        run.setdefault("recordedAt", stamp)
+        manifest["summary"]["run"] = run
+    elif run_facts is None and carried_run:
+        manifest["summary"]["run"] = carried_run
     # A list silently cut at 20 reads as the whole list. Said only when it
     # applies, so the common case stays quiet.
     for field, total in (("droppedKeys", len(dropped)),

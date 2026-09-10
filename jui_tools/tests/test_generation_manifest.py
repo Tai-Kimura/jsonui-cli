@@ -1055,3 +1055,77 @@ class TheTwoLinesShareAQuantityTests(unittest.TestCase):
                               present_keys=[], scope={})["summary"]
             self.assertEqual({"1.8.12": 1}, summary["untrackedVersions"])
             self.assertEqual({"1.8.7": 1}, summary["droppedVersions"])
+
+
+class RunRecordCarriesAcrossWriters(unittest.TestCase):
+    """`summary.run` is the last jsonui-doc run's record, and `jui build` keeps it.
+
+    Measured 2026-09-10 on one face: a doc run wrote its record, the next
+    `jui build` rewrote the manifest without it, and the commit carrying the
+    deletion was a spec edit nobody expected to touch the manifest. `save()`
+    placed `run` only when handed one — the same shape C1 fixed for
+    `trackedByDirectory` (derived when absent, not emptied). A reader of the
+    v1.8.66 notice was told to read `summary.run.outsideOutput.*` as the
+    outside-writes discriminator; a build that drops the block turns "no
+    outside writes" and "no record" into the same absence.
+    """
+
+    DOC = "jsonui-doc generate html"
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.root = Path(self._tmp.name)
+        gen = self.root / "gen"
+        gen.mkdir()
+        (gen / "A.kt").write_text("// A\n", encoding="utf-8")
+
+    def tearDown(self):
+        self._tmp.cleanup()
+
+    def _save(self, **kw):
+        # Both writers go through this one function with `present_keys`, the
+        # way build_cmd and the doc generator call it; only `run_facts` and
+        # `generated_by` differ between them.
+        gm.save(self.root, "1.8.67", [], present_keys=["gen/A.kt"], **kw)
+        return json.loads(gm.manifest_path(self.root).read_text(encoding="utf-8"))
+
+    def test_a_build_carries_the_doc_runs_record_forward_unchanged(self):
+        facts = {"outsideOutput": {"directories": ["docs/html"],
+                                   "gitModifiedDirectories": []},
+                 "manifestIsGitTracked": True}
+        written = self._save(run_facts=facts, generated_by=self.DOC)["summary"]["run"]
+        after = self._save()["summary"]  # jui build: no run facts of its own
+        self.assertEqual(after["run"], written)
+
+    def test_the_record_names_its_writer_and_time_and_a_build_does_not_restamp_it(self):
+        run = self._save(run_facts={"manifestIsGitTracked": False},
+                         generated_by=self.DOC)["summary"]["run"]
+        self.assertEqual(run["recordedBy"], self.DOC)
+        self.assertRegex(run["recordedAt"], r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$")
+        carried = self._save()["summary"]["run"]
+        self.assertEqual(carried["recordedBy"], self.DOC)
+        self.assertEqual(carried["recordedAt"], run["recordedAt"])
+
+    def test_a_build_with_no_earlier_record_writes_none(self):
+        # Nothing is made from nothing: "nobody recorded" must not become a
+        # block that reads as "recorded: nothing found".
+        self.assertNotIn("run", self._save()["summary"])
+
+    def test_a_doc_run_replaces_the_earlier_record(self):
+        self._save(run_facts={"leftovers": 2, "manifestIsGitTracked": False},
+                   generated_by=self.DOC)
+        after = self._save(run_facts={"manifestIsGitTracked": True},
+                           generated_by=self.DOC)["summary"]["run"]
+        self.assertNotIn("leftovers", after)
+        self.assertIs(after["manifestIsGitTracked"], True)
+
+    def test_a_run_that_reports_nothing_clears_the_record(self):
+        # An empty dict is a run saying it found nothing — not "no caller".
+        self._save(run_facts={"leftovers": 2}, generated_by=self.DOC)
+        self.assertNotIn("run", self._save(run_facts={})["summary"])
+
+    def test_the_carried_record_does_not_leak_into_the_builds_own_numbers(self):
+        self._save(run_facts={"leftovers": 5}, generated_by=self.DOC)
+        summary = self._save()["summary"]
+        self.assertEqual(summary["tracked"], 1)
+        self.assertEqual(summary["trackedByDirectory"], {"gen": 1})
