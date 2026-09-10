@@ -950,17 +950,23 @@ def _diagram_owners(
         if entry.get("root"):
             roots_by_app[entry.get("app")] = Path(entry["root"])
 
-    def tests_for(app: str | None) -> tuple[Path, Path, str]:
+    def tests_for(app: str | None, declared_root: Path | None = None) -> tuple[Path, Path, str]:
         """``(flows_dir, screens_dir, provenance)`` — provenance says which
         root the paths came from, so the log never claims to have LOOKED at
-        a fallback directory that does not exist (a face read
-        `flow tests 0 in client/tests/bar` as "it looked there")."""
-        declared = roots_by_app.get(app)
-        if declared is not None and declared.is_dir():
-            base, provenance = declared, "declared test root"
+        a directory it did not (a face read `flow tests 0 in client/tests/bar`
+        as "it looked there"). An app that DECLARES `test.src` is judged by
+        the declared path, present or absent; the fallback under the input
+        directory is only for apps that declare nothing."""
+        declared = roots_by_app.get(app) or declared_root
+        if declared is not None:
+            if declared.is_dir():
+                base, provenance = declared, "declared test root"
+            else:
+                return declared / "flows", declared / "screens", "no test root (declared, absent)"
         else:
             base = input_path / app if app else input_path
-            provenance = "fallback under the input directory" if base.is_dir() else "no test root"
+            provenance = ("fallback under the input directory" if base.is_dir()
+                          else "no test root (undeclared)")
         flows = base / "flows" if (base / "flows").exists() else base
         screens = base / "screens" if (base / "screens").exists() else flows.parent / "screens"
         return flows, screens, provenance
@@ -969,7 +975,7 @@ def _diagram_owners(
     seen_specs: set[Path] = set()
 
     def add(name: str, app: str | None, spec_dir: Path | None, layouts: Path | None,
-            config: dict | None) -> None:
+            config: dict | None, declared_root: Path | None = None) -> None:
         if spec_dir is None or not spec_dir.is_dir():
             return
         key = spec_dir.resolve()
@@ -985,7 +991,7 @@ def _diagram_owners(
             declared = project_config.declared_app_owned_screens(config)
             app_owned = [e.screen_id for e in screen_identity.parse_app_owned_screens(declared)]
             owned_transitions = screen_identity.app_owned_transitions(declared)
-        flows, screens, provenance = tests_for(app)
+        flows, screens, provenance = tests_for(app, declared_root)
         owners.append({
             "name": name, "app": app, "spec_dir": spec_dir, "layouts_dir": layouts,
             "aliases": aliases, "app_owned": app_owned,
@@ -1009,7 +1015,9 @@ def _diagram_owners(
             if isinstance(layouts_rel, str) and layouts_rel:
                 layouts = (root / layouts_rel).resolve()
         app = entry.get("app")
-        add(app or root_app, app, spec_dir, layouts, config)
+        src = (config.get("test") or {}).get("src") if isinstance(config.get("test"), dict) else None
+        declared_root = (root / src).resolve() if isinstance(src, str) and src else None
+        add(app or root_app, app, spec_dir, layouts, config, declared_root)
 
     if not owners:
         add(root_app, None, docs_base / "screens" / "json", layouts_override, None)
@@ -1486,8 +1494,10 @@ def generate_html_directory(
                 app_diagrams[_owner] = owner["rel"]
                 if not owner["app"]:
                     mermaid_generated = True
-                if owner["tests_provenance"] == "no test root":
-                    flows_clause = f"no test root for {_owner} ({owner['flows_dir']} absent), nothing checked"
+                if owner["tests_provenance"].startswith("no test root"):
+                    which = ("declared " if "declared" in owner["tests_provenance"] else "")
+                    flows_clause = (f"no test root for {_owner} ({which}{owner['flows_dir'].parent} absent), "
+                                    f"nothing checked")
                 else:
                     flows_clause = (f"flow tests {result.stats.get('flow_tests', 0)} in "
                                     f"{owner['flows_dir']} ({owner['tests_provenance']}) checked "
