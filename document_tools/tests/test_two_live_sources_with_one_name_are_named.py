@@ -113,3 +113,46 @@ def test_a_component_and_a_screen_sharing_a_name_are_named(tmp_path, capsys):
     found = gen._report_colliding_spec_sources(docs)
     assert [k for k, _ in found] == ["sidepanel"]
     assert "components/json/sidepanel.component.json" in capsys.readouterr().out
+
+
+def test_the_same_file_name_in_two_slots_is_silent(tmp_path, capsys):
+    """The control this check needed and did not have, 2026-09-10.
+
+    The first cut asked only whether the names normalise alike, so it named
+    every face that keeps a `requirements/` spec and a `screens/` spec for
+    one screen under the SAME file name — a deliberate arrangement, measured
+    on one face as fourteen pairs, every one with the same title. The defect
+    reported is a rename done in one slot and not the other: the spellings
+    DIFFER and normalise alike.
+
+    ⚠️ The control that shipped with the first cut — two slots holding two
+    DIFFERENT screens — does not test this. Those names do not normalise
+    alike either, so they never reach the predicate. A control has to be
+    chosen from inside the window it is checking.
+    """
+    docs = tmp_path / "docs"
+    _spec(docs / "requirements" / "json" / "login.spec.json", "login", "Login")
+    _spec(docs / "screens" / "json" / "login.spec.json", "login", "Login")
+    _spec(docs / "requirements" / "json" / "splash.spec.json", "splash", "Splash")
+    _spec(docs / "screens" / "json" / "splash.spec.json", "splash", "Splash")
+
+    assert gen._report_colliding_spec_sources(docs) == []
+    assert "doc-source" not in capsys.readouterr().out
+
+
+def test_one_differing_spelling_among_same_named_pairs_is_still_named(tmp_path, capsys):
+    """…and narrowing must not swallow the real one. The same tree as the
+    control, plus one screen renamed under only one slot."""
+    docs = tmp_path / "docs"
+    _spec(docs / "requirements" / "json" / "login.spec.json", "login", "Login")
+    _spec(docs / "screens" / "json" / "login.spec.json", "login", "Login")
+    _spec(docs / "requirements" / "json" / "twofaverification.spec.json",
+          "twofaverification", "Two-factor")
+    _spec(docs / "screens" / "json" / "two_fa_verification.spec.json",
+          "two_fa_verification", "Two-factor (renamed)")
+
+    found = gen._report_colliding_spec_sources(docs)
+    printed = capsys.readouterr().out
+    assert [k for k, _ in found] == ["twofaverification"], "the deliberate pair must not be named"
+    assert "1 name(s) are held by more than one LIVE spec source" in printed
+    assert "login" not in printed

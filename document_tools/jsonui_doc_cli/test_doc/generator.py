@@ -3957,7 +3957,17 @@ def _report_colliding_spec_sources(docs_base: Path) -> list:
             if not (f.name.endswith(".spec.json") or f.name.endswith(".component.json")):
                 continue
             by_key.setdefault(_source_key(f), []).append(f)
-    collisions = [(k, v) for k, v in sorted(by_key.items()) if len(v) > 1]
+    # ⚠️ Normalising alike is not enough. A face that keeps a `requirements/`
+    # spec and a `screens/` spec for one screen under the SAME file name is
+    # doing that deliberately — one face was measured holding fourteen such
+    # pairs, every one with the same title, and the first cut of this check
+    # named all fourteen. The defect reported is a rename done in one slot
+    # and not the other: the spellings DIFFER and normalise alike. So the
+    # group must hold more than one raw name before it is a finding.
+    collisions = [
+        (k, v) for k, v in sorted(by_key.items())
+        if len(v) > 1 and len({f.name for f in v}) > 1
+    ]
     if not collisions:
         return []
     print()
