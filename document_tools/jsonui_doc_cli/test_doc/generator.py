@@ -2214,6 +2214,39 @@ def _record_generation_manifest(
         _record_into(target, targets, manifest, stale, outside, slots, recorded_at)
 
 
+def _git_toplevel(root: Path) -> "Path | None":
+    """The repository that holds `root`, or None when there is none to ask."""
+    try:
+        out = subprocess.run(["git", "-C", str(root), "rev-parse", "--show-toplevel"],
+                             capture_output=True, text=True, timeout=10)
+    except (OSError, subprocess.SubprocessError):
+        return None
+    if out.returncode != 0 or not out.stdout.strip():
+        return None
+    try:
+        return Path(out.stdout.strip()).resolve()
+    except OSError:
+        return None
+
+
+def _relative_to_root(directories: list, root: Path) -> list:
+    """Each directory relative to `root`, or None when it lies outside the
+    repository that holds `root` (then only the absolute form can name it).
+    A sub-repository is its own repository here, which is what its face
+    commits."""
+    top = _git_toplevel(root) or Path(root).resolve()
+    out: list = []
+    for d in directories:
+        try:
+            real = Path(d).resolve()
+            real.relative_to(top)
+        except (OSError, ValueError):
+            out.append(None)
+            continue
+        out.append(os.path.relpath(str(real), str(Path(root).resolve())))
+    return out
+
+
 def _scope_outside(outside: dict, scopes: list) -> dict:
     """The outside-writes record restricted to the face's own directories.
 
@@ -2283,8 +2316,17 @@ def _record_into(target: dict, targets: list, manifest, stale: list, outside: di
         # an explicit empty list when there were none — one face's block used
         # to carry four faces' directories, and the other three had no block
         # at all. One root: the run-level record, unchanged.
-        facts["outsideOutput"] = (_scope_outside(outside, scopes)
-                                  if len(targets) > 1 else outside)
+        block = (_scope_outside(outside, scopes)
+                 if len(targets) > 1 else dict(outside))
+        # The same directories relative to THIS manifest's root, beside the
+        # absolute ones. The manifest is a tracked file on some faces, and
+        # an absolute path makes it machine-specific: a clone at another
+        # path rewrites every line on its first run. Relative to the root —
+        # `../docs/<face>/…` on a split tree, which is not a defect but the
+        # record's point — the list is byte-identical across clones. A
+        # directory outside this repository has no such form and is None.
+        block["directoriesRelative"] = _relative_to_root(block.get("directories") or [], root)
+        facts["outsideOutput"] = block
     if slots:
         # Its own key, not `collisions`: that word already belongs to the
         # manifest's count of keys whose spellings normalised onto one entry,

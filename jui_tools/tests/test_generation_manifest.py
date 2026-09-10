@@ -1140,3 +1140,20 @@ class RunRecordCarriesAcrossWriters(unittest.TestCase):
         for _ in range(3):
             after = self._save()["summary"]
         self.assertEqual(after["run"], written)
+
+
+    def test_an_unstamped_block_from_an_earlier_release_is_named_once_when_carried(self):
+        # 1.8.66's doc run wrote `run` without recordedBy; a 1.8.67 build must
+        # not leave that absence to read as "no doc run". Measured on one face
+        # the day 1.8.67 shipped.
+        self._save(run_facts={"manifestIsGitTracked": True}, generated_by=self.DOC)
+        path = gm.manifest_path(self.root)
+        data = json.loads(path.read_text(encoding="utf-8"))
+        for k in ("recordedBy", "recordedAt"):
+            data["summary"]["run"].pop(k, None)
+        path.write_text(json.dumps(data, indent=2), encoding="utf-8")
+        carried = self._save()["summary"]["run"]
+        self.assertEqual(carried["recordedBy"], "an earlier release (unstamped, before 1.8.67)")
+        self.assertNotIn("recordedAt", carried)
+        # And a stamped block is still carried byte-for-byte.
+        self.assertEqual(self._save()["summary"]["run"], carried)

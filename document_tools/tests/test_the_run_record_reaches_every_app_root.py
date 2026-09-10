@@ -201,7 +201,11 @@ def test_a_single_root_keeps_the_run_level_outside_record(two_roots):
     out, roots = two_roots
     outside = {"directories": ["/elsewhere/docs"], "gitTrackedDirectories": {}, "uncheckable": []}
     gen._record_generation_manifest(out, roots["a"], [], outside)
-    assert _manifest(roots["a"])["summary"]["run"]["outsideOutput"] == outside
+    block = _manifest(roots["a"])["summary"]["run"]["outsideOutput"]
+    # Unscoped (the run-level record) — plus the relative form every block
+    # carries since the manifest became machine-independent.
+    assert {k: v for k, v in block.items() if k != "directoriesRelative"} == outside
+    assert block["directoriesRelative"] == [None]  # /elsewhere is outside the repository
 
 
 def test_a_docs_directory_outside_the_root_is_still_the_faces_own(two_roots, tmp_path):

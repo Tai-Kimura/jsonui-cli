@@ -531,7 +531,13 @@ def save(
         run.setdefault("recordedAt", stamp)
         manifest["summary"]["run"] = run
     elif run_facts is None and carried_run:
-        manifest["summary"]["run"] = carried_run
+        run = dict(carried_run)
+        # A block written before the stamp existed (1.8.66's doc run) carries
+        # no recordedBy, and a reader who takes that absence as "no doc run"
+        # is wrong twice. It is named once, as what it is; a stamped block is
+        # carried byte-for-byte.
+        run.setdefault("recordedBy", "an earlier release (unstamped, before 1.8.67)")
+        manifest["summary"]["run"] = run
     # A list silently cut at 20 reads as the whole list. Said only when it
     # applies, so the common case stays quiet.
     for field, total in (("droppedKeys", len(dropped)),
