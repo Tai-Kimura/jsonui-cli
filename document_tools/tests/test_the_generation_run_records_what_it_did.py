@@ -96,7 +96,7 @@ def test_c_the_writes_outside_output_survive_too(project):
     assert run.get("outsideOutput", {}).get("gitTrackedDirectories") == {"/other/lane/docs": 7}
 
 
-def test_a_quiet_run_states_its_zeros(project):
+def test_a_quiet_run_states_its_zeros(project, monkeypatch):
     """A run that found nothing says so with explicit zeros.
 
     ⚠️ Inverted 2026-09-10 (ticket summary-run-encodes-zero-two-different-
@@ -109,6 +109,9 @@ def test_a_quiet_run_states_its_zeros(project):
     `manifestIsGitTracked` is a fact about every run) stands.
     """
     root, out = project
+    # The outside-writes ledger is process-wide; other arms in this process
+    # have written elsewhere, so this run starts it empty like a fresh run.
+    monkeypatch.setattr(gen, "_written_outside_output", type(gen._written_outside_output)())
     gen._record_generation_manifest(out, root, [], gen._report_writes_outside_output(out))
     run = (_manifest(root).get("summary") or {}).get("run") or {}
     assert "manifestIsGitTracked" in run
