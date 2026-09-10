@@ -321,9 +321,11 @@ jobs:
         # to the last line that supports 2.6.
         if: ${{ matrix.ruby == '2.6' }}
         run: gem install ${{ matrix.gems }} --no-document
-      - name: Install TypeScript (rjui emitted-TS type-check)
+      - name: Install TypeScript and esbuild (rjui emitted-TS type-check, define fold)
         # The rjui specs type-check emitted TSX with a tsc pinned in
-        # rjui_tools/spec/support/package.json. It lives under spec/ so it
+        # rjui_tools/spec/support/package.json, and run the generated
+        # screenMarker helper through esbuild's define (same package.json)
+        # to measure that a production build folds the marker away. It lives under spec/ so it
         # never reaches a consumer — `jui sync_tool` deletes spec/ by default
         # and the distribution does not ship it.
         #

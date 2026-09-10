@@ -1174,6 +1174,18 @@ module RjuiTools
         # constant-folds the branch away. A `globalThis.process` lookup would
         # typecheck too, but bundlers do NOT replace it — the marker would
         # then ship in production, which is the thing being prevented.
+        #
+        # ⚠️ 2026-09-10: from a2f06144 the paragraph above was true and the
+        # code was not. The `| undefined` shape of the declaration forced a
+        # `typeof` guard and an optional chain (`process?.env?.NODE_ENV`),
+        # and neither is the literal expression a bundler replaces. Measured:
+        # Next 16 (Turbopack) kept a runtime check against its `process`
+        # polyfill — whose `env` is empty in a browser — and the marker
+        # rendered in every web face's production build; esbuild folded the
+        # `typeof` and kept the marker. The declaration now has the shape that
+        # lets the plain member read type-check, and
+        # spec/cli/commands/screen_marker_helper_spec.rb runs the emitted text
+        # through a define, so the fold is measured rather than described.
         def emit_screen_marker_helper
           generated_dir = @config['generated_directory'] || 'src/generated'
           FileUtils.mkdir_p(generated_dir)
@@ -1181,7 +1193,7 @@ module RjuiTools
           extension = is_ts ? 'ts' : 'js'
           path = File.join(generated_dir, "screenMarker.#{extension}")
 
-          declare = is_ts ? "declare const process: { env?: { NODE_ENV?: string } } | undefined;\n\n" : ''
+          declare = is_ts ? "declare const process: { env: { NODE_ENV?: string } };\n\n" : ''
           id_type = is_ts ? ': string' : ''
           ret_type = is_ts ? ': Record<string, string>' : ''
 
@@ -1198,7 +1210,7 @@ module RjuiTools
             // marker is test scaffolding and has no place in a shipped app,
             // matching the DEBUG-only markers on iOS and Android.
             #{declare}export function screenMarker(screenId#{id_type})#{ret_type} {
-              if (typeof process !== 'undefined' && process?.env?.NODE_ENV === 'production') {
+              if (process.env.NODE_ENV === 'production') {
                 return {};
               }
               return { 'data-screen': screenId };

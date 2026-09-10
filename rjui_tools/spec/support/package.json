@@ -1,8 +1,9 @@
 {
   "name": "rjui-tools-spec-support",
   "private": true,
-  "description": "TypeScript compiler for the rjui spec suite. Lives under spec/ so it never reaches a consumer: `jui sync_tool` deletes spec/ by default, and the distribution does not ship it.",
+  "description": "TypeScript compiler and esbuild (compile-time define) for the rjui spec suite. Lives under spec/ so it never reaches a consumer: `jui sync_tool` deletes spec/ by default, and the distribution does not ship it.",
   "devDependencies": {
+    "esbuild": "0.28.1",
     "typescript": "5.9.2"
   }
 }

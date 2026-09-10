@@ -21,7 +21,12 @@ RSpec.describe RjuiTools::React::ReactGenerator do
   end
 
   describe 'screen marker' do
-    it 'puts data-screen on the root element, gated on NODE_ENV' do
+    # The gate itself — literal `process.env.NODE_ENV`, folded by a define —
+    # is pinned in spec/cli/commands/screen_marker_helper_spec.rb. This
+    # example was named 'gated on NODE_ENV' from 2026-07-27 to 2026-09-10
+    # while asserting only the import and the spread; the gate was broken
+    # the whole time.
+    it 'spreads the helper on the root element and imports it from @/generated/screenMarker' do
       output = generator.generate('Home', layout, screen_id: 'home')
 
       expect(output).to include(%({...screenMarker("home")}))
