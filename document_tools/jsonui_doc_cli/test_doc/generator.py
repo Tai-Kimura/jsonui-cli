@@ -148,6 +148,21 @@ def generation_summary_line() -> str:
     if structural:
         warnings += (f" ({sum(structural.values())} structural: "
                      f"{', '.join(sorted(structural))})")
+    # 🔻 THE READER'S EXPRESSION ALSO MATCHES DATA. N counts what went through
+    # `warn()`; the rulebook's grep counts every line it matches, and a face
+    # printed a test NAME carrying "warning:" (the shared-slot listing echoes
+    # names) — its log said 2 where this line said 1, and no fixture's name
+    # had ever carried the token, so the B2 arm was green for the fixtures'
+    # reason (2026-09-10). Bending data so the expression misses it would
+    # dull the instrument; so N stays the tool's, and this clause says how
+    # many more lines the gate will count that are not warnings — the
+    # reader's 2 explained by the line that says 1. Only the command can see
+    # its own stream (`run_log.begin` wraps it); a library call has no window
+    # and adds no clause. The clause itself carries none of the gate's tokens.
+    hits = run_log.data_hits()
+    if hits:
+        warnings += (f" / gate expression matches {run_log.count() + len(hits)} "
+                     f"({len(hits)} printed data, not warnings)")
     if not c:
         return f"{head} ({warnings})"
     parts = [f"screens {c.get('screens', 0)}", f"flows {c.get('flows', 0)}"]
