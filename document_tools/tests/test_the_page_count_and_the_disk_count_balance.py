@@ -8,7 +8,7 @@ name before anyone goes looking for it.
 
 🔻 THE ARM IS A CONSERVATION LAW, NOT AN EQUALITY.
 
-    disk == tool + leftovers
+    disk == tool + leftovers + placeholders_under_o
 
 🚫 THERE IS NO `- collisions` TERM, AND THAT IS DELIBERATE. The first version
 of this law carried one. `summary.collisions` counts entries lost when the
@@ -125,7 +125,27 @@ def _terms(root: Path) -> tuple[int, int]:
     return int(summary["collisions"]), int(run["leftovers"])
 
 
-def _expected_disk(tool: int, leftovers: int) -> int:
+def _placeholders_under(out: Path) -> int:
+    """Placeholder pages this run wrote UNDER `-o`.
+
+    🚨 THREE QUANTITIES WEAR THE WORD "FAILURE" AND THEY ARE DIFFERENT NUMBERS.
+    Measured 2026-09-11 on three trees:
+
+        failures recorded / placeholders written / placeholders under -o
+              1           /         1            /          0     (A)
+              3           /         0            /          0     (B)
+              1           /         2            /          1     (C)
+
+    Only the third belongs in a balance against a walk of `-o`. `len(get_page_-
+    failures())` gives the right answer on C alone — which is the tree the
+    quantity was originally chosen from, and the reason A and B are arms.
+    """
+    o = out.resolve()
+    return sum(1 for raw in gen.get_placeholders_written()
+               if o in Path(raw).resolve().parents)
+
+
+def _expected_disk(tool: int, leftovers: int, placeholders: int) -> int:
     """The law itself, in ONE place — every assertion of it calls this.
 
     🚨 Not a style preference. When the law was spelled out separately in
@@ -136,19 +156,21 @@ def _expected_disk(tool: int, leftovers: int) -> int:
     only be discriminated by an arm whose tree makes it non-zero, so that arm
     has to be reading the same expression as everyone else.
     """
-    return tool + leftovers
+    return tool + leftovers + placeholders
 
 
 def _assert_balances(log: str, out: Path, root: Path) -> tuple[int, int, int, int]:
     tool, disk = _tool_count(log), _disk_count(out)
     collisions, leftovers = _terms(root)
-    residual = disk - _expected_disk(tool, leftovers)
+    placeholders = _placeholders_under(out)
+    residual = disk - _expected_disk(tool, leftovers, placeholders)
     assert residual == 0, (
         "the page counts do not balance, and the remainder has no name:\n"
         f"  tool       {tool:4d}  (the run's own closing line, pages it wrote)\n"
         f"  disk       {disk:4d}  (rglob('*.html') under -o, {out})\n"
         f"  leftovers  {leftovers:4d}  (manifest summary.run.leftovers)\n"
-        f"  residual   {residual:+d}  = disk - (tool + leftovers)\n"
+        f"  placehold. {placeholders:4d}  (placeholder pages written under -o)\n"
+        f"  residual   {residual:+d}  = disk - (tool + leftovers + placeholders)\n"
         f"  (collisions {collisions} — the previous manifest's merged keys, "
         f"not a term in this balance)")
     # 🚫 NOT asserted to be zero. An arm demanding zero would redden on the
@@ -306,13 +328,13 @@ def test_the_term_is_the_runs_value_and_summing_the_roots_breaks_the_law(tmp_pat
     shared = int(runs[0]["leftovers"])
     summed = sum(int(r["leftovers"]) for r in runs)
 
-    assert disk == _expected_disk(tool, shared), (
+    assert disk == _expected_disk(tool, shared, _placeholders_under(out)), (
         f"the law does not close on the run's own value: tool {tool}, "
         f"disk {disk}, leftovers {shared}")
     assert summed == shared * len(roots), (
         f"the double-count this arm exists for did not happen: "
         f"summed {summed}, shared {shared}, roots {len(roots)}")
-    assert disk != _expected_disk(tool, summed), (
+    assert disk != _expected_disk(tool, summed, _placeholders_under(out)), (
         "summing the term across roots balanced, so this arm is no longer "
         "measuring the trap it was written for")
 
@@ -374,3 +396,124 @@ def test_the_law_closes_on_a_tree_that_has_a_real_key_collision(tmp_path):
     assert collisions >= 1, (
         f"the fixture did not produce a collision (got {collisions}), so this "
         f"arm would pass without measuring anything. Key used: {key!r}")
+
+
+# ------------------------------------------------------ the third term ----
+# ⚠️ THE ORDER OF THESE THREE ARMS IS THE ARGUMENT. A and B are trees where
+# `len(get_page_failures())` gives the WRONG number; C is the tree where it
+# gives the right one — and C alone is what the quantity was first chosen
+# from. An arm set holding only C would have ratified the mistake, which is
+# what happened before A and B existed (triage, 2026-09-11, naming its own
+# ruling as the thing these arms exist to kill).
+
+
+def _valid_spec(name: str) -> dict:
+    """A spec the validator accepts, so the site's spec writer really runs."""
+    return {"type": "screen_spec", "version": "1.0",
+            "metadata": {"name": name.title().replace("_", ""),
+                         "displayName": name, "description": "d"},
+            "structure": {"components": [{"type": "View", "id": "root",
+                                          "description": "r"}],
+                          "layout": {"root": "root", "children": []}},
+            "transitions": []}
+
+
+def _face_with_specs(root: Path, *, valid: bool, broken_spec: bool = True,
+                     broken_tests: int = 0):
+    """A one-app face. Each ingredient is separate because each one moves a
+    DIFFERENT quantity, and a fixture that mixes them cannot say which arm is
+    measuring what — the first version of tree B carried a broken spec it did
+    not need, which put a placeholder under `-o` and made its docstring
+    ("no placeholder written anywhere") false about its own tree.
+    """
+    tests, docs, _ = _build_face(root, screens=1)
+    specs = docs / "screens" / "json"
+    specs.mkdir(parents=True, exist_ok=True)
+    if valid:
+        (specs / "good.spec.json").write_text(json.dumps(_valid_spec("good")),
+                                              encoding="utf-8")
+    if broken_spec:
+        (specs / "broken.spec.json").write_text(json.dumps({"not_a_spec": True}),
+                                                encoding="utf-8")
+    for n in range(broken_tests):
+        (tests / f"broken{n}.test.json").write_text(
+            json.dumps({"this_is_not_a_valid_test": True, "n": n}), encoding="utf-8")
+    return tests, docs
+
+
+def test_a_placeholder_written_outside_the_output_tree_is_not_in_the_balance(tmp_path):
+    """Tree A: one failure, one placeholder, and it lands OUTSIDE `-o`.
+
+    The page is real — the run wrote it into the source docs tree — but the
+    disk walk counts `-o`, so it is not in that population. A law using
+    `len(get_page_failures())` would add 1 here and demand a smaller disk
+    count than reality: red with no defect behind it.
+    """
+    root = tmp_path
+    tests, docs = _face_with_specs(root, valid=False)
+    out = root / "out"
+    out.mkdir()
+    log = _run(tests, out, root, docs)
+
+    assert len(gen.get_page_failures()) == 1, "the fixture stopped failing"
+    assert len(gen.get_placeholders_written()) == 1, "no placeholder was written"
+    assert _placeholders_under(out) == 0, (
+        "the placeholder landed under -o; this arm needs the tree where it "
+        "does not, or it is measuring the same thing as the arm below")
+    _assert_balances(log, out, root)
+
+
+def test_failures_with_no_page_at_all_are_not_in_the_balance(tmp_path):
+    """Tree B: three failures, no placeholder written anywhere.
+
+    `generator.py` says why at the site: the page path is derived from data
+    the file could not supply, so no placeholder is possible. The ledger
+    entries are real and there is nothing on the disk to match them.
+    """
+    root = tmp_path
+    tests, docs = _face_with_specs(root, valid=True, broken_spec=False,
+                                   broken_tests=3)
+    out = root / "out"
+    out.mkdir()
+    log = _run(tests, out, root, docs)
+
+    assert len(gen.get_placeholders_written()) == 0, (
+        "this tree is supposed to hold failures with NO page anywhere; "
+        f"{len(gen.get_placeholders_written())} placeholder(s) were written, "
+        "so the arm is no longer measuring what its name says")
+    failures = [f for f in gen.get_page_failures() if f.get("kind") == "test"]
+    assert len(failures) == 3, f"the fixture produced {len(failures)} test failures"
+    assert all(f.get("output") is None for f in failures), (
+        "these failures were given an output path, so they are not the "
+        "no-page shape this arm is about")
+    _assert_balances(log, out, root)
+
+
+def test_a_placeholder_under_the_output_tree_is_in_the_balance(tmp_path):
+    """Tree C: the coincidence — one failure AND one placeholder under `-o`.
+
+    ⭐ THE POSITIVE CONTROL, AND THE ARM THAT MUST NOT STAND ALONE. On this
+    tree `len(get_page_failures())` and the right quantity are both 1, so a
+    law built from either closes. The ruling that chose the wrong quantity
+    was made by measuring a tree of exactly this shape. An arm set that held
+    only this one would ratify it again.
+
+    ⚠️ The difference from tree A is ONE VALID SPEC. The site's spec writer
+    runs in a second pass gated on the app having produced some navigation,
+    so an app whose only spec is broken never reaches it — which is why a
+    real face reproduces this and a minimal fixture does not.
+    """
+    root = tmp_path
+    tests, docs = _face_with_specs(root, valid=True)
+    out = root / "out"
+    out.mkdir()
+    log = _run(tests, out, root, docs)
+
+    assert _placeholders_under(out) == 1, (
+        "the site spec writer did not run, so this is tree A again, not the "
+        "coincidence this arm exists to hold")
+    assert len(gen.get_page_failures()) == 1
+    tool, disk, _c, leftovers = _assert_balances(log, out, root)
+    assert disk == tool + leftovers + 1, (
+        f"the placeholder under -o is not being counted: tool {tool}, "
+        f"disk {disk}, leftovers {leftovers}")
