@@ -28,6 +28,7 @@
       "unresolved": "dropKey"
     },
     "nameRef": {
+      "readBy": "Implemented per face without a shared pin: sjui_tools/lib/swiftui/views/base_view_converter.rb (onclick = name, onClick = binding), kjui_tools/lib/compose/helpers/modifier_builder.rb get_event_handler_call (is_binding? ? extract : bare — both spellings), rjui_tools/lib/react/converters/base_converter.rb (onClick documented as binding format only — the bare spelling is NOT shown equivalent on web; unmeasured 2026-09-10). 0 vectors exercise this context. Declared 2026-09-10.",
       "description": "Event / handler name references (onclick etc.). '@{name}' and the bare name are equivalent spellings of a handler NAME; this is name extraction, not value resolution. Path, default, and negation are not applicable.",
       "interpolation": false,
       "features": [],
@@ -44,6 +45,8 @@
     "order": ["flatKey", "pathTraversal"],
     "rule": "Look up the raw inner string as a flat key in the data map first; if absent, split on '.' and traverse. A data map that literally contains the key 'a.b' therefore shadows the nested path a.b (determinism guarantee).",
     "arrayIndex": {
+      "vectors": ["text_bracket_index", "text_bracket_index_scalar", "text_bracket_out_of_range", "text_bracket_on_non_array", "value_number_bracket_index", "invalid_twoway_bracket"],
+      "readBy": "Executed by the vendored binding_vectors.json in SwiftJsonUI and KotlinJsonUI test suites (ids in `vectors`; held to exist by jui_tools/tests/test_platform_semantics_is_read_by_the_resolver.py). Hand-mirrored in Ruby, no loader (no Ruby tool reads this file by design): kjui_tools/lib/core/binding_validator_core.rb (bracket-index grammar; sjui_tools/lib/core/binding_validator_core.rb and rjui_tools/lib/core/binding_validator_core.rb carry the same text), pinned by kjui_tools/spec/compose/helpers/binding_expression_spec.rb (items[0], items[10].label). Declared 2026-09-10; the link is prose, so a canon edit does not turn that spec red.",
       "syntax": "name[index] with a non-negative integer literal",
       "rule": "Canonical array access is bracket syntax (items[0].title). Out-of-range or non-array => the path is unresolved (never a crash).",
       "nonCanonical": "Dot-numeric segments (items.0.title) are a frozen UIKit-runtime legacy; not canonical, not to be added elsewhere."
@@ -55,6 +58,8 @@
     "contexts": ["text", "value"],
     "arity": "Exactly one '??' per expression. More than one is a validator error; runtimes split on the FIRST '??' only (the remainder is part of the default literal parse and fails closed to unresolved).",
     "defaultLiteral": {
+      "vectors": ["text_default_double_quotes", "text_default_single_quotes", "text_default_number", "text_default_bool", "text_default_null_is_unresolved", "text_default_empty_quotes", "value_bool_default_typed", "value_number_default_typed", "value_string_default_quotes"],
+      "readBy": "Executed by the vendored binding_vectors.json in SwiftJsonUI and KotlinJsonUI test suites (ids in `vectors`). Hand-mirrored in Ruby: kjui_tools/lib/compose/helpers/binding_expression.rb (double- or single-quoted string, true/false, number), pinned by kjui_tools/spec/compose/helpers/binding_expression_spec.rb 'parses a single-quoted string default (canonical-new spelling)'. Declared 2026-09-10; the link is prose.",
       "string": "Quoted with double OR single quotes: \"x\" or 'x' (single quotes are canonical-new; historical KJUI accepted only double quotes).",
       "boolean": "true | false",
       "number": "Integer or decimal literal",
@@ -96,12 +101,18 @@
     "number": "JSON-faithful: integral numbers render with no decimal point ('5', not '5.0'); non-integral render with their decimal digits.",
     "bool": "'true' / 'false'",
     "null": "unresolved (empty string)",
+    "objectOrArrayVectors": ["text_object_value_renders_empty"],
+    "objectOrArrayVectorsNote": "Only the OBJECT half has a vector (2026-09-10 census); an array-valued text binding has none, so that half of the rule is declared and unmeasured.",
+    "objectOrArrayReadBy": "Hand-mirrored in Ruby: rjui_tools/lib/react/converters/base_converter.rb #convert_text_binding (text sinks emit a stringifying template literal; unresolved renders \"\"), pinned by rjui_tools/spec/react/converters/base_converter_spec.rb 'treats a null default as unresolved (empty string)'. Declared 2026-09-10; the link is prose.",
     "objectOrArray": "unresolved (empty string) — never a platform debug dump"
   },
   "embedParamsTypes": "Resolved leaves keep native JSON types (bool stays bool, 5 stays integer 5). Unresolved leaves are dropped (see unresolved.embedParams).",
   "collectionCellScope": {
     "guaranteed": "The item object's own fields, flat, plus the reserved key 'index' (0-based).",
     "parentData": "NOT guaranteed. Depending on parent-screen keys inside a cell is non-portable (validator warning).",
+    "embedParamsTypesVectors": ["params_literal_types_preserved", "params_bound_types_preserved", "params_unresolved_leaf_dropped", "params_nested_unresolved_leaf_dropped"],
+    "embedParamsTypesReadBy": "Executed by the vendored binding_vectors.json in SwiftJsonUI and KotlinJsonUI (ids in embedParamsTypesVectors); in this repository the validators only exempt Embed params from attribute typing (kjui_tools/lib/core/binding_validator_core.rb embed_params_attr?, mirrored in sjui_tools and rjui_tools). Declared 2026-09-10.",
+    "itemPrefixReadBy": "Hand-mirrored in Ruby: kjui_tools/lib/compose/generators/cell_generator.rb (scaffolds flat item fields) and kjui_tools/lib/core/binding_validator_core.rb (mirrored in sjui_tools and rjui_tools), pinned by kjui_tools/spec/compose/generators/cell_generator_spec.rb 'scaffolds flat item-field bindings without the item. prefix'. Declared 2026-09-10; the link is prose.",
     "itemPrefix": "'@{item.xxx}' is NOT canonical; scaffolds must emit flat field names."
   },
   "validatorRules": [

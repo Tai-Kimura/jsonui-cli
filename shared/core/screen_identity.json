@@ -159,6 +159,7 @@
       }
     },
     "buildGating": {
+      "readBy": "web: rjui_tools/lib/cli/commands/build_command.rb emits the generated screenMarker helper (returns {} when NODE_ENV is production) and rjui_tools/lib/react/react_generator.rb spreads it on the root; rjui_tools/spec/react/react_generator_screen_marker_spec.rb pins the emitted TEXT only. ⚠️ 2026-09-10 (orchestrator, esbuild 0.28.1 with define): the emitted `typeof process !== 'undefined' && process?.env?.NODE_ENV === 'production'` is NOT folded — data-screen survives a production build — while the literal `process.env.NODE_ENV` form this entry prescribes is. The web implementation contradicts this rule; fix owned by rjui_tools. ios and android: implemented in the SwiftJsonUI and KotlinJsonUI libraries (outside this repository — DEBUG-only modifier / FLAG_DEBUGGABLE), not pinned from here. Declared 2026-09-10.",
       "rule": "The marker is test scaffolding and must not reach a shipped app. Every platform emits it in development builds only.",
       "platforms": {
         "ios": "#if DEBUG inside the library modifier — the same gate ViewSwitcher uses for Dynamic mode. SwiftJsonUI is distributed as source (SPM / CocoaPods), so this follows the CONSUMER's build configuration.",
@@ -275,11 +276,13 @@
       "rationale": "Distinct from defaultTimeout (5000ms): real cross-screen assertions in production suites already use 15000-20000ms after a cold start."
     },
     "optOut": {
+      "readBy": "Outside this repository: the three test drivers read the config key (jsonui-test-runner drivers/android and drivers/web JsonUITestRunner, jsonui-test-runner-ios TestRunner; all default true). Nothing in jsonui-cli reads this entry; it documents the drivers. Declared 2026-09-10.",
       "config": "TestRunnerConfig.verifyScreenTransitions",
       "default": true,
       "note": "ON by default from driver ios 1.9.0 / android 1.8.0 / web 1.8.0. An app whose generated code predates screen markers fails every screen change with marker-absent — that is the intended signal that it needs `jui build` and a current library pin, not a reason to soften the check. A project mid-migration opts out by setting this to false."
     },
     "failureHandling": {
+      "readBy": "Outside this repository: the drivers choose the class string and throw (ios and web found by the spelling `diagnosis`; android not located by that spelling on 2026-09-10 — unmeasured, not absent). Nothing in jsonui-cli reads this entry. Declared 2026-09-10.",
       "severity": "failure",
       "note": "Every class below fails the step through the ordinary assertion path. There is no warning tier and no per-class severity: a class is a prefix on the thrown failure message that names the likely CAUSE, so the reader knows what to fix — not how seriously to take it. This is what the three drivers implement (ScreenMarker.diagnosis on ios/android, AssertionExecutor.screenDiagnosis on web): they choose a string, then throw.",
       "rationale": "A class was briefly considered for demotion to a warning (marker-absent, since its cause is the build rather than the app). Rejected: a suite that reports success while verifying nothing is worse than one that fails loudly on a stale build."
@@ -343,7 +346,7 @@
       "severity": "error. `jsonui-doc generate html` writes every page (the diagram page lists the errors), prints one `ERROR [doc-diagram]:` line per transition, and exits 1. Not covered by --allow-partial (that accepts missing pages; this is a wrong spec). `generate mermaid` exits 1 likewise.",
       "reported": "per owner (app), with the flow test's name and file, from, to, and the reason. A count without the list is not a report.",
       "noSpecDirectory": "A flow group with no spec directory anywhere gets ONE `WARNING [doc-diagram]` naming how many flow test files went unchecked, and no diagram. Absence of the directory is a configuration state, not a spec omission.",
-      "readBy": "document_tools/jsonui_doc_cli/test_doc/mermaid/generator.py build_diagram; the exit code in jsonui_doc_cli/cli.py cmd_generate_html"
+      "readBy": "document_tools/jsonui_doc_cli/test_doc/mermaid/generator.py build_diagram; the exit code in document_tools/jsonui_doc_cli/cli.py cmd_generate_html"
     },
     "specTransitions": {
       "source": "<screen spec>.transitions[].destination",

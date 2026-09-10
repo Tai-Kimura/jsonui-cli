@@ -10,8 +10,10 @@
   ],
   "nodeDirective": {
     "attribute": "platform",
+    "consumedAtReadBy": "jui_tools/jui_cli/core/platform_resolver.py PlatformResolver.resolve_tree consumes the directive (the key is dropped from the output on every platform); pinned by jui_tools/tests/test_platform_semantics_is_read_by_the_resolver.py test_a_canon_token_keeps_the_node_and_a_foreign_one_drops_it (asserts the resolved node carries no `platform`). Declared 2026-09-10.",
     "consumedAt": "distribution (jui build). The key never appears in distributed per-platform output; platform-specific emit is produced from it.",
     "objectForm": {
+      "readBy": "jui_tools/jui_cli/core/platform_resolver.py PlatformResolver._is_override_map (`detection`: every key one of VALID_PLATFORMS) and resolve (merge); pinned by jui_tools/tests/test_platform_semantics_is_read_by_the_resolver.py",
       "summary": "Per-platform attribute overrides, merged into the node for the matching platform only. Override wins over the base value; merge is per top-level key (the override value replaces the base value for that key wholesale — it is not deep-merged into it).",
       "example": {
         "prompt": "Change fontColor only on iOS",
@@ -43,6 +45,7 @@
       "nesting": "Override values are themselves resolved recursively, so an override may contain child nodes with their own 'platform' directives."
     },
     "stringForm": {
+      "readBy": "jui_tools/jui_cli/core/platform_resolver.py PLATFORM_LANG_MAP (the `tokens` table, held equal by jui_tools/tests/test_platform_semantics_is_read_by_the_resolver.py) and PlatformResolver.resolve (the comma-split filter)",
       "summary": "Node filter: the node (and its whole subtree) is DROPPED on platforms that do not match. Comma-separated tokens allowed.",
       "example": {
         "prompt": "Render this node on Android only",
@@ -56,10 +59,12 @@
     }
   },
   "layoutRootPlatforms": {
+    "readBy": "jui_tools/jui_cli/commands/build_cmd.py ROOT_PLATFORMS_KEY (read at the layout root, stripped from the output); held equal to `attribute` by jui_tools/tests/test_platform_semantics_is_read_by_the_resolver.py",
     "attribute": "platforms",
     "summary": "Layout-root array whitelisting the distribution targets of the ENTIRE file (e.g. [\"ios\", \"android\"]). Distinct from the node-level 'platform' directive: 'platforms' picks which platforms get the file at all; 'platform' shapes a single node per platform."
   },
   "vsResponsive": {
+    "readBy": "jui_tools/jui_cli/core/platform_resolver.py PlatformResolver.resolve_tree leaves `responsive` untouched on every platform (the runtime resolves it); pinned by jui_tools/tests/test_platform_semantics_is_read_by_the_resolver.py test_responsive_is_left_for_the_runtime. Declared 2026-09-10.",
     "summary": "'responsive' is resolved at RUNTIME by each platform's framework (window size class / orientation); 'platform' is resolved at BUILD time and is invisible at runtime. Use 'platform' for per-OS differences, 'responsive' for per-form-factor differences. The resolver leaves 'responsive' untouched."
   },
   "authoringGuidance": {

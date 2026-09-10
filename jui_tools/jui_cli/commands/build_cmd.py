@@ -46,6 +46,15 @@ from ..core.spec_validator import (
 )
 
 
+
+#: The layout-root key that whitelists a file's distribution targets. The
+#: spelling is the canon's (`shared/core/platform_semantics.json` →
+#: `layoutRootPlatforms.attribute`), and an arm holds the two equal; before
+#: this name the literal appeared three times below and nothing tied it to
+#: the declaration, so the canon could rename the key and this command would
+#: keep reading the old one in silence.
+ROOT_PLATFORMS_KEY = "platforms"
+
 def register_build_command(subparsers: argparse._SubParsersAction) -> None:
     """Register the build subcommand."""
     build_parser = subparsers.add_parser("build", aliases=["b"], help="Build all platforms")
@@ -1012,7 +1021,7 @@ def _distribute_layouts(config_mgr: ConfigManager, platforms: dict, args) -> Non
             # "platforms": ["ios"] limits this file to iOS only). Variant
             # files (home@regular.json) inherit the base layout's whitelist
             # — the variant gate forbids them declaring their own.
-            allowed_platforms = data.get("platforms") if isinstance(data, dict) else None
+            allowed_platforms = data.get(ROOT_PLATFORMS_KEY) if isinstance(data, dict) else None
             variant_base, variant_cls = split_variant(src_file.stem)
             if variant_cls is not None:
                 base_path = src_file.with_name(variant_base + ".json")
@@ -1020,7 +1029,7 @@ def _distribute_layouts(config_mgr: ConfigManager, platforms: dict, args) -> Non
                     try:
                         base_json = json.loads(base_path.read_text())
                         allowed_platforms = (
-                            base_json.get("platforms") if isinstance(base_json, dict) else None
+                            base_json.get(ROOT_PLATFORMS_KEY) if isinstance(base_json, dict) else None
                         )
                     except json.JSONDecodeError:
                         allowed_platforms = None
@@ -1031,8 +1040,8 @@ def _distribute_layouts(config_mgr: ConfigManager, platforms: dict, args) -> Non
 
             # Strip platforms metadata from the output — it's a build directive,
             # not a runtime attribute.
-            if isinstance(data, dict) and "platforms" in data:
-                data = {k: v for k, v in data.items() if k != "platforms"}
+            if isinstance(data, dict) and ROOT_PLATFORMS_KEY in data:
+                data = {k: v for k, v in data.items() if k != ROOT_PLATFORMS_KEY}
 
             # Resolve platform-specific overrides
             if PlatformResolver.has_platform_key(data):
