@@ -503,7 +503,11 @@ _EXTERNAL = re.compile(
     # destinations, 3 of which said "external" in English and were filed
     # as unknown): `External Browser（商品URL）`, `Browser (URL)`,
     # `External Map App（バー座標）`.
-    r"External Browser|External Map|Browser \(URL\)"
+    r"External Browser|External Map|Browser \(URL\)|"
+    # The notice to the faces (2026-09-10) named 地図アプリ as an external
+    # word; a face wrote it 4 times and it was not here. The vocabulary a
+    # notice names must be the vocabulary the code has.
+    r"地図アプリ|電話アプリ|メールアプリ"
 )
 _NONE = re.compile(r"同画面|画面内|遷移なし|遷移しない|タブ切替|そのまま|留まる")
 #: Anchored at the start ON PURPOSE — see `classify_destination`. The spelling

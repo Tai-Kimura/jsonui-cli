@@ -75,6 +75,10 @@ class SpecGraph:
     def forward_pairs(self) -> set[tuple[str, str]]:
         return {(f, t) for f, t, k in self.edges if k == EDGE_FORWARD}
 
+    def declared_pairs(self) -> set[tuple[str, str]]:
+        """Every (from, to) the specs declare, forward or derived return."""
+        return {(f, t) for f, t, _k in self.edges}
+
 
 def spec_screen_id(spec_file: Path) -> str:
     """The screen id a spec file describes: its stem, variant-normalized.

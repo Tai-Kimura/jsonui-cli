@@ -197,7 +197,12 @@ def build_diagram(
     result.stats["flow_tests"] = len(flow_files)
     if flow_files:
         _n, _m, flow_edges_found, _s = _collect_flow_graph(flows_path, screens_path, layouts_dir)
-        forward = graph.forward_pairs()
+        # Declared = every edge the specs produce: a forward edge, or the
+        # return edge derived from a `back` declaration (X returns to each
+        # screen that pushes it). A flow that leaves a sheet by tapping
+        # "save" and lands on its opener performs that return as a forward
+        # step; the spec declared it as `back`. Same edge, drawn dotted.
+        forward = {(f, t) for f, t, _k in graph.edges}
         seen_pairs: set[tuple[str, str]] = set()
         checked: set[tuple[str, str]] = set()
         for from_id, to_id, flow_name, kind, flow_file in flow_edges_found:

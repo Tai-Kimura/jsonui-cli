@@ -151,7 +151,8 @@ class ExternalSpellingsReadOffTheSecondCorpus(unittest.TestCase):
     in English and were filed as unknown."""
 
     def test_each(self):
-        for raw in ("External Browser（商品URL）", "Browser (URL)", "External Map App（バー座標）"):
+        for raw in ("External Browser（商品URL）", "Browser (URL)", "External Map App（バー座標）",
+                    "地図アプリ（バー座標）", "電話アプリ（tel:）", "メールアプリ"):
             with self.subTest(raw=raw):
                 self.assertEqual(classify_destination(raw, ("chat",)).kind, "external")
 

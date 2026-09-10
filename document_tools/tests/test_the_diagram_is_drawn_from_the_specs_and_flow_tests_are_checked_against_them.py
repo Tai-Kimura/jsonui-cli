@@ -612,3 +612,31 @@ class EveryResolvedEdgeIsDrawnSomewhere(unittest.TestCase):
             self.assertNotIn("mypage --> catalog", result.diagrams["catalog"])
             page = out.read_text(encoding="utf-8")
             self.assertLess(page.index(">All<"), page.index(">account<"))
+
+
+class AReturnDeclaredAsBackAcceptsTheFlowsForwardStep(unittest.TestCase):
+    """A sheet's spec says `dismiss`; the flow taps "save" and lands on the
+    opener as a forward step. The spec declared that return (as back, drawn
+    dotted to each pusher) — the check must accept it. Asked by a face
+    2026-09-10; corpus count after their edit: 0, so this pins the rule's
+    reading rather than a live failure."""
+
+    def test_forward_step_onto_a_pusher_of_a_back_declaring_screen(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            face = _Face(Path(tmp))
+            face.spec("settings", ["ChangeEmailSheet"])
+            face.spec("change_email_sheet", ["dismiss（保存後に閉じる）"])
+            face.flow("save", [_s("settings"), _s("change_email_sheet"), _s("settings")])
+            result = face.build()
+            self.assertIn("change_email_sheet -.-> settings", result.combined)
+            self.assertEqual(result.errors, [])
+
+    def test_a_forward_step_onto_a_screen_that_never_pushed_it_is_still_an_error(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            face = _Face(Path(tmp))
+            face.spec("settings", ["ChangeEmailSheet"])
+            face.spec("change_email_sheet", ["dismiss（保存後に閉じる）"])
+            face.spec("mypage", [])
+            face.flow("odd", [_s("settings"), _s("change_email_sheet"), _s("mypage")])
+            result = face.build()
+            self.assertEqual([(e.from_id, e.to_id) for e in result.errors], [("change_email_sheet", "mypage")])

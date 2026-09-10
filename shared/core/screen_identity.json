@@ -330,7 +330,7 @@
       "An `external` destination is drawn as a terminal node; `none` draws nothing (a positive declaration); `unknown` and an unmapped `route` draw nothing and are treated as ABSENT — counted and listed, not errors by themselves (ruled 2026-09-10: 解決できない宣言は「無い」扱い)."
     ],
     "flowTestCheck": {
-      "rule": "Every FORWARD transition a flow test performs (consecutive distinct screens after resolve/canonicalize/collapse) must be a forward edge the specs declare. One that is not is an ERROR.",
+      "rule": "Every FORWARD transition a flow test performs (consecutive distinct screens after resolve/canonicalize/collapse) must be an edge the specs declare: a forward edge, or the return edge derived from a `back` declaration (X returns to each screen that pushes it — a flow that leaves a sheet by tapping save and lands on its opener performs that return as a forward step). One that is neither is an ERROR.",
       "ruledOn": "2026-09-10 — 'flowdiagram は spec だけ見て書く。flow test で遷移が見つかって、それが spec にない時はエラーを吐く'",
       "exempt": "Back steps (action `back`). A return through the stack is the inverse of a transition the check already saw — and a spec `back` declaration has no target to compare with.",
       "unresolvedIsAbsent": "A destination the classifier cannot resolve (kind unknown, or route with no mapping) is NOT in the spec for the purpose of this check. So a flow test that navigates to the screen such a destination was meant to name is an error, and the error names the unresolved destination(s) on that source: that is usually the fix.",
