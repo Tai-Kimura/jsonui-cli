@@ -166,3 +166,35 @@ def pytest_configure(config):
         f"{detail}\n"
         f"Run with:  {reproduction_line(REPO, [n for n, _ in strays])}"
     )
+
+
+# --------------------------------------------------------------------------
+# Module state, reset where every arm can see it.
+#
+# `generator` keeps nine per-run ledgers (written pages, outside writes, page
+# sources, document referrers, the misfiled-directory set, two counters, the
+# slot facts, the diagram errors). One place resets them —
+# `reset_page_failures()` — and the product calls it once, at the top of a
+# run. An arm that reaches an inner function directly does not go through
+# that call, so it inherits whatever the previous arm left.
+#
+# 🚨 That is not hypothetical either. On 2026-09-10 an arm named
+# "one directory reached twice is reported once" was passing on the ledger a
+# PREVIOUS arm had populated, not on the behaviour it names: a mutation that
+# suppressed every directory after the first killed it, and killed the arm
+# that was supposed to catch that mutation as well. Running the arms in
+# reverse order did NOT show it — each uses its own tmp_path, so the keys
+# never collided. Order was not the discriminator; the mutation was.
+#
+# ⚠️ THE FIX BELONGS HERE, NOT IN THAT FILE. Five test files reach
+# `_pre_generate_spec_docs` directly; the first repair was a fixture in one
+# of them, which is the shape `_write_stamped`'s own docstring argues against
+# two directories over: "One place, not four call sites. The four sites here
+# are the ones that exist today; a fix applied per-site reaches only the ones
+# someone remembered." Reset every ledger, for every arm, once.
+@pytest.fixture(autouse=True)
+def _fresh_generator_ledgers():
+    from jsonui_doc_cli.test_doc import generator as _gen
+    _gen.reset_page_failures()
+    yield
+    _gen.reset_page_failures()
