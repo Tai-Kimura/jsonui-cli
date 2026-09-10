@@ -68,13 +68,14 @@ def _build_face(root: Path, screens: int = 3) -> tuple[Path, Path, list[str]]:
     return tests, docs, names
 
 
-def _run(tests: Path, out: Path, root: Path, docs: Path) -> str:
+def _run(tests: Path, out: Path, root: Path, docs: Path,
+         manifest_roots: list[dict] | None = None) -> str:
     buf = io.StringIO()
     with redirect_stdout(buf):
         gen.generate_html_directory(
             tests, out, "T",
             apps=[{"name": "user", "docs_path": str(docs)}],
-            project_root=root)
+            project_root=root, manifest_roots=manifest_roots)
         print(gen.generation_summary_line())
     return buf.getvalue()
 
@@ -195,3 +196,86 @@ def test_the_two_sides_come_from_different_producers(tmp_path):
     assert _tool_count(log) == tool_before, "the printed line changed under us"
     assert _disk_count(out) == disk_before - 1, (
         "the disk walk did not see the deletion, so it is not reading the disk")
+
+
+# ------------------------------------------------------------ many roots ----
+# ⚠️ EVERYTHING ABOVE IS A SINGLE-ROOT SHAPE, AND THE NEXT DEFECT IS NOT
+# VISIBLE IN IT. One `-o` site is shared by every face in a run, and the
+# leftover scan walks that one site — so EVERY root's manifest records the
+# SAME leftover. Summing the term across faces counts one page as many.
+# Measured on a real two-app tree: one planted page, `leftovers=1` in both
+# manifests, same `leftoverPaths` entry, sum 2 (triage, 2026-09-11). The
+# synthetic single-face fixture cannot produce it, which is why it is here.
+
+
+def _two_manifest_roots(root: Path) -> list[dict]:
+    a, b = root / "face_a", root / "face_b"
+    for r in (a, b):
+        (r / "docs").mkdir(parents=True, exist_ok=True)
+    return [{"app": "face_a", "root": str(a)}, {"app": "face_b", "root": str(b)}]
+
+
+def _plant_aged_leftover(out: Path, name: str = "gone.html") -> Path:
+    stale = out / "screens" / "html" / name
+    stale.parent.mkdir(parents=True, exist_ok=True)
+    stale.write_text("<html><body>a page no test names</body></html>",
+                     encoding="utf-8")
+    old = time.time() - 3600
+    os.utime(stale, (old, old))
+    return stale
+
+
+def test_every_root_records_the_same_leftover_not_one_each(tmp_path):
+    """The site is shared, so the term is a property of the run, not of a face."""
+    root = tmp_path
+    tests, docs, _ = _build_face(root)
+    out = root / "out"
+    out.mkdir()
+    roots = _two_manifest_roots(root)
+    _run(tests, out, root, docs, manifest_roots=roots)
+    _plant_aged_leftover(out)
+    _run(tests, out, root, docs, manifest_roots=roots)
+
+    per_root = {}
+    for entry in roots:
+        run = _manifest(Path(entry["root"]))["summary"]["run"]
+        per_root[entry["app"]] = (run["leftovers"], tuple(run.get("leftoverPaths", ())))
+    assert len(set(per_root.values())) == 1, (
+        f"the roots disagree about the run's leftovers, so the term is "
+        f"ambiguous: {per_root}")
+    (count, paths), = set(per_root.values())
+    assert count == 1, f"one page was planted; the roots report {count}"
+    assert len(roots) > 1, "this arm needs more than one root to mean anything"
+
+
+def test_the_term_is_the_runs_value_and_summing_the_roots_breaks_the_law(tmp_path):
+    """Negative control for the unit. Pins the trap, so nobody re-derives it.
+
+    🔻 Read the term from ONE root (they agree, asserted above) rather than
+    from a union of `leftoverPaths`: that list is capped at 20 per root, so a
+    union is exact only below the cap and would undercount silently above it.
+    """
+    root = tmp_path
+    tests, docs, _ = _build_face(root)
+    out = root / "out"
+    out.mkdir()
+    roots = _two_manifest_roots(root)
+    _run(tests, out, root, docs, manifest_roots=roots)
+    _plant_aged_leftover(out)
+    log = _run(tests, out, root, docs, manifest_roots=roots)
+
+    tool, disk = _tool_count(log), _disk_count(out)
+    runs = [_manifest(Path(e["root"]))["summary"]["run"] for e in roots]
+    collisions = int(_manifest(Path(roots[0]["root"]))["summary"]["collisions"])
+    shared = int(runs[0]["leftovers"])
+    summed = sum(int(r["leftovers"]) for r in runs)
+
+    assert disk == tool - collisions + shared, (
+        f"the law does not close on the run's own value: tool {tool}, "
+        f"disk {disk}, collisions {collisions}, leftovers {shared}")
+    assert summed == shared * len(roots), (
+        f"the double-count this arm exists for did not happen: "
+        f"summed {summed}, shared {shared}, roots {len(roots)}")
+    assert disk != tool - collisions + summed, (
+        "summing the term across roots balanced, so this arm is no longer "
+        "measuring the trap it was written for")
