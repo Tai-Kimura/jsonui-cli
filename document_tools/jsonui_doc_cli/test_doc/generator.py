@@ -1092,6 +1092,7 @@ def generate_html_directory(
     project_root: Path | None = None,
     unit_roots: list[dict] | None = None,
     test_roots: list[dict] | None = None,
+    manifest_roots: list[dict] | None = None,
 ) -> list[dict]:
     """
     Generate HTML documentation for all test files in a directory.
@@ -1113,6 +1114,11 @@ def generate_html_directory(
             Tests section — `unitContracts` are read from `spec_directory` and
             compared against the per-platform `unitTestsDir`, both declared
             there. Omitted, the section is skipped and the rest is unaffected.
+        manifest_roots: Every root whose generation manifest this run
+            records into, `{'app': name, 'root': dir}` each — the CLI
+            resolves them (`--config`, else every app with a config, else
+            the walk-up). When omitted, `project_root` alone is written,
+            which is the single-tree spelling and the historical one.
         unit_roots: For a split tree, one `{'app': name, 'root': dir}` per
             place contracts are declared, because such a project keeps each
             app's spec config beside the app rather than at the repository
@@ -1864,8 +1870,11 @@ def generate_html_directory(
     # call had already named.
     stale = _report_stale_pages(output_path, started_at)
     outside = _report_writes_outside_output(output_path)
-    _record_generation_manifest(output_path, project_root, stale, outside,
-                                slots=dict(_document_slot_facts))
+    _record_generation_manifest(
+        output_path,
+        [{"app": e.get("app"), "root": Path(e["root"])} for e in manifest_roots]
+        if manifest_roots else project_root,
+        stale, outside, slots=dict(_document_slot_facts))
 
     return generated_files
 
@@ -2132,7 +2141,7 @@ def _report_writes_outside_output(output_path: Path) -> dict:
 
 def _record_generation_manifest(
     output_path: Path,
-    project_root: Path | None,
+    project_root: Path | list | None,
     stale: list,
     outside: dict,
     slots: dict | None = None,
@@ -2172,7 +2181,17 @@ def _record_generation_manifest(
     installed the doc tool from a bare pip has no manifest and this notice is
     the only thing that says so.
     """
-    if project_root is None:
+    # One root or several: a site run over N apps writes the SAME run record
+    # into every app root that has a config (2026-09-10). Before that the
+    # first app's manifest got everything and the others could never hold
+    # `summary.run`, which the v1.8.66 notice had told them to read.
+    if isinstance(project_root, list):
+        targets = [{"app": e.get("app"), "root": Path(e["root"])} for e in project_root]
+    elif project_root is not None:
+        targets = [{"app": None, "root": Path(project_root)}]
+    else:
+        targets = []
+    if not targets:
         print("  ⓘ NOTE: no project root for this run, so nothing was recorded "
               "in .jsonui-cli/generation-manifest.json — not a statement that "
               "there was nothing to record.")
@@ -2185,7 +2204,44 @@ def _record_generation_manifest(
               "writes outside -o all went to this output and nowhere else.")
         return
 
-    root = Path(project_root).resolve()
+    from ..reproducible import build_datetime_utc
+    # One stamp for every target, so the copies of one run agree to the
+    # second — a reader compares them across faces. Through `reproducible`,
+    # like every other stamp this package writes.
+    recorded_at = build_datetime_utc().strftime("%Y-%m-%dT%H:%M:%SZ")
+    for target in targets:
+        _record_into(target["root"], targets, manifest, stale, outside, slots, recorded_at)
+
+
+def _scope_outside(outside: dict, root: Path) -> dict:
+    """The outside-writes record restricted to `root`'s subtree.
+
+    Lists keep the entries under `root`, dicts keep the keys under it, and
+    the block says which root it was scoped to. A face reading its own
+    manifest then sees its own tree and nothing of its neighbours'.
+    """
+    def under(p) -> bool:
+        try:
+            Path(p).resolve().relative_to(root)
+            return True
+        except (OSError, ValueError):
+            return False
+    scoped: dict = {}
+    for key, value in outside.items():
+        if isinstance(value, list):
+            scoped[key] = [d for d in value if under(d)]
+        elif isinstance(value, dict):
+            scoped[key] = {d: n for d, n in value.items() if under(d)}
+        else:
+            scoped[key] = value
+    scoped["scope"] = str(root)
+    return scoped
+
+
+def _record_into(root: Path, targets: list, manifest, stale: list, outside: dict,
+                 slots: dict | None, recorded_at: str) -> None:
+    """Write this run's record into ONE root's manifest; see the caller."""
+    root = Path(root).resolve()
 
     def _key(p) -> str | None:
         try:
@@ -2204,13 +2260,25 @@ def _record_generation_manifest(
         if len(stale) > 20:
             facts["leftoverPathsNote"] = f"first 20 of {len(stale)}"
     if outside:
-        facts["outsideOutput"] = outside
+        # Several roots: each face's block names writes into ITS tree, with
+        # an explicit empty list when there were none — one face's block used
+        # to carry four faces' directories, and the other three had no block
+        # at all. One root: the run-level record, unchanged.
+        facts["outsideOutput"] = (_scope_outside(outside, root)
+                                  if len(targets) > 1 else outside)
     if slots:
         # Its own key, not `collisions`: that word already belongs to the
         # manifest's count of keys whose spellings normalised onto one entry,
         # and one face read the two as a single number disagreeing with the
         # SHARED SLOT lines on its terminal.
         facts["documentSlots"] = dict(slots)
+    apps = [t["app"] for t in targets if t.get("app")]
+    if apps:
+        # Which apps this run covered — the same record lands in each of
+        # their manifests, and a reader of one should know the others hold
+        # the same run.
+        facts["apps"] = apps
+    facts["recordedAt"] = recorded_at
     try:
         from .. import __version__ as version
     except ImportError:
@@ -2221,6 +2289,7 @@ def _record_generation_manifest(
     # this machine does not track it. The tool reports the condition and
     # leaves the choice where it belongs.
     target = manifest.manifest_path(root)
+    existed = target.is_file()
     tracked = _git_tracks_file(target, root)
     facts["manifestIsGitTracked"] = tracked
     try:
@@ -2233,6 +2302,12 @@ def _record_generation_manifest(
         print(f"  ⓘ NOTE: could not write the generation manifest ({exc}). "
               f"The pages were written; the record of them was not.")
         return
+    if len(targets) > 1:
+        # Named per root, and whether this run CREATED the file: a root that
+        # never had a manifest (a sub-repository a face ignores by default,
+        # say) now gets one, and the face should see that in the log rather
+        # than in a status line it did not expect.
+        print(f"  Manifest {'created' if not existed else 'updated'}: {target}")
     # Three states, like the outside-writes block above and for the same
     # reason: "not tracked" is an answer, and "cannot tell" is the absence of
     # the instrument. Folding them together would tell a face with no git

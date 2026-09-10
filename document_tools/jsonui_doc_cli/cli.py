@@ -187,6 +187,45 @@ def _resolve_unit_roots(
     return [{"app": None, "config": use, "root": use.parent}]
 
 
+def _resolve_manifest_targets(config_arg, apps, input_dir) -> list[tuple]:
+    """Every root whose `.jsonui-cli/generation-manifest.json` this run writes.
+
+    `(root, source, app)` per target. Until 2026-09-10 this was ONE root — the
+    first `--app` with a config — so a site run over four apps recorded its
+    pages and its run facts in one face's manifest and the other three could
+    never hold `summary.run`, while the v1.8.66 notice had told every face to
+    read `summary.run.outsideOutput.*` as the outside-writes discriminator.
+    An absence that is structural reads exactly like "nothing outside".
+
+    Same three sources as the unit-contract roots, same order, same reason:
+
+        1. --config          the operator said so — that root only
+        2. the apps' configs one root per app that declares one (deduplicated)
+        3. walk-up           LAST resort, never the quiet default
+    """
+    if config_arg:
+        cfg = Path(config_arg)
+        if cfg.is_file():
+            return [(cfg.resolve().parent, "--config", None)]
+    targets: list[tuple] = []
+    seen: set = set()
+    for app in (apps or []):
+        cfg = _config_for_app(app["name"], Path(app["docs_path"]))
+        if cfg is None:
+            continue
+        root = Path(cfg).resolve().parent
+        if root in seen:
+            continue
+        seen.add(root)
+        targets.append((root, f"--app {app['name']}'s config", app["name"]))
+    if targets:
+        return targets
+    cfg = _config_for(Path(input_dir))
+    if cfg is not None:
+        return [(Path(cfg).resolve().parent, "walk-up from the input directory", None)]
+    return []
+
+
 def _resolve_project_root(config_arg, apps, input_dir):
     """Where `.jsonui-cli/generation-manifest.json` gets written, and WHY.
 
@@ -209,17 +248,10 @@ def _resolve_project_root(config_arg, apps, input_dir):
     Returns `(root, source)`; `(None, "unresolved")` when nothing answers,
     which is a third value and must not print as either of the other two.
     """
-    if config_arg:
-        cfg = Path(config_arg)
-        if cfg.is_file():
-            return cfg.resolve().parent, "--config"
-    for app in (apps or []):
-        cfg = _config_for_app(app["name"], Path(app["docs_path"]))
-        if cfg is not None:
-            return Path(cfg).resolve().parent, f"--app {app['name']}'s config"
-    cfg = _config_for(Path(input_dir))
-    if cfg is not None:
-        return Path(cfg).resolve().parent, "walk-up from the input directory"
+    targets = _resolve_manifest_targets(config_arg, apps, input_dir)
+    if targets:
+        root, source, _app = targets[0]
+        return root, source
     return None, "unresolved"
 
 
@@ -594,6 +626,9 @@ def _cmd_generate_html(args):
     project_root, project_root_source = _resolve_project_root(
         getattr(args, "config", None), apps,
         input_dir if input_dir.exists() else Path.cwd())
+    manifest_targets = _resolve_manifest_targets(
+        getattr(args, "config", None), apps,
+        input_dir if input_dir.exists() else Path.cwd())
 
     print(f"Generating HTML documentation...")
     print(f"  Input: {input_dir}")
@@ -618,6 +653,13 @@ def _cmd_generate_html(args):
               "that none are declared")
     if project_root is not None:
         print(f"  Project root: {project_root} (from {project_root_source})")
+        if len(manifest_targets) > 1:
+            # One line per root, so a face can find ITS manifest in the log.
+            # The first target is the `Project root:` above; the rest are the
+            # other apps' roots, each of which gets the same run record.
+            print(f"  Manifests recorded at: {len(manifest_targets)} roots")
+            for root, source, _app in manifest_targets:
+                print(f"    {root} (from {source})")
     else:
         # Third value. "unresolved" must not read as either of the two ways a
         # root CAN be found, and must not read as "there was nothing to record".
@@ -627,7 +669,7 @@ def _cmd_generate_html(args):
     print()
 
     try:
-        generate_html_directory(input_dir, output_dir, title, docs_dirs if docs_dirs else None, figma_dir=figma_dir, apps=apps, layouts_dir=layouts_dir_override, unit_roots=[{"app": e.get("app"), "root": e["root"]} for e in unit_roots], test_roots=test_roots, project_root=project_root)
+        generate_html_directory(input_dir, output_dir, title, docs_dirs if docs_dirs else None, figma_dir=figma_dir, apps=apps, layouts_dir=layouts_dir_override, unit_roots=[{"app": e.get("app"), "root": e["root"]} for e in unit_roots], test_roots=test_roots, project_root=project_root, manifest_roots=[{"app": app, "root": root} for root, _source, app in manifest_targets])
         print()
         # Count every page written, not just the test pages in the return
         # value — the old number was smaller than the lines printed above it,
