@@ -130,6 +130,47 @@ say "== CI=${CI:-(unset)} — the test_tools leg mirrors ci.yml:184's --ignore"
 py_suite test_tools jsonui_test_cli \
     --ignore=tests/test_stub_name_tables_reach_a_compiler.py
 py_suite document_tools jsonui_doc_cli
+# ⚠️ THE GATE RUNS IN A DETACHED WORKTREE, AND THAT MOVES WHAT IS BESIDE IT.
+#
+# `jui_tools/tests/test_component_metadata_platform_truth.py` asks the two
+# sibling library checkouts — SwiftJsonUI and KotlinJsonUI — whether the
+# canon's claims about their emit are true. It finds them BESIDE this repo,
+# and skips with a named reason when they are absent, which is right for a
+# bare CI clone.
+#
+# 🚨 This runner has always used a worktree under a scratchpad directory, and
+# nothing is beside THAT. So the four cross-repo arms — the ones that catch
+# SSoT divergence between the canon and the two libraries — were skipped in
+# every release this runner has gated. Measured 2026-09-11 across three
+# trains in one night: `1897 passed, 5 skipped` here, `1902 passed` in the
+# shared checkout, same commit. The runner spent the night reporting
+# `failures=0` beside five arms it never ran, which is the exact shape it was
+# built to find.
+#
+# The repos are lent by path, the same way rjui's toolchain is installed, and
+# the lending is PRINTED: a leg that silently succeeds at nothing is what
+# this whole file exists to stop.
+# ⚠️ "Beside this repo" is not "beside this worktree". A worktree lives in a
+# scratchpad and has nothing beside it — which is the whole defect. The
+# siblings sit next to the MAIN working tree, and `--git-common-dir` is what
+# names it from inside a worktree (`--show-toplevel` would answer with the
+# worktree). Measured: the first cut of this repair resolved `$C/..`, printed
+# `NOT FOUND beside <scratchpad>`, and would have lent nothing while looking
+# like it had.
+_common="$(git -C "$C" rev-parse --path-format=absolute --git-common-dir 2>/dev/null)"
+_siblings="$(cd "${_common:-$C/.git}/../.." 2>/dev/null && pwd)"
+for _sib in SwiftJsonUI KotlinJsonUI; do
+  _env_name="JSONUI_$(printf '%s' "$_sib" | tr '[:lower:]' '[:upper:]')_PATH"
+  eval "_have=\${$_env_name:-}"
+  if [ -n "$_have" ]; then
+    say "== $_sib: using $_env_name=$_have"
+  elif [ -d "$_siblings/$_sib" ]; then
+    say "== $_sib: lending $_siblings/$_sib (not beside this worktree)"
+    eval "export $_env_name=\"$_siblings/$_sib\""
+  else
+    say "== $_sib: NOT FOUND beside $_siblings — the cross-repo arms will skip"
+  fi
+done
 py_suite jui_tools jui_cli
 
 # --- Ruby ------------------------------------------------------------------
