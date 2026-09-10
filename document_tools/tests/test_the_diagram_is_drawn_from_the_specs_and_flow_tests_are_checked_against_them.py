@@ -397,8 +397,35 @@ class TheOwnersFindAnAppsFlowTestsWhereItsConfigSaysTheyAre(unittest.TestCase):
                     test_roots=[{"app": "alpha", "root": app / "tests"}])
             log = buf.getvalue()
             self.assertIn("flow tests 1 in", log, log)
+            self.assertIn("(declared test root)", log)
             self.assertEqual([(e["owner"], e["from"], e["to"]) for e in get_diagram_errors()],
                              [("alpha", "mypage", "login")])
+
+    def test_an_app_with_no_test_root_says_so_instead_of_naming_a_directory_it_never_looked_at(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _write(root / "beta" / "jui.config.json", {
+                "spec_directory": "../docs/beta/screens/json",
+                "layouts_directory": "../docs/beta/screens/layouts"})
+            _write(root / "docs" / "beta" / "screens" / "layouts" / "login.json", {"type": "View"})
+            _write(root / "docs" / "beta" / "screens" / "json" / "login.spec.json", {
+                "type": "screen_spec", "version": "1.0",
+                "metadata": {"name": "login", "displayName": "login", "description": "d"},
+                "structure": {"components": [{"type": "View", "id": "root", "description": "r"}],
+                              "layout": {"root": "root", "children": []}},
+                "transitions": [{"trigger": "t", "condition": "c", "destination": "外部ブラウザ（https://x/）"}]})
+            _write(root / "alpha" / "tests" / "screens" / "x.test.json",
+                   {"type": "screen", "source": {"layout": "x.json"}, "metadata": {"name": "X"},
+                    "cases": [{"name": "c", "steps": []}]})
+            buf = io.StringIO()
+            with redirect_stdout(buf):
+                generate_html_directory(
+                    root / "alpha" / "tests", root / "out", title="NoRoot",
+                    apps=[{"name": "beta", "docs_path": root / "docs" / "beta"}],
+                    unit_roots=[{"app": "beta", "root": root / "beta"}])
+            log = buf.getvalue()
+            self.assertIn("no test root for beta", log, log)
+            self.assertNotIn("flow tests 0 in", log)
 
     def test_without_test_roots_the_shared_tests_app_shape_still_works(self):
         # 陰性対照 for the arm above: the `tests/<app>/` shape has no test.src
