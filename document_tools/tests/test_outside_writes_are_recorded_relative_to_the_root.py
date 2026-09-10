@@ -58,6 +58,9 @@ def test_the_relative_form_walks_up_out_of_the_root_on_a_split_tree(tmp_path, mo
     b = _manifest(site / "b")["summary"]["run"]["outsideOutput"]
     assert a["directoriesRelative"] == ["../docs/a/screens/html"]
     assert b["directoriesRelative"] == ["../docs/b/screens/html"]
+    # The scope has its relative twin: the root itself, then the --app docs.
+    assert a["scopeRelative"] == [".", "../docs/a"]
+    assert b["scopeRelative"] == [".", "../docs/b"]
     # The absolute form stays, so nothing that reads it today breaks.
     assert a["directories"] == [str((site / "docs" / "a" / "screens" / "html").resolve())]
 
@@ -78,6 +81,7 @@ def test_two_clones_at_different_paths_write_the_same_relative_list(tmp_path, mo
         o2 = _manifest(second / name)["summary"]["run"]["outsideOutput"]
         assert o1["directories"] != o2["directories"]
         assert json.dumps(o1["directoriesRelative"]) == json.dumps(o2["directoriesRelative"])
+        assert o1["scopeRelative"] == o2["scopeRelative"] and o1["scope"] != o2["scope"]
 
 
 def test_a_directory_outside_the_repository_has_no_relative_form(tmp_path, monkeypatch):

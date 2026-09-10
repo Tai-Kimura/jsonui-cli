@@ -2326,6 +2326,10 @@ def _record_into(target: dict, targets: list, manifest, stale: list, outside: di
         # record's point — the list is byte-identical across clones. A
         # directory outside this repository has no such form and is None.
         block["directoriesRelative"] = _relative_to_root(block.get("directories") or [], root)
+        if block.get("scope"):
+            # The scope is absolute too; the same block must not hold one key
+            # with a relative twin and another without. The root itself is `.`.
+            block["scopeRelative"] = _relative_to_root(block["scope"], root)
         facts["outsideOutput"] = block
     if slots:
         # Its own key, not `collisions`: that word already belongs to the
