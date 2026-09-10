@@ -156,3 +156,41 @@ def test_one_differing_spelling_among_same_named_pairs_is_still_named(tmp_path, 
     assert [k for k, _ in found] == ["twofaverification"], "the deliberate pair must not be named"
     assert "1 name(s) are held by more than one LIVE spec source" in printed
     assert "login" not in printed
+
+
+def test_the_count_reaches_the_manifest_because_the_warning_tally_cannot_carry_it(tmp_path, monkeypatch):
+    r"""triage, 2026-09-10: `warnings N` in the closing line counts LINES.
+
+    This check reports N names in ONE line, so fourteen findings and one
+    finding produce the same tally — and narrowing the predicate from 14 to
+    0 moves that number by one. Someone comparing closing lines cannot see
+    the change at all. triage read a 14 as a 1 exactly this way while
+    measuring it, with `grep -oE 'WARNING \[doc-[a-z-]*\]' | uniq -c`.
+
+    ⚠️ Direction: the misreading says "the detector did not fire", which is
+    shaped like a bug report about the implementation — so it sends the
+    reader to the wrong code and never to their own instrument.
+
+    So the number goes where the run's numbers live, explicit zero included.
+    """
+    docs = tmp_path / "docs"
+    _spec(docs / "requirements" / "json" / "twofaverification.spec.json", "a", "T")
+    _spec(docs / "screens" / "json" / "two_fa_verification.spec.json", "b", "T")
+    _spec(docs / "requirements" / "json" / "storeinfo.spec.json", "c", "S")
+    _spec(docs / "screens" / "json" / "store_info.spec.json", "d", "S")
+
+    out = tmp_path / "out"; out.mkdir()
+    monkeypatch.setattr(gen, "get_written_pages", lambda: set())
+    assert len(gen._report_colliding_spec_sources(docs)) == 2
+    gen._record_generation_manifest(out, tmp_path, [], {})
+    run = json.loads((tmp_path / ".jsonui-cli" / "generation-manifest.json")
+                     .read_text(encoding="utf-8"))["summary"]["run"]
+    assert run["collidingSourceNames"] == 2
+
+    # …and the explicit zero, so a reader can tell "none" from "older record".
+    gen._colliding_sources = 0
+    assert gen._report_colliding_spec_sources(tmp_path / "empty") == []
+    gen._record_generation_manifest(out, tmp_path, [], {})
+    run2 = json.loads((tmp_path / ".jsonui-cli" / "generation-manifest.json")
+                      .read_text(encoding="utf-8"))["summary"]["run"]
+    assert run2["collidingSourceNames"] == 0

@@ -72,6 +72,13 @@ _written_outside_output: set[Path] = set()
 # unconditionally on a run that registered no outside directories at all
 # (triage, 2026-09-10, sharpening the scoped-zero ticket).
 _stale_outside_scanned: int = 0
+# Set by `_report_colliding_spec_sources`: how many names it found held by
+# more than one live source. That check reports N names in ONE line, so the
+# closing line's `warnings` tally — which counts LINES — cannot express its
+# magnitude: fourteen findings and one finding look the same there. A face that
+# wants to gate on the quantity needs a number, and the record is where the
+# run's numbers already live (triage, 2026-09-10, after reading a 14 as a 1).
+_colliding_sources: int = 0
 
 #: Which source file each written page was rendered from, for the writers
 #: that render a file already on disk (a face's markdown, a spec). The site
@@ -119,8 +126,9 @@ def reset_page_failures() -> None:
     _page_failures.clear()
     _pages_written.clear()
     _written_outside_output.clear()
-    global _stale_outside_scanned
+    global _stale_outside_scanned, _colliding_sources
     _stale_outside_scanned = 0
+    _colliding_sources = 0
     _page_sources.clear()
     _document_referrers.clear()
     _generation_counts.clear()
@@ -2435,6 +2443,9 @@ def _record_into(target: dict, targets: list, manifest, stale: list, outside: di
     # …and how many directories the scan walked to get there. A zero with a
     # zero denominator is not the same answer as a zero with a denominator.
     facts["leftoversOutsideScanned"] = _stale_outside_scanned
+    # One line, N names — so the closing line's warning tally cannot say how
+    # many. Explicit zero, under the same convention as the counts above.
+    facts["collidingSourceNames"] = _colliding_sources
     facts["leftoverOutsidePaths"] = [str(p) for p, _c in mine[:20]]
     facts["leftoverOutsideSiteCopies"] = [str(c) for _p, copies in mine[:20] for c in copies]
     facts["leftoverOutsideReferencedBy"] = {
@@ -3968,6 +3979,8 @@ def _report_colliding_spec_sources(docs_base: Path) -> list:
         (k, v) for k, v in sorted(by_key.items())
         if len(v) > 1 and len({f.name for f in v}) > 1
     ]
+    global _colliding_sources
+    _colliding_sources = len(collisions)
     if not collisions:
         return []
     print()
