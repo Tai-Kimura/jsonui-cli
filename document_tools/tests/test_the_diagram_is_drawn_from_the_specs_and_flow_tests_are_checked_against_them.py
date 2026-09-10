@@ -793,3 +793,13 @@ class TheBackToIndexLinkResolves(unittest.TestCase):
             href = re.search(r'<a href="([^"]+)">Back to Index</a>', page.read_text(encoding="utf-8")).group(1)
             self.assertEqual(href, "index.html")
             self.assertTrue((page.parent / href).exists())
+
+    def test_no_template_in_the_module_hard_codes_the_index_link(self):
+        """A second, tab-less template kept the literal `href="index.html"`
+        with zero callers — dead code with a known 404 in it, which no arm
+        can turn red until someone wires it up again. Removed; this pins
+        that the literal does not come back."""
+        import jsonui_doc_cli.test_doc.mermaid.generator as gen
+        source = Path(gen.__file__).read_text(encoding="utf-8")
+        self.assertEqual(source.count('href="index.html"'), 0)
+        self.assertIn('href="{index_href}"', source)
