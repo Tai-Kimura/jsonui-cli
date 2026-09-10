@@ -799,7 +799,10 @@ class TheBackToIndexLinkResolves(unittest.TestCase):
         with zero callers — dead code with a known 404 in it, which no arm
         can turn red until someone wires it up again. Removed; this pins
         that the literal does not come back."""
+        import jsonui_doc_cli
         import jsonui_doc_cli.test_doc.mermaid.generator as gen
-        source = Path(gen.__file__).read_text(encoding="utf-8")
-        self.assertEqual(source.count('href="index.html"'), 0)
-        self.assertIn('href="{index_href}"', source)
+        package = Path(jsonui_doc_cli.__file__).parent
+        offenders = [str(f.relative_to(package)) for f in package.rglob("*.py")
+                     if 'href="index.html"' in f.read_text(encoding="utf-8")]
+        self.assertEqual(offenders, [], "a hard-coded index link (package-wide; f325efeb had 1)")
+        self.assertIn('href="{index_href}"', Path(gen.__file__).read_text(encoding="utf-8"))
