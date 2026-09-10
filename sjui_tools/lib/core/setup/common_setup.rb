@@ -6,6 +6,7 @@ require 'json'
 require_relative '../pbxproj_manager'
 require_relative '../project_finder'
 require_relative '../xcode_project_manager'
+require_relative 'workspace_package_resolved'
 
 module SjuiTools
   module Core
@@ -55,18 +56,14 @@ module SjuiTools
           FileUtils.mkdir_p(swiftpm_path)
           puts "Created/verified SPM directory structure: #{swiftpm_path}"
           
-          # Create empty Package.resolved if it doesn't exist
-          package_resolved_path = File.join(swiftpm_path, 'Package.resolved')
-          unless File.exist?(package_resolved_path)
-            initial_resolved = {
-              "object" => {
-                "pins" => []
-              },
-              "version" => 1
-            }
-            File.write(package_resolved_path, JSON.pretty_generate(initial_resolved))
-            puts "Created Package.resolved file"
-          end
+          # NOT created empty, and an empty one already here is reclaimed.
+          # An empty Package.resolved in the WORKSPACE shadows the project
+          # copy's real pins the moment the .xcworkspace is opened, and the
+          # old `unless File.exist?` guard meant the shell was written once
+          # and never updated — so "stop creating it" on its own repairs no
+          # tree that has already run setup. See WorkspacePackageResolved.
+          WorkspacePackageResolved.report(
+            WorkspacePackageResolved.reclaim(workspace_path, @project_file_path))
           
           # Create workspace configuration if needed
           workspace_settings_path = File.join(shared_data_path, 'WorkspaceSettings.xcsettings')

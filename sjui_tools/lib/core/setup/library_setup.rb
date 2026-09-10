@@ -7,6 +7,7 @@ require 'xcodeproj'
 require_relative '../project_finder'
 require_relative '../config_manager'
 require_relative '../xcode_target_helper'
+require_relative 'workspace_package_resolved'
 
 module SjuiTools
   module Core
@@ -363,18 +364,14 @@ module SjuiTools
             puts "ERROR: Failed to create SPM directory at #{swiftpm_path}"
           end
           
-          # Create empty Package.resolved if it doesn't exist
-          package_resolved_path = File.join(swiftpm_path, 'Package.resolved')
-          unless File.exist?(package_resolved_path)
-            initial_resolved = {
-              "object" => {
-                "pins" => []
-              },
-              "version" => 1
-            }
-            File.write(package_resolved_path, JSON.pretty_generate(initial_resolved))
-            puts "Created Package.resolved file"
-          end
+          # NOT created empty, and an empty one already here is reclaimed.
+          # An empty Package.resolved in the WORKSPACE shadows the project
+          # copy's real pins the moment the .xcworkspace is opened, and the
+          # old `unless File.exist?` guard meant the shell was written once
+          # and never updated — so "stop creating it" on its own repairs no
+          # tree that has already run setup. See WorkspacePackageResolved.
+          WorkspacePackageResolved.report(
+            WorkspacePackageResolved.reclaim(workspace_path, @project.path))
           
           # Create workspace contents.xcworkspacedata if it doesn't exist
           workspace_data_path = File.join(workspace_path, 'contents.xcworkspacedata')
