@@ -1,14 +1,15 @@
-"""Flow-diagram extraction tests.
+"""Flow-graph and diagram-rendering tests.
 
-The diagram is derived from flow tests through the canonical pipeline
-(``shared/core/screen_identity.json`` → ``diagram``):
-
-    resolve → canonicalize → collapse consecutive duplicates → build edges
-
-These tests pin the parts that are easy to regress silently: inline steps
-becoming nodes, ``file:`` references landing in the SAME id space, cells
-being dropped instead of drawn, back edges staying distinguishable, and
-node ids surviving values that are not valid diagram identifiers.
+Ruled 2026-09-10: the diagram is drawn from the SPECS; flow tests are
+CHECKED against it. The flow-test walk (``flow_graph.py``) still runs the
+canonical pipeline — resolve → canonicalize → collapse consecutive
+duplicates → build edges — to obtain what the tests DO, so the arms on that
+walk (``FlowEdgeTests``, ``CellClassificationTests``, file references) are
+kept; what changed is what they prove. A ``file:`` step landing in the same
+id space used to mean "one node, not two"; it now means "the check compares
+the screen the test covers, not the file's name". The rendering arms feed
+specs, and the one that used to assert "No flow tests found" now asserts
+its inverse, with the date.
 """
 from __future__ import annotations
 
@@ -25,6 +26,7 @@ from jsonui_doc_cli.test_doc.mermaid.flow_graph import (
     normalize_screen_ref,
 )
 from jsonui_doc_cli.test_doc.mermaid.generator import (
+    build_diagram,
     generate_grouped_mermaid_diagrams,
     generate_mermaid_diagram,
     generate_mermaid_html,
@@ -168,66 +170,97 @@ class CellClassificationTests(unittest.TestCase):
         self.assertIn("not_a_layout", nodes)
 
 
-class DiagramRenderingTests(unittest.TestCase):
-    def setUp(self):
-        self.tmp = tempfile.TemporaryDirectory()
-        self.addCleanup(self.tmp.cleanup)
-        self.root = Path(self.tmp.name)
-        self.flows = self.root / "flows"
-        self.screens = self.root / "screens"
-        self.flows.mkdir()
-        self.screens.mkdir()
+class _Tree:
+    """specs + layouts + tests for the rendering arms."""
 
-    def _write_flow(self, name: str, steps: list[dict], flow_name: str | None = None):
-        payload = {
-            "type": "flow",
-            "metadata": {"name": flow_name or name},
-            "steps": steps,
-        }
+    def __init__(self, root: Path):
+        self.root = root
+        self.specs = root / "docs" / "screens" / "json"
+        self.layouts = root / "docs" / "screens" / "layouts"
+        self.flows = root / "tests" / "flows"
+        self.screens = root / "tests" / "screens"
+        for d in (self.specs, self.layouts, self.flows, self.screens):
+            d.mkdir(parents=True, exist_ok=True)
+
+    def spec(self, name: str, destinations: list[str], display: str | None = None) -> None:
+        (self.layouts / f"{name}.json").write_text(json.dumps({"type": "View"}), encoding="utf-8")
+        metadata = {"displayName": display} if display else {}
+        (self.specs / f"{name}.spec.json").write_text(json.dumps({
+            "type": "screen_spec", "metadata": metadata,
+            "transitions": [{"trigger": "t", "condition": "c", "destination": d} for d in destinations],
+        }, ensure_ascii=False), encoding="utf-8")
+
+    def flow(self, name: str, steps: list[dict], flow_name: str | None = None) -> None:
+        payload = {"type": "flow", "metadata": {"name": flow_name or name}, "steps": steps}
         (self.flows / f"{name}.test.json").write_text(json.dumps(payload), encoding="utf-8")
 
-    def _write_screen_test(self, name: str, layout: str, metadata: dict, document: str | None = None):
+    def screen_test(self, name: str, layout: str, metadata: dict, document: str | None = None,
+                    subdir: str = "") -> None:
         source = {"layout": f"Layouts/{layout}.json"}
         if document:
             source["document"] = document
         payload = {"type": "screen", "metadata": metadata, "source": source, "cases": []}
-        (self.screens / f"{name}.test.json").write_text(json.dumps(payload), encoding="utf-8")
+        directory = self.screens / subdir if subdir else self.screens
+        directory.mkdir(parents=True, exist_ok=True)
+        (directory / f"{name}.test.json").write_text(json.dumps(payload), encoding="utf-8")
 
-    def test_diagram_has_nodes_and_edges_from_inline_steps(self):
-        self._write_flow("nav", [_step("login"), _step("mypage")])
-        out = generate_mermaid_diagram(self.flows, self.screens)
-        self.assertIn("login --> mypage", out)
+    def config(self, app_owned: list) -> None:
+        (self.root / "jui.config.json").write_text(
+            json.dumps({"test": {"appOwnedScreens": app_owned}}), encoding="utf-8")
 
-    def test_back_edge_uses_a_dotted_arrow(self):
-        self._write_flow(
-            "roundtrip",
-            [_step("mypage", action="tap", id="x"), _step("settings", action="back"), _step("mypage")],
-        )
-        out = generate_mermaid_diagram(self.flows, self.screens)
+    def diagram(self, **kwargs) -> str:
+        return generate_mermaid_diagram(self.specs, self.screens, self.layouts,
+                                        flows_dir=self.flows, **kwargs)
+
+    def grouped(self, **kwargs) -> dict[str, str]:
+        return generate_grouped_mermaid_diagrams(self.specs, self.screens, self.layouts,
+                                                 flows_dir=self.flows, **kwargs)
+
+    def build(self, **kwargs):
+        return build_diagram(self.specs, flows_dir=self.flows, screens_dir=self.screens,
+                             layouts_dir=self.layouts, **kwargs)
+
+
+class DiagramRenderingTests(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.tree = _Tree(Path(self.tmp.name))
+
+    def test_diagram_has_nodes_and_edges_from_spec_transitions(self):
+        self.tree.spec("login", ["Mypage"])
+        self.tree.spec("mypage", [])
+        self.assertIn("login --> mypage", self.tree.diagram())
+
+    def test_a_spec_back_declaration_uses_a_dotted_arrow(self):
+        self.tree.spec("mypage", ["Settings"])
+        self.tree.spec("settings", ["Previous screen (pop)"])
+        out = self.tree.diagram()
         self.assertIn("mypage --> settings", out)
         self.assertIn("settings -.-> mypage", out)
 
     def test_screen_test_metadata_is_resolved_by_layout_basename(self):
-        self._write_flow("nav", [_step("login"), _step("mypage")])
-        self._write_screen_test(
-            "login_smoke", "login", {"name": "ログイン", "entry_screen": True}, "login.html"
-        )
-        out = generate_mermaid_diagram(self.flows, self.screens)
+        self.tree.spec("login", ["Mypage"])
+        self.tree.spec("mypage", [])
+        self.tree.screen_test("login_smoke", "login", {"name": "ログイン", "entry_screen": True}, "login.html")
+        out = self.tree.diagram()
         self.assertIn('login(["ログイン"]):::entryNode', out)
         self.assertIn('click login "login.html"', out)
 
     def test_conflicting_names_fall_back_to_the_derived_title(self):
         # Two tests cover one screen with different names — picking the first
         # would label the node with an unrelated test's name.
-        self._write_flow("nav", [_step("login"), _step("mypage")])
-        self._write_screen_test("a", "login", {"name": "Login Smoke"})
-        self._write_screen_test("b", "login", {"name": "Forgot Password Reach"})
-        out = generate_mermaid_diagram(self.flows, self.screens)
-        self.assertIn('login["Login"]', out)
+        self.tree.spec("login", ["Mypage"])
+        self.tree.spec("mypage", [])
+        self.tree.screen_test("a", "login", {"name": "Login Smoke"})
+        self.tree.screen_test("b", "login", {"name": "Forgot Password Reach"})
+        self.assertIn('login["Login"]', self.tree.diagram())
 
     def test_node_ids_are_sanitized(self):
-        self._write_flow("odd", [_step("my page"), _step("ログイン")])
-        out = generate_mermaid_diagram(self.flows, self.screens)
+        self.tree.spec("my page", ["ログイン"])
+        self.tree.spec("ログイン", [])
+        out = self.tree.diagram()
+        self.assertIn("-->", out)
         for line in out.splitlines():
             if "-->" in line:
                 left, _, right = line.strip().partition(" --> ")
@@ -236,201 +269,170 @@ class DiagramRenderingTests(unittest.TestCase):
                     self.assertTrue(token.isascii(), token)
 
     def test_mermaid_keyword_ids_are_escaped(self):
-        self._write_flow("kw", [_step("end"), _step("mypage")])
-        out = generate_mermaid_diagram(self.flows, self.screens)
-        self.assertIn("end_node", out)
+        self.tree.spec("end", ["Mypage"])
+        self.tree.spec("mypage", [])
+        self.assertIn("end_node", self.tree.diagram())
 
     def test_grouped_diagrams_use_group_metadata(self):
-        self._write_flow("nav", [_step("login"), _step("mypage")])
-        self._write_screen_test("login_t", "login", {"name": "Login", "entry_screen": True})
-        self._write_screen_test("mypage_t", "mypage", {"name": "MyPage", "group": ["account"]})
-        groups = generate_grouped_mermaid_diagrams(self.flows, self.screens)
-        self.assertIn("account", groups)
+        self.tree.spec("login", ["Mypage"])
+        self.tree.spec("mypage", [])
+        self.tree.screen_test("login_t", "login", {"name": "Login", "entry_screen": True})
+        self.tree.screen_test("mypage_t", "mypage", {"name": "MyPage", "group": ["account"]})
+        self.assertIn("account", self.tree.grouped())
 
-    def test_no_flows_directory_content_reports_no_flows(self):
-        out = generate_mermaid_diagram(self.flows, self.screens)
-        self.assertIn("NO_FLOWS", out)
+    def test_no_specs_reports_no_specs(self):
+        self.assertIn("NO_SPECS", self.tree.diagram())
 
-    def test_flow_without_screens_yields_no_groups(self):
-        # A flow whose steps carry no screen produces no nodes: callers use
-        # the empty mapping to suppress the diagram link entirely.
-        payload = {"type": "flow", "metadata": {"name": "empty"}, "steps": [{"block": "x", "steps": []}]}
-        (self.flows / "empty.test.json").write_text(json.dumps(payload), encoding="utf-8")
-        self.assertEqual(generate_grouped_mermaid_diagrams(self.flows, self.screens), {})
+    def test_no_flow_tests_still_draws_from_the_specs(self):
+        """INVERTED 2026-09-10. This arm used to be
+        `test_no_flows_directory_content_reports_no_flows`: an empty flows
+        directory produced "No flow tests found" even with specs present."""
+        self.tree.spec("login", ["Mypage"])
+        self.tree.spec("mypage", [])
+        out = self.tree.diagram()
+        self.assertIn("login --> mypage", out)
+        self.assertNotIn("NO_FLOWS", out)
+
+    def test_specs_without_a_resolvable_transition_yield_no_groups(self):
+        # `none` draws nothing, so nothing is drawable: callers use the empty
+        # mapping to suppress the diagram link entirely.
+        self.tree.spec("login", ["なし（画面内のタブ切替）"])
+        self.assertEqual(self.tree.grouped(), {})
 
     def test_html_generation_is_skipped_when_there_is_nothing_to_draw(self):
-        payload = {"type": "flow", "metadata": {"name": "empty"}, "steps": [{"block": "x", "steps": []}]}
-        (self.flows / "empty.test.json").write_text(json.dumps(payload), encoding="utf-8")
-        out_file = self.root / "diagram.html"
-        result = generate_mermaid_html(self.flows, out_file, "Flow Diagram", self.screens)
-        self.assertEqual(result, "")
+        self.tree.spec("login", ["なし（画面内のタブ切替）"])
+        out_file = self.tree.root / "diagram.html"
+        result = generate_mermaid_html(self.tree.specs, out_file, "Flow Diagram", self.tree.screens,
+                                       self.tree.layouts, flows_dir=self.tree.flows)
+        self.assertEqual(result.combined, "")
         self.assertFalse(out_file.exists())
 
     def test_html_is_written_when_there_are_screens(self):
-        self._write_flow("nav", [_step("login"), _step("mypage")])
-        out_file = self.root / "diagram.html"
-        result = generate_mermaid_html(self.flows, out_file, "Flow Diagram", self.screens)
-        self.assertTrue(result)
+        self.tree.spec("login", ["Mypage"])
+        self.tree.spec("mypage", [])
+        out_file = self.tree.root / "diagram.html"
+        result = generate_mermaid_html(self.tree.specs, out_file, "Flow Diagram", self.tree.screens,
+                                       self.tree.layouts, flows_dir=self.tree.flows)
+        self.assertTrue(result.combined)
         self.assertTrue(out_file.exists())
 
 
 class FileReferenceResolutionTests(unittest.TestCase):
     """A ``file:`` step names a FILE, and a file name is not a screen id.
 
-    One screen routinely has several test files (``login_smoke``,
-    ``booking_complete--bank_pending``), so naming the node after the file
-    splits one screen into several — and the split-off node loses the group
-    its test declared, landing in 'その他'.
+    The check compares the screen the referenced test COVERS (its
+    ``source.layout``) against the spec — a file name would have produced
+    "login_smoke has no spec" for a screen whose spec declares the
+    transition perfectly well.
     """
 
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
-        self.root = Path(self.tmp.name)
-        self.flows = self.root / "flows"
-        self.screens = self.root / "screens"
-        self.flows.mkdir()
-        self.screens.mkdir()
-
-    def _write_flow(self, name: str, steps: list[dict]):
-        payload = {"type": "flow", "metadata": {"name": name}, "steps": steps}
-        (self.flows / f"{name}.test.json").write_text(json.dumps(payload), encoding="utf-8")
-
-    def _write_screen_test(self, name: str, layout: str, metadata: dict, subdir: str = ""):
-        payload = {
-            "type": "screen",
-            "metadata": metadata,
-            "source": {"layout": f"Layouts/{layout}.json"},
-            "cases": [],
-        }
-        directory = self.screens / subdir if subdir else self.screens
-        directory.mkdir(parents=True, exist_ok=True)
-        (directory / f"{name}.test.json").write_text(json.dumps(payload), encoding="utf-8")
+        self.tree = _Tree(Path(self.tmp.name))
+        self.tree.spec("booking_confirm", ["BookingComplete"])
+        self.tree.spec("booking_complete", [])
+        self.tree.spec("login", ["Mypage"])
+        self.tree.spec("mypage", [])
 
     def test_variant_test_file_folds_onto_the_screen_it_covers(self):
-        self._write_screen_test(
-            "booking_complete--bank_pending", "booking_complete", {"name": "銀行振込"}
-        )
-        self._write_flow(
-            "bank",
-            [
-                _step("booking_confirm", action="tap", id="submit"),
-                {"file": "booking_complete--bank_pending", "case": "bank_transfer_block"},
-            ],
-        )
-        out = generate_mermaid_diagram(self.flows, self.screens)
-        self.assertIn("booking_confirm --> booking_complete", out)
-        self.assertNotIn("booking_complete__bank_pending", out)
+        self.tree.screen_test("booking_complete--bank_pending", "booking_complete", {"name": "銀行振込"})
+        self.tree.flow("bank", [
+            _step("booking_confirm", action="tap", id="submit"),
+            {"file": "booking_complete--bank_pending", "case": "bank_transfer_block"},
+        ])
+        result = self.tree.build()
+        self.assertEqual(result.errors, [])
+        self.assertIn("booking_confirm --> booking_complete", result.combined)
 
     def test_file_reference_inherits_the_referenced_tests_group(self):
-        self._write_screen_test(
-            "booking_complete--bank_pending",
-            "booking_complete",
-            {"name": "銀行振込", "group": "booking"},
-        )
-        self._write_screen_test("booking_confirm_t", "booking_confirm", {"group": "booking"})
-        self._write_flow(
-            "bank",
-            [
-                _step("booking_confirm", action="tap", id="submit"),
-                {"file": "booking_complete--bank_pending"},
-            ],
-        )
-        groups = generate_grouped_mermaid_diagrams(self.flows, self.screens)
-        self.assertEqual(sorted(groups), ["booking"])
+        self.tree.screen_test("booking_complete--bank_pending", "booking_complete",
+                              {"name": "銀行振込", "group": "booking"})
+        self.tree.screen_test("booking_confirm_t", "booking_confirm", {"group": "booking"})
+        self.tree.screen_test("login_t", "login", {"group": "auth"})
+        self.tree.screen_test("mypage_t", "mypage", {"group": "auth"})
+        self.assertEqual(sorted(self.tree.grouped()), ["auth", "booking"])
 
     def test_a_differently_named_test_file_also_folds_onto_its_screen(self):
-        # The bug is not specific to the `--variant` spelling: any test file
-        # whose name is not the screen id used to become its own node.
-        self._write_screen_test("login_smoke", "login", {"name": "ログイン"})
-        self._write_flow("nav", [{"file": "login_smoke"}, _step("mypage")])
-        out = generate_mermaid_diagram(self.flows, self.screens)
-        self.assertIn("login --> mypage", out)
-        self.assertNotIn("login_smoke", out)
+        self.tree.screen_test("login_smoke", "login", {"name": "ログイン"})
+        self.tree.flow("nav", [{"file": "login_smoke"}, _step("mypage")])
+        self.assertEqual(self.tree.build().errors, [])
 
-    def test_unresolvable_reference_still_draws_the_basename(self):
-        # Nothing indexed under that name (a broken reference, or a test
-        # with no source.layout): keep drawing something rather than
-        # dropping the edge.
-        self._write_flow("nav", [{"file": "../screens/ghost.test.json"}, _step("mypage")])
-        out = generate_mermaid_diagram(self.flows, self.screens)
-        self.assertIn("ghost --> mypage", out)
+    def test_without_the_covering_test_the_file_name_is_what_gets_checked(self):
+        # 陰性対照 for the arm above: the SAME flow, no screen test to resolve
+        # through, is checked under the file's name and fails as such.
+        self.tree.flow("nav", [{"file": "login_smoke"}, _step("mypage")])
+        errors = self.tree.build().errors
+        self.assertEqual([(e.from_id, e.to_id) for e in errors], [("login_smoke", "mypage")])
+        self.assertIn("login_smoke has no spec", errors[0].reason)
+
+    def test_unresolvable_reference_is_checked_under_its_basename(self):
+        self.tree.flow("nav", [{"file": "../screens/ghost.test.json"}, _step("mypage")])
+        errors = self.tree.build().errors
+        self.assertEqual([(e.from_id, e.to_id) for e in errors], [("ghost", "mypage")])
 
     def test_one_file_name_claiming_two_screens_is_not_resolved(self):
-        # Resolving would pick one at random and silently mislabel the node.
-        self._write_screen_test("home", "user_home", {}, subdir="user")
-        self._write_screen_test("home", "admin_home", {}, subdir="admin")
-        self._write_flow("nav", [{"file": "home"}, _step("mypage")])
-        out = generate_mermaid_diagram(self.flows, self.screens)
-        self.assertIn("home --> mypage", out)
+        # Resolving would pick one at random and silently check the wrong screen.
+        self.tree.screen_test("home", "user_home", {}, subdir="user")
+        self.tree.screen_test("home", "admin_home", {}, subdir="admin")
+        self.tree.flow("nav", [{"file": "home"}, _step("mypage")])
+        errors = self.tree.build().errors
+        self.assertEqual([e.from_id for e in errors], ["home"])
 
 
 class AppOwnedScreenGroupTests(unittest.TestCase):
     """An app-owned screen has no layout, so it has no test file — and
     ``metadata.group`` lives in test files. Its jui.config.json declaration
     is the only place it can name a group, so without this it is pinned to
-    'その他' forever, where genuinely ungrouped screens need to be visible."""
+    'その他' forever, where genuinely ungrouped screens need to be visible.
+
+    Since 2026-09-10 the node itself comes from a spec transition INTO the
+    app-owned screen (or from its own declared ``transitions``)."""
 
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
-        self.root = Path(self.tmp.name)
-        self.flows = self.root / "tests" / "flows"
-        self.screens = self.root / "tests" / "screens"
-        self.flows.mkdir(parents=True)
-        self.screens.mkdir(parents=True)
-
-    def _write_config(self, app_owned: list):
-        (self.root / "jui.config.json").write_text(
-            json.dumps({"test": {"appOwnedScreens": app_owned}}), encoding="utf-8"
-        )
-
-    def _write_flow(self, steps: list[dict]):
-        payload = {"type": "flow", "metadata": {"name": "footer_nav"}, "steps": steps}
-        (self.flows / "footer_nav.test.json").write_text(json.dumps(payload), encoding="utf-8")
-
-    def _write_screen_test(self, name: str, layout: str, metadata: dict):
-        payload = {
-            "type": "screen",
-            "metadata": metadata,
-            "source": {"layout": f"Layouts/{layout}.json"},
-            "cases": [],
-        }
-        (self.screens / f"{name}.test.json").write_text(json.dumps(payload), encoding="utf-8")
+        self.tree = _Tree(Path(self.tmp.name))
+        self.tree.spec("top", ["Tokushoho"])
+        self.tree.spec("mypage", [])
 
     def test_declared_group_is_used(self):
-        self._write_config([{"id": "tokushoho", "group": "static"}])
-        self._write_screen_test("top_t", "top", {"group": "booking"})
-        self._write_flow([_step("top", action="tap", id="footer"), _step("tokushoho")])
-        groups = generate_grouped_mermaid_diagrams(self.flows, self.screens)
+        self.tree.config([{"id": "tokushoho", "group": "static"}])
+        self.tree.screen_test("top_t", "top", {"group": "booking"})
+        groups = self.tree.grouped(app_owned=["tokushoho"])
         self.assertIn("static", groups)
         self.assertNotIn("その他", groups)
 
     def test_a_bare_id_declares_no_group(self):
         # The negative half: the object form is what adds a group, so the
         # string form must still land in 'その他' rather than inventing one.
-        self._write_config(["tokushoho"])
-        self._write_screen_test("top_t", "top", {"group": "booking"})
-        self._write_flow([_step("top", action="tap", id="footer"), _step("tokushoho")])
-        groups = generate_grouped_mermaid_diagrams(self.flows, self.screens)
-        self.assertIn("その他", groups)
+        self.tree.config(["tokushoho"])
+        self.tree.screen_test("top_t", "top", {"group": "booking"})
+        self.assertIn("その他", self.tree.grouped(app_owned=["tokushoho"]))
 
     def test_a_tests_own_group_wins_over_the_declaration(self):
         # One screen, one place to look: a declaration must not silently
         # override what a test file says.
-        self._write_config([{"id": "top", "group": "static"}])
-        self._write_screen_test("top_t", "top", {"group": "booking"})
-        self._write_flow([_step("top", action="tap", id="x"), _step("mypage")])
-        groups = generate_grouped_mermaid_diagrams(self.flows, self.screens)
+        self.tree.spec("top", ["Mypage"])
+        self.tree.config([{"id": "top", "group": "static"}])
+        self.tree.screen_test("top_t", "top", {"group": "booking"})
+        self.tree.screen_test("mypage_t", "mypage", {"group": "booking"})
+        groups = self.tree.grouped()
         self.assertIn("booking", groups)
         self.assertNotIn("static", groups)
 
     def test_multiple_groups_may_be_declared(self):
-        self._write_config([{"id": "tokushoho", "group": ["static", "legal"]}])
-        self._write_flow([_step("top", action="tap", id="footer"), _step("tokushoho")])
-        groups = generate_grouped_mermaid_diagrams(self.flows, self.screens)
+        self.tree.config([{"id": "tokushoho", "group": ["static", "legal"]}])
+        self.tree.screen_test("top_t", "top", {"group": "booking"})
+        groups = self.tree.grouped(app_owned=["tokushoho"])
         self.assertIn("static", groups)
         self.assertIn("legal", groups)
+
+    def test_its_own_declared_transitions_are_drawn(self):
+        self.tree.spec("licenses", [])
+        self.tree.config([{"id": "tokushoho", "group": "static", "transitions": ["Licenses"]}])
+        out = self.tree.diagram(app_owned=["tokushoho"], app_owned_transitions={"tokushoho": ["Licenses"]})
+        self.assertIn("tokushoho --> licenses", out)
 
 
 if __name__ == "__main__":

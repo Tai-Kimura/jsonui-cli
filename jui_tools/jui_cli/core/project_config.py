@@ -62,6 +62,22 @@ def find_project_config(start: Path | str) -> tuple[dict, Path] | tuple[None, No
     return None, None
 
 
+def declared_transition_aliases(config: dict | None) -> list:
+    """The raw ``spec.transitionAliases`` list, or ``[]``.
+
+    Returned unparsed for the same reason as the app-owned list:
+    ``jui_cli.core.screen_identity.parse_transition_aliases`` is the one
+    place that knows the entry shape and refuses a wrong position.
+    """
+    if not isinstance(config, dict):
+        return []
+    spec_config = config.get("spec")
+    if not isinstance(spec_config, dict):
+        return []
+    declared = spec_config.get("transitionAliases")
+    return declared if isinstance(declared, list) else []
+
+
 def declared_app_owned_screens(config: dict | None) -> list:
     """The raw ``test.appOwnedScreens`` list, or ``[]``.
 

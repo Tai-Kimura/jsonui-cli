@@ -89,12 +89,16 @@
     "declaration": {
       "location": "jui.config.json",
       "key": "test.appOwnedScreens",
-      "shape": "Array of entries. An entry is a screen id, or an object { id, group } when the screen also needs diagram metadata. Both forms are equivalent for classification.",
+      "shape": "Array of entries. An entry is a screen id, or an object { id, group, transitions } when the screen also needs diagram metadata or declares outgoing transitions. All forms are equivalent for classification.",
       "example": [
         "tokushoho",
         {
           "id": "company",
-          "group": "static"
+          "group": "static",
+          "transitions": [
+            "Licenses",
+            "Tokushoho"
+          ]
         },
         {
           "id": "licenses",
@@ -104,6 +108,11 @@
           ]
         }
       ],
+      "transitions": {
+        "value": "An array of raw destinations, in the SAME vocabulary a spec's transitions[].destination uses (classified by classify_destination with the face's aliases).",
+        "readBy": "The flow-diagram generator (document_tools spec_graph) — it draws them and flowTestCheck accepts them. Classification and code generation ignore them.",
+        "rationale": "The diagram is drawn from specs only (2026-09-10), and an app-owned screen has no spec — a spec for a screen with nothing to generate describes nothing. Without this key every flow test that leaves an app-owned screen (a footer link from the company page to the licenses page, measured: 2 on one face) would be an error with no way to comply."
+      },
       "group": {
         "value": "A group name, or an array of them — the same shape a screen test's metadata.group takes.",
         "readBy": "The flow-diagram generator only. Classification and code generation read the id and ignore the rest of the object.",
@@ -296,8 +305,17 @@
     ]
   },
   "diagram": {
-    "description": "The screen-transition diagram is derived from the same ids.",
-    "nodeSource": "TWO sources, both normalized into the same id space: (1) flow test inline step 'screen' values plus file-reference steps; (2) spec 'transitions[].destination' values, through specTransitions below. Naming only one of them here is how an implementation ends up reading a source the canon does not declare.",
+    "description": "The screen-transition diagram is drawn from the screen SPECS — <screen spec>.transitions[].destination, plus test.appOwnedScreens[].transitions for a screen that has no spec — and the flow tests are CHECKED against it. Ruled 2026-09-10.",
+    "nodeSource": "ONE source: spec transitions, normalized through specTransitions below, plus the app-owned declarations (appOwnedScreens.declaration.transitions). Flow tests are NOT a source since 2026-09-10; they are the check (flowTestCheck). History: from 2026-09-09 this key declared TWO sources while document_tools read only the first (flow tests) and had ZERO readers of specTransitions — the diagram answered 'No flow tests found' on a face holding 48 specs. A declaration with no reader is a sentence, not a rule. The reader is now document_tools/.../mermaid/spec_graph.py, and its arms fail when the generator reads a flow test as a source.",
+    "drawingPipeline": [
+      "readSpecs (spec stems are the screen ids)",
+      "classifyDestinations (specTransitions.kinds)",
+      "buildForwardEdges (kind screen)",
+      "deriveReturnEdges (kind back → a dotted edge to every screen with a forward edge into the declarer)",
+      "terminalNodes (kind external)",
+      "groupByScreenTestMetadata"
+    ],
+    "pipelineNote": "`pipeline` is the FLOW-TEST walk (resolve → canonicalize → collapse → build edges). It no longer draws anything; flowTestCheck runs it to obtain what the tests DO and compares that with what the specs declare.",
     "pipeline": [
       "resolve",
       "canonicalize",
@@ -307,8 +325,25 @@
     "rules": [
       "Self-loops are discarded (they are the collapse of a screen onto itself).",
       "An edge caused by a 'back' action is a return edge and is rendered distinctly from a forward transition.",
-      "Node ids are sanitized for the diagram language; a screen id is never emitted raw into a diagram identifier position."
+      "Node ids are sanitized for the diagram language; a screen id is never emitted raw into a diagram identifier position.",
+      "A `back` declaration carries no target: it is drawn as a return edge (dotted) to each screen that has a forward edge into the declaring screen. Derived from the specs, never from a test.",
+      "An `external` destination is drawn as a terminal node; `none` draws nothing (a positive declaration); `unknown` and an unmapped `route` draw nothing and are treated as ABSENT — counted and listed, not errors by themselves (ruled 2026-09-10: 解決できない宣言は「無い」扱い)."
     ],
+    "flowTestCheck": {
+      "rule": "Every FORWARD transition a flow test performs (consecutive distinct screens after resolve/canonicalize/collapse) must be a forward edge the specs declare. One that is not is an ERROR.",
+      "ruledOn": "2026-09-10 — 'flowdiagram は spec だけ見て書く。flow test で遷移が見つかって、それが spec にない時はエラーを吐く'",
+      "exempt": "Back steps (action `back`). A return through the stack is the inverse of a transition the check already saw — and a spec `back` declaration has no target to compare with.",
+      "unresolvedIsAbsent": "A destination the classifier cannot resolve (kind unknown, or route with no mapping) is NOT in the spec for the purpose of this check. So a flow test that navigates to the screen such a destination was meant to name is an error, and the error names the unresolved destination(s) on that source: that is usually the fix.",
+      "reasons": [
+        "<from> has no spec",
+        "<from>'s spec declares no transition to <to>",
+        "the app-owned screen <from> declares no transition to <to> (jui.config.json test.appOwnedScreens[].transitions)"
+      ],
+      "severity": "error. `jsonui-doc generate html` writes every page (the diagram page lists the errors), prints one `ERROR [doc-diagram]:` line per transition, and exits 1. Not covered by --allow-partial (that accepts missing pages; this is a wrong spec). `generate mermaid` exits 1 likewise.",
+      "reported": "per owner (app), with the flow test's name and file, from, to, and the reason. A count without the list is not a report.",
+      "noSpecDirectory": "A flow group with no spec directory anywhere gets ONE `WARNING [doc-diagram]` naming how many flow test files went unchecked, and no diagram. Absence of the directory is a configuration state, not a spec omission.",
+      "readBy": "document_tools/jsonui_doc_cli/test_doc/mermaid/generator.py build_diagram; the exit code in jsonui_doc_cli/cli.py cmd_generate_html"
+    },
     "specTransitions": {
       "source": "<screen spec>.transitions[].destination",
       "description": "A spec transition's destination is FREE PROSE, not an identifier. The validator requires only that the key exists (condition + destination), so nothing has ever constrained its shape, and the corpus shows at least six different kinds of value in that one column.",
@@ -324,11 +359,11 @@
         "description": "CLOSED vocabulary. It exists so that a destination which is not a screen id stops being reported as a defect. Declaring only 'screen' would make 119 of 271 measured destinations spec errors, when they are other kinds of transition — that turns a reporting gap into a rejection of correct input, which is the worse direction.",
         "values": [
           {"kind": "screen", "meaning": "resolves to a screen id in this face's id space", "drawn": "a node and an edge"},
-          {"kind": "route", "meaning": "a URL path owned by a web router, e.g. '/admin/login'", "drawn": "an edge once the route is mapped to a screen; until then, reported"},
+          {"kind": "route", "meaning": "a URL path owned by a web router, e.g. '/admin/login'", "drawn": "nothing until the route is mapped to a screen; until then it is reported with the unknowns and treated as absent"},
           {"kind": "external", "meaning": "leaves the app entirely (browser, tel:, map app, mailer)", "drawn": "a terminal node, never a screen"},
           {"kind": "none", "meaning": "declares that no screen transition happens (in-page tab switch, SPA state change)", "drawn": "nothing. This is a POSITIVE declaration, not a missing value"},
-          {"kind": "back", "meaning": "returns through the navigation stack (pop, dismiss, previous screen)", "drawn": "a return edge, like a flow test's back action"},
-          {"kind": "unknown", "meaning": "none of the above matched", "drawn": "nothing, and it is COUNTED AND LISTED — see unresolvedReporting"}
+          {"kind": "back", "meaning": "returns through the navigation stack (pop, dismiss, previous screen)", "drawn": "a dotted return edge to each screen that has a forward edge into the declaring screen (derived from the specs)"},
+          {"kind": "unknown", "meaning": "none of the above matched", "drawn": "nothing, and it is COUNTED AND LISTED — see unresolvedReporting. Treated as ABSENT by the diagram and by flowTestCheck (ruled 2026-09-10)"}
         ]
       },
       "normalization": {
@@ -342,6 +377,27 @@
         "aliases": {
           "shape": "each declared alias is (position, affix); position is drawn from the closed set below",
           "positions": ["prefix", "suffix"],
+          "declaration": {
+            "location": "jui.config.json",
+            "key": "spec.transitionAliases",
+            "shape": "Array of { position: 'prefix' | 'suffix', affix: '<text>' }. A wrong position is REFUSED (the run fails naming the entry), never skipped — an alias that silently does not fire looks exactly like a face that declared nothing.",
+            "example": [
+              {
+                "position": "prefix",
+                "affix": "Web"
+              },
+              {
+                "position": "suffix",
+                "affix": "画面"
+              },
+              {
+                "position": "suffix",
+                "affix": "View"
+              }
+            ],
+            "readBy": "jui_cli.core.project_config.declared_transition_aliases → jui_cli.core.screen_identity.parse_transition_aliases; consumed by document_tools spec_graph.build_spec_graph through classify_destination(aliases=…)",
+            "history": "Declared as per-face from 2026-09-09 with the SHAPE only — no key, no reader. Measured 2026-09-10: 0 faces could declare one. Added with the reader."
+          },
           "positionsNote": "THE TWO POSITIONS OBSERVED SO FAR, not all of them. Infix and partial matches are NOT covered, and saying which is which matters: a generalization that names its coverage makes the third example a counterexample that asks for a redesign, while one that says 'all' makes the same example an exception to be pushed in sideways, leaving the mechanism bent.",
           "measured": "prefix 'Web' resolves 50 of one face's 93 destinations; suffix '画面' resolves 10 (9 distinct spellings) of another face's 69. The two sit at different ends, which is why the mechanism carries a position rather than a bare string. A THIRD affix then turned up that does not behave like those two: suffix 'View' resolves 8 on one face and 2 on ANOTHER, so an affix is not necessarily one face's convention. Per-face declaration still expresses it — each face declares it separately — but the earlier reading that 'an affix helps exactly one face' was drawn from a sample of two. Whether to declare it is the FACE's call, not the library's — the mechanism already accepts it — so the numbers a face needs are recorded here rather than argued: declaring suffix 'View' resolves 10 destinations (8 on one face, 2 on another) and leaves 5 occurrences / 4 spellings that contain 'View' still unresolved, because stripping it yields no id — FullscreenImageViewer, LicensesView, and the Privacy/Terms WebView pair, whose kind is a separate question (embedded page or external browser) that no measurement here answers.",
           "scopingIsARiskChoiceNotAMeasuredOne": {
@@ -352,7 +408,8 @@
         }
       },
       "unresolvedReporting": {
-        "rule": "The count of 'unknown' destinations is reported PER FACE, never only as a total, together with the scanned total it was drawn from.",
+        "rule": "The count of 'unknown' destinations is reported PER FACE, never only as a total, together with the scanned total it was drawn from.",        "treatment": "ABSENT (ruled 2026-09-10). Not drawn, not an error by itself, listed per face with the raw value and the reason the classifier gave. It becomes an error only when a flow test performs the transition the unresolved destination was meant to declare.",
+
         "rationale": "Measured unresolved rates were 28% / 61% / 50% / 100%. Summed, the face at 100% disappears into the average — and a face that resolves nothing looks exactly like a face with nothing to resolve. A bare zero, or a bare average, cannot tell an instrument that found nothing from one that never reached the corpus."
       }
     },

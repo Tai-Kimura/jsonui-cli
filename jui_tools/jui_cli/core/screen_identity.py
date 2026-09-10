@@ -82,6 +82,13 @@ class AppOwnedScreen:
     screen_id: str
     #: Diagram groups, from the object form's ``group``. Empty for a bare id.
     groups: tuple[str, ...] = ()
+    #: Raw ``transitions[]`` destinations, from the object form. An app-owned
+    #: screen has no spec file to carry ``transitions`` in, and the diagram
+    #: is drawn from spec transitions ONLY (ruled 2026-09-10), so the
+    #: declaration is the one place its outgoing edges can be written. Same
+    #: vocabulary as a spec destination; classified by
+    #: :func:`classify_destination`. Canon: ``appOwnedScreens.declaration.transitions``.
+    transitions: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -265,16 +272,40 @@ def parse_app_owned_screens(declared: Iterable[Any] | None) -> list[AppOwnedScre
     parsed: list[AppOwnedScreen] = []
     for raw in declared or ():
         if isinstance(raw, str):
-            screen_id, groups = raw, ()
+            screen_id, groups, transitions = raw, (), ()
         elif isinstance(raw, dict):
             screen_id = raw.get("id")
             groups = _as_groups(raw.get("group"))
+            transitions = _as_transitions(raw.get("transitions"))
         else:
             continue
         if not isinstance(screen_id, str) or not screen_id:
             continue
-        parsed.append(AppOwnedScreen(screen_id_for_path(screen_id), groups))
+        parsed.append(AppOwnedScreen(screen_id_for_path(screen_id), groups, transitions))
     return parsed
+
+
+def _as_transitions(value: Any) -> tuple[str, ...]:
+    """``transitions`` of an app-owned declaration: a list of raw destinations.
+
+    Strings only, in order, blanks dropped. Anything else is not a
+    destination and is skipped for the same reason a malformed entry is:
+    hand-written config must not take down a build.
+    """
+    if isinstance(value, str):
+        value = [value]
+    if not isinstance(value, (list, tuple)):
+        return ()
+    return tuple(v.strip() for v in value if isinstance(v, str) and v.strip())
+
+
+def app_owned_transitions(declared: Iterable[Any] | None) -> dict[str, list[str]]:
+    """``{screen_id: [raw destination, ...]}`` for declarations that name any."""
+    return {
+        entry.screen_id: list(entry.transitions)
+        for entry in parse_app_owned_screens(declared)
+        if entry.transitions
+    }
 
 
 def app_owned_groups(declared: Iterable[Any] | None) -> dict[str, list[str]]:
@@ -401,6 +432,38 @@ def load_canon(shared_core_dir: Path | str | None = None) -> dict:
 #: same example an EXCEPTION to be pushed in sideways, leaving the mechanism
 #: bent.
 ALIAS_POSITIONS: tuple[str, ...] = ("prefix", "suffix")
+
+#: Where a face declares its aliases: ``jui.config.json`` → ``spec`` →
+#: ``transitionAliases``. Canon: diagram.specTransitions.normalization.aliases.declaration.
+TRANSITION_ALIASES_KEY: tuple[str, str] = ("spec", "transitionAliases")
+
+
+def parse_transition_aliases(declared: Iterable[Any] | None) -> list[tuple[str, str]]:
+    """Normalize a ``spec.transitionAliases`` list into ``(position, affix)`` pairs.
+
+    Each entry is ``{"position": "prefix" | "suffix", "affix": "<text>"}``.
+    A wrong position is REFUSED, not skipped: an alias that silently does
+    not fire looks exactly like a face that declared nothing, and the canon
+    says so (``positionsNote``). A missing or empty affix is refused for the
+    same reason. Returns ``[]`` for nothing declared.
+    """
+    out: list[tuple[str, str]] = []
+    for index, raw in enumerate(declared or ()):
+        if not isinstance(raw, dict):
+            raise ValueError(
+                f"spec.transitionAliases[{index}] must be an object "
+                f"{{position, affix}}, got {type(raw).__name__}")
+        position = raw.get("position")
+        affix = raw.get("affix")
+        if position not in ALIAS_POSITIONS:
+            raise ValueError(
+                f"spec.transitionAliases[{index}].position {position!r} is not "
+                f"one of {ALIAS_POSITIONS}")
+        if not isinstance(affix, str) or not affix:
+            raise ValueError(
+                f"spec.transitionAliases[{index}].affix must be a non-empty string")
+        out.append((position, affix))
+    return out
 
 #: Closed vocabulary. Canon: diagram.specTransitions.kinds.
 DESTINATION_KINDS: tuple[str, ...] = (

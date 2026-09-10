@@ -1,4 +1,16 @@
-"""Mermaid flowchart diagram generation from flow tests."""
+"""Mermaid flowchart diagram generation — drawn from the screen SPECS.
+
+Ruled 2026-09-10: the diagram's one source is ``<spec>.transitions[].destination``
+(``spec_graph.py``). Flow tests are checked AGAINST it: a forward transition a
+flow test performs that no spec declares is an ERROR (``DiagramResult.errors``),
+a destination the classifier cannot resolve is treated as absent
+(``DiagramResult.unresolved``), and back steps are exempt — they are the stack's
+inverse of a transition the check already saw.
+
+Before this the module read flow tests only and answered "No flow tests
+found" on a face with 48 specs, while the canon declared two sources. The
+flow-test walk is kept for exactly one purpose: the check.
+"""
 
 from __future__ import annotations
 
@@ -13,12 +25,14 @@ from ...reproducible import build_datetime
 from ...run_log import warn
 from .flow_graph import (
     EDGE_BACK,
+    EDGE_FORWARD,
     ScreenResolver,
     flow_edges,
     import_jui_cli_module,
     load_flow,
     normalize_screen_ref,
 )
+from .spec_graph import SpecGraph, SpecTransition, build_spec_graph, iter_spec_files
 
 
 @dataclass
@@ -37,13 +51,13 @@ def _collect_flow_graph(
     flows_path: Path,
     screens_path: Path,
     layouts_dir: Path | None = None,
-) -> tuple[dict[str, str], dict[str, dict], list[tuple[str, str, str, str]], dict[str, list[str]]]:
-    """Walk every flow test once and return the whole graph.
+) -> tuple[dict[str, str], dict[str, dict], list[tuple[str, str, str, str, str]], dict[str, list[str]]]:
+    """Walk every flow test once and return what the tests DO.
 
     Returns ``(nodes, node_metadata, edges, flow_subgraphs)`` where an edge
-    is ``(from_id, to_id, flow_name, kind)``. This is the single collection
-    pass — the combined and grouped builders both consume it, so their
-    node sets can no longer drift apart.
+    is ``(from_id, to_id, flow_name, kind, flow_file)``. Since 2026-09-10
+    this is no longer a drawing source: ``build_diagram`` compares these
+    edges against the spec graph and reports the ones no spec declares.
     """
     tree = _walk_test_tree(screens_path, flows_path)
     resolver = ScreenResolver(layouts_dir, tree.file_ref_screen_ids)
@@ -81,85 +95,206 @@ def _collect_flow_graph(
 
         flow_subgraphs[flow_name] = flow_nodes
         for from_id, to_id, kind in flow_transitions:
-            edges.append((from_id, to_id, flow_name, kind))
+            edges.append((from_id, to_id, flow_name, kind, str(flow_file)))
 
     return nodes, node_metadata, edges, flow_subgraphs
 
 
-def generate_mermaid_diagram(
-    flows_dir: Path,
-    screens_dir: Path | None = None,
-    layouts_dir: Path | None = None,
-) -> str:
+NO_SPECS_DIAGRAM = "flowchart LR\n    NO_SPECS[No screen specs found]"
+
+
+@dataclass(frozen=True)
+class TransitionError:
+    """A forward transition a flow test performs that no spec declares."""
+
+    from_id: str
+    to_id: str
+    flow_name: str
+    flow_file: str
+    #: Which of "no spec" / "spec declares no such transition" / "an
+    #: app-owned screen declares no such transition" it is, plus the source's
+    #: unresolved destinations when it has any — that is usually the fix.
+    reason: str
+
+    def __str__(self) -> str:
+        return (f"flow test \"{self.flow_name}\" ({self.flow_file}) transitions "
+                f"{self.from_id} -> {self.to_id}: {self.reason}")
+
+
+@dataclass
+class DiagramResult:
+    """What one owner's diagram run produced. ``combined`` is "" when
+    nothing was drawable — callers suppress the page and the link then."""
+
+    #: group name -> mermaid code
+    diagrams: dict[str, str] = field(default_factory=dict)
+    combined: str = ""
+    errors: list[TransitionError] = field(default_factory=list)
+    unresolved: list[SpecTransition] = field(default_factory=list)
+    stats: dict[str, int] = field(default_factory=dict)
+
+
+def build_diagram(
+    spec_dir: Path | str | None,
+    *,
+    flows_dir: Path | str | None = None,
+    screens_dir: Path | str | None = None,
+    layouts_dir: Path | str | None = None,
+    aliases=(),
+    app_owned=(),
+    app_owned_transitions: dict[str, list[str]] | None = None,
+) -> DiagramResult:
+    """Draw from the specs under ``spec_dir``; check the flow tests under
+    ``flows_dir`` against what was drawn.
+
+    ``screens_dir`` (screen tests) supplies labels, groups and document links
+    for the nodes, exactly as before; it is not a source of edges. With no
+    ``spec_dir`` or no spec in it, nothing is drawn (``combined == ""``) and
+    the flow tests go unchecked — the caller says so, because "no spec
+    directory" is a configuration state, not a spec omission.
     """
-    Generate a Mermaid flowchart diagram from all flow tests in a directory.
+    flows_path = Path(flows_dir) if flows_dir else None
+    screens_path = Path(screens_dir) if screens_dir else (
+        flows_path.parent / "screens" if flows_path else None)
+    result = DiagramResult()
 
-    Args:
-        flows_dir: Directory containing flow test files
-        screens_dir: Optional directory containing screen test files (defaults to sibling screens/)
-        layouts_dir: Optional layout tree; enables screen/cell classification
-            so Collection cells stop appearing as screens.
-
-    Returns:
-        Mermaid diagram string
-    """
-    flows_path = Path(flows_dir)
-
-    # Default screens dir to sibling directory
-    if screens_dir is None:
-        screens_path = flows_path.parent / "screens"
-    else:
-        screens_path = Path(screens_dir)
-
-    if not sorted(flows_path.rglob("*.test.json")):
-        return "flowchart LR\n    NO_FLOWS[No flow tests found]"
-
-    all_nodes, node_metadata, all_edges, flow_subgraphs = _collect_flow_graph(
-        flows_path, screens_path, layouts_dir
+    graph = build_spec_graph(
+        spec_dir, layouts_dir=layouts_dir, aliases=aliases,
+        app_owned=app_owned, app_owned_transitions=app_owned_transitions,
     )
+    result.unresolved = list(graph.unresolved)
+    result.stats = {
+        "specs": graph.specs_scanned,
+        "transitions": len(graph.transitions),
+        "spec_edges": len(graph.forward_pairs()),
+        "unresolved": len(graph.unresolved),
+    }
 
-    # Generate Mermaid diagram
-    return _build_mermaid_diagram(all_nodes, all_edges, flow_subgraphs, node_metadata)
+    tree = _walk_test_tree(screens_path, flows_path)
+    nodes: dict[str, str] = {}
+    node_metadata: dict[str, dict] = {}
+    drawn_ids = {n for e in graph.edges for n in e[:2]} | {f for f, _raw in graph.externals}
+    for screen_id in sorted(drawn_ids):
+        meta = _resolve_screen_metadata(screen_id, tree)
+        spec_label = graph.nodes.get(screen_id, "")
+        if meta["label"] == screen_id.replace("_", " ").title() and spec_label:
+            meta["label"] = spec_label
+        nodes[screen_id] = meta["label"]
+        node_metadata[screen_id] = {
+            "entry_screen": meta["entry_screen"],
+            "groups": meta["groups"],
+            "document": meta["document"],
+        }
+
+    # ---- the check: what the flow tests do vs what the specs declare ----
+    flow_files = sorted(flows_path.rglob("*.test.json")) if flows_path and flows_path.is_dir() else []
+    result.stats["flow_tests"] = len(flow_files)
+    if flow_files:
+        _n, _m, flow_edges_found, _s = _collect_flow_graph(flows_path, screens_path, layouts_dir)
+        forward = graph.forward_pairs()
+        seen_pairs: set[tuple[str, str]] = set()
+        checked: set[tuple[str, str]] = set()
+        for from_id, to_id, flow_name, kind, flow_file in flow_edges_found:
+            if kind == EDGE_BACK:
+                continue
+            checked.add((from_id, to_id))
+            if (from_id, to_id) in forward or (from_id, to_id) in seen_pairs:
+                continue
+            seen_pairs.add((from_id, to_id))
+            result.errors.append(TransitionError(
+                from_id, to_id, flow_name, flow_file,
+                _absence_reason(graph, from_id, to_id, app_owned)))
+        result.stats["flow_edges"] = len(checked)
+        result.stats["absent"] = len(result.errors)
+
+    if not nodes:
+        return result
+    result.diagrams = _group_diagrams(nodes, node_metadata, graph.edges, graph.externals)
+    result.combined = _build_mermaid_diagram(nodes, graph.edges, node_metadata, graph.externals)
+    return result
+
+
+def _absence_reason(graph: SpecGraph, from_id: str, to_id: str, app_owned) -> str:
+    owned = {normalize_screen_ref(s) for s in app_owned}
+    if from_id in owned:
+        head = (f"the app-owned screen {from_id} declares no transition to {to_id} "
+                f"(jui.config.json test.appOwnedScreens[].transitions)")
+    elif from_id not in graph.sources_with_spec:
+        head = f"{from_id} has no spec"
+    else:
+        head = f"{from_id}'s spec declares no transition to {to_id}"
+    unresolved = [t.raw for t in graph.unresolved if t.source == from_id]
+    if unresolved:
+        listed = ", ".join(repr(r) for r in unresolved[:4])
+        more = "" if len(unresolved) <= 4 else f" (+{len(unresolved) - 4} more)"
+        head += (f"; {len(unresolved)} of its destination(s) could not be resolved "
+                 f"and count as absent: {listed}{more}")
+    return head
+
+
+def generate_mermaid_diagram(
+    spec_dir: Path | str | None,
+    screens_dir: Path | str | None = None,
+    layouts_dir: Path | str | None = None,
+    **kwargs,
+) -> str:
+    """One combined Mermaid diagram from the specs under ``spec_dir``.
+
+    ``NO_SPECS`` placeholder when the directory holds no spec — the shape the
+    old "No flow tests found" placeholder had, so a page never renders blank.
+    """
+    if not iter_spec_files(spec_dir):
+        return NO_SPECS_DIAGRAM
+    result = build_diagram(spec_dir, screens_dir=screens_dir, layouts_dir=layouts_dir, **kwargs)
+    return result.combined
 
 
 def generate_grouped_mermaid_diagrams(
-    flows_dir: Path,
-    screens_dir: Path | None = None,
-    layouts_dir: Path | None = None,
+    spec_dir: Path | str | None,
+    screens_dir: Path | str | None = None,
+    layouts_dir: Path | str | None = None,
+    **kwargs,
 ) -> dict[str, str]:
+    """Separate Mermaid diagrams per group, from the specs.
+
+    ``{"All": NO_SPECS}`` when no spec exists; ``{}`` when specs exist but
+    none declares a resolvable transition — callers use the empty mapping to
+    suppress the diagram link instead of publishing an empty page.
     """
-    Generate separate Mermaid diagrams for each group.
+    if not iter_spec_files(spec_dir):
+        return {"All": NO_SPECS_DIAGRAM}
+    result = build_diagram(spec_dir, screens_dir=screens_dir, layouts_dir=layouts_dir, **kwargs)
+    return result.diagrams
 
-    Args:
-        flows_dir: Directory containing flow test files
-        screens_dir: Optional directory containing screen test files
-        layouts_dir: Optional layout tree; enables screen/cell classification
 
-    Returns:
-        Dict of group_name -> mermaid_code. Empty when no flow yields a
-        screen — callers use that to suppress the diagram link instead of
-        publishing an empty page.
-    """
-    flows_path = Path(flows_dir)
+def _external_node_id(from_id: str, raw: str) -> str:
+    import hashlib
+    digest = hashlib.md5(f"{from_id}\x00{raw}".encode("utf-8")).hexdigest()[:8]
+    return f"ext_{digest}"
 
-    if screens_dir is None:
-        screens_path = flows_path.parent / "screens"
-    else:
-        screens_path = Path(screens_dir)
 
-    flow_files = sorted(flows_path.rglob("*.test.json"))
+def _external_lines(externals: list[tuple[str, str]], only_from: set[str] | None = None) -> list[str]:
+    """Terminal nodes for ``external`` destinations (canon: "a terminal
+    node, never a screen") and the edge into each."""
+    lines: list[str] = []
+    for from_id, raw in sorted(set(externals)):
+        if only_from is not None and from_id not in only_from:
+            continue
+        node = _external_node_id(from_id, raw)
+        lines.append(f'    {node}>"{_escape_label(raw)}"]:::externalNode')
+        lines.append(f"    {_emit_node_id(from_id)} --> {node}")
+    if lines:
+        lines.append("    classDef externalNode fill:#fff3e0,stroke:#ff9800,stroke-dasharray: 4 2")
+    return lines
 
-    if not flow_files:
-        return {"All": "flowchart LR\n    NO_FLOWS[No flow tests found]"}
 
-    all_nodes, node_metadata, all_edges, _flow_subgraphs = _collect_flow_graph(
-        flows_path, screens_path, layouts_dir
-    )
-
-    if not all_nodes:
-        return {}
-
-    # Group nodes by their groups metadata (nodes can belong to multiple groups)
+def _group_diagrams(
+    nodes: dict[str, str],
+    node_metadata: dict[str, dict],
+    all_edges: list[tuple[str, str, str]],
+    externals: list[tuple[str, str]],
+) -> dict[str, str]:
+    """Group nodes by their metadata groups (a node may sit in several)."""
     groups: dict[str, set[str]] = {}
     entry_nodes: set[str] = set()
 
@@ -170,74 +305,66 @@ def generate_grouped_mermaid_diagrams(
         if not node_groups:
             node_groups = ["その他"]
         for group in node_groups:
-            if group not in groups:
-                groups[group] = set()
-            groups[group].add(node_id)
+            groups.setdefault(group, set()).add(node_id)
 
-    # Build diagram for each group
     diagrams: dict[str, str] = {}
-
     for group_name in sorted(groups.keys()):
         group_nodes = groups[group_name]
 
-        # Include entry nodes in the diagram if they connect to this group
         relevant_entry_nodes = set()
         for entry_node in entry_nodes:
-            for from_id, to_id, _flow_name, _kind in all_edges:
+            for from_id, to_id, _kind in all_edges:
                 if from_id == entry_node and to_id in group_nodes:
                     relevant_entry_nodes.add(entry_node)
                     break
 
-        # Get edges within this group or from entry nodes to this group
         group_edges = []
-        for from_id, to_id, _flow_name, kind in all_edges:
+        for from_id, to_id, kind in all_edges:
             from_in_group = from_id in group_nodes or from_id in relevant_entry_nodes
             to_in_group = to_id in group_nodes
             if from_in_group and to_in_group:
                 group_edges.append((from_id, to_id, kind))
 
-        # Build mermaid for this group
         lines = ["flowchart LR"]
-
-        # Add entry nodes first
         if relevant_entry_nodes:
             lines.append("")
             lines.append("    %% Entry screens")
             for node_id in sorted(relevant_entry_nodes):
                 lines.append(
-                    f'    {_emit_node_id(node_id)}(["{_escape_label(all_nodes[node_id])}"]):::entryNode'
+                    f'    {_emit_node_id(node_id)}(["{_escape_label(nodes[node_id])}"]):::entryNode'
                 )
             lines.append("")
             lines.append("    classDef entryNode fill:#e8f5e9,stroke:#4caf50,stroke-width:3px")
 
-        # Add group nodes
         lines.append("")
         lines.append(f"    %% {group_name}")
         for node_id in sorted(group_nodes):
             if node_id not in relevant_entry_nodes:
                 lines.append(
-                    f'    {_emit_node_id(node_id)}["{_escape_label(all_nodes[node_id])}"]'
+                    f'    {_emit_node_id(node_id)}["{_escape_label(nodes[node_id])}"]'
                 )
 
-        # Add edges
         if group_edges:
             lines.append("")
             lines.append("    %% Transitions")
             for from_id, to_id, kind in _dedupe_edges(group_edges):
                 lines.append(_edge_line(from_id, to_id, kind))
 
-        # Add click events for nodes with document links
+        ext_lines = _external_lines(externals, only_from=group_nodes | relevant_entry_nodes)
+        if ext_lines:
+            lines.append("")
+            lines.append("    %% External destinations")
+            lines.extend(ext_lines)
+
         click_lines = []
-        all_group_node_ids = group_nodes | relevant_entry_nodes
-        for node_id in sorted(all_group_node_ids):
+        for node_id in sorted(group_nodes | relevant_entry_nodes):
             meta = node_metadata.get(node_id, {})
             document = meta.get("document")
             if document:
-                safe_tooltip = all_nodes[node_id].replace('"', "'")
+                safe_tooltip = nodes[node_id].replace('"', "'")
                 click_lines.append(
                     f'    click {_emit_node_id(node_id)} "{document}" "{safe_tooltip}"'
                 )
-
         if click_lines:
             lines.append("")
             lines.append("    %% Click events for document links")
@@ -613,23 +740,24 @@ def _get_screen_label(
 def _build_mermaid_diagram(
     nodes: dict[str, str],
     edges: list[tuple[str, str, str]],
-    subgraphs: dict[str, list[str]],
-    node_metadata: dict[str, dict] | None = None
+    node_metadata: dict[str, dict] | None = None,
+    externals: list[tuple[str, str]] | None = None,
 ) -> str:
     """
-    Build the Mermaid flowchart diagram string.
+    Build the combined Mermaid flowchart diagram string.
 
     Args:
         nodes: Dict of node_id -> display label
-        edges: List of (from_id, to_id, flow_name) tuples
-        subgraphs: Dict of flow_name -> list of node_ids
-        node_metadata: Dict of node_id -> {entry_screen, groups}
+        edges: List of (from_id, to_id, kind) tuples
+        node_metadata: Dict of node_id -> {entry_screen, groups, document}
+        externals: (from_id, raw) external destinations, drawn as terminal nodes
 
     Returns:
         Mermaid diagram string
     """
     if node_metadata is None:
         node_metadata = {}
+    externals = externals or []
 
     lines = ["flowchart LR"]
 
@@ -685,7 +813,7 @@ def _build_mermaid_diagram(
             lines.append(f'    {_emit_node_id(node_id)}["{_escape_label(nodes[node_id])}"]')
 
     # Build unique edges (deduplicate same source->target pairs)
-    unique_edges = _dedupe_edges((from_id, to_id, kind) for from_id, to_id, _flow, kind in edges)
+    unique_edges = _dedupe_edges(edges)
 
     # Separate entry screen edges (output first for LR layout positioning)
     entry_edges = [e for e in unique_edges if e[0] in entry_nodes]
@@ -698,6 +826,12 @@ def _build_mermaid_diagram(
         lines.append(_edge_line(from_id, to_id, kind))
     for from_id, to_id, kind in other_edges:
         lines.append(_edge_line(from_id, to_id, kind))
+
+    ext_lines = _external_lines(externals)
+    if ext_lines:
+        lines.append("")
+        lines.append("    %% External destinations")
+        lines.extend(ext_lines)
 
     # Add click events for nodes with document links
     click_lines = []
@@ -719,46 +853,40 @@ def _build_mermaid_diagram(
 
 
 def generate_mermaid_html(
-    flows_dir: Path,
+    spec_dir: Path | str | None,
     output_path: Path,
     title: str = "Flow Diagram",
-    screens_dir: Path | None = None,
-    layouts_dir: Path | None = None,
-) -> str:
+    screens_dir: Path | str | None = None,
+    layouts_dir: Path | str | None = None,
+    *,
+    flows_dir: Path | str | None = None,
+    aliases=(),
+    app_owned=(),
+    app_owned_transitions: dict[str, list[str]] | None = None,
+) -> DiagramResult:
+    """Write the tabbed diagram page for one owner and return what happened.
+
+    The page is written only when something was drawable
+    (``result.combined`` non-empty); callers suppress the link otherwise —
+    publishing a page with zero tabs used to render blank. The page carries
+    the check's findings too: every flow-test transition absent from the
+    specs, and every destination treated as absent, so the reader who opens
+    the diagram sees why an edge they expected is missing.
     """
-    Generate an HTML page with embedded Mermaid diagrams (one per group).
+    result = build_diagram(
+        spec_dir, flows_dir=flows_dir, screens_dir=screens_dir, layouts_dir=layouts_dir,
+        aliases=aliases, app_owned=app_owned, app_owned_transitions=app_owned_transitions,
+    )
+    if not result.diagrams:
+        return result
 
-    Args:
-        flows_dir: Directory containing flow test files
-        output_path: Path to write HTML file
-        title: Page title
-        screens_dir: Optional directory containing screen test files
-        layouts_dir: Optional layout tree; enables screen/cell classification
-
-    Returns:
-        The generated Mermaid diagram string (combined), or an empty string
-        when no flow yields a screen. Callers MUST treat the empty string as
-        "no diagram" and suppress the link: publishing a page with zero tabs
-        used to render a blank page (its tab script has no tab to select).
-
-    Raises:
-        Nothing — an empty result is a normal outcome, not an error.
-    """
-    # Generate grouped diagrams
-    grouped_diagrams = generate_grouped_mermaid_diagrams(flows_dir, screens_dir, layouts_dir)
-
-    if not grouped_diagrams:
-        return ""
-
-    html_content = _generate_tabbed_mermaid_html_page(grouped_diagrams, title)
-
-    # Write HTML file
+    html_content = _generate_tabbed_mermaid_html_page(
+        result.diagrams, title, errors=result.errors, unresolved=result.unresolved)
+    output_path = Path(output_path)
     output_path.parent.mkdir(parents=True, exist_ok=True)
     with open(output_path, 'w', encoding='utf-8') as f:
         f.write(html_content)
-
-    # Return combined for backward compatibility
-    return "\n\n".join(grouped_diagrams.values())
+    return result
 
 
 def _generate_mermaid_html_page(mermaid_code: str, title: str) -> str:
@@ -1112,8 +1240,42 @@ def _generate_mermaid_html_page(mermaid_code: str, title: str) -> str:
     return html
 
 
-def _generate_tabbed_mermaid_html_page(diagrams: dict[str, str], title: str) -> str:
+def _issues_html(errors, unresolved) -> str:
+    """The check's findings, on the page the reader is already looking at."""
+    parts: list[str] = []
+    if errors:
+        items = "".join(
+            f"<li><code>{escape_html(e.from_id)} &rarr; {escape_html(e.to_id)}</code> "
+            f"&mdash; {escape_html(e.reason)} "
+            f"<span class='issue-src'>(flow test &ldquo;{escape_html(e.flow_name)}&rdquo;, "
+            f"{escape_html(e.flow_file)})</span></li>"
+            for e in errors)
+        parts.append(
+            f'<div class="issues errors"><h2>ERROR: {len(errors)} transition(s) found in flow '
+            f'tests but absent from the specs</h2>'
+            f'<p>A flow test navigates where its spec declares no transition. Declare it in the '
+            f'spec (<code>transitions[].destination</code>), or in <code>jui.config.json</code> '
+            f'<code>test.appOwnedScreens[].transitions</code> for a screen that has no layout.</p>'
+            f'<ul>{items}</ul></div>')
+    if unresolved:
+        items = "".join(
+            f"<li><code>{escape_html(u.source)}</code>: &ldquo;{escape_html(u.raw)}&rdquo; "
+            f"<span class='issue-src'>({escape_html(u.kind)}: {escape_html(u.why)})</span></li>"
+            for u in unresolved)
+        parts.append(
+            f'<div class="issues unresolved"><h2>WARNING: {len(unresolved)} destination(s) could '
+            f'not be resolved and were treated as absent</h2>'
+            f'<p>Not drawn, and not an error by themselves. Name the screen id, declare an alias '
+            f'(<code>spec.transitionAliases</code>), or declare the destination as '
+            f'<code>none</code> / external.</p><ul>{items}</ul></div>')
+    return "\n".join(parts)
+
+
+def _generate_tabbed_mermaid_html_page(
+    diagrams: dict[str, str], title: str, errors=(), unresolved=()
+) -> str:
     """Generate HTML page with tabs for each group diagram."""
+    issues_html = _issues_html(list(errors), list(unresolved))
 
     # Build tab buttons and content
     tab_buttons = []
@@ -1301,6 +1463,48 @@ def _generate_tabbed_mermaid_html_page(diagrams: dict[str, str], title: str) -> 
             min-height: 400px;
         }}
 
+        .issues {{
+            margin: 16px 20px 24px;
+            padding: 14px 18px;
+            border-radius: 6px;
+            border-left: 5px solid #999;
+            background: #fafafa;
+            font-size: 14px;
+        }}
+
+        .issues h2 {{
+            font-size: 15px;
+            margin-bottom: 6px;
+        }}
+
+        .issues p {{
+            margin-bottom: 8px;
+            color: #444;
+        }}
+
+        .issues ul {{
+            margin-left: 20px;
+        }}
+
+        .issues li {{
+            margin: 3px 0;
+        }}
+
+        .issues .issue-src {{
+            color: #777;
+            font-size: 12px;
+        }}
+
+        .issues.errors {{
+            border-left-color: #d32f2f;
+            background: #fdecea;
+        }}
+
+        .issues.unresolved {{
+            border-left-color: #ff9800;
+            background: #fff3e0;
+        }}
+
         .diagram-wrapper {{
             overflow: auto;
             min-height: 400px;
@@ -1390,7 +1594,7 @@ def _generate_tabbed_mermaid_html_page(diagrams: dict[str, str], title: str) -> 
     <div class="container">
         <div class="header">
             <h1>{escape_html(title)}</h1>
-            <div class="subtitle">Screen transition diagrams by group</div>
+            <div class="subtitle">Screen transitions by group &mdash; drawn from the screen specs; flow tests are checked against them</div>
         </div>
 
         <div class="toolbar">
@@ -1410,6 +1614,7 @@ def _generate_tabbed_mermaid_html_page(diagrams: dict[str, str], title: str) -> 
         </div>
 
         {contents_html}
+        {issues_html}
 
         <div class="footer">
             Generated by JsonUI Test CLI

@@ -218,13 +218,20 @@ class TestGeneratorRouting(unittest.TestCase):
             root = Path(tmp)
             _write(root / "tests" / "flows" / "a.test.json", _flow_test("A"))
             _write(root / "tests" / "bar" / "flows" / "b.test.json", _flow_test("B"))
+            # Since 2026-09-10 the diagram is drawn from SPECS, so an owner is
+            # a spec directory: the root's and the app's.
+            _write(root / "docs" / "screens" / "json" / "a.spec.json",
+                   json.dumps({"type": "screen_spec", "transitions": []}))
+            _write(root / "docs" / "bar" / "screens" / "json" / "b.spec.json",
+                   json.dumps({"type": "screen_spec", "transitions": []}))
             out = root / "out"
             written: list[Path] = []
 
-            def fake_mermaid(flows_dir, output, title, screens_dir, layouts_dir=None):
+            def fake_mermaid(spec_dir, output, title, screens_dir, layouts_dir=None, **kwargs):
+                from jsonui_doc_cli.test_doc.mermaid.generator import DiagramResult
                 written.append(Path(output))
                 Path(output).write_text("<html></html>", encoding="utf-8")
-                return "diagram"
+                return DiagramResult(diagrams={"All": "diagram"}, combined="diagram")
 
             import jsonui_doc_cli.test_doc.generator as gen
             orig = gen.generate_mermaid_html

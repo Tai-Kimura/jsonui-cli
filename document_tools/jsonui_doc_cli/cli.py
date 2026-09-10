@@ -432,15 +432,18 @@ from .test_doc import (
     DocumentGenerator,
     generate_schema_reference,
     generate_html_directory,
+    get_diagram_errors,
     get_page_failures,
     get_pages_written,
     generation_summary_line,
     generation_warnings,
     generate_mermaid_diagram,
     generate_mermaid_html,
+    build_diagram,
     generate_adapter,
     ADAPTER_PLATFORMS,
 )
+from .test_doc.mermaid.generator import NO_SPECS_DIAGRAM
 from .spec_doc import (
     SpecValidator,
     generate_spec_markdown,
@@ -627,6 +630,32 @@ def cmd_generate_html(args):
         print(generation_summary_line())
         print(f"Open {output_dir}/index.html to view documentation")
 
+        # Ruled 2026-09-10: a transition a flow test performs that no spec
+        # declares is an ERROR, and an error that leaves the exit code at 0
+        # is a warning wearing a different label. The pages are already
+        # written (the diagram page lists these), so the reader can see
+        # them; the exit code is what stops a deploy from shipping a diagram
+        # the tests contradict. Printed BEFORE the page-failure block so that
+        # --allow-partial — which accepts missing PAGES — cannot return 0
+        # past a wrong SPEC.
+        diagram_errors = get_diagram_errors()
+        if diagram_errors:
+            sys.stdout.flush()
+            print()
+            print(f"{len(diagram_errors)} flow-test transition(s) are absent from the specs:",
+                  file=sys.stderr)
+            for e in diagram_errors:
+                print(f"  [{e['owner']}] {e['from']} -> {e['to']}  ({e['flow']})", file=sys.stderr)
+                print(f"      {e['reason']}", file=sys.stderr)
+            print(
+                "A flow test navigates where its spec declares no transition. Declare it in "
+                "the spec (transitions[].destination), or in jui.config.json "
+                "test.appOwnedScreens[].transitions for a screen with no layout. A destination "
+                "the classifier cannot resolve counts as absent — see the [doc-diagram] warning "
+                "lines above for those.",
+                file=sys.stderr,
+            )
+
         failures = get_page_failures()
         if failures:
             # The summary goes to stderr; flush stdout first so it lands
@@ -644,12 +673,15 @@ def cmd_generate_html(args):
                     "were written in their place.",
                     file=sys.stderr,
                 )
-                return 0
-            print(
-                "The documentation is incomplete. Fix the inputs above, or "
-                "pass --allow-partial to accept a partial site.",
-                file=sys.stderr,
-            )
+            else:
+                print(
+                    "The documentation is incomplete. Fix the inputs above, or "
+                    "pass --allow-partial to accept a partial site.",
+                    file=sys.stderr,
+                )
+                return 1
+        if diagram_errors:
+            print("The specs and the flow tests disagree (see above) — exiting 1.", file=sys.stderr)
             return 1
         return 0
     except ValueError as e:
@@ -661,55 +693,100 @@ def cmd_generate_html(args):
 
 
 def cmd_generate_mermaid(args):
-    """Handle 'generate mermaid' command - generate Mermaid flow diagram."""
+    """Handle 'generate mermaid' command - generate the flow diagram from the specs."""
     input_dir = Path(args.input)
     output_path = Path(args.output) if args.output else None
     title = args.title or "Flow Diagram"
     screens_dir = Path(args.screens) if args.screens else None
 
-    # Determine flows directory
+    # Flow tests are the CHECK, not the source (ruled 2026-09-10).
     flows_dir = input_dir / "flows" if (input_dir / "flows").exists() else input_dir
-
     if not flows_dir.exists():
         print(f"Error: Input directory not found: {flows_dir}", file=sys.stderr)
         return 1
-
-    # Determine screens directory
     if screens_dir is None:
         if (input_dir / "screens").exists():
             screens_dir = input_dir / "screens"
         else:
             screens_dir = flows_dir.parent / "screens"
 
+    spec_dir = Path(args.specs) if getattr(args, "specs", None) else _resolve_spec_dir_from_config(input_dir)
+    if spec_dir is None or not spec_dir.is_dir():
+        print("Error: no spec directory — pass --specs <dir>, or run where jui.config.json "
+              "declares `spec_directory`. The diagram is drawn from the screen specs.",
+              file=sys.stderr)
+        return 1
+
     print(f"Generating Mermaid diagram...")
-    print(f"  Flows: {flows_dir}")
+    print(f"  Specs: {spec_dir}")
+    print(f"  Flows: {flows_dir} (checked against the specs)")
     print(f"  Screens: {screens_dir}")
 
-    # Layout tree (optional): lets the generator tell screens from cells so
-    # Collection cells stop being drawn as screens.
     layouts_dir = Path(args.layouts_dir) if getattr(args, "layouts_dir", None) else _resolve_layouts_dir_from_config()
+    aliases, app_owned, owned_transitions = _resolve_diagram_declarations(input_dir)
 
     try:
+        kwargs = dict(flows_dir=flows_dir, aliases=aliases, app_owned=app_owned,
+                      app_owned_transitions=owned_transitions)
         if output_path:
-            # Generate HTML with embedded Mermaid
-            mermaid_code = generate_mermaid_html(flows_dir, output_path, title, screens_dir, layouts_dir)
-            print()
-            if mermaid_code:
+            result = generate_mermaid_html(spec_dir, output_path, title, screens_dir, layouts_dir, **kwargs)
+        else:
+            result = build_diagram(spec_dir, screens_dir=screens_dir, layouts_dir=layouts_dir, **kwargs)
+        for u in result.unresolved:
+            print(f"  WARNING [doc-diagram]: {u.source}: destination {u.raw!r} could not be "
+                  f"resolved ({u.why}) and was treated as absent", file=sys.stderr)
+        for e in result.errors:
+            print(f"  ERROR [doc-diagram]: {e}", file=sys.stderr)
+        print()
+        if output_path:
+            if result.combined:
                 print(f"Generated: {output_path}")
                 print(f"Open in browser to view the diagram")
             else:
-                print("No screen transitions found — no diagram written")
+                print("No screen transitions found in the specs — no diagram written")
         else:
-            # Output Mermaid code to stdout
-            mermaid_code = generate_mermaid_diagram(flows_dir, screens_dir, layouts_dir)
-            print()
-            print(mermaid_code)
-
-        return 0
+            print(result.combined or NO_SPECS_DIAGRAM)
+        return 1 if result.errors else 0
 
     except Exception as e:
         print(f"Error: {e}", file=sys.stderr)
         return 1
+
+
+def _resolve_spec_dir_from_config(start: Path) -> Path | None:
+    """``spec_directory`` of the config governing *start*, resolved."""
+    cfg = _config_for(start)
+    if cfg is None:
+        return None
+    try:
+        data = json.loads(cfg.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    rel = data.get("spec_directory")
+    if not isinstance(rel, str) or not rel:
+        return None
+    return (cfg.parent / rel).resolve()
+
+
+def _resolve_diagram_declarations(start: Path) -> tuple[list, list, dict]:
+    """The face's ``spec.transitionAliases`` and ``test.appOwnedScreens`` (ids
+    and their ``transitions``), from the config governing *start*."""
+    cfg = _config_for(start)
+    if cfg is None:
+        return [], [], {}
+    try:
+        data = json.loads(cfg.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return [], [], {}
+    from .test_doc.mermaid.flow_graph import import_jui_cli_module
+    project_config = import_jui_cli_module("jui_cli.core.project_config")
+    screen_identity = import_jui_cli_module("jui_cli.core.screen_identity")
+    if project_config is None or screen_identity is None:
+        return [], [], {}
+    aliases = screen_identity.parse_transition_aliases(project_config.declared_transition_aliases(data))
+    declared = project_config.declared_app_owned_screens(data)
+    owned = [e.screen_id for e in screen_identity.parse_app_owned_screens(declared)]
+    return aliases, owned, screen_identity.app_owned_transitions(declared)
 
 
 def cmd_generate_adapter(args):
@@ -2475,7 +2552,7 @@ def main():
     # Generate mermaid subcommand
     gen_mermaid_parser = generate_subparsers.add_parser(
         "mermaid",
-        help="Generate Mermaid flow diagram from flow tests"
+        help="Generate the Mermaid flow diagram from the screen specs (flow tests are checked against it)"
     )
     gen_mermaid_parser.add_argument(
         "input",
@@ -2492,6 +2569,14 @@ def main():
     gen_mermaid_parser.add_argument(
         "-s", "--screens",
         help="Path to screens directory (default: auto-detect)"
+    )
+    gen_mermaid_parser.add_argument(
+        "--specs",
+        help=(
+            "Path to the screen spec directory the diagram is drawn from "
+            "(default: `spec_directory` of the governing jui.config.json). "
+            "Flow tests under INPUT are checked against it."
+        )
     )
     gen_mermaid_parser.add_argument(
         "--layouts-dir",

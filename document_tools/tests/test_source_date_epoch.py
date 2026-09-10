@@ -59,6 +59,20 @@ def _project(root: Path) -> Path:
     _write(tests / "screens" / "b.test.json", json.dumps({
         "type": "screen", "source": {"layout": "d.json"},
         "metadata": {"name": "B"}, "cases": [{"name": "c", "steps": []}]}))
+    # Since 2026-09-10 the diagram is drawn from the SPECS, so the corpus
+    # needs a spec that declares the a -> b transition (and a config that
+    # says where the specs are), or the mermaid page is not produced and
+    # its timestamp exits are untested again.
+    _write(root / "jui.config.json", json.dumps({
+        "spec_directory": "docs/screens/json", "layouts_directory": "docs/screens/layouts"}))
+    for name, dests in (("a", ["B"]), ("b", [])):
+        _write(root / "docs" / "screens" / "layouts" / f"{name}.json", json.dumps({"type": "View"}))
+        _write(root / "docs" / "screens" / "json" / f"{name}.spec.json", json.dumps({
+            "type": "screen_spec", "version": "1.0",
+            "metadata": {"name": name.upper(), "description": "s"},
+            "structure": {"components": [{"type": "View", "id": "root", "description": "r"}],
+                          "layout": {"root": "root", "children": []}},
+            "transitions": [{"trigger": "t", "condition": "c", "destination": d} for d in dests]}))
     return tests
 
 

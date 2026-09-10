@@ -82,6 +82,16 @@ _generation_counts: dict = {}
 _document_slot_facts: dict = {}
 
 
+#: Flow-test transitions absent from the specs, this run. The CLI reads it
+#: back for the exit code the same way it reads `_page_failures`.
+_diagram_errors: list[dict] = []
+
+
+def get_diagram_errors() -> list[dict]:
+    """``{owner, from, to, flow, file, reason}`` per absent transition, oldest first."""
+    return list(_diagram_errors)
+
+
 def reset_page_failures() -> None:
     """Start a fresh accounting run."""
     _page_failures.clear()
@@ -90,6 +100,7 @@ def reset_page_failures() -> None:
     _generation_counts.clear()
     _document_slot_facts.clear()
     run_log.reset()
+    _diagram_errors.clear()
 
 
 def note_generation_counts(**counts) -> None:
@@ -897,6 +908,95 @@ def _test_group(rel_path: Path) -> str:
     return "/".join(dirs)
 
 
+def _diagram_owners(
+    input_path: Path,
+    unit_roots: list[dict] | None,
+    project_root: Path | None,
+    docs_base: Path,
+    layouts_override: Path | None,
+    root_app: str,
+    flow_groups: list[str],
+) -> list[dict]:
+    """One entry per app that can have a diagram — i.e. per SPEC directory.
+
+    Ruled 2026-09-10: the diagram is drawn from specs, so its owners are the
+    spec-bearing apps, not the flow-bearing ones. Three ways an owner is
+    found, most explicit first:
+
+      1. a unit root (``--config`` / ``--app`` / the walk-up): its config
+         names ``spec_directory``, ``layouts_directory``, the app-owned
+         screens and the transition aliases
+      2. the run's own ``docs/screens/json`` when no config was found
+      3. a flow group's ``docs/<app>/screens/json`` — a config-less
+         multi-app tree, kept so such a tree still gets its diagrams
+
+    Each entry: ``{name, app, spec_dir, layouts_dir, aliases, app_owned,
+    app_owned_transitions, flows_dir, screens_dir, rel}``.
+    """
+    from .mermaid.flow_graph import import_jui_cli_module
+    project_config = import_jui_cli_module("jui_cli.core.project_config")
+    screen_identity = import_jui_cli_module("jui_cli.core.screen_identity")
+
+    def tests_for(app: str | None) -> tuple[Path, Path]:
+        base = input_path / app if app else input_path
+        flows = base / "flows" if (base / "flows").exists() else base
+        screens = base / "screens" if (base / "screens").exists() else flows.parent / "screens"
+        return flows, screens
+
+    owners: list[dict] = []
+    seen_specs: set[Path] = set()
+
+    def add(name: str, app: str | None, spec_dir: Path | None, layouts: Path | None,
+            config: dict | None) -> None:
+        if spec_dir is None or not spec_dir.is_dir():
+            return
+        key = spec_dir.resolve()
+        if key in seen_specs:
+            return
+        seen_specs.add(key)
+        aliases: list = []
+        app_owned: list = []
+        owned_transitions: dict = {}
+        if config is not None and project_config is not None and screen_identity is not None:
+            aliases = screen_identity.parse_transition_aliases(
+                project_config.declared_transition_aliases(config))
+            declared = project_config.declared_app_owned_screens(config)
+            app_owned = [e.screen_id for e in screen_identity.parse_app_owned_screens(declared)]
+            owned_transitions = screen_identity.app_owned_transitions(declared)
+        flows, screens = tests_for(app)
+        owners.append({
+            "name": name, "app": app, "spec_dir": spec_dir, "layouts_dir": layouts,
+            "aliases": aliases, "app_owned": app_owned,
+            "app_owned_transitions": owned_transitions,
+            "flows_dir": flows, "screens_dir": screens,
+            "rel": f"{app}/diagram.html" if app else "diagram.html",
+        })
+
+    for entry in normalise_unit_roots(unit_roots, project_root):
+        root = Path(entry["root"])
+        config = None
+        if project_config is not None:
+            config, _path = project_config.find_project_config(root)
+        if not isinstance(config, dict):
+            continue
+        spec_rel = config.get("spec_directory")
+        spec_dir = (root / spec_rel).resolve() if isinstance(spec_rel, str) and spec_rel else None
+        layouts = layouts_override
+        if layouts is None:
+            layouts_rel = config.get("layouts_directory")
+            if isinstance(layouts_rel, str) and layouts_rel:
+                layouts = (root / layouts_rel).resolve()
+        app = entry.get("app")
+        add(app or root_app, app, spec_dir, layouts, config)
+
+    if not owners:
+        add(root_app, None, docs_base / "screens" / "json", layouts_override, None)
+    for group in flow_groups:
+        if group:
+            add(group, group, docs_base / group / "screens" / "json", layouts_override, None)
+    return owners
+
+
 def generate_html_directory(
     input_dir: Path,
     output_dir: Path,
@@ -1323,33 +1423,58 @@ def generate_html_directory(
     flow_groups = sorted({
         f.get('group', '') for f in file_infos if f['type'] == 'flow'
     })
+    # Ruled 2026-09-10: drawn from the SPECS, one diagram per spec-bearing
+    # app; the flow tests are checked against it. A flow group with no spec
+    # directory anywhere gets a WARNING, not a diagram — its transitions
+    # cannot be checked against a spec that does not exist.
+    owners = _diagram_owners(
+        input_path, unit_roots, project_root, docs_base, layouts_dir, _root_app, flow_groups)
+    covered_groups = {o["app"] or "" for o in owners}
     for _group in flow_groups:
+        if _group not in covered_groups:
+            _flows, _screens = (input_path / _group if _group else input_path), None
+            n_flows = len(list(_flows.rglob("*.test.json")))
+            warn(f"  WARNING [doc-diagram]: no spec directory found for {_group or _root_app} "
+                 f"— no diagram drawn and {n_flows} flow test file(s) not checked against a spec")
+    for owner in owners:
+        _owner = owner["name"]
         try:
-            _base = input_path / _group if _group else input_path
-            _flows_dir = _base / "flows" if (_base / "flows").exists() else _base
-            _screens_dir = (
-                _base / "screens" if (_base / "screens").exists()
-                else _flows_dir.parent / "screens"
-            )
-            _owner = _group or _root_app
-            _rel = f"{_group}/diagram.html" if _group else "diagram.html"
-            _out = output_path / _rel
+            _out = output_path / owner["rel"]
             _out.parent.mkdir(parents=True, exist_ok=True)
-            diagram = generate_mermaid_html(
-                _flows_dir, _out, "Flow Diagram", _screens_dir, layouts_dir
+            result = generate_mermaid_html(
+                owner["spec_dir"], _out, "Flow Diagram", owner["screens_dir"], owner["layouts_dir"],
+                flows_dir=owner["flows_dir"], aliases=owner["aliases"],
+                app_owned=owner["app_owned"], app_owned_transitions=owner["app_owned_transitions"],
             )
-            # An empty result means no flow produced a screen — link nothing
-            # rather than publishing a page the tab script cannot render.
-            if diagram:
+            for err in result.errors:
+                print(f"  ERROR [doc-diagram]: {_owner}: {err}")
+                _diagram_errors.append({
+                    "owner": _owner, "from": err.from_id, "to": err.to_id,
+                    "flow": err.flow_name, "file": err.flow_file, "reason": err.reason,
+                })
+            if result.unresolved:
+                listed = "; ".join(f"{u.source}: {u.raw!r}" for u in result.unresolved[:6])
+                more = "" if len(result.unresolved) <= 6 else f"; +{len(result.unresolved) - 6} more"
+                warn(f"  WARNING [doc-diagram]: {_owner}: {len(result.unresolved)} of "
+                     f"{result.stats.get('transitions', 0)} spec destination(s) could not be "
+                     f"resolved and were treated as absent: {listed}{more}")
+            if result.combined:
                 note_page_generated(_out, indent="  ")
-                app_diagrams[_owner] = _rel
-                if not _group:
+                app_diagrams[_owner] = owner["rel"]
+                if not owner["app"]:
                     mermaid_generated = True
+                print(f"    diagram {_owner}: specs {result.stats.get('specs', 0)} / "
+                      f"transitions {result.stats.get('transitions', 0)} / "
+                      f"edges {result.stats.get('spec_edges', 0)} / "
+                      f"flow tests {result.stats.get('flow_tests', 0)} checked "
+                      f"{result.stats.get('flow_edges', 0)} transition(s), absent "
+                      f"{result.stats.get('absent', 0)}")
             else:
-                print(f"  Skipped: flow diagram has no screens ({_owner})")
+                print(f"  Skipped: flow diagram — no spec under {owner['spec_dir']} declares a "
+                      f"resolvable screen transition ({_owner})")
         except Exception as e:
             warn(f"  WARNING [doc-diagram]: could not generate Mermaid diagram for "
-                  f"{_group or _root_app}: {e}")
+                 f"{_owner}: {e}")
 
     # Generate index.html
     generate_index_html(output_path, generated_files, title, mermaid_generated, document_files, api_doc_categories)
