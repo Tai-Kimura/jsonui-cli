@@ -81,8 +81,19 @@ class _Face:
                             for d in destinations],
         }), encoding="utf-8")
 
-    def write_the_site(self, out: Path) -> None:
-        _generate_spec_pages([self.specs], out)
+    def write_the_site(self, out: Path, app: str | None = None) -> Path:
+        """Write the spec pages and return the directory the DIAGRAM sits in.
+
+        A href in the diagram is resolved by the browser against the page's
+        own directory, not against the site root. With one app those are the
+        same directory and every base is right by accident; with `--app` the
+        diagram is at `<out>/<app>/diagram.html` and a root-based check
+        cannot see a `../` error. Measured by the triage lane on 2026-09-10
+        with a rendering instrument: 20 of 20 declared hrefs 404 on a
+        two-app site, and a root-based arm passes on all of them.
+        """
+        _generate_spec_pages([self.specs], out, path_prefix=app)
+        return out / app if app else out
 
     def nested_spec(self, subdir: str, name: str, destinations: list[str]) -> None:
         (self.layouts / f"{name}.json").write_text(
@@ -259,6 +270,12 @@ class EveryHrefResolvesToAFileTheRunWrote(_Case):
     the set the writer produces are the same set.
     """
 
+    def _unresolved(self, page_dir: Path) -> list[str]:
+        """Hrefs that do not name a file, resolved the way a browser does."""
+        clicks = self.face.clicks(self.face.build().combined)
+        self.assertTrue(clicks, "no click at all, the check would be vacuous")
+        return sorted(h for h in clicks.values() if not (page_dir / h).is_file())
+
     def test_a_spec_that_fails_validation_still_has_the_page_its_node_links_to(self):
         out = Path(self.tmp.name) / "html"
         self.face.valid_spec("login", ["Broken"])
@@ -267,26 +284,38 @@ class EveryHrefResolvesToAFileTheRunWrote(_Case):
             json.dumps({"type": "View"}), encoding="utf-8")
         (self.face.specs / "broken.spec.json").write_text(
             json.dumps({"type": "screen_spec", "metadata": {}}), encoding="utf-8")
-        self.face.write_the_site(out)
-        clicks = self.face.clicks(self.face.build().combined)
-        self.assertIn("broken", clicks,
+        page_dir = self.face.write_the_site(out)
+        self.assertIn("broken", self.face.clicks(self.face.build().combined),
                       "the invalid spec drew no node; the specimen proves nothing")
-        for node, href in sorted(clicks.items()):
-            with self.subTest(node=node):
-                self.assertTrue((out / href).is_file(),
-                                f"{node} links to {href}, which this run did not write")
+        self.assertEqual(self._unresolved(page_dir), [])
 
-    def test_the_arm_can_see_a_missing_page(self):
-        # The control for the arm above: with the page removed it must fail.
+    def test_the_site_is_checked_where_the_page_sits_not_where_the_site_starts(self):
+        # The `--app` shape, where the two bases part company. Without this
+        # specimen every base is right, so the arm above cannot say which one
+        # it is testing.
         out = Path(self.tmp.name) / "html"
         self.face.valid_spec("login", ["Mypage"])
         self.face.valid_spec("mypage", [])
-        self.face.write_the_site(out)
-        self.assertTrue((out / "specs/mypage.html").is_file())
-        (out / "specs" / "mypage.html").unlink()
-        clicks = self.face.clicks(self.face.build().combined)
-        missing = [h for h in clicks.values() if not (out / h).is_file()]
-        self.assertEqual(missing, ["specs/mypage.html"])
+        page_dir = self.face.write_the_site(out, app="user")
+        self.assertEqual(page_dir, out / "user")
+        self.assertTrue((out / "user" / "specs" / "mypage.html").is_file())
+        self.assertFalse((out / "specs" / "mypage.html").exists(),
+                         "the site root must NOT also carry the page, or the "
+                         "two bases still agree and the specimen proves nothing")
+        self.assertEqual(self._unresolved(page_dir), [])
+
+    def test_the_arm_can_see_a_missing_page(self):
+        # The control, on the same base as the arm it controls: removing the
+        # page under `<out>/<app>/` must make the check fail. A control that
+        # deletes at the root while the arm resolves at the page directory is
+        # blind to exactly the error this pair exists to catch.
+        out = Path(self.tmp.name) / "html"
+        self.face.valid_spec("login", ["Mypage"])
+        self.face.valid_spec("mypage", [])
+        page_dir = self.face.write_the_site(out, app="user")
+        self.assertEqual(self._unresolved(page_dir), [])
+        (page_dir / "specs" / "mypage.html").unlink()
+        self.assertEqual(self._unresolved(page_dir), ["specs/mypage.html"])
 
 
 class TheFallbackIsTheSameLinkOnSomeFacesAndANewOneOnOthers(_Case):
