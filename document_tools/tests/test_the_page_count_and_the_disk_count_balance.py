@@ -137,11 +137,11 @@ def _assert_balances(log: str, out: Path, root: Path) -> tuple[int, int, int, in
         f"  residual   {residual:+d}  = disk - (tool + leftovers)\n"
         f"  (collisions {collisions} — the previous manifest's merged keys, "
         f"not a term in this balance)")
-    assert collisions == 0, (
-        f"summary.collisions is {collisions}. That is a finding about the "
-        "manifest's own history, not about this balance — but it has never "
-        "been non-zero on a real tree, so it is worth looking at rather than "
-        "folding into the law.")
+    # 🚫 NOT asserted to be zero. An arm demanding zero would redden on the
+    # day the quantity legitimately went non-zero — the same false positive
+    # this term was removed from the law to avoid, rebuilt one line down.
+    # What the law claims about `collisions` is INSENSITIVITY, and that is
+    # asserted where it can be measured, against a tree built to have one.
     return tool, disk, collisions, leftovers
 
 
@@ -301,3 +301,57 @@ def test_the_term_is_the_runs_value_and_summing_the_roots_breaks_the_law(tmp_pat
     assert disk != tool + summed, (
         "summing the term across roots balanced, so this arm is no longer "
         "measuring the trap it was written for")
+
+
+# ------------------------------------------------------- insensitivity ----
+
+
+def test_the_law_closes_on_a_tree_that_has_a_real_key_collision(tmp_path):
+    """Positive control for the term that is NOT in the law.
+
+    `summary.collisions` counts entries lost when the previous manifest's
+    keys are merged to canonical spellings at save time. The claim being
+    pinned is that the balance does not depend on it: on a tree where the
+    quantity is genuinely non-zero, `disk == tool + leftovers` still holds.
+
+    🔻 THE FIXTURE IS SYNTHETIC BECAUSE IT HAS TO BE. `load_migrated_with_-
+    collisions` measured eight generations across three real corpora and
+    found the quantity zero in every one, and says so: "A smoke test on a
+    real tree would therefore report 'no collisions' forever and prove only
+    that it ran. The coverage for this lives in synthetic fixtures with a
+    positive control, and belongs there."
+
+    ⚠️ The two spellings differ by a `./` segment, not by case. A
+    case-folding fixture reproduces on this machine and stops reproducing on
+    a case-sensitive filesystem, where the second spelling names a file that
+    does not exist, normalises to itself, and collides with nothing — the
+    arm would then pass while measuring the empty set.
+    """
+    root = tmp_path
+    tests, docs, _ = _build_face(root)
+    out = root / "out"
+    out.mkdir()
+    _run(tests, out, root, docs)
+
+    manifest_path = root / ".jsonui-cli" / "generation-manifest.json"
+    data = json.loads(manifest_path.read_text(encoding="utf-8"))
+    files = data["files"]
+    assert files, "the first run recorded no files; the fixture has nothing to collide"
+    key = sorted(files)[0]
+    files["./" + key] = dict(files[key])
+    manifest_path.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+
+    log = _run(tests, out, root, docs)
+
+    collisions = int(_manifest(root)["summary"]["collisions"])
+    assert collisions >= 1, (
+        f"the fixture did not produce a collision (got {collisions}), so this "
+        f"arm would pass without measuring anything. Key used: {key!r}")
+
+    tool, disk = _tool_count(log), _disk_count(out)
+    leftovers = int(_manifest(root)["summary"]["run"]["leftovers"])
+    assert disk == tool + leftovers, (
+        "the law stopped closing on a tree with a non-zero collision count, "
+        "which is what it claims not to depend on:\n"
+        f"  tool {tool} / disk {disk} / leftovers {leftovers} / "
+        f"collisions {collisions}")
