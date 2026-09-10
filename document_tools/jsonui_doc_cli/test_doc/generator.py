@@ -72,6 +72,13 @@ _written_outside_output: set[Path] = set()
 #: screen (2026-09-10).
 _page_sources: dict = {}
 
+#: Which tests name each document (resolved source path → test names), from
+#: the document-page writer. A leftover that tests still name is not a page
+#: to delete but a face-side inconsistency (spec renamed, tests not); the
+#: report says so instead of sending the reader to delete it (triage,
+#: 2026-09-10: one such orphan was named by five tests).
+_document_referrers: dict = {}
+
 
 #: What the last run read, for the closing line. Recorded once at the end of
 #: `generate_html_directory` and phrased in ONE place, the same reason
@@ -105,6 +112,7 @@ def reset_page_failures() -> None:
     _pages_written.clear()
     _written_outside_output.clear()
     _page_sources.clear()
+    _document_referrers.clear()
     _generation_counts.clear()
     _document_slot_facts.clear()
     run_log.reset()
@@ -2364,6 +2372,8 @@ def _record_into(target: dict, targets: list, manifest, stale: list, outside: di
     facts["leftoversOutside"] = len(mine)
     facts["leftoverOutsidePaths"] = [str(p) for p, _c in mine[:20]]
     facts["leftoverOutsideSiteCopies"] = [str(c) for _p, copies in mine[:20] for c in copies]
+    facts["leftoverOutsideReferencedBy"] = {
+        str(p): len(_document_referrers.get(Path(p).resolve(), [])) for p, _c in mine[:20]}
     if len(mine) > 20:
         facts["leftoverOutsidePathsNote"] = f"first 20 of {len(mine)}"
     if outside:
@@ -2649,7 +2659,17 @@ def _report_stale_pages_outside(output_path: Path, started_at: "float | None" = 
         print(f"       {d}: {len(by_dir[d])}")
         for p, copies in by_dir[d]:
             if shown < limit:
-                print(f"         {p.name}" + (f"  (also copied into the site: {', '.join(str(c) for c in copies)})" if copies else ""))
+                refs = _document_referrers.get(p.resolve(), [])
+                line = f"         {p.name}"
+                if copies:
+                    line += f"  (also copied into the site: {', '.join(str(c) for c in copies)})"
+                if refs:
+                    # Not a page to delete: tests still resolve their `source.document`
+                    # to it. The inconsistency is on the face (spec renamed, tests not).
+                    named = ', '.join(refs[:3]) + (f', … +{len(refs) - 3}' if len(refs) > 3 else '')
+                    line += (f"  (no spec writes it, but {len(refs)} test(s) still name it as "
+                             f"source.document — update those before deleting: {named})")
+                print(line)
                 shown += 1
     if len(stale) > limit:
         print(f"       … {len(stale) - limit} more")
@@ -2888,6 +2908,11 @@ def _generate_document_pages(
         (owner, doc_path): test_name
         for owner, doc_path, test_name in declarations
     }
+    # Every test that names a document, kept beside the deduplicated map: the
+    # leftover report needs the count the map throws away.
+    referrers_by_key: dict = {}
+    for owner, doc_path, test_name in declarations:
+        referrers_by_key.setdefault((owner, doc_path), []).append(test_name)
 
     if not documents_to_process:
         return
@@ -2973,6 +2998,8 @@ def _generate_document_pages(
                 f.write(html_content)
 
             note_page_generated(output_doc_path)
+            note_page_source(output_doc_path, source_path)
+            _document_referrers[Path(source_path).resolve()] = list(referrers_by_key.get((owner, doc_path), []))
 
         except Exception as e:
             record_page_failure('document', str(doc_path), e,

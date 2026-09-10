@@ -172,3 +172,37 @@ def test_both_faces_renamed_gives_each_orphan_its_own_copy(run, monkeypatch):
     assert pairs[orphan_md] == [site_copy]
     assert pairs[orphan_b] == [(out / "md" / "components" / "md" / "gone.html").resolve()]
     assert pairs[orphan] == []
+
+
+def test_an_orphan_that_tests_still_name_is_reported_as_theirs_not_as_deletable(run, monkeypatch, capsys):
+    """A renamed spec's old page can still be what five tests resolve their
+    `source.document` to. Deleting it on the report's word would turn those
+    five into doc-missing next run; the report says who still names it."""
+    site, out, docs, orphan, orphan_md, site_copy = run
+    monkeypatch.setattr(gen, "_document_referrers", {orphan.resolve(): ["Settings (email)", "Settings (withdraw)"]})
+    pairs = gen._report_stale_pages_outside(out, started_at=time.time())
+    printed = capsys.readouterr().out
+    assert "2 test(s) still name it as source.document" in printed and "Settings (email)" in printed
+    targets = [{"app": "a", "root": site / "a", "docs": docs["a"]}]
+    gen._record_generation_manifest(out, targets, [], {}, stale_outside=pairs)
+    refs = _manifest(site / "a")["summary"]["run"]["leftoverOutsideReferencedBy"]
+    assert refs[str(orphan)] == 2 and refs[str(orphan_md)] == 0
+
+
+def test_the_document_writer_registers_its_source_and_its_referrers(tmp_path, monkeypatch):
+    """The one writer that did not record its source now does, with the tests
+    that name the document — from the writer itself, not from a stub."""
+    site = tmp_path / "site"
+    (site / "docs").mkdir(parents=True)
+    doc = site / "docs" / "guide.html"
+    doc.write_text("<html><body>guide</body></html>", encoding="utf-8")
+    out = site / "out"; out.mkdir()
+    monkeypatch.setattr(gen, "_page_sources", {})
+    monkeypatch.setattr(gen, "_document_referrers", {})
+    generated_files = [
+        {"name": "Guide test one", "document": "docs/guide.html", "group": None},
+        {"name": "Guide test two", "document": "docs/guide.html", "group": None},
+    ]
+    gen._generate_document_pages(site / "tests", out, generated_files, {"tests": []}, roots_by_app={None: site})
+    assert gen._document_referrers.get(doc.resolve()) == ["Guide test one", "Guide test two"]
+    assert doc.resolve() in set(gen._page_sources.values())
