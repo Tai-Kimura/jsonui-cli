@@ -254,11 +254,20 @@ rm -f  */.DS_Store
 # */spec` above is a one-level glob, so it covers all three Ruby tools at
 # once; the Python tools keep their tests in `tests/`, which that glob does
 # not reach, so each needs its own line. From the initial commit until
-# 2026-09-11 only `test_tools` had one — `document_tools/tests` (83 files)
-# and `jui_tools/tests` (116) shipped to every machine for four months, and
-# the asymmetry read as deliberate because the `build` / `*.egg-info` lines
-# below ARE paired. Nothing consumed them: measured across the consuming
-# projects, references to the distributed test trees were zero.
+# 2026-09-11 only `test_tools` had one — `document_tools/tests` and
+# `jui_tools/tests` shipped to every machine for four months, and the
+# asymmetry read as deliberate because the `build` / `*.egg-info` lines below
+# ARE paired. Nothing consumed them: measured across the consuming projects,
+# references to the distributed test trees were zero.
+#
+# ⚠️ TWO COUNTS, TWO SUBJECTS. Both are right and they are not the same number:
+#     199 = 83 + 116   what actually SHIPPED, measured at v1.8.70
+#     200 = 83 + 117   what these rules now EXCLUDE
+# The +1 is the arm below, which lives in `jui_tools/tests` and is therefore
+# pruned by the rule it guards. Whole-distribution figures move the same way:
+# 476 excluded / 3122 delivered at v1.8.70, 676 / 2923 from here (3 of the
+# delivered are symlinks). Write which question a figure answers, or the pair
+# reads as a discrepancy and someone "fixes" the correct one.
 #
 # ⚠️ `jui_tools/tests/test_the_distribution_prunes_every_test_tree.py` derives
 # this population from the repo rather than listing it, so a seventh tool
