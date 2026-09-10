@@ -2026,7 +2026,12 @@ def _report_writes_outside_output(output_path: Path) -> dict:
         if not str(real).startswith(str(out) + "/")
     )
     if not outside:
-        return {}
+        # The same shape, empty: "counted, found none" is a fact the record
+        # states, never an absent key. One face read `leftovers` missing
+        # beside `directories: []` and could not tell "zero" from "not
+        # counted" — a file that teaches two conventions teaches neither.
+        return {"directories": [], "gitTrackedDirectories": {},
+                "gitModifiedDirectories": {}, "uncheckable": []}
     # Through the tally: the gate's expression counts `⚠`, so this line is a
     # warning whether or not it was written as one.
     warn(f"  ⚠️ Also written OUTSIDE {output_path} ({len(outside)} directories):",
@@ -2306,11 +2311,12 @@ def _record_into(target: dict, targets: list, manifest, stale: list, outside: di
 
     written = sorted(k for k in (_key(p) for p in get_written_pages()) if k)
     facts = {}
-    if stale:
-        facts["leftovers"] = len(stale)
-        facts["leftoverPaths"] = [str(p) for p in stale[:20]]
-        if len(stale) > 20:
-            facts["leftoverPathsNote"] = f"first 20 of {len(stale)}"
+    # Explicit zero, like `outsideOutput.directories: []`: the run counted and
+    # found none. A missing key means the record predates the key.
+    facts["leftovers"] = len(stale)
+    facts["leftoverPaths"] = [str(p) for p in stale[:20]]
+    if len(stale) > 20:
+        facts["leftoverPathsNote"] = f"first 20 of {len(stale)}"
     if outside:
         # Several roots: each face's block names writes into ITS tree, with
         # an explicit empty list when there were none — one face's block used

@@ -92,7 +92,9 @@ _COMMENT = (
     "— what it found and wrote outside its output — and names its writer and "
     "time inside it ('recordedBy', 'recordedAt'). 'jui build' carries that "
     "block forward unchanged, so it can be older than the entries around it; "
-    "only a doc run replaces it, and a doc run that found nothing removes it."
+    "only a doc run replaces it, and a doc run that found nothing removes it. "
+    "Inside 'summary.run' a zero is explicit — 'leftovers: 0', 'outsideOutput.directories: []' — meaning counted and found none; a key "
+    "that is missing means the record predates that key, never zero."
 )
 
 

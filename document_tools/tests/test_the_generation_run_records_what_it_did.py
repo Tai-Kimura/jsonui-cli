@@ -96,19 +96,33 @@ def test_c_the_writes_outside_output_survive_too(project):
     assert run.get("outsideOutput", {}).get("gitTrackedDirectories") == {"/other/lane/docs": 7}
 
 
-def test_a_quiet_run_records_only_the_facts_that_are_always_true(project):
-    """Nothing observed must not look the same as something observed.
+def test_a_quiet_run_states_its_zeros(project):
+    """A run that found nothing says so with explicit zeros.
 
-    ⚠️ Changed 2026-09-09: the run block is now always written, because
-    "is this record visible to anyone else" is a fact about EVERY run, not
-    only about runs that found something. The absence of `leftovers` is what
-    carries "nothing was found".
+    ⚠️ Inverted 2026-09-10 (ticket summary-run-encodes-zero-two-different-
+    ways-in-sibling-keys). Until then the absence of `leftovers` carried
+    "nothing was found" while `outsideOutput.directories` said the same with
+    `[]` — two conventions in one file, and a face reading one could not
+    tell the other's absence from "not counted" or "key renamed". Now every
+    count is explicit and a missing key means only that the record predates
+    the key. The 2026-09-09 change (the block is always written, because
+    `manifestIsGitTracked` is a fact about every run) stands.
     """
     root, out = project
-    gen._record_generation_manifest(out, root, [], {})
+    gen._record_generation_manifest(out, root, [], gen._report_writes_outside_output(out))
     run = (_manifest(root).get("summary") or {}).get("run") or {}
     assert "manifestIsGitTracked" in run
-    assert "leftovers" not in run and "outsideOutput" not in run
+    assert run["leftovers"] == 0 and run["leftoverPaths"] == []
+    assert run["outsideOutput"]["directories"] == [] and run["outsideOutput"]["directoriesRelative"] == []
+
+
+def test_the_file_states_the_one_convention_for_zero(project):
+    """The reader learns the convention from the file, in one place, for both keys."""
+    root, out = project
+    gen._record_generation_manifest(out, root, [], {})
+    comment = _manifest(root)["_comment"]
+    assert "leftovers: 0" in comment and "directories: []" in comment
+    assert "predates" in comment
 
 
 def test_the_breakdown_of_tracked_is_not_empty_when_tracked_is_not(project):
