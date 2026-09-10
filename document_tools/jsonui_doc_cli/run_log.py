@@ -31,6 +31,13 @@ import re
 COUNTING_RE = re.compile(r"warning \[|warning:|\[warn|⚠", re.I)
 
 _emitted: list[str] = []
+#: Of the emitted lines, those a mouth declared STRUCTURAL — fired by design on
+#: every run of a given shape, not by anything going wrong — keyed by kind.
+#: They stay in `_emitted` (the gate's expression counts them, so the total
+#: must too); this only lets the closing line say how many of N are that kind,
+#: so a multi-app face can read `N − M == 0` as clean. Reported 2026-09-10 by
+#: such a face: with `--app`, N was never 0.
+_structural: dict[str, int] = {}
 #: True between `begin()` and `end()` — a CLI command owns the tally, and a
 #: `reset()` from inside the run (generate_html_directory's accounting
 #: reset) must not throw away what the command already emitted.
@@ -46,6 +53,7 @@ def begin() -> None:
     (measured over 4 runs by a verification lane, 2026-09-10)."""
     global _open
     _emitted.clear()
+    _structural.clear()
     _open = True
 
 
@@ -54,10 +62,20 @@ def end() -> None:
     _open = False
 
 
-def warn(line: str) -> None:
-    """Print *line* and count it. Callers keep their own indentation and tag."""
+def warn(line: str, *, structural: str | None = None) -> None:
+    """Print *line* and count it. Callers keep their own indentation and tag.
+
+    `structural=<kind>` marks a line that fires by design on every run of some
+    shape (today: the outside-writes notice on any `--app` run). It is still
+    counted — the gate counts it — but the closing line can then show the
+    breakdown. ⚠️ A declaration at the emit site, deliberately not a list here:
+    a second mouth calling itself structural would let a real warning hide
+    inside the "clean" reading, so an arm pins the number of such sites to one.
+    """
     print(line)
     _emitted.append(line)
+    if structural:
+        _structural[structural] = _structural.get(structural, 0) + 1
 
 
 def count() -> int:
@@ -69,8 +87,14 @@ def emitted() -> list[str]:
     return list(_emitted)
 
 
+def structural() -> dict[str, int]:
+    """Structural warnings emitted since the tally began, by kind."""
+    return dict(_structural)
+
+
 def reset() -> None:
     """Clear the tally — unless a command opened it with `begin()`, in which
     case the command's own warnings are part of this run and stay."""
     if not _open:
         _emitted.clear()
+        _structural.clear()

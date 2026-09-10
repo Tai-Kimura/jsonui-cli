@@ -136,6 +136,18 @@ def generation_summary_line() -> str:
     # from the log alone, "0 warnings" and "the counter is gone" are the same
     # sentence. Tallied by `run_log.warn`, which every warning goes through.
     warnings = f"warnings {run_log.count()}"
+    # 🔻 THE TOTAL IS THE GATE'S; THE BREAKDOWN IS THE READER'S. On any `--app`
+    # run the outside-writes notice fires by design and the gate's expression
+    # counts its ⚠, so N is never 0 on a multi-app face and "0 = clean" was a
+    # reading nobody there could use (reported 2026-09-10). Shrinking N would
+    # re-open the gap B2 closed (tally ≠ gate); dropping the ⚠ would take a
+    # write into another lane's tree out of the zero-warnings gate. So N stays
+    # and the same line says how many of it are structural: `N − M == 0` is
+    # the clean reading.
+    structural = run_log.structural()
+    if structural:
+        warnings += (f" ({sum(structural.values())} structural: "
+                     f"{', '.join(sorted(structural))})")
     if not c:
         return f"{head} ({warnings})"
     parts = [f"screens {c.get('screens', 0)}", f"flows {c.get('flows', 0)}"]
@@ -1963,7 +1975,8 @@ def _report_writes_outside_output(output_path: Path) -> dict:
         return {}
     # Through the tally: the gate's expression counts `⚠`, so this line is a
     # warning whether or not it was written as one.
-    warn(f"  ⚠️ Also written OUTSIDE {output_path} ({len(outside)} directories):")
+    warn(f"  ⚠️ Also written OUTSIDE {output_path} ({len(outside)} directories):",
+         structural="outside-writes")
     for d in outside:
         print(f"       {d}")
     print("     Every --app passed to this run has its source tree rewritten, so "
