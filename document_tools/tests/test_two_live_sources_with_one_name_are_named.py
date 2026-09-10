@@ -103,13 +103,13 @@ def test_a_component_and_a_screen_sharing_a_name_are_named(tmp_path, capsys):
     """A component spec and a screen spec under one name is the same
     ambiguity: two live sources, one key, two pages."""
     docs = tmp_path / "docs"
-    _spec(docs / "screens" / "json" / "badge_wide.spec.json", "badge_wide", "Progress")
+    _spec(docs / "screens" / "json" / "side_panel.spec.json", "side_panel", "Side panel")
     (docs / "components" / "json").mkdir(parents=True)
-    (docs / "components" / "json" / "badge.component.json").write_text(json.dumps({
+    (docs / "components" / "json" / "sidepanel.component.json").write_text(json.dumps({
         "type": "component_spec", "version": "1.0",
-        "metadata": {"component_id": "badge", "title": "Progress bar", "description": "d"},
+        "metadata": {"component_id": "sidepanel", "title": "Side panel (component)", "description": "d"},
         "structure": {"root": {"type": "View", "children": []}},
     }), encoding="utf-8")
     found = gen._report_colliding_spec_sources(docs)
-    assert [k for k, _ in found] == ["badge"]
-    assert "components/json/badge.component.json" in capsys.readouterr().out
+    assert [k for k, _ in found] == ["sidepanel"]
+    assert "components/json/sidepanel.component.json" in capsys.readouterr().out
