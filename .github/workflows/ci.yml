@@ -109,6 +109,38 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
+      # 🔻 THE FOUR CROSS-REPO ARMS RAN NOWHERE BUT ONE DEVELOPER TREE.
+      # `test_component_metadata_platform_truth.py` compares this repo's
+      # component metadata against what the two libraries actually implement.
+      # Each arm skips unless the library checkout is found, and the skip is
+      # silent in a passing run: 1897 passed / 5 skipped reads the same as
+      # 1901 passed / 1 skipped to anyone counting failures.
+      #
+      # Three paths could run them. The shared dev checkout does (the siblings
+      # sit beside it). The release gate did not until 2026-09-11 (a detached
+      # worktree has no siblings beside it). THIS JOB never did — and a repo-
+      # wide search for the checkouts says they are present, because two OTHER
+      # jobs have them. The denominator is the job, not the repository.
+      #
+      # ⚠️ SPARSE, BECAUSE THE ARMS READ TWO FILES. Measured 2026-09-11:
+      # DynamicComponentBuilder.swift 17,004 B + DynamicView.kt 24,852 B =
+      # 41,856 B, against ~11.5 MB of .git for two full clones. Cone mode
+      # takes directories, so each pattern is the file's parent; widen it only
+      # with the same measurement in hand.
+      - name: SwiftJsonUI (two files — the platform-truth arms read one)
+        uses: actions/checkout@v4
+        with:
+          repository: Tai-Kimura/SwiftJsonUI
+          path: SwiftJsonUI
+          filter: blob:none
+          sparse-checkout: Sources/SwiftJsonUI/Classes/SwiftUI/Dynamic
+      - name: KotlinJsonUI (two files — the platform-truth arms read one)
+        uses: actions/checkout@v4
+        with:
+          repository: Tai-Kimura/KotlinJsonUI
+          path: KotlinJsonUI
+          filter: blob:none
+          sparse-checkout: library-dynamic/src/main/kotlin/com/kotlinjsonui/dynamic
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
@@ -152,6 +184,14 @@ jobs:
       # anywhere. pytest runs the TestCase modules too, so nothing is lost.
       - name: Run unit tests
         working-directory: jui_tools
+        # 🔻 THE ENV VARS, NOT THE LAYOUT. `_sibling_repo` falls back to
+        # `REPO_ROOT.parent / <name>`, and on a runner this repo IS the
+        # workspace root — so a checkout at `path: SwiftJsonUI` lands INSIDE
+        # it, not beside it, and the fallback would still miss. Naming the
+        # paths is also what the skip message tells a reader to do.
+        env:
+          JSONUI_SWIFTJSONUI_PATH: ${{ github.workspace }}/SwiftJsonUI
+          JSONUI_KOTLINJSONUI_PATH: ${{ github.workspace }}/KotlinJsonUI
         run: python -m pytest
       - name: Protocol sync idempotency (e2e)
         # Runs the protocol sync twice against the fixture project and ensures
