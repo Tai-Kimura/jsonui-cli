@@ -31,6 +31,7 @@ from .html import (
 from .html.sidebar import escape_html
 from .markdown import generate_markdown, generate_schema_markdown
 from .mermaid import generate_mermaid_html
+from .mermaid.spec_graph import spec_page_path
 from .. import run_log
 from ..run_log import warn
 
@@ -1594,7 +1595,15 @@ def generate_html_directory(
                                     f"{owner['flows_dir']} ({owner['tests_provenance']}) checked "
                                     f"{result.stats.get('flow_edges', 0)} transition(s), absent "
                                     f"{result.stats.get('absent', 0)}")
+                # `nodes` is the denominator's provenance, stated in the line
+                # itself: a ratio whose bottom half is unnamed reads better
+                # every time the bottom half shrinks, and nobody can shoot
+                # back at it. These are the ids the graph drew — not a regex
+                # over the emitted text, which reads square brackets only and
+                # silently drops every round-bracketed entry node.
                 print(f"    diagram {_owner}: specs {result.stats.get('specs', 0)} / "
+                      f"click targets {result.stats.get('click_targets', 0)} of "
+                      f"{result.stats.get('nodes', 0)} node(s) the graph drew / "
                       f"transitions {result.stats.get('transitions', 0)} / "
                       f"spec edges {result.stats.get('spec_edges', 0)} (all in the All tab) / "
                       f"none inferred from wording {result.stats.get('none_inferred', 0)} / "
@@ -3340,6 +3349,23 @@ def _generate_spec_pages(
             # error silently overwriting another spec's page.
             output_spec_path = None
             try:
+                # Determine output path
+                # e.g., docs/screens/json/login.spec.json -> specs/login.html
+                # e.g., docs/screens/json/settings/profile.spec.json -> specs/settings/profile.html
+                # With path_prefix: client/specs/login.html
+                # The page path (name + subdirectory) is `spec_page_path`, the
+                # SAME call the diagram makes to decide where a node's click
+                # goes. Spelled out here and there, the two drift while both
+                # suites stay green and the link 404s.
+                #
+                # Computed BEFORE the validity check, as the sibling writer
+                # already does: an invalid spec must still be able to name the
+                # page it owns. Without it the run left LAST run's page where
+                # it was, presented as current, and — since 2026-09-10 — the
+                # diagram links a node to a page this run never wrote.
+                specs_subdir = f"{path_prefix}/specs" if path_prefix else "specs"
+                current_path = f"{specs_subdir}/{spec_page_path(spec_file, spec_docs_path)}"
+
                 result = _validator_for(spec_file).validate_file(spec_file)
 
                 if not result.is_valid:
@@ -3347,22 +3373,20 @@ def _generate_spec_pages(
                         print(f"    FAILED: {spec_file.name}")
                         for error in result.errors:
                             print(f"      {error}")
+                        # The placeholder, NOT `record_page_failure`: the
+                        # sibling writer above already recorded this spec's
+                        # failure, and a failure is counted once. What is
+                        # missing here is the PAGE — the diagram now links a
+                        # node to it, and `_write_failure_placeholder` exists
+                        # for exactly that ("so the link that brought you here
+                        # is not a 404"). Two pages, one ledger entry.
+                        _write_failure_placeholder(output_path / current_path, {
+                            'kind': 'screen spec', 'name': spec_file.name,
+                            'error': _validation_failure_text(result),
+                            'source': str(spec_file),
+                        })
                     error_count += 1
                     continue
-
-                # Determine output path
-                # e.g., docs/screens/json/login.spec.json -> specs/login.html
-                # e.g., docs/screens/json/settings/profile.spec.json -> specs/settings/profile.html
-                # With path_prefix: client/specs/login.html
-                output_name = spec_file.stem.replace(".spec", "") + ".html"
-                # Preserve subdirectory structure relative to docs_path
-                rel_to_docs = spec_file.parent.relative_to(spec_docs_path)
-                rel_subdir = str(rel_to_docs) if str(rel_to_docs) != '.' else ''
-                specs_subdir = f"{path_prefix}/specs" if path_prefix else "specs"
-                if rel_subdir:
-                    current_path = f"{specs_subdir}/{rel_subdir}/{output_name}"
-                else:
-                    current_path = f"{specs_subdir}/{output_name}"
 
                 # Prepare navigation info
                 metadata = result.spec_data.get('metadata', {})

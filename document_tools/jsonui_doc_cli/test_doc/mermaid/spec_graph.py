@@ -79,6 +79,12 @@ class SpecGraph:
     #: error message for a flow transition needs to say which of "no spec"
     #: and "spec declares no such transition" it is
     sources_with_spec: set[str] = field(default_factory=set)
+    #: screen id -> the file name the site generator writes for its spec
+    #: (``spec_page_name``). Only ids that HAVE a spec file are in here.
+    #: ``nodes`` and ``sources_with_spec`` are NOT that set: both take an
+    #: app-owned id too, which is drawn as a node and has no page — reading
+    #: either as "a page exists" links every app-owned screen to a 404.
+    spec_pages: dict[str, str] = field(default_factory=dict)
     id_space: set[str] = field(default_factory=set)
     specs_scanned: int = 0
 
@@ -102,6 +108,47 @@ def spec_screen_id(spec_file: Path) -> str:
     if name.endswith(SPEC_SUFFIX):
         name = name[: -len(SPEC_SUFFIX)]
     return normalize_screen_ref(name)
+
+
+def spec_page_name(spec_file: Path) -> str:
+    """The file name the site generator writes for ``spec_file``.
+
+    THE expression, not a copy of it: ``test_doc/generator.py`` calls this to
+    name the page and the diagram calls it to link to the page. Spelled out
+    twice, the two stay green while they drift, and the link 404s.
+
+    Deliberately NOT ``spec_screen_id`` + ``.html``. That one normalizes
+    (``Login.spec.json`` -> ``login``) and this one must not — the page on
+    disk is ``Login.html``. Two more things separate a node id from a page
+    name: the id can come from a layout instead of the spec (the collision
+    collapse ranks layout > app-owned > spec stem), and the id space is
+    normalized. The third, the subdirectory, is ``spec_page_path``'s.
+    """
+    return spec_file.stem.replace(".spec", "") + ".html"
+
+
+def spec_page_path(spec_file: Path, spec_root: Path | str | None) -> str:
+    """The page's path RELATIVE TO ``specs/``, subdirectory included.
+
+    The writer walks with ``rglob`` and keeps the subdirectory
+    (``specs/chat/chat-core.html``); ``iter_spec_files`` walks with ``glob``
+    and never sees those specs at all. So today a nested spec has a page and
+    no node, which is why no link 404s — an accident of two walks disagreeing,
+    not a property. Measured 2026-09-10 on a three-face corpus: 56 pages
+    against 48 nodes' worth of specs, the 8 nested ones drawn nowhere.
+
+    Widening ``iter_spec_files`` to ``rglob`` is the obvious repair for the
+    missing nodes, and on that day ``specs/<name>.html`` would be wrong for
+    every one of them. This function is what makes that repair safe.
+    """
+    name = spec_page_name(spec_file)
+    if spec_root is None:
+        return name
+    try:
+        rel = spec_file.parent.relative_to(Path(spec_root))
+    except ValueError:
+        return name
+    return name if str(rel) == "." else f"{rel}/{name}"
 
 
 def iter_spec_files(spec_dir: Path | str | None) -> list[Path]:
@@ -285,6 +332,11 @@ def build_spec_graph(
         graph.sources_with_spec.add(screen_id)
         if path is not None:
             graph.nodes.setdefault(screen_id, _spec_label(data or {}))
+            # `setdefault` over a sorted walk: `home@regular` and
+            # `home@compact` are one screen and two pages, so the node links
+            # to the first by name. Deterministic and stated, rather than
+            # whichever the walk yielded last.
+            graph.spec_pages.setdefault(screen_id, spec_page_path(path, spec_dir))
         else:
             graph.nodes.setdefault(screen_id, "")
         for entry, origin in transitions:
