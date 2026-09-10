@@ -221,6 +221,10 @@ def build_diagram(
     if not nodes:
         return result
     result.combined = _build_mermaid_diagram(nodes, graph.edges, node_metadata, graph.externals)
+    collisions = mermaid_id_problems(result.combined)
+    if collisions:  # pragma: no cover - impossible by construction; kept as the tripwire
+        raise RuntimeError(
+            f"subgraph and node share an id, Mermaid would refuse the diagram: {collisions}")
     # The group tabs show edges WITHIN a group (plus entry edges into it); an
     # edge between two groups appeared in none of them and on no list — a
     # face counted 29 resolved edges on the closing line and 19 drawn on the
@@ -387,7 +391,9 @@ def _group_diagrams(
             lines.append("    %% Click events for document links")
             lines.extend(click_lines)
 
-        diagrams[group_name] = "\n".join(lines)
+        # A group literally named "All" must not overwrite the All tab.
+        key = group_name if group_name != ALL_TAB else f"{group_name} (group)"
+        diagrams[key] = "\n".join(lines)
 
     return diagrams
 
@@ -449,16 +455,59 @@ _MERMAID_RESERVED = frozenset(
 )
 
 
+#: Namespace for subgraph ids. Mermaid's flowchart keeps subgraphs and nodes
+#: in ONE id space: a subgraph whose id equals a node inside it makes "the
+#: node its own parent" and the WHOLE diagram refuses to render
+#: ("would create a cycle"). A group named after its screen — `"group":
+#: "mypage"` around the `mypage` node — is the most natural naming there is,
+#: and two faces hit it the day the All tab appeared (2026-09-10: 2 of 3 and
+#: 2 of 5 subgraphs). Always prefixed, not only on collision: an id space
+#: kept apart by construction needs no detector to stay apart.
+_SUBGRAPH_PREFIX = "sg_"
+
+
+def _subgraph_id(group_name: str) -> str:
+    return f"{_SUBGRAPH_PREFIX}{_sanitize_id(group_name)}"
+
+
 def _emit_node_id(screen_id: str) -> str:
     """Diagram-safe identifier for a screen id.
 
     Screen ids reach us straight from test files, so a space, a non-ASCII
-    name or a Mermaid keyword would otherwise emit a broken diagram.
+    name or a Mermaid keyword would otherwise emit a broken diagram. A screen
+    id that happens to start with the subgraph namespace is pushed out of it.
     """
     safe = _sanitize_id(screen_id)
-    if safe in _MERMAID_RESERVED:
+    if safe in _MERMAID_RESERVED or safe.startswith(_SUBGRAPH_PREFIX):
         return f"{safe}_node"
     return safe
+
+
+def mermaid_id_problems(code: str) -> list[str]:
+    """Ids a flowchart declares both as a subgraph and as a node.
+
+    The browser is the only place this failure used to show, and it showed
+    as an empty tab with a red line under it; the CLI's counts (edges,
+    ERROR 0, exit 0) said nothing. Checked on every combined diagram at
+    generation time so the failure moves from the reader's browser to the
+    run that produced it.
+    """
+    import re
+    subgraphs: set[str] = set()
+    nodes: set[str] = set()
+    for raw in code.splitlines():
+        line = raw.strip()
+        if not line or line.startswith("%%") or line.startswith("classDef") or line.startswith("click"):
+            continue
+        m = re.match(r"subgraph\s+([A-Za-z_][A-Za-z0-9_]*)", line)
+        if m:
+            subgraphs.add(m.group(1))
+            continue
+        if line == "end" or line.startswith("flowchart"):
+            continue
+        for token in re.findall(r"(?<![A-Za-z0-9_])([A-Za-z_][A-Za-z0-9_]*)(?=\s*(?:\[|\(|>|-->|-\.->|:::|$))", line):
+            nodes.add(token)
+    return sorted(subgraphs & nodes)
 
 
 def _escape_label(label: str) -> str:
@@ -812,8 +861,8 @@ def _build_mermaid_diagram(
     # Define grouped nodes in subgraphs
     for group_name in sorted(grouped_nodes.keys()):
         group_node_ids = grouped_nodes[group_name]
-        # Sanitize group name for subgraph ID (must be alphanumeric + underscore only)
-        group_id = _sanitize_id(group_name)
+        # Subgraph id lives in its own namespace — see _SUBGRAPH_PREFIX.
+        group_id = _subgraph_id(group_name)
         lines.append("")
         lines.append(f'    subgraph {group_id}["{_escape_label(group_name)}"]')
         for node_id in sorted(group_node_ids):

@@ -806,3 +806,61 @@ class TheBackToIndexLinkResolves(unittest.TestCase):
                      if 'href="index.html"' in f.read_text(encoding="utf-8")]
         self.assertEqual(offenders, [], "a hard-coded index link (package-wide; f325efeb had 1)")
         self.assertIn('href="{index_href}"', Path(gen.__file__).read_text(encoding="utf-8"))
+
+
+class ASubgraphNeverSharesAnIdWithANode(unittest.TestCase):
+    """Mermaid keeps subgraphs and nodes in one id space. A group named after
+    its screen — the most natural naming — made the node its own parent and
+    the whole All tab refused to render ("would create a cycle"); 2 of 3 and
+    2 of 5 subgraphs on two faces, the day the All tab shipped (2026-09-10).
+    The CLI said edges 29 / ERROR 0 / exit 0 throughout."""
+
+    def _face(self, root: Path) -> _Face:
+        face = _Face(root)
+        face.spec("mypage", ["Settings"])
+        face.spec("settings", [])
+        _write(face.screens / "mypage_t.test.json", {
+            "type": "screen", "metadata": {"name": "Mypage", "group": "mypage"},
+            "source": {"layout": "Layouts/mypage.json"}, "cases": []})
+        _write(face.screens / "settings_t.test.json", {
+            "type": "screen", "metadata": {"name": "Settings", "group": "mypage"},
+            "source": {"layout": "Layouts/settings.json"}, "cases": []})
+        return face
+
+    def test_the_subgraph_id_is_namespaced_and_the_label_is_not(self):
+        from jsonui_doc_cli.test_doc.mermaid.generator import mermaid_id_problems
+        with tempfile.TemporaryDirectory() as tmp:
+            result = self._face(Path(tmp)).build()
+            self.assertIn('subgraph sg_mypage["mypage"]', result.combined)
+            self.assertIn('mypage["Mypage"]', result.combined)
+            self.assertEqual(mermaid_id_problems(result.combined), [])
+            self.assertIn("mypage --> settings", result.combined)
+
+    def test_the_checker_sees_the_old_shape(self):
+        # 陽性対照 on the tripwire: the exact text the two faces rendered.
+        from jsonui_doc_cli.test_doc.mermaid.generator import mermaid_id_problems
+        old = 'flowchart LR\n\n    subgraph mypage["mypage"]\n        mypage["Mypage"]\n    end\n\n    mypage --> settings'
+        self.assertEqual(mermaid_id_problems(old), ["mypage"])
+
+    def test_group_tabs_use_no_subgraph_and_are_unchanged(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            result = self._face(Path(tmp)).build()
+            self.assertNotIn("subgraph", result.diagrams["mypage"])
+
+    def test_a_screen_id_in_the_namespace_is_pushed_out_of_it(self):
+        from jsonui_doc_cli.test_doc.mermaid.generator import _emit_node_id
+        self.assertEqual(_emit_node_id("sg_home"), "sg_home_node")
+        self.assertEqual(_emit_node_id("home"), "home")
+
+    def test_a_group_named_all_does_not_overwrite_the_all_tab(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            face = _Face(Path(tmp))
+            face.spec("mypage", ["Settings"])
+            face.spec("settings", [])
+            _write(face.screens / "mypage_t.test.json", {
+                "type": "screen", "metadata": {"name": "Mypage", "group": "All"},
+                "source": {"layout": "Layouts/mypage.json"}, "cases": []})
+            result = face.build()
+            self.assertEqual(list(result.diagrams)[0], "All")
+            self.assertIn("All (group)", result.diagrams)
+            self.assertIn("subgraph sg_All", result.diagrams["All"])
