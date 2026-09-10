@@ -226,6 +226,16 @@ class ADeclarationSitsBesideTheKeyItDescribes(unittest.TestCase):
     and 13 arms stayed green. Position is the definition of ownership, so a
     detector that reads only position cannot see this; the independent fact
     is the suffix convention, and this arm holds it.
+
+    ⚠️ AND THE CONTROL COUNTS DECLARATIONS, NOT FILES. The first version
+    counted the canons it opened (`checked == 4`), which says nothing about
+    whether one declaration was examined: respelling SUFFIXES to something
+    that matches nothing left this arm green, and green with the misfiling
+    put back too (measured 2026-09-10, ticket
+    canon-sibling-arm-counts-files-not-declarations). A control has to count
+    the thing the arm protects, so `found` counts suffixed keys and the floor
+    below is what a change to the convention breaks. The two neighbouring
+    arms in this file hold the same shape (9 declarations, 20 vector ids).
     """
 
     SUFFIXES = ("ReadBy", "Vectors")
@@ -236,12 +246,16 @@ class ADeclarationSitsBesideTheKeyItDescribes(unittest.TestCase):
         core = Path(__file__).resolve().parents[2] / "shared" / "core"
         orphans = []
 
+        found = 0
+
         def walk(node, path):
+            nonlocal found
             if not isinstance(node, dict):
                 return
             for key, value in node.items():
                 for suffix in self.SUFFIXES:
                     if key.endswith(suffix) and len(key) > len(suffix):
+                        found += 1
                         base = key[: -len(suffix)]
                         if base not in node:
                             orphans.append(f"{path}.{key} (no sibling {base!r})")
@@ -253,4 +267,10 @@ class ADeclarationSitsBesideTheKeyItDescribes(unittest.TestCase):
             walk(json.loads((core / name).read_text(encoding="utf-8")), name)
             checked += 1
         self.assertEqual(checked, 4)
+        # The control that matters: an empty walk must not be able to report
+        # "no orphans". 6 is a floor — the suffixed declarations this tree had
+        # when the control was written, MEASURED not guessed (the first draft
+        # said 8, which counted bare `readBy` keys that carry no base name and
+        # are therefore not declarations this arm can pair).
+        self.assertGreaterEqual(found, 6, f"only {found} suffixed declaration(s) examined")
         self.assertEqual(orphans, [], "\n".join(orphans))
