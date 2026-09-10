@@ -190,7 +190,9 @@ def _resolve_unit_roots(
 def _resolve_manifest_targets(config_arg, apps, input_dir) -> list[tuple]:
     """Every root whose `.jsonui-cli/generation-manifest.json` this run writes.
 
-    `(root, source, app)` per target. Until 2026-09-10 this was ONE root — the
+    `(root, source, app, docs)` per target — `docs` is the `--app` directory,
+    which a split tree keeps OUTSIDE the app's root, and which the run writes
+    into; the record's outside-writes scope is root ∪ docs for that reason. Until 2026-09-10 this was ONE root — the
     first `--app` with a config — so a site run over four apps recorded its
     pages and its run facts in one face's manifest and the other three could
     never hold `summary.run`, while the v1.8.66 notice had told every face to
@@ -206,7 +208,7 @@ def _resolve_manifest_targets(config_arg, apps, input_dir) -> list[tuple]:
     if config_arg:
         cfg = Path(config_arg)
         if cfg.is_file():
-            return [(cfg.resolve().parent, "--config", None)]
+            return [(cfg.resolve().parent, "--config", None, None)]
     targets: list[tuple] = []
     seen: set = set()
     for app in (apps or []):
@@ -217,12 +219,13 @@ def _resolve_manifest_targets(config_arg, apps, input_dir) -> list[tuple]:
         if root in seen:
             continue
         seen.add(root)
-        targets.append((root, f"--app {app['name']}'s config", app["name"]))
+        targets.append((root, f"--app {app['name']}'s config", app["name"],
+                        Path(app["docs_path"]).resolve()))
     if targets:
         return targets
     cfg = _config_for(Path(input_dir))
     if cfg is not None:
-        return [(Path(cfg).resolve().parent, "walk-up from the input directory", None)]
+        return [(Path(cfg).resolve().parent, "walk-up from the input directory", None, None)]
     return []
 
 
@@ -250,7 +253,7 @@ def _resolve_project_root(config_arg, apps, input_dir):
     """
     targets = _resolve_manifest_targets(config_arg, apps, input_dir)
     if targets:
-        root, source, _app = targets[0]
+        root, source, _app, _docs = targets[0]
         return root, source
     return None, "unresolved"
 
@@ -658,7 +661,7 @@ def _cmd_generate_html(args):
             # The first target is the `Project root:` above; the rest are the
             # other apps' roots, each of which gets the same run record.
             print(f"  Manifests recorded at: {len(manifest_targets)} roots")
-            for root, source, _app in manifest_targets:
+            for root, source, _app, _docs in manifest_targets:
                 print(f"    {root} (from {source})")
     else:
         # Third value. "unresolved" must not read as either of the two ways a
@@ -669,7 +672,7 @@ def _cmd_generate_html(args):
     print()
 
     try:
-        generate_html_directory(input_dir, output_dir, title, docs_dirs if docs_dirs else None, figma_dir=figma_dir, apps=apps, layouts_dir=layouts_dir_override, unit_roots=[{"app": e.get("app"), "root": e["root"]} for e in unit_roots], test_roots=test_roots, project_root=project_root, manifest_roots=[{"app": app, "root": root} for root, _source, app in manifest_targets])
+        generate_html_directory(input_dir, output_dir, title, docs_dirs if docs_dirs else None, figma_dir=figma_dir, apps=apps, layouts_dir=layouts_dir_override, unit_roots=[{"app": e.get("app"), "root": e["root"]} for e in unit_roots], test_roots=test_roots, project_root=project_root, manifest_roots=[{"app": app, "root": root, "docs": docs} for root, _source, app, docs in manifest_targets])
         print()
         # Count every page written, not just the test pages in the return
         # value — the old number was smaller than the lines printed above it,

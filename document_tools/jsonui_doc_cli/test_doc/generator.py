@@ -1872,7 +1872,7 @@ def generate_html_directory(
     outside = _report_writes_outside_output(output_path)
     _record_generation_manifest(
         output_path,
-        [{"app": e.get("app"), "root": Path(e["root"])} for e in manifest_roots]
+        [{"app": e.get("app"), "root": Path(e["root"]), "docs": e.get("docs")} for e in manifest_roots]
         if manifest_roots else project_root,
         stale, outside, slots=dict(_document_slot_facts))
 
@@ -2186,7 +2186,8 @@ def _record_generation_manifest(
     # first app's manifest got everything and the others could never hold
     # `summary.run`, which the v1.8.66 notice had told them to read.
     if isinstance(project_root, list):
-        targets = [{"app": e.get("app"), "root": Path(e["root"])} for e in project_root]
+        targets = [{"app": e.get("app"), "root": Path(e["root"]), "docs": e.get("docs")}
+                   for e in project_root]
     elif project_root is not None:
         targets = [{"app": None, "root": Path(project_root)}]
     else:
@@ -2210,22 +2211,39 @@ def _record_generation_manifest(
     # like every other stamp this package writes.
     recorded_at = build_datetime_utc().strftime("%Y-%m-%dT%H:%M:%SZ")
     for target in targets:
-        _record_into(target["root"], targets, manifest, stale, outside, slots, recorded_at)
+        _record_into(target, targets, manifest, stale, outside, slots, recorded_at)
 
 
-def _scope_outside(outside: dict, root: Path) -> dict:
-    """The outside-writes record restricted to `root`'s subtree.
+def _scope_outside(outside: dict, scopes: list) -> dict:
+    """The outside-writes record restricted to the face's own directories.
 
-    Lists keep the entries under `root`, dicts keep the keys under it, and
-    the block says which root it was scoped to. A face reading its own
-    manifest then sees its own tree and nothing of its neighbours'.
+    `scopes` is the face's config root plus its `--app` directory: a split
+    tree keeps the docs OUTSIDE the root (one face's docs sit under the
+    parent repository's docs/), and those docs are exactly what the run
+    writes. Scoped to the root alone, both faces of such a tree would have
+    read an empty list — an absence wearing the face of zero. Lists keep the
+    entries under any scope, dicts keep the keys under any scope, and the
+    block names its scopes.
     """
+    roots = []
+    for sc in scopes:
+        try:
+            roots.append(Path(sc).resolve())
+        except OSError:
+            roots.append(Path(sc))
+
     def under(p) -> bool:
         try:
-            Path(p).resolve().relative_to(root)
-            return True
-        except (OSError, ValueError):
+            real = Path(p).resolve()
+        except OSError:
             return False
+        for r in roots:
+            try:
+                real.relative_to(r)
+                return True
+            except ValueError:
+                continue
+        return False
     scoped: dict = {}
     for key, value in outside.items():
         if isinstance(value, list):
@@ -2234,14 +2252,15 @@ def _scope_outside(outside: dict, root: Path) -> dict:
             scoped[key] = {d: n for d, n in value.items() if under(d)}
         else:
             scoped[key] = value
-    scoped["scope"] = str(root)
+    scoped["scope"] = [str(r) for r in roots]
     return scoped
 
 
-def _record_into(root: Path, targets: list, manifest, stale: list, outside: dict,
+def _record_into(target: dict, targets: list, manifest, stale: list, outside: dict,
                  slots: dict | None, recorded_at: str) -> None:
     """Write this run's record into ONE root's manifest; see the caller."""
-    root = Path(root).resolve()
+    root = Path(target["root"]).resolve()
+    scopes = [root] + ([Path(target["docs"])] if target.get("docs") else [])
 
     def _key(p) -> str | None:
         try:
@@ -2264,7 +2283,7 @@ def _record_into(root: Path, targets: list, manifest, stale: list, outside: dict
         # an explicit empty list when there were none — one face's block used
         # to carry four faces' directories, and the other three had no block
         # at all. One root: the run-level record, unchanged.
-        facts["outsideOutput"] = (_scope_outside(outside, root)
+        facts["outsideOutput"] = (_scope_outside(outside, scopes)
                                   if len(targets) > 1 else outside)
     if slots:
         # Its own key, not `collisions`: that word already belongs to the

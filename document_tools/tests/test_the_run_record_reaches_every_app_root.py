@@ -194,7 +194,7 @@ def test_outside_writes_are_scoped_to_each_root(two_roots):
     assert a["gitTrackedDirectories"] == {a_dir: 5} and b["gitTrackedDirectories"] == {b_dir: 14}
     assert a["gitModifiedDirectories"] == {} and b["gitModifiedDirectories"] == {b_dir: 2}
     assert a["uncheckable"] == [] and b["uncheckable"] == []
-    assert a["scope"] == str(roots["a"].resolve()) and b["scope"] == str(roots["b"].resolve())
+    assert a["scope"] == [str(roots["a"].resolve())] and b["scope"] == [str(roots["b"].resolve())]
 
 
 def test_a_single_root_keeps_the_run_level_outside_record(two_roots):
@@ -202,3 +202,62 @@ def test_a_single_root_keeps_the_run_level_outside_record(two_roots):
     outside = {"directories": ["/elsewhere/docs"], "gitTrackedDirectories": {}, "uncheckable": []}
     gen._record_generation_manifest(out, roots["a"], [], outside)
     assert _manifest(roots["a"])["summary"]["run"]["outsideOutput"] == outside
+
+
+def test_a_docs_directory_outside_the_root_is_still_the_faces_own(two_roots, tmp_path):
+    """A split tree keeps a face's docs under the PARENT repository's docs/,
+    outside the face's root — and that is what the run writes. Scoped to the
+    root alone both faces read an empty list (measured on one face's tree
+    before this arm); the --app directory is part of the face's scope."""
+    out, roots = two_roots
+    docs_a = tmp_path / "docs" / "a"
+    docs_b = tmp_path / "docs" / "b"
+    for d in (docs_a, docs_b):
+        (d / "screens" / "html").mkdir(parents=True)
+    wa, wb = str((docs_a / "screens" / "html").resolve()), str((docs_b / "screens" / "html").resolve())
+    outside = {"directories": [wa, wb], "gitTrackedDirectories": {wa: 3, wb: 4}, "uncheckable": []}
+    gen._record_generation_manifest(
+        out, [{"app": "a", "root": roots["a"], "docs": docs_a},
+              {"app": "b", "root": roots["b"], "docs": docs_b}], [], outside)
+    a = _manifest(roots["a"])["summary"]["run"]["outsideOutput"]
+    b = _manifest(roots["b"])["summary"]["run"]["outsideOutput"]
+    assert a["directories"] == [wa] and b["directories"] == [wb]
+    assert a["gitTrackedDirectories"] == {wa: 3} and b["gitTrackedDirectories"] == {wb: 4}
+    assert a["scope"] == [str(roots["a"].resolve()), str(docs_a.resolve())]
+
+
+@pytest.fixture()
+def split_tree(tmp_path):
+    """The reported shape: a parent repository whose root config carries only
+    checks, each app's config beside the app, and every app's docs under the
+    PARENT's docs/ — outside the app's root."""
+    site = tmp_path / "site"
+    (site / "tests" / "screens").mkdir(parents=True)
+    (site / "tests" / "screens" / "s.test.json").write_text(_test_json(), encoding="utf-8")
+    (site / "jui.config.json").write_text(json.dumps({"checks": {}}), encoding="utf-8")
+    for name in ("a", "b"):
+        (site / name).mkdir()
+        (site / name / "jui.config.json").write_text(
+            json.dumps({"spec_directory": f"../docs/{name}/screens/json"}), encoding="utf-8")
+        (site / "docs" / name / "screens" / "json").mkdir(parents=True)
+        (site / "docs" / name / "screens" / "json" / "s.spec.json").write_text(_spec(), encoding="utf-8")
+    return site
+
+
+def test_the_command_scopes_each_faces_record_to_its_own_docs_in_a_split_tree(split_tree):
+    out = _run(split_tree, "--app", f"a:{split_tree / 'docs' / 'a'}", "--app", f"b:{split_tree / 'docs' / 'b'}")
+    assert "Manifests recorded at: 2 roots" in out, out
+    ra, rb = split_tree / "a", split_tree / "b"
+    assert (ra / ".jsonui-cli" / "generation-manifest.json").is_file()
+    assert (rb / ".jsonui-cli" / "generation-manifest.json").is_file()
+    a = _manifest(ra)["summary"]["run"]
+    b = _manifest(rb)["summary"]["run"]
+    assert a["recordedAt"] == b["recordedAt"] and a["apps"] == ["a", "b"]
+    # The run writes each app's docs (outside -o and outside every root); each
+    # face's block names ITS docs and not the other's.
+    oa = a.get("outsideOutput") or {}
+    ob = b.get("outsideOutput") or {}
+    assert oa.get("scope") == [str(ra.resolve()), str((split_tree / "docs" / "a").resolve())]
+    assert all("/docs/a/" in d for d in oa.get("directories", [])), oa
+    assert all("/docs/b/" in d for d in ob.get("directories", [])), ob
+    assert oa.get("directories") and ob.get("directories"), (oa, ob)
