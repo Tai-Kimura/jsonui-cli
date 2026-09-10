@@ -160,22 +160,31 @@ py_suite document_tools jsonui_doc_cli
 _common="$(git -C "$C" rev-parse --path-format=absolute --git-common-dir 2>/dev/null)"
 _siblings="$(cd "${_common:-$C/.git}/../.." 2>/dev/null && pwd)"
 for _sib in SwiftJsonUI KotlinJsonUI; do
-  # 🔻 `--`, NOT `==`. Every other line this script prints with `==` is counted
-  # by readers as a leg (`grep -c '^== '` — four release reports carry the
-  # resulting number, "26"). These three lines are informational: they say what
-  # this run borrowed, not that a suite ran. Printing them with `==` moved a
-  # number that ships in the report from 26 to 28, with no suite added and no
-  # way for the reader to see why. The prefix is the discriminator; the count
-  # stays the count.
+  # 🔻 `~~`, AND THE PREFIX WAS MEASURED, NOT PICKED. Every line this script
+  # prints with `==` is counted by readers as a leg (`grep -c '^== '` — four
+  # release reports carry the resulting number, "26"). These three lines are
+  # informational: they say what this run BORROWED, not that a suite ran.
+  # Printing them with `==` moved a number that ships in the report from 26 to
+  # 28, with no suite added and no way for the reader to see why.
+  #
+  # ⚠️ THE FIRST FIX PICKED `--` WITHOUT MEASURING, AND `--` IS TAKEN: pytest
+  # emits `-- Docs: https://docs.pytest.org/...` on any run with warnings. So
+  # `grep -c '^-- '` would have counted three borrow lines where two were
+  # printed. Across a full 26-leg run (82 lines) the taken prefixes are `== `
+  # (28) and `-- ` (1); `~~ `, `>> `, `++ `, `%% `, `@@ `, `|| `, `:: `, `## `
+  # were all zero. `~~` was chosen from that measurement.
+  #
+  # 🔻 RE-MEASURE BEFORE CHANGING THIS. A prefix that is free in a green run
+  # can be taken by a tool that only prints on failure.
   _env_name="JSONUI_$(printf '%s' "$_sib" | tr '[:lower:]' '[:upper:]')_PATH"
   eval "_have=\${$_env_name:-}"
   if [ -n "$_have" ]; then
-    say "-- $_sib: using $_env_name=$_have"
+    say "~~ $_sib: using $_env_name=$_have"
   elif [ -d "$_siblings/$_sib" ]; then
-    say "-- $_sib: lending $_siblings/$_sib (not beside this worktree)"
+    say "~~ $_sib: lending $_siblings/$_sib (not beside this worktree)"
     eval "export $_env_name=\"$_siblings/$_sib\""
   else
-    say "-- $_sib: NOT FOUND beside $_siblings — the cross-repo arms will skip"
+    say "~~ $_sib: NOT FOUND beside $_siblings — the cross-repo arms will skip"
   fi
 done
 py_suite jui_tools jui_cli
