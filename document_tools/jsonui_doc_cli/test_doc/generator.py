@@ -176,7 +176,21 @@ def generation_summary_line() -> str:
     """
     n = get_pages_written()
     c = _generation_counts
-    head = f"Generated {n} HTML files"
+    # 🔻 "THIS RUN" IS THE UNIT, AND IT IS SAID OUT LOUD. N counts pages this
+    # run WROTE; the `.html` on disk under `-o` is a different quantity, and
+    # the two are not supposed to be equal — anything an earlier run left
+    # behind is on disk and not in N. Two readers compared N against a `find`
+    # count, called a +1 a defect, and one of them recorded a prediction as
+    # confirmed after matching a disk number against this line (2026-09-11).
+    # The difference already has a name in the same run (`WARNING [doc-stale]`
+    # and `summary.run.leftovers`), so the line points at the unit rather than
+    # at the remainder.
+    #
+    # ⚠️ THE SUFFIX IS ADDITIVE ON PURPOSE. `Generated <n> HTML files` stays
+    # the prefix so that anything already grepping for it keeps matching;
+    # respelling it would move a number that faces read, and this change is
+    # about naming a unit, not about moving one.
+    head = f"Generated {n} HTML files this run"
     # 🔻 THE WARNING COUNT IS THE TOOL'S, AND IT PRINTS AT ZERO. This line
     # never carried one; what a face read as "warning 5" at 1.8.63 was its own
     # grep over the log, which went to 0 when five lines were respelled — and
