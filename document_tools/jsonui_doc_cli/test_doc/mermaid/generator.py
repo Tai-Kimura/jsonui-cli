@@ -193,7 +193,16 @@ def build_diagram(
             "entry_screen": meta["entry_screen"],
             "groups": meta["groups"],
             "document": meta["document"],
+            "spec_page": graph.spec_pages.get(screen_id),
         }
+
+    # The denominator of the click-target count is THIS set: the ids the
+    # graph drew. Not a regex over the emitted text — `^\s{4}(\w+)\[` reads
+    # only square brackets and drops every round-bracketed entry node, which
+    # cost one node per face in the first measurement of this ticket.
+    result.stats["nodes"] = len(nodes)
+    result.stats["click_targets"] = sum(
+        1 for node_id in nodes if _click_href(node_metadata.get(node_id, {})))
 
     # ---- the check: what the flow tests do vs what the specs declare ----
     flow_files = sorted(flows_path.rglob("*.test.json")) if flows_path and flows_path.is_dir() else []
@@ -312,6 +321,29 @@ def _external_lines(externals: list[tuple[str, str]], only_from: set[str] | None
     return lines
 
 
+def _click_href(meta: dict) -> str | None:
+    """Where a node's click goes, or ``None`` when it must not have one.
+
+    A screen test's ``source.document`` is the author's choice and wins. With
+    no declaration the node falls back to the spec page the site generator
+    wrote for that screen — but ONLY if it wrote one. An app-owned screen
+    (``licenses``: a drawn node with no spec) gets no click, because emitting
+    a href the site never wrote is the same defect as emitting none, pointed
+    the other way (2026-09-10, doc-diagram-click-targets-vanish-…).
+
+    The href is relative to the diagram's own directory. Measured, not
+    assumed: in both output layouts the site produces —
+    ``docs/html/<app>/{diagram.html,specs/}`` and
+    ``<app>/docs/html/{diagram.html,specs/}`` — ``specs/`` is the diagram's
+    sibling, which is also how the declared ``document`` values resolve.
+    """
+    document = meta.get("document")
+    if document:
+        return document
+    page = meta.get("spec_page")
+    return f"specs/{page}" if page else None
+
+
 def _group_diagrams(
     nodes: dict[str, str],
     node_metadata: dict[str, dict],
@@ -383,11 +415,11 @@ def _group_diagrams(
         click_lines = []
         for node_id in sorted(group_nodes | relevant_entry_nodes):
             meta = node_metadata.get(node_id, {})
-            document = meta.get("document")
-            if document:
+            href = _click_href(meta)
+            if href:
                 safe_tooltip = nodes[node_id].replace('"', "'")
                 click_lines.append(
-                    f'    click {_emit_node_id(node_id)} "{document}" "{safe_tooltip}"'
+                    f'    click {_emit_node_id(node_id)} "{href}" "{safe_tooltip}"'
                 )
         if click_lines:
             lines.append("")
@@ -913,11 +945,11 @@ def _build_mermaid_diagram(
     click_lines = []
     for node_id in sorted(nodes):
         meta = node_metadata.get(node_id, {})
-        document = meta.get("document")
-        if document:
+        href = _click_href(meta)
+        if href:
             safe_tooltip = nodes[node_id].replace('"', "'")
             click_lines.append(
-                f'    click {_emit_node_id(node_id)} "{document}" "{safe_tooltip}"'
+                f'    click {_emit_node_id(node_id)} "{href}" "{safe_tooltip}"'
             )
 
     if click_lines:

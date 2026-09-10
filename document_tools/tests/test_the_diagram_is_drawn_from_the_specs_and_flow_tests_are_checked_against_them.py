@@ -939,7 +939,19 @@ class TwoIdsThatNormalizeAlikeAreOneScreen(unittest.TestCase):
                              [("forgot_password", [("forgot_password", "layout"), ("forgotpassword", "spec")])])
             self.assertIn("login --> forgot_password", result.combined)
             self.assertIn("forgot_password --> login", result.combined)
-            self.assertNotIn("forgotpassword", result.combined.replace("forgot_password", ""))
+            # The loser id must not be DRAWN — not "must not appear as text".
+            # Since 2026-09-10 a node with no `source.document` links to its
+            # spec page, and that page is named by the spec FILE, so the
+            # loser spelling is the correct content of the href
+            # (`specs/forgotpassword.html` is the file on disk;
+            # `specs/forgot_password.html` does not exist). Widening the old
+            # text predicate to cover the href would demand a dangling link.
+            # So: exclude click lines, which name files, and assert the
+            # winner separately on the one click line that exists.
+            structure = "\n".join(l for l in result.combined.splitlines()
+                                   if not l.strip().startswith("click "))
+            self.assertNotIn("forgotpassword", structure.replace("forgot_password", ""))
+            self.assertIn('click forgot_password "specs/forgotpassword.html"', result.combined)
             # the spec's label rides on the winner
             self.assertIn('forgot_password["パスワードリセット依頼"]', result.combined)
 
