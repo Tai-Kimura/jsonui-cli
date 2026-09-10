@@ -1562,6 +1562,10 @@ def generate_html_directory(
                 flows_dir=owner["flows_dir"], aliases=owner["aliases"],
                 app_owned=owner["app_owned"], app_owned_transitions=owner["app_owned_transitions"],
                 site_root=output_path,
+                # The app that DECLARED the tests, and the diagram's own place
+                # in the site — the two things a declared document path has to
+                # be said from.
+                document_href=diagram_document_href(owner["app"], owner["rel"]),
             )
             for err in result.errors:
                 print(f"  ERROR [doc-diagram]: {_owner}: {err}")
@@ -1601,9 +1605,15 @@ def generate_html_directory(
                 # back at it. These are the ids the graph drew — not a regex
                 # over the emitted text, which reads square brackets only and
                 # silently drops every round-bracketed entry node.
+                # Both halves named: `declared` is 0 for a face that declares
+                # nothing and `rebased` is 0 for a face whose paths were
+                # already right for its layout. Printing one of them alone
+                # makes those two faces read identically.
                 print(f"    diagram {_owner}: specs {result.stats.get('specs', 0)} / "
                       f"click targets {result.stats.get('click_targets', 0)} of "
                       f"{result.stats.get('nodes', 0)} node(s) the graph drew / "
+                      f"document links {result.stats.get('documents_declared', 0)} declared, "
+                      f"{result.stats.get('documents_rebased', 0)} rebased / "
                       f"transitions {result.stats.get('transitions', 0)} / "
                       f"spec edges {result.stats.get('spec_edges', 0)} (all in the All tab) / "
                       f"none inferred from wording {result.stats.get('none_inferred', 0)} / "
@@ -2770,6 +2780,32 @@ def document_output_rel_path(owner: str | None, doc_path: str) -> str:
     if _path_already_names_app(owner, doc_path):
         return doc_path
     return f"{owner}/{doc_path}"
+
+
+def diagram_document_href(owner: str | None, diagram_rel: str):
+    """How a diagram must spell a declared ``source.document``.
+
+    The value in the test is a forward path from a stable root — the same
+    string that decides where the page is WRITTEN. `document_output_rel_path`
+    already owns that decision, so this asks it and then says the answer from
+    where the diagram sits. No second rule: a rule spelled out twice drifts
+    while both suites stay green.
+
+    Before this, the declared string was emitted verbatim. That resolves only
+    when the page's site path happens to start with the diagram's own
+    directory — true for a face whose docs dir is inside its face directory,
+    false for one whose docs dir sits beside it. Measured 2026-09-10 on the
+    rendered DOM of a two-app site: 20 of 20 declared hrefs 404, while a
+    single-app site and a face with `--app client:client/docs` were fine. The
+    difference was the layout, not the tool doing anything different.
+    """
+    base = PurePosixPath(diagram_rel).parent
+
+    def href(declared: str) -> str:
+        page = document_output_rel_path(owner, declared)
+        return PurePosixPath(os.path.relpath(page, str(base))).as_posix()
+
+    return href
 
 
 def _path_already_names_app(owner: str, doc_path: str) -> bool:

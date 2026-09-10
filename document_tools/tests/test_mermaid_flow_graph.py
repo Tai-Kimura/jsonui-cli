@@ -25,6 +25,7 @@ from jsonui_doc_cli.test_doc.mermaid.flow_graph import (
     flow_edges,
     normalize_screen_ref,
 )
+from jsonui_doc_cli.test_doc.generator import diagram_document_href
 from jsonui_doc_cli.test_doc.mermaid.generator import (
     build_diagram,
     generate_grouped_mermaid_diagrams,
@@ -265,17 +266,25 @@ class _Tree:
         (self.root / "jui.config.json").write_text(
             json.dumps({"test": {"appOwnedScreens": app_owned}}), encoding="utf-8")
 
+    def _href(self, kwargs):
+        # Single-app spelling, stated rather than defaulted: with no declaring
+        # app and the diagram at the site root, the mapping returns the declared
+        # value unchanged. The parameter has no default precisely so a caller
+        # has to say which layout it means.
+        kwargs.setdefault("document_href", diagram_document_href(None, "diagram.html"))
+        return kwargs
+
     def diagram(self, **kwargs) -> str:
         return generate_mermaid_diagram(self.specs, self.screens, self.layouts,
-                                        flows_dir=self.flows, **kwargs)
+                                        flows_dir=self.flows, **self._href(kwargs))
 
     def grouped(self, **kwargs) -> dict[str, str]:
         return generate_grouped_mermaid_diagrams(self.specs, self.screens, self.layouts,
-                                                 flows_dir=self.flows, **kwargs)
+                                                 flows_dir=self.flows, **self._href(kwargs))
 
     def build(self, **kwargs):
         return build_diagram(self.specs, flows_dir=self.flows, screens_dir=self.screens,
-                             layouts_dir=self.layouts, **kwargs)
+                             layouts_dir=self.layouts, **self._href(kwargs))
 
 
 class DiagramRenderingTests(unittest.TestCase):
@@ -360,7 +369,8 @@ class DiagramRenderingTests(unittest.TestCase):
         self.tree.spec("login", ["なし（画面内のタブ切替）"])
         out_file = self.tree.root / "diagram.html"
         result = generate_mermaid_html(self.tree.specs, out_file, "Flow Diagram", self.tree.screens,
-                                       self.tree.layouts, flows_dir=self.tree.flows)
+                                       self.tree.layouts, flows_dir=self.tree.flows,
+                                       document_href=diagram_document_href(None, "diagram.html"))
         self.assertEqual(result.combined, "")
         self.assertFalse(out_file.exists())
 
@@ -369,7 +379,8 @@ class DiagramRenderingTests(unittest.TestCase):
         self.tree.spec("mypage", [])
         out_file = self.tree.root / "diagram.html"
         result = generate_mermaid_html(self.tree.specs, out_file, "Flow Diagram", self.tree.screens,
-                                       self.tree.layouts, flows_dir=self.tree.flows)
+                                       self.tree.layouts, flows_dir=self.tree.flows,
+                                       document_href=diagram_document_href(None, "diagram.html"))
         self.assertTrue(result.combined)
         self.assertTrue(out_file.exists())
 

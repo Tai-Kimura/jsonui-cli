@@ -9,6 +9,7 @@ from .generator import (
     get_pages_written,
     generation_summary_line,
     generation_warnings,
+    diagram_document_href,
 )
 from .mermaid import generate_mermaid_diagram, generate_mermaid_html
 from .mermaid.generator import DiagramResult, TransitionError, build_diagram
@@ -26,6 +27,7 @@ __all__ = [
     "generate_mermaid_diagram",
     "generate_mermaid_html",
     "build_diagram",
+    "diagram_document_href",
     "DiagramResult",
     "TransitionError",
     "generate_adapter",

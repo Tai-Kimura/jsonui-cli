@@ -34,7 +34,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from jsonui_doc_cli.test_doc.generator import _generate_spec_pages
+from jsonui_doc_cli.test_doc.generator import _generate_spec_pages, diagram_document_href
 from jsonui_doc_cli.test_doc.mermaid.generator import build_diagram
 from jsonui_doc_cli.test_doc.mermaid.spec_graph import spec_page_name, spec_page_path
 
@@ -116,6 +116,12 @@ class _Face:
                 for p in self.specs.rglob("*.spec.json")}
 
     def build(self, **kwargs):
+        # The app that declared the tests and the diagram's own place in the
+        # site. Defaulting to the single-app spelling would make every arm
+        # here a single-app arm without saying so.
+        app = kwargs.pop("app", None)
+        kwargs.setdefault("document_href", diagram_document_href(
+            app, f"{app}/diagram.html" if app else "diagram.html"))
         return build_diagram(self.specs, screens_dir=self.screens,
                              layouts_dir=self.layouts, **kwargs)
 
@@ -316,6 +322,98 @@ class EveryHrefResolvesToAFileTheRunWrote(_Case):
         self.assertEqual(self._unresolved(page_dir), [])
         (page_dir / "specs" / "mypage.html").unlink()
         self.assertEqual(self._unresolved(page_dir), ["specs/mypage.html"])
+
+
+class ADeclaredDocumentResolvesFromTheDiagramToo(_Case):
+    """The declared half, on both of the shapes faces actually write.
+
+    `source.document` is passed through with no re-basing, so whether it
+    resolves depends on where the face's docs directory sits relative to the
+    face — a convention the tool never enforced. Measured on two consumers
+    2026-09-10:
+
+        face A   --app client:client/docs   "docs/screens/html/login.html"
+                 the docs dir is INSIDE the face; the site copy lands at
+                 <site>/client/docs/... and the diagram at <site>/client/,
+                 so the string happens to be right
+        face B   --app admin:docs/admin     "docs/admin/screens/html/x.html"
+                 the docs dir is OUTSIDE the face; the copy lands at
+                 <site>/docs/admin/... and the diagram at <site>/admin/,
+                 so the string is missing a `../` — 20 of 20 hrefs 404,
+                 read off the rendered DOM by the triage lane's instrument
+
+    Face A resolving is an accident of the two paths agreeing, not a
+    property the tool holds. Both shapes are here so that a repair has to
+    keep A byte-identical while moving B.
+    """
+
+    def _site_with_document(self, docs_dir: str, app: str, declared: str) -> tuple[Path, Path]:
+        """Write the site the way a run does: the face's docs copy under
+        `<out>/<docs_dir>/`, the diagram's directory at `<out>/<app>/`."""
+        out = Path(self.tmp.name) / "html"
+        self.face.valid_spec("login", ["Mypage"])
+        self.face.valid_spec("mypage", [])
+        self.face.screen_test("login_smoke", "login", declared)
+        page_dir = self.face.write_the_site(out, app=app)
+        copy = out / docs_dir / "screens" / "html" / "login.html"
+        copy.parent.mkdir(parents=True, exist_ok=True)
+        copy.write_text("<html></html>", encoding="utf-8")
+        return out, page_dir
+
+    def test_the_docs_dir_inside_the_face_resolves(self):
+        out, page_dir = self._site_with_document(
+            "user/docs", "user", "docs/screens/html/login.html")
+        clicks = self.face.clicks(self.face.build(app="user").combined)
+        self.assertEqual(clicks["login"], "docs/screens/html/login.html")
+        self.assertTrue((page_dir / clicks["login"]).is_file())
+
+    def test_the_docs_dir_outside_the_face_resolves_too(self):
+        out, page_dir = self._site_with_document(
+            "docs/user", "user", "docs/user/screens/html/login.html")
+        clicks = self.face.clicks(self.face.build(app="user").combined)
+        self.assertTrue(
+            (page_dir / clicks["login"]).is_file(),
+            f"{clicks['login']!r} from {page_dir.name}/ resolves to "
+            f"{(page_dir / clicks['login'])}, which the run did not write")
+
+
+class TheDeclaredValueIsLeftAloneOnTwoDifferentBranches(_Case):
+    """Two ways to come out unchanged, and they are NOT one arm.
+
+    `document_output_rel_path` leaves the declared value alone twice, by
+    different routes: when the path already carries the app segment
+    (`_path_already_names_app`), and when there is no app at all. One arm
+    covering both stays green while either branch dies, so they get one each.
+    """
+
+    def test_no_declaring_app_leaves_the_value_alone(self):
+        # The single-app site: no app segment to add, diagram at the root.
+        self.face.spec("login", ["Mypage"])
+        self.face.spec("mypage", [])
+        self.face.screen_test("login_smoke", "login", "docs/screens/html/login.html")
+        clicks = self.face.clicks(self.face.build().combined)
+        self.assertEqual(clicks["login"], "docs/screens/html/login.html")
+
+    def test_a_path_that_already_names_its_app_is_left_alone_from_that_app(self):
+        # `<app>/…` — the other branch of `_path_already_names_app`. The page
+        # is at `user/x/login.html` and the diagram at `user/`, so the value
+        # is already right and must not gain a `../`.
+        self.face.spec("login", ["Mypage"])
+        self.face.spec("mypage", [])
+        self.face.screen_test("login_smoke", "login", "user/x/login.html")
+        clicks = self.face.clicks(self.face.build(app="user").combined)
+        self.assertEqual(clicks["login"], "x/login.html")
+
+    def test_a_docs_dir_ending_in_the_hrefs_first_segment_is_not_a_special_case(self):
+        # The shape a prefix-matching rule would get wrong: a face whose docs
+        # directory ends with the href's first segment. There is no
+        # prefix-matching rule here — the mapping is asked, not re-derived —
+        # so this is only a statement that no such rule was added.
+        self.face.spec("login", ["Mypage"])
+        self.face.spec("mypage", [])
+        self.face.screen_test("login_smoke", "login", "screens/html/x.html")
+        clicks = self.face.clicks(self.face.build(app="a").combined)
+        self.assertEqual(clicks["login"], "screens/html/x.html")
 
 
 class TheFallbackIsTheSameLinkOnSomeFacesAndANewOneOnOthers(_Case):

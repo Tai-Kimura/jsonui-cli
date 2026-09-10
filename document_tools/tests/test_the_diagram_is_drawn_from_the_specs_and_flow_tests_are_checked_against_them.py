@@ -22,12 +22,20 @@ from contextlib import redirect_stdout
 from pathlib import Path
 
 from jsonui_doc_cli.test_doc.generator import generate_html_directory, get_diagram_errors
+from jsonui_doc_cli.test_doc.generator import diagram_document_href
 from jsonui_doc_cli.test_doc.mermaid.generator import (
     NO_SPECS_DIAGRAM,
     build_diagram,
     generate_mermaid_diagram,
     generate_mermaid_html,
 )
+
+
+#: Single-app spelling, stated rather than defaulted: with no declaring app
+#: and the diagram at the site root, the mapping returns the declared value
+#: unchanged. `document_href` has no default precisely so a caller has to say
+#: which layout it means.
+_HREF = diagram_document_href(None, "diagram.html")
 
 
 def _write(path: Path, data) -> None:
@@ -78,6 +86,7 @@ class _Face:
         return path
 
     def build(self, **kwargs):
+        kwargs.setdefault("document_href", _HREF)
         return build_diagram(self.specs, flows_dir=self.flows, screens_dir=self.screens,
                              layouts_dir=self.layouts, **kwargs)
 
@@ -118,7 +127,8 @@ class TheSpecsAreTheSource(unittest.TestCase):
 
     def test_no_specs_is_the_no_specs_placeholder_not_the_old_no_flows_one(self):
         self.face.flow("nav", [_s("login"), _s("mypage")])
-        out = generate_mermaid_diagram(self.face.specs, self.face.screens, self.face.layouts)
+        out = generate_mermaid_diagram(self.face.specs, self.face.screens, self.face.layouts,
+                                       document_href=_HREF)
         self.assertEqual(out, NO_SPECS_DIAGRAM)
         self.assertIn("NO_SPECS", out)
 
@@ -338,7 +348,8 @@ class TheHtmlEntryPointReturnsTheResult(unittest.TestCase):
             face = _Face(Path(tmp))
             face.spec("login", ["なし（タブ切替）"])
             out = face.root / "diagram.html"
-            result = generate_mermaid_html(face.specs, out, "T", face.screens, face.layouts, flows_dir=face.flows)
+            result = generate_mermaid_html(face.specs, out, "T", face.screens, face.layouts, flows_dir=face.flows,
+                                          document_href=_HREF)
             self.assertEqual(result.combined, "")
             self.assertFalse(out.exists())
 
@@ -348,7 +359,8 @@ class TheHtmlEntryPointReturnsTheResult(unittest.TestCase):
             face.spec("login", ["Mypage"])
             face.spec("mypage", [])
             out = face.root / "diagram.html"
-            result = generate_mermaid_html(face.specs, out, "T", face.screens, face.layouts, flows_dir=face.flows)
+            result = generate_mermaid_html(face.specs, out, "T", face.screens, face.layouts, flows_dir=face.flows,
+                                          document_href=_HREF)
             self.assertTrue(result.combined)
             self.assertTrue(out.exists())
 
@@ -500,7 +512,8 @@ class InferredNoneIsListedNotHidden(unittest.TestCase):
             face.spec("mypage", ["request モード（画面内状態）", "Settings"])
             face.spec("settings", [])
             out = face.root / "diagram.html"
-            result = generate_mermaid_html(face.specs, out, "T", face.screens, face.layouts, flows_dir=face.flows)
+            result = generate_mermaid_html(face.specs, out, "T", face.screens, face.layouts, flows_dir=face.flows,
+                                          document_href=_HREF)
             self.assertEqual([(n.source, n.raw) for n in result.nones], [("mypage", "request モード（画面内状態）")])
             self.assertEqual(result.stats["none_inferred"], 1)
             self.assertEqual(result.unresolved, [])
@@ -697,7 +710,8 @@ class EveryResolvedEdgeIsDrawnSomewhere(unittest.TestCase):
                 "type": "screen", "metadata": {"name": "Catalog", "group": "catalog"},
                 "source": {"layout": "Layouts/catalog.json"}, "cases": []})
             out = face.root / "diagram.html"
-            result = generate_mermaid_html(face.specs, out, "T", face.screens, face.layouts, flows_dir=face.flows)
+            result = generate_mermaid_html(face.specs, out, "T", face.screens, face.layouts, flows_dir=face.flows,
+                                          document_href=_HREF)
             self.assertEqual(list(result.diagrams)[0], "All")
             self.assertIn("mypage --> catalog", result.diagrams["All"])
             # and in no group tab — that is what made it invisible
