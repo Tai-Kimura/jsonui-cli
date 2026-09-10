@@ -64,6 +64,13 @@ _pages_written: set[Path] = set()
 #: nothing named them. Named at the end of the run now, from what was actually
 #: written rather than from a rule about where it would go.
 _written_outside_output: set[Path] = set()
+# Set by `_report_stale_pages_outside`: the number of directories that scan
+# walked. `leftoversOutside: 0` beside `…Scanned: 0` is "nothing to look at";
+# beside `…Scanned: 4` it is "looked at four and found none". Without it the
+# two share one symbol, and a face gating on `leftoversOutside == 0` passes
+# unconditionally on a run that registered no outside directories at all
+# (triage, 2026-09-10, sharpening the scoped-zero ticket).
+_stale_outside_scanned: int = 0
 
 #: Which source file each written page was rendered from, for the writers
 #: that render a file already on disk (a face's markdown, a spec). The site
@@ -111,6 +118,8 @@ def reset_page_failures() -> None:
     _page_failures.clear()
     _pages_written.clear()
     _written_outside_output.clear()
+    global _stale_outside_scanned
+    _stale_outside_scanned = 0
     _page_sources.clear()
     _document_referrers.clear()
     _generation_counts.clear()
@@ -2262,21 +2271,51 @@ def _git_toplevel(root: Path) -> "Path | None":
 
 
 def _relative_to_root(directories: list, root: Path) -> list:
-    """Each directory relative to `root`, or None when it lies outside the
-    repository that holds `root` (then only the absolute form can name it).
-    A sub-repository is its own repository here, which is what its face
-    commits."""
-    top = _git_toplevel(root) or Path(root).resolve()
+    """Each directory relative to `root`, with `../` where that is what the
+    layout is. None only when no relative form exists at all (another drive).
+
+    ⚠️ Until 1.8.68 this returned None for anything outside the REPOSITORY
+    holding `root`, on the reasoning that a sub-repository is its own
+    repository and that is what its face commits. Measured on the face that
+    asked for the key: its manifest root is a submodule and its `--app` docs
+    live in the parent repository, so every entry came back None and the
+    ticket's own problem — a tracked manifest full of machine-specific
+    absolute paths — was not solved for the face that reported it. The
+    relative form is never WORSE than the absolute one for that purpose:
+    `../docs/<face>/screens/html` survives a clone at another path, an
+    absolute path does not. So it is emitted, and whether it leaves the
+    repository is said in its own key rather than by erasing the value.
+    (2026-09-10, filed after 1.8.68 shipped; see
+    `directoriesRelative-is-null-for-every-submodule-face-…`.)"""
+    base = str(Path(root).resolve())
     out: list = []
     for d in directories:
         try:
-            real = Path(d).resolve()
-            real.relative_to(top)
+            out.append(os.path.relpath(str(Path(d).resolve()), base))
         except (OSError, ValueError):
+            # No relative form exists (a different drive on Windows). Not the
+            # same as "outside the repository", which now has its own key.
             out.append(None)
-            continue
-        out.append(os.path.relpath(str(real), str(Path(root).resolve())))
     return out
+
+
+def _outside_repo_flags(directories: list, root: Path) -> list:
+    """For each directory, whether it lies outside the repository holding
+    `root` — index-aligned with `directories` and `directoriesRelative`.
+
+    This carries what the None used to carry, without destroying the path.
+    A face that clones only its own sub-repository cannot reach a `true`
+    entry from that clone; a face whose tree is one repository sees all
+    `false`. A sub-repository is its own repository here."""
+    top = _git_toplevel(root) or Path(root).resolve()
+    flags: list = []
+    for d in directories:
+        try:
+            Path(d).resolve().relative_to(top)
+            flags.append(False)
+        except (OSError, ValueError):
+            flags.append(True)
+    return flags
 
 
 def _under_any(p, scopes: list) -> bool:
@@ -2370,6 +2409,18 @@ def _record_into(target: dict, targets: list, manifest, stale: list, outside: di
     # that face's view, and the paths say which file it is.
     mine = [(p, copies) for p, copies in stale_outside if _under_any(p, scopes)]
     facts["leftoversOutside"] = len(mine)
+    # The scan looked at every directory the run wrote outside -o; this block
+    # only lists the ones under THIS face's scope. Counted, not listed, like
+    # `outsideOutput.elsewhere` — otherwise a scoped 0 reads as "the scan
+    # found nothing" when the scan found several and filed them elsewhere.
+    # Measured on a single-root run where the console said 3 pages and the
+    # manifest said 0, which is exactly what the one-convention-for-zero
+    # ruling (1.8.68) says a 0 must never mean. The console's count is
+    # `leftoversOutside + leftoversOutsideElsewhere`.
+    facts["leftoversOutsideElsewhere"] = len(stale_outside) - len(mine)
+    # …and how many directories the scan walked to get there. A zero with a
+    # zero denominator is not the same answer as a zero with a denominator.
+    facts["leftoversOutsideScanned"] = _stale_outside_scanned
     facts["leftoverOutsidePaths"] = [str(p) for p, _c in mine[:20]]
     facts["leftoverOutsideSiteCopies"] = [str(c) for _p, copies in mine[:20] for c in copies]
     facts["leftoverOutsideReferencedBy"] = {
@@ -2393,9 +2444,16 @@ def _record_into(target: dict, targets: list, manifest, stale: list, outside: di
         # record's point — the list is byte-identical across clones. A
         # directory outside this repository has no such form and is None.
         block["directoriesRelative"] = _relative_to_root(block.get("directories") or [], root)
+        # Index-aligned with the two lists above: whether that directory is
+        # outside the repository holding this root. The relative form is still
+        # given for those — it is what a face with the whole tree checked out
+        # follows — but a face that clones only its sub-repository cannot.
+        block["directoriesOutsideRepo"] = _outside_repo_flags(
+            block.get("directories") or [], root)
         # The scope is absolute too; the same block must not hold one key
         # with a relative twin and another without. The root itself is `.`.
         block["scopeRelative"] = _relative_to_root(block["scope"], root)
+        block["scopeOutsideRepo"] = _outside_repo_flags(block["scope"], root)
         facts["outsideOutput"] = block
     if slots:
         # Its own key, not `collisions`: that word already belongs to the
@@ -2633,6 +2691,7 @@ def _report_stale_pages_outside(output_path: Path, started_at: "float | None" = 
     cutoff = (started_at - 1) if started_at is not None else None
     seen: set = set()
     stale: list = []
+    global _stale_outside_scanned
     for d in sorted(_written_outside_output, key=str):
         try:
             real = d.resolve()
@@ -2644,6 +2703,11 @@ def _report_stale_pages_outside(output_path: Path, started_at: "float | None" = 
         for pattern in ("*.html", "*.md"):
             stale.extend(p for p in real.rglob(pattern) if _is_leftover(p, written, cutoff))
     stale = sorted(set(stale))
+    # How many directories this scan actually walked. Recorded HERE, by the
+    # scan, rather than re-derived at the recording site: the same rule
+    # written in two places drifts, and the number's whole job is to say
+    # whether the zero beside it was measured.
+    _stale_outside_scanned = len(seen)
     if not stale:
         return []
     pairs = [(p, _site_copies_of(p, output_path, written)) for p in stale]

@@ -206,3 +206,83 @@ def test_the_document_writer_registers_its_source_and_its_referrers(tmp_path, mo
     gen._generate_document_pages(site / "tests", out, generated_files, {"tests": []}, roots_by_app={None: site})
     assert gen._document_referrers.get(doc.resolve()) == ["Guide test one", "Guide test two"]
     assert doc.resolve() in set(gen._page_sources.values())
+
+
+def test_a_scoped_zero_says_how_many_the_scan_found_outside_this_scope(run):
+    """Regression: scoped-zero-hides-the-nonzero-the-scan-found-leftoversOutside.
+
+    A single-root run's scope is the root alone, so leftovers in the face's
+    docs — which the scan DID find and the console DID name — fall outside
+    it and the block recorded 0. Under the one-convention-for-zero ruling
+    (1.8.68) a 0 means "the run counted and found none", so that 0 was false
+    by the tool's own rule. Reported 2026-09-10 by the face that had asked
+    for that ruling: its console said 3 pages while its manifest said 0.
+    Counted, not listed, like `outsideOutput.elsewhere`.
+
+    ⚠️ This does not reproduce on a two-app run: there the scope holds each
+    face's docs, so the leftovers land INSIDE it. The single-root shape is
+    the only one that shows it.
+    """
+    site, out, docs, orphan, orphan_md, site_copy = run
+    pairs = gen._report_stale_pages_outside(out, started_at=time.time())
+    assert len(pairs) == 2, "fixture: this is what the scan and the console found"
+
+    # Single root: scope is `site/a` alone; the leftovers live under site/docs/a.
+    gen._record_generation_manifest(out, site / "a", [], {}, stale_outside=pairs)
+    run_block = _manifest(site / "a")["summary"]["run"]
+    assert run_block["leftoversOutside"] == 0
+    assert run_block["leftoverOutsidePaths"] == []
+    # …and the record no longer lets that 0 stand alone.
+    assert run_block["leftoversOutsideElsewhere"] == 2
+    # The property that closes it: the console's count is the sum.
+    assert (run_block["leftoversOutside"] + run_block["leftoversOutsideElsewhere"]
+            == len(pairs))
+
+
+def test_a_scope_that_covers_the_leftovers_reports_none_elsewhere(run):
+    """The control for the arm above: same run, same leftovers, a scope that
+    holds them. Without this, `leftoversOutsideElsewhere` could be a constant
+    equal to the scan's count."""
+    site, out, docs, orphan, orphan_md, site_copy = run
+    pairs = gen._report_stale_pages_outside(out, started_at=time.time())
+    targets = [{"app": "a", "root": site / "a", "docs": docs["a"]},
+               {"app": "b", "root": site / "b", "docs": docs["b"]}]
+    gen._record_generation_manifest(out, targets, [], {}, stale_outside=pairs)
+    a = _manifest(site / "a")["summary"]["run"]
+    b = _manifest(site / "b")["summary"]["run"]
+    assert a["leftoversOutside"] == 2 and a["leftoversOutsideElsewhere"] == 0
+    # Face b holds none of them, and says so on both keys: 0 under its scope,
+    # and 2 that the same scan found under someone else's.
+    assert b["leftoversOutside"] == 0 and b["leftoversOutsideElsewhere"] == 2
+
+
+def test_a_zero_says_whether_it_had_anything_to_scan(run):
+    """triage's sharpening of the scoped-zero ticket, 2026-09-10.
+
+    `leftoversOutside: 0` comes out of two different runs: one that walked
+    four directories and found nothing, and one that had no directory
+    registered to walk. The discriminator lived in the record already
+    (`outsideOutput.directories`), but a reader gating on
+    `leftoversOutside == 0` does not know that, and passes unconditionally
+    on the second kind. So the scan's own denominator sits beside the count.
+    """
+    site, out, docs, orphan, orphan_md, site_copy = run
+    orphan.unlink(); orphan_md.unlink()          # nothing stale, dirs still registered
+    assert gen._report_stale_pages_outside(out, started_at=time.time()) == []
+    gen._record_generation_manifest(out, site / "a", [], {}, stale_outside=[])
+    looked = _manifest(site / "a")["summary"]["run"]
+    assert looked["leftoversOutside"] == 0
+    assert looked["leftoversOutsideScanned"] == 3, "the fixture registers three directories"
+
+    # The other run that produces the same 0: nothing registered to scan.
+    gen._written_outside_output.clear()
+    gen._stale_outside_scanned = 0
+    assert gen._report_stale_pages_outside(out, started_at=time.time()) == []
+    gen._record_generation_manifest(out, site / "b", [], {}, stale_outside=[])
+    blind = _manifest(site / "b")["summary"]["run"]
+    assert blind["leftoversOutside"] == 0
+    assert blind["leftoversOutsideScanned"] == 0
+    # The two runs differ on the denominator and only on the denominator —
+    # which is the whole claim.
+    assert looked["leftoversOutside"] == blind["leftoversOutside"]
+    assert looked["leftoversOutsideScanned"] != blind["leftoversOutsideScanned"]
