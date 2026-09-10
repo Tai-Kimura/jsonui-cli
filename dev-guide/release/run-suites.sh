@@ -145,6 +145,15 @@ rb_suite() {
 }
 rb_suite sjui_tools "rspec"                 # no Gemfile: plain rspec
 rb_suite kjui_tools "bundle exec rspec"
+# rjui's fold and type-check arms need the toolchain pinned under
+# rjui_tools/spec/support (tsc + esbuild). Without it they SKIP through
+# mark_skipped! — visible as `pending` in the summary line, invisible to the
+# `failures=` count this runner ends with. Measured 2026-09-10: 6 pending,
+# every one of them an arm for that day's fix. A skipped gate gates nothing,
+# so the install is a leg, and a leg that cannot install is a failure.
+say "== rjui_tools spec support (npm ci --prefix rjui_tools/spec/support)"
+(cd "$C" && npm ci --prefix rjui_tools/spec/support --prefer-offline --no-audit --no-fund 2>&1 | tail -1)
+rc=$?; say "   exit=$rc"; [ "$rc" = 0 ] || bad "rjui_tools: spec support not installed — the fold and tsc arms would skip"
 rb_suite rjui_tools "bundle exec rspec"
 
 # --- Ruby 2.6: the consumer floor, and a CI leg this runner did not have ----
