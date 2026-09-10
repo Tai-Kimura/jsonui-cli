@@ -22,6 +22,7 @@ from jui_cli.core.screen_identity import (
     TRANSITION_ALIASES_KEY,
     app_owned_transitions,
     classify_destination,
+    destination_parts,
     load_canon,
     parse_app_owned_screens,
     parse_transition_aliases,
@@ -128,3 +129,31 @@ class TheCanonNamesTheKeysTheCodeReads(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ADestinationCanNameSeveralScreens(unittest.TestCase):
+    def test_parts_are_the_classifiers_split(self):
+        self.assertEqual(destination_parts("Chat or Mypage（source依存。戻る）"), ["Chat", "Mypage"])
+        self.assertEqual(destination_parts("A / B、C"), ["A", "B", "C"])
+
+    def test_a_single_destination_has_no_parts(self):
+        self.assertEqual(destination_parts("Ledger（Next.js router.push）"), [])
+        self.assertEqual(destination_parts(""), [])
+
+    def test_the_classifier_alone_returns_the_first_screen(self):
+        # the reason the diagram asks for the parts
+        t = classify_destination("Chat or Mypage（戻る）", ("chat", "mypage"))
+        self.assertEqual((t.kind, t.screen_id), ("screen", "chat"))
+
+
+class ExternalSpellingsReadOffTheSecondCorpus(unittest.TestCase):
+    """2026-09-10: three of a face's unresolved destinations said 'external'
+    in English and were filed as unknown."""
+
+    def test_each(self):
+        for raw in ("External Browser（商品URL）", "Browser (URL)", "External Map App（バー座標）"):
+            with self.subTest(raw=raw):
+                self.assertEqual(classify_destination(raw, ("chat",)).kind, "external")
+
+    def test_a_screen_named_browser_still_wins(self):
+        self.assertEqual(classify_destination("Browser (URL)", ("browser",)).kind, "screen")

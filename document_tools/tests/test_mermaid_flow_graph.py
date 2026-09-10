@@ -121,6 +121,63 @@ class FlowEdgeTests(unittest.TestCase):
         _nodes, edges = flow_edges(steps, self.resolver)
         self.assertEqual(edges, [])
 
+    def test_platform_exclusive_sibling_steps_are_not_consecutive(self):
+        """iOS lands on chat, Android on confirm — the same
+        step position, two devices. Read as one sequence they produced
+        chat -> confirm, which no platform performs
+        (2 of a face's 36 absent transitions, 2026-09-10)."""
+        resolver = ScreenResolver()
+        steps = [
+            _step("input_form", action="tap", id="register"),
+            _step("chat", id="message_input", when={"platform": "ios"}),
+            _step("confirm", id="question", when={"platform": "android"}),
+        ]
+        _nodes, edges = flow_edges(steps, resolver)
+        self.assertIn(("input_form", "chat", EDGE_FORWARD), edges)
+        self.assertIn(("input_form", "confirm", EDGE_FORWARD), edges)
+        self.assertNotIn(("chat", "confirm", EDGE_FORWARD), edges)
+
+    def test_responsive_siblings_are_not_consecutive_either(self):
+        """Third shape from the same face: two-pane `regular` vs `compact`."""
+        resolver = ScreenResolver()
+        steps = [
+            _step("following_bar_list", action="tap", id="row"),
+            _step("tablet_detail", when={"responsive": "regular"}),
+            _step("tablet_detail", id="sort", when={"responsive": "regular"}),
+            _step("detail", when={"responsive": "compact"}),
+        ]
+        _nodes, edges = flow_edges(steps, resolver)
+        self.assertIn(("following_bar_list", "tablet_detail", EDGE_FORWARD), edges)
+        self.assertIn(("following_bar_list", "detail", EDGE_FORWARD), edges)
+        self.assertNotIn(("tablet_detail", "detail", EDGE_FORWARD), edges)
+
+    def test_two_when_keys_combine(self):
+        resolver = ScreenResolver()
+        steps = [
+            _step("a"),
+            _step("b", when={"platform": "ios"}),
+            _step("c", when={"responsive": "compact"}),
+            _step("d", when={"platform": "android", "responsive": "regular"}),
+        ]
+        _nodes, edges = flow_edges(steps, resolver)
+        # ios+compact: a→b→c ; ios+regular: a→b ; android+compact: a→c ; android+regular: a→d
+        self.assertEqual(sorted(edges), sorted([
+            ("a", "b", EDGE_FORWARD), ("b", "c", EDGE_FORWARD),
+            ("a", "c", EDGE_FORWARD), ("a", "d", EDGE_FORWARD)]))
+
+    def test_an_ungated_step_after_gated_siblings_follows_each_platform(self):
+        resolver = ScreenResolver()
+        steps = [
+            _step("a"),
+            _step("b", when={"platform": "ios"}),
+            _step("c", when={"platform": "android"}),
+            _step("d"),
+        ]
+        _nodes, edges = flow_edges(steps, resolver)
+        self.assertEqual(sorted(edges), sorted([
+            ("a", "b", EDGE_FORWARD), ("b", "d", EDGE_FORWARD),
+            ("a", "c", EDGE_FORWARD), ("c", "d", EDGE_FORWARD)]))
+
     def test_non_dict_steps_are_ignored(self):
         nodes, _edges = flow_edges(["oops", _step("login")], self.resolver)
         self.assertEqual(nodes, ["login"])

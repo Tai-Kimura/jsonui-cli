@@ -427,6 +427,7 @@ def _resolve_layouts_dir_from_config() -> Path | None:
     return None
 
 from . import __version__
+from . import run_log
 from .run_log import warn
 from .test_doc import (
     DocumentGenerator,
@@ -514,6 +515,17 @@ def cmd_generate_doc(args):
 
 def cmd_generate_html(args):
     """Handle 'generate html' command - generate HTML directory with index."""
+    # The tally covers the WHOLE command: warnings this function prints
+    # before generation (a missing --figma, an unreadable --app config, no
+    # jui.config.json) are this run's warnings too.
+    run_log.begin()
+    try:
+        return _cmd_generate_html(args)
+    finally:
+        run_log.end()
+
+
+def _cmd_generate_html(args):
     input_dir = Path(args.input)
     output_dir = Path(args.output) if args.output else Path("html")
     title = args.title or "JsonUI Test Documentation"
@@ -733,8 +745,8 @@ def cmd_generate_mermaid(args):
         else:
             result = build_diagram(spec_dir, screens_dir=screens_dir, layouts_dir=layouts_dir, **kwargs)
         for u in result.unresolved:
-            print(f"  WARNING [doc-diagram]: {u.source}: destination {u.raw!r} could not be "
-                  f"resolved ({u.why}) and was treated as absent", file=sys.stderr)
+            warn(f"  WARNING [doc-diagram]: {u.source}: destination {u.raw!r} could not be "
+                 f"resolved ({u.why}) and was treated as absent")
         for e in result.errors:
             print(f"  ERROR [doc-diagram]: {e}", file=sys.stderr)
         print()
@@ -1622,10 +1634,10 @@ def cmd_generate_spec_batch(args, input_dir: Path):
         for _f in spec_files
     ]
     for _line in report_foreign_output(output_dir, _planned, suffix):
-        print(f"WARNING: {_line}", file=sys.stderr)
+        warn(f"WARNING: {_line}")
     for _line in report_overwrites_by_another_producer(
             output_dir, _planned, "spec-batch"):
-        print(f"WARNING: {_line}", file=sys.stderr)
+        warn(f"WARNING: {_line}")
 
     validator = SpecValidator()
     success_count = 0
@@ -1970,10 +1982,10 @@ def cmd_generate_component_batch(args, input_dir: Path):
         for _f in component_files
     ]
     for _line in report_foreign_output(output_dir, _planned, suffix):
-        print(f"WARNING: {_line}", file=sys.stderr)
+        warn(f"WARNING: {_line}")
     for _line in report_overwrites_by_another_producer(
             output_dir, _planned, "component-batch"):
-        print(f"WARNING: {_line}", file=sys.stderr)
+        warn(f"WARNING: {_line}")
 
     validator = SpecValidator()
     success_count = 0

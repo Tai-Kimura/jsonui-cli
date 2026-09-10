@@ -916,6 +916,7 @@ def _diagram_owners(
     layouts_override: Path | None,
     root_app: str,
     flow_groups: list[str],
+    test_roots: list[dict] | None = None,
 ) -> list[dict]:
     """One entry per app that can have a diagram — i.e. per SPEC directory.
 
@@ -932,13 +933,29 @@ def _diagram_owners(
 
     Each entry: ``{name, app, spec_dir, layouts_dir, aliases, app_owned,
     app_owned_transitions, flows_dir, screens_dir, rel}``.
+
+    ⚠️ An app's flow tests live where its config's ``test.src`` says
+    (``test_roots``), which in a split tree is ``<app>/tests`` — NOT under
+    the run's input directory. The first version looked only at
+    ``<input>/<app>/flows`` and checked 0 of a face's 59 flow tests, which
+    reads exactly like "no violations" (measured by triage 2026-09-10 on an
+    isolated copy). ``<input>/<app>`` remains the fallback for the shared
+    ``tests/<app>/`` shape, where no app declares ``test.src``.
     """
     from .mermaid.flow_graph import import_jui_cli_module
     project_config = import_jui_cli_module("jui_cli.core.project_config")
     screen_identity = import_jui_cli_module("jui_cli.core.screen_identity")
+    roots_by_app: dict[str | None, Path] = {}
+    for entry in (test_roots or []):
+        if entry.get("root"):
+            roots_by_app[entry.get("app")] = Path(entry["root"])
 
     def tests_for(app: str | None) -> tuple[Path, Path]:
-        base = input_path / app if app else input_path
+        declared = roots_by_app.get(app)
+        if declared is not None and declared.is_dir():
+            base = declared
+        else:
+            base = input_path / app if app else input_path
         flows = base / "flows" if (base / "flows").exists() else base
         screens = base / "screens" if (base / "screens").exists() else flows.parent / "screens"
         return flows, screens
@@ -1428,7 +1445,8 @@ def generate_html_directory(
     # directory anywhere gets a WARNING, not a diagram — its transitions
     # cannot be checked against a spec that does not exist.
     owners = _diagram_owners(
-        input_path, unit_roots, project_root, docs_base, layouts_dir, _root_app, flow_groups)
+        input_path, unit_roots, project_root, docs_base, layouts_dir, _root_app, flow_groups,
+        test_roots=test_roots)
     covered_groups = {o["app"] or "" for o in owners}
     for _group in flow_groups:
         if _group not in covered_groups:
@@ -1466,8 +1484,9 @@ def generate_html_directory(
                 print(f"    diagram {_owner}: specs {result.stats.get('specs', 0)} / "
                       f"transitions {result.stats.get('transitions', 0)} / "
                       f"edges {result.stats.get('spec_edges', 0)} / "
-                      f"flow tests {result.stats.get('flow_tests', 0)} checked "
-                      f"{result.stats.get('flow_edges', 0)} transition(s), absent "
+                      f"none inferred from wording {result.stats.get('none_inferred', 0)} / "
+                      f"flow tests {result.stats.get('flow_tests', 0)} in {owner['flows_dir']} "
+                      f"checked {result.stats.get('flow_edges', 0)} transition(s), absent "
                       f"{result.stats.get('absent', 0)}")
             else:
                 print(f"  Skipped: flow diagram — no spec under {owner['spec_dir']} declares a "

@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import io
 import json
+import re
 import tempfile
 import unittest
 from contextlib import redirect_stdout
@@ -354,3 +355,233 @@ class TheHtmlEntryPointReturnsTheResult(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TheOwnersFindAnAppsFlowTestsWhereItsConfigSaysTheyAre(unittest.TestCase):
+    """A split tree keeps each app's tests beside the app (`<app>/tests`,
+    declared by `test.src`), not under the run's input directory. The first
+    owner resolution looked only at `<input>/<app>/flows` and checked 0 of a
+    face's 59 flow tests — which reads as "no violations". Measured by a
+    triage lane on an isolated copy, 2026-09-10."""
+
+    def test_flow_tests_declared_by_test_src_are_checked(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            app = root / "alpha"
+            _write(app / "jui.config.json", {
+                "spec_directory": "../docs/alpha/screens/json",
+                "layouts_directory": "../docs/alpha/screens/layouts",
+                "test": {"src": "tests"}})
+            for name, dests in (("login", ["Mypage"]), ("mypage", [])):
+                _write(root / "docs" / "alpha" / "screens" / "layouts" / f"{name}.json", {"type": "View"})
+                _write(root / "docs" / "alpha" / "screens" / "json" / f"{name}.spec.json", {
+                    "type": "screen_spec", "version": "1.0",
+                    "metadata": {"name": name, "displayName": name, "description": "d"},
+                    "structure": {"components": [{"type": "View", "id": "root", "description": "r"}],
+                                  "layout": {"root": "root", "children": []}},
+                    "transitions": [{"trigger": "t", "condition": "c", "destination": d} for d in dests]})
+            # the app's own flow test, beside the app — with an absent transition
+            _write(app / "tests" / "flows" / "nav.test.json",
+                   {"type": "flow", "metadata": {"name": "Round trip"},
+                    "steps": [_s("login"), _s("mypage"), _s("login")]})
+            # the run's input is a DIFFERENT tests directory (another app's)
+            _write(root / "beta" / "tests" / "screens" / "x.test.json",
+                   {"type": "screen", "source": {"layout": "x.json"}, "metadata": {"name": "X"},
+                    "cases": [{"name": "c", "steps": []}]})
+            buf = io.StringIO()
+            with redirect_stdout(buf):
+                generate_html_directory(
+                    root / "beta" / "tests", root / "out", title="Split",
+                    apps=[{"name": "alpha", "docs_path": root / "docs" / "alpha"}],
+                    unit_roots=[{"app": "alpha", "root": app}],
+                    test_roots=[{"app": "alpha", "root": app / "tests"}])
+            log = buf.getvalue()
+            self.assertIn("flow tests 1 in", log, log)
+            self.assertEqual([(e["owner"], e["from"], e["to"]) for e in get_diagram_errors()],
+                             [("alpha", "mypage", "login")])
+
+    def test_without_test_roots_the_shared_tests_app_shape_still_works(self):
+        # 陰性対照 for the arm above: the `tests/<app>/` shape has no test.src
+        # and is found under the input directory, as before.
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _write(root / "alpha" / "jui.config.json", {
+                "spec_directory": "../docs/alpha/screens/json",
+                "layouts_directory": "../docs/alpha/screens/layouts"})
+            for name, dests in (("login", ["Mypage"]), ("mypage", [])):
+                _write(root / "docs" / "alpha" / "screens" / "layouts" / f"{name}.json", {"type": "View"})
+                _write(root / "docs" / "alpha" / "screens" / "json" / f"{name}.spec.json", {
+                    "type": "screen_spec", "version": "1.0",
+                    "metadata": {"name": name, "displayName": name, "description": "d"},
+                    "structure": {"components": [{"type": "View", "id": "root", "description": "r"}],
+                                  "layout": {"root": "root", "children": []}},
+                    "transitions": [{"trigger": "t", "condition": "c", "destination": d} for d in dests]})
+            _write(root / "tests" / "alpha" / "flows" / "nav.test.json",
+                   {"type": "flow", "metadata": {"name": "Round trip"},
+                    "steps": [_s("login"), _s("mypage"), _s("login")]})
+            with redirect_stdout(io.StringIO()):
+                generate_html_directory(
+                    root / "tests", root / "out", title="Shared",
+                    apps=[{"name": "alpha", "docs_path": root / "docs" / "alpha"}],
+                    unit_roots=[{"app": "alpha", "root": root / "alpha"}])
+            self.assertEqual([(e["owner"], e["from"], e["to"]) for e in get_diagram_errors()],
+                             [("alpha", "mypage", "login")])
+
+
+class InferredNoneIsListedNotHidden(unittest.TestCase):
+    """`none` is a positive declaration — but today every `none` is INFERRED
+    from wording, so a screen name that happens to contain 画面内 or SPA
+    would vanish with the same silence. Listed, not warned (a consumer lane's
+    proposal, 2026-09-10)."""
+
+    def test_nones_are_counted_listed_on_the_page_and_not_drawn(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            face = _Face(Path(tmp))
+            face.spec("mypage", ["request モード（画面内状態）", "Settings"])
+            face.spec("settings", [])
+            out = face.root / "diagram.html"
+            result = generate_mermaid_html(face.specs, out, "T", face.screens, face.layouts, flows_dir=face.flows)
+            self.assertEqual([(n.source, n.raw) for n in result.nones], [("mypage", "request モード（画面内状態）")])
+            self.assertEqual(result.stats["none_inferred"], 1)
+            self.assertEqual(result.unresolved, [])
+            page = out.read_text(encoding="utf-8")
+            self.assertIn("read as &ldquo;no screen transition&rdquo; from their wording", page)
+            self.assertIn("request モード", page)
+            self.assertNotIn("mypage --> request", result.combined)
+
+    def test_an_empty_destination_is_unresolved_not_none(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            face = _Face(Path(tmp))
+            face.spec("mypage", [""])
+            result = face.build()
+            self.assertEqual(result.nones, [])
+            self.assertEqual([u.kind for u in result.unresolved], ["unknown"])
+
+
+class AParentSpecsTransitionsLiveInItsSubSpecs(unittest.TestCase):
+    """`chat.spec.json` (screen_parent_spec) carries no transitions; its 15
+    live in `chat/chat-core.spec.json` (screen_sub_spec). Reading the parent
+    alone said "chat's spec declares no transition to mypage" for 42 flow
+    tests on one face (reported by that face, 2026-09-10)."""
+
+    def _parent(self, face: _Face) -> None:
+        face.layout("chat")
+        _write(face.specs / "chat.spec.json", {
+            "type": "screen_parent_spec", "version": "1.0",
+            "metadata": {"name": "Chat", "displayName": "Chat", "description": "d"},
+            "subSpecs": [{"file": "chat/chat-core.spec.json", "name": "core"}],
+        })
+        _write(face.specs / "chat" / "chat-core.spec.json", {
+            "type": "screen_sub_spec", "version": "1.0",
+            "metadata": {"name": "ChatCore", "description": "d"},
+            "transitions": [{"trigger": "t", "condition": "c", "destination": "Mypage"}],
+        })
+
+    def test_the_sub_specs_transitions_are_the_parents(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            face = _Face(Path(tmp))
+            face.spec("mypage", [])
+            self._parent(face)
+            face.flow("nav", [_s("chat"), _s("mypage")])
+            result = face.build()
+            self.assertIn("chat --> mypage", result.combined)
+            self.assertEqual(result.errors, [])
+            origin = [t.spec_file for t in result.transitions_of("chat")] if hasattr(result, "transitions_of") else None
+
+    def test_a_sub_spec_file_is_not_a_screen_of_its_own(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            face = _Face(Path(tmp))
+            face.spec("mypage", [])
+            self._parent(face)
+            result = face.build()
+            self.assertNotIn("chat-core", result.combined)
+            self.assertNotIn("chat_core", result.combined)
+
+
+class ADestinationNamingSeveralScreensDeclaresEach(unittest.TestCase):
+    def test_chat_or_mypage_is_two_edges(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            face = _Face(Path(tmp))
+            face.spec("chat", [])
+            face.spec("mypage", [])
+            face.spec("profiling", ["Chat or Mypage（source依存。onDismissコールバックで遷移元に戻る）"])
+            face.flow("nav", [_s("profiling"), _s("mypage")])
+            result = face.build()
+            self.assertIn("profiling --> chat", result.combined)
+            self.assertIn("profiling --> mypage", result.combined)
+            self.assertEqual(result.errors, [])
+
+    def test_one_resolving_part_is_the_classifiers_single_answer(self):
+        # 陰性対照: "Chat / Nowhere" resolves one screen — the classifier's
+        # answer stands and no second edge appears.
+        with tempfile.TemporaryDirectory() as tmp:
+            face = _Face(Path(tmp))
+            face.spec("chat", [])
+            face.spec("profiling", ["Chat / Nowhere"])
+            result = face.build()
+            self.assertIn("profiling --> chat", result.combined)
+            self.assertEqual(result.combined.count("profiling -->"), 1)
+
+
+class TheRunShapeDoesNotChangeWhatIsChecked(unittest.TestCase):
+    """Measured by triage 2026-09-10 on one corpus: no --app → 59 flow tests /
+    36 errors; `--app client` → 0 / 0 and exit 0. The rule was silently never
+    applied in the shape the face uses to build its site."""
+
+    def _face(self, root: Path) -> _Face:
+        face = _Face(root)
+        face.spec("login", ["Mypage"])
+        face.spec("mypage", [])
+        face.flow("nav", [_s("login"), _s("mypage"), _s("login")], flow_name="Round trip")
+        return face
+
+    def _run(self, face: _Face, with_app: bool) -> tuple[str, list[dict]]:
+        buf = io.StringIO()
+        kwargs = {}
+        if with_app:
+            kwargs = dict(apps=[{"name": "face", "docs_path": face.root / "docs"}],
+                          unit_roots=[{"app": "face", "root": face.root}],
+                          test_roots=[{"app": "face", "root": face.root / "tests"}])
+        with redirect_stdout(buf):
+            generate_html_directory(face.root / "tests", face.root / "out", title="Shape", **kwargs)
+        return buf.getvalue(), get_diagram_errors()
+
+    def test_no_app_and_app_check_the_same_flow_tests(self):
+        with tempfile.TemporaryDirectory() as a, tempfile.TemporaryDirectory() as b:
+            log0, errors0 = self._run(self._face(Path(a)), with_app=False)
+            log1, errors1 = self._run(self._face(Path(b)), with_app=True)
+            n0 = re.search(r"flow tests (\d+) in", log0).group(1)
+            n1 = re.search(r"flow tests (\d+) in", log1).group(1)
+            self.assertEqual((n0, n1), ("1", "1"))
+            self.assertEqual([(e["from"], e["to"]) for e in errors0], [("mypage", "login")])
+            self.assertEqual([(e["from"], e["to"]) for e in errors1], [("mypage", "login")])
+
+
+class TheClosingLineCountsTheWholeCommand(unittest.TestCase):
+    """Warnings the CLI prints BEFORE generate_html_directory (no
+    jui.config.json, a missing --figma) were dropped by the accounting reset
+    inside it, and the closing line printed a confident number one to two
+    short of the gate's expression (verification lane, 4 runs, 2026-09-10).
+    The only window that sees this is the command itself, in-process."""
+
+    def test_closing_line_equals_the_gates_expression_over_the_output(self):
+        import contextlib
+        from jsonui_doc_cli.cli import cmd_generate_html
+        from jsonui_doc_cli.run_log import COUNTING_RE
+        from argparse import Namespace
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _write(root / "tests" / "flows" / "nav.test.json",
+                   {"type": "flow", "metadata": {"name": "nav"}, "steps": [_s("login"), _s("mypage")]})
+            args = Namespace(input=str(root / "tests"), output=str(root / "out"), title="Bare",
+                             docs=None, figma=str(root / "no-such-figma"), app=None, layouts_dir=None,
+                             config=None, with_checks=False, allow_partial=False)
+            out, err = io.StringIO(), io.StringIO()
+            with redirect_stdout(out), contextlib.redirect_stderr(err):
+                cmd_generate_html(args)
+            text = out.getvalue() + err.getvalue()
+            gate = sum(1 for line in text.splitlines() if COUNTING_RE.search(line))
+            closing = re.search(r"warnings (\d+)\)", text)
+            self.assertIsNotNone(closing, text)
+            self.assertIn("WARNING [doc-figma]", text)
+            self.assertEqual(int(closing.group(1)), gate, text)

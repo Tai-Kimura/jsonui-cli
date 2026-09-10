@@ -31,6 +31,27 @@ import re
 COUNTING_RE = re.compile(r"warning \[|warning:|\[warn|⚠", re.I)
 
 _emitted: list[str] = []
+#: True between `begin()` and `end()` — a CLI command owns the tally, and a
+#: `reset()` from inside the run (generate_html_directory's accounting
+#: reset) must not throw away what the command already emitted.
+_open: bool = False
+
+
+def begin() -> None:
+    """Start a command's tally. Called first thing by the CLI command, BEFORE
+    any warning it prints on its own (`--figma` missing, a config that will
+    not read, no jui.config.json): those fired ahead of
+    `generate_html_directory`, whose reset then dropped them, and the
+    closing line printed a confident number one to two short of the gate's
+    (measured over 4 runs by a verification lane, 2026-09-10)."""
+    global _open
+    _emitted.clear()
+    _open = True
+
+
+def end() -> None:
+    global _open
+    _open = False
 
 
 def warn(line: str) -> None:
@@ -49,4 +70,7 @@ def emitted() -> list[str]:
 
 
 def reset() -> None:
-    _emitted.clear()
+    """Clear the tally — unless a command opened it with `begin()`, in which
+    case the command's own warnings are part of this run and stay."""
+    if not _open:
+        _emitted.clear()

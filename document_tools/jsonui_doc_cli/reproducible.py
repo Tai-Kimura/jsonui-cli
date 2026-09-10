@@ -46,7 +46,11 @@ def _epoch() -> int | None:
     except ValueError:
         if raw not in _warned:
             _warned.add(raw)
-            print(
+            # Through the one tally: a warning the closing line does not
+            # count is a warning the gate counts alone (verification lane's
+            # run d, 2026-09-10).
+            from .run_log import warn
+            warn(
                 f"WARNING [doc]: {ENV} is not an integer ({raw!r}) — ignoring "
                 f"it; generated timestamps will use the current time"
             )

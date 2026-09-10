@@ -220,6 +220,28 @@ def flow_screen_sequence(
     return sequence
 
 
+def _step_conditions(step: dict) -> dict[str, frozenset[str]]:
+    """The ``when`` conditions a step is gated by: key -> accepted values.
+
+    ``when.platform`` and ``when.responsive`` are the two keys the corpus
+    uses; any key whose value is a string or a list of strings is treated
+    the same way. Keys with other value shapes cannot be evaluated here and
+    do not gate the step.
+    """
+    when = step.get("when")
+    if not isinstance(when, dict):
+        return {}
+    out: dict[str, frozenset[str]] = {}
+    for key, value in when.items():
+        if isinstance(value, str) and value:
+            out[key] = frozenset({value})
+        elif isinstance(value, list):
+            values = frozenset(v for v in value if isinstance(v, str) and v)
+            if values:
+                out[key] = values
+    return out
+
+
 def flow_edges(
     steps: Iterable[dict], resolver: ScreenResolver
 ) -> tuple[list[str], list[tuple[str, str, str]]]:
@@ -228,16 +250,46 @@ def flow_edges(
     ``edges`` are ``(from_id, to_id, kind)`` with kind ``forward``/``back``.
     Self-loops cannot occur (consecutive duplicates are collapsed first)
     but are filtered defensively.
+
+    ⚠️ A flow runs ONCE PER CONTEXT — per platform, per responsive class —
+    and a step gated by ``when.platform`` / ``when.responsive`` runs only in
+    its own. Two sibling steps gated ``ios`` and ``android`` (or ``regular``
+    and ``compact``) are therefore never consecutive in any run; reading
+    them as one sequence invented transitions (the iOS branch's screen
+    followed by the Android branch's; the two-pane tablet screen followed
+    by the compact one) that no run performs. Reported by a consumer lane
+    2026-09-10: 3 of its 36 absent transitions were this shape. So the
+    sequence is built once per combination of the ``when`` values the flow
+    uses, and the edges are the union.
     """
-    sequence = flow_screen_sequence(steps, resolver)
-    nodes = [screen for screen, _ in sequence]
+    import itertools
+    steps = [s for s in steps if isinstance(s, dict)]
+    conditions = [_step_conditions(s) for s in steps]
+    keys = sorted({k for c in conditions for k in c})
+    values_by_key = {k: sorted({v for c in conditions for v in c.get(k, ())}) for k in keys}
+    contexts = list(itertools.product(*(values_by_key[k] for k in keys))) or [()]
+    nodes: list[str] = []
     edges: list[tuple[str, str, str]] = []
-    for index in range(len(sequence) - 1):
-        from_id = sequence[index][0]
-        to_id, via_back = sequence[index + 1]
-        if from_id == to_id:
-            continue
-        edges.append((from_id, to_id, EDGE_BACK if via_back else EDGE_FORWARD))
+    seen: set[tuple[str, str, str]] = set()
+    for context in contexts:
+        assignment = dict(zip(keys, context))
+        subset = [
+            s for s, c in zip(steps, conditions)
+            if all(k not in c or assignment[k] in c[k] for k in keys)
+        ]
+        sequence = flow_screen_sequence(subset, resolver)
+        for screen, _ in sequence:
+            if screen not in nodes:
+                nodes.append(screen)
+        for index in range(len(sequence) - 1):
+            from_id = sequence[index][0]
+            to_id, via_back = sequence[index + 1]
+            if from_id == to_id:
+                continue
+            edge = (from_id, to_id, EDGE_BACK if via_back else EDGE_FORWARD)
+            if edge not in seen:
+                seen.add(edge)
+                edges.append(edge)
     return nodes, edges
 
 

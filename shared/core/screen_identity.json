@@ -374,6 +374,9 @@
           "strip a trailing parenthetical, full-width or half-width, then split on ' or ', '/', and '、' and try each part",
           "apply the face's declared aliases (below)"
         ],
+        "multipleScreens": "A destination whose split parts (pipeline step 2) resolve to MORE THAN ONE screen — `Chat or Mypage（source依存…）` — declares a transition to each. classify_destination returns the first match; the diagram asks jui_cli.core.screen_identity.destination_parts for the parts and classifies each. One resolving part is the classifier's single answer, unchanged.",
+        "parentSpecs": "A `screen_parent_spec` carries no transitions; its `subSpecs[].file` entries (type `screen_sub_spec`) do. The diagram merges them under the parent's screen id (the parent's stem). Measured 2026-09-10: one face's main screen had 0 transitions in the parent and 15 in the sub spec, and reading the parent alone produced false errors for 42 flow tests.",
+        "flowTestConditions": "For the CHECK: a flow test runs once per context (platform, responsive class), and a step gated by `when.platform` / `when.responsive` — any `when` key with a string or list-of-strings value — runs only in its own. Two sibling steps gated ios / android, or regular / compact, are never consecutive; the sequence is built once per combination of the `when` values the flow uses and the edges are the union (measured 2026-09-10: 3 invented transitions on one face).",
         "aliases": {
           "shape": "each declared alias is (position, affix); position is drawn from the closed set below",
           "positions": ["prefix", "suffix"],

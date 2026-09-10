@@ -131,6 +131,8 @@ class DiagramResult:
     combined: str = ""
     errors: list[TransitionError] = field(default_factory=list)
     unresolved: list[SpecTransition] = field(default_factory=list)
+    #: `none` transitions, all inferred from wording today (see SpecGraph.nones)
+    nones: list[SpecTransition] = field(default_factory=list)
     stats: dict[str, int] = field(default_factory=dict)
 
 
@@ -163,11 +165,13 @@ def build_diagram(
         app_owned=app_owned, app_owned_transitions=app_owned_transitions,
     )
     result.unresolved = list(graph.unresolved)
+    result.nones = list(graph.nones)
     result.stats = {
         "specs": graph.specs_scanned,
         "transitions": len(graph.transitions),
         "spec_edges": len(graph.forward_pairs()),
         "unresolved": len(graph.unresolved),
+        "none_inferred": len(graph.nones),
     }
 
     tree = _walk_test_tree(screens_path, flows_path)
@@ -881,7 +885,8 @@ def generate_mermaid_html(
         return result
 
     html_content = _generate_tabbed_mermaid_html_page(
-        result.diagrams, title, errors=result.errors, unresolved=result.unresolved)
+        result.diagrams, title, errors=result.errors, unresolved=result.unresolved,
+        nones=result.nones)
     output_path = Path(output_path)
     output_path.parent.mkdir(parents=True, exist_ok=True)
     with open(output_path, 'w', encoding='utf-8') as f:
@@ -1240,7 +1245,7 @@ def _generate_mermaid_html_page(mermaid_code: str, title: str) -> str:
     return html
 
 
-def _issues_html(errors, unresolved) -> str:
+def _issues_html(errors, unresolved, nones=()) -> str:
     """The check's findings, on the page the reader is already looking at."""
     parts: list[str] = []
     if errors:
@@ -1268,14 +1273,24 @@ def _issues_html(errors, unresolved) -> str:
             f'<p>Not drawn, and not an error by themselves. Name the screen id, declare an alias '
             f'(<code>spec.transitionAliases</code>), or declare the destination as '
             f'<code>none</code> / external.</p><ul>{items}</ul></div>')
+    if nones:
+        items = "".join(
+            f"<li><code>{escape_html(u.source)}</code>: &ldquo;{escape_html(u.raw)}&rdquo;</li>"
+            for u in nones)
+        parts.append(
+            f'<div class="issues nones"><h2>INFO: {len(nones)} destination(s) read as '
+            f'&ldquo;no screen transition&rdquo; from their wording</h2>'
+            f'<p>Not drawn, by declaration. Listed because the kind is inferred from words such as '
+            f'画面内 / SPA / tab — a screen name that happens to contain one lands here too, and a reader '
+            f'could not otherwise tell the two apart.</p><ul>{items}</ul></div>')
     return "\n".join(parts)
 
 
 def _generate_tabbed_mermaid_html_page(
-    diagrams: dict[str, str], title: str, errors=(), unresolved=()
+    diagrams: dict[str, str], title: str, errors=(), unresolved=(), nones=()
 ) -> str:
     """Generate HTML page with tabs for each group diagram."""
-    issues_html = _issues_html(list(errors), list(unresolved))
+    issues_html = _issues_html(list(errors), list(unresolved), list(nones))
 
     # Build tab buttons and content
     tab_buttons = []
@@ -1503,6 +1518,11 @@ def _generate_tabbed_mermaid_html_page(
         .issues.unresolved {{
             border-left-color: #ff9800;
             background: #fff3e0;
+        }}
+
+        .issues.nones {{
+            border-left-color: #90a4ae;
+            background: #eceff1;
         }}
 
         .diagram-wrapper {{

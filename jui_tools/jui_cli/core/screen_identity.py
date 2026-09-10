@@ -498,7 +498,12 @@ _SPLIT = re.compile(r"\s+or\s+|/|、|,")
 _ROUTE = re.compile(r"\A/[A-Za-z0-9\-_/\[\]:.]*\Z")
 _EXTERNAL = re.compile(
     r"https?://|tel:|mailto:|外部ブラウザ|外部アプリ|ブラウザ[でを]|App ?Store|"
-    r"Google Maps|Apple Maps|メーラー|Phone app"
+    r"Google Maps|Apple Maps|メーラー|Phone app|"
+    # Read off a second corpus 2026-09-10 (a face's 14 unresolved
+    # destinations, 3 of which said "external" in English and were filed
+    # as unknown): `External Browser（商品URL）`, `Browser (URL)`,
+    # `External Map App（バー座標）`.
+    r"External Browser|External Map|Browser \(URL\)"
 )
 _NONE = re.compile(r"同画面|画面内|遷移なし|遷移しない|タブ切替|そのまま|留まる")
 #: Anchored at the start ON PURPOSE — see `classify_destination`. The spelling
@@ -527,6 +532,22 @@ class TransitionTarget:
 
 def _norm_id(value: str) -> str:
     return re.sub(r"[\s_\-]", "", value).lower()
+
+
+def destination_parts(raw: str) -> list[str]:
+    """The de-parenthesized PARTS of a destination, when there are several.
+
+    ``classify_destination`` tries the parts in order and returns the FIRST
+    screen that matches, so ``Chat or Mypage（source依存…）`` classifies as
+    ``chat`` and the transition to ``mypage`` is lost. A destination that
+    names several screens declares a transition to EACH; the diagram asks
+    for the parts here and classifies each one. Same split as the
+    classifier's (canon ``normalization.pipeline`` step 2) — this is the
+    one place that split is written. ``[]`` when there is only one part.
+    """
+    cleaned = _strip_parentheticals(raw.strip())
+    parts = [p.strip() for p in _SPLIT.split(cleaned) if p.strip()]
+    return parts if len(parts) > 1 else []
 
 
 def _candidates(raw: str) -> list[str]:

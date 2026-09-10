@@ -58,6 +58,12 @@ class SpecGraph:
     externals: list[tuple[str, str]] = field(default_factory=list)
     #: ``unknown`` and unmapped ``route`` destinations: treated as ABSENT
     unresolved: list[SpecTransition] = field(default_factory=list)
+    #: ``none`` destinations. Today every one of them is INFERRED from the
+    #: wording ("画面内", "SPA"...) — no spec declares the kind explicitly —
+    #: so an author who wrote a screen name that happens to contain such a
+    #: word lands here silently. Listed (not warned) so the two can be told
+    #: apart by a reader; a consumer lane asked for exactly this 2026-09-10.
+    nones: list[SpecTransition] = field(default_factory=list)
     transitions: list[SpecTransition] = field(default_factory=list)
     #: screen ids that HAVE a spec file or an app-owned declaration — the
     #: error message for a flow transition needs to say which of "no spec"
@@ -117,6 +123,36 @@ def _spec_label(data: dict) -> str:
     return ""
 
 
+def _sub_spec_transitions(spec_file: Path, data: dict) -> list[tuple[dict, Path]]:
+    """``transitions`` of a ``screen_parent_spec``'s ``subSpecs[]`` files.
+
+    A parent spec (``chat.spec.json``, type ``screen_parent_spec``) carries
+    no transitions of its own; they live in its sub specs
+    (``chat/chat-core.spec.json``, type ``screen_sub_spec``). Reading only the
+    parent reported "chat's spec declares no transition to mypage" for a
+    transition declared 15 lines into the sub spec — 42 flow tests' worth of
+    false errors on one face (reported by that face 2026-09-10). The screen
+    id stays the parent's stem; the sub file is kept for the message.
+    """
+    if data.get("type") != "screen_parent_spec":
+        return []
+    out: list[tuple[dict, Path]] = []
+    for entry in data.get("subSpecs") or []:
+        if not isinstance(entry, dict):
+            continue
+        rel = entry.get("file")
+        if not isinstance(rel, str) or not rel:
+            continue
+        path = spec_file.parent / rel
+        sub = _load_spec(path)
+        if sub is None:
+            continue
+        transitions = sub.get("transitions")
+        if isinstance(transitions, list):
+            out.extend((t, path) for t in transitions if isinstance(t, dict))
+    return out
+
+
 def _load_spec(path: Path) -> dict | None:
     try:
         with open(path, "r", encoding="utf-8") as f:
@@ -157,6 +193,7 @@ def build_spec_graph(
             "(jui_cli.core.screen_identity.classify_destination) and the diagram "
             "does not carry a second one")
     classify = screen_identity.classify_destination
+    destination_parts = getattr(screen_identity, "destination_parts", None)
 
     graph = SpecGraph()
     spec_files = iter_spec_files(spec_dir)
@@ -166,15 +203,19 @@ def build_spec_graph(
         normalize_screen_ref(k): list(v) for k, v in (app_owned_transitions or {}).items()
     }
 
-    loaded: list[tuple[str, Path | None, dict | None, list[Any]]] = []
+    # (screen id, spec file or None, spec data or None, [(transition, origin file)])
+    loaded: list[tuple[str, Path | None, dict | None, list[tuple[Any, Path | None]]]] = []
     for path in spec_files:
         data = _load_spec(path)
         if data is None:
             continue
-        transitions = data.get("transitions")
-        loaded.append((spec_screen_id(path), path, data, transitions if isinstance(transitions, list) else []))
+        own = data.get("transitions")
+        entries: list[tuple[Any, Path | None]] = [
+            (t, path) for t in (own if isinstance(own, list) else [])]
+        entries.extend(_sub_spec_transitions(path, data))
+        loaded.append((spec_screen_id(path), path, data, entries))
     for screen_id, raws in owned_transitions.items():
-        loaded.append((screen_id, None, None, [{"destination": r} for r in raws]))
+        loaded.append((screen_id, None, None, [({"destination": r}, None) for r in raws]))
 
     graph.id_space = (
         _screen_ids_from_layouts(layouts_dir)
@@ -190,21 +231,39 @@ def build_spec_graph(
             graph.nodes.setdefault(screen_id, _spec_label(data or {}))
         else:
             graph.nodes.setdefault(screen_id, "")
-        for entry in transitions:
+        for entry, origin in transitions:
             if not isinstance(entry, dict):
                 continue
             raw = entry.get("destination")
             raw_text = raw.strip() if isinstance(raw, str) else ""
             target = classify(raw_text, graph.id_space, aliases=aliases)
-            transition = SpecTransition(screen_id, raw_text, target.kind, target.screen_id, target.why, path)
-            graph.transitions.append(transition)
-            if target.kind == "screen" and target.screen_id:
+            # "Chat or Mypage（…）" names two screens: a transition to each.
+            # The classifier returns the first match; ask for the parts and
+            # classify each, and only when MORE than one resolves take them
+            # all (one match is what the classifier already found).
+            targets = [target]
+            parts = destination_parts(raw_text) if destination_parts else []
+            if parts:
+                resolved = [t for t in (classify(p, graph.id_space, aliases=aliases) for p in parts)
+                            if t.kind == "screen" and t.screen_id]
+                if len(resolved) > 1:
+                    targets = resolved
+            for target in targets:
+                transition = SpecTransition(
+                    screen_id, raw_text, target.kind, target.screen_id, target.why, origin)
+                graph.transitions.append(transition)
+                if target.kind != "screen":
+                    break
                 graph.nodes.setdefault(target.screen_id, "")
                 graph.edges.append((screen_id, target.screen_id, EDGE_FORWARD))
-            elif target.kind == "back":
+            if target.kind == "screen":
+                continue
+            if target.kind == "back":
                 backs.add(screen_id)
             elif target.kind == "external":
                 graph.externals.append((screen_id, raw_text))
+            elif target.kind == "none":
+                graph.nones.append(transition)
             elif target.kind in ("unknown", "route"):
                 # `route` is "an edge once the route is mapped to a screen;
                 # until then, reported" — no mapping exists yet, so it is
