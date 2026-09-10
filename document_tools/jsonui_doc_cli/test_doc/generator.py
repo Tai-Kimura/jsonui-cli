@@ -3927,6 +3927,26 @@ def _pre_generate_spec_docs(
     # Process screen specifications
     spec_json_dir = docs_base / spec_subdir / "json"
     if spec_json_dir.exists():
+        # A component spec filed under the SCREENS json directory reaches
+        # neither loop: this one globs `*.spec.json`, and the component loop
+        # below reads `<docs>/components/json` only. So the file produces no
+        # page, no link and — before this — no line of output at all. A face
+        # was found holding ten of them; it had no way to notice, because
+        # "wrote nothing" and "there was nothing to write" print the same.
+        # Reported 2026-09-10 while measuring the leaf directories.
+        _misfiled = sorted(spec_json_dir.rglob("*.component.json"))
+        if _misfiled:
+            print()
+            warn(f"  WARNING [doc]: {len(_misfiled)} component spec(s) under "
+                 f"{spec_json_dir} produce no page — this directory is read for "
+                 f"*.spec.json, and component specs are read from "
+                 f"{docs_base / 'components' / 'json'}:")
+            for _m in _misfiled[:20]:
+                print(f"       {_m.name}")
+            if len(_misfiled) > 20:
+                print(f"       … and {len(_misfiled) - 20} more")
+            print("     Move them there, or rename them to *.spec.json if they "
+                  "are screens. Nothing is deleted by this warning.")
         spec_files = list(spec_json_dir.rglob("*.spec.json"))
         if spec_files:
             print(f"  Processing {len(spec_files)} {spec_subdir} specification files...")
