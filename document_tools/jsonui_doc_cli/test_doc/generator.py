@@ -2411,6 +2411,9 @@ def _record_into(target: dict, targets: list, manifest, stale: list, outside: di
     existed = target.is_file()
     tracked = _git_tracks_file(target, root)
     facts["manifestIsGitTracked"] = tracked
+    # Untracked because the face said so (an ignore rule), or just untracked.
+    ignored = _git_ignores_file(target, root) if tracked is False else False
+    facts["manifestIsGitIgnored"] = ignored
     try:
         manifest.save(
             root, version, written,
@@ -2432,14 +2435,42 @@ def _record_into(target: dict, targets: list, manifest, stale: list, outside: di
     # the instrument. Folding them together would tell a face with no git
     # that its record is private, which is a different claim.
     if tracked is False:
-        print(f"  ⓘ NOTE: {target} is NOT git-tracked here, so this record "
-              f"will not appear in `git status` or a diff. It is still "
-              f"readable in place — but it cannot serve as evidence to anyone "
-              f"who is looking for a change rather than reading the file.")
+        # Two kinds of "not tracked", and they call for different readers.
+        # An ignore rule the face wrote is a decision already taken: say
+        # where the record lives and stop. A plain untracked file may be an
+        # accident: ask. One wording for both made the deliberate case a
+        # line printed every run that never changed anyone's action, and a
+        # reader who learns to skip it skips the other one too (reported
+        # 2026-09-10; one face holds both kinds in a single run).
+        if ignored:
+            print(f"  ⓘ NOTE: {target} is ignored by this repository's .gitignore, so this "
+                  f"record lives outside `git status` and any diff by that rule. It is "
+                  f"readable in place; nothing to decide here.")
+        else:
+            print(f"  ⓘ NOTE: {target} is NOT git-tracked here, so this record "
+                  f"will not appear in `git status` or a diff. It is still "
+                  f"readable in place — but it cannot serve as evidence to anyone "
+                  f"who is looking for a change rather than reading the file.")
     elif tracked is None:
         print(f"  ⓘ NOTE: could not tell whether {target} is git-tracked (no "
               f"git, or outside a repository) — not a statement that it is "
               f"untracked.")
+
+
+def _git_ignores_file(path: Path, cwd: Path) -> "bool | None":
+    """True when an ignore rule of the repository covers `path`, False when
+    none does, None when git did not answer. Run from `cwd` (the root), like
+    `_git_tracks_file`, and for the same reason: the file need not exist yet."""
+    try:
+        out = subprocess.run(["git", "-C", str(cwd), "check-ignore", "-q", "--", str(path)],
+                             capture_output=True, text=True, timeout=10)
+    except (OSError, subprocess.SubprocessError):
+        return None
+    if out.returncode == 0:
+        return True
+    if out.returncode == 1:
+        return False
+    return None  # 128: not a repository, or git refused
 
 
 def _git_tracks_file(path: Path, cwd: Path) -> bool | None:
