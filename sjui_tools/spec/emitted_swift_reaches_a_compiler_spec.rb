@@ -23,7 +23,20 @@
 # as stale. So the list cannot quietly become a permanent exemption, which is
 # the usual fate of an allowlist nobody trims.
 RSpec.describe 'emitted Swift reaches a compiler' do
-  EMIT_MARKERS = ['expect(code)', 'expect(swift', 'expect(out'].freeze
+  # `expect(out` was a prefix, and it caught locals: `expect(outcome...`,
+  # `expect(outer_idx...`. Narrowed 2026-09-10 after counting what leaves the
+  # population — the only safe way to narrow a detector is to name the files
+  # that stop being detected:
+  #
+  #   expect(code) 52 files / expect(swift 4 / expect(out 7
+  #   narrowing drops exactly 2 files, and neither is lost:
+  #     this file            — matches COMPILE_MARKER, so it was already exempt
+  #                            (a source-reading check hits its own text)
+  #     responsive_helper    — holds 19 `expect(code)`, so it stays in on that
+  #   ALLOWLIST entries that leave the population: 0 of 49
+  #
+  # A spec that emits Swift into a local named `output` still matches.
+  EMIT_MARKERS = ['expect(code)', 'expect(swift', 'expect(out)', 'expect(output'].freeze
   COMPILE_MARKER = 'compile_as_swift'
 
   # The reason every current entry carries. A fragment needs a stub universe —
@@ -130,6 +143,24 @@ RSpec.describe 'emitted Swift reaches a compiler' do
     end
     expect(converted).to be_empty,
                          "these now compile — remove them from ALLOWLIST:\n#{converted.join("\n")}"
+  end
+
+  it 'has no allowlist entry the markers no longer reach' do
+    # The two arms above ask whether an entry is stale by its FILE. This one
+    # asks whether it is stale by the POPULATION: narrow a marker, or edit a
+    # spec until it stops matching one, and its entry becomes debt that no
+    # measurement can ever retire. 49 would then be partly a fiction, and the
+    # ratchet would be guarding a number that had stopped meaning anything.
+    #
+    # Zero when written, which is why it could be added without turning red —
+    # the moment to install a check is while it is still free.
+    unreachable = ALLOWLIST.keys.select do |rel|
+      path = File.join(root, rel)
+      File.file?(path) && EMIT_MARKERS.none? { |m| File.read(path).include?(m) }
+    end
+    expect(unreachable).to be_empty,
+                           "these are listed but no marker reaches them, so nothing " \
+                           "can ever retire them:\n#{unreachable.join("\n")}"
   end
 
   it 'never grows' do
