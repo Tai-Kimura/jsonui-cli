@@ -28,8 +28,8 @@
       "unresolved": "dropKey"
     },
     "nameRef": {
-      "readBy": "Implemented per face without a shared pin: sjui_tools/lib/swiftui/views/base_view_converter.rb (onclick = name, onClick = binding), kjui_tools/lib/compose/helpers/modifier_builder.rb get_event_handler_call (is_binding? ? extract : bare — both spellings), rjui_tools/lib/react/converters/base_converter.rb (onClick documented as binding format only — the bare spelling is NOT shown equivalent on web; unmeasured 2026-09-10). 0 vectors exercise this context. Declared 2026-09-10.",
-      "description": "Event / handler name references (onclick etc.). '@{name}' and the bare name are equivalent spellings of a handler NAME; this is name extraction, not value resolution. Path, default, and negation are not applicable.",
+      "readBy": "Hand-mirrored per face, measured 2026-09-10 and pinned per face: sjui_tools/lib/swiftui/views/base_view_converter.rb (onClick = binding, onclick = bare selector name) pinned by sjui_tools/spec/swiftui/views/handler_name_spelling_spec.rb; kjui_tools/lib/compose/helpers/modifier_builder.rb (camelCase events require the binding form) pinned by kjui_tools/spec/compose/components/handler_name_spelling_spec.rb; rjui_tools/lib/react/converters/base_converter.rb (onClick = binding only, onclick = bare only) pinned by rjui_tools/spec/react/converters/handler_name_spelling_spec.rb. 0 vectors: this context is code generation, not runtime resolution. Known gap, declared here and not a rule: a bare camelCase handler compiles to a no-op with no build-time report (an inline ERROR comment on kjui and rjui, nothing on sjui). A validator rule would need scoping to the declared event attributes first — consumer layouts also use camelCase keys as custom-component props (measured 2026-09-10).",
+      "description": "Event / handler NAME references. The camelCase event attributes (onClick, onAppear, onLongPress, …) take the binding form only: '@{name}' names the handler, and a bare string is NOT a handler on any face (measured 2026-09-10: kjui and rjui emit an inline ERROR comment and no call; sjui emits an empty action). The lowercase `onclick` is the UIKit selector legacy and takes the bare name only. Name extraction, not value resolution: path, default and negation are not applicable. Until 2026-09-10 this entry said the two spellings were equivalent; no generator ever implemented that, and the sentence was corrected to what they do.",
       "interpolation": false,
       "features": [],
       "unresolved": "platformEventContract"
@@ -49,7 +49,8 @@
       "readBy": "Executed by the vendored binding_vectors.json in SwiftJsonUI and KotlinJsonUI test suites (ids in `vectors`; held to exist by jui_tools/tests/test_platform_semantics_is_read_by_the_resolver.py). Hand-mirrored in Ruby, no loader (no Ruby tool reads this file by design): kjui_tools/lib/core/binding_validator_core.rb (bracket-index grammar; sjui_tools/lib/core/binding_validator_core.rb and rjui_tools/lib/core/binding_validator_core.rb carry the same text), pinned by kjui_tools/spec/compose/helpers/binding_expression_spec.rb (items[0], items[10].label). Declared 2026-09-10; the link is prose, so a canon edit does not turn that spec red.",
       "syntax": "name[index] with a non-negative integer literal",
       "rule": "Canonical array access is bracket syntax (items[0].title). Out-of-range or non-array => the path is unresolved (never a crash).",
-      "nonCanonical": "Dot-numeric segments (items.0.title) are a frozen UIKit-runtime legacy; not canonical, not to be added elsewhere."
+      "nonCanonical": "Dot-numeric segments (items.0.title) are a frozen UIKit-runtime legacy; not canonical, not to be added elsewhere.",
+      "nonCanonicalEnforcement": "None, deliberately. No validator rule rejects a dot-numeric segment (measured 2026-09-10: the validators emit five rule ids and none covers it), and none will be added — rejecting would break frozen UIKit layouts that still carry the form. The sentence above binds authors and generators; it is not a gate."
     },
     "intermediateMiss": "A missing or non-object intermediate node makes the whole path unresolved; it must never crash or throw (web: generated user data paths use optional chaining)."
   },
@@ -101,8 +102,8 @@
     "number": "JSON-faithful: integral numbers render with no decimal point ('5', not '5.0'); non-integral render with their decimal digits.",
     "bool": "'true' / 'false'",
     "null": "unresolved (empty string)",
-    "objectOrArrayVectors": ["text_object_value_renders_empty"],
-    "objectOrArrayVectorsNote": "Only the OBJECT half has a vector (2026-09-10 census); an array-valued text binding has none, so that half of the rule is declared and unmeasured.",
+    "objectOrArrayVectors": ["text_object_value_renders_empty", "text_array_value_renders_empty"],
+    "objectOrArrayVectorsNote": "Both halves have a vector since 2026-09-10: the array case (text_array_value_renders_empty) was added that day and executed by the vendored copy on KotlinJsonUI (allRuntimeVectorCasesPass, local run); SwiftJsonUI runs it on its next vendoring of binding_vectors.json.",
     "objectOrArrayReadBy": "Hand-mirrored in Ruby: rjui_tools/lib/react/converters/base_converter.rb #convert_text_binding (text sinks emit a stringifying template literal; unresolved renders \"\"), pinned by rjui_tools/spec/react/converters/base_converter_spec.rb 'treats a null default as unresolved (empty string)'. Declared 2026-09-10; the link is prose.",
     "objectOrArray": "unresolved (empty string) — never a platform debug dump"
   },

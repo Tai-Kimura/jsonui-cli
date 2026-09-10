@@ -70,6 +70,6 @@
   "authoringGuidance": {
     "spec": "Screen specs stay platform-agnostic; when a node intentionally differs per platform, note the difference in the spec text of the section that owns the node (do not fork the spec per platform). Large screens split into sub-specs list them in the parent's 'subSpecs' array — the sub-spec that owns the node carries the note.",
     "precedence": "Per-node 'platform' override > inline base attribute > 'style'-provided value. Distribution bakes the override into the node as a plain inline attribute; style merge (applied later, at codegen or dynamic runtime) always yields to inline attributes.",
-    "dynamicFace": "Distribution has already resolved 'platform' by the time a layout reaches a device, so the dynamic face never sees the key either — declaring it costs nothing at runtime on any face."
+    "dynamicFaceNote": "Distribution has already resolved 'platform' by the time a layout reaches a device, so the dynamic face never sees the key either — declaring it costs nothing at runtime on any face."
   }
 }

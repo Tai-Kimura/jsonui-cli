@@ -1129,3 +1129,14 @@ class RunRecordCarriesAcrossWriters(unittest.TestCase):
         summary = self._save()["summary"]
         self.assertEqual(summary["tracked"], 1)
         self.assertEqual(summary["trackedByDirectory"], {"gen": 1})
+
+    def test_the_record_survives_any_number_of_builds_not_just_the_first(self):
+        # A face may build three times between doc runs (take the release,
+        # regenerate, accept). The carry reads the file each time, so the
+        # chain has no length — pinned here because "keeps the previous
+        # value" could also be read as "keeps it once".
+        written = self._save(run_facts={"manifestIsGitTracked": True},
+                             generated_by=self.DOC)["summary"]["run"]
+        for _ in range(3):
+            after = self._save()["summary"]
+        self.assertEqual(after["run"], written)
