@@ -8,7 +8,23 @@ name before anyone goes looking for it.
 
 🔻 THE ARM IS A CONSERVATION LAW, NOT AN EQUALITY.
 
-    disk == tool - collisions + leftovers
+    disk == tool + leftovers
+
+🚫 THERE IS NO `- collisions` TERM, AND THAT IS DELIBERATE. The first version
+of this law carried one. `summary.collisions` counts entries lost when the
+PREVIOUS manifest's keys were merged to canonical spellings at save time
+(`load_migrated_with_collisions`) — it is a property of the accumulated
+record, not of the pages this run wrote or of the files on the disk. Neither
+side of this balance loses anything to it. Subtracting it is not a harmless
+zero: on the day it goes non-zero the law would demand a smaller disk count
+than reality and redden with no defect behind it.
+
+⚠️ It reads as zero on every real tree today ("537→537, 210→210, … through
+eight generations", says its own docstring), so the wrong term would never
+have falsified itself. The value is still read below and asserted to be zero,
+so that this reasoning is attached to a measurement rather than to a comment,
+and so the next person who worries about collisions finds the answer here
+instead of writing a third implementation of it.
 
 An equality arm passes only on a pristine tree and goes red on every dirty
 one, which teaches the reader to ignore it. Under the law the remainder is
@@ -105,20 +121,27 @@ def _terms(root: Path) -> tuple[int, int]:
         "summary.run.leftovers is absent. Since 1.8.69 a zero is written "
         "explicitly, so an absent key means the record is older than this "
         "run — the law cannot be evaluated against it.")
+    # Read, reported, and NOT subtracted — see the module docstring.
     return int(summary["collisions"]), int(run["leftovers"])
 
 
 def _assert_balances(log: str, out: Path, root: Path) -> tuple[int, int, int, int]:
     tool, disk = _tool_count(log), _disk_count(out)
     collisions, leftovers = _terms(root)
-    residual = disk - (tool - collisions + leftovers)
+    residual = disk - (tool + leftovers)
     assert residual == 0, (
         "the page counts do not balance, and the remainder has no name:\n"
         f"  tool       {tool:4d}  (the run's own closing line, pages it wrote)\n"
         f"  disk       {disk:4d}  (rglob('*.html') under -o, {out})\n"
-        f"  collisions {collisions:4d}  (manifest summary.collisions)\n"
         f"  leftovers  {leftovers:4d}  (manifest summary.run.leftovers)\n"
-        f"  residual   {residual:+d}  = disk - (tool - collisions + leftovers)")
+        f"  residual   {residual:+d}  = disk - (tool + leftovers)\n"
+        f"  (collisions {collisions} — the previous manifest's merged keys, "
+        f"not a term in this balance)")
+    assert collisions == 0, (
+        f"summary.collisions is {collisions}. That is a finding about the "
+        "manifest's own history, not about this balance — but it has never "
+        "been non-zero on a real tree, so it is worth looking at rather than "
+        "folding into the law.")
     return tool, disk, collisions, leftovers
 
 
@@ -266,16 +289,15 @@ def test_the_term_is_the_runs_value_and_summing_the_roots_breaks_the_law(tmp_pat
 
     tool, disk = _tool_count(log), _disk_count(out)
     runs = [_manifest(Path(e["root"]))["summary"]["run"] for e in roots]
-    collisions = int(_manifest(Path(roots[0]["root"]))["summary"]["collisions"])
     shared = int(runs[0]["leftovers"])
     summed = sum(int(r["leftovers"]) for r in runs)
 
-    assert disk == tool - collisions + shared, (
+    assert disk == tool + shared, (
         f"the law does not close on the run's own value: tool {tool}, "
-        f"disk {disk}, collisions {collisions}, leftovers {shared}")
+        f"disk {disk}, leftovers {shared}")
     assert summed == shared * len(roots), (
         f"the double-count this arm exists for did not happen: "
         f"summed {summed}, shared {shared}, roots {len(roots)}")
-    assert disk != tool - collisions + summed, (
+    assert disk != tool + summed, (
         "summing the term across roots balanced, so this arm is no longer "
         "measuring the trap it was written for")
