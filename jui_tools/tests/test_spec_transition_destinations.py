@@ -27,12 +27,14 @@ the prefix it was given rather than merely stripping something.
 from __future__ import annotations
 
 import json
+import re
 import unittest
 from pathlib import Path
 
 from jui_cli.core.screen_identity import (
     ALIAS_POSITIONS,
     DESTINATION_KINDS,
+    _NONE,
     classify_destination,
     load_canon,
     summarize_destinations,
@@ -383,6 +385,183 @@ class TheKindsThemselves(unittest.TestCase):
         t = classify_destination("", KNOWN)
         self.assertEqual(t.kind, "unknown")
         self.assertIn("no destination declared", t.why)
+
+
+class TheNoneMarkerCarriesEnglishToo(unittest.TestCase):
+    """`back` and `external` were bilingual; `none` was not, and that was all.
+
+    A face writing "no transition" matched no marker and was reported as
+    `unknown` — not because the order was wrong or the anchor was wrong, but
+    because the alternatives were Japanese. `_BACK` already carries
+    `previous screen` and `_EXTERNAL` already carries `External Browser`;
+    nothing about the `none` kind is more Japanese than those.
+
+    ⚠️ THIS ARM IS PLANTED AND SAYS SO. Measured 2026-09-11 over every
+    ``transitions[].destination`` on this machine — 852 values, 459 distinct,
+    6 faces — exactly 0 are matched by the English half. The widening changes
+    no face's diagram today. An unexercised hazard is still a hazard; it just
+    cannot be found by sampling, which is the same reason
+    ``classify_destination``'s order arm is planted.
+    """
+
+    ENGLISH = ["Same screen", "same page (query param only)",
+               "No transition", "no navigation", "No screen change",
+               "does not navigate", "Does not transition",
+               "stays on the current screen", "remains on this screen",
+               "in-page（drawer）", "In page scroll",
+               "Tab switch (SPA)", "switches tabs", "switch tab",
+               "None", "none（SPA state change）"]
+
+    def test_every_english_spelling_is_a_none(self):
+        for raw in self.ENGLISH:
+            with self.subTest(raw=raw):
+                self.assertEqual(kind(raw), "none")
+
+    def test_the_case_folding_is_what_carries_half_of_them(self):
+        """`_EXTERNAL` is case-SENSITIVE and this one is not, so the three
+        markers no longer share one answer. Pin the difference, or a later
+        tidy-up that "makes them consistent" drops the capitalised spellings
+        without a single arm going red."""
+        for raw in ["NO TRANSITION", "Same Screen", "TAB SWITCH"]:
+            with self.subTest(raw=raw):
+                self.assertEqual(kind(raw), "none")
+
+    def test_the_japanese_spellings_still_classify(self):
+        """The control from inside the window: real values this marker
+        matched BEFORE the English half was added. A widening that quietly
+        broke the alternation would otherwise show up only as a face's
+        diagram losing nodes."""
+        for raw in ["遷移なし", "同画面内のタブ切替（SPA内遷移）",
+                    "現在の画面に留まる（エラーメッセージ表示）",
+                    "画面内（ペイン切替。push なし）", "なし",
+                    "なし（送信のみ）"]:
+            with self.subTest(raw=raw):
+                self.assertEqual(kind(raw), "none")
+
+    def test_a_resolvable_screen_is_still_a_screen(self):
+        """The order control, in English this time. `_NONE` is unanchored, so
+        a real transition whose parenthetical explains that the push happens
+        in place would be filed `none` if the markers ran before the ids."""
+        t = classify_destination("Chat（stays on the same screen until sent）",
+                                 KNOWN)
+        self.assertEqual(t.kind, "screen",
+                         "the English `none` vocabulary outran screen resolution")
+        self.assertEqual(t.screen_id, "chat")
+
+    def test_the_bare_none_is_anchored(self):
+        r"""`\Anone` mirrors `\Aなし`. Unanchored it would swallow any prose
+        with the word in it — and because the markers run LAST, what it
+        swallows is an `unknown`: a destination the unresolved report names,
+        turned into a `none` the report is silent about."""
+        for raw in ["Login none required", "Browse with none of the filters"]:
+            with self.subTest(raw=raw):
+                self.assertEqual(kind(raw), "unknown")
+
+    def test_the_corpuss_own_near_misses_stay_unknown(self):
+        """Decoys taken from the window, not invented. One face's spec pages
+        write these; both carry `tab`, and `tab` alone is not a declaration
+        that nothing happens — only `tab switch` is."""
+        for raw in ["Target screen or tab", "Target spec screen or tab",
+                    "Checkout（no coupon）", "Notification"]:
+            with self.subTest(raw=raw):
+                self.assertEqual(kind(raw), "unknown")
+
+
+class TheEnglishNoneVocabularyIsMultiWordOrAnchored(unittest.TestCase):
+    r"""A rule about the NEXT alternative, not about the ones there now.
+
+    The Japanese half can afford single words — 同画面 is not a word that
+    turns up inside unrelated prose. `none`, `back`, `stay`, `tab` are. The
+    protection is that every English alternative either starts at `\A` or
+    cannot match a string with no separator in it, and that is checked by
+    EXECUTION rather than by reading the source: a syntactic "contains a
+    space" test passes `(?:stay|stays on)`, and this one does not.
+    """
+
+    #: Probe tokens, derived from the pattern itself rather than listed, plus
+    #: the words a reader would expect to be dangerous.
+    EXTRA = ("none", "back", "stay", "stays", "remain", "remains", "same",
+             "screen", "page", "tab", "tabs", "switch", "switches",
+             "navigate", "transition", "change", "in", "on", "no", "not")
+
+    @staticmethod
+    def _top_level_alternatives(pattern: str) -> list[str]:
+        r"""Split on `|` at depth 0 only.
+
+        Depth-counted rather than split, for the same reason
+        ``_strip_parentheticals`` is: `(?=\s*[（(]|\s*\Z)` and
+        `(?:navigate|transition)` both carry a `|` that is not a top-level
+        alternation, and a naive split tears them in half — producing
+        fragments that are not regexes and an arm that passes by accident.
+        """
+        out, buf, depth, in_class, escaped = [], [], 0, False, False
+        for ch in pattern:
+            if escaped:
+                buf.append(ch)
+                escaped = False
+                continue
+            if ch == "\\":
+                buf.append(ch)
+                escaped = True
+                continue
+            if in_class:
+                buf.append(ch)
+                if ch == "]":
+                    in_class = False
+                continue
+            if ch == "[":
+                in_class = True
+            elif ch == "(":
+                depth += 1
+            elif ch == ")":
+                depth -= 1
+            elif ch == "|" and depth == 0:
+                out.append("".join(buf))
+                buf = []
+                continue
+            buf.append(ch)
+        out.append("".join(buf))
+        return out
+
+    def setUp(self):
+        self.alts = self._top_level_alternatives(_NONE.pattern)
+
+    def test_the_splitter_did_not_tear_a_group(self):
+        """The control on the control. Every fragment must still compile, and
+        the count must be plausible — a splitter that returned the whole
+        pattern as one alternative would make every assertion below vacuous.
+        """
+        for alt in self.alts:
+            with self.subTest(alt=alt):
+                re.compile(alt)
+        self.assertGreaterEqual(len(self.alts), 8, self.alts)
+        self.assertIn("同画面", self.alts)
+        self.assertTrue(any("does not" in a for a in self.alts), self.alts)
+
+    def test_no_unanchored_english_alternative_matches_a_bare_word(self):
+        tokens = set(re.findall(r"[a-z]+", _NONE.pattern.lower()))
+        tokens.update(self.EXTRA)
+        for alt in self.alts:
+            if alt.startswith("\\A") or not re.search(r"[A-Za-z]", alt):
+                continue
+            probe = re.compile(alt, re.IGNORECASE)
+            for token in sorted(tokens):
+                with self.subTest(alt=alt, token=token):
+                    self.assertIsNone(
+                        probe.search(token),
+                        f"the unanchored alternative {alt!r} matches the bare "
+                        f"word {token!r}; anchor it with \\A or widen it to a "
+                        f"phrase — _NONE runs last, so what it swallows is an "
+                        f"`unknown` that stops being reported")
+
+    def test_the_probe_would_catch_a_bare_word(self):
+        """The positive control: the check above is only worth having if it
+        goes red on the thing it is for."""
+        tokens = set(re.findall(r"[a-z]+", _NONE.pattern.lower()))
+        tokens.update(self.EXTRA)
+        bad = re.compile(r"(?:stay|stays on)", re.IGNORECASE)
+        self.assertTrue(any(bad.search(tok) for tok in tokens),
+                        "the probe set cannot see a bare-word alternative")
 
 
 if __name__ == "__main__":

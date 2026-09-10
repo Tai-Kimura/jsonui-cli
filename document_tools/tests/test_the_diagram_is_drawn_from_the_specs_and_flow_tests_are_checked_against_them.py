@@ -155,6 +155,23 @@ class TheSpecsAreTheSource(unittest.TestCase):
         self.assertEqual(result.unresolved, [])
         self.assertEqual(result.combined.count("-->"), 1, "exactly the external edge")
 
+    def test_an_english_none_declaration_draws_nothing_either(self):
+        """The second mouth. The classifier's own arms prove the vocabulary;
+        this proves the DRAWING reads it — a `none` that leaks through here
+        would appear as an `unresolved` line in the face's report, which is
+        the same face the English `back` spelling above already relies on.
+
+        Planted: measured 2026-09-11, 0 of 459 distinct destinations across
+        6 faces are English `none` declarations. The kind is reachable, the
+        spelling is not yet used.
+        """
+        self.face.spec("mypage", ["No transition (in-page tab switch)"])
+        result = self.face.build()
+        self.assertEqual(result.unresolved, [],
+                         "an English `none` was reported as unresolved")
+        self.assertEqual(result.combined.count("-->"), 0, "no edge is drawn")
+        self.assertNotIn(":::externalNode", result.combined)
+
 
 class FlowTestsAreCheckedAgainstTheSpecs(unittest.TestCase):
     def setUp(self):

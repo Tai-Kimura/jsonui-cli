@@ -515,7 +515,44 @@ _NONE = re.compile(
     # parenthetical. The notice to the faces (2026-09-10) named it; a face
     # wrote it 13 times; the code had 遷移なし and not なし. Anchored, so
     # prose such as ログインなしで閲覧 is not swallowed.
-    r"\Aなし(?=\s*[（(]|\s*\Z)"
+    r"\Aなし(?=\s*[（(]|\s*\Z)|"
+    # 🔻 AND THE ENGLISH HALF, ADDED 2026-09-11. `_BACK` carries English and
+    # Japanese, `_EXTERNAL` carries English and Japanese, and this one carried
+    # only Japanese — so a face writing "no transition" fell through all three
+    # markers and was reported as `unknown`. The asymmetry was the whole
+    # defect; nothing about `none` is more Japanese than `back` is.
+    #
+    # The words are derived from the two things that are allowed to name them:
+    # the Japanese alternatives above, and the canon's meaning for the kind
+    # ("declares that no screen transition happens (in-page tab switch, SPA
+    # state change)" — screen_identity.json). `state change` on its own is NOT
+    # here: it says how, not whether, and the corpus cannot adjudicate it.
+    #
+    # ⚠️ EVERY ALTERNATIVE IS MULTI-WORD OR \A-ANCHORED, and that is a rule,
+    # not a coincidence — `TheEnglishNoneVocabularyIsMultiWordOrAnchored`
+    # fails if the next one is a bare word. _NONE is UNANCHORED (see
+    # `classify_destination`): a bare `none` or `stay` would match inside any
+    # prose, and because the markers run last the value it would swallow is
+    # an `unknown` — turning a destination the report NAMES into a `none` the
+    # report is silent about. The harm runs toward silence, so the vocabulary
+    # buys its width with length.
+    #
+    # Measured 2026-09-11 over every transitions[].destination on this
+    # machine — 852 values, 459 distinct, 6 faces: 0 are newly matched by
+    # this half. So it is PLANTED, like the order hazard in
+    # `classify_destination`, and the corpus's own near-misses are kept as
+    # decoys in the arm: one face writes `Target screen or tab`, which carries
+    # `tab` and must stay `unknown` — only `tab switch` is a declaration.
+    r"same screen|same page|no transition|no navigation|no screen change|"
+    r"does not (?:navigate|transition)|stays? on|remains? on|in[- ]page|"
+    r"tab switch|switch(?:es)? tabs?|"
+    r"\Anone(?=\s*[（(]|\s*\Z)",
+    # IGNORECASE for the English half only — the Japanese alternatives have no
+    # case. `_BACK` is the precedent (`Previous screen (pop)` is a real corpus
+    # value). ⚠️ `_EXTERNAL` is still case-SENSITIVE, so the three markers no
+    # longer share one answer to "does case matter"; anyone writing that down
+    # has to read all three.
+    re.IGNORECASE,
 )
 #: Anchored at the start ON PURPOSE — see `classify_destination`. The spelling
 #: list is the part that rots: `前画面` was here and `前の画面` was not, and 7
