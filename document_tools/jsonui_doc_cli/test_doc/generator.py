@@ -1579,7 +1579,11 @@ def generate_html_directory(
     for _group in flow_groups:
         if _group not in covered_groups:
             _flows, _screens = (input_path / _group if _group else input_path), None
-            n_flows = len(list(_flows.rglob("*.test.json")))
+            # The second place that counted without the filter, and the worse
+            # of the two: it calls the files "flow test file(s) not checked",
+            # which is a backlog claim about files that are not flow tests.
+            from .mermaid.flow_graph import flow_tests
+            n_flows = len(flow_tests(_flows))
             warn(f"  WARNING [doc-diagram]: no spec directory found for {_group or _root_app} "
                  f"— no diagram drawn and {n_flows} flow test file(s) not checked against a spec")
     for owner in owners:

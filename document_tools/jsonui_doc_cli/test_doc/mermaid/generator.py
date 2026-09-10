@@ -24,6 +24,7 @@ from ..html.sidebar import escape_html
 from ...reproducible import build_datetime
 from ...run_log import warn
 from .flow_graph import (
+    flow_tests,
     EDGE_BACK,
     EDGE_FORWARD,
     ScreenResolver,
@@ -67,11 +68,7 @@ def _collect_flow_graph(
     edges: list[tuple[str, str, str, str]] = []
     flow_subgraphs: dict[str, list[str]] = {}
 
-    for flow_file in sorted(flows_path.rglob("*.test.json")):
-        flow_data = load_flow(flow_file)
-        if flow_data is None:
-            continue
-
+    for flow_file, flow_data in flow_tests(flows_path):
         flow_name = flow_data.get("metadata", {}).get("name", flow_file.stem)
         try:
             flow_nodes, flow_transitions = flow_edges(flow_data.get("steps", []), resolver)
@@ -210,7 +207,10 @@ def build_diagram(
         if _click_href(node_metadata.get(node_id, {}), document_href))
 
     # ---- the check: what the flow tests do vs what the specs declare ----
-    flow_files = sorted(flows_path.rglob("*.test.json")) if flows_path and flows_path.is_dir() else []
+    # The same enumeration the walk uses, so the number and the check cannot
+    # describe different sets: `*.test.json` is screen tests too, and only
+    # `type == "flow"` is a flow test.
+    flow_files = [path for path, _data in flow_tests(flows_path)]
     result.stats["flow_tests"] = len(flow_files)
     if flow_files:
         _n, _m, flow_edges_found, _s = _collect_flow_graph(flows_path, screens_path, layouts_dir)

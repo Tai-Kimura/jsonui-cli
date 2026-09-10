@@ -293,6 +293,44 @@ def flow_edges(
     return nodes, edges
 
 
+def flow_tests(root) -> list[tuple[Path, dict[str, Any]]]:
+    """Every flow test under `root`, with the data already parsed.
+
+    ⚠️ THE ENUMERATION, not one of two. `*.test.json` under a face's test
+    root is screen tests AND flow tests; only `type == "flow"` is one. The
+    checker always applied that filter — `load_flow` returns None otherwise —
+    but the two places that COUNTED did not, so a face with no `flows/`
+    directory, where the fallback climbs to `tests/<app>/`, read:
+
+        flow tests 116 in tests/admin (fallback …) checked 0 transition(s), absent 0
+        WARNING [doc-diagram]: … 116 flow test file(s) not checked against a spec
+
+    with 116 screen tests and zero flow tests. `checked 0` was right; the
+    labels were not. Measured 2026-09-11: that face's 116 files are
+    `type: screen` 116 / 0, and the face that reads 14 has `type: flow` 14/14.
+
+    🚨 The danger is not that it reads like "no violations" — it reads like a
+    backlog. Every face without a `flows/` directory sees a large number
+    described as unchecked on every run, learns to skip the line, and is not
+    there on the day a real one appears.
+
+    Returning the parsed data is what makes this ONE enumeration rather than
+    two that agree today: the caller that walks the graph and the callers
+    that count are reading the same list, not the same glob with different
+    filters."""
+    if not root:
+        return []
+    base = Path(root)
+    if not base.is_dir():
+        return []
+    out: list[tuple[Path, dict[str, Any]]] = []
+    for path in sorted(base.rglob("*.test.json")):
+        data = load_flow(path)
+        if data is not None:
+            out.append((path, data))
+    return out
+
+
 def load_flow(path: Path) -> dict[str, Any] | None:
     """Load a flow test file, returning None for anything that is not one."""
     try:
