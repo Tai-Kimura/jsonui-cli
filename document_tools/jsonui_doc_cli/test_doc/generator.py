@@ -118,6 +118,25 @@ _generation_counts: dict = run_state.ledger(globals(), "_generation_counts", dic
 _document_slot_facts: dict = run_state.ledger(globals(), "_document_slot_facts", dict)
 
 
+#: Every placeholder page this run wrote, by path.
+#:
+#: 🔻 PATHS, NOT A COUNT, AND NOT `_page_failures`. Three quantities wear the
+#: word "failure" and they are all different numbers: failures recorded,
+#: placeholder pages written, and placeholder pages written UNDER `-o`. A
+#: run measured 2026-09-11 had 1 / 1 / 0 — the page was real and landed in
+#: the source docs tree, outside `-o` — and another had 3 / 0 / 0, where no
+#: placeholder was written at all. Only the third quantity belongs in a
+#: balance against a walk of `-o`, and only the path can tell them apart.
+#:
+#: ⚠️ Recorded INSIDE `_write_failure_placeholder`, which is the one function
+#: that writes these pages; both call sites (`record_page_failure` and the
+#: site spec writer) go through it. Counting at the callers would be two
+#: places to keep in step, and the reason this ledger exists is that a count
+#: kept somewhere else disagreed with what was on the disk.
+_placeholders_written: list = run_state.ledger(
+    globals(), "_placeholders_written", list)
+
+
 #: Flow-test transitions absent from the specs, this run. The CLI reads it
 #: back for the exit code the same way it reads `_page_failures`.
 _diagram_errors: list[dict] = run_state.ledger(globals(), "_diagram_errors", list)
@@ -272,6 +291,17 @@ def generation_warnings() -> list[str]:
     return out
 
 
+def get_placeholders_written() -> list:
+    """Paths of the placeholder pages this run wrote, in write order.
+
+    ⚠️ Not interchangeable with `len(get_page_failures())`. A failure may be
+    recorded with no page (deliberately — `generator.py` says so where it
+    happens), and a page may be written outside `-o`. Callers balancing
+    against a walk of some directory must filter by that directory.
+    """
+    return list(_placeholders_written)
+
+
 def get_page_failures() -> list[dict]:
     """Failures recorded since the last reset, oldest first."""
     return list(_page_failures)
@@ -361,7 +391,12 @@ def record_page_failure(
 
 
 def _write_failure_placeholder(output_path: Path, failure: dict) -> None:
-    """Write a page that says why the real page is missing."""
+    """Write a page that says why the real page is missing, and record it.
+
+    The record is taken here rather than at the callers because this is the
+    only function that writes one: writing it and counting it are the same
+    act, so a placeholder cannot be written without joining the ledger.
+    """
     output_path.parent.mkdir(parents=True, exist_ok=True)
     source_line = (
         f"<p><strong>Source:</strong> <code>{escape_html(failure['source'])}</code></p>"
@@ -386,6 +421,8 @@ def _write_failure_placeholder(output_path: Path, failure: dict) -> None:
         "</body></html>\n",
         encoding='utf-8',
     )
+    _placeholders_written.append(output_path.resolve())
+
 
 
 def _validator_for(spec_file: Path) -> SpecValidator:
