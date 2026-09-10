@@ -128,7 +128,21 @@ class SummaryLine(unittest.TestCase):
         # carries the count so that "0 warnings" and "nobody counted" stop
         # printing the same).
         self._pages(4)
-        self.assertEqual(generation_summary_line(), "Generated 4 HTML files (warnings 0)")
+        self.assertEqual(generation_summary_line(),
+                         "Generated 4 HTML files this run (warnings 0)")
+
+    def test_the_head_still_starts_with_the_spelling_faces_already_grep(self):
+        """`this run` was added to name N's unit (2026-09-11), and it was added
+        as a SUFFIX so that a face grepping `Generated <n> HTML files` keeps
+        matching. That property is only true of substring and prefix readers:
+        the equality assertion above had to be updated, which is the honest
+        limit of calling a spelling change additive. Pinned so that a future
+        respelling of the head has to decide about those readers on purpose.
+        """
+        self._pages(4)
+        line = generation_summary_line()
+        self.assertTrue(line.startswith("Generated 4 HTML files"), line)
+        self.assertIn("this run", line)
 
 
 class _quiet:
