@@ -1762,6 +1762,11 @@ def generate_html_directory(
 
             # Pre-generate spec docs for this app
             if app_spec_dir.exists() or app_component_dir.exists() or app_requirements_dir.exists():
+                # Across the slot directories, before either is generated: a
+                # rename done under one and not the other leaves two live
+                # sources, which the stale-page scan cannot see because the
+                # run writes both.
+                _report_colliding_spec_sources(app_docs_path)
                 _pre_generate_spec_docs(app_docs_path, layouts_dir=layouts_dir)
                 # Also pre-generate for requirements if they exist
                 if app_requirements_dir.exists():
@@ -3876,6 +3881,79 @@ def _write_stamped(path: Path, content: str, command: str) -> None:
         pass
     with open(path, 'w', encoding='utf-8') as f:
         f.write(content)
+
+
+
+def _source_key(path: Path) -> str:
+    """The name two spec sources share when one is a rename of the other.
+
+    `forgotpassword.spec.json` and `forgot_password.spec.json` are the same
+    screen spelled two ways; separators and case are what a rename changes
+    and what the reader does not see."""
+    stem = path.name
+    for suffix in (".spec.json", ".component.json", ".json"):
+        if stem.endswith(suffix):
+            stem = stem[: -len(suffix)]
+            break
+    return "".join(c for c in stem.lower() if c.isalnum())
+
+
+def _spec_title(path: Path) -> str | None:
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    meta = data.get("metadata") if isinstance(data, dict) else None
+    return meta.get("title") if isinstance(meta, dict) else None
+
+
+def _report_colliding_spec_sources(docs_base: Path) -> list:
+    """Two LIVE sources whose names normalise alike — a rename done in one
+    slot directory and not the other.
+
+    The stale-page scan (1.8.68) names a page nothing wrote this time. It
+    cannot see this: both sources are alive, so the run writes BOTH pages
+    every time, and the pair sits in the site under two spellings. Reported
+    2026-09-10 on a face that renamed under `screens/` while the old
+    spelling stayed under `requirements/`; the two pages had drifted as far
+    as their titles.
+
+    🚨 The face's first remedy was to delete the OUTPUT pages. The next run
+    rewrote them, because the sources are alive — so the deletion looked
+    like a fix at the moment it was made and came back somewhere the person
+    who made it was not looking. An instrument that names the source is what
+    closes that, and until one exists a face has no better move available.
+    """
+    dirs = [docs_base / sub / "json" for sub in ("screens", "requirements", "components")]
+    by_key: dict = {}
+    for d in dirs:
+        if not d.is_dir():
+            continue
+        for f in sorted(d.rglob("*.json")):
+            if not (f.name.endswith(".spec.json") or f.name.endswith(".component.json")):
+                continue
+            by_key.setdefault(_source_key(f), []).append(f)
+    collisions = [(k, v) for k, v in sorted(by_key.items()) if len(v) > 1]
+    if not collisions:
+        return []
+    print()
+    warn(f"  WARNING [doc-source]: {len(collisions)} name(s) are held by more than one "
+         "LIVE spec source — a rename done in one slot and not the other. Both are read, "
+         "so both pages are written every run and the site carries both spellings:")
+    for key, files in collisions[:20]:
+        print(f"       {key}:")
+        for f in files:
+            title = _spec_title(f)
+            try:
+                shown = f.relative_to(docs_base)
+            except ValueError:
+                shown = f
+            print(f"         {shown}" + (f"   title: {title}" if title else ""))
+    if len(collisions) > 20:
+        print(f"       … and {len(collisions) - 20} more")
+    print("     Deleting the generated pages does not fix this — the sources are alive "
+          "and the next run writes them again. Remove or rename the source.")
+    return collisions
 
 
 def _pre_generate_spec_docs(

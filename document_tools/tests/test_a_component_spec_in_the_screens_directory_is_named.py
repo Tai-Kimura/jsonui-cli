@@ -43,14 +43,14 @@ def _component(path: Path, name: str) -> None:
 def test_a_component_spec_under_the_screens_json_directory_is_named(tmp_path, capsys):
     docs = tmp_path / "docs"
     _spec(docs / "screens" / "json" / "home.spec.json", "home")
-    _component(docs / "screens" / "json" / "chatbubble.component.json", "chatbubble")
-    _component(docs / "screens" / "json" / "progressbar.component.json", "progressbar")
+    _component(docs / "screens" / "json" / "infopanel.component.json", "infopanel")
+    _component(docs / "screens" / "json" / "badge.component.json", "badge")
 
     _pre_generate_spec_docs(docs)
     printed = capsys.readouterr().out
 
     assert "WARNING [doc]: 2 component spec(s) under" in printed
-    assert "chatbubble.component.json" in printed and "progressbar.component.json" in printed
+    assert "infopanel.component.json" in printed and "badge.component.json" in printed
     # The line has to say where they belong, or the reader cannot act on it.
     assert str(docs / "components" / "json") in printed
     # …and it must not claim to have deleted or moved anything.
@@ -58,8 +58,8 @@ def test_a_component_spec_under_the_screens_json_directory_is_named(tmp_path, ca
 
     # The premise this arm rests on: those two really did produce no page.
     # Without this the warning could be firing on files the run handled.
-    assert not (docs / "screens" / "html" / "chatbubble.html").exists()
-    assert not (docs / "components" / "html" / "chatbubble.html").exists()
+    assert not (docs / "screens" / "html" / "infopanel.html").exists()
+    assert not (docs / "components" / "html" / "infopanel.html").exists()
     assert (docs / "screens" / "html" / "home.html").exists(), "the screen spec still generates"
 
 
@@ -68,21 +68,21 @@ def test_component_specs_in_their_own_directory_are_silent(tmp_path, capsys):
     anywhere, which would make the message noise rather than a finding."""
     docs = tmp_path / "docs"
     _spec(docs / "screens" / "json" / "home.spec.json", "home")
-    _component(docs / "components" / "json" / "chatbubble.component.json", "chatbubble")
+    _component(docs / "components" / "json" / "infopanel.component.json", "infopanel")
 
     _pre_generate_spec_docs(docs)
     printed = capsys.readouterr().out
 
     assert "component spec(s) under" not in printed
     # And the component DID produce its page — the run was not simply quiet.
-    assert (docs / "components" / "html" / "chatbubble.html").exists()
+    assert (docs / "components" / "html" / "infopanel.html").exists()
 
 
 def test_the_screens_loop_still_ignores_the_misfiled_file(tmp_path, capsys):
     """The warning must not change what gets generated: it reports, it does
     not adopt the file. A `*.component.json` is not a screen spec."""
     docs = tmp_path / "docs"
-    _component(docs / "screens" / "json" / "chatbubble.component.json", "chatbubble")
+    _component(docs / "screens" / "json" / "infopanel.component.json", "infopanel")
     _pre_generate_spec_docs(docs)
     capsys.readouterr()
     written = sorted(p.name for p in (docs / "screens" / "html").glob("*.html")) \
