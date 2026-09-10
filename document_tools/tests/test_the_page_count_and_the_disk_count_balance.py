@@ -125,10 +125,24 @@ def _terms(root: Path) -> tuple[int, int]:
     return int(summary["collisions"]), int(run["leftovers"])
 
 
+def _expected_disk(tool: int, leftovers: int) -> int:
+    """The law itself, in ONE place — every assertion of it calls this.
+
+    🚨 Not a style preference. When the law was spelled out separately in
+    each arm, restoring the `- collisions` term in the shared helper left all
+    six arms green: the arms reading the helper all run on trees where the
+    quantity is zero, and the one arm with a non-zero collision count was
+    asserting its own copy (orchestrator, measured 2026-09-11). A term can
+    only be discriminated by an arm whose tree makes it non-zero, so that arm
+    has to be reading the same expression as everyone else.
+    """
+    return tool + leftovers
+
+
 def _assert_balances(log: str, out: Path, root: Path) -> tuple[int, int, int, int]:
     tool, disk = _tool_count(log), _disk_count(out)
     collisions, leftovers = _terms(root)
-    residual = disk - (tool + leftovers)
+    residual = disk - _expected_disk(tool, leftovers)
     assert residual == 0, (
         "the page counts do not balance, and the remainder has no name:\n"
         f"  tool       {tool:4d}  (the run's own closing line, pages it wrote)\n"
@@ -292,13 +306,13 @@ def test_the_term_is_the_runs_value_and_summing_the_roots_breaks_the_law(tmp_pat
     shared = int(runs[0]["leftovers"])
     summed = sum(int(r["leftovers"]) for r in runs)
 
-    assert disk == tool + shared, (
+    assert disk == _expected_disk(tool, shared), (
         f"the law does not close on the run's own value: tool {tool}, "
         f"disk {disk}, leftovers {shared}")
     assert summed == shared * len(roots), (
         f"the double-count this arm exists for did not happen: "
         f"summed {summed}, shared {shared}, roots {len(roots)}")
-    assert disk != tool + summed, (
+    assert disk != _expected_disk(tool, summed), (
         "summing the term across roots balanced, so this arm is no longer "
         "measuring the trap it was written for")
 
@@ -343,15 +357,20 @@ def test_the_law_closes_on_a_tree_that_has_a_real_key_collision(tmp_path):
 
     log = _run(tests, out, root, docs)
 
-    collisions = int(_manifest(root)["summary"]["collisions"])
+    # 🚨 THROUGH THE HELPER, NEVER A SECOND COPY OF THE LAW. This arm owns the
+    # only tree in this file where `collisions` is non-zero, so it is the ONLY
+    # arm that can tell the term's absence from its presence. It used to
+    # assert the law inline — and with it inline, putting `- collisions` back
+    # into `_assert_balances` left all six arms green (orchestrator, measured
+    # 2026-09-11). The arms that DO read the helper all run on trees where
+    # the quantity is 0, so the restored term subtracts nothing and nothing
+    # moves.
+    #
+    # ⚠️ "The law is written in one place" and "every arm reads that place"
+    # are two different sentences. The commit that dropped the term said it
+    # was guarding against the term coming back as a third implementation;
+    # the guard was one call away from where it was needed.
+    tool, disk, collisions, leftovers = _assert_balances(log, out, root)
     assert collisions >= 1, (
         f"the fixture did not produce a collision (got {collisions}), so this "
         f"arm would pass without measuring anything. Key used: {key!r}")
-
-    tool, disk = _tool_count(log), _disk_count(out)
-    leftovers = int(_manifest(root)["summary"]["run"]["leftovers"])
-    assert disk == tool + leftovers, (
-        "the law stopped closing on a tree with a non-zero collision count, "
-        "which is what it claims not to depend on:\n"
-        f"  tool {tool} / disk {disk} / leftovers {leftovers} / "
-        f"collisions {collisions}")
