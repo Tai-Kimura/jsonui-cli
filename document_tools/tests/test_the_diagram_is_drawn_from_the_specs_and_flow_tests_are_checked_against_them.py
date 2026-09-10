@@ -426,7 +426,9 @@ class TheOwnersFindAnAppsFlowTestsWhereItsConfigSaysTheyAre(unittest.TestCase):
             log = buf.getvalue()
             self.assertIn("no test root for beta", log, log)
             self.assertNotIn("flow tests 0 in", log)
-            self.assertNotIn("declared", log.split("no test root for beta")[1].split("\n")[0])
+            line = [l for l in log.splitlines() if "no test root for beta" in l][0]
+            self.assertIn("(nothing declared;", line)
+            self.assertNotIn("(declared ", line)
 
     def test_a_declared_but_absent_test_src_is_named_by_its_declared_path(self):
         # A face read the fallback path as "where its tests are supposed to

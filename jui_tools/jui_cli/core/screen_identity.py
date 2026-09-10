@@ -509,7 +509,14 @@ _EXTERNAL = re.compile(
     # notice names must be the vocabulary the code has.
     r"地図アプリ|電話アプリ|メールアプリ"
 )
-_NONE = re.compile(r"同画面|画面内|遷移なし|遷移しない|タブ切替|そのまま|留まる")
+_NONE = re.compile(
+    r"同画面|画面内|遷移なし|遷移しない|タブ切替|そのまま|留まる|"
+    # A bare なし — the whole destination, optionally followed by a
+    # parenthetical. The notice to the faces (2026-09-10) named it; a face
+    # wrote it 13 times; the code had 遷移なし and not なし. Anchored, so
+    # prose such as ログインなしで閲覧 is not swallowed.
+    r"\Aなし(?=\s*[（(]|\s*\Z)"
+)
 #: Anchored at the start ON PURPOSE — see `classify_destination`. The spelling
 #: list is the part that rots: `前画面` was here and `前の画面` was not, and 7
 #: destinations that plainly say "go back" were filed as `unknown` because of

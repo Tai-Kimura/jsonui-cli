@@ -950,7 +950,7 @@ def _diagram_owners(
         if entry.get("root"):
             roots_by_app[entry.get("app")] = Path(entry["root"])
 
-    def tests_for(app: str | None, declared_root: Path | None = None) -> tuple[Path, Path, str]:
+    def tests_for(app: str | None, declared_root: Path | None = None) -> tuple[Path, Path, str, Path]:
         """``(flows_dir, screens_dir, provenance)`` — provenance says which
         root the paths came from, so the log never claims to have LOOKED at
         a directory it did not (a face read `flow tests 0 in client/tests/bar`
@@ -962,14 +962,15 @@ def _diagram_owners(
             if declared.is_dir():
                 base, provenance = declared, "declared test root"
             else:
-                return declared / "flows", declared / "screens", "no test root (declared, absent)"
+                return declared / "flows", declared / "screens", "absent: declared", declared
         else:
             base = input_path / app if app else input_path
-            provenance = ("fallback under the input directory" if base.is_dir()
-                          else "no test root (undeclared)")
+            if not base.is_dir():
+                return base / "flows", base / "screens", "absent: nothing declared", base
+            provenance = "fallback under the input directory"
         flows = base / "flows" if (base / "flows").exists() else base
         screens = base / "screens" if (base / "screens").exists() else flows.parent / "screens"
-        return flows, screens, provenance
+        return flows, screens, provenance, base
 
     owners: list[dict] = []
     seen_specs: set[Path] = set()
@@ -991,12 +992,13 @@ def _diagram_owners(
             declared = project_config.declared_app_owned_screens(config)
             app_owned = [e.screen_id for e in screen_identity.parse_app_owned_screens(declared)]
             owned_transitions = screen_identity.app_owned_transitions(declared)
-        flows, screens, provenance = tests_for(app, declared_root)
+        flows, screens, provenance, test_root = tests_for(app, declared_root)
         owners.append({
             "name": name, "app": app, "spec_dir": spec_dir, "layouts_dir": layouts,
             "aliases": aliases, "app_owned": app_owned,
             "app_owned_transitions": owned_transitions,
             "flows_dir": flows, "screens_dir": screens, "tests_provenance": provenance,
+            "test_root": test_root,
             "rel": f"{app}/diagram.html" if app else "diagram.html",
         })
 
@@ -1494,9 +1496,11 @@ def generate_html_directory(
                 app_diagrams[_owner] = owner["rel"]
                 if not owner["app"]:
                     mermaid_generated = True
-                if owner["tests_provenance"].startswith("no test root"):
-                    which = ("declared " if "declared" in owner["tests_provenance"] else "")
-                    flows_clause = (f"no test root for {_owner} ({which}{owner['flows_dir'].parent} absent), "
+                if owner["tests_provenance"] == "absent: declared":
+                    flows_clause = (f"no test root for {_owner} (declared {owner['test_root']} absent), "
+                                    f"nothing checked")
+                elif owner["tests_provenance"] == "absent: nothing declared":
+                    flows_clause = (f"no test root for {_owner} (nothing declared; {owner['test_root']} absent), "
                                     f"nothing checked")
                 else:
                     flows_clause = (f"flow tests {result.stats.get('flow_tests', 0)} in "

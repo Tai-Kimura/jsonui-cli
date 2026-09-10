@@ -158,3 +158,16 @@ class ExternalSpellingsReadOffTheSecondCorpus(unittest.TestCase):
 
     def test_a_screen_named_browser_still_wins(self):
         self.assertEqual(classify_destination("Browser (URL)", ("browser",)).kind, "screen")
+
+
+class ABareNoneIsANone(unittest.TestCase):
+    """The notice named なし as the word; the code had only 遷移なし."""
+
+    def test_bare_and_with_parenthetical(self):
+        for raw in ("なし", "なし（アラート表示）", "なし (sheet)"):
+            with self.subTest(raw=raw):
+                self.assertEqual(classify_destination(raw, ("chat",)).kind, "none")
+
+    def test_prose_containing_nashi_is_not_swallowed(self):
+        self.assertEqual(classify_destination("ログインなしで閲覧", ("chat",)).kind, "unknown")
+        self.assertEqual(classify_destination("Chat（ログインなし）", ("chat",)).kind, "screen")
