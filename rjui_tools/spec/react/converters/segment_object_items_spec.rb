@@ -146,19 +146,27 @@ RSpec.describe RjuiTools::React::Converters::SegmentConverter do
 
   describe 'the generated JSX parses' do
     # The arms above are the regression guard and always run. This is the
-    # end-to-end claim, and it needs a JavaScript parser. rjui_tools has no
-    # node_modules of its own, so point it at one:
+    # end-to-end claim, and it needs a JavaScript parser.
     #
-    #   JSONUI_BABEL_DIR=<a dir from which @babel/parser resolves> rspec …
+    # ⚠️ Until 1.8.69 this example was PENDING in EVERY environment that ran
+    # it — CI's default rjui leg, CI's ruby 2.6 leg, the release gate's 26
+    # legs, and triage's worktree, four for four on 2026-09-10 — because it
+    # waited on a JSONUI_BABEL_DIR nobody set. A parse claim nobody ran is
+    # not a green, and a gate that has never once observed its subject is
+    # not a gate. The parser is pinned in spec/support/package.json beside
+    # tsc and esbuild now, so the `npm ci --prefix rjui_tools/spec/support`
+    # step that CI and the release gate already run installs it, and this
+    # arm runs where the others do. spec/ never reaches a consumer.
     #
-    # Without it the example is PENDING, not passing — a parse claim nobody
-    # ran is not a green.
+    # JSONUI_BABEL_DIR still overrides, for a machine that has the parser
+    # elsewhere and does not want the install.
     def parser_path
       return @parser_path if defined?(@parser_path)
 
       require 'open3'
       dir = ENV['JSONUI_BABEL_DIR']
       dir = File.expand_path(dir) if dir && !dir.empty?
+      dir = File.expand_path('../../support', __dir__) if dir.nil? || dir.empty?
       out, _err, status = Open3.capture3(
         { 'NODE_PATH' => nil }.compact,
         'node', '-e',
@@ -185,7 +193,16 @@ RSpec.describe RjuiTools::React::Converters::SegmentConverter do
     end
 
     it 'parses with an object entry present, and the old output does not' do
-      skip 'set JSONUI_BABEL_DIR to a directory where @babel/parser resolves' unless parser_path
+      unless parser_path
+        # Same ruling as the tsc and esbuild arms: on a developer machine a
+        # missing toolchain is a skip, but in CI a skipped gate gates
+        # nothing and disappears into a green summary. This one spent its
+        # whole life on the quiet side, so CI says so out loud.
+        raise '@babel/parser did not resolve: run `npm ci --prefix ' \
+              'rjui_tools/spec/support`' if ENV['CI'] && !ENV['CI'].empty?
+
+        skip 'set JSONUI_BABEL_DIR to a directory where @babel/parser resolves'
+      end
 
       jsx, = emit([{ 'label' => 'opt_a', 'value' => 'a' }])
       expect(parses?(jsx)).to be(true), 'the generated JSX did not parse'

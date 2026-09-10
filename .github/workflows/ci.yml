@@ -321,18 +321,32 @@ jobs:
         # to the last line that supports 2.6.
         if: ${{ matrix.ruby == '2.6' }}
         run: gem install ${{ matrix.gems }} --no-document
-      - name: Install TypeScript and esbuild (rjui emitted-TS type-check, define fold)
+      - name: Install the rjui spec toolchain (tsc, esbuild, @babel/parser)
         # The rjui specs type-check emitted TSX with a tsc pinned in
-        # rjui_tools/spec/support/package.json, and run the generated
+        # rjui_tools/spec/support/package.json, run the generated
         # screenMarker helper through esbuild's define (same package.json)
-        # to measure that a production build folds the marker away. It lives under spec/ so it
+        # to measure that a production build folds the marker away, and hand
+        # emitted JSX to @babel/parser. It lives under spec/ so it
         # never reaches a consumer — `jui sync_tool` deletes spec/ by default
         # and the distribution does not ship it.
         #
         # Without this the `compile_as_typescript` matcher SKIPS rather than
         # passing (mark_skipped!, visible in the count) — but a skipped gate
         # gates nothing, so CI installs it.
-        if: ${{ matrix.tool == 'rjui_tools' && !matrix.ruby }}
+        #
+        # ⚠️ This step used to carry `&& !matrix.ruby`, so the ruby-pinned leg
+        # ran without the toolchain and reported ten pendings beside its
+        # `0 failures`. Eight of those were defensible — that leg's question
+        # is whether the vendored tools emit the same bytes under the
+        # consumer's older ruby, which a TypeScript type-check does not
+        # answer — but the ninth, the @babel/parser arm, was pending in
+        # every environment that ran it: this leg, the default leg, the
+        # release gate and triage's worktree, four for four on 2026-09-10.
+        # A gate that has never once observed its subject is not a gate. The
+        # arm raises instead of skipping when CI is set now, so the
+        # toolchain has to be here on every rjui leg. It is node, not ruby:
+        # nothing about it depends on which ruby runs the suite.
+        if: ${{ matrix.tool == 'rjui_tools' }}
         run: npm ci --prefix rjui_tools/spec/support
       - name: rspec (bundle)
         if: ${{ matrix.bundler }}
