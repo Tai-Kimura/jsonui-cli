@@ -213,3 +213,44 @@ class EveryDeclaredVectorExists(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ADeclarationSitsBesideTheKeyItDescribes(unittest.TestCase):
+    """`<key>ReadBy` and `<key>Vectors` must have `<key>` as a sibling.
+
+    The existence arms above check that a readBy names a real file and that
+    a vector id names a real case — neither checks WHICH key a declaration
+    hangs under. Measured 2026-09-10: `embedParamsTypesVectors` and
+    `embedParamsTypesReadBy` landed inside `collectionCellScope` (the insert
+    anchored on a neighbour) while `embedParamsTypes` itself is top-level,
+    and 13 arms stayed green. Position is the definition of ownership, so a
+    detector that reads only position cannot see this; the independent fact
+    is the suffix convention, and this arm holds it.
+    """
+
+    SUFFIXES = ("ReadBy", "Vectors")
+
+    def test_every_suffixed_declaration_has_its_key_as_a_sibling(self):
+        from pathlib import Path
+        import json
+        core = Path(__file__).resolve().parents[2] / "shared" / "core"
+        orphans = []
+
+        def walk(node, path):
+            if not isinstance(node, dict):
+                return
+            for key, value in node.items():
+                for suffix in self.SUFFIXES:
+                    if key.endswith(suffix) and len(key) > len(suffix):
+                        base = key[: -len(suffix)]
+                        if base not in node:
+                            orphans.append(f"{path}.{key} (no sibling {base!r})")
+                walk(value, f"{path}.{key}")
+
+        checked = 0
+        for name in ("screen_identity.json", "platform_semantics.json",
+                     "binding_semantics.json", "attribute_semantics.json"):
+            walk(json.loads((core / name).read_text(encoding="utf-8")), name)
+            checked += 1
+        self.assertEqual(checked, 4)
+        self.assertEqual(orphans, [], "\n".join(orphans))

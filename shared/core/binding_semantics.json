@@ -107,12 +107,12 @@
     "objectOrArrayReadBy": "Hand-mirrored in Ruby: rjui_tools/lib/react/converters/base_converter.rb #convert_text_binding (text sinks emit a stringifying template literal; unresolved renders \"\"), pinned by rjui_tools/spec/react/converters/base_converter_spec.rb 'treats a null default as unresolved (empty string)'. Declared 2026-09-10; the link is prose.",
     "objectOrArray": "unresolved (empty string) — never a platform debug dump"
   },
+  "embedParamsTypesVectors": ["params_literal_types_preserved", "params_bound_types_preserved", "params_unresolved_leaf_dropped", "params_nested_unresolved_leaf_dropped"],
+  "embedParamsTypesReadBy": "Executed by the vendored binding_vectors.json in SwiftJsonUI and KotlinJsonUI (ids in embedParamsTypesVectors); in this repository the validators only exempt Embed params from attribute typing (kjui_tools/lib/core/binding_validator_core.rb embed_params_attr?, mirrored in sjui_tools and rjui_tools). Declared 2026-09-10.",
   "embedParamsTypes": "Resolved leaves keep native JSON types (bool stays bool, 5 stays integer 5). Unresolved leaves are dropped (see unresolved.embedParams).",
   "collectionCellScope": {
     "guaranteed": "The item object's own fields, flat, plus the reserved key 'index' (0-based).",
     "parentData": "NOT guaranteed. Depending on parent-screen keys inside a cell is non-portable (validator warning).",
-    "embedParamsTypesVectors": ["params_literal_types_preserved", "params_bound_types_preserved", "params_unresolved_leaf_dropped", "params_nested_unresolved_leaf_dropped"],
-    "embedParamsTypesReadBy": "Executed by the vendored binding_vectors.json in SwiftJsonUI and KotlinJsonUI (ids in embedParamsTypesVectors); in this repository the validators only exempt Embed params from attribute typing (kjui_tools/lib/core/binding_validator_core.rb embed_params_attr?, mirrored in sjui_tools and rjui_tools). Declared 2026-09-10.",
     "itemPrefixReadBy": "Hand-mirrored in Ruby: kjui_tools/lib/compose/generators/cell_generator.rb (scaffolds flat item fields) and kjui_tools/lib/core/binding_validator_core.rb (mirrored in sjui_tools and rjui_tools), pinned by kjui_tools/spec/compose/generators/cell_generator_spec.rb 'scaffolds flat item-field bindings without the item. prefix'. Declared 2026-09-10; the link is prose.",
     "itemPrefix": "'@{item.xxx}' is NOT canonical; scaffolds must emit flat field names."
   },
