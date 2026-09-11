@@ -185,12 +185,15 @@ def test_the_count_reaches_the_manifest_because_the_warning_tally_cannot_carry_i
     gen._record_generation_manifest(out, tmp_path, [], {})
     run = json.loads((tmp_path / ".jsonui-cli" / "generation-manifest.json")
                      .read_text(encoding="utf-8"))["summary"]["run"]
-    assert run["collidingSourceNames"] == 2
+    # The key is named "Names" and now holds them (it used to hold the count
+    # — a number under a name that promised a list). The count is len().
+    assert sorted(run["collidingSourceNames"]) == ["storeinfo", "twofaverification"]
+    assert len(run["collidingSourceNames"]) == 2
 
     # …and the explicit zero, so a reader can tell "none" from "older record".
-    gen._colliding_sources = 0
+    gen._colliding_sources[:] = []
     assert gen._report_colliding_spec_sources(tmp_path / "empty") == []
     gen._record_generation_manifest(out, tmp_path, [], {})
     run2 = json.loads((tmp_path / ".jsonui-cli" / "generation-manifest.json")
                       .read_text(encoding="utf-8"))["summary"]["run"]
-    assert run2["collidingSourceNames"] == 0
+    assert run2["collidingSourceNames"] == []   # explicit empty, not an absent key

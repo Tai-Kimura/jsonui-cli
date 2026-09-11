@@ -170,21 +170,102 @@ class FileState:
     sha256: str
 
 
+class NotObserved(RuntimeError):
+    """A claim was asked of a run that never looked at the tree.
+
+    `0 tracked` and `nothing was scanned` are different facts, and every
+    ticket in the record series since 1.8.8 is one of them wearing the
+    other's number. A ledger that was never handed a scan refuses to
+    answer rather than answering 0.
+    """
+
+
 @dataclass
 class GenerationRun:
-    """Snapshot a tree, run a generator, record only what moved."""
+    """THE RUN LEDGER: one value, built once per run, that every claim is
+    derived from.
+
+    Before 2026-09-11 this held only the pre-run snapshot, and each claim
+    the record made — `tracked`, `recorded`, `dropped`, `collisions`, the
+    closing lines — was a scalar computed at its own print site and passed
+    by hand: `coverage_line` took eleven numbers, `jui build` read three of
+    them back out of the manifest it had just written, and `jsonui-doc`
+    assembled seventeen `facts[...]` entries by hand. Observation and claim
+    were different variables, so a claim never carried WHICH tree, WHICH
+    roots, or HOW MANY directories it stood on. That is the mechanism
+    behind about sixty trains and thirty tickets of "the record said more
+    than it saw" (1.8.68: six tickets, 1.8.69: eight, 1.8.70: eight).
+
+    Now the ledger owns the observation AND the vocabulary. Callers hand it
+    COLLECTIONS at the point of observation (`observe`, `written`,
+    `note_distributed`, `record_*`); counts, truncated lists and notes are
+    derived here, once, in `claims()` and `run_facts()`. `save` and
+    `coverage_line` take the ledger and nothing else — there is no number
+    to forget to pass, and no second definition of a quantity's name.
+
+    "Not observed" is a value, not a zero: `observed is None` means no scan
+    ran, and a claim asked of such a ledger raises `NotObserved`.
+    """
 
     project_root: Path
     version: str
     #: Paths considered, keyed relative to project_root.
     before: dict[str, FileState] = field(default_factory=dict)
 
-    def observe(self, paths) -> None:
+    # --- what the scan covered ------------------------------------------
+    #: Project-relative roots the scan walked; `()` means the caller did
+    #: not declare any, and the record says so rather than guessing.
+    roots: tuple = ()
+    #: How many paths `observe` was handed. None = observe never ran.
+    observed: int | None = None
+
+    # --- what the run found afterwards ---------------------------------
+    present: list | None = None       # keys present after the run
+    written_keys: list | None = None  # keys this run records or corrects
+    absent_after: list = field(default_factory=list)
+    #: Present keys not under any declared root (empty when roots are ()).
+    outside_roots: list = field(default_factory=list)
+    #: Files the build distributed to platforms; None = not counted.
+    distributed: int | None = None
+
+    # --- what `save` learned against the previous record ---------------
+    dropped: list | None = None
+    untracked: list | None = None
+    dropped_versions: dict | None = None
+    untracked_versions: dict | None = None
+    collisions: dict | None = None
+    recorded_versions: dict | None = None
+
+    #: Run facts, only ever set through `record_*`. None = this producer
+    #: has no run facts (jui build); a dict = it does (jsonui-doc).
+    _facts: dict | None = None
+
+    # ------------------------------------------------------------------
+    # observation
+    # ------------------------------------------------------------------
+    def observe(self, paths, *, roots=()) -> None:
         """Record the pre-run state of every path a run could write."""
+        paths = list(paths)
+        self.roots = tuple(self._key(r) for r in roots) if roots else ()
+        self.observed = len(paths)
         for path in paths:
             state = _state_of(path)
             if state is not None:
                 self.before[self._key(path)] = state
+
+    def observe_written(self, keys, *, roots=()) -> None:
+        """A producer that has no before/after — it knows what it wrote.
+
+        `jsonui-doc generate html` registers each page as it is written;
+        the pages are its observation. Recorded as both the scan and the
+        writes, with `present` left None so `tracked` falls back to the
+        record's own size, as it always has for this producer.
+        """
+        keys = sorted(keys)
+        self.roots = tuple(self._key(r) for r in roots) if roots else ()
+        self.observed = len(keys)
+        self.written_keys = keys
+        self._refuse_outside_roots(keys)
 
     def written(self, paths, known: set | None = None,
                 bootstrap: bool = True) -> list[str]:
@@ -230,9 +311,16 @@ class GenerationRun:
         rule fires on the absence of a record, not on having written.
         A halted run has one kind of direct evidence, a content change
         inside its window, so that is all it may record.
+
+        Stored on the ledger as well as returned: `present`, `written_keys`
+        and `absent_after` are what `save` and `coverage_line` read.
         """
+        if self.observed is None:
+            raise NotObserved("written() asked of a run that never observed the tree")
         known = known if known is not None else set()
         touched = []
+        present = []
+        absent = []
         for path in paths:
             key = self._key(path)
             after = _state_of(path)
@@ -240,12 +328,179 @@ class GenerationRun:
                 # Generated last time, absent now: the run did not write it,
                 # and neither does the manifest claim it did. The stale entry
                 # is dropped by `save` rather than left naming a missing file.
+                absent.append(key)
                 continue
+            present.append(key)
             prior = self.before.get(key)
             changed = prior is None or prior.sha256 != after.sha256
             if changed or (bootstrap and key not in known):
                 touched.append(key)
+        # Recorded, not refused: `jui build`'s scan is a union of enumerations
+        # (collected targets, view targets, generated dirs), so a present key
+        # outside the DIRECTORIES it walked is normal. The count says how
+        # much of the claim stands outside the declared scan — a reader can
+        # see it instead of inferring it. The doc generator's scope is a real
+        # boundary, and `observe_written` refuses there.
+        self.outside_roots = [k for k in present
+                              if not self._under_roots(Path(self.project_root) / k)]
+        self.present = present
+        self.written_keys = touched
+        self.absent_after = absent
         return touched
+
+    def note_distributed(self, paths) -> None:
+        """Files placed under the platforms' layout dirs. None = not counted."""
+        self.distributed = None if paths is None else sum(1 for _ in paths)
+
+    # ------------------------------------------------------------------
+    # run facts (the doc generator's observations). Collections in,
+    # counts out — the vocabulary below is the only place these names live.
+    # ------------------------------------------------------------------
+    def _facts_dict(self) -> dict:
+        if self._facts is None:
+            self._facts = {}
+        return self._facts
+
+    def record_leftovers(self, stale, stale_outside, *, walked_dirs,
+                         colliding_sources, referrers: dict) -> None:
+        """Pages found that this run did not write.
+
+        `stale`: under -o. `stale_outside`: (path, copies) pairs in the
+        directories the run wrote outside -o; only those under this
+        ledger's roots are listed, the rest are counted as `Elsewhere` so a
+        scoped 0 cannot read as "the scan found nothing". `walked_dirs` is
+        the directories that scan walked; its length is the denominator —
+        a 0 with a 0 denominator is not the same answer as a 0 with one.
+        Collections in, counts out: nothing here is handed a number.
+        """
+        f = self._facts_dict()
+        stale = list(stale)
+        f["leftovers"] = len(stale)
+        f["leftoverPaths"] = [str(p) for p in stale[:20]]
+        if len(stale) > 20:
+            f["leftoverPathsNote"] = f"first 20 of {len(stale)}"
+        mine = [(p, copies) for p, copies in stale_outside
+                if self._under_roots(p)]
+        f["leftoversOutside"] = len(mine)
+        f["leftoversOutsideElsewhere"] = len(list(stale_outside)) - len(mine)
+        f["leftoversOutsideScanned"] = len(list(walked_dirs))
+        f["collidingSourceNames"] = list(colliding_sources)
+        f["leftoverOutsidePaths"] = [str(p) for p, _c in mine[:20]]
+        f["leftoverOutsideSiteCopies"] = [str(c) for _p, copies in mine[:20] for c in copies]
+        f["leftoverOutsideReferencedBy"] = {
+            str(p): len(referrers.get(Path(p).resolve(), [])) for p, _c in mine[:20]}
+        if len(mine) > 20:
+            f["leftoverOutsidePathsNote"] = f"first 20 of {len(mine)}"
+
+    def record_outside_output(self, block: dict | None) -> None:
+        if block:
+            self._facts_dict()["outsideOutput"] = dict(block)
+
+    def record_document_slots(self, slots: dict | None) -> None:
+        if slots:
+            self._facts_dict()["documentSlots"] = dict(slots)
+
+    def record_apps(self, apps) -> None:
+        self._facts_dict()["apps"] = list(apps)
+
+    def record_time(self, recorded_at: str) -> None:
+        self._facts_dict()["recordedAt"] = recorded_at
+
+    def record_manifest_visibility(self, *, tracked, ignored) -> None:
+        f = self._facts_dict()
+        f["manifestIsGitTracked"] = tracked
+        f["manifestIsGitIgnored"] = ignored
+
+    def run_facts(self) -> dict | None:
+        """The run block, or None when this producer records none."""
+        return None if self._facts is None else dict(self._facts)
+
+    # ------------------------------------------------------------------
+    # claims — derived, never passed
+    # ------------------------------------------------------------------
+    def claims(self) -> dict:
+        """Every number the record and the closing lines may state.
+
+        ONE derivation. `save` writes `summary` from this and
+        `coverage_line` prints from this, so a quantity cannot have two
+        definitions, and a caller cannot hand either of them a number.
+        Asked of a ledger that never observed, it refuses.
+        """
+        if self.observed is None:
+            raise NotObserved("claims() asked of a run that never observed the tree")
+        written = self.written_keys or []
+        present = self.present
+        recorded = self.recorded_count if self.recorded_count is not None else len(written)
+        tracked = len(present) if present is not None else recorded
+        dropped = self.dropped or []
+        untracked = self.untracked or []
+        collisions = self.collisions or {}
+        return {
+            "scan": {
+                "roots": list(self.roots) if self.roots else "not declared",
+                "observed": self.observed,
+                "outsideDeclaredRoots": len(self.outside_roots),
+            },
+            "summary": {
+                "tracked": tracked,
+                "recorded": recorded,
+                "unrecorded": max(tracked - recorded, 0) if present is not None else 0,
+                "trackedByDirectory": tracked_scope(
+                    present if present is not None else (self.recorded_keys or written)),
+                "dropped": len(dropped),
+                "droppedKeys": list(dropped[:20]),
+                "untracked": len(untracked),
+                "untrackedKeys": list(untracked[:20]),
+                "droppedVersions": dict(sorted((self.dropped_versions or {}).items())),
+                "untrackedVersions": dict(sorted((self.untracked_versions or {}).items())),
+                "collisions": sum(collisions.values()),
+                "collisionKeys": sorted(collisions)[:20],
+            },
+            "run": {
+                "version": self.version,
+                "written": len(written),
+                "distributed": self.distributed,
+                "recordedVersions": dict(self.recorded_versions or {}),
+            },
+        }
+
+    #: Set by `save`: the record's size and keys after the merge, so
+    #: `recorded` is the file's own count and not a re-count elsewhere.
+    recorded_count: int | None = None
+    recorded_keys: list | None = None
+
+    # ------------------------------------------------------------------
+    def _under_roots(self, path) -> bool:
+        """Under one of the declared roots, compared as RESOLVED paths.
+
+        Not as key strings: a root spelled `.` would match everything, and
+        a root outside the project (a split docs tree) is stored absolute
+        while keys under the project are relative, so a string prefix test
+        compares two spellings of the same thing and gets it wrong both
+        ways. Measured 2026-09-11: every leftover counted as "mine" and
+        `leftoversOutsideElsewhere` was 0 on a two-face tree.
+        """
+        if not self.roots:
+            return True
+        target = real_case(Path(path))
+        base = real_case(Path(self.project_root))
+        for r in self.roots:
+            rp = Path(r)
+            rp = real_case(rp if rp.is_absolute() else base / rp)
+            if target == rp or rp in target.parents:
+                return True
+        return False
+
+    def _refuse_outside_roots(self, keys) -> None:
+        """A key outside every declared root is a claim wider than the scan."""
+        if not self.roots:
+            return
+        outside = [k for k in keys if not self._under_roots(Path(self.project_root) / k)]
+        if outside:
+            raise ValueError(
+                f"{len(outside)} key(s) lie outside the declared scan roots "
+                f"{list(self.roots)}: {outside[:5]} — the record would claim "
+                "more than the run looked at")
 
     def _key(self, path) -> str:
         """The project-relative path, spelled the way the disk spells it.
@@ -269,6 +524,10 @@ class GenerationRun:
             return p.relative_to(root).as_posix()
         except ValueError:
             return p.as_posix()
+
+
+#: The name the ticket used. Same object.
+RunLedger = GenerationRun
 
 
 def _state_of(path) -> FileState | None:
@@ -368,40 +627,44 @@ def _supersedes(new_key, new_value, old_key, old_value, canonical) -> bool:
     return new_key == canonical and old_key != canonical
 
 
-def save(
-    project_root: Path,
-    version: str,
-    written_keys: list[str],
-    *,
-    present_keys: list[str] | None = None,
-    generated_by: str = "jui build",
-    scope: dict | None = None,
-    run_facts: dict | None = None,
-) -> dict:
+def save(ledger: GenerationRun, *, generated_by: str = "jui build",
+         clear_run_facts: bool = False) -> dict:
     """Merge this run's writes into the manifest and write it back.
 
-    `present_keys`, when given, is every generated file the run could see;
-    entries naming a file that is no longer there are dropped, so the
-    manifest does not keep asserting a version for something absent.
+    TAKES THE LEDGER AND NOTHING ELSE. Before 2026-09-11 this took the
+    written keys, the present keys, a scope and a run-facts dict as four
+    separate arguments, and every one of them was a place to hand the
+    record a number the run had not observed. `jui build` passed a scope
+    it had computed with the same function this file exports; `jsonui-doc`
+    passed seventeen hand-assembled facts. Now the keys come from the
+    ledger's own `written()` / `observe_written()`, the breakdown is
+    derived from the same keys `tracked` is, and the run block is whatever
+    `record_*` put on the ledger.
 
-    `run_facts` is what the run OBSERVED but did not write — leftovers it
-    found, directories it wrote outside its own output. It lands in its own
-    block rather than beside `tracked`/`recorded`, because those two describe
-    the manifest's coverage of the tree and these describe the run's actions;
-    a reader who adds them together gets a number that means nothing.
-    Carried forward unchanged when not given (`None`): `jui build` has no run
-    facts of its own, and dropping the previous `jsonui-doc` record made "no
-    outside writes" and "no record" the same absence (measured 2026-09-10:
-    a spec-only commit on one face deleted 43 lines of manifest nobody meant
-    to touch). An EMPTY dict clears it — that is a run saying it found
-    nothing. The block names its writer and time (`recordedBy`,
-    `recordedAt`), so a carried block reads as older than the entries
-    around it.
+    What this function learns against the PREVIOUS record — entries whose
+    file is gone (`dropped`), entries that left the tracked set with the
+    file still there (`untracked`), spellings that normalised onto one key
+    (`collisions`), and which versions the surviving entries carry — is
+    written back onto the ledger, so `coverage_line` reads it from the
+    same place `summary` was written from, instead of re-reading the JSON
+    this function just wrote (which is what `jui build` did).
 
-    Added 2026-09-09 for `jsonui-doc generate html`, which detected 64
-    leftover pages on one face and had nowhere to put the finding: it printed
-    them to stdout, discarded the return value, and the pages shipped anyway.
+    Run facts: None on the ledger means this producer has none and the
+    previous producer's block is CARRIED FORWARD (dropping it made "no
+    outside writes" and "no record" the same absence — measured 2026-09-10,
+    a spec-only commit deleted 43 lines of manifest). A dict, even an empty
+    one, is this run's own finding and replaces it. `clear_run_facts=True`
+    is the explicit way to say "found nothing" from a producer that has no
+    `record_*` calls.
     """
+    if ledger.observed is None:
+        raise NotObserved("save() asked of a run that never observed the tree")
+    project_root = ledger.project_root
+    version = ledger.version
+    written_keys = list(ledger.written_keys or [])
+    present_keys = ledger.present
+    run_facts = {} if clear_run_facts else ledger.run_facts()
+
     files, collisions = load_migrated_with_collisions(project_root)
     # The previous writer's run record, kept when this caller has none.
     carried_run = None
@@ -421,19 +684,13 @@ def save(
     # this record exists to find files written by a particular release, and
     # a restore that re-stamps them with today's version answers that
     # question wrongly while looking repaired.
-    # TWO REASONS AN ENTRY LEAVES, AND THEY ARE NOT THE SAME NEWS.
     #
-    # The prune removes every key the current scan did not return, and this
-    # reported all of them as "whose file is gone". That was true while the
-    # scan only ever grew. Once it could also shrink — the ownership prune
-    # that stopped this record claiming another command's output — entries
-    # left with their files sitting right there, and the line said the
-    # build had deleted 231 of them. One face checked before raising an
-    # alarm; another keeps its manifest in git and would have committed
-    # that explanation into its history.
-    #
-    # The file itself is the discriminator, so it is asked rather than
-    # assumed.
+    # TWO REASONS AN ENTRY LEAVES, AND THEY ARE NOT THE SAME NEWS. The prune
+    # removes every key the current scan did not return, and this reported
+    # all of them as "whose file is gone". Once the scan could also shrink,
+    # entries left with their files sitting right there, and the line said
+    # the build had deleted 231 of them. The file itself is the
+    # discriminator, so it is asked rather than assumed.
     dropped: list[str] = []
     untracked: list[str] = []
     dropped_versions: dict = {}
@@ -441,14 +698,6 @@ def save(
     if present_keys is not None:
         present = set(present_keys)
         for key in sorted(k for k in files if k not in present):
-            # The version goes with the count. `released 231` and a list of
-            # the versions still on record share no quantity, so a reader
-            # watching a version vanish from that list cannot get from one
-            # line to the other: one says how many left, the other says
-            # what remains, and the fact joining them — that 215 of the 231
-            # were the version that disappeared — is in neither. Adjacency
-            # was not enough; what was missing is something both lines
-            # speak about.
             entry = files.get(key) or {}
             name = entry.get("version") or "unknown"
             if (Path(project_root) / key).exists():
@@ -463,70 +712,37 @@ def save(
     for key in written_keys:
         files[key] = {"version": version, "generatedAt": stamp, "generatedBy": generated_by}
 
+    # Back onto the ledger — the only place these quantities are defined.
+    ledger.dropped = dropped
+    ledger.untracked = untracked
+    ledger.dropped_versions = dropped_versions
+    ledger.untracked_versions = untracked_versions
+    ledger.collisions = dict(collisions)
+    ledger.recorded_count = len(files)
+    ledger.recorded_keys = sorted(files)
+    versions: dict = {}
+    for entry in files.values():
+        name = (entry.get("version") if isinstance(entry, dict) else None) or "unknown"
+        versions[name] = versions.get(name, 0) + 1
+    ledger.recorded_versions = versions
+
+    claims = ledger.claims()
     manifest = {
         "_comment": _COMMENT,
         "schemaVersion": 1,
         # The denominator, inside the file. Without it a reader compares the
         # entry count against the number in the build log, finds a gap of a
-        # hundred-odd, and reads it as records that went missing — measured:
-        # a run reporting "112 of 233" wrote a file holding 112 entries, and
-        # nothing in the file said the other 121 were simply never written.
-        "summary": {
-            "tracked": len(present_keys) if present_keys is not None else len(files),
-            "recorded": len(files),
-            "unrecorded": (
-                max(len(present_keys) - len(files), 0)
-                if present_keys is not None else 0
-            ),
-            # Which directories `tracked` came from. A bare total is a number
-            # a reader cannot reconcile against their own tree, and one who
-            # tried got 127 by hand against a reported 223 with no way to
-            # find the difference.
-            # 🔻 DERIVED WHEN THE CALLER HAS NOTHING TO SAY, not emptied. `scope or
-            # {}` wrote `{}` over whatever the previous producer had recorded:
-            # `jui build` passes its breakdown, `jsonui-doc generate html` passed
-            # none, and a face read `trackedByDirectory: {}` beside
-            # `tracked: 1464` in the same summary — the total counted both
-            # producers' files and the breakdown counted nobody's. The
-            # breakdown is a breakdown OF `tracked`, so when no caller supplies
-            # one it is computed from the same keys `tracked` was.
-            "trackedByDirectory": (
-                scope if scope is not None
-                else tracked_scope(present_keys if present_keys is not None
-                                   else files.keys())
-            ),
-            # Entries this run removed because the file is no longer there.
-            # A run that drops records while printing "untouched files keep
-            # the version that last wrote them" is describing the opposite
-            # of what it did.
-            "dropped": len(dropped),
-            "droppedKeys": dropped[:20],
-            # Left the tracked set with the file still on disk. A separate
-            # number because the two call for opposite responses: one is a
-            # finding, the other is this tool's own scope changing.
-            "untracked": len(untracked),
-            "untrackedKeys": untracked[:20],
-            # What versions left, so the surviving distribution above can
-            # be reconciled with it rather than guessed at.
-            "droppedVersions": dict(sorted(dropped_versions.items())),
-            "untrackedVersions": dict(sorted(untracked_versions.items())),
-            # Entries lost when two spellings normalised onto one key. The
-            # prune never saw these, so `dropped` says nothing about them.
-            "collisions": sum(collisions.values()),
-            "collisionKeys": sorted(collisions)[:20],
-        },
+        # hundred-odd, and reads it as records that went missing.
+        "summary": dict(claims["summary"]),
         "files": {k: files[k] for k in sorted(files)},
     }
-    # 🔻 CARRIED FORWARD WHEN THE CALLER HAS NOTHING TO SAY, not dropped —
-    # the rule `trackedByDirectory` got above, for the same reason. `jui
-    # build` never has run facts; `jsonui-doc generate html` always does.
-    # Placing the block only when handed one meant the next build rewrote
-    # the manifest without the doc run's record, and the v1.8.66 notice
-    # had just told every face to read `summary.run.outsideOutput.*` as
-    # the outside-writes discriminator — a missing block then reads as
-    # "none". The record names who wrote it and when, so a carried block
-    # reads as older than the entries around it. An EMPTY dict is not
-    # None: that is a run saying it found nothing, and it clears the block.
+    # What the scan covered, in the record itself. "not declared" is a
+    # value: a reader can tell an undeclared scope from an empty one.
+    manifest["summary"]["scan"] = claims["scan"]
+    # Three states, none of them silence: a dict with facts is this run's
+    # block; an EMPTY dict is this run saying it found nothing (no block,
+    # and the previous one is not carried); None is a producer with no facts
+    # of its own, whose predecessor's block is carried forward.
     if run_facts:
         run = dict(run_facts)
         run.setdefault("recordedBy", generated_by)
@@ -536,17 +752,16 @@ def save(
         run = dict(carried_run)
         # A block written before the stamp existed (1.8.66's doc run) carries
         # no recordedBy, and a reader who takes that absence as "no doc run"
-        # is wrong twice. It is named once, as what it is; a stamped block is
-        # carried byte-for-byte.
+        # is wrong twice. It is named once, as what it is.
         run.setdefault("recordedBy", "an earlier release (unstamped, before 1.8.67)")
         manifest["summary"]["run"] = run
     # A list silently cut at 20 reads as the whole list. Said only when it
     # applies, so the common case stays quiet.
-    for field, total in (("droppedKeys", len(dropped)),
-                         ("untrackedKeys", len(untracked)),
-                         ("collisionKeys", len(collisions))):
+    for field_name, total in (("droppedKeys", len(dropped)),
+                              ("untrackedKeys", len(untracked)),
+                              ("collisionKeys", len(collisions))):
         if total > 20:
-            manifest["summary"][field + "Note"] = f"first 20 of {total}"
+            manifest["summary"][field_name + "Note"] = f"first 20 of {total}"
     path = manifest_path(project_root)
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(manifest, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
@@ -571,13 +786,14 @@ def tracked_scope(keys) -> dict:
     return dict(sorted(scope.items(), key=lambda kv: (-kv[1], kv[0])))
 
 
-def coverage_line(
-    written: int, total: int, version: str, distributed: int | None = None,
-    dropped: int = 0, collisions: int = 0, collision_keys=(),
-    recorded_versions=None, untracked: int = 0,
-    dropped_versions=None, untracked_versions=None,
-) -> str:
-    """One line per subject, one population, one number.
+def coverage_line(ledger: GenerationRun) -> str:
+    """One line per subject, one population, one number — all from the ledger.
+
+    Eleven scalar parameters used to arrive here, three of them read back
+    out of the manifest `save` had just written. Every number below is now
+    `ledger.claims()`; nothing can be passed, so nothing can be passed
+    wrong, and a ledger that never observed prints NOT OBSERVED instead of
+    the 0 that "no scan" and "no files" used to share.
 
     ```
     generation manifest: 492 tracked generated file(s)      # reproduces
@@ -633,57 +849,49 @@ def coverage_line(
     the number can be found by it rather than by matching around
     neighbouring words.
     """
-    lines = [f"generation manifest: {total} tracked generated file(s)"]
+    if ledger.observed is None:
+        return ("generation manifest: NOT OBSERVED — no scan ran, so this run "
+                "makes no claim about the tree")
+    c = ledger.claims()
+    s, r = c["summary"], c["run"]
+    lines = [f"generation manifest: {s['tracked']} tracked generated file(s)"]
 
     # "not counted" rather than nothing, and 0 rather than "not counted".
     # The count returned None for both "the walk failed" and "there were
     # none", and the line then omitted itself for both — plus for the case
     # where it equalled `tracked`. Three states, one silence, and a lane
     # reading its own output took the absence for a zero.
-    if distributed is None:
+    if r["distributed"] is None:
         lines.append("  distributed to platforms: not counted")
     else:
-        lines.append(f"  distributed to platforms: {distributed} file(s)")
+        lines.append(f"  distributed to platforms: {r['distributed']} file(s)")
 
-    # The caveat sits beside the thing it qualifies. Put at the end of the
-    # block it qualified nothing in particular, and the two earlier
-    # attempts to fix a misreading by appending a denial there did not
-    # reach the reading. Its scope was also wrong: it said "untouched files
-    # keep the version that last generated them", and a face measured a
-    # file whose contents had changed that morning still carrying an older
-    # version — so the promise was false for touched files too. What is
-    # true of every entry is the weaker statement.
-    run = f"  this run (jui {version}): recorded/updated {written}"
-    if dropped:
+    run = f"  this run (jui {r['version']}): recorded/updated {r['written']}"
+    if s["dropped"]:
         # Stays on this line: a dropped entry means a generated file was
         # deleted, and those are tracked, so a diff shows it.
-        run += (f", dropped {dropped} entr(y/ies) whose file is gone"
-                f"{_left_at(dropped_versions)}")
-    if untracked:
+        run += (f", dropped {s['dropped']} entr(y/ies) whose file is gone"
+                f"{_left_at(s['droppedVersions'])}")
+    if s["untracked"]:
         # Deliberately not the same words. Reported as a drop, this reads
         # as the build having deleted them, and on a face that keeps the
         # manifest in git that explanation goes into the commit message.
-        run += (f", released {untracked} entr(y/ies) that left the tracked "
-                f"set{_left_at(untracked_versions)} (their files are still "
+        run += (f", released {s['untracked']} entr(y/ies) that left the tracked "
+                f"set{_left_at(s['untrackedVersions'])} (their files are still "
                 f"there)")
     lines.append(run)
 
-    # The caveat sits beside the thing it qualifies. Put at the end of the
-    # block it qualified nothing in particular, and the two earlier
-    # attempts to fix a misreading by appending a denial there did not
-    # reach the reading. Its scope was also wrong: it said "untouched files
-    # keep the version that last generated them", and a face measured a
-    # file whose contents had changed that morning still carrying an older
-    # version — so the promise was false for touched files too. What is
-    # true of every entry is the weaker statement.
+    # What the entries actually carry, printed instead of left to be
+    # inferred — three faces read the running version off the head and
+    # took it for this.
     lines.append(
-        f"  recorded versions: {_versions_phrase(recorded_versions)}"
+        f"  recorded versions: {_versions_phrase(r['recordedVersions'])}"
         " — the version of the run that stamped each entry, not proof of"
         " what generated the file"
     )
 
-    if collisions:
-        lines.extend(_collision_warning(collisions, collision_keys))
+    if s["collisions"]:
+        lines.extend(_collision_warning(s["collisions"], s["collisionKeys"]))
     return "\n".join(lines)
 
 

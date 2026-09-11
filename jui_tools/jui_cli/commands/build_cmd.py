@@ -304,7 +304,8 @@ def cmd_build(args: argparse.Namespace) -> int:
         project_root=config_mgr.project_root,
         version=toolchain_version(),
     )
-    gen_run.observe(_generated_paths(config_mgr))
+    _paths, _roots = _generated_scan(config_mgr)
+    gen_run.observe(_paths, roots=_roots)
 
     # Where the platform tools leave stages that failed while their build
     # carried on. Each of them is a separate process and names its own at
@@ -339,23 +340,13 @@ def cmd_build(args: argparse.Namespace) -> int:
         window is the only direct evidence a halted run has.
         """
         halted = _generated_paths(config_mgr)
-        written, present_keys, manifest = _record_generation(
-            config_mgr, gen_run, halted, bootstrap=False)
+        _record_generation(config_mgr, gen_run, halted, bootstrap=False)
         # Printed even though the build failed: a record nobody is told
         # about is the same as no record when the next reader tries to
         # explain a version stamp. The success line is not printed — the
         # build did not succeed.
         print()
-        print(generation_manifest.coverage_line(
-            len(written), len(present_keys), gen_run.version,
-            distributed=_distributed_file_count(config_mgr),
-            dropped=manifest["summary"].get("dropped", 0),
-            untracked=manifest["summary"].get("untracked", 0),
-        dropped_versions=manifest["summary"].get("droppedVersions"),
-        untracked_versions=manifest["summary"].get("untrackedVersions"),
-            collisions=manifest["summary"].get("collisions", 0),
-            collision_keys=manifest["summary"].get("collisionKeys", ()),
-            recorded_versions=_recorded_versions(manifest)))
+        print(generation_manifest.coverage_line(gen_run))
         _print_stage_failures(_stage_failures(_stage_ledger))
         return code
 
@@ -457,19 +448,9 @@ def cmd_build(args: argparse.Namespace) -> int:
         # Re-read after the build: a run can create files that did not exist to
         # be observed, and can leave others exactly as they were.
         present = _generated_paths(config_mgr)
-        written, present_keys, manifest = _record_generation(
-            config_mgr, gen_run, present)
+        _record_generation(config_mgr, gen_run, present)
         print()
-        print(generation_manifest.coverage_line(
-            len(written), len(present_keys), gen_run.version,
-            distributed=_distributed_file_count(config_mgr),
-            dropped=manifest["summary"].get("dropped", 0),
-            untracked=manifest["summary"].get("untracked", 0),
-        dropped_versions=manifest["summary"].get("droppedVersions"),
-        untracked_versions=manifest["summary"].get("untrackedVersions"),
-            collisions=manifest["summary"].get("collisions", 0),
-            collision_keys=manifest["summary"].get("collisionKeys", ()),
-            recorded_versions=_recorded_versions(manifest)))
+        print(generation_manifest.coverage_line(gen_run))
 
         # "Build completed successfully" is the identical sentence whether a
         # run produced every file or none: `jui verify` had the same shape
@@ -598,7 +579,7 @@ def _print_stage_failures(entries: list) -> None:
         print(f"  - {entry.get('stage', '?')}: {entry.get('message', '')}")
 
 
-def _record_generation(config_mgr, gen_run, present, *, bootstrap=True):
+def _record_generation(config_mgr, gen_run, present, *, bootstrap=True):  # -> GenerationRun
     """Decide what this run changed in the record, and save it.
 
     THE ORDER IS THE CONTRACT, which is why it is one function instead of
@@ -619,17 +600,36 @@ def _record_generation(config_mgr, gen_run, present, *, bootstrap=True):
     from ..core import generation_manifest
 
     known = set(generation_manifest.load_migrated(config_mgr.project_root))
-    written = gen_run.written(present, known=known, bootstrap=bootstrap)
-    present_keys = [gen_run._key(p) for p in present]
-    manifest = generation_manifest.save(
-        config_mgr.project_root, gen_run.version, written,
-        present_keys=present_keys,
-        scope=_tracked_scope(present_keys),
-    )
-    return written, present_keys, manifest
+    gen_run.written(present, known=known, bootstrap=bootstrap)
+    # Observed here, at the point it is measured — not computed at the print
+    # site. The ledger counts; this hands it the files.
+    gen_run.note_distributed(_distributed_files(config_mgr))
+    # The ledger carries the keys, the breakdown is derived from them inside
+    # `save`, and what `save` learns against the previous record comes back
+    # onto the ledger. Nothing is passed by number. The ledger is what a
+    # caller gets back — the manifest dict is a projection of it.
+    generation_manifest.save(gen_run, generated_by="jui build")
+    return gen_run
+
+
+def _generated_scan(config_mgr) -> tuple[list, list]:
+    """`_generated_paths`, plus WHICH DIRECTORIES the walk covered.
+
+    The second value is what the ledger records as the scan's roots, so the
+    manifest can say where its claim stands instead of leaving a reader to
+    reconcile a bare total against their own tree. Same walk, same paths;
+    the directory set is the one `rglob` ran over.
+    """
+    paths, roots = _generated_paths_and_roots(config_mgr)
+    return paths, roots
 
 
 def _generated_paths(config_mgr) -> list:
+    """Every generated file the manifest can speak about (paths only)."""
+    return _generated_paths_and_roots(config_mgr)[0]
+
+
+def _generated_paths_and_roots(config_mgr) -> tuple[list, list]:
     """Every generated file the manifest can speak about.
 
     Reuses `lint-generated`'s two collections rather than defining a third
@@ -699,9 +699,11 @@ def _generated_paths(config_mgr) -> list:
     # under every version. A green there would read as agreement.) Walking
     # and comparing names ourselves takes the question away rather than
     # answering it per environment.
+    walked: set = set()
     for directory in _generated_tree_roots(config_mgr) | {
         p.parent for p in list(paths) if _is_generated_dir(p.parent)
     }:
+        walked.add(directory)
         try:
             paths.update(f for f in directory.rglob("*") if f.is_file())
         except OSError:
@@ -731,8 +733,10 @@ def _generated_paths(config_mgr) -> list:
             probe = path
         return any(probe == tree or tree in probe.parents for tree in owned)
 
-    return sorted({c for c in (real_case(p) for p in paths)
+    canon = sorted({c for c in (real_case(p) for p in paths)
                    if not _owned_elsewhere(c)})
+    roots = sorted({real_case(d) for d in walked}, key=str)
+    return canon, roots
 
 
 def _generated_tree_roots(config_mgr) -> set:
@@ -2705,8 +2709,8 @@ def _distribute_images(
                 print(f"Converted {count} image(s) → {platform}")
 
 
-def _distributed_file_count(config_mgr) -> int | None:
-    """How many files the build DISTRIBUTED, for the line's second number.
+def _distributed_files(config_mgr) -> list | None:
+    """The files the build DISTRIBUTED, for the ledger to count.
 
     Counts the layouts and resources placed under each platform's
     `layoutsDir`, which is what "distributed" means here. It used to walk
@@ -2715,13 +2719,19 @@ def _distributed_file_count(config_mgr) -> int | None:
     A denominator that wrong is worse than none — the line exists to stop a
     reader inventing the scope, and a number off by two orders of magnitude
     invites exactly that, which is the misreading it was added to prevent.
+
+    Returns the FILES, not a count: the ledger derives the number, so the
+    print site cannot be handed one it did not observe. None = not counted.
     """
-    config = config_mgr.load()
+    # A config manager that cannot load is "not counted", not a crash: this
+    # now runs inside `_record_generation` for every build, including the
+    # halted path, and a record is better than none there.
+    load = getattr(config_mgr, "load", None)
+    config = load() if callable(load) else None
     platforms = config.get("platforms") if isinstance(config, dict) else None
     if not isinstance(platforms, dict):
         return None
-
-    total = 0
+    found: list = []
     try:
         for pconfig in platforms.values():
             if not isinstance(pconfig, dict):
@@ -2732,15 +2742,10 @@ def _distributed_file_count(config_mgr) -> int | None:
             layouts = config_mgr.project_root / root / layouts_rel
             if not layouts.is_dir():
                 continue
-            total += sum(1 for f in layouts.rglob("*") if f.is_file())
+            found.extend(f for f in layouts.rglob("*") if f.is_file())
     except OSError:
         return None
-    # `total or None` collapsed a real zero into the same value the OSError
-    # path returns, and the line then omitted itself for both. A lane
-    # reading its own output took that absence for a zero and carried on;
-    # the tree it was measuring had no distribution wired at all. Zero is
-    # an answer, and this returns it.
-    return total
+    return found
 
 
 def _tracked_scope(present_keys: list[str]) -> dict:

@@ -717,8 +717,10 @@ class RecordOrderTests(unittest.TestCase):
     def test_the_run_records_only_the_files_that_had_no_entry(self):
         from jui_cli.commands.build_cmd import _record_generation
 
-        written, present_keys, _ = _record_generation(
+        _led = _record_generation(
             _ConfigStub(self.root), self._run(), self._present())
+        written = list(_led.written_keys)
+        present_keys = list(_led.present)
         self.assertEqual(
             sorted(self.fresh), sorted(written),
             "the count is 5 of 5 when the lookup misses the migrated keys, "
@@ -740,16 +742,14 @@ class RecordOrderTests(unittest.TestCase):
         # different failure with a different summary. A reproduction that
         # fails differently from the original does not establish that the
         # arms above are watching the original.
-        from jui_cli.commands.build_cmd import _tracked_scope
         from jui_cli.core import generation_manifest as gm
 
         run = self._run()
         known = set(gm.load(self.root).get("files") or {})  # ← raw
         written = run.written(self._present(), known=known)
         present_keys = [run._key(p) for p in self._present()]
-        manifest = gm.save(self.root, run.version, written,
-                           present_keys=present_keys,
-                           scope=_tracked_scope(present_keys))
+        run.present = present_keys          # what the old call passed by hand
+        manifest = gm.save(run)             # the breakdown is derived, not passed
 
         self.assertEqual(5, len(written), "the control did not reproduce the "
                                          "over-recording it exists to show")
@@ -931,8 +931,9 @@ class HaltedRunRecordsWhatItWroteTests(unittest.TestCase):
 
         run = self._run()
         self.files[1].write_text("// written by this run\n", encoding="utf-8")
-        written, _keys, _m = _record_generation(
+        _led = _record_generation(
             _ConfigStub(self.root), run, self.files, bootstrap=False)
+        written = list(_led.written_keys)
         self.assertEqual(["gen/B.kt"], written)
         self.assertEqual("1.8.11",
                          gm.load(self.root)["files"]["gen/B.kt"]["version"])
@@ -946,8 +947,10 @@ class HaltedRunRecordsWhatItWroteTests(unittest.TestCase):
         from jui_cli.commands.build_cmd import _record_generation
         from jui_cli.core import generation_manifest as gm
 
-        written, _keys, _m = _record_generation(
+        _led = _record_generation(
             _ConfigStub(self.root), self._run(), self.files, bootstrap=False)
+
+        written = list(_led.written_keys)
         self.assertEqual([], written)
         self.assertEqual({}, gm.load(self.root).get("files") or {})
 
@@ -958,8 +961,10 @@ class HaltedRunRecordsWhatItWroteTests(unittest.TestCase):
         # files happen to be recorded already.
         from jui_cli.commands.build_cmd import _record_generation
 
-        written, _keys, _m = _record_generation(
+        _led = _record_generation(
             _ConfigStub(self.root), self._run(), self.files, bootstrap=True)
+
+        written = list(_led.written_keys)
         self.assertEqual(["gen/A.kt", "gen/B.kt", "gen/C.kt"], sorted(written))
 
     def test_a_completed_run_still_bootstraps(self):
@@ -967,8 +972,10 @@ class HaltedRunRecordsWhatItWroteTests(unittest.TestCase):
         # a stable project still gets a first entry.
         from jui_cli.commands.build_cmd import _record_generation
 
-        written, _keys, _m = _record_generation(
+        _led = _record_generation(
             _ConfigStub(self.root), self._run(), self.files)
+
+        written = list(_led.written_keys)
         self.assertEqual(3, len(written))
 
 

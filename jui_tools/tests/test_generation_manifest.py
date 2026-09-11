@@ -25,10 +25,63 @@ import json
 import os
 import tempfile
 import time
+import inspect
 import unittest
 from pathlib import Path
 
 from jui_cli.core import generation_manifest as gm
+
+
+def _ledger_for_line(written: int, total: int, version: str, *, distributed=None,
+                     dropped=0, collisions=0, collision_keys=(), recorded_versions=None,
+                     untracked=0, dropped_versions=None, untracked_versions=None):
+    """The old `coverage_line(written, total, version, …)` arguments, placed
+    on a ledger. These arms test the WORDING of the block; the numbers are
+    stand-ins, so they are set on the ledger's fields directly — the one
+    place the real code reads them from — rather than passed to the line.
+    """
+    run = gm.GenerationRun(project_root=Path("/nonexistent"), version=version)
+    run.observed = total
+    run.present = [f"k{i}" for i in range(total)]
+    run.written_keys = [f"k{i}" for i in range(written)]
+    run.recorded_count = total
+    run.distributed = distributed
+    run.dropped = [f"d{i}" for i in range(dropped)]
+    run.untracked = [f"u{i}" for i in range(untracked)]
+    run.dropped_versions = dropped_versions or {}
+    run.untracked_versions = untracked_versions or {}
+    # `collisions` is the number of ENTRIES merged away, `collision_keys` the
+    # keys they merged onto — a key with three spellings counts 2. So the
+    # dict's values are topped up until they sum to the count, which is the
+    # shape the real load produces (7 keys, 9 entries is reachable).
+    keys = list(collision_keys) or [f"c{i}" for i in range(collisions)]
+    run.collisions = {k: 1 for k in keys} if collisions else {}
+    if run.collisions and sum(run.collisions.values()) < collisions:
+        first = keys[0]
+        run.collisions[first] += collisions - sum(run.collisions.values())
+    run.recorded_versions = recorded_versions or {}
+    return run
+
+
+def _line(*args, **kw) -> str:
+    return gm.coverage_line(_ledger_for_line(*args, **kw))
+
+
+def _save(project_root, version, written, *, present_keys=None, generated_by="jui build",
+          scope=None, run_facts=None):
+    """The old `save(root, version, written, present_keys=…)` shape, via a ledger.
+
+    `scope` is accepted and ignored: the breakdown is derived from the same
+    keys `tracked` is (the arm that asserted a caller's scope wins is
+    inverted below). `run_facts` becomes `record_*` calls.
+    """
+    run = gm.GenerationRun(project_root=Path(project_root), version=version)
+    run.observed = len(present_keys) if present_keys is not None else len(written)
+    run.written_keys = list(written)
+    run.present = list(present_keys) if present_keys is not None else None
+    if run_facts is not None:
+        run._facts = dict(run_facts)
+    return gm.save(run, generated_by=generated_by, clear_run_facts=(run_facts == {}))
 
 
 class ManifestTests(unittest.TestCase):
@@ -59,7 +112,7 @@ class ManifestTests(unittest.TestCase):
         paths = present if present is not None else self.files
         known = set(gm.load(self.root).get("files") or {})
         written = run.written(paths, known=known)
-        gm.save(self.root, run.version, written,
+        _save(self.root, run.version, written,
                 present_keys=[run._key(p) for p in paths])
         return written
 
@@ -105,7 +158,7 @@ class ManifestTests(unittest.TestCase):
         # A partial run reporting only its numerator reads like a full one.
         # The two now sit on separate lines — see coverage_line — so this
         # checks both are present and which line each is on.
-        block = gm.coverage_line(1, 3, "1.8.4")
+        block = _line(1, 3, "1.8.4")
         self.assertIn("generation manifest: 3 tracked generated file(s)",
                       block)
         self.assertIn("this run (jui 1.8.4): recorded/updated 1", block)
@@ -115,7 +168,7 @@ class ManifestTests(unittest.TestCase):
         # say "this line" rather than deleting the run's number, so the
         # next state-dependent number added lands outside it instead of
         # passing an exclusion rule that never heard of it.
-        lines = gm.coverage_line(1, 3, "1.8.4", distributed=9, dropped=2,
+        lines = _line(1, 3, "1.8.4", distributed=9, dropped=2,
                                  collisions=1, collision_keys=["gen/A.kt"],
                                  recorded_versions={"1.8.3": 3}).split("\n")
         head = lines[0]
@@ -134,7 +187,7 @@ class ManifestTests(unittest.TestCase):
     def test_the_run_line_prints_when_the_run_did_nothing(self):
         # Otherwise "recorded nothing" and "nobody read the output" are the
         # same observation.
-        lines = gm.coverage_line(0, 3, "1.8.4").split("\n")
+        lines = _line(0, 3, "1.8.4").split("\n")
         run = next(l for l in lines if "this run" in l)
         self.assertIn("recorded/updated 0", run)
         # The other two are omitted at zero: nothing turns on telling
@@ -148,7 +201,7 @@ class ManifestTests(unittest.TestCase):
         # Beside what it qualifies, and true of every entry — the earlier
         # wording promised something only about untouched files, and a
         # face measured a touched one carrying an older version anyway.
-        block = gm.coverage_line(1, 3, "1.8.4")
+        block = _line(1, 3, "1.8.4")
         versions = next(l for l in block.split("\n")
                         if "recorded versions" in l)
         self.assertIn("not proof of what generated the file", versions)
@@ -158,7 +211,7 @@ class ManifestTests(unittest.TestCase):
         # reported 223 of 223 (bootstrapped entries) and, after --clean,
         # 0 of 223 (nothing on record moved). Whichever number is right for
         # the record, "wrote" is wrong for both.
-        line = gm.coverage_line(1, 3, "1.8.4")
+        line = _line(1, 3, "1.8.4")
         self.assertNotIn("wrote", line)
         self.assertNotIn("records writes", line)
         self.assertIn("recorded/updated", line)
@@ -331,7 +384,7 @@ class PathSpellingTests(unittest.TestCase):
         # A reader took the distributed total for the manifest's scope and
         # concluded hundreds of files were unrecorded. Two names, two
         # numbers.
-        lines = gm.coverage_line(198, 200, "1.8.8",
+        lines = _line(198, 200, "1.8.8",
                                   distributed=507).split("\n")
         self.assertIn("200 tracked generated file(s)", lines[0])
         self.assertIn("distributed to platforms: 507 file(s)", lines[1])
@@ -340,7 +393,7 @@ class PathSpellingTests(unittest.TestCase):
         self.assertNotIn("507", lines[0])
 
     def test_the_line_omits_the_second_number_when_it_adds_nothing(self):
-        line = gm.coverage_line(4, 4, "1.8.8", distributed=4)
+        line = _line(4, 4, "1.8.8", distributed=4)
         self.assertNotIn("distributed in total", line)
 
 
@@ -386,7 +439,7 @@ class BootstrapTests(unittest.TestCase):
         for path in self.files:
             path.write_text("stable\n", encoding="utf-8")
         written = run.written(self.files, known=known)
-        gm.save(self.root, version, written,
+        _save(self.root, version, written,
                 present_keys=[run._key(p) for p in self.files])
         return written
 
@@ -414,7 +467,7 @@ class BootstrapTests(unittest.TestCase):
     def test_the_summary_says_which_directories_were_counted(self):
         run = gm.GenerationRun(project_root=self.root, version="1.8.10")
         keys = [run._key(p) for p in self.files]
-        gm.save(self.root, "1.8.10", keys, present_keys=keys,
+        _save(self.root, "1.8.10", keys, present_keys=keys,
                 scope={"gen": 2})
         data = json.loads(gm.manifest_path(self.root).read_text(encoding="utf-8"))
         self.assertEqual({"gen": 2}, data["summary"]["trackedByDirectory"])
@@ -425,7 +478,7 @@ class BootstrapTests(unittest.TestCase):
         that passed none."""
         run = gm.GenerationRun(project_root=self.root, version="1.8.10")
         keys = [run._key(p) for p in self.files]
-        gm.save(self.root, "1.8.10", keys)          # no present_keys, no scope
+        _save(self.root, "1.8.10", keys)          # no present_keys, no scope
         data = json.loads(gm.manifest_path(self.root).read_text(encoding="utf-8"))
         # Derived from the fixture, not a literal: the first draft wrote 3 for
         # a fixture holding 2 and was red for a reason the arm is not about.
@@ -438,12 +491,12 @@ class BootstrapTests(unittest.TestCase):
         wrote `{}` over it, and the total kept counting both producers' files."""
         run = gm.GenerationRun(project_root=self.root, version="1.8.10")
         keys = [run._key(p) for p in self.files]
-        gm.save(self.root, "1.8.10", keys, present_keys=keys,
+        _save(self.root, "1.8.10", keys, present_keys=keys,
                 scope={"gen": len(self.files)})
         page = self.root / "docs" / "html" / "index.html"
         page.parent.mkdir(parents=True)
         page.write_text("<html></html>", encoding="utf-8")
-        gm.save(self.root, "1.8.10", ["docs/html/index.html"],
+        _save(self.root, "1.8.10", ["docs/html/index.html"],
                 generated_by="jsonui-doc generate html")
         data = json.loads(gm.manifest_path(self.root).read_text(encoding="utf-8"))
         self.assertEqual({"gen": len(self.files), "docs": 1},
@@ -452,16 +505,26 @@ class BootstrapTests(unittest.TestCase):
         self.assertEqual(data["summary"]["tracked"],
                          sum(data["summary"]["trackedByDirectory"].values()))
 
-    def test_an_explicit_scope_is_still_the_callers_word(self):
-        # The control: a producer that measured its own breakdown keeps it.
-        run = gm.GenerationRun(project_root=self.root, version="1.8.10")
-        keys = [run._key(p) for p in self.files]
-        gm.save(self.root, "1.8.10", keys, present_keys=keys,
-                scope={"gen": len(self.files), "other": 0})
-        data = json.loads(gm.manifest_path(self.root).read_text(encoding="utf-8"))
-        self.assertEqual({"gen": len(self.files), "other": 0},
-                         data["summary"]["trackedByDirectory"])
+    def test_a_callers_scope_is_no_longer_a_word_the_record_takes(self):
+        """INVERTED 2026-09-11 (ticket record-claims-are-assembled-from-scalars).
 
+        This arm used to assert that a breakdown passed by the caller was
+        written as given, even where it disagreed with the keys `tracked`
+        counted (`{'gen': 2, 'other': 0}` beside two keys under `gen/`).
+        That is a claim wider than the scan — the exact shape the ticket
+        names — and the port that carried it is gone: `save` takes the
+        ledger, and the breakdown is derived from the same keys `tracked`
+        is. A caller's scope is accepted by the test helper and ignored.
+        """
+        run = gm.GenerationRun(project_root=self.root, version="1.8.10")
+        run.observe(self.files)
+        run.written(self.files, known=set())
+        summary = gm.save(run)["summary"]
+        self.assertEqual({"gen": len(self.files)}, summary["trackedByDirectory"],
+                         "the breakdown must be derived from the tracked keys, "
+                         "not taken from a caller")
+        # And there is no parameter left to pass one through.
+        self.assertNotIn("scope", inspect.signature(gm.save).parameters)
 
 class KeyMigrationTests(unittest.TestCase):
     """Records written under an older spelling survive; gone files do not.
@@ -510,7 +573,7 @@ class KeyMigrationTests(unittest.TestCase):
         }, indent=2), encoding="utf-8")
 
     def _save_with_present(self, present_keys):
-        return gm.save(self.root, "1.8.10", [], present_keys=present_keys)
+        return _save(self.root, "1.8.10", [], present_keys=present_keys)
 
     def test_an_entry_written_under_the_old_spelling_survives(self):
         self._seed(("src/Generated/ColorManager.ts", "1.8.7"),
@@ -548,7 +611,7 @@ class KeyMigrationTests(unittest.TestCase):
         self._seed(("src/Generated/GONE.ts", "1.8.7"))
         manifest = self._save_with_present(["src/generated/ColorManager.ts"])
         self.assertIn("src/generated/GONE.ts", manifest["summary"]["droppedKeys"])
-        line = gm.coverage_line(0, 1, "1.8.10", dropped=1)
+        line = _line(0, 1, "1.8.10", dropped=1)
         self.assertIn("dropped 1", line)
 
 
@@ -651,7 +714,7 @@ class KeyCollisionTests(unittest.TestCase):
         # own field rather than riding on the existing count.
         self._seed({"src/Generated/A.ts": {"version": "1.8.5"},
                     "src/generated/A.ts": {"version": "1.8.7"}})
-        manifest = gm.save(self.root, "1.8.10", [],
+        manifest = _save(self.root, "1.8.10", [],
                            present_keys=["src/generated/A.ts"], scope={})
         self.assertEqual(1, manifest["summary"]["collisions"])
         self.assertEqual(["src/generated/A.ts"],
@@ -659,7 +722,7 @@ class KeyCollisionTests(unittest.TestCase):
         self.assertEqual(0, manifest["summary"]["dropped"])
 
     def test_the_merge_gets_a_line_of_its_own(self):
-        lines = gm.coverage_line(0, 1, "1.8.10", collisions=2,
+        lines = _line(0, 1, "1.8.10", collisions=2,
                                  collision_keys=["src/generated/A.ts"]
                                  ).split("\n")
         warn = next(i for i, l in enumerate(lines) if "merged away" in l)
@@ -674,7 +737,7 @@ class KeyCollisionTests(unittest.TestCase):
         # text is asserted rather than the count, because the count is the
         # part that will look self-explanatory and the rest is what has to
         # carry the meaning.
-        lines = gm.coverage_line(
+        lines = _line(
             0, 9, "1.8.10", collisions=2,
             collision_keys=["src/generated/ColorManager.ts"]).split("\n")
         warn = next(i for i, l in enumerate(lines) if "merged away" in l)
@@ -692,13 +755,13 @@ class KeyCollisionTests(unittest.TestCase):
     def test_the_warning_says_how_many_keys_it_did_not_name(self):
         # A truncated list reads as the whole list.
         keys = [f"src/generated/f{i}.ts" for i in range(7)]
-        lines = gm.coverage_line(0, 9, "1.8.10", collisions=9,
+        lines = _line(0, 9, "1.8.10", collisions=9,
                                  collision_keys=keys).split("\n")
         warning = next(l for l in lines if "merged away" in l)
         self.assertIn("+2 more", warning)
 
     def test_no_warning_line_when_nothing_merged(self):
-        lines = gm.coverage_line(0, 1, "1.8.10").split("\n")
+        lines = _line(0, 1, "1.8.10").split("\n")
         self.assertTrue(all("merged away" not in l for l in lines), lines)
         # And the four that always print are all there.
         self.assertEqual(4, len(lines), lines)
@@ -708,7 +771,7 @@ class KeyCollisionTests(unittest.TestCase):
         # file says otherwise.
         self._seed({f"src/generated/gone{i}.ts": {"version": "1.8.7"}
                     for i in range(45)})
-        manifest = gm.save(self.root, "1.8.10", [],
+        manifest = _save(self.root, "1.8.10", [],
                            present_keys=["src/generated/A.ts"], scope={})
         self.assertEqual(45, manifest["summary"]["dropped"])
         self.assertEqual(20, len(manifest["summary"]["droppedKeys"]))
@@ -717,7 +780,7 @@ class KeyCollisionTests(unittest.TestCase):
 
     def test_nothing_is_said_about_truncation_when_nothing_is_cut(self):
         self._seed({"src/generated/gone.ts": {"version": "1.8.7"}})
-        manifest = gm.save(self.root, "1.8.10", [],
+        manifest = _save(self.root, "1.8.10", [],
                            present_keys=["src/generated/A.ts"], scope={})
         self.assertNotIn("droppedKeysNote", manifest["summary"])
 
@@ -753,7 +816,7 @@ class CleanRebuildTests(unittest.TestCase):
         for f in self.files:
             f.write_text("generated\n", encoding="utf-8")
         written = run.written(self.files, known=known)
-        gm.save(self.root, version, written,
+        _save(self.root, version, written,
                 present_keys=[run._key(f) for f in self.files])
         return written
 
@@ -783,7 +846,7 @@ class OneSubjectPerLineTests(unittest.TestCase):
         base = dict(written=1, total=492, version="1.8.13", distributed=1042,
                     recorded_versions={"1.8.10": 294, "1.8.7": 198})
         base.update(kwargs)
-        return gm.coverage_line(**base).split("\n")
+        return _line(**base).split("\n")
 
     def test_the_running_version_appears_once_and_on_the_run_line(self):
         lines = self._lines()
@@ -825,9 +888,9 @@ class OneSubjectPerLineTests(unittest.TestCase):
         self.assertTrue(any("none recorded yet" in l for l in lines), lines)
 
     def test_the_order_is_stable_for_a_baseline(self):
-        a = gm.coverage_line(0, 2, "1.8.13",
+        a = _line(0, 2, "1.8.13",
                              recorded_versions={"1.8.7": 1, "1.8.10": 1})
-        b = gm.coverage_line(0, 2, "1.8.13",
+        b = _line(0, 2, "1.8.13",
                              recorded_versions={"1.8.10": 1, "1.8.7": 1})
         self.assertEqual(a, b)
 
@@ -856,7 +919,7 @@ class ReproducibleLinesComeFirstTests(unittest.TestCase):
         base = dict(written=0, total=9, version="1.8.13", distributed=2,
                     recorded_versions={"1.8.10": 9})
         base.update(kwargs)
-        return gm.coverage_line(**base).split("\n")
+        return _line(**base).split("\n")
 
     def test_the_state_dependent_region_starts_at_this_run(self):
         # Contiguity alone is too weak: the previous order also had both
@@ -930,7 +993,7 @@ class WhyAnEntryLeftTests(unittest.TestCase):
 
     def test_a_file_that_is_gone_is_reported_as_gone(self):
         self._seed("gen/deleted.ts")
-        summary = gm.save(self.root, "1.8.14", [],
+        summary = _save(self.root, "1.8.14", [],
                           present_keys=[], scope={})["summary"]
         self.assertEqual(1, summary["dropped"])
         self.assertEqual(["gen/deleted.ts"], summary["droppedKeys"])
@@ -940,7 +1003,7 @@ class WhyAnEntryLeftTests(unittest.TestCase):
         # The one that was being misreported: present, but no longer in
         # the scan's scope.
         self._seed("gen/still_here.ts")
-        summary = gm.save(self.root, "1.8.14", [],
+        summary = _save(self.root, "1.8.14", [],
                           present_keys=[], scope={})["summary"]
         self.assertEqual(0, summary["dropped"],
                          "a file that is right there was reported gone")
@@ -949,12 +1012,12 @@ class WhyAnEntryLeftTests(unittest.TestCase):
 
     def test_both_can_happen_in_one_run_and_are_counted_apart(self):
         self._seed("gen/still_here.ts", "gen/deleted.ts")
-        summary = gm.save(self.root, "1.8.14", [],
+        summary = _save(self.root, "1.8.14", [],
                           present_keys=[], scope={})["summary"]
         self.assertEqual((1, 1), (summary["dropped"], summary["untracked"]))
 
     def test_the_line_does_not_call_them_the_same_thing(self):
-        line = gm.coverage_line(0, 1, "1.8.14", dropped=2, untracked=231)
+        line = _line(0, 1, "1.8.14", dropped=2, untracked=231)
         self.assertIn("dropped 2 entr(y/ies) whose file is gone", line)
         self.assertIn("released 231 entr(y/ies) that left the tracked set",
                       line)
@@ -966,7 +1029,7 @@ class WhyAnEntryLeftTests(unittest.TestCase):
         self._seed(*[f"gen/k{i}.ts" for i in range(45)])
         for i in range(45):
             (self.root / "gen" / f"k{i}.ts").write_text("x\n", encoding="utf-8")
-        summary = gm.save(self.root, "1.8.14", [],
+        summary = _save(self.root, "1.8.14", [],
                           present_keys=[], scope={})["summary"]
         self.assertEqual(45, summary["untracked"])
         self.assertEqual(20, len(summary["untrackedKeys"]))
@@ -992,7 +1055,7 @@ class TheTwoLinesShareAQuantityTests(unittest.TestCase):
         base = dict(written=0, total=492, version="1.8.15", distributed=80,
                     recorded_versions={"1.8.10": 294, "1.8.7": 198})
         base.update(kwargs)
-        block = gm.coverage_line(**base).split("\n")
+        block = _line(**base).split("\n")
         return next(l for l in block if "this run" in l), block
 
     def test_the_versions_that_left_are_named(self):
@@ -1051,7 +1114,7 @@ class TheTwoLinesShareAQuantityTests(unittest.TestCase):
                 "gen/here.ts": {"version": "1.8.12"},
                 "gen/gone.ts": {"version": "1.8.7"},
             }}), encoding="utf-8")
-            summary = gm.save(root, "1.8.15", [],
+            summary = _save(root, "1.8.15", [],
                               present_keys=[], scope={})["summary"]
             self.assertEqual({"1.8.12": 1}, summary["untrackedVersions"])
             self.assertEqual({"1.8.7": 1}, summary["droppedVersions"])
@@ -1086,7 +1149,7 @@ class RunRecordCarriesAcrossWriters(unittest.TestCase):
         # Both writers go through this one function with `present_keys`, the
         # way build_cmd and the doc generator call it; only `run_facts` and
         # `generated_by` differ between them.
-        gm.save(self.root, "1.8.67", [], present_keys=["gen/A.kt"], **kw)
+        _save(self.root, "1.8.67", [], present_keys=["gen/A.kt"], **kw)
         return json.loads(gm.manifest_path(self.root).read_text(encoding="utf-8"))
 
     def test_a_build_carries_the_doc_runs_record_forward_unchanged(self):

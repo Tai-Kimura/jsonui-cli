@@ -72,14 +72,18 @@ _written_outside_output: set[Path] = run_state.ledger(globals(), "_written_outsi
 # two share one symbol, and a face gating on `leftoversOutside == 0` passes
 # unconditionally on a run that registered no outside directories at all
 # (triage, 2026-09-10, sharpening the scoped-zero ticket).
-_stale_outside_scanned: int = run_state.ledger(globals(), "_stale_outside_scanned", int)
+#: The directories the outside-leftover scan walked — the set, so the
+#: ledger can derive the denominator instead of being handed it.
+_stale_outside_walked: list = run_state.ledger(globals(), "_stale_outside_walked", list)
 # Set by `_report_colliding_spec_sources`: how many names it found held by
 # more than one live source. That check reports N names in ONE line, so the
 # closing line's `warnings` tally — which counts LINES — cannot express its
 # magnitude: fourteen findings and one finding look the same there. A face that
 # wants to gate on the quantity needs a number, and the record is where the
 # run's numbers already live (triage, 2026-09-10, after reading a 14 as a 1).
-_colliding_sources: int = run_state.ledger(globals(), "_colliding_sources", int)
+#: The colliding source names — the names, so the record can list them
+#: and the ledger can count them; a count alone cannot say which.
+_colliding_sources: list = run_state.ledger(globals(), "_colliding_sources", list)
 # Directories already reported by the misfiled-component check. One docs tree
 # is reached from the root scope AND from its own `--app` scope, so the check
 # ran twice on it and named the same ten files under two spellings of one
@@ -2496,40 +2500,27 @@ def _record_into(target: dict, targets: list, manifest, stale: list, outside: di
             return None
 
     written = sorted(k for k in (_key(p) for p in get_written_pages()) if k)
-    facts = {}
-    # Explicit zero, like `outsideOutput.directories: []`: the run counted and
-    # found none. A missing key means the record predates the key.
-    facts["leftovers"] = len(stale)
-    facts["leftoverPaths"] = [str(p) for p in stale[:20]]
-    if len(stale) > 20:
-        facts["leftoverPathsNote"] = f"first 20 of {len(stale)}"
-    # Leftovers in the directories this run wrote OUTSIDE -o — a renamed spec's
-    # old pages — under this face's scope, like outsideOutput. A face whose
-    # docs tree another face shares counts the same file too: each block is
-    # that face's view, and the paths say which file it is.
-    mine = [(p, copies) for p, copies in stale_outside if _under_any(p, scopes)]
-    facts["leftoversOutside"] = len(mine)
-    # The scan looked at every directory the run wrote outside -o; this block
-    # only lists the ones under THIS face's scope. Counted, not listed, like
-    # `outsideOutput.elsewhere` — otherwise a scoped 0 reads as "the scan
-    # found nothing" when the scan found several and filed them elsewhere.
-    # Measured on a single-root run where the console said 3 pages and the
-    # manifest said 0, which is exactly what the one-convention-for-zero
-    # ruling (1.8.68) says a 0 must never mean. The console's count is
-    # `leftoversOutside + leftoversOutsideElsewhere`.
-    facts["leftoversOutsideElsewhere"] = len(stale_outside) - len(mine)
-    # …and how many directories the scan walked to get there. A zero with a
-    # zero denominator is not the same answer as a zero with a denominator.
-    facts["leftoversOutsideScanned"] = _stale_outside_scanned
-    # One line, N names — so the closing line's warning tally cannot say how
-    # many. Explicit zero, under the same convention as the counts above.
-    facts["collidingSourceNames"] = _colliding_sources
-    facts["leftoverOutsidePaths"] = [str(p) for p, _c in mine[:20]]
-    facts["leftoverOutsideSiteCopies"] = [str(c) for _p, copies in mine[:20] for c in copies]
-    facts["leftoverOutsideReferencedBy"] = {
-        str(p): len(_document_referrers.get(Path(p).resolve(), [])) for p, _c in mine[:20]}
-    if len(mine) > 20:
-        facts["leftoverOutsidePathsNote"] = f"first 20 of {len(mine)}"
+    # THE LEDGER, not a dict of numbers. Every count, truncated list and
+    # "first 20 of N" note below used to be assembled here by hand —
+    # seventeen `facts[...]` lines — and the manifest's own summary was
+    # assembled from other numbers in `save`. The ledger is handed the
+    # COLLECTIONS at the point they were observed and derives the claims
+    # once; the vocabulary (`leftovers`, `leftoversOutside`, …) lives in
+    # `record_leftovers` and nowhere else.
+    try:
+        from .. import __version__ as version
+    except ImportError:
+        version = "unknown"
+    ledger = manifest.GenerationRun(project_root=root, version=version)
+    # The scope is the ledger's roots: a page outside it is refused, which is
+    # the "claim ⊆ scan" invariant made mechanical for this producer.
+    ledger.observe_written(written, roots=scopes)
+    ledger.record_leftovers(
+        stale, stale_outside,
+        walked_dirs=_stale_outside_walked,
+        colliding_sources=_colliding_sources,
+        referrers=_document_referrers,
+    )
     if outside:
         # Several roots: each face's block names writes into ITS tree, with
         # an explicit empty list when there were none — one face's block used
@@ -2557,22 +2548,17 @@ def _record_into(target: dict, targets: list, manifest, stale: list, outside: di
         # with a relative twin and another without. The root itself is `.`.
         block["scopeRelative"] = _relative_to_root(block["scope"], root)
         block["scopeOutsideRepo"] = _outside_repo_flags(block["scope"], root)
-        facts["outsideOutput"] = block
-    if slots:
-        # Its own key, not `collisions`: that word already belongs to the
-        # manifest's count of keys whose spellings normalised onto one entry,
-        # and one face read the two as a single number disagreeing with the
-        # SHARED SLOT lines on its terminal.
-        facts["documentSlots"] = dict(slots)
+        ledger.record_outside_output(block)
+    # Its own key, not `collisions`: that word already belongs to the
+    # manifest's count of keys whose spellings normalised onto one entry,
+    # and one face read the two as a single number disagreeing with the
+    # SHARED SLOT lines on its terminal.
+    ledger.record_document_slots(slots)
     # Which apps this run covered — the same record lands in each of their
     # manifests, and a reader of one should know the others hold the same
     # run. Always written: `[]` is "no --app", an absent key would not be.
-    facts["apps"] = [t["app"] for t in targets if t.get("app")]
-    facts["recordedAt"] = recorded_at
-    try:
-        from .. import __version__ as version
-    except ImportError:
-        version = "unknown"
+    ledger.record_apps(t_["app"] for t_ in targets if t_.get("app"))
+    ledger.record_time(recorded_at)
     # Whether the record this run just wrote is visible to anyone else.
     # ⚠️ NOT a reason to make it tracked — `.jsonui-cli/` is the face's call,
     # and it is genuinely split: measured 2026-09-09, one of three faces on
@@ -2581,16 +2567,11 @@ def _record_into(target: dict, targets: list, manifest, stale: list, outside: di
     target = manifest.manifest_path(root)
     existed = target.is_file()
     tracked = _git_tracks_file(target, root)
-    facts["manifestIsGitTracked"] = tracked
     # Untracked because the face said so (an ignore rule), or just untracked.
     ignored = _git_ignores_file(target, root) if tracked is False else False
-    facts["manifestIsGitIgnored"] = ignored
+    ledger.record_manifest_visibility(tracked=tracked, ignored=ignored)
     try:
-        manifest.save(
-            root, version, written,
-            generated_by="jsonui-doc generate html",
-            run_facts=facts,
-        )
+        manifest.save(ledger, generated_by="jsonui-doc generate html")
     except OSError as exc:
         print(f"  ⓘ NOTE: could not write the generation manifest ({exc}). "
               f"The pages were written; the record of them was not.")
@@ -2794,7 +2775,7 @@ def _report_stale_pages_outside(output_path: Path, started_at: "float | None" = 
     cutoff = (started_at - 1) if started_at is not None else None
     seen: set = set()
     stale: list = []
-    global _stale_outside_scanned
+    global _stale_outside_walked
     for d in sorted(_written_outside_output, key=str):
         try:
             real = d.resolve()
@@ -2810,7 +2791,7 @@ def _report_stale_pages_outside(output_path: Path, started_at: "float | None" = 
     # scan, rather than re-derived at the recording site: the same rule
     # written in two places drifts, and the number's whole job is to say
     # whether the zero beside it was measured.
-    _stale_outside_scanned = len(seen)
+    _stale_outside_walked[:] = sorted(str(d) for d in seen)
     if not stale:
         return []
     pairs = [(p, _site_copies_of(p, output_path, written)) for p in stale]
@@ -4084,7 +4065,7 @@ def _report_colliding_spec_sources(docs_base: Path) -> list:
         if len(v) > 1 and len({f.name for f in v}) > 1
     ]
     global _colliding_sources
-    _colliding_sources = len(collisions)
+    _colliding_sources[:] = sorted(k for k, _v in collisions)
     if not collisions:
         return []
     print()
