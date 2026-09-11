@@ -176,6 +176,37 @@ class TestTheRootIsNotPreGeneratedTwice:
         out = buf.getvalue()
         lines = [l for l in out.splitlines() if "Generated:" in l and "chart_bars.html" in l]
         assert len(lines) == 1, "\n".join(lines) or out
+        # …and the nav lists the face's spec as often as a default-layout
+        # face's: on 1.8.74 the shared dir doubled every spec link (38 → 76
+        # on the reporting face) while faces with a separate component dir
+        # were unchanged.
+        # (The single-app index links component pages; spec links sit in the
+        # spec pages' sidebar. The component link is the one that doubled.)
+        shared = (docs / "html" / "index.html").read_text(encoding="utf-8").count("components/chart_bars.html")
+        assert shared == _index_links_default_layout(tmp_path.parent / (tmp_path.name + "_ctl"))
+        assert shared >= 1
+
+
+def _index_links_default_layout(root: Path) -> int:
+    """Control: the same site with the component under components/json."""
+    root.mkdir(parents=True, exist_ok=True)
+    tests = root / "tests"
+    tests.mkdir(exist_ok=True)
+    (tests / "s0.test.json").write_text(json.dumps({
+        "type": "screen", "platform": "ios", "source": {"layout": "s0"},
+        "metadata": {"name": "s0 test", "description": "d"},
+        "cases": [{"name": "c", "description": "c",
+                   "steps": [{"action": "tap", "id": "x"}]}],
+    }), encoding="utf-8")
+    docs = root / "docs"
+    _screen(docs / "screens" / "json" / "admin_dashboard.spec.json", "admin_dashboard")
+    _component(docs / "components" / "json" / "chart_bars.component.json", "chart_bars")
+    gen.reset_per_run_ledgers()
+    with redirect_stdout(io.StringIO()):
+        gen.generate_html_directory(tests, docs / "html", "T", project_root=root)
+    n = (docs / "html" / "index.html").read_text(encoding="utf-8").count("components/chart_bars.html")
+    gen.reset_per_run_ledgers()
+    return n
 
 
 class TestTheEndOfRunDerivesNoPageFromWhatWasWritten:
