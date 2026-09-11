@@ -445,6 +445,17 @@ UNDECLARED_OP_DOC = (
     "three faces — so the refusal is reachable only from a hand-written "
     "name, which is exactly what it is for.",
 
+    "THE ROUTE TABLE IS OPTIONAL, and without one this refuses nothing. A "
+    "recorder built with no routes cannot know which names are real, and "
+    "the alternative — making the argument required — would have been a "
+    "COMPILE error at every hand-written harness that builds its own "
+    "recorder: 22 of them in one project alone, every one of them spelling "
+    "its ops correctly. Breaking working code to catch a mistake is not a "
+    "trade worth taking, which is the same reason `countFor` reports "
+    "through XCTFail here rather than by throwing. A harness that wants "
+    "the check passes the ops it declares, and the generated entry point "
+    "always does.",
+
     "WHAT IT DOES NOT REACH: `calls` is public, and a test that filters it "
     "by op directly — comparing the op field rather than calling either "
     "accessor — gets the old silent answer, because no name was passed to "

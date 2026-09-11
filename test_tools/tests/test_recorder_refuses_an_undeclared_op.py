@@ -208,6 +208,16 @@ check("undeclared-count-refused", !counted.isEmpty)
 check("undeclared-body-refused", !bodied.isEmpty)
 check("message-names-the-op", (counted.first ?? "").contains("%(typo)s"))
 check("message-lists-declared", (counted.first ?? "").contains("%(declared)s"))
+
+  // A harness that builds its own recorder must still COMPILE and must not
+  // be refused: it never declared a route table, so it cannot be told which
+  // names are real. 22 such call sites existed in one project alone.
+  recordedFailures = []
+  let bare = Recorder()
+  bare.calls.append(RecordedCall(op: "%(declared)s", method: "POST",
+                                 path: "/api/orders", body: nil))
+  let bareCount = bare.countFor("%(typo)s")
+  check("bare-recorder-quiet", recordedFailures.isEmpty && bareCount == 0)
 '''
 
 
@@ -243,6 +253,7 @@ def test_ios_refuses_an_undeclared_op(tmp_path):
     # property that matters is that the test goes RED, which XCTFail does.
     # This row says the guard is silent on a name that IS declared.
     assert results.get("declared-quiet") is True, results
+    assert results.get("bare-recorder-quiet") is True, results
 
 
 def test_ios_control_without_the_guard_reports_the_old_behaviour(tmp_path):
@@ -288,6 +299,14 @@ fun main() {
   check("undeclared-body-refused", bodied != null)
   check("message-names-the-op", (counted ?: "").contains("%(typo)s"))
   check("message-lists-declared", (counted ?: "").contains("%(declared)s"))
+
+  // A harness that builds its own recorder must still COMPILE and must not
+  // be refused: it never declared a route table, so it cannot be told which
+  // names are real. 22 such call sites existed in one project alone.
+  val bare = Recorder()
+  bare.calls.add(RecordedCall("%(declared)s", "POST", "/api/orders", null))
+  val bareOk = try { bare.countFor("%(typo)s") == 0 } catch (e: Throwable) { false }
+  check("bare-recorder-quiet", bareOk)
 }
 '''
 
@@ -313,7 +332,12 @@ def _run_kotlin(tmp_path: Path, runtime_source: str) -> dict[str, bool]:
 
 
 def test_android_refuses_an_undeclared_op(tmp_path):
-    _assert_all(_run_kotlin(tmp_path, bt.KOTLIN_RUNTIME), "")
+    results = _run_kotlin(tmp_path, bt.KOTLIN_RUNTIME)
+    _assert_all(results, "")
+    # `Recorder()` with no route table still compiles, still answers,
+    # and refuses nothing. Making the argument required would have been
+    # a compile error at every hand-written harness that builds its own.
+    assert results.get("bare-recorder-quiet") is True, results
 
 
 def test_android_control_without_the_guard_reports_the_old_behaviour(tmp_path):

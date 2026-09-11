@@ -2139,15 +2139,16 @@ data class RouteSpec(
 
 data class RecordedCall(val op: String, val method: String, val path: String, val body: String?)
 
-class Recorder(routeOps: Set<String>) {
+class Recorder(routeOps: Set<String>? = null) {
   val calls = mutableListOf<RecordedCall>()
 //<<undeclared-op doc>>
   // The sentinel is not a spelling mistake: undeclared traffic is recorded
   // under this exact string, so asking how much of it there was is a
   // legitimate question and must not be refused.
-  private val declaredOps: Set<String> = routeOps + "(unmatched)"
+  private val declaredOps: Set<String>? = routeOps?.plus("(unmatched)")
 
   private fun assertDeclared(op: String) {
+    val declaredOps = this.declaredOps ?: return
     if (op !in declaredOps) {
       error(
 //<<undeclared-op message>>
@@ -2887,16 +2888,17 @@ final class Recorder {
   func matchedCalls() -> [RecordedCall] { calls.filter { $0.op != "(unmatched)" } }
 
 //<<undeclared-op doc>>
-  private let declaredOps: Set<String>
+  private let declared: Set<String>?
 
-  init(routeOps: Set<String>) {
+  init(routeOps: Set<String>? = nil) {
     // The sentinel is not a spelling mistake: undeclared traffic is
     // recorded under this exact string, so asking how much of it there was
     // is a legitimate question and must not be refused.
-    declaredOps = routeOps.union(["(unmatched)"])
+    declared = routeOps.map { $0.union(["(unmatched)"]) }
   }
 
   private func assertDeclared(_ op: String) {
+    guard let declaredOps = declared else { return }
     if !declaredOps.contains(op) {
       XCTFail(
 //<<undeclared-op message>>
