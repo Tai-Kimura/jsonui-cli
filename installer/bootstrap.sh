@@ -264,10 +264,33 @@ rm -f  */.DS_Store
 #     199 = 83 + 116   what actually SHIPPED, measured at v1.8.70
 #     200 = 83 + 117   what these rules now EXCLUDE
 # The +1 is the arm below, which lives in `jui_tools/tests` and is therefore
-# pruned by the rule it guards. Whole-distribution figures move the same way:
-# 476 excluded / 3122 delivered at v1.8.70, 676 / 2923 from here (3 of the
-# delivered are symlinks). Write which question a figure answers, or the pair
-# reads as a discrepancy and someone "fixes" the correct one.
+# pruned by the rule it guards. Write which question a figure answers, or the
+# pair reads as a discrepancy and someone "fixes" the correct one.
+#
+# 🚨 AND SAY WHICH TREE, NOT "FROM HERE". Whole-distribution totals move with
+# every file added anywhere, so a figure anchored to "this commit" is stale as
+# soon as the next one lands — measured: the line that used to stand here said
+# `676 / 2923 from here`, written at 88df835c, and it was already 678 / 2924
+# three commits later. Two figures that differ by one file read exactly like a
+# discrepancy, which is the failure this whole comment is about, committed by
+# the comment itself.
+#
+#     v1.8.70  (OLD rules)    476 excluded / 3122 delivered  (tracked 3598)
+#     v1.8.71  (these rules)   678 excluded / 2924 delivered  (tracked 3602)
+#
+# PINNED TO TAGS, and NOT to a SHA — a tag does not move, and naming the tip
+# here would be stale the moment this file is committed, which is the bug
+# being fixed. Each row closes on its own tree: excluded + delivered ==
+# tracked, both sides measured against the SAME tree. The line that used to
+# stand here did not: its delivered figure was that tree's total minus the
+# other tree's excluded, so the pair did not add up and the reader who
+# checked it found the tip agreeing and the named version not.
+#
+# For any other tree, derive it. The arm below builds the population from the
+# repository rather than listing it, and THE RULES ARE `rm -rf` AND `rm -f`:
+# README.md and install.sh are two tracked files only the second kind
+# reaches, so a predicate grepping for `rm -rf` alone lands exactly two
+# short. Two independent readers did.
 #
 # ⚠️ `jui_tools/tests/test_the_distribution_prunes_every_test_tree.py` derives
 # this population from the repo rather than listing it, so a seventh tool

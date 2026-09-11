@@ -362,3 +362,23 @@ class TestEveryFaceHasTheGuard:
         assert guards == reads, (
             f"{name}: {reads} read(s) by op but {guards} guard(s)")
         assert "(unmatched)" in source, f"{name}: sentinel missing"
+
+    def test_the_swift_harness_is_still_retained(self):
+        """A consumer's whole iOS suite depends on this CALL existing.
+
+        On a pre-26 simulator a harness that is not retained is released
+        while its view model is still settling, and the process dies in
+        `swift_task_deinitOnExecutorMainActorBackDeploy` with a corrupted
+        malloc — SIGABRT, not a failing assertion. The file is `@generated`,
+        so the consuming project cannot hold it in place; only this emitter
+        can, and nothing else here would notice it going.
+
+        THE CALL, not the declaration. An arm that counted the enum would
+        stay green on an emitter that still defines `BranchHarnessRetainer`
+        and stops invoking it — which is the direction a refactor moves in.
+        """
+        swift = bt.SWIFT_RUNTIME
+        assert "BranchHarnessRetainer.retain(" in swift, (
+            "the emitted Swift no longer RETAINS the harness; a consumer's "
+            "pre-26 iOS branch tests will SIGABRT rather than fail")
+        assert "enum BranchHarnessRetainer" in swift

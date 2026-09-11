@@ -305,13 +305,19 @@ jobs:
       # Each step reads its own EXECUTED count. `success` is what both
       # "6 passed" and "6 collected, 6 skipped" produce, so a reader going
       # job by job — or step by step — is reading a value the two share.
+      #
+      # ⚠️ AND ITS OWN REPORT FILE. Both steps wrote `guard-report.xml`
+      # until 2026-09-11. `set -e` keeps that honest today, but the day one
+      # of them gains `continue-on-error`, the second checker reads the
+      # first step's numbers and passes — a check whose subject is rewritten
+      # by the run it is checking.
       - name: Identifier tables
         working-directory: test_tools
         run: |
           set -euo pipefail
           python -m pytest tests/test_stub_name_tables_reach_a_compiler.py \
-            -v -rs --junitxml=guard-report.xml
-          ../dev-guide/ci/executed-or-skipped.py guard-report.xml
+            -v -rs --junitxml=guard-identifier.xml
+          ../dev-guide/ci/executed-or-skipped.py guard-identifier.xml
       # Node as well as the two compilers: the web face asserts the same rows
       # as the other two, and a row compared in a different job is a row
       # nobody compares.
@@ -323,9 +329,14 @@ jobs:
       # arm RUNS, and a step whose file was never collected is invisible to
       # it. `executed-or-skipped.py` puts the discriminator in the output.
       #
-      # Deliberately NOT added to the identifier-tables step above: that
-      # file's skip set on this image has not been measured, and a gate
-      # asserting a property nobody checked is the shape being fixed here.
+      # ⚠️ THIS PARAGRAPH USED TO SAY THE OPPOSITE OF THE STEP ABOVE IT. It
+      # read "deliberately NOT added to the identifier-tables step", which
+      # was true when it was written and false three lines later, once that
+      # step got the checker too. Nothing failed: a comment that misstates
+      # why a gate exists is the only argument anyone needs for deleting the
+      # gate. The reason it changed is that the missing measurement arrived
+      # — run 34560362076 reported `collected=20 skipped=0 executed=20` for
+      # that step, so the skip set it was waiting on is known and is zero.
       - name: Branch-runtime arms (three faces, real compilers)
         working-directory: test_tools
         run: |
@@ -335,8 +346,8 @@ jobs:
             tests/test_branch_swizzle_ordering.py \
             tests/test_branch_then_data_addresses_nested_paths.py \
             tests/test_readback_folds_unordered_collections.py \
-            -v -rs --junitxml=guard-report.xml
-          ../dev-guide/ci/executed-or-skipped.py guard-report.xml
+            -v -rs --junitxml=guard-branch-runtime.xml
+          ../dev-guide/ci/executed-or-skipped.py guard-branch-runtime.xml
 
   # ------------------------------------------------------------------ #
   # Ruby codegen unit suites. sjui_tools has no Gemfile (plain rspec);
