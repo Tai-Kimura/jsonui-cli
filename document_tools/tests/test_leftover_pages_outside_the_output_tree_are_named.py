@@ -232,17 +232,20 @@ def test_a_scoped_zero_says_how_many_the_scan_found_outside_this_scope(run):
     run_block = _manifest(site / "a")["summary"]["run"]
     assert run_block["leftoversOutside"] == 0
     assert run_block["leftoverOutsidePaths"] == []
-    # …and the record no longer lets that 0 stand alone.
-    assert run_block["leftoversOutsideElsewhere"] == 2
-    # The property that closes it: the console's count is the sum.
-    assert (run_block["leftoversOutside"] + run_block["leftoversOutsideElsewhere"]
-            == len(pairs))
+    # …and the 0 says the scan ran, through its denominator — not through a
+    # run-wide complement. `leftoversOutsideElsewhere` carried the OTHER
+    # faces' leftovers into this face's record and moved a tracked file on a
+    # face with nothing of its own behind it (inverted 2026-09-11, ticket
+    # doc-face-manifest-counts-other-faces-leftovers). The console's total
+    # is the log's; the record says what is under this root.
+    assert "leftoversOutsideElsewhere" not in run_block
+    assert run_block["leftoversOutsideScanned"] >= 1
 
 
 def test_a_scope_that_covers_the_leftovers_reports_none_elsewhere(run):
     """The control for the arm above: same run, same leftovers, a scope that
-    holds them. Without this, `leftoversOutsideElsewhere` could be a constant
-    equal to the scan's count."""
+    holds them — and the face that holds none of them records none, with no
+    run-wide key that would move its manifest for another face's page."""
     site, out, docs, orphan, orphan_md, site_copy = run
     pairs = gen._report_stale_pages_outside(out, started_at=time.time())
     targets = [{"app": "a", "root": site / "a", "docs": docs["a"]},
@@ -250,10 +253,11 @@ def test_a_scope_that_covers_the_leftovers_reports_none_elsewhere(run):
     gen._record_generation_manifest(out, targets, [], {}, stale_outside=pairs)
     a = _manifest(site / "a")["summary"]["run"]
     b = _manifest(site / "b")["summary"]["run"]
-    assert a["leftoversOutside"] == 2 and a["leftoversOutsideElsewhere"] == 0
-    # Face b holds none of them, and says so on both keys: 0 under its scope,
-    # and 2 that the same scan found under someone else's.
-    assert b["leftoversOutside"] == 0 and b["leftoversOutsideElsewhere"] == 2
+    assert a["leftoversOutside"] == 2 and "leftoversOutsideElsewhere" not in a
+    # Face b holds none of them: 0 under its scope, and NOTHING about what
+    # the scan found under someone else's — that was the key that made b's
+    # tracked manifest move when only a had changed.
+    assert b["leftoversOutside"] == 0 and "leftoversOutsideElsewhere" not in b
 
 
 def test_a_zero_says_whether_it_had_anything_to_scan(run):

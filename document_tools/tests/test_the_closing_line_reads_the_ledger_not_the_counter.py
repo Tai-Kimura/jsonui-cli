@@ -108,9 +108,12 @@ class TestTheLineReadsTheRecord:
         assert _outside(line) == 0 == rec["outside"], line
         # The same number the manifest carries, from the same keying: the
         # scan block's `observed` is what `observe_written` was handed.
+        # The doc producer's scan lives in ITS block (`summary.run.scan`);
+        # `summary.scan` is the build's and a doc run must not write it.
         summary = _manifest(tmp_path)["summary"]
-        assert summary["scan"]["observed"] == rec["recorded"] == gen.get_pages_written()
-        assert summary["scan"]["outsideDeclaredRoots"] == 0
+        assert summary["run"]["scan"]["observed"] == rec["recorded"] == gen.get_pages_written()
+        assert summary["run"]["scan"]["outsideDeclaredRoots"] == 0
+        assert "scan" not in summary, "a doc run wrote the build's scan slot"
 
     def test_a_ghost_in_the_counter_does_not_move_the_line(self, tmp_path):
         """The kill condition: the old line followed the counter."""
@@ -134,7 +137,7 @@ class TestTheLineReadsTheRecord:
         assert n > 0
         assert _outside(line) == n, line
         assert gen._run_record == {"recorded": 0, "outside": n}
-        assert _manifest(face)["summary"]["scan"]["observed"] == 0
+        assert _manifest(face)["summary"]["run"]["scan"]["observed"] == 0
 
     def test_without_a_record_the_line_falls_back_and_says_so(self, tmp_path):
         """No project root → no manifest → counter, and no `outside` clause."""

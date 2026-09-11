@@ -379,10 +379,17 @@ class GenerationRun:
 
         `stale`: under -o. `stale_outside`: (path, copies) pairs in the
         directories the run wrote outside -o; only those under this
-        ledger's roots are listed, the rest are counted as `Elsewhere` so a
-        scoped 0 cannot read as "the scan found nothing". `walked_dirs` is
-        the directories that scan walked; its length is the denominator —
-        a 0 with a 0 denominator is not the same answer as a 0 with one.
+        ledger's roots are listed and counted. `walked_dirs` is the
+        directories that scan walked; its length is the denominator — a 0
+        with a 0 denominator is not the same answer as a 0 with one, and
+        that denominator is how a scoped 0 says the scan ran.
+
+        🚫 NO RUN-WIDE COUNT IN A FACE'S RECORD. Until 1.8.74 the rest of
+        `stale_outside` was written here as `leftoversOutsideElsewhere`; on a
+        three-face run that made one face's tracked manifest move because
+        ANOTHER face had a stale page (reported 2026-09-11 by the face whose
+        record moved with nothing of its own behind it). The run-wide total
+        is the log's; a face's record says what happened under its roots.
         Collections in, counts out: nothing here is handed a number.
         """
         f = self._facts_dict()
@@ -394,7 +401,6 @@ class GenerationRun:
         mine = [(p, copies) for p, copies in stale_outside
                 if self._under_roots(p)]
         f["leftoversOutside"] = len(mine)
-        f["leftoversOutsideElsewhere"] = len(list(stale_outside)) - len(mine)
         f["leftoversOutsideScanned"] = len(list(walked_dirs))
         f["collidingSourceNames"] = list(colliding_sources)
         f["leftoverOutsidePaths"] = [str(p) for p, _c in mine[:20]]
@@ -510,8 +516,8 @@ class GenerationRun:
         a root outside the project (a split docs tree) is stored absolute
         while keys under the project are relative, so a string prefix test
         compares two spellings of the same thing and gets it wrong both
-        ways. Measured 2026-09-11: every leftover counted as "mine" and
-        `leftoversOutsideElsewhere` was 0 on a two-face tree.
+        ways. Measured 2026-09-11: every leftover counted as "mine" (the
+        then-existing run-wide complement read 0 on a two-face tree).
         """
         if self.roots is None:
             return True                      # nothing declared: nothing to be outside of
@@ -703,8 +709,17 @@ def save(ledger: GenerationRun, *, generated_by: str = "jui build",
     files, collisions = load_migrated_with_collisions(project_root)
     # The previous writer's run record, kept when this caller has none.
     carried_run = None
+    carried_scan = None
     if run_facts is None:
         carried_run = (load(project_root).get("summary") or {}).get("run")
+    else:
+        # A producer with a run block of its own (the doc generator) scans
+        # something else — the pages it wrote under this root — and its
+        # scan goes in ITS block. `summary.scan` stays the build's: on a
+        # three-face doc run every face's build scan was overwritten with
+        # `[".", "docs"] / 0`, and whichever face had built last looked like
+        # the only one ever scanned (reported 2026-09-11).
+        carried_scan = (load(project_root).get("summary") or {}).get("scan")
 
     # Migration happens in load_migrated, BEFORE the prune below. The prune
     # drops any key not currently present, and it compares strings — so when
@@ -772,8 +787,13 @@ def save(ledger: GenerationRun, *, generated_by: str = "jui build",
         "files": {k: files[k] for k in sorted(files)},
     }
     # What the scan covered, in the record itself. "not declared" is a
-    # value: a reader can tell an undeclared scope from an empty one.
-    manifest["summary"]["scan"] = claims["scan"]
+    # value: a reader can tell an undeclared scope from an empty one. The
+    # slot is the producer's: the build's scan under `summary.scan`, a doc
+    # run's under its own `summary.run.scan`, never one over the other.
+    if run_facts is None:
+        manifest["summary"]["scan"] = claims["scan"]
+    elif carried_scan is not None:
+        manifest["summary"]["scan"] = carried_scan
     # Three states, none of them silence: a dict with facts is this run's
     # block; an EMPTY dict is this run saying it found nothing (no block,
     # and the previous one is not carried); None is a producer with no facts
@@ -782,6 +802,7 @@ def save(ledger: GenerationRun, *, generated_by: str = "jui build",
         run = dict(run_facts)
         run.setdefault("recordedBy", generated_by)
         run.setdefault("recordedAt", stamp)
+        run["scan"] = claims["scan"]
         manifest["summary"]["run"] = run
     elif run_facts is None and carried_run:
         run = dict(carried_run)

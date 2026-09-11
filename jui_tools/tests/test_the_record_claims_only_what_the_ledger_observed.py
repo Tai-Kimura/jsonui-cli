@@ -322,7 +322,9 @@ class TestTheVocabularyHasOneOwner(_Tree):
         self.assertEqual(len(f["leftoverPaths"]), 20)
         self.assertEqual(f["leftoverPathsNote"], "first 20 of 25")
         self.assertEqual(f["leftoversOutside"], 1)           # under app/Generated
-        self.assertEqual(f["leftoversOutsideElsewhere"], 1)  # other/
+        # No run-wide complement in a face's record (inverted 2026-09-11):
+        # the other/ leftover belongs to another face's record, not this one.
+        self.assertNotIn("leftoversOutsideElsewhere", f)
         self.assertEqual(f["leftoversOutsideScanned"], 4)
         self.assertEqual(f["collidingSourceNames"], ["dup"])
 
