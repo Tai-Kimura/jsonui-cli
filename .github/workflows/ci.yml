@@ -221,17 +221,30 @@ jobs:
       # moved, and dropping a line here would turn this suite red rather than
       # quiet.
       #
-      # ⚠️ TWO FILES, AND THE SECOND ONE ALSO HAS A WEB ARM. Ignoring the
-      # whole file moves its node probe to macos-15 too. That is deliberate:
-      # the three faces assert the same rows, and splitting them across two
+      # ⚠️ FIVE FILES, AND SOME OF THEM ALSO HAVE WEB ARMS. Ignoring a whole
+      # file moves its node probe to macos-15 too. That is deliberate: the
+      # faces in one file assert the SAME ROWS, and splitting them across two
       # jobs is how one face's row silently stops being compared with the
       # others'.
+      #
+      # 🔻 THE LIST GREW BY THREE BECAUSE THEY WERE ALREADY BROKEN HERE.
+      # Measured on a green run of this job: `1636 passed, 9 skipped`, and
+      # the nine were every iOS and Android arm in `branch_swizzle_ordering`
+      # (all five), `branch_then_data_addresses_nested_paths` and
+      # `readback_folds_unordered_collections`. Three files' worth of
+      # compile-and-run arms gated nothing here and nobody could see it in
+      # the summary. They now sit with the compilers, and their Kotlin
+      # probes shim `StateFlow`/`JsonElement` so they need `kotlinc` and not
+      # a populated Gradle cache — which no CI image has.
       - name: Run test_tools tests
         working-directory: test_tools
         run: |
           python -m pytest \
             --ignore=tests/test_stub_name_tables_reach_a_compiler.py \
-            --ignore=tests/test_recorder_refuses_an_undeclared_op.py
+            --ignore=tests/test_recorder_refuses_an_undeclared_op.py \
+            --ignore=tests/test_branch_swizzle_ordering.py \
+            --ignore=tests/test_branch_then_data_addresses_nested_paths.py \
+            --ignore=tests/test_readback_folds_unordered_collections.py
       - name: Run document_tools tests
         working-directory: document_tools
         run: python -m pytest
@@ -289,9 +302,16 @@ jobs:
           set -euo pipefail
           swiftc --version
           kotlinc -version
+      # Each step reads its own EXECUTED count. `success` is what both
+      # "6 passed" and "6 collected, 6 skipped" produce, so a reader going
+      # job by job — or step by step — is reading a value the two share.
       - name: Identifier tables
         working-directory: test_tools
-        run: python -m pytest tests/test_stub_name_tables_reach_a_compiler.py -v
+        run: |
+          set -euo pipefail
+          python -m pytest tests/test_stub_name_tables_reach_a_compiler.py \
+            -v -rs --junitxml=guard-report.xml
+          ../dev-guide/ci/executed-or-skipped.py guard-report.xml
       # Node as well as the two compilers: the web face asserts the same rows
       # as the other two, and a row compared in a different job is a row
       # nobody compares.
@@ -306,11 +326,15 @@ jobs:
       # Deliberately NOT added to the identifier-tables step above: that
       # file's skip set on this image has not been measured, and a gate
       # asserting a property nobody checked is the shape being fixed here.
-      - name: Branch-runtime read-side guard (three faces, three compilers)
+      - name: Branch-runtime arms (three faces, real compilers)
         working-directory: test_tools
         run: |
           set -euo pipefail
-          python -m pytest tests/test_recorder_refuses_an_undeclared_op.py \
+          python -m pytest \
+            tests/test_recorder_refuses_an_undeclared_op.py \
+            tests/test_branch_swizzle_ordering.py \
+            tests/test_branch_then_data_addresses_nested_paths.py \
+            tests/test_readback_folds_unordered_collections.py \
             -v -rs --junitxml=guard-report.xml
           ../dev-guide/ci/executed-or-skipped.py guard-report.xml
 

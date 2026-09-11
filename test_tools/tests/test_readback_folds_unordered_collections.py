@@ -24,16 +24,13 @@ from __future__ import annotations
 
 import json
 import re
-import shutil
 import subprocess
-import sys
 from pathlib import Path
 
 import pytest
 
 from jsonui_test_cli.branch_tests import generate_branch_tests
-
-_JAVA = Path("/opt/homebrew/opt/openjdk@17/bin/java")
+from tests import _toolchain as tc
 
 # Every arm asserts the same eight properties, so a face that disagrees with
 # another shows up as a different row rather than a different test.
@@ -86,9 +83,8 @@ def _assert_all(results: dict[str, bool], stdout: str) -> None:
 
 
 
-@pytest.mark.skipif(sys.platform != "darwin" or shutil.which("swiftc") is None,
-                    reason="needs swiftc (macOS); the property is about emitted Swift")
 def test_ios_folds_a_set_and_compares_membership(tmp_path):
+    tc.tool("swiftc")
     root = _project(tmp_path)
     emitted = generate_branch_tests(
         "s", root, platform="ios", module="App",
@@ -134,8 +130,8 @@ check("nsset", partialMismatches(NSSet(array: ["a", "b"]), ["b", "a"]), true)
     assert results.get("nsset") is True, run.stdout
 
 
-@pytest.mark.skipif(shutil.which("node") is None, reason="needs node")
 def test_web_folds_a_set_and_compares_membership(tmp_path):
+    tc.tool("node")
     root = _project(tmp_path)
     runtime = generate_branch_tests("s", root).runtime_file
     probe = runtime.parent / "probe.ts"
@@ -160,33 +156,6 @@ check("list-same-order", partialMismatches(["a", "b"], ["a", "b"]), true);
     _assert_all(_results(run.stdout), run.stdout)
 
 
-def _kotlin_jars() -> tuple[str, str, str] | None:
-    """(compiler_cp, target_cp, version) from the Gradle cache, versions matched.
-
-    Matched on purpose: a 2.2 compiler against a 2.4 stdlib fails with
-    "incompatible classes were found in dependencies", which reads like a
-    defect in the emitted code and is not one.
-    """
-    cache = Path.home() / ".gradle/caches"
-    if not _JAVA.exists() or not cache.exists():
-        return None
-    compilers = sorted(cache.glob("**/kotlin-compiler-embeddable-*.jar"))
-    compilers = [c for c in compilers if "sources" not in c.name]
-    for compiler in reversed(compilers):
-        version = compiler.name[len("kotlin-compiler-embeddable-"):-len(".jar")]
-        std = sorted(cache.glob(f"**/kotlin-stdlib-{version}.jar"))
-        ref = sorted(cache.glob(f"**/kotlin-reflect-{version}.jar"))
-        cor = sorted(cache.glob("**/kotlinx-coroutines-core-jvm-*.jar"))
-        if std and ref and cor:
-            extra = [str(p) for p in list(cache.glob("**/annotations-13.0.jar"))[:1]]
-            extra += [str(p) for p in list(cache.glob("**/trove4j-*.jar"))[:1]]
-            target = ":".join([str(std[-1]), str(ref[-1]), str(cor[-1])])
-            return ":".join([str(compiler), target] + extra), target, version
-    return None
-
-
-@pytest.mark.skipif(_kotlin_jars() is None,
-                    reason="needs JDK17 + a matched kotlin toolchain in the Gradle cache")
 def test_android_compares_a_set_by_membership_not_by_index(tmp_path):
     """Kotlin already folded; it compared the folded list by index.
 
@@ -208,7 +177,7 @@ def test_android_compares_a_set_by_membership_not_by_index(tmp_path):
     parts = [block(s) for s in ("fun setMismatches(", "fun valueMismatches(",
                                 "private fun memberValue(")]
     (tmp_path / "probe.kt").write_text(
-        "import kotlinx.coroutines.flow.StateFlow\n" + "\n".join(decls) + "\n\n"
+        tc.KOTLIN_SHIM + "\n" + "\n".join(decls) + "\n\n"
         + "\n\n".join(parts) + '''
 
 fun check(n: String, got: List<String>, wantEmpty: Boolean) {
@@ -228,17 +197,8 @@ fun main() {
 }
 ''', encoding="utf-8")
 
-    compiler_cp, target_cp, _version = _kotlin_jars()
-    out = tmp_path / "out"
-    build = subprocess.run(
-        [str(_JAVA), "-cp", compiler_cp,
-         "org.jetbrains.kotlin.cli.jvm.K2JVMCompiler",
-         "-no-stdlib", "-cp", target_cp, "-d", str(out), str(tmp_path / "probe.kt")],
-        capture_output=True, text=True, timeout=600)
-    errors = [l for l in (build.stdout + build.stderr).splitlines() if "error:" in l]
-    assert not errors, "emitted Kotlin did not compile:\n" + "\n".join(errors[:20])
-    run = subprocess.run([str(_JAVA), "-cp", f"{out}:{target_cp}", "ProbeKt"],
-                         capture_output=True, text=True, timeout=120)
+    run = tc.compile_and_run_kotlin(
+        tmp_path, (tmp_path / "probe.kt").read_text(encoding="utf-8"))
     results = _results(run.stdout)
     _assert_all(results, run.stdout)
     assert results.get("hashset-orderB") is True, run.stdout

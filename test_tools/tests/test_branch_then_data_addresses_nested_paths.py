@@ -32,6 +32,7 @@ from pathlib import Path
 import pytest
 
 from jsonui_test_cli.branch_tests import generate_branch_tests
+from tests import _toolchain as tc
 
 _JAVA = Path("/opt/homebrew/opt/openjdk@17/bin/java")
 
@@ -152,8 +153,8 @@ def test_a_flat_key_is_emitted_exactly_as_before(tmp_path):
 # Executing arms
 # --------------------------------------------------------------------------
 
-@pytest.mark.skipif(shutil.which("node") is None, reason="needs node")
 def test_web_runs_the_generated_nested_assert(tmp_path):
+    tc.tool("node")
     root = _project(tmp_path)
     result = generate_branch_tests("s", root)
     runtime = result.runtime_file
@@ -200,9 +201,8 @@ function run(name: string, value: unknown, arm: (h: any) => void) {{
     _assert_all(inverted, run.stdout)
 
 
-@pytest.mark.skipif(sys.platform != "darwin" or shutil.which("swiftc") is None,
-                    reason="needs swiftc (macOS); the property is about emitted Swift")
 def test_ios_runs_the_generated_nested_assert(tmp_path):
+    tc.tool("swiftc")
     root = _project(tmp_path)
     result = generate_branch_tests(
         "s", root, platform="ios", module="App",
@@ -265,33 +265,6 @@ func run(_ name: String, _ h: H, _ arm: (H) -> Void) {
     _assert_all(inverted, run.stdout)
 
 
-def _kotlin_jars() -> tuple[str, str, str] | None:
-    """(compiler_cp, target_cp, version) from the Gradle cache, versions matched.
-
-    Matched on purpose: a 2.2 compiler against a 2.4 stdlib fails with
-    "incompatible classes were found in dependencies", which reads like a
-    defect in the emitted code and is not one.
-    """
-    cache = Path.home() / ".gradle/caches"
-    if not _JAVA.exists() or not cache.exists():
-        return None
-    compilers = [c for c in sorted(cache.glob("**/kotlin-compiler-embeddable-*.jar"))
-                 if "sources" not in c.name]
-    for compiler in reversed(compilers):
-        version = compiler.name[len("kotlin-compiler-embeddable-"):-len(".jar")]
-        std = sorted(cache.glob(f"**/kotlin-stdlib-{version}.jar"))
-        ref = sorted(cache.glob(f"**/kotlin-reflect-{version}.jar"))
-        cor = sorted(cache.glob("**/kotlinx-coroutines-core-jvm-*.jar"))
-        if std and ref and cor:
-            extra = [str(p) for p in list(cache.glob("**/annotations-13.0.jar"))[:1]]
-            extra += [str(p) for p in list(cache.glob("**/trove4j-*.jar"))[:1]]
-            target = ":".join([str(std[-1]), str(ref[-1]), str(cor[-1])])
-            return ":".join([str(compiler), target] + extra), target, version
-    return None
-
-
-@pytest.mark.skipif(_kotlin_jars() is None,
-                    reason="needs JDK17 + a matched kotlin toolchain in the Gradle cache")
 def test_android_runs_the_generated_nested_assert(tmp_path):
     root = _project(tmp_path)
     result = generate_branch_tests(
@@ -320,7 +293,7 @@ def test_android_runs_the_generated_nested_assert(tmp_path):
     body = "\n".join(
         f'  run("{name}", {value}) {{ h -> {line} }}' for name, value, line in cases)
     (tmp_path / "probe.kt").write_text(
-        "import kotlinx.coroutines.flow.StateFlow\n" + "\n".join(decls) + "\n\n"
+        tc.KOTLIN_SHIM + "\n" + "\n".join(decls) + "\n\n"
         + "\n\n".join(parts) + f'''
 
 var ok = true
@@ -339,17 +312,8 @@ fun main() {{
 }}
 ''', encoding="utf-8")
 
-    compiler_cp, target_cp, _version = _kotlin_jars()
-    out = tmp_path / "out"
-    build = subprocess.run(
-        [str(_JAVA), "-cp", compiler_cp,
-         "org.jetbrains.kotlin.cli.jvm.K2JVMCompiler",
-         "-no-stdlib", "-cp", target_cp, "-d", str(out), str(tmp_path / "probe.kt")],
-        capture_output=True, text=True, timeout=600)
-    errors = [l for l in (build.stdout + build.stderr).splitlines() if "error:" in l]
-    assert not errors, "generated Kotlin did not compile:\n" + "\n".join(errors[:20])
-    run = subprocess.run([str(_JAVA), "-cp", f"{out}:{target_cp}", "ProbeKt"],
-                         capture_output=True, text=True, timeout=120)
+    run = tc.compile_and_run_kotlin(
+        tmp_path, (tmp_path / "probe.kt").read_text(encoding="utf-8"))
     inverted = {n: (v if _EXPECTED[n] else not v)
                 for n, v in _results(run.stdout).items()}
     _assert_all(inverted, run.stdout)

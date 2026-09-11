@@ -68,10 +68,17 @@ from test_branch_tests_generator import SEEDABLE, _project  # noqa: E402
 
 from jsonui_test_cli.branch_tests import generate_branch_tests  # noqa: E402
 
-pytestmark = pytest.mark.skipif(
-    sys.platform != "darwin" or shutil.which("swiftc") is None,
-    reason="needs swiftc (macOS); the property is about the emitted Swift",
-)
+from tests import _toolchain as tc  # noqa: E402
+
+
+@pytest.fixture(autouse=True)
+def _swiftc_or_decide():
+    """A FIXTURE, not a `pytestmark`. Both gate every arm in the file, but a
+    `skipif` can only skip, and skipping in CI is what left all five of these
+    arms silently unmeasured on an image with no swiftc — "1636 passed, 9
+    skipped" reads exactly like a healthy run. `tc.tool` fails there instead.
+    """
+    tc.tool("swiftc")
 
 # The 6 XCTest call sites in the emitted runtime, stood up so the file compiles
 # outside a test target. Failures print rather than abort: no arm below asserts

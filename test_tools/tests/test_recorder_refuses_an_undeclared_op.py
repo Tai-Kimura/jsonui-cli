@@ -22,45 +22,14 @@ report the same all-PASS as one that reached it and was refused.
 """
 from __future__ import annotations
 
-import os
 import re
-import shutil
 import subprocess
-from fnmatch import fnmatch
-from functools import lru_cache
 from pathlib import Path
 
 import pytest
 
 from jsonui_test_cli import branch_tests as bt
-
-_JAVA = Path("/opt/homebrew/opt/openjdk@17/bin/java")
-
-
-def _tool(name: str) -> str:
-    """The tool, or a decision about its absence.
-
-    In CI this FAILS. A skipped gate gates nothing and disappears into a
-    green summary, so a face whose compiler is missing has to say so in the
-    exit code rather than in a count nobody reads. Locally it skips, so the
-    gap lands in the skipped count instead of passing silently.
-
-    Copied deliberately from `test_emitted_typescript_compiles.py` and
-    `test_stub_name_tables_reach_a_compiler.py`, which already made this
-    decision — a third spelling of one policy is how the three drift.
-
-    CALLED FROM INSIDE THE TEST, not from a `skipif`: a decorator cannot
-    fail, only skip, which is the outcome this exists to refuse.
-    """
-    found = shutil.which(name)
-    if found:
-        return found
-    if os.environ.get("CI"):
-        pytest.fail(
-            f"{name} is not installed and this is CI. This face's read-side "
-            "guard would go unmeasured, and the job that owns these arms is "
-            "the one with the compilers")
-    pytest.skip(f"{name} not installed — this face is UNMEASURED here")
+from tests import _toolchain as tc
 
 #: The op the route table declares, and the typo a hand-written test makes.
 _DECLARED_OP = "createOrder"
@@ -177,12 +146,12 @@ def _run_ts(tmp_path: Path, runtime_source: str) -> dict[str, bool]:
 
 
 def test_web_refuses_an_undeclared_op(tmp_path):
-    _tool("node")
+    tc.tool("node")
     _assert_all(_run_ts(tmp_path, bt.RUNTIME_TS), "")
 
 
 def test_web_control_without_the_guard_reports_the_old_behaviour(tmp_path):
-    _tool("node")
+    tc.tool("node")
     stripped = _strip_guard(bt.RUNTIME_TS, "      assertDeclared(op);\n")
     results = _run_ts(tmp_path, stripped)
 
@@ -265,7 +234,7 @@ def _run_swift(tmp_path: Path, runtime_source: str) -> dict[str, bool]:
 
 
 def test_ios_refuses_an_undeclared_op(tmp_path):
-    _tool("swiftc")
+    tc.tool("swiftc")
     results = _run_swift(tmp_path, bt.SWIFT_RUNTIME)
     _assert_all(results, "")
     # Swift's refusal is `XCTFail`, not a throw: `countFor` is called from
@@ -277,7 +246,7 @@ def test_ios_refuses_an_undeclared_op(tmp_path):
 
 
 def test_ios_control_without_the_guard_reports_the_old_behaviour(tmp_path):
-    _tool("swiftc")
+    tc.tool("swiftc")
     stripped = _strip_guard(bt.SWIFT_RUNTIME, "    assertDeclared(op)\n")
     results = _run_swift(tmp_path, stripped)
 
@@ -291,73 +260,6 @@ def test_ios_control_without_the_guard_reports_the_old_behaviour(tmp_path):
 # ---------------------------------------------------------------------------
 # android
 # ---------------------------------------------------------------------------
-
-#: `JsonElement` / `Json` stand in for kotlinx-serialization. Shimmed rather
-#: than resolved: the emitted `Recorder` only passes the recorded body
-#: through `parseToJsonElement` and reads it back as text, so the real
-#: library would answer nothing this probe asks — and requiring it is what
-#: tied the arm to a populated Gradle cache, which CI does not have. A shim
-#: here is the same choice `XCTFail` gets on the Swift side.
-_KOTLIN_SHIM = """
-class JsonElement(private val raw: String) {
-  override fun toString(): String = raw
-}
-
-object Json {
-  fun parseToJsonElement(text: String): JsonElement = JsonElement(text)
-}
-"""
-
-
-@lru_cache(maxsize=1)
-def _kotlin_jars() -> tuple[str, str] | None:
-    """(compiler_cp, target_cp) from the Gradle cache — the LOCAL path.
-
-    A developer machine has the cache and usually not `kotlinc`; the CI job
-    that owns these arms installs `kotlinc` and has no cache. Both are
-    tried, so neither environment skips, and `_tool` decides only when both
-    are absent.
-
-    CACHED because it is not cheap. The globs walk the cache: `**` measured
-    at 147.6s per call, six bounded globs at 59.7s (the cost is the walk,
-    and there were six), one listing plus `fnmatch` at 8.6s.
-
-    Versions matched on purpose: a 2.2 compiler against a 2.4 stdlib fails
-    with "incompatible classes were found in dependencies", which reads
-    like a defect in the emitted code and is not one.
-    """
-    cache = Path.home() / ".gradle/caches"
-    if not _JAVA.exists() or not cache.exists():
-        return None
-
-    all_jars = sorted([*cache.glob("modules-2/files-2.1/*/*/*/*/*.jar"),
-                       *cache.glob("*/transforms/*/transformed/*.jar")])
-
-    def jars(pattern: str) -> list[Path]:
-        return [j for j in all_jars if fnmatch(j.name, pattern)]
-
-    compilers = [c for c in jars("kotlin-compiler-embeddable-*.jar")
-                 if "sources" not in c.name]
-    for compiler in reversed(compilers):
-        version = compiler.name[len("kotlin-compiler-embeddable-"):-len(".jar")]
-        std = jars(f"kotlin-stdlib-{version}.jar")
-        ref = jars(f"kotlin-reflect-{version}.jar")
-        cor = jars("kotlinx-coroutines-core-jvm-*.jar")
-        if not (std and ref and cor):
-            continue
-        # THE COMPILER'S OWN CLASSPATH IS NOT THE TARGET'S. The embeddable
-        # compiler runs on the stdlib and on coroutines; handed only its own
-        # jar it dies before reading a line of Kotlin (`KMappedMarker`, then
-        # `CoroutineScope`), and neither message is a fact about the emitted
-        # source.
-        extra = [str(pp) for pp in jars("annotations-13.0.jar")[:1]]
-        extra += [str(pp) for pp in jars("trove4j-*.jar")[:1]]
-        target = ":".join([str(std[-1]), str(ref[-1])])
-        compiler_cp = ":".join(
-            [str(compiler), str(std[-1]), str(ref[-1]), str(cor[-1])] + extra)
-        return compiler_cp, target
-    return None
-
 
 def _kotlin_block(emitted: str, signature: str) -> str:
     i = emitted.index(signature)
@@ -400,56 +302,14 @@ def _kotlin_probe_source(runtime_source: str) -> str:
     parts = [recorded_call,
              _kotlin_block(runtime_source, "private fun quotedValue("),
              _kotlin_block(runtime_source, "class Recorder(")]
-    return (_KOTLIN_SHIM + "\n" + "\n\n".join(parts)
+    return ("\n\n".join(parts)
             + _KOTLIN_MAIN % {"declared": _DECLARED_OP, "typo": _TYPO_OP})
 
 
-def _assert_compiled(build: subprocess.CompletedProcess) -> None:
-    """THE EXIT CODE, not a grep for "error:".
-
-    This JVM reports in Japanese (`エラー:`), so a word filter matched
-    nothing and a compiler that failed to START read as a clean build — a
-    failure wearing the face of success, after which the arm measures
-    nothing at all and says so in no way.
-    """
-    assert build.returncode == 0, (
-        "emitted Kotlin did not compile (rc="
-        f"{build.returncode}):\n{(build.stdout + build.stderr)[-4000:]}")
-
-
 def _run_kotlin(tmp_path: Path, runtime_source: str) -> dict[str, bool]:
-    (tmp_path / "probe.kt").write_text(
-        _kotlin_probe_source(runtime_source), encoding="utf-8")
-    out = tmp_path / "out"
-    kotlinc, kotlin = shutil.which("kotlinc"), shutil.which("kotlin")
-    jars = _kotlin_jars()
-
-    if kotlinc and kotlin:
-        _assert_compiled(subprocess.run(
-            [kotlinc, str(tmp_path / "probe.kt"), "-d", str(out)],
-            capture_output=True, text=True, timeout=900))
-        run = subprocess.run([kotlin, "-classpath", str(out), "ProbeKt"],
-                             capture_output=True, text=True, timeout=120)
-    elif jars:
-        compiler_cp, target_cp = jars
-        _assert_compiled(subprocess.run(
-            [str(_JAVA), "-cp", compiler_cp,
-             "org.jetbrains.kotlin.cli.jvm.K2JVMCompiler",
-             "-no-stdlib", "-cp", target_cp, "-d", str(out),
-             str(tmp_path / "probe.kt")],
-            capture_output=True, text=True, timeout=900))
-        run = subprocess.run(
-            [str(_JAVA), "-cp", f"{out}:{target_cp}", "ProbeKt"],
-            capture_output=True, text=True, timeout=120)
-    else:
-        # NAME WHAT IS ACTUALLY MISSING. `_tool("kotlinc")` would RETURN on a
-        # machine that has the compiler but not the runner, and the next line
-        # would then raise "unreachable" — a message about this function
-        # instead of about the toolchain.
-        _tool("kotlinc" if not kotlinc else "kotlin")
-        raise AssertionError("unreachable")  # pragma: no cover
-
-    return _results(run.stdout)
+    return _results(tc.compile_and_run_kotlin(
+        tmp_path, tc.KOTLIN_SHIM + "\n" + _kotlin_probe_source(runtime_source)
+    ).stdout)
 
 
 def test_android_refuses_an_undeclared_op(tmp_path):
