@@ -706,10 +706,18 @@ def _generated_paths_and_roots(config_mgr) -> tuple[list, list]:
     # under every version. A green there would read as agreement.) Walking
     # and comparing names ourselves takes the question away rather than
     # answering it per environment.
+    from .lint_generated_cmd import _layout_distribution_dirs
+
+    # The roots are every directory the record can claim files under: the
+    # `generated` trees, the parents of generated files, AND the layout
+    # distribution dirs — the same declaration `_collect_targets` reads the
+    # layout JSON from. A root missing here is a file the manifest lists
+    # under no declared root (`outsideDeclaredRoots`), which is the record
+    # saying its scan was declared short, not that the file is wrong.
     walked: set = set()
     for directory in _generated_tree_roots(config_mgr) | {
         p.parent for p in list(paths) if _is_generated_dir(p.parent)
-    }:
+    } | _layout_distribution_dirs(config_mgr):
         walked.add(directory)
         try:
             paths.update(f for f in directory.rglob("*") if f.is_file())

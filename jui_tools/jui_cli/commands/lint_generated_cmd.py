@@ -463,18 +463,7 @@ def _collect_targets(config_mgr) -> list[tuple[str, Path]]:
     # 1. Layout JSON — only the distributed per-platform copies get the
     # @generated marker; the shared ``layouts_directory`` source is
     # hand-editable and intentionally marker-free.
-    full_config = config_mgr.load()
-    platforms = full_config.get("platforms", {}) if isinstance(full_config, dict) else {}
-    for platform_name, pconfig in platforms.items():
-        if not isinstance(pconfig, dict):
-            continue
-        layouts_rel = pconfig.get("layoutsDir")
-        platform_root_rel = pconfig.get("root")
-        if not layouts_rel or not platform_root_rel:
-            continue
-        platform_layouts = config_mgr.project_root / platform_root_rel / layouts_rel
-        if not platform_layouts.exists():
-            continue
+    for platform_layouts in sorted(_layout_distribution_dirs(config_mgr)):
         for jf in platform_layouts.rglob("*.json"):
             if _is_resource_or_style(jf):
                 continue
@@ -533,6 +522,35 @@ def _collect_targets(config_mgr) -> list[tuple[str, Path]]:
 
 def _platform_roots(config_mgr) -> list[Path | None]:
     return [config_mgr.ios_root, config_mgr.android_root, config_mgr.web_root]
+
+
+def _layout_distribution_dirs(config_mgr) -> set[Path]:
+    """Every `platforms.<p>.root/layoutsDir` that exists — where `jui build`
+    distributes the per-platform layout copies.
+
+    ONE declaration, two readers: the lint collection enumerates the layout
+    JSON from it (step 1 of `_collect_targets`), and the build manifest's
+    scan roots include it. Until 1.8.74 the roots were only the trees named
+    `generated`, so the layout copies the same build had just written were
+    in the record and under no declared root — the first thing the
+    `summary.scan` block (1.8.73) flagged on a real face: `outsideDeclaredRoots
+    25`, all `src/Layouts/**/*.json`. The claim was right and the scan's
+    declaration was short; this is the declaration.
+    """
+    config = config_mgr.load()
+    platforms = config.get("platforms", {}) if isinstance(config, dict) else {}
+    found: set[Path] = set()
+    for _name, pconfig in platforms.items():
+        if not isinstance(pconfig, dict):
+            continue
+        layouts_rel = pconfig.get("layoutsDir")
+        platform_root_rel = pconfig.get("root")
+        if not layouts_rel or not platform_root_rel:
+            continue
+        platform_layouts = config_mgr.project_root / platform_root_rel / layouts_rel
+        if platform_layouts.exists():
+            found.add(platform_layouts)
+    return found
 
 
 def _scan_code_tree(directory: Path) -> list[tuple[str, Path]]:
