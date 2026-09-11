@@ -169,6 +169,23 @@ class TheRuleActuallyRemovesTheTree(unittest.TestCase):
         being right has to come first.
         """
         rules = _prune_block(BOOTSTRAP.read_text(encoding="utf-8"))
+        # A GATE, not an assertion elsewhere. `env=` below makes a rule whose
+        # variable is the WHOLE argument harmless — `"$VAR"` becomes `""` and
+        # `rm -rf ""` exits 0 — but it does nothing for a rule where the
+        # variable is a PREFIX: `"$VAR/spec"` expands to `/spec`, an absolute
+        # path, and `rm -rf` goes after it. That form already exists in this
+        # file (`rm -f "$tool_dir/lib/core/..."`), outside the block, so a
+        # rule of that shape moving inside it is a relocation rather than an
+        # invention. The arm that refuses `$` runs AFTER this one — unittest
+        # orders by method name — so it would report the destruction, not
+        # prevent it.
+        for rule in rules:
+            if "$" in rule:
+                raise AssertionError(
+                    f"refusing to run a prune rule that names a variable: "
+                    f"{rule!r}. Under a cleared environment a whole-argument "
+                    "variable is empty and harmless, but a prefix leaves an "
+                    "absolute path — this is checked before anything runs")
         script = "set -e\n" + "\n".join(rules) + "\n"
         return subprocess.run(
             ["bash", "-c", script], cwd=self.tmp,
