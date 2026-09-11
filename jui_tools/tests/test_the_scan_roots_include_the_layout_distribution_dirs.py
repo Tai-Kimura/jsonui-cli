@@ -47,6 +47,12 @@ def _project(root: Path) -> tuple[ConfigManager, Path, Path]:
     page.write_text('{"type": "View"}\n', encoding="utf-8")
     (root / "web" / "src" / "generated").mkdir(parents=True)
     (root / "web" / "src" / "generated" / "Home.tsx").write_text("// @generated\n", encoding="utf-8")
+    # Hand-placed and resource files under the layout dir — never the
+    # build's to claim.
+    res = root / "web" / "src" / "Layouts" / "Resources"
+    res.mkdir()
+    (res / ".gitkeep").write_text("", encoding="utf-8")
+    (res / "colors.json").write_text('{"primary": "#000"}\n', encoding="utf-8")
     return ConfigManager(root / "jui.config.json"), (root / "web" / "src" / "Layouts"), page
 
 
@@ -66,6 +72,19 @@ class TestOneDeclaration:
         resolved_roots = {Path(r).resolve() for r in roots}
         assert layouts_dir.resolve() in resolved_roots, roots
         assert page.resolve() in {Path(p).resolve() for p in paths}
+
+    def test_the_layout_dir_is_declared_not_walked(self, tmp_path):
+        """1.8.74 walked it and claimed a hand-placed `.gitkeep` and four
+        resource files on one face as generated (files 492 → 497). The
+        layout copies come from the lint collection; nothing else under the
+        layout dir is the build's."""
+        cfg, layouts_dir, page = _project(tmp_path)
+        paths, roots = build_cmd._generated_paths_and_roots(cfg)
+        resolved = {Path(p).resolve() for p in paths}
+        assert (layouts_dir / "Resources" / ".gitkeep").resolve() not in resolved
+        assert (layouts_dir / "Resources" / "colors.json").resolve() not in resolved
+        assert page.resolve() in resolved
+        assert layouts_dir.resolve() in {Path(r).resolve() for r in roots}
 
 
 class TestTheLedgerAgrees:
