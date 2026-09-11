@@ -102,7 +102,11 @@ py_suite() {
     "$C"/*) ;;
     *) bad "$dir: $pkg resolves outside the checkout — the suite would examine another tree" ;;
   esac
-  (cd "$C/$dir" && PYTHONPATH="$pp" python3 -m pytest -q "$@" 2>&1 | tail -3)
+  # `-rs` names every skip, and the filter keeps those lines plus the summary.
+  # `tail -3` kept only the summary, so a skipped arm was a number with no
+  # name — and a number is not something anyone can go and fix.
+  (cd "$C/$dir" && PYTHONPATH="$pp" python3 -m pytest -q -rs "$@" 2>&1 \
+     | grep -E '^(SKIPPED|FAILED|ERROR) |^=+ .* in [0-9.]+s')
   local rc=$?
   say "   exit=$rc"
   [ "$rc" = 0 ] || bad "$dir: pytest exit $rc"
@@ -126,6 +130,23 @@ py_suite() {
 # count, where it vanishes into a green summary — and this runner's own
 # reports said "1635 passed, 1 skipped" for three candidates without anyone
 # asking WHICH ONE. The denominator of a gate is CI's job list.
+# rjui's fold and type-check arms need the toolchain pinned under
+# rjui_tools/spec/support (tsc + esbuild). Without it they SKIP through
+# mark_skipped! — visible as `pending` in the summary line, invisible to the
+# `failures=` count this runner ends with. Measured 2026-09-10: 6 pending,
+# every one of them an arm for that day's fix. A skipped gate gates nothing,
+# so the install is a leg, and a leg that cannot install is a failure.
+say "== rjui_tools spec support (npm ci --prefix rjui_tools/spec/support)"
+(cd "$C" && npm ci --prefix rjui_tools/spec/support --prefer-offline --no-audit --no-fund 2>&1 | tail -1)
+rc=$?; say "   exit=$rc"; [ "$rc" = 0 ] || bad "rjui_tools: spec support not installed — the fold and tsc arms would skip"
+# 🚨 AND IT RUNS BEFORE test_tools, NOT JUST BEFORE rjui. test_tools' TypeScript
+# compile arms resolve `tsc` at that same rjui_tools/spec/support/node_modules
+# path — not on PATH. On a fresh worktree this leg used to sit after the
+# Python suites, so test_tools ran with no tsc and 6 arms skipped; the runner
+# printed `1654 passed, 6 skipped` under a green header and nobody could say
+# why, because `| tail -3` had already thrown the reasons away. Measured
+# 2026-09-11: worktree created 15:02:22, test_tools ran 15:02:35–15:03:33,
+# npm ci created tsc at 15:06:47. Order is the defect; this is the fix.
 say "== CI=${CI:-(unset)} — the test_tools leg mirrors ci.yml:184's --ignore"
 py_suite test_tools jsonui_test_cli \
     --ignore=tests/test_stub_name_tables_reach_a_compiler.py
@@ -202,15 +223,6 @@ rb_suite() {
 }
 rb_suite sjui_tools "rspec"                 # no Gemfile: plain rspec
 rb_suite kjui_tools "bundle exec rspec"
-# rjui's fold and type-check arms need the toolchain pinned under
-# rjui_tools/spec/support (tsc + esbuild). Without it they SKIP through
-# mark_skipped! — visible as `pending` in the summary line, invisible to the
-# `failures=` count this runner ends with. Measured 2026-09-10: 6 pending,
-# every one of them an arm for that day's fix. A skipped gate gates nothing,
-# so the install is a leg, and a leg that cannot install is a failure.
-say "== rjui_tools spec support (npm ci --prefix rjui_tools/spec/support)"
-(cd "$C" && npm ci --prefix rjui_tools/spec/support --prefer-offline --no-audit --no-fund 2>&1 | tail -1)
-rc=$?; say "   exit=$rc"; [ "$rc" = 0 ] || bad "rjui_tools: spec support not installed — the fold and tsc arms would skip"
 rb_suite rjui_tools "bundle exec rspec"
 
 # --- Ruby 2.6: the consumer floor, and a CI leg this runner did not have ----
