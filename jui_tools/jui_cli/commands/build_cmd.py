@@ -472,12 +472,19 @@ def cmd_build(args: argparse.Namespace) -> int:
         # one level up: the failure was on screen and the last line
         # contradicted it.
         incomplete = _stage_failures(_stage_ledger)
+        # The same `tracked` the coverage head printed two lines up — read
+        # from the ledger's claims, not re-counted here, so the two lines
+        # cannot disagree. (This line used to count a local `present_keys`;
+        # when that variable went, a Ruby spec driving the real CLI caught
+        # the NameError that the Python suites, which stop short of this
+        # path, did not.)
+        tracked = gen_run.claims()["summary"]["tracked"]
         if incomplete:
-            print(f"\nBuild finished — {len(present_keys)} tracked "
+            print(f"\nBuild finished — {tracked} tracked "
                   f"generated file(s); {len(incomplete)} stage(s) did not "
                   f"complete")
         else:
-            print(f"\nBuild completed successfully — {len(present_keys)} "
+            print(f"\nBuild completed successfully — {tracked} "
                   f"tracked generated file(s)")
         _print_stage_failures(incomplete)
         # A stage that did not complete is a screen that is not there. The
