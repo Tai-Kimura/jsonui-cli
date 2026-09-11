@@ -25,7 +25,8 @@ the POPULATION IS DERIVED, not listed:
       the count must match what the ledger was actually handed.
 
 Each arm names the mutation that turns it red. Run them with the mutation
-applied before trusting them (2026-09-11: all three went red on theirs).
+applied before trusting them (2026-09-11: 11/11 killed here; triage's independent
+probe then found four the first arms let through — pinned in the last class).
 """
 
 from __future__ import annotations
@@ -229,6 +230,74 @@ class TestC_ClaimWithinScan(_Tree):
         saved = gm.save(run, generated_by="test")
         self.assertEqual(saved["summary"]["scan"]["roots"], "not declared")
         self.assertEqual(saved["summary"]["scan"]["outsideDeclaredRoots"], 0)
+
+
+class TestWhatTriagesProbeFoundTheFirstArmsDidNot(_Tree):
+    """Four specimens from the independent check (2026-09-11). Each is a
+    mutation or a pristine red the arms above let through; each is now
+    pinned so the next fold cannot re-open it quietly."""
+
+    def test_the_closing_line_does_not_read_the_record_back_from_disk(self):
+        """Mutation: in `coverage_line`, take `tracked` from
+        `load(root)["summary"]` → red.
+
+        A second source that AGREES is invisible to a value comparison,
+        which is what every arm above does. So the disk copy is tampered
+        after `save`: a line that reads the ledger is unchanged, a line
+        that re-reads the file moves.
+        """
+        run = self._observed_ledger()
+        run.written(self.files, known=set())
+        gm.save(run, generated_by="test")
+        before = gm.coverage_line(run)
+        path = gm.manifest_path(self.root)
+        data = json.loads(path.read_text())
+        data["summary"]["tracked"] = 999
+        data["files"] = {}
+        path.write_text(json.dumps(data))
+        self.assertEqual(before, gm.coverage_line(run),
+                         "the closing line read the record back from disk")
+
+    def test_a_sibling_directory_with_the_root_as_a_prefix_is_outside(self):
+        """Mutation: compare roots as string prefixes → red (`gen2` under `gen`)."""
+        extra = _write(self.root, "app/Generated2/Z.swift", "z")
+        run = gm.GenerationRun(project_root=self.root, version="1.8.73")
+        run.observe(self.files + [extra], roots=(self.gen,))
+        run.written(self.files + [extra], known=set())
+        self.assertIn("app/Generated2/Z.swift", run.outside_roots)
+        self.assertNotIn("app/Generated/A.swift", run.outside_roots)
+
+    def test_the_doc_producers_keys_are_spelled_the_way_the_disk_spells_them(self):
+        """Pristine RED before this arm: `observe_written` kept the caller's
+        spelling. Mutation: drop the `_key` pass in `observe_written` → red.
+        """
+        _write(self.root, "docs/y.html", "y")
+        run = gm.GenerationRun(project_root=self.root, version="1.8.73")
+        run.observe_written(["DOCS/y.html"], roots=(self.root / "docs",))
+        self.assertEqual(run.written_keys, ["docs/y.html"])
+        saved = gm.save(run, generated_by="jsonui-doc generate html")
+        self.assertIn("docs/y.html", saved["files"])
+        self.assertNotIn("DOCS/y.html", saved["files"])
+
+    def test_a_dotdot_key_does_not_pass_as_under_the_scope(self):
+        """Mutation: remove the `normpath` in `_under_roots` → red."""
+        run = gm.GenerationRun(project_root=self.root, version="1.8.73")
+        with self.assertRaises(ValueError):
+            run.observe_written(["app/Generated/../Views/HomeGeneratedView.swift"],
+                                roots=(self.gen,))
+
+    def test_declared_but_empty_roots_are_not_undeclared(self):
+        """Mutation: make `observe(roots=[])` collapse to None → red.
+
+        "declared and walked no directory" and "declared nothing" used to
+        share one value; under the first, every present key is outside.
+        """
+        run = gm.GenerationRun(project_root=self.root, version="1.8.73")
+        run.observe(self.files, roots=[])
+        run.written(self.files, known=set())
+        saved = gm.save(run, generated_by="test")
+        self.assertEqual(saved["summary"]["scan"]["roots"], [])
+        self.assertEqual(saved["summary"]["scan"]["outsideDeclaredRoots"], 3)
 
 
 class TestTheVocabularyHasOneOwner(_Tree):

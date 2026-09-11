@@ -213,9 +213,12 @@ class GenerationRun:
     before: dict[str, FileState] = field(default_factory=dict)
 
     # --- what the scan covered ------------------------------------------
-    #: Project-relative roots the scan walked; `()` means the caller did
-    #: not declare any, and the record says so rather than guessing.
-    roots: tuple = ()
+    #: Project-relative roots the scan walked. None = the caller declared
+    #: nothing (the record says "not declared"); `()` = declared and empty,
+    #: under which every present key stands outside the scan. Two states
+    #: that used to share one value — the ticket's 0 ≠ not-observed, on the
+    #: directory axis (found by triage's probe, 2026-09-11).
+    roots: tuple | None = None
     #: How many paths `observe` was handed. None = observe never ran.
     observed: int | None = None
 
@@ -243,17 +246,17 @@ class GenerationRun:
     # ------------------------------------------------------------------
     # observation
     # ------------------------------------------------------------------
-    def observe(self, paths, *, roots=()) -> None:
+    def observe(self, paths, *, roots=None) -> None:
         """Record the pre-run state of every path a run could write."""
         paths = list(paths)
-        self.roots = tuple(self._key(r) for r in roots) if roots else ()
+        self.roots = None if roots is None else tuple(self._key(r) for r in roots)
         self.observed = len(paths)
         for path in paths:
             state = _state_of(path)
             if state is not None:
                 self.before[self._key(path)] = state
 
-    def observe_written(self, keys, *, roots=()) -> None:
+    def observe_written(self, keys, *, roots=None) -> None:
         """A producer that has no before/after — it knows what it wrote.
 
         `jsonui-doc generate html` registers each page as it is written;
@@ -261,8 +264,13 @@ class GenerationRun:
         writes, with `present` left None so `tracked` falls back to the
         record's own size, as it always has for this producer.
         """
-        keys = sorted(keys)
-        self.roots = tuple(self._key(r) for r in roots) if roots else ()
+        # THROUGH `_key`, like every other path that enters the manifest. The
+        # first cut kept the caller's spelling verbatim, so a key whose case
+        # differed from the disk (`DOCS/y.html`) would have been recorded as
+        # given — the drift `_key` exists to prevent, bypassed by one of the
+        # two producers. Found by triage's probe before it shipped.
+        keys = sorted(self._key(Path(self.project_root) / k) for k in keys)
+        self.roots = None if roots is None else tuple(self._key(r) for r in roots)
         self.observed = len(keys)
         self.written_keys = keys
         self._refuse_outside_roots(keys)
@@ -437,7 +445,7 @@ class GenerationRun:
         collisions = self.collisions or {}
         return {
             "scan": {
-                "roots": list(self.roots) if self.roots else "not declared",
+                "roots": "not declared" if self.roots is None else list(self.roots),
                 "observed": self.observed,
                 "outsideDeclaredRoots": len(self.outside_roots),
             },
@@ -480,20 +488,22 @@ class GenerationRun:
         ways. Measured 2026-09-11: every leftover counted as "mine" and
         `leftoversOutsideElsewhere` was 0 on a two-face tree.
         """
-        if not self.roots:
-            return True
-        target = real_case(Path(path))
+        if self.roots is None:
+            return True                      # nothing declared: nothing to be outside of
         base = real_case(Path(self.project_root))
+        # `..` is collapsed before the comparison; `real_case` keeps it, and
+        # `docs/../evil/x.html` has `/docs` among its textual parents.
+        target = real_case(Path(os.path.normpath(Path(path))))
         for r in self.roots:
             rp = Path(r)
-            rp = real_case(rp if rp.is_absolute() else base / rp)
+            rp = real_case(Path(os.path.normpath(rp if rp.is_absolute() else base / rp)))
             if target == rp or rp in target.parents:
                 return True
         return False
 
     def _refuse_outside_roots(self, keys) -> None:
         """A key outside every declared root is a claim wider than the scan."""
-        if not self.roots:
+        if self.roots is None:
             return
         outside = [k for k in keys if not self._under_roots(Path(self.project_root) / k)]
         if outside:
