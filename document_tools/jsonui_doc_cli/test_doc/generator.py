@@ -125,6 +125,11 @@ _document_slot_facts: dict = run_state.ledger(globals(), "_document_slot_facts",
 #: from the ledgers' own keying, read by `generation_summary_line`, empty when
 #: no record was written (no root, no shared/core) — the line then says so.
 _run_record: dict = run_state.ledger(globals(), "_run_record", dict)
+#: Component spec files the spec pre-generation found OUTSIDE the directory
+#: the config names for them (resolved path -> that directory). Whether each
+#: got a page is decided at the end of the run from the pages written, not
+#: guessed at the moment the file is seen — see `_report_component_specs_outside_dir`.
+_component_specs_outside_dir: dict = run_state.ledger(globals(), "_component_specs_outside_dir", dict)
 
 
 #: Every placeholder page this run wrote, by path.
@@ -1315,7 +1320,7 @@ def generate_html_directory(
 
     # Pre-generate spec and component documentation (HTML and MD)
     spec_json_dir = docs_base / "screens" / "json"
-    component_json_dir = docs_base / "components" / "json"
+    component_json_dir = _component_json_dir_for(docs_base)
 
     if spec_json_dir.exists() or component_json_dir.exists():
         print("Pre-generating specification documentation...")
@@ -1871,7 +1876,7 @@ def generate_html_directory(
 
             # Process app-specific specs (screens/json)
             app_spec_dir = app_docs_path / "screens" / "json"
-            app_component_dir = app_docs_path / "components" / "json"
+            app_component_dir = _component_json_dir_for(app_docs_path)
             app_requirements_dir = app_docs_path / "requirements" / "json"
 
             # Pre-generate spec docs for this app
@@ -2020,6 +2025,7 @@ def generate_html_directory(
     # away. The printing reaches whoever is watching; the record reaches the
     # next question. One face shipped 64 unreachable pages that this exact
     # call had already named.
+    _report_component_specs_outside_dir()
     stale = _report_stale_pages(output_path, started_at)
     outside = _report_writes_outside_output(output_path)
     stale_outside = _report_stale_pages_outside(output_path, started_at)
@@ -4122,6 +4128,86 @@ def _report_colliding_spec_sources(docs_base: Path) -> list:
     return collisions
 
 
+def _component_json_dir_for(docs_base: Path) -> Path:
+    """Where this app keeps its component specs: `component_spec_directory`
+    from the app's `jui.config.json`, else the tool's own layout.
+
+    ONE resolver for the four places that used to spell `<docs>/components/
+    json` as a literal (site pre-scan, per-app pre-scan, the page map, the
+    component loop). `doc_init_component` writes where the config says; a
+    face that set `"component_spec_directory": "docs/screens/json"` had its
+    components written there and then heard from this generator that they
+    "produce no page" — while the site pass, which walks the docs tree,
+    wrote their pages in the same run (reported 2026-09-11). Two spellings
+    of one fact, disagreeing. The config is the fact; this reads it.
+
+    The app root is the docs directory's parent, which is where `jui init`
+    puts `jui.config.json`. Without a config the literal stands — it is the
+    tool's default layout, not a second copy of the config default.
+    """
+    app_root = docs_base.resolve().parent
+    config_path = app_root / "jui.config.json"
+    if config_path.is_file():
+        try:
+            here = Path(__file__).resolve()
+            jui_tools_dir = here.parents[3] / "jui_tools"
+            if jui_tools_dir.is_dir() and str(jui_tools_dir) not in sys.path:
+                sys.path.insert(0, str(jui_tools_dir))
+            from jui_cli.core.config_manager import ConfigManager
+            return Path(ConfigManager(config_path).component_spec_directory)
+        except Exception:  # noqa: BLE001 — a pip-only install has no jui_cli
+            try:
+                import json as _json
+                rel = (_json.loads(config_path.read_text(encoding="utf-8")) or {}).get(
+                    "component_spec_directory")
+                if isinstance(rel, str) and rel:
+                    return app_root / rel
+            except (OSError, ValueError):
+                pass
+    return docs_base / "components" / "json"
+
+
+def _under(path: Path, directory: Path) -> bool:
+    try:
+        path.resolve().relative_to(directory.resolve())
+        return True
+    except (ValueError, OSError):
+        return False
+
+
+def _report_component_specs_outside_dir() -> None:
+    """The end-of-run word on component specs found outside their directory.
+
+    Derived from what this run WROTE: a spec is "without a page" only when
+    no component page with its stem is among the written pages. The
+    pre-generation pass cannot know this — the site pass, which walks the
+    whole docs tree, runs later and writes pages for these files too — so
+    it says only what it did, and this says what the run did.
+    """
+    if not _component_specs_outside_dir:
+        return
+    stems = {p.stem for p in get_written_pages() if p.parent.name == "components"}
+    paged = sorted(f for f in _component_specs_outside_dir
+                   if f.stem.replace(".component", "") in stems)
+    unpaged = sorted(f for f in _component_specs_outside_dir
+                     if f.stem.replace(".component", "") not in stems)
+    if unpaged:
+        print()
+        warn(f"  WARNING [doc]: {len(unpaged)} component spec(s) outside the "
+             f"component spec directory produced no page this run:")
+        for f in unpaged[:20]:
+            print(f"       {f}  (component specs are read from "
+                 f"{_component_specs_outside_dir[f]})")
+        if len(unpaged) > 20:
+            print(f"       … and {len(unpaged) - 20} more")
+    if paged:
+        print(f"  ⓘ NOTE: {len(paged)} component spec(s) outside the component spec "
+              f"directory got a page from the site pass anyway; the placement "
+              f"still differs from the config, the page does not:")
+        for f in paged[:20]:
+            print(f"       {f}")
+
+
 def _pre_generate_spec_docs(
     docs_base: Path,
     spec_subdir: str = "screens",
@@ -4160,7 +4246,7 @@ def _pre_generate_spec_docs(
     # four `generate_spec_html` call sites. `_component_page_rel`'s docstring
     # says "both callers now read this" — it counted two. Wiring one place and
     # counting the places that need it are different acts.
-    _component_json_dir = docs_base / "components" / "json"
+    _component_json_dir = _component_json_dir_for(docs_base)
     _component_html_dir = docs_base / "components" / "html"
     _component_pages: dict[str, Path] = {}
     if _component_json_dir.is_dir():
@@ -4178,7 +4264,11 @@ def _pre_generate_spec_docs(
         # was found holding ten of them; it had no way to notice, because
         # "wrote nothing" and "there was nothing to write" print the same.
         # Reported 2026-09-10 while measuring the leaf directories.
-        _misfiled = sorted(spec_json_dir.rglob("*.component.json"))
+        # Outside the CONFIGURED component directory — a face that keeps its
+        # components beside its screens, and says so in its config, has
+        # nothing misfiled here.
+        _misfiled = sorted(f for f in spec_json_dir.rglob("*.component.json")
+                           if not _under(f, _component_json_dir))
         try:
             _seen_key = spec_json_dir.resolve()
         except OSError:
@@ -4192,11 +4282,17 @@ def _pre_generate_spec_docs(
         elif _misfiled:
             _misfiled_reported.add(_seen_key)
         if _misfiled:
+            # What this pass knows: it wrote no page for them. Whether the
+            # RUN did is said at the end, from the pages written — the site
+            # pass walks the docs tree and writes pages for these too, and
+            # "produce no page" printed here was false on such a run.
+            for _m in _misfiled:
+                _component_specs_outside_dir[_m.resolve()] = _component_json_dir
             print()
             warn(f"  WARNING [doc]: {len(_misfiled)} component spec(s) under "
-                 f"{spec_json_dir} produce no page — this directory is read for "
-                 f"*.spec.json, and component specs are read from "
-                 f"{docs_base / 'components' / 'json'}:")
+                 f"{spec_json_dir} are outside the component spec directory — "
+                 f"this pass reads *.spec.json here and component specs from "
+                 f"{_component_json_dir}, so it wrote no page for them:")
             for _m in _misfiled[:20]:
                 print(f"       {_m.name}")
             if len(_misfiled) > 20:
@@ -4262,7 +4358,7 @@ def _pre_generate_spec_docs(
                                         source=spec_file)
 
     # Process component specifications
-    comp_json_dir = docs_base / "components" / "json"
+    comp_json_dir = _component_json_dir_for(docs_base)
     if comp_json_dir.exists():
         comp_files = list(comp_json_dir.glob("*.component.json"))
         if comp_files:
