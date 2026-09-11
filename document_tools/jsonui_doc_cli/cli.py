@@ -937,6 +937,22 @@ def cmd_validate_spec(args):
 
     validator = SpecValidator()
     result = validator.validate_file(file_path)
+    # The same existence check the directory walk runs, on this one file:
+    # a dangling `specFile` used to pass here with 0 errors while the walk
+    # over the same directory reported it (a downstream admin face, 2026-09-11,
+    # synthetic control). When the file is not under a <face>/screens/json the
+    # check cannot derive the face, and it SAYS so instead of passing silently.
+    from .spec_doc.validator import SpecValidationMessage
+    comp_errors, comp_warnings = _component_declaration_gaps(
+        [file_path], file_path.parent, this_spec_only=True)
+    for text in comp_errors:
+        result.errors.append(SpecValidationMessage(
+            path="structure.customComponents",
+            message=text.removeprefix("[ERROR] "), level="error"))
+    for text in comp_warnings:
+        result.warnings.append(SpecValidationMessage(
+            path="structure.customComponents",
+            message=text.removeprefix("[WARNING] "), level="warning"))
 
     if not validator._custom_rules.is_empty:
         print(f"Using custom rules: {validator._custom_rules.config_path}")
@@ -1066,8 +1082,19 @@ def _component_sibling_dirs(input_dir: Path):
     return comps, (layouts if layouts.is_dir() else None)
 
 
-def _component_declaration_gaps(spec_files, input_dir):
+def _component_declaration_gaps(spec_files, input_dir, *, this_spec_only: bool = False):
     """Component specs and the screens that declare them, reconciled.
+
+    ONE function, three mouths (2026-09-11): the directory walk, the
+    single-file `validate spec`, and MCP `doc_validate_spec` (which runs the
+    single-file form). Until 1.8.74 only the walk called this, so a
+    `specFile` naming a file that does not exist passed the single-file form
+    with 0 errors — and that form is the one the define agent declares
+    "done" with. `this_spec_only` keeps the first direction (declared, file
+    missing) and drops the second (on disk, declared by nobody), which a
+    single file cannot answer: another screen may declare it. The "declares"
+    predicate is the same code for every mouth — no mouth resolves paths or
+    judges emptiness on its own.
 
     Ruled 2026-09-08. Two faces had four component pages that no screen
     declared: the pages were generated and nothing linked to them, so they
@@ -1137,7 +1164,10 @@ def _component_declaration_gaps(spec_files, input_dir):
             f"to nothing "
             f"(declared by: {where})")
 
-    for name in sorted(set(on_disk) - set(declared)):
+    # The second direction needs every spec of the face; one file has no
+    # standing to say a component is undeclared.
+    undeclared = [] if this_spec_only else sorted(set(on_disk) - set(declared))
+    for name in undeclared:
         # A declaration that named this component but gave no `specFile` is
         # the likelier story, and it points at the field to fix rather than at
         # a declaration to add that is already there.
