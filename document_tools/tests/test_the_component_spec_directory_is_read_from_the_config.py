@@ -33,19 +33,23 @@ from jsonui_doc_cli.test_doc import generator as gen  # noqa: E402
 
 def _component(path: Path, name: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
+    pascal = "".join(part.capitalize() for part in name.split("_"))
     path.write_text(json.dumps({
-        "type": "component", "version": "1.0",
-        "metadata": {"component_id": name, "title": name, "description": "d"},
-        "structure": {"root": {"type": "View", "children": []}},
+        "type": "component_spec", "version": "1.0",
+        "metadata": {"name": pascal, "displayName": pascal, "description": "d"},
+        "structure": {"components": [{"type": "Label", "id": "t", "description": "d"}],
+                      "layout": {"root": "View", "children": [{"id": "t"}]}},
     }), encoding="utf-8")
 
 
 def _screen(path: Path, screen_id: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps({
-        "type": "screen", "version": "1.0",
-        "metadata": {"screen_id": screen_id, "title": screen_id, "description": "d"},
-        "structure": {"root": {"type": "View", "children": []}},
+        "type": "screen_spec", "version": "1.0",
+        "metadata": {"name": screen_id, "displayName": screen_id, "description": "d",
+                     "layoutFile": screen_id},
+        "structure": {"components": [{"type": "Label", "id": "t", "description": "d"}],
+                      "layout": {"root": "View", "children": [{"id": "t"}]}},
     }), encoding="utf-8")
 
 
@@ -88,7 +92,11 @@ class TestTheFaceThatKeepsComponentsBesideScreens:
         out = _pre(docs)
         assert "component spec(s) under" not in out, out
         assert "produce no page" not in out and "produced no page" not in out
-        assert (docs / "components" / "html" / "chart_bars.html").is_file(), out
+        # (a): the page sits beside the spec, like screens — where the
+        # single-file `generate component` already wrote on that face.
+        assert (docs / "screens" / "html" / "chart_bars.html").is_file(), out
+        assert (docs / "screens" / "md" / "chart_bars.md").is_file(), out
+        assert not (docs / "components").exists(), "the tool's default layout was created beside the configured one"
         assert not gen._component_specs_outside_dir
 
     def test_without_the_config_the_same_tree_is_named_and_the_pass_says_what_it_did(self, tmp_path):
@@ -102,6 +110,72 @@ class TestTheFaceThatKeepsComponentsBesideScreens:
         assert "produce no page" not in out
         assert list(gen._component_specs_outside_dir) == [
             (docs / "screens" / "json" / "chart_bars.component.json").resolve()]
+
+
+class TestTheDefaultLayoutStillWritesUnderComponents:
+    def test_without_a_config_component_pages_go_to_components_html(self, tmp_path):
+        docs = tmp_path / "docs"
+        _component(docs / "components" / "json" / "badge.component.json", "badge")
+        _pre(docs)
+        assert (docs / "components" / "html" / "badge.html").is_file()
+
+
+class TestTheRootIsNotPreGeneratedTwice:
+    def test_an_app_naming_the_root_docs_dir_generates_each_page_once(self, tmp_path):
+        """`--app x:<root docs>`: the root pass and the app pass read the same
+        directory; the root pass now steps aside. One `Generated:` line per
+        page, and the page count is unchanged (pages are a set either way)."""
+        tests = tmp_path / "tests"
+        tests.mkdir()
+        (tests / "s0.test.json").write_text(json.dumps({
+            "type": "screen", "platform": "ios",
+            "source": {"layout": "s0"},
+            "metadata": {"name": "s0 test", "description": "d"},
+            "cases": [{"name": "c", "description": "c",
+                       "steps": [{"action": "tap", "id": "x"}]}],
+        }), encoding="utf-8")
+        docs = tmp_path / "docs"
+        _component(docs / "components" / "json" / "badge.component.json", "badge")
+        _screen(docs / "screens" / "json" / "home.spec.json", "home")
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            gen.generate_html_directory(
+                tests, tmp_path / "out", "T",
+                apps=[{"name": "root", "docs_path": str(docs)}],
+                project_root=tmp_path)
+        out = buf.getvalue()
+        badge = [l for l in out.splitlines() if "Generated:" in l and "badge.html" in l]
+        assert len(badge) == 1, "\n".join(badge) or out
+        # The root pass's banner is absent (it stepped aside); the app pass
+        # processed the component exactly once.
+        assert out.count("Pre-generating specification documentation...") == 0, out
+        assert out.count("OK: badge.component.json") == 1, out
+
+    def test_the_reported_shape_no_app_components_beside_screens_one_generated_line(self, tmp_path):
+        """The face's own repro: `cd admin && jsonui-doc generate html tests -o
+        docs/html`, no --app, `component_spec_directory: docs/screens/json`,
+        one component spec — `Generated: …/components/chart_bars.html` twice.
+        The search dirs reached the file through the docs base and through
+        screens/json (twice: once as the spec dir, once as the component dir)."""
+        (tmp_path / "jui.config.json").write_text(json.dumps(
+            {"component_spec_directory": "docs/screens/json"}), encoding="utf-8")
+        tests = tmp_path / "tests"
+        tests.mkdir()
+        (tests / "s0.test.json").write_text(json.dumps({
+            "type": "screen", "platform": "ios", "source": {"layout": "s0"},
+            "metadata": {"name": "s0 test", "description": "d"},
+            "cases": [{"name": "c", "description": "c",
+                       "steps": [{"action": "tap", "id": "x"}]}],
+        }), encoding="utf-8")
+        docs = tmp_path / "docs"
+        _screen(docs / "screens" / "json" / "admin_dashboard.spec.json", "admin_dashboard")
+        _component(docs / "screens" / "json" / "chart_bars.component.json", "chart_bars")
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            gen.generate_html_directory(tests, docs / "html", "T", project_root=tmp_path)
+        out = buf.getvalue()
+        lines = [l for l in out.splitlines() if "Generated:" in l and "chart_bars.html" in l]
+        assert len(lines) == 1, "\n".join(lines) or out
 
 
 class TestTheEndOfRunDerivesNoPageFromWhatWasWritten:

@@ -1322,7 +1322,11 @@ def generate_html_directory(
     spec_json_dir = docs_base / "screens" / "json"
     component_json_dir = _component_json_dir_for(docs_base)
 
-    if spec_json_dir.exists() or component_json_dir.exists():
+    # Not when an `--app` names this same docs directory: the app loop below
+    # pre-generates it, and running it here too wrote every page twice and
+    # printed `Generated:` twice for one path (a face's log, 2026-09-11 —
+    # the count stayed right because pages are a set, the log did not).
+    if not _root_is_duplicate and (spec_json_dir.exists() or component_json_dir.exists()):
         print("Pre-generating specification documentation...")
         _pre_generate_spec_docs(docs_base, layouts_dir=layouts_dir)
 
@@ -1758,7 +1762,7 @@ def generate_html_directory(
     spec_search_dirs = list(unique_docs_dirs)
     if spec_json_dir.exists():
         spec_search_dirs.append(spec_json_dir)
-    if component_json_dir.exists():
+    if component_json_dir.exists() and component_json_dir.resolve() != spec_json_dir.resolve():
         spec_search_dirs.append(component_json_dir)
     if spec_search_dirs and _root_is_duplicate:
         # The --app pass reads this very directory and writes the pages under
@@ -3439,6 +3443,17 @@ def _generate_spec_pages(
     """
     spec_files_found = []
     component_files_found = []
+    _reached: set = set()
+
+    def _seen_once(p: Path) -> bool:
+        try:
+            key = p.resolve()
+        except OSError:
+            key = p
+        if key in _reached:
+            return False
+        _reached.add(key)
+        return True
 
     # Find all .spec.json and .component.json files in docs_dirs
     for docs_dir in docs_dirs:
@@ -3446,13 +3461,19 @@ def _generate_spec_pages(
         if not docs_path.exists():
             continue
 
-        # Look for .spec.json files (screen specifications)
+        # One file, one page, whichever search dirs reach it. The search
+        # list carries the docs base AND its screens/json AND the component
+        # dir; on a face whose component dir IS screens/json the same
+        # `*.component.json` was reached three times and its page written
+        # and announced more than once (a face's log, 2026-09-11). The
+        # first dir to reach a file owns it.
         for spec_file in docs_path.rglob("*.spec.json"):
-            spec_files_found.append((spec_file, docs_path))
+            if _seen_once(spec_file):
+                spec_files_found.append((spec_file, docs_path))
 
-        # Look for .component.json files (component specifications)
         for comp_file in docs_path.rglob("*.component.json"):
-            component_files_found.append((comp_file, docs_path))
+            if _seen_once(comp_file):
+                component_files_found.append((comp_file, docs_path))
 
     spec_files_info = []
     component_files_info = []
@@ -4247,7 +4268,13 @@ def _pre_generate_spec_docs(
     # says "both callers now read this" — it counted two. Wiring one place and
     # counting the places that need it are different acts.
     _component_json_dir = _component_json_dir_for(docs_base)
-    _component_html_dir = docs_base / "components" / "html"
+    # The pages sit beside the specs, like screens: `<spec dir>/../html`.
+    # Ruled (a) by the reporting face 2026-09-11: one rule for both kinds,
+    # one ignore line per face. For the tool's default layout this is still
+    # `components/html`; for a face that keeps components under
+    # `screens/json` it is `screens/html`, where the single-file
+    # `generate component` already wrote.
+    _component_html_dir = _component_json_dir.parent / "html"
     _component_pages: dict[str, Path] = {}
     if _component_json_dir.is_dir():
         for _cf in sorted(_component_json_dir.glob("*.component.json")):
@@ -4364,8 +4391,8 @@ def _pre_generate_spec_docs(
         if comp_files:
             print(f"  Processing {len(comp_files)} component specification files...")
 
-            html_dir = docs_base / "components" / "html"
-            md_dir = docs_base / "components" / "md"
+            html_dir = comp_json_dir.parent / "html"
+            md_dir = comp_json_dir.parent / "md"
             html_dir.mkdir(parents=True, exist_ok=True)
             md_dir.mkdir(parents=True, exist_ok=True)
             _written_outside_output.update({html_dir, md_dir})

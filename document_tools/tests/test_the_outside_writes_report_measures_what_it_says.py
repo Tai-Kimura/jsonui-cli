@@ -23,6 +23,7 @@ The arms pin the MEASUREMENT, not the wording. A wording change alone
 from __future__ import annotations
 
 import io
+import os
 import json
 import sys
 from contextlib import redirect_stdout
@@ -101,6 +102,16 @@ def test_the_reported_shape_a_run_pointed_at_an_app_it_also_lists(tmp_path, monk
             Path("client/tests"), Path("out"), "T",
             apps=[{"name": "client", "docs_path": str(docs.resolve())}])
 
+    # Since 1.8.75 the root pre-generation steps aside when an --app names
+    # its directory (it wrote every page twice), so the run itself no longer
+    # records the relative spelling. The report's subject — two spellings of
+    # one directory listed once — is still worth an arm, so the second
+    # spelling is planted the way the root pass used to record it.
+    for d in list(gen._written_outside_output):
+        try:
+            gen._written_outside_output.add(Path(os.path.relpath(d, root)))
+        except ValueError:
+            pass
     raw = set(gen._written_outside_output)
     spellings = {d.is_absolute() for d in raw}
     assert spellings == {True, False}, f"fixture lacks the shape: {sorted(map(str, raw))}"
