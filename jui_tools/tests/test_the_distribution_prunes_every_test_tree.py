@@ -56,21 +56,40 @@ def _tool_test_trees() -> dict[str, list[str]]:
     return out
 
 
+#: The cleanup block, by the lines the script itself prints around it.
+_BLOCK_OPEN = 'info "Cleaning up development files..."'
+_BLOCK_CLOSE = 'success "Cleaned up'
+
+
 def _prune_block(text: str) -> list[str]:
-    """The prune lines, in order, ignoring comments and blanks.
+    """The prune lines of the CLEANUP BLOCK, in order.
 
-    BOTH KINDS. This read `rm -rf ` alone, so `rm -f README.md` and
-    `rm -f install.sh` — two tracked files, removed from every distribution
-    since the beginning — were outside every arm here: deleting either line
-    reddened nothing and shipped them. Two readers counting the distribution
-    by hand landed exactly two short for the same reason, and this file is
-    the third, which is the one that matters because it is the gate.
+    BOUNDED, because the caller EXECUTES what this returns. It used to
+    match `rm -rf ` after `strip()`, which has no idea where it is in the
+    file, and the install path's `rm -rf "$INSTALL_DIR"` starts that way
+    too. `_run_prune` inherits the environment, so a shell that had
+    exported `INSTALL_DIR` — the name bootstrap.sh itself uses for
+    `~/.jsonui-cli` — deleted that directory when this suite ran, with
+    return code 0 and nothing on stderr. Measured: the directory was gone.
+    It passed only because nobody had the variable set.
 
-    `rm -f */.DS_Store` joins too and changes no count: nothing matching it
-    is tracked. What widens is the RULE the arms see, not the population.
+    Widening the match to `rm -f ` made that worse before it made it
+    better: it pulled in two more lines from outside the block, one of them
+    also naming a path from the environment. A predicate whose results are
+    run has to be bounded by WHERE, not only by what the line starts with.
+
+    Both rules matter. `rm -f README.md` and `rm -f install.sh` remove two
+    tracked files from every distribution, and while only `rm -rf ` was
+    read, deleting either line reddened nothing. Two readers counting the
+    distribution by hand landed exactly two short for the same reason; this
+    file was the third, and the one that mattered, because it is the gate.
     """
-    return [line.strip() for line in text.splitlines()
-            if line.strip().startswith(("rm -rf ", "rm -f "))]
+    lines = text.splitlines()
+    start = next(i for i, l in enumerate(lines) if l.strip() == _BLOCK_OPEN)
+    end = next(i for i, l in enumerate(lines)
+               if i > start and l.strip().startswith(_BLOCK_CLOSE))
+    return [l.strip() for l in lines[start + 1:end]
+            if l.strip().startswith(("rm -rf ", "rm -f "))]
 
 
 class ThePopulationIsDerived(unittest.TestCase):
@@ -143,6 +162,46 @@ class TheRuleActuallyRemovesTheTree(unittest.TestCase):
     #: be tracked as well as pruned, so a rename cannot leave a stale name
     #: here passing against a file that no longer exists.
     REPO_ONLY_FILES = ("README.md", "install.sh")
+
+    def test_every_removal_in_the_block_is_extracted(self):
+        """Conservation, so the extractor cannot quietly narrow again.
+
+        Written as a count rather than a list of names: the point is that
+        the block and the extraction agree, and a rule added later in a
+        spelling this does not know about fails here instead of being
+        skipped. It also fails if the extractor widens to reach outside the
+        block, because the denominator is the block.
+        """
+        text = BOOTSTRAP.read_text(encoding="utf-8")
+        lines = text.splitlines()
+        start = next(i for i, l in enumerate(lines)
+                     if l.strip() == _BLOCK_OPEN)
+        end = next(i for i, l in enumerate(lines)
+                   if i > start and l.strip().startswith(_BLOCK_CLOSE))
+        in_block = [l.strip() for l in lines[start + 1:end]
+                    if l.strip().startswith("rm ")]
+
+        self.assertTrue(in_block, "the cleanup block has no `rm` lines")
+        self.assertEqual(
+            in_block, _prune_block(text),
+            "the extractor and the cleanup block disagree — either a rule "
+            "is written in a spelling the extractor does not read, or the "
+            "extractor is reaching outside the block")
+
+    def test_the_extraction_stays_inside_the_block(self):
+        """No extracted rule may name a shell variable.
+
+        The block's rules are literal paths. Everything in bootstrap.sh
+        that removes a path from the ENVIRONMENT — `$INSTALL_DIR`,
+        `$MCP_TMP`, `$tool_dir/...` — lives outside it, and those are the
+        lines that made running this suite destructive. This is the cheap
+        check that says so directly, rather than trusting the boundary.
+        """
+        for rule in _prune_block(BOOTSTRAP.read_text(encoding="utf-8")):
+            self.assertNotIn(
+                "$", rule,
+                f"extracted rule names a variable: {rule!r} — the caller "
+                "runs these with the environment inherited")
 
     def test_the_repo_only_files_are_pruned(self):
         """`rm -f` is a prune rule too, and widening the reader was not enough.
