@@ -344,11 +344,15 @@ class GenerationRun:
             if changed or (bootstrap and key not in known):
                 touched.append(key)
         # Recorded, not refused: `jui build`'s scan is a union of enumerations
-        # (collected targets, view targets, generated dirs), so a present key
-        # outside the DIRECTORIES it walked is normal. The count says how
-        # much of the claim stands outside the declared scan — a reader can
-        # see it instead of inferring it. The doc generator's scope is a real
-        # boundary, and `observe_written` refuses there.
+        # (collected targets, view targets, generated dirs, layout
+        # distribution dirs), so a present key outside the DIRECTORIES it
+        # walked is possible — and since 1.8.74 it means exactly one thing:
+        # the file came from a source the config does not declare. The first
+        # non-zero this count ever showed (25 on a web face, 1.8.73) was the
+        # scan's declaration being short of the build's own layout copies,
+        # not a stray file; the declaration was widened, the count kept. A
+        # reader sees the number instead of inferring it. The doc generator's
+        # scope is a real boundary, and `observe_written` refuses there.
         self.outside_roots = [k for k in present
                               if not self._under_roots(Path(self.project_root) / k)]
         self.present = present
