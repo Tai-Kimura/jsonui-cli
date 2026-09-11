@@ -57,9 +57,20 @@ def _tool_test_trees() -> dict[str, list[str]]:
 
 
 def _prune_block(text: str) -> list[str]:
-    """The `rm -rf` lines, in order, ignoring comments and blanks."""
+    """The prune lines, in order, ignoring comments and blanks.
+
+    BOTH KINDS. This read `rm -rf ` alone, so `rm -f README.md` and
+    `rm -f install.sh` — two tracked files, removed from every distribution
+    since the beginning — were outside every arm here: deleting either line
+    reddened nothing and shipped them. Two readers counting the distribution
+    by hand landed exactly two short for the same reason, and this file is
+    the third, which is the one that matters because it is the gate.
+
+    `rm -f */.DS_Store` joins too and changes no count: nothing matching it
+    is tracked. What widens is the RULE the arms see, not the population.
+    """
     return [line.strip() for line in text.splitlines()
-            if line.strip().startswith("rm -rf ")]
+            if line.strip().startswith(("rm -rf ", "rm -f "))]
 
 
 class ThePopulationIsDerived(unittest.TestCase):
@@ -125,6 +136,34 @@ class TheRuleActuallyRemovesTheTree(unittest.TestCase):
         script = "set -e\n" + "\n".join(rules) + "\n"
         return subprocess.run(["bash", "-c", script], cwd=self.tmp,
                               capture_output=True, text=True)
+
+    #: Tracked top-level files that serve the REPOSITORY and must not ship.
+    #: Listed because nothing else distinguishes them — there is no flag on
+    #: a file that says "this one is for contributors". Each is asserted to
+    #: be tracked as well as pruned, so a rename cannot leave a stale name
+    #: here passing against a file that no longer exists.
+    REPO_ONLY_FILES = ("README.md", "install.sh")
+
+    def test_the_repo_only_files_are_pruned(self):
+        """`rm -f` is a prune rule too, and widening the reader was not enough.
+
+        `_prune_block` read `rm -rf ` alone until 2026-09-11, so these two
+        lines were outside every arm: deleting either shipped the file and
+        reddened nothing. Widening the reader still changed no outcome —
+        every assertion here was about the tool test trees — which is a
+        predicate made wider with no effect, and reads as a fix in the log.
+        This is the assertion that makes the widening load-bearing.
+        """
+        rules = _prune_block(BOOTSTRAP.read_text(encoding="utf-8"))
+        tracked = subprocess.run(
+            ["git", "ls-tree", "--name-only", "HEAD"], cwd=REPO,
+            capture_output=True, text=True, check=True).stdout.split()
+        for name in self.REPO_ONLY_FILES:
+            self.assertIn(name, tracked,
+                          f"{name} is not tracked — this list is stale")
+            self.assertTrue(
+                any(rule.split()[-1] == name for rule in rules),
+                f"no prune rule removes {name}, so the distribution ships it")
 
     def test_the_planted_trees_are_gone(self):
         trees = _tool_test_trees()

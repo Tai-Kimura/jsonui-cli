@@ -281,10 +281,22 @@ rm -f  */.DS_Store
 # PINNED TO TAGS, and NOT to a SHA — a tag does not move, and naming the tip
 # here would be stale the moment this file is committed, which is the bug
 # being fixed. Each row closes on its own tree: excluded + delivered ==
-# tracked, both sides measured against the SAME tree. The line that used to
-# stand here did not: its delivered figure was that tree's total minus the
-# other tree's excluded, so the pair did not add up and the reader who
-# checked it found the tip agreeing and the named version not.
+# tracked.
+#
+# ⚠️ WHAT WAS WRONG WITH THE OLD LINE WAS ONLY THAT IT SAID "from here".
+# Both of its pairs were correct partitions of their own trees — 676 + 2923
+# really is 3599 — and a first reading of this file diagnosed the delivered
+# figure as one tree's total minus another's excluded. That was false, and
+# it was retracted by the reader who proposed it; the identity it rested on
+# is just the partition restated. Recording it here anyway would have made
+# this comment defend against a danger that never existed while leaving the
+# real one — a figure anchored to a commit, in a file that outlives it.
+#
+# ⚠️ AND THE CONSERVATION LAW DOES NOT SETTLE IT. Two different splits of
+# the same total both close: 676 + 2923 and 674 + 2925 are each 3599, and
+# only one of them applies the rules below. Closing is necessary, not
+# sufficient — to decide which split is right, run the rules or compare the
+# delivered SET, not its size.
 #
 # For any other tree, derive it. The arm below builds the population from the
 # repository rather than listing it, and THE RULES ARE `rm -rf` AND `rm -f`:

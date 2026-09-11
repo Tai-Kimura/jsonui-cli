@@ -387,6 +387,35 @@ class TestEveryFaceHasTheGuard:
             f"{name}: {reads} read(s) by op but {guards} guard(s)")
         assert "(unmatched)" in source, f"{name}: sentinel missing"
 
+    #: How each face spells "build the recorder WITH the route table".
+    _WIRING = {
+        "kotlin": "Recorder(routes.map { it.op }.toSet())",
+        "swift": "Recorder(routeOps: Set(routes.map { $0.op }))",
+    }
+
+    @pytest.mark.parametrize("name", ["kotlin", "swift"])
+    def test_the_entry_point_hands_over_the_route_table(self, name):
+        """The guard is opt-in, and this is the only place that opts in.
+
+        `routeOps` defaults to absent so a hand-written harness keeps
+        compiling, which means a recorder built without one refuses
+        nothing — correctly, since it cannot know which names are real.
+        Every generated test gets its recorder from the entry point, so
+        that ONE construction is what makes the guard reach anything at
+        all.
+
+        Nothing else here would notice it going. `bare-recorder-quiet`
+        asserts the unguarded path stays quiet, so an emitter that stopped
+        passing the table would leave every arm in this file green while
+        the check vanished from every consuming project — the same shape as
+        the retainer below, and the reason this is written down rather than
+        relied upon.
+        """
+        source = getattr(bt, self._SOURCE[name])
+        assert self._WIRING[name] in source, (
+            f"{name}: the entry point no longer passes the route table, so "
+            "the read-side guard is inert everywhere it ships")
+
     def test_the_swift_harness_is_still_retained(self):
         """A consumer's whole iOS suite depends on this CALL existing.
 
