@@ -277,6 +277,9 @@ rm -f  */.DS_Store
 #
 #     v1.8.70  (OLD rules)    476 excluded / 3122 delivered  (tracked 3598)
 #     v1.8.71  (these rules)   678 excluded / 2924 delivered  (tracked 3602)
+#     v1.8.72  (these rules)   678 excluded / 2924 delivered  (tracked 3602)
+#              — same rules, same partition: measured on 58340fe8's tree by
+#              materialising the archive and running the 17 rules, not predicted.
 #
 # PINNED TO TAGS, and NOT to a SHA — a tag does not move, and naming the tip
 # here would be stale the moment this file is committed, which is the bug
