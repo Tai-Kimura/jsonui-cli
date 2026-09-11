@@ -259,12 +259,32 @@ gen_attr; rc=$?; [ "$rc" = 0 ] || bad "attr-bindings run 1: exit $rc"
 rm -rf "$C/build/attr_codegen.run1"; cp -R "$C/build/attr_codegen" "$C/build/attr_codegen.run1"
 gen_attr; rc=$?; [ "$rc" = 0 ] || bad "attr-bindings run 2: exit $rc"
 d=$(diff -r "$C/build/attr_codegen.run1" "$C/build/attr_codegen" | wc -l | tr -d ' ')
+# ⚠️ `d=0` IS PRODUCED BY TWO DIFFERENT FACTS: "the two runs agree" and
+# "there was nothing to compare". `diff -r` on a missing or empty tree writes
+# its complaint to stderr and NOTHING to stdout, so `wc -l` says 0 and this leg
+# goes green. Measured 2026-09-11 against these exact lines: an emit that
+# returns 0 and writes no file leaves BOTH this leg and the vendored-tables leg
+# below at fail=0. Worse than a one-sided zero — in a TWO-VERSION comparison a
+# dead predicate returns "identical", which is an ACTIVE claim of no drift.
+# So count the denominator BEFORE the rm, and let it speak.
+n=$(find "$C/build/attr_codegen.run1" -type f 2>/dev/null | wc -l | tr -d ' ')
 rm -rf "$C/build/attr_codegen.run1"
-say "   run1 vs run2 diff lines: $d"; [ "$d" = 0 ] || bad "attr-bindings emit is not deterministic ($d diff lines)"
+say "   compared $n file(s); run1 vs run2 diff lines: $d"
+[ "$n" -gt 0 ] || bad "attr-bindings determinism compared 0 file(s) — the emit wrote nothing"
+[ "$d" = 0 ] || bad "attr-bindings emit is not deterministic ($d diff lines)"
 
 say "== vendored ruby attr tables match fresh emit"
 d=$(diff -r -x README.md "$C/build/attr_codegen/ruby" "$C/rjui_tools/lib/core/generated/attributes" | wc -l | tr -d ' ')
-say "   diff lines: $d"; [ "$d" = 0 ] || { diff -r -x README.md "$C/build/attr_codegen/ruby" "$C/rjui_tools/lib/core/generated/attributes" | head -5; bad "vendored ruby attr tables are stale (regenerate: jui generate attr-bindings --lang ruby, then copy build/attr_codegen/ruby/*.rb into rjui_tools/lib/core/generated/attributes/)"; }
+# Same hole as the leg above, and this one is easy to think is covered because
+# it HAS gone red before (1.8.43's second candidate). Going red once is history,
+# not a guard: with build/attr_codegen/ruby missing, `d` is 0 and this is green.
+# The count must name THE SET THE DIFF COMPARES, not a tidier-sounding subset:
+# `-name '*.rb'` says 31 while `diff -x README.md` is looking at 32 (the 31
+# tables plus skipped_attributes.json). Same exclusion here as on the diff.
+n=$(find "$C/build/attr_codegen/ruby" -type f ! -name README.md 2>/dev/null | wc -l | tr -d ' ')
+say "   compared $n file(s); diff lines: $d"
+[ "$n" -gt 0 ] || bad "vendored ruby attr tables leg compared 0 file(s) — build/attr_codegen/ruby is empty or missing"
+[ "$d" = 0 ] || { diff -r -x README.md "$C/build/attr_codegen/ruby" "$C/rjui_tools/lib/core/generated/attributes" | head -5; bad "vendored ruby attr tables are stale (regenerate: jui generate attr-bindings --lang ruby, then copy build/attr_codegen/ruby/*.rb into rjui_tools/lib/core/generated/attributes/)"; }
 
 say "== attr-codegen manifest freshness (committed manifest matches fresh emit)"
 m=$(git -C "$C" status --porcelain -- build/attr_codegen/manifest.json | wc -l | tr -d ' ')
