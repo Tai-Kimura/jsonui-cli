@@ -25,6 +25,7 @@ after the block that copies the tree away.
 """
 from __future__ import annotations
 
+import os
 import re
 import shutil
 import subprocess
@@ -151,10 +152,28 @@ class TheRuleActuallyRemovesTheTree(unittest.TestCase):
         return planted
 
     def _run_prune(self):
+        """Run the block's rules in a temp tree, WITH A CLEAN ENVIRONMENT.
+
+        `env=` is the outermost of three things keeping this from deleting
+        something real, and the only one that holds when the other two are
+        wrong. Bounding the extraction fixes the bad line there is today;
+        refusing a rule that names a variable catches the next one as it is
+        added. Neither helps if a rule legitimately reads the environment
+        later — and this shell has nothing to read.
+
+        Ordered that way because the failure was SILENT. With `INSTALL_DIR`
+        exported, the old extraction removed that directory with return
+        code 0 and an empty stderr: a green run and a run that destroyed
+        something wore the same face, so no assertion downstream could have
+        told them apart. The fix that does not depend on the extraction
+        being right has to come first.
+        """
         rules = _prune_block(BOOTSTRAP.read_text(encoding="utf-8"))
         script = "set -e\n" + "\n".join(rules) + "\n"
-        return subprocess.run(["bash", "-c", script], cwd=self.tmp,
-                              capture_output=True, text=True)
+        return subprocess.run(
+            ["bash", "-c", script], cwd=self.tmp,
+            env={"PATH": os.environ.get("PATH", "/usr/bin:/bin")},
+            capture_output=True, text=True)
 
     #: Tracked top-level files that serve the REPOSITORY and must not ship.
     #: Listed because nothing else distinguishes them — there is no flag on
