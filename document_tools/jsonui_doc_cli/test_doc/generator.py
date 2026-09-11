@@ -120,6 +120,11 @@ _generation_counts: dict = run_state.ledger(globals(), "_generation_counts", dic
 #: lines from the same run. Kept under its own name so the two cannot be
 #: read as one number disagreeing with itself.
 _document_slot_facts: dict = run_state.ledger(globals(), "_document_slot_facts", dict)
+#: What the ledgers keyed this run: `recorded` pages landed under some
+#: declared root, `outside` under none. Filled by `_record_generation_manifest`
+#: from the ledgers' own keying, read by `generation_summary_line`, empty when
+#: no record was written (no root, no shared/core) — the line then says so.
+_run_record: dict = run_state.ledger(globals(), "_run_record", dict)
 
 
 #: Every placeholder page this run wrote, by path.
@@ -197,7 +202,14 @@ def generation_summary_line() -> str:
     `unit-stubs --check` counts the same files with the same words, so the
     site and the gate cannot drift.
     """
-    n = get_pages_written()
+    # N FROM THE LEDGERS' KEYING when this run wrote a record, from the page
+    # counter only when it did not (library call, no root, no shared/core) —
+    # and the line says which by carrying the `outside declared roots` clause
+    # only in the first case. A run that wrote a record and whose counter
+    # disagrees with it prints the record's number: the counter is the
+    # producer's tally, the record is what was observed (2026-09-11).
+    rec = _run_record
+    n = (rec["recorded"] + rec["outside"]) if rec else get_pages_written()
     c = _generation_counts
     # 🔻 "THIS RUN" IS THE UNIT, AND IT IS SAID OUT LOUD. N counts pages this
     # run WROTE; the `.html` on disk under `-o` is a different quantity, and
@@ -247,9 +259,12 @@ def generation_summary_line() -> str:
     if hits:
         warnings += (f" / gate expression matches {run_log.count() + len(hits)} "
                      f"({len(hits)} printed data, not warnings)")
+    # Printed at zero, like every other count on this line: "none outside"
+    # and "nobody looked" are different sentences.
+    outside = [f"outside declared roots {rec['outside']}"] if rec else []
     if not c:
-        return f"{head} ({warnings})"
-    parts = [f"screens {c.get('screens', 0)}", f"flows {c.get('flows', 0)}"]
+        return f"{head} ({' / '.join(outside + [warnings])})"
+    parts = [f"screens {c.get('screens', 0)}", f"flows {c.get('flows', 0)}"] + outside
     if c.get("unit_scanned"):
         parts.append(
             f"unit targets {c.get('unit_targets', 0)} from "
@@ -2336,6 +2351,7 @@ def _record_generation_manifest(
         targets = [{"app": None, "root": Path(project_root)}]
     else:
         targets = []
+    _run_record.clear()
     if not targets:
         print("  ⓘ NOTE: no project root for this run, so nothing was recorded "
               "in .jsonui-cli/generation-manifest.json — not a statement that "
@@ -2354,9 +2370,18 @@ def _record_generation_manifest(
     # second — a reader compares them across faces. Through `reproducible`,
     # like every other stamp this package writes.
     recorded_at = build_datetime_utc().strftime("%Y-%m-%dT%H:%M:%SZ")
+    keyed: set = set()
     for target in targets:
-        _record_into(target, targets, manifest, stale, outside, slots, recorded_at,
-                     stale_outside or [])
+        keyed |= _record_into(target, targets, manifest, stale, outside, slots,
+                              recorded_at, stale_outside or [])
+    # The closing line's N comes from HERE — from what the ledgers keyed —
+    # and not from the page counter, so a line and a record cannot disagree
+    # about the same run. K is the pages under no declared root: written,
+    # counted, and in no manifest (closure of the record-claims ticket).
+    _run_record.update({
+        "recorded": len(keyed),
+        "outside": len(get_written_pages() - keyed),
+    })
 
 
 def _git_toplevel(root: Path) -> "Path | None":
@@ -2485,8 +2510,12 @@ def _scope_outside(outside: dict, scopes: list) -> dict:
 
 
 def _record_into(target: dict, targets: list, manifest, stale: list, outside: dict,
-                 slots: dict | None, recorded_at: str, stale_outside: list) -> None:
-    """Write this run's record into ONE root's manifest; see the caller."""
+                 slots: dict | None, recorded_at: str, stale_outside: list) -> set:
+    """Write this run's record into ONE root's manifest; see the caller.
+
+    Returns the written pages this root's ledger keyed (resolved paths), so
+    the caller can say how many pages of the run landed under NO root.
+    """
     root = Path(target["root"]).resolve()
     scopes = [root] + ([Path(target["docs"])] if target.get("docs") else [])
 
@@ -2499,7 +2528,8 @@ def _record_into(target: dict, targets: list, manifest, stale: list, outside: di
             # that would resolve to a different tree on the next run.
             return None
 
-    written = sorted(k for k in (_key(p) for p in get_written_pages()) if k)
+    keyed = {p for p in get_written_pages() if _key(p)}
+    written = sorted(_key(p) for p in keyed)
     # THE LEDGER, not a dict of numbers. Every count, truncated list and
     # "first 20 of N" note below used to be assembled here by hand —
     # seventeen `facts[...]` lines — and the manifest's own summary was
@@ -2553,7 +2583,10 @@ def _record_into(target: dict, targets: list, manifest, stale: list, outside: di
     # manifest's count of keys whose spellings normalised onto one entry,
     # and one face read the two as a single number disagreeing with the
     # SHARED SLOT lines on its terminal.
-    ledger.record_document_slots(slots)
+    if slots:
+        ledger.record_document_slots(
+            paths=slots["paths"], declarations=slots["declarations"],
+            shared_keys=slots["sharedPathKeys"])
     # Which apps this run covered — the same record lands in each of their
     # manifests, and a reader of one should know the others hold the same
     # run. Always written: `[]` is "no --app", an absent key would not be.
@@ -2575,7 +2608,7 @@ def _record_into(target: dict, targets: list, manifest, stale: list, outside: di
     except OSError as exc:
         print(f"  ⓘ NOTE: could not write the generation manifest ({exc}). "
               f"The pages were written; the record of them was not.")
-        return
+        return keyed
     if len(targets) > 1:
         # Named per root, and whether this run CREATED the file: a root that
         # never had a manifest (a sub-repository a face ignores by default,
@@ -2608,6 +2641,8 @@ def _record_into(target: dict, targets: list, manifest, stale: list, outside: di
               f"git, or outside a repository) — not a statement that it is "
               f"untracked.")
 
+
+    return keyed
 
 def _git_ignores_file(path: Path, cwd: Path) -> "bool | None":
     """True when an ignore rule of the repository covers `path`, False when
@@ -3021,15 +3056,14 @@ def _report_document_slot_collisions(
               f"same bytes, nothing lost:")
         for owner, name in claimants:
             print(f"        {name} ({owner or 'the run itself'})")
+    # The COLLECTION, not a truncated list and a hand-written note: the
+    # ledger's `record_document_slots` derives both (1.8.74).
     _document_slot_facts.clear()
     _document_slot_facts.update({
         "paths": len(by_file),
         "declarations": len(declarations),
-        "sharedPaths": len(shared),
-        "sharedPathKeys": sorted(shared)[:20],
+        "sharedPathKeys": sorted(shared),
     })
-    if len(shared) > 20:
-        _document_slot_facts["sharedPathKeysNote"] = f"first 20 of {len(shared)}"
     return len(shared)
 
 

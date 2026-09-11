@@ -404,9 +404,30 @@ class GenerationRun:
         if block:
             self._facts_dict()["outsideOutput"] = dict(block)
 
-    def record_document_slots(self, slots: dict | None) -> None:
-        if slots:
-            self._facts_dict()["documentSlots"] = dict(slots)
+    def record_document_slots(self, *, paths: int, declarations: int,
+                              shared_keys) -> None:
+        """The document-slot facts, derived HERE from the collections.
+
+        The producer hands over what it observed — how many output paths,
+        how many declarations, and the full list of paths more than one
+        declaration resolved to — and the ledger derives the count, the
+        first-20 listing and the "first 20 of N" note. Until 1.8.73 the
+        producer truncated the list and wrote the note itself, which was the
+        last `facts[...]`-shaped line left after the fold: a claim assembled
+        beside the ledger instead of by it (closure of the record-claims
+        ticket, 2026-09-11). An empty list is recorded as an explicit zero;
+        "the pass did not run" is the caller's to say by not calling this.
+        """
+        keys = sorted(shared_keys)
+        slots = {
+            "paths": int(paths),
+            "declarations": int(declarations),
+            "sharedPaths": len(keys),
+            "sharedPathKeys": keys[:20],
+        }
+        if len(keys) > 20:
+            slots["sharedPathKeysNote"] = f"first 20 of {len(keys)}"
+        self._facts_dict()["documentSlots"] = slots
 
     def record_apps(self, apps) -> None:
         self._facts_dict()["apps"] = list(apps)
