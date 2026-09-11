@@ -416,6 +416,51 @@ class TestEveryFaceHasTheGuard:
             f"{name}: the entry point no longer passes the route table, so "
             "the read-side guard is inert everywhere it ships")
 
+    #: How each face spells "a recorder can be built without a route table".
+    #: Derived from the SIGNATURE, because that is what decides whether the
+    #: sentence about it is true.
+    _OPTIONAL_TABLE = {
+        "kotlin": "class Recorder(routeOps: Set<String>? = null)",
+        "swift": "init(routeOps: Set<String>? = nil)",
+    }
+
+    @pytest.mark.parametrize("name", ["ts", "kotlin", "swift"])
+    def test_the_doc_says_what_this_face_actually_does(self, name):
+        """The sentence about reach has to match the face it ships on.
+
+        It did not. One paragraph said "THE ROUTE TABLE IS OPTIONAL, and
+        without one this refuses nothing" and was rendered into all three
+        runtimes — but on web the only thing that returns a recorder is
+        `installFetchMock`, whose `routes` parameter is REQUIRED. There is
+        no unarmed recorder there to warn about, and a reader who believed
+        the sentence would go looking for an opt-in that does not exist,
+        and could conclude their tests were unguarded when every one of
+        them is.
+
+        The direction was the safe one — it made a covered face look
+        uncovered — which is exactly why nothing caught it: no arm fails
+        when a comment is pessimistic. A lane reading the emitted runtime
+        did.
+
+        Derived from the signature rather than from a list of faces: a
+        runtime that later gains an optional table gets the other sentence
+        the moment its constructor changes, without anyone remembering to
+        edit a table here.
+        """
+        source = getattr(bt, self._SOURCE[name])
+        optional = self._OPTIONAL_TABLE.get(name)
+        can_build_unarmed = optional is not None and optional in source
+
+        says_optional = "THE ROUTE TABLE IS OPTIONAL" in source
+        says_always_checked = "EVERY RECORDER HERE IS CHECKED" in source
+
+        assert says_optional != says_always_checked, (
+            f"{name}: the runtime says both or neither")
+        assert says_optional == can_build_unarmed, (
+            f"{name}: doc says optional={says_optional} but the constructor "
+            f"{'does' if can_build_unarmed else 'does not'} allow a recorder "
+            "with no route table")
+
     def test_the_swift_harness_is_still_retained(self):
         """A consumer's whole iOS suite depends on this CALL existing.
 

@@ -421,6 +421,38 @@ UNDECLARED_OP_SENTENCE = (
 )
 
 
+#: 🔻 THE ONE PARAGRAPH THAT DIFFERS BETWEEN THE FACES. On web the recorder
+#: can only come from `installFetchMock`, whose `routes` parameter is
+#: REQUIRED — there is no unarmed recorder to warn about, and a reader told
+#: the table is optional goes looking for an opt-in that does not exist.
+#: Kotlin and Swift let a harness build its own, so there the warning is the
+#: important half. Written flat it was false on one face of three, which is
+#: the defect this runtime exists to catch, in the runtime's own comment.
+_ROUTE_TABLE_REACH_MARKER = "<route table reach>"
+
+_ROUTE_TABLE_REACH = {
+    "ts": (
+        "EVERY RECORDER HERE IS CHECKED. `installFetchMock` is the only "
+        "thing that returns one, and its route table is a required "
+        "argument, so the declared set is always derivable and there is no "
+        "way to build a recorder this does not cover. The other two "
+        "runtimes let a harness construct its own and their table is "
+        "optional; that sentence does not carry over to this one."),
+    "kotlin": (
+        "THE ROUTE TABLE IS OPTIONAL, and without one this refuses "
+        "nothing. A recorder built with no routes cannot know which names "
+        "are real, and the alternative — making the argument required — "
+        "would have been a COMPILE error at every hand-written harness "
+        "that builds its own: 22 of them in one project alone, every one "
+        "spelling its ops correctly. Breaking working code to catch a "
+        "mistake is not a trade worth taking. A harness that wants the "
+        "check passes the ops it declares, and the generated entry point "
+        "always does."),
+}
+_ROUTE_TABLE_REACH["swift"] = _ROUTE_TABLE_REACH["kotlin"]
+assert set(_ROUTE_TABLE_REACH) == set(LANGUAGES)
+
+
 #: The doc comment above the guard. Shared for the same reason the message
 #: is: three copies of a rationale drift, and the copy that stops being
 #: true is the one nobody rereads.
@@ -445,16 +477,7 @@ UNDECLARED_OP_DOC = (
     "three faces — so the refusal is reachable only from a hand-written "
     "name, which is exactly what it is for.",
 
-    "THE ROUTE TABLE IS OPTIONAL, and without one this refuses nothing. A "
-    "recorder built with no routes cannot know which names are real, and "
-    "the alternative — making the argument required — would have been a "
-    "COMPILE error at every hand-written harness that builds its own "
-    "recorder: 22 of them in one project alone, every one of them spelling "
-    "its ops correctly. Breaking working code to catch a mistake is not a "
-    "trade worth taking, which is the same reason `countFor` reports "
-    "through XCTFail here rather than by throwing. A harness that wants "
-    "the check passes the ops it declares, and the generated entry point "
-    "always does.",
+    _ROUTE_TABLE_REACH_MARKER,
 
     "WHAT IT DOES NOT REACH: `calls` is public, and a test that filters it "
     "by op directly — comparing the op field rather than calling either "
@@ -481,8 +504,19 @@ UNDECLARED_OP_DOC = (
 
 
 def undeclared_op_doc(language: str, *, indent: int = 0) -> str:
-    """The guard's doc comment for `language`."""
-    return doc(UNDECLARED_OP_DOC, language_or_raise(language), indent=indent)
+    """The guard's doc comment for `language`.
+
+    One paragraph differs between the faces and the rest does not, so the
+    shared tuple carries a marker that is swapped here — rather than three
+    copies of a comment whose other four paragraphs are identical.
+    """
+    language_or_raise(language)
+    paragraphs = tuple(_ROUTE_TABLE_REACH[language]
+                       if para == _ROUTE_TABLE_REACH_MARKER else para
+                       for para in UNDECLARED_OP_DOC)
+    assert _ROUTE_TABLE_REACH_MARKER not in paragraphs, (
+        "the per-face paragraph was not substituted — the marker would ship")
+    return doc(paragraphs, language, indent=indent)
 
 
 def undeclared_op_failure(language: str, *, indent: int,
