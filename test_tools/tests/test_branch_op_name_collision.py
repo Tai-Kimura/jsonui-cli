@@ -87,7 +87,11 @@ def _generate(root: Path, platform="web", **kw):
 
 # `RouteSpec(op: "x")` on iOS, `RouteSpec("x")` on Android, `op: "x"` on web.
 _REGISTERED = re.compile(r'(?:RouteSpec\(op:\s*|RouteSpec\(|op:\s*)"([^"]+)"')
-_REFERENCED = re.compile(r'countFor\("([^"]+)"\)')
+# BOTH read sites. `lastBodyFor` matches recorded calls by the same op
+# string and is emitted beside `countFor`, so a predicate naming only one
+# of them asserts the containment for half the population — and the runtime
+# now refuses an undeclared op at both.
+_REFERENCED = re.compile(r'(?:countFor|lastBodyFor)\("([^"]+)"\)')
 
 
 class TestCollectEndpointOps:
@@ -215,9 +219,16 @@ class TestRegistrationAndReferenceAgree:
         ("android", {"package": "com.example.app"}),
     ])
     def test_every_referenced_op_is_a_registered_op(self, tmp_path, platform, kwargs):
+        """The branch declares a `.request` expectation on purpose.
+
+        Without one the generator emits no `lastBodyFor("<op>")` call at
+        all, and the second half of the predicate matches nothing: the arm
+        would read as covering both read sites while measuring one. The
+        row below counts the calls rather than trusting the shape.
+        """
         root = _project(tmp_path, _TWO_OWNERS, [
             {"when": {"api.AccountRepository.getProfile": "failure"},
-             "then": {"api.AccountRepository.getProfile": "called",
+             "then": {"api.AccountRepository.getProfile.request": {"id": 1},
                       "api.PreferencesRepository.getProfile": "not-called"}},
         ])
         _generate(root, platform, **kwargs)
@@ -228,6 +239,9 @@ class TestRegistrationAndReferenceAgree:
         referenced = set(_REFERENCED.findall(content))
 
         assert referenced, "no countFor call was emitted; this asserts nothing"
+        assert re.search(r'lastBodyFor\("[^"]+"\)', content), (
+            "no lastBodyFor call was emitted; the predicate covers a read "
+            "site this corpus does not contain")
         assert referenced <= registered, (
             f"{platform}: asserts reference ops with no route: "
             f"{sorted(referenced - registered)}"

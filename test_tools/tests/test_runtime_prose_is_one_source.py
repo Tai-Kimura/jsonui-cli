@@ -102,12 +102,32 @@ class TestEveryRuntimeReadsTheOneSource:
         assert rendered.count("\n") >= 8
         assert rendered in carrier
 
+    def test_the_undeclared_op_message_is_the_rendered_constant(
+            self, tmp_path, platform):
+        rendered = prose.undeclared_op_failure(_language(platform), indent=8)
+
+        assert rendered.count("\n") >= 3
+        assert rendered in _runtime_file(tmp_path, platform)
+
+    def test_the_undeclared_op_doc_is_the_rendered_constant(
+            self, tmp_path, platform):
+        rendered = prose.undeclared_op_doc(_language(platform), indent=2)
+
+        assert rendered.count("\n") >= 10
+        assert rendered in _runtime_file(tmp_path, platform)
+
     def test_no_marker_survives_into_an_emitted_runtime(self, tmp_path,
                                                         platform):
         """A marker reads as an ordinary `//` comment in all three
         languages, so an unspliced one would ship a runtime with no
-        diagnostic and compile cleanly while doing it."""
-        assert "<<resolve-string" not in _runtime_file(tmp_path, platform)
+        diagnostic and compile cleanly while doing it.
+
+        The predicate is the MARKER SYNTAX, not this module's first marker
+        name. Written as `<<resolve-string` it said nothing about the
+        second diagnostic that arrived later, and would have said nothing
+        about the third — a check whose subject is a spelling grows stale
+        silently every time the population grows."""
+        assert "//<<" not in _runtime_file(tmp_path, platform)
 
 
 class TestTheSpliceRefusesRatherThanNoOps:
@@ -283,6 +303,8 @@ class TestAnUnknownLanguageIsNamedNotRaised:
         lambda: prose.escape("x", "typescript"),
         lambda: prose.quoter_helper("typescript"),
         lambda: prose.harness_doc("typescript", summary="s", indent=0),
+        lambda: prose.undeclared_op_failure("typescript", indent=0),
+        lambda: prose.undeclared_op_doc("typescript", indent=0),
     ])
     def test_every_entry_point_names_the_set(self, call):
         with pytest.raises(ValueError) as raised:
@@ -292,10 +314,14 @@ class TestAnUnknownLanguageIsNamedNotRaised:
         assert "typescript" in message
         assert all(name in message for name in prose.LANGUAGES), message
 
-    def test_the_three_tables_are_keyed_the_same(self):
+    def test_the_per_language_tables_are_keyed_the_same(self):
         """Asserted rather than left to whichever table is consulted first.
         A language added to `_ESCAPES` alone would render a message and then
-        fail in `doc()`, one call later and in a different sentence."""
+        fail in `doc()`, one call later and in a different sentence.
+
+        Named for the property rather than for how many tables there were:
+        it read "three" while checking four, and now checks five."""
         assert (set(prose._ESCAPES) == set(prose._DOC_STYLE)
                 == set(prose._QUOTED_FORM) == set(prose._QUOTER)
+                == set(prose._DECLARED_LIST_FORM)
                 == set(prose.LANGUAGES))

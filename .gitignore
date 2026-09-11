@@ -33,3 +33,7 @@ docs/
 # Conformance screenshot artifacts — PNGs stay local / CI artifacts; the
 # committed regression signal is baselines/<platform>.hashes.json (plan 12).
 conformance/artifacts/
+
+# JUnit report written by the compiler-backed arms so their EXECUTED count
+# can be read; the job asserts on it and then it is done with.
+guard-report.xml

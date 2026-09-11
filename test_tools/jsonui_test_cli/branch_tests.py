@@ -1510,15 +1510,31 @@ export function installFetchMock(
     );
   }) as typeof fetch;
 
+//<<undeclared-op doc>>
+  const declaredOps = new Set(routes.map((r) => r.op));
+  // The sentinel is not a spelling mistake: undeclared traffic is recorded
+  // under this exact string, so asking how much of it there was is a
+  // legitimate question and must not be refused.
+  declaredOps.add("(unmatched)");
+  const assertDeclared = (op: string): void => {
+    if (!declaredOps.has(op)) {
+      throw new Error(
+//<<undeclared-op message>>
+      );
+    }
+  };
+
   return {
     calls,
     matchedCalls() {
       return calls.filter((c) => c.op !== "(unmatched)");
     },
     countFor(op: string) {
+      assertDeclared(op);
       return calls.filter((c) => c.op === op).length;
     },
     lastBodyFor(op: string) {
+      assertDeclared(op);
       const m = calls.filter((c) => c.op === op);
       return m.length ? m[m.length - 1].body : undefined;
     },
@@ -2123,13 +2139,34 @@ data class RouteSpec(
 
 data class RecordedCall(val op: String, val method: String, val path: String, val body: String?)
 
-class Recorder {
+class Recorder(routeOps: Set<String>) {
   val calls = mutableListOf<RecordedCall>()
+//<<undeclared-op doc>>
+  // The sentinel is not a spelling mistake: undeclared traffic is recorded
+  // under this exact string, so asking how much of it there was is a
+  // legitimate question and must not be refused.
+  private val declaredOps: Set<String> = routeOps + "(unmatched)"
+
+  private fun assertDeclared(op: String) {
+    if (op !in declaredOps) {
+      error(
+//<<undeclared-op message>>
+      )
+    }
+  }
+
   /** Calls bound to a declared route — the `api: "none"` surface. */
   fun matchedCalls(): List<RecordedCall> = calls.filter { it.op != "(unmatched)" }
-  fun countFor(op: String): Int = calls.count { it.op == op }
-  fun lastBodyFor(op: String): JsonElement? =
-    calls.lastOrNull { it.op == op }?.body?.let { Json.parseToJsonElement(it) }
+
+  fun countFor(op: String): Int {
+    assertDeclared(op)
+    return calls.count { it.op == op }
+  }
+
+  fun lastBodyFor(op: String): JsonElement? {
+    assertDeclared(op)
+    return calls.lastOrNull { it.op == op }?.body?.let { Json.parseToJsonElement(it) }
+  }
 }
 
 /** '@data.<field>' pre-act capture marker for partial matching / asserts. */
@@ -2322,7 +2359,7 @@ fun runBranchTest(
 ) {
   val dispatcher = StandardTestDispatcher()
   Dispatchers.setMain(dispatcher)
-  val recorder = Recorder()
+  val recorder = Recorder(routes.map { it.op }.toSet())
   val server = MockWebServer()
   server.dispatcher = object : Dispatcher() {
     override fun dispatch(request: RecordedRequest): MockResponse {
@@ -2848,8 +2885,34 @@ final class Recorder {
   /// traffic (analytics etc.) shows up as "(unmatched)"; it is served a
   /// 599 and recorded for diagnostics but is not the contract surface.
   func matchedCalls() -> [RecordedCall] { calls.filter { $0.op != "(unmatched)" } }
-  func countFor(_ op: String) -> Int { calls.filter { $0.op == op }.count }
-  func lastBodyFor(_ op: String) -> Any? { calls.last { $0.op == op }?.body }
+
+//<<undeclared-op doc>>
+  private let declaredOps: Set<String>
+
+  init(routeOps: Set<String>) {
+    // The sentinel is not a spelling mistake: undeclared traffic is
+    // recorded under this exact string, so asking how much of it there was
+    // is a legitimate question and must not be refused.
+    declaredOps = routeOps.union(["(unmatched)"])
+  }
+
+  private func assertDeclared(_ op: String) {
+    if !declaredOps.contains(op) {
+      XCTFail(
+//<<undeclared-op message>>
+      )
+    }
+  }
+
+  func countFor(_ op: String) -> Int {
+    assertDeclared(op)
+    return calls.filter { $0.op == op }.count
+  }
+
+  func lastBodyFor(_ op: String) -> Any? {
+    assertDeclared(op)
+    return calls.last { $0.op == op }?.body
+  }
 }
 
 /// '@data.<field>' pre-act capture marker.
@@ -3030,7 +3093,7 @@ func runBranchTest(
   block: (BranchHarness, Recorder) throws -> Void
 ) rethrows {
   installBranchURLInterception()
-  let recorder = Recorder()
+  let recorder = Recorder(routeOps: Set(routes.map { $0.op }))
   BranchURLProtocol.routes = routes
   BranchURLProtocol.overrides = overrides
   BranchURLProtocol.recorder = recorder
@@ -3417,7 +3480,11 @@ func create%(pascal)sBranchHarness() -> BranchHarness {
 
 
 # ---------------------------------------------------------------------------
-# `resolveString`: one source for the text, three hand-written guards.
+# Shared prose: one source for the text, three hand-written guards.
+#
+# Two diagnostics come through here — `resolveString`'s and the read side's
+# refusal of an undeclared op. Both are text, and text has no reason to
+# differ between the three languages; both guards stay per-language.
 #
 # The markers above are filled in here rather than typed into each literal.
 # Three consecutive blockers came out of maintaining three copies by hand
@@ -3472,9 +3539,16 @@ def _splice(template: str, marker: str, block: str, *,
     return template.replace(marker, block)
 
 
-def _with_resolve_string_text(template: str, platform: str, *,
-                              harness_doc: bool, percent_literal: bool = False,
-                              sample: tuple = ()) -> str:
+def _with_shared_prose(template: str, platform: str, *,
+                       harness_doc: bool, percent_literal: bool = False,
+                       sample: tuple = ()) -> str:
+    """Fill every prose marker in `template`, or refuse.
+
+    Named for what it does rather than for the first diagnostic it carried:
+    the read side's refusal is the second, and a function still called
+    `_with_resolve_string_text` would be a name that stopped being true
+    while every call site kept reading correctly.
+    """
     language = _LANGUAGE[platform]
     quoter = prose.quoter_helper(language)
     text = template
@@ -3493,6 +3567,14 @@ def _with_resolve_string_text(template: str, platform: str, *,
         text, "//<<resolve-string message>>",
         prose.message(prose.RESOLVE_STRING_FAILURE, language, indent=6),
         percent_literal=percent_literal)
+    text = _splice(
+        text, "//<<undeclared-op doc>>",
+        prose.undeclared_op_doc(language, indent=2),
+        percent_literal=percent_literal)
+    text = _splice(
+        text, "//<<undeclared-op message>>",
+        prose.undeclared_op_failure(language, indent=8),
+        percent_literal=percent_literal)
     if harness_doc:
         text = _splice(
             text, "//<<resolve-string harness doc>>",
@@ -3502,10 +3584,10 @@ def _with_resolve_string_text(template: str, platform: str, *,
     return text
 
 
-RUNTIME_TS = _with_resolve_string_text(RUNTIME_TS, "web", harness_doc=False)
-KOTLIN_RUNTIME = _with_resolve_string_text(
+RUNTIME_TS = _with_shared_prose(RUNTIME_TS, "web", harness_doc=False)
+KOTLIN_RUNTIME = _with_shared_prose(
     KOTLIN_RUNTIME, "android", harness_doc=True, percent_literal=True)
-SWIFT_RUNTIME = _with_resolve_string_text(
+SWIFT_RUNTIME = _with_shared_prose(
     SWIFT_RUNTIME, "ios", harness_doc=True)
 HARNESS_SKELETON = _splice(
     HARNESS_SKELETON, "//<<resolve-string harness doc>>",

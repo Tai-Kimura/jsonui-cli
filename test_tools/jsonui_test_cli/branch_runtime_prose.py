@@ -1,4 +1,9 @@
-"""One source for what the three branch runtimes say about `resolveString`.
+"""One source for what the three branch runtimes SAY.
+
+Two diagnostics live here: `resolveString`'s, which is why the module
+exists, and the read side's refusal of an undeclared op. The rule is the
+same for both — text has no reason to differ between the three, so it is
+declared once and rendered, while the guard around it stays per-language.
 
 The same diagnostic was hand-copied into a TypeScript literal, a Kotlin
 literal and a Swift literal. Three blockers came out of that in one day,
@@ -115,10 +120,20 @@ _DOC_STYLE = {
 }
 
 
-#: The three tables are keyed the same on purpose. A language added to one
-#: and not the others would fail somewhere downstream with whichever table
-#: was consulted first, which is a worse place to read about it.
-assert set(_ESCAPES) == set(_DOC_STYLE) == set(_QUOTED_FORM) == set(LANGUAGES)
+#: How each language spells "the declared op names, sorted and joined". The
+#: SENTENCE around this is shared; only the expression differs, and it
+#: differs for reasons that are about the language's collection API.
+_DECLARED_LIST_FORM = {
+    "ts": '[...declaredOps].sort().join(", ")',
+    "kotlin": 'declaredOps.sorted().joinToString(", ")',
+    "swift": 'declaredOps.sorted().joined(separator: ", ")',
+}
+
+#: The tables are keyed the same on purpose. A language added to one and
+#: not the others would fail somewhere downstream with whichever table was
+#: consulted first, which is a worse place to read about it.
+assert (set(_ESCAPES) == set(_DOC_STYLE) == set(_QUOTED_FORM)
+        == set(_DECLARED_LIST_FORM) == set(LANGUAGES))
 
 
 def language_or_raise(language: str) -> str:
@@ -386,3 +401,88 @@ def harness_doc(language: str, *, summary: str, indent: int,
         paragraphs.append(sample)
     paragraphs.append(RESOLVE_STRING_HARNESS_CLOSE)
     return doc(paragraphs, language, indent=indent)
+
+
+#: The read side's refusal. `countFor` and `lastBodyFor` are the only two
+#: places a test names an op AFTER generation has finished, so they are the
+#: only two places the generator's own write-side checks cannot reach.
+#:
+#: The sentence says what the old answer WAS, because that is the part a
+#: reader needs: a refusal that only said "undeclared" invites "fine, then
+#: it counted zero", which is precisely the reading that let the defect
+#: live. What made it survive is that 0 and an absent body are plausible.
+UNDECLARED_OP_SENTENCE = (
+    "branch-runtime: op ",
+    Quoted("op"),
+    " is not declared by any route. Counting an undeclared op answered 0 "
+    "and reading its body answered nothing, and both are plausible values "
+    "— so an assert written against a misspelled op checked nothing and "
+    "stayed green. Declared: ",
+)
+
+
+#: The doc comment above the guard. Shared for the same reason the message
+#: is: three copies of a rationale drift, and the copy that stops being
+#: true is the one nobody rereads.
+UNDECLARED_OP_DOC = (
+    "Refuse an op no route declares — the read side of the write side's "
+    "check.",
+
+    "The generator already refuses an op with no endpoint declaration, and "
+    "refuses two spellings for one endpoint. Both run at GENERATION time. "
+    "`countFor` and `lastBodyFor` are read at TEST time by hand-written "
+    "tests, which is the population this runtime is exported for, and a "
+    "name that matched no recorded call answered 0 and nothing.",
+
+    "Those are PLAUSIBLE ANSWERS, which is the whole defect: an assert "
+    "against a misspelled op checked nothing and stayed green for ever. "
+    "Measured in the wild, one such assert compared a count taken under a "
+    "typo against a later total and certified a save request that was "
+    "never sent; the comment above it called itself a non-vacuous control.",
+
+    "Generated asserts cannot reach this. Every op they name comes from "
+    "this same route table, and a test asserts that containment on all "
+    "three faces — so the refusal is reachable only from a hand-written "
+    "name, which is exactly what it is for.",
+
+    "WHAT IT DOES NOT REACH: `calls` is public, and a test that filters it "
+    "by op directly — comparing the op field rather than calling either "
+    "accessor — gets the old silent answer, because no name was passed to "
+    "anything that could refuse it. Guarding it would mean taking the "
+    "recorded calls away, and they are the diagnostic surface; so the "
+    "limit is stated instead of hidden.",
+
+    "That form only HIDES a defect where the assert expects zero or "
+    "nothing. A misspelled op read that way yields an empty list or an "
+    "absent element, so an assert expecting a value, a length, or a "
+    "non-empty result goes red on its own. Measured in one hand-written "
+    "suite: 18 sites read `calls` by op and none of them were at risk, "
+    "because every one of them expected something back. The hazard is the "
+    "defect's direction times the assertion's, and a project wanting the "
+    "remaining direction covered needs its own scan.",
+
+    "A scan for it must not look for the literal zero. \"Expects zero\" has "
+    "a second form that never spells one: a count taken BEFORE the act and "
+    "compared with the count after. Under a misspelled op both are zero, "
+    "the comparison holds, and the text says only that the two agree. The "
+    "one such assert found in the wild was of exactly that shape.",
+)
+
+
+def undeclared_op_doc(language: str, *, indent: int = 0) -> str:
+    """The guard's doc comment for `language`."""
+    return doc(UNDECLARED_OP_DOC, language_or_raise(language), indent=indent)
+
+
+def undeclared_op_failure(language: str, *, indent: int,
+                          width: int = WIDTH) -> str:
+    """The refusal message for `language`.
+
+    A function rather than a constant because one term is a different
+    EXPRESSION in each language while the sentence is the same — the same
+    split `harness_doc` makes, and the same reason: what differs is about
+    the language, and what does not differ has one source.
+    """
+    parts = UNDECLARED_OP_SENTENCE + (
+        Value(_DECLARED_LIST_FORM[language_or_raise(language)]),)
+    return message(parts, language, indent=indent, width=width)

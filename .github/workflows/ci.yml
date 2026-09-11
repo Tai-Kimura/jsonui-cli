@@ -213,15 +213,25 @@ jobs:
       # failure rather than as four quiet skips.
       - name: Install TypeScript (test_tools emitted-TS type-check)
         run: npm ci --prefix rjui_tools/spec/support
-      # `--ignore` because that file asks swiftc and kotlinc directly and
-      # refuses to skip when `CI` is set; this image has neither, so it would
+      # `--ignore` because these files ask swiftc and kotlinc directly and
+      # refuse to skip when `CI` is set; this image has neither, so they would
       # fail here for the absence of a toolchain rather than for anything
-      # about the tables. The `stub-identifier-tables` job below owns it and
-      # runs it on macos-15 — the arms are NOT dropped, they are moved, and
-      # dropping this line would turn this suite red rather than quiet.
+      # about what they measure. The `compiler-backed-arms` job below owns
+      # them and runs them on macos-15 — the arms are NOT dropped, they are
+      # moved, and dropping a line here would turn this suite red rather than
+      # quiet.
+      #
+      # ⚠️ TWO FILES, AND THE SECOND ONE ALSO HAS A WEB ARM. Ignoring the
+      # whole file moves its node probe to macos-15 too. That is deliberate:
+      # the three faces assert the same rows, and splitting them across two
+      # jobs is how one face's row silently stops being compared with the
+      # others'.
       - name: Run test_tools tests
         working-directory: test_tools
-        run: python -m pytest --ignore=tests/test_stub_name_tables_reach_a_compiler.py
+        run: |
+          python -m pytest \
+            --ignore=tests/test_stub_name_tables_reach_a_compiler.py \
+            --ignore=tests/test_recorder_refuses_an_undeclared_op.py
       - name: Run document_tools tests
         working-directory: document_tools
         run: python -m pytest
@@ -243,9 +253,18 @@ jobs:
   # to be installed, and the SwiftUI-compiling ruby leg already proves this
   # image answers for Swift. Separate from python-suite so that a compiler
   # download never sits on the critical path of the whole Python suite.
+  #
+  # 🔻 THIS JOB NOW OWNS TWO FAMILIES, and the name says so. The second is
+  # `test_recorder_refuses_an_undeclared_op.py`: the branch runtime's read
+  # side refuses an op no route declares, and whether a guard REFUSES is a
+  # fact about execution — three emitted runtimes, three real compilers.
+  # It ran on a developer machine (Gradle-cache jars, swiftc, node) and
+  # would have skipped in CI for want of a toolchain, which is the outcome
+  # `_tool` exists to refuse. Renaming rather than adding a job: a second
+  # macos-15 runner pays for `brew install kotlin` twice.
   # ------------------------------------------------------------------ #
   stub-identifier-tables:
-    name: identifier tables vs. real compilers
+    name: arms that ask the real compilers
     runs-on: macos-15
     timeout-minutes: 20
     steps:
@@ -273,6 +292,27 @@ jobs:
       - name: Identifier tables
         working-directory: test_tools
         run: python -m pytest tests/test_stub_name_tables_reach_a_compiler.py -v
+      # Node as well as the two compilers: the web face asserts the same rows
+      # as the other two, and a row compared in a different job is a row
+      # nobody compares.
+      #
+      # 🔻 AND THE RESULT IS READ FROM THE COUNTS, NOT FROM THE JOB. `success`
+      # is what BOTH "9 passed" and "9 collected, 9 skipped" produce, so a
+      # reader going job by job is reading a value the two share. The arms
+      # refuse to skip when `CI` is set — but that refusal only fires if the
+      # arm RUNS, and a step whose file was never collected is invisible to
+      # it. `executed-or-skipped.py` puts the discriminator in the output.
+      #
+      # Deliberately NOT added to the identifier-tables step above: that
+      # file's skip set on this image has not been measured, and a gate
+      # asserting a property nobody checked is the shape being fixed here.
+      - name: Branch-runtime read-side guard (three faces, three compilers)
+        working-directory: test_tools
+        run: |
+          set -euo pipefail
+          python -m pytest tests/test_recorder_refuses_an_undeclared_op.py \
+            -v -rs --junitxml=guard-report.xml
+          ../dev-guide/ci/executed-or-skipped.py guard-report.xml
 
   # ------------------------------------------------------------------ #
   # Ruby codegen unit suites. sjui_tools has no Gemfile (plain rspec);
