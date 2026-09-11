@@ -170,10 +170,20 @@ class TheRuleActuallyRemovesTheTree(unittest.TestCase):
         """
         rules = _prune_block(BOOTSTRAP.read_text(encoding="utf-8"))
         # A GATE, not an assertion elsewhere. `env=` below makes a rule whose
-        # variable is the WHOLE argument harmless — `"$VAR"` becomes `""` and
-        # `rm -rf ""` exits 0 — but it does nothing for a rule where the
-        # variable is a PREFIX: `"$VAR/spec"` expands to `/spec`, an absolute
-        # path, and `rm -rf` goes after it. That form already exists in this
+        # variable is the WHOLE argument harmless — `"$VAR"` becomes `""`,
+        # `rm -rf` gets no operand at all, and it exits 0.
+        #
+        # 🚨 FOR A PREFIX IT DOES THE OPPOSITE OF NOTHING. `"$VAR/spec"`
+        # expands to `/spec` and `"$VAR/Users"` to `/Users`: clearing the
+        # environment does not neutralise the rule, it REPOINTS it at the
+        # root. With the variable set, the damage is confined to whatever it
+        # names; cleared, the target is `/` plus the suffix. Measured with
+        # `rm` replaced by a recorder: `[-rf]` for the whole-argument form,
+        # `[-rf /spec]` and `[-rf /Users]` for the prefix form.
+        #
+        # So this gate is not defence in depth behind `env=`. For the prefix
+        # form it is the only thing between a relativised rule and a real
+        # path. That form already exists in this
         # file (`rm -f "$tool_dir/lib/core/..."`), outside the block, so a
         # rule of that shape moving inside it is a relocation rather than an
         # invention. The arm that refuses `$` runs AFTER this one — unittest
