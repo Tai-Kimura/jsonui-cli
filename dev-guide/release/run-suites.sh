@@ -105,11 +105,23 @@ py_suite() {
   # `-rs` names every skip, and the filter keeps those lines plus the summary.
   # `tail -3` kept only the summary, so a skipped arm was a number with no
   # name — and a number is not something anyone can go and fix.
-  (cd "$C/$dir" && PYTHONPATH="$pp" python3 -m pytest -q -rs "$@" 2>&1 \
-     | grep -E '^(SKIPPED|FAILED|ERROR) |^=+ .* in [0-9.]+s')
+  #
+  # The summary is matched by its shape (`N passed … in Ns`), NOT by the `=`
+  # band: jui_tools runs pytest-subtests, whose summary has no band, and a
+  # filter anchored on `^=+` dropped that leg's count in every log (1.8.73
+  # candidate, 2026-09-11). pytest writes to a file so `rc` is pytest's own —
+  # a pipe into grep reports grep's exit under pipefail, which is 1 whenever
+  # a passing run has no skip to name.
+  local log; log=$(mktemp "${TMPDIR:-/tmp}/run-suites.$dir.XXXXXX")
+  (cd "$C/$dir" && PYTHONPATH="$pp" python3 -m pytest -q -rs "$@" >"$log" 2>&1)
   local rc=$?
+  local closing='[0-9]+ (passed|failed|error|skipped|xfailed|xpassed|deselected|warning)s?.* in [0-9.]+s'
+  grep -E "^(SKIPPED|FAILED|ERROR) |$closing" "$log"
+  local n; n=$(grep -c -E "$closing" "$log")
   say "   exit=$rc"
-  [ "$rc" = 0 ] || bad "$dir: pytest exit $rc"
+  [ "$rc" = 0 ] || bad "$dir: pytest exit $rc (full log: $log)"
+  [ "$n" = 1 ] || bad "$dir: pytest printed $n closing line(s), expected 1 — the count is unreadable (full log: $log)"
+  [ "$rc" = 0 ] && [ "$n" = 1 ] && rm -f "$log"
 }
 # 🚨 THE SAME `--ignore` CI USES, AND FOR THE SAME REASON. Reported by a
 # triage lane 2026-09-08 after their gate went red on a branch that touched
