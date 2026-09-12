@@ -671,14 +671,18 @@ def _generated_paths_and_roots(config_mgr) -> tuple[list, list]:
     from .lint_generated_cmd import _collect_targets, _view_targets
 
     paths: set = set()
-    for collect in (
-        lambda: [path for _kind, path in _collect_targets(config_mgr)],
-        lambda: _view_targets(config_mgr),
-    ):
-        try:
-            paths.update(collect())
-        except Exception:
-            continue
+    # Kept apart from `paths`: the view files' PARENTS become declared
+    # roots below, and only these files say where the view dirs are.
+    view_paths: set = set()
+    try:
+        view_paths = set(_view_targets(config_mgr))
+    except Exception:
+        pass
+    paths |= view_paths
+    try:
+        paths.update(path for _kind, path in _collect_targets(config_mgr))
+    except Exception:
+        pass
 
     # Everything inside a generated tree, whatever its extension.
     #
@@ -733,7 +737,20 @@ def _generated_paths_and_roots(config_mgr) -> tuple[list, list]:
             paths.update(f for f in directory.rglob("*") if f.is_file())
         except OSError:
             continue
-    walked |= _layout_distribution_dirs(config_mgr)
+    declared: set = set(_layout_distribution_dirs(config_mgr))
+
+    # The per-screen view dirs are DECLARED roots too, for the same reason
+    # and under the same restriction. `_view_targets` finds
+    # `View/<screen>/<Screen>GeneratedView.swift` and `views/<screen>/….kt`,
+    # and neither parent is named `generated`, so through 1.8.75 every such
+    # file was recorded and then counted outside every declared root: on
+    # two mobile faces `outsideDeclaredRoots` was exactly the number of
+    # GeneratedView files (88 and 200, reported 2026-09-12) — a constant
+    # that would have hidden any root really missing. The parent holds the
+    # hand-written `<Screen>View.swift` beside the generated one, so it is
+    # declared and never walked; the files under it that are the build's
+    # come from `_view_targets`, nothing else.
+    declared |= {p.parent for p in view_paths}
 
     from ..core.generation_manifest import real_case
 
@@ -761,7 +778,7 @@ def _generated_paths_and_roots(config_mgr) -> tuple[list, list]:
 
     canon = sorted({c for c in (real_case(p) for p in paths)
                    if not _owned_elsewhere(c)})
-    roots = sorted({real_case(d) for d in walked}, key=str)
+    roots = sorted({real_case(d) for d in walked | declared}, key=str)
     return canon, roots
 
 

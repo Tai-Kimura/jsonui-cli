@@ -15,6 +15,14 @@ collection AND by the scan roots.
 
 🔻 THE CONTROL IS THE OLD DERIVATION: the same paths observed against roots
 without the layout dir put the copy outside; with it, nothing is outside.
+
+2026-09-12: the fixture gained the THIRD path source. Two mobile faces on
+1.8.75 reported `outsideDeclaredRoots` 88 and 200 — exactly their
+`*GeneratedView.{kt,swift}` counts. This file's "nothing is outside" arm
+was green the whole time because the fixture had no such file: a corpus
+without the shape is silent. The fixture now holds all three sources
+(layout copies / a `generated` tree / per-screen view targets, one nested
+in a cell dir), so the generic arm covers every source the record has.
 """
 from __future__ import annotations
 
@@ -38,9 +46,18 @@ def _project(root: Path) -> tuple[ConfigManager, Path, Path]:
         "platforms": {
             "web": {"root": "web", "layoutsDir": "src/Layouts"},
             "ios": {"root": "ios", "layoutsDir": "Layouts"},   # root absent on disk
+            "android": {"root": "android"},                     # view targets, no layoutsDir
             "bogus": "not a mapping",
         },
     }), encoding="utf-8")
+    # Third source: per-screen view targets beside hand-written siblings,
+    # one nested in a cell dir (the reported shape: 1 file = 1 parent).
+    views = root / "android" / "app" / "src" / "main" / "java" / "x" / "views"
+    (views / "home" / "cell").mkdir(parents=True)
+    (views / "home" / "HomeGeneratedView.kt").write_text("// @generated\n", encoding="utf-8")
+    (views / "home" / "HomeView.kt").write_text("// hand-written\n", encoding="utf-8")
+    (views / "home" / "cell" / "HomeCellGeneratedView.kt").write_text("// @generated\n", encoding="utf-8")
+    (views / "home" / "cell" / "HomeCellView.kt").write_text("// hand-written\n", encoding="utf-8")
     layouts = root / "web" / "src" / "Layouts" / "home"
     layouts.mkdir(parents=True)
     page = layouts / "home.json"
@@ -100,6 +117,34 @@ class TestTheLedgerAgrees:
         run = self._observe(tmp_path, paths, roots)
         assert run.outside_roots == []
         assert run.claims()["scan"]["outsideDeclaredRoots"] == 0
+
+    def test_the_fixture_holds_all_three_sources(self, tmp_path):
+        """The arm above is only as wide as this corpus. Name the sources
+        so a fourth one added to the record is missing HERE, visibly."""
+        cfg, layouts_dir, page = _project(tmp_path)
+        paths, roots = build_cmd._generated_paths_and_roots(cfg)
+        resolved = {Path(p).resolve() for p in paths}
+        views = tmp_path / "android" / "app" / "src" / "main" / "java" / "x" / "views"
+        assert page.resolve() in resolved                                   # layout copy
+        assert (tmp_path / "web" / "src" / "generated" / "Home.tsx").resolve() in resolved  # generated tree
+        assert (views / "home" / "HomeGeneratedView.kt").resolve() in resolved             # view target
+        assert (views / "home" / "cell" / "HomeCellGeneratedView.kt").resolve() in resolved  # nested view target
+        assert (views / "home" / "HomeView.kt").resolve() not in resolved       # sibling: declared, not walked
+        assert (views / "home" / "cell" / "HomeCellView.kt").resolve() not in resolved
+
+    def test_the_old_derivation_put_every_view_target_outside(self, tmp_path):
+        """Control for the third source: roots without the view parents
+        put exactly the GeneratedView files outside, nothing else."""
+        cfg, _, _ = _project(tmp_path)
+        paths, roots = build_cmd._generated_paths_and_roots(cfg)
+        views = (tmp_path / "android" / "app" / "src" / "main" / "java" / "x" / "views").resolve()
+        old_roots = [r for r in roots if views not in Path(r).resolve().parents]
+        assert len(old_roots) == len(roots) - 2, roots
+        run = self._observe(tmp_path, paths, old_roots)
+        rel = lambda p: str(p.resolve().relative_to(tmp_path.resolve())).replace("\\", "/")
+        assert sorted(run.outside_roots) == sorted([
+            rel(views / "home" / "HomeGeneratedView.kt"),
+            rel(views / "home" / "cell" / "HomeCellGeneratedView.kt")])
 
     def test_the_old_derivation_put_the_layout_copy_outside(self, tmp_path):
         """Control: the same paths against roots without the layout dir."""
