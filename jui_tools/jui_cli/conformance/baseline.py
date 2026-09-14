@@ -494,12 +494,24 @@ def compare_platform(
     # exactly the wholesale-mismatch failure the env key exists to prevent.
     # (Manifests from before the env key have no field; their location under
     # baselines/<env>/ is the claim.)
+    # 🔑 THE RE-BAKE LINE BELOW CARRIES `--fail-on-moved`, AND IT IS THE ONE
+    # RECIPE NO DOCUMENT CAN COVER. This string is handed to the operator by
+    # the tool, at the moment a comparison stopped because the baseline no
+    # longer matches — i.e. immediately before a bake, to the reader who is
+    # following the tool rather than the README. Without the flag the bake it
+    # names rewrites every changed picture and exits 0.
+    #
+    # ⚠️ KEPT ON ONE SOURCE LINE even though it is long: split across two
+    # f-strings the recipe stops being greppable, and every scanner for it
+    # — this repo's gate, a person's grep, another lane's audit — is line
+    # oriented. The gate caught exactly that when this fix was first written
+    # across two lines.
     stored_env = baseline.get("environment")
     if stored_env is not None and stored_env != env:
         comparison.error = (
             f"baseline {baseline_path(conformance_dir, platform, env).name} records "
             f"environment '{stored_env}' but this comparison is for '{env}' — "
-            f"re-bake with `jui conformance baseline update --platform {platform} --env {env}`"
+            f"re-bake with `jui conformance baseline update --platform {platform} --env {env} --fail-on-moved`"
         )
         return comparison
 

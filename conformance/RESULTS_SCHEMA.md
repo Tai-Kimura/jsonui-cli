@@ -147,7 +147,7 @@ Rules:
 
 ## `jui conformance baseline update` (v2)
 
-`jui conformance baseline update --platform <p> [--env <e>]` hashes
+`jui conformance baseline update --platform <p> [--env <e>] --fail-on-moved` hashes
 `artifacts/<p>/*.png` into `baselines/<e>/<p>.hashes.json` (perceptual dHash-64;
 Pillow required — optional extra `jui-tools[conformance]`). Algorithm,
 measured threshold rationale and the update workflow: `baselines/README.md`.
