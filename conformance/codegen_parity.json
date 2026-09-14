@@ -66,6 +66,15 @@
       "note": ""
     },
     {
+      "screenshot": "common_glass__true.png",
+      "platform": "ios",
+      "env": "ci",
+      "status": "mismatch",
+      "distance": 151,
+      "reason": "sjui-dynamic-glass-unimplemented: this is not two renderers disagreeing about how to draw a thing — it is one of them not reading the attribute at all. The codegen face emits `.sjuiGlassEffect(...)` (sjui_tools base_view_converter.rb); the Dynamic face has no `\"glass\"` anywhere under Classes/SwiftUI/Dynamic, and `sjuiGlassEffect` has zero callers in SwiftJsonUI's Sources. Measured in run 34849471695, BOTH iOS lanes on the same runtime (ios-26.2) in the same run: codegen glass__true vs its control = 148 raw dhash (151 through the gate's chrome crop); dynamic glass__true vs the same control = 0, i.e. the dynamic lane draws the control. WHY IT APPEARS ONLY NOW: on an iOS 18 SDK the SwiftUI Liquid Glass types do not exist, so BOTH faces rendered nothing and parity held at 0 — the agreement was two absences, not a shared implementation. It became measurable the moment the iOS jobs moved to Xcode 26.3 / iOS 26.2, which is what that move was for. WHY IT IS NOT FIXED IN THIS TRAIN: the Dynamic tree's read-discipline gate forbids raw `data[\"glass\"]` reads, and its allowlist is a set-compared ratchet that is deliberately frozen. The canonical reader is the generated `AttrValue<T>` from the vendored attr tables, which are sha256-pinned to jsonui-cli v1.8.19 (JSONUI_CLI_MANIFEST_REF in SwiftJsonUI's ci.yml) and therefore do not carry `/common/glass` — that declaration lands with THIS train. Order is forced: ship this train, re-vendor and bump the pin, then add the Dynamic stage. The insertion point is already fixed by codegen's MODIFIER_ORDER (background -> [glass] -> corner_radius) and by DynamicModifierHelper.standardOrder, where it goes immediately before the cornerRadius stage. DROP THIS ENTRY when that stage lands; it should then measure 0 and the gate will report it as stale.",
+      "note": ""
+    },
+    {
       "screenshot": "control_TabView.png",
       "platform": "android",
       "env": "local",
