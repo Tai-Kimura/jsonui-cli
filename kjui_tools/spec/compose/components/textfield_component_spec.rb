@@ -214,10 +214,16 @@ RSpec.describe KjuiTools::Compose::Components::TextFieldComponent do
     # member exists. Mutating the implementation and its arm together to
     # KeyboardType.Datetime left the suite fully green.
     #
-    # Two independent transcriptions, both javap -p on
-    # androidx.compose.ui.text.input.KeyboardType$Companion in the ui-text aar:
-    # the triage lane on 1.12.0 and this lane on 1.12.1. Both report 26 members
-    # and the same names; 1.11.0 has 10 and none of the four.
+    # Transcribed twice, by two lanes, javap -p on
+    # androidx.compose.ui.text.input.KeyboardType$Companion: triage from the
+    # 1.12.0 aar (md5 343361cd…), this lane from 1.12.1 (2a172948…). Different
+    # artifacts, so this is not one file read twice — but they are two releases
+    # of one library, so what the pair establishes is that neither of us
+    # mistyped, not that the members exist independently of androidx. For THAT
+    # there is one window, and no compiler here to close it.
+    #
+    # The floor comes from the same window: 1.11.0 lists 10 members and has none
+    # of the four; 1.10.0 also 10. Text, which dynamic falls back to, is in both.
     COMPOSE_KEYBOARD_TYPES = %w[
       Ascii Date DateTime Decimal DecimalPassword DecimalPasswordSigned
       DecimalSigned Email EmailSubject Filter LongMessage Number NumberPassword
