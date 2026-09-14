@@ -108,7 +108,25 @@ kwargs や属性を通すときは **lib/compose/ 全体を grep** する。sink
 ## 5. 罠（Android 固有）
 
 - 🚨 **Android 17 以降、回転で IME の表示状態は復元されない**（targetSdk 不問、全アプリに効く）。
-  **ライブラリは復元を担わない。担えない**——`FocusManager`（library-dynamic）は
+  🔻 **2026-09-14 追記: 下の「担えない」は dynamic 面だけの話で、codegen 面には当たらない**（当初の記述は
+  射程を外していた。docsite 担当が生成器の実装を読んで指摘）。**面ごとに分けて読むこと**:
+
+  | 面 | focus の経路 | 構成変更後 |
+  |---|---|---|
+  | **dynamic**（`library-dynamic`） | `FocusManager` の replay 0 な `SharedFlow` | **再配信されない**＝下の記述どおり |
+  | **codegen**（`kjui_tools` が emit） | フィールドごとの `remember { FocusRequester() }` ＋ `LocalSoftwareKeyboardController` を `LaunchedEffect(data.<id>IsFocused)` が駆動 | 🚨 **再要求が走り得る**（下記） |
+
+  codegen 面の実測（`textfield_component.rb:206-212` が emit、生成物で確認）:
+  ```kotlin
+  val focusRequester_<name> = remember { FocusRequester() }
+  val keyboardController_<id> = LocalSoftwareKeyboardController.current
+  LaunchedEffect(data.<id>IsFocused) { if (data.<id>IsFocused) { focusRequester_<name>.requestFocus(); keyboardController_<id>?.show() } }
+  ```
+  `data` は `viewModel()` 由来（wrapper の `val data by viewModel.data.collectAsState()`）で、**`ViewModel` は構成変更をまたいで保持される**。`<id>IsFocused` は data クラスの実フィールド。⇒ 回転後に composition が作り直されると `LaunchedEffect` が key `true` のまま再入し、**`requestFocus()` と `keyboardController?.show()` が走る経路が在る**。
+  ⚠️ **走ることまでは実装から読めるが、Android 17 上で実際に IME が出るかは未測定**（端末が要る）。`FocusManager` を根拠にした「担えない」は、**この経路には移らない**。
+  ⚠️ この配線を持つのは `id` を宣言した TextField だけ（sample-app では生成画面 53 本中 **8 本**）。
+
+  **dynamic 面について**: **ライブラリは復元を担わない。担えない**——`FocusManager`（library-dynamic）は
   `MutableSharedFlow<String>(extraBufferCapacity = 1)`、つまり**状態でなくイベントバス**で、
   構成変更後に `LaunchedEffect` が購読し直しても**直前の focus 要求は再配信されない**。
   ⚠️ **`extraBufferCapacity` と `replay` は別軸**。buffer は emit 側が suspend しないための容量で、
