@@ -765,3 +765,120 @@ jobs:
           done
           diff -r "$RUNNER_TEMP/out26" "$RUNNER_TEMP/out33"
           echo "identical on both interpreters"
+
+  # ------------------------------------------------------------------ #
+  # Xcode 27 (PREVIEW). Three questions the 26.x legs cannot answer, on
+  # the only machine that has the SDK.
+  #
+  # 🔻 THIS JOB'S RESULT IS NOT A PREMISE FOR ANY OTHER CLAIM.
+  # `continue-on-error` makes a red job look green in the checks list, so
+  # nothing may depend on it: not a gate, not an acceptance row, not
+  # another job's `needs`. What it produces is EVIDENCE IN THE LOG, which
+  # is why every step prints its findings rather than only exiting.
+  #
+  # The image is announced as preview ("some software can be unstable on
+  # the new platform" — actions/runner-images#14404). Two sources disagree
+  # on the OS it runs: the announcement says macOS 26, the generated
+  # image Readme says macOS 27.0 (26A5406e) with Xcode 27.0 beta
+  # (27A5252f) as default. The Readme is the generated one, so it is the
+  # better source, but the label is what we pin — not an OS version.
+  # ------------------------------------------------------------------ #
+  xcode-27-preview:
+    name: xcode 27 preview — evidence only, never a premise
+    runs-on: xcode-27
+    continue-on-error: true
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: Tai-Kimura/SwiftJsonUI
+          ref: master
+          path: SwiftJsonUI
+
+      # Say what we are standing on before measuring anything with it. A
+      # preview image can change under the same label.
+      - name: What this runner actually is
+        run: |
+          sw_vers
+          xcodebuild -version
+          xcrun --sdk iphonesimulator --show-sdk-version
+          xcrun simctl list runtimes | sed 's/^/  /'
+
+      # P1-4 step 0: do the fold/hinge/posture symbols exist in the 27 SDK?
+      #
+      # 🔻 THE ANSWER IS ASYMMETRIC, and the asymmetry is the point:
+      #   found     -> the real names are established; P1-4 can start
+      #   not found -> establishes NOTHING. A GM SDK may still add them.
+      # So a clean run here does not close P1-4. Written in the step
+      # rather than in a note, because a note beside a green result is
+      # read as "fine".
+      #
+      # Measured on 26.5 before writing this: zero true matches, and two
+      # FALSE positives — `isPrefetchingEnabled` contains "hinge" under
+      # `-i`. Every matching line is printed so the next reader classifies
+      # them by eye instead of trusting a count.
+      - name: Fold symbols in the 27 SDK (evidence, not a gate)
+        run: |
+          set -u
+          SDK=$(xcrun --sdk iphonesimulator --show-sdk-path)
+          echo "SDK: $SDK"
+          for fw in SwiftUICore SwiftUI UIKit; do
+            IF=$(find "$SDK/System/Library/Frameworks/$fw.framework" \
+                 -name '*.swiftinterface' 2>/dev/null | head -1)
+            [ -z "$IF" ] && { echo "$fw: no swiftinterface"; continue; }
+            echo "=== $fw ($IF)"
+            # Positive controls FIRST and in the same output: if these are
+            # zero the window is wrong and the zeros below mean nothing.
+            printf '    control func background : %s\n' "$(grep -c 'func background' "$IF" || true)"
+            printf '    control UIWindowScene   : %s\n' "$(grep -c 'UIWindowScene' "$IF" || true)"
+            for sym in fold hinge posture; do
+              n=$(grep -ic "$sym" "$IF" || true)
+              printf '    %-8s : %s\n' "$sym" "$n"
+              [ "$n" != "0" ] && grep -in "$sym" "$IF" | sed 's/^/        /'
+            done
+          done
+          echo "--- ObjC headers ---"
+          for sym in fold hinge posture; do
+            echo "  $sym:"
+            grep -ril "$sym" "$SDK/System/Library/Frameworks/UIKit.framework/Headers/" \
+              2>/dev/null | sed 's/^/    /' || echo "    (none)"
+          done
+          echo "  control UIWindowScene:"
+          grep -rl "UIWindowScene" "$SDK/System/Library/Frameworks/UIKit.framework/Headers/" \
+            2>/dev/null | wc -l | sed 's/^/    files: /'
+
+      # P1-6: does the library build against the 27 SDK at all?
+      #
+      # Deployment target is iOS 17 (Package.swift), and that is what
+      # decides which deprecation warnings the compiler emits — measured
+      # earlier in this train: `UIScreen.main` warns ZERO times at 17 and
+      # 52 times at 26.0. So this step names the deployment target it is
+      # asking about instead of taking the package default, or the warning
+      # count means nothing.
+      - name: Build SwiftJsonUI against the 27 SDK (evidence, not a gate)
+        working-directory: SwiftJsonUI
+        run: |
+          set -o pipefail
+          xcodebuild -scheme SwiftJsonUI \
+            -destination 'generic/platform=iOS Simulator' \
+            -derivedDataPath "$RUNNER_TEMP/dd27" \
+            IPHONEOS_DEPLOYMENT_TARGET=26.0 \
+            build 2>&1 | tee "$RUNNER_TEMP/build27.log" | tail -40 || true
+          echo "=== warnings, grouped ==="
+          grep -oE 'warning: .*' "$RUNNER_TEMP/build27.log" \
+            | sed 's/ in [^ ]*$//' | sort | uniq -c | sort -rn | head -30 || true
+          echo "=== totals ==="
+          printf '  warning lines : %s\n' "$(grep -c 'warning:' "$RUNNER_TEMP/build27.log" || true)"
+          printf '  error lines   : %s\n' "$(grep -c 'error:'   "$RUNNER_TEMP/build27.log" || true)"
+
+      # `continue-on-error` turns this job green whatever happened, so the
+      # log is the only record. Keep it.
+      - name: Keep the evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: xcode-27-preview-evidence
+          path: ${{ runner.temp }}/build27.log
+          if-no-files-found: warn
+          retention-days: 14
