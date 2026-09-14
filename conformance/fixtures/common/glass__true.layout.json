@@ -14,10 +14,82 @@
   "child": [
     {
       "type": "View",
+      "id": "backdrop",
+      "width": 200,
+      "height": 200,
+      "background": "#FF0000",
+      "orientation": "horizontal",
+      "child": [
+        {
+          "type": "View",
+          "id": "stripe_a",
+          "width": 20,
+          "height": 200,
+          "background": "#FFFFFF"
+        },
+        {
+          "type": "View",
+          "id": "stripe_b",
+          "width": 20,
+          "height": 200,
+          "background": "#0000FF"
+        },
+        {
+          "type": "View",
+          "id": "stripe_c",
+          "width": 20,
+          "height": 200,
+          "background": "#FFFFFF"
+        },
+        {
+          "type": "View",
+          "id": "stripe_d",
+          "width": 20,
+          "height": 200,
+          "background": "#00AA00"
+        },
+        {
+          "type": "View",
+          "id": "stripe_e",
+          "width": 20,
+          "height": 200,
+          "background": "#FF0000"
+        },
+        {
+          "type": "View",
+          "id": "stripe_f",
+          "width": 20,
+          "height": 200,
+          "background": "#FFFFFF"
+        },
+        {
+          "type": "View",
+          "id": "stripe_g",
+          "width": 20,
+          "height": 200,
+          "background": "#0000FF"
+        },
+        {
+          "type": "View",
+          "id": "stripe_h",
+          "width": 20,
+          "height": 200,
+          "background": "#FFFFFF"
+        },
+        {
+          "type": "View",
+          "id": "stripe_i",
+          "width": 20,
+          "height": 200,
+          "background": "#00AA00"
+        }
+      ]
+    },
+    {
+      "type": "View",
       "id": "target",
       "width": 200,
       "height": 200,
-      "background": "#DDDDDD",
       "child": [
         {
           "type": "View",
