@@ -141,6 +141,30 @@ RSpec.describe SjuiTools::UIKit::XcodeProject::Setup::AppDelegateSetup do
     }
   SWIFT
 
+  # ⚠️ 既定の SceneDelegate は `scene(_:willConnectTo:)` しか持たない形（実測: ios を
+  #   宣言する木の SceneDelegate は `func scene` 2 本のみ ＝ sceneDid* 0 本）。
+  #   一方で sjui_tools を直に使う木の SceneDelegate は sceneDidBecomeActive などを
+  #   **既に 5 本持つ**ので、「既存メソッドに本文を残したまま注入する」経路も実地で走る。
+  #   両方を検体にする。
+  HotLoaderRegionFixtures::SCENE_DELEGATE_WITH_METHODS = <<~SWIFT
+    import UIKit
+
+    class SceneDelegate: UIResponder, UIWindowSceneDelegate {
+        var window: UIWindow?
+
+        func scene(_ scene: UIScene, willConnectTo session: UISceneSession, options connectionOptions: UIScene.ConnectionOptions) {
+        }
+
+        func sceneDidBecomeActive(_ scene: UIScene) {
+            Analytics.resume()
+        }
+
+        func sceneDidEnterBackground(_ scene: UIScene) {
+            Analytics.pause()
+        }
+    }
+  SWIFT
+
   # scene:
   #   :ok            plist に鍵（従来の fixture）
   #   :pbxproj       plist に鍵なし・pbxproj に [sdk=…] 付きで YES ← plist を生成する面の実形
@@ -153,14 +177,30 @@ RSpec.describe SjuiTools::UIKit::XcodeProject::Setup::AppDelegateSetup do
     FileUtils.mkdir_p(app)
     FileUtils.mkdir_p(File.join(dir, 'App.xcodeproj'))
     scene_path = File.join(app, 'SceneDelegate.swift')
-    File.write(scene_path, HotLoaderRegionFixtures::SCENE_DELEGATE) if scene != :no_file && !File.exist?(scene_path)
+    unless scene == :no_file || File.exist?(scene_path)
+      File.write(scene_path, scene == :scene_has_methods ? HotLoaderRegionFixtures::SCENE_DELEGATE_WITH_METHODS : HotLoaderRegionFixtures::SCENE_DELEGATE)
+    end
     # 宣言源は 2 つ。実測（2026-09-14、build/Pods/SourcePackages を除いた走査根）:
     #   面 A  plist に鍵 0 / pbxproj に 12 行（全て [sdk=…] 付き）
     #   面 B  plist に鍵 3 / pbxproj に 0 行
     # ⇒ 検体も 2 源 × 有無で置く。`:plist` が従来の fixture、`:pbxproj` が plist を生成する面の実形。
-    plist_key = %i[ok plist].include?(scene)
+    # ⚠️ 新しい検体モードを足すときは、ここに宣言源を持たせるのを忘れない。
+    #   :scene_has_methods を足した最初の版は宣言を持たず、SceneDelegate の形でなく
+    #   「Manifest 無し」の警告枝を測っていた（腕が別の主題で赤くなって気づいた）。
+    plist_key = %i[ok plist scene_has_methods].include?(scene)
     plist = plist_key ? "<plist><dict><key>UIApplicationSceneManifest</key><dict/></dict></plist>\n" : "<plist><dict></dict></plist>\n"
     File.write(File.join(app, 'Info.plist'), plist) unless File.exist?(File.join(app, 'Info.plist'))
+    # 同じ深さの plist が 3 本、鍵を持つのは**最短でない 1 本だけ**という形。
+    # 最短パスの 1 本しか読まない実装では、同着の並び順に答えが依存する。
+    if scene == :plist_tie
+      FileUtils.rm_f(File.join(app, 'Info.plist'))
+      tie = File.join(app, 'plists')
+      %w[dev production staging].each_with_index do |env, i|
+        FileUtils.mkdir_p(File.join(tie, env))
+        body = i == 1 ? "<plist><dict><key>UIApplicationSceneManifest</key><dict/></dict></plist>\n" : "<plist><dict></dict></plist>\n"
+        File.write(File.join(tie, env, 'Info.plist'), body)
+      end
+    end
     setting = case scene
               when :pbxproj then '\t\t\t\t"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphoneos*]" = YES;'
               when :pbxproj_bare then "\t\t\t\tINFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;"
@@ -344,6 +384,29 @@ RSpec.describe SjuiTools::UIKit::XcodeProject::Setup::AppDelegateSetup do
           expect(after).not_to include('func applicationDidBecomeActive'), after
         end
       end
+    end
+  end
+
+  it '同じ深さの plist が 3 本あり、鍵を持つのが最短でない 1 本でも見つける' do
+    Dir.mktmpdir do |dir|
+      _after, msg, scene = run_setup(dir, shell(''), scene: :plist_tie)
+      expect(scene).to match(/func\s+sceneDidBecomeActive[^}]*HotLoader/m),
+        "同着の 1 本しか読んでいない ⇒ 走るたびに答えが変わりうる\n#{msg}"
+      expect(msg).not_to include('iOS 27'), msg
+    end
+  end
+
+  it 'SceneDelegate が sceneDid* を既に持つときは本文を残して注入する' do
+    Dir.mktmpdir do |dir|
+      _after, _msg, scene = run_setup(dir, shell(''), scene: :scene_has_methods)
+      expect(scene).to include('Analytics.resume()'), scene
+      expect(scene).to include('Analytics.pause()'), scene
+      %w[sceneDidBecomeActive sceneDidEnterBackground sceneDidDisconnect].each do |m|
+        expect(scene).to match(/func\s+#{m}[^}]*HotLoader\.instance\.isHotLoadEnabled/m), scene
+      end
+      # 既存 2 本 + 生成 1 本。重複して 2 度定義しない。
+      expect(scene.scan('func sceneDidBecomeActive').size).to eq(1), scene
+      expect(scene.count('{')).to eq(scene.count('}'))
     end
   end
 

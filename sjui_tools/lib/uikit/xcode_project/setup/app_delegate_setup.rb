@@ -312,10 +312,12 @@ module SjuiTools
           #   腕は全部緑のまま、実在のプロジェクトには一度も届かない修正になっていた。
           #
           #   走査根から build / Pods / SourcePackages / DerivedData を除いた実測
-          #   (2026-09-14):
-          #     面 A    Info.plist 3 本中 鍵を持つもの 0 / pbxproj に 12 行（全て [sdk=…] 付き）
-          #     面 B    Info.plist 3 本中 鍵を持つもの 3 / pbxproj に 0 行
-          #   ⇒ **どちらの源も実在する**。片方だけ見る述語はどちらかの面で必ず外す。
+          #   (2026-09-14)。分母は**構成の綴り**で書く（面の名前は配布物に入れない）:
+          #     `jui.config.json` が ios を宣言する木（2 本）
+          #         Info.plist 3 本中 鍵を持つもの 0 / pbxproj に 12 行（全て [sdk=…] 付き）
+          #     `sjui.config.json` だけを持ち sjui_tools を直に使う木（1 本）
+          #         Info.plist 3 本中 鍵を持つもの 3 / pbxproj に 0 行
+          #   ⇒ **どちらの源も実在する**。片方だけ見る述語はどちらかの木で必ず外す。
           #
           # 綴りは `[sdk=iphoneos*]` のような条件 suffix が付く形が実在する（面 A は
           # 全行が suffix 付き）。suffix 無しの綴りも Xcode は書くので、両方受ける。
@@ -330,12 +332,16 @@ module SjuiTools
             pbxproj_declares_scene?(project_dir)
           end
 
+          # ⚠️ **全部読む**。最短パスの 1 本だけを読む形（`min_by`）だと、同じ深さの
+          #   plist が複数在るときに実装依存の 1 本が選ばれる。実測 (2026-09-14):
+          #   plist を生成する構成の木は `plists/{dev,staging,production}/Info.plist` の
+          #   3 本が**全部同じ深さ**、plist を保持する構成の木も 3 本が同じ深さ。
+          #   今日はどちらの木も 3 本が同じ答えなので症状は出ないが、1 本だけが鍵を持つ
+          #   構成では**走るたびに答えが変わりうる**（同着の順序は保証されない）。
           def info_plist_declares_scene?(project_dir)
-            plist = Dir.glob("#{project_dir}/**/Info.plist").reject { |path| ignored_path?(path) }
-                       .min_by { |path| path.split("/").length }
-            return false if plist.nil?
-
-            File.read(plist).include?(SCENE_MANIFEST_KEY)
+            Dir.glob("#{project_dir}/**/Info.plist")
+               .reject { |path| ignored_path?(path) }
+               .any? { |path| File.read(path).include?(SCENE_MANIFEST_KEY) }
           rescue StandardError
             false
           end
