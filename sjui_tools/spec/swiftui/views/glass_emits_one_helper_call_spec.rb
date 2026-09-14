@@ -31,6 +31,29 @@
 
 require 'swiftui/views/blur_converter'
 
+# The helper this emitter calls does not exist in the library yet — the iOS
+# lane implements it. So the stub below is a CONTRACT, not a mirror of
+# something already written, and that is the opposite of how every other stub
+# in spec/support works (those are transcribed from a real declaration, and
+# the file says a stub accepting more than the library does lets a wrong
+# argument list pass here and fail in a consumer build).
+#
+# 🔻 WHAT THAT MEANS FOR THIS ARM: compiling against this stub proves the
+# emitted call is well-formed Swift AND that it matches THIS signature. It
+# does NOT prove the library agrees, because the library has nothing to
+# agree with yet. When `sjuiGlassEffect` lands, someone has to check the two
+# against each other — that check does not exist and cannot exist today.
+# Recorded rather than left implicit, because a green compile arm reads as
+# "the library and the codegen agree" to anyone who did not write it.
+GLASS_HELPER_CONTRACT = <<~SWIFT
+  extension View {
+      func sjuiGlassEffect(style: String? = nil,
+                           tint: Color? = nil,
+                           interactive: Bool? = nil,
+                           shape: String? = nil) -> some View { self }
+  }
+SWIFT
+
 RSpec.describe 'glass on the SwiftUI codegen path' do
   before(:all) { SjuiTools::SwiftUI::Views::BaseViewConverter.validation_enabled = false }
   after(:all)  { SjuiTools::SwiftUI::Views::BaseViewConverter.validation_enabled = true }
@@ -125,6 +148,28 @@ RSpec.describe 'glass on the SwiftUI codegen path' do
     it 'emits exactly one helper call per component' do
       out = emit('glass' => { 'style' => 'regular' })
       expect(out.scan('sjuiGlassEffect').size).to eq(1)
+    end
+  end
+
+  describe 'the emitted call is Swift a compiler accepts' do
+    # A string assert is not a compile. These hand the emitted modifier to
+    # swiftc against the contract above, so an argument list that is merely
+    # plausible fails here rather than in a consumer build.
+    it 'the no-argument form type-checks' do
+      expect(compilable_view("Color.clear\n#{glass_line('glass' => true)}",
+                             stubs: GLASS_HELPER_CONTRACT)).to compile_as_swift
+    end
+
+    it 'all four arguments type-check together' do
+      line = glass_line('glass' => { 'style' => 'regular', 'tint' => '#FF0000',
+                                     'interactive' => true, 'shape' => 'capsule' })
+      expect(compilable_view("Color.clear\n#{line}",
+                             stubs: GLASS_HELPER_CONTRACT)).to compile_as_swift
+    end
+
+    it 'interactive: false type-checks (Bool?, not a truthy string)' do
+      expect(compilable_view("Color.clear\n#{glass_line('glass' => { 'interactive' => false })}",
+                             stubs: GLASS_HELPER_CONTRACT)).to compile_as_swift
     end
   end
 
