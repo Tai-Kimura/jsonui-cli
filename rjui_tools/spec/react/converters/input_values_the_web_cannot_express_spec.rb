@@ -59,6 +59,37 @@ RSpec.describe 'input values web cannot express natively' do
     'datetime'      => ['datetime-local', nil,       nil]
   }.freeze
 
+  # Every `type` an <input> may carry, from the HTML Living Standard's input
+  # type table. NOT copied from our implementation and NOT from the SSoT
+  # description -- both of those are the thing under test.
+  #
+  # 🔻 WHY THIS LIST EXISTS. triage ran the mutation this file asked for:
+  #
+  #   implementation only, spelling broken   37 examples, 1 failure
+  #   implementation AND the arm broken      37 examples, 0 failures   <- GREEN
+  #     ('datetime-local' -> 'datetime-locale', one site each)
+  #
+  # The arms were alive -- the first mutation proves it -- and they still
+  # passed a spelling no browser implements, because `expect(type).to
+  # eq('datetime-local')` is a COPY of the implementation's claim, not a
+  # check against anything outside it. An arm is a claim too.
+  #
+  # Membership in this set is a different question from equality with a
+  # remembered string: 'datetime-locale' is not in it whatever the
+  # implementation and the arm above happen to agree on. Breaking the pair
+  # now takes THREE edits instead of two, and the third one is visibly a lie.
+  #
+  # ⚠️ WHAT THIS STILL CANNOT DO: the set is itself written down here, so it
+  # is a transcription like any other. The thing that actually holds React's
+  # own `HTMLInputTypeAttribute` is `tsc`, run over the generated components
+  # by the web-conformance job (measured: 900 components, exit 0). Per-face,
+  # the門 that touches the real API is kotlinc / tsc / swiftc -- never a
+  # sibling assertion in the same language as the code it checks.
+  HTML_INPUT_TYPES = %w[
+    button checkbox color date datetime-local email file hidden image month
+    number password radio range reset search submit tel text time url week
+  ].freeze
+
   let(:config) { { 'use_tailwind' => true } }
 
   def field(value)
@@ -150,6 +181,34 @@ RSpec.describe 'input values web cannot express natively' do
         html = area(value)
         expect(attr_of(html, 'inputMode')).to be_nil
         expect(attr_of(html, 'type')).to be_nil
+      end
+    end
+  end
+
+  describe 'the emitted type is a type the platform has' do
+    LANDING.each do |value, (type, _, _)|
+      it "#{value} emits a real HTML input type" do
+        expect(HTML_INPUT_TYPES).to include(type),
+                                    "type=#{type.inspect} is not an HTML input type; " \
+                                    "no browser implements it and the arm above would " \
+                                    "still pass if the implementation agreed"
+      end
+    end
+
+    it 'the set is not just an echo of what we emit' do
+      # Control for the set: it has to contain types this converter never
+      # produces, or it is the implementation's own output list renamed.
+      emitted = LANDING.values.map(&:first).uniq
+      unused = HTML_INPUT_TYPES - emitted
+      expect(unused.size).to be >= 10, "set #{HTML_INPUT_TYPES.inspect} is too close to #{emitted.inspect}"
+      expect(HTML_INPUT_TYPES).to include('checkbox', 'range', 'week')
+    end
+
+    it 'the near-miss spellings are absent, which is what makes it a check' do
+      # The exact strings triage's mutation used. If any of these were in the
+      # set, the membership arm would pass the broken implementation too.
+      %w[datetime-locale datetime datetimelocal dates times].each do |wrong|
+        expect(HTML_INPUT_TYPES).not_to include(wrong)
       end
     end
   end
