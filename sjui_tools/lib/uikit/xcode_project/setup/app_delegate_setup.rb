@@ -120,7 +120,12 @@ module SjuiTools
 
             # 前版の生成物を落とす。マーカー区間 → 旧生成物（行単位）の順。
             content = strip_generated_regions(content)
-            content = strip_legacy_hotloader_lines(content)
+            stray = []
+            content = strip_legacy_hotloader_lines(content, warnings: stray)
+            stray.uniq.each do |line|
+              puts "Warning: #{line} は生成節から離れた位置に在るので残しました。" \
+                   "二重に実行されるなら手で 1 本消してください（実行順を勝手に変えないためです）。"
+            end
 
             content = add_hotloader_to_did_finish_launching(content)
             # v2: `application*` には注入しない。v1 の区間を剥がした結果 空になった
@@ -156,30 +161,66 @@ module SjuiTools
           #   (1) 生成節の後ろにユーザーが足した行を巻き込み、
           #   (2) HotLoader 以外の `#if DEBUG` を持つメソッドでは閉じ括弧を残さず消して
           #       brace が -1 になりビルドが壊れた（初回 setup で到達する）。
-          def strip_legacy_hotloader_lines(content)
+          #
+          # `only_methods` を渡すと、そのメソッドの本文に在る三行組だけを剥がす。
+          # scene 側で使う: v2 が注入するのは 3 本なので、**注入しないメソッドの
+          # toggle を消すと消費側の挙動が黙って減る**（実測: 裸の三行組を 5 本持つ木が在り、
+          # うち 2 本は v2 の注入先ではない）。
+          #
+          # `UIViewCreator.*` の単独行は、**三行組と連続しているときだけ**剥がす。
+          # 実測: `prepare()` と `copyResourcesToDocuments()` が 13 行離れ、間に消費側の
+          # 初期化が 12 行（ネットワーク / 外観 / Firebase / 通知登録）在る木がある。
+          # 無条件に剥がして先頭へ貼り直すと、**消費側が選んだ実行順が無言で変わる**。
+          # 離れている行は残し、警告で名指しする（二重の `prepare()` は diff に出るが、
+          # 順序の消失は diff に出ない ⇒ 声の大きい失敗を選ぶ）。
+          def strip_legacy_hotloader_lines(content, only_methods: nil, warnings: nil)
             lines = content.lines
-            out = []
+            scope = method_scope(lines)
+            generated = generated_line_indexes(lines, only_methods, scope)
+
+            lines.each_with_index.reject { |line, i| generated.include?(i) }.each do |line, i|
+              next unless line =~ VIEWCREATOR_LINE
+              next unless only_methods.nil? || only_methods.include?(scope[i])
+
+              (warnings ||= []) << line.strip
+            end
+            lines.each_with_index.reject { |_line, i| generated.include?(i) }.map(&:first).join
+          end
+
+          # 各行がどのメソッドの中に在るか
+          def method_scope(lines)
+            current = nil
+            lines.map do |line|
+              if (m = line.match(/\A\s*func\s+(\w+)/))
+                current = m[1]
+              end
+              current
+            end
+          end
+
+          # 「生成された行」= 三行組と、**それに連続する** UIViewCreator 行。
+          # ⚠️ 2 パスにするのは、1 パスで「後から前の行を取り消す」形にすると、
+          #   取り消した行の警告が消し忘れで残るため（実測で踏んだ: 連続しているのに
+          #   「離れている」警告が出た）。生成行の index を先に確定させる。
+          def generated_line_indexes(lines, only_methods, scope)
+            generated = []
             i = 0
             while i < lines.length
-              line = lines[i]
-              if line =~ IF_DEBUG_LINE && lines[i + 1].to_s =~ HOTLOADER_LINE && lines[i + 2].to_s =~ ENDIF_LINE
-                i += 3
-                next
-              end
-              # 単独で在る `UIViewCreator.*` は旧生成物が didFinishLaunching に書いた行なので落とす
-              # （残すと再 setup で二重になる。変異で確認済み）。
-              # ⚠️ 単独の `HotLoader.instance…` は**落とさない**: 三行組の外に在るそれは
-              #   消費側が自分で書いた行でありうる。変異でこの枝を消しても腕が 1 本も
-              #   赤くならず、検体を作って調べたら「冗長」ではなく「消してはいけない物を
-              #   消す枝」だった（下の腕がその境界を守る）。
-              if line =~ VIEWCREATOR_LINE
+              in_scope = only_methods.nil? || only_methods.include?(scope[i])
+              unless in_scope && lines[i] =~ IF_DEBUG_LINE &&
+                     lines[i + 1].to_s =~ HOTLOADER_LINE && lines[i + 2].to_s =~ ENDIF_LINE
                 i += 1
                 next
               end
-              out << line
-              i += 1
+
+              first = i
+              first -= 1 while first.positive? && lines[first - 1] =~ VIEWCREATOR_LINE
+              last = i + 2
+              last += 1 while lines[last + 1].to_s =~ VIEWCREATOR_LINE
+              generated.concat((first..last).to_a)
+              i = last + 1
             end
-            out.join
+            generated
           end
 
           # v1 の区間を剥がした結果、本文が空になった `application*` を畳む。
@@ -288,6 +329,16 @@ module SjuiTools
               content = content.gsub(/^import UIKit/, "import UIKit\nimport SwiftJsonUI")
             end
             content = strip_generated_regions(content)
+            # v2 が注入する 3 本の中の裸の三行組だけを剥がす（重複注入を避ける）。
+            # それ以外のメソッドが持つ toggle は**消さない**: 消すと消費側の挙動が
+            # 黙って減る。代わりに名指しして、区間の外に在ることを伝える。
+            targets = SCENE_LIFECYCLE_METHODS.map(&:first)
+            outside = legacy_toggle_methods(content) - targets
+            content = strip_legacy_hotloader_lines(content, only_methods: targets)
+            unless outside.empty?
+              puts "Note: #{outside.join(', ')} が持つ HotLoader の on/off は生成節の外なので残しました " \
+                   "(sjui が管理するのは #{targets.join(', ')} の 3 本です)。"
+            end
             SCENE_LIFECYCLE_METHODS.each do |name, enabled|
               content = ensure_scene_block(content, name, enabled)
             end
@@ -363,6 +414,22 @@ module SjuiTools
             path.include?("DerivedData") || path.include?("/build/") || path.include?("Pods") ||
               path.include?("Carthage") || path.include?(".build") || path.include?("node_modules") ||
               path.include?("SourcePackages")
+          end
+
+          # 裸の三行組を持つメソッド名を数える（区間の中は数えない）。
+          def legacy_toggle_methods(content)
+            lines = content.lines
+            found = []
+            current = nil
+            lines.each_with_index do |line, i|
+              if (m = line.match(/\A\s*func\s+(\w+)/))
+                current = m[1]
+              end
+              next unless line =~ IF_DEBUG_LINE && lines[i + 1].to_s =~ HOTLOADER_LINE && lines[i + 2].to_s =~ ENDIF_LINE
+
+              found << current if current
+            end
+            found.uniq
           end
 
           def ensure_scene_block(content, method_name, enabled)

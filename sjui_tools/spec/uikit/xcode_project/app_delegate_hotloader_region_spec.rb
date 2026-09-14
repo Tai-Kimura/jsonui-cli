@@ -165,6 +165,37 @@ RSpec.describe SjuiTools::UIKit::XcodeProject::Setup::AppDelegateSetup do
     }
   SWIFT
 
+  # 実測: `sjui.config.json` だけを持つ木の SceneDelegate は、**裸の三行組を 5 本**持つ
+  #   （sceneDidDisconnect / sceneWillResignActive / sceneDidEnterBackground /
+  #     sceneWillEnterForeground / sceneDidBecomeActive）。v2 が注入するのはうち 3 本。
+  #   残り 2 本の toggle は**消さない**——消すと消費側の挙動が黙って減る。
+  HotLoaderRegionFixtures::SCENE_DELEGATE_LEGACY_TOGGLES = <<~SWIFT
+    import UIKit
+
+    class SceneDelegate: UIResponder, UIWindowSceneDelegate {
+        func scene(_ scene: UIScene, willConnectTo session: UISceneSession, options connectionOptions: UIScene.ConnectionOptions) {
+        }
+
+        func sceneDidBecomeActive(_ scene: UIScene) {
+            #if DEBUG
+            HotLoader.instance.isHotLoadEnabled = true
+            #endif
+        }
+
+        func sceneWillResignActive(_ scene: UIScene) {
+            #if DEBUG
+            HotLoader.instance.isHotLoadEnabled = false
+            #endif
+        }
+
+        func sceneWillEnterForeground(_ scene: UIScene) {
+            #if DEBUG
+            HotLoader.instance.isHotLoadEnabled = true
+            #endif
+        }
+    }
+  SWIFT
+
   # scene:
   #   :ok            plist に鍵（従来の fixture）
   #   :pbxproj       plist に鍵なし・pbxproj に [sdk=…] 付きで YES ← plist を生成する面の実形
@@ -178,7 +209,12 @@ RSpec.describe SjuiTools::UIKit::XcodeProject::Setup::AppDelegateSetup do
     FileUtils.mkdir_p(File.join(dir, 'App.xcodeproj'))
     scene_path = File.join(app, 'SceneDelegate.swift')
     unless scene == :no_file || File.exist?(scene_path)
-      File.write(scene_path, scene == :scene_has_methods ? HotLoaderRegionFixtures::SCENE_DELEGATE_WITH_METHODS : HotLoaderRegionFixtures::SCENE_DELEGATE)
+      body = case scene
+             when :scene_has_methods then HotLoaderRegionFixtures::SCENE_DELEGATE_WITH_METHODS
+             when :scene_legacy_toggles then HotLoaderRegionFixtures::SCENE_DELEGATE_LEGACY_TOGGLES
+             else HotLoaderRegionFixtures::SCENE_DELEGATE
+             end
+      File.write(scene_path, body)
     end
     # 宣言源は 2 つ。実測（2026-09-14、build/Pods/SourcePackages を除いた走査根）:
     #   面 A  plist に鍵 0 / pbxproj に 12 行（全て [sdk=…] 付き）
@@ -187,7 +223,7 @@ RSpec.describe SjuiTools::UIKit::XcodeProject::Setup::AppDelegateSetup do
     # ⚠️ 新しい検体モードを足すときは、ここに宣言源を持たせるのを忘れない。
     #   :scene_has_methods を足した最初の版は宣言を持たず、SceneDelegate の形でなく
     #   「Manifest 無し」の警告枝を測っていた（腕が別の主題で赤くなって気づいた）。
-    plist_key = %i[ok plist scene_has_methods].include?(scene)
+    plist_key = %i[ok plist scene_has_methods scene_legacy_toggles].include?(scene)
     plist = plist_key ? "<plist><dict><key>UIApplicationSceneManifest</key><dict/></dict></plist>\n" : "<plist><dict></dict></plist>\n"
     File.write(File.join(app, 'Info.plist'), plist) unless File.exist?(File.join(app, 'Info.plist'))
     # 同じ深さの plist が 3 本、鍵を持つのは**最短でない 1 本だけ**という形。
@@ -219,6 +255,23 @@ RSpec.describe SjuiTools::UIKit::XcodeProject::Setup::AppDelegateSetup do
     end
     scene_text = File.exist?(scene_path) ? File.read(scene_path) : nil
     [File.read(path), out.string, scene_text]
+  end
+
+  # 生成区間を落とした本文。生成行と消費側の行は綴りが同じことがあるので、
+  # 区間の外だけを見ないと「生成された方」を測ってしまう（この腕で 1 回踏んだ）。
+  def outside_regions(text)
+    inside = false
+    text.lines.reject do |line|
+      if line.include?(HotLoaderRegionFixtures::MARKER)
+        inside = true
+        true
+      elsif line.include?('sjui:hotloader:end')
+        inside = false
+        true
+      else
+        inside
+      end
+    end.join
   end
 
   def user_lines(text)
@@ -407,6 +460,75 @@ RSpec.describe SjuiTools::UIKit::XcodeProject::Setup::AppDelegateSetup do
       # 既存 2 本 + 生成 1 本。重複して 2 度定義しない。
       expect(scene.scan('func sceneDidBecomeActive').size).to eq(1), scene
       expect(scene.count('{')).to eq(scene.count('}'))
+    end
+  end
+
+  it '裸の三行組を持つ SceneDelegate: 注入先 3 本は区間に畳まれ、注入先でない toggle は残る' do
+    Dir.mktmpdir do |dir|
+      _after, msg, scene = run_setup(dir, shell(''), scene: :scene_legacy_toggles)
+      # 注入先（sceneDidBecomeActive）: 裸の三行組は消えて区間 1 つだけ。二重にしない。
+      body = scene[/func sceneDidBecomeActive.*?\n    \}/m]
+      expect(body.scan('HotLoader.instance.isHotLoadEnabled').size).to eq(1), body
+      expect(body).to include('sjui:hotloader:begin')
+      # 注入先でない 2 本: 消さない（消すと消費側の挙動が黙って減る）
+      %w[sceneWillResignActive sceneWillEnterForeground].each do |m|
+        kept = scene[/func #{m}.*?\n    \}/m]
+        expect(kept.scan('HotLoader.instance.isHotLoadEnabled').size).to eq(1), kept
+        expect(kept).not_to include('sjui:hotloader:begin'), kept
+      end
+      # 残したことは黙らない
+      expect(msg).to include('sceneWillResignActive'), msg
+      expect(msg).to include('sceneWillEnterForeground'), msg
+      expect(scene.count('{')).to eq(scene.count('}'))
+    end
+  end
+
+  it 'UIViewCreator が生成節から離れていれば残し、警告する（消費側が選んだ実行順を壊さない）' do
+    Dir.mktmpdir do |dir|
+      # 実測の形: prepare() と copyResourcesToDocuments() が 13 行離れ、間に消費側の初期化。
+      spaced = <<~SWIFT
+        import UIKit
+        @main
+        class AppDelegate: UIResponder, UIApplicationDelegate {
+            func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
+                UIViewCreator.prepare()
+                Network.loadCookie()
+                FirebaseApp.configure()
+                UIViewCreator.copyResourcesToDocuments()
+                return true
+            }
+        }
+      SWIFT
+      after, msg, = run_setup(dir, spaced)
+      # ⚠️ 区間の中にも同じ綴りの行が生成されるので、区間を落としてから順序を見る。
+      lines = outside_regions(after).lines.map(&:strip)
+      expect(lines.index('UIViewCreator.prepare()')).to be < lines.index('Network.loadCookie()')
+      expect(lines.index('Network.loadCookie()')).to be < lines.index('FirebaseApp.configure()')
+      expect(lines.index('FirebaseApp.configure()')).to be < lines.index('UIViewCreator.copyResourcesToDocuments()')
+      expect(msg).to include('生成節から離れた位置'), msg
+    end
+  end
+
+  it '生成節と連続している UIViewCreator は剥がして貼り直す（重複しない）' do
+    Dir.mktmpdir do |dir|
+      contiguous = <<~SWIFT
+        import UIKit
+        @main
+        class AppDelegate: UIResponder, UIApplicationDelegate {
+            func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
+                UIViewCreator.prepare()
+                UIViewCreator.copyResourcesToDocuments()
+                #if DEBUG
+                HotLoader.instance.isHotLoadEnabled = true
+                #endif
+                return true
+            }
+        }
+      SWIFT
+      after, msg, = run_setup(dir, contiguous)
+      expect(after.scan('UIViewCreator.prepare()').size).to eq(1), after
+      expect(after.scan('UIViewCreator.copyResourcesToDocuments()').size).to eq(1), after
+      expect(msg).not_to include('生成節から離れた位置'), msg
     end
   end
 
