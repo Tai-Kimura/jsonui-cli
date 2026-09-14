@@ -109,8 +109,11 @@ kwargs や属性を通すときは **lib/compose/ 全体を grep** する。sink
 
 - 🚨 **Android 17 以降、回転で IME の表示状態は復元されない**（targetSdk 不問、全アプリに効く）。
   **ライブラリは復元を担わない。担えない**——`FocusManager`（library-dynamic）は
-  `MutableSharedFlow<String>(extraBufferCapacity = 1)` の **replay 0**、つまり**状態でなくイベントバス**で、
+  `MutableSharedFlow<String>(extraBufferCapacity = 1)`、つまり**状態でなくイベントバス**で、
   構成変更後に `LaunchedEffect` が購読し直しても**直前の focus 要求は再配信されない**。
+  ⚠️ **`extraBufferCapacity` と `replay` は別軸**。buffer は emit 側が suspend しないための容量で、
+  **新しい購読者に過去の値を配るのは `replay` のほう**。ここは `replay` を渡していない＝**既定の 0** なので、
+  購読し直した側には何も届かない。`extraBufferCapacity = 1` を「直前の 1 件を配る」と読むと逆の結論になる。
   実装漏れではなく設計（`FocusManager.requestFocus` は submit 時の次フィールド送りが用途）。
   ライブラリが一律に再表示すると、意図しない IME 出現を作る。
   ⇒ **復元が要る画面は消費側の責務**: `windowSoftInputMode="stateAlwaysVisible"` か、
