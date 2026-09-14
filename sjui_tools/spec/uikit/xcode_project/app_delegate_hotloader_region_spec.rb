@@ -130,10 +130,26 @@ RSpec.describe SjuiTools::UIKit::XcodeProject::Setup::AppDelegateSetup do
   # 実エントリを撃つ。抽出した private メソッドではない
   # （抽出計器での測定は「その関数の主張」であって「コマンドの主張」ではない:
   #  初報はそれで、早期 return の手前で起きない欠陥を major として起票した）。
-  def run_setup(dir, source)
+  HotLoaderRegionFixtures::SCENE_DELEGATE = <<~SWIFT
+    import UIKit
+
+    class SceneDelegate: UIResponder, UIWindowSceneDelegate {
+        var window: UIWindow?
+
+        func scene(_ scene: UIScene, willConnectTo session: UISceneSession, options connectionOptions: UIScene.ConnectionOptions) {
+        }
+    }
+  SWIFT
+
+  # scene: :ok（SceneDelegate + Manifest あり）/ :no_file / :no_manifest
+  def run_setup(dir, source, scene: :ok)
     app = File.join(dir, 'App')
     FileUtils.mkdir_p(app)
     FileUtils.mkdir_p(File.join(dir, 'App.xcodeproj'))
+    scene_path = File.join(app, 'SceneDelegate.swift')
+    File.write(scene_path, HotLoaderRegionFixtures::SCENE_DELEGATE) if scene != :no_file && !File.exist?(scene_path)
+    plist = scene == :no_manifest ? "<plist><dict></dict></plist>\n" : "<plist><dict><key>UIApplicationSceneManifest</key><dict/></dict></plist>\n"
+    File.write(File.join(app, 'Info.plist'), plist) unless File.exist?(File.join(app, 'Info.plist'))
     path = File.join(app, 'AppDelegate.swift')
     File.write(path, source) unless source.nil?
     out = StringIO.new
@@ -143,7 +159,8 @@ RSpec.describe SjuiTools::UIKit::XcodeProject::Setup::AppDelegateSetup do
     ensure
       $stdout = STDOUT
     end
-    [File.read(path), out.string]
+    scene_text = File.exist?(scene_path) ? File.read(scene_path) : nil
+    [File.read(path), out.string, scene_text]
   end
 
   def user_lines(text)
@@ -169,13 +186,20 @@ RSpec.describe SjuiTools::UIKit::XcodeProject::Setup::AppDelegateSetup do
         end
       end
 
-      it 'ライフサイクル 3 本すべてに HotLoader の on/off が入る' do
+      it 'on/off は SceneDelegate の 3 メソッドに入る（v2: application* には入れない）' do
         Dir.mktmpdir do |dir|
-          after, = run_setup(dir, source)
-          %w[applicationDidBecomeActive applicationDidEnterBackground applicationWillTerminate].each do |m|
-            expect(after).to match(/func\s+#{m}[^}]*HotLoader\.instance\.isHotLoadEnabled/m),
-              "#{m} に注入されていない\n#{after}"
+          after, _msg, scene = run_setup(dir, source)
+          %w[sceneDidBecomeActive sceneDidEnterBackground sceneDidDisconnect].each do |m|
+            expect(scene).to match(/func\s+#{m}[^}]*HotLoader\.instance\.isHotLoadEnabled/m),
+              "SceneDelegate の #{m} に注入されていない\n#{scene}"
           end
+          # iOS 27 では application* は呼ばれない。ここに残すと黙って死ぬので入れない。
+          %w[applicationDidBecomeActive applicationDidEnterBackground applicationWillTerminate].each do |m|
+            expect(after).not_to match(/func\s+#{m}[^}]*HotLoader\.instance\.isHotLoadEnabled/m),
+              "AppDelegate の #{m} に残っている\n#{after}"
+          end
+          # didFinishLaunching の prepare / copyResources は AppDelegate に残る
+          expect(after).to include('UIViewCreator.prepare()')
         end
       end
 
@@ -193,7 +217,7 @@ RSpec.describe SjuiTools::UIKit::XcodeProject::Setup::AppDelegateSetup do
           after, = run_setup(dir, source)
           expect(after.scan('UIViewCreator.prepare()').size).to eq(1), after
           expect(after.scan('UIViewCreator.copyResourcesToDocuments()').size).to eq(1), after
-          expect(after.scan('HotLoader.instance.isHotLoadEnabled').size).to eq(4), after
+          expect(after.scan('HotLoader.instance.isHotLoadEnabled').size).to eq(1), after
         end
       end
 
@@ -209,10 +233,13 @@ RSpec.describe SjuiTools::UIKit::XcodeProject::Setup::AppDelegateSetup do
         end
       end
 
-      it '生成した区間はマーカーで囲まれている' do
+      it '生成した区間はマーカーで囲まれている（AppDelegate 1 / SceneDelegate 3）' do
         Dir.mktmpdir do |dir|
-          after, = run_setup(dir, source)
-          expect(after.scan(HotLoaderRegionFixtures::MARKER).size).to eq(4)
+          after, _msg, scene = run_setup(dir, source)
+          expect(after.scan(HotLoaderRegionFixtures::MARKER).size).to eq(1)
+          expect(scene.scan(HotLoaderRegionFixtures::MARKER).size).to eq(3)
+          expect(after.scan('sjui:hotloader:end').size).to eq(1)
+          expect(scene.scan('sjui:hotloader:end').size).to eq(3)
         end
       end
     end
@@ -220,10 +247,11 @@ RSpec.describe SjuiTools::UIKit::XcodeProject::Setup::AppDelegateSetup do
 
   it '前の版の区間は貼り替わり、区間の外のユーザー行は残る（版を上げた setup が既存プロジェクトに届く）' do
     Dir.mktmpdir do |dir|
-      after, msg = run_setup(dir, shell(HotLoaderRegionFixtures::SHAPES[:old_version_region]))
+      after, msg, scene = run_setup(dir, shell(HotLoaderRegionFixtures::SHAPES[:old_version_region]))
       expect(msg).not_to include('already up to date'), '古い版の区間が素通りした ⇒ 版を上げても届かない'
       expect(after).not_to include(HotLoaderRegionFixtures::OLD_VERSION_REGION)
-      expect(after.scan(HotLoaderRegionFixtures::MARKER).size).to eq(4)
+      expect(after.scan(HotLoaderRegionFixtures::MARKER).size).to eq(1)
+      expect(scene.scan(HotLoaderRegionFixtures::MARKER).size).to eq(3)
       expect(after).to include('Analytics.resume()')
     end
   end
@@ -252,6 +280,54 @@ RSpec.describe SjuiTools::UIKit::XcodeProject::Setup::AppDelegateSetup do
       end
       expect(outside.join).to include('HotLoader.instance.isHotLoadEnabled = true'),
         "区間の外の手書き行を消した\n#{after}"
+    end
+  end
+
+  it 'v1 の生成メソッド（区間だけの本体）は v2 移行で AppDelegate から消える' do
+    Dir.mktmpdir do |dir|
+      # 区間しか持たない = 完全に生成物。剥がしたら空になるので、畳んで消す。
+      # ⚠️ 消費側の行が 1 行でも在れば消さない（上の old_version_region 検体がその側）。
+      pure_generated = shell(<<~SWIFT)
+            func applicationDidBecomeActive(_ application: UIApplication) {
+                #{HotLoaderRegionFixtures::OLD_VERSION_REGION}
+                #if DEBUG
+                HotLoader.instance.isHotLoadEnabled = true
+                #endif
+                // sjui:hotloader:end
+            }
+      SWIFT
+      after, _msg, scene = run_setup(dir, pure_generated)
+      expect(after).not_to include('func applicationDidBecomeActive'),
+        "空になった生成メソッドが AppDelegate に残った\n#{after}"
+      expect(scene).to match(/func\s+sceneDidBecomeActive[^}]*HotLoader/m)
+      expect(after.count('{')).to eq(after.count('}'))
+    end
+  end
+
+  # ── scene が無い / Manifest が無い ──────────────────────────────
+  # 黙って AppDelegate 側へ戻すと、アプリが scene 化した後の再 setup で旧型に
+  # 巻き戻り、消費側は壊れたことに気づけない。だから警告して**戻さない**。
+  %i[no_file no_manifest].each do |missing|
+    it "SceneDelegate が届かない（#{missing}）ときは警告し、AppDelegate へ戻さない" do
+      Dir.mktmpdir do |dir|
+        after, msg, = run_setup(dir, shell(''), scene: missing)
+        expect(msg).to include('iOS 27'), msg
+        expect(msg).to match(/UIScene|UIApplicationSceneManifest/), msg
+        %w[applicationDidBecomeActive applicationDidEnterBackground applicationWillTerminate].each do |m|
+          expect(after).not_to include("func #{m}"), "AppDelegate へ戻した\n#{after}"
+        end
+        # didFinishLaunching 側の準備は届く（ホットリロードの on/off だけが欠ける）
+        expect(after).to include('UIViewCreator.prepare()')
+      end
+    end
+  end
+
+  it '警告は毎回出る（届かないままの状態を「最新」と黙らない）' do
+    Dir.mktmpdir do |dir|
+      _, first, = run_setup(dir, shell(''), scene: :no_file)
+      _, second, = run_setup(dir, nil, scene: :no_file)
+      expect(first).to include('iOS 27')
+      expect(second).to include('iOS 27'), "2 回目が黙った ⇒ 届いていないのに up to date 扱い\n#{second}"
     end
   end
 
@@ -328,9 +404,12 @@ RSpec.describe SjuiTools::UIKit::XcodeProject::Setup::AppDelegateSetup do
     HotLoaderRegionFixtures::SHAPES.each_key do |name|
       it "検体 #{name} の生成物が typecheck を通る" do
         Dir.mktmpdir do |dir|
-          after, = run_setup(dir, shell(HotLoaderRegionFixtures::SHAPES[name], HotLoaderRegionFixtures::DID_FINISH[name]))
+          after, _msg, scene = run_setup(dir, shell(HotLoaderRegionFixtures::SHAPES[name], HotLoaderRegionFixtures::DID_FINISH[name]))
           ok, out = typecheck(compilable(after))
-          expect(ok).to be(true), "#{out}\n---\n#{after}"
+          expect(ok).to be(true), "AppDelegate:\n#{out}\n---\n#{after}"
+          # v2 では on/off の本体は SceneDelegate 側。同じ窓で見る。
+          ok2, out2 = typecheck(compilable(scene))
+          expect(ok2).to be(true), "SceneDelegate:\n#{out2}\n---\n#{scene}"
         end
       end
     end
