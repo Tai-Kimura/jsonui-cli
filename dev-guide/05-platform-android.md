@@ -123,6 +123,22 @@ kwargs や属性を通すときは **lib/compose/ 全体を grep** する。sink
   **この挙動はホストには届かない**。テストランナー側も「キーボードが表示されている」ことを
   **assert する腕は 0 本**（`isKeyboardShown` は `hideKeyboard` アクションの private helper で、
   schema はアクションとしてのみ公開）。非復元は `hideKeyboard` を **no-op 側**に倒すので、期待値が反転する腕は無い。
+- 🚨 **`publishToMavenLocal` は「無害な検証」ではない。`mavenLocal()` を `mavenCentral()` より先に置く
+  消費側が 1 つでも在れば、それは *その面への配布* である。**（2026-09-14 のインシデント）
+  - `~/.m2` は**機械全体で共有**。**同じ版番号のまま中身が入れ替わる**ので、
+    「`<version>` で build した」という記録が、その時刻以降**2 つの別物を指す**。
+    引いた側に合図は 1 つも出ない —— 版番号は同じ、gradle は警告を出さない、ビルドは緑。
+  - 実測例: ソースは同一で `compileSdk` / AGP / Compose BOM だけ違うビルドが 495,291 B、
+    中央のリリース版が 498,120 B。**ソースを 1 行も変えなくても別物になる。**
+  - **上書きは痕跡を残さない**（mtime は上書きした側の物になる）。⇒ 先に何が在ったかは**事後には分からない**。
+    消して原状復帰する前に、**引いている面の担当に聞く**。
+  - 判別子: その座標に `_remote.repositories` が**無く** `maven-metadata-local.xml` だけ在るなら、
+    中央から落ちた物ではなく**誰かがローカル install した物**。
+  - **撃つ前に測る**: 消費側の `settings.gradle.kts` / `build.gradle.kts` を `mavenLocal` で grep し、
+    在るならその順序を読む。⚠️ **消費側が submodule なら親から `git grep` を撃っても 0 件に見える**
+    （tracked が親に無い）。**disk の `find` で撃つこと** —— 「無い」と「窓が届いていない」は同じ 0 を返す。
+  - **汚さない代替**: 依存を差し替えて検証したいだけなら gradle の
+    **init script（`-I`）＋ `dependencySubstitution`**。`~/.m2` に触らない。
 - **responsive はインライン emit が正**: ファイルスコープ helper へ抽出すると
   `data`/`viewModel`/scope が漏れ `Modifier.weight` が壊れる（過去バグ多数、
   compose_builder.rb に長文コメントあり）。`LocalWindowInfo`/`LocalDensity` を使う
