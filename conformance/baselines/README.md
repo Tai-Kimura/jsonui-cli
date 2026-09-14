@@ -160,21 +160,39 @@ outside the band is still a fact about one device, so the declaration stands.
 Record what rendered a set with `--rendered-by`, which is the other half of
 the same question:
 
+🔑 **`--fail-on-moved` IS IN EVERY RECIPE BELOW ON PURPOSE.** Without it the
+bake prints the `MOVED` list and exits 0, so the only thing standing between a
+regression and the baseline is whether a person read past the end of a long
+output. With it the bake STOPS and names the count. The flag is not a
+correctness setting — it is the step that forces the reading.
+
 ```sh
-jui conformance baseline update --platform ios --env local \
+jui conformance baseline update --platform ios --env local --fail-on-moved \
   --artifacts <run>/artifacts/ios --rendered-by swiftjsonui=<sha>
 ```
 
 ```sh
 # bake the ci set from downloaded CI artifacts:
-jui conformance baseline update --platform ios --env ci --artifacts <downloaded>/artifacts/ios
+jui conformance baseline update --platform ios --env ci --fail-on-moved \
+  --artifacts <downloaded>/artifacts/ios
 ```
+
+**When it exits non-zero** (`ERROR: --fail-on-moved and N entr(y/ies) moved`):
+read every `MOVED` line — each carries its own hamming distance — and decide
+per entry whether that picture SHOULD have changed. `unstable` lines are a
+different list and never enter `N`. Then re-run the same command WITHOUT the
+flag to write the baseline. Dropping the flag is the record that a person
+looked; skipping it means no one did.
+
+⚠️ Measured 2026-09-15: on the bake that carried the glass change, the flag
+exits 1 with "2 entr(y/ies) moved", and on a re-run against the already-baked
+set it exits 0 with `moved 0`. It fires on the thing and not on everything.
 
 ## Workflow
 
 ```sh
 # after a green suite run on <platform> (local machine):
-jui conformance baseline update --platform web     # records under baselines/local/
+jui conformance baseline update --platform web --fail-on-moved   # under baselines/local/
 jui conformance report                             # compares artifacts vs baselines/local/
 ```
 
@@ -262,16 +280,28 @@ deliberately NOT in the set. It is named here so the next person sees it.
 the exact check, by name. The next unstable class arrives as a named
 refusal, not as a repeat of the 09-05 investigation.
 
-🔻 **"SMALL DISTANCE" IS NOT A MEMBERSHIP TEST, AND READING IT AS ONE IS A
-MISTAKE THAT HAS BEEN MADE.** The bake prints the moved entries and separately
-prints how many were exempt; a reader who sees a handful of 2-and-3 hamming
-moves and writes them all off as "animated / async" is inferring membership
-from the distance. On 2026-09-15 six entries moved in a `ci/` bake and five of
-them were small — but only FOUR were in the set. The fifth, `control_Web.png`,
-is not exempt at all: it moved because its picture is nearly BLANK (the iOS
-Web host renders no content, so after the chrome crop the dHash was all
-zeroes), and a nearly-blank picture has few bits to move. Same small number,
-entirely different reason.
+🔻 **"SMALL DISTANCE" IS NOT A MEMBERSHIP TEST — AND THE BAKE NEVER ASKED YOU
+TO GUESS.** Its output already separates the two, with different words and
+different counters:
+
+```
+  new 0  same 861  moved 2  dropped 0
+    MOVED    common_glass__true.png  hamming=151  -> REWRITTEN
+    MOVED    control_Web.png         hamming=2    -> REWRITTEN
+  visual-stability: 18 screenshot(s) exempt from the exact check; 4 differed this run
+    unstable Indicator_color__static.png  hamming=2  (not exact-checked: animated …)
+    …
+```
+
+`moved` is **2**. The four exempt ones are counted separately and never enter
+that number. On 2026-09-15 this output was read with `tail -5`, which showed
+three `unstable` lines and the closing warning; from those three the reader
+generalised "the small ones are all animated/async" over SIX hash differences —
+a denominator taken from a JSON diff rather than from the tool, and a
+classification invented to fit it. `control_Web.png` is printed as `MOVED`.
+
+It moved because its picture is nearly blank, so few bits can change — the same
+small hamming number a spinner produces for the opposite reason.
 
 ⇒ Membership is answered by `visual_stability.unstable_screenshots()`, which
 returns the names. Ask it; do not infer it from a hamming column.

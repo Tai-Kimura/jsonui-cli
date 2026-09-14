@@ -25,7 +25,9 @@ npm run conformance               # build + serve + execute + write results
 `conformance/artifacts/web/` (gitignored — the committed regression signal
 is `conformance/baselines/local/web.hashes.json`). Then render the matrix with
 `jui conformance report`; after reviewing intentional visual changes,
-record them with `jui conformance baseline update --platform web`
+record them with `jui conformance baseline update --platform web --fail-on-moved`
+(it stops on any changed picture so the review is forced; re-run without the
+flag once you have read the `MOVED` lines)
 (see `conformance/baselines/README.md`).
 
 ### Options

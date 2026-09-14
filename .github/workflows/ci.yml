@@ -689,7 +689,10 @@ jobs:
         # changes the fixture set, this lane goes red on no_baseline — bake
         # from THIS lane's uploaded artifacts (never a local render):
         #   jui conformance baseline update --platform web --env ci \
-        #     --artifacts <downloaded>/artifacts/web
+        #     --fail-on-moved --artifacts <downloaded>/artifacts/web
+        # (--fail-on-moved stops the bake and names how many existing pictures
+        # changed; read every MOVED line, then re-run without it. Absent, a
+        # regression is absorbed by a bake that exits 0.)
         # and commit baselines/ci/web.hashes.json with the change.
         # For ios/android add --rendered-by swiftjsonui=<sha> (resp.
         # kotlinjsonui=<sha>) with the commit that run checked out: the

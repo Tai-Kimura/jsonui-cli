@@ -70,7 +70,11 @@
   閾値はマニフェスト格納 — 共有既定 8、ci/android のみ 12〈taskbar recents の
   インスタンス間二値、`baselines/README.md` の較正記録参照〉）。PNG はコミットしない。
 - レポート: `jui conformance report` → `REPORT.md`（クロスプラットフォーム mismatch 表が主ゲート）。
-  baseline 更新: `jui conformance baseline update --platform <p> [--env <e>] [--threshold N]`。
+  baseline 更新: `jui conformance baseline update --platform <p> [--env <e>] --fail-on-moved`。
+  **`--fail-on-moved` は既定 off で、付けないと既存の絵が変わっても exit 0 で焼ける**
+  （吸収された regression は regression でなくなる）。赤で止まったら `MOVED` 行を
+  1 本ずつ読み、意図した変化だと判断してから旗を外して焼き直す。`unstable` 行は
+  別集合で件数に入らない。
   **ci ベースラインは CI アーティファクトから焼く**（ローカルレンダ厳禁 — manifest が env を
   記録し、別 env での比較は loader が拒否する）。
 - **parity（dynamic ≡ codegen）**: `jui conformance parity --platform <ios|android> [--env e]`
