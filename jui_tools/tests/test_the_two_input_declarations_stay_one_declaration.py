@@ -90,6 +90,13 @@ class TheDegradationsAreStillWrittenDown(unittest.TestCase):
         "textarea": "the element with no type attribute, which is WHY TextView "
                     "cannot honour the date family",
         "datetime-local": "the web spelling, shared with SelectBox's datepicker",
+        "DecimalSigned": "the Compose member that actually EXISTS. The plan for this "
+                         "work named it SignedDecimal, which does not, and this "
+                         "description repeated the plan until 2026-09-14 while the "
+                         "emitter already emitted the real one — the declaration named "
+                         "a member no compiler would accept. Both spellings are in "
+                         "the text deliberately, so a grep for SignedDecimal returns "
+                         "the correction, not the defect",
     }
 
     #: The superseded pair says in its own description that it is superseded and
