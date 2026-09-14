@@ -22,7 +22,7 @@ module JsonUI
         { name: 'accessoryCornerRadius', kind: :number }.freeze,
         # Input accessory toolbar text color - hex string or color name from colors.json. UIKit only (see accessoryBackground).
         { name: 'accessoryTextColor', kind: :string }.freeze,
-        # Apply liquid glass effect
+        # Apply liquid glass effect. SUPERSEDED by the common attribute 'glass' as of 2026-09-14. The fold from this spelling to glass belongs to the normalizer and IS NOT IMPLEMENTED YET, so both spellings are live: this one stays TextField-only, UIKit-only and backed by UIBlurEffect, while glass is declared on common for SwiftUI and UIKit. Nothing breaks while both exist - they do not overlap in platform, mode or component - but a layout should be written against glass.
         { name: 'applyLiquidGlass', kind: :boolean }.freeze,
         # Auto-capitalization type. UIKit's vocabulary, honoured on every platform (.textInputAutocapitalization / KeyboardCapitalization / the HTML autocapitalize attribute). `characters` is an accepted alias spelling of allCharacters.
         { name: 'autocapitalizationType', kind: :enum, values: ['none', 'words', 'sentences', 'allCharacters', 'characters'].freeze }.freeze,
@@ -50,7 +50,7 @@ module JsonUI
         { name: 'fontFamily', kind: :string, bindable: true }.freeze,
         # Font size (binding supported)
         { name: 'fontSize', kind: :number, bindable: true }.freeze,
-        # Glass effect style
+        # Glass effect style. SUPERSEDED by glass.style as of 2026-09-14. As with applyLiquidGlass, the normalizer fold is NOT IMPLEMENTED YET and both spellings are live.
         { name: 'glassEffectStyle', kind: :string }.freeze,
         # Has container view [DEPRECATED: hasContainer is a UIKit-only behavior.]
         { name: 'hasContainer', kind: :boolean }.freeze,
@@ -68,8 +68,8 @@ module JsonUI
         { name: 'hintFontSize', kind: :number }.freeze,
         # Placeholder line height multiplier. Declared from the implementation, which already read it: sjui textfield_converter.rb:153 and textview_converter.rb:93,117 (EditText/Input follow via _alias_of) (plan 51-E).
         { name: 'hintLineHeightMultiple', kind: :number }.freeze,
-        # Input type (includes 'allphabet' typo for backward compatibility)
-        { name: 'input', kind: :enum, values: ['default', 'alphabet', 'allphabet', 'email', 'number', 'phone', 'url', 'password', 'decimal'].freeze }.freeze,
+        # Input type (includes 'allphabet' typo for backward compatibility). Not every face can express every value, and the degradations are declared here so that an implementer does not rediscover them one at a time. Android is the only face where all four of the values added in 1.8.8x land natively (Compose 1.12 KeyboardType.Date / Time / DateTime / SignedDecimal). web, TextField: date, time and datetime are not inputmode values; they change the element type to date, time and datetime-local, which is the path SelectBox's datepicker already takes. web, TextView: a textarea has no type attribute at all, so those three degrade to plain text there and the declared value cannot be honoured. web, inputmode: signedDecimal has no inputmode of its own and must share decimal with the decimal value above, so on web the two are INDISTINGUISHABLE. web, type: number and decimal already collapse to type=number, and signedDecimal joins them. iOS: UIKeyboardType has no member for the date family, so they fall back to .default, and signedDecimal to .numbersAndPunctuation.
+        { name: 'input', kind: :enum, values: ['default', 'alphabet', 'allphabet', 'email', 'number', 'phone', 'url', 'password', 'decimal', 'signedDecimal', 'date', 'time', 'datetime'].freeze }.freeze,
         # Input type for Android (Android-only; `input` is the cross-platform attribute). Both the JsonUI spellings and the raw android:inputType names the frozen XML mapper passed through are accepted; the latter normalize to the former.
         { name: 'inputType', kind: :enum, values: ['text', 'number', 'numberDecimal', 'phone', 'email', 'password', 'multiline', 'textEmailAddress', 'textPassword'].freeze }.freeze,
         # Left view configuration

@@ -8,11 +8,11 @@
     "agentWarning": "LLM/Agent: you MUST NOT modify this file."
   },
   "schemaVersion": 2,
-  "generatedFrom": "9b3be7ca1208fb09161bc7964934ab6f31c4e920400f4eac2a904e2eaa1752d4",
+  "generatedFrom": "7b8c8c69f485a1360494da5061902b863e4924017bbd39aa04185fd96c70f5c5",
   "counts": {
-    "fixtures": 1088,
+    "fixtures": 1098,
     "assertable": 49,
-    "visual": 812,
+    "visual": 822,
     "interactive": 37,
     "control": 112,
     "declarationOnly": 77,
@@ -22,6 +22,56 @@
     }
   },
   "fixtures": [
+    {
+      "id": "common/glass__true",
+      "component": "common",
+      "attribute": "glass",
+      "case": "true",
+      "class": "visual",
+      "host": "View",
+      "writtenKey": "glass",
+      "aliasOf": null,
+      "value": true,
+      "platforms": [
+        "ios"
+      ],
+      "mode": [
+        "uikit",
+        "swiftui"
+      ],
+      "deprecated": null,
+      "layout": "fixtures/common/glass__true.layout.json",
+      "test": "fixtures/common/glass__true.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": "common/glass@View",
+      "control": "__control/View"
+    },
+    {
+      "id": "common/glass__false",
+      "component": "common",
+      "attribute": "glass",
+      "case": "false",
+      "class": "visual",
+      "host": "View",
+      "writtenKey": "glass",
+      "aliasOf": null,
+      "value": false,
+      "platforms": [
+        "ios"
+      ],
+      "mode": [
+        "uikit",
+        "swiftui"
+      ],
+      "deprecated": null,
+      "layout": "fixtures/common/glass__false.layout.json",
+      "test": "fixtures/common/glass__false.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": "common/glass@View",
+      "control": "__control/View"
+    },
     {
       "id": "common/width__matchparent",
       "component": "common",
@@ -8599,6 +8649,102 @@
       "control": null
     },
     {
+      "id": "TextField/input__signeddecimal",
+      "component": "TextField",
+      "attribute": "input",
+      "case": "signeddecimal",
+      "class": "visual",
+      "host": "TextField",
+      "writtenKey": "input",
+      "aliasOf": null,
+      "value": "signedDecimal",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/TextField/input__signeddecimal.layout.json",
+      "test": "fixtures/TextField/input__signeddecimal.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": null,
+      "control": null
+    },
+    {
+      "id": "TextField/input__date",
+      "component": "TextField",
+      "attribute": "input",
+      "case": "date",
+      "class": "visual",
+      "host": "TextField",
+      "writtenKey": "input",
+      "aliasOf": null,
+      "value": "date",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/TextField/input__date.layout.json",
+      "test": "fixtures/TextField/input__date.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": null,
+      "control": null
+    },
+    {
+      "id": "TextField/input__time",
+      "component": "TextField",
+      "attribute": "input",
+      "case": "time",
+      "class": "visual",
+      "host": "TextField",
+      "writtenKey": "input",
+      "aliasOf": null,
+      "value": "time",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/TextField/input__time.layout.json",
+      "test": "fixtures/TextField/input__time.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": null,
+      "control": null
+    },
+    {
+      "id": "TextField/input__datetime",
+      "component": "TextField",
+      "attribute": "input",
+      "case": "datetime",
+      "class": "visual",
+      "host": "TextField",
+      "writtenKey": "input",
+      "aliasOf": null,
+      "value": "datetime",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/TextField/input__datetime.layout.json",
+      "test": "fixtures/TextField/input__datetime.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": null,
+      "control": null
+    },
+    {
       "id": "TextField/inputType__text",
       "component": "TextField",
       "attribute": "inputType",
@@ -11058,6 +11204,102 @@
       "deprecated": null,
       "layout": "fixtures/TextView/input__decimal.layout.json",
       "test": "fixtures/TextView/input__decimal.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": null,
+      "control": null
+    },
+    {
+      "id": "TextView/input__signeddecimal",
+      "component": "TextView",
+      "attribute": "input",
+      "case": "signeddecimal",
+      "class": "visual",
+      "host": "TextView",
+      "writtenKey": "input",
+      "aliasOf": null,
+      "value": "signedDecimal",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/TextView/input__signeddecimal.layout.json",
+      "test": "fixtures/TextView/input__signeddecimal.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": null,
+      "control": null
+    },
+    {
+      "id": "TextView/input__date",
+      "component": "TextView",
+      "attribute": "input",
+      "case": "date",
+      "class": "visual",
+      "host": "TextView",
+      "writtenKey": "input",
+      "aliasOf": null,
+      "value": "date",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/TextView/input__date.layout.json",
+      "test": "fixtures/TextView/input__date.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": null,
+      "control": null
+    },
+    {
+      "id": "TextView/input__time",
+      "component": "TextView",
+      "attribute": "input",
+      "case": "time",
+      "class": "visual",
+      "host": "TextView",
+      "writtenKey": "input",
+      "aliasOf": null,
+      "value": "time",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/TextView/input__time.layout.json",
+      "test": "fixtures/TextView/input__time.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": null,
+      "control": null
+    },
+    {
+      "id": "TextView/input__datetime",
+      "component": "TextView",
+      "attribute": "input",
+      "case": "datetime",
+      "class": "visual",
+      "host": "TextView",
+      "writtenKey": "input",
+      "aliasOf": null,
+      "value": "datetime",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/TextView/input__datetime.layout.json",
+      "test": "fixtures/TextView/input__datetime.test.json",
       "state": null,
       "promotedFrom": null,
       "peerGroup": null,

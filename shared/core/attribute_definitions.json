@@ -1,6 +1,12 @@
 {
   "_comment": "Unified attribute definitions for JsonUI (Swift/Kotlin/React). Binding format: @{propertyName}. When `type` includes \"binding\", an optional `binding_direction` field declares how the MCP should label the binding: \"two-way\" means the component writes back to the binding (e.g. TextField.text); omit the field (or set \"read-only\") for values that only flow view ← model. Optional extended fields per attribute: `aliases` (array of alternate names treated as synonyms for this canonical attribute; validator expands these at load time), `deprecated` (boolean; validator emits a warning when the attribute is used), `deprecation_note` (string appended to the warning to explain the replacement or limitation).",
   "common": {
+    "glass": {
+      "type": ["boolean", "object"],
+      "platform": "swift",
+      "mode": ["uikit", "swiftui"],
+      "description": "Liquid Glass. true for the default treatment, or an object {style: regular|clear|identity, tint: color, interactive: bool, shape: capsule|rect|circle|rounded(N)}. Declared on common rather than per component because ios.md names View, Button, TextField and Label followed by 'etc' - an open list, and a per-component declaration would make the set of components the acceptance population, so every reading of 'etc' becomes a gap. mode carries BOTH uikit and swiftui because the attribute has two implementations, .glassEffect() on SwiftUI and UIGlassEffect on UIKit; this is the first declaration in the file to pair those two, though five declarations already use an array for mode and both readers accept one (kjui Array(attr_def['mode']), jui isinstance(raw, list)). Leaving mode off would not have meant 'both' - an absent mode means NO restriction at all (kjui attribute_validator_core.rb mode_compatible? returns true when the key is missing), which would let the attribute read as available in modes it has no implementation for."
+    },
     "_comment": "Common attributes shared across all components",
     "$jui": {
       "type": "object",
@@ -1669,9 +1675,13 @@
         "phone",
         "url",
         "password",
-        "decimal"
+        "decimal",
+        "signedDecimal",
+        "date",
+        "time",
+        "datetime"
       ],
-      "description": "Input type (includes 'allphabet' typo for backward compatibility)"
+      "description": "Input type (includes 'allphabet' typo for backward compatibility). Not every face can express every value, and the degradations are declared here so that an implementer does not rediscover them one at a time. Android is the only face where all four of the values added in 1.8.8x land natively (Compose 1.12 KeyboardType.Date / Time / DateTime / SignedDecimal). web, TextField: date, time and datetime are not inputmode values; they change the element type to date, time and datetime-local, which is the path SelectBox's datepicker already takes. web, TextView: a textarea has no type attribute at all, so those three degrade to plain text there and the declared value cannot be honoured. web, inputmode: signedDecimal has no inputmode of its own and must share decimal with the decimal value above, so on web the two are INDISTINGUISHABLE. web, type: number and decimal already collapse to type=number, and signedDecimal joins them. iOS: UIKeyboardType has no member for the date family, so they fall back to .default, and signedDecimal to .numbersAndPunctuation."
     },
     "inputType": {
       "type": "string",
@@ -1782,7 +1792,7 @@
     },
     "applyLiquidGlass": {
       "type": "boolean",
-      "description": "Apply liquid glass effect",
+      "description": "Apply liquid glass effect. SUPERSEDED by the common attribute 'glass' as of 2026-09-14. The fold from this spelling to glass belongs to the normalizer and IS NOT IMPLEMENTED YET, so both spellings are live: this one stays TextField-only, UIKit-only and backed by UIBlurEffect, while glass is declared on common for SwiftUI and UIKit. Nothing breaks while both exist - they do not overlap in platform, mode or component - but a layout should be written against glass.",
       "platform": "swift",
       "mode": "uikit"
     },
@@ -1794,7 +1804,7 @@
     },
     "glassEffectStyle": {
       "type": "string",
-      "description": "Glass effect style",
+      "description": "Glass effect style. SUPERSEDED by glass.style as of 2026-09-14. As with applyLiquidGlass, the normalizer fold is NOT IMPLEMENTED YET and both spellings are live.",
       "platform": "swift",
       "mode": "uikit"
     },
@@ -2117,9 +2127,13 @@
         "phone",
         "url",
         "password",
-        "decimal"
+        "decimal",
+        "signedDecimal",
+        "date",
+        "time",
+        "datetime"
       ],
-      "description": "Input type (includes 'allphabet' typo for backward compatibility)"
+      "description": "Input type (includes 'allphabet' typo for backward compatibility). Not every face can express every value, and the degradations are declared here so that an implementer does not rediscover them one at a time. Android is the only face where all four of the values added in 1.8.8x land natively (Compose 1.12 KeyboardType.Date / Time / DateTime / SignedDecimal). web, TextField: date, time and datetime are not inputmode values; they change the element type to date, time and datetime-local, which is the path SelectBox's datepicker already takes. web, TextView: a textarea has no type attribute at all, so those three degrade to plain text there and the declared value cannot be honoured. web, inputmode: signedDecimal has no inputmode of its own and must share decimal with the decimal value above, so on web the two are INDISTINGUISHABLE. web, type: number and decimal already collapse to type=number, and signedDecimal joins them. iOS: UIKeyboardType has no member for the date family, so they fall back to .default, and signedDecimal to .numbersAndPunctuation."
     },
     "returnKeyType": {
       "type": "string",

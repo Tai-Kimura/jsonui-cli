@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/TextView/input__signeddecimal.layout.json"
+  },
+  "metadata": {
+    "name": "conformance TextView.input (signeddecimal)",
+    "description": "Conformance fixture for 'input' on TextView (section: TextView, class: visual). Value under test: \"signedDecimal\".",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "TextView"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "input__signeddecimal",
+      "description": "Conformance fixture for 'input' on TextView (section: TextView, class: visual). Value under test: \"signedDecimal\".",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "TextView_input__signeddecimal"
+        }
+      ]
+    }
+  ]
+}
