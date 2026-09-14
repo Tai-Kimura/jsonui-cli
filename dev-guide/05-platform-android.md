@@ -116,7 +116,7 @@ kwargs や属性を通すときは **lib/compose/ 全体を grep** する。sink
   | **dynamic**（`library-dynamic`） | `FocusManager` の replay 0 な `SharedFlow` | **再配信されない**＝下の記述どおり |
   | **codegen**（`kjui_tools` が emit） | フィールドごとの `remember { FocusRequester() }` ＋ `LocalSoftwareKeyboardController` を `LaunchedEffect(data.<id>IsFocused)` が駆動 | 🚨 **再要求が走り得る**（下記） |
 
-  codegen 面の実測（`textfield_component.rb:206-212` が emit、生成物で確認）:
+  codegen 面の実測（**emit 元は 2 本**: `textfield_component.rb:212` と `textview_component.rb:172`。生成物で確認）:
   ```kotlin
   val focusRequester_<name> = remember { FocusRequester() }
   val keyboardController_<id> = LocalSoftwareKeyboardController.current
@@ -124,7 +124,21 @@ kwargs や属性を通すときは **lib/compose/ 全体を grep** する。sink
   ```
   `data` は `viewModel()` 由来（wrapper の `val data by viewModel.data.collectAsState()`）で、**`ViewModel` は構成変更をまたいで保持される**。`<id>IsFocused` は data クラスの実フィールド。⇒ 回転後に composition が作り直されると `LaunchedEffect` が key `true` のまま再入し、**`requestFocus()` と `keyboardController?.show()` が走る経路が在る**。
   ⚠️ **走ることまでは実装から読めるが、Android 17 上で実際に IME が出るかは未測定**（端末が要る）。`FocusManager` を根拠にした「担えない」は、**この経路には移らない**。
-  ⚠️ この配線を持つのは `id` を宣言した TextField だけ（sample-app では生成画面 53 本中 **8 本**）。
+  ⚠️ **母集団**: この配線を持つのは `id` を宣言した **TextField と TextView**（sample-app では生成画面
+  53 本中 **8 本**、うち TextField を含むのは 1 本だけで**残り 7 本は TextView 由来**）。
+  ⚠️ **`id` 付き TextField だけ、と読むと 8 分の 7 を外す。**
+
+  🔻 **未測定が 2 つ在る。回転より手前に 1 つ在る。**
+
+  | 的 | 問い | 状態 |
+  |---|---|---|
+  | A | **回転をまたいだ**後に IME が出るか | 未測定（API 37 の image がこの機械に無い） |
+  | B | **回転と無関係に**、ViewModel から `<id>IsFocused` を true にしたとき IME が出るか | 🚨 **未測定** |
+
+  B は A より手前に在る。`keyboardController?.show()` は **ユーザー操作に紐づかない IME 表示**で、
+  プラットフォームがこれを拒否する方向の変更は**回転の復元より広い範囲に当たる**（web 面で
+  `showPicker` に user-activation の guard を入れたのと同じクラス）。
+  ⇒ **B が false なら、限定条件は「回転後」の脚注ではなく能動経路の記述そのものに要る。**
 
   **dynamic 面について**: **ライブラリは復元を担わない。担えない**——`FocusManager`（library-dynamic）は
   `MutableSharedFlow<String>(extraBufferCapacity = 1)`、つまり**状態でなくイベントバス**で、
