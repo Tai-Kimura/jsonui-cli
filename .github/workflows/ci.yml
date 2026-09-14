@@ -148,9 +148,13 @@ jobs:
           repository: Tai-Kimura/SwiftJsonUI
           path: SwiftJsonUI
           filter: blob:none
-          sparse-checkout: |
-            Sources/SwiftJsonUI/Classes/SwiftUI/Dynamic
-            Sources/SwiftJsonUI/Classes/SwiftUI
+          # One pattern: cone mode subsumes nested directories, so naming
+          # `Classes/SwiftUI` already brings `Dynamic/` with it. MEASURED in
+          # a throwaway repo rather than read off the docs — with a control
+          # proving sparse was in effect at all (a sibling directory stayed
+          # absent; the first attempt had no such control and reported a
+          # result from a checkout where sparse was not applied).
+          sparse-checkout: Sources/SwiftJsonUI/Classes/SwiftUI
       - name: KotlinJsonUI (two files — the platform-truth arms read one)
         uses: actions/checkout@v4
         with:
