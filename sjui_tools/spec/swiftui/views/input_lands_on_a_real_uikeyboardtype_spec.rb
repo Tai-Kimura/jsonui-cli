@@ -129,6 +129,14 @@ RSpec.describe 'input values on iOS' do
     end
   end
 
+  # 🔻 THE NEXT TWO ARMS ARE A PAIR; NEITHER IS REDUNDANT.
+  # triage's mutation run (8 mutations, all red) measured which arm catches
+  # what: deleting the `signeddecimal` row leaves "gets a keyboard that can
+  # type a sign" GREEN, because signedDecimal falls to `.default` while
+  # decimal keeps `.decimalPad` -- still different, just both wrong. The one
+  # that catches deletion is "is not left on the bare fallback". Conversely a
+  # row that collapsed onto `.decimalPad` is caught by the first and not the
+  # second. Pruning either as a duplicate reopens one of the two holes.
   describe 'signedDecimal is not decimal on iOS' do
     it 'gets a keyboard that can type a sign' do
       # The whole point of the value. `.decimalPad` has no minus key, so
@@ -144,13 +152,57 @@ RSpec.describe 'input values on iOS' do
   end
 
   describe 'what these arms do not claim' do
-    it 'the date family is genuinely indistinguishable from password here' do
-      # Not a defect to fix in this file: UIKit has no date keyboard. Recorded
-      # so that a later reader does not "fix" the table by inventing one.
-      %w[date time datetime].each do |v|
-        expect(helper.input_to_keyboard_type(v))
-          .to eq(helper.input_to_keyboard_type('password'))
+    it 'input_to_keyboard_type returns the same keyboard for the date family, password and default' do
+      # NOT a defect to fix by inventing a table row: UIKit has no date
+      # keyboard. Recorded so a later reader does not "fix" it.
+      #
+      # ⚠️ THE SCOPE IS IN THE NAME OF THIS ARM ON PURPOSE. An earlier
+      # version was called "...indistinguishable from password here", where
+      # `here` meant this one function. That sentence is TRUE of the keyboard
+      # argument and FALSE of the rendered view, and `here` is exactly the
+      # word that falls off when a sentence is quoted into a declaration or a
+      # release note. Same shape as the 1.8.78 dev-guide, where a limit put
+      # in a subordinate clause shipped as an unqualified claim.
+      #
+      # What is actually true, measured on this tree:
+      #   TextField  password -> `is_secure_field?` (text_field_binding_handler:50,
+      #              one caller, textfield_converter:74) -> emits SecureField.
+      #              A different VIEW, so password and date are distinguishable
+      #              even though this function collapses them.
+      #   TextView   no secure path at all (zero mentions), and `secure` is
+      #              declared on TextField only -- so there the collapse is
+      #              the whole rendering.
+      # The value that collapses with the date family on BOTH components and
+      # at every layer is `default`. Name that one when writing prose.
+      %w[date time datetime password default].each do |v|
+        expect(helper.input_to_keyboard_type(v)).to eq('.default')
       end
+    end
+
+    it 'the collapse is this function only -- TextField still picks a different view' do
+      # The control for the arm above: if password stopped selecting
+      # SecureField, the sentence "on TextField it is distinguishable" would
+      # go quiet with nothing failing.
+      handler_src = File.read(File.expand_path(
+        '../../../lib/swiftui/binding/handlers/text_field_binding_handler.rb', __dir__
+      ))
+      expect(handler_src).to include('def is_secure_field?')
+      expect(handler_src).to include("component['input'] == 'password'")
+
+      # ...and that the TextField converter is what calls it. The rule only
+      # holds because this one caller exists; TextView has none.
+      field_src = File.read(File.expand_path(
+        '../../../lib/swiftui/views/textfield_converter.rb', __dir__
+      ))
+      expect(field_src).to include('is_secure_field?')
+      expect(field_src).to include('SecureField')
+
+      view_src = File.read(File.expand_path(
+        '../../../lib/swiftui/views/textview_converter.rb', __dir__
+      ))
+      expect(view_src).not_to include('SecureField'),
+                              'TextView grew a secure path; the asymmetry this arm ' \
+                              'records is gone and the prose above is now wrong'
     end
   end
 end
