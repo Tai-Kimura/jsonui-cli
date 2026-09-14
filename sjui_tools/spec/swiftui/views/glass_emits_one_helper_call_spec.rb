@@ -64,8 +64,39 @@ RSpec.describe 'glass on the SwiftUI codegen path' do
     SjuiTools::SwiftUI::Views::BlurConverter.new({ 'type' => 'Blur' }.merge(component)).convert.to_s
   end
 
+  # The emitted helper call, or nil. Use this ONLY where nil is a legitimate
+  # answer — the three "emits nothing" arms.
   def glass_line(component)
     emit(component).lines.map(&:strip).find { |l| l.include?('sjuiGlassEffect') }
+  end
+
+  # 🔻 THE SAME LOOKUP, BUT A MISS IS A FAILURE.
+  #
+  # Every arm that asserts something ABOUT the emitted call — the equality
+  # arms and, critically, the three compile arms — has to fail when there is
+  # no call to assert about. Measured by triage: renaming the emitted
+  # spelling in the implementation AND the assertions, leaving the stub's
+  # `func sjuiGlassEffect` alone, made `find` return nil. The compile arms
+  # then handed swiftc
+  #
+  #     Color.clear
+  #             (nothing)
+  #
+  # which type-checks perfectly, so all three stayed GREEN while the string
+  # arms went red. Adding this raise turned the same mutation from 7
+  # failures into 13, and the six new ones include those three by name.
+  #
+  # THE GENERAL SHAPE: when a compile arm's subject is a line it went
+  # LOOKING for, a failed search does not fail the arm — it empties it. The
+  # arm keeps reporting that an empty program compiled. Type errors are
+  # still caught (a raw String passed where `Color?` is expected does fail),
+  # but a renamed or vanished emit is not. So a search that feeds an
+  # assertion must map "not found" onto the assertion's failure.
+  def glass_line!(component)
+    glass_line(component) or
+      raise "no sjuiGlassEffect line emitted for #{component.inspect} — " \
+            'without this the compile arms below would hand swiftc a view ' \
+            'with no glass call in it, and pass'
   end
 
   describe 'when the attribute is not asking for glass' do
@@ -86,20 +117,20 @@ RSpec.describe 'glass on the SwiftUI codegen path' do
 
   describe 'the boolean form' do
     it 'emits the helper with no arguments' do
-      expect(glass_line('glass' => true)).to eq('.sjuiGlassEffect()')
+      expect(glass_line!('glass' => true)).to eq('.sjuiGlassEffect()')
     end
   end
 
   describe 'the object form' do
     it 'passes style through' do
-      expect(glass_line('glass' => { 'style' => 'clear' }))
+      expect(glass_line!('glass' => { 'style' => 'clear' }))
         .to eq('.sjuiGlassEffect(style: "clear")')
     end
 
     it 'passes shape through unresolved, including the height-dependent ones' do
-      expect(glass_line('glass' => { 'shape' => 'capsule' }))
+      expect(glass_line!('glass' => { 'shape' => 'capsule' }))
         .to eq('.sjuiGlassEffect(shape: "capsule")')
-      expect(glass_line('glass' => { 'shape' => 'rounded(12)' }))
+      expect(glass_line!('glass' => { 'shape' => 'rounded(12)' }))
         .to eq('.sjuiGlassEffect(shape: "rounded(12)")')
     end
 
@@ -107,20 +138,20 @@ RSpec.describe 'glass on the SwiftUI codegen path' do
       # `false` is a value the author wrote, not an absence. The helper's own
       # default is what an ABSENT key means, and the two must stay
       # distinguishable in the generated source.
-      expect(glass_line('glass' => { 'interactive' => false }))
+      expect(glass_line!('glass' => { 'interactive' => false }))
         .to eq('.sjuiGlassEffect(interactive: false)')
     end
 
     it 'routes tint through the colour helper, not as a raw string' do
-      line = glass_line('glass' => { 'tint' => '#FF0000' })
+      line = glass_line!('glass' => { 'tint' => '#FF0000' })
       expect(line).to include('tint: ')
       expect(line).not_to include('tint: "#FF0000"'), 'the hex reached Swift as a string literal'
       expect(line).to include('#FF0000')
     end
 
     it 'emits all four keys in a stable order' do
-      line = glass_line('glass' => { 'style' => 'regular', 'tint' => '#FF0000',
-                                     'interactive' => true, 'shape' => 'capsule' })
+      line = glass_line!('glass' => { 'style' => 'regular', 'tint' => '#FF0000',
+                                      'interactive' => true, 'shape' => 'capsule' })
       expect(line).to match(/\A\.sjuiGlassEffect\(style: .*, tint: .*, interactive: true, shape: .*\)\z/)
     end
   end
@@ -156,19 +187,19 @@ RSpec.describe 'glass on the SwiftUI codegen path' do
     # swiftc against the contract above, so an argument list that is merely
     # plausible fails here rather than in a consumer build.
     it 'the no-argument form type-checks' do
-      expect(compilable_view("Color.clear\n#{glass_line('glass' => true)}",
+      expect(compilable_view("Color.clear\n#{glass_line!('glass' => true)}",
                              stubs: GLASS_HELPER_CONTRACT)).to compile_as_swift
     end
 
     it 'all four arguments type-check together' do
-      line = glass_line('glass' => { 'style' => 'regular', 'tint' => '#FF0000',
-                                     'interactive' => true, 'shape' => 'capsule' })
+      line = glass_line!('glass' => { 'style' => 'regular', 'tint' => '#FF0000',
+                                      'interactive' => true, 'shape' => 'capsule' })
       expect(compilable_view("Color.clear\n#{line}",
                              stubs: GLASS_HELPER_CONTRACT)).to compile_as_swift
     end
 
     it 'interactive: false type-checks (Bool?, not a truthy string)' do
-      expect(compilable_view("Color.clear\n#{glass_line('glass' => { 'interactive' => false })}",
+      expect(compilable_view("Color.clear\n#{glass_line!('glass' => { 'interactive' => false })}",
                              stubs: GLASS_HELPER_CONTRACT)).to compile_as_swift
     end
   end
