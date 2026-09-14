@@ -262,6 +262,22 @@ deliberately NOT in the set. It is named here so the next person sees it.
 the exact check, by name. The next unstable class arrives as a named
 refusal, not as a repeat of the 09-05 investigation.
 
+🔻 **"SMALL DISTANCE" IS NOT A MEMBERSHIP TEST, AND READING IT AS ONE IS A
+MISTAKE THAT HAS BEEN MADE.** The bake prints the moved entries and separately
+prints how many were exempt; a reader who sees a handful of 2-and-3 hamming
+moves and writes them all off as "animated / async" is inferring membership
+from the distance. On 2026-09-15 six entries moved in a `ci/` bake and five of
+them were small — but only FOUR were in the set. The fifth, `control_Web.png`,
+is not exempt at all: it moved because its picture is nearly BLANK (the iOS
+Web host renders no content, so after the chrome crop the dHash was all
+zeroes), and a nearly-blank picture has few bits to move. Same small number,
+entirely different reason.
+
+⇒ Membership is answered by `visual_stability.unstable_screenshots()`, which
+returns the names. Ask it; do not infer it from a hamming column. (`Web/html`
+being indistinguishable from its control on ios is a separate, already-accepted
+fact — it is recorded in `control_diff.json` for android/ios/web.)
+
 **Procedure when `moved > 0`.** Attribute before baking. Re-run the SAME
 corpus and device on the library the baseline was drawn from; entries that
 move there too are environment drift, not a regression. On 2026-09-05 that
