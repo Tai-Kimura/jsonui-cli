@@ -49,6 +49,7 @@ from pathlib import Path
 
 from ..core.generated_marker import json_marker
 from .visual_stability import unstable_screenshots
+from .os_dependence import os_dependent_screenshots_for
 
 GENERATOR_NAME = "jui conformance baseline update"
 
@@ -269,6 +270,7 @@ def update_baseline(
     env: str = DEFAULT_ENV,
     threshold: int | None = None,
     rendered_by: dict[str, str] | None = None,
+    os_key: str | None = None,
     only_new: bool = False,
 ) -> BaselineUpdateSummary:
     """Hash every PNG under the platform's artifacts dir into the manifest.
@@ -310,7 +312,14 @@ def update_baseline(
 
     # Classify against what is already committed, whichever mode we are in.
     previous = load_baseline(conformance_dir, platform, env) or {}
+    # 🔻 WHAT THIS RUN IS COMPARED AGAINST: the OS-agnostic entries plus THIS
+    # OS's bucket. An entry filed under a different OS is deliberately not
+    # prior — separating those is the whole point of the key, and folding them
+    # in here would reintroduce the cross-runtime comparison one level down.
+    previous_by_os: dict = {k: dict(v) for k, v in (previous.get("hashes_by_os") or {}).items()}
     prior: dict[str, str] = dict(previous.get("hashes") or {})
+    if os_key:
+        prior.update(previous_by_os.get(os_key) or {})
     new_names = sorted(n for n in measured if n not in prior)
     same_names = sorted(n for n in measured if n in prior and prior[n] == measured[n])
     # A fixture whose picture is not a function of the code — a spinning
@@ -350,6 +359,30 @@ def update_baseline(
     else:
         hashes = measured
 
+    # Carve the availability-gated pictures into a per-OS bucket. Only these
+    # move: the corpus at large is NOT a function of the running OS (measured
+    # on the 2026-09-14 re-bake — the 61 entries that moved were every one a
+    # system-DRAWN control, which is the SDK the host links against, a
+    # different axis). Keying the whole file by OS would assert the stronger
+    # thing and make every re-bake answer a question it did not ask.
+    by_os = {k: dict(v) for k, v in previous_by_os.items()}
+    os_dependent = os_dependent_screenshots_for(conformance_dir)
+    carved = {n: hashes.pop(n) for n in sorted(hashes) if n in os_dependent}
+    if carved:
+        if not os_key:
+            raise BaselineError(
+                "these pictures resolve through an availability check, so they cannot be "
+                "filed without the OS that drew them: "
+                + ", ".join(sorted(carved))
+                + " — pass the run's `runner` (os_key) so they land under "
+                "hashes_by_os.<os>. Baking them OS-agnostically is the comparison this "
+                "key exists to prevent, and dropping them silently would remove them "
+                "from visual coverage."
+            )
+        bucket = dict(by_os.get(os_key) or {})
+        bucket.update(carved)
+        by_os[os_key] = {k: bucket[k] for k in sorted(bucket)}
+
     out_path = baseline_path(conformance_dir, platform, env)
     out_path.parent.mkdir(parents=True, exist_ok=True)
     payload = {
@@ -384,6 +417,10 @@ def update_baseline(
             else {}
         ),
         "hashes": hashes,
+        # Availability-gated pictures, keyed by the MAJOR OS that drew them.
+        # Empty for every platform whose runner does not name an OS (android
+        # reports a uiautomator version, web a playwright one).
+        "hashes_by_os": {k: by_os[k] for k in sorted(by_os)},
     }
     out_path.write_text(
         json.dumps(payload, indent=2, ensure_ascii=False, sort_keys=False) + "\n",
@@ -430,6 +467,7 @@ def compare_platform(
     screenshot_names: list[str],
     artifacts_dir: Path | None = None,
     env: str = DEFAULT_ENV,
+    os_key: str | None = None,
 ) -> VisualComparison:
     """Compare the current artifacts of *screenshot_names* to the baseline.
 
@@ -469,7 +507,16 @@ def compare_platform(
         comparison.algorithm_mismatch = str(baseline.get("algorithm"))
         return comparison
 
-    hashes: dict = baseline.get("hashes", {})
+    hashes: dict = dict(baseline.get("hashes", {}))
+    # An availability-gated picture is only ever compared against one drawn on
+    # the same major OS. With no os_key — or with a baseline that holds no
+    # bucket for this one — those names simply have no expected value, so they
+    # land in `no_baseline` and are REPORTED as uncovered. That is the correct
+    # answer: we have no baseline for this OS. Falling back to another OS's
+    # bucket would be the cross-runtime comparison the key exists to prevent,
+    # and falling back to silence would drop them out of coverage unseen.
+    if os_key:
+        hashes.update(baseline.get("hashes_by_os", {}).get(os_key) or {})
     crop = chrome_crop(platform, env)
     seen = set()
     for name in screenshot_names:

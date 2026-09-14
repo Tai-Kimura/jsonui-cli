@@ -6,7 +6,24 @@ The baseline is keyed by `<env>/<platform>`, which does not separate those, so
 two runs on different simulator runtimes compare against each other and every
 glass fixture reports `moved`.
 
-THIS IS AN ARM AND NOT A FIX, for a measured reason. On this tree:
+✅ ANSWERED 2026-09-15. The condition arrived exactly as written — `glass` was
+baked into `ci/ios` and this file went red on the bake — and the answer is
+`hashes_by_os` in the same manifest rather than `<platform>-<os>.hashes.json`.
+Per-ENTRY and not per-FILE, because the measurement said the file-level claim
+is false: of the 61 entries that moved on the toolchain change, every one is a
+system-DRAWN control (26 Switch / 12 TabView / 10 Segment / 6 control_* /
+5 Slider / 2 Collection, zero others) — that is the SDK the host links against,
+a different axis from `#available`. Keying the file by OS would have asserted
+that the whole corpus depends on the running OS.
+
+This arm stays: it is what stops an OS-dependent picture landing in the
+agnostic table again. `test_the_os_key_gates_the_comparison` is its other
+half — that the key PREVENTS the comparison rather than annotating it.
+
+The original deferral is kept below because the reasoning is still how the
+decision should be read.
+
+THIS WAS AN ARM AND NOT A FIX, for a measured reason. On this tree:
 
     glass fixtures                    2  (common/glass__true, __false)
     entries for them in ci/ios        0  of 856

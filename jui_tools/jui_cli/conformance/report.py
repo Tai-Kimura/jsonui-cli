@@ -23,6 +23,7 @@ from typing import Any
 from . import baseline as baseline_mod
 from . import control_diff as control_diff_mod
 from . import cross_effect as cross_effect_mod
+from .os_dependence import os_key_from_runner
 
 REPORT_GENERATOR = "jui conformance report"
 
@@ -617,8 +618,14 @@ def generate_report(
             for entry in p.results.values()
             if isinstance(entry.get("screenshot"), str)
         ]
+        # The OS comes from the run's own `runner` block, so the comparison
+        # and the bake agree without either restating the other.
         visual[p.platform] = baseline_mod.compare_platform(
-            conformance_dir, p.platform, screenshot_names, env=env
+            conformance_dir,
+            p.platform,
+            screenshot_names,
+            env=env,
+            os_key=os_key_from_runner(p.runner),
         )
 
     # Fixture-vs-control comparison: does the attribute change anything on

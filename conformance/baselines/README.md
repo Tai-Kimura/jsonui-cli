@@ -65,6 +65,46 @@ the discriminator: an SDK appearance change touches exactly the controls the
 system draws, and a regression in our own code would not respect that line.
 So do not read `simulator_os` alone when a bake moves; read all four.
 
+### Availability-gated pictures: `hashes_by_os`
+
+`glass` resolves through `#available(iOS 26.0, *)`, which asks the RUNNING OS —
+so the same fixture is a different picture on iOS 25 and 26. Those entries are
+keyed by the MAJOR OS that drew them:
+
+```json
+"hashes":       { ... 865 entries ... },
+"hashes_by_os": { "26": { "common_glass__true.png": "...", "common_glass__false.png": "..." } }
+```
+
+**Per entry, not per file.** Splitting the manifest into
+`<platform>-<os>.hashes.json` says the whole corpus depends on the running OS,
+and the 2026-09-14 re-bake measured that it does not: the 61 entries that moved
+are every one a system-DRAWN control (26 Switch / 12 TabView / 10 Segment /
+6 control_* / 5 Slider / 2 Collection, and zero others). That is the SDK the
+host links against — a different axis. Only the availability-gated entries get
+an OS key.
+
+The key comes from the run's own `runner` block (`ios-26.2` -> `26`), read from
+the results file NEXT TO the artifacts being baked, not from the checkout —
+measured: the checked-out `results/ios.results.json` said ios-18.6 while the
+artifacts were drawn on ios-26.2, and taking the checkout's copy would have
+filed iOS 26 pictures under key 18. A key that exists and is wrong is worse
+than no key. The patch level is dropped on purpose: 26.2 and 26.3 answer
+`#available(iOS 26.0, *)` identically, and every split costs a re-bake that
+proves nothing.
+
+A picture with no bucket for the running OS is reported as `no_baseline` —
+uncovered and visible — never compared against another OS's value and never
+silently skipped. Measured both ways against the committed ci baseline:
+
+| os_key | compared | no_baseline |
+|---|---|---|
+| `26` (the OS that drew them) | 3 of 3 | — |
+| `18` / `27` / none | 1 of 3 | the two glass entries |
+
+The OS-agnostic probe is compared in every row; that is the control that says
+the key gates the right entries and not the corpus.
+
 ### The device behind `local/`
 
 An env key names a class of renderer, and within `local/` the class has to be

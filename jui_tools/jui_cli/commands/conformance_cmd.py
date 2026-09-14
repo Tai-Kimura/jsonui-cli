@@ -12,6 +12,7 @@ Two subcommands:
 from __future__ import annotations
 
 import argparse
+import json
 from pathlib import Path
 
 #: jsonui-cli repo root (…/jui_tools/jui_cli/commands/ -> repo root).
@@ -1261,6 +1262,43 @@ def _cmd_compat_doc(args: argparse.Namespace) -> int:
     return 0
 
 
+def _os_key_for_bake(conformance_dir, platform: str, artifacts_dir=None) -> str | None:
+    """The OS that drew the artifacts being baked, from the run's own results.
+
+    Read rather than asked for: the results file the run wrote already records
+    `runner`, so a bake cannot be told an OS that disagrees with its pictures.
+
+    🔻 THE RESULTS NEXT TO THE ARTIFACTS WIN. A `ci` bake reads a DOWNLOADED
+    artifact tree while the checkout still holds a committed results snapshot
+    from some earlier run — measured here: the tree's `results/ios.results.json`
+    said ios-18.6 while the artifacts being baked were drawn on ios-26.2. Taking
+    the checkout's copy would have filed iOS 26 pictures under key 18, which is
+    worse than not keying them at all: the key would exist and be wrong, and
+    every later comparison would trust it.
+
+    Returns None when neither file exists or the runner names no OS; the writer
+    then refuses only if the bake actually contains an availability-gated
+    picture, so nothing changes for platforms that have none.
+    """
+    from jui_cli.conformance.os_dependence import os_key_from_runner
+
+    candidates = []
+    if artifacts_dir is not None:
+        # <root>/artifacts/<platform> -> <root>/results/<platform>.results.json
+        candidates.append(Path(artifacts_dir).parent.parent / "results" / f"{platform}.results.json")
+    candidates.append(Path(conformance_dir) / "results" / f"{platform}.results.json")
+    for path in candidates:
+        if not path.is_file():
+            continue
+        try:
+            key = os_key_from_runner(json.loads(path.read_text(encoding="utf-8")).get("runner"))
+        except (ValueError, OSError):
+            continue
+        if key:
+            return key
+    return None
+
+
 def _parse_rendered_by(pairs) -> dict:
     """`["swiftjsonui=abc123"]` -> `{"swiftjsonui": "abc123"}`."""
     out: dict = {}
@@ -1297,6 +1335,7 @@ def _cmd_baseline(args: argparse.Namespace) -> int:
             env=env,
             threshold=threshold,
             rendered_by=_parse_rendered_by(getattr(args, "rendered_by", None)),
+            os_key=_os_key_for_bake(conformance_dir, args.platform, artifacts_dir),
             only_new=only_new,
         )
     except BaselineError as e:
