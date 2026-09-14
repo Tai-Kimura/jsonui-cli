@@ -128,32 +128,35 @@ jobs:
       # takes directories, so each pattern is the file's parent; widen it only
       # with the same measurement in hand.
       #
-      # WIDENED 2026-09-14, with that measurement. A third arm pins the glass
-      # shape vocabulary against `SJUIGlass.swift`, which sits DIRECTLY in
-      # `Classes/SwiftUI/` — one level above `Dynamic/`, so the existing
-      # pattern does not reach it and the arm skips in CI while passing
-      # locally. Cone mode takes whole directories, so the cost is the files
-      # directly in `SwiftUI/`, not the one file:
+      # WIDENED 2026-09-14, with the measurement the line above demands. A
+      # third arm pins the glass shape vocabulary against `SJUIGlass.swift`,
+      # which sits DIRECTLY in `Classes/SwiftUI/` — one level above
+      # `Dynamic/`. The old pattern did not reach it, so the arm skipped in
+      # CI while passing locally.
       #
-      #   already fetched  Dynamic/                  89 files   996,069 B
-      #   added            SwiftUI/ (direct children) 26 files   169,770 B
-      #   of which the arm reads  SJUIGlass.swift                 10,096 B
+      # Cone mode takes a directory RECURSIVELY, so the cost is everything
+      # under `SwiftUI/`, not the files directly in it:
       #
-      # +17% on what this job already pulls. Recorded because the line above
-      # asks for exactly this and a later reader will otherwise widen it on a
-      # guess.
-      - name: SwiftJsonUI (three files — the platform-truth arms read two)
+      #   Classes/SwiftUI/Dynamic    89 files    996,069 B   (what it took)
+      #   Classes/SwiftUI           142 files  1,337,994 B   (what it takes now)
+      #   delta                      53 files    341,925 B   (+34%)
+      #   of which the arm reads   SJUIGlass.swift  10,096 B
+      #
+      # ⚠️ Two earlier versions of this comment had different numbers, and
+      # BOTH were wrong — one counted only the files directly in `SwiftUI/`
+      # (+170 KB), the other something else again (+448 KB). `ls-tree -r` on
+      # the branch is what settles it; a non-recursive listing is not what
+      # cone mode does.
+      - name: SwiftJsonUI (the platform-truth arms read one file, the glass vocabulary arm another)
         uses: actions/checkout@v4
         with:
           repository: Tai-Kimura/SwiftJsonUI
           path: SwiftJsonUI
           filter: blob:none
           # One pattern: cone mode subsumes nested directories, so naming
-          # `Classes/SwiftUI` already brings `Dynamic/` with it. MEASURED in
-          # a throwaway repo rather than read off the docs — with a control
-          # proving sparse was in effect at all (a sibling directory stayed
-          # absent; the first attempt had no such control and reported a
-          # result from a checkout where sparse was not applied).
+          # `Classes/SwiftUI` already brings `Dynamic/` with it. Measured in
+          # a throwaway repo with a control proving sparse was in effect at
+          # all (a sibling directory stayed absent).
           sparse-checkout: Sources/SwiftJsonUI/Classes/SwiftUI
       - name: KotlinJsonUI (two files — the platform-truth arms read one)
         uses: actions/checkout@v4
