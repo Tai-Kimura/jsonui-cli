@@ -27,11 +27,13 @@ module SjuiTools
             app_delegate_path = find_app_delegate_file(project_dir)
             
             if app_delegate_path.nil?
-              puts "Warning: Could not find AppDelegate.swift file. HotLoader functionality not added."
+              puts "Warning: UIApplicationDelegate に適合する型が見つかりません " \
+                   "(`@UIApplicationDelegateAdaptor` が名指す型 / `: UIApplicationDelegate` / AppDelegate.swift のいずれも不在)。" \
+                   "HotLoader は有効になりません。"
               return
             end
 
-            puts "Updating AppDelegate: #{app_delegate_path}"
+            puts "Updating app delegate: #{app_delegate_path}"
             
             # AppDelegate.swiftの内容を読み込む
             content = File.read(app_delegate_path)
@@ -55,25 +57,121 @@ module SjuiTools
             # v2: on/off は scene 側。届かないときは**黙って AppDelegate に戻さない**
             # （戻すと、アプリが scene 化した後の再 setup で旧型に巻き戻り、
             #  消費側は壊れたことに気づけない）。
-            update_scene_delegate(project_dir)
+            scene_path = update_scene_delegate(project_dir)
+            # 生成した先（AppDelegate 相当と SceneDelegate）以外に配線が在れば名指しする
+            wiring = report_existing_wiring(project_dir, [app_delegate_path, scene_path].compact)
+            annotate_generated_region(app_delegate_path, wiring) unless wiring.empty?
           end
 
           private
 
+          # delegate は**型の綴り**で探す。ファイル名で探してはいけない。
+          #
+          # ⚠️ 実測 (2026-09-14): `jui.config.json` が ios を宣言する木には
+          #   `AppDelegate.swift` が **0 本**。SwiftUI ライフサイクル
+          #   （`@main struct XxxApp: App` ＋ `@UIApplicationDelegateAdaptor(AppDelegate.self)`）
+          #   では delegate クラスが App 本体のファイルの中に在る。
+          #   ファイル名 glob はそこで nil を返し、警告 1 行 ＋ **exit 0** で終わっていた
+          #   ＝ setup の HotLoader 経路がその木では**一度も走っていない**。
+          #   「注入先が AppDelegate 固定」より手前の、**探索の綴り**が母集団を決めていた。
+          #
+          # 優先順位: ① `@UIApplicationDelegateAdaptor(X.self)` が名指す型 X の定義
+          #           ② `UIApplicationDelegate` に適合する型の定義
+          #           ③ 従来の `AppDelegate.swift`（①②が無い木のための最後の砦）
+          APP_DELEGATE_ADAPTOR = /@UIApplicationDelegateAdaptor(?:\s*\(\s*([A-Za-z_][A-Za-z0-9_]*)\.self\s*\))?/
           def find_app_delegate_file(project_dir)
-            # プロジェクトディレクトリから再帰的にAppDelegate.swiftを検索
-            # ただし、DerivedData、Build、Pods、Carthageなどのディレクトリは除外
-            app_delegate_files = Dir.glob("#{project_dir}/**/AppDelegate.swift").reject do |path|
-              path.include?('DerivedData') || 
-              path.include?('Build') || 
-              path.include?('Pods') || 
-              path.include?('Carthage') ||
-              path.include?('.build') ||
-              path.include?('node_modules')
+            swift_files = Dir.glob("#{project_dir}/**/*.swift").reject { |path| ignored_path?(path) }
+                             .sort_by { |path| [path.split("/").length, path] }
+
+            named = adaptor_named_type(swift_files)
+            if named
+              hit = swift_files.find { |path| File.read(path) =~ /(?:class|struct)\s+#{Regexp.escape(named)}\b/ }
+              return hit if hit
             end
-            
-            # 最もプロジェクトルートに近いものを選択
-            app_delegate_files.min_by { |path| path.split('/').length }
+
+            hit = swift_files.find { |path| File.read(path) =~ /(?:class|struct)\s+\w+[^{\n]*:\s*[^{\n]*\bUIApplicationDelegate\b/ }
+            return hit if hit
+
+            swift_files.find { |path| File.basename(path) == "AppDelegate.swift" }
+          rescue StandardError
+            nil
+          end
+
+          # 区間の外に在る既存の HotLoader 配線を**名指しする**（消さない）。
+          #
+          # ⚠️ 到達していなかった木は、その間に自分で配線している。実測: App ファイルの
+          #   `init()` の `#if DEBUG` に 5 行、うち 1 行が `isHotLoadEnabled = true`。
+          #   探索を直して到達させると、SceneDelegate に区間が入る一方でこの行は残り、
+          #   **有効化が 2 系統**になる。到達させる修正は、到達先で二重になるを連れてくる。
+          #
+          # 処置は検出と名乗りまで。**剥がさない・動かさない・書き換えない**——区間の外は
+          # 消費側の territory で、置き換えないなら取り上げない。
+          def existing_wiring(project_dir, generated_paths)
+            found = []
+            Dir.glob("#{project_dir}/**/*.swift").reject { |path| ignored_path?(path) }.sort.each do |path|
+              lines = outside_generated_regions(File.readlines(path))
+              lines.each do |lineno, line|
+                next unless line =~ /HotLoader\s*\.\s*instance/
+
+                found << [path, lineno, line.strip]
+              end
+            end
+            found.reject { |path, _lineno, _line| generated_paths.include?(path) }
+          rescue StandardError
+            []
+          end
+
+          # 行番号つきで、生成区間の**外**の行だけを返す
+          def outside_generated_regions(lines)
+            inside = false
+            out = []
+            lines.each_with_index do |line, i|
+              if line.include?(MARKER_PREFIX)
+                inside = true
+                next
+              end
+              if line.include?(MARKER_END)
+                inside = false
+                next
+              end
+              out << [i + 1, line] unless inside
+            end
+            out
+          end
+
+          # 同じ事実の読み手が 3 つあり、寿命が違う:
+          #   stdout の Note   撃った人向け    その実行だけ
+          #   区間内コメント     次に開く人向け  次の setup 実行まで
+          #   票 / 報告書       設計を追う人    恒久（散文なので腕では pin できない）
+          # ⇒ **機械が出す 2 つは 1 か所から組む**。別々に書くと、次に文言を直す人が
+          #   片方だけ直し、読み手ごとに違う事実が届く。
+          WIRING_HEADLINE = "HotLoader の配線が区間の外にもあります"
+
+          # 識別フィールド: ファイル名 ＋ **綴り** ＋ 行番号（綴りの補助）
+          def wiring_fields(wiring)
+            wiring.map { |path, lineno, line| "#{File.basename(path)} (#{line}) 付近 L#{lineno}" }.join(" / ")
+          end
+
+          def wiring_provenance
+            "#{setup_version} が #{observation_date} に観測"
+          end
+
+          def report_existing_wiring(project_dir, generated_paths)
+            wiring = existing_wiring(project_dir, generated_paths)
+            return [] if wiring.empty?
+
+            puts "Note: #{WIRING_HEADLINE} —— #{wiring_fields(wiring)} [#{wiring_provenance}]。" \
+                 "生成区間の外なので sjui は管理しません——このままだと有効化が 2 系統になります。" \
+                 "残すかどうかは消費側の判断です（sjui は消しません）。"
+            wiring
+          end
+
+          def adaptor_named_type(swift_files)
+            swift_files.each do |path|
+              m = File.read(path).match(APP_DELEGATE_ADAPTOR)
+              return m[1] if m && m[1]
+            end
+            nil
           end
 
           # 生成した節はマーカーで囲む。削除はこの区間だけを対象にし、
@@ -317,11 +415,11 @@ module SjuiTools
             path = find_scene_delegate_file(project_dir)
             if path.nil?
               puts SCENE_MISSING_WARNING
-              return :missing_file
+              return nil
             end
             unless scene_manifest?(project_dir)
               puts MANIFEST_MISSING_WARNING
-              return :missing_manifest
+              return nil
             end
 
             content = File.read(path)
@@ -344,7 +442,7 @@ module SjuiTools
             end
             File.write(path, content)
             puts "HotLoader lifecycle hooks written to SceneDelegate: #{path}"
-            :injected
+            path
           end
 
           def find_scene_delegate_file(project_dir)
@@ -430,6 +528,40 @@ module SjuiTools
               found << current if current
             end
             found.uniq
+          end
+
+          # Note は stdout だけなので、撃った人以外に痕跡が残らない。
+          # **生成区間の中**に 1 行書いて、次に開いた人が読めるようにする
+          # （区間の中なので「区間外不可侵」とは衝突しない）。
+          #
+          # ⚠️ 行番号を**単独の判別子にしない**。区間は `sjui setup` を撃ったときにしか
+          #   再生成されないので、その間の消費側の編集にコメントは追随しない。
+          #   `<file>:<line>` だけ書くと、相手が 1 行足した瞬間に**指し先がずれた嘘**になる。
+          #   ⇒ 書くのは **ファイル名 ＋ 綴り（その行の実テキスト）＋ 観測した版と日付**。
+          #   綴りは行移動に強く（grep で追える）、日付つきなら、消えていても
+          #   「嘘」ではなく「その時点ではそうだった」になる。
+          def annotate_generated_region(path, wiring)
+            return if path.nil? || wiring.empty?
+
+            note = "// sjui: #{WIRING_HEADLINE} —— #{wiring_fields(wiring)} " \
+                   "[#{wiring_provenance}。有効化が 2 系統になります。" \
+                   "行番号はこの時点の値で、以後の編集には追随しません]"
+            content = File.read(path)
+            return if content.include?(WIRING_HEADLINE)
+
+            marked = content.sub(/^([ \t]*)#{Regexp.escape(MARKER_BEGIN)}[ \t]*\n/) { "#{Regexp.last_match(0)}#{Regexp.last_match(1)}#{note}\n" }
+            File.write(path, marked)
+          end
+
+          def setup_version
+            require_relative "../../../cli/version"
+            "sjui #{SjuiTools::CLI::VERSION}"
+          rescue StandardError, LoadError
+            "sjui setup"
+          end
+
+          def observation_date
+            Time.now.strftime("%Y-%m-%d")
           end
 
           def ensure_scene_block(content, method_name, enabled)

@@ -130,6 +130,20 @@ RSpec.describe SjuiTools::UIKit::XcodeProject::Setup::AppDelegateSetup do
   # 実エントリを撃つ。抽出した private メソッドではない
   # （抽出計器での測定は「その関数の主張」であって「コマンドの主張」ではない:
   #  初報はそれで、早期 return の手前で起きない欠陥を major として起票した）。
+  # 消費側が自分で書いた HotLoader 配線（到達していなかった間に埋めた形）。
+  # 実測: App ファイルの init() の `#if DEBUG` に 5 行、うち 1 行が isHotLoadEnabled = true。
+  HotLoaderRegionFixtures::EXISTING_WIRING = <<~SWIFT
+    import SwiftUI
+
+    struct Bootstrapper {
+        init() {
+            #if DEBUG
+            HotLoader.instance.isHotLoadEnabled = true
+            #endif
+        }
+    }
+  SWIFT
+
   HotLoaderRegionFixtures::SCENE_DELEGATE = <<~SWIFT
     import UIKit
 
@@ -196,6 +210,29 @@ RSpec.describe SjuiTools::UIKit::XcodeProject::Setup::AppDelegateSetup do
     }
   SWIFT
 
+  # SwiftUI ライフサイクルの木: `AppDelegate.swift` が無く、delegate は App ファイルの中。
+  HotLoaderRegionFixtures::APP_FILE_WITH_DELEGATE = <<~SWIFT
+    import SwiftUI
+    import UIKit
+
+    class AppDelegate: NSObject, UIApplicationDelegate {
+        func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
+            return true
+        }
+    }
+
+    @main
+    struct MyApp: App {
+        @UIApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
+
+        var body: some Scene {
+            WindowGroup {
+                Text("hi")
+            }
+        }
+    }
+  SWIFT
+
   # scene:
   #   :ok            plist に鍵（従来の fixture）
   #   :pbxproj       plist に鍵なし・pbxproj に [sdk=…] 付きで YES ← plist を生成する面の実形
@@ -203,7 +240,7 @@ RSpec.describe SjuiTools::UIKit::XcodeProject::Setup::AppDelegateSetup do
   #   :pbxproj_no    pbxproj に NO（= 非採用。境界）
   #   :no_file       SceneDelegate.swift が無い
   #   :no_manifest   どちらの源にも宣言が無い
-  def run_setup(dir, source, scene: :ok)
+  def run_setup(dir, source, scene: :ok, delegate_in: :own_file, wiring: false)
     app = File.join(dir, 'App')
     FileUtils.mkdir_p(app)
     FileUtils.mkdir_p(File.join(dir, 'App.xcodeproj'))
@@ -244,8 +281,11 @@ RSpec.describe SjuiTools::UIKit::XcodeProject::Setup::AppDelegateSetup do
               end
     File.write(File.join(dir, 'App.xcodeproj', 'project.pbxproj'),
                "// !$*UTF8*$!\n{\n\tbuildSettings = {\n#{setting}\n\t};\n}\n") if setting
-    path = File.join(app, 'AppDelegate.swift')
+    # delegate をどのファイルに置くか。`:app_file` は SwiftUI ライフサイクルの木の実形
+    # （`AppDelegate.swift` は存在せず、delegate クラスは App 本体のファイルの中）。
+    path = File.join(app, delegate_in == :app_file ? 'MyApp.swift' : 'AppDelegate.swift')
     File.write(path, source) unless source.nil?
+    File.write(File.join(app, 'ExistingWiring.swift'), HotLoaderRegionFixtures::EXISTING_WIRING) if wiring
     out = StringIO.new
     begin
       $stdout = out
@@ -529,6 +569,135 @@ RSpec.describe SjuiTools::UIKit::XcodeProject::Setup::AppDelegateSetup do
       expect(after.scan('UIViewCreator.prepare()').size).to eq(1), after
       expect(after.scan('UIViewCreator.copyResourcesToDocuments()').size).to eq(1), after
       expect(msg).not_to include('生成節から離れた位置'), msg
+    end
+  end
+
+  # 探索の 3 経路を**互いに代替できない検体**で 1 本ずつ撃つ。
+  # ⚠️ 最初の検体は 3 経路すべてが当たる形だったので、どの経路を殺しても他の 2 本が
+  #   拾って変異が 3 本とも生き残った（腕が弱いのではなく、検体が経路を分けていなかった）。
+  {
+    adaptor_only: [
+      'アダプタが名指す型だけが手がかり（適合は extension、ファイル名も違う）',
+      <<~SWIFT
+        import SwiftUI
+        import UIKit
+
+        class Bootstrap: NSObject {
+        }
+
+        extension Bootstrap: UIApplicationDelegate {
+            func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
+                return true
+            }
+        }
+
+        @main
+        struct MyApp: App {
+            @UIApplicationDelegateAdaptor(Bootstrap.self) var delegate
+            var body: some Scene { WindowGroup { Text("hi") } }
+        }
+      SWIFT
+    ],
+    conformance_only: [
+      '適合の綴りだけが手がかり（アダプタ無し・ファイル名も違う）',
+      <<~SWIFT
+        import UIKit
+
+        class LaunchDelegate: NSObject, UIApplicationDelegate {
+            func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
+                return true
+            }
+        }
+      SWIFT
+    ]
+  }.each do |name, (label, source)|
+    it "注入先を綴りで見つける: #{label}" do
+      Dir.mktmpdir do |dir|
+        after, msg, scene = run_setup(dir, source, delegate_in: :app_file)
+        expect(msg).not_to include('見つかりません'), msg
+        expect(after).to include('sjui:hotloader:begin'), "#{name} で注入されなかった\n#{after}"
+        expect(scene).to match(/func\s+sceneDidBecomeActive[^}]*HotLoader/m), scene
+      end
+    end
+  end
+
+  it '注入先を綴りで見つける: 綴りが両方とも当たらない木は、従来のファイル名で拾う' do
+    Dir.mktmpdir do |dir|
+      # アダプタ無し・宣言行に適合が無い（extension で適合）⇒ 最後の砦だけが効く形。
+      source = <<~SWIFT
+        import UIKit
+
+        class AppDelegate: NSObject {
+        }
+
+        extension AppDelegate: UIApplicationDelegate {
+            func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
+                return true
+            }
+        }
+      SWIFT
+      after, msg, = run_setup(dir, source)
+      expect(msg).not_to include('見つかりません'), msg
+      expect(after).to include('sjui:hotloader:begin'), after
+    end
+  end
+
+  it '生成先そのものの区間は「区間外の配線」として数えない（自分の生成物を誤検出しない）' do
+    Dir.mktmpdir do |dir|
+      # SceneDelegate に消費側の toggle が在る形。生成先ファイルなので Note の対象外。
+      _after, msg, = run_setup(dir, shell(''), scene: :scene_legacy_toggles)
+      expect(msg).not_to include('HotLoader の配線が区間の外にも'), msg
+      # 代わりに「注入先でない toggle を残した」Note の方で名指しされる
+      expect(msg).to include('sceneWillResignActive'), msg
+    end
+  end
+
+  # ── P0-1c: AppDelegate.swift を持たない木 ─────────────────────────
+  it '`AppDelegate.swift` が無くても、@UIApplicationDelegateAdaptor が名指す型で注入先を見つける' do
+    Dir.mktmpdir do |dir|
+      after, msg, scene = run_setup(dir, HotLoaderRegionFixtures::APP_FILE_WITH_DELEGATE, delegate_in: :app_file)
+      expect(msg).not_to include('見つかりません'), msg
+      expect(after).to include('sjui:hotloader:begin'), after
+      expect(after).to include('UIViewCreator.prepare()')
+      expect(scene).to match(/func\s+sceneDidBecomeActive[^}]*HotLoader/m), scene
+      expect(after.count('{')).to eq(after.count('}'))
+    end
+  end
+
+  it '区間の外に在る既存の配線は、消さずに位置と綴りを名指しする' do
+    Dir.mktmpdir do |dir|
+      after, msg, = run_setup(dir, HotLoaderRegionFixtures::APP_FILE_WITH_DELEGATE, delegate_in: :app_file, wiring: true)
+      wiring_file = File.join(dir, 'App', 'ExistingWiring.swift')
+      # 消さない
+      expect(File.read(wiring_file)).to include('HotLoader.instance.isHotLoadEnabled = true')
+      # 名指しする: ファイル・行番号・綴り・「2 系統」
+      # Note と区間内コメントは 1 か所から組む。同じ識別フィールドが両方に出ること。
+      identifying = ['ExistingWiring.swift', 'HotLoader.instance.isHotLoadEnabled = true']
+      identifying.each { |field| expect(msg).to include(field), msg }
+      expect(msg).to include('2 系統'), msg
+      expect(msg).to match(/sjui 1\.\d+\.\d+ が \d{4}-\d{2}-\d{2} に観測/), msg
+      note_line = msg.lines.find { |l| l.include?('HotLoader の配線が区間の外にも') }
+      # stdout だけに頼らない: 区間の中に痕跡が残る。
+      # ⚠️ 判別子は**綴り**で、行番号ではない。区間は setup を撃ったときにしか
+      #   再生成されないので、行番号だけ書くと消費側が 1 行足した瞬間に嘘になる。
+      comment_line = after.lines.find { |l| l.include?('HotLoader の配線が区間の外にも') }
+      expect(comment_line).not_to be_nil, after
+      identifying.each { |field| expect(comment_line).to include(field), after }
+      expect(comment_line).to match(/sjui 1\.\d+\.\d+ が \d{4}-\d{2}-\d{2} に観測/), comment_line
+      expect(comment_line).to include('以後の編集には追随しません'), comment_line
+      # 🔻 2 つが同じ識別フィールドを持つこと。片方だけ文言を直すと、読み手ごとに
+      #   違う事実が届く（stdout は撃った人、コメントは次に開く人）。
+      extract = ->(text) { text.to_s[/—— (.*?) \[/m, 1] }
+      expect(extract.call(note_line)).to eq(extract.call(comment_line)), "Note: #{note_line}\nComment: #{comment_line}"
+      expect(extract.call(note_line)).not_to be_nil, note_line
+    end
+  end
+
+  it '既存の配線が無ければ Note も区間内コメントも出さない（誤検出しない）' do
+    Dir.mktmpdir do |dir|
+      after, msg, = run_setup(dir, HotLoaderRegionFixtures::APP_FILE_WITH_DELEGATE, delegate_in: :app_file)
+      expect(msg).not_to include('2 系統'), msg
+      expect(after).not_to include('配線が区間の外にも'), after
     end
   end
 
