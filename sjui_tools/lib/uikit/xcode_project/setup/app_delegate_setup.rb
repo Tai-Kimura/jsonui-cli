@@ -298,26 +298,65 @@ module SjuiTools
 
           def find_scene_delegate_file(project_dir)
             files = Dir.glob("#{project_dir}/**/SceneDelegate.swift").reject do |path|
-              path.include?("DerivedData") || path.include?("Build") || path.include?("Pods") ||
-                path.include?("Carthage") || path.include?(".build") || path.include?("node_modules") ||
-                path.include?("Tests") || path.include?("UITests")
+              ignored_path?(path) || path.include?("Tests") || path.include?("UITests")
             end
             files.min_by { |path| path.split("/").length }
           end
 
-          # scene 採用の判定は Info.plist の Manifest 有無で行う。
-          # ⚠️ SceneDelegate.swift が在るだけでは足りない: Xcode のテンプレートは
-          #   ファイルを置いたまま Manifest を消せる（その形は iOS 27 で起動しない）。
+          # scene 採用の宣言源は **2 つ**ある。
+          #
+          # ⚠️ 最初の実装は Info.plist の鍵しか見ておらず、実測で消費側 2 面のうち
+          #   1 面は plist に鍵を 0 個しか持たない。Xcode が
+          #   `GENERATE_INFOPLIST_FILE = YES` で plist を生成する構成では、宣言は
+          #   **pbxproj のビルド設定**に在る。当方の fixture が plist で宣言していたので
+          #   腕は全部緑のまま、実在のプロジェクトには一度も届かない修正になっていた。
+          #
+          #   走査根から build / Pods / SourcePackages / DerivedData を除いた実測
+          #   (2026-09-14):
+          #     面 A    Info.plist 3 本中 鍵を持つもの 0 / pbxproj に 12 行（全て [sdk=…] 付き）
+          #     面 B    Info.plist 3 本中 鍵を持つもの 3 / pbxproj に 0 行
+          #   ⇒ **どちらの源も実在する**。片方だけ見る述語はどちらかの面で必ず外す。
+          #
+          # 綴りは `[sdk=iphoneos*]` のような条件 suffix が付く形が実在する（面 A は
+          # 全行が suffix 付き）。suffix 無しの綴りも Xcode は書くので、両方受ける。
+          # `= YES` だけを受ける: `= NO` は「生成しない」宣言で、scene 非採用の側。
+          SCENE_MANIFEST_KEY = "UIApplicationSceneManifest"
+          SCENE_MANIFEST_BUILD_SETTING =
+            /INFOPLIST_KEY_UIApplicationSceneManifest_Generation(?:\[[^\]]*\])?"?\s*=\s*YES/
+
           def scene_manifest?(project_dir)
-            plist = Dir.glob("#{project_dir}/**/Info.plist").reject do |path|
-              path.include?("DerivedData") || path.include?("Build") || path.include?("Pods") ||
-                path.include?("Carthage") || path.include?(".build") || path.include?("node_modules")
-            end.min_by { |path| path.split("/").length }
+            return true if info_plist_declares_scene?(project_dir)
+
+            pbxproj_declares_scene?(project_dir)
+          end
+
+          def info_plist_declares_scene?(project_dir)
+            plist = Dir.glob("#{project_dir}/**/Info.plist").reject { |path| ignored_path?(path) }
+                       .min_by { |path| path.split("/").length }
             return false if plist.nil?
 
-            File.read(plist).include?("UIApplicationSceneManifest")
+            File.read(plist).include?(SCENE_MANIFEST_KEY)
           rescue StandardError
             false
+          end
+
+          def pbxproj_declares_scene?(project_dir)
+            candidates = [@project_file_path]
+            candidates << File.join(@project_file_path, "project.pbxproj") unless @project_file_path.end_with?(".pbxproj")
+            candidates += Dir.glob("#{project_dir}/**/project.pbxproj").reject { |path| ignored_path?(path) }
+            candidates.each do |path|
+              next unless path && File.file?(path)
+              return true if File.read(path) =~ SCENE_MANIFEST_BUILD_SETTING
+            end
+            false
+          rescue StandardError
+            false
+          end
+
+          def ignored_path?(path)
+            path.include?("DerivedData") || path.include?("/build/") || path.include?("Pods") ||
+              path.include?("Carthage") || path.include?(".build") || path.include?("node_modules") ||
+              path.include?("SourcePackages")
           end
 
           def ensure_scene_block(content, method_name, enabled)

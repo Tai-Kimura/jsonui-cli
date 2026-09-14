@@ -141,15 +141,33 @@ RSpec.describe SjuiTools::UIKit::XcodeProject::Setup::AppDelegateSetup do
     }
   SWIFT
 
-  # scene: :ok（SceneDelegate + Manifest あり）/ :no_file / :no_manifest
+  # scene:
+  #   :ok            plist に鍵（従来の fixture）
+  #   :pbxproj       plist に鍵なし・pbxproj に [sdk=…] 付きで YES ← plist を生成する面の実形
+  #   :pbxproj_bare  同上、suffix 無しの綴り
+  #   :pbxproj_no    pbxproj に NO（= 非採用。境界）
+  #   :no_file       SceneDelegate.swift が無い
+  #   :no_manifest   どちらの源にも宣言が無い
   def run_setup(dir, source, scene: :ok)
     app = File.join(dir, 'App')
     FileUtils.mkdir_p(app)
     FileUtils.mkdir_p(File.join(dir, 'App.xcodeproj'))
     scene_path = File.join(app, 'SceneDelegate.swift')
     File.write(scene_path, HotLoaderRegionFixtures::SCENE_DELEGATE) if scene != :no_file && !File.exist?(scene_path)
-    plist = scene == :no_manifest ? "<plist><dict></dict></plist>\n" : "<plist><dict><key>UIApplicationSceneManifest</key><dict/></dict></plist>\n"
+    # 宣言源は 2 つ。実測（2026-09-14、build/Pods/SourcePackages を除いた走査根）:
+    #   面 A  plist に鍵 0 / pbxproj に 12 行（全て [sdk=…] 付き）
+    #   面 B  plist に鍵 3 / pbxproj に 0 行
+    # ⇒ 検体も 2 源 × 有無で置く。`:plist` が従来の fixture、`:pbxproj` が plist を生成する面の実形。
+    plist_key = %i[ok plist].include?(scene)
+    plist = plist_key ? "<plist><dict><key>UIApplicationSceneManifest</key><dict/></dict></plist>\n" : "<plist><dict></dict></plist>\n"
     File.write(File.join(app, 'Info.plist'), plist) unless File.exist?(File.join(app, 'Info.plist'))
+    setting = case scene
+              when :pbxproj then '\t\t\t\t"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphoneos*]" = YES;'
+              when :pbxproj_bare then "\t\t\t\tINFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;"
+              when :pbxproj_no then '\t\t\t\t"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphoneos*]" = NO;'
+              end
+    File.write(File.join(dir, 'App.xcodeproj', 'project.pbxproj'),
+               "// !$*UTF8*$!\n{\n\tbuildSettings = {\n#{setting}\n\t};\n}\n") if setting
     path = File.join(app, 'AppDelegate.swift')
     File.write(path, source) unless source.nil?
     out = StringIO.new
@@ -301,6 +319,31 @@ RSpec.describe SjuiTools::UIKit::XcodeProject::Setup::AppDelegateSetup do
         "空になった生成メソッドが AppDelegate に残った\n#{after}"
       expect(scene).to match(/func\s+sceneDidBecomeActive[^}]*HotLoader/m)
       expect(after.count('{')).to eq(after.count('}'))
+    end
+  end
+
+  # 宣言源の 2 つを、境界の両側で同じ表に置く。
+  # ⚠️ ここが plist だけだったとき、腕は全部緑のまま実在の 1 面には
+  #   一度も届かない修正になっていた（fixture が実形と違う、の裏返し）。
+  {
+    plist: [:ok, true, 'plist に鍵（plist を保持する面の実形）'],
+    pbxproj_sdk_suffix: [:pbxproj, true, 'pbxproj に [sdk=…] 付きで YES（plist を生成する面の実形）'],
+    pbxproj_bare: [:pbxproj_bare, true, 'pbxproj に suffix 無しで YES'],
+    pbxproj_no: [:pbxproj_no, false, 'pbxproj に NO ＝ 非採用（境界）'],
+    neither: [:no_manifest, false, 'どちらの源にも無い']
+  }.each do |name, (mode, injected, label)|
+    it "宣言源 #{name}: #{label} → #{injected ? '注入される' : '警告して戻さない'}" do
+      Dir.mktmpdir do |dir|
+        after, msg, scene = run_setup(dir, shell(''), scene: mode)
+        if injected
+          expect(scene).to match(/func\s+sceneDidBecomeActive[^}]*HotLoader/m), "注入されなかった\n#{msg}"
+          expect(msg).not_to include('UIApplicationSceneManifest がありません'), msg
+        else
+          expect(msg).to include('iOS 27'), msg
+          expect(scene).not_to include('HotLoader'), scene
+          expect(after).not_to include('func applicationDidBecomeActive'), after
+        end
+      end
     end
   end
 
