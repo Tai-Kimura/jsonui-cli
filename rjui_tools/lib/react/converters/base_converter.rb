@@ -1838,7 +1838,17 @@ module RjuiTools
           case input&.downcase
           when 'number', 'numberpad'
             'numeric'
-          when 'decimal', 'decimalpad'
+          # `signedDecimal` collapses onto `decimal` here for the same reason
+          # it collapses onto `number` in determine_input_type: `inputmode`
+          # has no signed variant. Declared degradation, not an omission.
+          #
+          # This function is the TextView path too, and a textarea has no
+          # `type` attribute -- so for TextView this collapse is the WHOLE
+          # of what `signedDecimal` can do, and date / time / datetime reach
+          # the DOM as a plain textarea. They deliberately fall through to
+          # nil: emitting `inputmode="text"` for them would claim a keyboard
+          # choice the author did not make.
+          when 'decimal', 'decimalpad', 'signeddecimal'
             'decimal'
           # `phone` is the spelling attribute_definitions actually declares;
           # only the UIKit long forms were listed, so the one value a layout

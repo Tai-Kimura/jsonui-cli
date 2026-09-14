@@ -278,8 +278,26 @@ module RjuiTools
           case attributes['input']&.downcase
           when 'email'
             'email'
-          when 'number', 'decimal', 'numberpad', 'decimalpad'
+          # `signedDecimal` is a SIGNED decimal keyboard. HTML has no such
+          # type: `number` already accepts a leading minus, and there is no
+          # narrower input that means "decimal, sign allowed". So it lands on
+          # exactly what `decimal` lands on, here and in map_input_mode, and
+          # the two values are INDISTINGUISHABLE in the DOM. That is the
+          # declared degradation (attribute_definitions `input`), not a gap
+          # to close later -- a fixture that expects them to differ on web is
+          # asserting something the platform cannot express.
+          when 'number', 'decimal', 'signeddecimal', 'numberpad', 'decimalpad'
             'number'
+          # date / time / datetime change the ELEMENT TYPE rather than the
+          # keyboard hint, because they are not inputmode values -- inputmode
+          # has no date-like token at all. This is the path SelectBox's
+          # datepicker already takes, and the spellings match it.
+          when 'date'
+            'date'
+          when 'time'
+            'time'
+          when 'datetime'
+            'datetime-local'
           # `phone` is the declared enum spelling (see map_input_mode).
           when 'tel', 'phone', 'phonenumber', 'namephonepad'
             'tel'
