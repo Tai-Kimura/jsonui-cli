@@ -1768,14 +1768,41 @@ def _cmd_coverage(args: argparse.Namespace) -> int:
         print(f"    {reason}: {count}")
 
     if result.unrecorded:
-        print(f"\n{len(result.unrecorded)} declared attribute(s) no converter reads:")
-        for gap in result.unrecorded:
-            print(f"  {gap}")
-        print(
-            "\nImplement it, narrow platform/mode in attribute_definitions.json, or "
-            f"record it with `jui conformance coverage --update` (then set a reason in "
-            f"{ledger_path.name})."
-        )
+        # Two states reach this branch and they need different instructions.
+        # A gap with no entry has never been seen; a gap whose entry says
+        # `unreviewed` has already been through `--update`, and telling its
+        # reader to run `--update` sends them back to where they are. The
+        # states differed by one line in the summary before this split, and
+        # the ACTION line — the one people follow — was identical.
+        recorded = cov.load_ledger(ledger_path)
+        awaiting = [
+            gap for gap in result.unrecorded
+            if (recorded.get((gap.key, gap.platform)) or {}).get("reason") == cov.UNREVIEWED
+        ]
+        fresh = [gap for gap in result.unrecorded if gap not in awaiting]
+
+        if fresh:
+            print(f"\n{len(fresh)} declared attribute(s) no converter reads:")
+            for gap in fresh:
+                print(f"  {gap}")
+            print(
+                "\nImplement it, narrow platform/mode in attribute_definitions.json, or "
+                f"record it with `jui conformance coverage --update` (then set a reason in "
+                f"{ledger_path.name})."
+            )
+        if awaiting:
+            print(
+                f"\n{len(awaiting)} ledger entr(y/ies) still carry the `{cov.UNREVIEWED}` "
+                f"marker `--update` writes:"
+            )
+            for gap in awaiting:
+                print(f"  {gap}")
+            print(
+                f"\nThese are recorded but not ruled on. Open {ledger_path.name} and "
+                f"replace each `{cov.UNREVIEWED}` with a real reason and a note — or close "
+                "the gap by implementing it. Running `--update` again will not change "
+                "them; it is what wrote them."
+            )
 
     if result.stale:
         print(f"\n{len(result.stale)} stale ledger entr(y/ies) — the gap is closed or the")

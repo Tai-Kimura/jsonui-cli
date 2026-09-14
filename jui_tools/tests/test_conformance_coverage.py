@@ -650,6 +650,39 @@ class RealRepositoryTests(unittest.TestCase):
                                     platforms=("ios",))
             self.assertEqual([], [g.key for g in result.unrecorded])
 
+    def test_the_two_unrecorded_states_give_different_instructions(self):
+        """A gap that has never been seen and a gap `--update` already wrote
+        both reach the same failure branch. Before this split they printed
+        the SAME action line — "record it with `--update`" — which sends the
+        second reader back to where they already are. The states differed
+        only by a count in the summary, and a count is not an instruction.
+
+        Measured on a probe attribute:
+            never seen   -> "Implement it, narrow platform/mode ... or record
+                            it with `jui conformance coverage --update`"
+            unreviewed   -> "Open coverage.json and replace each `unreviewed`
+                            ... Running `--update` again will not change them;
+                            it is what wrote them."
+        """
+        # Read the FILE, not `inspect.getsource` of the module — the strings
+        # are split across source lines by the formatter, so a check against
+        # the joined sentence fails even when the sentence is there. (It did:
+        # the first version of this arm went red on a correct implementation.)
+        src = (Path(__file__).resolve().parents[1]
+               / "jui_cli" / "commands" / "conformance_cmd.py").read_text(encoding="utf-8")
+        flat = " ".join(src.split())
+
+        # ⚠️ Assert on fragments that do not cross a source-line boundary.
+        # Python joins adjacent string literals, so `"...will not change "`
+        # and `"them; ..."` are one sentence at runtime and two tokens in the
+        # file — a check for the joined form fails on a correct
+        # implementation. That happened twice writing this arm.
+        self.assertIn("Running `--update` again will not change", flat)
+        self.assertIn("still carry the `{cov.UNREVIEWED}`", flat)
+        # And the original instruction must still exist for the other state —
+        # removing it would leave a first-time gap with no route at all.
+        self.assertIn("record it with `jui conformance coverage --update`", flat)
+
     def test_the_shipped_ledger_has_no_machine_written_entries(self):
         """The repository's own ledger, not a fixture. An `unreviewed` row
         reaching main means somebody ran `--update` and stopped there."""
