@@ -90,6 +90,11 @@ NON_RENDERER_REASONS = frozenset(
 
 #: Why a gap is accepted. Recorded per entry so the ledger stays a decision
 #: log rather than an undifferentiated pile.
+#: The marker `--update` writes for a gap it has never seen. Kept as a
+#: constant because three places have to agree on it: the writer, the
+#: vocabulary, and the check that rejects it.
+UNREVIEWED = "unreviewed"
+
 REASONS = {
     # The attribute cannot mean anything on this platform. Prefer narrowing
     # `platform` / `mode` in attribute_definitions.json — then it is not a gap.
@@ -103,6 +108,22 @@ REASONS = {
     "dynamic-key",
     # Kept for compatibility, intentionally not wired up.
     "legacy",
+    # 🔻 NOT A REASON — the absence of one. `--update` writes this into every
+    # entry it creates, and `check` treats it exactly like an unrecorded gap.
+    #
+    # Why: the failure message told the reader to run `--update` "(then set a
+    # reason in coverage.json)", and nothing required the second half.
+    # `default_reason` filled in "unimplemented" — a real, plausible reason,
+    # written by the machine — so a brand-new gap could be absorbed into the
+    # ledger by running the command the error message suggested, and no
+    # downstream reader could tell a considered entry from an automatic one.
+    #
+    # Same shape the sibling command already learned: `baseline update`
+    # rewrites the whole manifest and "a regression that gets absorbed stops
+    # being a regression", which is why it grew `--only-new`. This is the
+    # coverage ledger's version of that flag, done as a vocabulary term so
+    # the check itself enforces it rather than a habit.
+    UNREVIEWED,
 }
 
 #: How a converter reads an attribute. Anything not matched here reads as a
@@ -609,7 +630,11 @@ def default_reason(gap, definitions: dict, aliases: dict) -> tuple:
     known = aliases.get(gap.component, set()) | aliases.get("common", set())
     if gap.attribute in known:
         return ("legacy", "alias — normalized to its canonical spelling before conversion")
-    return ("unimplemented", None)
+    # NOT "unimplemented". A machine cannot know whether this is debt, a
+    # platform that cannot express it, or a scanner blind spot — and writing
+    # a plausible reason is what let a new gap enter the ledger unexamined.
+    return (UNREVIEWED, "written by `coverage --update`; replace with a real "
+                        "reason and a note, or close the gap")
 
 
 def render_ledger(gaps, existing=None, definitions=None) -> str:
@@ -687,6 +712,11 @@ def check(definitions: dict, repo_root, conformance_dir, platforms=None) -> Cove
             result.unrecorded.append(gap)
         else:
             reason = entry.get("reason", "unimplemented")
+            if reason == UNREVIEWED:
+                # Recorded, but by the machine. Fails exactly as if it were
+                # not recorded at all — the entry exists so the reader can
+                # see WHAT to rule on, not so the gate can stop asking.
+                result.unrecorded.append(gap)
             result.by_reason[reason] = result.by_reason.get(reason, 0) + 1
 
     for (key, platform), _entry in sorted(ledger.items()):

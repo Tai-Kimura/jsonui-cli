@@ -389,13 +389,23 @@ class LedgerTests(unittest.TestCase):
 
     def test_an_alias_is_classified_as_legacy_not_unimplemented(self):
         # L1 normalization rewrites an alias to its canonical spelling, so no
-        # converter is ever expected to read one.
+        # converter is ever expected to read one. That is a fact the machine
+        # CAN establish, so it is allowed to write the reason.
+        #
+        # Everything else is not: this arm used to assert that a non-alias gap
+        # came out as "unimplemented", which pinned the behaviour that let
+        # `--update` absorb a brand-new gap behind a plausible machine-written
+        # reason. The subject of the arm — aliases are special-cased — is
+        # unchanged; what a non-alias gets is now the `unreviewed` marker the
+        # check rejects.
         gaps = coverage.find_gaps(self.defs, self.reads)
         doc = json.loads(coverage.render_ledger(gaps, definitions=self.defs))
         alias = next(e for e in doc["entries"] if e["attribute"] == "hilightColor")
         self.assertEqual("legacy", alias["reason"])
         image = next(e for e in doc["entries"] if e["attribute"] == "image")
-        self.assertEqual("unimplemented", image["reason"])
+        self.assertEqual(coverage.UNREVIEWED, image["reason"])
+        self.assertNotEqual(alias["reason"], image["reason"],
+                            "the alias special case must still be a special case")
 
     def test_regenerating_preserves_a_hand_set_reason_and_note(self):
         gaps = coverage.find_gaps(self.defs, self.reads)
@@ -554,6 +564,102 @@ class RealRepositoryTests(unittest.TestCase):
             [], result.stale,
             "stale ledger entries — run `jui conformance coverage --update`",
         )
+
+    def test_update_cannot_absorb_a_new_gap(self):
+        """`--update` must not be able to accept a gap nobody has read.
+
+        The failure message points at `--update` and then says, in
+        parentheses, "then set a reason in coverage.json". Nothing required
+        the second half: `default_reason` filled in "unimplemented" — a real,
+        plausible reason, written by the machine — so running the command the
+        error suggested made the gate go quiet, and no later reader could
+        tell a considered entry from an automatic one.
+
+        The sibling command learned this already: `baseline update` rewrites
+        the whole manifest, so "a regression that gets absorbed stops being a
+        regression", and it grew `--only-new`. This is the same lesson as a
+        vocabulary term, so the CHECK enforces it instead of a habit.
+
+        Measured before the fix, on a probe attribute nobody reads:
+            check            rc=1   (the ratchet works)
+            --update         rc=0   reason written: "unimplemented"
+            check again      rc=0   <- the hole: absorbed
+        and after:
+            check again      rc=1   reported under `unreviewed`
+        """
+        definitions = {
+            "TextField": {
+                "zzzNobodyReadsThis": {
+                    "type": "boolean", "description": "probe", "platform": "swift",
+                },
+            },
+        }
+        gap = coverage.Gap(component="TextField",
+                           attribute="zzzNobodyReadsThis",
+                           platform="ios")
+        reason, note = coverage.default_reason(gap, definitions, {})
+        self.assertEqual(coverage.UNREVIEWED, reason,
+                         "a machine-written entry must not claim a real reason")
+        self.assertTrue(note, "the marker has to say what the reader must do")
+
+    def test_an_unreviewed_entry_fails_exactly_like_an_unrecorded_one(self):
+        """Recorded, but by the machine. The entry exists so the reader can
+        see WHAT to rule on — not so the gate stops asking."""
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "conformance").mkdir()
+            (root / "conformance" / "coverage.json").write_text(json.dumps({
+                "schemaVersion": 1,
+                "entries": [{
+                    "component": "View", "attribute": "probeAttr",
+                    "platforms": ["ios"], "reason": coverage.UNREVIEWED,
+                }],
+            }), encoding="utf-8")
+            for platform, rel in coverage.SOURCE_ROOTS.items():
+                (root / rel).mkdir(parents=True, exist_ok=True)
+            definitions = {"View": {"probeAttr": {"type": "boolean",
+                                                  "description": "probe",
+                                                  "platform": "swift"}}}
+            result = coverage.check(definitions, root, root / "conformance",
+                                    platforms=("ios",))
+            self.assertEqual(
+                ["View.probeAttr"], [g.key for g in result.unrecorded],
+                "an `unreviewed` entry must fail like an unrecorded gap")
+            self.assertEqual([], result.stale)
+
+    def test_a_real_reason_is_accepted(self):
+        """Control for the two arms above: the same ledger with a considered
+        reason passes. Without this, `unreviewed` failing proves only that
+        SOMETHING fails."""
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "conformance").mkdir()
+            (root / "conformance" / "coverage.json").write_text(json.dumps({
+                "schemaVersion": 1,
+                "entries": [{
+                    "component": "View", "attribute": "probeAttr",
+                    "platforms": ["ios"], "reason": "unimplemented",
+                }],
+            }), encoding="utf-8")
+            for platform, rel in coverage.SOURCE_ROOTS.items():
+                (root / rel).mkdir(parents=True, exist_ok=True)
+            definitions = {"View": {"probeAttr": {"type": "boolean",
+                                                  "description": "probe",
+                                                  "platform": "swift"}}}
+            result = coverage.check(definitions, root, root / "conformance",
+                                    platforms=("ios",))
+            self.assertEqual([], [g.key for g in result.unrecorded])
+
+    def test_the_shipped_ledger_has_no_machine_written_entries(self):
+        """The repository's own ledger, not a fixture. An `unreviewed` row
+        reaching main means somebody ran `--update` and stopped there."""
+        repo_root = Path(__file__).resolve().parents[2]
+        ledger = json.loads(
+            (repo_root / "conformance" / "coverage.json").read_text(encoding="utf-8"))
+        unreviewed = [f"{e['component']}.{e['attribute']}"
+                      for e in ledger["entries"]
+                      if e.get("reason") == coverage.UNREVIEWED]
+        self.assertEqual([], unreviewed)
 
     def test_button_image_is_no_longer_a_gap(self):
         # The regression that motivated this check.
