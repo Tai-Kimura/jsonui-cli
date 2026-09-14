@@ -1,7 +1,19 @@
 {
-  "manifestHash" : "ff5353d320eb0b38da9b07dde099ad40a00f757fb23c7cab39e86649cfabcfe3",
+  "manifestHash" : "1b39dacd81c4e90a003908d9fd50052a3292b11fb5019d65185511a2eba60610",
   "platform" : "ios",
   "results" : [
+    {
+      "detail" : "",
+      "id" : "common/glass__true",
+      "screenshot" : "artifacts/ios/common_glass__true.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "common/glass__false",
+      "screenshot" : "artifacts/ios/common_glass__false.png",
+      "status" : "pass"
+    },
     {
       "detail" : "",
       "id" : "common/width__matchparent",
@@ -2029,6 +2041,30 @@
       "status" : "pass"
     },
     {
+      "detail" : "",
+      "id" : "TextField/input__signeddecimal",
+      "screenshot" : "artifacts/ios/TextField_input__signeddecimal.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "TextField/input__date",
+      "screenshot" : "artifacts/ios/TextField_input__date.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "TextField/input__time",
+      "screenshot" : "artifacts/ios/TextField_input__time.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "TextField/input__datetime",
+      "screenshot" : "artifacts/ios/TextField_input__datetime.png",
+      "status" : "pass"
+    },
+    {
       "detail" : "not applicable to ios",
       "id" : "TextField/inputType__text",
       "status" : "skipped"
@@ -2622,6 +2658,30 @@
       "detail" : "",
       "id" : "TextView/input__decimal",
       "screenshot" : "artifacts/ios/TextView_input__decimal.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "TextView/input__signeddecimal",
+      "screenshot" : "artifacts/ios/TextView_input__signeddecimal.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "TextView/input__date",
+      "screenshot" : "artifacts/ios/TextView_input__date.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "TextView/input__time",
+      "screenshot" : "artifacts/ios/TextView_input__time.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "TextView/input__datetime",
+      "screenshot" : "artifacts/ios/TextView_input__datetime.png",
       "status" : "pass"
     },
     {
@@ -5993,6 +6053,12 @@
     },
     {
       "detail" : "",
+      "id" : "__control/View__no-background_root.backdrop-5f535fdc",
+      "screenshot" : "artifacts/ios/control_View__no-background_root.backdrop-5f535fdc.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
       "id" : "__control/View__orientation-horizontal",
       "screenshot" : "artifacts/ios/control_View__orientation-horizontal.png",
       "status" : "pass"
@@ -6180,10 +6246,127 @@
       "id" : "common/maxWidth__wrap",
       "screenshot" : "artifacts/ios/common_maxWidth__wrap.png",
       "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Collection/cellAddress__scroll_1",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Collection/cellAddress__scroll_2",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Collection/cellAddress__none_1",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Collection/cellAddress__none_2",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Collection/cellAddress__horizontalSectionsNoItems",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Collection/cellChildAddress__bare_2",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Collection/cellChildTap__bare_2",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Collection/cellChildAddress__bare_1",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "__control/Collection__flow-overflow-scroll",
+      "screenshot" : "artifacts/ios/Collection_Collection__flow-overflow-scroll.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "__control/Collection__flow-overflow-none",
+      "screenshot" : "artifacts/ios/Collection_Collection__flow-overflow-none.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Collection/flowOverflow__scroll",
+      "screenshot" : "artifacts/ios/Collection_flowOverflow__scroll.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Collection/flowOverflow__none",
+      "screenshot" : "artifacts/ios/Collection_flowOverflow__none.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "__control/Collection__flow-overflow-wrap",
+      "screenshot" : "artifacts/ios/Collection_Collection__flow-overflow-wrap.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Collection/flowOverflow__wrap",
+      "screenshot" : "artifacts/ios/Collection_flowOverflow__wrap.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "__control/Collection__flow-overflow-fill",
+      "screenshot" : "artifacts/ios/Collection_Collection__flow-overflow-fill.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Collection/flowOverflow__fill",
+      "screenshot" : "artifacts/ios/Collection_flowOverflow__fill.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Collection/flowOverflow__none_item11",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "__control/Collection__flow-overflow-none-wrapInBox",
+      "screenshot" : "artifacts/ios/Collection_Collection__flow-overflow-none-wrapInBox.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Collection/flowOverflow__noneWrapInBox",
+      "screenshot" : "artifacts/ios/Collection_flowOverflow__noneWrapInBox.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "__control/Collection__flow-overflow-none-wrapInScroll",
+      "screenshot" : "artifacts/ios/Collection_Collection__flow-overflow-none-wrapInScroll.png",
+      "status" : "pass"
+    },
+    {
+      "detail" : "",
+      "id" : "Collection/flowOverflow__noneWrapInScroll",
+      "screenshot" : "artifacts/ios/Collection_flowOverflow__noneWrapInScroll.png",
+      "status" : "pass"
     }
   ],
   "runner" : {
     "name" : "xcuitest",
-    "version" : "ios-18.6"
+    "version" : "ios-26.5"
   }
 }

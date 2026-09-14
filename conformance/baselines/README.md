@@ -108,14 +108,46 @@ the key gates the right entries and not the corpus.
 ### The device behind `local/`
 
 An env key names a class of renderer, and within `local/` the class has to be
-narrow enough that a re-bake means something. The manifests carry no device
-field, so the reference devices are declared here:
+narrow enough that a re-bake means something. The iOS manifest now RECORDS its
+own toolchain and device in `rendered_by.ios.toolchain`, so that half is no
+longer a claim only this file makes; android's is still declared here.
 
 | platform | reference device |
 |---|---|
-| ios | **iPhone 16 Pro, iOS 18.6, simulator `C13F2A69-CA88-45A8-87C9-412FAADFFCCA`** — the device the driver gates run on |
-| | ⚠️ **iOS 18.6, deliberately still.** `ci/` moved to the iOS 26 SDK on 2026-09-14 and this set did not, so **iOS-26-only attributes render as nothing here** (`glass` is inert against its control on both faces on this device). That is a true picture of this device, not a broken baseline — the two env keys never compare. Moving it is a separate decision because iOS 26 offers no iPhone 16 Pro at all (its runtimes ship the iPhone 17 family), so a move changes the DEVICE as well as the OS, and the sentence above ties this device to the driver gates. |
+| ios | **iPhone 16 Pro, iOS 26.5, simulator `3B852800-3383-4374-9BB6-F0C486C474A4`** — same device MODEL as the driver gates, moved to iOS 26 on 2026-09-15 |
 | android | AVD **`conf_ci`** (android-35 google_apis_playstore_tablet arm64-v8a, 10G data) |
+
+🔻 **A CLAIM THAT STOOD HERE WAS FALSE, AND ITS REFUTATION WAS ALREADY IN THIS
+REPOSITORY.** This file said moving `local/` to iOS 26 would also have to
+change the device, "because iOS 26 offers no iPhone 16 Pro at all (its runtimes
+ship the iPhone 17 family)". Measured 2026-09-15: every installed iOS runtime —
+18.6, 26.4, 26.5 **and 27.0** — lists `iPhone 16 Pro` in its
+`supportedDeviceTypes`. What is true is narrower: Xcode's DEFAULT DEVICE SET
+for iOS 26 contains no iPhone 16 Pro, so `simctl list devices` shows none until
+one is created. `simctl create` makes one in a second. And the refutation did
+not need that measurement at all: `conformance-mobile.yml` has been running
+`SIMULATOR_NAME: iPhone 16 Pro` with `SIMULATOR_OS: "26"` green since
+2026-09-14 — the workflow in this repo was already doing the thing this
+paragraph called impossible.
+
+⇒ The move changed the OS and NOT the device, so the sentence tying this model
+to the driver gates survives intact.
+
+**What the move bought, measured both ways.** `ci/` is iOS 26.2 and `local/`
+was iOS 18.6, and the two env keys never compare — but that is a statement
+about the gate, not about the pictures, and the pictures were in fact
+unrelated:
+
+| | shared entries | identical hash | differing | beyond threshold |
+|---|---|---|---|---|
+| before (`ci` 26.2 vs `local` 18.6) | 856 | **0** | 856 | 829 |
+| after (`ci` 26.2 vs `local` 26.5) | 867 | **846** | 21 | 1 |
+
+Twenty-one of the remaining differences are Label text rasterisation across
+26.2 / 26.5 and across two machines. So `local/` and `ci/` now differ by the
+MACHINE and a point release, which is what having two env keys was supposed to
+isolate; before the move they differed by the whole operating system and the
+comparison could not see anything else.
 
 Bake `local/` from that device and no other. Two simulators of the *same*
 model and OS version are not interchangeable: `D6A1DD42` and `C13F2A69`, both
