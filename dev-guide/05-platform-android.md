@@ -107,6 +107,19 @@ kwargs や属性を通すときは **lib/compose/ 全体を grep** する。sink
 
 ## 5. 罠（Android 固有）
 
+- 🚨 **Android 17 以降、回転で IME の表示状態は復元されない**（targetSdk 不問、全アプリに効く）。
+  **ライブラリは復元を担わない。担えない**——`FocusManager`（library-dynamic）は
+  `MutableSharedFlow<String>(extraBufferCapacity = 1)` の **replay 0**、つまり**状態でなくイベントバス**で、
+  構成変更後に `LaunchedEffect` が購読し直しても**直前の focus 要求は再配信されない**。
+  実装漏れではなく設計（`FocusManager.requestFocus` は submit 時の次フィールド送りが用途）。
+  ライブラリが一律に再表示すると、意図しない IME 出現を作る。
+  ⇒ **復元が要る画面は消費側の責務**: `windowSoftInputMode="stateAlwaysVisible"` か、
+  `onCreate` / `onConfigurationChanged` で再要求する。
+  補足（測定 2026-09-14）: `conformance-host` は
+  `configChanges="orientation|screenSize|keyboardHidden"` を宣言しているので回転で再生成されず、
+  **この挙動はホストには届かない**。テストランナー側も「キーボードが表示されている」ことを
+  **assert する腕は 0 本**（`isKeyboardShown` は `hideKeyboard` アクションの private helper で、
+  schema はアクションとしてのみ公開）。非復元は `hideKeyboard` を **no-op 側**に倒すので、期待値が反転する腕は無い。
 - **responsive はインライン emit が正**: ファイルスコープ helper へ抽出すると
   `data`/`viewModel`/scope が漏れ `Modifier.weight` が壊れる（過去バグ多数、
   compose_builder.rb に長文コメントあり）。`LocalWindowInfo`/`LocalDensity` を使う
