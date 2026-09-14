@@ -214,6 +214,14 @@ class EveryBakeRecipeForcesTheReview(unittest.TestCase):
             # tests that name the command in their own prose, this file included
             "jui_tools/tests/test_conformance_baseline.py": 1,
             "jui_tools/tests/test_conformance_coverage.py": 1,
+            # ⚪ THIS FILE IS THE LARGEST BLOCK, AND THAT IS EXPECTED, NOT A
+            # SMELL. Every paragraph here names the command it guards, so
+            # adding prose to this file raises its own number and the failure
+            # reads "unclassified mention(s)" about the test itself. It is
+            # self-referential but SELF-MAINTAINING — writing here without
+            # updating the count goes red rather than quietly widening an
+            # allowance. If you are here because that fired: count the
+            # mentions you added and change the number.
             "jui_tools/tests/test_every_bake_recipe_forces_the_review.py": 8,
         }
         unclassified: list[str] = []
