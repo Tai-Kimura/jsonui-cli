@@ -301,6 +301,14 @@ rm -f  */.DS_Store
 #     v1.8.79  (these rules)   686 excluded / 2924 delivered  (tracked 3610)
 #              — same rules, same partition (no tracked file added), measured on
 #              e3f0d296's tree the same way.
+#     v1.8.80  (these rules)   695 excluded / 2947 delivered  (tracked 3642)
+#              — same rules; 32 tracked files more (23 delivered, 9 pruned: specs,
+#              jui_tools tests), measured on 94a66805's tree the same way.
+#              ⚠️ Counted with `find \( -type f -o -type l \)`. The three
+#              lib/core/attribute_definitions.json entries are SYMLINKS (mode
+#              120000), and `-type f` alone drops them: that predicate reproduces
+#              v1.8.79 as 2921/689 instead of the published 2924/686. Re-deriving
+#              the previous row is what caught it.
 #
 # PINNED TO TAGS, and NOT to a SHA — a tag does not move, and naming the tip
 # here would be stale the moment this file is committed, which is the bug
