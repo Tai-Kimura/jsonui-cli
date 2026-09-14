@@ -78,7 +78,6 @@ RSpec.describe 'emitted TypeScript reaches a compiler' do
     'react/converters/responsive_integration_spec.rb' => UNCONVERTED,
     'react/converters/scroll_view_converter_spec.rb' => UNCONVERTED,
     'react/converters/segment_converter_spec.rb' => UNCONVERTED,
-    'react/converters/select_box_converter_spec.rb' => UNCONVERTED,
     'react/converters/slider_converter_spec.rb' => UNCONVERTED,
     'react/converters/switch_converter_spec.rb' => UNCONVERTED,
     'react/converters/tab_view_converter_spec.rb' => UNCONVERTED,

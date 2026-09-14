@@ -497,9 +497,10 @@ module RjuiTools
           min_attr = date_bound_attr('min', attributes['minimumDate'])
           max_attr = date_bound_attr('max', attributes['maximumDate'])
 
-          # minuteInterval / datePickerStyle
+          # minuteInterval / datePickerStyle / click-to-open
           step_attr = build_minute_interval_attr(input_type)
           picker_attr = build_date_picker_style_attr
+          click_attr = build_date_picker_click_attr
 
           # onChange handler
           on_change = build_date_on_change(date_value, input_type)
@@ -508,7 +509,7 @@ module RjuiTools
           date_style = build_date_style_attr
           combined_style = date_style.empty? ? style_attr : date_style
 
-          jsx = "#{indent_str(indent)}<input#{id_attr} className=\"#{class_name}\" type=\"#{input_type}\"#{value_attr}#{on_change}#{min_attr}#{max_attr}#{step_attr}#{picker_attr}#{disabled_attr}#{combined_style}#{testid_attr}#{tag_attr} />"
+          jsx = "#{indent_str(indent)}<input#{id_attr} className=\"#{class_name}\" type=\"#{input_type}\"#{value_attr}#{on_change}#{min_attr}#{max_attr}#{step_attr}#{picker_attr}#{click_attr}#{disabled_attr}#{combined_style}#{testid_attr}#{tag_attr} />"
 
           wrap_with_visibility(jsx, indent)
         end
@@ -588,6 +589,20 @@ module RjuiTools
           return '' unless %w[graphical inline].include?(style)
 
           ' onFocus={(e) => e.currentTarget.showPicker?.()}'
+        end
+
+        # A native date input opens its calendar only from the indicator icon
+        # at its right edge; a click anywhere else in the box merely focuses
+        # the field, and a person tapping the visible control expects the
+        # calendar (reported on a web admin face, 2026-09-14). Every click
+        # therefore asks for the picker, whatever the datePickerStyle. Guarded
+        # because showPicker throws where it cannot open (no user activation,
+        # a cross-origin frame) — the native control is the fallback either
+        # way, and an engine without showPicker simply keeps its own behaviour.
+        # Independent of the focus hook above: focus is the "present it"
+        # semantics of graphical/inline; click is what a pointer does.
+        def build_date_picker_click_attr
+          ' onClick={(e) => { try { e.currentTarget.showPicker?.(); } catch {} }}'
         end
       end
     end

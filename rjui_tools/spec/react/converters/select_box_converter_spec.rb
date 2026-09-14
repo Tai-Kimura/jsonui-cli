@@ -399,14 +399,89 @@ RSpec.describe RjuiTools::React::Converters::SelectBoxConverter do
       # The wheel/compact chrome is UIKit's; what the web can honour is whether
       # the picker is presented or merely available.
       it 'opens the picker on focus for graphical and inline' do
-        expect(picker('datePickerStyle' => 'graphical')).to include('showPicker?.()')
-        expect(picker('datePickerStyle' => 'inline')).to include('showPicker?.()')
+        expect(picker('datePickerStyle' => 'graphical')).to include('onFocus={(e) => e.currentTarget.showPicker?.()}')
+        expect(picker('datePickerStyle' => 'inline')).to include('onFocus={(e) => e.currentTarget.showPicker?.()}')
       end
 
-      it 'leaves the native control alone for the wheel styles' do
-        expect(picker('datePickerStyle' => 'wheel')).not_to include('showPicker')
-        expect(picker('datePickerStyle' => 'compact')).not_to include('showPicker')
-        expect(picker({})).not_to include('showPicker')
+      it 'does not open on focus for the wheel styles or by default' do
+        expect(picker('datePickerStyle' => 'wheel')).not_to include('onFocus')
+        expect(picker('datePickerStyle' => 'compact')).not_to include('onFocus')
+        expect(picker({})).not_to include('onFocus')
+      end
+
+      # A native date input opens its calendar only from the indicator at the
+      # right edge; a click anywhere else merely focuses the field. Reported
+      # 2026-09-14 on a web admin face: the visible box is what a person taps.
+      # Every date input — any mode, any style, or none — opens on click.
+      # Until then `picker({})` emitted no showPicker at all (the inverted arm
+      # below pins that this is deliberate, not a leak of the focus hook).
+      it 'opens the picker on a click anywhere in the field, whatever the style' do
+        click = 'onClick={(e) => { try { e.currentTarget.showPicker?.(); } catch {} }}'
+        expect(picker({})).to include(click)
+        expect(picker('datePickerStyle' => 'wheel')).to include(click)
+        expect(picker('datePickerStyle' => 'graphical')).to include(click)
+        expect(picker('datePickerMode' => 'time')).to include(click)
+        expect(picker('datePickerMode' => 'datetime')).to include(click)
+      end
+
+      it 'keeps the click hook out of a select that is not a date picker' do
+        result = create_converter(
+          { 'class' => 'SelectBox', 'id' => 'kind', 'items' => %w[a b] }
+        ).convert
+        expect(result).not_to include('showPicker')
+      end
+
+      # The click hook is guarded: showPicker throws where it cannot open, and
+      # the native control must stay usable there.
+      it 'guards showPicker so an engine that refuses it falls back to the native control' do
+        expect(picker({})).to include('try { e.currentTarget.showPicker?.(); } catch {}')
+      end
+
+      # A string assert is not a compile. The handlers are typed by the real
+      # lib.dom `HTMLInputElement` (tsc's default lib for ES2020 carries DOM),
+      # so `showPicker` is checked against the declaration the consumer build
+      # sees, not a stub. `input` is narrowed from the support ambient's
+      # `any` so the arrow parameters are contextually typed — with `any`
+      # props `e` would be `any` and a misspelt member would type-check.
+      # The value helpers and `data` are declared as the consumer's
+      # generated module declares them (string in, string out).
+      DATE_INPUT_TS = <<~TS
+        declare namespace JSX {
+          interface IntrinsicElements {
+            input: {
+              id?: string; className?: string; type?: string; value?: string;
+              min?: string; max?: string; step?: number; disabled?: boolean;
+              onChange?: (e: { target: HTMLInputElement }) => void;
+              onFocus?: (e: { currentTarget: HTMLInputElement }) => void;
+              onClick?: (e: { currentTarget: HTMLInputElement }) => void;
+            };
+          }
+        }
+        declare const data: { day: string; at: string;
+                              onDayChange?: (v: string) => void; onAtChange?: (v: string) => void };
+        declare function toIsoDateValue(v: string, format: string, kind: string): string;
+        declare function formatDateValue(v: string, format: string, kind: string): string;
+      TS
+
+      def as_component(code)
+        "export const Emitted = (): JSX.Element => (\n#{code}\n);\n"
+      end
+
+      it 'the emitted date input type-checks: default, graphical with a binding, datetime with a format' do
+        expect(as_component(picker({}))).to compile_as_typescript.with_ambient(DATE_INPUT_TS)
+        expect(as_component(picker('selectedDate' => '@{day}', 'datePickerStyle' => 'graphical')))
+          .to compile_as_typescript.with_ambient(DATE_INPUT_TS)
+        expect(as_component(picker('datePickerMode' => 'datetime', 'selectedDate' => '@{at}',
+                                   'dateStringFormat' => 'yyyy/MM/dd HH:mm')))
+          .to compile_as_typescript.with_ambient(DATE_INPUT_TS)
+      end
+
+      # Control for the arm above: the same emit with the member misspelt
+      # must NOT type-check, or the arm is not looking at the handler.
+      it 'the compile arm sees the handler (a misspelt showPicker is rejected)' do
+        broken = picker({}).sub('showPicker?.()', 'showPickr?.()')
+        expect(broken).to include('showPickr')
+        expect(as_component(broken)).not_to compile_as_typescript.with_ambient(DATE_INPUT_TS)
       end
 
       # The input only ever speaks ISO, so a declared format is converted on
