@@ -15,6 +15,11 @@ module SjuiTools
           :frame_size,          # width/height
           :background,          # background color
           :gradient,            # gradient background
+          # `.glassEffect` renders a glass material OVER whatever background
+          # is already there, and carries its own shape argument — so it sits
+          # after the two background entries and before :corner_radius, which
+          # clips the result rather than the glass.
+          :glass,               # glassEffect (iOS 26+, via the library helper)
           :corner_radius,       # cornerRadius
           :border,              # overlay stroke
           :shadow,              # shadow

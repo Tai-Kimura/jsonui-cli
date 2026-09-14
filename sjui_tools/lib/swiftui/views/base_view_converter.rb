@@ -625,6 +625,19 @@ module SjuiTools
             end
           end
 
+          # Liquid Glass (iOS 26+). Emits ONE call to the library helper, never
+          # an `if #available` here: an availability check in generated code
+          # would be duplicated at every site that declares `glass`, and each
+          # copy asks the RUNNING OS, so the picture would vary by device. The
+          # helper holds the single check (ruling: iOS lane, 2026-09-14).
+          #
+          # `shape` is deliberately NOT resolved here. `rounded(N)` and `rect`
+          # could be, but `capsule` and `circle` depend on the laid-out height,
+          # which codegen does not know — so all four go to the helper as a
+          # value and the mapping stays in one place rather than being split
+          # across two layers by what happens to be statically knowable.
+          apply_glass
+
           # visibility属性はVisibilityWrapperで処理するので、ここでは何もしない
           # The actual wrapping happens in the parent view converter
 
@@ -1237,6 +1250,46 @@ module SjuiTools
         # The stroke colour. A binding resolves through the same colour
         # registry a literal does; it used to be skipped here and re-emitted
         # by the binding handler as a SECOND overlay.
+        # `glass` is declared on `common` with type [boolean, object]:
+        #   true                      -> the default treatment
+        #   {style:, tint:, interactive:, shape:}  -> each key optional
+        #   false / absent            -> nothing emitted
+        #
+        # ⚠️ THE DECLARED VALUE SET IS NOT THE SAME ON BOTH iOS MODES.
+        # SwiftUI's `Glass` has regular/clear/identity and `.glassEffect` takes
+        # a shape; UIKit's `UIGlassEffectStyle` has only Regular and Clear and
+        # `UIGlassEffect` (a UIVisualEffect subclass) has no shape parameter.
+        # This emitter is the SwiftUI path, so it passes all four keys through;
+        # the UIKit path cannot honour `identity` or `shape` and the
+        # declaration says so.
+        def apply_glass
+          value = @component['glass']
+          return if value.nil? || value == false || value == 'false'
+
+          args = []
+          if value.is_a?(Hash)
+            style = value['style']
+            args << "style: #{swift_string_literal(style)}" if style
+            if (tint = value['tint'])
+              args << "tint: #{get_swiftui_color(tint)}"
+            end
+            unless value['interactive'].nil?
+              interactive = value['interactive'] == true || value['interactive'] == 'true'
+              args << "interactive: #{interactive}"
+            end
+            args << "shape: #{swift_string_literal(value['shape'])}" if value['shape']
+          end
+
+          @modifier_bag.register(:glass, ".sjuiGlassEffect(#{args.join(', ')})")
+        end
+
+        # Swift string literal, escaped. Small enough to inline, but the
+        # escaping matters: a style or shape spelling arrives from JSON and
+        # goes into generated source.
+        def swift_string_literal(value)
+          %("#{value.to_s.gsub('\\', '\\\\').gsub('"', '\\"')}")
+        end
+
         def border_color_expr(value)
           return get_swiftui_color(value) unless bound_value?(value)
 
