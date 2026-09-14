@@ -69,6 +69,12 @@ EXEMPT: dict[str, str] = {
 #: the rest of its kind.
 _ADJACENT_LITERALS = re.compile(r'["\']\s*\n\s*[a-zA-Z]*["\']')
 
+#: Explicit `+` concatenation, the other way a runtime message gets split.
+#: Joined for the same reason as the implicit form — but note this only
+#: retires ONE spelling. The count assertion below is what closes the shape
+#: regardless of how the next split is written.
+_PLUS_CONCAT = re.compile(r'["\']\s*\n?\s*\+\s*\n?\s*[a-zA-Z]*["\']')
+
 
 def recipes_in(text: str) -> list[str]:
     """Each recipe as one logical line, continuations joined.
@@ -80,6 +86,7 @@ def recipes_in(text: str) -> list[str]:
     false PASS for the second — and the false pass is the dangerous one.
     """
     joined = re.sub(r"\\\s*\n\s*(?:#\s*)?", " ", text)
+    joined = _PLUS_CONCAT.sub("", joined)
     joined = _ADJACENT_LITERALS.sub("", joined)
     return [m.group(0) for m in RECIPE.finditer(joined) if "--platform" in m.group(0)]
 
@@ -171,30 +178,46 @@ class EveryBakeRecipeForcesTheReview(unittest.TestCase):
         the judgment is made once and recorded rather than re-derived by hand
         by whoever next audits this.
         """
-        files_with_non_recipe_mentions = {
+        # 🔑 A COUNT PER FILE, NOT A SET OF FILES. The previous version of
+        # this arm held a SET, so a file that legitimately carries prose
+        # mentions could gain unlimited UNCLASSIFIED ones and stay green — and
+        # the blind spot was `gate.py` and `report.py`, the two files where
+        # this exact class had already hidden twice tonight. Measured: the
+        # same flagless fragment probe is RED in an unregistered file and
+        # GREEN in a registered one.
+        #
+        # ⚠️ The earlier, hand-listed version of this file HAD per-file counts
+        # and lost them: moving the recipe side to a derived population
+        # dropped the count on the non-recipe side. A property already held
+        # can be given up by a change that improves something else.
+        #
+        # Counting closes the shape whatever spelling the next split uses;
+        # joining `+` above only retires one spelling.
+        non_recipe_mentions = {
             # generated manifests carry the command in their `generator` field
-            "conformance/baselines/ci/android.hashes.json",
-            "conformance/baselines/ci/ios.hashes.json",
-            "conformance/baselines/ci/web.hashes.json",
-            "conformance/baselines/local/android.hashes.json",
-            "conformance/baselines/local/ios.hashes.json",
-            "conformance/baselines/local/web.hashes.json",
+            "conformance/baselines/ci/android.hashes.json": 1,
+            "conformance/baselines/ci/ios.hashes.json": 1,
+            "conformance/baselines/ci/web.hashes.json": 1,
+            "conformance/baselines/local/android.hashes.json": 1,
+            "conformance/baselines/local/ios.hashes.json": 1,
+            "conformance/baselines/local/web.hashes.json": 1,
             # prose that names the command without invoking it
-            "conformance/RESULTS_SCHEMA.md",
-            "conformance/baselines/README.md",
-            "conformance/hosts/web/scripts/vendor/AssertionExecutor.ts",
+            "conformance/RESULTS_SCHEMA.md": 2,
+            "conformance/baselines/README.md": 4,
+            "conformance/hosts/web/scripts/vendor/AssertionExecutor.ts": 1,
             # module docstrings and error text that name the command generically
-            "jui_tools/jui_cli/conformance/baseline.py",
-            "jui_tools/jui_cli/conformance/coverage.py",
-            "jui_tools/jui_cli/conformance/gate.py",
-            "jui_tools/jui_cli/conformance/report.py",
-            "jui_tools/jui_cli/conformance/visual_stability.py",
+            "jui_tools/jui_cli/conformance/baseline.py": 1,
+            "jui_tools/jui_cli/conformance/coverage.py": 1,
+            "jui_tools/jui_cli/conformance/gate.py": 1,
+            "jui_tools/jui_cli/conformance/report.py": 1,
+            "jui_tools/jui_cli/conformance/visual_stability.py": 1,
             # tests that name the command in their own prose, this file included
-            "jui_tools/tests/test_conformance_baseline.py",
-            "jui_tools/tests/test_conformance_coverage.py",
-            "jui_tools/tests/test_every_bake_recipe_forces_the_review.py",
+            "jui_tools/tests/test_conformance_baseline.py": 1,
+            "jui_tools/tests/test_conformance_coverage.py": 1,
+            "jui_tools/tests/test_every_bake_recipe_forces_the_review.py": 8,
         }
-        unclassified = []
+        unclassified: list[str] = []
+        seen: set[str] = set()
         for rel in tracked_files():
             path = REPO / rel
             try:
@@ -207,15 +230,30 @@ class EveryBakeRecipeForcesTheReview(unittest.TestCase):
             if not wide:
                 continue
             narrow = len(recipes_in(text))
-            if wide > narrow and rel not in files_with_non_recipe_mentions:
-                unclassified.append(f"{rel} ({wide - narrow} unclassified mention(s))")
+            extra = wide - narrow
+            if extra <= 0:
+                continue
+            seen.add(rel)
+            declared = non_recipe_mentions.get(rel)
+            if declared != extra:
+                unclassified.append(
+                    f"{rel}: {extra} unclassified mention(s), declared "
+                    f"{declared if declared is not None else 'none'}"
+                )
+        stale = sorted(set(non_recipe_mentions) - seen)
         self.assertEqual(
             unclassified, [],
             "occurrence(s) of `baseline update` that are neither a recipe nor a "
-            "recorded non-recipe. Either they are recipes (give them "
-            "--platform and --fail-on-moved, on ONE source line) or they are "
-            "prose (add the file to files_with_non_recipe_mentions):\n  "
+            "DECLARED non-recipe. Either they are recipes (give them --platform "
+            "and --fail-on-moved, on ONE source line) or they are prose (declare "
+            "the new count in non_recipe_mentions):\n  "
             + "\n  ".join(unclassified),
+        )
+        self.assertEqual(
+            stale, [],
+            "non_recipe_mentions declares file(s) that no longer carry an "
+            f"unclassified mention — a stale allowance covers whatever appears "
+            f"there next: {stale}",
         )
 
     def test_the_flag_the_recipes_name_still_exists(self):
