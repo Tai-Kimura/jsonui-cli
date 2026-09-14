@@ -20,11 +20,50 @@ environment gets its own baseline set and only ever compares against itself:
 - `local/` — developer-machine renders (the pre-env-key baselines live on
   here unchanged; local gate runs default to this set)
 - `ci/` — GitHub Actions runners (macos-15 simulator / emulator / ubuntu
-  Chromium), baked **from CI run artifacts**, never from a local render
+  Chromium), baked **from CI run artifacts**, never from a local render.
+  The iOS toolchain is pinned — see below; `local/` and `ci/` are now on
+  **different iOS SDKs**, which is a fact about the pictures, not an oversight
 
 Each manifest records its `environment`; the loader refuses to compare a
 manifest under a different env key than it was baked for. Ratchet ceilings
 (`../gate_ratchet.json`) nest by the same env keys.
+
+### The toolchain behind `ci/` (iOS)
+
+| | |
+|---|---|
+| Xcode | **26.3** (`setup-xcode` in conformance-mobile.yml, both iOS jobs) |
+| SDK | iphonesimulator **26.2** |
+| runtime | iOS **26.2** — `SIMULATOR_OS: "26"`, resolved newest-within-the-pin |
+| device | iPhone 16 Pro |
+
+Each run re-measures all four and passes them as `ios.toolchain`, so the
+manifest says what drew it rather than this table being the only record.
+
+**Why it is pinned at all.** `simctl` lists every runtime INSTALLED on the
+machine, not the ones the selected Xcode shipped with, and the host script took
+the newest of them — so the Xcode pin was honoured while the runtime underneath
+moved with the runner image. It did move: the committed iOS runner version goes
+`18.6 -> 26.2 -> 18.6` across four bakes with the Xcode pin unchanged, and at
+one point the two iOS lanes disagreed with each other inside one tree
+(`results/ios` = ios-18.6 while `codegen/ios` = ios-26.2 — the pair
+`gate --parity` compares). An unmatched pin is now fatal rather than a
+fall-through to a neighbouring runtime.
+
+**Why Xcode 26.** iOS-26-only attributes compile out on the 18.5 SDK, and a
+fixture that renders as nothing still produces a baseline that matches itself —
+it passes while testing nothing. `common/glass__true` was exactly that: both
+faces drew the control, parity held at 0, and the agreement was two absences.
+On the first run after the move it measured 151 and the defect surfaced.
+
+🔻 **THE SDK, NOT THE RUNTIME, IS WHAT MOVED THE PICTURES.** The 2026-09-14
+re-bake moved 61 of 856 entries, and the previous baseline had ALREADY been
+drawn on an iOS 26.2 runtime — what changed was the SDK the host links against
+(18.5 -> 26.2). The 61 are `26 Switch / 12 TabView / 10 Segment / 6 control_* /
+5 Slider / 2 Collection`, and **zero** non-system-drawn fixtures. That zero is
+the discriminator: an SDK appearance change touches exactly the controls the
+system draws, and a regression in our own code would not respect that line.
+So do not read `simulator_os` alone when a bake moves; read all four.
 
 ### The device behind `local/`
 
@@ -35,6 +74,7 @@ field, so the reference devices are declared here:
 | platform | reference device |
 |---|---|
 | ios | **iPhone 16 Pro, iOS 18.6, simulator `C13F2A69-CA88-45A8-87C9-412FAADFFCCA`** — the device the driver gates run on |
+| | ⚠️ **iOS 18.6, deliberately still.** `ci/` moved to the iOS 26 SDK on 2026-09-14 and this set did not, so **iOS-26-only attributes render as nothing here** (`glass` is inert against its control on both faces on this device). That is a true picture of this device, not a broken baseline — the two env keys never compare. Moving it is a separate decision because iOS 26 offers no iPhone 16 Pro at all (its runtimes ship the iPhone 17 family), so a move changes the DEVICE as well as the OS, and the sentence above ties this device to the driver gates. |
 | android | AVD **`conf_ci`** (android-35 google_apis_playstore_tablet arm64-v8a, 10G data) |
 
 Bake `local/` from that device and no other. Two simulators of the *same*
