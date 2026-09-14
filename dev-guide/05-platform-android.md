@@ -124,9 +124,25 @@ kwargs や属性を通すときは **lib/compose/ 全体を grep** する。sink
   ```
   `data` は `viewModel()` 由来（wrapper の `val data by viewModel.data.collectAsState()`）で、**`ViewModel` は構成変更をまたいで保持される**。`<id>IsFocused` は data クラスの実フィールド。⇒ 回転後に composition が作り直されると `LaunchedEffect` が key `true` のまま再入し、**`requestFocus()` と `keyboardController?.show()` が走る経路が在る**。
   ⚠️ **走ることまでは実装から読めるが、Android 17 上で実際に IME が出るかは未測定**（端末が要る）。`FocusManager` を根拠にした「担えない」は、**この経路には移らない**。
-  ⚠️ **母集団**: この配線を持つのは `id` を宣言した **TextField と TextView**（sample-app では生成画面
-  53 本中 **8 本**、うち TextField を含むのは 1 本だけで**残り 7 本は TextView 由来**）。
-  ⚠️ **`id` 付き TextField だけ、と読むと 8 分の 7 を外す。**
+  ⚠️ **母集団**: この配線を持つのは `id` を宣言した **TextField と TextView**。**`id` 付き TextField だけ、と読むと TextView 側を落とす。**
+
+  🔴 **内訳の数え方（1.8.79 に載せた数は誤りだった。2026-09-14 14:2x に訂正）**
+  ```
+  🚫 生成物を `TextField(` で grep して emitter を判別する — できない
+     両 emitter が **同じ composable 名**を出す:
+       textfield_component.rb:217 / textview_component.rb:177  CustomTextFieldWithMargins(
+       textfield_component.rb:219 / textview_component.rb:179  CustomTextField(
+  ✅ 配線の id を生成物から拾い、**layout JSON の `type`** で引く。単位は **配線 1 本**（ファイル単位で数えない）
+  ```
+  この述語で数え直すと **多数側は TextField** で、1.8.79 に載せた「TextField 1 / TextView 7」は**数も向きも逆**だった:
+
+  | 面 | 配線 | TextField | TextView |
+  |---|---|---|---|
+  | KotlinJsonUI sample-app | 36 | 30 | 6 |
+  | 消費側 1 面（独立に再測） | 69 | 66 | 3 |
+
+  ⚠️ **ただしこの軸は的 B には効かない。** 両 emitter の配線は**形が同一**なので、emitter の違いは B の結果を変えない。⇒ **検体の条件は「配線を持っていること」だけ。**
+  🚨 **この壊れた述語には 2 レーンが独立に到達した**（片方は「TextView 由来 0 本」と結論しかけた）。⇒ **手順として置く**: 検体を選ぶ前に、面ごとに配線の内訳を **layout の `type`** で出す。**生成物の composable 名では判別できない。**
 
   🔻 **未測定が 2 つ在る。回転より手前に 1 つ在る。**
 
