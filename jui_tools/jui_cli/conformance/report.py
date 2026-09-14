@@ -322,9 +322,12 @@ def render_report(
                 continue
             if not comparison.baseline_exists:
                 env_flag = f" --env {env}" if env != baseline_mod.DEFAULT_ENV else ""
+                # One source line, and with the flag: this recipe is written
+                # INTO REPORT.md, so it ships in the artifact people read.
+                # Split across fragments it also disappears from the gate that
+                # checks recipes carry the flag.
                 lines.append(
-                    f"| {p.platform} | none recorded — run `jui conformance baseline update "
-                    f"--platform {p.platform}{env_flag}` | 0 | 0 | {len(comparison.no_baseline)} | 0 |"
+                    f"| {p.platform} | none recorded — run `jui conformance baseline update --platform {p.platform}{env_flag} --fail-on-moved` | 0 | 0 | {len(comparison.no_baseline)} | 0 |"
                 )
                 continue
             if comparison.algorithm_mismatch is not None:

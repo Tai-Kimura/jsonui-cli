@@ -54,15 +54,33 @@ EXEMPT: dict[str, str] = {
 }
 
 
-def recipes_in(text: str) -> list[str]:
-    """Each recipe as one logical line, shell continuations joined.
+#: Adjacent string literals in Python are concatenated by the compiler, so a
+#: recipe written across two f-string fragments is ONE string at runtime and
+#: TWO lines in the source. Joining them here is not cosmetic: without it the
+#: scan reads `baseline update ` with no `--platform`, does not classify it as
+#: a recipe, and the file stays green while that recipe carries no flag.
+#:
+#: 🔻 MEASURED, AND THE CLASS WAS FOUND FROM ITS OWN INSTANCE. The first fix
+#: for `baseline.py` was written across two fragments and this gate caught it;
+#: the class was NOT counted at the time, and a peer lane then found two more
+#: survivors — `gate.py` (emitted immediately after N regressions are
+#: measured) and `report.py` (written into REPORT.md). Finding a defect while
+#: fixing something else is the moment with the least appetite for counting
+#: the rest of its kind.
+_ADJACENT_LITERALS = re.compile(r'["\']\s*\n\s*[a-zA-Z]*["\']')
 
-    A recipe is often split with a trailing `\\`, and the flag may sit on
-    either half — matching per physical line reports a false failure for a
-    recipe that is in fact correct. YAML/py comment leaders on the joined
-    line are dropped for the same reason.
+
+def recipes_in(text: str) -> list[str]:
+    """Each recipe as one logical line, continuations joined.
+
+    Two ways a recipe gets split, both joined here:
+      * a shell `\\` continuation inside a doc or a YAML comment
+      * adjacent Python string literals (implicit concatenation)
+    Matching per physical line reports a false failure for the first and a
+    false PASS for the second — and the false pass is the dangerous one.
     """
     joined = re.sub(r"\\\s*\n\s*(?:#\s*)?", " ", text)
+    joined = _ADJACENT_LITERALS.sub("", joined)
     return [m.group(0) for m in RECIPE.finditer(joined) if "--platform" in m.group(0)]
 
 
@@ -133,6 +151,72 @@ class EveryBakeRecipeForcesTheReview(unittest.TestCase):
         self.assertEqual(stale, [], f"EXEMPT names file(s) with no recipe any more: {stale}")
         for rel, reason in EXEMPT.items():
             self.assertGreater(len(reason), 60, f"{rel}: an exemption needs a reason, not a label")
+
+    def test_every_mention_of_the_command_is_classified(self):
+        """⭐ THE COMPLEMENT IS THE POPULATION NOBODY HAS JUDGED.
+
+        The assertions above answer "does every RECIPE carry the flag". They
+        say nothing about the occurrences the predicate did not classify — and
+        that set is exactly where the two worst sites hid: `gate.py` and
+        `report.py` each wrote the command across f-string fragments, so the
+        predicate saw `baseline update ` with no `--platform`, filed them
+        outside its window, and stayed green while both carried no flag.
+
+        🔻 "The predicate matched SOMETHING" and "the predicate matched
+        EVERYTHING it should" do not have the same failure signature. The
+        empty-scan arm covers the first. This one covers the second: every
+        occurrence of the command string in the tree must be either a
+        flag-carrying recipe, a reasoned exemption, or a non-recipe whose FILE
+        is listed below with why. A new unclassified occurrence fails here, so
+        the judgment is made once and recorded rather than re-derived by hand
+        by whoever next audits this.
+        """
+        files_with_non_recipe_mentions = {
+            # generated manifests carry the command in their `generator` field
+            "conformance/baselines/ci/android.hashes.json",
+            "conformance/baselines/ci/ios.hashes.json",
+            "conformance/baselines/ci/web.hashes.json",
+            "conformance/baselines/local/android.hashes.json",
+            "conformance/baselines/local/ios.hashes.json",
+            "conformance/baselines/local/web.hashes.json",
+            # prose that names the command without invoking it
+            "conformance/RESULTS_SCHEMA.md",
+            "conformance/baselines/README.md",
+            "conformance/hosts/web/scripts/vendor/AssertionExecutor.ts",
+            # module docstrings and error text that name the command generically
+            "jui_tools/jui_cli/conformance/baseline.py",
+            "jui_tools/jui_cli/conformance/coverage.py",
+            "jui_tools/jui_cli/conformance/gate.py",
+            "jui_tools/jui_cli/conformance/report.py",
+            "jui_tools/jui_cli/conformance/visual_stability.py",
+            # tests that name the command in their own prose, this file included
+            "jui_tools/tests/test_conformance_baseline.py",
+            "jui_tools/tests/test_conformance_coverage.py",
+            "jui_tools/tests/test_every_bake_recipe_forces_the_review.py",
+        }
+        unclassified = []
+        for rel in tracked_files():
+            path = REPO / rel
+            try:
+                text = path.read_text(encoding="utf-8")
+            except (OSError, UnicodeDecodeError):
+                continue
+            joined = re.sub(r"\\\s*\n\s*(?:#\s*)?", " ", text)
+            joined = _ADJACENT_LITERALS.sub("", joined)
+            wide = len(re.findall(r"baseline update", joined))
+            if not wide:
+                continue
+            narrow = len(recipes_in(text))
+            if wide > narrow and rel not in files_with_non_recipe_mentions:
+                unclassified.append(f"{rel} ({wide - narrow} unclassified mention(s))")
+        self.assertEqual(
+            unclassified, [],
+            "occurrence(s) of `baseline update` that are neither a recipe nor a "
+            "recorded non-recipe. Either they are recipes (give them "
+            "--platform and --fail-on-moved, on ONE source line) or they are "
+            "prose (add the file to files_with_non_recipe_mentions):\n  "
+            + "\n  ".join(unclassified),
+        )
 
     def test_the_flag_the_recipes_name_still_exists(self):
         """🔑 The recipes are only worth pinning while the flag is real.

@@ -828,10 +828,21 @@ def judge(
             count = summary.visual_regressions.get(p, 0)
             if count:
                 env_flag = f" --env {env}" if env != DEFAULT_ENV else ""
+                # 🔴 THE RECIPE BELOW IS HANDED OVER AT THE WORST POSSIBLE
+                # MOMENT — N visual regressions have just been MEASURED, and
+                # this line tells the operator how to write them into the
+                # baseline. `--fail-on-moved` is what makes that bake stop and
+                # name the count instead of absorbing it; the command's own
+                # help says "a regression that gets absorbed stops being a
+                # regression", and here the regression is already on screen.
+                #
+                # ⚠️ KEPT ON ONE SOURCE LINE. Split across f-string fragments
+                # the recipe is invisible to every line-oriented scanner —
+                # this repo's own gate read it as `baseline update ` with no
+                # `--platform` and did not classify it as a recipe at all,
+                # which is how it kept the flag off while that gate was green.
                 problems.append(
-                    f"{p}: {count} visual regression(s) vs committed baseline — if "
-                    f"intended, re-baseline with `jui conformance baseline update "
-                    f"--platform {p}{env_flag}` and commit baselines/{env}/{p}.hashes.json"
+                    f"{p}: {count} visual regression(s) vs committed baseline — if intended, re-baseline with `jui conformance baseline update --platform {p}{env_flag} --fail-on-moved` and commit baselines/{env}/{p}.hashes.json"
                 )
             ids = summary.inert_regressions.get(p) or []
             if ids:
