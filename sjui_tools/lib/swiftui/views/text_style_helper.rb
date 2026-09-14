@@ -48,6 +48,17 @@ module SjuiTools
           'email' => '.emailAddress',
           'number' => '.numberPad',
           'decimal' => '.decimalPad',
+          # `signedDecimal` is a decimal keyboard that can also type a sign.
+          # `.decimalPad` has no minus key, so it is NOT the same keyboard as
+          # `decimal` — `.numbersAndPunctuation` is the narrowest UIKit type
+          # that offers one. Member name taken from the SDK header
+          # (UITextInputTraits.h, UIKeyboardTypeNumbersAndPunctuation), not
+          # from the plan or the declaration: the Android lane lost an hour
+          # to `KeyboardType.SignedDecimal`, which does not exist.
+          #
+          # Without this row the value fell through `KEYBOARD_TYPES[...] ||
+          # '.default'` to a plain `.default` — not even `decimal`'s pad.
+          'signeddecimal' => '.numbersAndPunctuation',
           'phone' => '.phonePad',
           'url' => '.URL',
           'password' => '.default',
