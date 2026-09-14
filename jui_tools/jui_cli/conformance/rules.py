@@ -1492,27 +1492,64 @@ BASE_ATTRS: dict[str, dict[str, Any]] = {
     "Web": {"html": "<p>Sample</p>", "width": 200, "height": 200},
 }
 
-def _striped_backdrop() -> list[dict[str, Any]]:
+#: One stripe is this wide, in pt. The blur radii the styles resolve to are
+#: 12-16dp (see the `Blur.effectStyle` entry), so a stripe has to be of that
+#: order for the smear to change the picture rather than erase it.
+_STRIPE_PT = 20
+
+#: Band ids. Letters first because the two Blur families were baked with
+#: `stripe_a..d` and their baselines carry those exact spellings.
+_STRIPE_IDS = "abcdefghijklmnopqrstuvwxyz"
+
+#: The backdrop's own fill. It is the LAST band of the cycle, not a
+#: margin: at the baked width the four stripes cover 80 of 100pt and this
+#: shows through the remaining 20. Measured on `effectStyle__ultrathin`,
+#: the right edge of the blurred square reads (190,134,108) — green smeared
+#: into red — so the band is load-bearing, and a wider backdrop that paved
+#: over it would drop a colour the baked renders are using.
+_BACKDROP_FILL = "#FF0000"
+
+#: The band colours, cycled to fill the requested width. White alternates
+#: with a saturated hue so the swing shows in every channel: over the red
+#: fill the scrim differences land on G and B, and the white/blue and
+#: white/green pairs keep R moving too. The fill is the fifth entry, which
+#: is why the cycle is 5 long while only `width/_STRIPE_PT - 1` stripes are
+#: ever emitted — the last band of each cycle is the fill itself.
+_STRIPE_COLOURS = ("#FFFFFF", "#0000FF", "#FFFFFF", "#00AA00", _BACKDROP_FILL)
+
+
+def _striped_backdrop(width: int = 100, height: int = 100) -> list[dict[str, Any]]:
     """A HIGH-FREQUENCY backdrop node, freshly built on each call.
 
-    Two separate families need something behind the target that is neither
-    flat nor white, and both need it for the same arithmetic reason (see the
-    `Blur.blurRadius` and `Blur.effectStyle` entries). Built by a function
-    rather than shared as a literal so the two entries cannot alias each
-    other's nested child list.
+    Three separate families need something behind the target that is neither
+    flat nor white, and all three need it for the same arithmetic reason (see
+    the `Blur.blurRadius`, `Blur.effectStyle` and `TextField.applyLiquidGlass`
+    entries). Built by a function rather than shared as a literal so the
+    entries cannot alias each other's nested child list.
+
+    `width` defaults to 100 because that is what the two `Blur` entries were
+    generated with and their baselines are baked against it — changing the
+    default would re-bake twelve fixtures to say nothing new. A family whose
+    target is wider passes its own width: the stripes must reach under the
+    WHOLE target, or the part hanging off the edge sits over white and is
+    silent, which is the defect this backdrop exists to remove.
+
+    The stripes are cycled to fill `width`, so the count follows from the
+    width rather than being written down twice.
     """
+    # One band short of the full width: the backdrop's own fill is the last
+    # band. At width 100 this is the four letter-named stripes the Blur
+    # baselines were baked with, unchanged.
+    count = width // _STRIPE_PT - 1
+    stripes = [
+        {"type": "View", "id": f"stripe_{_STRIPE_IDS[i]}", "width": _STRIPE_PT,
+         "height": height, "background": _STRIPE_COLOURS[i % len(_STRIPE_COLOURS)]}
+        for i in range(count)
+    ]
     return [
-        {"type": "View", "id": "backdrop", "width": 100, "height": 100,
-         "background": "#FF0000", "orientation": "horizontal", "child": [
-             {"type": "View", "id": "stripe_a", "width": 20, "height": 100,
-              "background": "#FFFFFF"},
-             {"type": "View", "id": "stripe_b", "width": 20, "height": 100,
-              "background": "#0000FF"},
-             {"type": "View", "id": "stripe_c", "width": 20, "height": 100,
-              "background": "#FFFFFF"},
-             {"type": "View", "id": "stripe_d", "width": 20, "height": 100,
-              "background": "#00AA00"},
-         ]},
+        {"type": "View", "id": "backdrop", "width": width, "height": height,
+         "background": _BACKDROP_FILL, "orientation": "horizontal",
+         "child": stripes},
     ]
 
 
@@ -1700,6 +1737,80 @@ BASE_ATTRS_BY_ATTRIBUTE: dict[str, dict[str, Any]] = {
     # widths. Ledger row: value_discrimination `common.effectStyle` android
     # prominent/thick, owner G, `backdrop-collapses-8bit`.
     "Blur.effectStyle": {"root.backdrop": _striped_backdrop()},
+    # The THIRD family that needs something behind it, found the same way
+    # the first two were: the three glass fixtures render over the bare root,
+    # which is white, and a material over white is white at every setting.
+    #
+    # Measured on the ALREADY-BAKED `common/effectStyle__*` renders, which
+    # have this backdrop (ios, 1206x2622, interior of the 100x100 square):
+    # all nine styles land on a different mean colour — closest pair
+    # prominent/thick at 3.2 levels — and the stripes show up as a left-to-
+    # right colour swing of 120.7 (ultrathin) down to 10.3 (thick). Over a
+    # flat white field BOTH quantities are 0 by construction, which is the
+    # `backdrop-collapses-8bit` row one paragraph up.
+    #
+    # 🔻 THIS IS NECESSARY, NOT SUFFICIENT — AND TODAY NOTHING RENDERS IT.
+    # MEASURED, not inferred: a filtered run of these three on 2026-09-14
+    # (iPhone 17 Pro, ios 26.4) reported all three
+    #     status skipped, "mode uikit not hosted (SwiftUI dynamic host)"
+    # and 77 fixtures share that exact reason — distinct in the same run
+    # from the 938 the filter excluded and the 73 not applicable to ios, so
+    # the count is a predicate, not a leftover. BOTH conformance hosts are
+    # SwiftUI (dynamic and codegen), and the SSoT declares both attributes
+    # `"mode": "uikit"`, so there is no host that can photograph them. This
+    # is upstream of the renderer question below and survives it: even an
+    # emitter would not put these three on film while the declaration says
+    # uikit.
+    #
+    # Downstream of that, no ios path draws them either:
+    #   codegen   `sjui_tools/lib` — zero occurrences of either spelling
+    #   dynamic   parsed into {TextField,EditText,Input}Attributes and read
+    #             by nobody; TextFieldConverter's 27-step modifier list has
+    #             no material in it (control: it does read component.hint)
+    #   uikit     SJUITextField.swift:149 — real, but inside the
+    #             `case "number", "decimal":` keyboard branch, applied to the
+    #             accessory BAR above the keyboard, not to the field. The
+    #             fixtures declare no `input`, so it is unreachable even there.
+    # So these three keep `class: declaration-only` and are not photographed
+    # at all. The backdrop is here so that the day the declaration opens to
+    # SwiftUI and an emitter lands, the fixture can show it on the FIRST
+    # bake — a first bake over white would record `true` and `false` as the
+    # same picture and nothing downstream would object, which is exactly how
+    # `backdrop-collapses-8bit` got into the ledger.
+    #
+    # ⚠️ `glassEffectStyle` has NO `enum` in the SSoT, so the generator emits
+    # the placeholder `"sample"`. The uikit switch matches ten spellings
+    # (systemUltraThinMaterial … extraLight) and `"sample"` hits `default`,
+    # i.e. the same picture as omitting the attribute. Declaring the enum is
+    # what turns this one into a discriminating fixture; the backdrop alone
+    # cannot.
+    "TextField.applyLiquidGlass": {"root.backdrop": _striped_backdrop(width=200)},
+    "TextField.glassEffectStyle": {"root.backdrop": _striped_backdrop(width=200)},
+    # `glass` (common, SSoT 16b350d6) is the spelling that SUPERSEDES those
+    # two, and unlike them it declares `mode: [uikit, swiftui]` — so it is
+    # the one the SwiftUI hosts can actually photograph, and it is classed
+    # `visual` rather than declaration-only. Its target is the common `View`
+    # base: 200x200 on `#DDDDDD`.
+    #
+    # #DDDDDD is 87% white. Everything said above about a material over a
+    # white field applies to it almost undiminished — this is the same
+    # defect arriving through the default rather than through an omission,
+    # which is why the backdrop is attached to the attribute and not left
+    # to whatever the section's base happens to be.
+    #
+    # The backdrop is 200x200 so it reaches the target's full extent on
+    # BOTH axes; the `Blur` pair only ever needed 100x100 because their
+    # target is 100x100. A glass effect refracts what is BEHIND it, and an
+    # earlier sibling of an overlay root is exactly that.
+    # `background: None` REMOVES the base key (see `apply_base_overrides`).
+    # Without that the backdrop is decoration: the common `View` base paints
+    # the target #DDDDDD edge to edge, so a glass effect that refracts what
+    # is behind it refracts an opaque grey rectangle and the stripes never
+    # reach the lens. Dropping the fill leaves the target's own six colour
+    # boxes as foreground — they are what tells `glass` apart from a plain
+    # transparent View — over stripes that are now actually behind it.
+    "glass": {"root.backdrop": _striped_backdrop(width=200, height=200),
+              "background": None},
     # The anchor goes LAST so the target starts underneath it and `indexAbove`
     # has somewhere to travel from. `indexBelow` needs no such thing — the
     # default order already puts the target on top, which is exactly why only
