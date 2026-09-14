@@ -138,6 +138,7 @@ jobs:
       JSONUI_TEST_RUNNER_PATH: ${{ github.workspace }}/jsonui-test-runner
     outputs:
       library_sha: ${{ steps.library_sha.outputs.sha }}
+      toolchain: ${{ steps.toolchain.outputs.spec }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/checkout@v4
@@ -178,6 +179,27 @@ jobs:
         # before its collect step would otherwise upload a PREVIOUS
         # campaign's file and read as a successful suite.
         run: rm -f conformance/results/ios.results.json
+      # The baseline records who drew the pixels. Until now that was the
+      # library SHA only — the subject. The tools that decide what the
+      # picture looks like (Xcode, the SDK, the simulator runtime, the
+      # device model) were recorded nowhere, so a `moved` entry could not
+      # be attributed: a token change in a new Xcode moves pictures that
+      # use none of the changed features, and from the baseline alone that
+      # is indistinguishable from a library regression. The web leg has
+      # recorded its renderer (chromium) since it was written; iOS and
+      # Android had the subject and not the tools.
+      - name: Record the toolchain that drew these pixels
+        id: toolchain
+        env:
+          SIMULATOR_NAME: iPhone 16 Pro
+        run: |
+          set -euo pipefail
+          xcode=$(xcodebuild -version | head -1 | cut -d' ' -f2)
+          build=$(xcodebuild -version | tail -1 | cut -d' ' -f3)
+          sdk=$(xcrun --sdk iphonesimulator --show-sdk-version)
+          runtime=$(xcrun simctl list runtimes --json \
+            | python3 -c 'import json,sys; rs=[r for r in json.load(sys.stdin)["runtimes"] if r.get("isAvailable") and "iOS" in r.get("name","")]; print(rs[-1]["version"] if rs else "unknown")')
+          echo "spec=xcode=${xcode} (${build});sdk=iphonesimulator${sdk};simulator_os=iOS ${runtime};device=${SIMULATOR_NAME}" >> "$GITHUB_OUTPUT"
       - name: Run iOS conformance suite (headless simulator)
         env:
           SIMULATOR_NAME: iPhone 16 Pro
@@ -326,6 +348,7 @@ jobs:
       CONFORMANCE_DIR: ${{ github.workspace }}/conformance
     outputs:
       library_sha: ${{ steps.library_sha.outputs.sha }}
+      toolchain: ${{ steps.android_toolchain.outputs.spec }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/checkout@v4
@@ -359,6 +382,21 @@ jobs:
         # before its collect step would otherwise upload a PREVIOUS
         # campaign's file and read as a successful suite.
         run: rm -f conformance/results/android.results.json conformance/results/android.logcat*.txt
+      # Same reason as the iOS leg: the baseline recorded the subject
+      # (library SHA) and none of the tools. An AGP / emulator image /
+      # API level change moves pictures that use none of the changed
+      # features. `api_level` is read from this workflow's own value so the
+      # record cannot drift from what actually booted.
+      - name: Record the toolchain that drew these pixels
+        id: android_toolchain
+        run: |
+          set -euo pipefail
+          agp=$(grep -oE 'com\.android\.tools\.build:gradle:[0-9.]+' \
+                  KotlinJsonUI/build.gradle.kts KotlinJsonUI/*/build.gradle.kts 2>/dev/null \
+                | head -1 | cut -d: -f3 || echo unknown)
+          gradle=$(grep -oE 'gradle-[0-9.]+-' KotlinJsonUI/gradle/wrapper/gradle-wrapper.properties \
+                | head -1 | sed 's/gradle-//;s/-$//' || echo unknown)
+          echo "spec=api_level=34;emulator_target=default;agp=${agp};gradle=${gradle}" >> "$GITHUB_OUTPUT"
       - name: Run Android conformance suite (emulator)
         id: android_emu
         continue-on-error: true
@@ -575,7 +613,7 @@ jobs:
         # drawn by a different library, the gate says so — a notice, not a
         # failure. Thirteen regressions in one run were neither fixture nor
         # codegen and two lanes reached "the library moved" by elimination.
-        run: python3 -c "import sys; from jui_cli.cli import main; sys.exit(main(['conformance','gate','--platform','ios','--platform','android','--platform','web','--env','ci','--parity','--cross-effect','--inert-complete','--value-discrimination','--rendered-by','swiftjsonui.src=${{ needs.ios.outputs.library_sha }}','--rendered-by','kotlinjsonui.src=${{ needs.android.outputs.library_sha }}','--rendered-by','rjui.src=${{ needs.web.outputs.library_sha }}','--rendered-by','chromium=${{ needs.web.outputs.chromium }}']))"
+        run: python3 -c "import sys; from jui_cli.cli import main; sys.exit(main(['conformance','gate','--platform','ios','--platform','android','--platform','web','--env','ci','--parity','--cross-effect','--inert-complete','--value-discrimination','--rendered-by','swiftjsonui.src=${{ needs.ios.outputs.library_sha }}','--rendered-by','ios.toolchain=${{ needs.ios.outputs.toolchain }}','--rendered-by','kotlinjsonui.src=${{ needs.android.outputs.library_sha }}','--rendered-by','android.toolchain=${{ needs.android.outputs.toolchain }}','--rendered-by','rjui.src=${{ needs.web.outputs.library_sha }}','--rendered-by','chromium=${{ needs.web.outputs.chromium }}']))"
       - name: Upload combined report
         if: always()
         uses: actions/upload-artifact@v4
