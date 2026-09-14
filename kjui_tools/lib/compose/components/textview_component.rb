@@ -429,7 +429,10 @@ module KjuiTools
             required_imports&.add(:keyboard_type)
             input_type = json_data['keyboardType'] || json_data['input']
             keyboard_type = Helpers::BoundValue.enum(
-              input_type, TextFieldComponent::INPUT_KEYBOARD,
+              # Through the accessor, not the constant: TextView emits the
+              # same member names from the same table, so it is under the same
+              # Compose version floor (TextFieldComponent.input_keyboard_table).
+              input_type, TextFieldComponent.input_keyboard_table,
               bound_default: 'KeyboardType.Text', lowercase: true
             )
             keyboard_options << "keyboardType = #{keyboard_type}" if keyboard_type

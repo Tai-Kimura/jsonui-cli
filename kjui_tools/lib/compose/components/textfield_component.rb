@@ -4,6 +4,7 @@ require_relative '../helpers/modifier_builder'
 require_relative '../helpers/binding_expression'
 require_relative '../helpers/resource_resolver'
 require_relative '../helpers/font_spec_helper'
+require_relative '../../core/config_manager'
 
 module KjuiTools
   module Compose
@@ -61,6 +62,57 @@ module KjuiTools
           'time' => 'KeyboardType.Time',
           'datetime' => 'KeyboardType.DateTime'
         }.freeze
+
+        # The last four entries name Compose members that only exist from
+        # ui-text 1.12.0. The generated Kotlin NAMES the member, so an older
+        # Compose is a COMPILE error rather than a degraded keyboard -- which
+        # is why this floor belongs to codegen alone. The dynamic renderer
+        # needs nothing: it never names them, it falls to KeyboardType.Text,
+        # and 1.11 already has Text.
+        #
+        # The floor is DECLARED, not detected. A project that says nothing
+        # keeps the real members, because that is what both known consumer
+        # faces are on and because this generator never sees the consumer's
+        # dependency graph. A project on an older Compose says so once, in
+        # kjui.config.json, and these four degrade.
+        COMPOSE_KEYBOARD_TYPE_FLOOR = '1.12.0'
+
+        # Which INPUT_KEYBOARD keys the floor moves. Derived from the table
+        # above by key, so a key that stops existing there stops being floored
+        # loudly (the spec asserts this list is a subset of INPUT_KEYBOARD)
+        # rather than silently flooring nothing.
+        FLOORED_INPUT_VALUES = %w[signeddecimal date time datetime].freeze
+
+        # The `input` table as this project may use it.
+        #
+        # The comparison is Gem::Version and never String. As strings,
+        # '1.9.0' > '1.12.0' is TRUE and '1.12.10' < '1.12.0' is TRUE, so a
+        # string compare gets BOTH digit-count directions wrong: it would emit
+        # 1.12 members onto a 1.9 project (a build failure -- the exact thing
+        # this floor exists to stop) and degrade a 1.12.10 project that did
+        # not need degrading.
+        def self.input_keyboard_table
+          return INPUT_KEYBOARD unless below_compose_keyboard_floor?(
+            Core::ConfigManager.get('compose_version')
+          )
+
+          INPUT_KEYBOARD.merge(
+            Hash[FLOORED_INPUT_VALUES.map { |key| [key, 'KeyboardType.Text'] }]
+          ).freeze
+        end
+
+        def self.below_compose_keyboard_floor?(declared)
+          text = declared.to_s.strip
+          return false if text.empty?
+
+          Gem::Version.new(text) < Gem::Version.new(COMPOSE_KEYBOARD_TYPE_FLOOR)
+        rescue ArgumentError
+          # Not a version at all. Treat it as undeclared rather than degrading:
+          # a project on a new Compose that mistyped the key should not lose
+          # four keyboards over a typo, and the value is visible in its own
+          # config file either way.
+          false
+        end
 
         @counter ||= 0
 
@@ -596,7 +648,7 @@ module KjuiTools
           elsif json_data['input']
             required_imports&.add(:keyboard_type)
             keyboard_type = Helpers::BoundValue.enum(
-              json_data['input'], INPUT_KEYBOARD,
+              json_data['input'], input_keyboard_table,
               bound_default: 'KeyboardType.Text', lowercase: true
             )
             keyboard_options << "keyboardType = #{keyboard_type}" if keyboard_type

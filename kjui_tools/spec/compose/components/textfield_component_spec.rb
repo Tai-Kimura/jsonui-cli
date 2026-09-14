@@ -216,11 +216,16 @@ RSpec.describe KjuiTools::Compose::Components::TextFieldComponent do
     #
     # Transcribed twice, by two lanes, javap -p on
     # androidx.compose.ui.text.input.KeyboardType$Companion: triage from the
-    # 1.12.0 aar (md5 343361cd…), this lane from 1.12.1 (2a172948…). Different
-    # artifacts, so this is not one file read twice — but they are two releases
-    # of one library, so what the pair establishes is that neither of us
-    # mistyped, not that the members exist independently of androidx. For THAT
-    # there is one window, and no compiler here to close it.
+    # 1.12.0 aar (md5 343361cd…), this lane from 1.12.1 (2a172948…).
+    #
+    # The triage lane did not compare by eye. It dumped javap to a file, parsed
+    # the %w[] below out of the commit, and ran comm: only-in-list 0 and
+    # only-in-javap 0, against 1.12.0 AND against 1.12.1. So what is
+    # established is that THIS LIST EQUALS THE ARTIFACT'S MEMBER SET, with no
+    # human transcription on that side — which is stronger than "neither of us
+    # mistyped". What is NOT established is that the members exist
+    # independently of androidx: two releases of one library are still one
+    # window, and there is no compiler here to close it.
     #
     # The floor comes from the same window: 1.11.0 lists 10 members and has none
     # of the four; 1.10.0 also 10. Text, which dynamic falls back to, is in both.
@@ -299,6 +304,123 @@ RSpec.describe KjuiTools::Compose::Components::TextFieldComponent do
       expect(plain).to include('KeyboardType.Decimal')
       expect(signed).to include('KeyboardType.DecimalSigned')
       expect(plain).not_to include('KeyboardType.DecimalSigned')
+    end
+
+    # The Compose version floor on those four members.
+    #
+    # DECLARED, not detected: `compose_version` in kjui.config.json. A project
+    # that declares nothing keeps the real members, so a consumer already on
+    # 1.12 does nothing, and the generator never has to read a dependency
+    # graph it cannot see.
+    #
+    # Gem::Version is required, and only two of these samples require it.
+    #
+    # A boundary pair does NOT: '1.11.9' and '1.12.0' have the same digit counts
+    # and compare correctly as strings, so arms built only on the boundary stay
+    # green against a String compare. Neither does '1.12.10' — measured against
+    # this floor, String and Gem::Version agree on it, because '1.12.10' sorts
+    # after '1.12.0' either way. The two that discriminate are:
+    #
+    #   '1.9.0'  String says NOT below the floor (it sorts after '1.12.0'),
+    #            Gem::Version says below  -> a String compare emits 1.12
+    #            members onto a 1.9 project, which is a build failure.
+    #   '1.12'   String says below the floor (it is a prefix of '1.12.0'),
+    #            Gem::Version says equal  -> a String compare degrades a
+    #            project that declared its Compose as major.minor.
+    #
+    # They fail in opposite directions, which is why both are here. '1.12.10'
+    # stays as a multi-digit sample, but it is not the arm that pins the
+    # comparison — the comment above it used to claim it was.
+    describe 'the declared Compose version floor' do
+      FLOORED_INPUT_MEMBERS = {
+        'signedDecimal' => 'KeyboardType.DecimalSigned',
+        'date' => 'KeyboardType.Date',
+        'time' => 'KeyboardType.Time',
+        'datetime' => 'KeyboardType.DateTime'
+      }.freeze
+
+      def declare(version)
+        config = version.nil? ? {} : { 'compose_version' => version }
+        allow(KjuiTools::Core::ConfigManager).to receive(:load_config).and_return(config)
+      end
+
+      def emit(input)
+        described_class.generate(
+          { 'type' => 'TextField', 'input' => input }, 0, Set.new
+        )
+      end
+
+      [
+        [nil,       'no declaration at all (the default)',        false],
+        ['1.9.0',   'a version a String compare sorts ABOVE',     true],
+        ['1.11.9',  'the version just under the floor',           true],
+        ['1.12.0',  'the floor itself',                           false],
+        ['1.12.10', 'a multi-digit patch above the floor',        false],
+        ['1.12',    'major.minor only, equal to the floor',       false],
+        ['1.12.1',  'a version above the floor',                  false]
+      ].each do |declared, shape, degraded|
+        verb = degraded ? 'degrades' : 'keeps'
+        it "#{verb} the four 1.12 members for #{shape}" do
+          declare(declared)
+          FLOORED_INPUT_MEMBERS.each do |value, member|
+            result = emit(value)
+            if degraded
+              expect(result).to include('keyboardType = KeyboardType.Text')
+              expect(result).not_to include("keyboardType = #{member}")
+            else
+              expect(result).to include("keyboardType = #{member}")
+            end
+          end
+        end
+      end
+
+      # The control on the floor's WIDTH. Every other declared value names a
+      # member 1.11 already has, so degrading any of them would be the floor
+      # reaching past what it is for.
+      it 'leaves every other declared value alone while degrading' do
+        declare('1.9.0')
+        {
+          'email' => 'KeyboardType.Email', 'number' => 'KeyboardType.Number',
+          'decimal' => 'KeyboardType.Decimal', 'phone' => 'KeyboardType.Phone',
+          'url' => 'KeyboardType.Uri', 'password' => 'KeyboardType.Password',
+          'alphabet' => 'KeyboardType.Text'
+        }.each do |value, member|
+          expect(emit(value)).to include("keyboardType = #{member}")
+        end
+      end
+
+      it 'moves exactly the floored keys, and invents no spelling doing it' do
+        declare('1.11.2')
+        degraded = described_class.input_keyboard_table
+        moved = described_class::INPUT_KEYBOARD.reject { |k, v| degraded[k] == v }.keys
+        expect(moved).to match_array(described_class::FLOORED_INPUT_VALUES)
+        expect(degraded.keys).to match_array(described_class::INPUT_KEYBOARD.keys)
+        expect(degraded.values - described_class::INPUT_KEYBOARD.values).to be_empty
+      end
+
+      it 'names floored keys that the table actually has' do
+        # FLOORED_INPUT_VALUES is a second spelling of keys that live in
+        # INPUT_KEYBOARD. If the two drift, the floor silently stops covering
+        # a value while every arm that does not use that value stays green.
+        expect(described_class::INPUT_KEYBOARD.keys)
+          .to include(*described_class::FLOORED_INPUT_VALUES)
+      end
+
+      it 'treats an unparseable compose_version as no declaration' do
+        # Degrading on a typo would cost a project on a new Compose four
+        # keyboards for a misspelling it can see in its own config file.
+        declare('latest')
+        expect(emit('date')).to include('keyboardType = KeyboardType.Date')
+      end
+
+      it 'reads the floor from config on every call, not once per process' do
+        # The table is a method, not a memoised constant: two projects in one
+        # `jui build` would otherwise share whichever config was read first.
+        declare('1.9.0')
+        expect(emit('time')).to include('keyboardType = KeyboardType.Text')
+        declare('1.12.1')
+        expect(emit('time')).to include('keyboardType = KeyboardType.Time')
+      end
     end
 
     it 'generates TextField with phone keyboard type' do

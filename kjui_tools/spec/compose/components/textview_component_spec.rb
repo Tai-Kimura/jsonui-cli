@@ -598,4 +598,42 @@ RSpec.describe KjuiTools::Compose::Components::TextViewComponent, 'hintAttribute
       expect(result).not_to include(',,')
     end
   end
+
+  # TextView reads TextFieldComponent's `input` table, so it emits the same
+  # 1.12-only members and is under the same declared floor. It reached the
+  # table through the constant until 1.8.80, which would have left one of the
+  # two Android codegen faces naming members the declared Compose does not
+  # have.
+  describe 'the declared Compose version floor (shared with TextField)' do
+    def declare(version)
+      config = version.nil? ? {} : { 'compose_version' => version }
+      allow(KjuiTools::Core::ConfigManager).to receive(:load_config).and_return(config)
+    end
+
+    def emit(input)
+      described_class.generate(
+        { 'type' => 'TextView', 'input' => input }, 0, Set.new
+      )
+    end
+
+    it 'emits the real member when nothing is declared' do
+      declare(nil)
+      expect(emit('signedDecimal')).to include('keyboardType = KeyboardType.DecimalSigned')
+    end
+
+    it 'degrades to Text under a declared 1.11' do
+      declare('1.11.2')
+      expect(emit('signedDecimal')).to include('keyboardType = KeyboardType.Text')
+    end
+
+    it 'degrades the keyboardType spelling too, not just input' do
+      declare('1.11.2')
+      expect(emit(nil)).not_to include('keyboardType =')
+      declare('1.11.2')
+      result = described_class.generate(
+        { 'type' => 'TextView', 'keyboardType' => 'datetime' }, 0, Set.new
+      )
+      expect(result).to include('keyboardType = KeyboardType.Text')
+    end
+  end
 end

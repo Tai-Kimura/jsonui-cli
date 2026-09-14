@@ -106,6 +106,22 @@ class TheDegradationsAreStillWrittenDown(unittest.TestCase):
                                "KeyboardType members and none of these four, so a "
                                "consumer on an older Compose gets a compile error "
                                "rather than a degradation",
+        "compose_version": "the key that MOVES the floor. From 1.8.80 the "
+                           "Compose emitter degrades these four when the project "
+                           "declares a Compose below 1.12.0 in kjui.config.json, "
+                           "and keeps them when it declares nothing. Without the "
+                           "key name in the text, the paragraph above reads as if "
+                           "an old Compose always fails to build, which stopped "
+                           "being the whole truth the moment the floor landed",
+        "Gem::Version and never String": "why the comparison is spelled out at "
+                                         "all. '1.9.0' sorts ABOVE '1.12.0' as "
+                                         "text, so a String compare emits 1.12 "
+                                         "members onto a 1.9 project — the exact "
+                                         "build failure the floor exists to stop. "
+                                         "The spec pins it with '1.9.0' and "
+                                         "'1.12', which are the two samples that "
+                                         "discriminate; a boundary pair alone "
+                                         "does not",
         "Signed is a suffix": "the naming rule behind the DecimalSigned spelling. "
                               "Compose writes <base><modifier>, and 1.12.0 ships "
                               "three members that follow it — NumberSigned, "
