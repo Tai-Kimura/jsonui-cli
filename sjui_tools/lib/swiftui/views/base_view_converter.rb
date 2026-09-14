@@ -1304,7 +1304,14 @@ module SjuiTools
             # that swaps the declaration on the base class would not reach them.
             # Measured: the arm below failed for exactly this reason.
             vocabulary = BaseViewConverter.declared_glass_shapes
-            return true if vocabulary.empty? # nothing to check against; do not invent a rule
+            if vocabulary.empty?
+              # Nothing to check against, so every spelling passes. That is the right
+              # behaviour and the wrong silence: "checked and fine" and "could not
+              # check" must not look alike, or a declaration that loses its enum turns
+              # this validation off with nothing said.
+              BaseViewConverter.warn_shape_validation_unavailable
+              return true
+            end
 
             spelling = shape.to_s.downcase
             return true if vocabulary.include?(spelling)
@@ -1342,14 +1349,32 @@ module SjuiTools
         def self.reset_declared_glass_shapes!
             @declared_glass_shapes = nil
             @declares_rounded_form = nil
+            @warned_shape_validation_unavailable = nil
         end
 
         # Parsed once per process: the file does not change while a build runs.
         def self.declared_glass_shapes
             @declared_glass_shapes ||= begin
             glass = find_glass_definition(load_attribute_definitions)
-            from_enum(glass) || from_description(glass) || []
+            # ⚠️ A prose fallback used to sit here (`|| from_description(glass)`).
+            # It was unreachable: every copy of attribute_definitions.json carries the
+            # enum, and bootstrap.sh overwrites each tool's copy from shared/core at
+            # install time, so a per-tool copy cannot lag behind. Measured: all four
+            # copies declare it. Removed rather than armed — an arm for a branch that
+            # cannot run protects nothing.
+            from_enum(glass) || []
             end
+        end
+
+        # Said once per process, not per component: a build with fifty glass views
+        # should report an unusable declaration once, not fifty times.
+        def self.warn_shape_validation_unavailable
+            return if @warned_shape_validation_unavailable
+
+            @warned_shape_validation_unavailable = true
+            puts "\e[33m[SwiftUI Warning] glass shape spellings were not checked: " \
+                 "attribute_definitions.json declares no shape vocabulary " \
+                 "(properties.shape.enum). Spellings are emitted as written.\e[0m"
         end
 
         def self.from_enum(glass)
@@ -1357,14 +1382,6 @@ module SjuiTools
             return nil unless values.is_a?(Array) && !values.empty?
 
             values.map { |v| v.to_s.downcase }
-        end
-
-        def self.from_description(glass)
-            description = glass&.fetch('description', nil).to_s
-            match = description.match(/shape:\s*([a-z()|N]+)/i)
-            return nil unless match
-
-            match[1].split('|').map { |v| v.to_s.downcase.sub(/\(n\)\z/, '') }.reject(&:empty?)
         end
 
         def self.find_glass_definition(node)

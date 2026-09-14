@@ -205,6 +205,24 @@ RSpec.describe 'glass on the SwiftUI codegen path' do
       converter.reset_declared_glass_shapes!
     end
 
+    # With no declared vocabulary the emitter cannot check anything, so every spelling
+    # passes — correct, but it must not be silent. "Checked and fine" and "could not
+    # check" have to be distinguishable, or a declaration that loses its enum turns the
+    # validation off with nothing said.
+    it 'says so when the declaration carries no vocabulary to check against' do
+      converter = SjuiTools::SwiftUI::Views::BaseViewConverter
+      allow(converter).to receive(:load_attribute_definitions)
+        .and_return('common' => { 'glass' => { 'description' => 'Liquid Glass.' } })
+      converter.reset_declared_glass_shapes!
+
+      output = capture_stdout { glass_line!('glass' => { 'shape' => 'hexagon' }) }
+      expect(output).to include('were not checked')
+      expect(output).to include('properties.shape.enum')
+    ensure
+      RSpec::Mocks.space.proxy_for(converter).reset if defined?(converter)
+      converter.reset_declared_glass_shapes!
+    end
+
     # The vocabulary is READ, never written here. If this file listed the spellings,
     # it would be a second list to keep in step — and the copy is what drifts: the
     # Swift library carried `rectangle`, which no declaration ever defined.
