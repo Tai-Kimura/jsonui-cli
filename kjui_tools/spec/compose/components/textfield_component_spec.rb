@@ -198,6 +198,46 @@ RSpec.describe KjuiTools::Compose::Components::TextFieldComponent do
       expect(result).to include('KeyboardType.Decimal')
     end
 
+    # The four values added to the SSoT in 1.8.8x. Each is asserted against the
+    # Compose member that actually exists rather than the one the plan named:
+    # the plan said KeyboardType.SignedDecimal, and javap on ui-text 1.12.1 has
+    # DecimalSigned. Emitting the planned spelling would reach the Kotlin
+    # compiler, not this spec, so the arm pins the spelling that compiles.
+    #
+    # signedDecimal is also where the declared vocabulary and the platform
+    # vocabulary disagree in ORDER, which is the kind of difference that reads
+    # as a typo and gets "fixed" later.
+    {
+      'signedDecimal' => 'KeyboardType.DecimalSigned',
+      'date' => 'KeyboardType.Date',
+      'time' => 'KeyboardType.Time',
+      'datetime' => 'KeyboardType.DateTime'
+    }.each do |value, member|
+      it "maps input #{value} to #{member}" do
+        result = described_class.generate(
+          { 'type' => 'TextField', 'input' => value }, 0, required_imports
+        )
+        expect(result).to include(member)
+        expect(required_imports).to include(:keyboard_type)
+      end
+    end
+
+    # Negative control for the pair the SSoT says web cannot tell apart. On
+    # Android they ARE distinguishable, and that is the whole reason the value
+    # exists -- if these two ever emit the same member, the declared
+    # signedDecimal has quietly become an alias of decimal on every face.
+    it 'keeps decimal and signedDecimal on different Compose members' do
+      plain = described_class.generate(
+        { 'type' => 'TextField', 'input' => 'decimal' }, 0, required_imports
+      )
+      signed = described_class.generate(
+        { 'type' => 'TextField', 'input' => 'signedDecimal' }, 0, required_imports
+      )
+      expect(plain).to include('KeyboardType.Decimal')
+      expect(signed).to include('KeyboardType.DecimalSigned')
+      expect(plain).not_to include('KeyboardType.DecimalSigned')
+    end
+
     it 'generates TextField with phone keyboard type' do
       json_data = { 'type' => 'TextField', 'input' => 'phone' }
       result = described_class.generate(json_data, 0, required_imports)

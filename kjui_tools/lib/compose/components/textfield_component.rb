@@ -48,7 +48,18 @@ module KjuiTools
           'number' => 'KeyboardType.Number',
           'decimal' => 'KeyboardType.Decimal',
           'phone' => 'KeyboardType.Phone',
-          'url' => 'KeyboardType.Uri'
+          'url' => 'KeyboardType.Uri',
+          # Compose 1.12 members. The declared value is `signedDecimal`; the
+          # Compose member is `DecimalSigned`. The two orders are NOT a typo on
+          # either side -- the plan called the member `SignedDecimal`, which does
+          # not exist (`javap` on ui-text 1.12.1 lists DecimalSigned alongside
+          # NumberSigned, DecimalPassword, NumberPasswordSigned and
+          # DecimalPasswordSigned). Emitting the planned spelling would not
+          # compile.
+          'signeddecimal' => 'KeyboardType.DecimalSigned',
+          'date' => 'KeyboardType.Date',
+          'time' => 'KeyboardType.Time',
+          'datetime' => 'KeyboardType.DateTime'
         }.freeze
 
         @counter ||= 0
