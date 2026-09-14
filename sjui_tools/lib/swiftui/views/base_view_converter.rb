@@ -1277,10 +1277,122 @@ module SjuiTools
               interactive = value['interactive'] == true || value['interactive'] == 'true'
               args << "interactive: #{interactive}"
             end
-            args << "shape: #{swift_string_literal(value['shape'])}" if value['shape']
+            if (shape = value['shape'])
+              warn_unknown_glass_shape(shape) unless glass_shape_declared?(shape)
+              args << "shape: #{swift_string_literal(shape)}"
+            end
           end
 
           @modifier_bag.register(:glass, ".sjuiGlassEffect(#{args.join(', ')})")
+        end
+
+        # Is this shape spelling one the SSoT declares?
+        #
+        # The vocabulary is READ from attribute_definitions.json, never written here.
+        # A copy in this file would be a second list to keep in step, and the one that
+        # drifts is always the copy — the library already carried `rectangle`, which no
+        # declaration ever defined, because it was written from SwiftUI's type name
+        # instead of from the declaration.
+        #
+        # Two shapes of declaration are accepted, because the SSoT is mid-migration:
+        # `properties.shape.enum` when it exists (machine-readable, preferred), and
+        # otherwise the `shape: a|b|c` clause in the prose description. When the enum
+        # lands, the prose path stops being used without this code changing.
+        def glass_shape_declared?(shape)
+            # ⚠️ `BaseViewConverter.` explicitly, not `self.class.` — every converter
+            # subclass would otherwise memoise (and parse) its own copy, and a test
+            # that swaps the declaration on the base class would not reach them.
+            # Measured: the arm below failed for exactly this reason.
+            vocabulary = BaseViewConverter.declared_glass_shapes
+            return true if vocabulary.empty? # nothing to check against; do not invent a rule
+
+            spelling = shape.to_s.downcase
+            return true if vocabulary.include?(spelling)
+
+            # `rounded(N)` is a FORM, not a spelling: it carries a number, so it cannot
+            # be an enum member. The declaration therefore lists it in prose while the
+            # enum holds the three fixed words, and a check that only reads the enum
+            # rejects every `rounded(12)` a consumer writes. Measured: with the enum
+            # present, `rounded(12)` came back undeclared until this branch existed.
+            BaseViewConverter.declares_rounded_form? && spelling.start_with?('rounded')
+        end
+
+        def warn_unknown_glass_shape(shape)
+            declared = BaseViewConverter.declared_glass_shapes.join(', ')
+            puts "\e[33m[SwiftUI Warning] glass shape #{shape.inspect} is not declared " \
+                 "(declared: #{declared}). Emitting it anyway; the library falls back to " \
+                 "the SDK default, so the screen renders but not as written.\e[0m"
+        end
+
+        # Does the declaration describe the parameterised `rounded(N)` form?
+        #
+        # Read from the prose deliberately: a form with an argument has no enum to live
+        # in, so prose is where it can be declared at all. This is not a fallback for a
+        # missing enum — the enum and this coexist.
+        def self.declares_rounded_form?
+            return @declares_rounded_form unless @declares_rounded_form.nil?
+
+            description = find_glass_definition(load_attribute_definitions)&.fetch('description', nil).to_s
+            @declares_rounded_form = description.downcase.include?('rounded(n)')
+        end
+
+        # Clears the parsed vocabulary. Exists for the arm that proves this code READS
+        # the declaration: it swaps the declaration, clears, and checks the emitter's
+        # answers follow. Without that arm, a hard-coded list passes every other test.
+        def self.reset_declared_glass_shapes!
+            @declared_glass_shapes = nil
+            @declares_rounded_form = nil
+        end
+
+        # Parsed once per process: the file does not change while a build runs.
+        def self.declared_glass_shapes
+            @declared_glass_shapes ||= begin
+            glass = find_glass_definition(load_attribute_definitions)
+            from_enum(glass) || from_description(glass) || []
+            end
+        end
+
+        def self.from_enum(glass)
+            values = glass&.dig('properties', 'shape', 'enum')
+            return nil unless values.is_a?(Array) && !values.empty?
+
+            values.map { |v| v.to_s.downcase }
+        end
+
+        def self.from_description(glass)
+            description = glass&.fetch('description', nil).to_s
+            match = description.match(/shape:\s*([a-z()|N]+)/i)
+            return nil unless match
+
+            match[1].split('|').map { |v| v.to_s.downcase.sub(/\(n\)\z/, '') }.reject(&:empty?)
+        end
+
+        def self.find_glass_definition(node)
+            case node
+            when Hash
+            return node['glass'] if node.key?('glass')
+
+            node.each_value do |child|
+                found = find_glass_definition(child)
+                return found if found
+            end
+            nil
+            when Array
+            node.each do |child|
+                found = find_glass_definition(child)
+                return found if found
+            end
+            nil
+            end
+        end
+
+        def self.load_attribute_definitions
+            path = File.expand_path('../../core/attribute_definitions.json', __dir__)
+            return {} unless File.exist?(path)
+
+            JSON.parse(File.read(path))
+        rescue JSON::ParserError
+            {}
         end
 
         # Swift string literal, escaped. Small enough to inline, but the

@@ -1,3 +1,4 @@
+require 'stringio'
 # frozen_string_literal: true
 
 # `glass` is declared on `common` with `platform: swift` and
@@ -92,6 +93,16 @@ RSpec.describe 'glass on the SwiftUI codegen path' do
   # still caught (a raw String passed where `Color?` is expected does fail),
   # but a renamed or vanished emit is not. So a search that feeds an
   # assertion must map "not found" onto the assertion's failure.
+  # The warning goes to stdout, so the arms that assert it have to capture it.
+  def capture_stdout
+    original = $stdout
+    $stdout = StringIO.new
+    yield
+    $stdout.string
+  ensure
+    $stdout = original
+  end
+
   def glass_line!(component)
     glass_line(component) or
       raise "no sjuiGlassEffect line emitted for #{component.inspect} — " \
@@ -127,11 +138,91 @@ RSpec.describe 'glass on the SwiftUI codegen path' do
         .to eq('.sjuiGlassEffect(style: "clear")')
     end
 
+    # ⚠️ This pinned "pass through" as the SPEC when there was no口 to check a
+    # spelling. There is one now: the emitter reads the declared vocabulary from
+    # attribute_definitions.json and warns on anything outside it. What still passes
+    # through is the RESOLUTION — capsule and circle depend on the laid-out size, so
+    # the library resolves all four, and codegen writes the spelling verbatim.
     it 'passes shape through unresolved, including the height-dependent ones' do
       expect(glass_line!('glass' => { 'shape' => 'capsule' }))
         .to eq('.sjuiGlassEffect(shape: "capsule")')
       expect(glass_line!('glass' => { 'shape' => 'rounded(12)' }))
         .to eq('.sjuiGlassEffect(shape: "rounded(12)")')
+    end
+
+    it 'accepts every spelling the declaration defines, without warning' do
+      declared = %w[capsule circle rect] + ['rounded(12)']
+      declared.each do |spelling|
+        output = capture_stdout { glass_line!('glass' => { 'shape' => spelling }) }
+        expect(output).not_to include('not declared'), "#{spelling} was reported as undeclared"
+      end
+    end
+
+    # `rounded(N)` cannot be an enum member — it carries a number — so the declaration
+    # holds the three fixed words in `properties.shape.enum` and the parameterised form
+    # in prose. A check that reads only the enum rejects every rounded() a consumer
+    # writes: measured, that is exactly what happened before the prose branch existed.
+    it 'accepts the parameterised rounded form, which the enum cannot hold' do
+      output = capture_stdout { glass_line!('glass' => { 'shape' => 'rounded(24)' }) }
+      expect(output).not_to include('not declared')
+    end
+
+    it 'warns about a spelling the declaration does not define, and still emits' do
+      line = nil
+      output = capture_stdout { line = glass_line!('glass' => { 'shape' => 'elipse' }) }
+      expect(output).to include('not declared')
+      expect(output).to include('elipse')
+      # Still emitted: a typo degrades to the SDK default at render time rather than
+      # failing the build. The warning is what makes it visible while it is fixable.
+      expect(line).to eq('.sjuiGlassEffect(shape: "elipse")')
+    end
+
+    # 🔑 The arm that a hard-coded list cannot pass: swap the DECLARATION and check the
+    # emitter's answers follow. Asserting the declaration's contents (below) proves the
+    # file says what we think; only this proves the code reads it. Measured: replacing
+    # the enum with a literal list left every other arm green.
+    it 'follows the declaration when the declaration changes' do
+      converter = SjuiTools::SwiftUI::Views::BaseViewConverter
+      invented = {
+        'common' => {
+          'glass' => {
+            'description' => 'Liquid Glass. shape: hexagon|rounded(N)',
+            'properties' => { 'shape' => { 'enum' => %w[hexagon] } }
+          }
+        }
+      }
+      allow(converter).to receive(:load_attribute_definitions).and_return(invented)
+      converter.reset_declared_glass_shapes!
+
+      # A spelling the real declaration defines is now undeclared...
+      expect(capture_stdout { glass_line!('glass' => { 'shape' => 'capsule' }) })
+        .to include('not declared')
+      # ...and the invented one is accepted.
+      expect(capture_stdout { glass_line!('glass' => { 'shape' => 'hexagon' }) })
+        .not_to include('not declared')
+    ensure
+      RSpec::Mocks.space.proxy_for(converter).reset if defined?(converter)
+      converter.reset_declared_glass_shapes!
+    end
+
+    # The vocabulary is READ, never written here. If this file listed the spellings,
+    # it would be a second list to keep in step — and the copy is what drifts: the
+    # Swift library carried `rectangle`, which no declaration ever defined.
+    it 'reads the vocabulary from the declaration, not from a list in the code' do
+      definitions = File.expand_path('../../../lib/core/attribute_definitions.json', __dir__)
+      declared = JSON.parse(File.read(definitions))
+      glass = nil
+      walk = lambda do |node|
+        case node
+        when Hash
+          glass ||= node['glass'] if node.key?('glass')
+          node.each_value { |v| walk.call(v) }
+        when Array then node.each { |v| walk.call(v) }
+        end
+      end
+      walk.call(declared)
+      expect(glass.dig('properties', 'shape', 'enum')).to eq(%w[capsule circle rect])
+      expect(glass['description'].to_s.downcase).to include('rounded(n)')
     end
 
     it 'emits interactive: false rather than dropping it' do
