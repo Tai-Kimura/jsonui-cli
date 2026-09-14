@@ -198,6 +198,63 @@ RSpec.describe KjuiTools::Compose::Components::TextFieldComponent do
       expect(result).to include('KeyboardType.Decimal')
     end
 
+    # Every Compose KeyboardType member, transcribed from the SDK.
+    #
+    # THIS IS NOT A COMPILE. Nothing in this repository compiles Kotlin that
+    # names a KeyboardType: the emitted-Kotlin leg builds what branch-tests
+    # emit, not what the components emit, and CI has no Android job at all. The
+    # only real compiler is KotlinJsonUI's own build, in another repository and
+    # still pinned to Compose 2026.05.01 (ui-text 1.11.2, which has none of the
+    # four new members). So the strongest arm available here is agreement with
+    # a transcribed table, and it is worth saying plainly that transcription is
+    # what it is.
+    #
+    # Why it exists: the emitter, the declaration and the arms above all AGREED
+    # on DecimalSigned, and agreement is internal. Nothing asked whether the
+    # member exists. Mutating the implementation and its arm together to
+    # KeyboardType.Datetime left the suite fully green.
+    #
+    # Two independent transcriptions, both javap -p on
+    # androidx.compose.ui.text.input.KeyboardType$Companion in the ui-text aar:
+    # the triage lane on 1.12.0 and this lane on 1.12.1. Both report 26 members
+    # and the same names; 1.11.0 has 10 and none of the four.
+    COMPOSE_KEYBOARD_TYPES = %w[
+      Ascii Date DateTime Decimal DecimalPassword DecimalPasswordSigned
+      DecimalSigned Email EmailSubject Filter LongMessage Number NumberPassword
+      NumberPasswordSigned NumberSigned Password PasswordVisible PersonName
+      Phone Phonetic PostalAddress ShortMessage Text Time Unspecified Uri
+    ].freeze
+
+    it 'only emits KeyboardType members that exist in Compose' do
+      # Reads the implementation table, not a copy of it kept here — a spelling
+      # this spec repeated would agree with itself.
+      emitted = (described_class::INPUT_KEYBOARD.values +
+                 described_class::CONTENT_TYPE_KEYBOARD.values)
+                .map { |v| v.sub('KeyboardType.', '') }.uniq
+      expect(emitted - COMPOSE_KEYBOARD_TYPES).to be_empty
+    end
+
+    it 'transcribes the SDK rather than echoing what we emit' do
+      # If the list were built from the emitter it would agree by construction.
+      # These members exist in Compose and this repo emits none of them, so the
+      # list has to have come from somewhere else.
+      emitted = (described_class::INPUT_KEYBOARD.values +
+                 described_class::CONTENT_TYPE_KEYBOARD.values)
+                .map { |v| v.sub('KeyboardType.', '') }
+      expect((COMPOSE_KEYBOARD_TYPES - emitted).size).to be >= 3
+      expect(COMPOSE_KEYBOARD_TYPES).to include('NumberPasswordSigned')
+    end
+
+    it 'does not emit the near-miss spellings' do
+      # SignedDecimal is the one the plan named and this lane shipped in the
+      # declaration; the rest are the shapes a later edit reaches for.
+      emitted = (described_class::INPUT_KEYBOARD.values +
+                 described_class::CONTENT_TYPE_KEYBOARD.values).join(' ')
+      %w[SignedDecimal Datetime DateAndTime SignedNumber].each do |wrong|
+        expect(emitted).not_to include(wrong)
+      end
+    end
+
     # The four values added to the SSoT in 1.8.8x. Each is asserted against the
     # Compose member that actually exists rather than the one the plan named:
     # the plan said KeyboardType.SignedDecimal, and javap on ui-text 1.12.1 has
