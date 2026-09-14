@@ -86,11 +86,21 @@ module KjuiTools
         # The `input` table as this project may use it.
         #
         # The comparison is Gem::Version and never String. As strings,
-        # '1.9.0' > '1.12.0' is TRUE and '1.12.10' < '1.12.0' is TRUE, so a
-        # string compare gets BOTH digit-count directions wrong: it would emit
-        # 1.12 members onto a 1.9 project (a build failure -- the exact thing
-        # this floor exists to stop) and degrade a 1.12.10 project that did
-        # not need degrading.
+        # '1.9.0' > '1.12.0' is TRUE, so a String compare would emit 1.12
+        # members onto a 1.9 project: a build failure, and the exact thing
+        # this floor exists to stop. The other direction is killed by '1.12',
+        # which sorts BELOW the floor as a string, so a project that declares
+        # only major.minor would lose four keyboards it actually has.
+        #
+        # '1.12.10' does NOT kill it, and this comment claimed it did until
+        # 1.8.80. Measured 2026-09-14 on ruby 3.2.2: '1.12.10' < '1.12.0' is
+        # false, because at index 5 '1' > '0'. Against a FIXED floor the
+        # multi-digit patch never discriminates -- it would take a moving
+        # floor, or a comparison like 1.12.9 against 1.12.10. The specimen
+        # came from triage, the emitter's arms were corrected to '1.12' when
+        # this lane measured it, and the correction reached the arms and the
+        # commit message before it reached this comment. Comments ship; commit
+        # messages do not.
         def self.input_keyboard_table
           return INPUT_KEYBOARD unless below_compose_keyboard_floor?(
             Core::ConfigManager.get('compose_version')

@@ -355,6 +355,9 @@ RSpec.describe KjuiTools::Compose::Components::TextFieldComponent do
         ['1.9.0',   'a version a String compare sorts ABOVE',     true],
         ['1.11.9',  'the version just under the floor',           true],
         ['1.12.0',  'the floor itself',                           false],
+        # Kept, but NOT load-bearing: against a fixed floor of '1.12.0' a
+        # String compare agrees with Gem::Version on this one. It was
+        # specified as the right-hand-digit killer and measured not to be.
         ['1.12.10', 'a multi-digit patch above the floor',        false],
         ['1.12',    'major.minor only, equal to the floor',       false],
         ['1.12.1',  'a version above the floor',                  false]
