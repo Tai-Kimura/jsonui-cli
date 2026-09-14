@@ -164,7 +164,7 @@ jobs:
           submodules: true
       - uses: maxim-lobanov/setup-xcode@v1
         with:
-          xcode-version: "16.4"
+          xcode-version: "26.3"
       - uses: ruby/setup-ruby@v1 # generate_project.rb needs the xcodeproj gem
         with:
           ruby-version: "3.3"
@@ -192,17 +192,30 @@ jobs:
         id: toolchain
         env:
           SIMULATOR_NAME: iPhone 16 Pro
+          # Pinned, not "whatever is newest" — see run_conformance.sh.
+          SIMULATOR_OS: "26"
         run: |
           set -euo pipefail
           xcode=$(xcodebuild -version | head -1 | cut -d' ' -f2)
           build=$(xcodebuild -version | tail -1 | cut -d' ' -f3)
           sdk=$(xcrun --sdk iphonesimulator --show-sdk-version)
+          # ⚠️ APPLIES THE SAME PIN THE RUN WILL APPLY. This took rs[-1] — the
+          # newest INSTALLED iOS runtime — while the suite picked its own. When
+          # the two disagree the manifest records a runtime that drew nothing:
+          # a measurement-shaped value that cannot be checked against anything.
           runtime=$(xcrun simctl list runtimes --json \
-            | python3 -c 'import json,sys; rs=[r for r in json.load(sys.stdin)["runtimes"] if r.get("isAvailable") and "iOS" in r.get("name","")]; print(rs[-1]["version"] if rs else "unknown")')
+            | python3 -c 'import json,os,re,sys; w=tuple(int(n) for n in re.findall(r"\d+", os.environ.get("SIMULATOR_OS",""))); rs=[r for r in json.load(sys.stdin)["runtimes"] if r.get("isAvailable") and "iOS" in r.get("name","")]; rs=[r for r in rs if not w or tuple(int(n) for n in re.findall(r"\d+", r["version"]))[:len(w)]==w]; print(rs[-1]["version"] if rs else "unknown")')
+          if [ "$runtime" = "unknown" ]; then
+            echo "::error::no available iOS runtime matches SIMULATOR_OS=${SIMULATOR_OS:-<unset>}" >&2
+            xcrun simctl list runtimes >&2 || true
+            exit 1
+          fi
           echo "spec=xcode=${xcode} (${build});sdk=iphonesimulator${sdk};simulator_os=iOS ${runtime};device=${SIMULATOR_NAME}" >> "$GITHUB_OUTPUT"
       - name: Run iOS conformance suite (headless simulator)
         env:
           SIMULATOR_NAME: iPhone 16 Pro
+          # Pinned, not "whatever is newest" — see run_conformance.sh.
+          SIMULATOR_OS: "26"
         run: SwiftJsonUI/ConformanceHost/scripts/run_conformance.sh
       - name: Upload results
         if: always()
@@ -241,7 +254,7 @@ jobs:
           submodules: true
       - uses: maxim-lobanov/setup-xcode@v1
         with:
-          xcode-version: "16.4"
+          xcode-version: "26.3"
       - uses: ruby/setup-ruby@v1
         with:
           ruby-version: "3.3"
@@ -261,6 +274,8 @@ jobs:
       - name: Run iOS codegen suite (headless simulator)
         env:
           SIMULATOR_NAME: iPhone 16 Pro
+          # Pinned, not "whatever is newest" — see run_conformance.sh.
+          SIMULATOR_OS: "26"
           HOST_MODE: codegen
         run: SwiftJsonUI/ConformanceHost/scripts/run_conformance.sh
       - name: Upload results

@@ -86,6 +86,72 @@ class TheWorkflowPassesToolsNotOnlyTheSubject(unittest.TestCase):
             self.assertIn(field, block, f"android toolchain does not record {field}")
 
 
+class RecordingIsNotPinning(unittest.TestCase):
+    """The class above proves the tools are WRITTEN DOWN. That is a different
+    claim from their being CHOSEN, and the gap between the two was live.
+
+    `simctl` lists every runtime installed on the machine, not the ones the
+    selected Xcode shipped with, and the host script took the newest of them.
+    So the Xcode pin was honoured while the runtime underneath moved with the
+    runner image. The committed results carry the proof: the iOS runner version
+    goes 18.6 -> 26.2 -> 18.6 across four bakes (05d0fde0, 761cc64c, 290f96a7)
+    with the Xcode pin unchanged, and at 761cc64c the two iOS lanes disagreed
+    with EACH OTHER in one tree -- results/ios said ios-18.6 while
+    codegen/ios said ios-26.2, which is the pair `gate --parity` compares.
+
+    A faithful record of an unchosen input is not a small problem: it looks
+    exactly like a measurement.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        cls.text = WORKFLOW.read_text(encoding="utf-8")
+
+    def test_every_simulator_name_is_accompanied_by_a_runtime_pin(self):
+        """A device without a runtime is still 'whatever is newest'."""
+        # Anchored on a YAML assignment, not a substring: the first version of
+        # this arm counted `SIMULATOR_OS:` anywhere and matched the shell's
+        # `${SIMULATOR_OS:-<unset>}` inside the step body, reporting 4 pins for
+        # 3 devices. The predicate was wrong, not the workflow.
+        names = len(re.findall(r"^\s+SIMULATOR_NAME: ", self.text, re.M))
+        pins = len(re.findall(r"^\s+SIMULATOR_OS: ", self.text, re.M))
+        self.assertGreater(names, 0, "no SIMULATOR_NAME — this arm measures nothing")
+        self.assertEqual(
+            pins, names, f"{names} simulator selections but {pins} runtime pins"
+        )
+
+    def test_the_recorded_runtime_is_filtered_by_the_same_pin(self):
+        """Recording a runtime the run will not use is worse than recording none.
+
+        The toolchain step and the suite must apply one pin, or the manifest
+        holds a value that drew nothing.
+        """
+        block = self.text[self.text.index("id: toolchain") :][:2600]
+        self.assertIn("SIMULATOR_OS", block, "toolchain step ignores the pin")
+        self.assertNotIn(
+            'rs[-1]["version"] if rs else "unknown"\')',
+            block.replace("\n", ""),
+            "toolchain step still takes the newest installed runtime unfiltered",
+        )
+
+    def test_an_unmatched_pin_fails_instead_of_falling_through(self):
+        """Falling through to a neighbouring runtime is how an unpinned input
+        looked pinned for months."""
+        block = self.text[self.text.index("id: toolchain") :][:2600]
+        self.assertIn("no available iOS runtime matches", block)
+        self.assertIn("exit 1", block)
+
+    def test_the_ios_jobs_are_on_an_sdk_that_has_the_effect_under_test(self):
+        """iOS 26 attributes render as nothing on an iOS 18 SDK, and a fixture
+        that renders as nothing still produces a baseline that matches itself."""
+        pins = re.findall(r'xcode-version: "([0-9.]+)"', self.text)
+        self.assertTrue(pins, "no Xcode pin — this arm measures nothing")
+        for pin in pins:
+            self.assertGreaterEqual(
+                int(pin.split(".")[0]), 26, f"Xcode {pin} has no Liquid Glass SDK"
+            )
+
+
 class WhatTheRecordCannotDo(unittest.TestCase):
     """Name the limits in an arm, so a later reader does not over-read it."""
 
