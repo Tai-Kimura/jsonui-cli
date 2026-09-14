@@ -274,9 +274,53 @@ zeroes), and a nearly-blank picture has few bits to move. Same small number,
 entirely different reason.
 
 ⇒ Membership is answered by `visual_stability.unstable_screenshots()`, which
-returns the names. Ask it; do not infer it from a hamming column. (`Web/html`
-being indistinguishable from its control on ios is a separate, already-accepted
-fact — it is recorded in `control_diff.json` for android/ios/web.)
+returns the names. Ask it; do not infer it from a hamming column.
+
+🔴 **AND THE SENTENCE THAT STOOD HERE READ `control_diff.json` BACKWARDS.** It
+said `Web/html` being "indistinguishable from its control on ios" was an
+"already-accepted fact — recorded in control_diff.json". That ledger records
+the OPPOSITE: fixtures **asserted to render DIFFERENTLY** from their control,
+where **a listed fixture that renders identically FAILS the build**. Being
+listed is the strongest possible claim about a fixture, not an amnesty; the
+record of an accepted indistinguishability is ABSENCE from this ledger (or a
+row in `inert_audit.json`).
+
+🔻 **The claim it was defending was also wrong, and for an instrument reason
+this file should state once.** `Web/html__static` measures **active** on ios —
+`control_diff.compare` puts it in `active`, not `inert`, on both a CI run and a
+local one. The dHash said distance 2 because **dHash is the wrong instrument
+for fixture-vs-control**, and `control_diff.py` says so in its own constant:
+dhash-64 downsamples the screen to 9x8, so `cornerRadius` (0.008% of pixels)
+and `fontColor` (0.05%) both hash IDENTICAL to their control. That check uses
+`diff_pixels` with a threshold of ZERO differing pixels, because both
+screenshots come off the same device in the same run.
+
+⚠️ **`Web` IS ASYNC AND IS NOT IN THE UNSTABLE SET — measured, two runs.**
+Opening the pictures rather than the hashes: the fixture declares
+`html: "<p>Conformance Sample</p>"` and its control declares `"<p>Sample</p>"`.
+In run 34878202456 (iOS 26.2) the FIXTURE rendered **blank** and the control
+rendered "Sample"; in a local run (iOS 26.5, same corpus) the fixture rendered
+"Conformance Sample" and the control rendered "Sample". Both runs report
+`active` — but the CI one satisfies "differs from its control" because ONE SIDE
+FAILED TO RENDER, not because the attribute was honoured. The same race hit the
+control in the previous bake, whose `control_Web.png` hash was all zeroes.
+
+⇒ `visual_stability` exempts `NetworkImage` for exactly this reason ("the frame
+depends on load timing") and does NOT exempt `Web`, which loads its HTML the
+same way. Two observations is not a calibration, so no entry is added here on
+that basis — but the next `moved` on a Web screenshot should be read as this,
+not as a regression, and the check that decides it is "open the picture", not
+"look at the distance".
+
+⇒ Two different questions, two different instruments, and they are not
+interchangeable:
+
+| question | instrument | tolerance |
+|---|---|---|
+| did this picture change since the last run? | dhash-64 | 8 |
+| does this fixture differ from its control? | `diff_pixels` | 0 differing px |
+
+A dHash distance says nothing about the second question in either direction.
 
 **Procedure when `moved > 0`.** Attribute before baking. Re-run the SAME
 corpus and device on the library the baseline was drawn from; entries that
