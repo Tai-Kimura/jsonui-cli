@@ -97,6 +97,31 @@ class TheDegradationsAreStillWrittenDown(unittest.TestCase):
                          "a member no compiler would accept. Both spellings are in "
                          "the text deliberately, so a grep for SignedDecimal returns "
                          "the correction, not the defect",
+        "Android, dynamic": "the face that does NOT support these. The runtime "
+                            "renderer falls to else -> KeyboardType.Text for all "
+                            "four, so 'Android supports it' is true only of codegen. "
+                            "Saying 'Android' without the face is the same scope "
+                            "error this repo shipped in a dev-guide the same week",
+        "1.12.0 is the first": "the version floor. ui-text 1.11 has ten "
+                               "KeyboardType members and none of these four, so a "
+                               "consumer on an older Compose gets a compile error "
+                               "rather than a degradation",
+        "Signed is a suffix": "the naming rule behind the DecimalSigned spelling. "
+                              "Compose writes <base><modifier>, and 1.12.0 ships "
+                              "three members that follow it — NumberSigned, "
+                              "DecimalPasswordSigned, NumberPasswordSigned (javap -p "
+                              "on KeyboardType$Companion in the ui-text 1.12.0 aar) — "
+                              "so the rule is evidenced, not asserted, and the next "
+                              "value added here should not be written Signed-first",
+        "the hit count is not a measure": "the sentence that stops a grep census "
+                                          "from being read as a failed correction. "
+                                          "Both spellings are in this text on "
+                                          "purpose; without this line the next reader "
+                                          "counts SignedDecimal hits and concludes "
+                                          "the fix never landed. It is also the "
+                                          "sentence most likely to be tidied away, "
+                                          "since an attribute description explaining "
+                                          "grep looks out of place",
     }
 
     #: The superseded pair says in its own description that it is superseded and
