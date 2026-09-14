@@ -5,7 +5,27 @@
       "type": ["boolean", "object"],
       "platform": "swift",
       "mode": ["uikit", "swiftui"],
-      "description": "Liquid Glass. true for the default treatment, or an object {style: regular|clear|identity, tint: color, interactive: bool, shape: capsule|rect|circle|rounded(N)}. Declared on common rather than per component because ios.md names View, Button, TextField and Label followed by 'etc' - an open list, and a per-component declaration would make the set of components the acceptance population, so every reading of 'etc' becomes a gap. mode carries BOTH uikit and swiftui because the attribute has two implementations, .glassEffect() on SwiftUI and UIGlassEffect on UIKit; this is the first declaration in the file to pair those two, though five declarations already use an array for mode and both readers accept one (kjui Array(attr_def['mode']), jui isinstance(raw, list)). Leaving mode off would not have meant 'both' - an absent mode means NO restriction at all (kjui attribute_validator_core.rb mode_compatible? returns true when the key is missing), which would let the attribute read as available in modes it has no implementation for."
+      "description": "Liquid Glass. true for the default treatment, or an object {style: regular|clear|identity, tint: color, interactive: bool, shape: capsule|rect|circle|rounded(N)}. Declared on common rather than per component because ios.md names View, Button, TextField and Label followed by 'etc' - an open list, and a per-component declaration would make the set of components the acceptance population, so every reading of 'etc' becomes a gap. mode carries BOTH uikit and swiftui because the attribute has two implementations, .glassEffect() on SwiftUI and UIGlassEffect on UIKit; this is the first declaration in the file to pair those two, though five declarations already use an array for mode and both readers accept one (kjui Array(attr_def['mode']), jui isinstance(raw, list)). Leaving mode off would not have meant 'both' - an absent mode means NO restriction at all (kjui attribute_validator_core.rb mode_compatible? returns true when the key is missing), which would let the attribute read as available in modes it has no implementation for.",
+      "properties": {
+        "style": {
+          "type": "string",
+          "enum": ["regular", "clear", "identity"],
+          "description": "Glass appearance. SwiftUI has all three (SwiftUICore.Glass.regular / .clear / .identity). UIKit has only two: UIGlassEffectStyle is Regular and Clear, so `identity` is SwiftUI-only and the UIKit path applies no effect for it rather than resolving a member that does not exist."
+        },
+        "tint": {
+          "type": "string",
+          "description": "Tint colour applied to the glass. SwiftUI Glass.tint(_ color: Color?), UIKit UIGlassEffect.tintColor."
+        },
+        "interactive": {
+          "type": "boolean",
+          "description": "Whether the glass reacts to touch. SwiftUI Glass.interactive(_:), UIKit UIGlassEffect.interactive. An explicit false is a value the author wrote and is distinct from the key being absent - the SwiftUI Glass type does not preserve that distinction (measured: Glass.regular == Glass.regular.interactive(false)), so the implementation records the author's choice before calling the SDK."
+        },
+        "shape": {
+          "type": "string",
+          "enum": ["capsule", "circle", "rect"],
+          "description": "Shape the glass is clipped to. The enum is the complete set of FIXED spellings; `rounded(N)` is additionally accepted and cannot be an enum member because N varies, so a validator checks the enum first and the `rounded(` prefix second. SwiftUI takes a shape argument (.glassEffect(_:in:)); UIKit does not - UIGlassEffect is a UIVisualEffect subclass with no shape parameter, so there the shape comes from the host view. Transcribed from the implementation that resolves them (SJUIGlass.swift knownShapeSpellings), not from this file's own prose - the two disagreed once already (`rectangle` was accepted by the implementation and named by nobody)."
+        }
+      }
     },
     "_comment": "Common attributes shared across all components",
     "$jui": {
