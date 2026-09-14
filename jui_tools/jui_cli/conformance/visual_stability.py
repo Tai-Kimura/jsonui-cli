@@ -42,6 +42,29 @@ The cost of being narrow is bounded on purpose: a fixture outside this set
 that wobbles still fails the exact check, BY NAME. The next unstable class
 arrives as a named refusal rather than as a repeat of tonight's
 investigation.
+
+🔻 `Web` WAS CONSIDERED AND DELIBERATELY NOT ADDED (2026-09-15). Its pictures
+DO move between runs: in conformance run 34878202456 `Web_html__static`
+rendered BLANK while its control rendered "Sample", and in a local run on a
+different machine and OS both rendered; an earlier `ci/` bake caught the same
+race on the control side, where `control_Web.png` hashed to all zeroes. Three
+observations, comparable to the calibration behind `Indicator`.
+
+⚠️ THE DECIDING QUESTION IS NOT HOW OFTEN IT WOBBLES BUT WHETHER THE WOBBLE IS
+IRREDUCIBLE. `Indicator` draws a different frame every capture and
+`NetworkImage` without `defaultImage` depends on when the network answers —
+neither can be waited out from here. `Web` is different in kind: the host
+captures as soon as the fixture MARKER exists (ConformanceUITests.swift,
+`markerElement.waitForExistence`), and a `WKWebView` is in the hierarchy — so
+the marker is there — before `loadHTMLString` has painted. There is no
+Web-specific wait in the host at all.
+
+⇒ Exempting `Web` would make a BLANK RENDER pass silently, and a blank render
+is the defect signal, not noise. The fix belongs in the host (wait for the web
+content the way the marker is waited for), not in this set. Recorded here so
+the next person who sees a Web screenshot move does not read it as jitter and
+add the row — and so that adding it later is a decision to overturn this one
+rather than a gap to fill.
 """
 from __future__ import annotations
 
