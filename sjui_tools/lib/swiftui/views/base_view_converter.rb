@@ -1309,6 +1309,11 @@ module SjuiTools
               # behaviour and the wrong silence: "checked and fine" and "could not
               # check" must not look alike, or a declaration that loses its enum turns
               # this validation off with nothing said.
+              #
+              # This is NOT the population of the fallback removed above. That branch
+              # could not run at all; this one can: `jui sync_tool` copies the tools
+              # into a face, and a face carrying an older vendored definition while
+              # running a newer sjui_tools reaches exactly this state.
               BaseViewConverter.warn_shape_validation_unavailable
               return true
             end
@@ -1357,11 +1362,17 @@ module SjuiTools
             @declared_glass_shapes ||= begin
             glass = find_glass_definition(load_attribute_definitions)
             # ⚠️ A prose fallback used to sit here (`|| from_description(glass)`).
-            # It was unreachable: every copy of attribute_definitions.json carries the
-            # enum, and bootstrap.sh overwrites each tool's copy from shared/core at
-            # install time, so a per-tool copy cannot lag behind. Measured: all four
-            # copies declare it. Removed rather than armed — an arm for a branch that
-            # cannot run protects nothing.
+            # It was unreachable, and the reason is stronger than "the copies agree":
+            # in the repository there is ONE file. `sjui_tools/lib/core/
+            # attribute_definitions.json` is a symlink (mode 120000) to
+            # `shared/core/attribute_definitions.json`, as are kjui's and rjui's — the
+            # same blob, so they cannot disagree. In a distribution they become real
+            # files, copied from the shared one by `installer/bootstrap.sh` (it removes
+            # each symlink and copies the shared file over it), so they start life
+            # identical there too.
+            #
+            # Removed rather than armed: an arm for a branch that cannot run protects
+            # nothing and reads as coverage.
             from_enum(glass) || []
             end
         end
