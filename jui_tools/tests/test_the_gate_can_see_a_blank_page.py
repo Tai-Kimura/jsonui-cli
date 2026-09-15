@@ -202,6 +202,12 @@ class AbsenceIsReportedNotReadAsZeroTests(unittest.TestCase):
         art.mkdir(parents=True)
         (conf / "baselines" / "local").mkdir(parents=True)
         _faint(art / "faint.png", 400)
+        # ⚠️ The corpus needs ONE picture that hashes blank, or the lane fails
+        # the derivation's own premise and nothing is blind — which is a real
+        # state (local/android) but a different one from the one this arm is
+        # about. Every real lane that CAN be asked has such entries: 20 on
+        # ci/ios, 11 on ci/android, 8 on ci/web.
+        _blank(art / "already_empty.png")
         update_baseline(conf, "web", artifacts_dir=art, env="local")
         path = conf / "baselines" / "local" / "web.hashes.json"
         baked = json.loads(path.read_text())
@@ -209,9 +215,12 @@ class AbsenceIsReportedNotReadAsZeroTests(unittest.TestCase):
         path.write_text(json.dumps(baked))
 
         _blank(art / "faint.png")  # and now it goes blank
-        c = compare_platform(conf, "web", ["faint.png"], artifacts_dir=art, env="local")
+        c = compare_platform(
+            conf, "web", ["faint.png", "already_empty.png"], artifacts_dir=art, env="local"
+        )
+        self.assertEqual(c.blank_check_unavailable, 0, "the lane must be askable here")
         self.assertEqual(c.ink_checked, 0)
-        self.assertEqual(c.ink_uncovered, ["faint.png"])
+        self.assertIn("faint.png", c.ink_uncovered)
         self.assertEqual(
             c.ink_regressions,
             [],
@@ -219,7 +228,7 @@ class AbsenceIsReportedNotReadAsZeroTests(unittest.TestCase):
             "regression the baseline never measured",
         )
         # …and the uncovered count is what keeps that from reading as a pass.
-        self.assertEqual(len(c.blind), 1)
+        self.assertEqual(len(c.blind), 2)
 
 
 @unittest.skipUnless(HAVE_PILLOW, "Pillow not installed (jui-tools[conformance])")
@@ -250,6 +259,7 @@ class EveryBlindEntryLandsInExactlyOneBucketTests(unittest.TestCase):
         _faint(art / "Indicator_animating__true.png", 300)
         _faint(art / "faint.png", 400)
         _loud(art / "loud.png")
+        _blank(art / "already_empty.png")   # the lane's proof that blank == zero
         names = sorted(p.name for p in art.glob("*.png"))
         update_baseline(conf, "web", artifacts_dir=art, env="local")
 
@@ -264,8 +274,137 @@ class EveryBlindEntryLandsInExactlyOneBucketTests(unittest.TestCase):
             len(c.blind),
             "a blind entry in no bucket is one nothing judged",
         )
-        self.assertEqual(len(c.blind), 2)
+        self.assertEqual(len(c.blind), 3)
 
 
 if __name__ == "__main__":  # pragma: no cover
     unittest.main()
+
+
+@unittest.skipUnless(HAVE_PILLOW, "Pillow not installed (jui-tools[conformance])")
+class TheDerivationsOwnPremiseIsMeasuredPerLaneTests(unittest.TestCase):
+    """`popcount <= threshold` is only the right question where a blank page
+    hashes to zero — and that is a property of the LANE, not of dHash.
+
+    🔴 THE DEFECT THIS EXISTS FOR. A lane that keeps chrome in the frame has
+    that chrome in every hash, so an emptied fixture lands on the chrome-only
+    hash rather than on zero. Measured 2026-09-15 on the committed baselines:
+    ci/android crops (48,120) and derives 106 blind of 816; local/android takes
+    NO crop, every one of the same 816 hashes sits at popcount >= 14, and the
+    derivation returned **0** — which reads as full coverage and means "this
+    question cannot be asked here".
+
+    The test is an existence proof rather than a guess about the crop: an entry
+    whose committed hash IS all zeros proves a blank picture reaches zero on
+    this lane. Guessing from the crop fails in both directions — ci/web takes
+    no crop and still reaches zero.
+    """
+
+    def _lane(self, painter, extra_blank: bool = False):
+        tmp = Path(tempfile.mkdtemp())
+        conf = tmp / "conformance"
+        art = conf / "artifacts" / "web"
+        art.mkdir(parents=True)
+        (conf / "baselines" / "local").mkdir(parents=True)
+        for i in range(3):
+            painter(art / f"f{i}.png")
+        if extra_blank:
+            _blank(art / "blank.png")
+        names = sorted(p.name for p in art.glob("*.png"))
+        update_baseline(conf, "web", artifacts_dir=art, env="local")
+        return conf, art, names
+
+    def test_a_lane_where_nothing_hashes_blank_reports_unjudged_not_zero(self) -> None:
+        conf, art, names = self._lane(_loud)
+        c = compare_platform(conf, "web", names, artifacts_dir=art, env="local")
+        self.assertEqual(c.blind, [], "the derivation must not run here")
+        self.assertEqual(
+            c.blank_check_unavailable,
+            len(names),
+            "an empty blind set on this lane must be reported as UNJUDGED, not as coverage",
+        )
+        self.assertGreater(c.blank_check_min_popcount, 0, "the evidence must be carried")
+        self.assertEqual(c.ink_checked, 0)
+
+    def test_one_blank_hashing_entry_is_enough_to_ask_the_question(self) -> None:
+        """The boundary, and the reason the test is an existence proof: the
+        SAME painter, plus one picture that does hash blank."""
+        conf, art, names = self._lane(_loud, extra_blank=True)
+        c = compare_platform(conf, "web", names, artifacts_dir=art, env="local")
+        self.assertEqual(c.blank_check_unavailable, 0)
+        self.assertIn("blank.png", c.blind)
+        self.assertEqual(
+            c.already_blank,
+            ["blank.png"],
+            "an entry whose committed hash IS the blank hash is its own category",
+        )
+
+    def test_the_premise_helper_answers_from_the_hashes_alone(self) -> None:
+        from jui_cli.conformance.baseline import blanking_premise_holds
+
+        self.assertFalse(blanking_premise_holds({"a": "f" * 64, "b": "1" * 64}))
+        self.assertTrue(blanking_premise_holds({"a": "f" * 64, "b": "0" * 64}))
+        self.assertFalse(blanking_premise_holds({}), "an empty corpus proves nothing")
+
+
+@unittest.skipUnless(HAVE_PILLOW, "Pillow not installed (jui-tools[conformance])")
+class OnlyNewNeverPairsAFreshInkWithACommittedHashTests(unittest.TestCase):
+    """🔴 THE PAIRING THE COMMENT FORBIDS, ON THE VERY OPERATION THAT ADDS INK.
+
+    The guard was `only_new and n not in new_names and n in prior_ink`, which
+    stops guarding when the committed baseline has NO ink map — and that is the
+    state of every baseline not yet re-baked since ink existed. In it, an
+    only-new bake kept each committed hash (an older render) and attached
+    today's ink to it, for the whole corpus. A fixture that had gone blank in
+    between would have had its blank ink baked in, and the collapse check would
+    be permanently blind to it.
+    """
+
+    def _bake_ground(self):
+        tmp = Path(tempfile.mkdtemp())
+        conf = tmp / "conformance"
+        art = conf / "artifacts" / "web"
+        art.mkdir(parents=True)
+        (conf / "baselines" / "local").mkdir(parents=True)
+        _faint(art / "old.png", 400)
+        _blank(art / "zero.png")
+        update_baseline(conf, "web", artifacts_dir=art, env="local")
+        path = conf / "baselines" / "local" / "web.hashes.json"
+        return conf, art, path
+
+    def test_with_no_committed_ink_an_only_new_bake_leaves_old_entries_absent(self) -> None:
+        conf, art, path = self._bake_ground()
+        baked = json.loads(path.read_text())
+        del baked["ink"]                       # a pre-ink baseline, exactly
+        path.write_text(json.dumps(baked))
+
+        _faint(art / "old.png", 12)            # it went nearly blank in between
+        _faint(art / "brand_new.png", 300)     # and a new fixture arrived
+        update_baseline(conf, "web", artifacts_dir=art, env="local", only_new=True)
+
+        after = json.loads(path.read_text())
+        self.assertNotIn(
+            "old.png",
+            after.get("ink", {}),
+            "an entry that kept its COMMITTED hash must not be given TODAY's ink — "
+            "that pairs two different renders and bakes the blank in",
+        )
+        self.assertIn("brand_new.png", after["ink"], "a genuinely new entry is measured")
+
+    def test_with_committed_ink_an_only_new_bake_keeps_it(self) -> None:
+        conf, art, path = self._bake_ground()
+        committed = json.loads(path.read_text())["ink"]["old.png"]
+        _faint(art / "old.png", 12)
+        _faint(art / "brand_new.png", 300)
+        update_baseline(conf, "web", artifacts_dir=art, env="local", only_new=True)
+        after = json.loads(path.read_text())
+        self.assertEqual(after["ink"]["old.png"], committed)
+        self.assertIn("brand_new.png", after["ink"])
+
+    def test_a_wholesale_bake_still_measures_everything(self) -> None:
+        """The boundary: the fix must not have stopped ink being recorded."""
+        conf, art, path = self._bake_ground()
+        _faint(art / "old.png", 12)
+        update_baseline(conf, "web", artifacts_dir=art, env="local")
+        after = json.loads(path.read_text())
+        self.assertEqual(after["ink"]["old.png"], 12)

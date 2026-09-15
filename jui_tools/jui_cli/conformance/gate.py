@@ -1034,6 +1034,21 @@ def judge(
             # pre-ink face claim coverage it does not have. A notice, not a
             # failure — the fix is a re-bake, which is not urgent — but it
             # means this face is NOT fully judged and the count says so.
+            # 🔴 A LANE WHERE THE QUESTION CANNOT BE ASKED IS NOT A COVERED
+            # LANE. The blind population is derived from "distance to an
+            # all-zero hash", which is only the right question where a blank
+            # picture hashes to zero. Measured 2026-09-15: local/android keeps
+            # an uncropped status bar in every frame, so its 816 hashes all sit
+            # at popcount >= 14 and the derivation returned 0 — indistinguishable
+            # from full coverage. Say the number left unjudged instead.
+            unaskable = summary.blank_check_unavailable.get(p, 0)
+            if unaskable:
+                notices.append(
+                    f"{p}: the blank-page check could not run on this lane — {unaskable} "
+                    f"entr(y/ies) unjudged. No committed hash here is all zeros, so nothing "
+                    f"shows a blank picture reaches zero and distance-from-zero is the wrong "
+                    f"question. This is NOT 'no blind entries'"
+                )
             uncovered = summary.ink_uncovered.get(p, 0)
             if uncovered:
                 env_flag = f" --env {env}" if env != DEFAULT_ENV else ""

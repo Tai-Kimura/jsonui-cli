@@ -98,6 +98,12 @@ class ReportSummary:
     #: gate refuses to call a face fully covered while it is above zero.
     ink_checked: dict[str, int] = field(default_factory=dict)
     ink_uncovered: dict[str, int] = field(default_factory=dict)
+    #: platform -> entries left UNJUDGED because this lane cannot be asked the
+    #: blanking question at all (no committed hash on it is all zeros, so
+    #: nothing proves a blank page reaches zero here). NEVER folded into a
+    #: zero blind count: an empty population for this reason reads as full
+    #: coverage, which is the silence the whole check exists to remove.
+    blank_check_unavailable: dict[str, int] = field(default_factory=dict)
     #: platform -> {pass/fail/error/skipped: count} over that platform's
     #: results (unknown statuses count as error, like the matrix rendering).
     status_tallies: dict[str, dict[str, int]] = field(default_factory=dict)
@@ -402,6 +408,7 @@ def render_report(
             summary.ink_regressions[p.platform] = list(comparison.ink_regressions)
             summary.ink_checked[p.platform] = comparison.ink_checked
             summary.ink_uncovered[p.platform] = len(comparison.ink_uncovered)
+            summary.blank_check_unavailable[p.platform] = comparison.blank_check_unavailable
             if comparison.error:
                 summary.baseline_errors[p.platform] = comparison.error
                 lines.append(
@@ -480,6 +487,14 @@ def render_report(
                 lines.append(f"| {p.platform} | (not evaluated) | | | | |")
                 continue
             bad = len(comparison.ink_regressions)
+            if comparison.blank_check_unavailable:
+                lines.append(
+                    f"| {p.platform} | ⚠️ NOT ASKABLE on this lane — "
+                    f"{comparison.blank_check_unavailable} entr(y/ies) unjudged "
+                    f"(min popcount {comparison.blank_check_min_popcount}: no picture here "
+                    f"hashes blank, so distance-from-zero is the wrong question) | | | | |"
+                )
+                continue
             lines.append(
                 f"| {p.platform} | {len(comparison.blind)} | {comparison.ink_checked} "
                 f"| {len(comparison.ink_uncovered)} | {len(comparison.ink_tolerated)} "

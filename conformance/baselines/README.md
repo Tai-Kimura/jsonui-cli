@@ -166,15 +166,32 @@ and exits 0, so the only thing standing between a regression and the baseline is
 whether a person read past the end of a long output. The flag makes the exit code
 carry the answer, which is what forces the reading.
 
-🔴 **IT DOES NOT STOP THE BAKE. IT REPORTS AFTER WRITING.** An earlier version of
-this page said "the bake STOPS and names the count" — measured 2026-09-15, that is
-false. `update_baseline` writes the file unconditionally (`baseline.py:425`) and the
-flag is checked on the summary it returns (`conformance_cmd.py:1380`), so the
-baseline on disk has ALREADY absorbed every moved entry by the time you read the
-error. The tool says so itself, one line above the error: *"a wholesale bake rewrote
-the moved entries above — every one of them is now the baseline, including any that
-were regressions."* Filed as
-`docs/bugs/2026-09-15-fail-on-moved-writes-the-baseline-before-it-refuses.md`.
+🔻 **WHAT THE FLAG DOES IS A FUNCTION OF THE `jui` YOUR MACHINE RESOLVES.** Not of
+your config, not of how you call it. Read it before trusting either paragraph
+below: `cat ~/.jsonui-cli/VERSION`, or your project's
+`.jsonui-cli/sync-meta.json` — those are two different mouths and they can hold
+different versions.
+
+**1.8.85 and later — the flag refuses BEFORE the write.** `update_baseline`
+raises `BaselineMoved` above `out_path.write_text`, and the CLI catches it and
+prints every MOVED line. Nothing is written: the file is byte-identical
+afterwards. There is nothing to undo.
+
+🔴 **1.8.84 and earlier — IT DID NOT STOP THE BAKE. IT REPORTED AFTER WRITING.**
+`update_baseline` wrote the file unconditionally and the flag was checked on the
+summary it returned, so the baseline on disk had ALREADY absorbed every moved
+entry by the time you read the error — measured 2026-09-15: 797 insertions / 800
+deletions landed, then exit 1. The tool said so itself one line above the error:
+*"a wholesale bake rewrote the moved entries above — every one of them is now the
+baseline, including any that were regressions."* Fixed in 1.8.85; the ticket and
+its report are `docs/bugs/reports/closed/2026-09-15-fail-on-moved-writes-the-baseline-before-it-refuses.md`
+and `docs/bugs/reports/2026-09-15-fail-on-moved-refuses-before-it-writes.md`.
+
+⚠️ **`--only-new` IS A DIFFERENT DOOR AND THE FLAG DOES NOT ARM ON IT.** The CLI
+passes `fail_on_moved and not only_new`, because only-new keeps every existing
+entry at its committed hash by construction and has no moved entry to refuse. So
+"I passed --fail-on-moved, therefore nothing was written" is FALSE when
+`--only-new` is also passed: the new entries are written, deliberately.
 
 ```sh
 jui conformance baseline update --platform ios --env local --fail-on-moved \
@@ -187,15 +204,23 @@ jui conformance baseline update --platform ios --env ci --fail-on-moved \
   --artifacts <downloaded>/artifacts/ios
 ```
 
-**When it exits non-zero** (`ERROR: --fail-on-moved and N entr(y/ies) moved`),
-the very first thing to do is **undo the write**:
+**When it exits non-zero** (`ERROR: --fail-on-moved and N entr(y/ies) moved`):
+
+**On 1.8.85 and later, do nothing to the file.** It was not written. Go straight
+to reading the MOVED lines.
+
+🔴 **On 1.8.84 and earlier only**, the write already happened and has to be undone
+before anything else:
 
 ```sh
 git restore conformance/baselines/<env>/<platform>.hashes.json
 ```
 
-That restore is the actual refusal; the exit code is only the notification. Then
-read every `MOVED` line — each carries its own hamming distance — and decide per
+⚠️ **Do not run that on 1.8.85 or later.** At best it is a no-op; at worst it
+discards another lane's uncommitted work on the same file, because nothing of
+yours is in there to restore. `git status` on that path first, always.
+
+Then read every `MOVED` line — each carries its own hamming distance — and decide per
 entry whether that picture SHOULD have changed. `unstable` lines are a different
 list and never enter `N`. Only then write, choosing deliberately:
 

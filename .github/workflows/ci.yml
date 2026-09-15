@@ -187,8 +187,23 @@ jobs:
         with:
           python-version: "3.11"
       - name: Install jui_tools
+        # 🔴 `[conformance]` PULLS IN PILLOW, AND WITHOUT IT 86 ARMS SKIP HERE.
+        # This was the only one of the three jui_tools installs on the bare
+        # package — web-conformance below and the mobile lane both take the
+        # extra and say why. The skips were DECLARED, so the collection census
+        # was green and the number sat in plain sight; what nobody had counted
+        # was WHICH arms. Measured 2026-09-15 on run 34958111160 (v1.8.86):
+        # 86 of the 88 skips, and BOTH files testing that release's two new
+        # gates were among them — test_the_gate_can_see_a_blank_page.py (13
+        # arms) and test_fail_on_moved_refuses_before_writing.py (5). They had
+        # never executed in CI at all.
+        #
+        # ⚠️ A DECLARED SKIP IS STILL A SKIP. The declaration exists so that a
+        # NEW skip fails the run, not so an old one becomes acceptable. The
+        # census prints a count per reason; the count has to be read, and the
+        # population behind it named.
         working-directory: jui_tools
-        run: python -m pip install --upgrade pip && python -m pip install -e .
+        run: python -m pip install --upgrade pip && python -m pip install -e '.[conformance]'
       # Both install BEFORE the jui_tools suite runs. `jui g project`
       # validates specs only when document_tools imports, so with the
       # installs after the suite, that validation never ran here — and a

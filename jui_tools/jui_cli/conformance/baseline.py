@@ -238,6 +238,56 @@ def popcount(hex_hash: str) -> int:
     return int(hex_hash, 16).bit_count()
 
 
+def blanking_premise_holds(hashes: dict[str, str]) -> bool:
+    """Does a blank picture hash to all zeros ON THIS LANE?
+
+    🔴 `blind_to_blanking` BELOW RESTS ENTIRELY ON THIS, AND IT IS NOT UNIVERSAL.
+    The derivation works because `hamming(h, 0) == popcount(h)`, i.e. because a
+    blank page hashes to all zeros — which holds only when the capture contains
+    nothing but the fixture. A lane that keeps chrome in the frame (a status bar
+    the crop does not remove) has that chrome in EVERY hash, so a fixture that
+    empties out lands on the chrome-only hash, not on zero.
+
+    Measured 2026-09-15 across the six committed baselines at threshold 8:
+
+        ci/android    (48,120)   816 entries   blind 106   min popcount  0
+        ci/ios        (160,0)    867           blind 115   min popcount  0
+        ci/web        (0,0)      818           blind 221   min popcount  0
+        local/ios     (160,0)    867           blind 114   min popcount  0
+        local/web     (0,0)      818           blind 229   min popcount  0
+        local/android  NO CROP   816           blind   0   min popcount 14   <- here
+
+    Same fixtures, same library; android splits 106 / 0 on the crop alone. All
+    816 local/android hashes sit at popcount >= 14, so nothing on that lane can
+    approach zero — and the derivation answered **0 blind entries**, which reads
+    as "fully covered" when it means "this question cannot be asked here".
+
+    🔻 THE TEST IS AN EXISTENCE PROOF, NOT A GUESS ABOUT THE CROP. An entry whose
+    committed hash IS all zeros is a picture that hashes blank on this lane, so
+    its presence proves a blank page reaches zero here. Deciding from the crop
+    would be wrong in both directions: ci/web takes no crop and still reaches
+    zero, so "uncropped" does not imply "cannot".
+
+    The closure this does NOT take: compute the lane's chrome-only hash and
+    measure distance from THAT instead of from zero. Nothing produces such an
+    image today, so the hole is left open and REPORTED rather than papered over
+    with a zero — see `VisualComparison.blank_check_unavailable`.
+    """
+    return any(popcount(h) == 0 for h in hashes.values())
+
+
+def already_blank(hashes: dict[str, str]) -> list[str]:
+    """Entries whose committed hash is ITSELF the blank hash.
+
+    A different category from "could go blank without being noticed": these
+    already are blank as far as the hash can tell, so no threshold and no
+    distance can say anything about them. The ink record is the only thing that
+    distinguishes "deliberately empty" from "empty because it broke", which is
+    why the ink comparison treats a recorded zero as its own case.
+    """
+    return sorted(n for n, h in hashes.items() if popcount(h) == 0)
+
+
 def blind_to_blanking(hashes: dict[str, str], threshold: int) -> list[str]:
     """Names whose committed hash cannot tell their picture from a blank page.
 
@@ -484,12 +534,27 @@ def update_baseline(
     prior_ink: dict[str, int] = dict(previous.get("ink") or {})
     if os_key:
         prior_ink.update((previous.get("ink_by_os") or {}).get(os_key) or {})
+    # 🔴 WHETHER THE COMMITTED BASELINE HAS INK AT ALL, as its own fact. The
+    # first version keyed the guard below on `n in prior_ink`, which silently
+    # stops guarding when the map is EMPTY — and empty is exactly the state of
+    # every baseline that has not been re-baked since ink existed. In that
+    # state an only-new bake kept each committed hash (an older render) and
+    # attached TODAY's ink to it: the one pairing the comment forbids, applied
+    # to the whole corpus, on the very operation that introduces ink. A fixture
+    # that had gone blank in between would have had its blank ink baked in, and
+    # the collapse check would be permanently blind to it.
+    baseline_records_ink = previous.get("ink") is not None
 
     def _ink_for(names) -> dict[str, int]:
         out: dict[str, int] = {}
         for n in sorted(names):
-            if only_new and n not in new_names and n in prior_ink:
-                out[n] = int(prior_ink[n])
+            if only_new and n not in new_names:
+                # This entry kept its COMMITTED hash, so it may only keep its
+                # COMMITTED ink. If there is none, it stays ABSENT and is
+                # reported as uncovered — never re-measured against a hash
+                # from a different render.
+                if baseline_records_ink and n in prior_ink:
+                    out[n] = int(prior_ink[n])
             elif n in measured_ink:
                 out[n] = measured_ink[n]
             # else: no measurement and nothing committed — left ABSENT, which
@@ -619,6 +684,17 @@ class VisualComparison:
     #: to run, so they are exempt from the collapse check — and named, so the
     #: exemption is visible rather than assumed.
     ink_tolerated: list[str] = field(default_factory=list)
+    #: Set when this lane cannot be asked the blanking question at all — no
+    #: committed hash on it is all zeros, so nothing proves a blank page
+    #: reaches zero here and `blind` would be an empty set for the wrong
+    #: reason. Carries the number of entries left UNJUDGED, never zero, plus
+    #: the smallest popcount measured (the evidence).
+    blank_check_unavailable: int = 0
+    blank_check_min_popcount: int | None = None
+    #: Entries whose committed hash is already the blank hash. Reported apart
+    #: from `blind` because no distance measurement can say anything about
+    #: them — only the ink record can.
+    already_blank: list[str] = field(default_factory=list)
 
 
 def _judge_ink(
@@ -732,8 +808,18 @@ def compare_platform(
     ink_committed: dict = dict(baseline.get("ink") or {})
     if os_key:
         ink_committed.update((baseline.get("ink_by_os") or {}).get(os_key) or {})
-    blind = set(blind_to_blanking(hashes, comparison.threshold))
+    if hashes and not blanking_premise_holds(hashes):
+        # 🔴 NOT "nothing is blind". The derivation cannot run here, and an
+        # empty `blind` would be indistinguishable from full coverage — the
+        # exact silence this whole check exists to remove. Say the number of
+        # entries left unjudged and the evidence that says so.
+        blind: set[str] = set()
+        comparison.blank_check_unavailable = len(hashes)
+        comparison.blank_check_min_popcount = min(popcount(h) for h in hashes.values())
+    else:
+        blind = set(blind_to_blanking(hashes, comparison.threshold))
     comparison.blind = sorted(blind)
+    comparison.already_blank = already_blank(hashes)
     unstable = unstable_screenshots(conformance_dir)
 
     seen = set()

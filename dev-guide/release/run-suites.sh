@@ -467,30 +467,33 @@ fi
 # full local checkouts. A sparse pattern too narrow for an arm shows up in CI
 # as a FAILURE (the arms fail on a named-but-absent file, by construction), not
 # as a skip — which is what this leg is for.
-say "== python suite in CI's shape (depth 1, no tags, no Pillow, no docs/)"
+say "== python suite in CI's shape (depth 1, no tags, no docs/, WITH Pillow)"
 CISHAPE=$(mktemp -d)
 git clone -q --depth 1 --no-tags "file://$C" "$CISHAPE/repo" 2>/dev/null
-mkdir -p "$CISHAPE/noPIL/PIL"
-# What blocks Pillow is the SHADOWING, not the raise: a `PIL` package earlier
-# on the path than site-packages makes `from PIL import Image` fail whatever is
-# inside it (measured — emptying this file changes nothing). The raise is kept
-# because it names the reason in any traceback that does escape. The skip
-# MESSAGE the census classifies comes from the tests themselves, not from here.
-printf 'raise ImportError("Pillow not installed")\n' > "$CISHAPE/noPIL/PIL/__init__.py"
 CI_TAGS=$(git -C "$CISHAPE/repo" tag -l 2>/dev/null | wc -l | tr -d ' ')
 CI_DEPTH=$(git -C "$CISHAPE/repo" rev-list --count HEAD 2>/dev/null)
 CI_DOCS=$([ -d "$CISHAPE/repo/docs" ] && echo present || echo absent)
-CI_PIL=$(PYTHONPATH="$CISHAPE/noPIL" python3 -c 'try:
+# 🔻 PILLOW IS NOW PART OF CI'S SHAPE, AND THAT IS A CHANGE. Until 1.8.87 the
+# python-suite job installed the bare package while the other two jui_tools
+# installs took `[conformance]`, so 86 arms skipped there — including both
+# files covering the gates 1.8.85 shipped. This leg faithfully reproduced that
+# by shadowing PIL, which meant the leg could not run them either: the arms
+# existed, passed on a developer tree, and were absent from every CI mouth.
+# ci.yml now installs the extra, so fidelity means Pillow PRESENT. If the extra
+# is ever dropped again the assertion below fails rather than quietly skipping.
+CI_PIL=$(python3 -c 'try:
     from PIL import Image
     print("importable")
 except ImportError:
     print("blocked")' 2>/dev/null)
 say "   shape: sha=$(git -C "$CISHAPE/repo" rev-parse --short HEAD 2>/dev/null) tags=$CI_TAGS depth=$CI_DEPTH docs=$CI_DOCS pillow=$CI_PIL"
-if [ "$CI_TAGS" != "0" ] || [ "$CI_DEPTH" != "1" ] || [ "$CI_DOCS" != "absent" ] || [ "$CI_PIL" != "blocked" ]; then
+if [ "$CI_TAGS" != "0" ] || [ "$CI_DEPTH" != "1" ] || [ "$CI_DOCS" != "absent" ] || [ "$CI_PIL" != "importable" ]; then
     bad "CI shape: the checkout does not look like CI's — this leg would measure the wrong thing"
+elif ! grep -q "pip install -e '.\[conformance\]'" "$CISHAPE/repo/.github/workflows/ci.yml"; then
+    bad "CI shape: ci.yml no longer installs [conformance] — this leg would run arms CI skips"
 else
     ( cd "$CISHAPE/repo/jui_tools" \
-      && PYTHONPATH="$CISHAPE/noPIL:$CISHAPE/repo/jui_tools" \
+      && PYTHONPATH="$CISHAPE/repo/jui_tools" \
          JSONUI_SWIFTJSONUI_PATH="${JSONUI_SWIFTJSONUI_PATH:-$(cd "$C/.." && pwd)/SwiftJsonUI}" \
          JSONUI_KOTLINJSONUI_PATH="${JSONUI_KOTLINJSONUI_PATH:-$(cd "$C/.." && pwd)/KotlinJsonUI}" \
          python3 -m pytest -q --junitxml="$CISHAPE/report.xml" -p no:cacheprovider ) > "$CISHAPE/pytest.log" 2>&1

@@ -86,6 +86,18 @@ ALLOWED_SKIP_REASONS: tuple[str, ...] = (
     # without the `[conformance]` extra, so the image-hashing tests skip. They
     # are covered where they mean something — the conformance lanes that
     # actually render. Measured on ci run 34932870285: 70 of these.
+    # ⚠️ AND IT NO LONGER FIRES IN CI, WHICH IS THE POINT. Until 1.8.87 the
+    # python-suite job installed the bare package and 86 arms skipped here —
+    # including both files covering the gates 1.8.85 shipped, which had
+    # therefore never executed in CI. ci.yml now installs `[conformance]`.
+    #
+    # The reason stays DECLARED because developer machines and other lanes can
+    # legitimately lack Pillow, and a declaration that is removed the moment it
+    # stops firing cannot tell "fixed" from "regressed". What stops it becoming
+    # a licence is elsewhere: run-suites.sh asserts that ci.yml still installs
+    # the extra, so dropping it fails the release rather than re-earning this
+    # allowance. 🔻 A DECLARED SKIP IS STILL A SKIP — the per-reason count is
+    # printed every run so the number is looked at, not just classified.
     "Pillow not installed",
     # AN ARM THAT CANNOT RUN HERE AT ALL. The audited canonical set it
     # cross-checks against lives under `docs/`, which is gitignored, so it is
