@@ -97,6 +97,22 @@ ALLOWED_SKIP_REASONS: tuple[str, ...] = (
     # cross-check skipped. Allowing it is therefore not a hole; the hole would
     # be allowing it without having checked that sibling.
     "no committed conformance dir",
+    # A THIRD KIND AGAIN, AND IT IS THE CHECKOUT ITSELF. The arm that runs
+    # `what_moved.py` over the last released range needs a release tag, and
+    # `actions/checkout@v4` here is depth-1 with no tags — not a dependency
+    # anyone can install, and not something a sparse pattern can widen.
+    # Fetching tags into every python-suite run was considered and not taken:
+    # the note on this job already weighs ~11.5 MB of history against 41 KB of
+    # sources for the cross-repo arms, and this would spend it for a check the
+    # release itself must pass anyway.
+    #
+    # ⚠️ ALLOWING IT IS ONLY HONEST BECAUSE THE PROPERTY IS CHECKED ELSEWHERE,
+    # and that was made true in the same commit rather than assumed:
+    # `dev-guide/release/run-suites.sh` now runs `what_moved.py` over
+    # <last tag>..HEAD as its own leg and fails the release when a path has no
+    # named surface. A release cannot be announced from a tree whose suites
+    # did not run, so the gate sits in front of every announcement.
+    "no release tags in this checkout",
 )
 
 

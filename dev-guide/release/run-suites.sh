@@ -442,6 +442,94 @@ fi
 # population from `shared/core/*.rb` and cannot see build droppings at all).
 # It compares bytes on the intersection AND presence on both sides, taking the
 # expected mirror set from each tool's own shared_core_mirror_spec.rb.
+# --- the python suite, IN CI'S SHAPE ----------------------------------------
+# 🔴 THE GATE THAT WAS MISSING WHEN v1.8.85 WENT OUT RED. Every other leg here
+# runs the suite in THIS tree, which has 206 tags, Pillow installed and an
+# untracked `docs/`. CI has none of those: `actions/checkout@v4` is depth-1 and
+# `--no-tags`, the job installs without the [conformance] extra, and `docs/` is
+# gitignored so no checkout ever has it. A skip that only happens in CI is
+# therefore INVISIBLE to a release gate that runs here — not unlikely to be
+# caught, structurally incapable of being caught. v1.8.85 was tagged and pushed
+# green and CI failed on exactly that: one arm skipped for a reason the
+# repository had not declared, because the arm needs a release tag.
+#
+# So this leg builds a checkout shaped like CI's and runs the suite plus the
+# collection census in it. Reproduced 2026-09-15 against run 34954953718:
+# testcases 2597, skipped 88 (86 Pillow + 1 docs + 1 undeclared) — the runner's
+# own numbers, to the unit.
+#
+# ⚠️ THE SHAPE IS ASSERTED, NOT ASSUMED. A clone that quietly kept its tags, or
+# a Pillow shim that did not take, would run a DIFFERENT suite and report a
+# green this leg did not earn. The four facts are measured and printed.
+#
+# 🔻 NOT REPRODUCED, AND SAID SO: CI sparse-checks-out the two sibling
+# libraries, so those arms read a few named files while this leg points at the
+# full local checkouts. A sparse pattern too narrow for an arm shows up in CI
+# as a FAILURE (the arms fail on a named-but-absent file, by construction), not
+# as a skip — which is what this leg is for.
+say "== python suite in CI's shape (depth 1, no tags, no Pillow, no docs/)"
+CISHAPE=$(mktemp -d)
+git clone -q --depth 1 --no-tags "file://$C" "$CISHAPE/repo" 2>/dev/null
+mkdir -p "$CISHAPE/noPIL/PIL"
+printf 'raise ImportError("Pillow not installed")\n' > "$CISHAPE/noPIL/PIL/__init__.py"
+CI_TAGS=$(git -C "$CISHAPE/repo" tag -l 2>/dev/null | wc -l | tr -d ' ')
+CI_DEPTH=$(git -C "$CISHAPE/repo" rev-list --count HEAD 2>/dev/null)
+CI_DOCS=$([ -d "$CISHAPE/repo/docs" ] && echo present || echo absent)
+CI_PIL=$(PYTHONPATH="$CISHAPE/noPIL" python3 -c 'try:
+    from PIL import Image
+    print("importable")
+except ImportError:
+    print("blocked")' 2>/dev/null)
+say "   shape: sha=$(git -C "$CISHAPE/repo" rev-parse --short HEAD 2>/dev/null) tags=$CI_TAGS depth=$CI_DEPTH docs=$CI_DOCS pillow=$CI_PIL"
+if [ "$CI_TAGS" != "0" ] || [ "$CI_DEPTH" != "1" ] || [ "$CI_DOCS" != "absent" ] || [ "$CI_PIL" != "blocked" ]; then
+    bad "CI shape: the checkout does not look like CI's — this leg would measure the wrong thing"
+else
+    ( cd "$CISHAPE/repo/jui_tools" \
+      && PYTHONPATH="$CISHAPE/noPIL:$CISHAPE/repo/jui_tools" \
+         JSONUI_SWIFTJSONUI_PATH="${JSONUI_SWIFTJSONUI_PATH:-$(cd "$C/.." && pwd)/SwiftJsonUI}" \
+         JSONUI_KOTLINJSONUI_PATH="${JSONUI_KOTLINJSONUI_PATH:-$(cd "$C/.." && pwd)/KotlinJsonUI}" \
+         python3 -m pytest -q --junitxml="$CISHAPE/report.xml" -p no:cacheprovider ) > "$CISHAPE/pytest.log" 2>&1
+    rc=$?
+    say "   $(grep -E '^[0-9]+ (passed|failed)|passed,' "$CISHAPE/pytest.log" | tail -1)  exit=$rc"
+    [ "$rc" = 0 ] || { bad "CI-shaped pytest: exit $rc"; grep -E '^FAILED|^ERROR' "$CISHAPE/pytest.log" | head -10; }
+    ( cd "$CISHAPE/repo/jui_tools" && python3 tools/check_pytest_collection.py "$CISHAPE/report.xml" ) > "$CISHAPE/census.log" 2>&1
+    rc=$?
+    sed 's/^/   /' "$CISHAPE/census.log" | grep -E 'collection|error' | head -8
+    say "   collection census exit=$rc"
+    [ "$rc" = 0 ] || bad "CI-shaped collection census: exit $rc"
+fi
+rm -rf "$CISHAPE"
+
+# --- the notice's surface classification ------------------------------------
+# 🔻 THIS LEG EXISTS TO EARN A SKIP ELSEWHERE. `what_moved.py` exits 1 on a
+# path whose surface nobody has named, which is how a new top-level artifact
+# gets a line in the release notice instead of being dropped from it. The arm
+# that runs it in the python suite SKIPS in CI, because `actions/checkout@v4`
+# is depth-1 with no tags and the check needs a released range to classify.
+# Allowing that skip is only honest if the property is checked where it
+# matters, and this is that place: a release cannot be announced from a tree
+# whose suites did not run, and these run from a full checkout with tags.
+say "== notice surfaces (every changed path has a named surface)"
+PREVTAG=$(git -C "$C" tag -l 'v*' --sort=-v:refname | head -1)
+if [ -z "$PREVTAG" ]; then
+    bad "notice surfaces: no release tag in $C — cannot classify a range"
+else
+    python3 "$C/dev-guide/release/what_moved.py" "$PREVTAG" HEAD > /tmp/what_moved.$$ 2>&1
+    rc=$?
+    RANGEN=$(git -C "$C" rev-list --count "$PREVTAG..HEAD")
+    NPATH=$(grep -c '^      ' /tmp/what_moved.$$ | tr -d ' ')
+    say "   range $PREVTAG..HEAD: $RANGEN commit(s), $NPATH path(s) classified, exit=$rc"
+    # ⚠️ AN EMPTY RANGE EXITS 0 AND CLASSIFIES NOTHING, which reads exactly
+    # like a clean pass. That is the state right after a tag is cut — HEAD is
+    # AT the newest tag — so the leg says out loud that it was not exercised
+    # rather than reporting a green it did not earn.
+    if [ "$RANGEN" = 0 ]; then
+        say "   NOT EXERCISED: HEAD is at $PREVTAG, so there was nothing to classify"
+    fi
+    [ "$rc" = 0 ] || { bad "notice surfaces: exit $rc"; grep -A5 'UNCLASSIFIED' /tmp/what_moved.$$; }
+    rm -f /tmp/what_moved.$$
+fi
+
 say "== shared/core parity (bytes AND presence, both directions)"
 python3 "$C/dev-guide/release/check-shared-core-parity.py" "$C"
 rc=$?; say "   exit=$rc"; [ "$rc" = 0 ] || bad "shared/core parity: exit $rc"
