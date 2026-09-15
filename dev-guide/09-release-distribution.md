@@ -46,6 +46,11 @@ push せず、rsync/sync_tool による同期のみ。
     直 git URL で入れているため、**rev を書かないとタグ指定でインストールしても
     兄弟だけ既定ブランチ**に解決される（= 消費側 CI のツール固定が宣言側で崩れる）。
     同じ `test_version_lockstep.py` が root との一致を強制する。
+  - **タグ門**: `dev-guide/release/check-tag.sh <repo> <prev-tag> <tag> <branch> <version> <words,comma> <remote>`
+    を **`git tag -a` の後・`git push` の前**に撃つ（5 検査がタグ object を要求するので
+    「緑をもらってから打つ」は実行不能）。⚠️ **これは唯一の門ではなく、triage レーンが
+    `prev-main` から期待値を導出する別の門を持っている。独立なのはファイルの場所ではなく
+    期待値の出所**なので、重複に見えても統合しない。
   - リリース手順: テスト green → commit → `git tag vX.Y.Z` →
     **`git push --atomic origin main vX.Y.Z`**（main とタグを 1 回で押す）→
     （shared/core を触っていれば）MCP snapshot 更新。
