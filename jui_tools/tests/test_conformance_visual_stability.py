@@ -118,9 +118,15 @@ class MovedJudgment(unittest.TestCase):
     #: Skipping without PIL would have been the same absence, quieter.
     MEASURED = "0" * (baseline.HASH_SIZE * baseline.HASH_SIZE // 4)
 
+    #: What `ink_file` returns. Zero would be a picture that is already
+    #: blank, which the blank-detection check reads as a different fact — so
+    #: these arms draw an arbitrary non-zero, because their subject is the
+    #: HAMMING judgment and nothing here is about ink.
+    MEASURED_INK = 4096
+
     def _artifact(self, name: str):
         # Only has to exist and end in .png: update_baseline globs the
-        # directory, and dhash_file is patched below.
+        # directory, and every reader of the bytes is patched in `_run`.
         (self.dir / "artifacts" / "ios" / name).write_bytes(b"not a real png")
 
     def _corpus(self, fid: str, layout: dict):
@@ -159,7 +165,24 @@ class MovedJudgment(unittest.TestCase):
         self._corpus(fid, layout)
         self._artifact(name)
         self._commit_baseline(name, self._at_distance(self.MEASURED, distance))
-        with mock.patch.object(baseline, "dhash_file", return_value=self.MEASURED):
+        # 🔻 EVERY READER OF THE ARTIFACT BYTES HAS TO BE PATCHED, and there
+        # is now more than one: `update_baseline` measures a dHash AND an ink
+        # count for each picture. A reader added later would open
+        # `b"not a real png"` and raise, which is loud — but it would raise
+        # from inside a passing-looking arm about tolerance, so `_load_pillow`
+        # is stubbed to say what actually went wrong. It must never be reached
+        # while both readers are patched, and reaching it is the message.
+        def _no_pillow():
+            raise AssertionError(
+                "update_baseline opened an artifact through a reader these arms do "
+                "not patch. These three arms run on the python-suite runner, which "
+                "has NO Pillow on purpose, so a new image reader removes them from "
+                "CI rather than failing there. Patch it here too."
+            )
+
+        with mock.patch.object(baseline, "dhash_file", return_value=self.MEASURED), \
+                mock.patch.object(baseline, "ink_file", return_value=self.MEASURED_INK), \
+                mock.patch.object(baseline, "_load_pillow", _no_pillow):
             summary = baseline.update_baseline(self.dir, "ios", env="local")
         return name, summary
 

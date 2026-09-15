@@ -273,8 +273,23 @@ class EveryBakeRecipeForcesTheReview(unittest.TestCase):
         """
         src = (REPO / "jui_tools/jui_cli/commands/conformance_cmd.py").read_text()
         self.assertIn('"--fail-on-moved"', src)
-        self.assertIn("if fail_on_moved and summary.moved:", src,
-                      "the flag is declared but nothing acts on it")
+        # ⚠️ THIS USED TO PIN `if fail_on_moved and summary.moved:` — the line
+        # that checked the flag on the summary, i.e. AFTER update_baseline had
+        # already written the file. That line's POSITION was the defect (the
+        # flag performed the bake it exists to prevent), so pinning its spelling
+        # made the arm fail the moment the defect was fixed. It now pins the
+        # WIRING — the flag is handed to the function that can refuse — and the
+        # behaviour is pinned where behaviour belongs:
+        # tests/test_fail_on_moved_refuses_before_writing.py.
+        self.assertIn("refuse_if_moved=", src,
+                      "the flag is declared but never handed to anything that refuses")
+        self.assertIn("BaselineMoved", src,
+                      "nothing handles the refusal, so the flag cannot stop a bake")
+        self.assertNotIn(
+            "if fail_on_moved and summary.moved:", src,
+            "the post-hoc check is back: that reads the flag AFTER the write, "
+            "which is the defect this option was found to have on 2026-09-15",
+        )
 
     def test_the_flag_is_still_opt_in_which_is_why_the_recipes_matter(self):
         """If the default ever becomes fail-on-moved, the recipes stop being

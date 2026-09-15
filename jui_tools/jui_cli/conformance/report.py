@@ -50,6 +50,8 @@ class PlatformResults:
     runner: dict
     results: dict[str, dict]  # fixture id -> result entry
     stale: bool = False
+    #: manifest moved, fixtures did not — judged, not re-rendered
+    manifest_drifted: bool = False
     #: Run-level census the host may emit alongside its per-fixture results.
     #: Empty when the host does not produce one — which is the pre-census
     #: hosts and every platform but ios today, so absence is not a failure.
@@ -67,6 +69,13 @@ class ReportSummary:
     env: str = baseline_mod.DEFAULT_ENV
     mismatch_count: int = 0
     stale_platforms: list[str] = field(default_factory=list)
+    #: Platforms whose results name a DIFFERENT manifest that this tool has
+    #: recorded as describing the same fixtures and ids — the pictures are
+    #: fresh, only the manifest's provenance moved. Its own list, never folded
+    #: into `stale_platforms`: an equivalence accepted without being counted
+    #: is a third state that sediments, and "3 faces green" must not be
+    #: sayable while any of these are unexplained.
+    drifted_platforms: list[str] = field(default_factory=list)
     unknown_ids: dict[str, list[str]] = field(default_factory=dict)
     visual_regressions: dict[str, int] = field(default_factory=dict)  # platform -> count
     no_baseline: dict[str, int] = field(default_factory=dict)  # platform -> count
@@ -75,6 +84,20 @@ class ReportSummary:
     #: producing a screenshot exits visual coverage without failing anything —
     #: this is the number the gate ratchets so that exit is no longer silent.
     missing_artifact: dict[str, int] = field(default_factory=dict)
+    #: platform -> entries whose committed hash is within the threshold of a
+    #: blank page, so the Hamming comparison cannot see them empty out. A
+    #: derived population, not a defect list: many are blank on purpose.
+    blind_to_blanking: dict[str, int] = field(default_factory=dict)
+    #: platform -> (name, baseline ink, measured ink, kind) for blind entries
+    #: whose ink collapsed (or appeared). THIS is the defect the population
+    #: above exists to make findable.
+    ink_regressions: dict[str, list] = field(default_factory=dict)
+    #: platform -> how many blind entries the ink check actually judged, and
+    #: how many it could not because the baseline predates ink. The second
+    #: number is the migration state: it is NOT zero regressions, and the
+    #: gate refuses to call a face fully covered while it is above zero.
+    ink_checked: dict[str, int] = field(default_factory=dict)
+    ink_uncovered: dict[str, int] = field(default_factory=dict)
     #: platform -> {pass/fail/error/skipped: count} over that platform's
     #: results (unknown statuses count as error, like the matrix rendering).
     status_tallies: dict[str, dict[str, int]] = field(default_factory=dict)
@@ -122,8 +145,18 @@ class ReportError(RuntimeError):
 # --------------------------------------------------------------------------- #
 
 
-def load_platform_results(results_dir: Path, current_manifest_hash: str) -> list[PlatformResults]:
-    """Load every ``*.results.json`` under *results_dir*, sorted by filename."""
+def load_platform_results(
+    results_dir: Path,
+    current_manifest_hash: str,
+    render_equivalent: frozenset[str] = frozenset(),
+) -> list[PlatformResults]:
+    """Load every ``*.results.json`` under *results_dir*, sorted by filename.
+
+    *render_equivalent* holds manifest hashes this tool has recorded as
+    describing the SAME fixture tree and id set as the manifest on disk — see
+    :mod:`manifest_lineage`. Results under one of those are not stale; their
+    manifest merely drifted.
+    """
     loaded: list[PlatformResults] = []
     if not results_dir.is_dir():
         return loaded
@@ -143,10 +176,48 @@ def load_platform_results(results_dir: Path, current_manifest_hash: str) -> list
                 runner=raw.get("runner") or {},
                 results=results,
                 web_markers=raw.get("webMarkers") or {},
-                stale=(manifest_hash != current_manifest_hash),
+                # 🔻 TWO QUESTIONS, TWO ANSWERS. `stale` means the PICTURES
+                # are from different fixtures and must be drawn again.
+                # `manifest_drifted` means the manifest moved but the render
+                # inputs did not — a prose edit to the SSoT is the measured
+                # case — and the gate re-judges from the current manifest on
+                # every run anyway, at no cost. Collapsing the two is what
+                # made a one-word documentation change cost an hour of
+                # rendering across three faces.
+                stale=(
+                    manifest_hash != current_manifest_hash
+                    and manifest_hash not in render_equivalent
+                ),
+                manifest_drifted=(
+                    manifest_hash != current_manifest_hash
+                    and manifest_hash in render_equivalent
+                ),
             )
         )
     return loaded
+
+
+def manifest_identity(
+    manifest_path: Path, conformance_dir: Path | None = None
+) -> tuple[str, frozenset[str]]:
+    """``(the hash the runners record, hashes whose render inputs match it)``.
+
+    The second half is empty unless a lineage has been recorded, so a tree
+    without one behaves exactly as it did before this existed — nothing
+    becomes fresh that was not fresh, and the fallback is the old answer
+    rather than a new silence.
+    """
+    from . import manifest_lineage
+
+    manifest_path = Path(manifest_path)
+    digest = manifest_lineage.manifest_digest(manifest_path)
+    if conformance_dir is None:
+        conformance_dir = manifest_path.parent
+    try:
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return digest, frozenset()
+    return digest, manifest_lineage.equivalent_manifest_hashes(conformance_dir, manifest)
 
 
 def _status_of(platform: PlatformResults, fixture_id: str) -> str | None:
@@ -327,6 +398,10 @@ def render_report(
             summary.visual_regressions[p.platform] = len(comparison.regressions)
             summary.no_baseline[p.platform] = len(comparison.no_baseline)
             summary.missing_artifact[p.platform] = len(comparison.missing_artifact)
+            summary.blind_to_blanking[p.platform] = len(comparison.blind)
+            summary.ink_regressions[p.platform] = list(comparison.ink_regressions)
+            summary.ink_checked[p.platform] = comparison.ink_checked
+            summary.ink_uncovered[p.platform] = len(comparison.ink_uncovered)
             if comparison.error:
                 summary.baseline_errors[p.platform] = comparison.error
                 lines.append(
@@ -381,6 +456,46 @@ def render_report(
                     f"> {p.platform}: {len(comparison.no_baseline)} screenshot(s) without a "
                     f"baseline hash (not compared — NOT a pass): {shown}{more}"
                 )
+
+        # --- blank detection, on the population the hashes cannot judge --- #
+        lines.append("")
+        lines.append("### Blank detection (entries the Hamming comparison cannot judge)")
+        lines.append("")
+        lines.append(
+            "An entry whose committed hash has a popcount at or below the threshold is "
+            "within that threshold of a **blank page**, so it stays green however empty "
+            "it gets — `hamming(h, 0) == popcount(h)`. That population is derived from "
+            "the committed hashes every run and judged by a second predicate instead: "
+            "the count of non-background pixels (`ink`), which must not collapse to "
+            f"under 1/{baseline_mod.INK_COLLAPSE_RATIO} of what the baseline recorded. "
+            "Lowering the threshold cannot close this — these entries are near-blank by "
+            "construction. Unstable fixtures (animating, async) are exempt and named."
+        )
+        lines.append("")
+        lines.append("| Platform | Blind entries | Ink-checked | Uncovered (re-bake) | Exempt (unstable) | Blank/appeared |")
+        lines.append("|---|---|---|---|---|---|")
+        for p in platforms:
+            comparison = visual.get(p.platform)
+            if comparison is None or comparison.error or not comparison.baseline_exists:
+                lines.append(f"| {p.platform} | (not evaluated) | | | | |")
+                continue
+            bad = len(comparison.ink_regressions)
+            lines.append(
+                f"| {p.platform} | {len(comparison.blind)} | {comparison.ink_checked} "
+                f"| {len(comparison.ink_uncovered)} | {len(comparison.ink_tolerated)} "
+                f"| {('❌ ' + str(bad)) if bad else '0'} |"
+            )
+        for p in platforms:
+            comparison = visual.get(p.platform)
+            if comparison is None or not comparison.ink_regressions:
+                continue
+            lines.append("")
+            lines.append(f"#### {p.platform}: pictures that went blank")
+            lines.append("")
+            lines.append("| Screenshot | Baseline ink | Now | |")
+            lines.append("|---|---|---|---|")
+            for name, recorded, measured, kind in comparison.ink_regressions:
+                lines.append(f"| `{name}` | {recorded} | {measured} | {kind} |")
     lines.append("")
 
     # --- 1d. Attribute effect (fixture vs its control) --- #
@@ -523,7 +638,9 @@ def render_report(
             runner_label = str(runner.get("name", "?"))
             if runner.get("version"):
                 runner_label += f" {runner['version']}"
-            manifest_state = "⚠️ STALE" if p.stale else "current"
+            manifest_state = (
+                "⚠️ STALE" if p.stale else "drifted (same fixtures)" if p.manifest_drifted else "current"
+            )
             lines.append(
                 f"| {p.platform} | {runner_label} | {len(p.results)} "
                 f"| {tally['pass']} | {tally['fail']} | {tally['error']} | {tally['skipped']} "
@@ -537,6 +654,16 @@ def render_report(
                     f"> ⚠️ `{p.path.name}` was produced against manifest "
                     f"`{p.manifest_hash or '(missing manifestHash)'}` but the current manifest is "
                     f"`{manifest_hash}` — results are stale; re-run the {p.platform} suite."
+                )
+            elif p.manifest_drifted:
+                summary.drifted_platforms.append(p.platform)
+                lines.append("")
+                lines.append(
+                    f"> `{p.path.name}` names manifest `{p.manifest_hash}` and the current "
+                    f"one is `{manifest_hash}`, but `manifest_lineage.json` records both as "
+                    f"describing the same `fixtures/` tree and the same fixture ids — the "
+                    f"pictures were drawn from these inputs and are NOT re-rendered. "
+                    f"Judgment below uses the current manifest either way."
                 )
             unknown = sorted(set(p.results) - known_ids)
             if unknown:
@@ -620,11 +747,11 @@ def generate_report(
             f"manifest not found: {manifest_path} — run 'jui conformance generate' first"
         )
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-    manifest_hash = hashlib.sha256(manifest_path.read_bytes()).hexdigest()
+    manifest_hash, render_equivalent = manifest_identity(manifest_path)
 
     if results_dir is None:
         results_dir = conformance_dir / "results"
-    platforms = load_platform_results(Path(results_dir), manifest_hash)
+    platforms = load_platform_results(Path(results_dir), manifest_hash, render_equivalent)
 
     # Same-platform screenshot baseline comparison (plan 12 §3). The names
     # come from the `screenshot` fields the platform runner recorded.

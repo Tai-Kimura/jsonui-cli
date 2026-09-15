@@ -473,7 +473,7 @@ def judge_value_discrimination(
 
     from . import control_diff as cd
     from . import value_discrimination as vd
-    from .report import load_platform_results
+    from .report import load_platform_results, manifest_identity
 
     conformance_dir = Path(conformance_dir)
     problems: list[str] = []
@@ -483,14 +483,14 @@ def judge_value_discrimination(
     if not manifest_path.is_file():
         return ([f"value-discrimination: no manifest ({manifest_path})"], [])
     manifest = _json.loads(manifest_path.read_text(encoding="utf-8"))
-    manifest_hash = hashlib.sha256(manifest_path.read_bytes()).hexdigest()
+    manifest_hash, render_equivalent = manifest_identity(manifest_path, conformance_dir)
 
     definitions = {}
     if definitions_path and Path(definitions_path).is_file():
         definitions = _json.loads(Path(definitions_path).read_text(encoding="utf-8"))
 
     results_dir = Path(results_dir) if results_dir else conformance_dir / "results"
-    loaded = {p.platform: p for p in load_platform_results(results_dir, manifest_hash)}
+    loaded = {p.platform: p for p in load_platform_results(results_dir, manifest_hash, render_equivalent)}
     ledger = vd.load_ledger(vd.ledger_path(conformance_dir))
 
     for platform in dict.fromkeys(platforms):
@@ -947,6 +947,19 @@ def judge(
             problems.append(
                 f"{p}: stale results (manifestHash != current manifest) — re-run the {p} suite"
             )
+        elif p in summary.drifted_platforms:
+            # NOT a problem, and NOT silence either. The manifest moved while
+            # `fixtures/` and the fixture ids did not, which is what a prose
+            # edit to the SSoT does — measured 2026-09-15: 0 fixture files
+            # changed, 1 manifest line changed, three faces red, ~56 minutes
+            # of rendering to get back to green. Counted in its own line so
+            # that accepting the equivalence stays visible: a fallback nobody
+            # counts is a third state that sediments.
+            notices.append(
+                f"{p}: results name a different manifest, but manifest_lineage.json "
+                f"records the same fixtures/ tree and fixture ids — judged against the "
+                f"current manifest, NOT re-rendered"
+            )
         ids = summary.unknown_ids.get(p)
         if ids:
             problems.append(f"{p}: {len(ids)} fixture id(s) not in manifest")
@@ -996,6 +1009,38 @@ def judge(
                 problems.append(
                     f"{p}: {count} visual regression(s) vs committed baseline — if intended, re-baseline with `jui conformance baseline update --platform {p}{env_flag} --fail-on-moved` and commit baselines/{env}/{p}.hashes.json"
                 )
+            # 🔻 THE POPULATION THE HAMMING COMPARISON ABOVE IS BLIND TO.
+            # An entry whose committed hash has popcount <= threshold is
+            # within the threshold of a blank page, so `count` above stays 0
+            # however empty it gets. Measured 2026-09-15 at threshold 8: 115
+            # of 867 ci/ios entries, 106/816 android, 221/818 web — and 96,
+            # 97 and 218 of those respectively DRAW something, so that is
+            # what the ink predicate puts back under judgment.
+            blanked = summary.ink_regressions.get(p) or []
+            if blanked:
+                shown = ", ".join(
+                    f"{name} ({recorded}->{measured}, {kind})"
+                    for name, recorded, measured, kind in blanked[:8]
+                )
+                more = f" … {len(blanked) - 8} more" if len(blanked) > 8 else ""
+                problems.append(
+                    f"{p}: {len(blanked)} picture(s) went blank (or stopped being "
+                    f"blank) without moving their hash — the Hamming comparison "
+                    f"cannot see these: {shown}{more}"
+                )
+            # The migration state, as its own number rather than folded into
+            # "0 regressions". A baseline baked before ink existed carries
+            # none, and reading its absence as zero ink would let every
+            # pre-ink face claim coverage it does not have. A notice, not a
+            # failure — the fix is a re-bake, which is not urgent — but it
+            # means this face is NOT fully judged and the count says so.
+            uncovered = summary.ink_uncovered.get(p, 0)
+            if uncovered:
+                env_flag = f" --env {env}" if env != DEFAULT_ENV else ""
+                notices.append(
+                    f"{p}: {uncovered} of {summary.blind_to_blanking.get(p, 0)} entries that the hash cannot tell from a blank page carry no committed ink, so they were NOT judged — re-bake with `jui conformance baseline update --platform {p}{env_flag} --fail-on-moved` to cover them"
+                )
+
             ids = summary.inert_regressions.get(p) or []
             if ids:
                 shown = ", ".join(ids[:5]) + (" …" if len(ids) > 5 else "")
@@ -1077,7 +1122,7 @@ def judge_inert_complete(
     from . import cross_effect as ce_mod
     from . import inert_audit as ia
     from . import rules as rules_mod
-    from .report import load_platform_results
+    from .report import load_platform_results, manifest_identity
 
     problems: list[str] = []
     notices: list[str] = []
@@ -1089,10 +1134,10 @@ def judge_inert_complete(
         problems.append(f"--inert-complete: manifest not found: {manifest_path}")
         return problems, notices
     manifest = _json.loads(manifest_path.read_text(encoding="utf-8"))
-    manifest_hash = hashlib.sha256(manifest_path.read_bytes()).hexdigest()
+    manifest_hash, render_equivalent = manifest_identity(manifest_path, conformance_dir)
 
     results_dir = Path(results_dir) if results_dir else conformance_dir / "results"
-    loaded = {p.platform: p for p in load_platform_results(results_dir, manifest_hash)}
+    loaded = {p.platform: p for p in load_platform_results(results_dir, manifest_hash, render_equivalent)}
     diffs = {}
     for platform in selected:
         pr = loaded.get(platform)

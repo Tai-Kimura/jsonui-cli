@@ -1,0 +1,19 @@
+{
+  "_generated": {
+    "doNotEdit": true,
+    "source": "jui conformance generate",
+    "humanWarning": "Append-only. Each key is the sha256 a runner records as manifestHash; the value says which fixture tree and id set that manifest described. The gate uses it to tell a manifest that DRIFTED (prose in the SSoT) from one whose fixtures MOVED — only the second needs the pictures drawn again."
+  },
+  "manifests": {
+    "0d22d6f56977392c80671fc996f0ece8739c2d6638102f8becb42f2a3b942164": {
+      "version": 1,
+      "fixtures": "a5ea58d7efe17b2bae4907b2ba667e1088d4a17611071fe2c97f38b71802744d",
+      "ids": "51baf35438fa73882fa25ddec2bd7c7034b4e18cbc347aaf42548debfa667e74"
+    },
+    "4713207a1fffdfe2ffb9cf46ea75af511f5fbfd4600c592b4b390bb2a0aa7d47": {
+      "version": 1,
+      "fixtures": "a5ea58d7efe17b2bae4907b2ba667e1088d4a17611071fe2c97f38b71802744d",
+      "ids": "51baf35438fa73882fa25ddec2bd7c7034b4e18cbc347aaf42548debfa667e74"
+    }
+  }
+}

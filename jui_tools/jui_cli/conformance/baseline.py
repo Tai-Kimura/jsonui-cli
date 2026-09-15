@@ -78,6 +78,21 @@ ALGORITHM = f"dhash-{HASH_SIZE}"
 DEFAULT_THRESHOLD = 8
 
 
+class BaselineMoved(RuntimeError):
+    """Raised INSTEAD OF writing, when entries moved and the caller refused that.
+
+    Carries the classification so the caller can print every MOVED line — the
+    reading the flag exists to force — without the file having changed.
+    """
+
+    def __init__(self, out_path: "Path", moved: "tuple[tuple[str, int], ...]"):
+        self.out_path = out_path
+        self.moved = moved
+        super().__init__(
+            f"{len(moved)} entr(y/ies) moved; {out_path} was NOT written"
+        )
+
+
 class BaselineError(RuntimeError):
     """Raised when baseline work cannot proceed (missing Pillow / inputs)."""
 
@@ -213,6 +228,77 @@ def hamming(hex_a: str, hex_b: str) -> int:
     return (int(hex_a, 16) ^ int(hex_b, 16)).bit_count()
 
 
+def popcount(hex_hash: str) -> int:
+    """Set bits in a hex hash.
+
+    ``popcount(h) == hamming(h, 0)``, and an all-zero dHash is what a
+    perfectly uniform image produces — so this is the distance from *this*
+    picture to a blank page, derivable without opening a single file.
+    """
+    return int(hex_hash, 16).bit_count()
+
+
+def blind_to_blanking(hashes: dict[str, str], threshold: int) -> list[str]:
+    """Names whose committed hash cannot tell their picture from a blank page.
+
+    🔻 THE HOLE THIS NAMES. The visual gate passes anything within *threshold*
+    of the committed hash. A picture that goes completely blank hashes to all
+    zeros, so its distance from the baseline is exactly ``popcount(baseline)``
+    — and every entry whose popcount is at or below the threshold therefore
+    stays green no matter how empty it gets.
+
+    Measured 2026-09-15 at threshold 8: **115 of 867 ci/ios entries**, 106 of
+    816 on android, 221 of 818 on web. Of the iOS 115, **96 draw something**
+    (ink > 0) — those are the ones with real coverage to lose; the other 19
+    are already blank on purpose and nothing can distinguish them.
+
+    The population is DERIVED from the committed hashes rather than listed,
+    so it follows the corpus and the threshold without being maintained.
+    """
+    return sorted(n for n, h in hashes.items() if popcount(h) <= threshold)
+
+
+#: A picture has "gone blank" when its ink falls below this fraction of the
+#: ink the baseline recorded. DECLARED as a ratio, not calibrated to a
+#: measurement: a per-fixture floor taken from today's render would turn every
+#: legitimate content change red and create pressure to lower it, which is how
+#: a ratchet stops meaning anything. A ratio is scale-free — it asks "did this
+#: collapse by an order of magnitude", which is the question, and it degrades
+#: gracefully: a fixture with 12 ink pixels needs to reach 1 to pass, i.e. the
+#: rule becomes "went to zero", which is still exactly the defect.
+INK_COLLAPSE_RATIO = 8
+
+
+def ink_file(path: Path, crop: tuple[int, int] = (0, 0)) -> int:
+    """Pixels that are not the picture's single most common grey level.
+
+    A blank page — of any colour — has one level and therefore **zero ink**.
+    Anything drawn on top of a uniform background has ink above zero. That is
+    the whole claim; this is not a similarity measure and is never compared
+    across fixtures, only against the same fixture's recorded value.
+
+    ⚠️ It reads the *modal* level rather than "not white", so a dark-mode or
+    tinted capture is measured the same way, and it takes the SAME ``crop`` as
+    :func:`dhash_file` so the two describe the same rectangle. Computed from
+    the 256-bucket histogram, which Pillow builds in C: the whole blind
+    population of one face is ~1.4 s (measured, 115 images of 1206x2622).
+
+    🔻 KNOWN LIMIT, STATED RATHER THAN HIDDEN: luminance collapses colour, so
+    two different hues at the same grey level read as one. A picture that
+    changes colour without changing brightness has no ink change — that case
+    belongs to dHash and the control diff, not here.
+    """
+    Image = _load_pillow()
+    with Image.open(path) as img:
+        top, bottom = crop
+        if top or bottom:
+            width, height = img.size
+            if height > top + bottom:
+                img = img.crop((0, top, width, height - bottom))
+        histogram = img.convert("L").histogram()
+    return sum(histogram) - max(histogram)
+
+
 # --------------------------------------------------------------------------- #
 # Baseline manifest I/O
 # --------------------------------------------------------------------------- #
@@ -272,6 +358,7 @@ def update_baseline(
     rendered_by: dict[str, str] | None = None,
     os_key: str | None = None,
     only_new: bool = False,
+    refuse_if_moved: bool = False,
 ) -> BaselineUpdateSummary:
     """Hash every PNG under the platform's artifacts dir into the manifest.
 
@@ -309,6 +396,12 @@ def update_baseline(
 
     crop = chrome_crop(platform, env)
     measured = {png.name: dhash_file(png, crop) for png in pngs}
+    # Measured for EVERY picture, not only the ones the ink check will read.
+    # Which entries are blind to blanking is a function of the hash and the
+    # threshold, so it moves when either does — recording ink only for
+    # today's blind set would leave the next threshold change with no data
+    # and no way to tell "never measured" from "measured as zero".
+    measured_ink = {png.name: ink_file(png, crop) for png in pngs}
 
     # Classify against what is already committed, whichever mode we are in.
     previous = load_baseline(conformance_dir, platform, env) or {}
@@ -383,6 +476,28 @@ def update_baseline(
         bucket.update(carved)
         by_os[os_key] = {k: bucket[k] for k in sorted(bucket)}
 
+    # Ink follows whatever `hashes` / `by_os` ended up holding, so the two
+    # can never describe different key sets. In only-new mode an entry that
+    # kept its committed hash keeps its committed ink with it: re-measuring it
+    # would pair a fresh ink with a stale hash, which is the one combination
+    # that makes the collapse check compare two different renders.
+    prior_ink: dict[str, int] = dict(previous.get("ink") or {})
+    if os_key:
+        prior_ink.update((previous.get("ink_by_os") or {}).get(os_key) or {})
+
+    def _ink_for(names) -> dict[str, int]:
+        out: dict[str, int] = {}
+        for n in sorted(names):
+            if only_new and n not in new_names and n in prior_ink:
+                out[n] = int(prior_ink[n])
+            elif n in measured_ink:
+                out[n] = measured_ink[n]
+            # else: no measurement and nothing committed — left ABSENT, which
+            # the comparison reports as uncovered rather than as zero ink.
+        return out
+
+    ink_by_os = {k: _ink_for(v) for k, v in by_os.items()}
+
     out_path = baseline_path(conformance_dir, platform, env)
     out_path.parent.mkdir(parents=True, exist_ok=True)
     payload = {
@@ -421,7 +536,29 @@ def update_baseline(
         # Empty for every platform whose runner does not name an OS (android
         # reports a uiautomator version, web a playwright one).
         "hashes_by_os": {k: by_os[k] for k in sorted(by_os)},
+        # Non-background pixel counts, in the same key sets as `hashes`. Read
+        # only for the entries `blind_to_blanking` derives — where the hash
+        # cannot tell the picture from a blank page — and never compared
+        # across fixtures. See `ink_file` and `INK_COLLAPSE_RATIO`.
+        "ink": _ink_for(hashes),
+        "ink_by_os": {k: ink_by_os[k] for k in sorted(ink_by_os)},
     }
+    # 🔻 THE REFUSAL HAS TO HAPPEN BEFORE THE WRITE, AND IT DID NOT.
+    # `--fail-on-moved` used to be checked by the CLI on the summary this
+    # function returns — i.e. AFTER the line below had already replaced the
+    # file. The exit code was honest and the baseline was gone: measured
+    # 2026-09-15, baking two android entries with the flag on landed 797
+    # insertions / 800 deletions and then exited 1, so the flag performed the
+    # very thing it exists to prevent. Worse, the run printed "a wholesale bake
+    # rewrote the moved entries above" one line ABOVE the error, so the two
+    # statements that contradicted each other were in the same output.
+    #
+    # ⚠️ The measurement that vouched for the flag was the symptom: a second
+    # run against the already-baked set reported `moved 0`, and that was read
+    # as "it fires on the thing and not on everything". It is evidence the
+    # FIRST run wrote. A flag that refused would report the same N twice.
+    if refuse_if_moved and moved_pairs:
+        raise BaselineMoved(out_path, moved_pairs)
     out_path.write_text(
         json.dumps(payload, indent=2, ensure_ascii=False, sort_keys=False) + "\n",
         encoding="utf-8",
@@ -459,6 +596,61 @@ class VisualComparison:
     no_baseline: list[str] = field(default_factory=list)  # screenshot without baseline hash
     missing_artifact: list[str] = field(default_factory=list)  # baseline hash without PNG
     error: str | None = None  # e.g. Pillow missing
+
+    #: Entries whose committed hash is within the threshold of a blank page,
+    #: so the Hamming comparison above cannot see them empty out. DERIVED
+    #: every run from the committed hashes — see `blind_to_blanking`.
+    blind: list[str] = field(default_factory=list)
+    #: How many of `blind` the ink check actually judged. Printed whether or
+    #: not it is zero: a check that only appears when it fires is invisible
+    #: on exactly the runs that are supposed to prove it is alive.
+    ink_checked: int = 0
+    #: (name, baseline ink, measured ink, what happened). `collapsed` is the
+    #: ticketed defect; `appeared` is the same blindness the other way round
+    #: — a fixture recorded as empty that has started drawing — and costs
+    #: nothing extra to catch.
+    ink_regressions: list[tuple[str, int, int, str]] = field(default_factory=list)
+    #: Blind entries with no committed ink. A baseline baked before this
+    #: existed has none, so these are NOT passes: they are reported as
+    #: uncovered and counted separately until the face is re-baked.
+    ink_uncovered: list[str] = field(default_factory=list)
+    #: Blind entries whose picture is not a function of the code (a spinning
+    #: Indicator, an image still arriving). Their ink legitimately varies run
+    #: to run, so they are exempt from the collapse check — and named, so the
+    #: exemption is visible rather than assumed.
+    ink_tolerated: list[str] = field(default_factory=list)
+
+
+def _judge_ink(
+    comparison: VisualComparison,
+    name: str,
+    png: Path,
+    crop: tuple[int, int],
+    committed: dict,
+    unstable: dict,
+) -> None:
+    """Rule on one blind entry. Every one lands in exactly one bucket."""
+    if name in unstable:
+        # Its picture is not a function of the code, so its ink is not either
+        # — an Indicator mid-animation can legitimately be near-empty. Named,
+        # not silently dropped.
+        comparison.ink_tolerated.append(name)
+        return
+    recorded = committed.get(name)
+    if recorded is None:
+        # ABSENCE IS AMBIGUOUS HERE — a baseline baked before ink existed
+        # looks exactly like one whose entry was deleted — so it is reported,
+        # never read as zero. Reading it as zero would make every pre-ink
+        # baseline claim full coverage it does not have.
+        comparison.ink_uncovered.append(name)
+        return
+    recorded = int(recorded)
+    measured = ink_file(png, crop)
+    comparison.ink_checked += 1
+    if recorded > 0 and measured * INK_COLLAPSE_RATIO < recorded:
+        comparison.ink_regressions.append((name, recorded, measured, "collapsed"))
+    elif recorded == 0 and measured > 0:
+        comparison.ink_regressions.append((name, recorded, measured, "appeared"))
 
 
 def compare_platform(
@@ -530,6 +722,20 @@ def compare_platform(
     if os_key:
         hashes.update(baseline.get("hashes_by_os", {}).get(os_key) or {})
     crop = chrome_crop(platform, env)
+
+    # 🔻 THE SECOND PREDICATE, AND WHY IT IS NOT A SECOND THRESHOLD.
+    # Lowering the Hamming threshold would not close this: the entries below
+    # are within it of a BLANK PAGE, so no threshold that lets a normal render
+    # pass can also catch them emptying out. They need a different question
+    # asked of them, on a population derived from the same hashes the gate
+    # already trusts.
+    ink_committed: dict = dict(baseline.get("ink") or {})
+    if os_key:
+        ink_committed.update((baseline.get("ink_by_os") or {}).get(os_key) or {})
+    blind = set(blind_to_blanking(hashes, comparison.threshold))
+    comparison.blind = sorted(blind)
+    unstable = unstable_screenshots(conformance_dir)
+
     seen = set()
     for name in screenshot_names:
         seen.add(name)
@@ -543,6 +749,8 @@ def compare_platform(
             continue
         try:
             distance = hamming(dhash_file(png, crop), expected)
+            if name in blind:
+                _judge_ink(comparison, name, png, crop, ink_committed, unstable)
         except BaselineError as exc:
             comparison.error = str(exc)
             return comparison

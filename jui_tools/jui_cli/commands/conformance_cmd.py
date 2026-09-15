@@ -776,7 +776,7 @@ def _cmd_cross_effect(args: argparse.Namespace) -> int:
 
     from ..conformance import control_diff as control_diff_mod
     from ..conformance import cross_effect as ce
-    from ..conformance.report import load_platform_results
+    from ..conformance.report import load_platform_results, manifest_identity
 
     from ..conformance.baseline import DEFAULT_ENV
     # Same key `gate` uses: it selects the chrome bands control_diff must
@@ -801,9 +801,9 @@ def _cmd_cross_effect(args: argparse.Namespace) -> int:
         print(f"ERROR: manifest not found: {manifest_path}")
         return 1
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-    manifest_hash = hashlib.sha256(manifest_path.read_bytes()).hexdigest()
+    manifest_hash, render_equivalent = manifest_identity(manifest_path)
 
-    loaded = {p.platform: p for p in load_platform_results(results_dir, manifest_hash)}
+    loaded = {p.platform: p for p in load_platform_results(results_dir, manifest_hash, render_equivalent)}
     diffs = {}
     for platform in platforms:
         pr = loaded.get(platform)
@@ -955,7 +955,7 @@ def _cmd_inert_audit(args: argparse.Namespace) -> int:
     from ..conformance import control_diff as control_diff_mod
     from ..conformance import cross_effect as ce
     from ..conformance import inert_audit as ia
-    from ..conformance.report import load_platform_results
+    from ..conformance.report import load_platform_results, manifest_identity
 
     from ..conformance.baseline import DEFAULT_ENV
     # Same key `gate` uses: it selects the chrome bands control_diff must
@@ -974,9 +974,9 @@ def _cmd_inert_audit(args: argparse.Namespace) -> int:
         print(f"ERROR: manifest not found: {manifest_path}")
         return 1
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-    manifest_hash = hashlib.sha256(manifest_path.read_bytes()).hexdigest()
+    manifest_hash, render_equivalent = manifest_identity(manifest_path)
 
-    loaded = {p.platform: p for p in load_platform_results(results_dir, manifest_hash)}
+    loaded = {p.platform: p for p in load_platform_results(results_dir, manifest_hash, render_equivalent)}
     diffs = {}
     for platform in platforms:
         pr = loaded.get(platform)
@@ -1310,7 +1310,12 @@ def _parse_rendered_by(pairs) -> dict:
 
 
 def _cmd_baseline(args: argparse.Namespace) -> int:
-    from ..conformance.baseline import DEFAULT_ENV, BaselineError, update_baseline
+    from ..conformance.baseline import (
+        DEFAULT_ENV,
+        BaselineError,
+        BaselineMoved,
+        update_baseline,
+    )
 
     action = getattr(args, "baseline_action", None)
     if action != "update":
@@ -1337,7 +1342,24 @@ def _cmd_baseline(args: argparse.Namespace) -> int:
             rendered_by=_parse_rendered_by(getattr(args, "rendered_by", None)),
             os_key=_os_key_for_bake(conformance_dir, args.platform, artifacts_dir),
             only_new=only_new,
+            # The refusal now happens INSIDE, before the write. Passing the
+            # flag down is the whole fix: checking it out here, on the summary,
+            # meant checking it after the file had already been replaced.
+            refuse_if_moved=fail_on_moved and not only_new,
         )
+    except BaselineMoved as e:
+        # Every MOVED line, because reading them is what the flag is for — and
+        # now the file on disk is still the committed one while you read.
+        print(f"  moved {len(e.moved)}")
+        for name, dist in e.moved:
+            print(f"    MOVED    {name}  hamming={dist}  -> NOT WRITTEN")
+        print(f"ERROR: --fail-on-moved and {len(e.moved)} entr(y/ies) moved; "
+              f"{e.out_path} was NOT written")
+        print("  Decide per entry, then choose deliberately:")
+        print("    --only-new            insert new entries, leave moved ones committed")
+        print("    edit named entries    for a few, and assert changed=N/added=0/removed=0")
+        print("    drop the flag         wholesale, absorbing EVERY moved entry")
+        return 1
     except BaselineError as e:
         print(f"ERROR: {e}")
         return 1
@@ -1377,9 +1399,6 @@ def _cmd_baseline(args: argparse.Namespace) -> int:
             "is now the baseline, including any that were regressions. Use --only-new "
             "to insert the new entries and leave the rest alone."
         )
-    if fail_on_moved and summary.moved:
-        print(f"ERROR: --fail-on-moved and {len(summary.moved)} entr(y/ies) moved")
-        return 1
 
     print(f"baseline written to {summary.out_path}")
     print(
@@ -1885,6 +1904,11 @@ def _cmd_report(args: argparse.Namespace) -> int:
         )
     if summary.stale_platforms:
         print(f"  STALE results: {', '.join(summary.stale_platforms)}")
+    if summary.drifted_platforms:
+        print(
+            f"  manifest drifted (same fixtures, not re-rendered): "
+            f"{', '.join(summary.drifted_platforms)}"
+        )
     for platform, ids in summary.unknown_ids.items():
         print(f"  WARNING: {platform} has {len(ids)} fixture id(s) not in manifest")
     return 0
@@ -1896,7 +1920,7 @@ def _cmd_gate(args: argparse.Namespace) -> int:
 
     from ..conformance.baseline import DEFAULT_ENV
     from ..conformance.gate import evaluate
-    from ..conformance.report import ReportError, _status_of, load_platform_results
+    from ..conformance.report import ReportError, _status_of, load_platform_results, manifest_identity
 
     conformance_dir = (
         Path(args.conformance_dir) if args.conformance_dir else _DEFAULT_OUT
@@ -1946,10 +1970,10 @@ def _cmd_gate(args: argparse.Namespace) -> int:
         if (tally := summary.status_tallies.get(platform)) is not None
     )
     if has_bad_results:
-        manifest_hash = hashlib.sha256(
-            (conformance_dir / "manifest.json").read_bytes()
-        ).hexdigest()
-        loaded = {p.platform: p for p in load_platform_results(results_dir, manifest_hash)}
+        manifest_hash, render_equivalent = manifest_identity(
+            conformance_dir / "manifest.json", conformance_dir
+        )
+        loaded = {p.platform: p for p in load_platform_results(results_dir, manifest_hash, render_equivalent)}
         for platform in selected:
             p = loaded.get(platform)
             if p is None:

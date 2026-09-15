@@ -996,4 +996,22 @@ def generate_conformance(definitions_path: Path, out_dir: Path) -> GenerationSum
     summary.manifest_path.write_text(_dump_json(manifest), encoding="utf-8")
     summary.files_written += 1
 
+    # Record, from the files just written, what THIS manifest is equivalent
+    # to: which `fixtures/` tree and which fixture ids it describes. The gate
+    # reads it to tell a manifest whose provenance drifted (a `description`
+    # edited in the SSoT) from one whose fixtures actually moved — only the
+    # second needs three faces re-rendered. See `manifest_lineage`.
+    #
+    # ⚠️ Written here rather than computed later on demand because the answer
+    # has to come from the tree the generator produced. A reading taken after
+    # someone else has touched `fixtures/` would record an equivalence that
+    # was never true.
+    from . import manifest_lineage
+
+    _lineage_path, _lineage_changed = manifest_lineage.record(
+        summary.manifest_path.parent, summary.manifest_path
+    )
+    if _lineage_changed:
+        summary.files_written += 1
+
     return summary
