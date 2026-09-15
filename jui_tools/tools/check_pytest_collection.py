@@ -66,6 +66,44 @@ from pathlib import Path
 
 TESTS_DIR = Path(__file__).resolve().parent.parent / "tests"
 
+#: Skip reasons this repository accepts, as substrings of the skip message.
+#: DECLARED, not inferred — the same shape the conformance ledgers use, and for
+#: the same reason: "no skips at all" is a property that happens to hold on a
+#: developer machine and has never held in CI, so asserting it made the arm fail
+#: on its first real run against 71 skips that are entirely by design. Allowing
+#: *any* skip would empty the gate instead; allowing *named* reasons keeps a new
+#: one — an arm quietly dropping out — a failure.
+#:
+#: Measured 2026-09-15 on ci run 34932870285: 71 skipped, every one of them
+#: Pillow-dependent, because the python-suite job installs `pip install -e .`
+#: without the `[conformance]` extra on purpose (the image-hashing tests are
+#: covered by the conformance lanes that actually render).
+ALLOWED_SKIP_REASONS: tuple[str, ...] = (
+    "Pillow not installed",
+)
+
+
+def unexpected_skips(suite: ET.Element) -> tuple[list[tuple[str, str]], dict[str, int]]:
+    """Return (skips whose reason is not declared, a census by declared reason).
+
+    Read from the report's own ``<skipped message=...>`` rather than from a
+    ``-rs`` summary, so the classification comes from the same artifact as the
+    counts and cannot disagree with them.
+    """
+    unexpected: list[tuple[str, str]] = []
+    census: dict[str, int] = {reason: 0 for reason in ALLOWED_SKIP_REASONS}
+    for case in suite.iter("testcase"):
+        for skipped in case.iter("skipped"):
+            message = (skipped.get("message") or "") + " " + (skipped.text or "")
+            for reason in ALLOWED_SKIP_REASONS:
+                if reason in message:
+                    census[reason] += 1
+                    break
+            else:
+                name = f"{case.get('classname','')}::{case.get('name','')}"
+                unexpected.append((name, message.strip()[:120]))
+    return unexpected, census
+
 
 def mapped_and_unmapped(suite: ET.Element) -> tuple[set[str], int]:
     """Return (module paths derived from testcases, testcases that derived none).
@@ -156,11 +194,26 @@ def main(argv: list[str]) -> int:
         return 1
 
     failed = False
-    if skipped:
+    unexpected, skip_census = unexpected_skips(suite)
+    for reason, count in sorted(skip_census.items()):
+        print(f"[collection] declared skip reason {reason!r}: {count}")
+    if unexpected:
         print(
-            f"::error::{skipped} test(s) were SKIPPED. A skip is not a pass — "
-            "run with -rs to see which, and either make the arm's precondition "
-            "a refusal or give the job what it needs"
+            f"::error::{len(unexpected)} test(s) skipped for a reason this repository "
+            "has not declared. A skip is not a pass — add the reason to "
+            "ALLOWED_SKIP_REASONS with a note on why it is legitimate, or give the "
+            "job what it needs:"
+        )
+        for name, message in unexpected[:20]:
+            print(f"::error::  {name} — {message}")
+        failed = True
+    # Conservation: every skip is either declared or reported. A classifier that
+    # silently matched nothing would otherwise pass by finding no unexpected ones.
+    classified = sum(skip_census.values()) + len(unexpected)
+    if classified != skipped:
+        print(
+            f"::error::skip classification does not add up: {classified} classified "
+            f"vs {skipped} reported by the run — the reader is broken, not the suite"
         )
         failed = True
     if uncollected:

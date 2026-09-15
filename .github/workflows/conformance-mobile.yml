@@ -417,13 +417,21 @@ jobs:
           # Both spellings are searched, and NOT FINDING ONE IS AN ERROR:
           # `unknown` is what a dead predicate returns, so it must not be a
           # value this step can quietly ship.
+          # ⚠️ `|| true` ON EVERY SEARCH, BECAUSE `set -euo pipefail` IS ABOVE.
+          # Without it the FIRST grep finding nothing kills the step: the
+          # command substitution exits non-zero, `set -e` fires, and neither
+          # the second spelling nor the "neither matched" error below is ever
+          # reached. Measured 2026-09-15 (run 34933040350): this step exited 2
+          # with no output at all — the fallback and the diagnostic were both
+          # written and both unreachable. A no-match is the NORMAL outcome for
+          # whichever spelling this repo does not use, so it cannot be fatal.
           agp=$(grep -ohE 'com\.android\.tools\.build:gradle:[0-9.]+' \
                   KotlinJsonUI/build.gradle.kts KotlinJsonUI/*/build.gradle.kts 2>/dev/null \
-                | head -1 | cut -d: -f3)
+                | head -1 | cut -d: -f3 || true)
           if [ -z "$agp" ]; then
             agp=$(grep -ohE 'id\("com\.android\.(library|application)"\) version "[0-9.]+"' \
                     KotlinJsonUI/build.gradle.kts KotlinJsonUI/*/build.gradle.kts 2>/dev/null \
-                  | head -1 | grep -oE '[0-9]+\.[0-9]+\.[0-9]+')
+                  | head -1 | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' || true)
           fi
           if [ -z "$agp" ]; then
             echo "error: neither AGP spelling matched. A third spelling exists, or the" >&2
