@@ -28,7 +28,23 @@ from pathlib import Path
 # `v?` because the sibling pin is spelled `...git@vX.Y.Z#...`: `\b` finds
 # no boundary between `v` and `1`, so the pin line failed the stamp test
 # and dragged document_tools/pyproject.toml into the jsonui-doc surface.
-STAMP_LINE = re.compile(r"^[+-].*(?<![\w.])v?\d+\.\d+\.\d+(?![\w.])")
+#
+# 🔻 AND IT MUST BE *THIS* VERSION, NOT ANY VERSION. `.*` lets the literal sit
+# anywhere on the line, so a line of prose that merely MENTIONS some other
+# product's version satisfied it — and a one-line diff made of that prose came
+# out as "the whole diff is version literals". Measured 2026-09-15 on
+# v1.8.84..v1.8.85: the SSoT's only changed line is a `description` sentence
+# containing "NOT a v10.22.0 regression" (a LIBRARY version, in prose), so
+# `shared/core/attribute_definitions.json` — the widest surface this script
+# has — was announced as a stamp. The vendored table carrying the same
+# sentence went with it.
+#
+# ⚠️ That is this script's own docstring defect arriving from the other side:
+# "stamps only" as a true-sounding sentence whose denominator is wrong. So the
+# versions are DERIVED from `VERSION` at the two refs and the line has to carry
+# one of them. Nothing is pinned to a spelling: a range that bumps nothing has
+# no stamp versions and therefore no stamp lines, which is the honest answer.
+_ANY_VERSION = r"(?<![\w.])v?\d+\.\d+\.\d+(?![\w.])"
 STAMPS = "version stamps — the whole diff is version literals"
 
 SURFACES = [
@@ -49,6 +65,11 @@ SURFACES = [
     # v1.7.53 range put attribute_definitions.json through this script.
     ("SSoT declaration + emit manifests — every face's vocabulary",
      r"^(shared/core/|conformance/manifest\.json$|build/attr_codegen/manifest\.json$)"),
+    # Records which manifest hashes describe the same fixtures/ tree and id
+    # set, so the gate can tell a manifest that DRIFTED from one whose
+    # fixtures moved. No host reads it; it only ever removes a re-render.
+    ("conformance manifest lineage — maintainer side, removes re-renders only",
+     r"^conformance/manifest_lineage\.json$"),
     ("release procedure / installer — maintainer side only",
      r"^(dev-guide|installer)/"),
     # CI config is maintainer-side too, but it is worth its own line: a face
@@ -102,10 +123,37 @@ def _needs_a_git_tree() -> str | None:
             "naming the two tags.")
 
 
-def stamp_only(frm: str, to: str, path: str) -> bool:
+def _version_at(ref: str) -> str | None:
+    """Root `VERSION` at *ref*, or None when the ref has no such file."""
+    try:
+        return _run("git", "show", f"{ref}:VERSION").strip() or None
+    except subprocess.CalledProcessError:
+        return None
+
+
+def stamp_line_matcher(frm: str, to: str):
+    """A predicate for "this line is a version stamp for THIS bump".
+
+    Derived from the two refs rather than declared, so it follows the release
+    it is describing. When neither ref names a version — or the version did
+    not move — nothing is a stamp, and every file falls through to its real
+    surface. That is the safe direction: the failure mode this replaces was a
+    file being called a stamp when it was not.
+    """
+    versions = {v for v in (_version_at(frm), _version_at(to)) if v}
+    if len(versions) < 2:
+        return lambda _line: False
+    this_bump = "|".join(re.escape(v) for v in sorted(versions))
+    rx = re.compile(rf"^[+-].*(?<![\w.])v?({this_bump})(?![\w.])")
+    return lambda line: bool(rx.match(line))
+
+
+def stamp_only(frm: str, to: str, path: str, is_stamp_line=None) -> bool:
+    if is_stamp_line is None:
+        is_stamp_line = stamp_line_matcher(frm, to)
     body = [l for l in _run("git", "diff", "-U0", frm, to, "--", path).splitlines()
             if l[:1] in "+-" and not l.startswith(("+++", "---"))]
-    return bool(body) and all(STAMP_LINE.match(l) for l in body)
+    return bool(body) and all(is_stamp_line(l) for l in body)
 
 
 def main(frm: str, to: str) -> int:
@@ -120,8 +168,9 @@ def main(frm: str, to: str) -> int:
 
     hit: dict[str, list[str]] = {}
     unclassified: list[str] = []
+    is_stamp_line = stamp_line_matcher(frm, to)
     for path in paths:
-        if stamp_only(frm, to, path):
+        if stamp_only(frm, to, path, is_stamp_line):
             hit.setdefault(STAMPS, []).append(path)
             continue
         for label, rx in SURFACES:
