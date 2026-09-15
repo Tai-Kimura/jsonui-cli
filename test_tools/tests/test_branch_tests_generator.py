@@ -1663,3 +1663,55 @@ class TestCoerceUsesKotlinsOwnClassSpellings:
         # would stop matching inputs coerce used to convert.
         assert f"{kotlin_type}::class.javaPrimitiveType" in self.RUNTIME
         assert f"{kotlin_type}::class.javaObjectType" in self.RUNTIME
+
+
+class TestTheSwiftTestsCompileUnderTheTargetsDefaultIsolation:
+    """The emitted XCTestCase must survive `SWIFT_DEFAULT_ACTOR_ISOLATION`.
+
+    An app that builds `@MainActor` needs its test target to do the same, or
+    the tests cannot call its ViewModels synchronously. Under Swift 6 with
+    `SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor` a plain
+    `final class XBranchesTest: XCTestCase` becomes MainActor, and its IMPLICIT
+    init overrides then disagree with XCTestCase's nonisolated ones — three
+    errors per class, in files stamped DO NOT EDIT. A consumer measured 58 of
+    them across 20 generated files and had to hold the whole test target at
+    Swift 5.
+
+    ⚠️ BOTH HALVES, measured with swiftc 6.4 one file per shape:
+
+        final class / func                    3 errors
+        nonisolated class / func              3 (body: a nonisolated method
+                                                 cannot call the MainActor
+                                                 harness factory)
+        final class / @MainActor func         3 (the init overrides again)
+        nonisolated class / @MainActor func   0
+
+    So the two arms below are not one claim written twice: remove either
+    annotation and the target stops compiling, for a different reason each
+    time.
+    """
+
+    def test_the_class_is_nonisolated(self, tmp_path):
+        root = _project(tmp_path, BASIC)
+        content = generate_branch_tests(
+            "checkout", root, platform="ios", module="App"
+        ).test_file.read_text(encoding="utf-8")
+        assert "nonisolated final class CheckoutBranchesTest: XCTestCase {" in content
+        # …and not the shape that cannot override XCTestCase's inits
+        assert "\nfinal class CheckoutBranchesTest" not in content
+        assert "@MainActor final class" not in content
+
+    def test_every_emitted_test_method_is_mainactor(self, tmp_path):
+        root = _project(tmp_path, BASIC)
+        content = generate_branch_tests(
+            "checkout", root, platform="ios", module="App"
+        ).test_file.read_text(encoding="utf-8")
+        methods = re.findall(r"^\s*(?:@MainActor )?func (test_\w+)\(", content, re.M)
+        annotated = re.findall(r"^\s*@MainActor func (test_\w+)\(", content, re.M)
+        # The population is asserted: an emit that produced no test methods
+        # would satisfy "every method is annotated" while proving nothing.
+        assert len(methods) >= 2, methods
+        assert methods == annotated, (
+            "these emitted test methods are not @MainActor, so they cannot "
+            f"reach the harness factory: {sorted(set(methods) - set(annotated))}"
+        )

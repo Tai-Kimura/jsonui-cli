@@ -2496,13 +2496,26 @@ def base_attrs_for(host: str, attribute: str, case_name: str = "") -> dict[str, 
 
     if not case_name:
         return shared
+    # 🔻 `common` IS ALWAYS THE FALLBACK SECTION, not only for View. This read
+    # `host if host != View else (host, "common")`, which was invisible while
+    # every common attribute was hosted on View — and wrong the moment one got
+    # a SECOND host (rules.COMMON_EXTRA_HOSTS, 2026-09-16). The Label-hosted
+    # `borderStyle__*_with_border` fixtures then lost the extras that make a
+    # border exist at all (`borderWidth: 2, borderColor: "#FF0000"`), so the
+    # layout declared a STYLE for a border nobody asked for: measured, all
+    # three platforms rendered them byte-identical to the plain-Label control.
+    # A fixture with no discriminating power is decoration, and the gate was
+    # right to call all eight inert.
+    #
+    # The host's own section still wins — a component that declares the
+    # attribute itself (TextField.borderStyle) keeps its own extras.
+    sections = (host, "common") if host != "common" else ("common",)
     # A case-scoped base replaces the shared one for that case only.
-    for section in (host, "common" if host == DEFAULT_COMMON_HOST else host):
+    for section in sections:
         case_extra = CASE_BASE_ATTRS.get((section, attribute, case_name))
         if case_extra is not None:
             return {**shared, **case_extra}
-    # `View` hosts both its own section and `common`, so both keys are checked.
-    for section in (host, "common" if host == DEFAULT_COMMON_HOST else host):
+    for section in sections:
         for suffix, overlay in VARIANT_CASES.get((section, attribute), {}).items():
             if case_name == suffix or case_name.endswith(f"_{suffix}"):
                 return {**shared, **overlay}

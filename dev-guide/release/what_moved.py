@@ -70,6 +70,22 @@ SURFACES = [
     # fixtures moved. No host reads it; it only ever removes a re-render.
     ("conformance manifest lineage — maintainer side, removes re-renders only",
      r"^conformance/manifest_lineage\.json$"),
+    # 🔻 BAKED PICTURE HASHES. A baseline is what one environment's renderer
+    # DREW, measured from a run's artifacts — not something a consumer
+    # resolves, and not a claim about any face's behaviour. It reaches nobody
+    # through bootstrap or sync_tool; the only reader is this repo's own gate.
+    # Unclassified until 2026-09-16, when baking twelve new fixtures' web
+    # entries made the release gate ask which audience they belong to. The
+    # honest answer is "none" — and saying so out loud is what keeps a
+    # baseline bake from being announced as if a face's pictures had changed.
+    ("conformance baselines — measured by a run, read only by this repo's gate",
+     r"^conformance/baselines/"),
+    # Fixture layouts/tests and the per-face ledgers beside them: generated
+    # from the SSoT, rendered by the hosts, judged here. Same audience as the
+    # baselines — this repo's gate — but a different kind of file, so it gets
+    # its own line rather than widening the one above.
+    ("conformance corpus + ledgers — the gate's own subject matter",
+     r"^conformance/(fixtures/|codegen/|hosts/|[a-z_]+\.json$)"),
     ("release procedure / installer — maintainer side only",
      r"^(dev-guide|installer)/"),
     # CI config is maintainer-side too, but it is worth its own line: a face

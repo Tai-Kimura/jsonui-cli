@@ -2735,7 +2735,36 @@ def render_swift_test_file(
     lines.append("import XCTest")
     lines.append(f"@testable import {module}")
     lines.append("")
-    lines.append(f"final class {pascal}BranchesTest: XCTestCase {{")
+    # 🔻 `nonisolated`, AND `@MainActor` ON EACH TEST METHOD (see the emit
+    # below). A test target built with Swift 6 and
+    # `SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor` — which is what an app built
+    # @MainActor needs, or its tests cannot call the ViewModels synchronously —
+    # makes this class MainActor by default, and its IMPLICIT init overrides
+    # then disagree with XCTestCase's nonisolated ones:
+    #
+    #   error: main actor-isolated initializer 'init()' has different actor
+    #   isolation from nonisolated overridden declaration   (x3 per class)
+    #
+    # A consumer measured 58 such errors across 20 generated files and could
+    # not fix any of them — the files say DO NOT EDIT and the next generation
+    # would take the edit back. Their only way forward was to hold the whole
+    # test target at Swift 5.
+    #
+    # ⚠️ BOTH HALVES ARE LOAD-BEARING. Measured 2026-09-16 with swiftc 6.4
+    # (Xcode 27.0 RC), one file per shape, typechecked against the iOS
+    # simulator SDK:
+    #
+    #   shape                                sw5   sw6   sw6 + MainActor default
+    #   final class / func                    -     0     3  (the init overrides)
+    #   nonisolated class / func              -     0     3  (body: calls a
+    #                                                          MainActor runner
+    #                                                          from nonisolated)
+    #   final class / @MainActor func         -     0     3  (the init overrides)
+    #   nonisolated class / @MainActor func   -     0     0  ← this
+    #
+    # (`sw5` is identical for all four: one consumer-side error in the harness
+    # factory, which is hand-written and out of this file's reach.)
+    lines.append(f"nonisolated final class {pascal}BranchesTest: XCTestCase {{")
     lines.append("")
     lines.append("  private let routes: [RouteSpec] = [")
     lines.append(",\n".join(route_lines))
@@ -2792,7 +2821,12 @@ def _render_swift_branch(
     out: list[str] = []
     out.append("")
     out.append(f"  // {_branch_title(number, branch)}")
-    out.append(f"  func test_{method_name}_branch_{number}() {{")
+    # @MainActor: the harness factory this calls builds the real ViewModel,
+    # which is MainActor-isolated in every app that builds @MainActor. The
+    # class is `nonisolated` (see the class emit), so without this the body
+    # cannot reach it. Harmless on a Swift 5 target and on a target whose
+    # default is nonisolated — a MainActor method may call either.
+    out.append(f"  @MainActor func test_{method_name}_branch_{number}() {{")
     out.append(
         f"    runBranchTest(routes: routes, overrides: {_swift(overrides) if overrides else '[:]'},"
     )

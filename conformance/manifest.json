@@ -10,11 +10,11 @@
   "schemaVersion": 2,
   "generatedFrom": "b1a3d7648234c3b6e0911a4b88edfbc41f43308fe50ed3ab156191a872d8a026",
   "counts": {
-    "fixtures": 1111,
+    "fixtures": 1112,
     "assertable": 49,
     "visual": 832,
     "interactive": 37,
-    "control": 115,
+    "control": 116,
     "declarationOnly": 77,
     "skipped": 157,
     "promoted": {
@@ -1571,8 +1571,8 @@
       "test": "fixtures/common/borderStyle_on_Label__solid_with_border.test.json",
       "state": null,
       "promotedFrom": null,
-      "peerGroup": "common/borderStyle_on_Label@Label",
-      "control": "__control/Label"
+      "peerGroup": "common/borderStyle_on_Label@Label__borderColor--FF0000_borderWidth-2",
+      "control": "__control/Label__borderColor--FF0000_borderWidth-2"
     },
     {
       "id": "common/borderStyle_on_Label__dashed_with_border",
@@ -1595,8 +1595,8 @@
       "test": "fixtures/common/borderStyle_on_Label__dashed_with_border.test.json",
       "state": null,
       "promotedFrom": null,
-      "peerGroup": "common/borderStyle_on_Label@Label",
-      "control": "__control/Label"
+      "peerGroup": "common/borderStyle_on_Label@Label__borderColor--FF0000_borderWidth-2",
+      "control": "__control/Label__borderColor--FF0000_borderWidth-2"
     },
     {
       "id": "common/borderStyle_on_Label__dotted_with_border",
@@ -1619,8 +1619,8 @@
       "test": "fixtures/common/borderStyle_on_Label__dotted_with_border.test.json",
       "state": null,
       "promotedFrom": null,
-      "peerGroup": "common/borderStyle_on_Label@Label",
-      "control": "__control/Label"
+      "peerGroup": "common/borderStyle_on_Label@Label__borderColor--FF0000_borderWidth-2",
+      "control": "__control/Label__borderColor--FF0000_borderWidth-2"
     },
     {
       "id": "common/opacity__static",
@@ -24102,6 +24102,30 @@
       "deprecated": null,
       "layout": "fixtures/__control/Label__borderColor--FF0000.layout.json",
       "test": "fixtures/__control/Label__borderColor--FF0000.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "control": null,
+      "isControl": true
+    },
+    {
+      "id": "__control/Label__borderColor--FF0000_borderWidth-2",
+      "component": "__control",
+      "attribute": null,
+      "case": "Label",
+      "class": "visual",
+      "host": "Label",
+      "writtenKey": null,
+      "aliasOf": null,
+      "value": null,
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/__control/Label__borderColor--FF0000_borderWidth-2.layout.json",
+      "test": "fixtures/__control/Label__borderColor--FF0000_borderWidth-2.test.json",
       "state": null,
       "promotedFrom": null,
       "control": null,

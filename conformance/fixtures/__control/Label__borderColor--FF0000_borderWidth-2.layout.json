@@ -19,8 +19,7 @@
       "height": "wrapContent",
       "text": "Sample",
       "borderWidth": 2,
-      "borderColor": "#FF0000",
-      "borderStyle": "dashed"
+      "borderColor": "#FF0000"
     }
   ]
 }
