@@ -408,3 +408,56 @@ class OnlyNewNeverPairsAFreshInkWithACommittedHashTests(unittest.TestCase):
         update_baseline(conf, "web", artifacts_dir=art, env="local")
         after = json.loads(path.read_text())
         self.assertEqual(after["ink"]["old.png"], 12)
+
+
+@unittest.skipUnless(HAVE_PILLOW, "Pillow not installed (jui-tools[conformance])")
+class AnUncoveredEntryIsStillMeasuredTests(unittest.TestCase):
+    """Judging needs a committed value. Reporting does not.
+
+    The first version returned from the uncovered branch without calling
+    `ink_file`, so a run against a pre-ink baseline left no NUMBER anywhere —
+    and a before/after pair across a fix ("does this picture stop being
+    blank?") had nothing to subtract, because both sides said only
+    "uncovered". That is the shape a lane hit while planning the android
+    conformance-mobile run: the fixture it cares about is blind to the hash
+    AND uncovered by ink, so neither instrument produced a value.
+    """
+
+    def _pre_ink_lane(self):
+        tmp = Path(tempfile.mkdtemp())
+        conf = tmp / "conformance"
+        art = conf / "artifacts" / "web"
+        art.mkdir(parents=True)
+        (conf / "baselines" / "local").mkdir(parents=True)
+        _faint(art / "faint.png", 400)
+        _blank(art / "already_empty.png")   # the lane's proof that blank == zero
+        update_baseline(conf, "web", artifacts_dir=art, env="local")
+        path = conf / "baselines" / "local" / "web.hashes.json"
+        baked = json.loads(path.read_text())
+        del baked["ink"]
+        path.write_text(json.dumps(baked))
+        return conf, art, sorted(p.name for p in art.glob("*.png"))
+
+    def test_an_uncovered_entry_reports_a_number(self) -> None:
+        conf, art, names = self._pre_ink_lane()
+        c = compare_platform(conf, "web", names, artifacts_dir=art, env="local")
+        self.assertIn("faint.png", c.ink_uncovered)
+        self.assertEqual(
+            c.ink_measured_while_uncovered.get("faint.png"),
+            400,
+            "an uncovered entry must still carry its measured ink — without it a "
+            "before/after pair has nothing to subtract",
+        )
+        self.assertEqual(c.ink_regressions, [], "measuring is not judging")
+
+    def test_the_number_moves_when_the_picture_does(self) -> None:
+        """The before/after subtraction this exists for, in one arm."""
+        conf, art, names = self._pre_ink_lane()
+        before = compare_platform(
+            conf, "web", names, artifacts_dir=art, env="local"
+        ).ink_measured_while_uncovered["faint.png"]
+        _blank(art / "faint.png")
+        after = compare_platform(
+            conf, "web", names, artifacts_dir=art, env="local"
+        ).ink_measured_while_uncovered["faint.png"]
+        self.assertEqual((before, after), (400, 0))

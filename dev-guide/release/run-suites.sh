@@ -266,11 +266,29 @@ rb26_suite rjui_tools
 # failed here on one line: the manifest's generatedFrom digest had not
 # followed a one-line change to attribute_definitions.json.
 say "== fixture freshness (jui conformance generate produces zero diff)"
+# ⚠️ THE LABEL HAS TO BE EARNED. This read `git status` AFTER the generate and
+# called the result "files changed by generate" — so a file that was ALREADY
+# dirty got attributed to the generator. Measured 2026-09-15: two hand-edited
+# ledger files (`control_diff.json` / `cross_effect.json`, which the generator
+# does not write at all — verified, md5 unchanged across a generate) were
+# reported as "conformance fixtures are stale". That is the wrong diagnosis in
+# the expensive direction: it sends someone to look at the generator when the
+# generator is a fixed point and the tree simply has work in it.
+#
+# The set before and the set after are both taken, and the difference is what
+# the generator did. The pre-existing dirt is PRINTED rather than subtracted
+# silently — a release must not be cut from a dirty tree either, and the tag
+# gate is what refuses that.
+_dirty_before=$(git -C "$C" status --porcelain -- conformance/ | awk '{print $2}' | sort)
 (cd "$C/jui_tools" && PYTHONPATH="$C/jui_tools" python3 -c "import sys; from jui_cli.cli import main; sys.exit(main(['conformance','generate']))" 2>&1 | tail -1)
 rc=$?; [ "$rc" = 0 ] || bad "conformance generate: exit $rc"
-fresh=$(git -C "$C" status --porcelain -- conformance/ | wc -l | tr -d ' ')
-say "   files changed by generate: $fresh"
-[ "$fresh" = 0 ] || { git -C "$C" diff --stat -- conformance/ | tail -3; bad "conformance fixtures are stale (generate changed $fresh file(s))"; }
+_dirty_after=$(git -C "$C" status --porcelain -- conformance/ | awk '{print $2}' | sort)
+_by_generate=$(comm -13 <(printf '%s\n' "$_dirty_before" | grep .) <(printf '%s\n' "$_dirty_after" | grep .))
+fresh=$(printf '%s\n' "$_by_generate" | grep -c .)
+_pre=$(printf '%s\n' "$_dirty_before" | grep -c .)
+say "   files changed by generate: $fresh   (already dirty before this leg: $_pre)"
+[ "$_pre" = 0 ] || printf '%s\n' "$_dirty_before" | grep . | sed 's|^|     pre-existing |'
+[ "$fresh" = 0 ] || { printf '%s\n' "$_by_generate" | sed 's|^|     BY GENERATE |'; bad "conformance fixtures are stale (generate changed $fresh file(s))"; }
 
 # --- the rest of CI's ssot-guards job --------------------------------------
 # The second 1.8.43 candidate went red on "Vendored ruby attr tables match
@@ -507,6 +525,41 @@ else
     [ "$rc" = 0 ] || bad "CI-shaped collection census: exit $rc"
 fi
 rm -rf "$CISHAPE"
+
+# --- cited ticket paths ------------------------------------------------------
+# 🔻 NO OTHER GATE CAN EVER SEE THESE. `docs/` is gitignored, so a path written
+# into tracked prose points at a file no CI checkout has — and the ticket
+# routine MOVES every ticket when it closes (inbox -> reports/ -> closed/), so
+# the citations rot structurally, one per closure. Measured 2026-09-15: a lane
+# named ONE dead path in the baselines README; deriving the whole set found
+# FOUR dead of seven, across six files, only one of which was that README.
+# Fixing the named instance would have left three.
+#
+# ⚠️ IT IS ALSO THE ONE CHECK THAT MUST NOT FAIL ON A TREE WITHOUT `docs/`.
+# On a fresh clone every cited path is missing for a reason that says nothing
+# about the citations, so it reports NOT EXERCISED instead of turning red — the
+# same shape as the empty-range case below.
+say "== cited ticket paths resolve (docs/ is gitignored, so no CI job checks these)"
+if [ ! -d "$C/docs/bugs" ]; then
+    say "   NOT EXERCISED: $C/docs/bugs does not exist (gitignored; this tree has no tickets)"
+else
+    CITED=$(git -C "$C" grep -ohE 'docs/bugs/[A-Za-z0-9/._-]+\.md' -- . | sort -u)
+    NCITED=$(printf '%s\n' "$CITED" | grep -c . )
+    DEAD=""
+    while read -r _p; do
+        [ -z "$_p" ] && continue
+        [ -f "$C/$_p" ] || DEAD="$DEAD$_p\n"
+    done <<< "$CITED"
+    NDEAD=$(printf "$DEAD" | grep -c . )
+    say "   $NCITED path(s) cited by tracked files, $NDEAD unresolved"
+    # A derivation that found nothing to check looks exactly like a clean tree.
+    if [ "$NCITED" = 0 ]; then
+        bad "cited ticket paths: the derivation matched 0 paths — the predicate is dead, not the repo clean"
+    elif [ "$NDEAD" != 0 ]; then
+        printf "$DEAD" | sed 's|^|     DEAD |'
+        bad "cited ticket paths: $NDEAD path(s) point at files that are not there"
+    fi
+fi
 
 # --- the notice's surface classification ------------------------------------
 # 🔻 THIS LEG EXISTS TO EARN A SKIP ELSEWHERE. `what_moved.py` exits 1 on a

@@ -679,6 +679,10 @@ class VisualComparison:
     #: existed has none, so these are NOT passes: they are reported as
     #: uncovered and counted separately until the face is re-baked.
     ink_uncovered: list[str] = field(default_factory=list)
+    #: name -> ink measured on an entry that has no committed value to judge
+    #: against. Not a verdict — a number, so a before/after pair across a fix
+    #: has something to subtract while the baseline is still uncovered.
+    ink_measured_while_uncovered: dict[str, int] = field(default_factory=dict)
     #: Blind entries whose picture is not a function of the code (a spinning
     #: Indicator, an image still arriving). Their ink legitimately varies run
     #: to run, so they are exempt from the collapse check — and named, so the
@@ -718,7 +722,15 @@ def _judge_ink(
         # looks exactly like one whose entry was deleted — so it is reported,
         # never read as zero. Reading it as zero would make every pre-ink
         # baseline claim full coverage it does not have.
+        #
+        # 🔻 BUT IT IS STILL MEASURED. The first version returned here without
+        # calling `ink_file`, so an uncovered run left no NUMBER anywhere — and
+        # a before/after pair across a fix (does the picture stop being blank?)
+        # had nothing to subtract, because both sides said only "uncovered".
+        # Judging needs a committed value; REPORTING does not. The cost is the
+        # measured 1.4 s for 115 images.
         comparison.ink_uncovered.append(name)
+        comparison.ink_measured_while_uncovered[name] = ink_file(png, crop)
         return
     recorded = int(recorded)
     measured = ink_file(png, crop)

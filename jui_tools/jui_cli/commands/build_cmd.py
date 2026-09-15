@@ -387,7 +387,9 @@ def cmd_build(args: argparse.Namespace) -> int:
         # used to auto-run that here, but it surprised users (every build
         # touched extension/ directories) and blocked non-interactive callers
         # (MCP, CI) on the downstream generators that still prompt. See
-        # `docs/bugs/reports/2026-04-23-jui-build-auto-converter-removed.md`.
+        # (The ticket this used to point at, `2026-04-23-jui-build-auto-converter-removed`,
+        # is not in this tree — `docs/` is gitignored, so a cited path can outlive
+        # its file with nothing to notice. The reasoning above is the whole of it.)
 
         # Sync ViewModel Protocol / Base files from spec.event_handlers + Impl
         # markers. Hard error if any spec-declared handler has no matching Impl

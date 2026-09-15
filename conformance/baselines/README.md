@@ -585,4 +585,4 @@ control_Web.png             32          0         8      ⇒ 焼き直し不要
 なので、committed hash の popcount が threshold 以下の fixture は、絵が完全な白紙に
 戻っても閾値の内側に収まります（ci/ios で 867 中 115、うち 21 は popcount 0）。
 「絵が空でない」を dHash で撃たないこと — `diff_pixels` を使う。
-起票: `docs/bugs/2026-09-15-the-visual-gate-cannot-see-a-mostly-white-fixture-go-blank.md`
+起票: `docs/bugs/reports/closed/2026-09-15-the-visual-gate-cannot-see-a-mostly-white-fixture-go-blank.md`

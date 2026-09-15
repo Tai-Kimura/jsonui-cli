@@ -202,7 +202,9 @@ RSpec.describe RjuiTools::React::Converters::ViewConverter do
     it 'pairs flex-1 with min-w-0 min-h-0 for height matchParent' do
       # Prevents long descendants (long <pre>, prose) from pushing the
       # flex container past its weight slice via `min-*-size: auto`.
-      # See docs/bugs/rjui-flex-grow-missing-min-w-0.md.
+      # (The ticket this used to cite, `rjui-flex-grow-missing-min-w-0`, is not in
+      # this tree — `docs/` is gitignored, so a cited path can outlive its file.
+      # The mechanism above is the whole of it.)
       converter = create_converter({
         'type' => 'View', 'height' => 'matchParent', 'child' => []
       })

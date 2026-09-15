@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "_comment": "Visual fixtures asserted to render DIFFERENTLY from their control (the same layout without the attribute under test), per platform. A fixture listed for a platform that renders identically there fails the build: the attribute stopped having an effect. Record an entry when you implement an attribute; remove it only when the attribute is removed. Fixtures not listed are reported as inert without failing — a value equal to the platform default, or a fixture whose shape leaves the attribute nothing to do, cannot differ.",
+  "_comment": "Visual fixtures asserted to render DIFFERENTLY from their control (the same layout without the attribute under test), per platform. A fixture listed for a platform that renders identically there fails the build: the attribute stopped having an effect. Record an entry when you implement an attribute; remove it only when the attribute is removed. Fixtures not listed are reported as inert without failing — a value equal to the platform default, or a fixture whose shape leaves the attribute nothing to do, cannot differ. HAND-MAINTAINED, NOT GENERATED: `jui conformance generate` does not write this file (measured — its md5 is unchanged across a generate). Edit it directly; nothing regenerates it, and nothing will restore it if an entry is dropped.",
   "entries": [
     {
       "fixture": "Blur/blurRadius__static",
@@ -1825,7 +1825,7 @@
         "android",
         "web"
       ],
-      "note": "ios dropped 2026-09-15: the iOS 26 tab bar ignores every UITabBar.appearance() item-tint route (measured, two probes + a build control). The loss is recorded in cross_effect.json and docs/bugs/reports/2026-09-15-tabview-unselectedcolor-does-not-reach-the-ios-26-tab-bar.md — it is a defect on file, not an accepted state."
+      "note": "ios dropped 2026-09-15: the iOS 26 tab bar ignores every UITabBar.appearance() item-tint route (measured, two probes + a build control). The loss is recorded in cross_effect.json and docs/bugs/reports/closed/2026-09-15-tabview-unselectedcolor-does-not-reach-the-ios-26-tab-bar.md — it is a defect on file, not an accepted state."
     },
     {
       "fixture": "TextField/borderStyle__bezel",
