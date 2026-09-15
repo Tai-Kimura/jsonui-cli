@@ -89,29 +89,103 @@
 
 | job | 内容 | timeout |
 |---|---|---|
+| publication-hygiene | 公開物に消費側の名前・パス・型が漏れていないか | 5m |
 | python-suite | jui_tools unittest + protocol-sync 冪等性 e2e | 15m |
+| stub-identifier-tables | 生成スタブの識別子表が SSoT と一致 | 20m |
 | ruby-suites | rspec matrix（sjui は macos-15）Ruby 3.3 | 20m |
+| ruby-generation-parity | kjui が Ruby 2.6 と 3.3 で同じバイト列を出す | 25m |
 | **ssot-guards** | ①`jui conformance generate` → git diff ゼロ ②attr-bindings 決定論 ③rjui vendored テーブル diff | 10m |
 | web-conformance | Node 24 + Playwright → web.results.json、gate `--env ci`（**視覚判定あり** — `baselines/ci/web` と比較。fixture 変更時は本レーンのアーティファクトから ci/web を焼き直して同 PR に載せる） | 30m |
+| xcode-27-preview | 次期 Xcode での先行ビルド。**証拠であって前提ではない**（赤でも出荷は止めない） | 30m |
 
 ### conformance-mobile.yml（週次: 日曜 18:00 UTC = 月曜 03:00 JST + dispatch）
 
-- ios: macos-15 + **Xcode 16.4 固定**、SwiftJsonUI + test-runner checkout、iPhone 16 Pro sim、90m
+- ios: macos-15 + **Xcode 26.3 固定**、SwiftJsonUI + test-runner checkout、iPhone 16 Pro sim、90m
   （Xcode ビルド ~30m 込み）
-- android: ubuntu + KVM、API 34 / pixel_tablet 固定、150m。**予算は「悪いランナー」基準**
-  （良ランナー ~7 分、悪いと 6 倍）: boot ~2m + gradle ~5m + 20 分×最大 3 attempt の resumable 実行。
+- android: ubuntu + KVM、API 34 / pixel_tablet 固定、270m。**予算は「悪いランナー」基準**
+  （良ランナー ~7 分、悪いと 6 倍）: boot ~2 分 + gradle ~5 分 + 20 分×最大 5 attempt の resumable 実行
+  （step 95 + retry 130 + setup ~15 ≈ 245 → job 270。attempt 数は fixture 数から導出する — 算数は
+  workflow のコメントに在る）。
   `progress.jsonl` で resume、timeout でチョップされた fixture は 1 回だけ再実行してから error 扱い。
   attempt-1 のみ retry 許容
 - **ios-codegen / android-codegen**: 同じ fixture を生成コードで描画する 2 レーン
   （sjui/kjui 実 codegen → registry → HOST_MODE=codegen。予算は dynamic レーンと同算数）
 - report: 5 job 後、ゲート = 欠落 0 / mismatch 0 / stale 0 / fail 0 / error 0 /
   visual regression 0 / ratchet 天井内 / **parity（codegen ⇔ dynamic ci ベースライン、
-  codegen_parity.json 台帳照合）**。すべて `jui conformance gate --env ci --parity` 1 コマンド
+  codegen_parity.json 台帳照合）**。1 コマンド:
+
+  ```
+  jui conformance gate --platform ios --platform android --platform web --env ci \
+      --parity --cross-effect --inert-complete --value-discrimination \
+      --rendered-by swiftjsonui.src=… --rendered-by ios.toolchain=… （計 6 本）
+  ```
+
+  🔴 **`--env ci` は `--inert-complete` / `--cross-effect` / attribute-effect を「注記」に
+  格下げする。** activeness と inert verdict は **local-env で主張される量**だから
+  （gate.py の env スコープ）。つまり **CI がいくら緑でも、この 3 つは一度も撃たれていない**。
+  2026-09-15 実測: CI 6/6 緑の同じ run で、inert 台帳は stale 33 件・未計上 12 件。
+  これらを実際に判定できるのは **3 面をローカルでレンダしてから `--env local` で撃つとき**だけで、
+  手元の results は放っておくと数週間古くなる（当日の実測: android が 12 日前、web が 38 日前、
+  どちらも manifestHash が旧）。**glass のように manifest が動いた変更の後は、
+  local 面の再レンダまでが 1 セット**。
 
 **CI 予算の鉄則**（過去の実測から）: cancelled はまず timeout 到達を疑う。fixture を増やしたら
 再採寸する（ローカル実測 × 5-7 倍が CI 目安）。attempt < step < job の算数を workflow コメントに書く。
 
 ## 6. よくある作業
+
+🔻 **門の「こう直せ」に従う前に、その指示が前提を壊さないか測る**（2026-09-15、実害あり）。
+
+`inert_audit.json` の一部の行は、**自分が在ることで fixture を対照比較から外す**。
+`control_diff.off_face_exclusions` が **reason 散文の sentinel**
+（`"Family: off-face-equals-control."`）を grep して除外集合を作るからで、
+`adjudicatedFamily` ではない——台帳の `_comment` が
+「Consumers key off those, never off a sentinel inside the prose」と書いているのは
+**実装と逆**なので信じないこと。
+
+除外された fixture は測定に現れないので、素朴な ratchet は永遠に stale と言う:
+
+```
+32 行が在る  → 「32 stale。--update で剪定せよ」
+32 行を消す  → 「34 未計上。--update で記録せよ」
+```
+
+**どちらの指示に従ってももう一方が出る。** 剪定側は破壊的で、`update_ledger` が
+測定から台帳を作り直すため調停 32 件と除外集合ごと消える。当日、指示どおり実行して
+壊した。`self_excluding()` の免除と持ち越しで閉じ、
+`test_the_inert_ratchet_is_not_a_catch22.py` が変異で赤くなることを確認済み。
+
+📌 **この種の穴は CI に出ない。** inert / cross-effect / attribute-effect は
+local-env で主張され、CI の `--env ci` では注記に落ちる。**CI が緑である期間と、
+これらが正しい期間は別物**。manifest を動かしたら local を撃つこと。
+
+**manifest が動く変更のあと、local 面を測り直す**（2026-09-15 に手順として確定）:
+
+`results/*.results.json` は**判定だけ**を持ち、画素は `artifacts/<platform>/` 側にある。
+env 依存は画素のほうだけなので、`--env local` の判定を成り立たせるには **3 面とも
+その manifest でレンダし直す**必要がある。当日の実測では android が 12 日前 /
+web が 38 日前で、どちらも `manifestHash` が旧だった。
+
+```
+web      cd conformance/hosts/web && ./generate.sh && npm run conformance   # ~3 分
+android  conf_ci AVD を起動 → CONFORMANCE_DIR=<repo>/conformance \
+         ANDROID_SERIAL=emulator-5554 JAVA_HOME=/opt/homebrew/opt/openjdk@17 \
+         KotlinJsonUI/conformance-host/scripts/run_conformance.sh --fresh
+         → collect_results.sh                                               # ~8 分
+ios      SIMULATOR_UDID=<iOS 26 の iPhone 16 Pro> \
+         SwiftJsonUI/ConformanceHost/scripts/run_conformance.sh             # 全面で ~45 分
+         CONFORMANCE_FILTER=<部分一致> で 1 コンポーネントだけなら ~60 秒
+```
+
+🔻 **ベースラインを scratch の木から焼いたら、その画素を `conformance/artifacts/<p>/`
+にも置く。** `conformance/artifacts/` は gitignore なので、置き忘れても `git status`
+に出ない。2026-09-15 に iOS でこれが起き、local ios lane が**自分のベースラインに対して
+590 regression** を出す状態が誰にも見えないまま残った。どの木が正本かは
+「ベースラインを再現するか」で同定できる（3 候補を当てて 865/865・844/865・0/852）。
+
+⚠️ **artifacts/ は run をまたいで消えない。** 消えた fixture の絵が残り、全面焼成が
+それをベースラインに取り込む（2026-09-15: 08-07 の control 1 枚）。捕まえるのは
+`missing_artifact` ratchet なので、天井は 0 のままにしておくこと。
 
 **fixture を増やす/変える**: 手書きしない。SSoT か rules.py を変更 → `jui conformance generate` →
 diff が意図どおりか確認 → 各ホストで実行 → visual なら baseline 更新（local は手元、

@@ -9,16 +9,14 @@
         "web": "active"
       },
       "reason": "Renderer-environment: the AVD/CI emulator renders Compose blur through software (swiftshader), where the radius delta between the declared value and the default lands under the dhash threshold; web's CSS blur shows it. The android EFFECT is real (effectStyle rows measure active) — only the radius magnitude is sub-threshold in this environment.",
-      "note": "",
-      "owner": "orch (wave 4, 2026-08-08)"
+      "note": ""
     },
     {
       "fixture": "Button/textAlign__center",
       "verdict": "uniformly-inert",
       "declared": "Center",
       "reason": "Declared default: the fixture writes the platform default, so it renders identically to the attribute-less control BY CONSTRUCTION — the fixture cannot discriminate its own default. (For direction values, the axis gate makes the non-matching axis a default too: rightToLeft on a vertical stack is the natural order.)",
-      "note": "",
-      "owner": "orch (wave 4, 2026-08-08)"
+      "note": ""
     },
     {
       "fixture": "Button/textAlign__left",
@@ -119,16 +117,14 @@
         "web": "inert"
       },
       "reason": "Sub-threshold on web only: the grouped chrome surface is a light grey drawn over the fixture's #DDDDDD box, and dhash cannot separate the two greys; insetgrouped/sidebar change geometry (insets, corners) and measure active on the same face.",
-      "note": "",
-      "owner": "orch (wave 4, 2026-08-08)"
+      "note": ""
     },
     {
       "fixture": "Collection/listStyle__plain",
       "verdict": "uniformly-inert",
       "declared": "plain",
       "reason": "Declared default: the fixture writes the platform default, so it renders identically to the attribute-less control BY CONSTRUCTION — the fixture cannot discriminate its own default. (For direction values, the axis gate makes the non-matching axis a default too: rightToLeft on a vertical stack is the natural order.)",
-      "note": "",
-      "owner": "orch (wave 4, 2026-08-08)"
+      "note": ""
     },
     {
       "fixture": "Collection/orientation__vertical",
@@ -173,16 +169,6 @@
       "note": ""
     },
     {
-      "fixture": "Indicator/animating__true",
-      "platforms": {
-        "android": "inert",
-        "ios": "active"
-      },
-      "reason": "animating's declared default is true, so the fixture equals the control by declaration on android; ios measures active only because the two captures catch the spinner at different animation frames — an animation cannot be pinned by a still screenshot.",
-      "note": "",
-      "owner": "orch (wave 4, 2026-08-08)"
-    },
-    {
       "fixture": "Label/autoShrink__true",
       "platforms": {
         "android": "active",
@@ -190,8 +176,7 @@
         "web": "inert"
       },
       "reason": "Platform capability: CSS has no intrinsic shrink-to-fit for overflowing text; ios (adjustsFontSizeToFitWidth analogue) and android (auto-size) both shrink. The web face renders the un-shrunk text — the declared behavior is unexpressible, not unimplemented.",
-      "note": "",
-      "owner": "orch (wave 4, 2026-08-08)"
+      "note": ""
     },
     {
       "fixture": "Label/lineBreakMode__char",
@@ -285,40 +270,35 @@
       "verdict": "uniformly-inert",
       "declared": "original",
       "reason": "Declared default: the fixture writes the platform default, so it renders identically to the attribute-less control BY CONSTRUCTION — the fixture cannot discriminate its own default. (For direction values, the axis gate makes the non-matching axis a default too: rightToLeft on a vertical stack is the natural order.)",
-      "note": "",
-      "owner": "orch (wave 4, 2026-08-08)"
+      "note": ""
     },
     {
       "fixture": "SafeAreaView/direction__lefttoright",
       "verdict": "uniformly-inert",
       "declared": "leftToRight",
       "reason": "Declared default: the fixture writes the platform default, so it renders identically to the attribute-less control BY CONSTRUCTION — the fixture cannot discriminate its own default. (For direction values, the axis gate makes the non-matching axis a default too: rightToLeft on a vertical stack is the natural order.)",
-      "note": "",
-      "owner": "orch (wave 4, 2026-08-08)"
+      "note": ""
     },
     {
       "fixture": "SafeAreaView/direction__none",
       "verdict": "uniformly-inert",
       "declared": "none",
       "reason": "Declared default: the fixture writes the platform default, so it renders identically to the attribute-less control BY CONSTRUCTION — the fixture cannot discriminate its own default. (For direction values, the axis gate makes the non-matching axis a default too: rightToLeft on a vertical stack is the natural order.)",
-      "note": "",
-      "owner": "orch (wave 4, 2026-08-08)"
+      "note": ""
     },
     {
       "fixture": "SafeAreaView/direction__righttoleft",
       "verdict": "uniformly-inert",
       "declared": "rightToLeft",
       "reason": "Declared default: the fixture writes the platform default, so it renders identically to the attribute-less control BY CONSTRUCTION — the fixture cannot discriminate its own default. (For direction values, the axis gate makes the non-matching axis a default too: rightToLeft on a vertical stack is the natural order.)",
-      "note": "",
-      "owner": "orch (wave 4, 2026-08-08)"
+      "note": ""
     },
     {
       "fixture": "SafeAreaView/direction__toptobottom",
       "verdict": "uniformly-inert",
       "declared": "topToBottom",
       "reason": "Declared default: the fixture writes the platform default, so it renders identically to the attribute-less control BY CONSTRUCTION — the fixture cannot discriminate its own default. (For direction values, the axis gate makes the non-matching axis a default too: rightToLeft on a vertical stack is the natural order.)",
-      "note": "",
-      "owner": "orch (wave 4, 2026-08-08)"
+      "note": ""
     },
     {
       "fixture": "SafeAreaView/safeAreaInsetPositions__alias_edges",
@@ -345,8 +325,7 @@
       "verdict": "uniformly-inert",
       "declared": "top",
       "reason": "Declared default: the fixture writes the platform default, so it renders identically to the attribute-less control BY CONSTRUCTION — the fixture cannot discriminate its own default. (For direction values, the axis gate makes the non-matching axis a default too: rightToLeft on a vertical stack is the natural order.)",
-      "note": "",
-      "owner": "orch (wave 4, 2026-08-08)"
+      "note": ""
     },
     {
       "fixture": "ScrollView/orientation__vertical",
@@ -560,8 +539,7 @@
         "web": "inert"
       },
       "reason": "Fixture shape: the control carries the same value (0.5) as a companion attribute, so the pair is identical BY CONSTRUCTION — the web renders are byte-identical (verified). The android/ios 'active' verdicts come from other control-shape differences, not from value discrimination.",
-      "note": "",
-      "owner": "orch (wave 4, 2026-08-08)"
+      "note": ""
     },
     {
       "fixture": "Slider/value__static",
@@ -571,18 +549,27 @@
         "web": "inert"
       },
       "reason": "Fixture shape: same as value__binding — the control carries value 0.5 as a companion, the web pair is byte-identical by construction.",
-      "note": "",
-      "owner": "orch (wave 4, 2026-08-08)"
+      "note": ""
     },
     {
-      "fixture": "TabView/showLabels__true",
+      "fixture": "TabView/unselectedColor__binding",
       "platforms": {
-        "android": "inert",
-        "ios": "active",
-        "web": "inert"
+        "android": "active",
+        "ios": "inert",
+        "web": "active"
       },
-      "reason": "MEASURED DIVERGENCE FROM THE DECLARED DEFAULT, narrowed to the ios DYNAMIC half — owner F. Folded 2026-08-07 after B measured the ios codegen face and cleared it. The SSoT declares TabView.showLabels default true, and web is measured obeying it (showLabels__false moves 2968 px against the control while __true moves 0), with android inert as well. B took three emits at the fixture's actual shape (`tabs: [{title}, {title}]`, not `child`) and found sjui codegen already implements the declared default: no attribute emits `Label(\"One\", systemImage: \"circle\")`, `showLabels: true` emits text that does not differ from it by one byte, and `showLabels: false` emits `Image(systemName:)` with no label. So the codegen face is value-is-default and there is nothing for B to change. Whatever makes the ios TRUE face differ from its control is therefore in the dynamic renderer or in SwiftUI's own TabView chrome — F's half. (B's method note, worth keeping: the first probe used a `child` shape and produced the opposite answer; measuring at the fixture's real shape reversed it. Same class as the codegen-effect --paired trap.) The row drops when an ios TabView without showLabels renders labels. Family: declared-default-divergence.",
-      "note": ""
+      "reason": "ios lost this to the iOS 26 tab bar, not to a missing implementation. Both iOS faces apply it through the UIKit appearance proxy — SwiftJsonUI TabViewConverter.swift:167 and sjui_tools tab_view_converter.rb:181 write the same `UITabBar.appearance().unselectedItemTintColor` — and on iOS 26 that assignment moves no pixels. Measured on iPhone 16 Pro / iOS 26.5 with control_diff.diff_pixels: fixture vs control = 0, while tabBarBackground = 223110 and tintColor = 4553 on the same render. Two replacement routes were rendered and both measured 0 (UITabBarAppearance item colours via standardAppearance/scrollEdgeAppearance, in .onAppear and again before view construction); a build control injecting `.backgroundColor = .red` on the same path moved 223110 px, so the code demonstrably ran. NOT a v10.22.0 regression: run 34849471695 shows the finding on iOS 26 before that tag existed, and runs 34055792747 / 34779310938 on iOS 18 do not show it. The prescription is narrow — Slider/Switch/Segment appearance proxies are all still active on iOS 26. Ticket: docs/bugs/reports/2026-09-15-tabview-unselectedcolor-does-not-reach-the-ios-26-tab-bar.md",
+      "note": "owner: SwiftJsonUI runtime + jsonui-cli sjui_tools codegen (both faces); re-measure with CONFORMANCE_FILTER=TabView"
+    },
+    {
+      "fixture": "TabView/unselectedColor__static",
+      "platforms": {
+        "android": "active",
+        "ios": "inert",
+        "web": "active"
+      },
+      "reason": "ios lost this to the iOS 26 tab bar, not to a missing implementation. Both iOS faces apply it through the UIKit appearance proxy — SwiftJsonUI TabViewConverter.swift:167 and sjui_tools tab_view_converter.rb:181 write the same `UITabBar.appearance().unselectedItemTintColor` — and on iOS 26 that assignment moves no pixels. Measured on iPhone 16 Pro / iOS 26.5 with control_diff.diff_pixels: fixture vs control = 0, while tabBarBackground = 223110 and tintColor = 4553 on the same render. Two replacement routes were rendered and both measured 0 (UITabBarAppearance item colours via standardAppearance/scrollEdgeAppearance, in .onAppear and again before view construction); a build control injecting `.backgroundColor = .red` on the same path moved 223110 px, so the code demonstrably ran. NOT a v10.22.0 regression: run 34849471695 shows the finding on iOS 26 before that tag existed, and runs 34055792747 / 34779310938 on iOS 18 do not show it. The prescription is narrow — Slider/Switch/Segment appearance proxies are all still active on iOS 26. Ticket: docs/bugs/reports/2026-09-15-tabview-unselectedcolor-does-not-reach-the-ios-26-tab-bar.md",
+      "note": "owner: SwiftJsonUI runtime + jsonui-cli sjui_tools codegen (both faces); re-measure with CONFORMANCE_FILTER=TabView"
     },
     {
       "fixture": "TextField/borderStyle__none",
@@ -599,8 +586,7 @@
         "web": "inert"
       },
       "reason": "Fixture shape: the hint is a single line, and a line-height multiplier only moves pixels when the box metric renders — Compose's lineHeight changes the single line's box; ios/web leave a lone line's baseline where it was. A multi-line hint would measure active everywhere (TextView's long-hint fixtures do).",
-      "note": "",
-      "owner": "orch (wave 4, 2026-08-08)"
+      "note": ""
     },
     {
       "fixture": "TextField/textAlign__center",
@@ -674,8 +660,7 @@
         "web": "active"
       },
       "reason": "Platform capability: `flexible` renders as a user-resize affordance, which only the web textarea has (resize handle). ios/android grow programmatically (the growth floor is measured by the flexible height fixtures), so a still screenshot shows nothing on those faces. Updated from the pre-wave record (ios was measuring a spurious active).",
-      "note": "",
-      "owner": "orch (wave 4, 2026-08-08)"
+      "note": ""
     },
     {
       "fixture": "TextView/lineBreakMode__char",
@@ -685,8 +670,7 @@
         "web": "active"
       },
       "reason": "Platform capability: char wrapping is web-only (word-break: break-all); SwiftUI and Compose have no per-character wrap mode, so Word and Char collapse there. Updated from uniformly-inert: the web face implemented it this wave.",
-      "note": "",
-      "owner": "orch (wave 4, 2026-08-08)"
+      "note": ""
     },
     {
       "fixture": "TextView/lineBreakMode__clip",
@@ -703,8 +687,7 @@
         "web": "inert"
       },
       "reason": "Platform capability: head truncation exists only on ios (truncationMode .head); Compose offers Clip/Ellipsis(tail) only, and CSS text-overflow has no head mode. Updated from uniformly-inert: the ios dynamic face implemented it this wave.",
-      "note": "",
-      "owner": "orch (wave 4, 2026-08-08)"
+      "note": ""
     },
     {
       "fixture": "TextView/lineBreakMode__middle",
@@ -714,8 +697,7 @@
         "web": "inert"
       },
       "reason": "Platform capability: middle truncation exists only on ios (truncationMode .middle); Compose and CSS have no middle mode. Updated from uniformly-inert: the ios dynamic face implemented it this wave.",
-      "note": "",
-      "owner": "orch (wave 4, 2026-08-08)"
+      "note": ""
     },
     {
       "fixture": "TextView/lineBreakMode__tail",
@@ -930,16 +912,14 @@
       "verdict": "uniformly-inert",
       "declared": "left",
       "reason": "Declared default: the fixture writes the platform default, so it renders identically to the attribute-less control BY CONSTRUCTION — the fixture cannot discriminate its own default. (For direction values, the axis gate makes the non-matching axis a default too: rightToLeft on a vertical stack is the natural order.)",
-      "note": "",
-      "owner": "orch (wave 4, 2026-08-08)"
+      "note": ""
     },
     {
       "fixture": "common/gravity__top",
       "verdict": "uniformly-inert",
       "declared": "top",
       "reason": "Declared default: the fixture writes the platform default, so it renders identically to the attribute-less control BY CONSTRUCTION — the fixture cannot discriminate its own default. (For direction values, the axis gate makes the non-matching axis a default too: rightToLeft on a vertical stack is the natural order.)",
-      "note": "",
-      "owner": "orch (wave 4, 2026-08-08)"
+      "note": ""
     },
     {
       "fixture": "common/maxHeight__binding",
@@ -949,8 +929,7 @@
         "web": "inert"
       },
       "reason": "Constraint not binding: the fixture's content already fits under the declared max, so the bound is inert where it is a pure clamp (android heightIn, web max-height). ios measures active because frame(maxHeight:) also changes the frame's proposal/alignment — same declared constraint, different layout system.",
-      "note": "",
-      "owner": "orch (wave 4, 2026-08-08)"
+      "note": ""
     },
     {
       "fixture": "common/maxHeight__static",
@@ -960,8 +939,7 @@
         "web": "inert"
       },
       "reason": "Constraint not binding: same as the binding face — content under the max, clamp inert on android/web; ios's frame(maxHeight:) repositions.",
-      "note": "",
-      "owner": "orch (wave 4, 2026-08-08)"
+      "note": ""
     },
     {
       "fixture": "common/maxWidth__binding",
@@ -971,8 +949,7 @@
         "web": "inert"
       },
       "reason": "Constraint not binding: content under the declared max — clamp inert on android/web; ios's frame(maxWidth:) repositions.",
-      "note": "",
-      "owner": "orch (wave 4, 2026-08-08)"
+      "note": ""
     },
     {
       "fixture": "common/maxWidth__static",
@@ -982,8 +959,7 @@
         "web": "inert"
       },
       "reason": "Constraint not binding: content under the declared max — clamp inert on android/web; ios's frame(maxWidth:) repositions.",
-      "note": "",
-      "owner": "orch (wave 4, 2026-08-08)"
+      "note": ""
     }
   ]
 }

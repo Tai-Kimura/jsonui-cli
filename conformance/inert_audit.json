@@ -7,7 +7,7 @@
     "web"
   ],
   "counts": {
-    "entries": 66,
+    "entries": 77,
     "unreviewed": 0
   },
   "entries": [
@@ -83,8 +83,7 @@
       "kind": "uniform-inert-undeclared-value",
       "family": "sibling-value-active",
       "reason": "Declared default: false shows separators, exactly what the attribute-less control draws (its listStyle companion gives both a List with rows) — identical by construction; the TRUE face carries the discrimination.",
-      "note": "",
-      "owner": "orch (wave 4, 2026-08-08)"
+      "note": ""
     },
     {
       "fixture": "Collection/horizontalScroll__false",
@@ -126,7 +125,7 @@
       ],
       "kind": "uniform-inert-undeclared-value",
       "family": "untriaged",
-      "reason": "adjudicated not-photographable-at-rest: a horizontal scroll indicator is overlay chrome that both iOS and the web host draw only DURING a scroll gesture and fade at rest, so a still capture of an idle scroll container shows the same picture whether the indicator is enabled or disabled — which is why BOTH faces of this attribute (true and false) are inert and neither can discriminate. codegen-effect --paired at HEAD 2026-08-07 (CI's own arguments, 863 probes) reports no defect for this attribute, so the converter emits the spelling — the inert verdict is a render-stage or fixture-shape fact, not a dropped spelling. The measurement fix is the interactive probe (a capture taken mid-scroll), not a converter change. Family: scroll-chrome-at-rest.",
+      "reason": "adjudicated scroll-chrome-at-rest: the attribute IS read on both faces that declare it (sjui_tools collection_converter.rb:1873, rjui_tools collection_converter.rb:289), and the false spelling is the one they act on. What the fixture cannot do is put the effect into a STILL: a scroll indicator is transient chrome that is not painted while the view is at rest, so suppressing it removes nothing from the capture. kotlin is out of scope by declaration (platform_reasons records that Compose has no scrollbar primitive for Lazy content). Family: scroll-chrome-at-rest.",
       "note": "",
       "adjudicatedFamily": "scroll-chrome-at-rest"
     },
@@ -140,9 +139,9 @@
       ],
       "kind": "uniform-inert-undeclared-value",
       "family": "untriaged",
-      "reason": "adjudicated not-photographable-at-rest: a horizontal scroll indicator is overlay chrome that both iOS and the web host draw only DURING a scroll gesture and fade at rest, so a still capture of an idle scroll container shows the same picture whether the indicator is enabled or disabled — which is why BOTH faces of this attribute (true and false) are inert and neither can discriminate. codegen-effect --paired at HEAD 2026-08-07 (CI's own arguments, 863 probes) reports no defect for this attribute, so the converter emits the spelling — the inert verdict is a render-stage or fixture-shape fact, not a dropped spelling. The measurement fix is the interactive probe (a capture taken mid-scroll), not a converter change. Family: scroll-chrome-at-rest.",
+      "reason": "adjudicated value-is-default: both faces that declare this attribute branch only on the FALSE spelling — sjui_tools emits `shows_indicators = @component['showsHorizontalScrollIndicator'] != false` and rjui_tools tests `attributes['showsHorizontalScrollIndicator'] == false`. `true` therefore takes the same path as an absent attribute, which is the control. Read from the emitters, not inferred from the picture. Family: value-is-default.",
       "note": "",
-      "adjudicatedFamily": "scroll-chrome-at-rest"
+      "adjudicatedFamily": "value-is-default"
     },
     {
       "fixture": "GradientView/gradient__alias_colors",
@@ -156,8 +155,7 @@
       "kind": "uniform-inert-undeclared-value",
       "family": "sibling-value-active",
       "reason": "Fixture shape: the alias probe's colour list equals the control's companion gradient, so the two renders are identical by construction (verified: alias and control both draw the red→purple ramp; the static sibling's green ramp discriminates). The alias IS read — a probe-value collision, not an alias gap.",
-      "note": "",
-      "owner": "orch (wave 4, 2026-08-08)"
+      "note": ""
     },
     {
       "fixture": "IconLabel/selected__false",
@@ -184,9 +182,8 @@
       ],
       "kind": "single-platform-scope",
       "family": "untriaged",
-      "reason": "Off-face value: highlightSrc only shows while highlighted, and the fixture is not highlighted — the base src renders, same as the control.",
-      "note": "",
-      "owner": "orch (wave 4, 2026-08-08)"
+      "reason": "adjudicated implemented-but-unobservable-in-a-still: the attribute IS read and applied on this face — measured by counting application sites OUTSIDE the decode slot in DynamicComponent.swift, so 'decoded' was not mistaken for 'applied'. What the fixture cannot do is put the effect into a STILL screenshot. This is a different family from an unimplemented face (cf. common/glass, where the Dynamic side had no implementation at all and the two faces agreed because BOTH drew nothing): here one face draws the effect and the camera cannot see it. Same site and reason as the __static sibling; the binding form resolves to the same pressed-state image.",
+      "note": ""
     },
     {
       "fixture": "Image/highlightSrc__static",
@@ -197,7 +194,7 @@
       ],
       "kind": "single-platform-scope",
       "family": "untriaged",
-      "reason": "adjudicated doubly-unobservable: (1) highlightSrc is the image shown in the HIGHLIGHTED state, which a still capture of an untouched Image never enters, and (2) the generated fixture writes highlightSrc: \"conformance_sample\" — the SAME asset the control already has as src — so even the highlighted capture would be pixel-identical. codegen-effect --paired at HEAD 2026-08-07 (CI's own arguments, 863 probes) reports no defect for this attribute, so the converter emits the spelling — the inert verdict is a render-stage or fixture-shape fact, not a dropped spelling. Disposition: fixture work (owner D) for the value, interactive probe for the state; neither is an ios implementation gap. Family: interaction-only.",
+      "reason": "adjudicated interaction-only — an implemented-but-unobservable-in-a-still case: the attribute IS read and applied on this face — measured by counting application sites OUTSIDE the decode slot in DynamicComponent.swift, so 'decoded' was not mistaken for 'applied'. What the fixture cannot do is put the effect into a STILL screenshot. This is a different family from an unimplemented face (cf. common/glass, where the Dynamic side had no implementation at all and the two faces agreed because BOTH drew nothing): here one face draws the effect and the camera cannot see it. Applied through HighlightableImage.swift, which swaps the image WHILE THE VIEW IS PRESSED. The conformance host captures an untouched screen, so the highlight image is never the one on screen. Family: interaction-only.",
       "note": "",
       "adjudicatedFamily": "interaction-only"
     },
@@ -216,6 +213,20 @@
       "controlDiffExclusion": "off-face-equals-control"
     },
     {
+      "fixture": "Indicator/animating__true",
+      "component": "Indicator",
+      "attribute": "animating",
+      "inertOn": [
+        "android",
+        "ios"
+      ],
+      "kind": "uniform-inert-undeclared-value",
+      "family": "value-is-default",
+      "reason": "adjudicated value-is-default: shared/core/attribute_definitions.json declares Indicator.animating with an explicit \"default\": true — \"an Indicator with nothing declared animates\" — and sjui_tools indicator_converter.rb branches `if animating == false` / binding / `else # Static true, any truthy value, or no animating property - always show`. `true` therefore takes the same branch as an absent attribute, which is the control. The sibling __false is the one that acts. Family: value-is-default.",
+      "note": "",
+      "adjudicatedFamily": "value-is-default"
+    },
+    {
       "fixture": "Indicator/color__binding",
       "component": "Indicator",
       "attribute": "color",
@@ -225,8 +236,7 @@
       "kind": "single-platform-scope",
       "family": "sibling-value-active",
       "reason": "Fixture shape: the bound colour resolves to the same value the control's companion carries; the static and alias siblings discriminate (triaged sibling-value-active). A probe-value collision, not a binding gap.",
-      "note": "",
-      "owner": "orch (wave 4, 2026-08-08)"
+      "note": ""
     },
     {
       "fixture": "Indicator/hidesWhenStopped__false",
@@ -237,9 +247,34 @@
       ],
       "kind": "single-platform-scope",
       "family": "untriaged",
-      "reason": "adjudicated on the path the fixture actually renders through, AND a codegen/dynamic divergence worth F's attention. The ios conformance lane renders DYNAMIC, and SwiftJsonUI's IndicatorConverter.swift:33-34 returns EmptyView() whenever animating == false — it never reads hidesWhenStopped at all (no read site in that file). Control (stopped) and fixture (stopped, hidesWhenStopped:false) are therefore both empty and the inert verdict is structurally required. The CODEGEN path disagrees with that: sjui_tools indicator_converter.rb:19-30 defaults the attribute to true (matching UIKit) and, for the false face, keeps a zero-opacity spinner in the layout precisely so the surrounding layout still reflows — its own comment says that reflow is 'the whole reason the attribute exists'. So the two ios paths implement different rules for this spelling. Owner F: make the dynamic Indicator honour hidesWhenStopped:false the way codegen does. Even then this fixture cannot show it — the observable is a NEIGHBOUR being reflowed and the fixture has no neighbour (owner D). Family: reflow-only-observable.",
+      "reason": "adjudicated reflow-only-observable — an implemented-but-unobservable-in-a-still case: the attribute IS read and applied on this face — measured by counting application sites OUTSIDE the decode slot in DynamicComponent.swift, so 'decoded' was not mistaken for 'applied'. What the fixture cannot do is put the effect into a STILL screenshot. This is a different family from an unimplemented face (cf. common/glass, where the Dynamic side had no implementation at all and the two faces agreed because BOTH drew nothing): here one face draws the effect and the camera cannot see it. IndicatorConverter returns EmptyView() when `animating == false`, so a stopped indicator occupies no space regardless of this flag. What the attribute changes is whether the SURROUNDING layout reflows — and this fixture has no neighbour to reflow. The observable is a sibling's position, not this view's pixels. Family: reflow-only-observable.",
       "note": "",
       "adjudicatedFamily": "reflow-only-observable"
+    },
+    {
+      "fixture": "Indicator/hidesWhenStopped__true",
+      "component": "Indicator",
+      "attribute": "hidesWhenStopped",
+      "inertOn": [
+        "ios"
+      ],
+      "kind": "single-platform-scope",
+      "family": "untriaged",
+      "reason": "adjudicated implemented-but-unobservable-in-a-still: the attribute IS read and applied on this face — measured by counting application sites OUTSIDE the decode slot in DynamicComponent.swift, so 'decoded' was not mistaken for 'applied'. What the fixture cannot do is put the effect into a STILL screenshot. This is a different family from an unimplemented face (cf. common/glass, where the Dynamic side had no implementation at all and the two faces agreed because BOTH drew nothing): here one face draws the effect and the camera cannot see it. Same mechanism as the __false sibling: with no neighbour in the fixture, both values render the same empty region.",
+      "note": ""
+    },
+    {
+      "fixture": "Indicator/indicatorStyle__medium",
+      "component": "Indicator",
+      "attribute": "indicatorStyle",
+      "inertOn": [
+        "ios"
+      ],
+      "kind": "single-platform-scope",
+      "family": "sibling-value-active",
+      "reason": "adjudicated value-is-default: the size table is INDICATOR_SIZE_SCALES = { 'large' => 1.5, 'small' => 0.8 } read through `fetch(style, 1.0)` (sjui_tools base_view_converter.rb), so `medium` is not in the table and falls through to scale 1.0 — the same scale an absent attribute gets. The sibling __large IS active. ⚠️ Noted while measuring: the declared enum is [medium, large] but the table handles large and SMALL; 'small' is a spelling the SSoT does not declare, and nothing rejects it. Family: value-is-default.",
+      "note": "",
+      "adjudicatedFamily": "value-is-default"
     },
     {
       "fixture": "Label/autoShrink__false",
@@ -306,6 +341,19 @@
       "controlDiffExclusion": "off-face-equals-control"
     },
     {
+      "fixture": "Label/textTransform__lowercase",
+      "component": "Label",
+      "attribute": "textTransform",
+      "inertOn": [
+        "web"
+      ],
+      "kind": "single-platform-scope",
+      "family": "sibling-value-active",
+      "reason": "adjudicated fixture-sample-cannot-discriminate: the shared control text is \"sample conformance text\", already entirely lower-case, so `text-transform: lowercase` has nothing to change. Measured on the same web render: __lowercase 0 px, __capitalize 1670 px, __uppercase 2006 px, __none 0 px. THE ATTRIBUTE WORKS — this VALUE has no sample to act on. It is a fixture gap: closing it needs a mixed-case sample string in rules.py and a re-measure, not an implementation change. Family: fixture-sample-cannot-discriminate.",
+      "note": "",
+      "adjudicatedFamily": "fixture-sample-cannot-discriminate"
+    },
+    {
       "fixture": "Label/textTransform__none",
       "component": "Label",
       "attribute": "textTransform",
@@ -365,6 +413,30 @@
       "controlDiffExclusion": "off-face-equals-control"
     },
     {
+      "fixture": "Progress/indicatorStyle__large",
+      "component": "Progress",
+      "attribute": "indicatorStyle",
+      "inertOn": [
+        "ios"
+      ],
+      "kind": "single-platform-scope",
+      "family": "untriaged",
+      "reason": "adjudicated implemented-but-unobservable-in-a-still: the attribute IS read and applied on this face — measured by counting application sites OUTSIDE the decode slot in DynamicComponent.swift, so 'decoded' was not mistaken for 'applied'. What the fixture cannot do is put the effect into a STILL screenshot. This is a different family from an unimplemented face (cf. common/glass, where the Dynamic side had no implementation at all and the two faces agreed because BOTH drew nothing): here one face draws the effect and the camera cannot see it. Applied at ProgressConverter.swift:47 as `.controlSize(.large)`. The declared vocabulary is the ActivityIndicator SIZE (`medium`/`large`), and `controlSize` is advisory: SwiftUI's circular ProgressView renders at the same glyph size for both on this OS, so the two declared values produce the same pixels even though the modifier differs.",
+      "note": ""
+    },
+    {
+      "fixture": "Progress/indicatorStyle__medium",
+      "component": "Progress",
+      "attribute": "indicatorStyle",
+      "inertOn": [
+        "ios"
+      ],
+      "kind": "single-platform-scope",
+      "family": "untriaged",
+      "reason": "adjudicated implemented-but-unobservable-in-a-still: the attribute IS read and applied on this face — measured by counting application sites OUTSIDE the decode slot in DynamicComponent.swift, so 'decoded' was not mistaken for 'applied'. What the fixture cannot do is put the effect into a STILL screenshot. This is a different family from an unimplemented face (cf. common/glass, where the Dynamic side had no implementation at all and the two faces agreed because BOTH drew nothing): here one face draws the effect and the camera cannot see it. Applied at ProgressConverter.swift:48 as `.controlSize(.regular)`. Same reason as the __large sibling.",
+      "note": ""
+    },
+    {
       "fixture": "Radio/checked__false",
       "component": "Radio",
       "attribute": "checked",
@@ -376,8 +448,7 @@
       "kind": "uniform-inert-undeclared-value",
       "family": "sibling-value-active",
       "reason": "Declared default: false is the unchecked default the control already renders; the true/binding/alias siblings discriminate.",
-      "note": "",
-      "owner": "orch (wave 4, 2026-08-08)"
+      "note": ""
     },
     {
       "fixture": "Radio/checked__false_with_group",
@@ -391,8 +462,7 @@
       "kind": "uniform-inert-undeclared-value",
       "family": "sibling-value-active",
       "reason": "Declared default: same as checked__false, inside a group.",
-      "note": "",
-      "owner": "orch (wave 4, 2026-08-08)"
+      "note": ""
     },
     {
       "fixture": "ScrollView/horizontalScroll__false",
@@ -406,8 +476,7 @@
       "kind": "uniform-inert-undeclared-value",
       "family": "sibling-value-active",
       "reason": "Declared default: false means the vertical default the control renders; the TRUE face discriminates.",
-      "note": "",
-      "owner": "orch (wave 4, 2026-08-08)"
+      "note": ""
     },
     {
       "fixture": "ScrollView/scrollBehavior__auto",
@@ -459,7 +528,7 @@
       ],
       "kind": "uniform-inert-undeclared-value",
       "family": "untriaged",
-      "reason": "adjudicated not-photographable-at-rest: a horizontal scroll indicator is overlay chrome that both iOS and the web host draw only DURING a scroll gesture and fade at rest, so a still capture of an idle scroll container shows the same picture whether the indicator is enabled or disabled — which is why BOTH faces of this attribute (true and false) are inert and neither can discriminate. codegen-effect --paired at HEAD 2026-08-07 (CI's own arguments, 863 probes) reports no defect for this attribute, so the converter emits the spelling — the inert verdict is a render-stage or fixture-shape fact, not a dropped spelling. The measurement fix is the interactive probe (a capture taken mid-scroll), not a converter change. Family: scroll-chrome-at-rest.",
+      "reason": "adjudicated scroll-chrome-at-rest: the attribute IS read on both faces that declare it (sjui_tools scrollview_converter.rb:59, rjui_tools scroll_view_converter.rb:75), and the false spelling is the one they act on. What the fixture cannot do is put the effect into a STILL: a scroll indicator is transient chrome that is not painted while the view is at rest, so suppressing it removes nothing from the capture. kotlin is out of scope by declaration (platform_reasons records that Compose has no scrollbar primitive for Lazy content). Family: scroll-chrome-at-rest.",
       "note": "",
       "adjudicatedFamily": "scroll-chrome-at-rest"
     },
@@ -473,9 +542,9 @@
       ],
       "kind": "uniform-inert-undeclared-value",
       "family": "untriaged",
-      "reason": "adjudicated not-photographable-at-rest: a horizontal scroll indicator is overlay chrome that both iOS and the web host draw only DURING a scroll gesture and fade at rest, so a still capture of an idle scroll container shows the same picture whether the indicator is enabled or disabled — which is why BOTH faces of this attribute (true and false) are inert and neither can discriminate. codegen-effect --paired at HEAD 2026-08-07 (CI's own arguments, 863 probes) reports no defect for this attribute, so the converter emits the spelling — the inert verdict is a render-stage or fixture-shape fact, not a dropped spelling. The measurement fix is the interactive probe (a capture taken mid-scroll), not a converter change. Family: scroll-chrome-at-rest.",
+      "reason": "adjudicated value-is-default: both faces that declare this attribute branch only on the FALSE spelling — sjui_tools emits `shows_indicators = @component['showsHorizontalScrollIndicator'] != false` and rjui_tools tests `attributes['showsHorizontalScrollIndicator'] == false`. `true` therefore takes the same path as an absent attribute, which is the control. Read from the emitters, not inferred from the picture. Family: value-is-default.",
       "note": "",
-      "adjudicatedFamily": "scroll-chrome-at-rest"
+      "adjudicatedFamily": "value-is-default"
     },
     {
       "fixture": "SelectBox/colorScheme__light",
@@ -502,9 +571,9 @@
       ],
       "kind": "uniform-inert-undeclared-value",
       "family": "untriaged",
-      "reason": "adjudicated selectbox-interactive: minimumDate/maximumDate bound the range the picker OFFERS; the closed select control photographed by the fixture shows the current selection, not the range, so it renders identically whatever the bounds are. Joins the family already carrying SelectBox/datePickerMode date/time/countdown. codegen-effect --paired at HEAD 2026-08-07 (CI's own arguments, 863 probes) reports no defect for this attribute, so the converter emits the spelling — the inert verdict is a render-stage or fixture-shape fact, not a dropped spelling — and for the binding faces the fixture's own data section supplies a real date (2020-01-01 / 2030-12-31), so this is not a binding-default hole either. Promotion to an interactive fixture that opens the picker is the measurement fix. Family: selectbox-interactive.",
+      "reason": "adjudicated bounds-only-observable-under-interaction: all three faces read SelectBox.maximumDate — sjui_tools select_box_binding_handler.rb assigns it to the UIDatePicker, kjui_tools selectbox_component.rb passes it into the Compose picker, rjui_tools select_box_converter.rb emits it as the input's min/max attribute. A date BOUND constrains which dates can be chosen; it does not change what a closed picker draws, and every face captures the control at rest. The effect is reachable only by opening the picker and attempting an out-of-range date, which is an interactive assertion, not a screenshot. Family: bounds-only-observable-under-interaction.",
       "note": "",
-      "adjudicatedFamily": "selectbox-interactive"
+      "adjudicatedFamily": "bounds-only-observable-under-interaction"
     },
     {
       "fixture": "SelectBox/maximumDate__static",
@@ -517,9 +586,9 @@
       ],
       "kind": "uniform-inert-undeclared-value",
       "family": "untriaged",
-      "reason": "adjudicated selectbox-interactive: minimumDate/maximumDate bound the range the picker OFFERS; the closed select control photographed by the fixture shows the current selection, not the range, so it renders identically whatever the bounds are. Joins the family already carrying SelectBox/datePickerMode date/time/countdown. codegen-effect --paired at HEAD 2026-08-07 (CI's own arguments, 863 probes) reports no defect for this attribute, so the converter emits the spelling — the inert verdict is a render-stage or fixture-shape fact, not a dropped spelling — and for the binding faces the fixture's own data section supplies a real date (2020-01-01 / 2030-12-31), so this is not a binding-default hole either. Promotion to an interactive fixture that opens the picker is the measurement fix. Family: selectbox-interactive.",
+      "reason": "adjudicated bounds-only-observable-under-interaction: all three faces read SelectBox.maximumDate — sjui_tools select_box_binding_handler.rb assigns it to the UIDatePicker, kjui_tools selectbox_component.rb passes it into the Compose picker, rjui_tools select_box_converter.rb emits it as the input's min/max attribute. A date BOUND constrains which dates can be chosen; it does not change what a closed picker draws, and every face captures the control at rest. The effect is reachable only by opening the picker and attempting an out-of-range date, which is an interactive assertion, not a screenshot. Family: bounds-only-observable-under-interaction.",
       "note": "",
-      "adjudicatedFamily": "selectbox-interactive"
+      "adjudicatedFamily": "bounds-only-observable-under-interaction"
     },
     {
       "fixture": "SelectBox/minimumDate__binding",
@@ -532,9 +601,9 @@
       ],
       "kind": "uniform-inert-undeclared-value",
       "family": "untriaged",
-      "reason": "adjudicated selectbox-interactive: minimumDate/maximumDate bound the range the picker OFFERS; the closed select control photographed by the fixture shows the current selection, not the range, so it renders identically whatever the bounds are. Joins the family already carrying SelectBox/datePickerMode date/time/countdown. codegen-effect --paired at HEAD 2026-08-07 (CI's own arguments, 863 probes) reports no defect for this attribute, so the converter emits the spelling — the inert verdict is a render-stage or fixture-shape fact, not a dropped spelling — and for the binding faces the fixture's own data section supplies a real date (2020-01-01 / 2030-12-31), so this is not a binding-default hole either. Promotion to an interactive fixture that opens the picker is the measurement fix. Family: selectbox-interactive.",
+      "reason": "adjudicated bounds-only-observable-under-interaction: all three faces read SelectBox.minimumDate — sjui_tools select_box_binding_handler.rb assigns it to the UIDatePicker, kjui_tools selectbox_component.rb passes it into the Compose picker, rjui_tools select_box_converter.rb emits it as the input's min/max attribute. A date BOUND constrains which dates can be chosen; it does not change what a closed picker draws, and every face captures the control at rest. The effect is reachable only by opening the picker and attempting an out-of-range date, which is an interactive assertion, not a screenshot. Family: bounds-only-observable-under-interaction.",
       "note": "",
-      "adjudicatedFamily": "selectbox-interactive"
+      "adjudicatedFamily": "bounds-only-observable-under-interaction"
     },
     {
       "fixture": "SelectBox/minimumDate__static",
@@ -547,9 +616,9 @@
       ],
       "kind": "uniform-inert-undeclared-value",
       "family": "untriaged",
-      "reason": "adjudicated selectbox-interactive: minimumDate/maximumDate bound the range the picker OFFERS; the closed select control photographed by the fixture shows the current selection, not the range, so it renders identically whatever the bounds are. Joins the family already carrying SelectBox/datePickerMode date/time/countdown. codegen-effect --paired at HEAD 2026-08-07 (CI's own arguments, 863 probes) reports no defect for this attribute, so the converter emits the spelling — the inert verdict is a render-stage or fixture-shape fact, not a dropped spelling — and for the binding faces the fixture's own data section supplies a real date (2020-01-01 / 2030-12-31), so this is not a binding-default hole either. Promotion to an interactive fixture that opens the picker is the measurement fix. Family: selectbox-interactive.",
+      "reason": "adjudicated bounds-only-observable-under-interaction: all three faces read SelectBox.minimumDate — sjui_tools select_box_binding_handler.rb assigns it to the UIDatePicker, kjui_tools selectbox_component.rb passes it into the Compose picker, rjui_tools select_box_converter.rb emits it as the input's min/max attribute. A date BOUND constrains which dates can be chosen; it does not change what a closed picker draws, and every face captures the control at rest. The effect is reachable only by opening the picker and attempting an out-of-range date, which is an interactive assertion, not a screenshot. Family: bounds-only-observable-under-interaction.",
       "note": "",
-      "adjudicatedFamily": "selectbox-interactive"
+      "adjudicatedFamily": "bounds-only-observable-under-interaction"
     },
     {
       "fixture": "SelectBox/multiple__false",
@@ -621,8 +690,7 @@
       "kind": "single-platform-scope",
       "family": "sibling-value-active",
       "reason": "Value-level, not a gap (sibling button active): SwiftUI has no checkbox toggle style, so the value falls back to the switch appearance — the default picture.",
-      "note": "",
-      "owner": "orch (wave 4, 2026-08-08)"
+      "note": ""
     },
     {
       "fixture": "Switch/toggleStyle__default",
@@ -634,8 +702,7 @@
       "kind": "single-platform-scope",
       "family": "sibling-value-active",
       "reason": "Declared default: 'default' IS the switch appearance the control already wears.",
-      "note": "",
-      "owner": "orch (wave 4, 2026-08-08)"
+      "note": ""
     },
     {
       "fixture": "Switch/toggleStyle__switch",
@@ -647,8 +714,7 @@
       "kind": "single-platform-scope",
       "family": "sibling-value-active",
       "reason": "Declared default appearance: 'switch' names the default picture, so it equals the control by construction.",
-      "note": "",
-      "owner": "orch (wave 4, 2026-08-08)"
+      "note": ""
     },
     {
       "fixture": "Switch/value__false",
@@ -665,6 +731,21 @@
       "note": "",
       "adjudicatedFamily": "off-face-equals-control",
       "controlDiffExclusion": "off-face-equals-control"
+    },
+    {
+      "fixture": "TabView/showLabels__true",
+      "component": "TabView",
+      "attribute": "showLabels",
+      "inertOn": [
+        "android",
+        "ios",
+        "web"
+      ],
+      "kind": "uniform-inert-undeclared-value",
+      "family": "value-is-default",
+      "reason": "adjudicated value-is-default: TabView.showLabels is declared boolean with default true and SwiftJsonUI reads it as `component.typedAttributes(TabViewAttributes.self).showLabels ?? true`, so `true` IS the control. Measured on iPhone 16 Pro / iOS 26.5: __true 0 px vs its control, __false 7389 px — the attribute works and only this value cannot discriminate. The row asserting it differs was removed from control_diff.json in the same change. Family: value-is-default.",
+      "note": "",
+      "adjudicatedFamily": "value-is-default"
     },
     {
       "fixture": "TextField/secure__false",
@@ -711,6 +792,19 @@
       "note": "",
       "adjudicatedFamily": "off-face-equals-control",
       "controlDiffExclusion": "off-face-equals-control"
+    },
+    {
+      "fixture": "TextView/resize__none",
+      "component": "TextView",
+      "attribute": "resize",
+      "inertOn": [
+        "web"
+      ],
+      "kind": "single-platform-scope",
+      "family": "sibling-value-active",
+      "reason": "adjudicated value-is-default: rjui_tools text_view_converter.rb maps the declared enum onto Tailwind and its own comment records \"Absent or false still means resize-none\", so `none` is the path an absent attribute already takes. Measured on the same web render: __none 0 px, __both / __horizontal / __vertical 10 px each. Family: value-is-default.",
+      "note": "",
+      "adjudicatedFamily": "value-is-default"
     },
     {
       "fixture": "TextView/selectable__false",
@@ -898,14 +992,15 @@
       "component": "common",
       "attribute": "clipToBounds",
       "inertOn": [
+        "android",
         "ios",
         "web"
       ],
       "kind": "uniform-inert-undeclared-value",
       "family": "value-is-default",
-      "reason": "Declared default (triaged value-is-default): False is the SSoT default; the interactive overflow pair (clipToBounds__hit_overflow_*) carries the FALSE face's real semantics.",
+      "reason": "adjudicated value-is-default: shared/core/attribute_definitions.json declares common.clipToBounds with \"Defaults to FALSE: content is not clipped unless the layout asks\". The fixture writes the declared default, so it renders the control on every face by definition, not by any platform's choice. Family: value-is-default.",
       "note": "",
-      "owner": "orch (wave 4, 2026-08-08)"
+      "adjudicatedFamily": "value-is-default"
     },
     {
       "fixture": "common/clipToBounds__false_overflow",
@@ -919,8 +1014,20 @@
       "kind": "uniform-inert-undeclared-value",
       "family": "value-is-default",
       "reason": "Declared default (triaged): a still cannot show 'not clipped' against a control that also does not clip; the interactive hit_overflow pair discriminates.",
+      "note": ""
+    },
+    {
+      "fixture": "common/glass__false",
+      "component": "common",
+      "attribute": "glass",
+      "inertOn": [
+        "ios"
+      ],
+      "kind": "single-platform-scope",
+      "family": "sibling-value-active",
+      "reason": "adjudicated off-value-makes-no-call: DynamicModifierHelper.glassCall() returns GlassCall.none for `false` and the string \"false\", and applyGlass then does `guard call.applies else { return view }` — so no modifier is applied and the result is the control, which declares no glass. The pair is structurally incapable of differing. The sibling common/glass__true IS active on this face (it went from hashing identical to its control to differing when the glass stage landed in SwiftJsonUI v10.22.0), so the attribute is read. Family: off-value-makes-no-call.",
       "note": "",
-      "owner": "orch (wave 4, 2026-08-08)"
+      "adjudicatedFamily": "off-value-makes-no-call"
     },
     {
       "fixture": "common/idealHeight__static",
@@ -931,7 +1038,7 @@
       ],
       "kind": "single-platform-scope",
       "family": "untriaged",
-      "reason": "adjudicated no-slack-at-this-shape: .frame(idealWidth:)/.frame(idealHeight:) only take effect when the parent offers a FLEXIBLE size proposal — SwiftUI resolves the ideal size against an unspecified proposal and ignores it under a fixed one. The fixture writes the attribute on a target already pinned to width:200 height:200, so the proposal is fixed and the ideal hint has nothing to answer. codegen-effect --paired at HEAD 2026-08-07 (CI's own arguments, 863 probes) reports no defect for this attribute, so the converter emits the spelling — the inert verdict is a render-stage or fixture-shape fact, not a dropped spelling. Not an ios gap: the closure is a fixture whose target is size-flexible (owner D), the same construction as the maxWidth/maxHeight fill_clamp pair. Family: no-slack-at-this-shape.",
+      "reason": "adjudicated no-slack-at-this-shape — an implemented-but-unobservable-in-a-still case: the attribute IS read and applied on this face — measured by counting application sites OUTSIDE the decode slot in DynamicComponent.swift, so 'decoded' was not mistaken for 'applied'. What the fixture cannot do is put the effect into a STILL screenshot. This is a different family from an unimplemented face (cf. common/glass, where the Dynamic side had no implementation at all and the two faces agreed because BOTH drew nothing): here one face draws the effect and the camera cannot see it. Applied at DynamicModifierHelper.swift:223 as `.frame(idealHeight:)`. Same reason as idealWidth: no layout pressure in this fixture shape. Family: no-slack-at-this-shape.",
       "note": "",
       "adjudicatedFamily": "no-slack-at-this-shape"
     },
@@ -944,9 +1051,35 @@
       ],
       "kind": "single-platform-scope",
       "family": "untriaged",
-      "reason": "adjudicated no-slack-at-this-shape: .frame(idealWidth:)/.frame(idealHeight:) only take effect when the parent offers a FLEXIBLE size proposal — SwiftUI resolves the ideal size against an unspecified proposal and ignores it under a fixed one. The fixture writes the attribute on a target already pinned to width:200 height:200, so the proposal is fixed and the ideal hint has nothing to answer. codegen-effect --paired at HEAD 2026-08-07 (CI's own arguments, 863 probes) reports no defect for this attribute, so the converter emits the spelling — the inert verdict is a render-stage or fixture-shape fact, not a dropped spelling. Not an ios gap: the closure is a fixture whose target is size-flexible (owner D), the same construction as the maxWidth/maxHeight fill_clamp pair. Family: no-slack-at-this-shape.",
+      "reason": "adjudicated no-slack-at-this-shape — an implemented-but-unobservable-in-a-still case: the attribute IS read and applied on this face — measured by counting application sites OUTSIDE the decode slot in DynamicComponent.swift, so 'decoded' was not mistaken for 'applied'. What the fixture cannot do is put the effect into a STILL screenshot. This is a different family from an unimplemented face (cf. common/glass, where the Dynamic side had no implementation at all and the two faces agreed because BOTH drew nothing): here one face draws the effect and the camera cannot see it. Applied at DynamicModifierHelper.swift:220 as `.frame(idealWidth:)`. SwiftUI consults an ideal size only when the parent offers a RANGE and asks the child what it would like — a fixture whose target sits at a fixed size in a fixed parent never reaches that negotiation, so the ideal is never the size chosen. Family: no-slack-at-this-shape.",
       "note": "",
       "adjudicatedFamily": "no-slack-at-this-shape"
+    },
+    {
+      "fixture": "common/maxEndMargin__static",
+      "component": "common",
+      "attribute": "maxEndMargin",
+      "inertOn": [
+        "ios"
+      ],
+      "kind": "single-platform-scope",
+      "family": "type-fallback-value",
+      "reason": "adjudicated type-fallback-value: common.maxEndMargin is declared only as `\"type\": \"number\"` with no enum, no default and no example, so the fixture generator fell back to its type-level 8 — a number from the generator, not from the attribute's domain. 8pt of end margin on this host's shape moves no pixels. THIS IS A FIXTURE GAP, NOT A PLATFORM GAP: the row says nothing about whether SwiftUI honours the constraint. Closing it needs a representative value in rules.py and a re-measure, not an implementation change. Family: type-fallback-value.",
+      "note": "",
+      "adjudicatedFamily": "type-fallback-value"
+    },
+    {
+      "fixture": "common/minEndMargin__static",
+      "component": "common",
+      "attribute": "minEndMargin",
+      "inertOn": [
+        "ios"
+      ],
+      "kind": "single-platform-scope",
+      "family": "type-fallback-value",
+      "reason": "adjudicated type-fallback-value: common.minEndMargin is declared only as `\"type\": \"number\"` with no enum, no default and no example, so the fixture generator fell back to its type-level 8 — a number from the generator, not from the attribute's domain. 8pt of end margin on this host's shape moves no pixels. THIS IS A FIXTURE GAP, NOT A PLATFORM GAP: the row says nothing about whether SwiftUI honours the constraint. Closing it needs a representative value in rules.py and a re-measure, not an implementation change. Family: type-fallback-value.",
+      "note": "",
+      "adjudicatedFamily": "type-fallback-value"
     },
     {
       "fixture": "common/tintColor__binding",

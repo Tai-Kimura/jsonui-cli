@@ -796,3 +796,100 @@ class RealLedgerExclusionTests(unittest.TestCase):
             if not [i for i in ids if i not in excluded]
         ]
         self.assertEqual(orphaned, [], "attribute(s) left with no compared fixture")
+
+
+class SelfExcludingRowsAreNotStaleTests(unittest.TestCase):
+    """A row that removes its OWN fixture from the measurement is not stale.
+
+    ``control_diff.off_face_exclusions`` builds the off-face exclusion set by
+    reading these rows — it greps ``OFF_FACE_FAMILY`` out of the REASON PROSE —
+    and every fixture it names then leaves the control comparison, so it can
+    never appear in an inert verdict again.
+
+    ``check_ledger`` used to call any row absent from the live measurement
+    stale, and a self-excluding row is absent BY WORKING. Measured 2026-09-15
+    on a three-platform local render, both answers were red:
+
+        rows present  ->  "32 stale … prune with --update"
+        rows pruned   ->  "34 inert verdict(s) no ledger accounts for … record"
+
+    Obeying either produced the other, and obeying the prune was destructive:
+    ``update_ledger`` rebuilds from ``result.items``, so it deleted 32
+    adjudications and with them the exclusion set, putting 32
+    structurally-undiffable fixtures back into the comparison. That is what
+    happened — the gate said prune, and pruning is what broke it.
+
+    It stayed invisible because this lane is asserted local-env while CI runs
+    ``--env ci``, where all of these findings are downgraded to notices.
+    """
+
+    @staticmethod
+    def _row(fixture, *, off_face):
+        reason = (
+            f"adjudicated off-face-equals-control: … Family: off-face-equals-control."
+            if off_face
+            else "adjudicated something-else: an ordinary ruling. Family: something-else."
+        )
+        return {
+            "fixture": fixture, "component": "X", "attribute": "y",
+            "inertOn": ["ios"], "kind": "k", "family": "f",
+            "reason": reason, "note": "",
+        }
+
+    def test_the_sentinel_is_the_one_control_diff_greps_for(self):
+        # The exemption is only correct while both modules mean the same
+        # string, so it is imported rather than re-spelled. A drift would
+        # stop exempting rows the other module is still excluding.
+        from jui_cli.conformance.control_diff import OFF_FACE_FAMILY
+
+        self.assertEqual(OFF_FACE_FAMILY, ia.OFF_FACE_SENTINEL)
+
+    def test_a_self_excluding_row_is_not_reported_stale(self):
+        ledger = {
+            "A/off__false": self._row("A/off__false", off_face=True),
+            "B/ordinary__x": self._row("B/ordinary__x", off_face=False),
+        }
+        unrecorded, stale = ia.check_ledger(ia.InertAudit(platforms=["ios"]), ledger)
+        self.assertEqual([], unrecorded)
+        self.assertEqual(
+            ["B/ordinary__x"], stale,
+            "the off-face row is absent from the measurement because the "
+            "exclusion it drives is working — that is not a stale excuse",
+        )
+
+    def test_the_boundary_an_ordinary_row_still_goes_stale(self):
+        # Same predicate, the other answer. Without this, an exemption that
+        # swallowed every stale row would look identical to a pass.
+        ledger = {"B/ordinary__x": self._row("B/ordinary__x", off_face=False)}
+        _, stale = ia.check_ledger(ia.InertAudit(platforms=["ios"]), ledger)
+        self.assertEqual(["B/ordinary__x"], stale)
+
+    def test_update_carries_self_excluding_rows_through(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "inert_audit.json"
+            path.write_text(json.dumps({
+                "schemaVersion": 1, "platforms": ["ios"], "counts": {},
+                "entries": [self._row("A/off__false", off_face=True),
+                            self._row("B/ordinary__x", off_face=False)],
+            }), encoding="utf-8")
+            doc = ia.update_ledger(ia.InertAudit(platforms=["ios"]), path)
+            kept = {e["fixture"] for e in doc["entries"]}
+            self.assertIn("A/off__false", kept,
+                          "this is the write that dismantles the exclusion set")
+            self.assertNotIn("B/ordinary__x", kept,
+                             "an ordinary unsupported row must still be pruned, "
+                             "or the carry-through has disabled the ratchet")
+
+    def test_the_repository_ledger_actually_carries_this_shape(self):
+        # A control on the corpus: with no off-face rows in the real ledger the
+        # assertions above would guard a shape that does not occur.
+        led = json.loads(
+            (Path(__file__).resolve().parents[2] / "conformance" / "inert_audit.json")
+            .read_text(encoding="utf-8")
+        )
+        rows = {e["fixture"]: e for e in led["entries"]}
+        self.assertGreater(
+            len(ia.self_excluding(rows)), 0,
+            "the committed ledger carries no self-excluding row: either the "
+            "off-face class is gone (delete the exemption too) or the sentinel drifted",
+        )

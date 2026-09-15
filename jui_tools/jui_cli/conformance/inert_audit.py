@@ -51,6 +51,13 @@ import json
 from dataclasses import dataclass, field
 from pathlib import Path
 
+# The sentinel is OWNED by control_diff — it is the string that module greps
+# for when it builds the off-face exclusion set. Imported, never re-spelled:
+# two copies of a load-bearing literal drift, and a drift here would silently
+# stop exempting rows that the other module is still excluding.
+# (control_diff imports only `.baseline`, so this direction adds no cycle.)
+from .control_diff import OFF_FACE_FAMILY as OFF_FACE_SENTINEL
+
 #: Queue schema version; bump when the item shape changes.
 SCHEMA_VERSION = 1
 
@@ -628,6 +635,37 @@ def load_ledger(path) -> dict:
     }
 
 
+def self_excluding(ledger: dict) -> set:
+    """Ledger entries that remove their OWN fixture from the measurement.
+
+    ``control_diff.off_face_exclusions`` builds the off-face exclusion set by
+    reading these very rows — it keys off :data:`OFF_FACE_SENTINEL` appearing
+    in the reason prose — and every fixture it excludes is then absent from
+    the control comparison, so it can never appear in an inert verdict again.
+
+    🔻 WITHOUT THIS, THE RATCHET IS A CATCH-22 AND BOTH ANSWERS ARE RED.
+    Measured 2026-09-15 on a three-platform local render:
+
+        entries present  -> 32 reported stale, "prune with --update"
+        entries pruned   -> 34 reported unrecorded, "record with --update"
+
+    Obeying either instruction produces the other. Worse, obeying the prune
+    DESTROYS the exclusion set, which silently puts 32 structurally-undiffable
+    fixtures back into the control comparison — the tool's own advice
+    dismantling the mechanism those rows exist to drive. It stayed invisible
+    because the inert lane is asserted local-env and CI runs ``--env ci``,
+    where every one of these findings is downgraded to a notice.
+
+    An entry here is supported by the measurement precisely BY being absent
+    from it. That is not a stale excuse on file; it is the mechanism working.
+    """
+    return {
+        fixture
+        for fixture, entry in ledger.items()
+        if OFF_FACE_SENTINEL in (entry.get("reason") or "")
+    }
+
+
 def check_ledger(result: InertAudit, ledger: dict) -> tuple[list, list]:
     """``(unrecorded, stale)`` — the two directions of the ratchet.
 
@@ -637,7 +675,9 @@ def check_ledger(result: InertAudit, ledger: dict) -> tuple[list, list]:
 
     *stale*: a ledger entry the measurement no longer supports — the fixture
     became active, or another ledger took responsibility for it. Keeping it
-    would let a fixed attribute keep an excuse on file.
+    would let a fixed attribute keep an excuse on file. Rows that exclude
+    their own fixture from the comparison are exempt — see
+    :func:`self_excluding`.
     """
     unrecorded = []
     for item in result.items:
@@ -645,7 +685,12 @@ def check_ledger(result: InertAudit, ledger: dict) -> tuple[list, list]:
         if prior is None or sorted(prior.get("inertOn", [])) != _fact(item):
             unrecorded.append(item)
     live = {item.fixture: item for item in result.items}
-    stale = [fixture for fixture in sorted(ledger) if fixture not in live]
+    exempt = self_excluding(ledger)
+    stale = [
+        fixture
+        for fixture in sorted(ledger)
+        if fixture not in live and fixture not in exempt
+    ]
     return unrecorded, stale
 
 
@@ -660,6 +705,13 @@ def update_ledger(result: InertAudit, path) -> dict:
     """
     prior = load_ledger(path)
     entries = []
+    # Rows that exclude their own fixture from the comparison are carried
+    # through verbatim: they are absent from `result.items` BECAUSE they work,
+    # and rebuilding the file from the measurement alone would delete them —
+    # which is how a `--update` run dismantled 32 of them on 2026-09-15.
+    for fixture in sorted(self_excluding(prior)):
+        if fixture not in {i.fixture for i in result.items}:
+            entries.append(dict(prior[fixture]))
     for item in sorted(result.items, key=lambda i: i.fixture):
         before = prior.get(item.fixture, {})
         holds = sorted(before.get("inertOn", [])) == _fact(item)
@@ -681,6 +733,7 @@ def update_ledger(result: InertAudit, path) -> dict:
             for key in PRESERVED_ADJUDICATION_KEYS:
                 if before.get(key):
                     entries[-1][key] = before[key]
+    entries.sort(key=lambda e: e["fixture"])
     doc = {
         "schemaVersion": SCHEMA_VERSION,
         "_comment": (

@@ -337,12 +337,52 @@ class DiscriminationCheck:
         return not (self.unrecorded or self.stale or self.incomplete)
 
 
-def check(result: DiscriminationResult, ledger: dict) -> DiscriminationCheck:
+#: Optional per-row scope: the render environments a collapse is claimed for.
+#: Absent means "every environment", which is what every row written before
+#: 2026-09-15 means and must keep meaning.
+ENV_SCOPE_KEY = "env"
+
+
+def applies_in(entry: dict, env: str | None) -> bool:
+    """Whether a ledger row makes a claim about *env*.
+
+    🔻 WHETHER TWO VALUES COLLAPSE IS AN ENVIRONMENT FACT, NOT ONLY A PLATFORM
+    FACT, and the ledger had no way to say so. Measured 2026-09-15 on one
+    manifest, same fixtures, same rjui tree:
+
+        Label.fontWeight 600 vs bold   local (macOS)  416 px      ci (ubuntu)  0 px
+        Button.fontWeight 600 vs bold  local (macOS)  358 px      ci (ubuntu)  0 px
+
+    The CI runner's font stack has no distinct 600 weight and falls back to
+    700, so the two values draw one picture there and two pictures on a Mac.
+    Without a scope the ledger cannot be right in both lanes: keeping the rows
+    made `--env local` fail them as stale, deleting them made `--env ci` fail
+    them as unrecorded. Deleting them is what this author did first, on a
+    single environment's measurement.
+
+    A row with no scope keeps the old meaning — every environment — so nothing
+    already written changes.
+    """
+    scope = entry.get(ENV_SCOPE_KEY)
+    if not scope:
+        return True
+    if env is None:
+        return True
+    return env in scope
+
+
+def check(
+    result: DiscriminationResult, ledger: dict, env: str | None = None
+) -> DiscriminationCheck:
     verdict = DiscriminationCheck(platform=result.platform)
     measured = {p.key for p in result.collapsed}
 
     for pair in result.collapsed:
         entry = ledger.get(pair.key)
+        if entry is not None and not applies_in(entry, env):
+            # The row exists but claims a different environment. The collapse
+            # measured HERE is unrecorded, and saying so is the point.
+            entry = None
         if entry is None:
             verdict.unrecorded.append(str(pair))
             continue
@@ -356,8 +396,13 @@ def check(result: DiscriminationResult, ledger: dict) -> DiscriminationCheck:
             verdict.accepted += 1
 
     for key in sorted(ledger):
-        if key[2] == result.platform and key not in measured:
-            verdict.stale.append(
-                f"{key[0]}.{key[1]} [{key[2]}] {' / '.join(key[3:])}"
-            )
+        if key[2] != result.platform or key in measured:
+            continue
+        if not applies_in(ledger[key], env):
+            # Not stale: the row never claimed this environment, so this
+            # environment's measurement cannot be evidence against it.
+            continue
+        verdict.stale.append(
+            f"{key[0]}.{key[1]} [{key[2]}] {' / '.join(key[3:])}"
+        )
     return verdict

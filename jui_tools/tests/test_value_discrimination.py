@@ -234,3 +234,80 @@ class WrongResultsShapeRaisesTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class EnvScopedRowsTest(unittest.TestCase):
+    """Whether two values collapse is an ENVIRONMENT fact, not only a platform one.
+
+    Measured 2026-09-15 on one manifest, one rjui tree, the same fixtures:
+
+        Label.fontWeight  600 vs bold   local (macOS) 416 px   ci (ubuntu) 0 px
+        Button.fontWeight 600 vs bold   local (macOS) 358 px   ci (ubuntu) 0 px
+
+    The CI runner's font stack has no distinct 600 weight and falls back to
+    700; a Mac has one. The same fixture differs 661 px between the two
+    environments, which is the font stack and nothing else.
+
+    Before the scope existed, the ledger could not be right in both lanes:
+    keeping the rows made ``--env local`` fail them as stale, deleting them
+    made ``--env ci`` fail them as unrecorded. The author deleted them first,
+    from one environment's measurement, and the other lane caught it.
+
+    A row with no ``env`` keeps its old meaning — every environment — so every
+    row written before the scope existed is unaffected.
+    """
+
+    @staticmethod
+    def _result(platform="web"):
+        pair = vd.Pair(
+            component="Label", attribute="fontWeight", platform=platform,
+            case_a="600", case_b="static", pixels=0,
+        )
+        return vd.DiscriminationResult(platform=platform, collapsed=[pair]), pair
+
+    def _ledger(self, **extra):
+        res, pair = self._result()
+        entry = {"component": "Label", "attribute": "fontWeight", "platform": "web",
+                 "cases": ["600", "static"], "owner": "o", "reason": "r"}
+        entry.update(extra)
+        return res, {pair.key: entry}
+
+    def test_an_unscoped_row_still_applies_everywhere(self):
+        # The compatibility guarantee. Every row written before the scope
+        # existed has no `env`, and must keep covering both lanes.
+        res, ledger = self._ledger()
+        for env in ("local", "ci", None):
+            with self.subTest(env=env):
+                v = vd.check(res, ledger, env=env)
+                self.assertEqual([], v.unrecorded)
+                self.assertEqual([], v.stale)
+
+    def test_a_row_scoped_to_ci_covers_the_ci_lane(self):
+        res, ledger = self._ledger(env=["ci"])
+        v = vd.check(res, ledger, env="ci")
+        self.assertEqual([], v.unrecorded)
+        self.assertEqual(1, v.accepted)
+
+    def test_a_row_scoped_to_ci_does_not_excuse_the_local_lane(self):
+        # The boundary, and the direction that matters: a ci-only row must not
+        # become a blanket excuse. Same row, same collapse, other env.
+        res, ledger = self._ledger(env=["ci"])
+        v = vd.check(res, ledger, env="local")
+        self.assertEqual(1, len(v.unrecorded))
+        self.assertEqual(0, v.accepted)
+
+    def test_a_row_scoped_to_ci_is_not_stale_just_because_local_discriminates(self):
+        # The other half of the catch. Under `local` the pair does NOT collapse,
+        # so it is absent from the measurement — which used to read as stale and
+        # push an author to delete a row that is true in the other lane.
+        _, ledger = self._ledger(env=["ci"])
+        empty = vd.DiscriminationResult(platform="web")  # nothing collapsed here
+        v = vd.check(empty, ledger, env="local")
+        self.assertEqual([], v.stale)
+
+    def test_an_unscoped_row_IS_stale_when_nothing_collapses(self):
+        # Control: the exemption must not have disabled the stale direction.
+        _, ledger = self._ledger()
+        empty = vd.DiscriminationResult(platform="web")
+        v = vd.check(empty, ledger, env="local")
+        self.assertEqual(1, len(v.stale))

@@ -406,9 +406,30 @@ jobs:
         id: android_toolchain
         run: |
           set -euo pipefail
-          agp=$(grep -oE 'com\.android\.tools\.build:gradle:[0-9.]+' \
+          # AGP has (at least) two spellings and this repo uses the one the
+          # first predicate could not see: the plugin DSL
+          #   id("com.android.library") version "9.2.0"
+          # not the buildscript classpath `com.android.tools.build:gradle:X`.
+          # Every ci baseline baked before 2026-09-15 therefore records
+          # `agp=unknown` — which reads as "looked, and there is no AGP"
+          # rather than "our grep does not match this repo". A toolchain
+          # coordinate the baseline exists to record was silently absent.
+          # Both spellings are searched, and NOT FINDING ONE IS AN ERROR:
+          # `unknown` is what a dead predicate returns, so it must not be a
+          # value this step can quietly ship.
+          agp=$(grep -ohE 'com\.android\.tools\.build:gradle:[0-9.]+' \
                   KotlinJsonUI/build.gradle.kts KotlinJsonUI/*/build.gradle.kts 2>/dev/null \
-                | head -1 | cut -d: -f3 || echo unknown)
+                | head -1 | cut -d: -f3)
+          if [ -z "$agp" ]; then
+            agp=$(grep -ohE 'id\("com\.android\.(library|application)"\) version "[0-9.]+"' \
+                    KotlinJsonUI/build.gradle.kts KotlinJsonUI/*/build.gradle.kts 2>/dev/null \
+                  | head -1 | grep -oE '[0-9]+\.[0-9]+\.[0-9]+')
+          fi
+          if [ -z "$agp" ]; then
+            echo "error: neither AGP spelling matched. A third spelling exists, or the" >&2
+            echo "       files moved. Recording 'unknown' would hide that." >&2
+            exit 1
+          fi
           gradle=$(grep -oE 'gradle-[0-9.]+-' KotlinJsonUI/gradle/wrapper/gradle-wrapper.properties \
                 | head -1 | sed 's/gradle-//;s/-$//' || echo unknown)
           echo "spec=api_level=34;emulator_target=default;agp=${agp};gradle=${gradle}" >> "$GITHUB_OUTPUT"

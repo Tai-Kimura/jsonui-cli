@@ -1014,12 +1014,6 @@
       ]
     },
     {
-      "fixture": "Label/textTransform__lowercase",
-      "platforms": [
-        "web"
-      ]
-    },
-    {
       "fixture": "Label/textTransform__uppercase",
       "platforms": [
         "web"
@@ -1794,12 +1788,6 @@
       ]
     },
     {
-      "fixture": "TabView/showLabels__true",
-      "platforms": [
-        "ios"
-      ]
-    },
-    {
       "fixture": "TabView/tabBarBackground__binding",
       "platforms": [
         "android",
@@ -1835,9 +1823,9 @@
       "fixture": "TabView/unselectedColor__static",
       "platforms": [
         "android",
-        "ios",
         "web"
-      ]
+      ],
+      "note": "ios dropped 2026-09-15: the iOS 26 tab bar ignores every UITabBar.appearance() item-tint route (measured, two probes + a build control). The loss is recorded in cross_effect.json and docs/bugs/reports/2026-09-15-tabview-unselectedcolor-does-not-reach-the-ios-26-tab-bar.md — it is a defect on file, not an accepted state."
     },
     {
       "fixture": "TextField/borderStyle__bezel",
@@ -2207,12 +2195,6 @@
     },
     {
       "fixture": "TextView/resize__horizontal",
-      "platforms": [
-        "web"
-      ]
-    },
-    {
-      "fixture": "TextView/resize__none",
       "platforms": [
         "web"
       ]

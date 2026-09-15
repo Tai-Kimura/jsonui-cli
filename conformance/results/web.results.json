@@ -1,11 +1,21 @@
 {
   "platform": "web",
-  "manifestHash": "ff5353d320eb0b38da9b07dde099ad40a00f757fb23c7cab39e86649cfabcfe3",
+  "manifestHash": "1b39dacd81c4e90a003908d9fd50052a3292b11fb5019d65185511a2eba60610",
   "runner": {
     "name": "playwright",
     "version": "1.61.1"
   },
   "results": [
+    {
+      "id": "common/glass__true",
+      "status": "skipped",
+      "detail": "not applicable to web"
+    },
+    {
+      "id": "common/glass__false",
+      "status": "skipped",
+      "detail": "not applicable to web"
+    },
     {
       "id": "common/width__matchparent",
       "status": "pass",
@@ -2014,6 +2024,30 @@
       "screenshot": "artifacts/web/TextField_input__decimal.png"
     },
     {
+      "id": "TextField/input__signeddecimal",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/TextField_input__signeddecimal.png"
+    },
+    {
+      "id": "TextField/input__date",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/TextField_input__date.png"
+    },
+    {
+      "id": "TextField/input__time",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/TextField_input__time.png"
+    },
+    {
+      "id": "TextField/input__datetime",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/TextField_input__datetime.png"
+    },
+    {
       "id": "TextField/inputType__text",
       "status": "skipped",
       "detail": "not applicable to web"
@@ -2607,6 +2641,30 @@
       "status": "pass",
       "detail": "",
       "screenshot": "artifacts/web/TextView_input__decimal.png"
+    },
+    {
+      "id": "TextView/input__signeddecimal",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/TextView_input__signeddecimal.png"
+    },
+    {
+      "id": "TextView/input__date",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/TextView_input__date.png"
+    },
+    {
+      "id": "TextView/input__time",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/TextView_input__time.png"
+    },
+    {
+      "id": "TextView/input__datetime",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/TextView_input__datetime.png"
     },
     {
       "id": "TextView/returnKeyType__done",
@@ -5952,6 +6010,11 @@
       "screenshot": "artifacts/web/control_View__highlightBackground--FF0000.png"
     },
     {
+      "id": "__control/View__no-background_root.backdrop-5f535fdc",
+      "status": "skipped",
+      "detail": "not applicable to web"
+    },
+    {
       "id": "__control/View__orientation-horizontal",
       "status": "pass",
       "detail": "",
@@ -6138,6 +6201,123 @@
       "status": "pass",
       "detail": "",
       "screenshot": "artifacts/web/common_maxWidth__wrap.png"
+    },
+    {
+      "id": "Collection/cellAddress__scroll_1",
+      "status": "pass",
+      "detail": ""
+    },
+    {
+      "id": "Collection/cellAddress__scroll_2",
+      "status": "pass",
+      "detail": ""
+    },
+    {
+      "id": "Collection/cellAddress__none_1",
+      "status": "pass",
+      "detail": ""
+    },
+    {
+      "id": "Collection/cellAddress__none_2",
+      "status": "pass",
+      "detail": ""
+    },
+    {
+      "id": "Collection/cellAddress__horizontalSectionsNoItems",
+      "status": "pass",
+      "detail": ""
+    },
+    {
+      "id": "Collection/cellChildAddress__bare_2",
+      "status": "pass",
+      "detail": ""
+    },
+    {
+      "id": "Collection/cellChildTap__bare_2",
+      "status": "pass",
+      "detail": ""
+    },
+    {
+      "id": "Collection/cellChildAddress__bare_1",
+      "status": "pass",
+      "detail": ""
+    },
+    {
+      "id": "__control/Collection__flow-overflow-scroll",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/Collection_Collection__flow-overflow-scroll.png"
+    },
+    {
+      "id": "__control/Collection__flow-overflow-none",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/Collection_Collection__flow-overflow-none.png"
+    },
+    {
+      "id": "Collection/flowOverflow__scroll",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/Collection_flowOverflow__scroll.png"
+    },
+    {
+      "id": "Collection/flowOverflow__none",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/Collection_flowOverflow__none.png"
+    },
+    {
+      "id": "__control/Collection__flow-overflow-wrap",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/Collection_Collection__flow-overflow-wrap.png"
+    },
+    {
+      "id": "Collection/flowOverflow__wrap",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/Collection_flowOverflow__wrap.png"
+    },
+    {
+      "id": "__control/Collection__flow-overflow-fill",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/Collection_Collection__flow-overflow-fill.png"
+    },
+    {
+      "id": "Collection/flowOverflow__fill",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/Collection_flowOverflow__fill.png"
+    },
+    {
+      "id": "Collection/flowOverflow__none_item11",
+      "status": "pass",
+      "detail": ""
+    },
+    {
+      "id": "__control/Collection__flow-overflow-none-wrapInBox",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/Collection_Collection__flow-overflow-none-wrapInBox.png"
+    },
+    {
+      "id": "Collection/flowOverflow__noneWrapInBox",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/Collection_flowOverflow__noneWrapInBox.png"
+    },
+    {
+      "id": "__control/Collection__flow-overflow-none-wrapInScroll",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/Collection_Collection__flow-overflow-none-wrapInScroll.png"
+    },
+    {
+      "id": "Collection/flowOverflow__noneWrapInScroll",
+      "status": "pass",
+      "detail": "",
+      "screenshot": "artifacts/web/Collection_flowOverflow__noneWrapInScroll.png"
     }
   ]
 }

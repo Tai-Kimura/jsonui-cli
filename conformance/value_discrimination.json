@@ -7,6 +7,92 @@
   ],
   "entries": [
     {
+      "component": "Blur",
+      "attribute": "effectStyle",
+      "platform": "web",
+      "cases": [
+        "extralight",
+        "light"
+      ],
+      "owner": "A (rjui/web host)",
+      "reason": "Platform vocabulary collapse, web: ExtraLight and Light resolve to the same backdrop recipe in the web host's effect table — the 8-step material vocabulary maps onto fewer distinguishable backdrop-filter/scrim combinations than ios has materials. Same class as android's pruned prominent/thick row (backdrop-collapses-8bit). Deliberate degradation, owner A (rjui/web host); a fixture cannot fix a vocabulary wider than the medium."
+    },
+    {
+      "component": "Button",
+      "attribute": "fontWeight",
+      "platform": "web",
+      "cases": [
+        "600",
+        "static"
+      ],
+      "env": [
+        "ci"
+      ],
+      "owner": "A (rjui) — environment fact, no code owner",
+      "reason": "The CI runner's font stack has no distinct 600 weight and falls back to 700, so `font-[600]` and `font-bold` draw one picture there. NOT a codegen collapse: the DOM differs and deliberately so (`font-[600]` vs `font-bold`, TSX measured). Measured 2026-09-15 on one manifest and one rjui tree, same fixtures: local (macOS) 416 / 358 / 416 px apart, ci (ubuntu) 0 / 0 / 0 — and the same fixture differs 661 px BETWEEN the two environments, which is the font stack. Scoped to ci because on a developer machine these values do discriminate and a row here would be a false excuse."
+    },
+    {
+      "component": "Collection",
+      "attribute": "listStyle",
+      "platform": "ios",
+      "cases": [
+        "grouped",
+        "insetgrouped"
+      ],
+      "owner": "orch (wave 4, 2026-08-09)",
+      "reason": "Fixture shape, ios only: the section-less listStyle fixtures render a chromed EMPTY List (declaration-faithful — no invented rows), and SwiftUI's grouped/insetGrouped/sidebar chromes are indistinguishable on an empty 200pt list (the inset and corner treatments only manifest around content). The sectioned fixtures (Collection_hideSeparator family, listStyle grouped base) discriminate where rows exist; android and web draw the container-level chrome distinctly and measure apart on the same values."
+    },
+    {
+      "component": "Collection",
+      "attribute": "listStyle",
+      "platform": "ios",
+      "cases": [
+        "grouped",
+        "sidebar"
+      ],
+      "owner": "orch (wave 4, 2026-08-09)",
+      "reason": "Fixture shape, ios only: the section-less listStyle fixtures render a chromed EMPTY List (declaration-faithful — no invented rows), and SwiftUI's grouped/insetGrouped/sidebar chromes are indistinguishable on an empty 200pt list (the inset and corner treatments only manifest around content). The sectioned fixtures (Collection_hideSeparator family, listStyle grouped base) discriminate where rows exist; android and web draw the container-level chrome distinctly and measure apart on the same values."
+    },
+    {
+      "component": "Collection",
+      "attribute": "listStyle",
+      "platform": "ios",
+      "cases": [
+        "insetgrouped",
+        "sidebar"
+      ],
+      "owner": "orch (wave 4, 2026-08-09)",
+      "reason": "Fixture shape, ios only: the section-less listStyle fixtures render a chromed EMPTY List (declaration-faithful — no invented rows), and SwiftUI's grouped/insetGrouped/sidebar chromes are indistinguishable on an empty 200pt list (the inset and corner treatments only manifest around content). The sectioned fixtures (Collection_hideSeparator family, listStyle grouped base) discriminate where rows exist; android and web draw the container-level chrome distinctly and measure apart on the same values."
+    },
+    {
+      "component": "Label",
+      "attribute": "fontWeight",
+      "platform": "web",
+      "cases": [
+        "600",
+        "static"
+      ],
+      "env": [
+        "ci"
+      ],
+      "owner": "A (rjui) — environment fact, no code owner",
+      "reason": "The CI runner's font stack has no distinct 600 weight and falls back to 700, so `font-[600]` and `font-bold` draw one picture there. NOT a codegen collapse: the DOM differs and deliberately so (`font-[600]` vs `font-bold`, TSX measured). Measured 2026-09-15 on one manifest and one rjui tree, same fixtures: local (macOS) 416 / 358 / 416 px apart, ci (ubuntu) 0 / 0 / 0 — and the same fixture differs 661 px BETWEEN the two environments, which is the font stack. Scoped to ci because on a developer machine these values do discriminate and a row here would be a false excuse."
+    },
+    {
+      "component": "Label",
+      "attribute": "fontWeight",
+      "platform": "web",
+      "cases": [
+        "600_with_partial",
+        "static_with_partial"
+      ],
+      "env": [
+        "ci"
+      ],
+      "owner": "A (rjui) — environment fact, no code owner",
+      "reason": "The CI runner's font stack has no distinct 600 weight and falls back to 700, so `font-[600]` and `font-bold` draw one picture there. NOT a codegen collapse: the DOM differs and deliberately so (`font-[600]` vs `font-bold`, TSX measured). Measured 2026-09-15 on one manifest and one rjui tree, same fixtures: local (macOS) 416 / 358 / 416 px apart, ci (ubuntu) 0 / 0 / 0 — and the same fixture differs 661 px BETWEEN the two environments, which is the font stack. Scoped to ci because on a developer machine these values do discriminate and a row here would be a false excuse."
+    },
+    {
       "component": "Label",
       "attribute": "lineBreakMode",
       "platform": "web",
@@ -38,39 +124,6 @@
       ],
       "owner": "A (rjui)",
       "reason": "Same as clip/middle: CSS has one truncation. See that row."
-    },
-    {
-      "component": "TextView",
-      "attribute": "resize",
-      "platform": "web",
-      "cases": [
-        "both",
-        "horizontal"
-      ],
-      "owner": "A (rjui)",
-      "reason": "The three resizable values draw the SAME grabber. `resize: both | horizontal | vertical` differ only in which axis a drag is allowed on; the corner affordance the browser paints is identical, so a capture taken at rest cannot separate them. rjui emits resize / resize-x / resize-y distinctly (plan 49 2df3401) and `none` IS separated by the gate, which is what shows the mapping is real."
-    },
-    {
-      "component": "TextView",
-      "attribute": "resize",
-      "platform": "web",
-      "cases": [
-        "both",
-        "vertical"
-      ],
-      "owner": "A (rjui)",
-      "reason": "Same as both/horizontal: the grabber is identical across the three resizable values. See that row."
-    },
-    {
-      "component": "TextView",
-      "attribute": "resize",
-      "platform": "web",
-      "cases": [
-        "horizontal",
-        "vertical"
-      ],
-      "owner": "A (rjui)",
-      "reason": "Same as both/horizontal: the grabber is identical across the three resizable values. See that row."
     },
     {
       "component": "TextField",
@@ -205,40 +258,37 @@
       "reason": "Same as bezel/line: Material has two chromes, UIKit four. See that row."
     },
     {
-      "component": "Button",
-      "attribute": "fontWeight",
+      "component": "TextView",
+      "attribute": "resize",
       "platform": "web",
       "cases": [
-        "600",
-        "static"
+        "both",
+        "horizontal"
       ],
-      "owner": "A (rjui) — adjudicated; fixture-side follow-up owned by D",
-      "reason": "DOM differs and deliberately so (`font-[600]` vs `font-bold`, TSX measured); the collapse is in the renderer's font, not the emit. The host declares no font-family, the CI container's default sans carries 400/700 faces only, and CSS font-weight matching resolves a 600 request above 500 upward to 700 — so 600 and bold select the same face and the same pixels. Until D's variable-weight-font fixture (the same family as effectStyle's 8-bit backdrop: a measurement-environment limit, not a codegen one).",
-      "note": "A's adjudication relayed 2026-08-07 (run 31088841656 triage; pair first comparable after d983b62 made web fontWeight active — not a regression). Row written by E per the relay; pair names from the run-7 instrument."
+      "owner": "A (rjui)",
+      "reason": "The three resizable values draw the SAME grabber. `resize: both | horizontal | vertical` differ only in which axis a drag is allowed on; the corner affordance the browser paints is identical, so a capture taken at rest cannot separate them. rjui emits resize / resize-x / resize-y distinctly (plan 49 2df3401) and `none` IS separated by the gate, which is what shows the mapping is real."
     },
     {
-      "component": "Label",
-      "attribute": "fontWeight",
+      "component": "TextView",
+      "attribute": "resize",
       "platform": "web",
       "cases": [
-        "600",
-        "static"
+        "both",
+        "vertical"
       ],
-      "owner": "A (rjui) — adjudicated; fixture-side follow-up owned by D",
-      "reason": "DOM differs and deliberately so (`font-[600]` vs `font-bold`, TSX measured); the collapse is in the renderer's font, not the emit. The host declares no font-family, the CI container's default sans carries 400/700 faces only, and CSS font-weight matching resolves a 600 request above 500 upward to 700 — so 600 and bold select the same face and the same pixels. Until D's variable-weight-font fixture (the same family as effectStyle's 8-bit backdrop: a measurement-environment limit, not a codegen one).",
-      "note": "A's adjudication relayed 2026-08-07 (run 31088841656 triage; pair first comparable after d983b62 made web fontWeight active — not a regression). Row written by E per the relay; pair names from the run-7 instrument."
+      "owner": "A (rjui)",
+      "reason": "Same as both/horizontal: the grabber is identical across the three resizable values. See that row."
     },
     {
-      "component": "Label",
-      "attribute": "fontWeight",
+      "component": "TextView",
+      "attribute": "resize",
       "platform": "web",
       "cases": [
-        "600_with_partial",
-        "static_with_partial"
+        "horizontal",
+        "vertical"
       ],
-      "owner": "A (rjui) — adjudicated; fixture-side follow-up owned by D",
-      "reason": "DOM differs and deliberately so (`font-[600]` vs `font-bold`, TSX measured); the collapse is in the renderer's font, not the emit. The host declares no font-family, the CI container's default sans carries 400/700 faces only, and CSS font-weight matching resolves a 600 request above 500 upward to 700 — so 600 and bold select the same face and the same pixels. Until D's variable-weight-font fixture (the same family as effectStyle's 8-bit backdrop: a measurement-environment limit, not a codegen one).",
-      "note": "A's adjudication relayed 2026-08-07 (run 31088841656 triage; pair first comparable after d983b62 made web fontWeight active — not a regression). Row written by E per the relay; pair names from the run-7 instrument."
+      "owner": "A (rjui)",
+      "reason": "Same as both/horizontal: the grabber is identical across the three resizable values. See that row."
     },
     {
       "component": "View",
@@ -263,17 +313,6 @@
       "reason": "Adjudicated 51-orch (wave-end bake, run 31160838024): the canonical ios distribution ruling (2026-08-07) makes `fill` put `.frame(maxWidth: .infinity)` on every child, and the probe's children are IDENTICAL — equal division (fillEqually) and expand-every-child (fill) produce the same geometry for equal children, so the collapse is fixture-shape coincidence, not a dead face: fillProportionally and equalSpacing discriminate in the same run. Fixture-side follow-up owned by D: unequal-content children would separate the two."
     },
     {
-      "component": "Blur",
-      "attribute": "effectStyle",
-      "platform": "web",
-      "cases": [
-        "extralight",
-        "light"
-      ],
-      "owner": "A (rjui/web host)",
-      "reason": "Platform vocabulary collapse, web: ExtraLight and Light resolve to the same backdrop recipe in the web host's effect table — the 8-step material vocabulary maps onto fewer distinguishable backdrop-filter/scrim combinations than ios has materials. Same class as android's pruned prominent/thick row (backdrop-collapses-8bit). Deliberate degradation, owner A (rjui/web host); a fixture cannot fix a vocabulary wider than the medium."
-    },
-    {
       "component": "common",
       "attribute": "effectStyle",
       "platform": "web",
@@ -283,39 +322,6 @@
       ],
       "owner": "A (rjui/web host)",
       "reason": "Platform vocabulary collapse, web: ExtraLight and Light resolve to the same backdrop recipe in the web host's effect table — the 8-step material vocabulary maps onto fewer distinguishable backdrop-filter/scrim combinations than ios has materials. Same class as android's pruned prominent/thick row (backdrop-collapses-8bit). Deliberate degradation, owner A (rjui/web host); a fixture cannot fix a vocabulary wider than the medium."
-    },
-    {
-      "component": "Collection",
-      "attribute": "listStyle",
-      "platform": "ios",
-      "cases": [
-        "grouped",
-        "insetgrouped"
-      ],
-      "owner": "orch (wave 4, 2026-08-09)",
-      "reason": "Fixture shape, ios only: the section-less listStyle fixtures render a chromed EMPTY List (declaration-faithful — no invented rows), and SwiftUI's grouped/insetGrouped/sidebar chromes are indistinguishable on an empty 200pt list (the inset and corner treatments only manifest around content). The sectioned fixtures (Collection_hideSeparator family, listStyle grouped base) discriminate where rows exist; android and web draw the container-level chrome distinctly and measure apart on the same values."
-    },
-    {
-      "component": "Collection",
-      "attribute": "listStyle",
-      "platform": "ios",
-      "cases": [
-        "grouped",
-        "sidebar"
-      ],
-      "owner": "orch (wave 4, 2026-08-09)",
-      "reason": "Fixture shape, ios only: the section-less listStyle fixtures render a chromed EMPTY List (declaration-faithful — no invented rows), and SwiftUI's grouped/insetGrouped/sidebar chromes are indistinguishable on an empty 200pt list (the inset and corner treatments only manifest around content). The sectioned fixtures (Collection_hideSeparator family, listStyle grouped base) discriminate where rows exist; android and web draw the container-level chrome distinctly and measure apart on the same values."
-    },
-    {
-      "component": "Collection",
-      "attribute": "listStyle",
-      "platform": "ios",
-      "cases": [
-        "insetgrouped",
-        "sidebar"
-      ],
-      "owner": "orch (wave 4, 2026-08-09)",
-      "reason": "Fixture shape, ios only: the section-less listStyle fixtures render a chromed EMPTY List (declaration-faithful — no invented rows), and SwiftUI's grouped/insetGrouped/sidebar chromes are indistinguishable on an empty 200pt list (the inset and corner treatments only manifest around content). The sectioned fixtures (Collection_hideSeparator family, listStyle grouped base) discriminate where rows exist; android and web draw the container-level chrome distinctly and measure apart on the same values."
     }
   ]
 }

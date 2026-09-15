@@ -500,7 +500,9 @@ def judge_value_discrimination(
             definitions=definitions,
             active=active,
         )
-        verdict = vd.check(result, ledger)
+        # env is passed so a row scoped to one render environment is neither
+        # demanded nor called stale in the other — see vd.applies_in.
+        verdict = vd.check(result, ledger, env=env)
         # The count on its own reads backwards. A platform where an attribute
         # stopped working drops every one of its pairs out of this check —
         # both sides have to be active for the question to mean anything — so

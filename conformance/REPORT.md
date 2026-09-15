@@ -2,9 +2,9 @@
 
 # JsonUI Conformance Report
 
-- Manifest: `ff5353d320eb0b38da9b07dde099ad40a00f757fb23c7cab39e86649cfabcfe3` (sha256)
-- Definitions: `1565216371b36804d0ee90bf630dc23ef3a0b61a222a1bfa716ec5e62c16081f` (sha256)
-- Fixtures: 1067 (assertable: 41, visual: 806, interactive: 37) / skipped attributes: 156
+- Manifest: `1b39dacd81c4e90a003908d9fd50052a3292b11fb5019d65185511a2eba60610` (sha256)
+- Definitions: `ebf98ec0475d96763fa1f2c982eec45aaac95a44027411007404aeb0bd9d86ee` (sha256)
+- Fixtures: 1099 (assertable: 49, visual: 822, interactive: 37) / skipped attributes: 157
 
 Legend: ✅ pass / ❌ fail / ⚠️ error / – skipped / (blank) no result
 
@@ -62,9 +62,9 @@ Screenshots are compared against `baselines/local/<platform>.hashes.json` (rende
 
 | Platform | Baseline | Compared | Regressions | No baseline | Missing artifact |
 |---|---|---|---|---|---|
-| android | threshold 8 | 796 | 0 | 0 | 0 |
-| ios | threshold 8 | 844 | 0 | 0 | 0 |
-| web | threshold 8 | 798 | 0 | 0 | 1 |
+| android | threshold 8 | 816 | 0 | 0 | 0 |
+| ios | threshold 8 | 867 | 0 | 0 | 0 |
+| web | threshold 8 | 818 | 0 | 0 | 0 |
 
 ## Attribute effect (fixture vs control)
 
@@ -72,20 +72,15 @@ Each visual fixture is compared against its **control** — the same layout with
 
 | Platform | Compared | Active | Inert | Recorded-but-inert | Unmeasured |
 |---|---|---|---|---|---|
-| android | 561 | 462 | 99 | 0 | 0 |
-| ios | 605 | 493 | 112 | 0 | 0 |
-| web | 543 | 448 | 95 | **2** | 0 |
-
-**web: 2 fixture(s) recorded as expected-to-differ now render identically to their control — the attribute stopped taking effect.**
-
-- `Label/textTransform__lowercase`
-- `TextView/resize__none`
+| android | 567 | 466 | 101 | 0 | 0 |
+| ios | 613 | 495 | 118 | 0 | 0 |
+| web | 549 | 452 | 97 | 0 | 0 |
 
 ## Cross-platform attribute effect
 
 Pixel comparison across platforms is out of scope by design, but each platform's control-diff verdict — *did the attribute change the render?* — is platform-independent. A fixture whose activeness disagrees across the platforms its attribute is declared for is a semantic-drift suspect, and an SSoT-enumerated value that is inert on **every** platform is flagged uniformly-inert (default rendering, or dead everywhere). Only fixtures compared on **all** their in-scope platforms are judged; findings are accepted (with a reason) in `cross_effect.json` and enforced by `jui conformance gate --cross-effect`.
 
-- Compared on all in-scope platforms: 565 (consistent: 501, **diverging: 64**, **uniformly-inert declared values: 44**) · not compared everywhere: 22 · in scope on <2 platforms: 77
+- Compared on all in-scope platforms: 571 (consistent: 506, **diverging: 65**, **uniformly-inert declared values: 44**) · not compared everywhere: 22 · in scope on <2 platforms: 79
 
 | Fixture | android | ios | web |
 |---|---|---|---|
@@ -116,7 +111,8 @@ Pixel comparison across platforms is out of scope by design, but each platform's
 | `Slider/value__binding` | active | active | inert |
 | `Slider/value__static` | active | active | inert |
 | `Switch/trackTintColor__static` | active | inert | active |
-| `TabView/showLabels__true` | inert | active | inert |
+| `TabView/unselectedColor__binding` | active | inert | active |
+| `TabView/unselectedColor__static` | active | inert | active |
 | `TextField/borderStyle__bezel` | active | inert | inert |
 | `TextField/borderStyle__bezel_2` | active | inert | inert |
 | `TextField/borderStyle__line` | active | inert | active |
@@ -205,9 +201,9 @@ Declared values inert on every in-scope platform (default rendering, or dead eve
 
 | Platform | Runner | Results | pass | fail | error | skipped | Manifest |
 |---|---|---|---|---|---|---|---|
-| android | uiautomator 2.3.0 | 1067 | 869 | 0 | 0 | 198 | current |
-| ios | xcuitest ios-18.6 | 1067 | 917 | 0 | 0 | 150 | current |
-| web | playwright 1.61.1 | 1067 | 871 | 0 | 0 | 196 | current |
+| android | uiautomator 2.3.0 | 1099 | 898 | 0 | 0 | 201 | current |
+| ios | xcuitest ios-26.5 | 1099 | 949 | 0 | 0 | 150 | current |
+| web | playwright 1.61.1 | 1099 | 900 | 0 | 0 | 199 | current |
 
 ## Matrix
 
@@ -215,6 +211,8 @@ Declared values inert on every in-scope platform (default rendering, or dead eve
 
 | Fixture | Case | Class | android | ios | web |
 |---|---|---|---|---|---|
+| `glass` | `true` | visual | – | ✅ | – |
+| `glass` | `false` | visual | – | ✅ | – |
 | `width` | `matchparent` | visual | ✅ | ✅ | ✅ |
 | `width` | `wrapcontent` | visual | ✅ | ✅ | ✅ |
 | `width` | `static` | visual | ✅ | ✅ | ✅ |
@@ -578,6 +576,10 @@ Declared values inert on every in-scope platform (default rendering, or dead eve
 | `input` | `url` | visual | ✅ | ✅ | ✅ |
 | `input` | `password` | visual | ✅ | ✅ | ✅ |
 | `input` | `decimal` | visual | ✅ | ✅ | ✅ |
+| `input` | `signeddecimal` | visual | ✅ | ✅ | ✅ |
+| `input` | `date` | visual | ✅ | ✅ | ✅ |
+| `input` | `time` | visual | ✅ | ✅ | ✅ |
+| `input` | `datetime` | visual | ✅ | ✅ | ✅ |
 | `inputType` | `text` | visual | ✅ | – | – |
 | `inputType` | `number` | visual | ✅ | – | – |
 | `inputType` | `numberdecimal` | visual | ✅ | – | – |
@@ -687,6 +689,10 @@ Declared values inert on every in-scope platform (default rendering, or dead eve
 | `input` | `url` | visual | ✅ | ✅ | ✅ |
 | `input` | `password` | visual | ✅ | ✅ | ✅ |
 | `input` | `decimal` | visual | ✅ | ✅ | ✅ |
+| `input` | `signeddecimal` | visual | ✅ | ✅ | ✅ |
+| `input` | `date` | visual | ✅ | ✅ | ✅ |
+| `input` | `time` | visual | ✅ | ✅ | ✅ |
+| `input` | `datetime` | visual | ✅ | ✅ | ✅ |
 | `returnKeyType` | `done` | visual | ✅ | ✅ | ✅ |
 | `returnKeyType` | `go` | visual | ✅ | ✅ | ✅ |
 | `returnKeyType` | `next` | visual | ✅ | ✅ | ✅ |
@@ -1368,6 +1374,7 @@ Declared values inert on every in-scope platform (default rendering, or dead eve
 | `None` | `View` | visual | ✅ | ✅ | ✅ |
 | `None` | `View` | visual | ✅ | ✅ | ✅ |
 | `None` | `View` | visual | ✅ | ✅ | ✅ |
+| `None` | `View` | visual | – | ✅ | – |
 | `None` | `View` | visual | ✅ | ✅ | ✅ |
 | `None` | `View` | visual | ✅ | ✅ | ✅ |
 | `None` | `View` | visual | ✅ | ✅ | ✅ |
@@ -1443,6 +1450,82 @@ Declared values inert on every in-scope platform (default rendering, or dead eve
 |---|---|---|---|---|---|
 | `maxWidth` | `wrap` | visual | ✅ | ✅ | ✅ |
 
+### Collection
+
+| Fixture | Case | Class | android | ios | web |
+|---|---|---|---|---|---|
+| `layout` | `cellAddress__scroll_1` | assertable | ✅ | ✅ | ✅ |
+| `layout` | `cellAddress__scroll_2` | assertable | ✅ | ✅ | ✅ |
+| `layout` | `cellAddress__none_1` | assertable | ✅ | ✅ | ✅ |
+| `layout` | `cellAddress__none_2` | assertable | ✅ | ✅ | ✅ |
+| `layout` | `cellAddress__horizontalSectionsNoItems` | declaration-only | ✅ | ✅ | ✅ |
+| `layout` | `cellChildAddress__bare_2` | assertable | ✅ | ✅ | ✅ |
+| `layout` | `cellChildTap__bare_2` | assertable | ✅ | ✅ | ✅ |
+| `layout` | `cellChildAddress__bare_1` | assertable | ✅ | ✅ | ✅ |
+
+### __control
+
+| Fixture | Case | Class | android | ios | web |
+|---|---|---|---|---|---|
+| `None` | `Collection__flow-overflow-scroll` | visual | ✅ | ✅ | ✅ |
+| `None` | `Collection__flow-overflow-none` | visual | ✅ | ✅ | ✅ |
+
+### Collection
+
+| Fixture | Case | Class | android | ios | web |
+|---|---|---|---|---|---|
+| `lazy` | `flowOverflow__scroll` | visual | ✅ | ✅ | ✅ |
+| `lazy` | `flowOverflow__none` | visual | ✅ | ✅ | ✅ |
+
+### __control
+
+| Fixture | Case | Class | android | ios | web |
+|---|---|---|---|---|---|
+| `None` | `Collection__flow-overflow-wrap` | visual | ✅ | ✅ | ✅ |
+
+### Collection
+
+| Fixture | Case | Class | android | ios | web |
+|---|---|---|---|---|---|
+| `height` | `flowOverflow__wrap` | visual | ✅ | ✅ | ✅ |
+
+### __control
+
+| Fixture | Case | Class | android | ios | web |
+|---|---|---|---|---|---|
+| `None` | `Collection__flow-overflow-fill` | visual | ✅ | ✅ | ✅ |
+
+### Collection
+
+| Fixture | Case | Class | android | ios | web |
+|---|---|---|---|---|---|
+| `lazy` | `flowOverflow__fill` | visual | ✅ | ✅ | ✅ |
+| `lazy` | `flowOverflow__none_item11` | assertable | ✅ | ✅ | ✅ |
+
+### __control
+
+| Fixture | Case | Class | android | ios | web |
+|---|---|---|---|---|---|
+| `None` | `Collection__flow-overflow-none-wrapInBox` | visual | ✅ | ✅ | ✅ |
+
+### Collection
+
+| Fixture | Case | Class | android | ios | web |
+|---|---|---|---|---|---|
+| `height` | `flowOverflow__noneWrapInBox` | visual | ✅ | ✅ | ✅ |
+
+### __control
+
+| Fixture | Case | Class | android | ios | web |
+|---|---|---|---|---|---|
+| `None` | `Collection__flow-overflow-none-wrapInScroll` | visual | ✅ | ✅ | ✅ |
+
+### Collection
+
+| Fixture | Case | Class | android | ios | web |
+|---|---|---|---|---|---|
+| `height` | `flowOverflow__noneWrapInScroll` | visual | ✅ | ✅ | ✅ |
+
 ## Skipped attributes
 
 | Component | Attribute | Reason |
@@ -1485,6 +1568,7 @@ Declared values inert on every in-scope platform (default rendering, or dead eve
 | common | `className` | metadata (not rendered) |
 | common | `testId` | metadata (not rendered) |
 | common | `confirmationDialog` | behavioral (no visual or assertable effect in v1) |
+| common | `alert` | behavioral (no visual or assertable effect in v1) |
 | common | `widthRaw` | metadata (not rendered) |
 | common | `heightRaw` | metadata (not rendered) |
 | TextField | `caretAttributes` | composite value (no representative static value in v1) |
