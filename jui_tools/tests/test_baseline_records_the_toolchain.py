@@ -103,6 +103,17 @@ class TheWorkflowPassesToolsNotOnlyTheSubject(unittest.TestCase):
             self.assertIn(field, block, f"android toolchain does not record {field}")
 
 
+def _step_text(text: str, step_id: str) -> str:
+    """A step bounded by the NEXT step, not by a character count — see the note
+    on the helper above. These two call sites used [:2600] and were the same
+    defect waiting for the same trigger: a comment long enough to push the
+    assertion past the window."""
+    start = text.index(f"id: {step_id}")
+    rest = text[start:]
+    nxt = rest.find("\n      - name:")
+    return rest if nxt == -1 else rest[:nxt]
+
+
 class RecordingIsNotPinning(unittest.TestCase):
     """The class above proves the tools are WRITTEN DOWN. That is a different
     claim from their being CHOSEN, and the gap between the two was live.
@@ -143,7 +154,7 @@ class RecordingIsNotPinning(unittest.TestCase):
         The toolchain step and the suite must apply one pin, or the manifest
         holds a value that drew nothing.
         """
-        block = self.text[self.text.index("id: toolchain") :][:2600]
+        block = _step_text(self.text, "toolchain")
         self.assertIn("SIMULATOR_OS", block, "toolchain step ignores the pin")
         self.assertNotIn(
             'rs[-1]["version"] if rs else "unknown"\')',
@@ -154,7 +165,7 @@ class RecordingIsNotPinning(unittest.TestCase):
     def test_an_unmatched_pin_fails_instead_of_falling_through(self):
         """Falling through to a neighbouring runtime is how an unpinned input
         looked pinned for months."""
-        block = self.text[self.text.index("id: toolchain") :][:2600]
+        block = _step_text(self.text, "toolchain")
         self.assertIn("no available iOS runtime matches", block)
         self.assertIn("exit 1", block)
 

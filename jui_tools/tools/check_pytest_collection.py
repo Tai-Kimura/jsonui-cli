@@ -78,8 +78,25 @@ TESTS_DIR = Path(__file__).resolve().parent.parent / "tests"
 #: Pillow-dependent, because the python-suite job installs `pip install -e .`
 #: without the `[conformance]` extra on purpose (the image-hashing tests are
 #: covered by the conformance lanes that actually render).
+#: ⚠️ THESE TWO ARE NOT THE SAME KIND OF REASON, and they are kept apart on
+#: purpose. Lumping them would hide that the second one names an arm CI can
+#: never run, which is a different fact from an optional dependency.
 ALLOWED_SKIP_REASONS: tuple[str, ...] = (
+    # A DELIBERATE OMISSION. The python-suite job installs `pip install -e .`
+    # without the `[conformance]` extra, so the image-hashing tests skip. They
+    # are covered where they mean something — the conformance lanes that
+    # actually render. Measured on ci run 34932870285: 70 of these.
     "Pillow not installed",
+    # AN ARM THAT CANNOT RUN HERE AT ALL. The audited canonical set it
+    # cross-checks against lives under `docs/`, which is gitignored, so it is
+    # absent from every checkout CI makes — this is not a dependency anyone
+    # can install. It is a BONUS cross-check by its own docstring, and the
+    # safety properties it would confirm are pinned by a sibling that DOES run
+    # in CI: verified 2026-09-15 by hiding `docs/` and re-running the class —
+    # `test_the_committed_ledgers_derive_a_safe_exclusion` passed, only the
+    # cross-check skipped. Allowing it is therefore not a hole; the hole would
+    # be allowing it without having checked that sibling.
+    "no committed conformance dir",
 )
 
 
