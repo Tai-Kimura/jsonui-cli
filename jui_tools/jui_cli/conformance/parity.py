@@ -103,14 +103,48 @@ def _judge_parity_ink(result, measured, codegen, dynamic, crop) -> None:
     hole is only open when the pair came out MATCHED — and that set is
     knowable exactly, so there is nothing to approximate.
 
-    What can hide there: `hamming(h, 0) == popcount(h)`, so two near-uniform
+    What can hide there: `hamming(h, 0) == popcount(h)`, so two LOW-POPCOUNT
     hashes are within the threshold of each other however different the
-    pictures are. Measured 2026-09-15 on the committed artifacts — every one of
-    these was sitting in `matched`:
+    pictures are.
 
-        ci/ios      Web_html__static   codegen ink 0 vs dynamic 533
-                    control_Web        codegen ink 0 vs dynamic 205
-        ci/android  6 pairs, 5 of them matched (NetworkImage family)
+    🔴 AND "LOW POPCOUNT" IS NOT "NEARLY BLANK" — THEIR DIVERGENCE IS THE
+    DEFECT. dHash records where a pixel is brighter than its right neighbour,
+    so a picture with few horizontal transitions hashes low no matter how much
+    of it is inked. `Web_html__static` on ci/ios has a dynamic popcount of 5
+    and 533 ink pixels: firmly drawn, and invisible to the distance. Reading
+    the two as the same thing is what makes "these hashes agree" sound like
+    "these pictures agree", and it is why the second predicate has to be a
+    PIXEL count rather than a tighter threshold.
+
+    Measured 2026-09-15 on the committed artifacts — every one of these was
+    sitting in `matched`, and note that the direction is not fixed:
+
+        ci/ios      Web_html__static   codegen ink 0    vs dynamic 533
+                    control_Web        codegen ink 0    vs dynamic 205
+        ci/android  NetworkImage x4    codegen ink 2560 vs dynamic 0
+                    control_SafeAreaView  codegen 6400 vs dynamic 67840
+
+    ⭐ THE DIRECTION FLIPS BETWEEN FACES — iOS has the codegen side blank,
+    android has the dynamic side blank — which is why the comparison is
+    symmetric rather than "is the codegen blank".
+
+    ⭐ AND THE LAST ONE IS AT DISTANCE 8 EXACTLY, the threshold, so `<=` puts
+    it in `matched`. A strict `ink == 0` test does not reach it; only the ratio
+    does. Boundaries show up at the point where the comparison is equal.
+
+    ⚠️ A COMBINED READER WAS TRIED AND MEASURED SLOWER, so it is not here.
+    `dhash_file` and `ink_file` both open the file and convert to mode L, so a
+    function returning both from one read is 1.51x faster PER IMAGE (measured,
+    200 files). It still loses, because the two populations differ: the hash is
+    needed for every pair and the ink only for the matched ones.
+
+        old  dhash over all pairs + ink over matched   4812 + 1812 = 6624 reads
+        new  combined over all pairs                   4812 reads at ~1.5x
+                                                       ≈ 7218 equivalent
+        measured end to end, three faces: 57 s -> 61 s
+
+    The per-image number was right and the aggregate was not. Cutting the
+    population would buy the seconds by measuring less; nothing here does.
 
     ⚠️ AND THIS NEEDS NO PREMISE AND NO RECORDED INK. The baseline gate has to
     ask whether a blank picture reaches zero on the lane, because one side of
