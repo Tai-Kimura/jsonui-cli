@@ -294,6 +294,36 @@ def evaluate(
                     f"baseline-only {len(result.baseline_only)}); zero comparisons "
                     f"cannot support a parity verdict"
                 )
+            # 🔻 THE PAIRS THE DISTANCE CANNOT JUDGE. `hamming(h, 0) ==
+            # popcount(h)`, so a blank codegen render sits within the threshold
+            # of any dynamic render whose popcount is at or below it — and the
+            # fainter the dynamic picture, the more blank codegen renders it
+            # accepts. These land in `matched` with no ledger entry and no
+            # deviation, which is agreement claimed for the wrong reason.
+            # Measured 2026-09-15 on the committed artifacts: ci/ios 2 pairs
+            # (both Web, codegen ink 0 against dynamic 533 and 205), ci/android
+            # 6 — and 5 of those android pairs were sitting in `matched`.
+            if result.ink_mismatched:
+                shown = ", ".join(
+                    f"{n} (codegen {c} / dynamic {d})"
+                    for n, c, d in result.ink_mismatched[:5]
+                ) + (" …" if len(result.ink_mismatched) > 5 else "")
+                outcome.problems.append(
+                    f"{p}: {len(result.ink_mismatched)} pair(s) where one pipeline drew "
+                    f"nothing and the other drew something, while their hashes stayed "
+                    f"within the threshold — the distance cannot see this: {shown}"
+                )
+            # NOT "nothing to check". When the dynamic renders are absent the
+            # comparison falls back to committed hashes, and a hash cannot be
+            # asked how much ink it has — so these matched pairs were never
+            # judged, and saying nothing would let the fallback read as a full
+            # check.
+            if result.blank_check_unavailable:
+                outcome.notices.append(
+                    f"{p}: parity fell back to committed hashes, so "
+                    f"{result.blank_check_unavailable} matched pair(s) were NOT checked for "
+                    f"one pipeline drawing nothing — there is no second image to measure"
+                )
             if verdict.unrecorded:
                 shown = ", ".join(verdict.unrecorded[:5]) + (
                     " …" if len(verdict.unrecorded) > 5 else ""

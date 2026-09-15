@@ -91,6 +91,51 @@ def ledger_path(conformance_dir: Path) -> Path:
     return Path(conformance_dir) / LEDGER_NAME
 
 
+def _judge_parity_ink(result, measured, codegen, dynamic, crop) -> None:
+    """Second predicate for the pairs the distance called EQUAL.
+
+    🔻 THE POPULATION IS THE VERDICT ITSELF, NOT A PROXY FOR IT. The first
+    version derived "pairs whose hash is within the threshold of blank" and
+    claimed both sides had to be checked because either going blank opens the
+    hole. A mutation put that claim to the test and it did not hold: with only
+    ONE side near blank the distance is roughly the other side's popcount,
+    which exceeds the threshold, so Hamming already reports the mismatch. The
+    hole is only open when the pair came out MATCHED — and that set is
+    knowable exactly, so there is nothing to approximate.
+
+    What can hide there: `hamming(h, 0) == popcount(h)`, so two near-uniform
+    hashes are within the threshold of each other however different the
+    pictures are. Measured 2026-09-15 on the committed artifacts — every one of
+    these was sitting in `matched`:
+
+        ci/ios      Web_html__static   codegen ink 0 vs dynamic 533
+                    control_Web        codegen ink 0 vs dynamic 205
+        ci/android  6 pairs, 5 of them matched (NetworkImage family)
+
+    ⚠️ AND THIS NEEDS NO PREMISE AND NO RECORDED INK. The baseline gate has to
+    ask whether a blank picture reaches zero on the lane, because one side of
+    its comparison is only a hash. Here both pictures are in hand, so the
+    question is simply "do these two agree", asked of the pairs something
+    already said agree.
+    """
+    from .baseline import INK_COLLAPSE_RATIO, ink_file
+
+    if dynamic is None:
+        # The baseline fallback compares a render against a committed hash;
+        # there is no second image to measure. Reported, not silently skipped.
+        result.blank_check_unavailable = len(result.matched)
+        return
+    for name in result.matched:
+        if name not in codegen or name not in dynamic:
+            continue
+        ink_c = ink_file(codegen[name], crop)
+        ink_d = ink_file(dynamic[name], crop)
+        result.ink_checked += 1
+        lo, hi = sorted((ink_c, ink_d))
+        if hi > 0 and lo * INK_COLLAPSE_RATIO < hi:
+            result.ink_mismatched.append((name, ink_c, ink_d))
+
+
 @dataclass
 class ParityResult:
     """Outcome of one platform's codegen-vs-dynamic-baseline measurement."""
@@ -113,6 +158,20 @@ class ParityResult:
     #: deviation count entirely: neither is "the two pipelines draw
     #: different things", it is "only one pipeline drew it".
     codegen_only: list = field(default_factory=list)
+    #: (name, codegen ink, dynamic ink) for pairs the DISTANCE called equal
+    #: while one pipeline drew nothing and the other drew something. Two
+    #: near-uniform hashes are within the threshold of each other however
+    #: different the pictures are — `hamming(h, 0) == popcount(h)` — so this
+    #: is a mismatch `matched` cannot express.
+    ink_mismatched: list = field(default_factory=list)
+    #: How many matched pairs the ink comparison judged. Printed whether or
+    #: not it is zero: a check that only appears when it fires is invisible on
+    #: exactly the runs meant to prove it is alive.
+    ink_checked: int = 0
+    #: Matched pairs left UNJUDGED because this run fell back to comparing
+    #: against committed hashes — there is no second image to measure ink
+    #: from. Never folded into `matched` as if it had been checked.
+    blank_check_unavailable: int = 0
     #: baseline names neither side produced — rename/deletion residue. Purely
     #: informational: it says something about the baseline's age, nothing
     #: about either pipeline, and folding it into the deviation count is what
@@ -182,14 +241,20 @@ def measure(
 
     try:
         if result.source == "dynamic":
+            # 🔻 BOTH PICTURES ARE IN HAND HERE, which makes this the easy half
+            # of the problem: the baseline gate has to have recorded ink ahead
+            # of time, but parity can measure both sides now. The hashes are
+            # kept so the blind population can be derived from what was
+            # actually measured rather than from a committed record.
             for name in sorted(set(codegen) & set(dynamic)):
-                distance = hamming(
-                    dhash_file(codegen[name], crop), dhash_file(dynamic[name], crop)
-                )
+                ch = dhash_file(codegen[name], crop)
+                dh = dhash_file(dynamic[name], crop)
+                distance = hamming(ch, dh)
                 if distance <= result.threshold:
                     result.matched.append(name)
                 else:
                     result.mismatched.append((name, distance))
+            _judge_parity_ink(result, None, codegen, dynamic, crop)
             result.missing = sorted(set(dynamic) - set(codegen))
             result.codegen_only = sorted(set(codegen) - set(dynamic))
             result.baseline_only = sorted(
@@ -197,11 +262,18 @@ def measure(
             )
         else:
             for name in sorted(set(codegen) & set(hashes)):
-                distance = hamming(dhash_file(codegen[name], crop), hashes[name])
+                ch = dhash_file(codegen[name], crop)
+                distance = hamming(ch, hashes[name])
                 if distance <= result.threshold:
                     result.matched.append(name)
                 else:
                     result.mismatched.append((name, distance))
+            # ⚠️ ONLY THE CODEGEN SIDE HAS AN IMAGE HERE. The other side is a
+            # committed hash, and this fallback runs precisely when the dynamic
+            # renders are absent — so there is nothing to measure ink from. The
+            # blind pairs are reported as unjudged rather than counted as
+            # matched, and the gate says so.
+            _judge_parity_ink(result, None, codegen, None, crop)
             result.missing = sorted(set(hashes) - set(codegen))
             result.codegen_only = sorted(set(codegen) - set(hashes))
     except BaselineError as exc:
