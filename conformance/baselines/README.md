@@ -530,3 +530,34 @@ Keys are artifact filenames (`<Section>_<attr>__<case>.png` — the
 An `algorithm` mismatch with the current implementation marks the whole
 baseline stale in the report (re-run `baseline update`) instead of comparing
 incompatible hashes.
+
+### ⚠️ `dhash_file` の既定は crop なし。門が渡す crop とは別物
+
+```python
+dhash_file(path, crop: tuple[int, int] = (0, 0))     # 既定は crop 無し
+chrome_crop('ios', 'ci') == (160, 0)                 # 門が実際に渡す値
+baseline.py:532-545   crop = chrome_crop(platform, env); hamming(dhash_file(png, crop), expected)
+```
+
+**既定のまま呼ぶと uncropped の hash が出て、committed hash（cropped）と比べた距離は
+意味を持ちません。** 2026-09-15 にこれを踏み、`Web_html__static.png` を
+`hamming=32 / MOVED` と読みました。正しくは:
+
+```
+                       uncropped   CROPPED   threshold
+Web_html__static.png        32          5         8      ⇒ MOVED していない
+control_Web.png             32          0         8      ⇒ 焼き直し不要
+```
+
+🔻 **そして 2 つのレーンが独立に 32 を出し、一致を「予測が当たった」と読みました。**
+出所が違っても**既定引数が同じなら独立ではありません**。値が一致したときこそ、
+相手と同じ既定を踏んでいないかを撃ってください。
+
+⇒ **距離を自分で計算せず、`compare_platform` を使う。**それが門の呼び方です。
+自分で呼ぶなら `chrome_crop(platform, env)` を渡す。
+
+📌 関連して、**dHash は白っぽい絵の白紙化を見られません**。`hamming(h, 0) == popcount(h)`
+なので、committed hash の popcount が threshold 以下の fixture は、絵が完全な白紙に
+戻っても閾値の内側に収まります（ci/ios で 867 中 115、うち 21 は popcount 0）。
+「絵が空でない」を dHash で撃たないこと — `diff_pixels` を使う。
+起票: `docs/bugs/2026-09-15-the-visual-gate-cannot-see-a-mostly-white-fixture-go-blank.md`

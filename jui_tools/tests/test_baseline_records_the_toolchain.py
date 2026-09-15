@@ -68,20 +68,37 @@ class TheWorkflowPassesToolsNotOnlyTheSubject(unittest.TestCase):
             )
             self.assertIn(f"id: {step_id}", self.text, f"{job}: no step with id {step_id}")
 
+    def _step(self, step_id: str) -> str:
+        """The step's own text, bounded by the NEXT step — not by a character count.
+
+        🔻 THIS USED TO SLICE 2000 CHARACTERS AND THAT MADE COMMENT LENGTH PART
+        OF THE PREDICATE. Adding nine lines of comment to the android step on
+        2026-09-15 pushed its `echo "spec=api_level=…"` past the window, and the
+        arm failed reporting that the step "does not record api_level=" — which
+        was false: the field was there, four lines further down. A test that
+        reads a fixed span asserts something about formatting while claiming to
+        assert something about content.
+        """
+        start = self.text.index(f"id: {step_id}")
+        rest = self.text[start:]
+        # Steps start with `      - name:` at a fixed indent in these workflows.
+        nxt = rest.find("\n      - name:")
+        return rest if nxt == -1 else rest[:nxt]
+
     def test_ios_names_the_four_tools_that_move_pictures(self):
         """Xcode / SDK / simulator OS / device. Dropping one loses a cause."""
-        block = self.text[self.text.index("id: toolchain") :][:2000]
+        block = self._step("toolchain")
         for field in ("xcode=", "sdk=", "simulator_os=", "device="):
             self.assertIn(field, block, f"ios toolchain does not record {field}")
 
     def test_ios_reads_the_tools_instead_of_hardcoding_them(self):
-        block = self.text[self.text.index("id: toolchain") :][:2000]
+        block = self._step("toolchain")
         self.assertIn("xcodebuild -version", block)
         self.assertIn("--show-sdk-version", block)
         self.assertIn("simctl list runtimes", block)
 
     def test_android_names_its_tools(self):
-        block = self.text[self.text.index("id: android_toolchain") :][:2000]
+        block = self._step("android_toolchain")
         for field in ("api_level=", "agp=", "gradle="):
             self.assertIn(field, block, f"android toolchain does not record {field}")
 
