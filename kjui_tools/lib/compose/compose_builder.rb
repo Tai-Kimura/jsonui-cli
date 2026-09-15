@@ -254,6 +254,8 @@ module KjuiTools
             update_generated_file(generated_view_file, json_data, dynamic_layout_name,
                                   variant_structs: variant_structs,
                                   screen_id: screen_id_for(json_file))
+            warn_if_generated_view_is_unreferenced(pascal_case_name, generated_view_file,
+                                                   source_directory)
           else
             Core::Logger.warn "GeneratedView file not found: #{generated_view_file}"
           end
@@ -1058,6 +1060,55 @@ module KjuiTools
         end
 
         result
+      end
+
+      # 🔻 A GENERATED VIEW NOBODY CALLS IS A SILENT HOLE, NOT A SPARE FILE.
+      # Everything this toolchain emits INTO the generated view only reaches the
+      # screen if the app actually renders that view. Two mechanisms have
+      # already been lost this way in the same consumer projects:
+      #
+      #   * the screen marker (`core/ScreenMarker.kt`) — the bypassing wrapper's
+      #     own comment records it: "kjui build emits the screen marker into
+      #     WebViewGeneratedView, which this wrapper bypasses"
+      #   * the web load signal (2026-09-16) — measured in two faces x two OSes:
+      #     `WebViewGeneratedView(` appears once, at its own definition, and the
+      #     screen renders a hand-written `WebViewView` instead
+      #
+      # Both were found by a person reading the app, months apart. The build can
+      # see it in milliseconds, so it says so.
+      #
+      # ⚠️ A WARNING, NOT AN ERROR. Bypassing is a legitimate choice — those
+      # faces inject Basic auth into their WebView — and the migration is to make
+      # the wrapper extend the library's type (`KjuiWebViewClient` is `open` for
+      # exactly this). What must not happen is that the choice is invisible.
+      #
+      # ⚠️ THE PREDICATE IS THE BARE IDENTIFIER, not `Name(`. A view reached
+      # through a registry or a function reference (`::FooGeneratedView`) IS
+      # referenced, and calling that unreferenced would be a false alarm in the
+      # direction that teaches readers to ignore this line.
+      def warn_if_generated_view_is_unreferenced(pascal_case_name, generated_view_file,
+                                                 source_directory)
+        identifier = "#{pascal_case_name}GeneratedView"
+        root = File.join(@source_path, source_directory)
+        return unless Dir.exist?(root)
+        generated_real = (File.realpath(generated_view_file) rescue generated_view_file)
+        scanned = 0
+        Dir.glob(File.join(root, '**', '*.kt')).each do |kt|
+          real = (File.realpath(kt) rescue kt)
+          next if real == generated_real
+          scanned += 1
+          return if File.read(kt).include?(identifier)
+        end
+        # 🔻 ZERO SCANNED IS NOT ZERO REFERENCES. With no other Kotlin file to
+        # read, "nobody calls it" is unmeasured, not false.
+        return if scanned.zero?
+        Core::Logger.warn(
+          "#{identifier} is never referenced by any of the #{scanned} other " \
+          "Kotlin file(s) under #{source_directory}. Anything kjui build emits " \
+          "into it \u2014 the screen marker, the WebView load signal \u2014 does not reach " \
+          "the screen. If a hand-written view renders this layout, have it call " \
+          "#{identifier} (or extend the library types it assigns)."
+        )
       end
 
       def update_generated_file(file_path, json_data, dynamic_layout_name = nil, fun_stem: nil, types_stem: nil, variant_structs: {}, screen_id: nil)

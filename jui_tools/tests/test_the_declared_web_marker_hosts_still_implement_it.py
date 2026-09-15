@@ -74,6 +74,32 @@ HOSTS: dict[str, tuple[str, str, str, tuple[str, ...]]] = {
             "webMarkers:",
         ),
     ),
+    "android": (
+        "JSONUI_KOTLINJSONUI_PATH",
+        "KotlinJsonUI",
+        "conformance-host/src/androidTest/kotlin/com/kotlinjsonui/conformance/ConformanceSuiteTest.kt",
+        (
+            # the switch that arms the signal for this run — off by default in
+            # a consumer's own instrumentation, so the host must turn it on
+            "WebLoadSignal.enabled = !webMarkersOff",
+            # ⚠️ `WebLoadSignal`, not `DynamicWebLoadSignal`. The signal moved
+            # into `library` in KotlinJsonUI 2.32.0 because the codegen path's
+            # WebView is emitted into the CONSUMER's module, where an
+            # `internal` member of the dynamic module cannot be reached at all
+            # — the dynamic leg reported markerAbsent 0 and the codegen leg 2
+            # in one run (34987243780). Reading the old spelling here would go
+            # green against the module that only covers half the faces.
+            "settleWebLoad(",
+            # the denominator, derived from the run's own filtered set rather
+            # than re-listed by hand
+            'f.host == "Web" && classifySkip(f, filter) == null',
+            "webFixturesRunnable",
+            # the bucket whose non-zero means the mechanism is gone
+            "markerAbsent",
+            # the census has to reach the results file, not just exist
+            "webMarkers = mapOf(",
+        ),
+    ),
 }
 
 

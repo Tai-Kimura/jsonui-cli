@@ -77,6 +77,11 @@ class AttributePlan:
     mode: str | list | None = None
     deprecated: str | list | None = None
     needs_anchor: bool = False
+    #: Set only for the EXTRA hosts of a common attribute (see
+    #: ``COMMON_EXTRA_HOSTS``): the fixture id/filename stem, so the second
+    #: host's fixture does not collide with the first's. ``None`` means "the
+    #: attribute name", which is every fixture that existed before this.
+    id_slug: str | None = None
 
 
 @dataclass(frozen=True)
@@ -2928,6 +2933,30 @@ COMMON_HOST_OVERRIDES: dict[str, str] = {
     "defaultBackground": "Button",
 }
 DEFAULT_COMMON_HOST = "View"
+
+#: Common attributes that must ALSO be exercised on a SECOND host, and which.
+#:
+#: 🔻 WHY THIS EXISTS. A common attribute gets ONE host, and for almost all of
+#: them that host is `View`. On iOS's dynamic renderer, View goes through the
+#: shared modifier pipeline — and four components do not: Label, Image,
+#: NetworkImage and Text re-implement the generator's modifier order by hand.
+#: All four had copied it as far as `cornerRadius` and dropped `border`, so a
+#: declared border drew in codegen and not in dynamic. Nine fixtures declare
+#: `borderWidth`; all nine declare it on `View`. THE CORPUS ASKED THE BORDER
+#: QUESTION ONLY WHERE THE ANSWER WAS ALREADY YES — measured 2026-09-16, from a
+#: consumer's screenshot rather than from any gate.
+#:
+#: ⚠️ NOT "every common attribute on every host". That would double a 1099
+#: fixture corpus to buy coverage of combinations nobody has a defect for. The
+#: entries here are the ones where a SECOND implementation of the same
+#: attribute is known to exist — the hand-rolled chain — so the second host is
+#: a second implementation, not a second decoration.
+COMMON_EXTRA_HOSTS: dict[str, tuple[str, ...]] = {
+    # The border family, on the component whose chain lost it.
+    "borderWidth": ("Label",),
+    "borderColor": ("Label",),
+    "borderStyle": ("Label",),
+}
 
 
 # --------------------------------------------------------------------------- #

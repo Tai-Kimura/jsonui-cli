@@ -27,8 +27,16 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parents[2]
 WORKFLOW = REPO / ".github" / "workflows" / "conformance-mobile.yml"
 
-# The gate invocation is one long python -c line; read the flags out of it.
-_RENDERED_BY = re.compile(r"'--rendered-by','([^=']+)=")
+# 🔻 THE INVOCATION'S SHAPE CHANGED AND THIS REGEX DID NOT. It read the flags
+# out of one long `python -c` line (`'--rendered-by','key=`). When the report
+# job became a shell block that builds an args array — so a run missing a leg
+# can still judge the legs it has — the pairs moved to
+# `args+=(--rendered-by "key=…")` and this matched NOTHING. The arms below then
+# asserted against an empty set and went red, which is the honest outcome: the
+# control arm ("no --rendered-by at all") is exactly what fired first.
+#
+# Both spellings are accepted, so the arm keeps working through the next move.
+_RENDERED_BY = re.compile(r"""--rendered-by['",\s]+['"]?([A-Za-z0-9_.]+)=""")
 
 
 class TheWorkflowPassesToolsNotOnlyTheSubject(unittest.TestCase):

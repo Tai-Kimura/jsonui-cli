@@ -55,16 +55,18 @@ def _summary(**overrides) -> ReportSummary:
     # An all-green ios run reports its web load-marker census; ios is declared
     # in EXPECTED_WEB_MARKER_HOSTS, so omitting it here would make every
     # summary below fail for a reason none of these tests is about.
-    summary.web_markers = {
-        "ios": {
-            "webFixturesRunnable": 4,
-            "webFixturesReachedCapture": 4,
-            "alreadySettled": 4,
-            "waitedThenSettled": 0,
-            "timedOut": 0,
-            "markerAbsent": 0,
-        }
+    # android joined the declaration on 2026-09-16 (KotlinJsonUI 2.32.0 carried
+    # the signal into `library`, so the codegen face could report one too), and
+    # a declared host with no census is a failure by design — so both are here.
+    _census = {
+        "webFixturesRunnable": 4,
+        "webFixturesReachedCapture": 4,
+        "alreadySettled": 4,
+        "waitedThenSettled": 0,
+        "timedOut": 0,
+        "markerAbsent": 0,
     }
+    summary.web_markers = {"ios": dict(_census), "android": dict(_census)}
     for name, value in overrides.items():
         setattr(summary, name, value)
     return summary

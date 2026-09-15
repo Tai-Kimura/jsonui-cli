@@ -38,7 +38,22 @@ def _write_results(
     *,
     manifest_hash: str | None = None,
     details: dict[str, str] | None = None,
+    web_markers: dict[str, int] | None = None,
 ) -> Path:
+    # 🔻 A DECLARED HOST WITHOUT A CENSUS IS A GATE FAILURE, BY DESIGN — that is
+    # how "the census regressed to zero" is told apart from "this host never
+    # adopted it". ios and android are both declared since 2026-09-16, so a
+    # synthetic result set for either needs one, or every test that writes one
+    # fails for a reason it is not about.
+    if web_markers is None and platform in ("ios", "android"):
+        web_markers = {
+            "webFixturesRunnable": 0,
+            "webFixturesReachedCapture": 0,
+            "alreadySettled": 0,
+            "waitedThenSettled": 0,
+            "timedOut": 0,
+            "markerAbsent": 0,
+        }
     payload = {
         "platform": platform,
         "manifestHash": manifest_hash if manifest_hash is not None else _manifest_hash(out_dir),
@@ -53,6 +68,8 @@ def _write_results(
             for fixture_id, status in statuses.items()
         ],
     }
+    if web_markers is not None:
+        payload["webMarkers"] = dict(web_markers)
     results_dir = out_dir / "results"
     results_dir.mkdir(exist_ok=True)
     path = results_dir / f"{platform}.results.json"

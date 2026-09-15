@@ -88,9 +88,15 @@ class TheDeclarationIsWhatCatchesAMissingFixtureTests(unittest.TestCase):
 
     def test_an_undeclared_host_is_not_judged(self) -> None:
         """Only hosts the gate DECLARES should emit a census are held to it —
-        the same population `EXPECTED_WEB_MARKER_HOSTS` governs elsewhere."""
+        the same population `EXPECTED_WEB_MARKER_HOSTS` governs elsewhere.
+
+        ⚠️ The specimen is `web`, not `android`. android was the undeclared
+        example until it adopted the census on 2026-09-16; leaving it here
+        would have turned this arm into its own opposite — a declared host
+        whose population disagrees, asserted to produce no problem.
+        """
         problems, notices = _web_marker_population_problems(
-            _summary(2, 1, platform="android"), ["android"]
+            _summary(2, 1, platform="web"), ["web"]
         )
         self.assertEqual((problems, notices), ([], []))
 

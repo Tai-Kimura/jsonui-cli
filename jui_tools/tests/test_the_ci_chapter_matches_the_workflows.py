@@ -66,8 +66,27 @@ def _jobs(path: Path) -> dict[str, dict]:
 
 
 def _gate_flags(body: str) -> set[str]:
-    """Every ``--flag`` the report job hands `jui conformance gate`."""
-    return set(re.findall(r"'(--[a-z-]+)'", body))
+    """Every ``--flag`` the report job hands `jui conformance gate`.
+
+    🔻 TWO SPELLINGS, because the invocation moved. It used to be one
+    `python -c` line whose flags were quoted python strings (`'--parity'`);
+    the report job now builds a shell args array (`args=(conformance gate
+    --env ci --parity …)`) so a run with a failed leg can still judge the legs
+    that passed. Matching only the quoted form returned an empty set, and the
+    arm that reads it went red — correctly, but for the reason "I can no
+    longer see the command" rather than "the chapter is stale".
+    """
+    quoted = set(re.findall(r"'(--[a-z-]+)'", body))
+    # ⚠️ SCOPED TO THE LINES THAT BUILD THE GATE'S ARGUMENT LIST. A bare
+    # `--[a-z-]+` over the whole job body also catches `pip install --upgrade`
+    # two steps earlier, and the arm then reports the chapter as missing a
+    # "gate flag" that the gate never sees. The array lines all start with
+    # `args` (`args=(conformance gate …` / `args+=(--platform …`).
+    bare: set[str] = set()
+    for line in body.splitlines():
+        if line.strip().startswith("args"):
+            bare |= set(re.findall(r"(?<![\w'\"-])(--[a-z][a-z-]+)", line))
+    return quoted | bare
 
 
 class CiChapterTests(unittest.TestCase):

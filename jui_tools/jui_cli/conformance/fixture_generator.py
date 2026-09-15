@@ -20,6 +20,8 @@ Hard requirements (plan §7):
 """
 from __future__ import annotations
 
+import dataclasses
+
 import hashlib
 import json
 import re
@@ -132,6 +134,19 @@ def plan_definitions(
                     skipped.append(result)
             else:
                 plans.append(result)
+                # 🔻 A SECOND HOST FOR THE SAME ATTRIBUTE, where a second
+                # IMPLEMENTATION of it is known to exist (rules.COMMON_EXTRA_HOSTS).
+                # The id carries the host so the two fixtures do not collide, and
+                # the case list is the first host's — the question being asked is
+                # the same one, of a different renderer path.
+                for extra_host in rules.COMMON_EXTRA_HOSTS.get(attribute, ()) if section == "common" else ():
+                    plans.append(
+                        dataclasses.replace(
+                            result,
+                            host=extra_host,
+                            id_slug=f"{attribute}_on_{extra_host}",
+                        )
+                    )
                 interactive = interactive_rules.plan_interactive(
                     section, attribute, defn, promoted_from=None
                 )
@@ -244,7 +259,7 @@ def _attach_data(layout: dict, host: str, base: dict, bound: dict | None = None)
 
 def build_test(plan: AttributePlan, case: CasePlan, layout_rel: str) -> dict:
     """One screen-test JSON referencing *layout_rel* (conformance-root relative)."""
-    case_id = f"{plan.attribute}__{case.name}"
+    case_id = f"{plan.id_slug or plan.attribute}__{case.name}"
     steps: list[dict] = [{"action": "waitFor", "id": "root"}]
     if plan.cls == rules.CLASS_ASSERTABLE:
         steps.extend(dict(a) for a in case.assertions)
@@ -436,14 +451,14 @@ def build_manifest_entry(
         == own_control
     ]
     peer_group = (
-        f"{plan.section}/{plan.attribute}@{own_control.split('/', 1)[1]}"
+        f"{plan.section}/{plan.id_slug or plan.attribute}@{own_control.split('/', 1)[1]}"
         if plan.cls == rules.CLASS_VISUAL
         and not rules.is_non_observable(plan.section, plan.attribute)
         and len(peers) > 1
         else None
     )
     entry = {
-        "id": f"{plan.section}/{plan.attribute}__{case.name}",
+        "id": f"{plan.section}/{plan.id_slug or plan.attribute}__{case.name}",
         "component": plan.section,
         "attribute": plan.attribute,
         "case": case.name,
@@ -775,7 +790,7 @@ def generate_conformance(definitions_path: Path, out_dir: Path) -> GenerationSum
                 summary.interactive_count += 1
             continue
         for case in plan.cases:
-            stem = _unique_stem(plan.section, f"{plan.attribute}__{case.name}")
+            stem = _unique_stem(plan.section, f"{plan.id_slug or plan.attribute}__{case.name}")
             layout_rel = f"fixtures/{plan.section}/{stem}.layout.json"
             test_rel = f"fixtures/{plan.section}/{stem}.test.json"
 

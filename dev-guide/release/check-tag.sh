@@ -49,7 +49,14 @@ ck "working tree clean"           "$(g status --porcelain | wc -l | tr -d ' ')" 
 CNT=$(g rev-list --count "$PREV..$BRANCH")
 BODY=$(g tag -l --format='%(contents)' "$TAG")
 ck "tag body states the commit count" "$(printf '%s' "$BODY" | grep -cE "RANGE: $CNT commits? since $PREV")" "1"
-LISTED=$(printf '%s' "$BODY" | grep -cE '^  [0-9a-f]{8} ')
+# 🔻 THE SHORT-SHA LENGTH IS THE REPOSITORY'S, NOT A CONSTANT. git picks the
+# abbreviation from object count, so `%h` is 7 in SwiftJsonUI and 8 in
+# jsonui-cli. This check was written against one repo and hard-coded 8, so the
+# first time it ran on another one it reported "lists 0 of 4" for a body that
+# listed all four — a red that says nothing about the tag. The claim being
+# checked is "one line per commit", so the width is 7..12 and the COUNT is
+# what is judged.
+LISTED=$(printf '%s' "$BODY" | grep -cE '^  [0-9a-f]{7,12} ')
 ck "tag body lists exactly that many" "$LISTED" "$CNT"
 for h in $(g log --format=%h "$PREV..$BRANCH"); do
   ck "  range commit $h is in the body" "$(printf '%s' "$BODY" | grep -cF "$h")" "1"

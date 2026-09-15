@@ -600,6 +600,20 @@ jobs:
     # is a weekly public-repo run, so wall-clock only gates the report.
     timeout-minutes: 20
     needs: [web, ios, android, ios-codegen, android-codegen]
+    # 🔴 ALWAYS, BECAUSE ONE RED LEG USED TO DELETE THE WHOLE JUDGMENT.
+    # Measured on run 34987243780: web/ios/ios-codegen/android all succeeded,
+    # android-codegen failed on a real defect — and this job was SKIPPED, so
+    # --parity, --cross-effect, --inert-complete, --value-discrimination, the
+    # library drift notices, the visual regressions, the ink coverage and the
+    # control diff were evaluated for NOTHING. Four legs left artifacts that
+    # nobody judged, after about three hours of runner time.
+    #
+    # ⚠️ The tension is real and is NOT being collapsed the other way: a
+    # COMPLETE report does need all five sets (it cross-checks them). What was
+    # wrong was turning "cannot produce a complete report" into "produce
+    # nothing". The verdict step below keeps the run RED whenever a face is
+    # missing — an incomplete report is "not judged", never "passed".
+    if: always()
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -612,6 +626,30 @@ jobs:
         # a check that never ran — which is exactly how an iOS runner upgrade
         # re-rendered all 490 fixtures unnoticed.
         run: python -m pip install --upgrade pip && python -m pip install -e '.[conformance]'
+      - name: Which faces can this run judge
+        id: faces
+        # 🔻 THE COVERAGE IS DERIVED FROM THE LEGS' OWN RESULTS, not assumed.
+        # A leg that failed produced no trustworthy result set, so its face is
+        # NOT JUDGED and says so by name. The codegen legs do not carry a
+        # --platform of their own: they feed --parity for the face they mirror,
+        # so a missing codegen leg removes parity for that face while leaving
+        # its dynamic judgment intact.
+        run: |
+          set -euo pipefail
+          judged=""; missing=""
+          add() { [ "$2" = success ] && judged="$judged $1" || missing="$missing $1($2)"; }
+          add web    "${{ needs.web.result }}"
+          add ios    "${{ needs.ios.result }}"
+          add android "${{ needs.android.result }}"
+          cg_missing=""
+          [ "${{ needs.ios-codegen.result }}" = success ] || cg_missing="$cg_missing ios-codegen(${{ needs.ios-codegen.result }})"
+          [ "${{ needs.android-codegen.result }}" = success ] || cg_missing="$cg_missing android-codegen(${{ needs.android-codegen.result }})"
+          all_missing="${missing}${cg_missing}"
+          echo "judged=${judged# }" >> "$GITHUB_OUTPUT"
+          echo "missing=${all_missing# }" >> "$GITHUB_OUTPUT"
+          echo "== faces this run can judge: ${judged:-(none)}"
+          echo "== NOT JUDGED: ${all_missing:-(none)}"
+          echo "   (a face listed here was not measured. It is not a pass.)"
       - name: Download platform results
         # merge-multiple lands results/<p>.results.json + artifacts/<p>/ from
         # all three jobs under conformance/, replacing the committed baseline.
@@ -657,7 +695,46 @@ jobs:
         # drawn by a different library, the gate says so — a notice, not a
         # failure. Thirteen regressions in one run were neither fixture nor
         # codegen and two lanes reached "the library moved" by elimination.
-        run: python3 -c "import sys; from jui_cli.cli import main; sys.exit(main(['conformance','gate','--platform','ios','--platform','android','--platform','web','--env','ci','--parity','--cross-effect','--inert-complete','--value-discrimination','--rendered-by','swiftjsonui.src=${{ needs.ios.outputs.library_sha }}','--rendered-by','ios.toolchain=${{ needs.ios.outputs.toolchain }}','--rendered-by','kotlinjsonui.src=${{ needs.android.outputs.library_sha }}','--rendered-by','android.toolchain=${{ needs.android.outputs.toolchain }}','--rendered-by','rjui.src=${{ needs.web.outputs.library_sha }}','--rendered-by','chromium=${{ needs.web.outputs.chromium }}']))"
+        #
+        # 🔻 ONLY THE FACES THIS RUN ACTUALLY MEASURED are passed. A failed leg
+        # has no trustworthy results, and asking the gate to judge them would
+        # report the committed baseline's leftovers as this run's answer.
+        # `--rendered-by` follows the same rule: a failed leg's job output is
+        # empty, and an empty coordinate compared against a baked one is a
+        # drift notice about nothing.
+        if: steps.faces.outputs.judged != ''
+        run: |
+          set -euo pipefail
+          args=(conformance gate --env ci --parity --cross-effect --inert-complete --value-discrimination)
+          for p in ${{ steps.faces.outputs.judged }}; do args+=(--platform "$p"); done
+          [ "${{ needs.ios.result }}" = success ] && args+=(--rendered-by "swiftjsonui.src=${{ needs.ios.outputs.library_sha }}" --rendered-by "ios.toolchain=${{ needs.ios.outputs.toolchain }}")
+          [ "${{ needs.android.result }}" = success ] && args+=(--rendered-by "kotlinjsonui.src=${{ needs.android.outputs.library_sha }}" --rendered-by "android.toolchain=${{ needs.android.outputs.toolchain }}")
+          [ "${{ needs.web.result }}" = success ] && args+=(--rendered-by "rjui.src=${{ needs.web.outputs.library_sha }}" --rendered-by "chromium=${{ needs.web.outputs.chromium }}")
+          printf 'gate args:'; printf ' %s' "${args[@]}"; printf '\n'
+          python3 -c "import sys; from jui_cli.cli import main; sys.exit(main(sys.argv[1:]))" "${args[@]}"
+      - name: Verdict — an incomplete run is NOT a pass
+        # 🔴 THE STEP THAT STOPS "4/5 GREEN" FROM EXISTING. The gate above now
+        # judges whatever was measured, which is the point — but a run missing
+        # a face has not been judged, and the only honest colour for that is
+        # red. The count is in the heading so a reader cannot skim past it.
+        if: always()
+        run: |
+          set -euo pipefail
+          judged="${{ steps.faces.outputs.judged }}"
+          missing="${{ steps.faces.outputs.missing }}"
+          n_missing=$(printf '%s' "$missing" | wc -w | tr -d ' ')
+          echo "== conformance verdict: ${n_missing} face(s) NOT JUDGED"
+          echo "   judged:     ${judged:-(none)}"
+          echo "   not judged: ${missing:-(none)}"
+          if [ -z "$judged" ]; then
+            echo "error: no face produced results — nothing was judged at all" >&2
+            exit 1
+          fi
+          if [ "$n_missing" != 0 ]; then
+            echo "error: ${n_missing} face(s) were not measured, so this run is INCOMPLETE." >&2
+            echo "       The gate's verdict above covers only: $judged" >&2
+            exit 1
+          fi
       - name: Upload combined report
         if: always()
         uses: actions/upload-artifact@v4

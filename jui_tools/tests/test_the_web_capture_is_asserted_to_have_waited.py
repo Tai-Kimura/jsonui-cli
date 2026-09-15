@@ -155,9 +155,14 @@ class TheExpectationIsDeclaredNotInferredTests(unittest.TestCase):
         self.assertIn("an unreadable one", hit[0])
 
     def test_an_undeclared_host_that_emits_nothing_is_silent(self) -> None:
-        """A host that has not adopted the census yet is not a defect."""
+        """A host that has not adopted the census yet is not a defect.
+
+        web is the undeclared host now: android was the example until it
+        adopted the census on 2026-09-16, and reusing it here would have made
+        this arm assert the opposite of what it is named for.
+        """
         outcome = judge(
-            _summary({"ios": _census(4, already=4), "web": {}, "android": {}}),
+            _summary({"ios": _census(4, already=4), "android": _census(4, already=4), "web": {}}),
             ["ios", "web", "android"],
             visual=False,
         )
@@ -181,9 +186,16 @@ class TheExpectationIsDeclaredNotInferredTests(unittest.TestCase):
         outcome = judge(_summary({"ios": {}, "web": {}}), ["web"], visual=False)
         self.assertEqual([p for p in outcome.problems if "declared to report" in p], [])
 
-    def test_ios_is_the_declaration_today(self) -> None:
-        """Pins the declaration itself, so growing it is a deliberate edit."""
-        self.assertEqual(sorted(EXPECTED_WEB_MARKER_HOSTS), ["ios"])
+    def test_the_declaration_today_is_ios_and_android(self) -> None:
+        """Pins the declaration itself, so growing it is a deliberate edit.
+
+        android joined on 2026-09-16. The edit was deliberate twice over: the
+        gate ASKED for it ("android: now reports a web load-marker census but
+        is not in EXPECTED_WEB_MARKER_HOSTS"), and the census had been seen
+        both broken and fixed — markerAbsent 2 on run 34987243780's codegen
+        leg, 0 on 34995640569's after KotlinJsonUI 2.32.0.
+        """
+        self.assertEqual(sorted(EXPECTED_WEB_MARKER_HOSTS), ["android", "ios"])
 
 
 if __name__ == "__main__":  # pragma: no cover

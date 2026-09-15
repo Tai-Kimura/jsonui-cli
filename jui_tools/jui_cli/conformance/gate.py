@@ -70,7 +70,14 @@ _ALL_PLATFORMS = frozenset({"android", "ios", "web"})
 #: Grow it in the same commit that teaches a host to emit one; the notice
 #: below asks for exactly that when an undeclared host starts reporting.
 #: ios adopted it in SwiftJsonUI ConformanceHost (2026-09-15).
-EXPECTED_WEB_MARKER_HOSTS = frozenset({"ios"})
+#: android adopted it in KotlinJsonUI conformance-host (2026-09-15, KJUI 2.31.0)
+#: and the run that declared it is 34995640569: BOTH android legs reported
+#: `markerAbsent 0` with `waitedThenSettled 2` — the dynamic leg from 2.31.0 and
+#: the codegen leg from 2.32.0, which is the release that carried the signal
+#: into `library` so the generated WebView could reach it at all. The previous
+#: run had the codegen leg at `markerAbsent 2`, so this declaration is made on
+#: a census that has been seen both broken and fixed.
+EXPECTED_WEB_MARKER_HOSTS = frozenset({"ios", "android"})
 
 
 @dataclass
