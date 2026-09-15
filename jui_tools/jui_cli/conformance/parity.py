@@ -146,6 +146,14 @@ def _judge_parity_ink(result, measured, codegen, dynamic, crop) -> None:
     The per-image number was right and the aggregate was not. Cutting the
     population would buy the seconds by measuring less; nothing here does.
 
+    🔻 THE CONDITION THIS REJECTION HOLDS UNDER, because a verdict with no
+    condition is carried forward as an absolute: measured when MATCHED WAS 38%
+    OF ALL PAIRS (906 of 2406, across ci/ios, ci/android and local/android).
+    The combined reader wins as that fraction approaches 1 — at 100% the two
+    populations are the same and one read beats two. Re-measure if the corpus
+    moves; `len(result.matched)` and `len(result.matched) + len(result.mismatched)`
+    are the two numbers that decide it.
+
     ⚠️ AND THIS NEEDS NO PREMISE AND NO RECORDED INK. The baseline gate has to
     ask whether a blank picture reaches zero on the lane, because one side of
     its comparison is only a hash. Here both pictures are in hand, so the

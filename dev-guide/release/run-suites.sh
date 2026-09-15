@@ -526,6 +526,30 @@ else
 fi
 rm -rf "$CISHAPE"
 
+# --- which python files changed only their prose ----------------------------
+# 🔻 "THIS RELEASE CHANGES NO CODE" IS THE CLAIM NOBODY CHECKS. Gates read
+# grammar and tests; a sentence in a notice is believed because reading the
+# diff is tedious and because the obvious way to read it is WRONG — a
+# predicate that skips `^[-+]\s*#` still counts every changed docstring line
+# as code, since a docstring is not a `#` comment. A person skimming makes the
+# same mistake. Measured on v1.8.89..v1.8.90, where the claim was true for
+# parity.py and false for the release as a whole (the version stamps ARE code).
+#
+# So it is DERIVED and PRINTED every run, never asked for: the notice can cite
+# the line instead of a human impression. Informational — a release is allowed
+# to change code — but a prose-only claim that this contradicts is now visible
+# before it ships.
+say "== prose-only classification (python files in the range)"
+PREVTAG_P=$(git -C "$C" tag -l 'v*' --sort=-v:refname | head -1)
+if [ -z "$PREVTAG_P" ]; then
+    say "   NOT EXERCISED: no release tag to compare against"
+elif [ "$(git -C "$C" rev-list --count "$PREVTAG_P..HEAD")" = 0 ]; then
+    say "   NOT EXERCISED: HEAD is at $PREVTAG_P, so there is nothing to classify"
+else
+    python3 "$C/jui_tools/tools/check_prose_only.py" "$PREVTAG_P" HEAD "$C" | sed 's|^|   |'
+    rc=$?; [ "$rc" = 0 ] || bad "prose-only classification: exit $rc"
+fi
+
 # --- cited ticket paths ------------------------------------------------------
 # 🔻 NO OTHER GATE CAN EVER SEE THESE. `docs/` is gitignored, so a path written
 # into tracked prose points at a file no CI checkout has — and the ticket
