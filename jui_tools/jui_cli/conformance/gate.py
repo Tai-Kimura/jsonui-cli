@@ -817,6 +817,58 @@ def judge_codegen_effect(
     return outcome
 
 
+def _web_marker_population_problems(summary, platforms) -> tuple[list[str], list[str]]:
+    """Judge the census's population against the manifest's declaration."""
+    problems: list[str] = []
+    notices: list[str] = []
+    for p in dict.fromkeys(platforms):
+        if p not in EXPECTED_WEB_MARKER_HOSTS:
+            continue
+        census = summary.web_markers.get(p) or {}
+        runnable = census.get("webFixturesRunnable")
+        if not isinstance(runnable, int):
+            continue  # absence is handled by the other web-marker checks
+        declared = summary.declared_web_fixtures.get(p)
+        if declared is None:
+            continue  # the report did not compute it (no manifest in that path)
+        if runnable == declared:
+            continue
+        run_filter = summary.run_filters.get(p)
+        if run_filter is not None and run_filter not in ("all", ""):
+            # ⚠️ A FILTERED RUN BREAKS THIS LEGITIMATELY, and saying nothing
+            # would mean the check disappears whenever a filter is passed.
+            notices.append(
+                f"{p}: NOT APPLICABLE — the run recorded filter '{run_filter}', so its "
+                f"{runnable} Web fixture(s) against the manifest's {declared} is the "
+                f"filter, not a missing fixture"
+            )
+            continue
+        # ⚠️ WHAT THIS CAN AND CANNOT TELL APART. `filter: "all"` is a run
+        # saying it narrowed nothing, so the difference is a missing fixture.
+        # NO filter field at all is a host that does not record one — the
+        # difference is then a missing fixture OR an unrecorded narrowing, and
+        # claiming the first would be asserting something the results do not
+        # contain.
+        if run_filter in ("all", ""):
+            why = (
+                "the run recorded filter 'all', so it narrowed nothing and a fixture "
+                "left the population"
+            )
+        else:
+            why = (
+                "the run records NO filter, so this is either a fixture that left the "
+                "population or a narrowed run that does not say so — the results do "
+                "not carry enough to tell them apart"
+            )
+        problems.append(
+            f"{p}: the manifest declares {declared} Web-hosted fixture(s) for this "
+            f"platform but the run counted {runnable} as runnable. {why}. Every "
+            f"in-run check stays green either way, because they all compare against "
+            f"`runnable`"
+        )
+    return problems, notices
+
+
 def _web_marker_problems(summary: ReportSummary, selected: Sequence[str]) -> list[str]:
     """Fail when a Web capture had no load marker to wait on at all.
 
@@ -999,6 +1051,13 @@ def judge(
             if bad:
                 problems.append(f"{p}: {bad} fail/error result(s)")
 
+    # 🔻 `judge` READS NO FILES — its docstring is the contract. The
+    # declaration this compares against is counted by the report, which has the
+    # manifest open already; passing the manifest down here would have made the
+    # cheapest available check the one that broke the contract.
+    _pop_problems, _pop_notices = _web_marker_population_problems(summary, selected)
+    problems.extend(_pop_problems)
+    notices.extend(_pop_notices)
     problems.extend(_web_marker_problems(summary, selected))
     problems.extend(_web_marker_absence_problems(summary, selected))
     notices.extend(_web_marker_timeout_notices(summary, selected))

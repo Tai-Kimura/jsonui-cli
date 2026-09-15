@@ -56,6 +56,10 @@ class PlatformResults:
     #: Empty when the host does not produce one — which is the pre-census
     #: hosts and every platform but ios today, so absence is not a failure.
     web_markers: dict = field(default_factory=dict)
+    #: What the run was asked to execute, as the host recorded it. `None` means
+    #: the host does not record it — which is NOT the same as "everything",
+    #: and the gate says so rather than assuming.
+    run_filter: str | None = None
 
 
 @dataclass
@@ -140,6 +144,13 @@ class ReportSummary:
     #: count it, which is why this rides in the results rather than being
     #: derived here. Platforms whose host emits nothing appear with {}.
     web_markers: dict[str, dict] = field(default_factory=dict)
+    #: platform -> the filter the run recorded, or None when it records none
+    run_filters: dict[str, str | None] = field(default_factory=dict)
+    #: platform -> how many Web-hosted fixtures the MANIFEST declares for it.
+    #: The one number that lives OUTSIDE the run: both hosts derive
+    #: `webFixturesRunnable` from the set they decided to execute, so every
+    #: in-run check stays green when a fixture leaves the population.
+    declared_web_fixtures: dict[str, int] = field(default_factory=dict)
 
 
 class ReportError(RuntimeError):
@@ -182,6 +193,7 @@ def load_platform_results(
                 runner=raw.get("runner") or {},
                 results=results,
                 web_markers=raw.get("webMarkers") or {},
+                run_filter=raw.get("filter"),
                 # 🔻 TWO QUESTIONS, TWO ANSWERS. `stale` means the PICTURES
                 # are from different fixtures and must be drawn again.
                 # `manifest_drifted` means the manifest moved but the render
@@ -649,6 +661,30 @@ def render_report(
                     tally[status] += 1
             summary.status_tallies[p.platform] = dict(tally)
             summary.web_markers[p.platform] = dict(p.web_markers)
+            summary.run_filters[p.platform] = p.run_filter
+            # 🔴 THE ONE NUMBER THAT LIVES OUTSIDE THE RUN. Both hosts derive
+            # `webFixturesRunnable` from the set they decided to execute — iOS
+            # from the `runnable` array it just built, android from
+            # `classifySkip(f, filter)`. So `Runnable == ReachedCapture`
+            # compares two points INSIDE the run: it catches a fixture that
+            # started and never reached capture, and it is blind to one that
+            # never entered `runnable` at all, because `runnable` shrinks with
+            # it and the identity still holds.
+            #
+            # Measured 2026-09-15 on a deliberately filtered android run:
+            # runnable 1, reachedCapture 1, buckets summing to 1, markerAbsent
+            # 0 — every in-run check green while HALF the declared population
+            # was absent. The conservation law is doing its job; the job simply
+            # does not include this. The declaration is the only outside
+            # number, so it is counted here, where the manifest is already
+            # open, rather than handed to `judge` (which reads no files).
+            summary.declared_web_fixtures[p.platform] = sum(
+                1
+                for f in manifest.get("fixtures", [])
+                if isinstance(f, dict)
+                and f.get("host") == "Web"
+                and p.platform in (f.get("platforms") or [])
+            )
             runner = p.runner or {}
             runner_label = str(runner.get("name", "?"))
             if runner.get("version"):
