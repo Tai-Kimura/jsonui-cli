@@ -471,6 +471,11 @@ say "== python suite in CI's shape (depth 1, no tags, no Pillow, no docs/)"
 CISHAPE=$(mktemp -d)
 git clone -q --depth 1 --no-tags "file://$C" "$CISHAPE/repo" 2>/dev/null
 mkdir -p "$CISHAPE/noPIL/PIL"
+# What blocks Pillow is the SHADOWING, not the raise: a `PIL` package earlier
+# on the path than site-packages makes `from PIL import Image` fail whatever is
+# inside it (measured — emptying this file changes nothing). The raise is kept
+# because it names the reason in any traceback that does escape. The skip
+# MESSAGE the census classifies comes from the tests themselves, not from here.
 printf 'raise ImportError("Pillow not installed")\n' > "$CISHAPE/noPIL/PIL/__init__.py"
 CI_TAGS=$(git -C "$CISHAPE/repo" tag -l 2>/dev/null | wc -l | tr -d ' ')
 CI_DEPTH=$(git -C "$CISHAPE/repo" rev-list --count HEAD 2>/dev/null)
