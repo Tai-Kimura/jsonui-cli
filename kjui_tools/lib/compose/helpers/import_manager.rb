@@ -166,9 +166,16 @@ module KjuiTools
             collection_cell_chrome: "import com.kotlinjsonui.components.CollectionCellChrome",
             material_theme: "import androidx.compose.material3.MaterialTheme",
             grid_item_span: "import androidx.compose.foundation.lazy.grid.GridItemSpan",
+            # 🔻 `KjuiWebViewClient`, NOT a bare `android.webkit.WebViewClient`.
+            # The bare one overrides nothing, so the generated WebView emits no
+            # completion signal and a conformance host captures the page at an
+            # uncontrolled moment. Measured 2026-09-16 on conformance-mobile run
+            # 34987243780: the dynamic leg reported markerAbsent=0 and the
+            # codegen leg markerAbsent=2 — same run, same emulator image. The
+            # library client is behaviourally identical and counts the load.
             webview: ["import android.webkit.WebView",
-                      "import android.webkit.WebViewClient",
                       "import android.webkit.WebChromeClient",
+                      "import com.kotlinjsonui.core.KjuiWebViewClient",
                       "import androidx.compose.ui.viewinterop.AndroidView"],
             constraint_layout: ["import androidx.constraintlayout.compose.ConstraintLayout",
                                 "import androidx.constraintlayout.compose.Dimension"],

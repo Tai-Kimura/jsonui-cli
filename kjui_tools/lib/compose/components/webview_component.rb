@@ -47,7 +47,7 @@ module KjuiTools
             code += "\n" + indent("settings.userAgentString = \"#{json_data['userAgent']}\"", depth + 3)
           end
 
-          code += "\n" + indent("webViewClient = WebViewClient()", depth + 3)
+          code += "\n" + indent("webViewClient = KjuiWebViewClient()", depth + 3)
           code += "\n" + indent("webChromeClient = WebChromeClient()", depth + 3)
 
           # Background color (resolved outside factory as Int)

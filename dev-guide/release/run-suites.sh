@@ -382,6 +382,7 @@ if [ ! -d "$C/docs/bugs/reports" ]; then
 else
 mis=0
 unjudgeable=0
+relrep=0
 scanned=0
 readme=0
 # 🚨 RECURSIVE AS OF 2026-09-09. The glob used to be one level deep, and
@@ -399,39 +400,57 @@ readme=0
 # ⚠️ `**/*.md` ALREADY INCLUDES THE TOP LEVEL. Pairing it with `*.md` counted
 # 405 files twice — measured, 833 for a corpus of 428.
 #
-# ⚠️ AND THE PREDICATE HAS A BLIND SPOT WIDENING CANNOT REACH: it is an AND,
-# so a file with `status:` and no `id:` falls out. Measured under `closed/`:
-# one such file, carrying `status: closed`.
-#
 # 🚫 UNJUDGEABLE IS NOT "HAS NO `id:`". Nearly every report here is a RELEASE
-# report with no frontmatter at all — 398 of 426 — and counting those would
-# report the corpus, not a gap. It is the files shaped like tickets that
-# cannot be judged: one frontmatter field present and the other absent.
-# Measured: both 27, status-only 1, id-only 0, neither 398.
+# report with no frontmatter at all, and counting those would report the
+# corpus, not a gap.
 #
-# 🚫 Do not widen the predicate to swallow that one. It is correctly closed in
-# an older format; reaching for it trades a named silence for an unnamed false
-# positive. Naming the count is the fix — a live ticket in that shape would
-# raise K, and K is read.
+# 🔴 AND THE `id:` AND `status:` CONJUNCTION WAS WRONG (fixed 2026-09-16).
+# The note that used to stand here said "status-only: 1 file, correctly closed
+# in an older format — naming the count is the fix". That number was measured
+# once and then aged: the CLOSING ROUTINE PRODUCES THAT SHAPE. Every closed
+# ticket is an inbox file moved under `closed/` with its frontmatter edited,
+# and an inbox ticket has no `id:` — the filename is the id. Re-measured the
+# day this was noticed: 12 files, one per closed ticket, all correct.
+#
+# ⚠️ AND THE COUNT WAS READ THROUGH A FILTER THAT HID IT. The release log was
+# grepped with a pattern containing `red`, which matched exactly the two lines
+# whose PATHS contain "measu(red)" and "decla(red)" — so a 12-line bucket was
+# read as 2. The printed data contained the reader's own token.
+#
+# So the predicate is now `status:` alone, which is the whole question this leg
+# asks. `release:` names a release report that carries a status. What is left
+# in UNJUDGEABLE is the one shape that genuinely cannot be judged: an `id:`
+# with no `status:` at all.
 for f in "$C"/docs/bugs/reports/**/*.md(N); do
   [ -f "$f" ] || continue
   scanned=$((scanned+1))
   case "$(basename "$f")" in README.md) readme=$((readme+1)); continue ;; esac
   has_id=$(head -20 "$f" | grep -c '^id:')
   has_st=$(head -20 "$f" | grep -cE '^status:')
+  has_rel=$(head -20 "$f" | grep -c '^release:')
   if [ "$has_id" = 0 ] && [ "$has_st" = 0 ]; then
     continue                      # a release report, not a ticket
   fi
-  if [ "$has_id" = 0 ] || [ "$has_st" = 0 ]; then
-    say "   UNJUDGEABLE (half a ticket frontmatter): ${f#$C/docs/bugs/reports/}"
+  # 🔻 A RELEASE REPORT CAN CARRY `status:` TOO (`release: v1.8.66` /
+  # `status: shipped`). `release:` names the kind and no ticket has it.
+  if [ "$has_rel" != 0 ]; then
+    relrep=$((relrep+1))
+    continue
+  fi
+  # 🔴 JUDGE ON `status:` ALONE. This used to require `id:` AND `status:` and
+  # call everything else unjudgeable — but a CLOSED TICKET is exactly that
+  # shape: the closing routine moves the inbox file under `closed/` and edits
+  # its frontmatter, and an inbox ticket never had an `id:` (the filename is
+  # the id). So the bucket filled with correctly-closed tickets: measured
+  # 2026-09-16, 12 of them, and the comment that used to stand here said "1".
+  # `id:` is not needed to answer this leg's question — `status:` is the whole
+  # predicate. A file claiming ticket identity with NO status still cannot be
+  # judged, and that is the only thing left in the bucket.
+  if [ "$has_st" = 0 ]; then
+    say "   UNJUDGEABLE (id: present, status: absent): ${f#$C/docs/bugs/reports/}"
     unjudgeable=$((unjudgeable+1))
     continue
   fi
-  # `id:` AND an UNRESOLVED status. Presence of `status:` alone is not enough:
-  # a closed investigation's report legitimately keeps ticket-style frontmatter
-  # (measured — the 2026-09-04 a11y bench report does, and its own body said
-  # "status: closed" while the frontmatter said open, which is how it looked
-  # like an unprocessed ticket for four days).
   if head -20 "$f" | grep -qE '^status: *(open|investigating)'; then
     say "   MISFILED: ${f#$C/docs/bugs/reports/}"
     mis=$((mis+1))
@@ -443,7 +462,7 @@ done
 # frontmatter tally three comments up says 426. Two implementations of one
 # population disagree silently, and the reader cannot tell which is the corpus.
 # Now the loop is the only counter, and what it drops is printed beside it.
-say "   misfiled=$mis  unjudgeable=$unjudgeable  (scanned $scanned, README skipped $readme, recursive)"
+say "   misfiled=$mis  unjudgeable=$unjudgeable  release-reports=$relrep  (scanned $scanned, README skipped $readme, recursive)"
 [ "$scanned" != 0 ] || bad "misfiled leg scanned 0 reports in a checkout that HAS the directory"
 [ "$mis" = 0 ] || bad "misfiled tickets under reports/: $mis — move them to docs/bugs/"
 fi

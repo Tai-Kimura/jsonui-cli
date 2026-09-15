@@ -7,6 +7,13 @@ RSpec.describe KjuiTools::Compose::Components::WebviewComponent do
   let(:required_imports) { Set.new }
 
   describe '.generate' do
+    it 'uses the library WebViewClient, not the bare one' do
+      json_data = { 'type' => 'WebView' }
+      result = described_class.generate(json_data, 0, required_imports)
+      expect(result).to include('webViewClient = KjuiWebViewClient()')
+      expect(result).not_to include('webViewClient = WebViewClient()')
+    end
+
     it 'generates AndroidView for WebView' do
       json_data = { 'type' => 'WebView' }
       result = described_class.generate(json_data, 0, required_imports)

@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require 'compose/components/web_component'
+require 'compose/helpers/import_manager'
 require 'compose/helpers/modifier_builder'
 require 'compose/helpers/resource_resolver'
 
@@ -79,10 +80,38 @@ RSpec.describe KjuiTools::Compose::Components::WebComponent do
       expect(result).to include('settings.displayZoomControls = false')
     end
 
-    it 'always includes WebViewClient' do
+    it 'always includes the library WebViewClient' do
       json_data = { 'type' => 'Web' }
       result = described_class.generate(json_data, 0, required_imports)
-      expect(result).to include('webViewClient = WebViewClient()')
+      expect(result).to include('webViewClient = KjuiWebViewClient()')
+    end
+
+    # 🔻 THE ARM THAT WOULD HAVE CAUGHT IT. A bare `WebViewClient()` overrides
+    # nothing, so the generated WebView reports no page-load completion and a
+    # conformance host captures whatever the page happened to paint. Measured
+    # 2026-09-16 on conformance-mobile run 34987243780: the dynamic leg reported
+    # markerAbsent=0 and the codegen leg markerAbsent=2 — in ONE run, on ONE
+    # emulator image, so the difference is the emitter and not the environment.
+    #
+    # ⚠️ The assertion is on the exact assignment, not on the substring
+    # "WebViewClient()" — `KjuiWebViewClient()` contains it, so a `not_to
+    # include('WebViewClient()')` would fail on the CORRECT output.
+    it 'never emits the bare client, which is the one that signals nothing' do
+      json_data = { 'type' => 'Web' }
+      result = described_class.generate(json_data, 0, required_imports)
+      expect(result).not_to include('webViewClient = WebViewClient()')
+    end
+
+    # Two halves, because the emitter and the import table are separate files:
+    # the emitter registers a KEY, the table turns that key into import lines.
+    # Asserting only the key would pass with a table that never mentions the
+    # class, and the generated file would not compile.
+    it 'requires the import key, and that key carries the client import' do
+      json_data = { 'type' => 'Web' }
+      described_class.generate(json_data, 0, required_imports)
+      expect(required_imports).to include(:webview)
+      lines = Array(KjuiTools::Compose::Helpers::ImportManager.get_imports_map[:webview])
+      expect(lines).to include('import com.kotlinjsonui.core.KjuiWebViewClient')
     end
 
     context 'modifiers' do

@@ -69,7 +69,7 @@ module KjuiTools
           end
           
           # WebViewClient for handling navigation
-          code += "\n" + indent("webViewClient = WebViewClient()", depth + 3)
+          code += "\n" + indent("webViewClient = KjuiWebViewClient()", depth + 3)
           
           # WebChromeClient for JavaScript alerts
           if json_data['javaScriptEnabled'] != false
