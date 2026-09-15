@@ -62,6 +62,14 @@ One file per platform, written atomically after a full suite run:
   "platform": "web",
   "manifestHash": "<sha256 of conformance/manifest.json at run time>",
   "runner": { "name": "playwright", "version": "1.44.0" },
+  "webMarkers": {
+    "webFixturesRunnable": 2,
+    "webFixturesReachedCapture": 2,
+    "alreadySettled": 2,
+    "waitedThenSettled": 0,
+    "timedOut": 0,
+    "markerAbsent": 0
+  },
   "results": [
     {
       "id": "Label/text__static",
@@ -82,6 +90,76 @@ One file per platform, written atomically after a full suite run:
 | `results[].status` | yes | `pass` — all steps green · `fail` — an assertion failed · `error` — could not execute (render crash, missing element, timeout) · `skipped` — intentionally not run (must set `detail` with the reason) |
 | `results[].detail` | on non-pass | human-readable failure/skip reason (single line) |
 | `results[].screenshot` | optional | artifact path relative to `conformance/` (visual fixtures should always set it) |
+| `webMarkers` | per declaration | run-level census of the Web load-marker wait — see below. Required of the platforms named in `gate.EXPECTED_WEB_MARKER_HOSTS`, optional for the rest |
+
+### `webMarkers` — asserting that a Web capture waited for the page to paint
+
+A web view exists the instant it is made, so a screenshot taken mid-load is
+blank — and **a blank fixture still differs from its control**, so `control_diff`
+calls the attribute active and a baseline re-bake of the same race calls itself
+a pass. Both sides of that race sat in committed iOS baselines under a green
+gate. **No arm that looks at pixels can separate "waited and painted" from "did
+not wait"**, so the host counts the wait and the gate reads the count.
+
+The wait's own failure wears the face of the bug it fixes: when the load marker
+is absent the capture proceeds immediately, exactly as before, and the timeout
+is never reached. The marker being missing has four causes and only the first
+is correct — the fixture has no web view; the env flag did not reach the app;
+the linked library predates the marker API (SwiftJsonUI < v10.23.0); the marker
+does not surface as an accessibility element (measured once already, when an
+identifier set on the `WKWebView` itself produced no element at all).
+
+⚠️ THE FIRST VERSION OF THIS CENSUS COUNTED THE WRONG THING AND CRIED WOLF ON
+ITS FIRST REAL RUN. It used sightings of the *pending* marker as the detector
+for "this fixture has a web view". Pending is a **transient** state: a local
+`loadHTMLString` settles before the runner's first query, so the tree carried
+only `sjui_web_loaded`, the census read 0 of 2, and the screenshots were
+byte-identical to the baseline. Measured 2026-09-15 by dumping the element tree
+at the exact query point — the 1x1 marker was present as a child of the
+`WKWebView`, already flipped to loaded, with the page's own text beside it.
+
+So the detector is the **declared** fact — `manifest.host == "Web"`, which is
+stable and names the control (`__control/Web`, whose *component* is
+`__control`) as well as the attribute fixtures — and the markers are used only
+as the wait's terminating condition. Each fixture lands in exactly one bucket,
+and each bucket's zero means one thing:
+
+| Key | Meaning |
+|---|---|
+| `webFixturesRunnable` | informational — Web-hosted fixtures the run intended to execute |
+| `webFixturesReachedCapture` | **the denominator**; the four buckets below sum to exactly this |
+| `alreadySettled` | the page had painted before the runner looked — correct, and the common case on a fast machine |
+| `waitedThenSettled` | pending was found, then loaded arrived within the budget — the wait did its job |
+| `timedOut` | pending was found, loaded never arrived — **a notice, not a failure** |
+| `markerAbsent` | neither marker ever appeared — **the failure**: the mechanism is gone |
+
+The gate fails on `markerAbsent > 0`, and on buckets that do not sum to
+`webFixturesReachedCapture`. A timeout is deliberately not failed: the capture
+is still judged by fixture-vs-control, which is readable, and failing here
+would make a slow page indistinguishable from a broken marker. The conservation
+check exists because a future branch that falls through every bucket would
+shrink the population silently, and a judgment with nothing left to judge
+passes.
+
+**Who must emit one is declared, not inferred.** `gate.EXPECTED_WEB_MARKER_HOSTS`
+names the platforms whose absence of a census fails the gate (today: `ios`,
+adopted in SwiftJsonUI's `ConformanceHost` on 2026-09-15). The obvious
+alternative — stay quiet until some host reports, then name the ones that do
+not — is silent in exactly the failing case: **the run where the census
+disappears has no reporting hosts, which is the same state as the run before
+anyone implemented it.** Worse, a census removed from the host takes the host's
+own `XCTAssert` with it, so host and gate would fall quiet together. With a
+declaration, absence is a named refusal:
+
+| | declared | not declared |
+|---|---|---|
+| **emits a census** | steady state — silent | notice: add it to the declaration |
+| **emits nothing** | **fails** — regression or a stale declaration | silent — has not adopted it |
+
+An unreadable census (wrong types) counts as *emitting nothing*, not as
+passing: unreadable is "cannot judge", which is neither satisfied nor
+not-applicable. Grow the declaration in the same commit that teaches a host to
+emit one.
 
 Rules:
 

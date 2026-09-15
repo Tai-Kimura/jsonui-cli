@@ -63,6 +63,15 @@ RATCHET_METRICS = ("missing_artifact", "no_baseline")
 
 _ALL_PLATFORMS = frozenset({"android", "ios", "web"})
 
+#: Platforms whose host is expected to report a ``webMarkers`` census in its
+#: results. THIS IS A DECLARATION, not a description — a platform listed here
+#: FAILS the gate when its census goes missing, which is the only way a
+#: regression to zero can be told apart from a host that never adopted it.
+#: Grow it in the same commit that teaches a host to emit one; the notice
+#: below asks for exactly that when an undeclared host starts reporting.
+#: ios adopted it in SwiftJsonUI ConformanceHost (2026-09-15).
+EXPECTED_WEB_MARKER_HOSTS = frozenset({"ios"})
+
 
 @dataclass
 class GateOutcome:
@@ -778,6 +787,142 @@ def judge_codegen_effect(
     return outcome
 
 
+def _web_marker_problems(summary: ReportSummary, selected: Sequence[str]) -> list[str]:
+    """Fail when a Web capture had no load marker to wait on at all.
+
+    🔻 NO PICTURE ARM CAN SEE THIS. A web view exists the instant it is made,
+    so a capture taken mid-load is blank — and a blank fixture still DIFFERS
+    from its control, so control_diff calls the attribute active and a re-bake
+    of the same race calls itself a pass. Both sides of that race sat in
+    committed iOS baselines under a green gate.
+
+    ⚠️ THE FIRST VERSION OF THIS CHECK COUNTED THE WRONG THING AND CRIED WOLF
+    ON ITS FIRST REAL RUN. It read a `pendingObserved` count, and pending is a
+    TRANSIENT state: a local `loadHTMLString` settles before the runner's first
+    query, so the tree carried only the *loaded* marker and the census reported
+    0 of 2 while the pictures were byte-identical to the baseline. The host now
+    detects Web fixtures from the manifest (`host == "Web"`, a declared and
+    stable fact that names the control too) and sorts each one into a bucket
+    whose zero means one thing:
+
+    ``alreadySettled``      painted before the runner looked — correct, common
+    ``waitedThenSettled``   the wait ran and the page arrived — correct
+    ``timedOut``            the page never arrived — a NOTICE, see below
+    ``markerAbsent``        no marker ever appeared — THE failure
+
+    A timeout is not failed on purpose: the capture is still judged by
+    fixture-vs-control, which is readable, and failing here would make a slow
+    page indistinguishable from a broken marker.
+    """
+    out: list[str] = []
+    for platform in selected:
+        census = summary.web_markers.get(platform) or {}
+        reached = census.get("webFixturesReachedCapture")
+        if not isinstance(reached, int):
+            continue  # no census from this host — see _web_marker_absence_problems
+
+        buckets = ("alreadySettled", "waitedThenSettled", "timedOut", "markerAbsent")
+        values = [census.get(name) for name in buckets]
+        if not all(isinstance(value, int) for value in values):
+            out.append(
+                f"{platform}: web load-marker census is missing bucket counts "
+                f"({', '.join(n for n, v in zip(buckets, values) if not isinstance(v, int))})"
+            )
+            continue
+
+        # Conservation, checked here as well as in the host: a future branch
+        # that falls through every bucket would shrink the population, and a
+        # judgment with nothing left to judge passes.
+        if sum(values) != reached:
+            out.append(
+                f"{platform}: web load-marker census does not add up — "
+                f"{sum(values)} bucketed vs {reached} that reached capture"
+            )
+
+        absent = census["markerAbsent"]
+        if absent:
+            out.append(
+                f"{platform}: {absent} Web fixture(s) presented no load marker at "
+                "all, so their screenshots were taken without waiting for the "
+                "page to paint — the blank-page race the marker exists to remove"
+            )
+    return out
+
+
+def _web_marker_timeout_notices(summary: ReportSummary, selected: Sequence[str]) -> list[str]:
+    """Report pages that never finished loading. Not a failure — see above."""
+    out: list[str] = []
+    for platform in selected:
+        census = summary.web_markers.get(platform) or {}
+        timed_out = census.get("timedOut")
+        if isinstance(timed_out, int) and timed_out:
+            out.append(
+                f"{platform}: {timed_out} Web fixture(s) were captured on the load "
+                "timeout rather than on a finished page — judged by "
+                "fixture-vs-control, but slower than expected"
+            )
+    return out
+
+
+def _web_marker_absence_problems(summary: ReportSummary, selected: Sequence[str]) -> list[str]:
+    """Fail when a host DECLARED to emit the census did not emit one.
+
+    🔻 WHY A DECLARATION AND NOT "WHOEVER REPORTED LAST RUN". The obvious
+    shape — stay quiet until some host reports, then name the ones that do
+    not — cannot tell a REGRESSION from PRE-ADOPTION: the run where the census
+    disappears has zero reporting hosts, which is the same state as the run
+    before any host implemented it, so it goes silent exactly when something
+    broke. And the thing that makes it disappear is not only a dropped env
+    flag (the host's own assertion catches that) but the census code being
+    reverted — which removes the assertion too, so host AND gate both fall
+    quiet.
+
+    So the expectation is DECLARED, in the same shape control_diff.json uses
+    for "this fixture must differ from its control": state it, and let absence
+    be a named refusal rather than an inferred state. Adoption is an edit to
+    :data:`EXPECTED_WEB_MARKER_HOSTS`, which makes the migration a visible
+    diff instead of a property of whatever happened to run.
+    """
+    out: list[str] = []
+    for platform in selected:
+        if platform not in EXPECTED_WEB_MARKER_HOSTS:
+            continue
+        census = summary.web_markers.get(platform) or {}
+        if isinstance(census.get("webFixturesReachedCapture"), int):
+            continue
+        what = "an unreadable one" if census else "none at all"
+        out.append(
+            f"{platform}: declared to report a web load-marker census and emitted "
+            f"{what} — its Web captures are no longer asserted to have waited for "
+            "the page to paint. Either the host regressed (env flag, library "
+            "version, the census itself removed) or the declaration in "
+            "EXPECTED_WEB_MARKER_HOSTS is stale"
+        )
+    return out
+
+
+def _web_marker_notices(summary: ReportSummary, selected: Sequence[str]) -> list[str]:
+    """Say when an undeclared host starts reporting — the migration advancing.
+
+    The counterpart to the problem above, and the only other state worth a
+    line: a platform nobody declared is now producing a census, so the
+    declaration should grow. Everything else is silence by construction —
+    declared-and-reporting is the steady state, undeclared-and-not-reporting
+    is a host that has not adopted yet.
+    """
+    arrived = [
+        platform
+        for platform in selected
+        if platform not in EXPECTED_WEB_MARKER_HOSTS and summary.web_markers.get(platform)
+    ]
+    if not arrived:
+        return []
+    return [
+        f"{', '.join(arrived)}: now report(s) a web load-marker census but is not in "
+        "EXPECTED_WEB_MARKER_HOSTS — add it so its disappearance would fail"
+    ]
+
+
 def judge(
     summary: ReportSummary,
     platforms: Sequence[str],
@@ -810,6 +955,11 @@ def judge(
             bad = tally.get("fail", 0) + tally.get("error", 0)
             if bad:
                 problems.append(f"{p}: {bad} fail/error result(s)")
+
+    problems.extend(_web_marker_problems(summary, selected))
+    problems.extend(_web_marker_absence_problems(summary, selected))
+    notices.extend(_web_marker_timeout_notices(summary, selected))
+    notices.extend(_web_marker_notices(summary, selected))
 
     # Cross-platform mismatch needs every platform's results to come from this
     # run; with a partial selection the others are committed snapshots and a

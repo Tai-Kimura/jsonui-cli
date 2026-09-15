@@ -50,6 +50,10 @@ class PlatformResults:
     runner: dict
     results: dict[str, dict]  # fixture id -> result entry
     stale: bool = False
+    #: Run-level census the host may emit alongside its per-fixture results.
+    #: Empty when the host does not produce one — which is the pre-census
+    #: hosts and every platform but ios today, so absence is not a failure.
+    web_markers: dict = field(default_factory=dict)
 
 
 @dataclass
@@ -99,6 +103,14 @@ class ReportSummary:
     #: value — the population of the uniformly-inert check. Empty when the
     #: attribute definitions were not available to the report run.
     effect_enum_values: dict[str, object] = field(default_factory=dict)
+    #: platform -> the host's run-level web load-marker census, verbatim.
+    #: A Web fixture captured WITHOUT waiting for its page to paint is, in
+    #: pixels, indistinguishable from one that waited — the blank-page race
+    #: produces a difference from the control either way, so every picture
+    #: arm calls it active. The only way to know the wait happened is to
+    #: count it, which is why this rides in the results rather than being
+    #: derived here. Platforms whose host emits nothing appear with {}.
+    web_markers: dict[str, dict] = field(default_factory=dict)
 
 
 class ReportError(RuntimeError):
@@ -130,6 +142,7 @@ def load_platform_results(results_dir: Path, current_manifest_hash: str) -> list
                 manifest_hash=manifest_hash,
                 runner=raw.get("runner") or {},
                 results=results,
+                web_markers=raw.get("webMarkers") or {},
                 stale=(manifest_hash != current_manifest_hash),
             )
         )
@@ -505,6 +518,7 @@ def render_report(
                 if status in tally:
                     tally[status] += 1
             summary.status_tallies[p.platform] = dict(tally)
+            summary.web_markers[p.platform] = dict(p.web_markers)
             runner = p.runner or {}
             runner_label = str(runner.get("name", "?"))
             if runner.get("version"):

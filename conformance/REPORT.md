@@ -2,8 +2,8 @@
 
 # JsonUI Conformance Report
 
-- Manifest: `1b39dacd81c4e90a003908d9fd50052a3292b11fb5019d65185511a2eba60610` (sha256)
-- Definitions: `ebf98ec0475d96763fa1f2c982eec45aaac95a44027411007404aeb0bd9d86ee` (sha256)
+- Manifest: `0d22d6f56977392c80671fc996f0ece8739c2d6638102f8becb42f2a3b942164` (sha256)
+- Definitions: `4476aba6cd18b656dfa0bac9e7822d43a643cce0f76f444ce481bbcb327b2c71` (sha256)
 - Fixtures: 1099 (assertable: 49, visual: 822, interactive: 37) / skipped attributes: 157
 
 Legend: ✅ pass / ❌ fail / ⚠️ error / – skipped / (blank) no result
@@ -73,14 +73,14 @@ Each visual fixture is compared against its **control** — the same layout with
 | Platform | Compared | Active | Inert | Recorded-but-inert | Unmeasured |
 |---|---|---|---|---|---|
 | android | 567 | 466 | 101 | 0 | 0 |
-| ios | 613 | 495 | 118 | 0 | 0 |
+| ios | 613 | 498 | 115 | 0 | 0 |
 | web | 549 | 452 | 97 | 0 | 0 |
 
 ## Cross-platform attribute effect
 
 Pixel comparison across platforms is out of scope by design, but each platform's control-diff verdict — *did the attribute change the render?* — is platform-independent. A fixture whose activeness disagrees across the platforms its attribute is declared for is a semantic-drift suspect, and an SSoT-enumerated value that is inert on **every** platform is flagged uniformly-inert (default rendering, or dead everywhere). Only fixtures compared on **all** their in-scope platforms are judged; findings are accepted (with a reason) in `cross_effect.json` and enforced by `jui conformance gate --cross-effect`.
 
-- Compared on all in-scope platforms: 571 (consistent: 506, **diverging: 65**, **uniformly-inert declared values: 44**) · not compared everywhere: 22 · in scope on <2 platforms: 79
+- Compared on all in-scope platforms: 571 (consistent: 505, **diverging: 66**, **uniformly-inert declared values: 44**) · not compared everywhere: 22 · in scope on <2 platforms: 79
 
 | Fixture | android | ios | web |
 |---|---|---|---|
@@ -93,6 +93,7 @@ Pixel comparison across platforms is out of scope by design, but each platform's
 | `Collection/lazy__eager` | inert | active | inert |
 | `Collection/lazy__none` | inert | active | inert |
 | `Collection/listStyle__grouped` | active | active | inert |
+| `Indicator/animating__true` | inert | active | — |
 | `Label/autoShrink__true` | active | active | inert |
 | `Label/lineBreakMode__char` | inert | inert | active |
 | `Label/lineBreakMode__clip` | inert | inert | active |

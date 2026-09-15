@@ -7,7 +7,7 @@
     "web"
   ],
   "counts": {
-    "entries": 77,
+    "entries": 74,
     "unreviewed": 0
   },
   "entries": [
@@ -213,32 +213,6 @@
       "controlDiffExclusion": "off-face-equals-control"
     },
     {
-      "fixture": "Indicator/animating__true",
-      "component": "Indicator",
-      "attribute": "animating",
-      "inertOn": [
-        "android",
-        "ios"
-      ],
-      "kind": "uniform-inert-undeclared-value",
-      "family": "value-is-default",
-      "reason": "adjudicated value-is-default: shared/core/attribute_definitions.json declares Indicator.animating with an explicit \"default\": true — \"an Indicator with nothing declared animates\" — and sjui_tools indicator_converter.rb branches `if animating == false` / binding / `else # Static true, any truthy value, or no animating property - always show`. `true` therefore takes the same branch as an absent attribute, which is the control. The sibling __false is the one that acts. Family: value-is-default.",
-      "note": "",
-      "adjudicatedFamily": "value-is-default"
-    },
-    {
-      "fixture": "Indicator/color__binding",
-      "component": "Indicator",
-      "attribute": "color",
-      "inertOn": [
-        "ios"
-      ],
-      "kind": "single-platform-scope",
-      "family": "sibling-value-active",
-      "reason": "Fixture shape: the bound colour resolves to the same value the control's companion carries; the static and alias siblings discriminate (triaged sibling-value-active). A probe-value collision, not a binding gap.",
-      "note": ""
-    },
-    {
       "fixture": "Indicator/hidesWhenStopped__false",
       "component": "Indicator",
       "attribute": "hidesWhenStopped",
@@ -262,19 +236,6 @@
       "family": "untriaged",
       "reason": "adjudicated implemented-but-unobservable-in-a-still: the attribute IS read and applied on this face — measured by counting application sites OUTSIDE the decode slot in DynamicComponent.swift, so 'decoded' was not mistaken for 'applied'. What the fixture cannot do is put the effect into a STILL screenshot. This is a different family from an unimplemented face (cf. common/glass, where the Dynamic side had no implementation at all and the two faces agreed because BOTH drew nothing): here one face draws the effect and the camera cannot see it. Same mechanism as the __false sibling: with no neighbour in the fixture, both values render the same empty region.",
       "note": ""
-    },
-    {
-      "fixture": "Indicator/indicatorStyle__medium",
-      "component": "Indicator",
-      "attribute": "indicatorStyle",
-      "inertOn": [
-        "ios"
-      ],
-      "kind": "single-platform-scope",
-      "family": "sibling-value-active",
-      "reason": "adjudicated value-is-default: the size table is INDICATOR_SIZE_SCALES = { 'large' => 1.5, 'small' => 0.8 } read through `fetch(style, 1.0)` (sjui_tools base_view_converter.rb), so `medium` is not in the table and falls through to scale 1.0 — the same scale an absent attribute gets. The sibling __large IS active. ⚠️ Noted while measuring: the declared enum is [medium, large] but the table handles large and SMALL; 'small' is a spelling the SSoT does not declare, and nothing rejects it. Family: value-is-default.",
-      "note": "",
-      "adjudicatedFamily": "value-is-default"
     },
     {
       "fixture": "Label/autoShrink__false",

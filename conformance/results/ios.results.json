@@ -1,5 +1,5 @@
 {
-  "manifestHash" : "1b39dacd81c4e90a003908d9fd50052a3292b11fb5019d65185511a2eba60610",
+  "manifestHash" : "0d22d6f56977392c80671fc996f0ece8739c2d6638102f8becb42f2a3b942164",
   "platform" : "ios",
   "results" : [
     {
@@ -6368,5 +6368,13 @@
   "runner" : {
     "name" : "xcuitest",
     "version" : "ios-26.5"
+  },
+  "webMarkers" : {
+    "alreadySettled" : 2,
+    "markerAbsent" : 0,
+    "timedOut" : 0,
+    "waitedThenSettled" : 0,
+    "webFixturesReachedCapture" : 2,
+    "webFixturesRunnable" : 2
   }
 }

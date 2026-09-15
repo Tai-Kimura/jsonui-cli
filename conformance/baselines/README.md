@@ -160,11 +160,21 @@ outside the band is still a fact about one device, so the declaration stands.
 Record what rendered a set with `--rendered-by`, which is the other half of
 the same question:
 
-🔑 **`--fail-on-moved` IS IN EVERY RECIPE BELOW ON PURPOSE.** Without it the
-bake prints the `MOVED` list and exits 0, so the only thing standing between a
-regression and the baseline is whether a person read past the end of a long
-output. With it the bake STOPS and names the count. The flag is not a
-correctness setting — it is the step that forces the reading.
+🔑 **`--fail-on-moved` IS IN EVERY RECIPE BELOW ON PURPOSE** — but read the next
+paragraph before trusting it. Without the flag the bake prints the `MOVED` list
+and exits 0, so the only thing standing between a regression and the baseline is
+whether a person read past the end of a long output. The flag makes the exit code
+carry the answer, which is what forces the reading.
+
+🔴 **IT DOES NOT STOP THE BAKE. IT REPORTS AFTER WRITING.** An earlier version of
+this page said "the bake STOPS and names the count" — measured 2026-09-15, that is
+false. `update_baseline` writes the file unconditionally (`baseline.py:425`) and the
+flag is checked on the summary it returns (`conformance_cmd.py:1380`), so the
+baseline on disk has ALREADY absorbed every moved entry by the time you read the
+error. The tool says so itself, one line above the error: *"a wholesale bake rewrote
+the moved entries above — every one of them is now the baseline, including any that
+were regressions."* Filed as
+`docs/bugs/2026-09-15-fail-on-moved-writes-the-baseline-before-it-refuses.md`.
 
 ```sh
 jui conformance baseline update --platform ios --env local --fail-on-moved \
@@ -177,16 +187,37 @@ jui conformance baseline update --platform ios --env ci --fail-on-moved \
   --artifacts <downloaded>/artifacts/ios
 ```
 
-**When it exits non-zero** (`ERROR: --fail-on-moved and N entr(y/ies) moved`):
-read every `MOVED` line — each carries its own hamming distance — and decide
-per entry whether that picture SHOULD have changed. `unstable` lines are a
-different list and never enter `N`. Then re-run the same command WITHOUT the
-flag to write the baseline. Dropping the flag is the record that a person
-looked; skipping it means no one did.
+**When it exits non-zero** (`ERROR: --fail-on-moved and N entr(y/ies) moved`),
+the very first thing to do is **undo the write**:
 
-⚠️ Measured 2026-09-15: on the bake that carried the glass change, the flag
-exits 1 with "2 entr(y/ies) moved", and on a re-run against the already-baked
-set it exits 0 with `moved 0`. It fires on the thing and not on everything.
+```sh
+git restore conformance/baselines/<env>/<platform>.hashes.json
+```
+
+That restore is the actual refusal; the exit code is only the notification. Then
+read every `MOVED` line — each carries its own hamming distance — and decide per
+entry whether that picture SHOULD have changed. `unstable` lines are a different
+list and never enter `N`. Only then write, choosing deliberately:
+
+- **new entries only** — `--only-new` (leaves every moved entry at its committed hash)
+- **a few named entries** — edit those hashes by hand and assert the count
+  (`changed=N / added=0 / removed=0` against `HEAD`); this is the only way to take
+  two entries and leave 786 alone
+- **wholesale** — re-run without the flag, knowing it absorbs *every* moved entry
+
+⚠️ **`N` IS NOT THE NUMBER THAT GETS WRITTEN.** `N` counts entries over the visual
+gate's threshold; the bake rewrites every entry whose hash changed at all. Measured
+2026-09-15 on android: the gate called it **2 regressions**, the bake reported **788
+moved**, and the file took 797 insertions / 800 deletions.
+
+🔴 **A RETRACTED MEASUREMENT USED TO SIT HERE.** It read: *"the flag exits 1 with
+'2 entr(y/ies) moved', and on a re-run against the already-baked set it exits 0 with
+`moved 0`. It fires on the thing and not on everything."* That second run is not
+evidence the flag discriminates — **it is evidence the first run wrote**. A flag that
+truly refused would report the same `N` both times, because nothing would have
+changed between them. The observation was correct and the inference was backwards.
+⭐ That comparison is therefore the right arm for the fix: **run the same bake twice
+and require the same `N`.**
 
 ## Workflow
 

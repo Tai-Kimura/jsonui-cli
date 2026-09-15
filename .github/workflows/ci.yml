@@ -157,14 +157,32 @@ jobs:
           # `Classes/SwiftUI` already brings `Dynamic/` with it. Measured in
           # a throwaway repo with a control proving sparse was in effect at
           # all (a sibling directory stayed absent).
-          sparse-checkout: Sources/SwiftJsonUI/Classes/SwiftUI
-      - name: KotlinJsonUI (two files — the platform-truth arms read one)
+          # 🔻 TWO PATHS. The second is for
+          # test_the_declared_web_marker_hosts_still_implement_it.py, which
+          # FAILS (never skips) when this checkout exists but the file is
+          # absent — a cross-repo arm that skips on a too-narrow sparse
+          # pattern reports agreement between one list and nothing. Measured
+          # cost: +78,143 B over the 1,341,858 B already fetched here.
+          sparse-checkout: |
+            Sources/SwiftJsonUI/Classes/SwiftUI
+            ConformanceHost/UITests
+      - name: KotlinJsonUI (the platform-truth arm and the BOM-floor arm)
         uses: actions/checkout@v4
         with:
           repository: Tai-Kimura/KotlinJsonUI
           path: KotlinJsonUI
           filter: blob:none
-          sparse-checkout: library-dynamic/src/main/kotlin/com/kotlinjsonui/dynamic
+          # 🔻 TWO PATHS, AND THE SECOND IS EASY TO FORGET. A cross-repo arm
+          # leaves CI for three independent reasons — the job does not check
+          # the sibling out, the env spelling is wrong, or THE SPARSE PATTERN
+          # DOES NOT INCLUDE THE FILE THE ARM READS — and only the third one
+          # looks like a passing suite. `conformance-host` is here for
+          # test_the_conformance_host_bom_carries_the_keyboardtype_floor.py,
+          # which fails (never skips) when the env names a checkout and the
+          # file is absent, precisely so widening this list is not optional.
+          sparse-checkout: |
+            library-dynamic/src/main/kotlin/com/kotlinjsonui/dynamic
+            conformance-host
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
@@ -216,7 +234,19 @@ jobs:
         env:
           JSONUI_SWIFTJSONUI_PATH: ${{ github.workspace }}/SwiftJsonUI
           JSONUI_KOTLINJSONUI_PATH: ${{ github.workspace }}/KotlinJsonUI
-        run: python -m pytest
+        run: python -m pytest --junitxml=pytest-report.xml
+      # 🔻 A GREEN SUITE DOES NOT PROVE THE ARMS RAN. An arm that is never
+      # COLLECTED raises no assertion, so the run is green and nothing says a
+      # gate disappeared — and that is precisely how cross-repo arms have left
+      # this CI before. The arm itself can refuse when its sibling is named
+      # but absent, or when it is under CI and found no checkout at all; it
+      # cannot refuse on behalf of a run that never loaded it. So the run is
+      # measured from outside: zero skips, and every tests/test_*.py on disk
+      # contributed at least one testcase. The population is derived from the
+      # directory, so new arms are covered without editing anything.
+      - name: Every arm was collected, and none skipped
+        working-directory: jui_tools
+        run: python tools/check_pytest_collection.py pytest-report.xml
       - name: Protocol sync idempotency (e2e)
         # Runs the protocol sync twice against the fixture project and ensures
         # no files change the second time — the structural guard against

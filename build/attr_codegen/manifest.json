@@ -3,7 +3,7 @@
   "generatedBy": "jui generate attr-bindings --lang all",
   "source": {
     "file": "shared/core/attribute_definitions.json",
-    "sha256": "ebf98ec0475d96763fa1f2c982eec45aaac95a44027411007404aeb0bd9d86ee"
+    "sha256": "4476aba6cd18b656dfa0bac9e7822d43a643cce0f76f444ce481bbcb327b2c71"
   },
   "files": {
     "kotlin/AttrCodegenSupport.kt": "3f56c8021ab16a32d0ed4a38e7839c27a08237bd095c4469255c800d1600b165",
@@ -31,7 +31,7 @@
     "kotlin/SelectBoxAttributes.kt": "7fa6cc486ebaca81839d32ba7ae33c17c39d7b368711d893745211b131963087",
     "kotlin/SliderAttributes.kt": "2a278c75709223c581803cec8a697da0375622dc0e25cfe9bd9b3d7b04a5d7e3",
     "kotlin/SwitchAttributes.kt": "c233c8598fc19f28646b1bd97824832edbc5c136bd82c9046ba360a27f748b6e",
-    "kotlin/TabViewAttributes.kt": "a4cbec617c43fa7b2a6cef81f6b78ad34c1f47391ed002d419637b110637f9c9",
+    "kotlin/TabViewAttributes.kt": "4803537a7a2a924832f2b884889bbffaadf1f8a34f7aff55ed3e170e32f88318",
     "kotlin/TextFieldAttributes.kt": "0072f9848847009f8859ee4c7f7c052acea22638cdaea321e5ffc5952c43047d",
     "kotlin/TextViewAttributes.kt": "d68ab0082a6c7b9b80f2fea6dde15e86b09142f214cc431ab28e0f29d893e3da",
     "kotlin/ToggleAttributes.kt": "8842a675e0175f568f1e260f63e3ee6d920399fa9373dce4fa12d2857f366159",
@@ -64,7 +64,7 @@
     "ruby/skipped_attributes.json": "91523bae8f1d575dcfc795171b6b7f46dc7b8c7a4068b3ad628742526e1527d0",
     "ruby/slider_attributes.rb": "b9541df9785e4f29745fde40132b49f062333e52dcca674c513537fb90effe16",
     "ruby/switch_attributes.rb": "0c8305f4578801c9000468e6b2912d948040d93ff931e04c1f575dfe4decfccf",
-    "ruby/tab_view_attributes.rb": "bca2339b5b721c930aca2b374d982b93e8d54fcb0fd74db6f0c34182c78aba00",
+    "ruby/tab_view_attributes.rb": "d8b6155c952ff045850117ab575b779e1aa13d53c33ac7ffd0eaaab4bc3ada12",
     "ruby/text_field_attributes.rb": "0317ddeb472c620b689bcacf3b5eb556d4bebb31ec3bf65e9b15f80b78e7de87",
     "ruby/text_view_attributes.rb": "cc978ff1a4af298e09e0e25fec046252eb5c9a1aef876b9ae16f38963625edc3",
     "ruby/toggle_attributes.rb": "8e67e5e70d180e956b7e3f61c0139787b2ed941a753354e3fcb77e86c4ecfdd3",
@@ -95,7 +95,7 @@
     "swift/SelectBoxAttributes.swift": "0e26367ff905de44523f32b8872dc9f99c946d5745042ed12f7ba027717526da",
     "swift/SliderAttributes.swift": "bf9a589fdb242e49ba77c8912058c071225899eeae0d96d87f17bf38a911139e",
     "swift/SwitchAttributes.swift": "839517ad6a93850af2ad53dcbee323916e2466af04959a016732e31eaebb3d82",
-    "swift/TabViewAttributes.swift": "06af3c66ab782ff619f982702eb7d50fe4ecd0a93d6528a659e93ed6f2ea15e3",
+    "swift/TabViewAttributes.swift": "12ab997e956bb0a28409a302d6503fc6a797164b242e642417e419793bb27251",
     "swift/TextFieldAttributes.swift": "7a916773128e9db39a2a30394b5e028194fd2a475b3b95a998e118c800edaf75",
     "swift/TextViewAttributes.swift": "bf9da5933c003b9bb3de6cd1f05e1df989c09c121a03383e9a42727f203fd87e",
     "swift/ToggleAttributes.swift": "2d9085501feb3cd9057eb3fae82c12ec2ed2f4e6b1cdb2d9bf9b5748da031a2d",

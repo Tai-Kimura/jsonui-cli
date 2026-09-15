@@ -52,6 +52,19 @@ def _summary(**overrides) -> ReportSummary:
     summary.status_tallies = {
         p: {"pass": 10, "fail": 0, "error": 0, "skipped": 1} for p in ALL
     }
+    # An all-green ios run reports its web load-marker census; ios is declared
+    # in EXPECTED_WEB_MARKER_HOSTS, so omitting it here would make every
+    # summary below fail for a reason none of these tests is about.
+    summary.web_markers = {
+        "ios": {
+            "webFixturesRunnable": 4,
+            "webFixturesReachedCapture": 4,
+            "alreadySettled": 4,
+            "waitedThenSettled": 0,
+            "timedOut": 0,
+            "markerAbsent": 0,
+        }
+    }
     for name, value in overrides.items():
         setattr(summary, name, value)
     return summary
