@@ -375,6 +375,31 @@ rc=$?; say "   exit=$rc"; [ "$rc" = 0 ] || bad "emitted kotlin: exit $rc"
 # ⚠️ `scanned 0` and `no corpus` must not print the same thing: `misfiled=0`
 # is produced both by "nothing is misfiled" and by "nothing was looked at".
 # The absent-directory case is named SKIPPED rather than counted.
+# --------------------------------------------------------------------------
+# The gate that RUNS the emitted branch runtime, not the one that reads it.
+#
+# 🔴 FOUR RELEASES MEASURED THE WRONG GATE. 1.8.96..1.8.99 drove
+# `swiftc -typecheck` on the emitted JsonuiBranchRuntime.swift to zero in three
+# configurations; a consumer then RAN it under Swift 6 and 127 of 248 tests
+# died with `signal trap`. The swizzled `@objc` session getters were still at
+# the target's default isolation — MainActor — and the ObjC runtime calls them
+# from whatever thread asked for a session.
+#
+# ⚠️ The repro only discriminates if it calls that getter FROM A BACKGROUND
+# QUEUE; a version that drove the harness on the main actor passed with the
+# defect present.
+say "== emitted branch runtime, EXECUTED (swift 6 + defaultIsolation MainActor)"
+if command -v swift >/dev/null 2>&1; then
+  python3 -c "import sys; sys.path.insert(0, sys.argv[1] + '/test_tools'); from jsonui_test_cli.branch_tests import SWIFT_RUNTIME; open(sys.argv[1] + '/dev-guide/release/runtime-gate/Tests/RTTests/JsonuiBranchRuntime.swift', 'w').write(SWIFT_RUNTIME)" "$C"
+  out=$( cd "$C/dev-guide/release/runtime-gate" && swift test 2>&1 )
+  rc=$?
+  say "   $(printf '%s' "$out" | grep -E 'Executed [0-9]+ test|signal|error:' | tail -1)"
+  say "   exit=$rc"
+  [ "$rc" = 0 ] || bad "emitted runtime traps when executed: exit $rc"
+else
+  say "   SKIPPED — no swift on PATH (this leg needs a toolchain, not a checkout)"
+fi
+
 say "== misfiled tickets (a ticket under reports/ is invisible to the inbox scan)"
 if [ ! -d "$C/docs/bugs/reports" ]; then
   say "   SKIPPED: no docs/bugs/reports in this checkout (docs/ is gitignored,"

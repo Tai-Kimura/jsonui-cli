@@ -1809,8 +1809,14 @@ class TestTheSwiftRuntimeSurvivesTheTargetsDefaultIsolation:
             "runBranchTest",                          # the @MainActor test calls it
             "withBranchRoutes", "seedState",          # take a harness
             "assertFieldEquals", "resolveString",     # ditto
-            "URLSessionConfiguration",                # an extension, not reached
         }
+        # 🔴 `URLSessionConfiguration` LEFT THIS SET IN v1.8.100. It was listed
+        # as "an extension, not reached" — true for the type checker and false
+        # at runtime: the extension holds the swizzled `@objc` session getters,
+        # which the ObjC runtime calls from whatever thread wanted a session.
+        # At the target's default isolation Swift 6 checks the executor on
+        # entry and traps. Measured by RUNNING the emitted runtime, which is a
+        # different gate from the one this arm reads.
         # ⚠️ THE SET IS THE MEASURED PARTITION, NOT A GUESS. The first version
         # of it also listed `mirrorField` and `normalizeNull` "because they
         # sound like harness helpers" — they are pure functions over Any, they
@@ -1843,6 +1849,46 @@ class TestTheSwiftRuntimeSurvivesTheTargetsDefaultIsolation:
             f"pushes the library's isolation into every face's harness: "
             f"{sorted(marked & HARNESS_FACING)}"
         )
+
+    def test_every_objc_declaration_sits_in_a_nonisolated_scope(self):
+        """`@objc` IS the marker that the caller is outside the language.
+
+        The swizzled session getters have no Swift caller — the ObjC runtime
+        invokes them, from whatever thread wanted a session. So a Swift-level
+        reachability judgement says "not reached" and is right, and the runtime
+        traps anyway: at the target's default isolation Swift 6 checks the
+        executor on entry (`_checkExpectedExecutor` -> `dispatch_assert_queue`
+        -> SIGTRAP). That cost a consumer 127 of 248 tests.
+
+        The rule a consumer proposed after measuring it: **an `@objc`
+        declaration is reachable**, full stop. They also counted the blast
+        radius before proposing it — two declarations in one extension, in the
+        whole generator — so the rule adds one judgement, not a policy.
+
+        ⚠️ WHY THIS IS NOT THE RUNTIME GATE AGAIN. The gate that RUNS the
+        emitted runtime catches this too, but only if the repro calls the
+        getter from a background queue — my first two repros did not, and
+        passed with the defect present. This arm does not depend on remembering
+        that.
+        """
+        from jsonui_test_cli.branch_tests import SWIFT_RUNTIME
+        lines = SWIFT_RUNTIME.splitlines()
+        objc = [i for i, ln in enumerate(lines) if ln.lstrip().startswith("@objc")]
+        assert objc, "no @objc in the emitted runtime — has the swizzle moved?"
+        for i in objc:
+            # walk back to the enclosing file-scope declaration
+            for j in range(i, -1, -1):
+                if re.match(r"^(?:private |public |open |internal )?(?:nonisolated )?"
+                            r"(?:final )?(?:struct|class|enum|protocol|extension) ", lines[j]):
+                    break
+            else:  # pragma: no cover
+                raise AssertionError(f"no enclosing scope for {lines[i]!r}")
+            assert "nonisolated " in lines[j], (
+                f"{lines[i].strip()!r} is @objc — the ObjC runtime calls it from "
+                f"whatever thread it likes — but its scope {lines[j].strip()!r} "
+                "is at the target's default isolation. Under Swift 6 that is a "
+                "SIGTRAP on entry, and no amount of type-checking shows it."
+            )
 
     def test_the_harness_facing_half_is_NOT_nonisolated(self):
         """The boundary, and the reason "just mark the whole file" is wrong.

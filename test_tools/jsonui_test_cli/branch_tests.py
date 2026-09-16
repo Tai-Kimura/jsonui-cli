@@ -3147,7 +3147,26 @@ func withBranchRoutes<T>(
   return try body()
 }
 
-extension URLSessionConfiguration {
+// 🔴 `nonisolated`, AND THIS ONE THE TYPE CHECKER CANNOT ASK FOR. These two
+// are the swizzled `@objc` getters: the ObjC runtime calls them from whatever
+// thread asked for a session, and third-party SDKs ask from background queues.
+// Left at the target's default isolation — MainActor, in any app that builds
+// @MainActor — Swift 6 inserts an executor check on entry and TRAPS:
+//
+//   @objc static NSURLSessionConfiguration.branchTestEphemeral()
+//     -> _checkExpectedExecutor -> swift_task_isCurrentExecutor
+//     -> dispatch_assert_queue -> SIGTRAP
+//
+// Measured 2026-09-16 by RUNNING the emitted runtime (a SwiftPM test target at
+// swiftLanguageMode .v6 with defaultIsolation(MainActor), calling the swizzled
+// getter from a background queue): signal 5, the same `Test crashed with
+// signal trap` a consumer saw on 127 of 248 tests. Swift 5 mode makes the same
+// call a runtime warning instead, which is why their 5.0 target is green.
+//
+// ⚠️ TYPE-CHECKING NEVER SEES THIS. Four releases measured `swiftc -typecheck`
+// in three configurations and all reported zero. The gate that finds it is
+// EXECUTION.
+nonisolated extension URLSessionConfiguration {
   @objc class func branchTestDefault() -> URLSessionConfiguration {
     let config = branchTestDefault()  // swapped: calls the original getter
     config.protocolClasses = [BranchURLProtocol.self] + (config.protocolClasses ?? [])
