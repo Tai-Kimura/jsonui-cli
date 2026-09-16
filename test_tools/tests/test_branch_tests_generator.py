@@ -1745,10 +1745,39 @@ class TestTheSwiftRuntimeSurvivesTheTargetsDefaultIsolation:
         assert "nonisolated final class BranchURLProtocol: URLProtocol {" in SWIFT_RUNTIME
         assert "\nfinal class BranchURLProtocol" not in SWIFT_RUNTIME
 
+    def test_every_type_the_loading_path_touches_is_nonisolated(self):
+        """The isolation of this file is ONE question, not a list.
+
+        Fixing `BranchURLProtocol` alone MOVED the error rather than removing
+        it: a consumer regenerated and reported 9 -> 4, the remaining four on
+        `Recorder.calls` and `RecordedCall.init` — both reached from the now
+        nonisolated `startLoading()`. Each annotation was then measured by
+        removing it and typechecking the emitted file:
+
+            annotation removed                     sw5  sw6  sw6+MainActor
+            BranchURLProtocol nonisolated           0    0      10
+            its three statics' nonisolated(unsafe)  0    2       2
+            Recorder nonisolated                    0    0       4
+            RecordedCall nonisolated                0    0       6
+            SwizzleState/Retainer statics           0    2       2
+            (none removed)                          0    0       0
+
+        Five sites, five different failures. None is redundant.
+        """
+        from jsonui_test_cli.branch_tests import SWIFT_RUNTIME
+        for decl in (
+            "nonisolated final class BranchURLProtocol: URLProtocol {",
+            "nonisolated struct RecordedCall {",
+            "nonisolated final class Recorder {",
+            "private nonisolated final class BranchSwizzleState {",
+            "nonisolated enum BranchHarnessRetainer {",
+        ):
+            assert decl in SWIFT_RUNTIME, f"missing: {decl}"
+
     def test_its_mutable_statics_say_unsafe_out_loud(self):
         from jsonui_test_cli.branch_tests import SWIFT_RUNTIME
-        statics = re.findall(r"^\s*(?:nonisolated\(unsafe\) )?static var (\w+)", SWIFT_RUNTIME, re.M)
-        marked = re.findall(r"^\s*nonisolated\(unsafe\) static var (\w+)", SWIFT_RUNTIME, re.M)
+        statics = re.findall(r"^\s*(?:nonisolated\(unsafe\) )?(?:private )?static (?:var|let) (\w+)", SWIFT_RUNTIME, re.M)
+        marked = re.findall(r"^\s*nonisolated\(unsafe\) (?:private )?static (?:var|let) (\w+)", SWIFT_RUNTIME, re.M)
         # The population is asserted: a template with no mutable statics would
         # satisfy "every one is marked" while proving nothing.
         assert len(statics) >= 3, statics

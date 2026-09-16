@@ -2906,14 +2906,26 @@ struct RouteSpec {
   let scenarios: [String: (Int, String, String)]
 }
 
-struct RecordedCall {
+// 🔻 `nonisolated` HERE TOO, AND FOR THE SAME REASON ONE LAYER DOWN. The
+// URLProtocol subclass below is `nonisolated` so it can override URLProtocol's
+// nonisolated members — which means its `startLoading()` runs nonisolated, and
+// everything it touches has to be reachable from there. Under
+// `SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor` these two types are MainActor by
+// default, so appending a call from the protocol was 4 errors (measured by a
+// consumer on v1.8.97: 9 -> 4, the remaining four all on `Recorder.calls` and
+// `RecordedCall.init`).
+//
+// ⚠️ The isolation of this file is one question, not a list: every type the
+// loading path touches belongs to the same answer. Fixing the protocol alone
+// moved the error rather than removing it.
+nonisolated struct RecordedCall {
   let op: String
   let method: String
   let path: String
   let body: Any?
 }
 
-final class Recorder {
+nonisolated final class Recorder {
   var calls: [RecordedCall] = []
   /// Calls bound to a declared route — the `api: "none"` surface. On iOS
   /// the URLProtocol intercepts the whole process, so third-party SDK
@@ -3066,8 +3078,13 @@ nonisolated final class BranchURLProtocol: URLProtocol {
 /// showed up only for some class execution orders. So the exchange happens
 /// exactly once per process, behind a flag, and every entry point goes
 /// through `installBranchURLInterception()` rather than touching it directly.
-private final class BranchSwizzleState {
-  static let shared = BranchSwizzleState()
+// 🔻 `nonisolated` + `nonisolated(unsafe)` FOR THE SAME REASON, AND BECAUSE
+// THE FIRST FIX MOVED THE ERROR. Making `Recorder` nonisolated took the
+// MainActor-default target to zero and put TWO NEW errors into a plain Swift 6
+// target: these statics had been satisfied by the implicit MainActor isolation
+// they no longer have. Measured, not guessed — the shapes are in the arms.
+private nonisolated final class BranchSwizzleState {
+  nonisolated(unsafe) static let shared = BranchSwizzleState()
   private var installed = false
   private let lock = NSLock()
   /// Idempotent: N calls leave interception installed exactly once.
@@ -3175,8 +3192,8 @@ func runBranchTest(
   try block(harness, recorder)
 }
 
-enum BranchHarnessRetainer {
-  private static var retained: [BranchHarness] = []
+nonisolated enum BranchHarnessRetainer {
+  nonisolated(unsafe) private static var retained: [BranchHarness] = []
   static func retain(_ harness: BranchHarness) { retained.append(harness) }
 }
 
