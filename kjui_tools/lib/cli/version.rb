@@ -6,6 +6,6 @@ module KjuiTools
     # file; this constant is a standalone copy for consumer-project installs
     # (where the root file is absent) and is locked to the root VERSION by
     # jui_tools/tests/test_version_lockstep.py.
-    VERSION = '1.8.98'
+    VERSION = '1.8.99'
   end
 end

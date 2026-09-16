@@ -33,6 +33,8 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
+import re
+
 import pytest
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -281,8 +283,12 @@ class TestValuesAreQuotedByTheLanguage:
         platform with nothing to put there."""
         runtime = _runtime_file(tmp_path, platform)
 
-        assert ("private fun quotedValue" in runtime
-                or "private func quotedValue" in runtime) is expected
+        # ⚠️ Matched with or without an isolation annotation: the Swift helper
+        # is emitted `private nonisolated func` since v1.8.99, and the question
+        # this arm asks is whether the helper is THERE, not how it is isolated.
+        assert bool(re.search(
+            r"private (?:nonisolated )?fun(?:c)? quotedValue", runtime
+        )) is expected
         assert ("quotedValue(resolved)" in runtime) is expected
         assert ("JSON.stringify(resolved)" in runtime) is not expected
 

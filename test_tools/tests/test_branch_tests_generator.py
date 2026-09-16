@@ -883,8 +883,8 @@ class TestIosEmission:
         assert "func normalizeNull(" in runtime
         # Applied to both sides, and before the numeric comparison so a
         # null expectation cannot fall through it.
-        body = runtime[runtime.index("func assertFieldEquals("):]
-        body = body[:body.index("\nprivate func asDouble")]
+        body = runtime[re.search(r"(?:nonisolated )?func assertFieldEquals\(", runtime).start():]
+        body = body[:re.search(r"\nprivate (?:nonisolated )?func asDouble", body).start()]
         assert "let exp = normalizeNull(" in body
         assert "let act = normalizeNull(actual)" in body
         assert "asDouble(act)" in body
@@ -900,7 +900,11 @@ class TestIosEmission:
         # 1.0, with real Bools (JSON true / Swift true) still nil.
         report, _root = self._generate(tmp_path)
         runtime = report.runtime_file.read_text(encoding="utf-8")
-        body = runtime[runtime.index("private func asDouble("):]
+        # ⚠️ The anchor tolerates the isolation annotation. It used to be the
+        # literal "private func asDouble(", and adding `nonisolated` to the
+        # emitted helper turned this arm into `ValueError: substring not
+        # found` — an arm that fails for a reason it is not about.
+        body = runtime[re.search(r"private (?:nonisolated )?func asDouble\(", runtime).start():]
         body = body[:body.index("\n}\n")]
         lines = [ln.strip() for ln in body.splitlines()[1:] if ln.strip()]
         # The NSNumber read is the first decision, and the CF type id is
@@ -1773,6 +1777,110 @@ class TestTheSwiftRuntimeSurvivesTheTargetsDefaultIsolation:
             "nonisolated enum BranchHarnessRetainer {",
         ):
             assert decl in SWIFT_RUNTIME, f"missing: {decl}"
+
+    def test_every_file_scope_declaration_is_on_one_side_or_the_other(self):
+        """The arm that stops the whack-a-mole, because it counts the denominator.
+
+        Three releases fixed one declaration each, and each time the compiler
+        showed the next one — `BranchURLProtocol`, then `Recorder` /
+        `RecordedCall`, then `quotedValue`. The consumer finally handed over
+        the denominator: 22 file-scope declarations with no `nonisolated`, any
+        of which produces the same error the moment something nonisolated
+        calls it.
+
+        🔻 AND `quotedValue` WAS NOT IN THE FILE I KEPT EDITING. The emitted
+        runtime is composed from TWO generator inputs — branch_tests.py and
+        branch_runtime_prose.py — and three releases annotated the first only.
+        So this arm reads the COMPOSED OUTPUT: whichever input a declaration
+        comes from, it has to land on one of the two declared sides.
+
+        HARNESS_FACING is the boundary control. Marking those `nonisolated`
+        compiles here and breaks the CONSUMER's hand-written harness, whose
+        `invoke` override reaches its own MainActor ViewModel — measured on a
+        consumer-shaped specimen.
+        """
+        from jsonui_test_cli.branch_tests import SWIFT_RUNTIME
+
+        #: Anything that takes, extends or IS a BranchHarness, plus the runner
+        #: the @MainActor test method calls with one. These keep the target's
+        #: default isolation.
+        HARNESS_FACING = {
+            "BranchHarness", "BaseBranchHarness",     # a consumer subclasses these
+            "runBranchTest",                          # the @MainActor test calls it
+            "withBranchRoutes", "seedState",          # take a harness
+            "assertFieldEquals", "resolveString",     # ditto
+            "URLSessionConfiguration",                # an extension, not reached
+        }
+        # ⚠️ THE SET IS THE MEASURED PARTITION, NOT A GUESS. The first version
+        # of it also listed `mirrorField` and `normalizeNull` "because they
+        # sound like harness helpers" — they are pure functions over Any, they
+        # are marked nonisolated, and the emitted file typechecks clean in all
+        # three configurations with them on that side. The compiler drew this
+        # line; the arm records where it fell.
+        decl = re.compile(
+            r"^(?:private |public |open |internal )?(nonisolated )?(?:final )?"
+            r"(?:struct|class|enum|protocol|extension|func) (\w+)"
+        )
+        marked, unmarked = set(), set()
+        for line in SWIFT_RUNTIME.splitlines():
+            m = decl.match(line)
+            if not m:
+                continue
+            (marked if m.group(1) else unmarked).add(m.group(2))
+
+        # The population is asserted first: a regex that stopped matching would
+        # make every claim below vacuously true.
+        assert len(marked) + len(unmarked) >= 25, (marked, unmarked)
+        assert unmarked == HARNESS_FACING & unmarked, (
+            "these declarations are neither nonisolated nor declared as "
+            f"harness-facing: {sorted(unmarked - HARNESS_FACING)}. Anything "
+            "the URL-loading side can reach must be nonisolated; anything that "
+            "touches a BranchHarness must not be. Put it in one set or the "
+            "other — and remember the runtime comes from two generator inputs."
+        )
+        assert not (marked & HARNESS_FACING), (
+            "these are declared harness-facing but marked nonisolated, which "
+            f"pushes the library's isolation into every face's harness: "
+            f"{sorted(marked & HARNESS_FACING)}"
+        )
+
+    def test_the_harness_facing_half_is_NOT_nonisolated(self):
+        """The boundary, and the reason "just mark the whole file" is wrong.
+
+        A consumer's hand-written harness subclasses `BaseBranchHarness` and
+        its `invoke` override touches the real ViewModel, which is MainActor.
+        Measured with a consumer-shaped specimen: making `BaseBranchHarness`
+        nonisolated adds an error IN THE CONSUMER'S FILE under Swift 6 +
+        MainActor default ("call to main actor-isolated instance method 'go()'
+        in a synchronous nonisolated context") — the library would be pushing
+        its isolation choice into every face's harness.
+
+        So the file has two halves and the split is not cosmetic:
+
+            nonisolated   the URL-loading side and the PURE helpers — nothing
+                          it touches belongs to the app
+            default       anything that takes or extends a BranchHarness, and
+                          `runBranchTest`, which the @MainActor test method
+                          calls with a MainActor harness
+
+        `resolveString(_ h: BranchHarness, …)` is the one that taught us where
+        the line is: it was marked nonisolated in the first attempt and the
+        compiler rejected it for calling the harness. The compiler finds this
+        boundary; a rule of thumb does not.
+        """
+        from jsonui_test_cli.branch_tests import SWIFT_RUNTIME
+        for decl in (
+            "class BaseBranchHarness: BranchHarness {",
+            "protocol BranchHarness {",
+            "func runBranchTest(",
+            "func resolveString(_ h: BranchHarness",
+        ):
+            assert decl in SWIFT_RUNTIME, f"missing: {decl}"
+            assert f"nonisolated {decl}" not in SWIFT_RUNTIME, (
+                f"{decl!r} must NOT be nonisolated — a consumer's harness "
+                "subclass needs the target's default isolation to reach its "
+                "own MainActor ViewModel"
+            )
 
     def test_its_mutable_statics_say_unsafe_out_loud(self):
         from jsonui_test_cli.branch_tests import SWIFT_RUNTIME

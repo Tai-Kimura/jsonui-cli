@@ -285,7 +285,16 @@ private fun quotedValue(value: String): String {
 /// `resolveString` fails on values nobody expected, so the ones it prints
 /// back are the ones most likely to hold a quote or a newline — and a raw
 /// splice ends the sentence early, exactly when the reader needs it.
-private func quotedValue(_ value: String) -> String {
+// 🔻 `nonisolated`, AND THIS FILE IS THE SECOND SOURCE OF THE RUNTIME. The
+// emitted JsonuiBranchRuntime.swift is composed from branch_tests.py AND this
+// file; three releases (1.8.96 / 1.8.97 / 1.8.98) annotated the first one only,
+// so `Recorder` became nonisolated while the helper it calls stayed at the
+// target's default isolation. A consumer reported the error at 110:33 three
+// times, once per release.
+//
+// ⚠️ The scan root is the OUTPUT, not either input. Measuring "this file" was
+// what kept this declaration invisible.
+private nonisolated func quotedValue(_ value: String) -> String {
   var out = "\""
   for scalar in value.unicodeScalars {
     switch scalar {

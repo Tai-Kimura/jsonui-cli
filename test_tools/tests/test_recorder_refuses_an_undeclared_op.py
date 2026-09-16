@@ -167,7 +167,22 @@ def test_web_control_without_the_guard_reports_the_old_behaviour(tmp_path):
 # ---------------------------------------------------------------------------
 
 def _swift_block(emitted: str, signature: str) -> str:
-    i = emitted.index(signature)
+    """Slice one declaration out of the emitted runtime.
+
+    ⚠️ The signature is matched WITH OR WITHOUT an isolation annotation. These
+    slices used to be literal (`"private func quotedValue("`), and adding
+    `nonisolated` to the emitted helper turned three arms into
+    `ValueError: substring not found` — arms failing for a reason they are not
+    about, in a file whose point is the emitted behaviour rather than its
+    modifiers.
+    """
+    import re as _re
+    pattern = _re.escape(signature).replace(
+        r"private\ ", r"private\ (?:nonisolated\ )?", 1
+    )
+    if not pattern.startswith("private"):
+        pattern = r"(?:nonisolated\ )?" + pattern
+    i = _re.search(pattern, emitted).start()
     return emitted[i:emitted.index("\n}\n", i) + 3]
 
 
