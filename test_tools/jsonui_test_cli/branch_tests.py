@@ -2968,10 +2968,31 @@ protocol BranchHarness {
   func settle()
 }
 
-final class BranchURLProtocol: URLProtocol {
-  static var routes: [RouteSpec] = []
-  static var overrides: [String: String] = [:]
-  static var recorder: Recorder?
+// 🔻 `nonisolated`, AND `nonisolated(unsafe)` ON THE THREE STATICS. A test
+// target built with Swift 6 and `SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor`
+// makes this class MainActor by default, and its overrides of URLProtocol's
+// nonisolated members then disagree — five errors (init, canInit,
+// canonicalRequest, startLoading, stopLoading). Measured 2026-09-16 from a
+// consumer's clean build, and reproduced here by typechecking this very file:
+//
+//   shape                                              sw5  sw6  sw6+MainActor
+//   final class / plain statics                         0    3       5
+//   nonisolated class / plain statics                   0    3       3
+//   final class / nonisolated(unsafe) statics           0    0       5
+//   nonisolated class / nonisolated(unsafe) statics     0    0       0  <- this
+//
+// ⚠️ THE STATICS ARE NOT OPTIONAL. `nonisolated` on the class alone leaves
+// three `#MutableGlobalVariable` errors — and those appear under plain Swift 6
+// too, so they are a language-mode debt this file owed regardless. A consumer
+// predicted them before the change was made.
+//
+// `unsafe` is the honest word: these are set by `runBranchTest` and read by the
+// protocol on the URL loading queue, serialised by the one-test-at-a-time
+// lifecycle rather than by the type system.
+nonisolated final class BranchURLProtocol: URLProtocol {
+  nonisolated(unsafe) static var routes: [RouteSpec] = []
+  nonisolated(unsafe) static var overrides: [String: String] = [:]
+  nonisolated(unsafe) static var recorder: Recorder?
 
   override class func canInit(with request: URLRequest) -> Bool { true }
   override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }

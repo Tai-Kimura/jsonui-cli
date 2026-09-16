@@ -1715,3 +1715,44 @@ class TestTheSwiftTestsCompileUnderTheTargetsDefaultIsolation:
             "these emitted test methods are not @MainActor, so they cannot "
             f"reach the harness factory: {sorted(set(methods) - set(annotated))}"
         )
+
+
+class TestTheSwiftRuntimeSurvivesTheTargetsDefaultIsolation:
+    """The emitted runtime has the same exposure as the emitted tests.
+
+    v1.8.96 fixed `*BranchesTest.swift` and stopped there. The same target
+    setting broke `JsonuiBranchRuntime.swift` — a consumer's clean build
+    reported exactly 9 errors, all in that one file, and `BranchURLProtocol`
+    owned 5 of them (init + canInit + canonicalRequest + startLoading +
+    stopLoading, each disagreeing with URLProtocol's nonisolated declaration).
+
+    ⚠️ AND `nonisolated` ALONE IS NOT ENOUGH. Measured by typechecking this
+    very template against the iOS simulator SDK:
+
+        shape                                            sw5  sw6  sw6+MainActor
+        final class / plain statics                       0    3       5
+        nonisolated class / plain statics                 0    3       3
+        final class / nonisolated(unsafe) statics         0    0       5
+        nonisolated class / nonisolated(unsafe) statics   0    0       0
+
+    The three `#MutableGlobalVariable` errors appear under plain Swift 6 too,
+    so they are a debt the file owed regardless of the isolation setting — the
+    consumer predicted them before the change existed.
+    """
+
+    def test_the_urlprotocol_subclass_is_nonisolated(self):
+        from jsonui_test_cli.branch_tests import SWIFT_RUNTIME
+        assert "nonisolated final class BranchURLProtocol: URLProtocol {" in SWIFT_RUNTIME
+        assert "\nfinal class BranchURLProtocol" not in SWIFT_RUNTIME
+
+    def test_its_mutable_statics_say_unsafe_out_loud(self):
+        from jsonui_test_cli.branch_tests import SWIFT_RUNTIME
+        statics = re.findall(r"^\s*(?:nonisolated\(unsafe\) )?static var (\w+)", SWIFT_RUNTIME, re.M)
+        marked = re.findall(r"^\s*nonisolated\(unsafe\) static var (\w+)", SWIFT_RUNTIME, re.M)
+        # The population is asserted: a template with no mutable statics would
+        # satisfy "every one is marked" while proving nothing.
+        assert len(statics) >= 3, statics
+        assert statics == marked, (
+            "these mutable statics are not nonisolated(unsafe), so the file "
+            f"cannot compile under Swift 6: {sorted(set(statics) - set(marked))}"
+        )
