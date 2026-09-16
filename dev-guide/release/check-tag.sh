@@ -78,7 +78,32 @@ for w in ${(s:,:)MSGWORDS}; do
   # were all my own capitalisation. If a check ever needs the case itself,
   # spell that one -F and say why on the same line — otherwise the pressure is
   # to relax the default rather than the one check.
-  ck "body still carries '$w'" "$([ "$(printf '%s' "$BODY" | tr '\n' ' ' | tr -s ' ' | grep -cFi "$w")" -ge 1 ] && echo present)" "present"
+  # 🔻 AND WHITESPACE IS ALSO REMOVED, not only collapsed. Collapsing turns a
+  # hard wrap into a space, which is right for English (the break sits between
+  # words) and WRONG for Japanese (it sits inside one). Measured 2026-09-16:
+  # the ruling "タグは全部終わったあとに打たないと" wrapped after "タグ", so the
+  # collapsed body read "タグ は全部…" and the gate called a present phrase GONE
+  # — the same false red as the "ZERO places" wrap that made this check
+  # normalise in the first place, one layer down.
+  #
+  # 🚨 AND `tr -d '[:space:]'` CANNOT DO IT. tr is byte-oriented here: stripping
+  # a UTF-8 body with it cut "タグ" after its first byte-run, so the stripped
+  # text no longer contained the word at all and the second chance was worse
+  # than the first. The comparison runs in python, which is character-oriented.
+  #
+  # ⚠️ The stripped comparison strips the SEARCH WORD too, so an English phrase
+  # still has to appear in order; what stops mattering is how it was wrapped.
+  ck "body still carries '$w'" \
+     "$(BODY="$BODY" NEEDLE="$w" python3 -c '
+import os, re, sys
+body = os.environ["BODY"]
+needle = os.environ["NEEDLE"]
+collapsed = re.sub(r"\s+", " ", body).lower()
+stripped = re.sub(r"\s+", "", body).lower()
+n_collapsed = needle.lower()
+n_stripped = re.sub(r"\s+", "", needle).lower()
+print("present" if (n_collapsed in collapsed or n_stripped in stripped) else "")
+')" "present"
 done
 
 # Nothing on the remote branch ahead of this tag, and nothing of ours left off.
