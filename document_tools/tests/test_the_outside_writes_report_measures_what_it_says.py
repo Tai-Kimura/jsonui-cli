@@ -125,6 +125,13 @@ def test_the_reported_shape_a_run_pointed_at_an_app_it_also_lists(tmp_path, monk
 
 
 # --- B1: "changed" only ever next to a measurement --------------------------
+#
+# Since doc-outside-writes-summary-omits-tracked-manifest (2026-09-17) the
+# "Tell the lane" paragraph is printed by `_report_owner_summary`, after the
+# generation manifests are written, so these arms run the two printers the
+# way `generate_html_directory` does. No manifest is written here, so the
+# manifest half of the denominator is empty and the measurement asserted is
+# the same one as before: the directories.
 
 def _seed(tmp_path, monkeypatch, *, tracked: int, modified: int) -> Path:
     gen.reset_per_run_ledgers()
@@ -136,10 +143,16 @@ def _seed(tmp_path, monkeypatch, *, tracked: int, modified: int) -> Path:
     return d
 
 
+def _report(out_dir: Path) -> dict:
+    facts = gen._report_writes_outside_output(out_dir)
+    gen._report_owner_summary(facts)
+    return facts
+
+
 def test_a_byte_identical_rewrite_is_not_called_a_change(tmp_path, monkeypatch, capsys):
     """The reporting face: 38 tracked, 0 differing, and the line said changed."""
     d = _seed(tmp_path, monkeypatch, tracked=38, modified=0)
-    facts = gen._report_writes_outside_output(tmp_path / "out")
+    facts = _report(tmp_path / "out")
     out = capsys.readouterr().out
     assert "GIT-TRACKED" in out, "the write is still reported — it happened"
     assert "0 tracked file(s) differ" in out
@@ -150,7 +163,7 @@ def test_a_byte_identical_rewrite_is_not_called_a_change(tmp_path, monkeypatch, 
 
 def test_a_real_difference_is_counted_not_asserted(tmp_path, monkeypatch, capsys):
     d = _seed(tmp_path, monkeypatch, tracked=38, modified=3)
-    facts = gen._report_writes_outside_output(tmp_path / "out")
+    facts = _report(tmp_path / "out")
     out = capsys.readouterr().out
     assert "3 tracked file(s) now differ from the index" in out
     assert "byte-identical" not in out
@@ -160,7 +173,7 @@ def test_a_real_difference_is_counted_not_asserted(tmp_path, monkeypatch, capsys
 def test_cannot_tell_is_neither_zero_nor_a_difference(tmp_path, monkeypatch, capsys):
     """Three states, like the tracked count: -1 must not print as 0."""
     d = _seed(tmp_path, monkeypatch, tracked=38, modified=-1)
-    facts = gen._report_writes_outside_output(tmp_path / "out")
+    facts = _report(tmp_path / "out")
     out = capsys.readouterr().out
     assert "could not tell" in out
     assert "0 tracked file(s) differ" not in out

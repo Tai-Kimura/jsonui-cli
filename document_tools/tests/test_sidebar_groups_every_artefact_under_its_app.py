@@ -346,7 +346,10 @@ class TestWritesOutsideOutputNameTheirOwner(unittest.TestCase):
             buf = io.StringIO()
             try:
                 with redirect_stdout(buf):
-                    gen._report_writes_outside_output(out)
+                    # Both printers, as generate_html_directory runs them: the
+                    # "Tell the lane" paragraph moved to the owner summary
+                    # (doc-outside-writes-summary-omits-tracked-manifest).
+                    gen._report_owner_summary(gen._report_writes_outside_output(out))
             finally:
                 gen._git_tracked_file_count = orig_count
                 gen._written_outside_output.clear()
