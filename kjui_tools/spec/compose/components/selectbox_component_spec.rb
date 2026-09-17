@@ -219,6 +219,119 @@ RSpec.describe KjuiTools::Compose::Components::SelectBoxComponent do
       end
     end
 
+    # SSoT SelectBox.caretAttributes — a cross-platform object since 1.8.101
+    # (UIKit-only before). Present: the face draws the caret itself; absent:
+    # the native arrow and every existing baseline stay where they are.
+    context 'caretAttributes' do
+      let(:fixture_caret) do
+        # The `SelectBox/caretAttributes__static` fixture value, verbatim.
+        { 'width' => 32, 'height' => 32, 'tintColor' => '#FF0000',
+          'background' => '#00AA00', 'rightMargin' => 24 }
+      end
+
+      it 'emits nothing when the object is absent, so the picture does not move' do
+        result = described_class.generate({ 'type' => 'SelectBox', 'items' => %w[One Two] }, 0, required_imports)
+        expect(result).not_to include('caret =')
+        expect(required_imports).not_to include(:selectbox_caret)
+      end
+
+      it 'hands the fixture object to the library as a SelectBoxCaret' do
+        json_data = { 'type' => 'SelectBox', 'items' => %w[One Two Three], 'caretAttributes' => fixture_caret }
+        result = described_class.generate(json_data, 0, required_imports)
+        expect(result).to include(
+          'caret = SelectBoxCaret(width = 32, height = 32, ' \
+          'tintColor = Color(android.graphics.Color.parseColor("#FF0000")), ' \
+          'background = Color(android.graphics.Color.parseColor("#00AA00")), ' \
+          'rightMargin = 24),'
+        )
+        expect(required_imports).to include(:selectbox_caret)
+      end
+
+      it 'an empty object is still present: the face draws its own caret with the defaults' do
+        json_data = { 'type' => 'SelectBox', 'items' => %w[One], 'caretAttributes' => {} }
+        result = described_class.generate(json_data, 0, required_imports)
+        expect(result).to include('caret = SelectBoxCaret(),')
+      end
+
+      it 'resolves src as a drawable name, the way Image resolves its src' do
+        json_data = { 'type' => 'SelectBox', 'items' => %w[One], 'caretAttributes' => { 'src' => 'My-Arrow.png', 'rightMargin' => 12 } }
+        result = described_class.generate(json_data, 0, required_imports)
+        expect(result).to include('caret = SelectBoxCaret(painter = painterResource(id = R.drawable.my_arrow), rightMargin = 12),')
+        expect(required_imports).to include(:painter_resource, :r_class)
+      end
+
+      it 'leaves a key of the wrong type out rather than emitting it as 0' do
+        json_data = { 'type' => 'SelectBox', 'items' => %w[One], 'caretAttributes' => { 'width' => '32', 'rightMargin' => 24 } }
+        result = described_class.generate(json_data, 0, required_imports)
+        expect(result).to include('caret = SelectBoxCaret(rightMargin = 24),')
+      end
+
+      it 'is not emitted for a date picker, which has no closed-state caret' do
+        json_data = { 'type' => 'SelectBox', 'selectItemType' => 'Date', 'caretAttributes' => fixture_caret }
+        result = described_class.generate(json_data, 0, required_imports)
+        expect(result).to include('DateSelectBox(')
+        expect(result).not_to include('caret =')
+        expect(required_imports).not_to include(:selectbox_caret)
+      end
+
+      it 'does not touch a SelectBox whose caretAttributes is not an object' do
+        json_data = { 'type' => 'SelectBox', 'items' => %w[One], 'caretAttributes' => 'nope' }
+        result = described_class.generate(json_data, 0, required_imports)
+        expect(result).not_to include('caret =')
+      end
+
+      # One broad arm (spec/support/kotlin_compiler.rb): the fixture call,
+      # with its modifier chain, is well-typed against a stub universe.
+      # ⚠️ The SelectBoxCaret / SelectBox stubs below are a hand transcription
+      # of library/.../SelectBox.kt, so this proves the emit is Kotlin — not
+      # that it matches the library. That second half is the codegen
+      # conformance host, which compiles the generated code against the real
+      # library (KotlinJsonUI conformance-host/scripts/generate_codegen_host.rb).
+      it 'emits a call that compiles, caret included' do
+        json_data = {
+          'type' => 'SelectBox', 'id' => 'target', 'width' => 200, 'height' => 'wrapContent',
+          'items' => %w[One Two Three], 'caretAttributes' => fixture_caret
+        }
+        result = described_class.generate(json_data, 1, required_imports)
+        expect(<<~KOTLIN).to compile_as_kotlin
+          annotation class Composable
+          class Color(val argb: Int) { companion object { val Unspecified = Color(0) } }
+          object android { object graphics { object Color { fun parseColor(s: String): Int = 0 } } }
+          class Painter
+          class Dp(val value: Float)
+          val Int.dp: Dp get() = Dp(toFloat())
+          class SemanticsScope { var testTagsAsResourceId: Boolean = false }
+          object Modifier {
+              fun testTag(tag: String): Modifier = this
+              fun semantics(block: SemanticsScope.() -> Unit): Modifier = this
+              fun requiredWidth(width: Dp): Modifier = this
+              fun wrapContentHeight(): Modifier = this
+          }
+          // transcribed from library/src/main/kotlin/com/kotlinjsonui/components/SelectBox.kt
+          data class SelectBoxCaret(
+              val painter: Painter? = null,
+              val width: Int? = null,
+              val height: Int? = null,
+              val tintColor: Color? = null,
+              val background: Color? = null,
+              val rightMargin: Int = 0
+          )
+          @Composable
+          fun SelectBox(
+              value: String,
+              onValueChange: (String) -> Unit,
+              options: List<String>,
+              modifier: Modifier = Modifier,
+              caret: SelectBoxCaret? = null
+          ) {}
+          @Composable
+          fun Host() {
+          #{result}
+          }
+        KOTLIN
+      end
+    end
+
     context 'DateSelectBox' do
       it 'generates DateSelectBox for date type' do
         json_data = {

@@ -226,6 +226,7 @@ module KjuiTools
                          "import androidx.navigation.compose.composable",
                          "import androidx.navigation.compose.rememberNavController"],
             selectbox_component: "import com.kotlinjsonui.components.SelectBox",
+            selectbox_caret: "import com.kotlinjsonui.components.SelectBoxCaret",
             date_selectbox_component: "import com.kotlinjsonui.components.DateSelectBox",
             simple_date_selectbox_component: "import com.kotlinjsonui.components.SimpleDateSelectBox",
             visibility_wrapper: "import com.kotlinjsonui.components.VisibilityWrapper",

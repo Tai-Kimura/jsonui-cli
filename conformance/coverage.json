@@ -16,7 +16,6 @@
       "attribute": "caretAttributes",
       "platforms": [
         "ios",
-        "android",
         "web"
       ],
       "reason": "unimplemented",
