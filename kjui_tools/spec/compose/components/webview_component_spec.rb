@@ -77,7 +77,7 @@ RSpec.describe KjuiTools::Compose::Components::WebviewComponent do
 
       it 'is not followed by reloading on every recomposition' do
         result = described_class.generate(bound, 0, required_imports)
-        update = result[/update = \{ webView ->(.*?)\n    \},/m, 1]
+        update = result[/update = \{ webView ->(.*?)\n\s*\},/m, 1]
         expect(update).not_to be_nil
         expect(update.scan('loadUrl').size).to eq(1)
         expect(update).to include('if (webView.tag != url)')
@@ -114,7 +114,10 @@ RSpec.describe KjuiTools::Compose::Components::WebviewComponent do
           object Modifier {
               fun testTag(tag: String): Modifier = this
               fun semantics(block: SemanticsScope.() -> Unit): Modifier = this
+              fun fillMaxSize(): Modifier = this
           }
+          @Composable
+          fun Box(modifier: Modifier = Modifier, content: () -> Unit) { content() }
           class WebSettings { var javaScriptEnabled: Boolean = false; var userAgentString: String = "" }
           open class WebViewClient
           class KjuiWebViewClient : WebViewClient()
@@ -136,6 +139,53 @@ RSpec.describe KjuiTools::Compose::Components::WebviewComponent do
           #{result}
           }
         KOTLIN
+      end
+    end
+
+    # kjui-webview-testtag-on-androidview-not-projected-as-resource-id: a
+    # testTag on the AndroidView's own modifier never reached UiAutomator
+    # (`class="android.webkit.WebView" resource-id=""` on the bar face, while
+    # the screen marker on a Compose node did). The id goes on a Compose Box
+    # that wraps the AndroidView — measured on conf_ci before this emit was
+    # changed: the Box node carries `resource-id="<id>"`, the WebView stays
+    # its child. Every layout modifier moves to the Box; the AndroidView
+    # fills it.
+    context 'an id' do
+      let(:with_id) do
+        { 'type' => 'WebView', 'id' => 'web_view', 'url' => '@{webViewUrl}',
+          'width' => 'matchParent', 'weight' => 1 }
+      end
+
+      it 'wraps the AndroidView in a Box that carries the testTag as a Compose node' do
+        result = described_class.generate(with_id, 0, required_imports, 'Column')
+        expect(result).to start_with("Box(\n")
+        box_chain = result[/\ABox\(\n    modifier = Modifier(.*?)\n\) \{/m, 1]
+        expect(box_chain).not_to be_nil, result
+        expect(box_chain).to include('.testTag("web_view")')
+        expect(box_chain).to include('.semantics { testTagsAsResourceId = true }')
+        # The layout modifiers ride on the Box, not the AndroidView.
+        expect(box_chain).to include('.fillMaxWidth()')
+        expect(box_chain).to include('.weight(1f)')
+        expect(required_imports).to include(:box)
+      end
+
+      it 'gives the AndroidView the whole Box and nothing else' do
+        result = described_class.generate(with_id, 0, required_imports, 'Column')
+        inner = result[/\n    AndroidView\((.*)\n    \)\n\}\z/m, 1]
+        expect(inner).not_to be_nil, result
+        expect(inner).to include('modifier = Modifier.fillMaxSize()')
+        expect(inner).not_to include('testTag')
+        expect(inner).not_to include('.weight(')
+        # The bound-url update block is still inside.
+        expect(inner).to include('update = { webView ->')
+      end
+
+      it 'wraps a static url the same way' do
+        result = described_class.generate({ 'type' => 'WebView', 'id' => 'wv', 'url' => 'https://example.com' }, 0, required_imports)
+        expect(result).to start_with("Box(\n")
+        expect(result).to include('.testTag("wv")')
+        expect(result).to include('loadUrl("https://example.com")')
+        expect(result).not_to include('update =')
       end
     end
 

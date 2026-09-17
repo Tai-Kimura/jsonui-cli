@@ -8,6 +8,47 @@ require 'compose/helpers/resource_resolver'
 RSpec.describe KjuiTools::Compose::Components::WebComponent do
   let(:required_imports) { Set.new }
 
+  # Same defect and same shape as webview_component.rb (the two converters are
+  # the AndroidView twins): an id becomes a testTag on a Compose Box around
+  # the AndroidView, so UiAutomator sees it as a resource-id. Without an id
+  # the emit is the bytes it was — pinned whole below.
+  describe 'the id as a Compose node (resource-id projection)' do
+    it 'wraps the AndroidView in a Box carrying the testTag, layout modifiers on the Box' do
+      result = described_class.generate({ 'type' => 'Web', 'id' => 'wv', 'url' => 'https://example.com', 'weight' => 1 }, 0, required_imports, 'Row')
+      expect(result).to start_with("Box(\n")
+      box_chain = result[/\ABox\(\n    modifier = Modifier(.*?)\n\) \{/m, 1]
+      expect(box_chain).not_to be_nil, result
+      expect(box_chain).to include('.testTag("wv")')
+      expect(box_chain).to include('.semantics { testTagsAsResourceId = true }')
+      expect(box_chain).to include('.fillMaxSize()')
+      expect(box_chain).to include('.weight(1f)')
+      inner = result[/\n    AndroidView\((.*)\n    \)\n\}\z/m, 1]
+      expect(inner).not_to be_nil, result
+      expect(inner).to include('modifier = Modifier.fillMaxSize()')
+      expect(inner).not_to include('testTag')
+      expect(required_imports).to include(:box)
+    end
+
+    it 'leaves the emit without an id byte-identical (no Box)' do
+      result = described_class.generate({ 'type' => 'Web', 'url' => 'https://example.com' }, 0, required_imports)
+      expect(result).to eq(<<~KOTLIN.chomp)
+        AndroidView(
+            factory = { context ->
+                WebView(context).apply {
+                    settings.javaScriptEnabled = true
+                    loadUrl("https://example.com")
+                    webViewClient = KjuiWebViewClient()
+                    webChromeClient = WebChromeClient()
+                }
+            },
+            update = { webView ->
+            },
+            modifier = Modifier.fillMaxSize()
+        )
+      KOTLIN
+    end
+  end
+
   before do
     allow(KjuiTools::Core::ConfigManager).to receive(:load_config).and_return({})
     allow(KjuiTools::Core::ProjectFinder).to receive(:get_full_source_path).and_return('/tmp')
