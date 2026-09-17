@@ -16,8 +16,7 @@
       "attribute": "caretAttributes",
       "platforms": [
         "ios",
-        "android",
-        "web"
+        "android"
       ],
       "reason": "unimplemented",
       "note": "1.8.101 で UIKit 専用から全面属性に昇格（rightMargin を追加）。各面の codegen が読むまでの一時記録。票: docs/bugs/sjui-selectbox-caret-attributes-on-swiftui.md (ios) / docs/bugs/kjui-selectbox-caret-attributes-on-compose.md (android) / docs/bugs/rjui-selectbox-caret-attributes-on-web.md (web)。各面は自分の converter が caretAttributes を読んだ commit で、この entry の platforms から自分の面を外す（3 面とも外れたら entry を消す）。"

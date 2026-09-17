@@ -75,6 +75,10 @@ module RjuiTools
             classes << 'px-3 py-2'
           end
 
+          # caretAttributes: present → the native arrow goes and the caret is
+          # redrawn from the object; absent → nothing here changes.
+          classes = apply_caret_attributes(classes)
+
           # Hint/placeholder color for when no value is selected.
           #
           # This was read and then thrown away unless `selectedValue` was a
@@ -181,6 +185,133 @@ module RjuiTools
         # control shape, and the value it reports is an array, not a string.
         def multiple_select?
           attributes['multiple'] == true || attributes['multiple'] == 'true'
+        end
+
+        # --- caretAttributes ---------------------------------------------------
+        #
+        # The browser paints a native <select>'s arrow at an inset nothing in
+        # CSS can move: `pr-8` is the TEXT's escape width, not the arrow's
+        # position. That is the observation this object was promoted for — an
+        # arrow stuck to the trailing edge with no key that pushes it in.
+        #
+        # Absent → not one byte of the class list or the style changes; the
+        # SelectBox baselines that predate this are the evidence. Present →
+        # `appearance-none` removes the native arrow and the caret is redrawn
+        # as background layers on the <select> itself:
+        #
+        #   layer 1  the glyph — an inline-SVG chevron by default, `src` if given
+        #   layer 2  the `background` box, a solid two-stop gradient, only when
+        #            `background` is declared
+        #
+        # Both layers share one position (`right <rightMargin>px center`) and
+        # one size (`<width>px <height>px`), so the box IS the caret's own
+        # width × height and never the select's. A pseudo-element would need a
+        # stylesheet the codegen does not own; a wrapper <span> would move the
+        # element the id / testId / value binding land on.
+        #
+        # tintColor reaches the default glyph as its stroke. A raster `src` is
+        # drawn as-is: the web has no "template image", and recolouring a
+        # bitmap needs mask-image, which would paint over the background box.
+        # A colors.json key resolves through ColorManager at runtime (the path
+        # color_style_expr already takes), which turns the value into a
+        # template literal; a CSS literal is baked in.
+        #
+        # The list box (`multiple`) and the Date mode have no closed-state
+        # caret (SSoT), so both are out — the same predicate that drops the
+        # arrow gutter above. A bound width/height/rightMargin is not resolved
+        # here and falls to the default.
+        #
+        # Known limit: a gradient `background` on the select itself lands in
+        # `@dynamic_styles['background']` (the shorthand), and a shorthand plus
+        # `backgroundImage` on one element has one winner in key order. That
+        # combination has no fixture and is left as it falls.
+        CARET_DEFAULT_SIZE = 16
+        CARET_DEFAULT_TINT = '#000000'
+        CARET_TEXT_GAP = 8
+        CARET_CHEVRON_PATH = 'M6 9l6 6 6-6'
+
+        def caret_attributes
+          caret = attributes['caretAttributes']
+          caret.is_a?(Hash) ? caret : nil
+        end
+
+        def date_picker?
+          attributes['selectItemType'].to_s.downcase == 'date'
+        end
+
+        def apply_caret_attributes(classes)
+          caret = caret_attributes
+          return classes if caret.nil? || multiple_select? || date_picker?
+
+          width = caret_px(caret['width'], CARET_DEFAULT_SIZE)
+          height = caret_px(caret['height'], CARET_DEFAULT_SIZE)
+          right = caret_px(caret['rightMargin'], 0)
+
+          classes = drop_class(classes, 'pr-8')
+          classes << 'appearance-none'
+
+          layers = caret_glyph_layer(caret)
+          layers += [[:lit, ', ']] + caret_box_layer(caret['background']) if caret['background']
+
+          @dynamic_styles['backgroundImage'] = js_string_expr(layers)
+          @dynamic_styles['backgroundRepeat'] = "'no-repeat'"
+          @dynamic_styles['backgroundPosition'] = "'right #{right}px center'"
+          @dynamic_styles['backgroundSize'] = "'#{width}px #{height}px'"
+          # The text's escape width follows the caret. The fixed `pr-8` (32px)
+          # would put a 32px caret at rightMargin 24 straight over the text.
+          @dynamic_styles['paddingRight'] = "'#{right + width + CARET_TEXT_GAP}px'"
+          classes
+        end
+
+        # Parts are [:lit, text] / [:expr, js] so one renderer can decide
+        # between a plain string and a template literal.
+        def caret_glyph_layer(caret)
+          if caret['src']
+            return [[:lit, "url(\"/images/#{resolve_image_extension(caret['src'].to_s)}\")"]]
+          end
+
+          head = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="'
+          tail = "\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\">" \
+                 "<path d=\"#{CARET_CHEVRON_PATH}\"/></svg>"
+          [[:lit, "url(\"data:image/svg+xml,#{svg_uri_encode(head)}"]] +
+            caret_color_parts(caret['tintColor'] || CARET_DEFAULT_TINT, uri: true) +
+            [[:lit, "#{svg_uri_encode(tail)}\")"]]
+        end
+
+        def caret_box_layer(color)
+          parts = caret_color_parts(color, uri: false)
+          [[:lit, 'linear-gradient(']] + parts + [[:lit, ', ']] + parts + [[:lit, ')']]
+        end
+
+        def caret_color_parts(value, uri:)
+          expr = color_style_expr(value)
+          if expr.start_with?("'")
+            literal = expr[1..-2]
+            [[:lit, uri ? svg_uri_encode(literal) : literal]]
+          else
+            [[:expr, uri ? "encodeURIComponent(#{expr})" : expr]]
+          end
+        end
+
+        # Only the characters a data: URI cannot carry raw inside url("…").
+        def svg_uri_encode(text)
+          text.gsub(/[<>#"% ]/) { |ch| format('%%%02X', ch.ord) }
+        end
+
+        def js_string_expr(parts)
+          return "'#{parts.map(&:last).join}'" if parts.none? { |kind, _| kind == :expr }
+
+          "`#{parts.map { |kind, text| kind == :expr ? "${#{text}}" : text }.join}`"
+        end
+
+        def caret_px(value, default)
+          number =
+            case value
+            when Numeric then value.to_f
+            when /\A\d+(\.\d+)?\z/ then value.to_f
+            else return default
+            end
+          (number % 1).zero? ? number.to_i : number
         end
 
         # `size` — how many option rows are visible. Only meaningful on a list
