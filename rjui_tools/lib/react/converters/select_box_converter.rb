@@ -274,22 +274,36 @@ module RjuiTools
           tail = "\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\">" \
                  "<path d=\"#{CARET_CHEVRON_PATH}\"/></svg>"
           [[:lit, "url(\"data:image/svg+xml,#{svg_uri_encode(head)}"]] +
-            caret_color_parts(caret['tintColor'] || CARET_DEFAULT_TINT, uri: true) +
+            caret_color_parts(caret['tintColor'] || CARET_DEFAULT_TINT, uri: true, fallback: CARET_DEFAULT_TINT) +
             [[:lit, "#{svg_uri_encode(tail)}\")"]]
         end
 
         def caret_box_layer(color)
-          parts = caret_color_parts(color, uri: false)
+          parts = caret_color_parts(color, uri: false, fallback: 'transparent')
           [[:lit, 'linear-gradient(']] + parts + [[:lit, ', ']] + parts + [[:lit, ')']]
         end
 
-        def caret_color_parts(value, uri:)
+        # A colors.json name resolves at runtime through
+        # `ColorManager.resolveColor`, whose return type is `string | undefined`
+        # — and the conformance host reverse-maps every `#FF0000` in a fixture
+        # to its `dark_red` entry, so the generated caret fixture takes this
+        # branch. Two things go wrong without the `??`:
+        #   * `encodeURIComponent(undefined)` is a TS2345 on the typed
+        #     parameter — CI's "generated code must have zero type errors"
+        #     step caught it on run 35172403874 before any pixel was drawn;
+        #   * inside the template literal an unresolved name renders the text
+        #     `undefined` into the CSS, which invalidates the whole
+        #     `background-image` and takes the glyph down with the box.
+        # The fallbacks are the defaults the layer would have had anyway: the
+        # glyph's default tint, and no paint for the box.
+        def caret_color_parts(value, uri:, fallback:)
           expr = color_style_expr(value)
           if expr.start_with?("'")
             literal = expr[1..-2]
             [[:lit, uri ? svg_uri_encode(literal) : literal]]
           else
-            [[:expr, uri ? "encodeURIComponent(#{expr})" : expr]]
+            guarded = "#{expr} ?? '#{fallback}'"
+            [[:expr, uri ? "encodeURIComponent(#{guarded})" : "(#{guarded})"]]
           end
         end
 

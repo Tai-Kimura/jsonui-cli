@@ -430,11 +430,19 @@ RSpec.describe RjuiTools::React::Converters::SelectBoxConverter do
         expect(result).not_to include('linear-gradient(')
       end
 
-      it 'resolves a colors.json key through ColorManager at runtime' do
+      # `ColorManager.resolveColor` is typed `string | undefined`. Unguarded,
+      # `encodeURIComponent(...)` is a TS2345 in the generated host (CI run
+      # 35172403874 — the conformance host maps the fixture's `#FF0000` to its
+      # `dark_red` entry, so the generated caret fixture hits exactly this
+      # branch), and an unresolved name inside the template literal would
+      # write the text `undefined` into the CSS and void the whole
+      # background-image. The fallbacks are the layer's own defaults.
+      it 'resolves a colors.json key through ColorManager at runtime, guarded for an unresolved name' do
         result = select_with('tintColor' => 'brand', 'background' => 'accent')
         expect(result).to include('backgroundImage: `url("data:image/svg+xml,')
-        expect(result).to include("encodeURIComponent(ColorManager.resolveColor('brand'))")
-        expect(result).to include("linear-gradient(${ColorManager.resolveColor('accent')}, ${ColorManager.resolveColor('accent')})")
+        expect(result).to include("encodeURIComponent(ColorManager.resolveColor('brand') ?? '#000000')")
+        expect(result).to include("linear-gradient(${(ColorManager.resolveColor('accent') ?? 'transparent')}, ${(ColorManager.resolveColor('accent') ?? 'transparent')})")
+        expect(result).not_to include("encodeURIComponent(ColorManager.resolveColor('brand'))")
       end
 
       it 'uses the named asset instead of the chevron when src is given' do
