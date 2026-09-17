@@ -641,16 +641,24 @@ RSpec.describe SjuiTools::Core::AttributeValidator do
         expect(validator.infos.any? { |i| i.include?('applyLiquidGlass') }).to be true
       end
 
-      it 'logs info for UIKit-only caretAttributes' do
+      # `SelectBox.caretAttributes` was `platform: swift, mode: uikit` — the
+      # SJUISelectBox contract — and this example pinned the info the
+      # validator logged for it under SwiftUI. jsonui-cli 1.8.101 declared the
+      # object for every platform and mode (the SwiftUI codegen reads it now),
+      # so the info is gone by design: the example flips to assert that a
+      # declared caret on SwiftUI is validated, not set aside as another
+      # mode's attribute.
+      it 'validates caretAttributes on SwiftUI now that it is declared for every mode' do
         component = {
           'type' => 'SelectBox',
           'width' => 'matchParent',
           'height' => 'wrapContent',
           'items' => %w[A B],
-          'caretAttributes' => { 'src' => 'caret' }
+          'caretAttributes' => { 'src' => 'caret', 'rightMargin' => 12 }
         }
         validator.validate(component)
-        expect(validator.infos.any? { |i| i.include?('caretAttributes') }).to be true
+        expect(validator.infos.any? { |i| i.include?('caretAttributes') }).to be false
+        expect(validator.warnings.any? { |w| w.include?('caretAttributes') }).to be false
       end
 
       it 'logs info for UIKit-only min/max padding' do

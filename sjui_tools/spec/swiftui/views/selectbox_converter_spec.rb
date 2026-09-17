@@ -369,5 +369,54 @@ RSpec.describe SjuiTools::SwiftUI::Views::SelectBoxConverter do
         expect(code).to include('.opacity(0).accessibilityHidden(true)')
       end
     end
+
+    # `caretAttributes` was UIKit-only (SJUISelectBox) until 1.8.101, so this
+    # converter never read it. The SSoT's rule: absent keeps the native
+    # indicator, present draws the caret from the keys, every key optional.
+    context 'with caretAttributes' do
+      let(:component) do
+        {
+          'type' => 'SelectBox',
+          'items' => %w[One Two],
+          'caretAttributes' => {
+            'width' => 32, 'height' => 32, 'tintColor' => '#FF0000',
+            'background' => '#00AA00', 'rightMargin' => 24
+          }
+        }
+      end
+
+      it 'emits the declared keys as SelectBoxView.CaretAttributes' do
+        code = described_class.new(component).convert
+
+        expect(code).to include('caret: SelectBoxView.CaretAttributes(')
+        expect(code).to include('width: 32, height: 32')
+        expect(code).to include('tintColor: SwiftJsonUIConfiguration.shared.getColor(for: "#FF0000")')
+        expect(code).to include('background: SwiftJsonUIConfiguration.shared.getColor(for: "#00AA00")')
+        expect(code).to include('rightMargin: 24)')
+      end
+
+      it 'names only the declared keys, so rightMargin alone is enough' do
+        code = described_class.new(
+          'type' => 'SelectBox', 'caretAttributes' => { 'rightMargin' => 12 }
+        ).convert
+
+        expect(code).to include('caret: SelectBoxView.CaretAttributes(rightMargin: 12),')
+        expect(code).not_to include('src:')
+      end
+
+      # Absent / present is the SSoT's distinction, not empty / non-empty:
+      # `{}` is present, and the view draws its default glyph at margin 0.
+      it 'treats an empty object as present' do
+        code = described_class.new('type' => 'SelectBox', 'caretAttributes' => {}).convert
+
+        expect(code).to include('caret: SelectBoxView.CaretAttributes(),')
+      end
+
+      it 'emits nothing when the object is absent, so existing layouts do not move' do
+        code = described_class.new('type' => 'SelectBox', 'items' => %w[One]).convert
+
+        expect(code).not_to include('caret:')
+      end
+    end
   end
 end
