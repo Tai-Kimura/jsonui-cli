@@ -272,6 +272,16 @@ module KjuiTools
             cancel_text = Helpers::ResourceResolver.process_color(json_data['cancelButtonTextColor'], required_imports)
             code += "\n" + indent("cancelButtonTextColor = #{cancel_text},", depth + 1)
           end
+
+          # `caretAttributes` (SSoT SelectBox.caretAttributes, cross-platform
+          # since 1.8.101): present → the library draws the caret itself from
+          # a SelectBoxCaret; absent → nothing is emitted, the native arrow
+          # stays and the picture does not move. A date picker has no
+          # closed-state caret, so the Date branch never emits it.
+          unless is_date_picker
+            caret_arg = caret_expression(json_data['caretAttributes'], required_imports)
+            code += "\n" + indent("caret = #{caret_arg},", depth + 1) if caret_arg
+          end
           
           # Build modifiers
           modifiers = []
@@ -315,6 +325,34 @@ module KjuiTools
           code
         end
         
+        # The `SelectBoxCaret(...)` expression for a caretAttributes object, or
+        # nil when the object is absent. An empty object is present: the face
+        # then draws its own caret with every default (flush at the edge).
+        # `src` resolves as a drawable name exactly as Image's `src` does.
+        # Numbers land as dp Ints on the library surface (cornerRadius is the
+        # precedent); a key of the wrong type is left out, not emitted as 0.
+        def self.caret_expression(caret, required_imports)
+          return nil unless caret.is_a?(Hash)
+
+          required_imports&.add(:selectbox_caret)
+          args = []
+          if caret['src'].is_a?(String) && !caret['src'].strip.empty?
+            required_imports&.add(:painter_resource)
+            required_imports&.add(:r_class)
+            args << "painter = painterResource(id = R.drawable.#{Helpers::ResourceResolver.drawable_name(caret['src'])})"
+          end
+          args << "width = #{caret['width'].to_i}" if caret['width'].is_a?(Numeric)
+          args << "height = #{caret['height'].to_i}" if caret['height'].is_a?(Numeric)
+          if caret['tintColor'].is_a?(String)
+            args << "tintColor = #{Helpers::ResourceResolver.process_color(caret['tintColor'], required_imports)}"
+          end
+          if caret['background'].is_a?(String)
+            args << "background = #{Helpers::ResourceResolver.process_color(caret['background'], required_imports)}"
+          end
+          args << "rightMargin = #{caret['rightMargin'].to_i}" if caret['rightMargin'].is_a?(Numeric)
+          "SelectBoxCaret(#{args.join(', ')})"
+        end
+
         private
         
         def self.indent(text, level)
