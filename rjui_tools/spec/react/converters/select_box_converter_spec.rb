@@ -378,6 +378,87 @@ RSpec.describe RjuiTools::React::Converters::SelectBoxConverter do
       end
     end
 
+    # The browser paints the native arrow at an inset CSS cannot move, so
+    # when caretAttributes is present the arrow is removed and redrawn as
+    # background layers. When it is absent NOTHING may change — the SelectBox
+    # baselines that predate the object are the evidence for that arm, and
+    # the first example here is its unit-level shadow.
+    context 'caretAttributes' do
+      def select_with(caret, extra = {})
+        create_converter(
+          { 'class' => 'SelectBox', 'id' => 'pick', 'items' => %w[One Two Three],
+            'caretAttributes' => caret }.merge(extra)
+        ).convert
+      end
+
+      it 'changes nothing when the object is absent' do
+        plain = create_converter({ 'class' => 'SelectBox', 'id' => 'pick', 'items' => %w[One Two Three] }).convert
+        expect(plain).to include('pl-3 pr-8 py-2')
+        expect(plain).not_to include('appearance-none')
+        expect(plain).not_to include('backgroundImage')
+        expect(plain).not_to include('paddingRight')
+      end
+
+      it 'moves the arrow in from the edge with rightMargin alone (the reported case)' do
+        result = select_with('rightMargin' => 12)
+        expect(result).to include('appearance-none')
+        expect(result).not_to include('pr-8')
+        expect(result).to include('pl-3 py-2')
+        expect(result).to include("backgroundPosition: 'right 12px center'")
+        expect(result).to include("backgroundSize: '16px 16px'")
+        expect(result).to include("paddingRight: '36px'")
+        expect(result).to include('url("data:image/svg+xml,')
+        expect(result).to include('stroke=%22%23000000%22')
+      end
+
+      it 'sizes, tints, boxes and insets the caret from the fixture values' do
+        result = select_with('width' => 32, 'height' => 32, 'tintColor' => '#FF0000',
+                             'background' => '#00AA00', 'rightMargin' => 24)
+        expect(result).to include("backgroundSize: '32px 32px'")
+        expect(result).to include("backgroundPosition: 'right 24px center'")
+        expect(result).to include("backgroundRepeat: 'no-repeat'")
+        expect(result).to include('stroke=%22%23FF0000%22')
+        expect(result).to include('linear-gradient(#00AA00, #00AA00)')
+        expect(result).to include("paddingRight: '64px'")
+        expect(result).not_to include('linear-gradient(#FF0000')
+      end
+
+      it 'treats an empty object as present and draws the default glyph flush' do
+        result = select_with({})
+        expect(result).to include('appearance-none')
+        expect(result).to include("backgroundPosition: 'right 0px center'")
+        expect(result).not_to include('linear-gradient(')
+      end
+
+      it 'resolves a colors.json key through ColorManager at runtime' do
+        result = select_with('tintColor' => 'brand', 'background' => 'accent')
+        expect(result).to include('backgroundImage: `url("data:image/svg+xml,')
+        expect(result).to include("encodeURIComponent(ColorManager.resolveColor('brand'))")
+        expect(result).to include("linear-gradient(${ColorManager.resolveColor('accent')}, ${ColorManager.resolveColor('accent')})")
+      end
+
+      it 'uses the named asset instead of the chevron when src is given' do
+        result = select_with('src' => 'caret.svg', 'rightMargin' => 4)
+        expect(result).to include('url("/images/caret.svg")')
+        expect(result).not_to include('data:image/svg+xml')
+        expect(result).to include('appearance-none')
+      end
+
+      it 'is ignored on a list box' do
+        result = select_with({ 'rightMargin' => 12 }, 'multiple' => true)
+        expect(result).not_to include('appearance-none')
+        expect(result).not_to include('backgroundImage')
+        expect(result).to include('px-3 py-2')
+      end
+
+      it 'is ignored on a date picker' do
+        result = select_with({ 'rightMargin' => 12 }, 'selectItemType' => 'Date')
+        expect(result).to include('<input')
+        expect(result).not_to include('appearance-none')
+        expect(result).not_to include('backgroundImage')
+      end
+    end
+
     context 'date picker' do
       def picker(extra)
         create_converter(
