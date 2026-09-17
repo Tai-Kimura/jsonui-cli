@@ -125,6 +125,14 @@ _document_slot_facts: dict = run_state.ledger(globals(), "_document_slot_facts",
 #: from the ledgers' own keying, read by `generation_summary_line`, empty when
 #: no record was written (no root, no shared/core) — the line then says so.
 _run_record: dict = run_state.ledger(globals(), "_run_record", dict)
+#: One entry per generation manifest this run wrote: path, whether git
+#: tracks it (True / False / None), and whether it now differs from the
+#: index (1 / 0 / -1, the same three states `_git_modified_file_count`
+#: uses). Read by `_report_owner_summary`, which is why it is a ledger and
+#: not a return value: the manifests are written AFTER the outside-writes
+#: block has run, and the summary that tells an owner what to review has to
+#: come after both (doc-outside-writes-summary-omits-tracked-manifest).
+_manifest_writes: list[dict] = run_state.ledger(globals(), "_manifest_writes", list)
 #: Component spec files the spec pre-generation found OUTSIDE the directory
 #: the config names for them (resolved path -> that directory). Whether each
 #: got a page is decided at the end of the run from the pages written, not
@@ -2038,6 +2046,10 @@ def generate_html_directory(
         [{"app": e.get("app"), "root": Path(e["root"]), "docs": e.get("docs")} for e in manifest_roots]
         if manifest_roots else project_root,
         stale, outside, slots=dict(_document_slot_facts), stale_outside=stale_outside)
+    # Last, because it is the line an owner acts on and it needs both of the
+    # blocks above: the directories written outside -o AND the manifests the
+    # record step just wrote (doc-outside-writes-summary-omits-tracked-manifest).
+    _report_owner_summary(outside)
 
     return generated_files
 
@@ -2249,36 +2261,14 @@ def _report_writes_outside_output(output_path: Path) -> dict:
             state = (f"{m} now differ from the index" if m >= 0
                      else "could not tell whether any differ")
             print(f"       {d}  ({n} tracked file(s), {state})")
-        differing = sum(m for m in modified.values() if m > 0)
-        unmeasured = sum(1 for m in modified.values() if m < 0)
-        # The owner is told in EVERY state. The write into their tree happened
-        # whether or not a byte moved, and only they can say whether that was
-        # acceptable; what changes with the state is what they are told. The
-        # first draft said it only when files differed, and an arm written for
-        # the 2026-09-09 incident — "called out by owner, not just listed" —
-        # went red for the byte-identical case, which is the common one.
-        if differing:
-            print(f"     Tell the lane that owns them: {differing} tracked file(s) now "
-                  "differ from the index and will show in\n"
-                  "     their `git status` with no way to tell which run produced "
-                  "them, or which version of the\n"
-                  "     tools wrote them. (A change they had pending before this run "
-                  "counts here too: this is a\n"
-                  "     state, not an attribution.)")
-        elif unmeasured:
-            print("     Tell the lane that owns them: the write happened; whether any "
-                  "byte moved could not be\n"
-                  f"     measured here (git did not answer for {unmeasured} of the "
-                  "tracked directories).")
-        else:
-            print("     Tell the lane that owns them: 0 tracked file(s) differ from the "
-                  "index — every rewrite was\n"
-                  "     byte-identical, so there is nothing to review. The write still "
-                  "happened; a version that\n"
-                  "     renders differently would have landed here.")
-        if differing and unmeasured:
-            print(f"     ⓘ {unmeasured} of the tracked directories could not be "
-                  "checked for differences (git did not answer).")
+        # 🔻 THE "TELL THE LANE" PARAGRAPH IS NOT PRINTED HERE ANY MORE. It
+        # used to close this block, and its denominator was these directories
+        # — while the same run went on to rewrite `.jsonui-cli/generation-
+        # manifest.json` under every root it recorded into, a tracked file
+        # under none of them. "0 tracked file(s) differ … nothing to review"
+        # was printed over two moved manifests (2026-09-17, four-app site).
+        # The owner's summary is `_report_owner_summary`, printed after the
+        # manifests are written, over both populations.
     if unknown:
         print(f"  ⓘ {len(unknown)} could not be checked for tracking (no git, or "
               f"outside a repository).")
@@ -2629,6 +2619,17 @@ def _record_into(target: dict, targets: list, manifest, stale: list, outside: di
     # reason: "not tracked" is an answer, and "cannot tell" is the absence of
     # the instrument. Folding them together would tell a face with no git
     # that its record is private, which is a different claim.
+    # The one combination that costs the owner a review — tracked, and now
+    # different from the index — used to be the one with no line at all:
+    # the notes below spoke for untracked and ignored, and the outside-
+    # writes summary counted directories, which this single file is under
+    # none of. Measured, the same three states as a doc tree's files.
+    # Recorded here, said in `_report_owner_summary`: the tracked case stays
+    # quiet per manifest (a line printed every run that never changes anyone's
+    # action is the line readers learn to skip — see the two notes below), and
+    # is named once, in the summary, next to the count that measured it.
+    differs = _git_file_differs(target, root) if tracked else (0 if tracked is False else -1)
+    _manifest_writes.append({"path": str(target), "tracked": tracked, "differs": differs})
     if tracked is False:
         # Two kinds of "not tracked", and they call for different readers.
         # An ignore rule the face wrote is a decision already taken: say
@@ -2759,6 +2760,101 @@ def _git_modified_file_count(directory: Path) -> int:
     if r.returncode != 0:
         return -1
     return sum(1 for line in r.stdout.splitlines() if line.strip())
+
+
+def _git_file_differs(path: Path, cwd: Path) -> int:
+    """ONE tracked file: 1 when it now differs from the index, 0 when not,
+    -1 when git did not answer. The file-level twin of
+    `_git_modified_file_count`, run from `cwd` (the root) for the reason
+    `_git_tracks_file` gives. A state, not a cause: a change the owner had
+    pending counts too."""
+    try:
+        r = subprocess.run(
+            ["git", "-C", str(cwd), "status", "--porcelain", "--untracked-files=no",
+             "--", str(path)],
+            capture_output=True, text=True, timeout=10,
+        )
+    except (OSError, ValueError, subprocess.SubprocessError):
+        return -1
+    if r.returncode != 0:
+        return -1
+    return 1 if any(line.strip() for line in r.stdout.splitlines()) else 0
+
+
+def _report_owner_summary(outside: dict) -> dict:
+    """Tell the lane that owns the tracked files this run wrote what to review.
+
+    Printed AFTER the generation manifests are written, over BOTH things the
+    run writes into other people's trees: the doc directories outside `-o`
+    (`outside`, from `_report_writes_outside_output`) and every generation
+    manifest that git tracks (`_manifest_writes`). The denominator is files,
+    in both populations; the paragraph used to close the directory block,
+    where a manifest — one tracked file under no listed directory — could
+    not be counted, and "0 tracked file(s) differ … nothing to review" was
+    printed over two manifests that had moved.
+
+    Silent when there is nothing an owner could act on: no tracked doc
+    directory was written, and every tracked manifest came back byte-
+    identical (the common single-root case, which `_record_into` keeps
+    quiet for the same reason). Three states, as everywhere in this file:
+    differing (a count), could-not-tell (named), and measured-identical —
+    only the last says "nothing to review", and only over what was measured.
+    """
+    dir_modified = {k: int(v) for k, v in (outside.get("gitModifiedDirectories") or {}).items()}
+    manifests = [m for m in _manifest_writes if m.get("tracked") is True]
+    tracked_dirs = outside.get("gitTrackedDirectories") or {}
+    dir_differing = sum(m for m in dir_modified.values() if m > 0)
+    dir_unmeasured = sum(1 for m in dir_modified.values() if m < 0)
+    moved = [m["path"] for m in manifests if m["differs"] > 0]
+    man_unmeasured = sum(1 for m in manifests if m["differs"] < 0)
+    differing = dir_differing + len(moved)
+    unmeasured = dir_unmeasured + man_unmeasured
+    facts = {"trackedDirectories": len(tracked_dirs), "trackedManifests": len(manifests),
+             "differing": differing, "differingManifests": moved, "unmeasured": unmeasured}
+    if not tracked_dirs and not moved and not man_unmeasured:
+        return facts
+    if moved or man_unmeasured:
+        # Named only when there is something to look at: a tracked manifest
+        # rewritten identical is in the count and nowhere else.
+        print(f"  🚨 {len(manifests)} generation manifest(s) this run wrote are GIT-TRACKED"
+              f" — {len(moved)} now differ from the index:")
+        for m in manifests:
+            state = ("now differs from the index" if m["differs"] > 0
+                     else "byte-identical" if m["differs"] == 0
+                     else "could not tell whether it differs")
+            print(f"       {m['path']}  ({state})")
+    # The owner is told in EVERY state. The write into their tree happened
+    # whether or not a byte moved, and only they can say whether that was
+    # acceptable; what changes with the state is what they are told.
+    # The zero (or the count) says what it was measured over — both
+    # populations by name, and "no tracked doc tree" rather than pointing at
+    # a list that was not printed.
+    scope = (f"({dir_differing} under the doc trees listed above, {len(moved)} generation "
+             f"manifest(s))" if tracked_dirs
+             else f"({len(moved)} generation manifest(s); no tracked doc tree was written)")
+    if differing:
+        print(f"     Tell the lane that owns them: {differing} tracked file(s) now "
+              f"differ from the index {scope}\n"
+              "     and will show in their `git status` with no way to tell which run "
+              "produced them, or\n"
+              "     which version of the tools wrote them. (A change they had pending "
+              "before this run counts\n"
+              "     here too: this is a state, not an attribution.)")
+        if unmeasured:
+            print(f"     ⓘ {unmeasured} of the tracked directories/manifests could not be "
+                  "checked for differences (git did not answer).")
+    elif unmeasured:
+        print("     Tell the lane that owns them: the write happened; whether any "
+              "byte moved could not be\n"
+              f"     measured here (git did not answer for {unmeasured} of the "
+              "tracked directories/manifests).")
+    else:
+        print("     Tell the lane that owns them: 0 tracked file(s) differ from the "
+              f"index {scope} — every\n"
+              "     rewrite was byte-identical, so there is nothing to review. The "
+              "write still happened; a\n"
+              "     version that renders differently would have landed here.")
+    return facts
 
 
 def _is_leftover(p: Path, written: set, cutoff: "float | None") -> bool:
