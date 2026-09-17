@@ -2994,29 +2994,31 @@
     },
     "caretAttributes": {
       "type": "object",
-      "description": "Caret/arrow styling attributes",
-      "platform": "swift",
-      "mode": "uikit",
+      "description": "Caret/arrow styling for the closed select. Absent: every face keeps its native indicator at its native inset (the picture each face drew before 1.8.101), so existing layouts do not move. Present: the face draws the caret itself from these keys, on every platform and mode — this object was UIKit-only (SJUISelectBox) until 1.8.101; SwiftUI codegen/dynamic, Compose codegen/dynamic and the web <select> now honour it too. `src` is optional: when it is absent the face draws its own default chevron glyph, so `{\"rightMargin\": 12}` alone moves the native-looking arrow away from the trailing edge. Not inherited from any other object; the multiple/list-box and Date modes have no closed-state caret and ignore it.",
       "properties": {
         "src": {
           "type": "string",
-          "description": "Caret image name"
+          "description": "Caret image asset name. Optional — absent means the face's default chevron glyph."
         },
         "width": {
           "type": "number",
-          "description": "Caret width"
+          "description": "Caret width (pt / dp / px). Absent: the face's default glyph size."
         },
         "height": {
           "type": "number",
-          "description": "Caret height"
+          "description": "Caret height (pt / dp / px). Absent: the face's default glyph size."
         },
         "tintColor": {
           "type": "string",
-          "description": "Caret tint color - hex string or color name from colors.json"
+          "description": "Caret tint color - hex string or color name from colors.json. Applies to the default glyph and to a template `src`."
         },
         "background": {
           "type": "string",
-          "description": "Caret background color - hex string or color name from colors.json"
+          "description": "Caret background color - hex string or color name from colors.json. Fills the caret's own box (width x height), not the select."
+        },
+        "rightMargin": {
+          "type": "number",
+          "description": "Distance from the select's trailing edge to the caret's trailing edge (pt / dp / px). Absent: 0, which is the UIKit contract this object came from (the caret sits flush against the edge)."
         }
       }
     },

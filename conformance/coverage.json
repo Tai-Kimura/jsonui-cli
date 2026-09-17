@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "_comment": "Declared attributes no platform converter reads. Hand-maintained: close a gap by implementing it (then delete the entry) or by narrowing platform/mode in attribute_definitions.json. reason is one of: dynamic-key, legacy, platform-na, runtime-only, unimplemented.",
+  "_comment": "Declared attributes no platform converter reads. Hand-maintained: close a gap by implementing it (then delete the entry) or by narrowing platform/mode in attribute_definitions.json. reason is one of: dynamic-key, legacy, platform-na, runtime-only, unimplemented, unreviewed.",
   "entries": [
     {
       "component": "ScrollView",
@@ -12,12 +12,24 @@
       "note": "codegen 未対応。ランタイム側に実装あり (ios: UIKit) — この検査は Ruby codegen しか走査しないので、実装の有無ではなく codegen 対応の有無を表す"
     },
     {
+      "component": "SelectBox",
+      "attribute": "caretAttributes",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "reason": "unimplemented",
+      "note": "1.8.101 で UIKit 専用から全面属性に昇格（rightMargin を追加）。各面の codegen が読むまでの一時記録。票: docs/bugs/sjui-selectbox-caret-attributes-on-swiftui.md (ios) / docs/bugs/kjui-selectbox-caret-attributes-on-compose.md (android) / docs/bugs/rjui-selectbox-caret-attributes-on-web.md (web)。各面は自分の converter が caretAttributes を読んだ commit で、この entry の platforms から自分の面を外す（3 面とも外れたら entry を消す）。"
+    },
+    {
       "component": "Slider",
       "attribute": "range",
       "platforms": [
         "android"
       ],
-      "reason": "unimplemented"
+      "reason": "unimplemented",
+      "note": "written by `coverage --update`; replace with a real reason and a note, or close the gap"
     },
     {
       "component": "common",

@@ -16,7 +16,7 @@ module JsonUI
       ATTRS = [
         # Show back button
         { name: 'canBack', kind: :boolean }.freeze,
-        # Caret/arrow styling attributes
+        # Caret/arrow styling for the closed select. Absent: every face keeps its native indicator at its native inset (the picture each face drew before 1.8.101), so existing layouts do not move. Present: the face draws the caret itself from these keys, on every platform and mode — this object was UIKit-only (SJUISelectBox) until 1.8.101; SwiftUI codegen/dynamic, Compose codegen/dynamic and the web <select> now honour it too. `src` is optional: when it is absent the face draws its own default chevron glyph, so `{"rightMargin": 12}` alone moves the native-looking arrow away from the trailing edge. Not inherited from any other object; the multiple/list-box and Date modes have no closed-state caret and ignore it.
         { name: 'caretAttributes', kind: :object }.freeze,
         # Color scheme for native date picker icon visibility (set 'dark' for dark backgrounds)
         { name: 'colorScheme', kind: :enum, values: ['light', 'dark'].freeze }.freeze,

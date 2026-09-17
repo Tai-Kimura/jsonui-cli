@@ -8,15 +8,15 @@
     "agentWarning": "LLM/Agent: you MUST NOT modify this file."
   },
   "schemaVersion": 2,
-  "generatedFrom": "b1a3d7648234c3b6e0911a4b88edfbc41f43308fe50ed3ab156191a872d8a026",
+  "generatedFrom": "0c8f10e5a9575ee3cfc5afd41c5009ff063d4e82dc24312a13e4719e9faaeaa5",
   "counts": {
-    "fixtures": 1112,
+    "fixtures": 1113,
     "assertable": 49,
-    "visual": 832,
+    "visual": 833,
     "interactive": 37,
     "control": 116,
     "declarationOnly": 77,
-    "skipped": 157,
+    "skipped": 156,
     "promoted": {
       "callback": 11
     }
@@ -15620,6 +15620,36 @@
       "control": "__control/SelectBox__prompt-Choose"
     },
     {
+      "id": "SelectBox/caretAttributes__static",
+      "component": "SelectBox",
+      "attribute": "caretAttributes",
+      "case": "static",
+      "class": "visual",
+      "host": "SelectBox",
+      "writtenKey": "caretAttributes",
+      "aliasOf": null,
+      "value": {
+        "width": 32,
+        "height": 32,
+        "tintColor": "#FF0000",
+        "background": "#00AA00",
+        "rightMargin": 24
+      },
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/SelectBox/caretAttributes__static.layout.json",
+      "test": "fixtures/SelectBox/caretAttributes__static.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": null,
+      "control": "__control/SelectBox"
+    },
+    {
       "id": "SelectBox/inView__static",
       "component": "SelectBox",
       "attribute": "inView",
@@ -27558,11 +27588,6 @@
       "component": "SelectBox",
       "attribute": "selectedDate",
       "reason": "requires runtime data / cell template (v1 static fixtures only)"
-    },
-    {
-      "component": "SelectBox",
-      "attribute": "caretAttributes",
-      "reason": "composite value (no representative static value in v1)"
     },
     {
       "component": "SelectBox",

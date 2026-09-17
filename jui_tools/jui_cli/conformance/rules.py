@@ -693,6 +693,21 @@ VALUE_OVERRIDES_BY_SECTION: dict[tuple[str, str], Any] = {
         "fontColor": "#FF0000",
         "textAlign": "Center",
     },
+    # UIKit-only (SJUISelectBox) until 1.8.101, so `_platforms` scoped it to
+    # iOS and the composite rule skipped it; now every face draws the caret
+    # from this bag. No `src`: the default glyph is the case that matters —
+    # `{"rightMargin": N}` alone is why the object was promoted — and an asset
+    # would make tintColor depend on the asset's rendering mode. The four
+    # values each move pixels on their own: 32x32 is larger than any face's
+    # default glyph, the tint is the fixture red, the background paints the
+    # caret's box, and 24 pushes it off the trailing edge on every face.
+    ("SelectBox", "caretAttributes"): {
+        "width": 32,
+        "height": 32,
+        "tintColor": "#FF0000",
+        "background": "#00AA00",
+        "rightMargin": 24,
+    },
     # Skipped as "composite value" until the properties hole was filled: the
     # declarations on TextField/TextView were bare objects, so the bag's own
     # keys existed only in the readers. The declared four (font / fontSize /

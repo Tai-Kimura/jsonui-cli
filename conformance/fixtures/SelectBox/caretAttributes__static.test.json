@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/SelectBox/caretAttributes__static.layout.json"
+  },
+  "metadata": {
+    "name": "conformance SelectBox.caretAttributes (static)",
+    "description": "Conformance fixture for 'caretAttributes' on SelectBox (section: SelectBox, class: visual). Value under test: {\"width\": 32, \"height\": 32, \"tintColor\": \"#FF0000\", \"background\": \"#00AA00\", \"rightMargin\": 24}.",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "SelectBox"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "caretAttributes__static",
+      "description": "Conformance fixture for 'caretAttributes' on SelectBox (section: SelectBox, class: visual). Value under test: {\"width\": 32, \"height\": 32, \"tintColor\": \"#FF0000\", \"background\": \"#00AA00\", \"rightMargin\": 24}.",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "SelectBox_caretAttributes__static"
+        }
+      ]
+    }
+  ]
+}
