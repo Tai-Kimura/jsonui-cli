@@ -70,6 +70,19 @@ module SjuiTools
               add_line "cornerRadius: #{@component['cornerRadius']},"
             end
 
+            # caretAttributes — the closed-state caret. The object was
+            # UIKit-only (SJUISelectBox) until 1.8.101, so nothing here read
+            # it; the SSoT now declares it for every face. Absent: nothing is
+            # emitted and SelectBoxView keeps its fixed chevron, so existing
+            # layouts do not move. Present: the keys become the view's
+            # `CaretAttributes` — every key optional, so `{"rightMargin": 12}`
+            # alone moves the default glyph off the trailing edge. The
+            # dynamic path (SelectBoxConverter.swift) builds the same struct.
+            caret_attrs = @component['caretAttributes']
+            if caret_attrs.is_a?(Hash)
+              add_line "caret: #{caret_literal(caret_attrs)},"
+            end
+
             # selectItemType
             case selectItemType
             when 'Date'
@@ -306,6 +319,22 @@ module SjuiTools
         # on ios).
         def selected_declaration
           @component['selectedItem'] || @component['selectedValue']
+        end
+
+        # `SelectBoxView.CaretAttributes(...)` from the declared object. Only
+        # the declared keys are named, so the view's defaults (nil → glyph
+        # size / gray / clear / 0) fill the rest, exactly as they do for the
+        # dynamic path. Colours go through the same resolver as every other
+        # colour here, so the `@color/…` spelling and bound colours work.
+        def caret_literal(attrs)
+          args = []
+          args << "src: \"#{attrs['src']}\"" if attrs['src']
+          args << "width: #{attrs['width']}" if attrs['width']
+          args << "height: #{attrs['height']}" if attrs['height']
+          args << "tintColor: #{get_swiftui_color(attrs['tintColor'])}" if attrs['tintColor']
+          args << "background: #{get_swiftui_color(attrs['background'])}" if attrs['background']
+          args << "rightMargin: #{attrs['rightMargin']}" if attrs['rightMargin']
+          "SelectBoxView.CaretAttributes(#{args.join(', ')})"
         end
 
         # The item list as a Swift expression, for the lookups that have to
