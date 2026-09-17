@@ -26,6 +26,25 @@ from ..schema import (
 ARG_PLACEHOLDER_PATTERN = re.compile(r'@\{([^}]+)\}')
 
 
+def _json_type_name(value) -> str:
+    """The JSON name of a value's type, for a message a test author reads
+    next to their file: `null`, `array`, `object`, not `NoneType`, `list`,
+    `dict`."""
+    if value is None:
+        return "null"
+    if isinstance(value, bool):
+        return "boolean"
+    if isinstance(value, (int, float)):
+        return "number"
+    if isinstance(value, str):
+        return "string"
+    if isinstance(value, list):
+        return "array"
+    if isinstance(value, dict):
+        return "object"
+    return type(value).__name__
+
+
 class ScreenTestValidator:
     """Validates screen test structure."""
 
@@ -67,7 +86,40 @@ class ScreenTestValidator:
         # additionalProperties: false, and the old warning-only handling let
         # 3 of the 4 shipped examples violate the repo's own schema unnoticed.
         source = data.get("source")
-        if source and isinstance(source, dict):
+        # 🔻 THE SHAPE FIRST, THEN THE KEYS. This used to read `if source and
+        # isinstance(source, dict):` — anything that was not a non-empty object
+        # skipped every check below, so `"source": "docs/…/x.json"` validated
+        # PASSED, was installed into both drivers' bundles, and failed at load
+        # on both (Android: kotlinx "Expected start of the object '{' … at
+        # path: $.source", TestModels.kt TestSource; iOS: TestLoader
+        # invalidJSON). Neither driver names the shape in its error, so the
+        # validator is the only place this can be said in words. An ABSENT
+        # `source` is the required-key check's error (schema `required`), not
+        # this one's; a present-but-wrong one is this one's, in every shape:
+        # string, array, number, boolean, null, and an object without the
+        # `layout` both drivers' TestSource requires (2026-09-17, bar face).
+        if "source" in data and not isinstance(source, dict):
+            result.errors.append(ValidationMessage(
+                path=f"{path}.source",
+                message=(
+                    "'source' must be an object with a 'layout' string "
+                    "({\"layout\": \"<path>\"}), got: "
+                    f"{_json_type_name(source)}. Both drivers reject a "
+                    "non-object source at parse time (TestSource)."
+                )
+            ))
+        elif isinstance(source, dict):
+            layout = source.get("layout")
+            if not isinstance(layout, str) or not layout.strip():
+                result.errors.append(ValidationMessage(
+                    path=f"{path}.source",
+                    message=(
+                        "'source' must have a non-empty string 'layout' — "
+                        "the drivers' TestSource requires it"
+                        + ("" if "layout" in source
+                           else " (the key is missing)")
+                    )
+                ))
             if "spec" in source:
                 if "document" in source:
                     result.errors.append(ValidationMessage(
