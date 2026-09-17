@@ -136,7 +136,6 @@ echo "     off-tag window: since $SINCE, $(printf '%s\n' "$MADE" | grep -c .) pa
 MISSING=$(comm -13 <(printf '%s\n' "$MADE" | grep .) <(printf '%s\n' "$ONTAG" | grep .) | grep -c .)
 ck "the window enumerated the tag's own commits (missing)" "$MISSING" "0"
 ck "the tag's own patch-id set is not empty" "$([ "$(printf '%s\n' "$ONTAG" | grep -c .)" -gt 0 ] && echo yes)" "yes"
-   "$(printf '%s\n' "$ONTAG" | grep -c .)" "$CNT"
 ck "no commit made since $PREV is off the tag" "$(printf '%s\n' "$OFF" | grep -c .)" "0"
 [ -n "$OFF" ] && g log --format='       OFF-TAG %h %s' --all --since="$SINCE" --not "$PREV" | head -10
 
