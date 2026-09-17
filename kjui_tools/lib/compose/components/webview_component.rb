@@ -11,6 +11,7 @@ module KjuiTools
           required_imports&.add(:webview)
           
           # WebView uses 'url' for the web page URL
+          url_is_bound = json_data['url'].is_a?(String) && json_data['url'].match?(/@\{([^}]+)\}/)
           url = if json_data['url'] && json_data['url'].match(/@\{([^}]+)\}/)
             # `data.#{$1}` spliced the inner expression in verbatim, so a
             # `?? default` reached the emit as `data.x ?? y`, which is not
@@ -55,11 +56,34 @@ module KjuiTools
             code += "\n" + indent("setBackgroundColor(webViewBgColor)", depth + 3)
           end
 
-          # Load URL
+          # Load URL. A bound url records what it loaded on the view (`tag`),
+          # so the first `update` below is a no-op rather than a second load.
+          code += "\n" + indent("tag = #{url}", depth + 3) if url_is_bound
           code += "\n" + indent("loadUrl(#{url})", depth + 3)
           
           code += "\n" + indent("}", depth + 2)
           code += "\n" + indent("},", depth + 1)
+
+          # A bound url is followed after the first composition. Until
+          # kjui-webview-codegen-does-not-follow-url-binding-changes this
+          # converter loaded it once, in `factory`, and emitted no `update`, so
+          # a url set after the first composition never reached the view —
+          # while `type: "Web"` (web_component.rb), SwiftJsonUI's `updateUIView`
+          # and the dynamic runtime all follow the binding. The comparand is
+          # the url this view last LOADED, kept on the view itself: `webView.url`
+          # follows redirects, so comparing against it would reload on every
+          # recomposition after one (SwiftJsonUI keeps `lastLoadedURL` for the
+          # same reason). A static url has nothing to follow, and its emit is
+          # unchanged.
+          if url_is_bound
+            code += "\n" + indent("update = { webView ->", depth + 1)
+            code += "\n" + indent("val url = #{url}", depth + 2)
+            code += "\n" + indent("if (webView.tag != url) {", depth + 2)
+            code += "\n" + indent("webView.tag = url", depth + 3)
+            code += "\n" + indent("webView.loadUrl(url)", depth + 3)
+            code += "\n" + indent("}", depth + 2)
+            code += "\n" + indent("},", depth + 1)
+          end
           
           # Build modifiers
           modifiers = []
