@@ -12,6 +12,7 @@ module KjuiTools
           required_imports&.add(:webview)
           
           # Web uses 'url' for the web page URL
+          url_is_bound = json_data['url'].is_a?(String) && json_data['url'].match?(/@\{([^}]+)\}/)
           url = if json_data['url'] && json_data['url'].match(/@\{([^}]+)\}/)
             # `data.#{$1}` spliced the inner expression in verbatim, so a
             # `?? default` reached the emit as `data.x ?? y`, which is not
@@ -65,6 +66,9 @@ module KjuiTools
             # what loading an author-supplied string should do.
             code += "\n" + indent("loadDataWithBaseURL(null, #{kotlin_string(json_data['html'])}, \"text/html\", \"utf-8\", null)", depth + 3)
           else
+            # A bound url records what it loaded on the view, so the first
+            # `update` below is a no-op rather than a second load.
+            code += "\n" + indent("tag = #{url}", depth + 3) if url_is_bound
             code += "\n" + indent("loadUrl(#{url})", depth + 3)
           end
           
@@ -79,11 +83,23 @@ module KjuiTools
           code += "\n" + indent("}", depth + 2)
           code += "\n" + indent("},", depth + 1)
           
-          # Update callback to handle URL changes
+          # Update callback to handle URL changes. `update` runs on every
+          # recomposition, so a bound url is reloaded only when it moved since
+          # the last load — kept on the view's `tag`, the same shape
+          # webview_component.rb has had since 1.8.103. Until
+          # kjui-web-codegen-reloads-bound-url-on-every-recomposition this
+          # called loadUrl unconditionally and threw away scroll position,
+          # form input and page state whenever anything around it recomposed.
+          # Not `webView.url`: it follows redirects, so a redirected page would
+          # still reload every time. A static url keeps its empty block.
           code += "\n" + indent("update = { webView ->", depth + 1)
           
-          if json_data['url'] && json_data['url'].match(/@\{([^}]+)\}/)
-            code += "\n" + indent("webView.loadUrl(#{url})", depth + 2)
+          if url_is_bound
+            code += "\n" + indent("val url = #{url}", depth + 2)
+            code += "\n" + indent("if (webView.tag != url) {", depth + 2)
+            code += "\n" + indent("webView.tag = url", depth + 3)
+            code += "\n" + indent("webView.loadUrl(url)", depth + 3)
+            code += "\n" + indent("}", depth + 2)
           end
           
           code += "\n" + indent("},", depth + 1)

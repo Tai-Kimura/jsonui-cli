@@ -29,6 +29,32 @@ RSpec.describe KjuiTools::Compose::Components::WebComponent do
       expect(required_imports).to include(:box)
     end
 
+    it 'leaves a static url inside the Box byte-identical to 1.8.104' do
+      result = described_class.generate({ 'type' => 'Web', 'id' => 'wv', 'url' => 'https://example.com' }, 0, required_imports)
+      expect(result).to eq(<<~KOTLIN.chomp)
+        Box(
+            modifier = Modifier
+                .testTag("wv")
+                .semantics { testTagsAsResourceId = true }
+                .fillMaxSize()
+        ) {
+            AndroidView(
+                factory = { context ->
+                    WebView(context).apply {
+                        settings.javaScriptEnabled = true
+                        loadUrl("https://example.com")
+                        webViewClient = KjuiWebViewClient()
+                        webChromeClient = WebChromeClient()
+                    }
+                },
+                update = { webView ->
+                },
+                modifier = Modifier.fillMaxSize()
+            )
+        }
+      KOTLIN
+    end
+
     it 'leaves the emit without an id byte-identical (no Box)' do
       result = described_class.generate({ 'type' => 'Web', 'url' => 'https://example.com' }, 0, required_imports)
       expect(result).to eq(<<~KOTLIN.chomp)
@@ -75,7 +101,8 @@ RSpec.describe KjuiTools::Compose::Components::WebComponent do
       result = described_class.generate(json_data, 0, required_imports)
       expect(result).to include('loadUrl(data.webUrl)')
       expect(result).to include('update = { webView ->')
-      expect(result).to include('webView.loadUrl(data.webUrl)')
+      expect(result).to include('val url = data.webUrl')
+      expect(result).to include('webView.loadUrl(url)')
     end
 
     it 'generates WebView with empty url when not provided' do
@@ -204,7 +231,60 @@ RSpec.describe KjuiTools::Compose::Components::WebComponent do
         json_data = { 'type' => 'Web', 'url' => '@{dynamicUrl}' }
         result = described_class.generate(json_data, 0, required_imports)
         expect(result).to include('update = { webView ->')
-        expect(result).to include('webView.loadUrl(data.dynamicUrl)')
+        expect(result).to include('val url = data.dynamicUrl')
+        expect(result).to include('webView.loadUrl(url)')
+      end
+
+      # kjui-web-codegen-reloads-bound-url-on-every-recomposition: the update
+      # used to call loadUrl unconditionally, and `update` runs on every
+      # recomposition — a bound page was reloaded whenever anything around it
+      # recomposed. `type: "WebView"` (1.8.103) keeps the last LOADED url on
+      # the view's `tag` and reloads only when the binding moved; this is the
+      # same shape. Not `webView.url`: that follows redirects.
+      describe 'a bound url reloads only when it moved' do
+        let(:bound) { { 'type' => 'Web', 'url' => '@{pageUrl}' } }
+
+        def update_body(code)
+          code[/update = \{ webView ->\n(.*?)\n\s*\},\n/m, 1]
+        end
+
+        it 'compares against the url the view last loaded before reloading' do
+          body = update_body(described_class.generate(bound, 0, required_imports))
+          expect(body).not_to be_nil
+          expect(body).to eq(<<~KOTLIN.chomp.gsub(/^/, '        '))
+            val url = data.pageUrl
+            if (webView.tag != url) {
+                webView.tag = url
+                webView.loadUrl(url)
+            }
+          KOTLIN
+        end
+
+        it 'records what the factory loaded, so the first update is a no-op' do
+          result = described_class.generate(bound, 0, required_imports)
+          expect(result).to match(/tag = data\.pageUrl\n\s+loadUrl\(data\.pageUrl\)/)
+        end
+
+        it 'keeps the same update inside the Box when there is an id' do
+          result = described_class.generate(bound.merge('id' => 'w'), 0, required_imports)
+          expect(result).to start_with("Box(\n")
+          expect(result).to include("        update = { webView ->\n" \
+                                    "            val url = data.pageUrl\n" \
+                                    "            if (webView.tag != url) {\n")
+          expect(result).to match(/tag = data\.pageUrl\n\s+loadUrl\(data\.pageUrl\)/)
+        end
+
+        it 'does not put the comparison on a static url, whose emit is unchanged' do
+          result = described_class.generate({ 'type' => 'Web', 'url' => 'https://example.com' }, 0, required_imports)
+          expect(result).not_to include('tag')
+          expect(update_body(result)).to be_nil  # the update block is still the empty one
+        end
+
+        it 'does not touch the html branch' do
+          result = described_class.generate({ 'type' => 'Web', 'html' => '<b>x</b>' }, 0, required_imports)
+          expect(result).not_to include('tag')
+          expect(result).not_to include('loadUrl')
+        end
       end
     end
   end
