@@ -32,7 +32,8 @@ Resolution:
    remove 2006 files, 1647 of them a vendored ``node_modules``.
 
 Notes:
-- ``.pyc`` / ``__pycache__`` / ``.DS_Store`` / ``.git`` are always skipped.
+- ``.pyc`` / ``__pycache__`` / ``.DS_Store`` / ``.git`` / ``.rspec_status`` /
+  ``.byebug_history`` are always skipped (see ``SKIP_DIR_NAMES`` / ``SKIP_FILE_NAMES``).
 - ``--dry-run`` shows what would change without touching disk.
 """
 from __future__ import annotations
@@ -107,12 +108,19 @@ SKIP_DIR_NAMES = {
     "vendor",         # bundled gems / Ruby deps
     "tmp",
     "log",
-    ".rspec_status",
-    ".byebug_history",
     "coverage",
     ".pytest_cache",
 }
-SKIP_FILE_NAMES = {".DS_Store"}
+# Files never synced. `_should_skip` judges a name on the branch its KIND
+# selects, so a file name listed under SKIP_DIR_NAMES is never consulted:
+# `.rspec_status` and `.byebug_history` sat there and `spec/.rspec_status`
+# (rspec's example-status persistence, ~190 KB) reached a consumer as
+# `copied: 1` whenever the pin was a checkout that had run the suite.
+SKIP_FILE_NAMES = {
+    ".DS_Store",
+    ".rspec_status",     # RSpec example status persistence
+    ".byebug_history",   # byebug REPL history
+}
 SKIP_SUFFIXES = {".pyc", ".pyo", ".gem", ".log", ".tmp"}
 
 
