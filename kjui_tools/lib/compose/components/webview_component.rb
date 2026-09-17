@@ -102,6 +102,35 @@ module KjuiTools
             modifiers << ".clip(RoundedCornerShape(#{json_data['cornerRadius']}.dp))"
           end
           
+          # 🔻 THE ID LIVES ON A COMPOSE NODE, NOT ON THE AndroidView. A testTag
+          # on the AndroidView's own modifier is never projected as a UiAutomator
+          # resource-id: the holder exposes the real android.webkit.WebView,
+          # whose resource-id is empty (bar face, 2026-09-17:
+          # `class="android.webkit.WebView" resource-id=""` while the screen
+          # marker on a Compose node was found). So an id wraps the view in a
+          # Box that carries the WHOLE modifier chain — tag, margins, size,
+          # alpha, clip, weight — and the AndroidView fills the Box. Measured on
+          # conf_ci (api 35) before this emit changed: with the wrap the tree
+          # holds `android.view.View resource-id="<id>"` with the WebView as
+          # its child, same bounds; without it, no node carries the id.
+          # Without an id nothing is wrapped and the emit is byte-identical.
+          # (kjui-webview-testtag-on-androidview-not-projected-as-resource-id;
+          # the dynamic runtime's DynamicWebComponent does the same.)
+          if json_data['id']
+            required_imports&.add(:box)
+            # Statements emitted before the call (`val webViewBgColor = …`)
+            # stay outside the Box; only the AndroidView(...) call is wrapped.
+            head, call = code.split(indent("AndroidView(", depth), 2)
+            call = indent("AndroidView(", depth) + call
+            box = head.to_s + indent("Box(", depth)
+            box += Helpers::ModifierBuilder.format(modifiers, depth)
+            box += "\n" + indent(") {", depth)
+            inner = call.split("\n").map { |l| l.empty? ? l : "    " + l }.join("\n")
+            inner += "\n" + indent("modifier = Modifier.fillMaxSize()", depth + 2)
+            inner += "\n" + indent(")", depth + 1)
+            return box + "\n" + inner + "\n" + indent("}", depth)
+          end
+
           code += Helpers::ModifierBuilder.format(modifiers, depth)
           
           code += "\n" + indent(")", depth)
