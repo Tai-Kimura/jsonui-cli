@@ -124,7 +124,18 @@ OFF=$(comm -23 <(printf '%s\n' "$MADE" | grep .) <(printf '%s\n' "$ONTAG" | grep
 # Positive control in the same output: a window that enumerated nothing would
 # report 0 off-tag commits and look identical to a clean release.
 echo "     off-tag window: since $SINCE, $(printf '%s\n' "$MADE" | grep -c .) patch-id(s) made, $(printf '%s\n' "$ONTAG" | grep -c .) on the tag"
-ck "the window enumerated the tag's own commits" \
+# 🔻 COMMITS AND PATCH-IDS ARE NOT ONE-TO-ONE. A merge train (v1.8.101: three
+# face branches merged, two of the merges resolving the same coverage.json
+# line) gave 9 commits and 7 patch-ids — one merge has no diff at all, two
+# carry the identical resolution. Comparing the on-tag patch-id count to
+# `rev-list --count` therefore reddened a clean release. The claim this
+# control makes is that the TIME window actually enumerated the release's
+# own commits — so judge containment: every on-tag patch-id is inside the
+# window, and the on-tag set is not empty. A window that enumerated nothing
+# now reports "missing = <all of them>" instead of a count mismatch.
+MISSING=$(comm -13 <(printf '%s\n' "$MADE" | grep .) <(printf '%s\n' "$ONTAG" | grep .) | grep -c .)
+ck "the window enumerated the tag's own commits (missing)" "$MISSING" "0"
+ck "the tag's own patch-id set is not empty" "$([ "$(printf '%s\n' "$ONTAG" | grep -c .)" -gt 0 ] && echo yes)" "yes"
    "$(printf '%s\n' "$ONTAG" | grep -c .)" "$CNT"
 ck "no commit made since $PREV is off the tag" "$(printf '%s\n' "$OFF" | grep -c .)" "0"
 [ -n "$OFF" ] && g log --format='       OFF-TAG %h %s' --all --since="$SINCE" --not "$PREV" | head -10
@@ -147,8 +158,16 @@ ck "marks extractor is not empty"  "$([ "$(printf '%s' "$A" | grep -c .)" -gt 0 
 ck "marks extractor is stable on one ref" \
    "$(printf '%s' "$(marks "$PREV")" | shasum | cut -c1-16)" "$(printf '%s' "$A" | shasum | cut -c1-16)"
 echo "     historical marks: $PREV=$(printf '%s' "$A" | grep -c .)  $TAG=$(printf '%s' "$B" | grep -c .)  (counts printed, not judged)"
-ck "historical marks unchanged (set digest)" \
-   "$(printf '%s' "$B" | shasum | cut -c1-16)" "$(printf '%s' "$A" | shasum | cut -c1-16)"
+# 🔻 THE CLAIM IS "NO HISTORICAL MARK WAS REWRITTEN", NOT "THE SET DID NOT
+# MOVE". A release that ADDS a mark ("a cross-platform object since 1.8.101")
+# is exactly what the marks are for, and the digest equality reddened
+# v1.8.101 on two such additions with nothing removed. So the judgement is
+# containment — every mark present at the previous tag is still present,
+# byte-identical, at this one — and the additions are printed, not judged.
+REMOVED=$(comm -23 <(printf '%s\n' "$A" | grep .) <(printf '%s\n' "$B" | grep .))
+echo "     marks added since $PREV: $(comm -13 <(printf '%s\n' "$A" | grep .) <(printf '%s\n' "$B" | grep .) | grep -c .)  (printed, not judged)"
+[ -n "$REMOVED" ] && printf '%s\n' "$REMOVED" | sed 's/^/     REWRITTEN OR REMOVED: /'
+ck "no historical mark rewritten or removed" "$(printf '%s' "$REMOVED" | grep -c .)" "0"
 
 echo "== $pass/$n pass, $fail fail"
 exit $([ "$fail" -eq 0 ] && echo 0 || echo 1)
