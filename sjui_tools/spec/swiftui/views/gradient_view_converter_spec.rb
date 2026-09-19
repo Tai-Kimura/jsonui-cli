@@ -290,4 +290,50 @@ RSpec.describe SjuiTools::SwiftUI::Views::GradientViewConverter do
       expect(result).to eq('UnitPoint(x: 0.3, y: 0.7)')
     end
   end
+
+  # ---------------------------------------------------------------- 1.8.107
+  #
+  # A child's `visibility` is honored by THIS container. Reported 2026-09-20:
+  # a `visibility: "@{x}"` moved from a ScrollView to its direct child
+  # vanished from the iOS output with 0 warnings (kjui wrapped it). The
+  # three containers that call the factory themselves (ScrollView, Blur,
+  # GradientView) go through BaseViewConverter#render_child_honoring_visibility
+  # now; these arms pin each site on each container.
+  describe 'a direct child that declares visibility (1.8.107)' do
+    let(:factory) { SjuiTools::SwiftUI::ConverterFactory.new }
+
+    def child(id, extra = {})
+      { 'type' => 'View', 'id' => id, 'width' => 'matchParent', 'height' => 'wrapContent',
+        'visibility' => '@{contentVisibility}' }.merge(extra)
+    end
+
+    def code_for(children, extra = {})
+      described_class.new({ 'type' => 'GradientView' }.merge(extra).merge('child' => children), 0, nil, factory).convert
+    end
+
+    it 'wraps a single child in VisibilityWrapper' do
+      code = code_for([child('content_container')])
+      expect(code).to include('VisibilityWrapper(data.contentVisibility) {')
+      expect(code.scan('VisibilityWrapper(').length).to eq(1)
+    end
+
+    it 'wraps each of several children that declare visibility, and only those' do
+      code = code_for([child('a'), { 'type' => 'View', 'id' => 'b' }, child('c', 'visibility' => '@{other}')])
+      expect(code).to include('VisibilityWrapper(data.contentVisibility) {')
+      expect(code).to include('VisibilityWrapper(data.other) {')
+      expect(code.scan('VisibilityWrapper(').length).to eq(2)
+    end
+
+    it 'emits no wrapper when no child declares visibility' do
+      code = code_for([{ 'type' => 'View', 'id' => 'plain' }, { 'type' => 'View', 'id' => 'plain2' }])
+      expect(code).not_to include('VisibilityWrapper(')
+    end
+
+    it 'still renders the child inside the wrapper' do
+      code = code_for([child('content_container')])
+      wrapper_at = code.index('VisibilityWrapper(')
+      expect(code.index('content_container')).to be > wrapper_at
+    end
+  end
+
 end

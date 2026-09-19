@@ -96,18 +96,9 @@ module SjuiTools
                 
                 add_line "#{stack_type}(#{alignment}, spacing: 0) {"
                 indent do
-                  if @converter_factory
-                    child_converter = @converter_factory.create_converter(children.first, @indent_level, @action_manager, @converter_factory, @view_registry)
-                    if child_converter
-                      child_code = child_converter.convert
-                      child_code.split("\n").each { |line| @generated_code << line }
-
-                      # Propagate state variables
-                      if child_converter.respond_to?(:state_variables) && child_converter.state_variables
-                        @state_variables.concat(child_converter.state_variables)
-                      end
-                    end
-                  end
+                  # Through the visibility door (base_view_converter): a
+                  # `visibility` on the child was dropped here until 1.8.107.
+                  render_child_honoring_visibility(children.first)
                   # Add Spacer for leading alignment (default)
                   if horizontal != 'center' && horizontal != 'right'
                     add_line "Spacer(minLength: 0)"
@@ -118,18 +109,9 @@ module SjuiTools
                 alignment = 'alignment: .top'
                 add_line "#{stack_type}(#{alignment}, spacing: 0) {"
                 indent do
-                  if @converter_factory
-                    child_converter = @converter_factory.create_converter(children.first, @indent_level, @action_manager, @converter_factory, @view_registry)
-                    if child_converter
-                      child_code = child_converter.convert
-                      child_code.split("\n").each { |line| @generated_code << line }
-
-                      # Propagate state variables
-                      if child_converter.respond_to?(:state_variables) && child_converter.state_variables
-                        @state_variables.concat(child_converter.state_variables)
-                      end
-                    end
-                  end
+                  # Through the visibility door (base_view_converter): a
+                  # `visibility` on the child was dropped here until 1.8.107.
+                  render_child_honoring_visibility(children.first)
                   # Add Spacer to fill remaining space
                   add_line "Spacer(minLength: 0)"
                 end
@@ -144,17 +126,7 @@ module SjuiTools
               add_line "#{stack_type}(#{alignment}, spacing: 0) {"
               indent do
                 children.each do |child|
-                  if @converter_factory
-                    child_converter = @converter_factory.create_converter(child, @indent_level, @action_manager, @converter_factory, @view_registry)
-                    next unless child_converter
-                    child_code = child_converter.convert
-                    child_code.split("\n").each { |line| @generated_code << line }
-                    
-                    # Propagate state variables
-                    if child_converter.respond_to?(:state_variables) && child_converter.state_variables
-                      @state_variables.concat(child_converter.state_variables)
-                    end
-                  end
+                  render_child_honoring_visibility(child)
                 end
                 # Add Spacer to fill remaining space (same as Dynamic mode)
                 add_line "Spacer(minLength: 0)"

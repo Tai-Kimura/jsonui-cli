@@ -1096,6 +1096,44 @@ module SjuiTools
           end
         end
 
+        # Draw one child of THIS container, honoring the child's `visibility`.
+        #
+        # 🚨 THE ONE DOOR FOR A CONTAINER THAT CALLS THE FACTORY ITSELF. A
+        # plain View's children go through ChildRenderingHelper, which wraps a
+        # child that declares `visibility` in `VisibilityWrapper(...)`. Three
+        # containers (ScrollView, Blur, GradientView) drew their children with
+        # `@converter_factory.create_converter(...)` directly and never asked
+        # about visibility, so a `visibility: "@{x}"` on a ScrollView's direct
+        # child compiled, built with 0 warnings, and was ALWAYS SHOWN on iOS —
+        # while kjui wrapped the same child in VisibilityWrapper. Reported
+        # 2026-09-20 from two consumer screens that had just moved a
+        # visibility binding from the ScrollView to its child.
+        #
+        # The wrapper goes where the caller stands: inside the VStack a
+        # single-child ScrollView builds, so the Spacer beside the child stays
+        # (wrapping the VStack would hide the Spacer too and change what
+        # weight / alignment mean). Returns the child's converter for state
+        # propagation, or nil when the factory produced none.
+        def render_child_honoring_visibility(child)
+          return nil unless @converter_factory
+          if child.is_a?(Hash) && child['visibility']
+            visibility_param = SwiftUI::Binding::BindingExpression.swift_visibility_param(child['visibility'])
+            child_converter = @converter_factory.create_converter(child, @indent_level + 1, @action_manager, @converter_factory, @view_registry)
+            return nil unless child_converter
+            add_line "VisibilityWrapper(#{visibility_param}) {"
+            child_converter.convert.split("\n").each { |line| @generated_code << line }
+            add_line "}"
+          else
+            child_converter = @converter_factory.create_converter(child, @indent_level, @action_manager, @converter_factory, @view_registry)
+            return nil unless child_converter
+            child_converter.convert.split("\n").each { |line| @generated_code << line }
+          end
+          if child_converter.respond_to?(:state_variables) && child_converter.state_variables
+            @state_variables.concat(child_converter.state_variables)
+          end
+          child_converter
+        end
+
         # Get event handler invocation based on handler type definition
         # Checks data_definitions to determine if handler takes (viewId, value) or no arguments
         # @param handler [String] The handler binding expression (e.g., "@{onValueChange}")
