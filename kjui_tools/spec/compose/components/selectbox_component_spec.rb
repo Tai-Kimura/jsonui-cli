@@ -525,5 +525,57 @@ RSpec.describe KjuiTools::Compose::Components::SelectBoxComponent do
 
       expect(result).to include('data.onSelectionChange?.invoke("selectbox", newValue)')
     end
+
+    # The payload is the new value of the SELECTION BINDING, as on sjui
+    # (selectbox_converter_spec 'with onValueChange on a bound selectedIndex'):
+    # a bound selectedIndex hands the handler the Int index, not the item
+    # String, so one `((Int) -> Unit)?` declaration compiles on both platforms.
+    context 'with a bound selectedIndex' do
+      let(:json_data) do
+        {
+          'type' => 'SelectBox',
+          'id' => 'countrySelect',
+          'items' => '@{countries}',
+          'selectedIndex' => '@{countryIndex}',
+          'onValueChange' => '@{onSelectionChange}'
+        }
+      end
+
+      it 'passes the Int index, not the item, to an (Int) -> Unit handler' do
+        KjuiTools::Compose::Helpers::ResourceResolver.data_definitions = {
+          'onSelectionChange' => { 'name' => 'onSelectionChange', 'class' => '((Int) -> Unit)?' }
+        }
+        result = described_class.generate(json_data, 0, required_imports)
+        expect(result).to include('val index = data.countries.indexOf(newValue)')
+        expect(result).to include('viewModel.updateData(mapOf("countryIndex" to index))')
+        expect(result).to include('data.onSelectionChange?.invoke(index)')
+        expect(result).not_to include('invoke(newValue)')
+      end
+
+      it 'passes viewId + Int index to a (String, Int) -> Unit handler' do
+        KjuiTools::Compose::Helpers::ResourceResolver.data_definitions = {
+          'onSelectionChange' => { 'name' => 'onSelectionChange', 'class' => '((String, Int) -> Unit)?' }
+        }
+        result = described_class.generate(json_data, 0, required_imports)
+        expect(result).to include('data.onSelectionChange?.invoke("countrySelect", index)')
+      end
+    end
+
+    it 'still passes the item String when selectedItem is bound' do
+      KjuiTools::Compose::Helpers::ResourceResolver.data_definitions = {
+        'onSelectionChange' => { 'name' => 'onSelectionChange', 'class' => '((String, String) -> Unit)?' }
+      }
+      json_data = {
+        'type' => 'SelectBox',
+        'id' => 'countrySelect',
+        'items' => ['USA', 'Japan'],
+        'selectedItem' => '@{country}',
+        'onValueChange' => '@{onSelectionChange}'
+      }
+      result = described_class.generate(json_data, 0, required_imports)
+      expect(result).to include('viewModel.updateData(mapOf("country" to newValue))')
+      expect(result).to include('data.onSelectionChange?.invoke("countrySelect", newValue)')
+      expect(result).not_to include('val index')
+    end
   end
 end

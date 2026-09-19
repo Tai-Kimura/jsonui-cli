@@ -92,7 +92,17 @@ module KjuiTools
           if json_data['onValueChange']
             # onValueChange (camelCase) -> binding format only (@{functionName})
             if Helpers::ModifierBuilder.is_binding?(json_data['onValueChange'])
-              handler_call = Helpers::ModifierBuilder.get_event_handler_invocation(json_data['onValueChange'], view_id, 'newValue')
+              # The handler receives the NEW VALUE OF THE SELECTION BINDING —
+              # the same thing sjui's `.onChange(of: data.<binding>)` hands its
+              # handler: the Int index for a bound `selectedIndex` (computed
+              # below for the writeback anyway), the String item otherwise.
+              # Passing the Compose item String here while sjui passed the
+              # index meant no argument-taking handler type compiled on both
+              # platforms; only `(() -> Unit)?` did
+              # (jui-selectbox-onvaluechange-argument-differs-between-sjui-and-kjui).
+              handler_call = Helpers::ModifierBuilder.get_event_handler_invocation(
+                json_data['onValueChange'], view_id, is_index_binding ? 'index' : 'newValue'
+              )
               if binding_variable
                 code += "\n" + indent("onValueChange = { newValue ->", depth + 1)
                 if is_index_binding
