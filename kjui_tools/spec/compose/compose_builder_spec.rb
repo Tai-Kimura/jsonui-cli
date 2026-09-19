@@ -364,6 +364,20 @@ RSpec.describe KjuiTools::Compose::ComposeBuilder do
   # viewModel.updateData(mapOf("<id>IsFocused" to ...)) writebacks, so the
   # builder's extract_data_properties must synthesize the same <id>IsFocused
   # property as DataModelUpdater, or the updateData when-block drops the key.
+  # A same-valued updateData used to be dropped against the PREVIOUS REQUEST
+  # (`_lastUpdateData`), not the current state: after the ViewModel moved the
+  # value itself (reverting a failed write), the user's identical re-pick was
+  # swallowed and the view stayed on the reverted value. MutableStateFlow
+  # already conflates an equal Data, so the guard only ever lost updates.
+  describe 'updateData has no request-level de-dupe' do
+    it 'applies a repeated update instead of comparing it to the last request' do
+      code = described_class.new.send(:generate_update_data_function, [], 'Test')
+      expect(code).not_to include('_lastUpdateData')
+      expect(code).to include('fun updateData(updates: Map<String, Any>) {')
+      expect(code).to include('_data.update { current ->')
+    end
+  end
+
   describe 'IsFocused writeback branch in updateData' do
     let(:builder) { described_class.new }
     let(:json) do

@@ -1500,13 +1500,16 @@ module KjuiTools
           class_type.include?('-> Unit') || class_type.include?('-> Void') ||
             class_type.match?(/^(List|Map)<.*>$/)
         }
-        code += "    private var _lastUpdateData: Map<String, Any>? = null\n"
+        # No request-level de-dupe. `if (updates == _lastUpdateData) return`
+        # compared a call to the PREVIOUS CALL, not to the current state: once
+        # the ViewModel had moved the value by itself (reverting a failed
+        # write), the user's identical re-pick was dropped and the view stayed
+        # on the reverted value. MutableStateFlow already conflates an equal
+        # Data, so the guard never saved a recomposition; it only lost updates.
         if has_unchecked_cast
           code += "    @Suppress(\"UNCHECKED_CAST\")\n"
         end
         code += "    fun updateData(updates: Map<String, Any>) {\n"
-        code += "        if (updates == _lastUpdateData) return\n"
-        code += "        _lastUpdateData = updates\n"
         code += "        _data.update { current ->\n"
         code += "            var updated = current\n"
         code += "            updates.forEach { (key, value) ->\n"
