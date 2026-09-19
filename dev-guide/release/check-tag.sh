@@ -25,12 +25,20 @@
 # They are typed by the caller, and the output labels them HAND-SUPPLIED so
 # nobody reads that line as a derivation.
 #
-# Usage: check-tag.sh <repo> <prev-tag> <tag> <branch> <version> <words,comma> <remote>
+# Usage: check-tag.sh <repo> <prev-tag> <tag> <branch> <version> <words,comma> <remote> [remote-branch]
+#
+# <remote-branch> (default: <branch>) is the branch on <remote> that must be an
+# ancestor of the tag. Pass it when the release was assembled on a worktree
+# branch (rel/vX.Y.Z) that the remote has never seen: 2026-09-19 the check
+# "remote branch is an ancestor" reddened three times for `origin/rel/v1.8.106`
+# not existing, while the claim that matters — origin/main is behind the tag —
+# was true and had to be re-run by hand. A missing ref is not a failed claim.
 set -u
 R=${1:?repo}; PREV=${2:?prev tag}; TAG=${3:?new tag}; BRANCH=${4:?branch}
 VER=${5:?version}
 MSGWORDS=${6:?comma-separated words that must survive in the tag body}
 REMOTE=${7:?remote}
+REMOTE_BRANCH=${8:-$BRANCH}
 g() { git -C "$R" "$@"; }
 pass=0; fail=0; n=0
 ck() { n=$((n+1)); if [ "$2" = "$3" ]; then pass=$((pass+1)); printf '  %2d PASS %-46s %s\n' "$n" "$1" "$2"
@@ -41,8 +49,21 @@ echo "   words to look for are HAND-SUPPLIED, not derived: $MSGWORDS"
 ck "tag object exists"            "$(g cat-file -t "$TAG" 2>/dev/null)" "tag"
 ck "tag peels to $BRANCH"         "$(g rev-parse "$TAG^{}")" "$(g rev-parse "$BRANCH")"
 ck "tag object != peel (annotated)" "$([ "$(g rev-parse "$TAG")" != "$(g rev-parse "$TAG^{}")" ] && echo yes)" "yes"
-ck "VERSION == tag"               "v$(g show "$BRANCH:VERSION" | tr -d '[:space:]')" "$TAG"
-ck "VERSION == arg"               "$(g show "$BRANCH:VERSION" | tr -d '[:space:]')" "$VER"
+# The version stamp lives in `VERSION` (jsonui-cli, SwiftJsonUI) or in
+# gradle.properties' `version=` (KotlinJsonUI). Read whichever the branch has,
+# and say which was read: a repo with neither must fail, not pass on an empty
+# string (2026-09-19: KotlinJsonUI reddened "got=v" on a VERSION it never had).
+# ⚠️ `${BRANCH}` with braces: zsh reads `$BRANCH:gradle.properties` as a
+# history modifier and hands git `mainadle.properties` (measured, same day).
+if g cat-file -e "${BRANCH}:VERSION" 2>/dev/null; then
+  STAMP=$(g show "${BRANCH}:VERSION" | tr -d '[:space:]'); STAMP_FROM=VERSION
+elif g cat-file -e "${BRANCH}:gradle.properties" 2>/dev/null; then
+  STAMP=$(g show "${BRANCH}:gradle.properties" | sed -n 's/^version=//p' | tr -d '[:space:]'); STAMP_FROM=gradle.properties
+else
+  STAMP=""; STAMP_FROM="(no VERSION, no gradle.properties)"
+fi
+ck "version stamp ($STAMP_FROM) == tag" "v$STAMP" "$TAG"
+ck "version stamp ($STAMP_FROM) == arg" "$STAMP" "$VER"
 ck "working tree clean"           "$(g status --porcelain | wc -l | tr -d ' ')" "0"
 
 # RANGE: the line and its contents must come from the SAME range.
@@ -108,8 +129,9 @@ done
 
 # Nothing on the remote branch ahead of this tag, and nothing of ours left off.
 g fetch -q "$REMOTE" 2>/dev/null
-ck "remote branch is an ancestor of the tag" \
-   "$(g merge-base --is-ancestor "$REMOTE/$BRANCH" "$TAG^{}" 2>/dev/null && echo yes)" "yes"
+ck "$REMOTE/$REMOTE_BRANCH exists" "$(g rev-parse --verify --quiet "$REMOTE/$REMOTE_BRANCH" >/dev/null && echo yes)" "yes"
+ck "$REMOTE/$REMOTE_BRANCH is an ancestor of the tag" \
+   "$(g merge-base --is-ancestor "$REMOTE/$REMOTE_BRANCH" "$TAG^{}" 2>/dev/null && echo yes)" "yes"
 # 🔻 THE WINDOW IS TIME, NOT REACHABILITY. `--all --not $PREV` enumerates
 # everything not reachable from the tag, which on a repo with old branches is
 # the whole divergent history — measured here: 986. The claim is about commits
