@@ -418,5 +418,43 @@ RSpec.describe SjuiTools::SwiftUI::Views::SelectBoxConverter do
         expect(code).not_to include('caret:')
       end
     end
+
+    # Cross-platform contract, pinned on both sides (kjui
+    # selectbox_component_spec 'with a bound selectedIndex'): the handler
+    # receives the new value of the selection binding — the Int index for a
+    # bound selectedIndex — so one `((Int) -> Void)?` / `((Int) -> Unit)?`
+    # declaration compiles on both platforms.
+    context 'with onValueChange on a bound selectedIndex' do
+      before do
+        SjuiTools::SwiftUI::Views::ColorHelper.data_definitions = {
+          'onSelectionChange' => { 'name' => 'onSelectionChange', 'class' => '((Int) -> Void)?' }
+        }
+      end
+      after { SjuiTools::SwiftUI::Views::ColorHelper.data_definitions = {} }
+
+      let(:component) do
+        {
+          'type' => 'SelectBox',
+          'id' => 'countrySelect',
+          'items' => '@{countries}',
+          'selectedIndex' => '@{countryIndex}',
+          'onValueChange' => '@{onSelectionChange}'
+        }
+      end
+
+      it 'observes the index binding and hands its new Int value to the handler' do
+        code = described_class.new(component).convert
+        expect(code).to include('.onChange(of: data.countryIndex) { _, newValue in')
+        expect(code).to include('data.onSelectionChange?(newValue)')
+      end
+
+      it 'passes viewId + index to a (String, Int) -> Void handler' do
+        SjuiTools::SwiftUI::Views::ColorHelper.data_definitions = {
+          'onSelectionChange' => { 'name' => 'onSelectionChange', 'class' => '((String, Int) -> Void)?' }
+        }
+        code = described_class.new(component).convert
+        expect(code).to include('data.onSelectionChange?("countrySelect", newValue)')
+      end
+    end
   end
 end

@@ -51,8 +51,16 @@ module SjuiTools
                     add_line "#{selection_binding} = \"#{item}\""
                     # onValueChange handler - called when radio selection changes
                     # onValueChange (camelCase) -> binding format only (@{functionName})
+                    #
+                    # The handler receives the new value of the selection
+                    # binding — the item String just written above — as the
+                    # kjui codegen, KotlinJsonUI dynamic and SwiftJsonUI
+                    # dynamic all do. Passing the Int `index` here meant the
+                    # payload was a different value on each platform, the
+                    # same split as SelectBox
+                    # (jui-selectbox-onvaluechange-argument-differs-between-sjui-and-kjui).
                     if @component['onValueChange'] && is_binding?(@component['onValueChange'])
-                      handler_call = get_event_handler_invocation(@component['onValueChange'], id, index.to_s)
+                      handler_call = get_event_handler_invocation(@component['onValueChange'], id, "\"#{item.gsub('"', '\\"')}\"")
                       add_line handler_call
                     end
                   end

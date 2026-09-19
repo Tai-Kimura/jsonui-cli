@@ -111,6 +111,39 @@ RSpec.describe SjuiTools::SwiftUI::Views::RadioConverter do
       end
     end
 
+    # The handler receives the new value of the selection binding — the item
+    # String — as the kjui codegen (radio_component_spec '(String, String) ->
+    # Unit') already does; the Int index was an iOS-only payload.
+    context 'with items and an onValueChange binding' do
+      after { SjuiTools::SwiftUI::Views::ColorHelper.data_definitions = {} }
+
+      let(:component) do
+        {
+          'type' => 'Radio',
+          'id' => 'genderRadio',
+          'items' => ['Male', 'Female'],
+          'onValueChange' => '@{onGenderChange}'
+        }
+      end
+
+      it 'passes viewId + the item String to a (String, String) -> Void handler' do
+        SjuiTools::SwiftUI::Views::ColorHelper.data_definitions = {
+          'onGenderChange' => { 'name' => 'onGenderChange', 'class' => '((String, String) -> Void)?' }
+        }
+        code = described_class.new(component).convert
+        expect(code).to include('data.onGenderChange?("genderRadio", "Male")')
+        expect(code).to include('data.onGenderChange?("genderRadio", "Female")')
+        expect(code).not_to match(/onGenderChange\?\("genderRadio", [01]\)/)
+      end
+
+      it 'passes nothing to a () -> Void handler' do
+        SjuiTools::SwiftUI::Views::ColorHelper.data_definitions = {
+          'onGenderChange' => { 'name' => 'onGenderChange', 'class' => '(() -> Void)?' }
+        }
+        expect(described_class.new(component).convert).to include('data.onGenderChange?()')
+      end
+    end
+
     context 'without items and with onClick' do
       let(:action_manager) { SjuiTools::SwiftUI::ActionManager.new }
       let(:component) do
