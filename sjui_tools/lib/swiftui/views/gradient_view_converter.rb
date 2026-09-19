@@ -19,30 +19,14 @@ module SjuiTools
           if children.empty?
             add_line "Color.clear"
           elsif children.length == 1
-            if @converter_factory
-              child_converter = @converter_factory.create_converter(children.first, @indent_level, @action_manager, @converter_factory, @view_registry)
-              child_code = child_converter.convert
-              child_code.split("\n").each { |line| @generated_code << line }
-              
-              # Propagate state variables
-              if child_converter.respond_to?(:state_variables) && child_converter.state_variables
-                @state_variables.concat(child_converter.state_variables)
-              end
-            end
+            # Same door as ScrollView: a child's `visibility` was dropped here
+            # (found by counting the class of the 2026-09-20 report).
+            render_child_honoring_visibility(children.first)
           else
             add_line "VStack(spacing: 0) {"
             indent do
               children.each do |child|
-                if @converter_factory
-                  child_converter = @converter_factory.create_converter(child, @indent_level, @action_manager, @converter_factory, @view_registry)
-                  child_code = child_converter.convert
-                  child_code.split("\n").each { |line| @generated_code << line }
-                  
-                  # Propagate state variables
-                  if child_converter.respond_to?(:state_variables) && child_converter.state_variables
-                    @state_variables.concat(child_converter.state_variables)
-                  end
-                end
+                render_child_honoring_visibility(child)
               end
             end
             add_line "}"

@@ -227,8 +227,9 @@ module SjuiTools
 
                         if child_array && child_array.is_a?(Array)
                           child_array.each do |child|
-                            child_converter = @factory.create_converter(child, @indent_level, @action_manager, @factory, @registry)
-                            @generated_code.concat(child_converter.convert.split("\\n"))
+                            # Honors the child's `visibility` (VisibilityWrapper),
+                            # as every built-in container does.
+                            render_child_honoring_visibility(child)
                           end
                         end
                       end

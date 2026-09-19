@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require 'swiftui/views/scrollview_converter'
+require 'swiftui/converter_factory'
 
 RSpec.describe SjuiTools::SwiftUI::Views::ScrollViewConverter do
   before(:all) do
@@ -401,4 +402,69 @@ RSpec.describe SjuiTools::SwiftUI::Views::ScrollViewConverter do
       expect(converter.extract_horizontal_from_gravity('invalid')).to eq('left')
     end
   end
+
+  # ---------------------------------------------------------------- 1.8.107
+  #
+  # A child's `visibility` is honored by THIS container. Reported 2026-09-20:
+  # a `visibility: "@{x}"` moved from a ScrollView to its direct child
+  # vanished from the iOS output with 0 warnings (kjui wrapped it). The
+  # three containers that call the factory themselves (ScrollView, Blur,
+  # GradientView) go through BaseViewConverter#render_child_honoring_visibility
+  # now; these arms pin each site on each container.
+  describe 'a direct child that declares visibility (1.8.107)' do
+    let(:factory) { SjuiTools::SwiftUI::ConverterFactory.new }
+
+    def child(id, extra = {})
+      { 'type' => 'View', 'id' => id, 'width' => 'matchParent', 'height' => 'wrapContent',
+        'visibility' => '@{contentVisibility}' }.merge(extra)
+    end
+
+    def code_for(children, extra = {})
+      described_class.new({ 'type' => 'ScrollView' }.merge(extra).merge('child' => children), 0, nil, factory).convert
+    end
+
+    it 'wraps a single child in VisibilityWrapper' do
+      code = code_for([child('content_container')])
+      expect(code).to include('VisibilityWrapper(data.contentVisibility) {')
+      expect(code.scan('VisibilityWrapper(').length).to eq(1)
+    end
+
+    it 'wraps each of several children that declare visibility, and only those' do
+      code = code_for([child('a'), { 'type' => 'View', 'id' => 'b' }, child('c', 'visibility' => '@{other}')])
+      expect(code).to include('VisibilityWrapper(data.contentVisibility) {')
+      expect(code).to include('VisibilityWrapper(data.other) {')
+      expect(code.scan('VisibilityWrapper(').length).to eq(2)
+    end
+
+    it 'emits no wrapper when no child declares visibility' do
+      code = code_for([{ 'type' => 'View', 'id' => 'plain' }, { 'type' => 'View', 'id' => 'plain2' }])
+      expect(code).not_to include('VisibilityWrapper(')
+    end
+
+
+    it 'puts the wrapper INSIDE the VStack a single child gets, beside the Spacer' do
+      code = code_for([child('content_container')])
+      stack_at = code.index('VStack(')
+      wrapper_at = code.index('VisibilityWrapper(')
+      spacer_at = code.index('Spacer(minLength: 0)')
+      expect(stack_at).to be < wrapper_at
+      expect(wrapper_at).to be < spacer_at
+      # the VStack is not what gets hidden: it opens before the wrapper and
+      # its Spacer sits after the wrapper closes
+      expect(code[wrapper_at..spacer_at]).to include("}\n")
+    end
+
+    it 'wraps the single child of a horizontal scroll too' do
+      code = code_for([child('content_container')], 'orientation' => 'horizontal')
+      expect(code).to include('HStack(')
+      expect(code).to include('VisibilityWrapper(data.contentVisibility) {')
+    end
+
+    it 'still renders the child inside the wrapper' do
+      code = code_for([child('content_container')])
+      wrapper_at = code.index('VisibilityWrapper(')
+      expect(code.index('content_container')).to be > wrapper_at
+    end
+  end
+
 end
