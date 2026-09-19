@@ -57,12 +57,18 @@ ck "tag object != peel (annotated)" "$([ "$(g rev-parse "$TAG")" != "$(g rev-par
 # history modifier and hands git `mainadle.properties` (measured, same day).
 if g cat-file -e "${BRANCH}:VERSION" 2>/dev/null; then
   STAMP=$(g show "${BRANCH}:VERSION" | tr -d '[:space:]'); STAMP_FROM=VERSION
-elif g cat-file -e "${BRANCH}:gradle.properties" 2>/dev/null; then
+elif g show "${BRANCH}:gradle.properties" 2>/dev/null | grep -q '^version='; then
   STAMP=$(g show "${BRANCH}:gradle.properties" | sed -n 's/^version=//p' | tr -d '[:space:]'); STAMP_FROM=gradle.properties
+elif g show "${BRANCH}:jsonuitestrunner/build.gradle.kts" 2>/dev/null | grep -q 'coordinates('; then
+  # The Android test driver stamps its version in the vanniktech coordinates()
+  # call and nowhere else (reference: jsonui-test-runner-android, 1.15.x).
+  STAMP=$(g show "${BRANCH}:jsonuitestrunner/build.gradle.kts" | sed -nE 's/.*coordinates\([^,]*,[^,]*,[[:space:]]*"([^"]+)"\).*/\1/p' | head -1); STAMP_FROM=coordinates
 else
-  STAMP=""; STAMP_FROM="(no VERSION, no gradle.properties)"
+  STAMP=""; STAMP_FROM="(no VERSION / gradle.properties version= / coordinates())"
 fi
-ck "version stamp ($STAMP_FROM) == tag" "v$STAMP" "$TAG"
+# Driver tags carry no `v` (1.15.5); library tags do (v1.8.106). Compare in the tag's spelling.
+case "$TAG" in v*) TAGSTAMP="v$STAMP";; *) TAGSTAMP="$STAMP";; esac
+ck "version stamp ($STAMP_FROM) == tag" "$TAGSTAMP" "$TAG"
 ck "version stamp ($STAMP_FROM) == arg" "$STAMP" "$VER"
 ck "working tree clean"           "$(g status --porcelain | wc -l | tr -d ' ')" "0"
 
