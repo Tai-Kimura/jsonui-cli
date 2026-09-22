@@ -57,9 +57,25 @@ module KjuiTools
           # first composition, same contract as Collection's anchor.
           anchor = json_data['defaultScrollAnchor'].to_s
           anchor = nil unless %w[center bottom].include?(anchor)
+          # keyboardAvoidance (default true) is the library's
+          # `Modifier.keyboardAvoidance(listState, clearanceDp)` — the
+          # viewport half (imePadding + the `keyboardAvoidancePadding` band)
+          # AND the follow (scroll the focused field up once the IME is up),
+          # implemented once in KotlinJsonUI and shared with the dynamic
+          # ScrollView. Until 1.8.109 this emit spelled the viewport half
+          # itself (`.imePadding().padding(bottom = if (WindowInsets.ime…`)
+          # and left the follow to Compose's built-in tracking, which a
+          # user's device did not do (2026-09-22): the band appeared, the
+          # field stayed under the keyboard. The follow scrolls through the
+          # list state, so the state is emitted whenever avoidance is on.
+          # A non-numeric padding falls back to the SSoT default: the
+          # validator reports the type, and avoidance itself must not
+          # silently disappear with the band (it did not before either —
+          # imePadding stayed, only the band was dropped).
+          keyboard_padding = keyboard_avoidance ? (keyboard_padding_dp(json_data) || 20) : nil
           state_var = nil
           code = ''
-          if paging || anchor
+          if paging || anchor || keyboard_padding
             required_imports&.add(:snap_fling) if paging
             required_imports&.add(:lazy_list_state) unless paging
             state_var = "scrollPagingState#{json_data['id'].to_s.gsub(/[^A-Za-z0-9]/, '')}"
@@ -84,7 +100,7 @@ module KjuiTools
           if paging
             code += "\n" + indent("state = #{state_var},", depth + 1)
             code += "\n" + indent("flingBehavior = rememberSnapFlingBehavior(lazyListState = #{state_var}),", depth + 1)
-          elsif anchor
+          elsif state_var
             code += "\n" + indent("state = #{state_var},", depth + 1)
           end
 
@@ -111,23 +127,14 @@ module KjuiTools
           modifiers.concat(Helpers::ModifierBuilder.build_padding(json_data))
           modifiers.concat(Helpers::ModifierBuilder.build_weight(json_data, parent_type))
 
-          # Apply keyboard avoidance at the end of modifier chain
-          if keyboard_avoidance
-            required_imports&.add(:ime_padding)
-            modifiers << ".imePadding()"
-            # keyboardAvoidancePadding (SSoT: number, default 20): while the
-            # IME is up, the scrollable's viewport ends this far above it, so
-            # Compose's bringIntoView (which stops a focused field at the
-            # viewport edge) leaves that clearance. AFTER imePadding and on
-            # the LazyColumn itself: a padding inside the scroll content
-            # would only add scrollable space, not a margin. Reported
-            # 2026-09-22 (iOS first; Android had the same 0 through
-            # imePadding alone).
-            padding = keyboard_padding_dp(json_data)
-            if padding
-              required_imports&.add(:window_insets_ime)
-              modifiers << ".padding(bottom = if (WindowInsets.ime.getBottom(LocalDensity.current) > 0) #{padding}.dp else 0.dp)"
-            end
+          # Keyboard avoidance at the end of the modifier chain, on the
+          # LazyColumn itself (inside the content it would only add
+          # scrollable space). The clearance (SSoT: number, default 20) is
+          # passed explicitly even when it is the default, so the emit says
+          # what it does and the library's default cannot drift under it.
+          if keyboard_padding
+            required_imports&.add(:keyboard_avoidance)
+            modifiers << ".keyboardAvoidance(#{state_var}, #{keyboard_padding})"
           end
 
           if modifiers.any? || is_root

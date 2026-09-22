@@ -255,6 +255,7 @@ module KjuiTools
             DynamicView: "import com.kotlinjsonui.dynamic.DynamicView",
             JsonObject: "import com.google.gson.JsonObject",
             JsonParser: "import com.google.gson.JsonParser",
+            keyboard_avoidance: "import com.kotlinjsonui.components.keyboardAvoidance",
             dashed_border: ["import com.kotlinjsonui.dynamic.helpers.dashedBorder",
                             "import com.kotlinjsonui.dynamic.helpers.dottedBorder"],
             border_stroke: "import androidx.compose.foundation.BorderStroke",
