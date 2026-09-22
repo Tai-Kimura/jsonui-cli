@@ -79,25 +79,25 @@ RSpec.describe KjuiTools::Compose::Components::ScrollViewComponent do
     end
 
     context 'keyboardAvoidance' do
-      it 'adds imePadding by default' do
+      it 'calls the library modifier by default' do
         json_data = { 'type' => 'ScrollView' }
         result = described_class.generate(json_data, 0, required_imports)
-        expect(result[:code]).to include('.imePadding()')
-        expect(required_imports).to include(:ime_padding)
+        expect(result[:code]).to include('.keyboardAvoidance(')
+        expect(required_imports).to include(:keyboard_avoidance)
       end
 
-      it 'adds imePadding when keyboardAvoidance is true' do
+      it 'calls the library modifier when keyboardAvoidance is true' do
         json_data = { 'type' => 'ScrollView', 'keyboardAvoidance' => true }
         result = described_class.generate(json_data, 0, required_imports)
-        expect(result[:code]).to include('.imePadding()')
-        expect(required_imports).to include(:ime_padding)
+        expect(result[:code]).to include('.keyboardAvoidance(')
       end
 
-      it 'does not add imePadding when keyboardAvoidance is false' do
+      it 'emits nothing for the keyboard when keyboardAvoidance is false' do
         json_data = { 'type' => 'ScrollView', 'keyboardAvoidance' => false }
         result = described_class.generate(json_data, 0, required_imports)
+        expect(result[:code]).not_to include('keyboardAvoidance(')
         expect(result[:code]).not_to include('imePadding()')
-        expect(required_imports).not_to include(:ime_padding)
+        expect(required_imports).not_to include(:keyboard_avoidance)
       end
 
       it 'works with horizontal scroll and keyboardAvoidance disabled' do
@@ -108,54 +108,80 @@ RSpec.describe KjuiTools::Compose::Components::ScrollViewComponent do
         }
         result = described_class.generate(json_data, 0, required_imports)
         expect(result[:code]).to include('LazyRow(')
-        expect(result[:code]).not_to include('imePadding()')
+        expect(result[:code]).not_to include('keyboardAvoidance(')
       end
     end
   end
 
-  # ---------------------------------------------------------------- 1.8.108
+  # ------------------------------------------------------- 1.8.108 / 1.8.110
   #
   # `keyboardAvoidancePadding` (SSoT: ScrollView, number, default 20): while
-  # the IME is up the LazyColumn's viewport ends that far above it, after
-  # imePadding and on the scrollable itself, so bringIntoView leaves the
-  # clearance. Absent → 20, the SSoT default, so both platforms agree
-  # whether or not the attribute is written.
-  describe 'keyboardAvoidancePadding (1.8.108)' do
+  # the IME is up the LazyColumn's viewport ends that far above it. From
+  # 1.8.110 the emit is the library's `Modifier.keyboardAvoidance(listState,
+  # clearanceDp)` — viewport half AND the follow that scrolls the focused
+  # field up once the IME is up — shared with the dynamic ScrollView, so the
+  # behaviour has one implementation (user's ruling 2026-09-22: change the
+  # library's scroll, not two renders). Until 1.8.109 this spelled
+  # `.imePadding().padding(bottom = if (WindowInsets.ime…)` itself and left
+  # the follow to Compose, which a user's device did not do.
+  describe 'keyboardAvoidancePadding → Modifier.keyboardAvoidance' do
     let(:imports) { Set.new }
 
     # generate returns a hash whose :code is the emitted LazyColumn.
     def code_for(extra)
-      described_class.generate({ 'type' => 'ScrollView' }.merge(extra), 0, imports)[:code]
+      described_class.generate({ 'type' => 'ScrollView', 'id' => 'form_scroll' }.merge(extra), 0, imports)[:code]
     end
 
-    it 'pads the scrollable by the declared value only while the IME is up, after imePadding' do
+    it 'passes the declared clearance and the list state it scrolls through' do
       code = code_for('keyboardAvoidancePadding' => 32)
-      expect(code).to include('.imePadding()')
-      expect(code).to include('.padding(bottom = if (WindowInsets.ime.getBottom(LocalDensity.current) > 0) 32.dp else 0.dp)')
-      expect(code.index('.imePadding()')).to be < code.index('WindowInsets.ime.getBottom')
-      expect(imports).to include(:window_insets_ime)
+      expect(code).to include('val scrollPagingStateformscroll = rememberLazyListState()')
+      expect(code).to include('state = scrollPagingStateformscroll,')
+      expect(code).to include('.keyboardAvoidance(scrollPagingStateformscroll, 32)')
+      expect(imports).to include(:keyboard_avoidance, :lazy_list_state)
     end
 
-    it 'applies the SSoT default of 20 when the layout does not declare it' do
-      expect(code_for({})).to include(') 20.dp else 0.dp)')
+    it 'passes the SSoT default of 20 explicitly when the layout does not declare it' do
+      expect(code_for({})).to include('.keyboardAvoidance(scrollPagingStateformscroll, 20)')
     end
 
-    it 'emits neither imePadding nor the clearance when keyboardAvoidance is false' do
-      code = code_for('keyboardAvoidance' => false, 'keyboardAvoidancePadding' => 32)
+    it 'is the last modifier, on the LazyColumn itself' do
+      code = code_for('keyboardAvoidancePadding' => 32, 'width' => 'matchParent')
+      expect(code).to include('.fillMaxWidth()')
+      expect(code.index('.keyboardAvoidance(')).to be > code.index('.fillMaxWidth()')
+      expect(code.index('.keyboardAvoidance(')).to be < code.index(') {')
+    end
+
+    it 'does not spell the viewport half itself any more (one implementation, in the library)' do
+      code = code_for('keyboardAvoidancePadding' => 32)
       expect(code).not_to include('imePadding')
       expect(code).not_to include('WindowInsets.ime')
     end
 
-    it 'emits no clearance for a non-numeric value (the validator reports the type)' do
-      expect(code_for('keyboardAvoidancePadding' => 'big')).not_to include('WindowInsets.ime')
+    it 'emits no call when keyboardAvoidance is false' do
+      code = code_for('keyboardAvoidance' => false, 'keyboardAvoidancePadding' => 32)
+      expect(code).not_to include('keyboardAvoidance(')
+      expect(code).not_to include('rememberLazyListState')
     end
 
-    # The clearance emit is well-typed against a stub universe of the
-    # Compose symbols it names (spec/support/kotlin_compiler.rb): the
-    # `WindowInsets.ime.getBottom(LocalDensity.current)` read, the `Dp`
-    # arithmetic and the conditional padding. Types against stubs only —
-    # not the Compose compiler's rules.
-    it 'emits a scrollable whose clearance compiles' do
+    it 'falls back to the default clearance for a non-numeric value (the validator reports the type)' do
+      expect(code_for('keyboardAvoidancePadding' => 'big')).to include('.keyboardAvoidance(scrollPagingStateformscroll, 20)')
+    end
+
+    it 'shares the state with defaultScrollAnchor rather than emitting a second one' do
+      code = code_for('defaultScrollAnchor' => 'bottom')
+      expect(code.scan('rememberLazyListState()').size).to eq(1)
+      expect(code).to include('state = scrollPagingStateformscroll,')
+      expect(code).to include('.keyboardAvoidance(scrollPagingStateformscroll, 20)')
+    end
+
+    # The emit is well-typed against a stub universe of the symbols it names
+    # (spec/support/kotlin_compiler.rb): the list state, the LazyColumn's
+    # `state` parameter and the library modifier's signature
+    # `Modifier.keyboardAvoidance(LazyListState, Int)`. Types against stubs
+    # only — not the Compose compiler's rules, and the stub signature is a
+    # TRANSCRIPTION of KotlinJsonUI's `KeyboardAvoidance.kt`, not a compile
+    # against it.
+    it 'emits a scrollable whose keyboard avoidance compiles' do
       result = described_class.generate(
         { 'type' => 'ScrollView', 'id' => 'form_scroll', 'keyboardAvoidancePadding' => 32, 'child' => [] },
         1, imports
@@ -163,21 +189,18 @@ RSpec.describe KjuiTools::Compose::Components::ScrollViewComponent do
       expect(<<~KOTLIN).to compile_as_kotlin
         annotation class Composable
         class SemanticsScope { var testTagsAsResourceId: Boolean = false }
-        class Dp(val value: Float)
-        val Int.dp: Dp get() = Dp(this.toFloat())
-        class Density
-        object LocalDensity { val current: Density = Density() }
-        class Insets { fun getBottom(density: Density): Int = 0 }
-        object WindowInsets { val ime: Insets = Insets() }
+        class LazyListState
+        @Composable
+        fun rememberLazyListState(): LazyListState = LazyListState()
         object Modifier {
             fun testTag(tag: String): Modifier = this
             fun semantics(block: SemanticsScope.() -> Unit): Modifier = this
-            fun imePadding(): Modifier = this
-            fun padding(bottom: Dp): Modifier = this
         }
+        @Composable
+        fun Modifier.keyboardAvoidance(listState: LazyListState, clearanceDp: Int = 20): Modifier = this
         class LazyListScope { fun item(content: () -> Unit) { content() } }
         @Composable
-        fun LazyColumn(modifier: Modifier = Modifier, content: LazyListScope.() -> Unit) { LazyListScope().content() }
+        fun LazyColumn(state: LazyListState = rememberLazyListState(), modifier: Modifier = Modifier, content: LazyListScope.() -> Unit) { LazyListScope().content() }
         @Composable
         fun Host() {
         #{result[:code]}#{result[:closing]}
