@@ -63,8 +63,13 @@ elif g show "${BRANCH}:jsonuitestrunner/build.gradle.kts" 2>/dev/null | grep -q 
   # The Android test driver stamps its version in the vanniktech coordinates()
   # call and nowhere else (reference: jsonui-test-runner-android, 1.15.x).
   STAMP=$(g show "${BRANCH}:jsonuitestrunner/build.gradle.kts" | sed -nE 's/.*coordinates\([^,]*,[^,]*,[[:space:]]*"([^"]+)"\).*/\1/p' | head -1); STAMP_FROM=coordinates
+elif g cat-file -e "${BRANCH}:package.json" 2>/dev/null; then
+  # An npm package (jsonui-mcp-server) stamps its version in package.json only;
+  # `npm version` keeps package-lock.json in step. Read the top-level "version"
+  # with a JSON parser, not a regex: dependencies carry "version" keys too.
+  STAMP=$(g show "${BRANCH}:package.json" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("version",""))'); STAMP_FROM=package.json
 else
-  STAMP=""; STAMP_FROM="(no VERSION / gradle.properties version= / coordinates())"
+  STAMP=""; STAMP_FROM="(no VERSION / gradle.properties version= / coordinates() / package.json)"
 fi
 # Driver tags carry no `v` (1.15.5); library tags do (v1.8.106). Compare in the tag's spelling.
 case "$TAG" in v*) TAGSTAMP="v$STAMP";; *) TAGSTAMP="$STAMP";; esac
