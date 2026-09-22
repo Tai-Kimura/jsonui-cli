@@ -67,6 +67,12 @@ module KjuiTools
                             "import androidx.compose.foundation.layout.asPaddingValues"],
             window_insets_sides: ["import androidx.compose.foundation.layout.WindowInsetsSides",
                                   "import androidx.compose.foundation.layout.only"],
+            # `keyboardAvoidancePadding` — the IME's current height, read to
+            # pad the scrollable only while the keyboard is up.
+            window_insets_ime: ["import androidx.compose.foundation.layout.WindowInsets",
+                                "import androidx.compose.foundation.layout.ime",
+                                "import androidx.compose.ui.platform.LocalDensity",
+                                "import androidx.compose.ui.unit.dp"],
             # `Dp.Infinity` — the unresolved value of a bound maxWidth/maxHeight
             # (a 0.dp cap would annihilate the view). Plan 49 lane C.
             dp_infinity: "import androidx.compose.ui.unit.Dp",

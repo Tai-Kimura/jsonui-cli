@@ -12,6 +12,16 @@ module SjuiTools
           @view_registry = view_registry
         end
         
+        # `keyboardAvoidancePadding` as a Swift CGFloat literal, or nil when
+        # the layout does not declare it (the library default then applies).
+        # A non-numeric value is not silently a number: it emits nothing and
+        # the validator's type check is what reports it.
+        def keyboard_padding_arg
+          v = @component['keyboardAvoidancePadding']
+          return nil unless v.is_a?(Numeric)
+          v == v.to_i ? v.to_i.to_s : v.to_s
+        end
+
         def extract_horizontal_from_gravity(gravity)
           gravity = gravity || 'left|top'
           if gravity.is_a?(Array)
@@ -70,10 +80,21 @@ module SjuiTools
           dismiss_mode = @component['keyboardDismissMode']
           dismiss_arg = %w[onDrag interactive].include?(dismiss_mode) ? ", keyboardDismissMode: \"#{dismiss_mode}\"" : ''
 
+          # keyboardAvoidancePadding (SSoT: ScrollView, number, default 20):
+          # the clearance a focused field keeps from the scroll view's
+          # visible bottom while the keyboard is up. Declared → passed as
+          # KeyboardAvoidanceConfiguration.additionalPadding; absent → the
+          # library's own default, which is the SSoT's 20. Until 1.8.108 no
+          # layout attribute reached that parameter, and until SwiftJsonUI
+          # 10.27.0 the parameter reached nothing on screen (reported
+          # 2026-09-22: a focused field flush against the fixed footer).
+          padding_arg = keyboard_padding_arg
+
           # AdvancedKeyboardAvoidingScrollViewを使用
           # keyboardAvoidance: falseの場合はconfigurationでisEnabled: falseを指定
           if keyboard_avoidance
-            add_line "AdvancedKeyboardAvoidingScrollView(#{axes}, showsIndicators: #{show_indicators}#{dismiss_arg}) {"
+            config_arg = padding_arg ? ", configuration: KeyboardAvoidanceConfiguration(additionalPadding: #{padding_arg})" : ''
+            add_line "AdvancedKeyboardAvoidingScrollView(#{axes}, showsIndicators: #{show_indicators}#{config_arg}#{dismiss_arg}) {"
           else
             add_line "AdvancedKeyboardAvoidingScrollView(#{axes}, showsIndicators: #{show_indicators}, configuration: KeyboardAvoidanceConfiguration(isEnabled: false)#{dismiss_arg}) {"
           end

@@ -110,4 +110,78 @@ RSpec.describe KjuiTools::Compose::Components::ScrollViewComponent do
       end
     end
   end
+
+  # ---------------------------------------------------------------- 1.8.108
+  #
+  # `keyboardAvoidancePadding` (SSoT: ScrollView, number, default 20): while
+  # the IME is up the LazyColumn's viewport ends that far above it, after
+  # imePadding and on the scrollable itself, so bringIntoView leaves the
+  # clearance. Absent → 20, the SSoT default, so both platforms agree
+  # whether or not the attribute is written.
+  describe 'keyboardAvoidancePadding (1.8.108)' do
+    let(:imports) { Set.new }
+
+    # generate returns a hash whose :code is the emitted LazyColumn.
+    def code_for(extra)
+      described_class.generate({ 'type' => 'ScrollView' }.merge(extra), 0, imports)[:code]
+    end
+
+    it 'pads the scrollable by the declared value only while the IME is up, after imePadding' do
+      code = code_for('keyboardAvoidancePadding' => 32)
+      expect(code).to include('.imePadding()')
+      expect(code).to include('.padding(bottom = if (WindowInsets.ime.getBottom(LocalDensity.current) > 0) 32.dp else 0.dp)')
+      expect(code.index('.imePadding()')).to be < code.index('WindowInsets.ime.getBottom')
+      expect(imports).to include(:window_insets_ime)
+    end
+
+    it 'applies the SSoT default of 20 when the layout does not declare it' do
+      expect(code_for({})).to include(') 20.dp else 0.dp)')
+    end
+
+    it 'emits neither imePadding nor the clearance when keyboardAvoidance is false' do
+      code = code_for('keyboardAvoidance' => false, 'keyboardAvoidancePadding' => 32)
+      expect(code).not_to include('imePadding')
+      expect(code).not_to include('WindowInsets.ime')
+    end
+
+    it 'emits no clearance for a non-numeric value (the validator reports the type)' do
+      expect(code_for('keyboardAvoidancePadding' => 'big')).not_to include('WindowInsets.ime')
+    end
+
+    # The clearance emit is well-typed against a stub universe of the
+    # Compose symbols it names (spec/support/kotlin_compiler.rb): the
+    # `WindowInsets.ime.getBottom(LocalDensity.current)` read, the `Dp`
+    # arithmetic and the conditional padding. Types against stubs only —
+    # not the Compose compiler's rules.
+    it 'emits a scrollable whose clearance compiles' do
+      result = described_class.generate(
+        { 'type' => 'ScrollView', 'id' => 'form_scroll', 'keyboardAvoidancePadding' => 32, 'child' => [] },
+        1, imports
+      )
+      expect(<<~KOTLIN).to compile_as_kotlin
+        annotation class Composable
+        class SemanticsScope { var testTagsAsResourceId: Boolean = false }
+        class Dp(val value: Float)
+        val Int.dp: Dp get() = Dp(this.toFloat())
+        class Density
+        object LocalDensity { val current: Density = Density() }
+        class Insets { fun getBottom(density: Density): Int = 0 }
+        object WindowInsets { val ime: Insets = Insets() }
+        object Modifier {
+            fun testTag(tag: String): Modifier = this
+            fun semantics(block: SemanticsScope.() -> Unit): Modifier = this
+            fun imePadding(): Modifier = this
+            fun padding(bottom: Dp): Modifier = this
+        }
+        class LazyListScope { fun item(content: () -> Unit) { content() } }
+        @Composable
+        fun LazyColumn(modifier: Modifier = Modifier, content: LazyListScope.() -> Unit) { LazyListScope().content() }
+        @Composable
+        fun Host() {
+        #{result[:code]}#{result[:closing]}
+        }
+      KOTLIN
+    end
+  end
+
 end

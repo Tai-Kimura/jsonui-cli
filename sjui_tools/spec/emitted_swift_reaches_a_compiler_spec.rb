@@ -89,7 +89,6 @@ RSpec.describe 'emitted Swift reaches a compiler' do
     'swiftui/views/radio_accessibility_label_spec.rb' => UNCONVERTED,
     'swiftui/views/radio_converter_spec.rb' => UNCONVERTED,
     'swiftui/views/responsive_helper_spec.rb' => UNCONVERTED,
-    'swiftui/views/scrollview_converter_spec.rb' => UNCONVERTED,
     'swiftui/views/segment_converter_spec.rb' => UNCONVERTED,
     'swiftui/views/selectbox_converter_spec.rb' => UNCONVERTED,
     'swiftui/views/slider_converter_spec.rb' => UNCONVERTED,

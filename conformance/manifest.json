@@ -8,7 +8,7 @@
     "agentWarning": "LLM/Agent: you MUST NOT modify this file."
   },
   "schemaVersion": 2,
-  "generatedFrom": "8dc86272f53f0f2261d1392e0f81794a11705d056696d8be9940574ad70eb4b5",
+  "generatedFrom": "2a330e98dac881132942f8c32eb0ad192110516935281e95b8a67782e6d99463",
   "counts": {
     "fixtures": 1113,
     "assertable": 49,
@@ -16,7 +16,7 @@
     "interactive": 37,
     "control": 116,
     "declarationOnly": 77,
-    "skipped": 156,
+    "skipped": 157,
     "promoted": {
       "callback": 11
     }
@@ -27762,6 +27762,11 @@
     {
       "component": "ScrollView",
       "attribute": "keyboardAvoidance",
+      "reason": "behavioral (no visual or assertable effect in v1)"
+    },
+    {
+      "component": "ScrollView",
+      "attribute": "keyboardAvoidancePadding",
       "reason": "behavioral (no visual or assertable effect in v1)"
     },
     {

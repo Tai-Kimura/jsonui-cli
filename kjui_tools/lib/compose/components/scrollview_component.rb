@@ -7,6 +7,17 @@ module KjuiTools
   module Compose
     module Components
       class ScrollViewComponent
+        # `keyboardAvoidancePadding` in dp; the SSoT default (20) when the
+        # layout does not declare it, so the clearance is the same on both
+        # platforms whether or not the attribute is written. nil for a
+        # non-numeric value (the validator reports the type).
+        def self.keyboard_padding_dp(json_data)
+          return 20 unless json_data.key?('keyboardAvoidancePadding')
+          v = json_data['keyboardAvoidancePadding']
+          return nil unless v.is_a?(Numeric)
+          v == v.to_i ? v.to_i : v
+        end
+
         def self.generate(json_data, depth, required_imports = nil, parent_type = nil, is_root: false)
           # スクロール方向の判定
           # horizontalScroll属性、orientation属性、またはchild要素の配置から判定
@@ -104,6 +115,19 @@ module KjuiTools
           if keyboard_avoidance
             required_imports&.add(:ime_padding)
             modifiers << ".imePadding()"
+            # keyboardAvoidancePadding (SSoT: number, default 20): while the
+            # IME is up, the scrollable's viewport ends this far above it, so
+            # Compose's bringIntoView (which stops a focused field at the
+            # viewport edge) leaves that clearance. AFTER imePadding and on
+            # the LazyColumn itself: a padding inside the scroll content
+            # would only add scrollable space, not a margin. Reported
+            # 2026-09-22 (iOS first; Android had the same 0 through
+            # imePadding alone).
+            padding = keyboard_padding_dp(json_data)
+            if padding
+              required_imports&.add(:window_insets_ime)
+              modifiers << ".padding(bottom = if (WindowInsets.ime.getBottom(LocalDensity.current) > 0) #{padding}.dp else 0.dp)"
+            end
           end
 
           if modifiers.any? || is_root
