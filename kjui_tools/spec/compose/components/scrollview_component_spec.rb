@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require 'json'
+require 'core/layout_validator'
 require 'compose/components/scrollview_component'
 require 'compose/helpers/modifier_builder'
 
@@ -181,6 +183,35 @@ RSpec.describe KjuiTools::Compose::Components::ScrollViewComponent do
         #{result[:code]}#{result[:closing]}
         }
       KOTLIN
+    end
+  end
+
+
+  # ---------------------------------------------------------------- 1.8.109
+  #
+  # Every attribute this component READS is declared for kotlin in the SSoT.
+  # `keyboardAvoidance` was declared `platform: "swift"` from the initial
+  # commit while this component had read it all along (`!= false` decides
+  # imePadding and, from 1.8.108, the clearance) — so the kjui validator
+  # filed an Android `keyboardAvoidance: false` as "for Swift platform" and
+  # did not type-check it, and a platform matrix drawn from the declaration
+  # showed the attribute iOS-only. The population is read from the
+  # declaration and the component's source, not from a list.
+  describe 'the attributes this component reads are declared for kotlin' do
+    let(:defs) do
+      JSON.parse(File.read(File.join(
+        File.dirname(JsonUIShared::LayoutValidator.method(:validate_layout).source_location.first),
+        'attribute_definitions.json'
+      )))
+    end
+    let(:source) { File.read(File.expand_path('../../../lib/compose/components/scrollview_component.rb', __dir__)) }
+
+    it 'declares keyboardAvoidance and keyboardAvoidancePadding for kotlin' do
+      %w[keyboardAvoidance keyboardAvoidancePadding].each do |attr|
+        expect(source).to include("'#{attr}'"), "#{attr}: the component no longer reads it — drop it from this arm"
+        platforms = Array(defs['ScrollView'][attr]['platform'])
+        expect(platforms).to include('kotlin'), "ScrollView.#{attr} platform=#{platforms.inspect}: read here, not declared for kotlin"
+      end
     end
   end
 

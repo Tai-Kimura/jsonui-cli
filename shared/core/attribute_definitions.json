@@ -3772,8 +3772,8 @@
     },
     "keyboardAvoidance": {
       "type": "boolean",
-      "description": "Enable keyboard avoidance",
-      "platform": "swift"
+      "description": "Enable keyboard avoidance (default true). iOS: AdvancedKeyboardAvoidingScrollView with the configuration disabled when false. Android: imePadding() and the keyboardAvoidancePadding clearance are emitted only when not false. Declared swift-only from the initial commit while the kjui codegen had read it all along (2026-09-22).",
+      "platform": ["swift", "kotlin"]
     },
     "keyboardAvoidancePadding": {
       "type": "number",
