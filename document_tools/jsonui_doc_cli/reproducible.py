@@ -16,6 +16,15 @@ Four accessors, not one, because each call site has an unset behaviour that must
 not change: a naive local `now()`, an aware UTC `now()`, a local-zone `now()`,
 and `today()`. Collapsing them would make an unset run behave differently from
 before, which is the one thing this must not do.
+
+⚠️ THE GENERATION MANIFEST IS STAMPED ELSEWHERE. `shared/core/generation_manifest`
+writes each entry's `generatedAt`, and it cannot import this module. Until
+2026-09-22 it read the wall clock, so a pinned run's pages were reproducible
+and its record was not (one second of drift, 1 run in 5). Now the doc
+generator hands the ledger the instant it took from here (`record_time`) and
+`shared/core` reads the same variable itself for producers that record no
+time (`jui build`). The name is spelled in both places; a document_tools arm
+holds the two spellings together.
 """
 from __future__ import annotations
 

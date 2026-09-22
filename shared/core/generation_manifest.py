@@ -153,6 +153,57 @@ def manifest_path(project_root: Path) -> Path:
     return Path(project_root) / MANIFEST_DIRNAME / MANIFEST_FILENAME
 
 
+#: The reproducible-builds clock. When set, an integer of seconds since
+#: the Unix epoch that replaces the wall clock for every `generatedAt` this
+#: module writes — so a receiver can run a generator twice with it set and
+#: compare manifests with plain `cmp`.
+#:
+#: ⚠️ SPELLED TWICE IN THIS TREE. `document_tools/jsonui_doc_cli/reproducible.py`
+#: reads the same variable for the page stamps, and this module cannot
+#: import it (`shared/core` depends on nothing, so that every tool can load
+#: it by path). Until 2026-09-22 only the pages went through that pin and
+#: this stamp read the wall clock — measured as a manifest whose `generatedAt`
+#: moved by one second between two identical pinned runs, 1 run in 5. An arm
+#: in `document_tools/tests` pins the two spellings to each other.
+SOURCE_DATE_EPOCH = "SOURCE_DATE_EPOCH"
+
+
+def source_date_epoch_problem() -> str | None:
+    """Why a set `SOURCE_DATE_EPOCH` is being ignored, or None.
+
+    None both when the variable is unset (nothing to say) and when it is a
+    valid integer (it is honoured). A caller with a warning channel prints
+    this; this module has none, and a pin that is silently ignored is the
+    one thing a receiver who set it cannot detect from the output.
+    """
+    raw = os.environ.get(SOURCE_DATE_EPOCH)
+    if raw is None or not raw.strip():
+        return None
+    try:
+        int(raw.strip())
+    except ValueError:
+        return (f"{SOURCE_DATE_EPOCH} is not an integer ({raw!r}) — ignoring it; "
+                f"generatedAt in the generation manifest will use the current time")
+    return None
+
+
+def pinned_build_time() -> datetime | None:
+    """The instant `SOURCE_DATE_EPOCH` names, or None to use the wall clock."""
+    raw = os.environ.get(SOURCE_DATE_EPOCH)
+    if raw is None or not raw.strip():
+        return None
+    try:
+        return datetime.fromtimestamp(int(raw.strip()), tz=timezone.utc)
+    except ValueError:
+        return None
+
+
+def build_stamp() -> str:
+    """`generatedAt` for this run: the pinned instant when there is one,
+    otherwise now — always UTC, always `%Y-%m-%dT%H:%M:%SZ`."""
+    return (pinned_build_time() or datetime.now(timezone.utc)).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
 @dataclass(frozen=True)
 class FileState:
     """What decides "written" from "left alone": the content, and only that.
@@ -242,6 +293,13 @@ class GenerationRun:
     #: Run facts, only ever set through `record_*`. None = this producer
     #: has no run facts (jui build); a dict = it does (jsonui-doc).
     _facts: dict | None = None
+    #: The one instant this run stamps with, set through `record_time`. A
+    #: producer that records a time has already chosen its clock (jsonui-doc
+    #: goes through its `reproducible` pin, which a test can patch and an
+    #: environment variable cannot reach); `save` stamps every entry with
+    #: it so the entries and `summary.run.recordedAt` agree to the second.
+    #: None = no time recorded, and `save` reads the clock itself.
+    recorded_at: str | None = None
 
     # ------------------------------------------------------------------
     # observation
@@ -444,6 +502,7 @@ class GenerationRun:
 
     def record_time(self, recorded_at: str) -> None:
         self._facts_dict()["recordedAt"] = recorded_at
+        self.recorded_at = recorded_at
 
     def record_manifest_visibility(self, *, tracked, ignored) -> None:
         f = self._facts_dict()
@@ -758,7 +817,10 @@ def save(ledger: GenerationRun, *, generated_by: str = "jui build",
                 dropped_versions[name] = dropped_versions.get(name, 0) + 1
         files = {k: v for k, v in files.items() if k in present}
 
-    stamp = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    # The producer's instant when it recorded one, else this module's clock
+    # — which honours SOURCE_DATE_EPOCH. Not `datetime.now` here: that was
+    # the one stamp in a pinned run that still moved (2026-09-22).
+    stamp = ledger.recorded_at or build_stamp()
     for key in written_keys:
         files[key] = {"version": version, "generatedAt": stamp, "generatedBy": generated_by}
 
