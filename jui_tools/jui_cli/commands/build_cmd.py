@@ -617,6 +617,13 @@ def _record_generation(config_mgr, gen_run, present, *, bootstrap=True):  # -> G
     # `save`, and what `save` learns against the previous record comes back
     # onto the ledger. Nothing is passed by number. The ledger is what a
     # caller gets back — the manifest dict is a projection of it.
+    # A receiver that pinned the clock and misspelled the value would
+    # otherwise get wall-clock stamps with nothing saying so; `shared/core`
+    # has no warning channel, so the build prints on its behalf. stderr,
+    # in the shape the gate counts (see the four shapes above).
+    problem = generation_manifest.source_date_epoch_problem()
+    if problem:
+        print(f"WARNING [manifest]: {problem}", file=sys.stderr)
     generation_manifest.save(gen_run, generated_by="jui build")
     return gen_run
 

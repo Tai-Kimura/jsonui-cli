@@ -171,3 +171,28 @@ def test_an_untracked_manifest_is_not_counted_as_differing(repo):
     out = _run(repo)
     assert "is NOT git-tracked here" in out, out
     assert "1 tracked file(s) now differ" not in out, out
+
+
+def test_every_entry_carries_the_pinned_instant(repo):
+    """The control above used to be red 1 run in 5 for a reason the pin was
+    meant to exclude: the pages went through `reproducible`, the manifest's
+    own `generatedAt` went through `datetime.now` in `shared/core`, and the
+    two runs of a settle straddled a second boundary. Asked directly — no
+    boundary to straddle: with the pin patched, every entry IS the pinned
+    instant, and equals the run block's `recordedAt`."""
+    _settle(repo)
+    data = json.loads((repo / MANIFEST).read_text(encoding="utf-8"))
+    assert data["files"], "the arm is vacuous without an entry to inspect"
+    stamps = {entry["generatedAt"] for entry in data["files"].values()}
+    assert stamps == {"2026-09-17T00:00:00Z"}, stamps
+    assert data["summary"]["run"]["recordedAt"] == "2026-09-17T00:00:00Z"
+
+
+def test_the_two_spellings_of_the_variable_agree():
+    """`shared/core` cannot import `reproducible`, so the variable's name is
+    spelled in both. One arm holds them together; the receiver sets one
+    variable and expects both the pages and the record to follow it."""
+    from jsonui_doc_cli import shared_core
+    manifest = shared_core.load("generation_manifest")
+    assert manifest is not None
+    assert manifest.SOURCE_DATE_EPOCH == reproducible.ENV
