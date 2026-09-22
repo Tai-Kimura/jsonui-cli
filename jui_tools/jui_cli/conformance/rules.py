@@ -166,6 +166,7 @@ BEHAVIORAL_ATTRS = {
     "keyLeftView",
     "keyRightView",
     "keyboardAvoidance",
+    "keyboardAvoidancePadding",
     "keyboardDismissMode",
     "scrollsToTop",
     "bounces",

@@ -467,4 +467,76 @@ RSpec.describe SjuiTools::SwiftUI::Views::ScrollViewConverter do
     end
   end
 
+
+  # ---------------------------------------------------------------- 1.8.108
+  #
+  # `keyboardAvoidancePadding` (SSoT: ScrollView, number, default 20) reaches
+  # KeyboardAvoidanceConfiguration.additionalPadding. Reported 2026-09-22: a
+  # focused field flush against the fixed footer and no layout attribute to
+  # ask for room; the library parameter existed and nothing emitted it.
+  describe 'keyboardAvoidancePadding (1.8.108)' do
+    def code_for(extra)
+      described_class.new({ 'type' => 'ScrollView' }.merge(extra)).convert
+    end
+
+    it 'passes a declared padding as additionalPadding' do
+      code = code_for('keyboardAvoidancePadding' => 32)
+      expect(code).to include('AdvancedKeyboardAvoidingScrollView(.vertical, showsIndicators: true, configuration: KeyboardAvoidanceConfiguration(additionalPadding: 32)) {')
+    end
+
+    it 'keeps a fractional value fractional' do
+      expect(code_for('keyboardAvoidancePadding' => 12.5)).to include('additionalPadding: 12.5)')
+    end
+
+    it 'emits no configuration when the layout does not declare it, so the library default (the SSoT 20) applies' do
+      expect(code_for({})).not_to include('KeyboardAvoidanceConfiguration')
+    end
+
+    it 'is ignored when keyboardAvoidance is false: the disabled configuration wins' do
+      code = code_for('keyboardAvoidance' => false, 'keyboardAvoidancePadding' => 32)
+      expect(code).to include('KeyboardAvoidanceConfiguration(isEnabled: false)')
+      expect(code).not_to include('additionalPadding')
+    end
+
+    it 'keeps keyboardDismissMode beside the configuration' do
+      code = code_for('keyboardAvoidancePadding' => 32, 'keyboardDismissMode' => 'interactive')
+      expect(code).to include('configuration: KeyboardAvoidanceConfiguration(additionalPadding: 32), keyboardDismissMode: "interactive")')
+    end
+
+    it 'emits nothing for a non-numeric value (the validator reports the type)' do
+      expect(code_for('keyboardAvoidancePadding' => 'big')).not_to include('additionalPadding')
+    end
+
+    # The emitted call is well-typed against a stub of the library's
+    # initializer (the real one: SwiftJsonUI KeyboardAvoidanceConfiguration /
+    # AdvancedKeyboardAvoidingScrollView, argument order configuration then
+    # keyboardDismissMode), compiled against the SwiftUI SDK.
+    describe 'the emitted Swift compiles', :swift_compile do
+      it 'type-checks the configuration beside keyboardDismissMode' do
+        code = code_for('keyboardAvoidancePadding' => 32, 'keyboardDismissMode' => 'interactive')
+        body = code.lines.map { |l| "        #{l}" }.join
+        expect(<<~SWIFT).to compile_as_swift
+          struct KeyboardAvoidanceConfiguration {
+              var isEnabled: Bool
+              var additionalPadding: CGFloat
+              init(isEnabled: Bool = true, additionalPadding: CGFloat = 20) {
+                  self.isEnabled = isEnabled; self.additionalPadding = additionalPadding
+              }
+          }
+          struct AdvancedKeyboardAvoidingScrollView<Content: View>: View {
+              init(_ axes: Axis.Set = .vertical, showsIndicators: Bool = true,
+                   configuration: KeyboardAvoidanceConfiguration = .init(),
+                   keyboardDismissMode: String? = nil, @ViewBuilder content: () -> Content) {}
+              var body: some View { EmptyView() }
+          }
+          struct Host: View {
+              var body: some View {
+          #{body}
+              }
+          }
+        SWIFT
+      end
+    end
+  end
+
 end
