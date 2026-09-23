@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+import contextlib
 import json
 import re
 import shutil
@@ -9,6 +10,7 @@ import os
 import subprocess
 import tempfile
 import sys
+import time
 from pathlib import Path
 
 from ..core.config_manager import ConfigManager
@@ -94,6 +96,66 @@ def register_build_command(subparsers: argparse._SubParsersAction) -> None:
              "jui.config.json)",
     )
 
+
+
+class _StageClock:
+    """Where a build's time goes, said while it is going there.
+
+    Through 1.8.110 a build printed nothing between its stages, and several of
+    them print nothing of their own: on a three-platform face the scans and
+    the manifest record ran for over a minute after the last platform tool
+    had finished, with no line on screen and the prompt not back (reported
+    2026-09-23, with the process at 100% CPU and no child). A reader cannot
+    tell a slow stage from a hung one, and cannot say which stage is slow
+    without a profiler.
+
+    So each stage says when it starts, and the build ends with the time each
+    one took. The table closes: the rows plus the time between them add up
+    to the total, so a stage that is not wrapped shows up as a gap rather
+    than as nothing. It is printed ABOVE the coverage and closing lines, so
+    the last lines of a build are the ones they always were.
+
+    The wording avoids the four warning shapes the build's warning count
+    greps for (see the lint-strings comment in `cmd_build`): these lines are
+    progress, and a count that includes them would be wrong by the number of
+    stages.
+    """
+
+    PREFIX = "[jui build]"
+
+    def __init__(self) -> None:
+        self.rows: list[tuple[str, float]] = []
+        self._started = time.perf_counter()
+
+    @contextlib.contextmanager
+    def stage(self, label: str, *, announce: bool = True):
+        # flush: stdout is block-buffered when piped, and the platform tools
+        # write to the same descriptor — an unflushed line would surface
+        # after their output, or only when the build ends.
+        if announce:
+            print(f"{self.PREFIX} {label} ...", flush=True)
+        started = time.perf_counter()
+        try:
+            yield
+        except BaseException:
+            self.rows.append((f"{label} (did not finish)",
+                              time.perf_counter() - started))
+            raise
+        self.rows.append((label, time.perf_counter() - started))
+
+    def summary_lines(self) -> list[str]:
+        total = time.perf_counter() - self._started
+        timed = sum(seconds for _label, seconds in self.rows)
+        lines = [f"{self.PREFIX} time by stage ({total:.1f}s in total):"]
+        lines += [f"  {seconds:6.1f}s  {label}" for label, seconds in self.rows]
+        lines.append(f"  {max(total - timed, 0.0):6.1f}s  (between stages)")
+        return lines
+
+    def print_summary(self) -> None:
+        print()
+        for line in self.summary_lines():
+            print(line)
+        sys.stdout.flush()
 
 
 def _report_toolchain_sync(config_mgr) -> None:
@@ -200,8 +262,10 @@ def cmd_build(args: argparse.Namespace) -> int:
     platforms = config.get("platforms", {})
     clean = ["--clean"] if args.clean else []
     failed = []
+    clock = _StageClock()
 
-    _report_toolchain_sync(config_mgr)
+    with clock.stage("toolchain check"):
+        _report_toolchain_sync(config_mgr)
 
     # 🚨 A `document_tools_path` that points at nothing is a property of the
     # CONFIG, not of one command, and until now the only place that said so
@@ -223,7 +287,9 @@ def cmd_build(args: argparse.Namespace) -> int:
     # Hard gate for responsive variant files (home@regular.json) — refuse
     # to distribute/build while the v1 variant contract is violated
     # (docs/plans/2026-07-24-v1-unsupported/06a-design.md D3).
-    if _check_variant_constraints(config_mgr) is False:
+    with clock.stage("responsive variant check"):
+        variants_ok = _check_variant_constraints(config_mgr)
+    if variants_ok is False:
         return 1
 
     # Localize scan (opt-in). Findings are PRINTED as build warnings and
@@ -284,8 +350,9 @@ def cmd_build(args: argparse.Namespace) -> int:
     if _lint_strings_enabled(config, args):
         from .lint_strings_cmd import run_for_build
 
-        for line in run_for_build(config_mgr):
-            print(f"  WARNING [lint-strings]: {line}")
+        with clock.stage("lint-strings"):
+            for line in run_for_build(config_mgr):
+                print(f"  WARNING [lint-strings]: {line}")
 
     # Snapshot BEFORE the first step that writes anything — distribution
     # included, not only the platform tools.
@@ -304,8 +371,9 @@ def cmd_build(args: argparse.Namespace) -> int:
         project_root=config_mgr.project_root,
         version=toolchain_version(),
     )
-    _paths, _roots = _generated_scan(config_mgr)
-    gen_run.observe(_paths, roots=_roots)
+    with clock.stage("scan generated files (before build)"):
+        _paths, _roots = _generated_scan(config_mgr)
+        gen_run.observe(_paths, roots=_roots)
 
     # Where the platform tools leave stages that failed while their build
     # carried on. Each of them is a separate process and names its own at
@@ -339,12 +407,15 @@ def cmd_build(args: argparse.Namespace) -> int:
         every unrecorded file in the project. A content change inside the
         window is the only direct evidence a halted run has.
         """
-        halted = _generated_paths(config_mgr)
-        _record_generation(config_mgr, gen_run, halted, bootstrap=False)
+        with clock.stage("scan generated files (after build)"):
+            halted = _generated_paths(config_mgr)
+        with clock.stage("record generation manifest"):
+            _record_generation(config_mgr, gen_run, halted, bootstrap=False)
         # Printed even though the build failed: a record nobody is told
         # about is the same as no record when the next reader tries to
         # explain a version stamp. The success line is not printed — the
         # build did not succeed.
+        clock.print_summary()
         print()
         print(generation_manifest.coverage_line(gen_run))
         _print_stage_failures(_stage_failures(_stage_ledger))
@@ -369,16 +440,23 @@ def cmd_build(args: argparse.Namespace) -> int:
     # and the exits were five.
     try:
         # Distribute shared assets to each platform before build
-        _distribute_layouts(config_mgr, platforms, args)
-        _distribute_styles(config_mgr, platforms, args)
-        _distribute_resources(config_mgr, platforms, args)
-        _distribute_images(config_mgr, config, platforms, args)
-        _distribute_hotload_config(config_mgr, platforms, args)
+        with clock.stage("distribute layouts"):
+            _distribute_layouts(config_mgr, platforms, args)
+        with clock.stage("distribute styles"):
+            _distribute_styles(config_mgr, platforms, args)
+        with clock.stage("distribute resources"):
+            _distribute_resources(config_mgr, platforms, args)
+        with clock.stage("distribute images"):
+            _distribute_images(config_mgr, config, platforms, args)
+        with clock.stage("distribute hotload config"):
+            _distribute_hotload_config(config_mgr, platforms, args)
 
         # Sync swagger-derived DTO + Domain scaffold files. Halts on §3.3
         # invariants (oneOf, multi-file $ref, direct self-ref, etc.) so the
         # downstream platform builds never see a broken model.
-        if _sync_api_models(config_mgr, platforms, args) is False:
+        with clock.stage("API model sync"):
+            models_ok = _sync_api_models(config_mgr, platforms, args)
+        if models_ok is False:
             return _halt(1)
 
         # Converter scaffolding is an explicit, one-time author action — run
@@ -399,49 +477,63 @@ def cmd_build(args: argparse.Namespace) -> int:
         # declare an isolated Embed, because the gate below returns before
         # it loads anything when there are none. Two faces reported 6 lines
         # and 2 lines for the same feature and neither number was wrong.
-        all_specs = _load_all_specs(config_mgr)
+        with clock.stage("load screen specs"):
+            all_specs = _load_all_specs(config_mgr)
 
-        if _sync_viewmodel_protocols(
-                config_mgr, config, platforms, args, specs=all_specs) is False:
+        with clock.stage("ViewModel protocol sync"):
+            synced = _sync_viewmodel_protocols(
+                config_mgr, config, platforms, args, specs=all_specs)
+        if synced is False:
             return _halt(1)
 
         # The UseCase layer had no counterpart, so a spec-declared method
         # reached neither protocol nor compiler. Same specs, same platforms.
-        if _sync_usecase_protocols(
-                config_mgr, config, platforms, args, specs=all_specs) is False:
+        with clock.stage("UseCase protocol sync"):
+            synced = _sync_usecase_protocols(
+                config_mgr, config, platforms, args, specs=all_specs)
+        if synced is False:
             return _halt(1)
 
         # And the layer below it, which had no counterpart either.
-        if _sync_repository_protocols(
-                config_mgr, config, platforms, args, specs=all_specs) is False:
+        with clock.stage("Repository protocol sync"):
+            synced = _sync_repository_protocols(
+                config_mgr, config, platforms, args, specs=all_specs)
+        if synced is False:
             return _halt(1)
 
         # Hard gate for navigationMode:"isolated" — the embedded screen's spec
         # must not declare present-type transitions (sheet/modal/dialog/dismiss).
-        if _check_isolated_embed_constraints(config_mgr, specs=all_specs) is False:
+        with clock.stage("isolated embed check"):
+            embeds_ok = _check_isolated_embed_constraints(config_mgr, specs=all_specs)
+        if embeds_ok is False:
             return _halt(1)
 
         should_build_ios = "ios" in platforms and not args.android_only and not args.web_only
         should_build_android = "android" in platforms and not args.ios_only and not args.web_only
         should_build_web = "web" in platforms and not args.ios_only and not args.android_only
 
+        # The `--- Building … ---` header already says a platform tool has
+        # started, so these stages are timed without a second line.
         if should_build_ios:
             ios_root = config_mgr.project_root / platforms["ios"]["root"]
-            print(f"\n--- Building iOS ({ios_root}) ---")
-            if not _run_tool(["sjui", "build"] + clean, ios_root):
-                failed.append("ios")
+            print(f"\n--- Building iOS ({ios_root}) ---", flush=True)
+            with clock.stage("iOS: sjui build", announce=False):
+                if not _run_tool(["sjui", "build"] + clean, ios_root):
+                    failed.append("ios")
 
         if should_build_android:
             android_root = config_mgr.project_root / platforms["android"]["root"]
-            print(f"\n--- Building Android ({android_root}) ---")
-            if not _run_tool(["kjui", "build"] + clean, android_root):
-                failed.append("android")
+            print(f"\n--- Building Android ({android_root}) ---", flush=True)
+            with clock.stage("Android: kjui build", announce=False):
+                if not _run_tool(["kjui", "build"] + clean, android_root):
+                    failed.append("android")
 
         if should_build_web:
             web_root = config_mgr.project_root / platforms["web"]["root"]
-            print(f"\n--- Building Web ({web_root}) ---")
-            if not _run_tool(["rjui", "build"] + clean, web_root):
-                failed.append("web")
+            print(f"\n--- Building Web ({web_root}) ---", flush=True)
+            with clock.stage("Web: rjui build", announce=False):
+                if not _run_tool(["rjui", "build"] + clean, web_root):
+                    failed.append("web")
 
         if failed:
             print(f"\nERROR: Build failed for: {', '.join(failed)}")
@@ -449,8 +541,12 @@ def cmd_build(args: argparse.Namespace) -> int:
 
         # Re-read after the build: a run can create files that did not exist to
         # be observed, and can leave others exactly as they were.
-        present = _generated_paths(config_mgr)
-        _record_generation(config_mgr, gen_run, present)
+        print(flush=True)
+        with clock.stage("scan generated files (after build)"):
+            present = _generated_paths(config_mgr)
+        with clock.stage("record generation manifest"):
+            _record_generation(config_mgr, gen_run, present)
+        clock.print_summary()
         print()
         print(generation_manifest.coverage_line(gen_run))
 
@@ -761,7 +857,7 @@ def _generated_paths_and_roots(config_mgr) -> tuple[list, list]:
     # come from `_view_targets`, nothing else.
     declared |= {p.parent for p in view_paths}
 
-    from ..core.generation_manifest import real_case
+    from ..core.generation_manifest import listing_memo, real_case
 
     # Pruned on the RESULT, not only on the walk's starting points. The
     # other set of starting points is the parent of each file the lint
@@ -783,11 +879,17 @@ def _generated_paths_and_roots(config_mgr) -> tuple[list, list]:
             probe = path.resolve()
         except OSError:
             probe = path
-        return any(probe == tree or tree in probe.parents for tree in owned)
+        # A set, built once per path: `in probe.parents` rebuilds every
+        # parent for every tree it is compared against.
+        parents = set(probe.parents)
+        return any(probe == tree or tree in parents for tree in owned)
 
-    canon = sorted({c for c in (real_case(p) for p in paths)
+    # One listing memo for the whole result: every path here was found on
+    # disk moments ago and nothing writes between them (see `real_case`).
+    listings = listing_memo()
+    canon = sorted({c for c in (real_case(p, listings=listings) for p in paths)
                    if not _owned_elsewhere(c)})
-    roots = sorted({real_case(d) for d in walked | declared}, key=str)
+    roots = sorted({real_case(d, listings=listings) for d in walked | declared}, key=str)
     return canon, roots
 
 

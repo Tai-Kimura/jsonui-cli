@@ -21,7 +21,9 @@ reported, just not gating.
 from __future__ import annotations
 
 import argparse
+import fnmatch
 import json
+import os
 from pathlib import Path
 
 
@@ -67,6 +69,42 @@ DEFAULT_EXCLUDED_DIR_NAMES = frozenset({
 def _is_excluded(path: Path, excluded_names: frozenset[str]) -> bool:
     """Return True if any ancestor of ``path`` is an excluded directory."""
     return any(part in excluded_names for part in path.parts)
+
+
+def _pruned_dirs(root: Path, excluded_names):
+    """`(directory, entry names)` for every directory `rglob` would search
+    under `root` and `_is_excluded` would not then throw away.
+
+    The collections below used to `rglob` the whole platform root and drop
+    excluded paths AFTERWARDS, so every run walked into `build/`,
+    `node_modules` and `.gradle` in full and discarded all of it. Measured
+    on a three-platform face (2026-09-23): the iOS root held 128,983 files,
+    126,442 of them under `build/`, and each pattern cost a full walk —
+    `_view_targets` took 2.62 s for 98 hits, and a build runs it twice.
+
+    Pruning a directory whose name is excluded loses nothing the filter
+    would have kept: every path under it has that name among its parts, so
+    `_is_excluded` rejects it. The callers keep applying `_is_excluded` to
+    what they find, so the result is the same set and the prune only
+    decides what is never read. Like `rglob`, this does not descend into
+    symlinked directories (`os.walk` without `followlinks`), and the names
+    include every entry — files, directories and symlinks — because the
+    final pattern in `rglob` matches all of them.
+    """
+    for dirpath, dirnames, filenames in os.walk(root):
+        names = dirnames + filenames
+        dirnames[:] = [d for d in dirnames if d not in excluded_names]
+        yield Path(dirpath), names
+
+
+def _rglob_pruned(root: Path, pattern: str, excluded_names) -> list[Path]:
+    """`root.rglob(pattern)` for a wildcard pattern, without descending into
+    excluded directories. Matched per entry name with `fnmatch.fnmatch`,
+    which folds case exactly when the platform's pathlib glob does (never on
+    POSIX, macOS included; always on Windows)."""
+    return [directory / name
+            for directory, names in _pruned_dirs(root, excluded_names)
+            for name in names if fnmatch.fnmatch(name, pattern)]
 
 
 def register_lint_generated_command(subparsers: argparse._SubParsersAction) -> None:
@@ -435,7 +473,7 @@ def _view_targets(config_mgr) -> list[Path]:
     out: list[Path] = []
     for root in roots:
         for pattern in ("*GeneratedView.swift", "*GeneratedView.kt"):
-            for path in root.rglob(pattern):
+            for path in _rglob_pruned(root, pattern, DEFAULT_EXCLUDED_DIR_NAMES):
                 if _is_excluded(path, DEFAULT_EXCLUDED_DIR_NAMES):
                     continue
                 out.append(path)
@@ -478,7 +516,20 @@ def _collect_targets(config_mgr) -> list[tuple[str, Path]]:
     for root in _platform_roots(config_mgr):
         if root is None or not root.exists():
             continue
-        for generated in root.rglob("Generated"):
+        # One level at a time with the interpreter's own `glob`, not a name
+        # comparison here: for a literal name the per-level match is NOT the
+        # same on every Python — 3.14 asks the filesystem whether
+        # `<dir>/Generated` exists (so APFS answers yes for `generated` and
+        # the path comes back spelled `Generated`), while 3.12 compares the
+        # directory's entry names and does not (both measured on APFS,
+        # 2026-09-24; 3.13 untested). `rglob` is this per-level
+        # match over every directory, so asking it per directory keeps
+        # whichever answer the running interpreter gave before; the build's
+        # own record does not depend on it (`_generated_tree_roots` walks
+        # and compares names itself). Only the excluded directories, which
+        # the filter below rejected anyway, are no longer walked.
+        for generated in (hit for directory, _names in _pruned_dirs(root, excluded_names)
+                          for hit in directory.glob("Generated")):
             if _is_excluded(generated, excluded_names):
                 continue
             if generated.is_dir():
