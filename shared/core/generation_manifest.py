@@ -98,7 +98,7 @@ _COMMENT = (
 )
 
 
-def real_case(path: Path) -> Path:
+def real_case(path: Path, *, listings: dict | None = None) -> Path:
     """A path spelled the way the filesystem spells it.
 
     Case-insensitive filesystems accept — and hand back — whatever casing
@@ -108,15 +108,25 @@ def real_case(path: Path) -> Path:
     component that is not there is kept as given, since the path may simply
     not exist yet and inventing a spelling would be worse than echoing the
     one asked for.
+
+    `listings` is a memo of directory → entries for ONE BATCH of calls
+    (see `listing_memo`). Every call lists every ancestor from `/`, so a
+    batch over a project's generated files lists the same few hundred
+    directories thousands of times: measured on a three-platform face
+    (2026-09-23), one `jui build` made 2,488,684 `listdir` calls in the
+    record step alone — 63 s of a build, with nothing printed. The memo
+    changes how often a directory is read, not what is read from it: the
+    same entries, in the same order, so the case-insensitive fallback
+    below picks the same first match. It must not outlive the batch — a
+    listing taken before a build does not know what the build created.
     """
     p = Path(path)
     if not p.is_absolute():
         return p
     fixed = Path(p.anchor)
     for part in p.relative_to(p.anchor).parts:
-        try:
-            entries = os.listdir(fixed)
-        except OSError:
+        entries = _listing(fixed, listings)
+        if entries is None:
             return fixed.joinpath(*_remaining(p, fixed))
         if part in entries:
             fixed = fixed / part
@@ -127,6 +137,32 @@ def real_case(path: Path) -> Path:
     return fixed
 
 
+def listing_memo() -> dict:
+    """A fresh memo for one batch of `real_case` calls.
+
+    A function rather than a bare `{}` at the call sites so the lifetime
+    rule has one place to be read: one memo per batch, made where the batch
+    starts, dropped when it ends. Never module-level.
+    """
+    return {}
+
+
+def _listing(directory: Path, listings: dict | None):
+    """`os.listdir(directory)`, or None where it raises — memoised when asked."""
+    if listings is None:
+        try:
+            return os.listdir(directory)
+        except OSError:
+            return None
+    key = str(directory)
+    if key not in listings:
+        try:
+            listings[key] = os.listdir(directory)
+        except OSError:
+            listings[key] = None
+    return listings[key]
+
+
 def _remaining(full: Path, prefix: Path) -> tuple:
     try:
         return full.relative_to(prefix).parts
@@ -134,7 +170,8 @@ def _remaining(full: Path, prefix: Path) -> tuple:
         return full.parts
 
 
-def _migrate_key(project_root: Path, key: str) -> str:
+def _migrate_key(project_root: Path, key: str, *,
+                 listings: dict | None = None) -> str:
     """An existing key, re-spelled the way the current normaliser spells it.
 
     Only the spelling moves. A key naming a file that is genuinely absent
@@ -142,9 +179,9 @@ def _migrate_key(project_root: Path, key: str) -> str:
     still fails the presence test and is still dropped.
     """
     root = Path(project_root)
-    candidate = real_case(root / key)
+    candidate = real_case(root / key, listings=listings)
     try:
-        return candidate.relative_to(real_case(root)).as_posix()
+        return candidate.relative_to(real_case(root, listings=listings)).as_posix()
     except ValueError:
         return key
 
@@ -307,12 +344,14 @@ class GenerationRun:
     def observe(self, paths, *, roots=None) -> None:
         """Record the pre-run state of every path a run could write."""
         paths = list(paths)
-        self.roots = None if roots is None else tuple(self._key(r) for r in roots)
+        listings = listing_memo()
+        self.roots = None if roots is None else tuple(
+            self._key(r, listings=listings) for r in roots)
         self.observed = len(paths)
         for path in paths:
             state = _state_of(path)
             if state is not None:
-                self.before[self._key(path)] = state
+                self.before[self._key(path, listings=listings)] = state
 
     def observe_written(self, keys, *, roots=None) -> None:
         """A producer that has no before/after — it knows what it wrote.
@@ -327,8 +366,11 @@ class GenerationRun:
         # differed from the disk (`DOCS/y.html`) would have been recorded as
         # given — the drift `_key` exists to prevent, bypassed by one of the
         # two producers. Found by triage's probe before it shipped.
-        keys = sorted(self._key(Path(self.project_root) / k) for k in keys)
-        self.roots = None if roots is None else tuple(self._key(r) for r in roots)
+        listings = listing_memo()
+        keys = sorted(self._key(Path(self.project_root) / k, listings=listings)
+                      for k in keys)
+        self.roots = None if roots is None else tuple(
+            self._key(r, listings=listings) for r in roots)
         self.observed = len(keys)
         self.written_keys = keys
         self._refuse_outside_roots(keys)
@@ -387,8 +429,9 @@ class GenerationRun:
         touched = []
         present = []
         absent = []
+        listings = listing_memo()
         for path in paths:
-            key = self._key(path)
+            key = self._key(path, listings=listings)
             after = _state_of(path)
             if after is None:
                 # Generated last time, absent now: the run did not write it,
@@ -411,8 +454,11 @@ class GenerationRun:
         # not a stray file; the declaration was widened, the count kept. A
         # reader sees the number instead of inferring it. The doc generator's
         # scope is a real boundary, and `observe_written` refuses there.
+        roots = self._canonical_roots(listings=listings)
         self.outside_roots = [k for k in present
-                              if not self._under_roots(Path(self.project_root) / k)]
+                              if not self._under_roots(Path(self.project_root) / k,
+                                                       canonical_roots=roots,
+                                                       listings=listings)]
         self.present = present
         self.written_keys = touched
         self.absent_after = absent
@@ -456,8 +502,10 @@ class GenerationRun:
         f["leftoverPaths"] = [str(p) for p in stale[:20]]
         if len(stale) > 20:
             f["leftoverPathsNote"] = f"first 20 of {len(stale)}"
+        listings = listing_memo()
+        roots = self._canonical_roots(listings=listings)
         mine = [(p, copies) for p, copies in stale_outside
-                if self._under_roots(p)]
+                if self._under_roots(p, canonical_roots=roots, listings=listings)]
         f["leftoversOutside"] = len(mine)
         f["leftoversOutsideScanned"] = len(list(walked_dirs))
         f["collidingSourceNames"] = list(colliding_sources)
@@ -568,7 +616,27 @@ class GenerationRun:
     recorded_keys: list | None = None
 
     # ------------------------------------------------------------------
-    def _under_roots(self, path) -> bool:
+    def _canonical_roots(self, *, listings: dict | None = None) -> list | None:
+        """The declared roots as `_under_roots` compares them; None = none declared.
+
+        Computed once per batch and handed to `_under_roots`, not recomputed
+        per key: every root costs a `real_case`, and doing all of them for
+        every present key was 1,459 keys × 227 roots on one face — the bulk
+        of the 2.5 million `listdir` calls a single build made.
+        """
+        if self.roots is None:
+            return None
+        base = real_case(Path(self.project_root), listings=listings)
+        out = []
+        for r in self.roots:
+            rp = Path(r)
+            out.append(real_case(
+                Path(os.path.normpath(rp if rp.is_absolute() else base / rp)),
+                listings=listings))
+        return out
+
+    def _under_roots(self, path, *, canonical_roots: list | None = None,
+                     listings: dict | None = None) -> bool:
         """Under one of the declared roots, compared as RESOLVED paths.
 
         Not as key strings: a root spelled `.` would match everything, and
@@ -580,14 +648,14 @@ class GenerationRun:
         """
         if self.roots is None:
             return True                      # nothing declared: nothing to be outside of
-        base = real_case(Path(self.project_root))
+        if canonical_roots is None:
+            canonical_roots = self._canonical_roots(listings=listings)
         # `..` is collapsed before the comparison; `real_case` keeps it, and
         # `docs/../evil/x.html` has `/docs` among its textual parents.
-        target = real_case(Path(os.path.normpath(Path(path))))
-        for r in self.roots:
-            rp = Path(r)
-            rp = real_case(Path(os.path.normpath(rp if rp.is_absolute() else base / rp)))
-            if target == rp or rp in target.parents:
+        target = real_case(Path(os.path.normpath(Path(path))), listings=listings)
+        parents = set(target.parents)     # once, not once per root
+        for rp in canonical_roots:
+            if target == rp or rp in parents:
                 return True
         return False
 
@@ -595,14 +663,18 @@ class GenerationRun:
         """A key outside every declared root is a claim wider than the scan."""
         if self.roots is None:
             return
-        outside = [k for k in keys if not self._under_roots(Path(self.project_root) / k)]
+        listings = listing_memo()
+        roots = self._canonical_roots(listings=listings)
+        outside = [k for k in keys
+                   if not self._under_roots(Path(self.project_root) / k,
+                                            canonical_roots=roots, listings=listings)]
         if outside:
             raise ValueError(
                 f"{len(outside)} key(s) lie outside the declared scan roots "
                 f"{list(self.roots)}: {outside[:5]} — the record would claim "
                 "more than the run looked at")
 
-    def _key(self, path) -> str:
+    def _key(self, path, *, listings: dict | None = None) -> str:
         """The project-relative path, spelled the way the disk spells it.
 
         NOT `Path.resolve()`. That normalises per platform — on macOS it
@@ -618,8 +690,8 @@ class GenerationRun:
         Disk spelling is canonical, and every path entering the manifest
         goes through this one function so the two sides cannot drift again.
         """
-        p = real_case(Path(path))
-        root = real_case(Path(self.project_root))
+        p = real_case(Path(path), listings=listings)
+        root = real_case(Path(self.project_root), listings=listings)
         try:
             return p.relative_to(root).as_posix()
         except ValueError:
@@ -695,8 +767,9 @@ def load_migrated_with_collisions(project_root: Path) -> tuple[dict, dict]:
     migrated: dict = {}
     winner: dict = {}
     collisions: dict = {}
+    listings = listing_memo()
     for key, value in files.items():
-        canonical = _migrate_key(project_root, key)
+        canonical = _migrate_key(project_root, key, listings=listings)
         if canonical not in migrated:
             migrated[canonical] = value
             winner[canonical] = key
