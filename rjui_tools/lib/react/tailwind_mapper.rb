@@ -433,8 +433,13 @@ module RjuiTools
             # orientation: "vertical" (flex-col) or not specified (default to vertical behavior)
             # items-* = horizontal alignment, justify-* = vertical alignment
 
-            # Horizontal alignment (cross-axis for flex-col)
-            if gravity_str.include?('centerHorizontal') || gravity_str.include?('center')
+            # Horizontal alignment (cross-axis for flex-col). Read by TOKEN:
+            # `include?('center')` also matched `centerVertical`, so a gravity
+            # that names only the vertical axis centred the horizontal one as
+            # well — on web only, where ios and android leave it at the
+            # container default (attribute_semantics.json -> gravityDefaults).
+            tokens = gravity_str.split('|').map(&:strip)
+            if tokens.include?('centerHorizontal') || tokens.include?('center')
               classes << 'items-center'
             elsif gravity_str.include?('right')
               classes << 'items-end'
