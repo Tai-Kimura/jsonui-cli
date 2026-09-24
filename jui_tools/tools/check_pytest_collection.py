@@ -125,6 +125,16 @@ ALLOWED_SKIP_REASONS: tuple[str, ...] = (
     # named surface. A release cannot be announced from a tree whose suites
     # did not run, so the gate sits in front of every announcement.
     "no release tags in this checkout",
+    # THE PILLOW SHAPE AGAIN: declared, and not expected to fire in CI. The
+    # iOS image converter's arms need rsvg-convert or cairosvg, which a
+    # developer machine may lack; python-suite installs both
+    # (librsvg2-bin + cairosvg). They were added in 1.8.112 WITHOUT that
+    # install and the first candidate's CI went red on these three skips —
+    # the arms that prove a PDF is byte-stable would have run nowhere but a
+    # Mac. run-suites.sh asserts ci.yml still installs both, so dropping the
+    # install fails the release instead of re-earning this allowance.
+    "rsvg-convert not on PATH",
+    "cairosvg / cairocffi not importable",
 )
 
 
