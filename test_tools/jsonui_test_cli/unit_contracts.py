@@ -1191,7 +1191,16 @@ def _test_roots(project_root: Path, config: dict) -> dict[str, list[Path] | None
     is a configuration error.
     """
     roots: dict[str, list[Path] | None] = {}
-    for platform, entry in (config.get("platforms") or {}).items():
+    platforms = config.get("platforms") or {}
+    if isinstance(platforms, list):
+        # The test_tools readers (coverage, branch tests) accept a list of
+        # names. A list has no place for `unitTestsDir`, so every platform it
+        # names is undeclared; `check_unit_contracts` says the list is why,
+        # rather than "not declared".
+        return {str(p): None for p in platforms if isinstance(p, str) and p}
+    if not isinstance(platforms, dict):
+        return roots
+    for platform, entry in platforms.items():
         if not isinstance(entry, dict):
             continue
         unit_dir = entry.get("unitTestsDir")
@@ -1535,7 +1544,15 @@ def check_unit_contracts(
     for platform in sorted(set(report.declared) | set(project_platforms)):
         dirs = roots.get(platform)
         if dirs is None:
-            if report.declared.get(platform):
+            if report.declared.get(platform) and isinstance(config.get("platforms"), list):
+                report.unscannable[platform] = (
+                    f"jui.config.json writes `platforms` as a list, which has no "
+                    f"place for unitTestsDir, so the {len(report.declared[platform])} "
+                    f"case(s) declared for {platform} cannot be compared against "
+                    f"anything — write `platforms` as an object, the shape `jui init` "
+                    f"writes, and declare platforms.<platform>.unitTestsDir"
+                )
+            elif report.declared.get(platform):
                 report.unscannable[platform] = (
                     f"platforms.{platform}.unitTestsDir is not declared in "
                     f"jui.config.json, so the {len(report.declared[platform])} case(s) "
