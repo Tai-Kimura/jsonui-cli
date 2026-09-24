@@ -9,10 +9,13 @@ from __future__ import annotations
 
 import base64
 import json
+import os
 import re
 import shutil
 import subprocess
+import tempfile
 import xml.etree.ElementTree as ET
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -62,9 +65,7 @@ class ImageConverter:
             },
         }
         contents_path = imageset_dir / "Contents.json"
-        with open(contents_path, "w", encoding="utf-8") as f:
-            json.dump(contents, f, indent=2)
-            f.write("\n")
+        _write_if_changed(contents_path, (json.dumps(contents, indent=2) + "\n").encode("utf-8"))
 
         return imageset_dir
 
@@ -194,33 +195,97 @@ class ImageConverter:
 #  Helpers
 # ====================================================================== #
 
+def _pdf_creation_epoch() -> int:
+    """The creation date every converted PDF carries, as a Unix time.
+
+    Left alone, both converters stamp the wall clock into the PDF, so the
+    same SVG became a different PDF on every build: on one face
+    `jui build --clean` rewrote all 123 iOS image assets each run, identical
+    but for /CreationDate (reported 2026-09-24). The date says nothing about
+    the image, so it is pinned: SOURCE_DATE_EPOCH when the run sets one —
+    read through the generation manifest's pin, so the variable has one
+    reader in this package — and otherwise the epoch itself. (The manifest's
+    `generatedAt` falls back to the wall clock instead; that stamp records
+    when a build ran, this one records nothing.)
+    """
+    from . import generation_manifest
+
+    pinned = generation_manifest.pinned_build_time() if generation_manifest.AVAILABLE else None
+    return int(pinned.timestamp()) if pinned else 0
+
+
+def _write_if_changed(path: Path, data: bytes) -> bool:
+    """Write *data* unless *path* already holds exactly that. True if written.
+
+    Byte-identical output left in place keeps its mtime, so an unchanged
+    asset does not look changed to Xcode's incremental build.
+    """
+    try:
+        if path.read_bytes() == data:
+            return False
+    except OSError:
+        pass
+    path.write_bytes(data)
+    return True
+
+
 def _svg_to_pdf(svg_path: Path, pdf_path: Path) -> bool:
-    """Convert SVG to PDF. Try rsvg-convert first, then cairosvg."""
-    # 1. rsvg-convert (brew install librsvg)
+    """Convert SVG to PDF. Try rsvg-convert first, then cairosvg.
+
+    The conversion goes to a scratch file beside *pdf_path* and replaces it
+    only when the bytes differ; with the creation date pinned
+    (`_pdf_creation_epoch`), an unchanged SVG leaves its PDF untouched.
+    """
+    epoch = _pdf_creation_epoch()
+    fd, scratch_name = tempfile.mkstemp(prefix=".jui-", suffix=".pdf", dir=pdf_path.parent)
+    os.close(fd)
+    scratch = Path(scratch_name)
+    try:
+        if not _convert_svg_to_pdf(svg_path, scratch, epoch):
+            print(
+                f"  WARNING: Cannot convert {svg_path.name} to PDF. "
+                "Install rsvg-convert (brew install librsvg) or cairosvg (pip install cairosvg)."
+            )
+            return False
+        _write_if_changed(pdf_path, scratch.read_bytes())
+        return True
+    finally:
+        scratch.unlink(missing_ok=True)
+
+
+def _convert_svg_to_pdf(svg_path: Path, pdf_path: Path, epoch: int) -> bool:
+    # 1. rsvg-convert (brew install librsvg). It stamps SOURCE_DATE_EPOCH as
+    #    the creation date when the variable is set (measured: rsvg-convert
+    #    2.62.1 / cairo 1.18.4), so the pin is handed to it that way.
     try:
         result = subprocess.run(
             ["rsvg-convert", "-f", "pdf", "-o", str(pdf_path), str(svg_path)],
             capture_output=True,
+            env={**os.environ, "SOURCE_DATE_EPOCH": str(epoch)},
         )
-        if result.returncode == 0 and pdf_path.exists():
+        if result.returncode == 0 and pdf_path.exists() and pdf_path.stat().st_size:
             return True
     except FileNotFoundError:
         pass
 
-    # 2. cairosvg (pip install cairosvg)
+    # 2. cairosvg (pip install cairosvg). cairo itself ignores
+    #    SOURCE_DATE_EPOCH (measured: two conversions a second apart differ
+    #    with it set), so the date goes onto the PDF surface directly.
     try:
-        import cairosvg  # type: ignore[import-untyped]
-        cairosvg.svg2pdf(url=str(svg_path), write_to=str(pdf_path))
-        if pdf_path.exists():
-            return True
+        import cairocffi  # type: ignore[import-untyped]
+        from cairosvg.surface import PDFSurface  # type: ignore[import-untyped]
     except ImportError:
-        pass
+        return False
+    stamp = datetime.fromtimestamp(epoch, tz=timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
-    print(
-        f"  WARNING: Cannot convert {svg_path.name} to PDF. "
-        "Install rsvg-convert (brew install librsvg) or cairosvg (pip install cairosvg)."
-    )
-    return False
+    class _PinnedPDFSurface(PDFSurface):
+        def _create_surface(self, width, height):
+            surface, width, height = super()._create_surface(width, height)
+            surface.set_metadata(cairocffi.PDF_METADATA_CREATE_DATE, stamp)
+            return surface, width, height
+
+    _PinnedPDFSurface.convert(url=str(svg_path), write_to=str(pdf_path))
+    return pdf_path.exists() and pdf_path.stat().st_size > 0
 
 
 def _strip_unit(value: str) -> str:
