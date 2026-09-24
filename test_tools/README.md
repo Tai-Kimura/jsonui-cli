@@ -544,9 +544,16 @@ declared route outside that set (plus the side calls the app contracts spec's
 `apiOutcomeRules` admit for the statuses the test serves, minus what the row
 says `not-called`) turns the test red.
 
+An operation is one a repositories / useCases method names as its `endpoint`
+— the same set branch tests route. An endpoint listed only in
+`dataFlow.apiEndpoints` is counted apart as **unbound endpoint**: a call to it
+is recorded as `(unmatched)`, so no bound, reach or count sees it. Bind it to
+the method that calls it.
+
 Exit per platform, composed 2 > 1 > 3 > 0: `0` pass (`empty` when no screen
 exists on the platform), `1` uncovered or a declaration error, `2` cannot
-start, `3` something could not be evaluated and nothing is uncovered.
+start, `3` something could not be evaluated (including an unbound endpoint)
+and nothing is uncovered.
 
 ### Generated branch tests: the act window
 

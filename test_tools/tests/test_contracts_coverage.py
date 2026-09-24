@@ -464,6 +464,68 @@ def test_a_clean_screen_passes(tmp_path):
     assert _counts(_screen_result(report))["required"] == 2
 
 
+def _clean(extra_api_endpoints=(), extra_methods=()):
+    """The clean screen (exit 0), with endpoints added to its dataFlow."""
+    openapi = {"openapi": "3.0.0", "paths": {
+        "/api/items/{id}": {"get": {"operationId": "getItem", "responses": {"200": {}, "404": {}}}},
+        "/api/tags": {"get": {"operationId": "getTags", "responses": {"200": {}, "403": {}}}}}}
+    mocks = {"getItem": _MOCKS["getItem"],
+             "getTags": ("GET", "/api/tags", {"default": {"status": 200, "body": {}},
+                                                  "error_403": {"status": 403, "body": {}}})}
+    spec = _screen()
+    spec["dataFlow"]["repositories"][0]["methods"] = [
+        {"name": "getItem", "endpoint": "GET /api/items/{id}"}, *extra_methods]
+    spec["dataFlow"]["apiEndpoints"] = [{"method": "GET", "path": "/api/items/{id}"},
+                                        *extra_api_endpoints]
+    spec["branchContracts"]["methods"] = {"approve": {"branches": [
+        {"when": {"api.getItem": "default"}, "then": {"data.status": "ok"}},
+        {"when": {"api.getItem": "error_404"}, "then": {"transition": "back"}}]}}
+    return spec, openapi, mocks
+
+
+def test_xxiii_c_an_endpoint_only_in_api_endpoints_is_named_and_unmeasured(tmp_path):
+    """Design v4.8 §2.2 / §4 #34: `apiEndpoints` alone routes nothing, so a call
+    to the endpoint is `(unmatched)` in every generated test. Coverage names it
+    as an E and keeps the verdict off `pass` — the "0 uncovered" it would print
+    otherwise is a count that never looked at this endpoint."""
+    spec, openapi, mocks = _clean([{"method": "GET", "path": "/api/tags"}])
+    report = _run(_project(tmp_path, spec, openapi=openapi, mocks=mocks))
+    s = _screen_result(report)
+    assert s.na_endpoints["unbound"] == 1
+    assert s.unbound_endpoints == ["GET /api/tags"]
+    assert any("GET /api/tags is in dataFlow.apiEndpoints" in n for n in s.notes)
+    assert _counts(s)["required"] == 2 and s.breakdown["uncovered"] == 0
+    assert _block(report).exit == cc.EXIT_UNMEASURED and _block(report).verdict == "unmeasured"
+    assert "unbound endpoint 1" in "\n".join(cc.format_text(report))
+    web = next(p for p in cc.to_json(report)["platforms"] if p["platform"] == "web")
+    assert web["screens"][0]["na_endpoints"]["unbound"] == 1
+    assert web["screens"][0]["unbound_endpoints"] == ["GET /api/tags"]
+
+
+def test_xxiii_c_control_binding_the_endpoint_brings_it_into_the_count(tmp_path):
+    """The pair: the same endpoint as a repository method's endpoint is an
+    operation like any other — no longer unbound, its statuses are required,
+    and with no row reaching it they are unattributed."""
+    spec, openapi, mocks = _clean([{"method": "GET", "path": "/api/tags"}],
+                                  [{"name": "getTags", "endpoint": "GET /api/tags"}])
+    report = _run(_project(tmp_path, spec, openapi=openapi, mocks=mocks))
+    s = _screen_result(report)
+    assert s.na_endpoints["unbound"] == 0 and s.unbound_endpoints == []
+    assert _counts(s)["required"] == 4
+    assert s.uncovered_breakdown["unattributed"] == 2
+    assert _block(report).exit == cc.EXIT_UNCOVERED
+
+
+def test_xxiii_c_boundary_a_renamed_path_variable_is_the_same_endpoint(tmp_path):
+    """Matched by route: `{item_id}` in apiEndpoints and `{id}` in the
+    method's endpoint name one route, so nothing is unbound and the screen
+    passes as it did without the extra line."""
+    spec, openapi, mocks = _clean([{"method": "GET", "path": "/api/items/{item_id}"}])
+    report = _run(_project(tmp_path, spec, openapi=openapi, mocks=mocks))
+    assert _screen_result(report).na_endpoints["unbound"] == 0
+    assert _block(report).exit == cc.EXIT_PASS
+
+
 def test_the_command_line_exits_with_the_composed_code(tmp_path):
     root = _project(tmp_path)
     done = subprocess.run(

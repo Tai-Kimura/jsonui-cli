@@ -335,7 +335,8 @@ class ScreenResult:
     outside_required: dict = field(default_factory=lambda: dict(
         unreached_op=0, na_default_response=0, na_no_scenario=0, na_platform_excluded=0))
     na_endpoints: dict = field(default_factory=lambda: dict(
-        no_mock=0, not_in_openapi=0, non_http=0))
+        no_mock=0, not_in_openapi=0, unbound=0, non_http=0))
+    unbound_endpoints: list = field(default_factory=list)
     notes: list = field(default_factory=list)
     http_endpoints: int = 0
     branches_active: int = 0
@@ -354,7 +355,16 @@ class ScreenResult:
 
 
 def _endpoints(spec: dict):
-    """(route_key -> {method, path}, methods without an endpoint, non-HTTP count)."""
+    """(route_key -> {method, path}, methods without an endpoint, non-HTTP count,
+    route_key -> {method, path} of the unbound endpoints).
+
+    UNBOUND: in `dataFlow.apiEndpoints` and the endpoint of no repositories /
+    useCases method. The generator routes only method endpoints, so a call
+    to one of these is recorded as `(unmatched)` and no bound, reach or
+    count ever sees it — `apiEndpoints` alone is a declaration nothing
+    measures (design v4.8 §2.2). Matched by route_key, so a renamed path
+    variable is the same endpoint.
+    """
     from .mock.generate import route_key
 
     endpoints: dict = {}
@@ -378,7 +388,21 @@ def _endpoints(spec: dict):
                     continue
                 endpoints.setdefault(route_key(m.group(1), m.group(2)),
                                      {"method": m.group(1), "path": m.group(2)})
-    return endpoints, without, non_http
+    unbound: dict = {}
+    for entry in flow.get("apiEndpoints") or []:
+        if not isinstance(entry, dict):
+            continue
+        method, path = entry.get("method"), entry.get("path")
+        if not (isinstance(method, str) and isinstance(path, str) and path.strip()):
+            continue
+        method = method.strip().upper()
+        if method not in HTTP_VERBS:
+            non_http += 1
+            continue
+        key = route_key(method, path.strip())
+        if key not in endpoints:
+            unbound.setdefault(key, {"method": method, "path": path.strip()})
+    return endpoints, without, non_http, unbound
 
 
 def _callers(spec: dict, names: set) -> list:
@@ -406,7 +430,7 @@ def evaluate_screen(name: str, spec: dict, platform: str, project: Project) -> S
         res.declaration_errors.append(_error(message=f"{e.path}: {e.message}"))
 
     ops = collect_endpoint_ops(spec)
-    endpoints, res.methods_without_endpoint, non_http = _endpoints(spec)
+    endpoints, res.methods_without_endpoint, non_http, unbound = _endpoints(spec)
     res.na_endpoints["non_http"] = non_http
     res.http_endpoints = len(endpoints)
 
@@ -434,6 +458,15 @@ def evaluate_screen(name: str, spec: dict, platform: str, project: Project) -> S
                 res.declared += n
         res.check_arithmetic()
         return res
+
+    res.na_endpoints["unbound"] = len(unbound)
+    for endpoint in unbound.values():
+        label = f"{endpoint['method']} {endpoint['path']}"
+        res.unbound_endpoints.append(label)
+        res.notes.append(
+            f"{label} is in dataFlow.apiEndpoints but is the endpoint of no "
+            "repositories / useCases method — branch tests do not route it (a call "
+            "is recorded as (unmatched)); bind it to the method that calls it")
 
     evaluable: dict = {}
     for key, endpoint in endpoints.items():
@@ -780,6 +813,7 @@ class PlatformBlock:
         unmeasured = sum(
             s.breakdown["not_evaluated"] + s.outside_required["na_no_scenario"]
             + s.na_endpoints["no_mock"] + s.na_endpoints["not_in_openapi"]
+            + s.na_endpoints["unbound"]
             + (1 if s.not_evaluated_reason else 0) for s in active)
         http = sum(s.http_endpoints for s in active)
         evaluated = sum(s.statuses_required for s in active)
@@ -913,7 +947,8 @@ def format_text(report: CoverageReport) -> list:
                 f"{o['na_no_scenario']} + n/a(platform-excluded) {o['na_platform_excluded']}")
             n = s.na_endpoints
             lines.append(f"  n/a (E) no mock {n['no_mock']} · not in OpenAPI "
-                         f"{n['not_in_openapi']} · non-HTTP {n['non_http']}")
+                         f"{n['not_in_openapi']} · unbound endpoint {n['unbound']} · "
+                         f"non-HTTP {n['non_http']}")
             for note in s.notes:
                 lines.append(f"  note  {note}")
         if excluded:
@@ -949,7 +984,8 @@ def to_json(report: CoverageReport) -> dict:
                 "not_evaluated": list(s.not_evaluated), "info": dict(s.info),
                 "methods_without_endpoint": s.methods_without_endpoint,
                 "outside_required": dict(s.outside_required),
-                "na_endpoints": dict(s.na_endpoints), "notes": list(s.notes)})
+                "na_endpoints": dict(s.na_endpoints),
+                "unbound_endpoints": list(s.unbound_endpoints), "notes": list(s.notes)})
         totals = {k: sum(s.breakdown[k] for s in active) for k in
                   ("row", "unit", "unreachable", "unexpressible", "not_evaluated", "uncovered")}
         platforms.append({
