@@ -170,7 +170,24 @@ MISSING=$(comm -13 <(printf '%s\n' "$MADE" | grep .) <(printf '%s\n' "$ONTAG" | 
 ck "the window enumerated the tag's own commits (missing)" "$MISSING" "0"
 ck "the tag's own patch-id set is not empty" "$([ "$(printf '%s\n' "$ONTAG" | grep -c .)" -gt 0 ] && echo yes)" "yes"
 ck "no commit made since $PREV is off the tag" "$(printf '%s\n' "$OFF" | grep -c .)" "0"
-[ -n "$OFF" ] && g log --format='       OFF-TAG %h %s' --all --since="$SINCE" --not "$PREV" | head -10
+# 🔻 THE LIST IS THE OFF SET, NOT THE WINDOW. This printed every commit in the
+# window under OFF-TAG, capped at 10 (v1.8.115: got=3, nine lines, six of
+# them on the tag) — the count was right and the names beside it said
+# otherwise, and a real off-tag commit past the tenth was never named. Name
+# the commits whose patch-id is in OFF, and require every OFF patch-id to
+# have been named, so the list and the count cannot disagree again.
+if [ -n "$OFF" ]; then
+  NAMED=""
+  g log --format=%H --all --since="$SINCE" --not "$PREV" 2>/dev/null | while read c; do
+    p=$(g show "$c" 2>/dev/null | g patch-id --stable | cut -d' ' -f1)
+    [ -n "$p" ] || continue
+    printf '%s\n' "$OFF" | grep -qxF "$p" || continue
+    g log -1 --format='       OFF-TAG %h %s' "$c"
+    NAMED="$NAMED$p"$'\n'
+  done
+  ck "every off-tag patch-id is named above (unnamed)" \
+     "$(comm -23 <(printf '%s\n' "$OFF" | grep .) <(printf '%s' "$NAMED" | grep . | sort -u) | grep -c .)" "0"
+fi
 
 # HISTORICAL MARKS: prose that names a PAST version must not be rewritten by a
 # release. Judged as a set digest of (path + matching line TEXT) — line numbers
