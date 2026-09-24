@@ -376,6 +376,19 @@ def cmd_validate(args):
     _print_uncounted_footnote(uncounted, command="validate")
     _print_editor_schema_drift(getattr(args, "config", None))
 
+    # Contracts coverage (design §2.6 / §6.1, P3a-1): a section, not yet a
+    # gate — the return code below does not read it in this release. Placed
+    # before the early returns so a run stopped by its own errors still says
+    # that coverage did not run, instead of saying nothing.
+    from .contracts_coverage import validate_section
+    coverage_lines, _coverage_exit = validate_section(
+        _project_root(getattr(args, "config", None)), __version__,
+        skipped=getattr(args, "no_coverage_check", False),
+        blocked_by=total_errors or (1 if mock_rc else 0))
+    print()
+    for line in coverage_lines:
+        print(line)
+
     if total_errors > 0:
         return 1
     if mock_rc != 0:
@@ -2983,6 +2996,13 @@ def main():
         "--config",
         help="Config file for test.install destinations (default: jui.config.json)"
     )
+    validate_parser.add_argument(
+        "--no-coverage-check",
+        action="store_true",
+        help="Skip the contracts coverage section (said, not silent: the run "
+             "prints 'coverage skipped'). The section reports `contracts "
+             "coverage`; from the next release validate fails unless it exits 0"
+    )
 
     # Generate command with subcommands
     generate_parser = subparsers.add_parser(
@@ -3285,7 +3305,8 @@ def main():
              "screen reaches, bucketed: answered by a row, excluded with a "
              "reason, unmeasured, or uncovered. Exit 0 pass / 1 uncovered or a "
              "declaration error / 2 cannot start / 3 unmeasured, per platform, "
-             "composed 2 > 1 > 3 > 0. Not a gate yet")
+             "composed 2 > 1 > 3 > 0. `validate` reports it; from the next "
+             "release validate fails unless it exits 0")
     coverage_parser.add_argument("screen", nargs="?", help="One screen (default: all)")
     coverage_parser.add_argument(
         "--platform", action="append", choices=["web", "android", "ios"],

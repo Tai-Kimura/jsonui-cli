@@ -74,7 +74,7 @@ pyenv local 3.11.0
 | `artifacts pull` | `a pull` | Pull test artifacts (screenshots/recordings) from devices and xcresults |
 | `artifacts status` | `a status` | Show resolved artifacts config and existing artifact files |
 | `artifacts prune-legacy` | `a prune-legacy` | List (default) or delete (`--yes`) the suites left in the flat legacy Android mirror |
-| `contracts coverage` | — | Every response status the OpenAPI declares for an operation a screen reaches, bucketed by who answers it (not a gate yet) |
+| `contracts coverage` | — | Every response status the OpenAPI declares for an operation a screen reaches, bucketed by who answers it — `validate` reports it; from the next release validate fails unless it exits 0 |
 
 ### validate (v)
 
@@ -116,6 +116,24 @@ Installed 1 test file(s) → 1 target(s) (cleaned 0 stale):
 
 Declare `test.testDir` when your tests do not live under `tests/`; without it the
 run cannot establish the full set and declines the clean.
+
+**Contracts coverage section.** After its summary, `validate` reports
+`jsonui-test contracts coverage` for the project whose config it read — one line
+per platform:
+
+```
+coverage: web units 2 · statuses required 12 · row 5 · excluded 1 · uncovered 6 · not evaluated 0 → exit 1 (uncovered)
+from jsonui-cli <next release>, validate fails unless contracts coverage exits 0 — close what it reports (jsonui-define Task 6) or see the release note
+```
+
+with any declaration errors, and what could not be measured by cause
+(`n/a(unbound endpoint) 1`, …). In this release the section **does not change the
+exit code**; the notice names the release from which it will. It is never silent:
+`coverage not run: N error(s) above …` when the run's own errors stop it,
+`coverage not applicable: …` when the project declares no `mock.swagger` and no
+spec has `branchContracts`, `coverage cannot start: …` when it has one of them and
+coverage still cannot start, and `coverage skipped (--no-coverage-check)` when
+asked.
 
 ### generate test screen (g t screen)
 
