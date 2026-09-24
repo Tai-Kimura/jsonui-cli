@@ -79,11 +79,13 @@ ck "working tree clean"           "$(g status --porcelain | wc -l | tr -d ' ')" 
 # Red-check xxxi (design §6.1, P3a): validate announces, one release ahead,
 # the release from which it gates on contracts coverage, and switches on at
 # it. The version is a literal set when the announcing release is cut; this
-# holds it to the tag — the next patch when announcing, at or below the tag
-# once gating, FAIL when unset or naming anything else. A tree without the
-# constant predates the section and passes as n/a.
-GATE_VERDICT=$(g show "${BRANCH}:test_tools/jsonui_test_cli/contracts_coverage.py" 2>/dev/null \
-  | python3 "$(dirname "$0")/validate_gate_version.py" "$VER")
+# holds it to the tag — a release that can follow it when announcing; at or
+# below the tag only if the PREVIOUS tag announced that same literal (else
+# the gate would start in a release that announced nothing); FAIL when unset
+# or naming anything else. A tree without the constant passes as n/a.
+GATE_SRC=test_tools/jsonui_test_cli/contracts_coverage.py
+GATE_VERDICT=$(python3 "$(dirname "$0")/validate_gate_version.py" "$VER" \
+  <(g show "${BRANCH}:$GATE_SRC" 2>/dev/null) <(g show "${PREV}:$GATE_SRC" 2>/dev/null))
 echo "     validate gate version: $GATE_VERDICT"
 ck "validate gate version (xxxi)"  "${GATE_VERDICT%% *}" "ok"
 

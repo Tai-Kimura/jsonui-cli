@@ -235,14 +235,35 @@ def _tag_check():
 class TestXxxiAtTheTag:
     """The tag gate's half: the literal against the tag being cut."""
 
+    @staticmethod
+    def _src(literal: str) -> str:
+        return f"x = 1\nVALIDATE_GATE_FROM: str | None = {literal}\n"
+
     @pytest.mark.parametrize("literal, ok, word", [
         ('"1.8.120"', True, "announces"), ('"1.9.0"', True, "announces"),
-        ('"2.0.0"', True, "announces"), ('"1.8.119"', True, "gates"), ('"1.8.99"', True, "gates"),
+        ('"2.0.0"', True, "announces"),
         ('None', False, "unset"), ('"1.8.121"', False, "cannot be"), ('"1.10.0"', False, "cannot be"),
     ])
     def test_the_verdict(self, literal, ok, word):
-        got, why = _tag_check().verdict("1.8.119", f"x = 1\nVALIDATE_GATE_FROM: str | None = {literal}\n")
+        got, why = _tag_check().verdict("1.8.119", self._src(literal))
         assert (got, word in why) == (ok, True), why
+
+    @pytest.mark.parametrize("literal", ['"1.8.119"', '"1.8.99"'])
+    def test_gating_needs_the_previous_tag_to_have_announced_it(self, literal):
+        check = _tag_check()
+        ok, why = check.verdict("1.8.119", self._src(literal), previous=self._src(literal))
+        assert ok and "gates since" in why, why
+
+    def test_the_first_release_setting_it_to_n_is_red(self):
+        # ee, v4.14: in N — the first release with the section — a literal
+        # <= N would switch the gate on with no release having announced it.
+        ok, why = _tag_check().verdict("1.8.119", self._src('"1.8.119"'), previous="no section here\n")
+        assert not ok and "had no section" in why, why
+
+    def test_a_different_previous_announcement_is_red(self):
+        ok, why = _tag_check().verdict("1.8.120", self._src('"1.8.120"'),
+                                       previous=self._src('"1.8.121"'))
+        assert not ok and "announced '1.8.121'" in why, why
 
     def test_a_tree_before_the_section_is_n_a(self):
         assert _tag_check().verdict("1.8.117", "nothing\n") == (
@@ -259,4 +280,5 @@ class TestXxxiAtTheTag:
     def test_check_tag_runs_it(self):
         text = (REPO / "dev-guide/release/check-tag.sh").read_text(encoding="utf-8")
         assert 'validate_gate_version.py" "$VER"' in text
+        assert '<(g show "${PREV}:$GATE_SRC"' in text   # the previous tag's tree, too
         assert 'ck "validate gate version (xxxi)"' in text
