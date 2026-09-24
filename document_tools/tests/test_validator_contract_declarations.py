@@ -129,6 +129,18 @@ class ScreenDeclarationsAreAdmitted(unittest.TestCase):
         spec["branchContracts"]["methods"]["confirm"]["branches"][1]["alsoStatus"] = {}
         self.assertIn("branchContracts.methods.confirm.branches[1].alsoStatus", _paths(spec))
 
+    def test_also_statuses_on_a_note_row_is_one_error(self):
+        spec = _screen()
+        spec["branchContracts"]["methods"]["confirm"]["branches"][1] = {
+            "note": "handled by the parent", "alsoStatuses": {"api.submitOrder": ["429"]}}
+        errors = [e for e in _errors(spec) if e.path.startswith("branchContracts.methods.confirm.branches[1]")]
+        self.assertEqual(1, len(errors), [(e.path, e.message) for e in errors])
+        self.assertIn("note", errors[0].message)
+        # Another key on a note row is still the note check's to report.
+        spec["branchContracts"]["methods"]["confirm"]["branches"][1]["then"] = {"x": 1}
+        paths = [e.path for e in _errors(spec)]
+        self.assertIn("branchContracts.methods.confirm.branches[1]", paths)
+
     def test_rules_on_a_screen_are_refused(self):
         spec = _screen()
         spec["apiOutcomeRules"] = [_rule()]

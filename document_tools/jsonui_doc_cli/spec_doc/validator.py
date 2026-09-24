@@ -2350,7 +2350,11 @@ class SpecValidator:
                     path=f"{path}.note",
                     message="note must be a non-empty string",
                 ))
-            extras = [k for k in branch if k != "note"]
+            # `alsoStatuses` on a note row has its own ERROR from the
+            # contract-declaration parser, which says why (a note has no
+            # when/then to repeat). Counting it here as well would print two
+            # sentences for one cause, which reads as two problems.
+            extras = [k for k in branch if k not in ("note", "alsoStatuses")]
             if extras:
                 result.errors.append(SpecValidationMessage(
                     path=path,
