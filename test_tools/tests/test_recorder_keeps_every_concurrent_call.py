@@ -31,16 +31,25 @@ built on it would pass for the defect; it is not used.
 
 Red-check (2026-09-24, predictions written before each run):
 
-    arm                                   fixed        old list / no lock
+    arm                                   fixed        as v1.8.114 shipped
     android: 8 writers + reader, 20 rds    0 short      20/20 rounds short or
                                                         thrown, in 3 runs of 3
     ios: read while 16 in flight, 20 rds   rc 0, 0      crashed 5 of 5 runs
     ios: same, ThreadSanitizer             0 races      2 races reported, or
                                                         index out of range first
 
-The controls below take the fix out of the SAME emitted source and assert it
-goes red, so a probe that stopped exercising the recorder would fail its
-control instead of passing both.
+THE CONTROLS ARE THE RECORDER AS IT SHIPPED. `_kotlin_as_shipped` and
+`_swift_as_shipped` undo this change in the emitted source, and the result
+was compared by hand (2026-09-24). On v1.8.115 it is byte-identical to
+v1.8.114 — the Kotlin runtime text, and the Swift runtime emitted for this
+fixture. The contract-gap work then added an act window to the same class,
+and on top of it the undone runtime is byte-identical to that work's branch
+before this fix (87102abf): the recorder a consumer's run caught dropping a
+call. So "as it shipped" means the storage, not the whole class. A probe
+that stopped exercising the recorder fails its control instead of passing
+both. The Swift face keeps one more control — the lock made a no-op
+and nothing else — so a red says it is the lock, not the move to `record(_:)`,
+that does the work.
 """
 from __future__ import annotations
 
@@ -148,12 +157,21 @@ def test_android_keeps_every_call_added_from_many_threads(tmp_path):
     assert counts == {"ROUNDS": _ROUNDS, "SHORT": 0, "THROWN": 0}, counts
 
 
-def test_android_control_a_plain_list_loses_calls(tmp_path):
+def _kotlin_as_shipped(runtime: str) -> str:
+    """The runtime with this change undone: the comment and the list go, the
+    v1.8.114 declaration comes back."""
+    head = "  // 🔻 A LIST THAT TAKES CONCURRENT ADDS."
+    decl = f"  val calls: MutableList<RecordedCall> = {_KOTLIN_COW}\n"
+    assert runtime.count(head) == 1 and runtime.count(decl) == 1, "the list declaration moved"
+    i = runtime.index(head)
+    j = runtime.index(decl, i) + len(decl)
+    return runtime[:i] + "  val calls = mutableListOf<RecordedCall>()\n" + runtime[j:]
+
+
+def test_android_control_the_shipped_list_loses_calls(tmp_path):
     """The same probe over the list v1.8.114 shipped. Measured 20/20 rounds
     red in each of 3 runs; one red round is all this asks for."""
-    assert bt.KOTLIN_RUNTIME.count(_KOTLIN_COW) == 1, "the list declaration moved"
-    old = bt.KOTLIN_RUNTIME.replace(_KOTLIN_COW, "mutableListOf()")
-    counts = _run_kotlin(tmp_path, old)
+    counts = _run_kotlin(tmp_path, _kotlin_as_shipped(bt.KOTLIN_RUNTIME))
     assert counts["SHORT"] + counts["THROWN"] > 0, (
         f"the old list survived 8 writers and a reader: {counts} — the probe "
         "is no longer racing, so the arm above would pass for the defect too")
@@ -263,6 +281,19 @@ def _without_the_lock(runtime: str) -> str:
     return runtime[:start] + body + runtime[end:]
 
 
+def _swift_as_shipped(runtime: str) -> str:
+    """The runtime with this change undone: a bare array, appended to by the
+    protocol directly."""
+    head = "  // 🔻 ONE LOCK FOR THE PROTOCOL'S WRITES AND THE TEST'S READS."
+    tail = "    storage.append(call)\n  }\n\n"
+    assert runtime.count(head) == 1 and runtime.count(tail) == 1, "the recorder moved"
+    i = runtime.index(head)
+    j = runtime.index(tail, i) + len(tail)
+    runtime = runtime[:i] + "  var calls: [RecordedCall] = []\n" + runtime[j:]
+    assert runtime.count("Self.recorder?.record(") == 2
+    return runtime.replace("Self.recorder?.record(", "Self.recorder?.calls.append(")
+
+
 def _run(binary: Path, **env: str) -> subprocess.CompletedProcess:
     import os
     return subprocess.run([str(binary)], capture_output=True, text=True, timeout=300,
@@ -292,6 +323,18 @@ def test_ios_control_without_the_lock_crashes(swift_runtime, tmp_path):
         "longer reading while calls land")
 
 
+def test_ios_control_the_shipped_recorder_crashes(swift_runtime, tmp_path):
+    """The recorder as v1.8.114 shipped it, under the same probe."""
+    binary = _build_swift(tmp_path, _swift_as_shipped(swift_runtime))
+    outcomes = []
+    for _ in range(3):
+        run = _run(binary)
+        outcomes.append((run.returncode, _counts(run.stdout).get("SHORT")))
+    assert any(rc != 0 or short != 0 for rc, short in outcomes), (
+        f"the shipped recorder survived three runs {outcomes} — the probe is no "
+        "longer reading while calls land")
+
+
 def test_ios_thread_sanitizer_finds_no_race(swift_runtime, tmp_path):
     """The timing-free form. A crash needs the two accesses to collide; the
     sanitizer reports them when nothing orders them, collision or not."""
@@ -310,6 +353,14 @@ def test_ios_thread_sanitizer_control_names_the_race(swift_runtime, tmp_path):
     assert "WARNING: ThreadSanitizer" in run.stderr or run.returncode != 0, (
         f"no race reported and no crash without the lock (rc={run.returncode}) — "
         f"the sanitizer arm above is not measuring the recorder:\n{run.stderr[-2000:]}")
+
+
+def test_ios_thread_sanitizer_control_the_shipped_recorder(swift_runtime, tmp_path):
+    binary = _build_swift(tmp_path, _swift_as_shipped(swift_runtime), "-sanitize=thread")
+    run = _run(binary, TSAN_OPTIONS="halt_on_error=0")
+    assert "WARNING: ThreadSanitizer" in run.stderr or run.returncode != 0, (
+        f"no race reported and no crash for the shipped recorder "
+        f"(rc={run.returncode}):\n{run.stderr[-2000:]}")
 
 
 def test_ios_every_write_the_protocol_makes_goes_through_record():

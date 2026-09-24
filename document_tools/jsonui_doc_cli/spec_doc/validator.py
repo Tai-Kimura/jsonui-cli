@@ -358,6 +358,10 @@ class SpecValidator:
             self._validate_branch_contracts(data["branchContracts"], result)
             self._validate_branch_cross_faces(data, result)
 
+        # excludedOutcomes / unreachedOps / metadata.platforms (and a
+        # misplaced apiOutcomeRules): shape only, through their one parser.
+        self._validate_contract_declarations(data, result)
+
         # Validate unitContracts (opt-in). Checked here as well as in
         # `jsonui-test generate unit-stubs --check` because the person writing
         # a spec runs THIS gate: a typo that passes here is not found until
@@ -387,11 +391,13 @@ class SpecValidator:
     #: allowing one here would give a screen-owned declaration a second legal
     #: home, which is the "escape hatch" this spec type exists to avoid.
     #:
-    #: `branchContracts` is refused for a different reason and deliberately:
-    #: the ownership predicate is defined for unit targets, and nothing yet
-    #: decides which app owns a branch that belongs to no screen. Leaving it
-    #: writable-but-unread would be the exact failure this type was added to
-    #: remove, so it is refused until that question has an answer.
+    #: `branchContracts` is refused for a different reason, and still is now
+    #: that ownership has an answer. The owner is the app of the
+    #: jui.config.json that reads the spec_directory holding this spec
+    #: (contract-gap detection design §2.3.1). The network layer's side
+    #: calls that show up in a screen's generated tests are admitted by
+    #: `apiOutcomeRules`; effects that reach beyond a screen are
+    #: `unitContracts`. branchContracts gets no second home.
     _APP_SPEC_FORBIDDEN = (
         "structure", "dataFlow", "stateManagement", "userActions",
         "transitions", "validation", "subSpecs", "branchContracts",
@@ -401,10 +407,27 @@ class SpecValidator:
         """Validate a `app_contracts_spec`.
 
         A container for declarations the app owns and no screen does. It
-        carries `unitContracts` and nothing that describes a screen.
+        carries `unitContracts` (required) and optionally `apiOutcomeRules` —
+        and nothing that describes a screen. A rules-only app spec cannot
+        stand: every rule's `verifiedBy` names unit cases of this same file.
         """
         self._validate_required_fields(
             data, ["type", "version", "metadata", "unitContracts"], "", result)
+        # Unknown keys were let through until the second declaration arrived:
+        # a key the validator does not know is a key nothing reads, and a
+        # misspelt `apiOutcomeRule` would have been a rule with no effect and
+        # no complaint. Forbidden keys keep their own message below.
+        if isinstance(data, dict):
+            for key in data:
+                if key in self._APP_SPEC_KEYS or key in self._APP_SPEC_FORBIDDEN:
+                    continue
+                result.errors.append(SpecValidationMessage(
+                    path=key,
+                    message=(
+                        f"Unknown {APP_CONTRACTS_SPEC} key — allowed: "
+                        f"{', '.join(repr(k) for k in self._APP_SPEC_KEYS)}"
+                    ),
+                ))
 
         version = data.get("version", "")
         if not re.match(r"^\d+\.\d+$", version):
@@ -440,8 +463,76 @@ class SpecValidator:
         if "unitContracts" in data:
             self._validate_unit_contracts(data["unitContracts"], result)
 
+        self._validate_contract_declarations(data, result)
+
         if "relatedFiles" in data:
             self._validate_related_files(data["relatedFiles"], result)
+
+    #: Every key an app contracts spec may carry.
+    _APP_SPEC_KEYS = ("type", "version", "metadata", "unitContracts",
+                      "apiOutcomeRules", "relatedFiles")
+
+    def _validate_contract_declarations(self, data: dict, result: SpecValidationResult):
+        """The shape of the contract-gap declarations, through their one parser.
+
+        The sites in `_CONTRACT_DECLARATION_SITES` (`excludedOutcomes`,
+        `unreachedOps`, a row's `alsoStatuses`, `apiOutcomeRules`,
+        `metadata.platforms`) are read by `jsonui-test contracts coverage`;
+        their parser lives in test_tools so this check and that command
+        cannot accept different documents. Imported HERE, not at module
+        level: a module-level import that failed would fall into
+        `jui generate`'s `except ImportError`, which folds the whole spec
+        validation into one WARNING line. A failed import is an ERROR on a
+        document that declares one of these, and nothing on one that does
+        not.
+        """
+        try:
+            from jsonui_test_cli.contract_declarations import parse_declarations
+        except ImportError as exc:
+            if self._mentions_contract_declarations(data):
+                result.errors.append(SpecValidationMessage(
+                    path="",
+                    message=(
+                        "cannot check "
+                        f"{' / '.join(self._CONTRACT_DECLARATION_SITES)}: "
+                        f"jsonui-test (jsonui_test_cli) is not importable ({exc})"
+                    ),
+                ))
+            return
+        for error in parse_declarations(data).errors:
+            result.errors.append(SpecValidationMessage(
+                path=error.path, message=error.message))
+
+    #: A copy of `jsonui_test_cli.contract_declarations.DECLARATION_SITES`,
+    #: for the failed-import message only (the parser is the reader). Kept
+    #: equal to the parser's by an arm; `*` matches any method name and a
+    #: trailing `[]` means each element of that list.
+    _CONTRACT_DECLARATION_SITES = (
+        "apiOutcomeRules",
+        "metadata.platforms",
+        "branchContracts.unreachedOps",
+        "branchContracts.methods.*.excludedOutcomes",
+        "branchContracts.methods.*.branches[].alsoStatuses",
+    )
+
+    @classmethod
+    def _mentions_contract_declarations(cls, data: dict) -> bool:
+        def present(node, parts) -> bool:
+            if not parts:
+                return True
+            if not isinstance(node, dict):
+                return False
+            head, rest = parts[0], parts[1:]
+            if head == "*":
+                return any(present(v, rest) for v in node.values())
+            if head.endswith("[]"):
+                key = head[:-2]
+                items = node.get(key)
+                return isinstance(items, list) and any(present(v, rest) for v in items)
+            return head in node and present(node[head], rest)
+
+        return any(present(data, site.split("."))
+                   for site in cls._CONTRACT_DECLARATION_SITES)
 
     def _validate_required_fields(
         self, data: Any, required: list[str], path_prefix: str, result: SpecValidationResult
@@ -1672,6 +1763,14 @@ class SpecValidator:
                         ))
 
     _BRANCH_THEN_API_VERDICTS = ("called", "not-called")
+    #: The keys this hand-written list admits are the real gate on a
+    #: branchContracts block — the JSON schema is description only and is
+    #: not used to validate. `unreachedOps` is shaped by
+    #: `_validate_contract_declarations`.
+    _BRANCH_CONTRACTS_KEYS = ("conditions", "methods", "notes", "seedableState",
+                              "unreachedOps")
+    #: Same for a method contract; `excludedOutcomes` is shaped there too.
+    _BRANCH_METHOD_KEYS = ("baseline", "branches", "excludedOutcomes")
 
     def _validate_branch_contracts(self, bc: Any, result: SpecValidationResult):
         if not isinstance(bc, dict):
@@ -1681,12 +1780,12 @@ class SpecValidator:
             ))
             return
         for key in bc:
-            if key not in ("conditions", "methods", "notes", "seedableState"):
+            if key not in self._BRANCH_CONTRACTS_KEYS:
                 result.errors.append(SpecValidationMessage(
                     path=f"branchContracts.{key}",
                     message=(
                         "Unknown branchContracts key — allowed: "
-                        "'conditions', 'methods', 'notes', 'seedableState'"
+                        f"{', '.join(repr(k) for k in self._BRANCH_CONTRACTS_KEYS)}"
                     ),
                 ))
 
@@ -2205,10 +2304,13 @@ class SpecValidator:
             ))
             return
         for key in contract:
-            if key not in ("baseline", "branches"):
+            if key not in self._BRANCH_METHOD_KEYS:
                 result.errors.append(SpecValidationMessage(
                     path=f"{path}.{key}",
-                    message="Unknown contract key — allowed: 'baseline', 'branches'",
+                    message=(
+                        "Unknown contract key — allowed: "
+                        f"{', '.join(repr(k) for k in self._BRANCH_METHOD_KEYS)}"
+                    ),
                 ))
         if "baseline" in contract:
             self._validate_branch_witness(
@@ -2248,7 +2350,11 @@ class SpecValidator:
                     path=f"{path}.note",
                     message="note must be a non-empty string",
                 ))
-            extras = [k for k in branch if k != "note"]
+            # `alsoStatuses` on a note row has its own ERROR from the
+            # contract-declaration parser, which says why (a note has no
+            # when/then to repeat). Counting it here as well would print two
+            # sentences for one cause, which reads as two problems.
+            extras = [k for k in branch if k not in ("note", "alsoStatuses")]
             if extras:
                 result.errors.append(SpecValidationMessage(
                     path=path,
@@ -2260,12 +2366,14 @@ class SpecValidator:
                 ))
             return
         for key in branch:
-            if key not in ("when", "then", "notes", "platforms", "baseline"):
+            if key not in ("when", "then", "notes", "platforms", "baseline",
+                           "alsoStatuses"):
                 result.errors.append(SpecValidationMessage(
                     path=f"{path}.{key}",
                     message=(
                         "Unknown branch key — allowed: 'when', 'then', "
-                        "'baseline', 'notes', 'platforms' (or a lone 'note')"
+                        "'baseline', 'notes', 'platforms', 'alsoStatuses' "
+                        "(or a lone 'note')"
                     ),
                 ))
         if "baseline" in branch:

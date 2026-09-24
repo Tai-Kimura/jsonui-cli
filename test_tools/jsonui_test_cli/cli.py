@@ -1576,6 +1576,29 @@ def _branch_check_summary(reports: list, scanned: int, orphans=()) -> int:
     return 0
 
 
+def cmd_contracts_coverage(args):
+    """Handle 'contracts coverage' — API outcomes no branch contract answers."""
+    from .contracts_coverage import (
+        EXIT_CANNOT_START, CannotStart, format_text, run_coverage, to_json,
+    )
+
+    try:
+        report = run_coverage(Path.cwd(), platforms=args.platform, screen=args.screen)
+    except CannotStart as e:
+        if args.as_json:
+            print(json.dumps({"exit": EXIT_CANNOT_START, "verdict": "cannot_start",
+                              "error": str(e)}, indent=2, ensure_ascii=False))
+        else:
+            print(f"contracts coverage: cannot start — {e}", file=sys.stderr)
+        return EXIT_CANNOT_START
+    if args.as_json:
+        print(json.dumps(to_json(report), indent=2, ensure_ascii=False))
+    else:
+        for line in format_text(report):
+            print(line)
+    return report.exit
+
+
 def cmd_generate_unit_stubs(args):
     """Handle 'generate unit-stubs' — declared-vs-implemented case sets."""
     from pathlib import Path as _Path
@@ -1689,11 +1712,21 @@ def cmd_generate_branch_tests(args):
                   f"{'check' if check else 'generate'}", file=sys.stderr)
             return 1
 
+    # Read once for the whole run: the app contracts spec is the project's,
+    # not a screen's, and a rule that fails to load must stop generation
+    # rather than quietly admit nothing.
+    from .branch_tests import _app_rules_for_generation
+    try:
+        app_rules = _app_rules_for_generation(Path.cwd())
+    except BranchTestGenerationError as e:
+        print(f"Error: {e}", file=sys.stderr)
+        return 1
+
     named_one = bool(args.screen)
     reports = []
     failures: list[tuple[str, str]] = []
     for screen in screens:
-        rc, report, error = _generate_one_branch_test(args, screen)
+        rc, report, error = _generate_one_branch_test(args, screen, app_rules)
         if rc:
             if named_one:
                 # One screen was asked for, so its failure is the answer.
@@ -1740,6 +1773,7 @@ def cmd_generate_branch_tests(args):
         _print_branch_generation(report, show_siblings=len(reports) == 1)
     _print_invoke_port_notes(r.harness_file for r in reports
                              if r.harness_lacks_invoke)
+    print(app_rules.note())
     _print_branch_toolchain(len(reports))
     return 0
 
@@ -1794,7 +1828,7 @@ def _branch_dirs(args):
     return out_dir, harness_dir
 
 
-def _generate_one_branch_test(args, screen: str):
+def _generate_one_branch_test(args, screen: str, app_rules=None):
     """Generate (or check) one screen. Returns (exit_code, report, error)."""
     from .branch_tests import BranchTestGenerationError, generate_branch_tests
 
@@ -1818,6 +1852,11 @@ def _generate_one_branch_test(args, screen: str):
             package=args.package,
             module=args.module,
             check=getattr(args, "check", False),
+            # The same `platforms` the rest of this tool reads, from the
+            # config the run was pointed at: a platform outside
+            # config ∩ metadata.platforms generates nothing for the screen.
+            config_platforms=_project_platforms(None),
+            app_rules=app_rules,
         )
     except BranchTestGenerationError as e:
         return 1, None, str(e)
@@ -1859,6 +1898,18 @@ def _print_invoke_port_notes(paths, stream=None) -> None:
 
 
 def _print_branch_generation(report, show_siblings: bool = True) -> None:
+    if getattr(report, "platform_excluded", False):
+        print(f"Skipped '{report.screen}': this platform is outside the "
+              "screen's platforms (jui.config.json platforms ∩ its "
+              "metadata.platforms), so nothing is generated for it")
+        for path in report.stale:
+            print(f"  removed {path} (generated for this screen before the "
+                  "platform was excluded)")
+        for path in report.unowned:
+            print(f"  [WARN] {path} is where this screen's generated test "
+                  "would be, but it carries no @generated banner — left "
+                  "alone; delete it by hand if it is a stale copy")
+        return
     if not report.platform_applicable:
         print(f"Skipped '{report.screen}': every branch it declares belongs "
               f"to another platform ({report.platform_skipped} scoped away), "
@@ -1877,9 +1928,13 @@ def _print_branch_generation(report, show_siblings: bool = True) -> None:
                   "alone; delete it by hand if it is a stale copy")
         return
     print(f"Generated branch tests for '{report.screen}':")
+    for line in getattr(report, "route_overlaps", ()):
+        print(f"  info {line}")
+    also = getattr(report, "also_statuses_rows", 0)
     print(f"  {report.test_file}  "
           f"({report.declared_branches} declared branch(es), "
-          f"{report.note_branches} note-only listed as comments)")
+          + (f"{also} more from alsoStatuses, " if also else "")
+          + f"{report.note_branches} note-only listed as comments)")
     print(f"  {report.runtime_file}  (shared runtime)")
     siblings = _sibling_branch_tests(report) if show_siblings else []
     if siblings:
@@ -3194,6 +3249,25 @@ def main():
                                         help="Print result as a single JSON object")
 
     # Pregrant command (iOS addMedia)
+    contracts_parser = subparsers.add_parser(
+        "contracts",
+        help="Contract-gap checks: which API outcomes the branch contracts answer")
+    contracts_subparsers = contracts_parser.add_subparsers(
+        dest="contracts_action", help="Contracts action")
+    coverage_parser = contracts_subparsers.add_parser(
+        "coverage",
+        help="Every response status the OpenAPI declares for an operation a "
+             "screen reaches, bucketed: answered by a row, excluded with a "
+             "reason, unmeasured, or uncovered. Exit 0 pass / 1 uncovered or a "
+             "declaration error / 2 cannot start / 3 unmeasured, per platform, "
+             "composed 2 > 1 > 3 > 0. Not a gate yet")
+    coverage_parser.add_argument("screen", nargs="?", help="One screen (default: all)")
+    coverage_parser.add_argument(
+        "--platform", action="append", choices=["web", "android", "ios"],
+        help="Platform block(s) to report (default: jui.config.json platforms)")
+    coverage_parser.add_argument("--json", dest="as_json", action="store_true",
+                                 help="Machine-readable output")
+
     pregrant_parser = subparsers.add_parser(
         "pregrant",
         help="Establish per-run permission baselines before the test process "
@@ -3257,6 +3331,11 @@ def main():
         return 0
     elif args.command == "pregrant":
         return cmd_pregrant(args)
+    elif args.command == "contracts":
+        if getattr(args, "contracts_action", None) == "coverage":
+            return cmd_contracts_coverage(args)
+        contracts_parser.print_help()
+        return 0
     elif args.command in ["generate", "g"]:
         # Check for subcommand
         if hasattr(args, 'generate_type') and args.generate_type:
