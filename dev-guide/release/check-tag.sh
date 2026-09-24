@@ -76,17 +76,17 @@ case "$TAG" in v*) TAGSTAMP="v$STAMP";; *) TAGSTAMP="$STAMP";; esac
 ck "version stamp ($STAMP_FROM) == tag" "$TAGSTAMP" "$TAG"
 ck "version stamp ($STAMP_FROM) == arg" "$STAMP" "$VER"
 ck "working tree clean"           "$(g status --porcelain | wc -l | tr -d ' ')" "0"
-# Red-check xxxi (design §6.1, P3a): validate announces, one release ahead,
-# the release from which it gates on contracts coverage, and switches on at
-# it. The version is a literal set when the announcing release is cut; this
-# holds it to the tag — a release that can follow it when announcing; at or
-# below the tag only if the PREVIOUS tag announced that same literal (else
-# the gate would start in a release that announced nothing); FAIL when unset
-# or naming anything else. A tree without the constant passes as n/a.
-GATE_SRC=test_tools/jsonui_test_cli/contracts_coverage.py
+# Red-check xxxi (design §6.1, P3a-1, v4.18): every `*_GATE_FROM` literal —
+# the release from which something starts failing (validate on contracts
+# coverage, a branch test on an unmatched request, …) — judged on the pair
+# (the previous tag's value, this tree's): announcing names a release that can
+# follow the tag; at or below it only if the PREVIOUS tag carried the same
+# literal; unset stays unset unless withdrawn by hand ("withdrawn"); and
+# VALIDATE_GATE_FROM must be set. The constants are collected from the tree,
+# not named here; the count and every verdict are printed.
 GATE_VERDICT=$(python3 "$(dirname "$0")/validate_gate_version.py" "$VER" \
-  <(g show "${BRANCH}:$GATE_SRC" 2>/dev/null) <(g show "${PREV}:$GATE_SRC" 2>/dev/null))
-echo "     validate gate version: $GATE_VERDICT"
+  --repo "$R" "$BRANCH" "$PREV")
+printf '%s\n' "$GATE_VERDICT" | sed 's/^/     gate constants: /'
 ck "validate gate version (xxxi)"  "${GATE_VERDICT%% *}" "ok"
 
 # RANGE: the line and its contents must come from the SAME range.

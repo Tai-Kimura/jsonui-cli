@@ -280,5 +280,5 @@ class TestXxxiAtTheTag:
     def test_check_tag_runs_it(self):
         text = (REPO / "dev-guide/release/check-tag.sh").read_text(encoding="utf-8")
         assert 'validate_gate_version.py" "$VER"' in text
-        assert '<(g show "${PREV}:$GATE_SRC"' in text   # the previous tag's tree, too
+        assert '--repo "$R" "$BRANCH" "$PREV"' in text   # the previous tag's tree, too
         assert 'ck "validate gate version (xxxi)"' in text
