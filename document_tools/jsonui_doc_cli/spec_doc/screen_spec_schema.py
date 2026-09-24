@@ -88,7 +88,11 @@ SCREEN_SPEC_SCHEMA = {
                     "items": {"enum": ["ios", "android", "web"]},
                     "description": (
                         "The platforms this screen exists on. Absent = every "
-                        "platform the project declares."
+                        "platform the project declares. Read by `jsonui-test "
+                        "generate branch-tests` (a platform outside this list, "
+                        "or outside jui.config.json's platforms, generates "
+                        "nothing for the screen) and by `jsonui-test contracts "
+                        "coverage` (its statuses count as n/a(platform-excluded))."
                     )
                 }
             }

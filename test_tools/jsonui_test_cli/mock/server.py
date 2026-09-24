@@ -25,6 +25,8 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import urlparse, parse_qs
 
+from .generate import route_match_order
+
 ADMIN_PREFIX = "/__jsonui__"
 #: Seconds a kept-alive connection may sit idle before the server closes it.
 #: Read when the handler class is built, so a test can shorten it.
@@ -138,7 +140,8 @@ class MockStore:
                 regex=_path_to_regex(entry["path"]),
                 is_static="{" not in entry["path"],
             ))
-        endpoints.sort(key=lambda e: (not e.is_static, e.path))
+        # One order with the generated branch tests (see route_match_order).
+        endpoints.sort(key=lambda e: route_match_order(e.path))
         with self._lock:
             self.endpoints = endpoints
             # Which side won is never left silent — a hand-written mock

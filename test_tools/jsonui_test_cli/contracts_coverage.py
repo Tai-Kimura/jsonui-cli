@@ -55,6 +55,7 @@ from .branch_tests import (
     _spec_files,
     collect_bindings,
     collect_endpoint_ops,
+    describe_overlap,
     effective_platforms,
     find_app_contract_spec,
     find_mock,
@@ -329,7 +330,7 @@ class ScreenResult:
     info: dict = field(default_factory=lambda: dict(
         guard_only=0, note_branches=0, also_statuses_rows=0,
         also_statuses_arrange_differs=0, side_calls_admitted=0,
-        reference_holds_on_success_row=0))
+        reference_holds_on_success_row=0, route_overlaps=0))
     methods_without_endpoint: int = 0
     outside_required: dict = field(default_factory=lambda: dict(
         unreached_op=0, na_default_response=0, na_no_scenario=0, na_platform_excluded=0))
@@ -463,6 +464,9 @@ def evaluate_screen(name: str, spec: dict, platform: str, project: Project) -> S
     else:
         bindings = Bindings(routes=[], rows=[], errors=[])
     by_op = {route.op: route for route in bindings.routes}
+    res.info["route_overlaps"] = len(bindings.overlaps)
+    for winner, other in bindings.overlaps:
+        res.notes.append(describe_overlap(winner, other))
 
     # ---- reach, from the rows as declared (a row that failed to bind still
     # says what it reaches)
@@ -900,8 +904,8 @@ def format_text(report: CoverageReport) -> list:
                 f"also_statuses_rows {i['also_statuses_rows']} · also_statuses_arrange_differs "
                 f"{i['also_statuses_arrange_differs']} · side_calls_admitted "
                 f"{i['side_calls_admitted']} · reference_holds_on_success_row "
-                f"{i['reference_holds_on_success_row']} · dataFlow methods without endpoint "
-                f"{s.methods_without_endpoint}")
+                f"{i['reference_holds_on_success_row']} · route_overlaps {i['route_overlaps']} · "
+                f"dataFlow methods without endpoint {s.methods_without_endpoint}")
             o = s.outside_required
             lines.append(
                 f"  outside required {sum(o.values())} = unreached-op {o['unreached_op']} + "

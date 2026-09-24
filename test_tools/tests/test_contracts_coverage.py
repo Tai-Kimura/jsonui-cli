@@ -186,6 +186,21 @@ def _mutated(tmp_path, mutate) -> dict:
     return _counts(_screen_result(_run(_project(tmp_path, spec))))
 
 
+def test_overlapping_routes_are_info_not_an_error(tmp_path):
+    openapi = copy.deepcopy(_OPENAPI)
+    openapi["paths"]["/api/items/export"] = {"get": {"operationId": "exportItems",
+                                                     "responses": {"200": {}}}}
+    mocks = copy.deepcopy(_MOCKS)
+    mocks["exportItems"] = ("GET", "/api/items/export", {"default": {"status": 200}})
+    spec = _screen()
+    spec["dataFlow"]["repositories"][0]["methods"].append(
+        {"name": "exportItems", "endpoint": "GET /api/items/export"})
+    s = _screen_result(_run(_project(tmp_path, spec, openapi=openapi, mocks=mocks)))
+    assert s.info["route_overlaps"] == 1
+    assert not s.declaration_errors
+    assert any("recorded as 'exportItems'" in note for note in s.notes)
+
+
 def test_i_deleting_the_only_row_for_a_status_uncovers_it(tmp_path):
     after = _mutated(tmp_path, lambda s: s["branchContracts"]["methods"]["approve"]["branches"].pop(3))
     assert _diff(BASELINE, after) == {"row": -1, "uncovered": 1, "u_partial": 1}

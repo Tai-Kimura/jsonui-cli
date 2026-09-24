@@ -599,6 +599,8 @@ class GenerationReport:
     #: True when the platform is outside the screen's effective platforms
     #: (`jui.config.json` platforms ∩ `metadata.platforms`).
     platform_excluded: bool = False
+    #: Printed lines naming route pairs one request could match, and the winner.
+    route_overlaps: list = field(default_factory=list)
     methods: list[str] = field(default_factory=list)
     routes: list[str] = field(default_factory=list)
     #: False when the screen declares contracts but none of its branches
@@ -792,7 +794,7 @@ def resolve_routes(
     instead, and binding goes on: `contracts coverage` needs every row that
     CAN be judged, not the first one that cannot.
     """
-    from .mock.generate import route_key
+    from .mock.generate import route_key, route_match_order
 
     ops = collect_endpoint_ops(spec)
     routes: dict[str, Route] = {}
@@ -881,51 +883,50 @@ def resolve_routes(
                 pattern=path_to_pattern(endpoint["path"]),
                 scenarios=mock.scenarios, default_scenario=mock.active_scenario,
             )
-    overlap = _overlapping_routes(list(routes.values()))
-    if overlap:
-        if errors is None:
-            raise BranchTestGenerationError(overlap)
-        errors.append(BindingError(None, None, None, None, overlap))
-    return list(routes.values())
+    # The order `mock serve` tries routes in (static paths first), so a call
+    # both could match is recorded under the op whose mock answers it.
+    return sorted(routes.values(), key=lambda route: route_match_order(route.path))
 
 
-def _overlapping_routes(routes: list[Route]) -> str | None:
-    """A message naming two routes one request could match, or None.
+def route_overlaps(routes: list[Route]) -> list[tuple[Route, Route]]:
+    """Pairs of routes one request could match, as (the one that wins, the other).
 
-    Routes are matched in order and a call is recorded under the FIRST route
-    whose pattern takes it, so `GET /items/export` beside
-    `GET /items/{item_id}` records an export as a fetch of an item called
-    "export" (or the reverse) — and every count, body and bound on either op
-    then describes the other one. Nothing downstream can tell, so it is
-    refused here.
+    Routes are tried in `route_match_order` — the order `mock serve` uses — and
+    a call is recorded under the first that matches, so for
+    `GET /items/export` beside `GET /items/{item_id}` an export is recorded as
+    the export op, served by its mock, exactly as `mock serve` would. Not an
+    error: printed, so the pair and the side that wins are never silent.
 
     Two paths overlap when the method is the same, the segment count is the
-    same, and every pair of segments is the same literal or has a
-    `{param}` on at least one side.
+    same, and every pair of segments is the same literal or has a `{param}` on
+    at least one side. (Two SPELLINGS of one template are refused earlier.)
     """
+    from .mock.generate import route_match_order
+
     def segments(path: str) -> list[str]:
         return [seg for seg in path.strip("/").split("/")]
 
     def is_param(seg: str) -> bool:
         return seg.startswith("{") and seg.endswith("}")
 
-    for i, a in enumerate(routes):
-        for b in routes[i + 1:]:
+    ordered = sorted(routes, key=lambda route: route_match_order(route.path))
+    pairs = []
+    for i, a in enumerate(ordered):
+        for b in ordered[i + 1:]:
             if a.method != b.method:
                 continue
             sa, sb = segments(a.path), segments(b.path)
             if len(sa) != len(sb):
                 continue
             if all(x == y or is_param(x) or is_param(y) for x, y in zip(sa, sb)):
-                return (
-                    f"routes '{a.op}' ({a.method} {a.path}) and '{b.op}' "
-                    f"({b.method} {b.path}) match the same requests — a call "
-                    "to one can be recorded as the other, so no assertion on "
-                    "either op can be trusted. This screen's dataFlow declares "
-                    "both endpoints; branch tests can bind at most one of "
-                    "two overlapping paths"
-                )
-    return None
+                pairs.append((a, b))
+    return pairs
+
+
+def describe_overlap(winner: Route, other: Route) -> str:
+    return (f"route overlap: {winner.method} {winner.path} ('{winner.op}') and "
+            f"{other.path} ('{other.op}') — a call both match is recorded as "
+            f"'{winner.op}' (the order mock serve uses)")
 
 
 RESPONSE_REF_PREFIX = "@response."
@@ -1226,6 +1227,8 @@ class Bindings:
     routes: list
     rows: list
     errors: list
+    #: (winner, other) route pairs one request could match — info, not an error.
+    overlaps: list = field(default_factory=list)
 
 
 @dataclass
@@ -1498,7 +1501,8 @@ def collect_bindings(
                 allowed |= ops
         allowed -= _not_called_ops(row.branch)
         row.allowed_ops = sorted(allowed)
-    return Bindings(routes=routes, rows=bound, errors=errors)
+    return Bindings(routes=routes, rows=bound, errors=errors,
+                    overlaps=route_overlaps(routes))
 
 
 def _also_op(row: Row, contract: dict) -> str | None:
@@ -4386,15 +4390,20 @@ def generate_branch_tests(
         rules=app_rules.rules, declarations=declarations)
     _raise_binding_errors(bindings.errors)
     routes, rows = bindings.routes, bindings.rows
+    overlaps = [describe_overlap(a, b) for a, b in bindings.overlaps]
 
     if platform == "android":
-        return _emit_android(
+        report = _emit_android(
             screen, spec, routes, rows, project_root, out_dir, harness_dir,
             package, check)
+        report.route_overlaps = overlaps
+        return report
     if platform == "ios":
-        return _emit_ios(
+        report = _emit_ios(
             screen, spec, routes, rows, project_root, out_dir, harness_dir,
             module, check)
+        report.route_overlaps = overlaps
+        return report
 
     emitter = _Emitter(check)
     out_path = project_root / out_dir
@@ -4405,6 +4414,7 @@ def generate_branch_tests(
     # another platform leaves no empty directory behind.
     rel = _relative_import(out_path, harness_path / screen)
     content, report = render_test_file(screen, spec, routes, rel, rows)
+    report.route_overlaps = overlaps
     if _skip_for_platform(report):
         # The screen produced a test here until its branches moved to
         # another platform. Nothing else knows to remove it: the run that

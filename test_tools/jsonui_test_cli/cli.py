@@ -1928,6 +1928,8 @@ def _print_branch_generation(report, show_siblings: bool = True) -> None:
                   "alone; delete it by hand if it is a stale copy")
         return
     print(f"Generated branch tests for '{report.screen}':")
+    for line in getattr(report, "route_overlaps", ()):
+        print(f"  info {line}")
     also = getattr(report, "also_statuses_rows", 0)
     print(f"  {report.test_file}  "
           f"({report.declared_branches} declared branch(es), "

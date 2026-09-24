@@ -158,18 +158,78 @@ def test_a_binding_error_on_an_excluded_platform_does_not_stop_it(tmp_path):
 
 # -------------------------------------------------------------- overlapping ---
 
-def test_overlapping_routes_are_refused(tmp_path):
-    """red-check xxi: `/items/{id}` beside `/items/export` in one spec."""
-    root = _project(tmp_path, [{"when": {"api.getItem": "default"},
-                                "then": {"data.status": "done"}}],
+def _overlap_project(root: Path) -> Path:
+    root = _project(root, [{"when": {"api.getItem": "default"},
+                            "then": {"data.status": "done"}}],
                     endpoints=[("getItem", "GET /api/items/{item_id}"),
                                ("exportItems", "GET /api/items/export")])
     _mock(root, "item", "GET", "/api/items/{item_id}", {"default": {"status": 200}})
     _mock(root, "export", "GET", "/api/items/export", {"default": {"status": 200}})
-    with pytest.raises(BranchTestGenerationError) as e:
-        _generate(root)
-    assert "getItem" in str(e.value) and "exportItems" in str(e.value)
-    assert "match the same requests" in str(e.value)
+    return root
+
+
+def test_overlapping_routes_are_ordered_the_way_mock_serve_orders_them(tmp_path):
+    """red-check xxi (design v4.2): `/items/{id}` beside `/items/export` in one
+    spec generates; the static path is tried first, as `mock serve` tries it,
+    and the pair and the side that wins are printed rather than refused."""
+    report = _generate(_overlap_project(tmp_path))
+    text = report.test_file.read_text()
+    assert text.index('op: "exportItems"') < text.index('op: "getItem"')
+    assert report.route_overlaps == [
+        "route overlap: GET /api/items/export ('exportItems') and "
+        "/api/items/{item_id} ('getItem') — a call both match is recorded as "
+        "'exportItems' (the order mock serve uses)"]
+
+
+def test_the_generator_and_mock_serve_share_one_order():
+    from jsonui_test_cli.mock import generate
+    paths = ["/a/{id}", "/a/export", "/b", "/a/{id}/x", "/a/list"]
+    assert sorted(paths, key=generate.route_match_order) == [
+        "/a/export", "/a/list", "/b", "/a/{id}", "/a/{id}/x"]
+
+
+def test_both_follow_a_changed_order(tmp_path, monkeypatch):
+    """The order is ONE function: replace it, and mock serve and the generated
+    ROUTES both follow. A copy of the rule that happens to agree today (a
+    lambda in the server, a sort of its own in the generator) keeps the old
+    order here and fails — agreement by value cannot show that."""
+    from jsonui_test_cli.mock import generate, server
+    reverse = lambda path: (not ("{" in path), path)   # params first
+    monkeypatch.setattr(generate, "route_match_order", reverse)
+    monkeypatch.setattr(server, "route_match_order", reverse)
+
+    root = _overlap_project(tmp_path)
+    store = server.MockStore.load(root / "tests/mocks")
+    served = [e.path for e in store.endpoints]
+    assert served.index("/api/items/{item_id}") < served.index("/api/items/export")
+    text = _generate(root).test_file.read_text()
+    assert text.index('op: "getItem"') < text.index('op: "exportItems"')
+
+
+def test_a_call_both_routes_match_is_recorded_as_the_winner(tmp_path):
+    """Executed: the generated ROUTES in the runtime record `/export` as the
+    export op and `/7` as the item — the attribution `mock serve` gives."""
+    from tests import _toolchain as tc
+    import subprocess
+    tc.tool("node")
+    report = _generate(_overlap_project(tmp_path / "p"))
+    text = report.test_file.read_text()
+    routes = text[text.index("const ROUTES: RouteSpec[] = ["):text.index("];") + 2]
+    probe = tmp_path / "probe"
+    probe.mkdir()
+    (probe / "runtime.ts").write_text(bt.RUNTIME_TS, encoding="utf-8")
+    (probe / "probe.ts").write_text(
+        'import { installFetchMock, type RouteSpec } from "./runtime.ts";\n'
+        + routes + "\n"
+        + 'const rec = installFetchMock(ROUTES);\n'
+        + 'await fetch("https://x.test/api/items/export");\n'
+        + 'await fetch("https://x.test/api/items/7");\n'
+        + 'console.log(JSON.stringify(rec.calls.map((c) => [c.path, c.op])));\n'
+        + 'rec.restore();\n', encoding="utf-8")
+    run = subprocess.run(["node", "--experimental-strip-types", "probe.ts"],
+                         cwd=probe, capture_output=True, text=True, timeout=120)
+    assert json.loads(run.stdout.strip().splitlines()[-1]) == [
+        ["/api/items/export", "exportItems"], ["/api/items/7", "getItem"]], run.stderr
 
 
 def test_routes_that_do_not_overlap_are_accepted(tmp_path):

@@ -213,6 +213,18 @@ def normalize_path_key(path: str) -> str:
     return normalized
 
 
+def route_match_order(path: str) -> tuple:
+    """The order routes are tried in: fully static paths first, then by path.
+
+    `mock serve` answers a request with the first route whose pattern matches
+    it, and the generated branch tests record a call under the first route
+    that matches — so both have to try routes in ONE order, or a call to
+    `/items/export` is served by the export mock and recorded as a fetch of
+    an item called "export" (or the reverse). This is that order, for both.
+    """
+    return ("{" in (path or ""), path or "")
+
+
 def route_key(method, path) -> tuple:
     """The identity of a mock: the route it serves.
 

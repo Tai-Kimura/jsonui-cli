@@ -74,6 +74,7 @@ pyenv local 3.11.0
 | `artifacts pull` | `a pull` | Pull test artifacts (screenshots/recordings) from devices and xcresults |
 | `artifacts status` | `a status` | Show resolved artifacts config and existing artifact files |
 | `artifacts prune-legacy` | `a prune-legacy` | List (default) or delete (`--yes`) the suites left in the flat legacy Android mirror |
+| `contracts coverage` | — | Every response status the OpenAPI declares for an operation a screen reaches, bucketed by who answers it (not a gate yet) |
 
 ### validate (v)
 
@@ -517,6 +518,43 @@ branch asserted by string key passes identically before and after the wording
 is corrected, so no test count moves and no diff appears. Errors in an
 ungated stretch do not arrive at a commit; they sit there from the start,
 which is why `git diff` and range comparisons do not find them.
+
+### contracts coverage
+
+```
+jsonui-test contracts coverage [screen] [--platform web|android|ios ...] [--json]
+```
+
+For every screen and platform, every response status the OpenAPI documents in
+`mock.swagger` declare for an operation the screen's dataFlow names lands in
+exactly one bucket, per (screen, view-model method, operation, platform):
+
+- **row** — a branch serves the status in its `when` (explicitly; the route's
+  default scenario is not an answer) and its `then` says more than "the op was
+  called". An `alsoStatuses` copy answers too and is counted apart.
+- **unit / unreachable / unexpressible** — `excludedOutcomes` with a reason.
+- **not-evaluated** — the method's row for the op could not be bound.
+- **uncovered** — `partial` (the method answers other statuses of the op),
+  `default-only`, or `unattributed` (no method's rows reach the op, and
+  `unreachedOps` does not say why).
+
+A method's operations are the ones its rows reach — the same set every
+generated branch test now bounds from the other side: a call during act to a
+declared route outside that set (plus the side calls the app contracts spec's
+`apiOutcomeRules` admit for the statuses the test serves, minus what the row
+says `not-called`) turns the test red.
+
+Exit per platform, composed 2 > 1 > 3 > 0: `0` pass (`empty` when no screen
+exists on the platform), `1` uncovered or a declaration error, `2` cannot
+start, `3` something could not be evaluated and nothing is uncovered.
+
+### Generated branch tests: the act window
+
+Every generated test installs the mock, builds the harness, lets the
+construction settle, writes the arranged state, and only then calls
+`rec.mark()` — `countFor`, `matchedCalls` and `lastBodyFor` read calls after
+the mark, so what the constructor fetched is not read as the method's doing.
+A hand-written test that never calls `mark()` reads every call, as before.
 
 ### `seedableState` on a view model built from `init` arguments
 
