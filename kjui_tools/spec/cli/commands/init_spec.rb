@@ -113,6 +113,37 @@ RSpec.describe KjuiTools::CLI::Commands::Init do
     end
   end
 
+  # `jui init --package-name` passes its value on (2026-09-25): a fresh
+  # platform root has no manifest or build.gradle to detect a package from, so
+  # the config fell back to com.example.app while jui.config.json named the
+  # package — and `jui g converter` wrote the Android files there. The stub in
+  # the `before` block returns com.example.app, i.e. detection is exactly the
+  # fallback the option has to beat.
+  describe '--package-name' do
+    it 'is the package of the compose config and of every path built from it' do
+      init = described_class.new
+      expect { init.run(['--mode', 'compose', '--package-name', 'com.example.myapp']) }
+        .to output(/Initialization complete/).to_stdout
+      config = JSON.parse(File.read('kjui.config.json'))
+      expect(config['package_name']).to eq('com.example.myapp')
+      %w[data_directory viewmodel_directory view_directory extension_directory adapter_directory].each do |key|
+        expect(config[key]).to start_with('kotlin/com/example/myapp/'), "#{key}: #{config[key]}"
+      end
+    end
+
+    it 'leaves detection in charge when it is not given' do
+      init = described_class.new
+      expect { init.run(['--mode', 'compose']) }.to output(/Initialization complete/).to_stdout
+      expect(JSON.parse(File.read('kjui.config.json'))['package_name']).to eq('com.example.app')
+    end
+
+    it 'says it is not applied in the frozen xml mode instead of dropping it silently' do
+      init = described_class.new
+      expect { init.run(['--mode', 'xml', '--package-name', 'com.example.myapp']) }
+        .to output(/--package-name is not applied in xml mode/).to_stdout
+    end
+  end
+
   describe 'option parsing' do
     it 'accepts --mode option' do
       init = described_class.new
