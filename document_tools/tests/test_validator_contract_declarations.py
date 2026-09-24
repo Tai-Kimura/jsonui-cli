@@ -179,6 +179,27 @@ class TheParserIsImportedInsideTheCheck(unittest.TestCase):
         self.assertEqual(sorted(e.path for e in _errors(spec)),
                          sorted(e.path for e in self._without_parser(spec)))
 
+    def test_the_failed_import_message_knows_every_site_the_parser_reads(self):
+        """The validator's copy of the sites equals the parser's, and means it.
+
+        Equality alone would pass two lists that agree and are both read
+        wrongly, so each site is also planted alone in an otherwise bare
+        document and must be recognised — and a bare document must not be.
+        """
+        from jsonui_test_cli.contract_declarations import DECLARATION_SITES
+
+        self.assertEqual(DECLARATION_SITES, SpecValidator._CONTRACT_DECLARATION_SITES)
+        mentions = SpecValidator._mentions_contract_declarations
+        for site in DECLARATION_SITES:
+            doc: dict = {}
+            node = doc
+            parts = site.replace("*", "anyMethod").split(".")
+            for part in parts[:-1]:
+                node = node.setdefault(part, {})
+            node[parts[-1]] = {}
+            self.assertTrue(mentions(doc), site)
+        self.assertFalse(mentions({"metadata": {}, "branchContracts": {"methods": {"m": {}}}}))
+
     def test_the_validator_module_does_not_import_it_at_load(self):
         import inspect
 

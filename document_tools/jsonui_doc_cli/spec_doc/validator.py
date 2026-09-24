@@ -511,22 +511,30 @@ class SpecValidator:
             result.errors.append(SpecValidationMessage(
                 path=error.path, message=error.message))
 
-    @staticmethod
-    def _mentions_contract_declarations(data: dict) -> bool:
-        """Only for the failed-import message: the parser is the reader."""
-        if not isinstance(data, dict):
-            return False
-        if "apiOutcomeRules" in data:
-            return True
-        metadata = data.get("metadata")
-        if isinstance(metadata, dict) and "platforms" in metadata:
-            return True
-        bc = data.get("branchContracts")
-        if not isinstance(bc, dict):
-            return False
-        methods = bc.get("methods")
-        return "unreachedOps" in bc or (isinstance(methods, dict) and any(
-            isinstance(c, dict) and "excludedOutcomes" in c for c in methods.values()))
+    #: A copy of `jsonui_test_cli.contract_declarations.DECLARATION_SITES`,
+    #: for the failed-import message only (the parser is the reader). Kept
+    #: equal to the parser's by an arm; `*` matches any method name.
+    _CONTRACT_DECLARATION_SITES = (
+        "apiOutcomeRules",
+        "metadata.platforms",
+        "branchContracts.unreachedOps",
+        "branchContracts.methods.*.excludedOutcomes",
+    )
+
+    @classmethod
+    def _mentions_contract_declarations(cls, data: dict) -> bool:
+        def present(node, parts) -> bool:
+            if not parts:
+                return True
+            if not isinstance(node, dict):
+                return False
+            head, rest = parts[0], parts[1:]
+            if head == "*":
+                return any(present(v, rest) for v in node.values())
+            return head in node and present(node[head], rest)
+
+        return any(present(data, site.split("."))
+                   for site in cls._CONTRACT_DECLARATION_SITES)
 
     def _validate_required_fields(
         self, data: Any, required: list[str], path_prefix: str, result: SpecValidationResult

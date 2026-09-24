@@ -250,6 +250,30 @@ class ApiOutcomeRulesShape(unittest.TestCase):
         self.assertEqual(["server"], [r.id for r in d.rules])
 
 
+class EveryListedSiteIsRead(unittest.TestCase):
+    """`DECLARATION_SITES` is what the parser reads, not a list beside it.
+
+    The validator keys its failed-import message on this constant, so a
+    site listed here that the parser ignores (or a name that drifted) would
+    make that message claim a check nobody runs. Each site gets an invalid
+    value and must come back as an error at that site.
+    """
+
+    def test_an_invalid_value_at_each_site_is_reported_there(self):
+        from jsonui_test_cli.contract_declarations import DECLARATION_SITES
+
+        for site in DECLARATION_SITES:
+            doc = {"type": APP_CONTRACTS_SPEC if site == "apiOutcomeRules" else "screen_spec"}
+            node = doc
+            parts = site.replace("*", "anyMethod").split(".")
+            for part in parts[:-1]:
+                node = node.setdefault(part, {})
+            node[parts[-1]] = "not a valid value"
+            paths = _paths(parse_declarations(doc))
+            where = site.replace("*", "anyMethod")
+            self.assertTrue(any(p.startswith(where) for p in paths), (site, paths))
+
+
 class DeclarationsInTheWrongDocument(unittest.TestCase):
     def test_rules_on_a_screen_are_refused(self):
         spec = _screen()

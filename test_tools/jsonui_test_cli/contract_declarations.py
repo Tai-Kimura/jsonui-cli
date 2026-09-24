@@ -73,6 +73,18 @@ _EXCEPT_KEYS = ("operationId", "reason")
 
 APP_CONTRACTS_SPEC = "app_contracts_spec"
 
+#: Every place `parse_declarations` reads, as dotted paths (`*` = any method
+#: name). The spec validator keeps its own copy for the one moment it cannot
+#: import this module — to say that a declaring document could not be
+#: checked — and an arm holds the two equal, so a site added here and not
+#: there cannot go quiet on a machine without test_tools.
+DECLARATION_SITES = (
+    "apiOutcomeRules",
+    "metadata.platforms",
+    "branchContracts.unreachedOps",
+    "branchContracts.methods.*.excludedOutcomes",
+)
+
 
 @dataclass(frozen=True)
 class DeclarationError:
