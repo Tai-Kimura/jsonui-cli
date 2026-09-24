@@ -303,7 +303,7 @@ jobs:
       # moved, and dropping a line here would turn this suite red rather than
       # quiet.
       #
-      # ⚠️ FIVE FILES, AND SOME OF THEM ALSO HAVE WEB ARMS. Ignoring a whole
+      # ⚠️ SIX FILES, AND SOME OF THEM ALSO HAVE WEB ARMS. Ignoring a whole
       # file moves its node probe to macos-15 too. That is deliberate: the
       # faces in one file assert the SAME ROWS, and splitting them across two
       # jobs is how one face's row silently stops being compared with the
@@ -326,7 +326,8 @@ jobs:
             --ignore=tests/test_recorder_refuses_an_undeclared_op.py \
             --ignore=tests/test_branch_swizzle_ordering.py \
             --ignore=tests/test_branch_then_data_addresses_nested_paths.py \
-            --ignore=tests/test_readback_folds_unordered_collections.py
+            --ignore=tests/test_readback_folds_unordered_collections.py \
+            --ignore=tests/test_recorder_keeps_every_concurrent_call.py
       - name: Run document_tools tests
         working-directory: document_tools
         run: python -m pytest
@@ -428,6 +429,7 @@ jobs:
             tests/test_branch_swizzle_ordering.py \
             tests/test_branch_then_data_addresses_nested_paths.py \
             tests/test_readback_folds_unordered_collections.py \
+            tests/test_recorder_keeps_every_concurrent_call.py \
             -v -rs --junitxml=guard-branch-runtime.xml
           ../dev-guide/ci/executed-or-skipped.py guard-branch-runtime.xml
 
