@@ -3,6 +3,7 @@
 require 'optparse'
 require_relative '../../core/config_manager'
 require_relative '../../core/project_finder'
+require_relative '../../core/converter_generator_core'
 
 module SjuiTools
   module CLI
@@ -236,6 +237,29 @@ module SjuiTools
 
             opts.on('--import-module MODULE', 'Import module for the custom view [UIKit only]') do |module_name|
               options[:import_module] = module_name
+            end
+
+            # The overwrite options the converter core has always read (its
+            # `may_write?`) — until 1.8.113 only rjui's CLI parsed them, so these were
+            # "invalid option" here while the scaffold header named --force.
+            opts.on('--force', 'Overwrite existing converter/scaffold files without prompting') do
+              options[:force] = true
+            end
+
+            opts.on('--skip-existing', 'Leave existing converter/scaffold files untouched (non-interactive)') do
+              options[:skip_existing] = true
+            end
+
+            # The component spec's prop descriptions, handed down by
+            # `jui g converter --from / --all` so attribute_definitions/<Name>.json
+            # keeps them instead of "<key> attribute".
+            opts.on('--attribute-descriptions JSON', 'Descriptions for the attribute definition: {"attr": "text"}') do |json|
+              begin
+                options[:attribute_descriptions] = JsonUIShared::ConverterGeneratorCore.parse_attribute_descriptions(json)
+              rescue ArgumentError => e
+                puts "Error: #{e.message}"
+                exit 1
+              end
             end
 
             opts.on('--attributes KEY:TYPE', 'Add custom attribute (can be used multiple times or comma-separated)') do |attr|

@@ -6,6 +6,7 @@ require 'optparse'
 require_relative '../../core/config_manager'
 require_relative '../../core/frameworks'
 require_relative '../../core/logger'
+require_relative '../../core/converter_generator_core'
 
 module RjuiTools
   module CLI
@@ -377,13 +378,31 @@ module RjuiTools
             return
           end
 
-          # Build command line string for comment (skip the type argument like 'converter')
-          remaining_args = @original_args[1..] || []
-          command_line = "rjui g converter #{remaining_args.join(' ')}"
-
           require_relative '../../react/generators/converter_generator'
-          generator = React::Generators::ConverterGenerator.new(name, options, @config, command_line)
+          generator = React::Generators::ConverterGenerator.new(name, options, @config, converter_command_line)
           generator.generate
+        end
+
+        # The invocation recorded in the generated files' markers, without the
+        # type argument ('converter') and without --attribute-descriptions: its
+        # JSON is the component spec's text, which the sjui / kjui markers do
+        # not record either. Recording it made the marker of every attribute
+        # definition carry the spec's text, and with LANG unset a non-ASCII
+        # argument is binary, which Ruby 2.6.10 could not write into the JSON
+        # marker (Encoding::UndefinedConversionError, measured 2026-09-24).
+        def converter_command_line
+          kept = []
+          skip_value = false
+          (@original_args[1..] || []).each do |arg|
+            if skip_value
+              skip_value = false
+            elsif arg == '--attribute-descriptions'
+              skip_value = true
+            elsif !arg.start_with?('--attribute-descriptions=')
+              kept << arg
+            end
+          end
+          "rjui g converter #{kept.join(' ')}"
         end
 
         def parse_converter_options
@@ -411,6 +430,18 @@ module RjuiTools
 
             opts.on('--no-container', 'Force component to not be a container (ignores children)') do
               options[:is_container] = false
+            end
+
+            # The component spec's prop descriptions, handed down by
+            # `jui g converter --from / --all` so attribute_definitions/<Name>.json
+            # keeps them instead of "<key> attribute".
+            opts.on('--attribute-descriptions JSON', 'Descriptions for the attribute definition: {"attr": "text"}') do |json|
+              begin
+                options[:attribute_descriptions] = JsonUIShared::ConverterGeneratorCore.parse_attribute_descriptions(json)
+              rescue ArgumentError => e
+                Core::Logger.error(e.message)
+                exit 1
+              end
             end
 
             opts.on('--force', 'Overwrite existing converter/component files without prompting') do

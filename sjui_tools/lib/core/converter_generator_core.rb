@@ -35,6 +35,11 @@ module JsonUIShared
   #   - the overwrite prompt reads $stdin.gets&.chomp (rjui semantics):
   #     plain gets crashed on nil at stdin EOF and could read ARGV files;
   #     --force / --skip-existing options work on every tool
+  #     ⚠️ Written 2026-08-01 and FALSE until 1.8.113 for sjui and kjui:
+  #     this core honoured the options, but only rjui's CLI parsed them —
+  #     `sjui/kjui g converter --force` was "invalid option". 1.8.112's
+  #     scaffold header repeated the claim; 1.8.113 made the two CLIs parse
+  #     both flags, so the sentence is now true.
   #   - the extension attribute-definition JSON carries the _generated
   #     marker everywhere (was sjui-only; the file is rewritten on every
   #     run, so the generated-file invariant applies)
@@ -70,6 +75,33 @@ module JsonUIShared
       logger.warn "#{exists_label || noun.capitalize} already exists: #{file_path}"
       print "Overwrite? (y/n): "
       $stdin.gets&.chomp&.downcase == 'y'
+    end
+
+    # `--attribute-descriptions '<json>'`: {attribute name => description},
+    # the component spec's `props.items[].description`, which `jui g
+    # converter --from / --all` hands down. Returns the Hash, or raises
+    # ArgumentError naming what is wrong (the CLIs print it and exit 1).
+    #
+    # Until 1.8.113 the spec's descriptions never left `jui`: it passed
+    # `name:type` only, and every rewrite of attribute_definitions/<Name>.json
+    # replaced hand-written descriptions with "<key> attribute".
+    def self.parse_attribute_descriptions(json_text)
+      parsed = JSON.parse(json_text.to_s)
+      unless parsed.is_a?(Hash) && parsed.all? { |k, v| k.is_a?(String) && v.is_a?(String) }
+        raise ArgumentError, "--attribute-descriptions takes a JSON object of " \
+                             "{\"attribute\": \"description\"}"
+      end
+      parsed
+    rescue JSON::ParserError => e
+      raise ArgumentError, "--attribute-descriptions is not valid JSON (#{e.message.lines.first&.strip})"
+    end
+
+    # The description an attribute definition carries: the spec's when one
+    # was handed down, the placeholder otherwise.
+    def self.attribute_description(options, key, fallback)
+      descriptions = options && options[:attribute_descriptions]
+      text = descriptions.is_a?(Hash) ? descriptions[key] : nil
+      text.is_a?(String) && !text.strip.empty? ? text : fallback
     end
 
     private
@@ -287,7 +319,8 @@ module JsonUIShared
     def build_attribute_definition(actual_key, type)
       {
         "type" => map_type_to_json_type(type),
-        "description" => "#{actual_key} attribute"
+        "description" => self.class.attribute_description(@options, actual_key,
+                                                          "#{actual_key} attribute")
       }
     end
 

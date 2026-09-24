@@ -40,7 +40,11 @@ def register_generate_command(subparsers: argparse._SubParsersAction) -> None:
     converter_parser.add_argument("--container", action="store_true", help="Container component")
     converter_parser.add_argument(
         "--skip-existing", action="store_true",
-        help="Skip converters that already exist (used by `jui build`)",
+        help="Leave existing converter and scaffold files untouched (no prompt)",
+    )
+    converter_parser.add_argument(
+        "--force", action="store_true",
+        help="Replace existing converter and scaffold files without prompting",
     )
 
     # jui g api — preview swagger-driven DTO + Domain model generation
@@ -962,6 +966,7 @@ def _cmd_generate_converter(args: argparse.Namespace) -> int:
     config = config_mgr.load()
     platforms = config.get("platforms", {})
     skip_existing = bool(getattr(args, "skip_existing", False))
+    force = bool(getattr(args, "force", False))
 
     # Converters are emitted per platform — with no platform configured the
     # generation loop runs zero times, which used to exit 0 without creating
@@ -979,7 +984,8 @@ def _cmd_generate_converter(args: argparse.Namespace) -> int:
             print(f"No component specs found in {comp_dir}")
             return 1
         return _run_converters_from_specs(
-            specs_to_process, platforms, config_mgr, skip_existing=skip_existing
+            specs_to_process, platforms, config_mgr, skip_existing=skip_existing,
+            force=force,
         )
     if args.from_spec:
         # Accept either a bare filename (resolved against component_spec_directory)
@@ -994,13 +1000,14 @@ def _cmd_generate_converter(args: argparse.Namespace) -> int:
             print(f"ERROR: Component spec not found: {spec_path}")
             return 1
         return _run_converters_from_specs(
-            [spec_path], platforms, config_mgr, skip_existing=skip_existing
+            [spec_path], platforms, config_mgr, skip_existing=skip_existing,
+            force=force,
         )
     if args.name:
         # Direct mode — pass through to platform tools.
         return _run_converter_direct(
             args.name, args.attributes, args.container, platforms, config_mgr,
-            skip_existing=skip_existing,
+            skip_existing=skip_existing, force=force,
         )
     print("Usage: jui g converter <name> | --from <spec> | --all")
     return 1
@@ -1012,12 +1019,21 @@ def _run_converters_from_specs(
     config_mgr,
     *,
     skip_existing: bool = False,
+    force: bool = False,
 ) -> int:
     """Iterate component spec files and invoke each platform's `g converter`.
 
-    Also used by `jui build` to auto-generate converters before the per-platform
-    build phase — callers pass ``skip_existing=True`` so the platform tools
-    leave existing converter files untouched instead of prompting.
+    Called by `jui g converter --from / --all` only. (This said "also used by
+    `jui build`" — the build stopped auto-generating converters long ago and
+    has no call here; a downstream face grepped the distributed tree and
+    found 0.)
+
+    Each prop's `description` travels with its type as
+    `--attribute-descriptions`, so the rewritten
+    attribute_definitions/<Name>.json carries the spec's text. Until 1.8.113
+    only `name:type` crossed, and every rewrite replaced hand-written
+    descriptions with "<key> attribute" (measured on a face: two lost on one
+    component).
     """
     import json
 
@@ -1037,6 +1053,11 @@ def _run_converters_from_specs(
             (p["name"], p["type"]) for p in props
             if "name" in p and "type" in p
         ]
+        descriptions = {
+            p["name"]: p["description"] for p in props
+            if "name" in p and "type" in p
+            and isinstance(p.get("description"), str) and p["description"].strip()
+        }
         # stateManagement.exposedEvents are callback props — merge them into
         # the attribute list as Callback-typed attrs so the platform
         # generators wire `"onFoo": "@{handler}"` bindings (unknown types
@@ -1049,13 +1070,17 @@ def _run_converters_from_specs(
             if event_name and event_name not in seen_attrs:
                 seen_attrs.add(event_name)
                 attr_pairs.append((event_name, "Callback"))
+                text = event.get("description")
+                if isinstance(text, str) and text.strip():
+                    descriptions[event_name] = text
         attrs = ",".join(f"{name}:{type_}" for name, type_ in attr_pairs)
         has_slots = bool(spec_data.get("slots", {}).get("items", []))
 
         print(f"\nGenerating converter: {comp_name}")
         result = _run_converter_direct(
             comp_name, attrs or None, has_slots, platforms, config_mgr,
-            skip_existing=skip_existing,
+            skip_existing=skip_existing, force=force,
+            descriptions=descriptions or None,
         )
         if result != 0:
             failed.append(comp_name)
@@ -1100,6 +1125,8 @@ def _run_converter_direct(
     config_mgr,
     *,
     skip_existing: bool = False,
+    force: bool = False,
+    descriptions: dict | None = None,
 ) -> int:
     """Run converter generation on each platform tool.
 
@@ -1109,6 +1136,7 @@ def _run_converter_direct(
     the Ruby converter generators read that and bypass their interactive
     "Overwrite? (y/n)" prompt, leaving existing files in place.
     """
+    import json
     import subprocess
 
     from ..core.tool_resolver import build_tool_env, resolve_tool
@@ -1142,6 +1170,15 @@ def _run_converter_direct(
                 cmd.append("--container")
         else:
             continue
+        # The same two options on every tool: each CLI parses them since
+        # 1.8.113 (sjui / kjui rejected --force and --skip-existing before).
+        if force:
+            cmd.append("--force")
+        if descriptions:
+            # \u-escaped (json.dumps' default), so the argument is ASCII
+            # whatever the locale: with LANG unset a raw UTF-8 argument
+            # reaches Ruby as binary (ASCII-8BIT).
+            cmd += ["--attribute-descriptions", json.dumps(descriptions)]
 
         resolved = resolve_tool(tool_name, root)
         actual_cmd = [resolved] + cmd[1:]

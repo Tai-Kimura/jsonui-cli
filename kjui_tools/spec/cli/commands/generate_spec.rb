@@ -234,6 +234,35 @@ RSpec.describe KjuiTools::CLI::Commands::Generate do
         result = generate.send(:parse_converter_options, args)
         expect(result[:attributes]['@title']).to eq('String')
       end
+
+      # sjui-kjui-converter-cli-reject-force-and-skip-existing: the converter
+      # core has always read :force / :skip_existing, but until 1.8.113 this
+      # parser refused both as "invalid option" while the scaffold header
+      # named --force.
+      it 'parses --force and --skip-existing (non-interactive overwrite control)' do
+        result = generate.send(:parse_converter_options, ['--force', '--skip-existing'])
+        expect(result[:force]).to be true
+        expect(result[:skip_existing]).to be true
+        plain = generate.send(:parse_converter_options, [])
+        expect(plain[:force]).to be_nil
+        expect(plain[:skip_existing]).to be_nil
+      end
+
+      # jui-g-converter-drops-spec-prop-descriptions: `jui g converter --from /
+      # --all` hands the spec's descriptions down as JSON.
+      it 'parses --attribute-descriptions into a Hash' do
+        result = generate.send(:parse_converter_options,
+                               ['--attribute-descriptions', '{"title":"見出し","onTap":"tapped"}'])
+        expect(result[:attribute_descriptions]).to eq('title' => '見出し', 'onTap' => 'tapped')
+      end
+
+      it 'exits 1 naming the option on a malformed --attribute-descriptions' do
+        ['{"title":', '["title"]', '{"title":1}'].each do |bad|
+          expect { generate.send(:parse_converter_options, ['--attribute-descriptions', bad]) }
+            .to raise_error(SystemExit) { |e| expect(e.status).to eq(1) }
+            .and output(/Error: --attribute-descriptions/).to_stdout
+        end
+      end
     end
 
     describe '#show_help' do
