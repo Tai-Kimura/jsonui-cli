@@ -336,13 +336,15 @@ module SjuiTools
           pass_anyview_slots(chunk, frames) ||
             pass_chain_cut(chunk, frames) ||
             pass_if_block(chunk, frames) ||
-            pass_container_children(chunk, frames)
+            pass_container_children(chunk, frames) ||
+            pass_outward_chain_cut(chunk, frames)
         else
           # Lines-only violation: distribute children; chain cuts last.
           pass_anyview_slots(chunk, frames) ||
             pass_container_children(chunk, frames) ||
             pass_chain_cut(chunk, frames) ||
-            pass_if_block(chunk, frames)
+            pass_if_block(chunk, frames) ||
+            pass_outward_chain_cut(chunk, frames)
         end
       end
 
@@ -664,6 +666,51 @@ module SjuiTools
           return false unless inner
           target, = inner
         end
+        cut_whole_container(chunk, frames, target)
+      end
+
+      # ---- pass 5: the nearest whole container OUTSIDE the budget ----------
+      #
+      # The last resort, and only for a body that would otherwise be waived.
+      # pass_chain_cut looks for a container AT or INSIDE the budget depth and
+      # nowhere else, so a spine whose levels below the budget are all scopes
+      # and closures had no cut at all — `Group > VisibilityWrapper >
+      # ScrollViewReader > .onChange { _, id in > if > withAnimation`, the
+      # collection a ZStack child gets when it binds visibility and scrollTo,
+      # came out depth 6 with "no safe cut point" (reported 2026-09-24) while
+      # extracting the VisibilityWrapper would have left 1 and 5.
+      #
+      # So here the search goes outward from the budget, innermost container
+      # first, still skipping the chunk's own first line. It runs after every
+      # other pass has declined and only over the waiver bound: measured on
+      # two faces' full builds, letting the outward search compete earlier
+      # (inside pass_chain_cut, for any body over BODY_DEPTH_MAX) moved 18
+      # generated views whose bodies were never waived, because it took the
+      # cut an `if` lift or a child split had been making.
+      def pass_outward_chain_cut(chunk, frames)
+        depth, lines = measure(chunk)
+        return false unless depth > BODY_DEPTH_HARD || lines > BODY_LINES_MAX
+
+        items = chunk.items
+        deep_idx = deepest_line_index(items)
+        return false unless deep_idx
+
+        enclosing = frames[deep_idx].select { |f| %i[container scope].include?(f.kind) }
+        return false if enclosing.empty?
+
+        budget_index = [BODY_DEPTH_MAX - 1, enclosing.size - 1].min
+        target = enclosing[0...budget_index].reverse.find do |f|
+          chain_target?(items, f) && !f.open_index.zero?
+        end
+        return false unless target
+
+        cut_whole_container(chunk, frames, target)
+      end
+
+      # Extracts the container opened at `target` — its whole brace span plus
+      # the trailing modifier chain — into a child function.
+      def cut_whole_container(chunk, frames, target)
+        items = chunk.items
         open_idx = target.open_index
         return false unless statement_cuttable?(frames[open_idx])
 

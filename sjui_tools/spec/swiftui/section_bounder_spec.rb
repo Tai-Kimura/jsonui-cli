@@ -234,6 +234,78 @@ RSpec.describe SjuiTools::SwiftUI::SectionBounder do
     end
   end
 
+  # ---- the outward last resort ------------------------------------------------
+  #
+  # A ZStack child that binds `visibility` and `scrollTo` is emitted as
+  # Group > VisibilityWrapper > ScrollViewReader > .onChange { _, id in > if >
+  # withAnimation: depth 6, and every level from the budget inward is a scope
+  # or a closure, so the chain cut had nothing to take and the body was waived
+  # (reported 2026-09-24). The nearest container OUTSIDE the budget — the
+  # VisibilityWrapper — is a safe cut. It is taken only as the last resort
+  # and only over the waiver bound, so bodies that were never waived keep
+  # their exact output (the second example is that control).
+  describe 'the outward last resort' do
+    def scroll_spine(animated: true)
+      spine = <<~SWIFT
+        VisibilityWrapper(data.listVisibility) {
+            ScrollViewReader { scrollProxy in
+                CollectionStackView(
+                    mode: .lazy,
+                    axis: .vertical
+                ) {
+                    AnyView(rows())
+                }
+                    .onChange(of: data.scrollToIndex) { _, cellId in
+                    if data.scrollAnimated {
+                        #{animated ? "withAnimation {\n                            scrollProxy.scrollTo(cellId, anchor: .bottom)\n                        }" : "scrollProxy.scrollTo(cellId, anchor: .top)"}
+                    } else {
+                        scrollProxy.scrollTo(cellId, anchor: .bottom)
+                    }
+                }
+            }
+                .accessibilityIdentifier("list")
+        }
+      SWIFT
+      "Group {\n#{spine}}"
+    end
+
+    it 'cuts at the enclosing container when nothing at or inside the budget can be cut' do
+      body = scroll_spine
+      _call, functions = bounder.bound(body)
+      expect(bounder.waivers).to be_empty
+      fns = emitted_functions(functions)
+      # emitted_functions counts the `func … {` line too, so a BODY at the
+      # waiver bound measures one more here.
+      expect(fns.map { |f| f[:depth] }.max).to be <= described_class::BODY_DEPTH_HARD + 1
+      cut = fns.find { |f| f[:text].lines[1].to_s.strip.start_with?('VisibilityWrapper(data.listVisibility) {') }
+      expect(cut).not_to be_nil, functions
+      root = fns.first
+      expect(root[:text]).to match(/Group \{\n\s*AnyView\(#{cut[:name]}\(\)\)\n\s*\}/)
+      expect(content_lines(functions).sort).to eq(content_lines(body).sort)
+    end
+
+    # The same spine without withAnimation is depth 5: over BODY_DEPTH_MAX,
+    # not over the waiver bound, and the VisibilityWrapper is still there to
+    # be cut. It was accepted as is before, and it still must be — the
+    # outward pass is for bodies that would otherwise be waived.
+    it 'leaves a body that is over the cutting budget but not over the waiver bound exactly as it was' do
+      body = scroll_spine(animated: false)
+      _call, functions = bounder.bound(body)
+      expect(bounder.waivers).to be_empty
+      expect(emitted_functions(functions).size).to eq(1)
+      expect(content_lines(functions)).to eq(content_lines(body))
+    end
+
+    it 'still waives when no container encloses the deep point at all' do
+      lines = []
+      7.times { |i| lines << ('    ' * i) + "if data.flag#{i} {" }
+      lines << ('    ' * 7) + 'Text("deep")'
+      6.downto(0) { |i| lines << ('    ' * i) + '}' }
+      bounder.bound(lines.join("\n"))
+      expect(bounder.waivers.map { |w| w.to_a.last }).to include('no safe cut point')
+    end
+  end
+
   # ---- typed parameter passing across binding scopes -------------------------
 
   describe 'scope-crossing cuts with typed parameters' do
