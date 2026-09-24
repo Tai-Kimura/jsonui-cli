@@ -394,9 +394,10 @@ class SpecValidator:
     #: `branchContracts` is refused for a different reason, and still is now
     #: that ownership has an answer. The owner is the app of the
     #: jui.config.json that reads the spec_directory holding this spec
-    #: (contract-gap detection design §2.3). How the app treats an API
-    #: outcome that belongs to no one screen is declared in
-    #: `apiOutcomeRules`; branchContracts gets no second home.
+    #: (contract-gap detection design §2.3.1). The network layer's side
+    #: calls that show up in a screen's generated tests are admitted by
+    #: `apiOutcomeRules`; effects that reach beyond a screen are
+    #: `unitContracts`. branchContracts gets no second home.
     _APP_SPEC_FORBIDDEN = (
         "structure", "dataFlow", "stateManagement", "userActions",
         "transitions", "validation", "subSpecs", "branchContracts",
@@ -406,20 +407,12 @@ class SpecValidator:
         """Validate a `app_contracts_spec`.
 
         A container for declarations the app owns and no screen does. It
-        carries `unitContracts`, `apiOutcomeRules`, or both — and nothing
-        that describes a screen.
+        carries `unitContracts` (required) and optionally `apiOutcomeRules` —
+        and nothing that describes a screen. A rules-only app spec cannot
+        stand: every rule's `verifiedBy` names unit cases of this same file.
         """
         self._validate_required_fields(
-            data, ["type", "version", "metadata"], "", result)
-        if isinstance(data, dict) and not any(
-                key in data for key in self._APP_SPEC_DECLARATIONS):
-            result.errors.append(SpecValidationMessage(
-                path="",
-                message=(
-                    f"a {APP_CONTRACTS_SPEC} declares at least one of "
-                    f"{', '.join(repr(k) for k in self._APP_SPEC_DECLARATIONS)}"
-                ),
-            ))
+            data, ["type", "version", "metadata", "unitContracts"], "", result)
         # Unknown keys were let through until the second declaration arrived:
         # a key the validator does not know is a key nothing reads, and a
         # misspelt `apiOutcomeRule` would have been a rule with no effect and
@@ -475,17 +468,16 @@ class SpecValidator:
         if "relatedFiles" in data:
             self._validate_related_files(data["relatedFiles"], result)
 
-    #: What an app contracts spec declares; at least one is required.
-    _APP_SPEC_DECLARATIONS = ("unitContracts", "apiOutcomeRules")
     #: Every key an app contracts spec may carry.
-    _APP_SPEC_KEYS = ("type", "version", "metadata", *_APP_SPEC_DECLARATIONS,
-                      "relatedFiles")
+    _APP_SPEC_KEYS = ("type", "version", "metadata", "unitContracts",
+                      "apiOutcomeRules", "relatedFiles")
 
     def _validate_contract_declarations(self, data: dict, result: SpecValidationResult):
         """The shape of the contract-gap declarations, through their one parser.
 
-        `excludedOutcomes`, `unreachedOps`, `apiOutcomeRules` and
-        `metadata.platforms` are read by `jsonui-test contracts coverage`;
+        The sites in `_CONTRACT_DECLARATION_SITES` (`excludedOutcomes`,
+        `unreachedOps`, a row's `alsoStatuses`, `apiOutcomeRules`,
+        `metadata.platforms`) are read by `jsonui-test contracts coverage`;
         their parser lives in test_tools so this check and that command
         cannot accept different documents. Imported HERE, not at module
         level: a module-level import that failed would fall into
@@ -501,9 +493,9 @@ class SpecValidator:
                 result.errors.append(SpecValidationMessage(
                     path="",
                     message=(
-                        "cannot check excludedOutcomes / unreachedOps / "
-                        "apiOutcomeRules / metadata.platforms: jsonui-test "
-                        f"(jsonui_test_cli) is not importable ({exc})"
+                        "cannot check "
+                        f"{' / '.join(self._CONTRACT_DECLARATION_SITES)}: "
+                        f"jsonui-test (jsonui_test_cli) is not importable ({exc})"
                     ),
                 ))
             return
@@ -513,12 +505,14 @@ class SpecValidator:
 
     #: A copy of `jsonui_test_cli.contract_declarations.DECLARATION_SITES`,
     #: for the failed-import message only (the parser is the reader). Kept
-    #: equal to the parser's by an arm; `*` matches any method name.
+    #: equal to the parser's by an arm; `*` matches any method name and a
+    #: trailing `[]` means each element of that list.
     _CONTRACT_DECLARATION_SITES = (
         "apiOutcomeRules",
         "metadata.platforms",
         "branchContracts.unreachedOps",
         "branchContracts.methods.*.excludedOutcomes",
+        "branchContracts.methods.*.branches[].alsoStatuses",
     )
 
     @classmethod
@@ -531,6 +525,10 @@ class SpecValidator:
             head, rest = parts[0], parts[1:]
             if head == "*":
                 return any(present(v, rest) for v in node.values())
+            if head.endswith("[]"):
+                key = head[:-2]
+                items = node.get(key)
+                return isinstance(items, list) and any(present(v, rest) for v in items)
             return head in node and present(node[head], rest)
 
         return any(present(data, site.split("."))
@@ -2364,12 +2362,14 @@ class SpecValidator:
                 ))
             return
         for key in branch:
-            if key not in ("when", "then", "notes", "platforms", "baseline"):
+            if key not in ("when", "then", "notes", "platforms", "baseline",
+                           "alsoStatuses"):
                 result.errors.append(SpecValidationMessage(
                     path=f"{path}.{key}",
                     message=(
                         "Unknown branch key — allowed: 'when', 'then', "
-                        "'baseline', 'notes', 'platforms' (or a lone 'note')"
+                        "'baseline', 'notes', 'platforms', 'alsoStatuses' "
+                        "(or a lone 'note')"
                     ),
                 ))
         if "baseline" in branch:

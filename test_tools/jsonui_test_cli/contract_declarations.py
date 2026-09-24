@@ -4,8 +4,8 @@ The check compares what an API declares (every response status of every
 operation a screen reaches) against what the screen's branch contracts
 cover. A plain set difference cannot tell "forgot to declare" from "does not
 distinguish on purpose" — the absence means both — so the second meaning
-needs a place to be written down. Three places, and this module is the one
-reader of all of them:
+needs a place to be written down. This module is the one reader of every
+such place:
 
 - ``branchContracts.methods.<M>.excludedOutcomes`` —
   ``{"api.<op>": {"<status>": {by, reason, platforms?}}}``: this method
@@ -19,20 +19,31 @@ reader of all of them:
 - ``branchContracts.unreachedOps`` — ``{"api.<op>": {reason, platforms?}}``:
   no contracted method on this screen calls the operation (the parent does,
   say). The generated tests verify the claim once calls are bounded.
-- ``apiOutcomeRules`` in the app contracts spec — outcomes the APP handles
-  for every screen (a 401 on an authenticated call signs out). Either a row
-  template (``then``) that becomes a generated test per screen, or, as the
-  last resort, ``vm: "not-reached"`` with where it is handled and which unit
-  cases verify it.
+- ``branchContracts.methods.<M>.branches[].alsoStatuses`` —
+  ``{"api.<op>": ["401", "429"]}`` on a row: the row's ``then`` holds for
+  these statuses of that operation too (the VM treats them alike). Each
+  status becomes its own generated test, so the claim is checked rather
+  than excluded. The key must be an ``api.<op>`` the row's ``when`` names
+  with a scenario; statuses are plain numbers — no ranges, no ``default``.
+- ``apiOutcomeRules`` in the app contracts spec —
+  ``{id, statuses, sideCalls, verifiedBy, reason}``, all required: the
+  HTTP calls the app's network layer makes on its own when a request ends
+  in one of these statuses (a logout POST after a terminal 401), which a
+  screen's generated test may therefore record. A rule only ADMITS those
+  calls; it says nothing about how the screen handles the status. What the
+  app does for every screen (sign out, an overlay, a refresh) is tested by
+  ``unitContracts`` in the same file — ``verifiedBy`` names those cases —
+  and is outside a screen's coverage.
 
 Plus ``metadata.platforms`` on a screen: the platforms the screen exists on.
 
 WHAT THIS CHECKS IS THE SHAPE, NOTHING ELSE. Keys, types, closed sets, and
 references inside the same document (a ``verifiedBy`` name must be a unit
-case the same file declares). Whether an excluded status is stale, whether
-an op resolves, whether a rule's security scheme exists, whether a row and
-an exclusion claim the same outcome — those need the OpenAPI document and
-the rows, and belong to the coverage command. A shape error here is an
+case the same file declares; an ``alsoStatuses`` key must be named in its
+row's ``when``). Whether an excluded status is stale, whether an op or a
+``sideCalls`` operationId resolves, whether a row and an exclusion claim the
+same outcome — those need the OpenAPI document, the mocks and the rows, and
+belong to the coverage command. A shape error here is an
 ERROR in ``jsonui-doc validate spec``, which imports this module inside the
 check (never at module level), so a failed import is an ERROR on the
 document that declares something, not a warning that swallows the whole
@@ -52,24 +63,22 @@ PLATFORMS = ("ios", "android", "web")
 #: `by` of an excluded outcome. Closed on purpose (see the module docstring).
 EXCLUSION_BY = ("unit", "unreachable", "unexpressible")
 
-#: The one `vm` value an outcome rule may carry.
-RULE_VM = ("not-reached",)
-
-#: Keys a rule's `then` may carry in v1. The value is checked against the
-#: expanding screen's own `transitions[].destination` when the rule expands,
-#: so the app spec carries no transition vocabulary of its own.
-RULE_THEN_KEYS = ("transition",)
-
 #: A response key as OpenAPI spells it: a status (`404`) or a range (`4XX`).
 #: `default` is not a status and is refused with its own message.
 _STATUS_KEY = re.compile(r"^[1-5](?:\d\d|XX)$")
+#: A plain status, for `alsoStatuses` and a rule's `statuses` (v1: a range
+#: or `default` would make the generator read OpenAPI to know what it means).
+_STATUS_NUMBER = re.compile(r"^[1-5]\d\d$")
 _OP_KEY = re.compile(r"^api\.\S+$")
+#: `VERB /path` — the spelling `sideCalls` does NOT take (operationIds only).
+_VERB_PATH = re.compile(r"^[A-Za-z]+\s+/")
 
 _EXCLUSION_KEYS = ("by", "reason", "platforms")
 _UNREACHED_KEYS = ("reason", "platforms")
-_RULE_KEYS = ("id", "statuses", "security", "then", "vm", "handledBy",
-              "verifiedBy", "except", "reason")
-_EXCEPT_KEYS = ("operationId", "reason")
+_RULE_KEYS = ("id", "statuses", "sideCalls", "verifiedBy", "reason")
+#: Rule keys of design v3, withdrawn in v4 (2026-09-24). Named so a rule
+#: written to the old shape is told what happened, not just "unknown key".
+_RULE_WITHDRAWN = ("then", "vm", "handledBy", "security", "except")
 
 APP_CONTRACTS_SPEC = "app_contracts_spec"
 
@@ -78,11 +87,13 @@ APP_CONTRACTS_SPEC = "app_contracts_spec"
 #: import this module — to say that a declaring document could not be
 #: checked — and an arm holds the two equal, so a site added here and not
 #: there cannot go quiet on a machine without test_tools.
+#: `[]` after a segment means "each element of that list".
 DECLARATION_SITES = (
     "apiOutcomeRules",
     "metadata.platforms",
     "branchContracts.unreachedOps",
     "branchContracts.methods.*.excludedOutcomes",
+    "branchContracts.methods.*.branches[].alsoStatuses",
 )
 
 
@@ -110,15 +121,19 @@ class UnreachedOp:
 
 
 @dataclass(frozen=True)
+class AlsoStatuses:
+    method: str
+    branch: int               # 0-based index into the method's branches
+    op: str                   # as written, `api.` prefix removed
+    statuses: tuple           # plain statuses, in the order written
+
+
+@dataclass(frozen=True)
 class OutcomeRule:
     id: str
-    statuses: tuple
-    security: str | tuple     # "*" or scheme names
-    then: dict | None
-    vm: str | None
-    handled_by: str | None
-    verified_by: tuple
-    exceptions: tuple         # ((operationId, reason), ...)
+    statuses: tuple           # plain statuses
+    side_calls: tuple         # operationIds
+    verified_by: tuple        # unit case names in the same file
     reason: str
 
 
@@ -127,6 +142,7 @@ class Declarations:
     exclusions: list = field(default_factory=list)
     unreached_ops: list = field(default_factory=list)
     rules: list = field(default_factory=list)
+    also_statuses: list = field(default_factory=list)
     #: `metadata.platforms` of a screen; None = not declared.
     platforms: tuple | None = None
     errors: list = field(default_factory=list)
@@ -136,7 +152,7 @@ def parse_declarations(spec: dict) -> Declarations:
     """Every declaration in one spec document, and every shape error in them.
 
     An app contracts spec carries `apiOutcomeRules`; a screen document (any
-    other type) carries the other three. A declaration in the wrong kind of
+    other type) carries the rest. A declaration in the wrong kind of
     document is an error rather than ignored: written but never read is the
     failure this vocabulary exists to prevent.
     """
@@ -152,9 +168,10 @@ def parse_declarations(spec: dict) -> Declarations:
     if "apiOutcomeRules" in spec:
         out.errors.append(DeclarationError(
             "apiOutcomeRules",
-            f"apiOutcomeRules belongs in the {APP_CONTRACTS_SPEC} — it declares "
-            "what the app does for every screen. A screen's own handling is "
-            "a row in branchContracts, or methods.<M>.excludedOutcomes"))
+            f"apiOutcomeRules belongs in the {APP_CONTRACTS_SPEC} — it admits "
+            "the calls the app's network layer makes for every screen. A "
+            "screen's own handling of a status is a row in branchContracts "
+            "(alsoStatuses for statuses the row treats alike)"))
     metadata = spec.get("metadata")
     if isinstance(metadata, dict) and "platforms" in metadata:
         out.platforms = _platforms(metadata["platforms"], "metadata.platforms", out,
@@ -167,8 +184,15 @@ def parse_declarations(spec: dict) -> Declarations:
     methods = bc.get("methods")
     if isinstance(methods, dict):
         for name, contract in methods.items():
-            if isinstance(contract, dict) and "excludedOutcomes" in contract:
+            if not isinstance(contract, dict):
+                continue
+            if "excludedOutcomes" in contract:
                 _parse_exclusions(name, contract["excludedOutcomes"], out)
+            branches = contract.get("branches")
+            if isinstance(branches, list):
+                for index, branch in enumerate(branches):
+                    if isinstance(branch, dict) and "alsoStatuses" in branch:
+                        _parse_also_statuses(name, index, branch, out)
     return out
 
 
@@ -219,6 +243,24 @@ def _status_key(key, path: str, out: Declarations) -> bool:
         hint = " (write it as a string, as OpenAPI does)" if isinstance(key, int) else ""
         _err(out, path, f"{key!r} is not a response key — a status such as "
              f"\"404\" or a range such as \"4XX\"{hint}")
+        return False
+    return True
+
+
+def _plain_status(value, path: str, out: Declarations, what: str) -> bool:
+    """A plain status string ("429"). Ranges and `default` are refused (v1)."""
+    if value == "default":
+        _err(out, path, f"'default' is not a status — {what} takes plain "
+             "statuses such as \"500\"")
+        return False
+    if isinstance(value, str) and _STATUS_KEY.match(value) and "XX" in value:
+        _err(out, path, f"{value!r} is a range — {what} takes plain statuses "
+             "(v1: a range would make the generator read OpenAPI to know which "
+             "statuses it stands for). List the statuses")
+        return False
+    if not isinstance(value, str) or not _STATUS_NUMBER.match(value):
+        hint = " (write it as a string, as OpenAPI does)" if isinstance(value, int) else ""
+        _err(out, path, f"{value!r} is not a status such as \"429\"{hint}")
         return False
     return True
 
@@ -300,6 +342,46 @@ def _parse_unreached(value, out: Declarations) -> None:
                 op=op, reason=entry["reason"], platforms=platforms))
 
 
+def _parse_also_statuses(method: str, index: int, branch: dict, out: Declarations) -> None:
+    base = f"branchContracts.methods.{method}.branches[{index}].alsoStatuses"
+    value = branch["alsoStatuses"]
+    if "note" in branch:
+        _err(out, base, "alsoStatuses cannot sit on a note branch — a note has "
+             "no when/then to repeat for another status")
+        return
+    if not isinstance(value, dict) or not value:
+        _err(out, base, "alsoStatuses must be a non-empty object of "
+             "{\"api.<op>\": [\"<status>\", ...]} — omit it when the row "
+             "stands for its own scenario only")
+        return
+    when = branch.get("when") if isinstance(branch.get("when"), dict) else {}
+    for op_key, statuses in value.items():
+        path = f"{base}.{op_key}"
+        op = _op_key(op_key, path, out)
+        ok = op is not None
+        if ok and not isinstance(when.get(op_key), str):
+            _err(out, path, f"{op_key!r} must be named in this row's when with a "
+                 "scenario — alsoStatuses repeats that when for other statuses "
+                 "of the same operation")
+            ok = False
+        if not isinstance(statuses, list) or not statuses:
+            _err(out, path, "must be a non-empty array of statuses (\"429\")")
+            continue
+        seen: list = []
+        for j, status in enumerate(statuses):
+            spath = f"{path}[{j}]"
+            if not _plain_status(status, spath, out, "alsoStatuses"):
+                ok = False
+            elif status in seen:
+                _err(out, spath, f"{status!r} is listed twice")
+                ok = False
+            else:
+                seen.append(status)
+        if ok:
+            out.also_statuses.append(AlsoStatuses(
+                method=method, branch=index, op=op, statuses=tuple(seen)))
+
+
 # --------------------------------------------------------------- app side ---
 
 def _unit_case_names(spec: dict) -> set:
@@ -327,8 +409,20 @@ def _parse_rules(value, case_names: set, out: Declarations) -> None:
         if not isinstance(rule, dict):
             _err(out, path, f"must be an object, got {type(rule).__name__}")
             continue
-        _unknown_keys(rule, _RULE_KEYS, path, out)
         ok = True
+        for key in rule:
+            if key in _RULE_KEYS:
+                continue
+            ok = False
+            if key in _RULE_WITHDRAWN:
+                _err(out, f"{path}.{key}", f"{key!r} was withdrawn (design v4, "
+                     "2026-09-24): a rule only admits the calls the network "
+                     "layer makes on these statuses. How a screen handles a "
+                     "status is a row in its branchContracts; what the app does "
+                     "for every screen is a unit case here, named in verifiedBy")
+            else:
+                _err(out, f"{path}.{key}", "Unknown key — allowed: "
+                     f"{', '.join(repr(k) for k in _RULE_KEYS)}")
 
         rule_id = rule.get("id")
         if not _nonempty_str(rule_id):
@@ -340,129 +434,73 @@ def _parse_rules(value, case_names: set, out: Declarations) -> None:
         else:
             ids[rule_id] = i
 
-        statuses = rule.get("statuses")
-        parsed_statuses: list = []
-        if not isinstance(statuses, list) or not statuses:
-            _err(out, f"{path}.statuses", "statuses must be a non-empty array "
-                 "of response keys (\"401\", \"5XX\")")
+        statuses = _string_list(rule.get("statuses"), f"{path}.statuses", out,
+                                "statuses is required: the plain statuses (\"401\") "
+                                "on which the side calls may appear")
+        if statuses is None:
             ok = False
         else:
-            for j, s in enumerate(statuses):
-                if not _status_key(s, f"{path}.statuses[{j}]", out):
+            for j, status in enumerate(statuses):
+                if not _plain_status(status, f"{path}.statuses[{j}]", out, "a rule's statuses"):
                     ok = False
-                elif s in parsed_statuses:
-                    _err(out, f"{path}.statuses[{j}]", f"{s!r} is listed twice")
-                    ok = False
-                else:
-                    parsed_statuses.append(s)
 
-        security = rule.get("security")
-        parsed_security = None
-        if security == "*":
-            parsed_security = "*"
-        elif (isinstance(security, list) and security
-              and all(_nonempty_str(s) for s in security)):
-            if len(set(security)) != len(security):
-                _err(out, f"{path}.security", "a scheme name is listed twice")
-                ok = False
-            parsed_security = tuple(security)
+        side_calls = _string_list(rule.get("sideCalls"), f"{path}.sideCalls", out,
+                                  "sideCalls is required: the operationIds the network "
+                                  "layer calls on these statuses")
+        if side_calls is None:
+            ok = False
         else:
-            _err(out, f"{path}.security", "security is required: scheme names "
-                 "(\"bearerAuth\") or \"*\" for every operation. Leaving it out "
-                 "would silently match operations that carry no credentials")
-            ok = False
-
-        has_then, has_vm = "then" in rule, "vm" in rule
-        then = rule.get("then")
-        vm = rule.get("vm")
-        handled_by = rule.get("handledBy")
-        verified_by = rule.get("verifiedBy")
-        if has_then == has_vm:
-            _err(out, path, "a rule carries exactly one of 'then' (a row template, "
-                 "expanded into each screen's generated tests) or "
-                 "'vm': \"not-reached\" (the last resort)")
-            ok = False
-        if has_then:
-            if not isinstance(then, dict) or not then:
-                _err(out, f"{path}.then", "then must be a non-empty object")
-                ok = False
-            else:
-                for key, v in then.items():
-                    if key not in RULE_THEN_KEYS:
-                        _err(out, f"{path}.then.{key}", f"a rule's then may only "
-                             f"carry {', '.join(repr(k) for k in RULE_THEN_KEYS)} — "
-                             "a screen's own words (data.*) belong in that "
-                             "screen's rows")
-                        ok = False
-                    elif not _nonempty_str(v):
-                        _err(out, f"{path}.then.{key}", "must be a non-empty string")
-                        ok = False
-            for key in ("handledBy", "verifiedBy"):
-                if key in rule:
-                    _err(out, f"{path}.{key}", f"{key} goes with vm: \"not-reached\"; "
-                         "a then rule is verified by the tests it expands into")
+            for j, op_id in enumerate(side_calls):
+                if not _nonempty_str(op_id):
+                    _err(out, f"{path}.sideCalls[{j}]", "must be a non-empty operationId")
                     ok = False
-        if has_vm:
-            if vm not in RULE_VM:
-                _err(out, f"{path}.vm", f"vm must be \"not-reached\", got {vm!r}")
-                ok = False
-            if not _nonempty_str(handled_by):
-                _err(out, f"{path}.handledBy", "handledBy is required with "
-                     "vm: \"not-reached\" — where the outcome is handled")
-                ok = False
-            if (not isinstance(verified_by, list) or not verified_by
-                    or not all(_nonempty_str(v) for v in verified_by)):
-                _err(out, f"{path}.verifiedBy", "verifiedBy is required with "
-                     "vm: \"not-reached\": the names of unit cases in this "
-                     "file's unitContracts that check the handling")
-                ok = False
-            else:
-                for j, name in enumerate(verified_by):
-                    if name not in case_names:
-                        _err(out, f"{path}.verifiedBy[{j}]", f"{name!r} is not a "
-                             "case in this file's unitContracts")
-                        ok = False
+                elif _VERB_PATH.match(op_id):
+                    _err(out, f"{path}.sideCalls[{j}]", f"{op_id!r} is a 'VERB /path' — "
+                         "sideCalls take the OpenAPI operationId, so there is one "
+                         "spelling to resolve")
+                    ok = False
 
-        exceptions: list = []
-        if "except" in rule:
-            exc = rule["except"]
-            if not isinstance(exc, list) or not exc:
-                _err(out, f"{path}.except", "except must be a non-empty array of "
-                     "{operationId, reason}")
-                ok = False
-            else:
-                seen_ids: set = set()
-                for j, entry in enumerate(exc):
-                    epath = f"{path}.except[{j}]"
-                    if not isinstance(entry, dict):
-                        _err(out, epath, "must be an object {operationId, reason}")
-                        ok = False
-                        continue
-                    _unknown_keys(entry, _EXCEPT_KEYS, epath, out)
-                    op_id = entry.get("operationId")
-                    if not _nonempty_str(op_id):
-                        _err(out, f"{epath}.operationId", "operationId is required")
-                        ok = False
-                    elif op_id in seen_ids:
-                        _err(out, f"{epath}.operationId", f"{op_id!r} is listed twice")
-                        ok = False
-                    else:
-                        seen_ids.add(op_id)
-                    if not _nonempty_str(entry.get("reason")):
-                        _err(out, f"{epath}.reason", "reason is required")
-                        ok = False
-                    if _nonempty_str(op_id) and _nonempty_str(entry.get("reason")):
-                        exceptions.append((op_id, entry["reason"]))
+        verified_by = _string_list(rule.get("verifiedBy"), f"{path}.verifiedBy", out,
+                                   "verifiedBy is required: the unit cases in this "
+                                   "file's unitContracts that test the network layer's "
+                                   "handling")
+        if verified_by is None:
+            ok = False
+        else:
+            for j, name in enumerate(verified_by):
+                if not _nonempty_str(name):
+                    _err(out, f"{path}.verifiedBy[{j}]", "must be a non-empty case name")
+                    ok = False
+                elif name not in case_names:
+                    _err(out, f"{path}.verifiedBy[{j}]", f"{name!r} is not a case in "
+                         "this file's unitContracts")
+                    ok = False
 
         if not _nonempty_str(rule.get("reason")):
-            _err(out, f"{path}.reason", "reason is required — what the app does "
-                 "with these outcomes, in one sentence")
+            _err(out, f"{path}.reason", "reason is required — what the network "
+                 "layer does on these statuses, in one sentence")
             ok = False
 
         if ok:
             out.rules.append(OutcomeRule(
-                id=rule_id, statuses=tuple(parsed_statuses), security=parsed_security,
-                then=dict(then) if has_then else None, vm=vm if has_vm else None,
-                handled_by=handled_by if has_vm else None,
-                verified_by=tuple(verified_by) if has_vm else (),
-                exceptions=tuple(exceptions), reason=rule["reason"]))
+                id=rule_id, statuses=tuple(statuses), side_calls=tuple(side_calls),
+                verified_by=tuple(verified_by), reason=rule["reason"]))
+
+
+def _string_list(value, path: str, out: Declarations, missing: str):
+    """A non-empty list without repeats, or None (with the error recorded)."""
+    if value is None:
+        _err(out, path, missing)
+        return None
+    if not isinstance(value, list) or not value:
+        _err(out, path, "must be a non-empty array")
+        return None
+    seen: list = []
+    ok = True
+    for j, item in enumerate(value):
+        if item in seen:
+            _err(out, f"{path}[{j}]", f"{item!r} is listed twice")
+            ok = False
+        else:
+            seen.append(item)
+    return seen if ok else None

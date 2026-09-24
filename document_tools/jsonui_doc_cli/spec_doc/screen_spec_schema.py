@@ -88,10 +88,7 @@ SCREEN_SPEC_SCHEMA = {
                     "items": {"enum": ["ios", "android", "web"]},
                     "description": (
                         "The platforms this screen exists on. Absent = every "
-                        "platform the project declares. Read by the branch-test "
-                        "generator and `jsonui-test contracts coverage`; a "
-                        "platform not listed gets no generated tests and no "
-                        "coverage requirement."
+                        "platform the project declares."
                     )
                 }
             }
@@ -1226,6 +1223,25 @@ SCREEN_SPEC_SCHEMA = {
                                 "outcome field that exists on one platform "
                                 "only). Omit for all platforms."
                             )
+                        },
+                        "alsoStatuses": {
+                            "type": "object",
+                            "minProperties": 1,
+                            "description": (
+                                "This row's then holds for these statuses of "
+                                "the operation too: {\"api.<op>\": [\"429\", "
+                                "\"503\"]}. The key must be an api.<op> this "
+                                "row's when names with a scenario; values are "
+                                "plain statuses (no ranges, no 'default'). Not "
+                                "on a note row."
+                            ),
+                            "propertyNames": {"pattern": "^api\\.\\S+$"},
+                            "additionalProperties": {
+                                "type": "array",
+                                "minItems": 1,
+                                "uniqueItems": True,
+                                "items": {"type": "string", "pattern": "^[1-5][0-9]{2}$"}
+                            }
                         }
                     },
                     "additionalProperties": False
