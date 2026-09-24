@@ -80,6 +80,19 @@ SCREEN_SPEC_SCHEMA = {
                 "layoutFile": {
                     "type": "string",
                     "description": "Path to existing Layout JSON file (relative to layouts_directory, without .json extension). When set, components and bindings are imported from this file for documentation."
+                },
+                "platforms": {
+                    "type": "array",
+                    "minItems": 1,
+                    "uniqueItems": True,
+                    "items": {"enum": ["ios", "android", "web"]},
+                    "description": (
+                        "The platforms this screen exists on. Absent = every "
+                        "platform the project declares. Read by the branch-test "
+                        "generator and `jsonui-test contracts coverage`; a "
+                        "platform not listed gets no generated tests and no "
+                        "coverage requirement."
+                    )
                 }
             }
         },
@@ -1071,9 +1084,44 @@ SCREEN_SPEC_SCHEMA = {
                     ),
                     "additionalProperties": {"$ref": "#/$defs/branchMethodContract"}
                 },
-                "notes": {"type": "string"}
+                "notes": {"type": "string"},
+                "seedableState": {
+                    "type": "object",
+                    "description": (
+                        "ViewModel-internal state a branch may arrange: "
+                        "{name: type}. The harness seeds it and reads it back."
+                    ),
+                    "additionalProperties": {"type": "string"}
+                },
+                "unreachedOps": {
+                    "type": "object",
+                    "description": (
+                        "Declared operations no contracted method on this "
+                        "screen calls: {\"api.<op>\": {reason, platforms?}}. "
+                        "Removes the operation from the coverage requirement "
+                        "(counted as unreached-op)."
+                    ),
+                    "propertyNames": {"pattern": "^api\\.\\S+$"},
+                    "additionalProperties": {"$ref": "#/$defs/unreachedOp"}
+                }
             },
             "additionalProperties": False
+        },
+        "unreachedOp": {
+            "type": "object",
+            "required": ["reason"],
+            "properties": {
+                "reason": {"type": "string", "minLength": 1},
+                "platforms": {"$ref": "#/$defs/contractPlatforms"}
+            },
+            "additionalProperties": False
+        },
+        "contractPlatforms": {
+            "type": "array",
+            "minItems": 1,
+            "uniqueItems": True,
+            "items": {"enum": ["ios", "android", "web"]},
+            "description": "Limit to these platforms. Absent = every platform."
         },
         "branchCondition": {
             "type": "object",
@@ -1110,7 +1158,34 @@ SCREEN_SPEC_SCHEMA = {
                     "type": "array",
                     "minItems": 1,
                     "items": {"$ref": "#/$defs/branchEntry"}
+                },
+                "excludedOutcomes": {
+                    "type": "object",
+                    "description": (
+                        "API outcomes this method reaches but does not need a "
+                        "row for: {\"api.<op>\": {\"<status>\": {by, reason, "
+                        "platforms?}}}. <status> is an OpenAPI response key "
+                        "(\"404\", \"4XX\"; not \"default\"). by: unit | "
+                        "unreachable | unexpressible. Folding a status into "
+                        "another outcome is a row, not an exclusion."
+                    ),
+                    "propertyNames": {"pattern": "^api\\.\\S+$"},
+                    "additionalProperties": {
+                        "type": "object",
+                        "propertyNames": {"pattern": "^[1-5]([0-9]{2}|XX)$"},
+                        "additionalProperties": {"$ref": "#/$defs/excludedOutcome"}
+                    }
                 }
+            },
+            "additionalProperties": False
+        },
+        "excludedOutcome": {
+            "type": "object",
+            "required": ["by", "reason"],
+            "properties": {
+                "by": {"enum": ["unit", "unreachable", "unexpressible"]},
+                "reason": {"type": "string", "minLength": 1},
+                "platforms": {"$ref": "#/$defs/contractPlatforms"}
             },
             "additionalProperties": False
         },

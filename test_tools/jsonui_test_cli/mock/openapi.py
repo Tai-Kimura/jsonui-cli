@@ -51,6 +51,14 @@ class Operation:
     # level would miss the required ones.
     parameters: list = field(default_factory=list)
     request_body: dict = field(default_factory=dict)
+    # The EFFECTIVE security requirements, for the contract-gap check's
+    # app-wide rules ("a 401 on a call that carries credentials"): the
+    # operation's own `security` when it declares one — an empty list
+    # included, which means "no credentials" — and the document's otherwise.
+    # Each element is one requirement object and any one satisfies the
+    # operation (OR); `{}` is "anonymous is also allowed". Read here because
+    # nothing else in the toolchain parsed security at all.
+    security: list = field(default_factory=list)
 
 
 class OpenApiDoc:
@@ -93,6 +101,10 @@ class OpenApiDoc:
                     synthesized = True
                 parameters = list(item.get("parameters") or [])
                 parameters += list(op.get("parameters") or [])
+                security = (op["security"] if "security" in op
+                            else self.spec.get("security"))
+                security = ([r for r in security if isinstance(r, dict)]
+                            if isinstance(security, list) else [])
                 ops.append(Operation(
                     method=method.upper(),
                     path=path,
@@ -102,8 +114,22 @@ class OpenApiDoc:
                     responses=op.get("responses") or {},
                     parameters=[self.resolve_schema(p) for p in parameters],
                     request_body=op.get("requestBody") or {},
+                    security=security,
                 ))
         return ops
+
+    def security_schemes(self) -> dict:
+        """`components.securitySchemes`, name -> definition ({} when absent).
+
+        The definitions, not only the names: two documents read as one index
+        may each define a scheme, and the same name defined two ways is a
+        configuration error the reader has to be able to see.
+        """
+        schemes = (self.spec.get("components") or {}).get("securitySchemes")
+        return dict(schemes) if isinstance(schemes, dict) else {}
+
+    def security_scheme_names(self) -> set:
+        return set(self.security_schemes())
 
     # ---- $ref resolution ----------------------------------------------
 
