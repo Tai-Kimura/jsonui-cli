@@ -32,10 +32,13 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 JUI_TOOLS = Path(__file__).resolve().parents[1]
+REPO = JUI_TOOLS.parent
 
-APP_SPEC = {"type": "app_contracts_spec", "metadata": {"name": "My App", "description": "d"},
+APP_SPEC = {"type": "app_contracts_spec", "version": "1.0",
+            "metadata": {"name": "My App", "description": "d"},
             "unitContracts": [{"target": "ApiClient", "cases": [{"name": "x"}]}]}
 UNKNOWN_SPEC = {"type": "weird_spec", "metadata": {"name": "Mystery"}}
 
@@ -87,7 +90,16 @@ class VerifyCountsOnlyScreens(unittest.TestCase):
 
 
 class GenerateProjectBuildsOnlyScreens(unittest.TestCase):
+    """`generate project` validates every spec first — but only when
+    `document_tools` is importable, which depends on what ran before (see
+    test_generate_project_scope.py). Each arm here pins it: the repository
+    root is put on the path, so validation runs, or the validator is made
+    unimportable, so it does not. Unpinned, the unknown-type arm passed alone
+    and failed in the full suite."""
+
     def setUp(self):
+        if str(REPO) not in sys.path:
+            sys.path.insert(0, str(REPO))
         self._tmp = tempfile.TemporaryDirectory()
         self.root = Path(self._tmp.name)
         _write(self.root / "jui.config.json", {
@@ -105,7 +117,6 @@ class GenerateProjectBuildsOnlyScreens(unittest.TestCase):
                          "viewModel": {"methods": [], "vars": []}},
             "stateManagement": {"uiVariables": []}})
         _write(specs / "app_contracts.spec.json", APP_SPEC)
-        _write(specs / "mystery.spec.json", UNKNOWN_SPEC)
         self._cwd = os.getcwd()
         os.chdir(self.root)
 
@@ -123,13 +134,33 @@ class GenerateProjectBuildsOnlyScreens(unittest.TestCase):
         generated = sorted(p.name for p in (self.root / "ios").rglob("*") if p.is_file())
         return rc, generated, out.getvalue()
 
-    def test_no_screen_is_made_from_a_non_screen_or_an_unknown_type(self):
+    def test_no_screen_is_made_from_an_app_spec(self):
         rc, generated, out = self._generate()
         self.assertEqual(rc, 0, out)
-        # Before: "My AppViewModel.swift" and "MysteryViewModel.swift".
-        self.assertFalse([n for n in generated if "My App" in n or "Mystery" in n], generated)
+        self.assertNotIn("skipping validation", out)   # the validator ran
+        # Before: "My AppViewModel.swift".
+        self.assertFalse([n for n in generated if "My App" in n], generated)
+        self.assertNotIn("has type", out)   # a known non-screen, silently
+
+    def test_with_the_validator_an_unknown_type_stops_the_run_first(self):
+        # Not this fix's branch: the validator rejects a type it does not
+        # know before the loop is reached. Pinned so the arm below is known
+        # to be the only way to reach the loop with one.
+        _write(self.root / "docs/screens/json/mystery.spec.json", UNKNOWN_SPEC)
+        rc, generated, out = self._generate()
+        self.assertEqual(rc, 1, out)
+        self.assertIn("Validation failed for mystery.spec.json", out)
+
+    def test_without_the_validator_an_unknown_type_is_skipped_and_said(self):
+        _write(self.root / "docs/screens/json/mystery.spec.json", UNKNOWN_SPEC)
+        with mock.patch.dict(sys.modules,
+                             {"document_tools.jsonui_doc_cli.spec_doc.validator": None}):
+            rc, generated, out = self._generate()
+        self.assertIn("skipping validation", out)
+        self.assertEqual(rc, 0, out)
+        # Before: "MysteryViewModel.swift".
+        self.assertFalse([n for n in generated if "Mystery" in n], generated)
         self.assertIn("mystery.spec.json has type 'weird_spec'", out)
-        self.assertNotIn("app_contracts.spec.json has type", out)   # a known non-screen, silently
 
     def test_the_screen_is_still_made(self):
         # The control: the loop still builds what it should.
