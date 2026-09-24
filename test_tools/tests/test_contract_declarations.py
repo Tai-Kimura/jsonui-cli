@@ -273,7 +273,8 @@ class ApiOutcomeRulesShape(unittest.TestCase):
 
 def _document_with(site: str, value) -> dict:
     """A bare document holding `value` at `site` (`*` → a method, `[]` → one element)."""
-    doc: dict = {"type": APP_CONTRACTS_SPEC if site == "apiOutcomeRules" else "screen_spec"}
+    doc: dict = {"type": APP_CONTRACTS_SPEC if site in ("apiOutcomeRules", "harnessConditions")
+                 else "screen_spec"}
     node = doc
     parts = site.replace("*", "anyMethod").split(".")
     for part in parts[:-1]:

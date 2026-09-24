@@ -470,14 +470,15 @@ class SpecValidator:
 
     #: Every key an app contracts spec may carry.
     _APP_SPEC_KEYS = ("type", "version", "metadata", "unitContracts",
-                      "apiOutcomeRules", "relatedFiles")
+                      "apiOutcomeRules", "harnessConditions", "relatedFiles")
 
     def _validate_contract_declarations(self, data: dict, result: SpecValidationResult):
         """The shape of the contract-gap declarations, through their one parser.
 
         The sites in `_CONTRACT_DECLARATION_SITES` (`excludedOutcomes`,
         `unreachedOps`, a row's `alsoStatuses`, `apiOutcomeRules`,
-        `metadata.platforms`) are read by `jsonui-test contracts coverage`;
+        `harnessConditions`, `metadata.platforms`) are read by
+        `jsonui-test contracts coverage`;
         their parser lives in test_tools so this check and that command
         cannot accept different documents. Imported HERE, not at module
         level: a module-level import that failed would fall into
@@ -509,6 +510,7 @@ class SpecValidator:
     #: trailing `[]` means each element of that list.
     _CONTRACT_DECLARATION_SITES = (
         "apiOutcomeRules",
+        "harnessConditions",
         "metadata.platforms",
         "branchContracts.unreachedOps",
         "branchContracts.methods.*.excludedOutcomes",
@@ -2615,6 +2617,32 @@ class SpecValidator:
                     ),
                 ))
             return
+        if key.startswith("harness."):
+            # A precondition outside the ViewModel that the consumer's
+            # arrangeCondition hook sets up (design v4.11, P2d) — not `cond`,
+            # which names a branchContracts.conditions witness. The shape is
+            # checked here; whether the app contracts spec declares the name
+            # and the value needs both documents, and `jsonui-test contracts
+            # coverage` / `generate branch-tests` check it.
+            name = key[len("harness."):]
+            if not re.match(r"^[A-Za-z][A-Za-z0-9_]*$", name):
+                result.errors.append(SpecValidationMessage(
+                    path=entry_path,
+                    message=(
+                        f"'{name}' is not a harness condition name — a letter, "
+                        "then letters, digits or '_' (declared in the app "
+                        "contracts spec's harnessConditions)"
+                    ),
+                ))
+            if not isinstance(value, str) or not value:
+                result.errors.append(SpecValidationMessage(
+                    path=entry_path,
+                    message=(
+                        "when harness.<name> value must be one of the "
+                        "condition's declared values, as a string"
+                    ),
+                ))
+            return
         if key.startswith("api."):
             op = key[len("api."):]
             if op.endswith(".request") or op.count(".") > 1:
@@ -2638,7 +2666,10 @@ class SpecValidator:
             path=entry_path,
             message=(
                 f"Unknown when key '{key}' — allowed: 'data.<field>', "
-                "'state.<name>', 'arg.<name>', 'api.<op>', 'cond'"
+                "'state.<name>', 'arg.<name>', 'api.<op>', 'cond' (a "
+                "branchContracts.conditions witness), 'harness.<name>' (a "
+                "precondition the harness sets up, declared in the app "
+                "contracts spec's harnessConditions)"
             ),
         ))
 
