@@ -9,8 +9,37 @@ from __future__ import annotations
 
 import json
 import re
+import sys
 from pathlib import Path
 from typing import Any
+
+#: An event attribute: `onClick`, `onLongPress`, … — any `on` + capital.
+#: Was a list of seven keys, and every other event's handler was imported as
+#: a String variable.
+_EVENT_KEY = re.compile(r"^on[A-Z]")
+
+
+def _binding_grammar():
+    """`jui_cli.core.layout_facts.value_roots`: the Ruby binding grammar,
+    ported once and held to Ruby by an arm (design §6.1 P2.5). This module
+    used to read a binding only when a value was wholly `@{...}` and took
+    the text between the braces as the name — `@{!isOn}` became a variable
+    `!isOn`, `@{a ?? 'x'}` one called `a ?? 'x'`, and `"Hi @{name}"` none.
+
+    None when jui_cli is not importable beside this package; the caller then
+    reads whole values only, as before, and says so once.
+    """
+    try:
+        jui_tools = Path(__file__).resolve().parents[3] / "jui_tools"
+        if jui_tools.is_dir() and str(jui_tools) not in sys.path:
+            sys.path.insert(0, str(jui_tools))
+        from jui_cli.core.layout_facts import BINDING_OCCURRENCE, value_roots
+    except ImportError as exc:
+        print(f"jsonui-doc: layout bindings read whole values only — the binding "
+              f"grammar (jui_cli.core.layout_facts) is not importable ({exc})",
+              file=sys.stderr)
+        return None
+    return BINDING_OCCURRENCE, value_roots
 
 
 def import_layout_into_spec(spec_data: dict, layouts_dir: Path) -> dict:
@@ -187,6 +216,8 @@ def _extract_from_layout(layout: dict) -> dict:
     layout_tree: dict = {}
     bindings: list[str] = []
     event_handlers: list[str] = []
+    if not _GRAMMAR:
+        _GRAMMAR.append(_binding_grammar())
 
     # Skip data section
     data_section = layout.get("data", {})
@@ -227,6 +258,10 @@ def _extract_from_layout(layout: dict) -> dict:
     }
 
 
+#: Loaded once, lazily, by `_extract_from_layout`.
+_GRAMMAR: list = []
+
+
 def _node_to_component(
     node: dict,
     bindings: list[str],
@@ -260,19 +295,31 @@ def _node_to_component(
     skip = {"type", "id", "child", "children", "data", "sections",
             "cellClasses", "include", "tabs", "responsive", "platform"}
 
+    grammar = _GRAMMAR[0] if _GRAMMAR else None
     for k, v in node.items():
         if k in skip:
             continue
-        # Detect bindings
-        if isinstance(v, str) and v.startswith("@{") and v.endswith("}"):
+        # Detect bindings — every `@{...}` occurrence, read by the one grammar:
+        # the ROOTS it names (`!` stripped, `??` defaults and string literals
+        # dropped, `a.b` / `a[0]` counted as `a`, a cell's `data.` skipped).
+        if isinstance(v, str) and "@{" in v and grammar is not None:
+            occurrence, roots_of = grammar
+            if not occurrence.search(v):
+                style[k] = v
+                continue
+            whole = v.strip()
+            shown = whole[2:-1] if (whole.startswith("@{") and whole.endswith("}")
+                                    and whole.count("@{") == 1) else v
+            comp.setdefault("binding", {})[k] = shown
+            target = event_handlers if _EVENT_KEY.match(k) else bindings
+            for root in sorted(roots_of(v)):
+                if root not in target:
+                    target.append(root)
+        elif isinstance(v, str) and v.startswith("@{") and v.endswith("}"):
+            # Without the grammar: whole values only, as before.
             var_name = v[2:-1]
-            if k in ("onClick", "onLongPress", "onValueChange", "onTextChange",
-                      "onSelect", "onTabChange", "onSubmit"):
-                event_handlers.append(var_name)
-                comp.setdefault("binding", {})[k] = var_name
-            else:
-                bindings.append(var_name)
-                comp.setdefault("binding", {})[k] = var_name
+            (event_handlers if _EVENT_KEY.match(k) else bindings).append(var_name)
+            comp.setdefault("binding", {})[k] = var_name
         elif k not in ("style",):
             style[k] = v
 
