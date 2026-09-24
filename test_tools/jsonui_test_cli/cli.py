@@ -1903,6 +1903,7 @@ def _generate_one_branch_test(args, screen: str, app_rules=None):
             # config the run was pointed at: a platform outside
             # config ∩ metadata.platforms generates nothing for the screen.
             config_platforms=_project_platforms(None),
+            condition_controls=getattr(args, "condition_controls", False),
             app_rules=app_rules,
         )
     except BranchTestGenerationError as e:
@@ -1983,6 +1984,11 @@ def _print_branch_generation(report, show_siblings: bool = True) -> None:
           + (f"{also} more from alsoStatuses, " if also else "")
           + f"{report.note_branches} note-only listed as comments)")
     print(f"  {report.runtime_file}  (shared runtime)")
+    controls = getattr(report, "condition_controls", 0)
+    if controls:
+        # Only when asked for and there are any.
+        print(f"  condition controls: {controls} (each runs its row with every harness "
+              f"condition at its default; condition_without_effect is printed when it holds)")
     siblings = _sibling_branch_tests(report) if show_siblings else []
     if siblings:
         # The runtime is one file for the whole directory, so a release that
@@ -3126,6 +3132,13 @@ def main():
     gen_branch_parser.add_argument(
         "--module",
         help="App module name for @testable import (required for ios)"
+    )
+    gen_branch_parser.add_argument(
+        "--condition-controls", action="store_true",
+        help="For each row that names a harness condition away from its default, "
+             "also emit a control that runs the row with every default and never "
+             "fails; it prints condition_without_effect when the row still holds "
+             "(the condition changes nothing the row asserts). Doubles those rows"
     )
 
     # Unit contracts: the spec declares the SET of hand-written cases; the

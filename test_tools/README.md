@@ -651,6 +651,16 @@ declaration error in `generate branch-tests` and in `contracts coverage`
 `condition_rows`. An app without `harnessConditions` gets none of this: its
 generated files are byte for byte what they were.
 
+Whether a condition changes anything is a question the rows do not answer: a
+row naming `harness.session: "present"` stays green if the session decides
+nothing it asserts. `generate branch-tests --condition-controls` adds, after
+each row that names a condition away from its default, a **control**
+(`[control: session=absent instead of present]`) that runs the same act and
+assertions with every condition at its default and never fails; when all of
+them still hold it prints `condition_without_effect: <row> …` (info, on the
+console — a JSON reporter does not show it). Off by default: it doubles those
+rows.
+
 ### `seedableState` on a view model built from `init` arguments
 
 `branchContracts.seedableState` names ViewModel-internal state a branch may

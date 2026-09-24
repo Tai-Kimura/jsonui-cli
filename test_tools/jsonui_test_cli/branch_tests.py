@@ -617,6 +617,8 @@ class GenerationReport:
     platform_skipped: int = 0
     #: Generated tests that are `alsoStatuses` copies (not in declared_branches).
     also_statuses_rows: int = 0
+    #: P2e(b): condition controls emitted (only with `--condition-controls`).
+    condition_controls: int = 0
     #: True when the platform is outside the screen's effective platforms
     #: (`jui.config.json` platforms ∩ `metadata.platforms`).
     platform_excluded: bool = False
@@ -1247,6 +1249,12 @@ class Row:
     #: declaration order — the row's `harness.<name>` or the default. Empty
     #: when the app declares none, and then no renderer emits a line of it.
     conditions: list = field(default_factory=list)
+    #: P2e(b) (`--condition-controls`): set on a CONTROL copy of a row that
+    #: names a harness condition away from its default — the original's
+    #: `[(name, value)]` for those conditions, while `conditions` carries the
+    #: defaults. The copy runs the same act and assertions without failing and
+    #: reports `condition_without_effect` when they all still hold.
+    control_of: list = field(default_factory=list)
 
 
 @dataclass
@@ -1838,7 +1846,9 @@ def _rows_in_order(contract: dict, method_name: str, rows: list, platform: str,
             continue
         report.declared_branches += 1
         for row in by_number.get(i + 1, []):
-            if row.also is not None:
+            if row.control_of:
+                report.condition_controls += 1
+            elif row.also is not None:
                 report.also_statuses_rows += 1
             yield ("row", row)
 
@@ -1848,7 +1858,39 @@ def _row_title(contract: dict, row: "Row") -> str:
     title = _branch_title(row.number, original)
     if row.also is not None:
         title += f" [+{row.also[0]} via {row.also[1]}]"
+    if row.control_of:
+        title += f" [control: {_control_label(row)}]"
     return title
+
+
+def _control_label(row: "Row") -> str:
+    """`session=absent instead of present` — the defaults a control runs with."""
+    defaults = dict(row.conditions)
+    return ", ".join(f"{name}={defaults[name]} instead of {value}"
+                     for name, value in row.control_of)
+
+
+def with_condition_controls(rows: list, conditions) -> list:
+    """P2e(b): each row naming a condition away from its default, followed by a
+    CONTROL copy arranged with every default. Rows naming none are unchanged."""
+    defaults = {c.name: c.default for c in (conditions or [])}
+    out: list = []
+    for row in rows:
+        out.append(row)
+        changed = [(name, value) for name, value in row.conditions
+                   if name in defaults and value != defaults[name]]
+        if not changed:
+            continue
+        control = copy.copy(row)
+        control.conditions = [(name, defaults.get(name, value)) for name, value in row.conditions]
+        control.control_of = changed
+        out.append(control)
+    return out
+
+
+#: What a control reports, on every face: the row still holds with the
+#: conditions at their defaults, so the condition does not change what it asserts.
+CONDITION_WITHOUT_EFFECT = "condition_without_effect"
 
 
 def render_test_file(
@@ -1878,6 +1920,7 @@ def render_test_file(
     lines.append("import {")
     red, _gate = unmatched_gate()
     lines.append("  installFetchMock, partialMismatches, "
+                 + ("reportConditionWithoutEffect, " if any(r.control_of for r in rows) else "")
                  + ("" if red else "reportUnmatched, ")
                  + "resolveString, seedState, settle,\n  type RouteSpec,")
     lines.append("} from \"./jsonui-branch-runtime\";")
@@ -1996,6 +2039,7 @@ def _render_branch(
     for fname in data_refs:
         out.append(f"      const ref_{fname} = h.readField({_ts(fname)});")
     call_args = ", ".join(args)
+    act_start = len(out)
     out.append(f"      await (h.vm as any).{method_name}({call_args});")
     out.append("      await settle();")
 
@@ -2055,6 +2099,13 @@ def _render_branch(
                     f"      expect(h.readField({_ts(fname)})).toEqual("
                     f"{_render_expected(value)});"
                 )
+    if row.control_of:
+        # P2e(b): the act and every assertion, run without failing the test.
+        body = ["  " + line for line in out[act_start:]]
+        out[act_start:] = (["      let holds = true;", "      try {"] + body
+                           + ["      } catch {", "        holds = false;", "      }",
+                              f"      reportConditionWithoutEffect(holds, "
+                              f"{_ts(_row_title(contract, row))}, {_ts(_control_label(row))});"])
     out.append("    } finally {")
     out.append("      rec.restore();")
     out.append("    }")
@@ -2280,6 +2331,17 @@ export function installFetchMock(
  * the declared "null" outcome. */
 /** Membership comparison for an unordered collection: every expected element
  *  must match a distinct actual element, in any order. */
+/** P2e(b): a condition control ran the row with its conditions at their
+ * defaults; when every assertion still held, the condition does not change
+ * what the row asserts. Info, never a failure. */
+export function reportConditionWithoutEffect(holds: boolean, row: string, defaults: string): void {
+  if (!holds) return;
+  console.info(
+    `condition_without_effect: ${row} holds with ${defaults} too — ` +
+      "the condition does not change what the row asserts"
+  );
+}
+
 /** Before the release that fails a generated test on them (P2e(a)): one
  * warning naming the requests in the act window no declared route answered.
  * `gateFrom` is that release, or null when none is announced. */
@@ -2765,6 +2827,8 @@ def _render_kotlin_branch(
     name = f"{method_name} branch {number}"
     if row.also is not None:
         name += f" also {row.also[0]}"
+    if row.control_of:
+        name += " control"
 
     out: list[str] = []
     out.append("")
@@ -2799,6 +2863,7 @@ def _render_kotlin_branch(
     for fname in data_refs:
         out.append(f"      val ref_{fname} = h.readField({_kt_str(fname)})")
     call_args = ", ".join(args)
+    act_start = len(out)
     out.append(f"      h.invoke({_kt_str(method_name)}{', ' + call_args if call_args else ''})")
     out.append("      h.settle()")
 
@@ -2854,6 +2919,14 @@ def _render_kotlin_branch(
                     f"      assertFieldEquals({_kt_expected(value)}, "
                     f"h.readField({_kt_str(fname)}))"
                 )
+    if row.control_of:
+        # P2e(b): see the web emitter. An assertion throws, so a caught one
+        # means the row does not hold with the defaults.
+        body = ["  " + line for line in out[act_start:]]
+        out[act_start:] = (["      val holds = try {"] + body
+                           + ["        true", "      } catch (e: Throwable) {", "        false", "      }",
+                              f"      reportConditionWithoutEffect(holds, "
+                              f"{_kt_str(_row_title(contract, row))}, {_kt_str(_control_label(row))})"])
     out.append("    }")
     out.append("  }")
     return out
@@ -2972,6 +3045,13 @@ class Recorder(routeOps: Set<String>? = null) {
    * the 599), as "METHOD path", each once, sorted. */
   fun unmatchedCalls(): List<String> =
     windowed().filter { it.op == "(unmatched)" }.map { "${it.method} ${it.path}" }.distinct().sorted()
+}
+
+/** P2e(b): see the web runtime. Info, never a failure. */
+fun reportConditionWithoutEffect(holds: Boolean, row: String, defaults: String) {
+  if (!holds) return
+  println("condition_without_effect: $row holds with $defaults too — " +
+    "the condition does not change what the row asserts")
 }
 
 /** Before the release that fails a generated test on them (P2e(a)): one
@@ -3584,6 +3664,15 @@ def render_swift_test_file(
     # factory, which is hand-written and out of this file's reach.)
     lines.append(f"nonisolated final class {pascal}BranchesTest: XCTestCase {{")
     lines.append("")
+    if any(r.control_of for r in rows):
+        # P2e(b), only when there are condition controls (an app without them
+        # generates what it did): what an XCTAssert records while a control
+        # runs is counted, not reported — a control never fails.
+        lines.append("  private var controlIssues: Int? = nil")
+        lines.append("  override func record(_ issue: XCTIssue) {")
+        lines.append("    if let n = controlIssues { controlIssues = n + 1 } else { super.record(issue) }")
+        lines.append("  }")
+        lines.append("")
     lines.append("  private let routes: [RouteSpec] = [")
     lines.append(",\n".join(route_lines))
     lines.append("  ]")
@@ -3636,6 +3725,8 @@ def _render_swift_branch(
     name = f"test_{method_name}_branch_{number}"
     if row.also is not None:
         name += f"_also_{row.also[0]}"
+    if row.control_of:
+        name += "_control"
 
     out: list[str] = []
     out.append("")
@@ -3670,6 +3761,7 @@ def _render_swift_branch(
     for fname in data_refs:
         out.append(f"      let ref_{fname} = h.readField({_swift_str(fname)})")
     call_args = ", ".join(args)
+    act_start = len(out)
     out.append(f"      h.invoke({_swift_str(method_name)}, args: [{call_args}])")
     out.append("      h.settle()")
 
@@ -3724,6 +3816,15 @@ def _render_swift_branch(
                     f"      assertFieldEquals({_swift_expected(value)}, "
                     f"h.readField({_swift_str(fname)}))"
                 )
+    if row.control_of:
+        # P2e(b): XCTAssert* records rather than throws, so the class counts
+        # what is recorded while a control runs (see its `record` override).
+        body = out[act_start:]
+        out[act_start:] = (["      self.controlIssues = 0"] + body
+                           + ["      let holds = (self.controlIssues ?? 0) == 0",
+                              "      self.controlIssues = nil",
+                              f"      reportConditionWithoutEffect(holds, "
+                              f"{_swift_str(_row_title(contract, row))}, {_swift_str(_control_label(row))})"])
     out.append("    }")
     out.append("  }")
     return out
@@ -3846,6 +3947,13 @@ nonisolated final class Recorder {
   func unmatchedCalls() -> [String] {
     Array(Set(windowed.filter { $0.op == "(unmatched)" }.map { "\\($0.method) \\($0.path)" })).sorted()
   }
+}
+
+/// P2e(b): see the web runtime. Info, never a failure.
+nonisolated func reportConditionWithoutEffect(_ holds: Bool, _ row: String, _ defaults: String) {
+  if !holds { return }
+  print("condition_without_effect: \\(row) holds with \\(defaults) too — "
+    + "the condition does not change what the row asserts")
 }
 
 /// Before the release that fails a generated test on them (P2e(a)): one
@@ -4597,6 +4705,7 @@ def generate_branch_tests(
     check: bool = False,
     config_platforms: list | None = None,
     app_rules: "AppRules | None" = None,
+    condition_controls: bool = False,
 ) -> GenerationReport:
     """Generate (or, with ``check``, compare) one screen's branch tests.
 
@@ -4682,6 +4791,8 @@ def generate_branch_tests(
     routes, rows = bindings.routes, bindings.rows
     for row in rows:
         row.conditions = arranged_conditions(app_rules.conditions, row.branch.get("when"))
+    if condition_controls:
+        rows = with_condition_controls(rows, app_rules.conditions)
     overlaps = [describe_overlap(a, b) for a, b in bindings.overlaps]
 
     if platform == "android":
