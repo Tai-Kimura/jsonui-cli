@@ -573,6 +573,32 @@ construction settle, writes the arranged state, and only then calls
 the mark, so what the constructor fetched is not read as the method's doing.
 A hand-written test that never calls `mark()` reads every call, as before.
 
+### Requests no route declares
+
+A request during act that matches no declared route is answered 599 by the
+runtime — a response no server returns — so whatever the view model did next
+is made up. `rec.unmatchedCalls()` lists those requests in the window as
+`METHOD path`. Until the release `UNMATCHED_GATE_FROM` names, every generated
+test prints one warning per test that has any (`… reached no declared route
+and was answered 599 …; from jsonui-cli <release> this fails the test`); from
+that release it fails the test and names them. Unset, the warning names no
+release. Clear one by declaring the route and its scenarios (a repositories /
+useCases `endpoint` and a mock); a call the app's network layer makes around
+every request is admitted once, with `apiOutcomeRules` (below).
+
+### Side calls the screen does not declare
+
+A rule's `sideCalls` name operations the app's network layer makes around a
+call — ApiClient's logout after a 401, say. When the screen does not declare
+such an operation, the generated test serves it anyway, as a **side route**:
+under its operationId, with its mock's default scenario (`generate
+branch-tests` prints a `side routes:` line). It is admitted only in the tests
+whose served statuses the rule names — a call to it anywhere else is the
+bound's red — and it is not an endpoint of the screen: `contracts coverage`
+requires nothing of it. An operationId that is already the screen's name for a
+different endpoint stops generation. An app without `apiOutcomeRules`
+generates what it did.
+
 ### Harness conditions (`harnessConditions`)
 
 When a view model's calls depend on something outside it — a signed-in

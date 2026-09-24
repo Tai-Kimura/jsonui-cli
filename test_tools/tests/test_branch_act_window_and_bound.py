@@ -52,6 +52,9 @@ _WINDOW_EXPECTED = {
     "unexpected-ignores-unmatched": True,
     "unexpected-ignores-pre-mark": True,
     "unexpected-empty-when-allowed": True,
+    # P2e(a): the requests no declared route answered, as "METHOD path".
+    "unmatched-unmarked-sees-the-early-one": True,
+    "unmatched-names-only-the-window": True,
 }
 
 #: Rows that exist only because `mark()` moves the start of the window
@@ -59,6 +62,7 @@ _WINDOW_EXPECTED = {
 _WINDOW_CONTROL_ROWS = {
     "pre-mark-not-counted", "pre-mark-no-body", "pre-mark-not-matched",
     "unexpected-ignores-pre-mark", "post-mark-counted",
+    "unmatched-names-only-the-window",
 }
 
 
@@ -103,7 +107,10 @@ function check(name: string, got: boolean) {
 const rec = installFetchMock(ROUTES);
 await fetch("https://x.test/a");
 await fetch("https://x.test/b", { method: "POST", body: JSON.stringify({ before: true }) });
+await fetch("https://x.test/early", { method: "POST" });
 check("unmarked-sees-everything", rec.countFor("a") === 1 && rec.countFor("b") === 1);
+check("unmatched-unmarked-sees-the-early-one",
+      JSON.stringify(rec.unmatchedCalls()) === '["POST /early"]');
 rec.mark();
 check("pre-mark-not-counted", rec.countFor("a") === 0);
 check("pre-mark-no-body", rec.lastBodyFor("b") === undefined);
@@ -117,6 +124,9 @@ check("unexpected-names-the-extra-op-once",
       JSON.stringify(rec.unexpectedOps(["a"])) === '["b"]');
 check("unexpected-ignores-unmatched", !rec.unexpectedOps(["a"]).includes("(unmatched)"));
 check("unexpected-empty-when-allowed", rec.unexpectedOps(["a", "b"]).length === 0);
+await fetch("https://x.test/elsewhere");
+check("unmatched-names-only-the-window",
+      JSON.stringify(rec.unmatchedCalls()) === '["GET /elsewhere"]');
 rec.restore();
 '''
 
@@ -162,7 +172,9 @@ func call(_ rec: Recorder, _ op: String, _ body: Any? = nil) {
 let rec = Recorder(routeOps: ["a", "b"])
 call(rec, "a")
 call(rec, "b", ["before": true])
+rec.calls.append(RecordedCall(op: "(unmatched)", method: "POST", path: "/early", body: nil))
 check("unmarked-sees-everything", rec.countFor("a") == 1 && rec.countFor("b") == 1)
+check("unmatched-unmarked-sees-the-early-one", rec.unmatchedCalls() == ["POST /early"])
 rec.mark()
 check("pre-mark-not-counted", rec.countFor("a") == 0)
 check("pre-mark-no-body", rec.lastBodyFor("b") == nil)
@@ -175,13 +187,20 @@ check("post-mark-counted", rec.countFor("b") == 2)
 check("unexpected-names-the-extra-op-once", rec.unexpectedOps(["a"]) == ["b"])
 check("unexpected-ignores-unmatched", !rec.unexpectedOps(["a"]).contains("(unmatched)"))
 check("unexpected-empty-when-allowed", rec.unexpectedOps(["a", "b"]).isEmpty)
+call(rec, "(unmatched)")
+check("unmatched-names-only-the-window", rec.unmatchedCalls() == ["GET /(unmatched)"])
+// The warning before the gate: compiled and run here (nothing else compiles
+// the file-scope Swift runtime without an app's XCTest target).
+reportUnmatched(rec.unmatchedCalls(), "9.9.9")
+reportUnmatched([], nil)
 '''
 
 
 def _run_swift_window(tmp_path: Path, runtime: str) -> tuple[dict, str]:
     parts = [_swift_block(runtime, "struct RecordedCall {"),
              _swift_block(runtime, "private func quotedValue("),
-             _swift_block(runtime, "final class Recorder {")]
+             _swift_block(runtime, "final class Recorder {"),
+             _swift_block(runtime, "func reportUnmatched(")]
     (tmp_path / "shim.swift").write_text(_SWIFT_SHIM, encoding="utf-8")
     (tmp_path / "runtime.swift").write_text(
         "import Foundation\n\n" + "\n\n".join(parts), encoding="utf-8")
@@ -218,7 +237,9 @@ fun main() {
   val rec = Recorder(setOf("a", "b"))
   call(rec, "a")
   call(rec, "b", "{\\"before\\":true}")
+  rec.calls.add(RecordedCall("(unmatched)", "POST", "/early", null))
   check("unmarked-sees-everything", rec.countFor("a") == 1 && rec.countFor("b") == 1)
+  check("unmatched-unmarked-sees-the-early-one", rec.unmatchedCalls() == listOf("POST /early"))
   rec.mark()
   check("pre-mark-not-counted", rec.countFor("a") == 0)
   check("pre-mark-no-body", rec.lastBodyFor("b") == null)
@@ -231,6 +252,11 @@ fun main() {
   check("unexpected-names-the-extra-op-once", rec.unexpectedOps(setOf("a")) == listOf("b"))
   check("unexpected-ignores-unmatched", "(unmatched)" !in rec.unexpectedOps(setOf("a")))
   check("unexpected-empty-when-allowed", rec.unexpectedOps(setOf("a", "b")).isEmpty())
+  call(rec, "(unmatched)")
+  check("unmatched-names-only-the-window", rec.unmatchedCalls() == listOf("GET /(unmatched)"))
+  // The warning before the gate, compiled and run (see the Swift probe).
+  reportUnmatched(rec.unmatchedCalls(), "9.9.9")
+  reportUnmatched(emptyList(), null)
 }
 '''
 
@@ -243,7 +269,7 @@ def _kotlin_window_source(runtime: str) -> str:
         return runtime[i:runtime.index("\n}\n", i) + 3]
 
     return "\n\n".join([recorded_call, block("private fun quotedValue("),
-                        block("class Recorder(")]) + _KOTLIN_WINDOW_MAIN
+                        block("class Recorder("), block("fun reportUnmatched(")]) + _KOTLIN_WINDOW_MAIN
 
 
 def _run_kotlin_window(tmp_path: Path, runtime: str) -> tuple[dict, str]:

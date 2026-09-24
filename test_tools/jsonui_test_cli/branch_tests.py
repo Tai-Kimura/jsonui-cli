@@ -1773,6 +1773,48 @@ UNEXPECTED_OPS_MESSAGE = (
     "with apiOutcomeRules")
 
 
+#: P2e(a) (design v4.14): a request in the act window that no declared route
+#: answered got the runtime's 599 — a response no server returns — so what the
+#: view model did next is made up (#28). From the release this literal names,
+#: every generated test fails on one; before it, the test prints a warning per
+#: request instead, and that warning is the notice. No default (the same rule
+#: as validate's coverage gate, v4.13): a version derived from the running one
+#: agrees with itself on every build and would never switch the red on. Set it
+#: when the release that announces the red is cut; unset, the warning promises
+#: no release.
+UNMATCHED_GATE_FROM: str | None = None
+
+UNMATCHED_MESSAGE = (
+    "requests in the act window reached no declared route — the runtime "
+    "answered them with a 599 no server returns, so what the view model did "
+    "next is made up. Declare the route and its scenarios (dataFlow + mock); "
+    "a call the app's network layer makes around every request is admitted "
+    "once, with apiOutcomeRules sideCalls")
+
+
+def _version_tuple(version: str) -> tuple:
+    try:
+        return tuple(int(part) for part in version.strip().split("."))
+    except ValueError:
+        raise BranchTestGenerationError(
+            f"UNMATCHED_GATE_FROM '{version}' is not a version of numbers "
+            "separated by dots") from None
+
+
+def _running_version() -> str:
+    from . import __version__
+    return __version__
+
+
+def unmatched_gate() -> tuple[bool, str | None]:
+    """(red, gate): whether unmatched requests in the act window fail the
+    generated test, and the release that makes them fail (None when unset)."""
+    gate = UNMATCHED_GATE_FROM
+    if not gate:
+        return False, None
+    return _version_tuple(_running_version()) >= _version_tuple(gate), gate
+
+
 def _rows_in_order(contract: dict, method_name: str, rows: list, platform: str,
                    report: "GenerationReport"):
     """Yield ("row", row) and ("skipped", number, platforms) in branch order.
@@ -1834,7 +1876,10 @@ def render_test_file(
     lines.append("// for VM construction, screenRoutes, and string resolution.")
     lines.append("import { describe, expect, it } from \"vitest\";")
     lines.append("import {")
-    lines.append("  installFetchMock, partialMismatches, resolveString, seedState, settle,\n  type RouteSpec,")
+    red, _gate = unmatched_gate()
+    lines.append("  installFetchMock, partialMismatches, "
+                 + ("" if red else "reportUnmatched, ")
+                 + "resolveString, seedState, settle,\n  type RouteSpec,")
     lines.append("} from \"./jsonui-branch-runtime\";")
     lines.append(f"import {{ createHarness }} from \"{harness_import}\";")
     if any(row.conditions for row in rows):
@@ -1968,6 +2013,11 @@ def _render_branch(
         f"      expect(rec.unexpectedOps({_ts(row.allowed_ops)}), "
         f"{_ts(UNEXPECTED_OPS_MESSAGE)}).toEqual([]);"
     )
+    red, gate = unmatched_gate()
+    if red:
+        out.append(f"      expect(rec.unmatchedCalls(), {_ts(UNMATCHED_MESSAGE)}).toEqual([]);")
+    else:
+        out.append(f"      reportUnmatched(rec.unmatchedCalls(), {_ts(gate) if gate else 'null'});")
 
     for key, value in then.items():
         if key == "api":
@@ -2100,6 +2150,9 @@ export interface FetchRecorder {
   /** The declared ops called in the window that `allowed` does not name,
    * each once, sorted. Empty when every call was one the contract expects. */
   unexpectedOps(allowed: string[]): string[];
+  /** The requests in the window that no declared route answered (they got
+   * the 599), as "METHOD path", each once, sorted. */
+  unmatchedCalls(): string[];
   restore(): void;
 }
 
@@ -2209,6 +2262,12 @@ export function installFetchMock(
         .filter((op) => op !== "(unmatched)" && !ok.has(op));
       return [...new Set(extra)].sort();
     },
+    unmatchedCalls() {
+      const seen = windowed()
+        .filter((c) => c.op === "(unmatched)")
+        .map((c) => `${c.method} ${c.path}`);
+      return [...new Set(seen)].sort();
+    },
     restore() {
       globalThis.fetch = original;
     },
@@ -2221,6 +2280,19 @@ export function installFetchMock(
  * the declared "null" outcome. */
 /** Membership comparison for an unordered collection: every expected element
  *  must match a distinct actual element, in any order. */
+/** Before the release that fails a generated test on them (P2e(a)): one
+ * warning naming the requests in the act window no declared route answered.
+ * `gateFrom` is that release, or null when none is announced. */
+export function reportUnmatched(calls: string[], gateFrom: string | null): void {
+  if (calls.length === 0) return;
+  console.warn(
+    `jsonui-test branch test: ${calls.join(", ")} reached no declared route and ` +
+      "was answered 599, which no server returns — declare the route and its " +
+      "scenarios (dataFlow + mock)" +
+      (gateFrom ? `; from jsonui-cli ${gateFrom} this fails the test` : "")
+  );
+}
+
 export function setMismatches(
   actual: unknown[],
   expected: unknown[],
@@ -2743,6 +2815,12 @@ def _render_kotlin_branch(
         f"      assertEquals({_kt_str(UNEXPECTED_OPS_MESSAGE)}, emptyList<String>(), "
         f"rec.unexpectedOps(setOf<String>({allowed})))"
     )
+    red, gate = unmatched_gate()
+    if red:
+        out.append(f"      assertEquals({_kt_str(UNMATCHED_MESSAGE)}, emptyList<String>(), "
+                   "rec.unmatchedCalls())")
+    else:
+        out.append(f"      reportUnmatched(rec.unmatchedCalls(), {_kt_str(gate) if gate else 'null'})")
 
     for key, value in then.items():
         if key == "api":
@@ -2889,6 +2967,24 @@ class Recorder(routeOps: Set<String>? = null) {
    * each once, sorted. Empty when every call was one the contract expects. */
   fun unexpectedOps(allowed: Set<String>): List<String> =
     windowed().map { it.op }.filter { it != "(unmatched)" && it !in allowed }.distinct().sorted()
+
+  /** The requests in the window that no declared route answered (they got
+   * the 599), as "METHOD path", each once, sorted. */
+  fun unmatchedCalls(): List<String> =
+    windowed().filter { it.op == "(unmatched)" }.map { "${it.method} ${it.path}" }.distinct().sorted()
+}
+
+/** Before the release that fails a generated test on them (P2e(a)): one
+ * warning naming the requests in the act window no declared route answered.
+ * `gateFrom` is that release, or null when none is announced. */
+fun reportUnmatched(calls: List<String>, gateFrom: String?) {
+  if (calls.isEmpty()) return
+  System.err.println(
+    "jsonui-test branch test: ${calls.joinToString(", ")} reached no declared route and " +
+      "was answered 599, which no server returns — declare the route and its " +
+      "scenarios (dataFlow + mock)" +
+      (if (gateFrom != null) "; from jsonui-cli $gateFrom this fails the test" else "")
+  )
 }
 
 /** '@data.<field>' pre-act capture marker for partial matching / asserts. */
@@ -3590,6 +3686,11 @@ def _render_swift_branch(
         f"      XCTAssertEqual(rec.unexpectedOps([{allowed}]), [], "
         f"{_swift_str(UNEXPECTED_OPS_MESSAGE)})"
     )
+    red, gate = unmatched_gate()
+    if red:
+        out.append(f"      XCTAssertEqual(rec.unmatchedCalls(), [], {_swift_str(UNMATCHED_MESSAGE)})")
+    else:
+        out.append(f"      reportUnmatched(rec.unmatchedCalls(), {_swift_str(gate) if gate else 'nil'})")
 
     for key, value in then.items():
         if key == "api":
@@ -3739,6 +3840,23 @@ nonisolated final class Recorder {
   func unexpectedOps(_ allowed: Set<String>) -> [String] {
     Array(Set(windowed.map { $0.op }.filter { $0 != "(unmatched)" && !allowed.contains($0) })).sorted()
   }
+
+  /// The requests in the window that no declared route answered (they got
+  /// the 599), as "METHOD path", each once, sorted.
+  func unmatchedCalls() -> [String] {
+    Array(Set(windowed.filter { $0.op == "(unmatched)" }.map { "\\($0.method) \\($0.path)" })).sorted()
+  }
+}
+
+/// Before the release that fails a generated test on them (P2e(a)): one
+/// warning naming the requests in the act window no declared route answered.
+/// `gateFrom` is that release, or nil when none is announced.
+nonisolated func reportUnmatched(_ calls: [String], _ gateFrom: String?) {
+  if calls.isEmpty { return }
+  print("jsonui-test branch test: \\(calls.joined(separator: ", ")) reached no declared route and "
+    + "was answered 599, which no server returns — declare the route and its "
+    + "scenarios (dataFlow + mock)"
+    + (gateFrom.map { "; from jsonui-cli \\($0) this fails the test" } ?? ""))
 }
 
 /// '@data.<field>' pre-act capture marker.
