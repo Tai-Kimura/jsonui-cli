@@ -2,7 +2,9 @@
 """Red-check xxxi at the tag: is every `*_GATE_FROM` what this release needs?
 
 A gate literal names the release from which something starts failing —
-`VALIDATE_GATE_FROM` (validate fails unless contracts coverage exits 0, P3a)
+`VALIDATE_GATE_FROM` (validate fails on contracts coverage against its
+baseline — an entry not in it, one it keeps that has closed, and what cannot
+be recorded; P3a, P3c)
 and `UNMATCHED_GATE_FROM` (a generated branch test fails on a request no
 declared route answered, P2e(a)) at the time of writing. Each is a literal
 written when the announcing release is cut, never derived: a derived one
