@@ -40,10 +40,14 @@ Red-check (2026-09-24, predictions written before each run):
 
 THE CONTROLS ARE THE RECORDER AS IT SHIPPED. `_kotlin_as_shipped` and
 `_swift_as_shipped` undo this change in the emitted source, and the result
-was compared by hand with v1.8.114 (2026-09-24): the Kotlin runtime text, and
-the Swift runtime emitted for this fixture, are byte-identical to it. A
-probe that stopped exercising the recorder fails its control instead of
-passing both. The Swift face keeps one more control — the lock made a no-op
+was compared by hand (2026-09-24). On v1.8.115 it is byte-identical to
+v1.8.114 — the Kotlin runtime text, and the Swift runtime emitted for this
+fixture. The contract-gap work then added an act window to the same class,
+and on top of it the undone runtime is byte-identical to that work's branch
+before this fix (87102abf): the recorder a consumer's run caught dropping a
+call. So "as it shipped" means the storage, not the whole class. A probe
+that stopped exercising the recorder fails its control instead of passing
+both. The Swift face keeps one more control — the lock made a no-op
 and nothing else — so a red says it is the lock, not the move to `record(_:)`,
 that does the work.
 """
