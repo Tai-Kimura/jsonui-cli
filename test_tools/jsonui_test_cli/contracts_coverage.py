@@ -32,9 +32,9 @@ Exit per platform block, composed 2 > 1 > 3 > 0 for the process:
 0 pass (or `empty`: no screen exists on the platform), 1 uncovered or a
 declaration error, 2 cannot start, 3 unmeasured (something could not be
 evaluated, and nothing was found uncovered). `jsonui-test validate` reports
-it in a coverage section and does not yet fail on it; from the release after
-the one that added the section, validate fails unless it exits 0 (design
-§6.1, P3a — announced one release ahead, by the section's own notice line).
+it in a coverage section, and from the release `VALIDATE_GATE_FROM` names it
+fails unless this exits 0 (design §6.1, P3a — announced one release ahead by
+the section's own last line).
 """
 from __future__ import annotations
 
@@ -1234,16 +1234,21 @@ def to_json(report: CoverageReport) -> dict:
 # --------------------------------------------------- the validate section ---
 #
 # Design §2.6 / §6.1 (P3a). `jsonui-test validate` carries a coverage section:
-# one denominator line per platform, the declaration errors, and — in the
-# release that adds it (P3a-1) — a one-line notice that the NEXT release
-# gates on it. The section changes no return code in that release. Flipping
-# it to a gate (P3a-2) is the validate command's return, not anything here.
+# one denominator line per platform, the declaration errors, and one line
+# about the gate. Below VALIDATE_GATE_FROM that line is the notice and the
+# section moves no return code (P3a-1); from it on, validate fails unless
+# coverage exits 0 (P3a-2) — the switch is this version, not a flag (U1),
+# and not a code change someone has to remember at the next release.
 
-#: The release from which validate fails unless contracts coverage exits 0.
-#: None means "the patch release after this one": the design puts the gate in
-#: whatever release follows the one that announces it (§6.1, U5 = plan C).
-#: A release that is not a patch bump sets it here — red-check xxxi compares
-#: the notice's version with the release that actually follows.
+#: The release from which validate fails unless contracts coverage exits 0 —
+#: a LITERAL, written when the announcing release N is cut (design §6.1: "N+1
+#: の版は N を切るときに決めて文に書く"). Deliberately no default: one derived
+#: from the running version agrees with itself on every build, so the notice
+#: would pass red-check xxxi whatever it said, and a gate switched on by
+#: "running >= derived" would never switch on (ee, 2026-09-25). Unset, the
+#: section says the version is not declared instead of announcing one. The
+#: tag gate (dev-guide/release/check-tag.sh) holds it to the release: the
+#: next patch when announcing, at or below the tag once gating.
 VALIDATE_GATE_FROM: str | None = None
 
 #: ee's text (design §6.1), with the version filled in.
@@ -1252,15 +1257,21 @@ VALIDATE_NOTICE = (
     "— close what it reports (jsonui-define Task 6) or see the release note")
 
 
-def validate_gate_release(current: str) -> str:
-    """The version the notice names: VALIDATE_GATE_FROM, else the next patch."""
-    if VALIDATE_GATE_FROM:
-        return VALIDATE_GATE_FROM
-    parts = current.split(".")
-    if parts and parts[-1].isdigit():
-        parts[-1] = str(int(parts[-1]) + 1)
-        return ".".join(parts)
-    return f"the release after {current}"
+def version_key(version: str) -> tuple:
+    """`1.8.120` -> (1, 8, 120): numeric, so 1.8.100 sorts after 1.8.99."""
+    out = []
+    for part in version.lstrip("v").split("."):
+        digits = "".join(ch for ch in part if ch.isdigit())
+        if not digits:
+            break
+        out.append(int(digits))
+    return tuple(out)
+
+
+def gate_is_on(version: str, gate_from: str | None = None) -> bool:
+    """Does validate fail on coverage in this version?"""
+    gate_from = VALIDATE_GATE_FROM if gate_from is None else gate_from
+    return bool(gate_from) and version_key(version) >= version_key(gate_from)
 
 
 def coverage_applicable(root: Path) -> tuple[bool, str]:
@@ -1303,13 +1314,25 @@ def denominator_line(block: "PlatformBlock") -> str:
     return line + f" → exit {block.exit} ({block.verdict})"
 
 
+def _gate_line(version: str) -> str:
+    """The one line about the gate: on, announced, or not declared."""
+    if gate_is_on(version):
+        return (f"validate gates on contracts coverage (from jsonui-cli "
+                f"{VALIDATE_GATE_FROM}): it fails unless coverage exits 0")
+    if VALIDATE_GATE_FROM:
+        return VALIDATE_NOTICE.format(version=VALIDATE_GATE_FROM)
+    return ("coverage gate version not declared (VALIDATE_GATE_FROM) — this build "
+            "announces no release")
+
+
 def validate_section(root: Path | None, version: str, *, skipped: bool = False,
                      blocked_by: int = 0) -> tuple[list, int | None]:
     """The lines `jsonui-test validate` prints for contracts coverage, and the
-    exit coverage decided (None when it did not run).
+    exit coverage decided (None when it did not run, which never fails the run).
 
     Never silent (design §2.6): skipped by flag, stopped by the run's own
     errors, not applicable, unable to start — each says so in one line.
+    Whether the exit fails validate is `gate_is_on(version)`, the caller's.
     """
     if skipped:
         return ["coverage skipped (--no-coverage-check)"], None
@@ -1318,7 +1341,7 @@ def validate_section(root: Path | None, version: str, *, skipped: bool = False,
     applies, why = coverage_applicable(root)
     if not applies:
         return [f"coverage not applicable: {why}"], None
-    notice = VALIDATE_NOTICE.format(version=validate_gate_release(version))
+    notice = _gate_line(version)
     if blocked_by:
         return [f"coverage not run: {blocked_by} error(s) above stop validate before it — "
                 "fix them and run again", notice], None

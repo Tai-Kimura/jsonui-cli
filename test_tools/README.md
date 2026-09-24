@@ -74,7 +74,7 @@ pyenv local 3.11.0
 | `artifacts pull` | `a pull` | Pull test artifacts (screenshots/recordings) from devices and xcresults |
 | `artifacts status` | `a status` | Show resolved artifacts config and existing artifact files |
 | `artifacts prune-legacy` | `a prune-legacy` | List (default) or delete (`--yes`) the suites left in the flat legacy Android mirror |
-| `contracts coverage` | — | Every response status the OpenAPI declares for an operation a screen reaches, bucketed by who answers it — `validate` reports it; from the next release validate fails unless it exits 0 |
+| `contracts coverage` | — | Every response status the OpenAPI declares for an operation a screen reaches, bucketed by who answers it — `validate` reports it, and fails on it from the release its section names |
 
 ### validate (v)
 
@@ -127,8 +127,10 @@ from jsonui-cli <next release>, validate fails unless contracts coverage exits 0
 ```
 
 with any declaration errors, and what could not be measured by cause
-(`n/a(unbound endpoint) 1`, …). In this release the section **does not change the
-exit code**; the notice names the release from which it will. It is never silent:
+(`n/a(unbound endpoint) 1`, …). Its last line says where the gate stands: below the
+release it names, the section **does not change the exit code**; from that release on,
+validate fails unless coverage exits 0 — after installing the valid tests, with
+`Result: FAILED` and `Coverage: exit N` on the summary line. It is never silent:
 `coverage not run: N error(s) above …` when the run's own errors stop it,
 `coverage not applicable: …` when the project declares no `mock.swagger` and no
 spec has `branchContracts`, `coverage cannot start: …` when it has one of them and
