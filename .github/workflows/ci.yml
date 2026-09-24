@@ -303,11 +303,18 @@ jobs:
       # moved, and dropping a line here would turn this suite red rather than
       # quiet.
       #
-      # ⚠️ SEVEN FILES, AND SOME OF THEM ALSO HAVE WEB ARMS. Ignoring a whole
+      # ⚠️ EIGHT FILES, AND SOME OF THEM ALSO HAVE WEB ARMS. Ignoring a whole
       # file moves its node probe to macos-15 too. That is deliberate: the
       # faces in one file assert the SAME ROWS, and splitting them across two
       # jobs is how one face's row silently stops being compared with the
       # others'.
+      #
+      # 🔻 THE EIGHTH ARRIVED RED. `test_harness_conditions.py` (P2d) type-
+      # checks its Swift test against XCTest through `xcrun`, which this image
+      # does not have, and refuses to skip under `CI`: the v1.8.118 candidate's
+      # run 36045878198 was `1811 passed, 2 failed` here for exactly that.
+      # The whole file moves — its web face is RUN and its Kotlin factory is
+      # compiled, and all three assert the same arrangement order.
       #
       # 🔻 THE LIST GREW BY THREE BECAUSE THEY WERE ALREADY BROKEN HERE.
       # Measured on a green run of this job: `1636 passed, 9 skipped`, and
@@ -328,7 +335,8 @@ jobs:
             --ignore=tests/test_branch_then_data_addresses_nested_paths.py \
             --ignore=tests/test_readback_folds_unordered_collections.py \
             --ignore=tests/test_recorder_keeps_every_concurrent_call.py \
-            --ignore=tests/test_branch_act_window_and_bound.py
+            --ignore=tests/test_branch_act_window_and_bound.py \
+            --ignore=tests/test_harness_conditions.py
       - name: Run document_tools tests
         working-directory: document_tools
         run: python -m pytest
@@ -432,6 +440,7 @@ jobs:
             tests/test_readback_folds_unordered_collections.py \
             tests/test_recorder_keeps_every_concurrent_call.py \
             tests/test_branch_act_window_and_bound.py \
+            tests/test_harness_conditions.py \
             -v -rs --junitxml=guard-branch-runtime.xml
           ../dev-guide/ci/executed-or-skipped.py guard-branch-runtime.xml
 
