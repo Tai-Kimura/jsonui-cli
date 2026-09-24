@@ -555,6 +555,16 @@ exists on the platform), `1` uncovered or a declaration error, `2` cannot
 start, `3` something could not be evaluated (including an unbound endpoint)
 and nothing is uncovered.
 
+Each platform block ends with its totals — `[platform=p] total
+n/a(no mock) … · n/a(not in OpenAPI) … · n/a(unbound endpoint) … ·
+n/a(non-HTTP) …`, each with the number of screens it came from. The
+per-screen `n/a (E)` lines are each screen's own; the one right above the
+block's exit line is the last screen's, not the total. When the block is
+exit 1 and something could not be evaluated as well, it also says
+`uncovered is a floor:` and names what, since the statuses behind those were
+never counted. The JSON carries the same: `totals.na_endpoints` and `floor`
+per platform.
+
 ### Generated branch tests: the act window
 
 Every generated test installs the mock, builds the harness, lets the
