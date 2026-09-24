@@ -46,6 +46,7 @@ from .branch_tests import (
     PARENT_SPEC_TYPE,
     Bindings,
     MockFile,
+    _also_op,
     _branch_active,
     _is_sub_spec_of_a_parent,
     _load_spec_result,
@@ -610,11 +611,25 @@ def evaluate_screen(name: str, spec: dict, platform: str, project: Project) -> S
         original = methods[row.method]["branches"][row.number - 1]
         when = row.branch.get("when") or {}
         then = row.branch.get("then") or {}
+        # A copy answers ONE question: the status it substituted for the op it
+        # expanded (§2.3.3, "the same (M, E, s, p, arrange)" — E is the
+        # expanded op). Every other op in its `when` keeps the original row's
+        # scenario, so for those ops the copy is the original row again, not a
+        # second answer. Counting it there read one row as "two answers to one
+        # question" whenever alsoStatuses widened an op beside another the row
+        # arranges — the consumer's only exits were to delete that arrangement
+        # or to spell every status out as its own row. It adds no coverage
+        # either: the original already answers the same status with the same
+        # `then`.
+        expanded = None
         if row.also is not None:
             res.info["also_statuses_rows"] += 1
+            expanded = _also_op(row, methods[row.method])
         for op in _reached_ops(row.branch):
             key = op_key(op)
             if key not in evaluable:
+                continue
+            if expanded is not None and key != op_key(expanded):
                 continue
             scenario = when.get(f"api.{op}")
             route = by_op.get(op)

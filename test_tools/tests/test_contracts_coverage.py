@@ -599,3 +599,68 @@ def test_the_command_line_exits_with_the_composed_code(tmp_path):
         cwd=tmp_path / "docs", capture_output=True, text=True,
         env={"PYTHONPATH": str(Path(__file__).resolve().parents[1]), "PATH": "/usr/bin:/bin"})
     assert broken.returncode == 2 and "cannot start" in broken.stderr
+
+
+# -------------------------------------- alsoStatuses copies and the ops they did not expand ---
+#
+# Reported by a consumer face on 1.8.117: a row that arranges one op and widens
+# ANOTHER with alsoStatuses was a declaration error ("status 200 of <the first
+# op> is answered by 3 rows with the same arrangement, one of them an
+# alsoStatuses copy"), while generate and the generated tests were fine. The
+# copy only substitutes the scenario of the op it expands (§2.3.3); for every
+# other op it IS the original row, so it is not a second answer there. The
+# consumer's exits were to drop the arrangement (not possible when the other
+# op's scenario is a non-default one the flow needs) or to spell each status as
+# its own row.
+
+def _two_op_spec(also_on_row2: bool = True, extra_row=None) -> dict:
+    """Row 2 arranges setApproval=default and serves getItem=error_404."""
+    spec = _screen()
+    approve = spec["branchContracts"]["methods"]["approve"]
+    approve.pop("excludedOutcomes")     # getItem 500 becomes answerable; no row/exclusion clash
+    if also_on_row2:
+        approve["branches"][1]["alsoStatuses"] = {"api.getItem": ["500"]}
+    if extra_row is not None:
+        approve["branches"].append(extra_row)
+    return spec
+
+
+def _two_answer_errors(s) -> list:
+    return [e["message"] for e in s.declaration_errors if "two answers to one question" in e["message"]]
+
+
+def test_a_copy_is_not_a_second_answer_for_the_op_it_did_not_expand(tmp_path):
+    # The reported shape (①②): the copy expands getItem; setApproval=default is
+    # only arranged. Red on 1.8.117 with "status 200 of setApproval …".
+    s = _screen_result(_run(_project(tmp_path, _two_op_spec())))
+    assert _two_answer_errors(s) == []
+
+
+def test_a_non_default_arrangement_beside_the_expanded_op_is_not_a_second_answer(tmp_path):
+    # The shape with no escape hatch (③): the arranged op's scenario is not its
+    # default (409), so the consumer cannot drop it without losing the path.
+    row = {"when": {"api.setApproval": "error_409", "api.getItem": "error_404"},
+           "alsoStatuses": {"api.getItem": ["500"]},
+           "then": {"data.banner": "conflict"}}
+    s = _screen_result(_run(_project(tmp_path, _two_op_spec(also_on_row2=False, extra_row=row))))
+    assert _two_answer_errors(s) == []
+
+
+def test_a_copy_still_collides_on_the_op_it_expanded(tmp_path):
+    # The control that keeps the fix from being "copies never collide": an
+    # explicit row serving getItem=error_500 under the same arrangement as the
+    # copy (setApproval=default) is two answers to one question for getItem 500.
+    row = {"when": {"api.setApproval": "default", "api.getItem": "error_500"},
+           "then": {"transition": "back"}}
+    s = _screen_result(_run(_project(tmp_path, _two_op_spec(extra_row=row))))
+    errors = _two_answer_errors(s)
+    assert len(errors) == 1 and "status 500 of getItem" in errors[0], errors
+
+
+def test_the_copy_still_answers_the_status_it_expanded(tmp_path):
+    # Restricting the copy must not cost the coverage it exists for: against the
+    # same spec without the alsoStatuses, the only difference is getItem 500
+    # moving from uncovered to a row (an alsoStatuses one).
+    without = _counts(_screen_result(_run(_project(tmp_path / "a", _two_op_spec(also_on_row2=False)))))
+    with_copy = _counts(_screen_result(_run(_project(tmp_path / "b", _two_op_spec()))))
+    assert _diff(without, with_copy) == {"row": 1, "also": 1, "uncovered": -1, "u_partial": -1}
