@@ -34,7 +34,7 @@ module KjuiTools
           puts "Initializing KotlinJsonUI project in #{mode} mode..."
 
           # Create config file only - directories will be created by 'setup' command
-          create_config_file(mode)
+          create_config_file(mode, options[:package_name])
 
           puts "Initialization complete!"
           puts
@@ -57,6 +57,16 @@ module KjuiTools
               options[:mode] = mode
             end
             
+            # `jui init --package-name` passes its value here. Without it the
+            # package is detected from AndroidManifest.xml / build.gradle, and
+            # an empty directory (what `jui init` starts from) has neither, so
+            # the config fell back to com.example.app while jui.config.json
+            # said otherwise — and `jui g converter` wrote there.
+            opts.on('--package-name NAME',
+                    'Android package (default: detected from AndroidManifest.xml / build.gradle)') do |name|
+              options[:package_name] = name
+            end
+
             opts.on('-h', '--help', 'Show this help message') do
               puts opts
               exit
@@ -66,7 +76,7 @@ module KjuiTools
           options
         end
 
-        def create_config_file(mode)
+        def create_config_file(mode, package_name_option = nil)
           config_file = 'kjui.config.json'
           
           if File.exist?(config_file)
@@ -112,8 +122,8 @@ module KjuiTools
           
           # Create base config based on mode
           if mode == 'compose'
-            # Detect package name
-            package_name = Core::ProjectFinder.package_name
+            # The package the caller named wins; detection is the fallback.
+            package_name = package_name_option || Core::ProjectFinder.package_name
             
             # Compose-specific config with appropriate defaults
             # Detect if we're in a module or main app
@@ -152,6 +162,11 @@ module KjuiTools
               'use_network' => true  # Compose mode can use network for API calls
             }
           else
+            # XML / all mode is frozen (Compose only): its paths stay on the
+            # template package. Say so rather than drop the option silently.
+            if package_name_option
+              puts "Note: --package-name is not applied in #{mode} mode (its paths use the template package)"
+            end
             # XML mode or all mode config
             config = {
               'mode' => mode,

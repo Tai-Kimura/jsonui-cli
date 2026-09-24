@@ -122,7 +122,13 @@ def cmd_init(args: argparse.Namespace) -> int:
     if args.android:
         android_root = project_root / args.android
         android_root.mkdir(parents=True, exist_ok=True)
-        _reason = _run_tool(["kjui", "init", "--mode", args.android_mode], android_root)
+        # The package reaches kjui.config.json too: kjui detects it from a
+        # manifest / build.gradle, which a fresh platform root does not have,
+        # so without this it fell back to its template package.
+        kjui_cmd = ["kjui", "init", "--mode", args.android_mode]
+        if args.package_name:
+            kjui_cmd += ["--package-name", args.package_name]
+        _reason = _run_tool(kjui_cmd, android_root)
         if _reason:
             failed.append(("android (kjui init)", _reason))
 
