@@ -664,3 +664,77 @@ def test_the_copy_still_answers_the_status_it_expanded(tmp_path):
     without = _counts(_screen_result(_run(_project(tmp_path / "a", _two_op_spec(also_on_row2=False)))))
     with_copy = _counts(_screen_result(_run(_project(tmp_path / "b", _two_op_spec()))))
     assert _diff(without, with_copy) == {"row": 1, "also": 1, "uncovered": -1, "u_partial": -1}
+
+
+# ------------------------------- a repositories / useCases method's own `platforms` ---
+#
+# Reported by a consumer face on 1.8.117: an iOS-only method (Apple Sign In)
+# declared `platforms: ["ios"]`, and coverage still counted its endpoint's
+# statuses on android and web, as unattributed (7 + 7). In the fixture getOther
+# is the endpoint no row reaches: 2 statuses (200, 500), unattributed.
+
+def _other_scoped(platforms, *, drop=False, also_use_case=False, extra_row=None) -> dict:
+    spec = _screen()
+    methods = spec["dataFlow"]["repositories"][0]["methods"]
+    other = next(m for m in methods if m.get("name") == "getOther")
+    if drop:
+        methods.remove(other)
+    elif platforms is not None:
+        other["platforms"] = platforms
+    if also_use_case:
+        spec["dataFlow"]["useCases"] = [{"name": "OtherUseCase", "methods": [
+            {"name": "fetchOther", "endpoint": "GET /api/other"}]}]
+    if extra_row is not None:
+        spec["branchContracts"]["methods"]["approve"]["branches"].append(extra_row)
+    return spec
+
+
+def _both(tmp_path, spec) -> tuple:
+    report = _run(_project(tmp_path, spec))
+    return (_counts(_screen_result(report, "web")), _counts(_screen_result(report, "ios")),
+            _screen_result(report, "web"))
+
+
+def test_a_method_scoped_to_ios_is_not_counted_on_web(tmp_path):
+    # A: the reported shape.
+    web, ios, s = _both(tmp_path, _other_scoped(["ios"]))
+    assert _diff(BASELINE, web) == {"required": -2, "uncovered": -2, "u_unattributed": -2,
+                                    "outside": 2}
+    assert s.outside_required["na_platform_excluded"] == 2
+    assert _diff(BASELINE, ios) == {}
+
+
+def test_widening_the_method_to_every_platform_counts_it_again(tmp_path):
+    # B: the control the report used — ignored platforms and honoured platforms
+    # agree here, so this alone proves nothing; it pins the other side of A.
+    web, ios, _ = _both(tmp_path, _other_scoped(["ios", "web"]))
+    assert _diff(BASELINE, web) == {} and _diff(BASELINE, ios) == {}
+
+
+def test_the_count_comes_from_the_method(tmp_path):
+    # C: positive control — without the method, the endpoint is not declared at
+    # all, on either platform.
+    web, ios, _ = _both(tmp_path, _other_scoped(None, drop=True))
+    expected = {"required": -2, "uncovered": -2, "u_unattributed": -2, "declared": -2}
+    assert _diff(BASELINE, web) == expected and _diff(BASELINE, ios) == expected
+
+
+def test_an_empty_list_reads_as_every_platform_like_the_generator(tmp_path):
+    # Boundary: `jui generate project` keeps a method with `platforms: []` in
+    # every platform's protocol, so coverage must not drop its endpoint.
+    web, ios, _ = _both(tmp_path, _other_scoped([]))
+    assert _diff(BASELINE, web) == {} and _diff(BASELINE, ios) == {}
+
+
+def test_another_method_on_the_platform_keeps_the_endpoint_counted(tmp_path):
+    # The endpoint is scoped away only when EVERY method declaring it is.
+    web, _, _ = _both(tmp_path, _other_scoped(["ios"], also_use_case=True))
+    assert _diff(BASELINE, web) == {}
+
+
+def test_a_row_on_web_reaching_an_ios_only_endpoint_is_named(tmp_path):
+    row = {"when": {"api.getOther": "error_500"}, "then": {"data.banner": "other"}}
+    web, _, s = _both(tmp_path, _other_scoped(["ios"], extra_row=row))
+    assert s.outside_required["na_platform_excluded"] == 2
+    assert any("reaches api.getOther on web" in n and "n/a(platform-excluded)" in n
+               for n in s.notes), s.notes

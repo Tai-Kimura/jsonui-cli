@@ -355,9 +355,42 @@ class ScreenResult:
         assert self.row_also_statuses <= self.breakdown["row"], self.spec
 
 
-def _endpoints(spec: dict):
+def _method_on(method: dict, platform: str | None) -> bool:
+    """Is this repositories / useCases method declared for *platform*?
+
+    Read exactly as `jui generate project` reads it when it narrows each
+    platform's Repository / UseCase protocol (`_filter_for_platform`,
+    generate_cmd.py) and as a branch row's `platforms` is read
+    (`_branch_active`): absent, not a list, or EMPTY means every platform; a
+    non-empty list names the ones the method exists on. A third reading of
+    the same field — `[]` as "nowhere" — would make coverage drop an endpoint
+    whose protocol the generator still emits everywhere.
+
+    Only the METHOD's own `platforms` is read — the field the schema declares
+    and the validator already asks authors to write; an owner (the repository
+    or use case itself) has no such field to read.
+    """
+    if platform is None:
+        return True
+    platforms = method.get("platforms")
+    if not isinstance(platforms, list) or not platforms:
+        return True
+    return platform in platforms
+
+
+def _endpoints(spec: dict, platform: str | None = None):
     """(route_key -> {method, path}, methods without an endpoint, non-HTTP count,
-    route_key -> {method, path} of the unbound endpoints).
+    route_key -> {method, path} of the unbound endpoints, route keys scoped
+    away from *platform*).
+
+    SCOPED AWAY: every method that declares the endpoint names platforms that
+    do not include *platform* (an Apple Sign In endpoint on an iOS-only
+    method). Counting it on the other platforms put statuses of a call that
+    does not exist there into their denominators, as unattributed — reported
+    by a consumer face on 1.8.117 as 7 on android and 7 on web. It stays in
+    the first dict (it IS a method endpoint, so `apiEndpoints` naming it is
+    not unbound); the caller counts its statuses n/a(platform-excluded), the
+    same treatment a platform-excluded screen gets.
 
     UNBOUND: in `dataFlow.apiEndpoints` and the endpoint of no repositories /
     useCases method. The generator routes only method endpoints, so a call
@@ -369,6 +402,7 @@ def _endpoints(spec: dict):
     from .mock.generate import route_key
 
     endpoints: dict = {}
+    on_platform: set = set()
     without = 0
     non_http = 0
     flow = spec.get("dataFlow") or {}
@@ -387,8 +421,10 @@ def _endpoints(spec: dict):
                 if not m or m.group(1) not in HTTP_VERBS:
                     non_http += 1
                     continue
-                endpoints.setdefault(route_key(m.group(1), m.group(2)),
-                                     {"method": m.group(1), "path": m.group(2)})
+                key = route_key(m.group(1), m.group(2))
+                endpoints.setdefault(key, {"method": m.group(1), "path": m.group(2)})
+                if _method_on(method, platform):
+                    on_platform.add(key)
     unbound: dict = {}
     for entry in flow.get("apiEndpoints") or []:
         if not isinstance(entry, dict):
@@ -403,7 +439,8 @@ def _endpoints(spec: dict):
         key = route_key(method, path.strip())
         if key not in endpoints:
             unbound.setdefault(key, {"method": method, "path": path.strip()})
-    return endpoints, without, non_http, unbound
+    scoped_away = set(endpoints) - on_platform
+    return endpoints, without, non_http, unbound, scoped_away
 
 
 def _callers(spec: dict, names: set) -> list:
@@ -431,7 +468,8 @@ def evaluate_screen(name: str, spec: dict, platform: str, project: Project) -> S
         res.declaration_errors.append(_error(message=f"{e.path}: {e.message}"))
 
     ops = collect_endpoint_ops(spec)
-    endpoints, res.methods_without_endpoint, non_http, unbound = _endpoints(spec)
+    endpoints, res.methods_without_endpoint, non_http, unbound, scoped_away = \
+        _endpoints(spec, platform)
     res.na_endpoints["non_http"] = non_http
     res.http_endpoints = len(endpoints)
 
@@ -469,8 +507,20 @@ def evaluate_screen(name: str, spec: dict, platform: str, project: Project) -> S
             "repositories / useCases method — branch tests do not route it (a call "
             "is recorded as (unmatched)); bind it to the method that calls it")
 
+    # An endpoint only methods of other platforms declare is not a call this
+    # platform makes: its statuses are declared but outside what is required
+    # here, counted where a platform-excluded screen's are.
+    for key in sorted(scoped_away):
+        entry = project.api.by_route.get(key)
+        if entry is not None:
+            n = len(status_keys(entry[1]))
+            res.outside_required["na_platform_excluded"] += n
+            res.declared += n
+
     evaluable: dict = {}
     for key, endpoint in endpoints.items():
+        if key in scoped_away:
+            continue
         mock = find_mock(project.mocks, endpoint["method"], endpoint["path"])
         if mock is None:
             res.na_endpoints["no_mock"] += 1
@@ -553,6 +603,18 @@ def evaluate_screen(name: str, spec: dict, platform: str, project: Project) -> S
                 if key is not None:
                     not_evaluated_units.add((e.method, key))
             res.not_evaluated.append(entry)
+
+    # A row active here that reaches an endpoint whose every method is scoped to
+    # other platforms says two things that cannot both hold. Its statuses are
+    # already counted n/a(platform-excluded) above, so this is named rather
+    # than counted a second way.
+    for method, keys in sorted(reach.items()):
+        for key in sorted(keys & scoped_away):
+            res.notes.append(
+                f"{method} reaches api.{names_of.get(key, ['?'])[0]} on {platform}, but "
+                "every repositories / useCases method declaring its endpoint is "
+                "scoped to other platforms — its statuses are counted "
+                "n/a(platform-excluded), not answered by this row")
 
     # ---- unreachedOps
     unreached: dict = {}
