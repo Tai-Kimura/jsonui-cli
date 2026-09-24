@@ -2140,7 +2140,16 @@ data class RouteSpec(
 data class RecordedCall(val op: String, val method: String, val path: String, val body: String?)
 
 class Recorder(routeOps: Set<String>? = null) {
-  val calls = mutableListOf<RecordedCall>()
+  // 🔻 A LIST THAT TAKES CONCURRENT ADDS. MockWebServer serves each
+  // connection on its own thread and `dispatch` appends from there, so an act
+  // that starts two calls at once appends from two threads. A plain ArrayList
+  // lost one: two parallel OkHttp calls inside this `runBranchTest` recorded
+  // fewer than two in 32 of 900 rounds — the first two adds into an empty
+  // list both grow it, and one grown array is thrown away. A reach assert
+  // then reads 0 for a call that was made. Reads iterate a snapshot, so a
+  // test that counts while a late call lands neither throws nor meets a
+  // half-written slot.
+  val calls: MutableList<RecordedCall> = java.util.concurrent.CopyOnWriteArrayList()
 //<<undeclared-op doc>>
   // The sentinel is not a spelling mistake: undeclared traffic is recorded
   // under this exact string, so asking how much of it there was is a
@@ -2926,7 +2935,28 @@ nonisolated struct RecordedCall {
 }
 
 nonisolated final class Recorder {
-  var calls: [RecordedCall] = []
+  // 🔻 ONE LOCK FOR THE PROTOCOL'S WRITES AND THE TEST'S READS. The
+  // URLProtocol appends on CFNetwork's loading thread and the test reads on
+  // its own; when a call lands after `settle()` has returned, the two meet on
+  // one array. Measured with this runtime on macOS: a test reading while 16
+  // calls were in flight crashed 5 of 5 runs (index out of range, SIGSEGV),
+  // and ThreadSanitizer names the pair. The protocol records through
+  // `record(_:)`. `calls` hands out a copy and takes one back under the same
+  // lock, so a hand-written test that reads it or appends to it still
+  // compiles — an append from the test is a read and a write, which is safe
+  // when no call is in flight, and that is when tests append.
+  private let lock = NSLock()
+  private var storage: [RecordedCall] = []
+  var calls: [RecordedCall] {
+    get { lock.lock(); defer { lock.unlock() }; return storage }
+    set { lock.lock(); defer { lock.unlock() }; storage = newValue }
+  }
+
+  func record(_ call: RecordedCall) {
+    lock.lock(); defer { lock.unlock() }
+    storage.append(call)
+  }
+
   /// Calls bound to a declared route — the `api: "none"` surface. On iOS
   /// the URLProtocol intercepts the whole process, so third-party SDK
   /// traffic (analytics etc.) shows up as "(unmatched)"; it is served a
@@ -3039,7 +3069,7 @@ nonisolated final class BranchURLProtocol: URLProtocol {
             let regex = try? NSRegularExpression(pattern: route.pattern),
             regex.firstMatch(in: path, range: NSRange(path.startIndex..., in: path)) != nil
       else { continue }
-      Self.recorder?.calls.append(RecordedCall(op: route.op, method: method, path: path, body: body))
+      Self.recorder?.record(RecordedCall(op: route.op, method: method, path: path, body: body))
       let name = Self.overrides[route.op] ?? route.defaultScenario
       guard let scenario = route.scenarios[name] else {
         client?.urlProtocol(self, didFailWithError: NSError(
@@ -3050,7 +3080,7 @@ nonisolated final class BranchURLProtocol: URLProtocol {
       respond(status: scenario.0, body: scenario.1, contentType: scenario.2)
       return
     }
-    Self.recorder?.calls.append(RecordedCall(op: "(unmatched)", method: method, path: path, body: nil))
+    Self.recorder?.record(RecordedCall(op: "(unmatched)", method: method, path: path, body: nil))
     respond(status: 599, body: "{\\"error\\":{\\"code\\":\\"unmocked_endpoint\\"}}",
             contentType: "application/json")
   }
