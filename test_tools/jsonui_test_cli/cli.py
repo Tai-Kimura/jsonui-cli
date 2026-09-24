@@ -346,12 +346,12 @@ def cmd_validate(args):
     # three readings of one decision — not a PASSED followed by a FAILED.
     # A run stopped by its own errors says coverage did not run.
     from .contracts_coverage import gate_is_on, validate_section
-    coverage_lines, coverage_exit = validate_section(
+    coverage_lines, coverage_gate = validate_section(
         _project_root(getattr(args, "config", None)), __version__,
         skipped=getattr(args, "no_coverage_check", False),
         blocked_by=total_errors or (1 if mock_rc else 0))
-    coverage_gates = gate_is_on(__version__) and coverage_exit is not None
-    coverage_fails = coverage_gates and coverage_exit != 0
+    coverage_gates = gate_is_on(__version__) and coverage_gate is not None
+    coverage_fails = coverage_gates and coverage_gate["fails"]
 
     # Summary
     print(f"\n{'='*50}")
@@ -389,7 +389,10 @@ def cmd_validate(args):
     # Only once it gates: before that the section reports and moves nothing,
     # and a field on every run would be a standing line.
     if coverage_gates:
-        summary += f", Coverage: exit {coverage_exit}"
+        summary += (f", Coverage: {'FAILED' if coverage_fails else 'passed'} "
+                    f"(exit {coverage_gate['exit']}"
+                    + (f"; {'; '.join(coverage_gate['why'])}" if coverage_gate["why"] else "")
+                    + ")")
     print(summary)
     _print_uncounted_footnote(uncounted, command="validate")
     _print_editor_schema_drift(getattr(args, "config", None))
@@ -1607,6 +1610,55 @@ def _branch_check_summary(reports: list, scanned: int, orphans=()) -> int:
     if drifted or absent or stale:
         print("Regenerate with the same command without --check.")
         return 1
+    return 0
+
+
+def cmd_contracts_baseline(args):
+    """Handle 'contracts baseline' — record today's coverage debt, or shrink it.
+
+    Design §6.1 P3c. No file: write the current entries. A file: write only
+    what it AND the current run hold. The tool never adds an entry; a new one
+    is closed (jsonui-define Task 6) or added by hand, where the diff shows it.
+
+    Nothing is written while the run holds what cannot be baselined (the gate
+    fails on it whatever the file says): under a row that could not be
+    evaluated, or a screen that could not be read, the statuses were never
+    counted — a first write would record a floor, and a shrink would drop
+    entries as closed that were only unmeasured.
+    """
+    from . import contracts_baseline as cb
+    from .contracts_coverage import (
+        EXIT_CANNOT_START, EXIT_UNCOVERED, CannotStart, load_project, run_coverage,
+    )
+
+    try:
+        project = load_project(Path.cwd())
+        path = cb.path_for(project.spec_dir)
+        recorded = cb.load(path)
+        report = run_coverage(Path.cwd())
+    except (CannotStart, ValueError) as e:
+        print(f"contracts baseline: cannot start — {e}", file=sys.stderr)
+        return EXIT_CANNOT_START
+    blocking = [f"{b.platform}: {cause} {n}" for b in report.platforms
+                for cause, n in cb.unbaselinable(b).items()]
+    if blocking:
+        print(f"contracts baseline: nothing written — the gate fails on these whatever "
+              f"the baseline says, and what they hide was never counted: "
+              f"{'; '.join(blocking)}. Fix them, then run it again.", file=sys.stderr)
+        return EXIT_UNCOVERED
+    entries, removed, kept, new = cb.shrink(report.entries, recorded)
+    if recorded is None and not entries:
+        print(f"nothing to record — no entry keeps coverage from exit 0; {path} not written")
+        return 0
+    text = cb.dump(entries)
+    if path.is_file() and path.read_text(encoding="utf-8") == text:
+        verb = "unchanged"
+    else:
+        verb = "wrote" if recorded is None else "updated"
+        path.write_text(text, encoding="utf-8")
+    print(f"{verb} {path}")
+    print(f"removed {removed} · kept {kept} · new {new} not added"
+          + (" (close them, or add by hand)" if new else ""))
     return 0
 
 
@@ -3314,6 +3366,13 @@ def main():
         help="Contract-gap checks: which API outcomes the branch contracts answer")
     contracts_subparsers = contracts_parser.add_subparsers(
         dest="contracts_action", help="Contracts action")
+    contracts_subparsers.add_parser(
+        "baseline",
+        help="Record the entries that make contracts coverage exit non-zero in "
+             "<spec_directory>/contracts_coverage_baseline.json — all of them when "
+             "there is no file, and otherwise only those still present (it only "
+             "shrinks; a new entry is closed or added by hand). validate's gate "
+             "fails on entries not in it and on entries in it that are closed")
     coverage_parser = contracts_subparsers.add_parser(
         "coverage",
         help="Every response status the OpenAPI declares for an operation a "
@@ -3395,6 +3454,8 @@ def main():
     elif args.command == "contracts":
         if getattr(args, "contracts_action", None) == "coverage":
             return cmd_contracts_coverage(args)
+        if getattr(args, "contracts_action", None) == "baseline":
+            return cmd_contracts_baseline(args)
         contracts_parser.print_help()
         return 0
     elif args.command in ["generate", "g"]:

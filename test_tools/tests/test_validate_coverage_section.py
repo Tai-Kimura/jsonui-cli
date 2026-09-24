@@ -39,7 +39,9 @@ from jsonui_test_cli.cli import main
 from tests import test_contracts_coverage as tcc
 
 REPO = Path(__file__).resolve().parents[2]
-NOTICE_HEAD = "validate fails unless contracts coverage exits 0"
+# What every announcing line holds after its version — derived, so a new text
+# cannot leave the negative arms below asserting the absence of an old one.
+NOTICE_HEAD = cc.VALIDATE_NOTICE.split("{version}", 1)[1]
 ABOVE, BELOW = "99.0.0", "0.0.1"   # a gate the running version has not / has reached
 
 
@@ -134,7 +136,8 @@ class TestXxxiAnnouncing:
         report = cc.run_coverage(root)
         _, out = validate(root)
         for block in report.platforms:
-            assert cc.denominator_line(block) in _section(out)
+            assert any(line.startswith(cc.denominator_line(block) + " · baselined ")
+                       for line in _section(out)), _section(out)
         web = next(b for b in report.platforms if b.platform == "web")
         assert cc.denominator_line(web) == (
             "coverage: web units 2 · statuses required 12 · row 5 · excluded 1 · "
@@ -158,14 +161,16 @@ class TestGating:
         installed = sorted(p.name for p in dest.rglob("*.test.json"))
         assert installed, f"nothing installed before the rc — {out}"
         assert rc == 1
-        assert "Result: FAILED" in out and _summary(out).endswith("Coverage: exit 1")
+        assert "Result: FAILED" in out and "Coverage: FAILED (exit 1;" in _summary(out)
 
     @pytest.mark.parametrize("make, rc_expected, exit_code", [
         (_uncovered, 1, 1), (_clean, 0, 0), (_exit3, 1, 3)])
     def test_the_rc_follows_coverage(self, tmp_path, validate, make, rc_expected, exit_code):
         rc, out = validate(make(tmp_path), gate=BELOW)
         assert rc == rc_expected, out
-        assert _summary(out).endswith(f"Coverage: exit {exit_code}")
+        # No baseline file: every entry is new, so the gate asks what exit 0 asked.
+        verdict = "FAILED" if rc_expected else "passed"
+        assert f"Coverage: {verdict} (exit {exit_code}" in _summary(out)
         assert ("Result: FAILED" in out) == bool(rc_expected)
         assert _section(out)[-1].startswith("validate gates on contracts coverage (from jsonui-cli 0.0.1)")
 
@@ -173,7 +178,7 @@ class TestGating:
         _, out = validate(_exit3(tmp_path), gate=BELOW)
         line = next(l for l in _section(out) if l.startswith("coverage: web"))
         assert "uncovered 0" in line and "n/a(unbound endpoint) 1" in line
-        assert line.endswith("exit 3 (unmeasured)")
+        assert "exit 3 (unmeasured) · baselined 0 (matched 0 · new 1 · stale 0)" in line
 
     def test_xxvi_not_applicable_does_not_fail(self, tmp_path, validate):
         rc, out = validate(_no_contracts(tmp_path), gate=BELOW)
@@ -185,7 +190,7 @@ class TestGating:
         rc, out = validate(_no_contracts(tmp_path, with_branch_contracts=True), gate=BELOW)
         assert _section(out)[0].startswith("coverage cannot start: mock.swagger is not declared")
         assert _section(out)[0].endswith("→ exit 2 (cannot_start)")
-        assert rc == 1 and _summary(out).endswith("Coverage: exit 2")
+        assert rc == 1 and "Coverage: FAILED (exit 2; cannot start)" in _summary(out)
 
     def test_boundary_the_same_project_announcing_does_not_fail(self, tmp_path, validate):
         rc, _ = validate(_no_contracts(tmp_path, with_branch_contracts=True), gate=ABOVE)
