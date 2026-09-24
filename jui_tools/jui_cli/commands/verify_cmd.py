@@ -144,7 +144,10 @@ def cmd_verify(args: argparse.Namespace) -> int:
     # ``layouts_root`` lets the checker follow cellClasses/include
     # references into neighbouring cell Layout JSON files so the
     # actual-layout view of ids matches the aggregated spec tree.
-    checker = ViewDiffChecker(layouts_root=layouts_root, normalizer=normalizer)
+    checker = ViewDiffChecker(
+        layouts_root=layouts_root, normalizer=normalizer,
+        styles_root=config_mgr.styles_directory,
+    )
 
     results = []
     missing_layouts: list[str] = []

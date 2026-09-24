@@ -7,13 +7,23 @@ The comparison recursively resolves ``cellClasses`` / ``include``
 references so that cells declared in separate layout files (e.g.
 ``chat/message_cell.json``) are aggregated into the actual-layout view
 of ids for a single screen.
+
+Includes are expanded the way the runtime expands them — by the normalizer's
+``IncludeExpander`` — so an id inside ``{"include": "header", "id": "top"}``
+is counted as ``topTitle``, not ``title``, and the include node's own id is
+not counted (it does not exist at runtime). Cell layouts are separate views at
+runtime: they are read in unprefixed, with their own includes expanded.
 """
 from __future__ import annotations
 
+import copy
 import json
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable
+
+from .normalizer.include_expander import IncludeExpander
+from .normalizer.style_merger import StyleMerger
 
 
 @dataclass
@@ -53,6 +63,7 @@ class ViewDiffChecker:
         self,
         layouts_root: Path | None = None,
         normalizer: Callable[[Any], Any] | None = None,
+        styles_root: Path | None = None,
     ):
         # Root directory used to resolve ``cellClasses`` / ``include``
         # references when comparing against an actual Layout JSON tree.
@@ -62,6 +73,12 @@ class ViewDiffChecker:
         # normalizeLayouts projects so L1 canonicalization can never
         # produce false drift between spec-generated and on-disk trees.
         self._normalizer = normalizer
+        # The runtime's include expansion (id prefixing included). Styles are
+        # merged first, as the expander does, so a style cannot move an id.
+        self._include_expander: IncludeExpander | None = None
+        if self._layouts_root is not None:
+            styles = Path(styles_root) if styles_root else self._layouts_root / ".no-styles"
+            self._include_expander = IncludeExpander(self._layouts_root, StyleMerger(styles))
 
     def compare(
         self,
@@ -127,6 +144,14 @@ class ViewDiffChecker:
         if loaded_files is None:
             loaded_files = set()
         if isinstance(node, dict):
+            if (resolve_refs and self._include_expander is not None
+                    and isinstance(node.get("include"), str)):
+                # Replace the include as the runtime does: the file's tree,
+                # its ids (and those of nested includes) prefixed with this
+                # node's id, this node's own id gone. Every placement is
+                # expanded, so the same file included twice counts twice.
+                self._flatten(self._expand_includes(node), out, resolve_refs, loaded_files)
+                return
             nid = node.get("id")
             if nid:
                 # Treat a missing type as the Layout JSON default (View)
@@ -138,9 +163,6 @@ class ViewDiffChecker:
                     for ref in cc:
                         if isinstance(ref, str):
                             self._load_ref(ref, out, loaded_files)
-                inc = node.get("include")
-                if isinstance(inc, str):
-                    self._load_ref(inc, out, loaded_files)
 
             for key in ("child", "children", "content", "headerCell"):
                 if key in node:
@@ -165,6 +187,10 @@ class ViewDiffChecker:
         if self._normalizer is not None:
             sub = self._normalizer(sub)
         self._flatten(sub, out, resolve_refs=True, loaded_files=loaded)
+
+    def _expand_includes(self, tree: Any) -> Any:
+        """The tree with every include replaced as the runtime replaces it."""
+        return self._include_expander.expand(copy.deepcopy(tree))
 
 
 def render_report(results: list[DiffResult], detail: bool = False) -> str:
