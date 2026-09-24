@@ -8,17 +8,17 @@
     "agentWarning": "LLM/Agent: you MUST NOT modify this file."
   },
   "schemaVersion": 2,
-  "generatedFrom": "672db1d654abaecc38c45f02a66986da2c6c51dd1f1cd591d7843915cf875cab",
+  "generatedFrom": "f096534f30990252c92b77f6d895e103c6a49e5b179c46c9322322756dfd5459",
   "counts": {
-    "fixtures": 1113,
+    "fixtures": 1114,
     "assertable": 49,
     "visual": 833,
-    "interactive": 37,
+    "interactive": 38,
     "control": 116,
     "declarationOnly": 77,
-    "skipped": 157,
+    "skipped": 158,
     "promoted": {
-      "callback": 11
+      "callback": 12
     }
   },
   "fixtures": [
@@ -22861,6 +22861,44 @@
       "control": null
     },
     {
+      "id": "Web/onLoadFailed__callback_fire",
+      "component": "Web",
+      "attribute": "onLoadFailed",
+      "case": "callback_fire",
+      "class": "interactive",
+      "host": "Web",
+      "writtenKey": "onLoadFailed",
+      "aliasOf": null,
+      "value": "@{conformanceFire}",
+      "platforms": [
+        "ios",
+        "android"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/Web/onLoadFailed__callback_fire.layout.json",
+      "test": "fixtures/Web/onLoadFailed__callback_fire.test.json",
+      "state": {
+        "vars": [
+          {
+            "name": "conformanceResult",
+            "class": "String",
+            "defaultValue": "ready"
+          }
+        ],
+        "handlers": [
+          {
+            "name": "conformanceFire",
+            "set": {
+              "var": "conformanceResult",
+              "value": "fired"
+            }
+          }
+        ]
+      },
+      "promotedFrom": "callback"
+    },
+    {
       "id": "SafeAreaView/orientation__horizontal",
       "component": "SafeAreaView",
       "attribute": "orientation",
@@ -27928,6 +27966,11 @@
       "component": "Web",
       "attribute": "allowsLinkPreview",
       "reason": "behavioral (no visual or assertable effect in v1)"
+    },
+    {
+      "component": "Web",
+      "attribute": "reloadToken",
+      "reason": "binding-only"
     },
     {
       "component": "SafeAreaView",

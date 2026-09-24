@@ -3,7 +3,7 @@
   "generatedBy": "jui generate attr-bindings --lang all",
   "source": {
     "file": "shared/core/attribute_definitions.json",
-    "sha256": "672db1d654abaecc38c45f02a66986da2c6c51dd1f1cd591d7843915cf875cab"
+    "sha256": "f096534f30990252c92b77f6d895e103c6a49e5b179c46c9322322756dfd5459"
   },
   "files": {
     "kotlin/AttrCodegenSupport.kt": "3f56c8021ab16a32d0ed4a38e7839c27a08237bd095c4469255c800d1600b165",
@@ -36,7 +36,7 @@
     "kotlin/TextViewAttributes.kt": "d68ab0082a6c7b9b80f2fea6dde15e86b09142f214cc431ab28e0f29d893e3da",
     "kotlin/ToggleAttributes.kt": "8842a675e0175f568f1e260f63e3ee6d920399fa9373dce4fa12d2857f366159",
     "kotlin/ViewAttributes.kt": "4f2a5f3eafaa270536aae6812e81fc8ebf9cb91704f9a2101a9a2726aa76609a",
-    "kotlin/WebAttributes.kt": "879621a42fb51cf636e968bde95980ac7b744ccb382ed01147082c64c6a8472d",
+    "kotlin/WebAttributes.kt": "12c888ead6205e09d17512e6ec70ce0d6f5bfd92b15064ae4b30fcc901557ee0",
     "kotlin/skipped_attributes.json": "91523bae8f1d575dcfc795171b6b7f46dc7b8c7a4068b3ad628742526e1527d0",
     "ruby/attr_support.rb": "145cf82a2c2ad951b8b78bea99e438727b28b58154f463d1addf7a7bd7840d94",
     "ruby/blur_attributes.rb": "754bf210fda5a104db98a73596fc7b3ace236d4b359cbffe8db5e18ae9aa0255",
@@ -69,7 +69,7 @@
     "ruby/text_view_attributes.rb": "cc978ff1a4af298e09e0e25fec046252eb5c9a1aef876b9ae16f38963625edc3",
     "ruby/toggle_attributes.rb": "8e67e5e70d180e956b7e3f61c0139787b2ed941a753354e3fcb77e86c4ecfdd3",
     "ruby/view_attributes.rb": "a0f3ec599bf7bb3b7d32af1245821537c6d9594b58ebfbe5b73da714e429b155",
-    "ruby/web_attributes.rb": "9bacd647e04a2765729a75bd04b5c61abc441574b7ac6ddd5a1970b0ce3607fa",
+    "ruby/web_attributes.rb": "984822088f35af4526da7f50b2e90582e508fdd4083383f8914258b39e9148b5",
     "swift/AttrCodegenSupport.swift": "3774292b88eed4a1656faab95c6056272cbc8d69b3c3d92d1261d5a7cbda7277",
     "swift/BlurAttributes.swift": "7a355eda4e4f47d70257764795a02d1c8d96562b25d02b012616e3874aecf590",
     "swift/ButtonAttributes.swift": "ae6a7330f6df3b48136b3a384a88df250f231caa0c86316145585b08e64cde4f",
@@ -100,7 +100,7 @@
     "swift/TextViewAttributes.swift": "bf9da5933c003b9bb3de6cd1f05e1df989c09c121a03383e9a42727f203fd87e",
     "swift/ToggleAttributes.swift": "2d9085501feb3cd9057eb3fae82c12ec2ed2f4e6b1cdb2d9bf9b5748da031a2d",
     "swift/ViewAttributes.swift": "f402c81eedf4570cc68631a0194c16772dea56f7fe116358f428e383762c13ab",
-    "swift/WebAttributes.swift": "17b91ffe5c9d21fa8d111529c745ae764c55adc22cd96ae45bf76db1e6a70253",
+    "swift/WebAttributes.swift": "ee12e00ca1b2a11f062b309f9fd2f86820f802236103710f18edf5337b440b48",
     "swift/skipped_attributes.json": "91523bae8f1d575dcfc795171b6b7f46dc7b8c7a4068b3ad628742526e1527d0"
   }
 }

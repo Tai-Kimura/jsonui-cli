@@ -446,6 +446,36 @@ def _negation_hidden() -> InteractiveSpec:
 
 _FIRE_BINDING = f"@{{{FIRE_HANDLER}}}"
 
+#: A page that fails at DNS: `.invalid` is reserved by RFC 2606 so it can
+#: never resolve — the host NetworkImage.errorImage already fails on (rules.py,
+#: INTERACTIVE_HOST_CONTRACT.md §5). A WKWebView / android WebView request does
+#: not pass through the hosts' URLProtocol / OkHttp interceptor, so here it is
+#: the resolver that fails it, still without a page ever leaving the machine.
+WEB_FAILING_URL = "https://conformance.invalid/"
+
+
+def _web_load_failed() -> InteractiveSpec:
+    """``Web.onLoadFailed``: the page's own url fails, so the handler fires
+    with no runner action — the ``onAppear`` shape (trigger None), asserting
+    only the post state. The text assertion polls to the driver's timeout, which
+    is what a failure that arrives asynchronously needs.
+
+    The discrimination is the mirror: ``fired`` only if the Web reported the
+    failure. Without the attribute (or with a page that loads) it stays
+    ``ready`` and the arm fails, so a face that never wires the event cannot
+    pass it. ``url`` wins over the Web base ``html`` on every platform.
+    """
+    spec = _callback_fire("Web", "onLoadFailed", _FIRE_BINDING, None)
+    return InteractiveSpec(
+        case=spec.case,
+        host=spec.host,
+        target_attrs=spec.target_attrs + (("url", WEB_FAILING_URL),),
+        vars=spec.vars,
+        handlers=spec.handlers,
+        steps=spec.steps,
+        mirror_var=spec.mirror_var,
+    )
+
 #: visibility enum value -> assertion (mirrors rules._assertable_cases).
 _VISIBILITY_ASSERTS = {
     "visible": _target_visible,
@@ -578,6 +608,8 @@ INTERACTIVE_SPECS: dict[tuple[str, str], tuple[InteractiveSpec, ...]] = {
         _callback_fire("View", "onPan", _FIRE_BINDING, _swipe_target(), HANDLER_EVENT),
     ),
     ("common", "onAppear"): (_callback_fire("View", "onAppear", FIRE_HANDLER, None),),
+    # Fires on its own: the Web's url is a page that cannot load.
+    ("Web", "onLoadFailed"): (_web_load_failed(),),
     ("TextField", "onTextChange"): (
         _callback_fire(
             "TextField", "onTextChange", _FIRE_BINDING, _input_target(TYPED_TEXT), HANDLER_TEXT

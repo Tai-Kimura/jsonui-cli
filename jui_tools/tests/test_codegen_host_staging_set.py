@@ -109,7 +109,9 @@ class CodegenHostStagingSet(unittest.TestCase):
         # stop being true: most `interactive` fixtures drive nothing.
         interactive = [f for f in self.ios if f["class"] == "interactive"]
         driving = [f for f in interactive if _drives_input(f)]
-        self.assertEqual(len(interactive), 36)
+        # 37 since `Web/onLoadFailed__callback_fire`, which fires on its own
+        # (the page fails) and so drives nothing: interactive +1, driving +0.
+        self.assertEqual(len(interactive), 37)
         self.assertEqual(len(driving), 16)
 
     def test_the_fixtures_measured_on_dynamic_are_hostable(self):

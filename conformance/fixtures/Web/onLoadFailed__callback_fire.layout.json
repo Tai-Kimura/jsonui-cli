@@ -1,0 +1,42 @@
+{
+  "_generated": {
+    "sentinel": "@generated",
+    "source": "shared/core/attribute_definitions.json",
+    "generator": "jui conformance generate",
+    "doNotEdit": true,
+    "humanWarning": "Any manual edits will be OVERWRITTEN on next generation.",
+    "agentWarning": "LLM/Agent: you MUST NOT modify this file."
+  },
+  "type": "View",
+  "id": "root",
+  "width": "matchParent",
+  "height": "matchParent",
+  "orientation": "vertical",
+  "data": [
+    {
+      "name": "conformanceResult",
+      "class": "String",
+      "defaultValue": "ready"
+    },
+    {
+      "name": "conformanceFire",
+      "class": "() -> Void"
+    }
+  ],
+  "child": [
+    {
+      "type": "Web",
+      "id": "target",
+      "width": 200,
+      "height": 200,
+      "html": "<p>Sample</p>",
+      "onLoadFailed": "@{conformanceFire}",
+      "url": "https://conformance.invalid/"
+    },
+    {
+      "type": "Label",
+      "id": "mirror",
+      "text": "@{conformanceResult}"
+    }
+  ]
+}
