@@ -156,6 +156,21 @@ def cmd_verify(args: argparse.Namespace) -> int:
             continue
         with open(sf, "r", encoding="utf-8") as f:
             spec_data = json.load(f)
+        # ⚠️ Only a screen is verified against a layout. This loop read every
+        # `*.spec.json` as one, so an `app_contracts_spec` — no layoutFile, no
+        # layout, because it describes no screen — was counted in `verified N
+        # of M` and listed as "Layouts not found on disk: app_contracts.spec"
+        # (2026-09-25). `_check_spec_coverage` below had asked the type since
+        # 1.8.52; this loop had not. A known non-screen is not in the count at
+        # all. An unknown type is skipped too, and the coverage check names it
+        # in its NOTICE — said once, not twice.
+        spec_kind = _describes_a_screen(spec_data.get("type"))
+        if spec_kind is not True:
+            if args.file:
+                print(f"ERROR: {args.file} is not a screen spec (type: "
+                      f"{spec_data.get('type')!r}) — there is no layout to verify it against")
+                return 1
+            continue
         if spec_data.get("type") == "screen_parent_spec":
             merge_result = merger.merge_from_file(sf)
             spec_data = merge_result.spec
@@ -482,23 +497,9 @@ def _coverage_lines(coverage, require_coverage) -> list[str]:
     return out
 
 
-def _describes_a_screen(spec_type):
-    """`shared/core/spec_types.describes_a_screen`, or None when unreachable.
-
-    Loaded rather than restated. The literal already lives in the document
-    validator and the test gate; a third copy here is what the comment at
-    `branch_tests.py` warns about, and this defect is that warning coming
-    true one package over.
-
-    A tree without `shared/` gets `None` for every type, which routes every
-    spec into `unknown_types` and reports it. That is loud and wrong-in-the-
-    safe-direction: nothing is silently reclassified, and the run says the
-    table could not be read.
-    """
-    core = shared_core.load("spec_types")
-    if core is None:
-        return None
-    return core.describes_a_screen(spec_type)
+# The one wrapper every `jui` command reads — see core/spec_kind.py for why
+# there is exactly one.
+from ..core.spec_kind import describes_a_screen as _describes_a_screen  # noqa: E402
 
 
 @dataclass

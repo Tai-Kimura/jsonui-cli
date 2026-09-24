@@ -1832,19 +1832,9 @@ def _sync_api_models(
     return True
 
 
-def _describes_a_screen(spec_type):
-    """`shared/core/spec_types.describes_a_screen`, or None when unreachable.
-
-    Loaded rather than restated. `jui verify` reads the same table for the same
-    question; the two of them going out of step is exactly how a spec type
-    added for one package became a broken identifier emitted by another.
-    """
-    from ..core import shared_core
-
-    core = shared_core.load("spec_types")
-    if core is None:
-        return None
-    return core.describes_a_screen(spec_type)
+# The one wrapper every `jui` command reads — see core/spec_kind.py for why
+# there is exactly one.
+from ..core.spec_kind import describes_a_screen as _describes_a_screen  # noqa: E402
 
 
 def _load_all_specs(config_mgr: ConfigManager) -> list[tuple[Path, ScreenSpec]]:
@@ -2100,7 +2090,11 @@ def _spec_cell_layout_stems(config_mgr: ConfigManager) -> set[str]:
             for value in node:
                 walk(value)
 
-    for spec_file in sorted(spec_dir.glob("*.spec.json")):
+    # rglob, not glob: a split screen keeps its Collections in sub-specs under
+    # `<spec_directory>/<parent>/`, and a cell declared only there was not a
+    # cell here (no consumer declared one as of 2026-09-25; the variant check
+    # below reads this set to tell cell layouts from screen roots).
+    for spec_file in sorted(spec_dir.rglob("*.spec.json")):
         try:
             walk(json.loads(spec_file.read_text()))
         except json.JSONDecodeError:
