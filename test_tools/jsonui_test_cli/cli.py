@@ -1689,11 +1689,21 @@ def cmd_generate_branch_tests(args):
                   f"{'check' if check else 'generate'}", file=sys.stderr)
             return 1
 
+    # Read once for the whole run: the app contracts spec is the project's,
+    # not a screen's, and a rule that fails to load must stop generation
+    # rather than quietly admit nothing.
+    from .branch_tests import _app_rules_for_generation
+    try:
+        app_rules = _app_rules_for_generation(Path.cwd())
+    except BranchTestGenerationError as e:
+        print(f"Error: {e}", file=sys.stderr)
+        return 1
+
     named_one = bool(args.screen)
     reports = []
     failures: list[tuple[str, str]] = []
     for screen in screens:
-        rc, report, error = _generate_one_branch_test(args, screen)
+        rc, report, error = _generate_one_branch_test(args, screen, app_rules)
         if rc:
             if named_one:
                 # One screen was asked for, so its failure is the answer.
@@ -1740,6 +1750,7 @@ def cmd_generate_branch_tests(args):
         _print_branch_generation(report, show_siblings=len(reports) == 1)
     _print_invoke_port_notes(r.harness_file for r in reports
                              if r.harness_lacks_invoke)
+    print(app_rules.note())
     _print_branch_toolchain(len(reports))
     return 0
 
@@ -1794,7 +1805,7 @@ def _branch_dirs(args):
     return out_dir, harness_dir
 
 
-def _generate_one_branch_test(args, screen: str):
+def _generate_one_branch_test(args, screen: str, app_rules=None):
     """Generate (or check) one screen. Returns (exit_code, report, error)."""
     from .branch_tests import BranchTestGenerationError, generate_branch_tests
 
@@ -1818,6 +1829,11 @@ def _generate_one_branch_test(args, screen: str):
             package=args.package,
             module=args.module,
             check=getattr(args, "check", False),
+            # The same `platforms` the rest of this tool reads, from the
+            # config the run was pointed at: a platform outside
+            # config ∩ metadata.platforms generates nothing for the screen.
+            config_platforms=_project_platforms(None),
+            app_rules=app_rules,
         )
     except BranchTestGenerationError as e:
         return 1, None, str(e)
@@ -1859,6 +1875,18 @@ def _print_invoke_port_notes(paths, stream=None) -> None:
 
 
 def _print_branch_generation(report, show_siblings: bool = True) -> None:
+    if getattr(report, "platform_excluded", False):
+        print(f"Skipped '{report.screen}': this platform is outside the "
+              "screen's platforms (jui.config.json platforms ∩ its "
+              "metadata.platforms), so nothing is generated for it")
+        for path in report.stale:
+            print(f"  removed {path} (generated for this screen before the "
+                  "platform was excluded)")
+        for path in report.unowned:
+            print(f"  [WARN] {path} is where this screen's generated test "
+                  "would be, but it carries no @generated banner — left "
+                  "alone; delete it by hand if it is a stale copy")
+        return
     if not report.platform_applicable:
         print(f"Skipped '{report.screen}': every branch it declares belongs "
               f"to another platform ({report.platform_skipped} scoped away), "
@@ -1877,9 +1905,11 @@ def _print_branch_generation(report, show_siblings: bool = True) -> None:
                   "alone; delete it by hand if it is a stale copy")
         return
     print(f"Generated branch tests for '{report.screen}':")
+    also = getattr(report, "also_statuses_rows", 0)
     print(f"  {report.test_file}  "
           f"({report.declared_branches} declared branch(es), "
-          f"{report.note_branches} note-only listed as comments)")
+          + (f"{also} more from alsoStatuses, " if also else "")
+          + f"{report.note_branches} note-only listed as comments)")
     print(f"  {report.runtime_file}  (shared runtime)")
     siblings = _sibling_branch_tests(report) if show_siblings else []
     if siblings:

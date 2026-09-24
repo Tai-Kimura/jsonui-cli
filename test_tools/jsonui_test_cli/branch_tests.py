@@ -23,6 +23,7 @@ A skeleton is emitted only when the file does not exist.
 
 from __future__ import annotations
 
+import copy
 import json
 import re
 import sys
@@ -486,6 +487,13 @@ class MockFile:
     path: str
     active_scenario: str
     scenarios: dict
+    #: `source.operationId` of the GENERATED file for this route, or None.
+    #: Taken from generated/ only: a hand-written overlay does not change it,
+    #: because hand-written files carry operationIds of their own that need
+    #: not agree with the swagger's (measured on one face: every one of them
+    #: differed). An `apiOutcomeRules` side call names an operationId, and
+    #: this is where it is found.
+    operation_id: str | None = None
 
 
 def index_mock_files(mocks_dir: Path) -> list[MockFile]:
@@ -527,11 +535,15 @@ def index_mock_files(mocks_dir: Path) -> list[MockFile]:
         key = (method.upper(), path)
         entry = merged.get(key)
         if entry is None:
+            operation_id = source.get("operationId")
             merged[key] = MockFile(
                 file=f, method=method.upper(), path=path,
                 active_scenario=(active if explicit
                                  else next(iter(scenarios))),
-                scenarios=dict(scenarios))
+                scenarios=dict(scenarios),
+                operation_id=(operation_id
+                              if _is_generated(f) and isinstance(operation_id, str)
+                              else None))
             continue
         if _is_generated(f):
             # Two generated files for one route cannot happen (the tree is
@@ -582,6 +594,11 @@ class GenerationReport:
     declared_branches: int = 0
     note_branches: int = 0
     platform_skipped: int = 0
+    #: Generated tests that are `alsoStatuses` copies (not in declared_branches).
+    also_statuses_rows: int = 0
+    #: True when the platform is outside the screen's effective platforms
+    #: (`jui.config.json` platforms ∩ `metadata.platforms`).
+    platform_excluded: bool = False
     methods: list[str] = field(default_factory=list)
     routes: list[str] = field(default_factory=list)
     #: False when the screen declares contracts but none of its branches
@@ -704,19 +721,19 @@ def _branch_active(branch: dict, platform: str) -> bool:
 
 
 def _iter_declared_api_refs(contract: dict):
-    """Yield (op, scenario_or_None, where) for every api.* reference."""
+    """Yield (op, scenario_or_None, where, branch_index) for every api.* reference."""
     for i, branch in enumerate(contract.get("branches") or []):
         if not isinstance(branch, dict) or "note" in branch:
             continue
         for key, value in (branch.get("when") or {}).items():
             if key.startswith("api."):
-                yield key[len("api."):], value, f"branches[{i}].when.{key}"
+                yield key[len("api."):], value, f"branches[{i}].when.{key}", i
         for key, _value in (branch.get("then") or {}).items():
             if key == "api" or not key.startswith("api."):
                 continue
             rest = key[len("api."):]
             op = rest[: -len(".request")] if rest.endswith(".request") else rest
-            yield op, None, f"branches[{i}].then.{key}"
+            yield op, None, f"branches[{i}].then.{key}", i
 
 
 def _scenario_body(scenario: dict) -> str:
@@ -764,14 +781,19 @@ def _mocks_dir_label(mocks_dir: Path | None) -> str:
 
 def resolve_routes(
     spec: dict, methods_contracts: dict, mocks: list[MockFile],
-    mocks_dir: Path | None = None,
+    mocks_dir: Path | None = None, errors: list | None = None,
 ) -> list[Route]:
     """Bind every referenced api.<op> (plus every declared endpoint with a
     mock, so incidental calls get their default scenario) to a Route.
 
     Unbindable references raise — a branch whose scenario cannot be found
-    must fail generation, not soften into a weaker test.
+    must fail generation, not soften into a weaker test. Given an ``errors``
+    list, each unbindable reference is appended to it as a `BindingError`
+    instead, and binding goes on: `contracts coverage` needs every row that
+    CAN be judged, not the first one that cannot.
     """
+    from .mock.generate import route_key
+
     ops = collect_endpoint_ops(spec)
     routes: dict[str, Route] = {}
     # Which op string already owns an endpoint, so the same endpoint cannot
@@ -780,7 +802,9 @@ def resolve_routes(
     # over the same path would make every assert under the other spelling
     # count zero. A contract that is written but never checked is the failure
     # this whole ticket is about, so mixing spellings is refused outright.
-    endpoint_owner: dict[tuple[str, str], str] = {}
+    # Keyed by `route_key`, so two spellings of one path template
+    # (`/items/{id}` and `/items/{item_id}`) are the one endpoint they are.
+    endpoint_owner: dict[tuple, str] = {}
 
     def bind(op: str, where: str) -> Route:
         if op in routes:
@@ -800,7 +824,7 @@ def resolve_routes(
                 "endpoint (e.g. \"endpoint\": \"POST /api/...\")"
             )
         endpoint = ops.canonical[canonical]
-        identity = (endpoint["method"], endpoint["path"])
+        identity = route_key(endpoint["method"], endpoint["path"])
         if identity in endpoint_owner and endpoint_owner[identity] != op:
             raise BranchTestGenerationError(
                 f"{where}: api operation '{op}' and "
@@ -808,7 +832,6 @@ def resolve_routes(
                 f"{endpoint['path']} — refer to one endpoint by one name, or "
                 "only the first spelling will match recorded calls"
             )
-        endpoint_owner[identity] = op
         mock = find_mock(mocks, endpoint["method"], endpoint["path"])
         if mock is None:
             raise BranchTestGenerationError(
@@ -817,6 +840,7 @@ def resolve_routes(
                 f"{_mocks_dir_label(mocks_dir)} and found "
                 f"{len(mocks)} mock file(s)"
             )
+        endpoint_owner[identity] = op
         route = Route(
             op=op, method=endpoint["method"], path=endpoint["path"],
             pattern=path_to_pattern(endpoint["path"]),
@@ -825,33 +849,83 @@ def resolve_routes(
         routes[op] = route
         return route
 
-    for contract in methods_contracts.values():
+    for method_name, contract in methods_contracts.items():
         if not isinstance(contract, dict):
             continue
-        for op, scenario, where in _iter_declared_api_refs(contract):
-            route = bind(op, where)
-            if scenario is not None and scenario not in route.scenarios:
-                raise BranchTestGenerationError(
-                    f"{where}: scenario '{scenario}' not found in "
-                    f"{sorted(route.scenarios)} (mock for {route.method} {route.path})"
-                )
+        for op, scenario, where, index in _iter_declared_api_refs(contract):
+            try:
+                route = bind(op, where)
+                if scenario is not None and scenario not in route.scenarios:
+                    raise BranchTestGenerationError(
+                        f"{where}: scenario '{scenario}' not found in "
+                        f"{sorted(route.scenarios)} (mock for {route.method} {route.path})"
+                    )
+            except BranchTestGenerationError as e:
+                if errors is None:
+                    raise
+                errors.append(BindingError(method_name, index, op, None, str(e)))
 
     # Every other declared endpoint that has a mock file joins with its
     # default scenario, so incidental calls during act don't 599. Keyed by
     # ENDPOINT, not by op string: an endpoint already bound under its bare
     # name would otherwise be added a second time under its canonical one.
     for op, endpoint in ops.canonical.items():
-        if (endpoint["method"], endpoint["path"]) in endpoint_owner:
+        identity = route_key(endpoint["method"], endpoint["path"])
+        if identity in endpoint_owner:
             continue
         mock = find_mock(mocks, endpoint["method"], endpoint["path"])
         if mock is not None:
-            endpoint_owner[(endpoint["method"], endpoint["path"])] = op
+            endpoint_owner[identity] = op
             routes[op] = Route(
                 op=op, method=endpoint["method"], path=endpoint["path"],
                 pattern=path_to_pattern(endpoint["path"]),
                 scenarios=mock.scenarios, default_scenario=mock.active_scenario,
             )
+    overlap = _overlapping_routes(list(routes.values()))
+    if overlap:
+        if errors is None:
+            raise BranchTestGenerationError(overlap)
+        errors.append(BindingError(None, None, None, None, overlap))
     return list(routes.values())
+
+
+def _overlapping_routes(routes: list[Route]) -> str | None:
+    """A message naming two routes one request could match, or None.
+
+    Routes are matched in order and a call is recorded under the FIRST route
+    whose pattern takes it, so `GET /items/export` beside
+    `GET /items/{item_id}` records an export as a fetch of an item called
+    "export" (or the reverse) — and every count, body and bound on either op
+    then describes the other one. Nothing downstream can tell, so it is
+    refused here.
+
+    Two paths overlap when the method is the same, the segment count is the
+    same, and every pair of segments is the same literal or has a
+    `{param}` on at least one side.
+    """
+    def segments(path: str) -> list[str]:
+        return [seg for seg in path.strip("/").split("/")]
+
+    def is_param(seg: str) -> bool:
+        return seg.startswith("{") and seg.endswith("}")
+
+    for i, a in enumerate(routes):
+        for b in routes[i + 1:]:
+            if a.method != b.method:
+                continue
+            sa, sb = segments(a.path), segments(b.path)
+            if len(sa) != len(sb):
+                continue
+            if all(x == y or is_param(x) or is_param(y) for x, y in zip(sa, sb)):
+                return (
+                    f"routes '{a.op}' ({a.method} {a.path}) and '{b.op}' "
+                    f"({b.method} {b.path}) match the same requests — a call "
+                    "to one can be recorded as the other, so no assertion on "
+                    "either op can be trusted. This screen's dataFlow declares "
+                    "both endpoints; branch tests can bind at most one of "
+                    "two overlapping paths"
+                )
+    return None
 
 
 RESPONSE_REF_PREFIX = "@response."
@@ -881,43 +955,48 @@ def resolve_response_refs(methods_contracts: dict, routes: list[Route]) -> None:
         for i, branch in enumerate(contract.get("branches") or []):
             if not isinstance(branch, dict) or "note" in branch:
                 continue
-            then = branch.get("then")
-            if not isinstance(then, dict):
-                continue
-            refs = [
-                (k, v) for k, v in then.items()
-                if isinstance(v, str) and v.startswith(RESPONSE_REF_PREFIX)
-            ]
-            if not refs:
-                continue
-            where = f"methods.{method_name}.branches[{i}]"
-            scenarios = {
-                k[len("api."):]: v
-                for k, v in (branch.get("when") or {}).items()
-                if k.startswith("api.") and isinstance(v, str)
-            }
-            if len(scenarios) != 1:
-                raise BranchTestGenerationError(
-                    f"{where}: '@response.<path>' needs exactly one "
-                    f"`api.<op>` in `when` to read the response from, found "
-                    f"{len(scenarios)}"
-                )
-            op, scenario_name = next(iter(scenarios.items()))
-            route = by_op.get(op)
-            if route is None:
-                raise BranchTestGenerationError(
-                    f"{where}: no route bound for api operation '{op}'"
-                )
-            scenario = route.scenarios.get(scenario_name)
-            if not isinstance(scenario, dict):
-                raise BranchTestGenerationError(
-                    f"{where}: scenario '{scenario_name}' of '{op}' is not an "
-                    "object, so it has no response body to read"
-                )
-            body = scenario.get("body")
-            for key, ref in refs:
-                path = ref[len(RESPONSE_REF_PREFIX):]
-                then[key] = _read_response_path(body, path, where, key, scenario_name)
+            _resolve_branch_response_refs(
+                branch, by_op, f"methods.{method_name}.branches[{i}]")
+
+
+def _resolve_branch_response_refs(branch: dict, by_op: dict, where: str) -> None:
+    """`resolve_response_refs` for one branch (in place). Raises on failure."""
+    then = branch.get("then")
+    if not isinstance(then, dict):
+        return
+    refs = [
+        (k, v) for k, v in then.items()
+        if isinstance(v, str) and v.startswith(RESPONSE_REF_PREFIX)
+    ]
+    if not refs:
+        return
+    scenarios = {
+        k[len("api."):]: v
+        for k, v in (branch.get("when") or {}).items()
+        if k.startswith("api.") and isinstance(v, str)
+    }
+    if len(scenarios) != 1:
+        raise BranchTestGenerationError(
+            f"{where}: '@response.<path>' needs exactly one "
+            f"`api.<op>` in `when` to read the response from, found "
+            f"{len(scenarios)}"
+        )
+    op, scenario_name = next(iter(scenarios.items()))
+    route = by_op.get(op)
+    if route is None:
+        raise BranchTestGenerationError(
+            f"{where}: no route bound for api operation '{op}'"
+        )
+    scenario = route.scenarios.get(scenario_name)
+    if not isinstance(scenario, dict):
+        raise BranchTestGenerationError(
+            f"{where}: scenario '{scenario_name}' of '{op}' is not an "
+            "object, so it has no response body to read"
+        )
+    body = scenario.get("body")
+    for key, ref in refs:
+        path = ref[len(RESPONSE_REF_PREFIX):]
+        then[key] = _read_response_path(body, path, where, key, scenario_name)
 
 
 def _read_response_path(body, path: str, where: str, key: str, scenario: str):
@@ -1020,7 +1099,8 @@ def _method_is_declared(spec: dict, method_name: str) -> bool:
     return False
 
 
-def check_arg_bindings(spec: dict, methods_contracts: dict) -> None:
+def check_arg_bindings(spec: dict, methods_contracts: dict,
+                       errors: list | None = None) -> None:
     """Every `arg.<name>` has to name a declared parameter.
 
     The act call is built from `dataFlow.viewModel.methods[].params`, so an
@@ -1051,18 +1131,392 @@ def check_arg_bindings(spec: dict, methods_contracts: dict) -> None:
                     continue
                 where = f"methods.{method_name}.branches[{i}].when.{key}"
                 if not declared:
-                    raise BranchTestGenerationError(
+                    message = (
                         f"{where}: '{method_name}' is not declared in "
                         "dataFlow.viewModel.methods, so it has no parameter "
                         "list to bind this argument to — declare it there "
                         "with `params` (stateManagement.eventHandlers is "
                         "View-layer only and carries no signature)"
                     )
-                raise BranchTestGenerationError(
-                    f"{where}: '{method_name}' declares no parameter "
-                    f"'{name}' — its params are "
-                    f"{sorted(params) if params else '(none)'}"
-                )
+                else:
+                    message = (
+                        f"{where}: '{method_name}' declares no parameter "
+                        f"'{name}' — its params are "
+                        f"{sorted(params) if params else '(none)'}"
+                    )
+                if errors is None:
+                    raise BranchTestGenerationError(message)
+                errors.append(BindingError(method_name, i, None, None, message))
+
+
+# ---------------------------------------------------------------------------
+# Bindings: what one platform's generated tests are made of
+# ---------------------------------------------------------------------------
+
+#: Every platform the generator emits for, in the order it reports them.
+ALL_PLATFORMS = ("web", "android", "ios")
+
+
+def effective_platforms(config_platforms, metadata_platforms) -> tuple[str, ...]:
+    """The platforms a screen is tested on: the project's AND the screen's own.
+
+    ``config_platforms`` is `jui.config.json`'s `platforms` (None when it
+    declares none), ``metadata_platforms`` the screen's `metadata.platforms`
+    (None when absent). One function for the generator and for `contracts
+    coverage`: when the two read `metadata.platforms` differently, one of them
+    reports a platform the other never tests.
+
+    Both None means every platform — what the generator has always done.
+    """
+    def keep(allowed) -> tuple[str, ...]:
+        return tuple(p for p in ALL_PLATFORMS if p in allowed)
+
+    if config_platforms is None and metadata_platforms is None:
+        return ALL_PLATFORMS
+    if config_platforms is None:
+        return keep(metadata_platforms)
+    if metadata_platforms is None:
+        return keep(config_platforms)
+    return keep([p for p in config_platforms if p in metadata_platforms])
+
+
+@dataclass(frozen=True)
+class BindingError:
+    """One thing that stops a row (or the whole screen) from being generated.
+
+    ``kind`` tells `contracts coverage` what the failure means for the
+    status it touches: ``binding`` (the row cannot be generated at all),
+    ``no-scenario`` (an `alsoStatuses` status no scenario of the mock
+    returns — the mock is what needs a scenario), ``response`` (an
+    `@response.*` the `alsoStatuses` status's body cannot answer) and
+    ``self`` (an `alsoStatuses` status that is the row's own).
+    """
+    method: str | None
+    branch_index: int | None     # 0-based, into the method's branches
+    op: str | None
+    status: str | None
+    message: str
+    kind: str = "binding"
+
+
+@dataclass
+class Row:
+    """One generated test: a contract branch as bound, or its `alsoStatuses`
+    copy for one more status.
+
+    A copy is NOT inserted into the method's branches. Inserting it renumbers
+    every branch after it — every title and every note number in every
+    generated file drifts — and sharing the original's number gives Kotlin
+    and Swift two functions with one name. So a copy keeps the number of the
+    row it came from and carries ``also``.
+    """
+    method: str
+    number: int                  # 1-based position in the method's branches
+    branch: dict                 # a bound copy: `@response.*` resolved
+    also: tuple | None = None    # (status, scenario) for an alsoStatuses copy
+    #: The ops a call may be recorded under during this test (sorted): the
+    #: method's reach on this platform, plus the app's admitted side calls
+    #: for the statuses this test serves, minus what this row says
+    #: `not-called`.
+    allowed_ops: list = field(default_factory=list)
+
+
+@dataclass
+class Bindings:
+    routes: list
+    rows: list
+    errors: list
+
+
+@dataclass
+class AppRules:
+    """The app contracts spec whose `apiOutcomeRules` apply, as found.
+
+    Found from the project's config (its `spec_directory`), never by walking
+    up from a spec file: a face whose specs sit under a directory holding a
+    second `jui.config.json` would otherwise pick the wrong app.
+    """
+    spec_directory: Path | None = None
+    spec_file: Path | None = None
+    rules: list = field(default_factory=list)
+    #: App contracts specs that declare `apiOutcomeRules`. Two is a config
+    #: error: which one's rules apply is not something to guess.
+    declaring: list = field(default_factory=list)
+    #: (file, message) — unreadable app specs and shape errors in the rules.
+    problems: list = field(default_factory=list)
+
+    def note(self) -> str:
+        if self.spec_directory is None:
+            return ("apiOutcomeRules: none (no spec_directory in jui.config.json "
+                    "to find the app contracts spec in)")
+        if self.spec_file is None:
+            return "apiOutcomeRules: none (no app contracts spec declares them)"
+        return (f"apiOutcomeRules: {len(self.rules)} rule(s) from "
+                f"{self.spec_file.name}")
+
+
+def find_app_contract_spec(project_root: Path) -> AppRules:
+    """Read the app contracts spec's `apiOutcomeRules` for this project."""
+    from .contract_declarations import parse_declarations
+
+    found = AppRules()
+    spec_dir = load_project_config(project_root).get("spec_directory")
+    if not isinstance(spec_dir, str) or not spec_dir:
+        return found
+    spec_path = (project_root / spec_dir).resolve()
+    if not spec_path.is_dir():
+        return found
+    found.spec_directory = spec_path
+    for path in _spec_files(spec_path):
+        try:
+            text = path.read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError) as e:
+            continue
+        if APP_CONTRACTS_SPEC_TYPE not in text:
+            continue
+        try:
+            raw = json.loads(text)
+        except json.JSONDecodeError as e:
+            found.problems.append((path, f"not valid JSON ({e.msg}, line {e.lineno})"))
+            continue
+        if not isinstance(raw, dict) or raw.get("type") != APP_CONTRACTS_SPEC_TYPE:
+            continue
+        if "apiOutcomeRules" not in raw:
+            continue
+        found.declaring.append(path)
+        declarations = parse_declarations(raw)
+        for error in declarations.errors:
+            found.problems.append((path, f"{error.path}: {error.message}"))
+        found.spec_file = path
+        found.rules = list(declarations.rules)
+    if len(found.declaring) > 1:
+        found.spec_file = None
+        found.rules = []
+    return found
+
+
+def _app_rules_for_generation(project_root: Path) -> AppRules:
+    """`find_app_contract_spec`, with the cases that must stop generation raised.
+
+    A rule that silently fails to load takes its admitted calls with it, and
+    every test that relied on the admission turns red with nothing to say why.
+    """
+    found = find_app_contract_spec(project_root)
+    if len(found.declaring) > 1:
+        raise BranchTestGenerationError(
+            "apiOutcomeRules are declared by more than one app contracts spec ("
+            + ", ".join(str(p) for p in found.declaring)
+            + ") — which rules apply is ambiguous; keep them in one")
+    if found.problems:
+        raise BranchTestGenerationError(
+            "the app contracts spec's apiOutcomeRules could not be read: "
+            + "; ".join(f"{path.name}: {message}" for path, message in found.problems))
+    return found
+
+
+def _scenario_status(route: Route, name: str) -> str:
+    """A scenario's status as the contract compares it: a string, 200 if unset."""
+    scenario = route.scenarios.get(name)
+    status = scenario.get("status", 200) if isinstance(scenario, dict) else 200
+    return str(status)
+
+
+def _scenario_for_status(route: Route, status: str) -> str | None:
+    """The scenario an `alsoStatuses` status is served with, or None.
+
+    Chosen by the status it RETURNS: `error_<status>` when that name returns
+    it, else the first such name in sorted order. A scenario called
+    `error_429` that returns 503 is not a 429 scenario.
+    """
+    candidates = sorted(name for name in route.scenarios
+                        if _scenario_status(route, name) == status)
+    if not candidates:
+        return None
+    preferred = f"error_{status}"
+    return preferred if preferred in candidates else candidates[0]
+
+
+def _reached_ops(branch: dict) -> set[str]:
+    """The ops a branch asserts were called: its unspoken `when` ops, and
+    `then` `api.<op>: "called"` / `api.<op>.request`."""
+    when = branch.get("when") or {}
+    then = branch.get("then") or {}
+    reached = set(_unspoken_when_ops(when, then))
+    for key, value in then.items():
+        if not key.startswith("api."):
+            continue
+        if key.endswith(".request"):
+            reached.add(key[len("api."):-len(".request")])
+        elif value == "called":
+            reached.add(key[len("api."):])
+    return reached
+
+
+def _not_called_ops(branch: dict) -> set[str]:
+    """The ops a branch asserts were NOT called (the renderers' count == 0)."""
+    then = branch.get("then") or {}
+    return {
+        key[len("api."):] for key, value in then.items()
+        if key.startswith("api.") and not key.endswith(".request")
+        and value != "called"
+    }
+
+
+def _served_statuses(branch: dict, by_op: dict) -> set[str]:
+    """The statuses the branch's `when` names a scenario for (route defaults
+    are not counted — they are not what the branch arranged)."""
+    served = set()
+    for key, value in (branch.get("when") or {}).items():
+        if key.startswith("api.") and isinstance(value, str):
+            route = by_op.get(key[len("api."):])
+            if route is not None and value in route.scenarios:
+                served.add(_scenario_status(route, value))
+    return served
+
+
+def side_call_ops(rule, mocks: list[MockFile], routes: list[Route]) -> set[str]:
+    """The route ops a rule's `sideCalls` operationIds resolve to on this screen.
+
+    operationId -> the one GENERATED mock carrying it -> its method and path
+    -> the route with that exact method and path. Anything that does not
+    resolve admits nothing and raises nothing: a call to a route this screen
+    does not declare is recorded as unmatched and never reaches the bound,
+    and an id that resolves nowhere is `contracts coverage`'s to report.
+    """
+    ops: set[str] = set()
+    for operation_id in rule.side_calls:
+        files = [m for m in mocks if m.operation_id == operation_id]
+        if len(files) != 1:
+            continue
+        mock = files[0]
+        for route in routes:
+            if route.method == mock.method and route.path == mock.path:
+                ops.add(route.op)
+    return ops
+
+
+def collect_bindings(
+    spec: dict, methods_contracts: dict, mocks: list[MockFile],
+    mocks_dir: Path | None, platform: str, rules=(), declarations=None,
+) -> Bindings:
+    """Everything one platform's generated tests need, and everything that
+    stops them — collected, not raised.
+
+    Order: routes -> `alsoStatuses` expansion -> argument bindings ->
+    `@response.*` -> a trial of arranging and rendering each row. The
+    generator raises if anything was collected; `contracts coverage` judges
+    every row that bound and reports the ones that did not.
+    """
+    from .contract_declarations import parse_declarations
+
+    if declarations is None:
+        declarations = parse_declarations(spec)
+    errors: list[BindingError] = []
+    routes = resolve_routes(spec, methods_contracts, mocks, mocks_dir, errors=errors)
+    by_op = {route.op: route for route in routes}
+    also_by_branch: dict[tuple, list] = {}
+    for also in declarations.also_statuses:
+        also_by_branch.setdefault((also.method, also.branch), []).append(also)
+
+    rows: list[Row] = []
+    for method_name, contract in methods_contracts.items():
+        if not isinstance(contract, dict):
+            continue
+        for i, branch in enumerate(contract.get("branches") or []):
+            if not isinstance(branch, dict) or "note" in branch:
+                continue
+            if not _branch_active(branch, platform):
+                continue
+            rows.append(Row(method_name, i + 1, copy.deepcopy(branch)))
+            for also in also_by_branch.get((method_name, i), []):
+                route = by_op.get(also.op)
+                if route is None:
+                    continue    # the op's own binding error is already collected
+                where = f"methods.{method_name}.branches[{i}].alsoStatuses.api.{also.op}"
+                own_name = (branch.get("when") or {}).get(f"api.{also.op}")
+                own = _scenario_status(route, own_name)
+                for status in also.statuses:
+                    if status == own:
+                        errors.append(BindingError(
+                            method_name, i, also.op, status,
+                            f"{where}: {status} is the status this row already "
+                            f"serves ('{own_name}') — alsoStatuses lists the "
+                            "OTHER statuses its then holds for", kind="self"))
+                        continue
+                    scenario = _scenario_for_status(route, status)
+                    if scenario is None:
+                        errors.append(BindingError(
+                            method_name, i, also.op, status,
+                            f"{where}: no scenario of {route.method} {route.path} "
+                            f"returns {status} (its scenarios return "
+                            + ", ".join(sorted({_scenario_status(route, n) for n in route.scenarios}))
+                            + ") — add a scenario to the mock", kind="no-scenario"))
+                        continue
+                    duplicate = copy.deepcopy(branch)
+                    duplicate["when"] = dict(duplicate.get("when") or {})
+                    duplicate["when"][f"api.{also.op}"] = scenario
+                    rows.append(Row(method_name, i + 1, duplicate, (status, scenario)))
+
+    check_arg_bindings(spec, methods_contracts, errors=errors)
+
+    conditions = (spec.get("branchContracts") or {}).get("conditions") or {}
+    # A branch that already failed to bind (its route, scenario or argument)
+    # is not tried again: a second message about the same branch is noise.
+    failed = {(e.method, e.branch_index) for e in errors if e.kind == "binding"}
+    bound: list[Row] = []
+    for row in rows:
+        if (row.method, row.number - 1) in failed:
+            continue
+        suffix = f" [+{row.also[0]} via {row.also[1]}]" if row.also else ""
+        where = f"methods.{row.method}.branches[{row.number - 1}]{suffix}"
+        contract = methods_contracts[row.method]
+        try:
+            _resolve_branch_response_refs(row.branch, by_op, where)
+            state, seed = _arrange_state(contract, row.branch, conditions)
+            if platform == "android":
+                _kt(state), _kt(seed)
+            elif platform == "ios":
+                _swift(state), _swift(seed)
+        except BranchTestGenerationError as e:
+            errors.append(BindingError(
+                row.method, row.number - 1,
+                None if row.also is None else _also_op(row, contract),
+                None if row.also is None else row.also[0],
+                str(e), kind="response" if row.also else "binding"))
+            continue
+        bound.append(row)
+
+    reach: dict[str, set] = {}
+    for row in bound:
+        reach.setdefault(row.method, set()).update(_reached_ops(row.branch))
+    admitted = [(rule, side_call_ops(rule, mocks, routes)) for rule in rules]
+    for row in bound:
+        served = _served_statuses(row.branch, by_op)
+        allowed = set(reach.get(row.method, set()))
+        for rule, ops in admitted:
+            if served & set(rule.statuses):
+                allowed |= ops
+        allowed -= _not_called_ops(row.branch)
+        row.allowed_ops = sorted(allowed)
+    return Bindings(routes=routes, rows=bound, errors=errors)
+
+
+def _also_op(row: Row, contract: dict) -> str | None:
+    """The op an `alsoStatuses` copy substituted a scenario for."""
+    original = (contract.get("branches") or [])[row.number - 1]
+    for key, value in (row.branch.get("when") or {}).items():
+        if key.startswith("api.") and (original.get("when") or {}).get(key) != value:
+            return key[len("api."):]
+    return None
+
+
+def _raise_binding_errors(errors: list) -> None:
+    if not errors:
+        return
+    if len(errors) == 1:
+        raise BranchTestGenerationError(errors[0].message)
+    raise BranchTestGenerationError(
+        f"{len(errors)} binding error(s):\n" + "\n".join(f"  - {e.message}" for e in errors))
 
 
 # ---------------------------------------------------------------------------
@@ -1178,8 +1632,54 @@ def _branch_title(index: int, branch: dict) -> str:
     return f"branch {index}: " + (" & ".join(parts) if parts else "(empty when)")
 
 
+#: Said when a test records a call its method's rows do not reach. The bound
+#: is what keeps "delete the row that reaches an endpoint" from being the
+#: cheapest way to make its uncovered statuses disappear.
+UNEXPECTED_OPS_MESSAGE = (
+    "declared routes called outside what this method's rows reach — if the "
+    "method makes the call, say so in a row (then api.<op>: \"called\"); if "
+    "the app's network layer makes it, admit it with apiOutcomeRules")
+
+
+def _rows_in_order(contract: dict, method_name: str, rows: list, platform: str,
+                   report: "GenerationReport"):
+    """Yield ("row", row) and ("skipped", number, platforms) in branch order.
+
+    Also counts the report: declared branches (originals only), note
+    branches, platform-skipped branches and `alsoStatuses` copies.
+    """
+    branches = contract.get("branches") or []
+    report.note_branches += sum(
+        1 for b in branches if isinstance(b, dict) and "note" in b)
+    by_number: dict[int, list] = {}
+    for row in rows:
+        if row.method == method_name:
+            by_number.setdefault(row.number, []).append(row)
+    for i, branch in enumerate(branches):
+        if not isinstance(branch, dict) or "note" in branch:
+            continue
+        if not _branch_active(branch, platform):
+            report.platform_skipped += 1
+            yield ("skipped", i + 1, branch.get("platforms"))
+            continue
+        report.declared_branches += 1
+        for row in by_number.get(i + 1, []):
+            if row.also is not None:
+                report.also_statuses_rows += 1
+            yield ("row", row)
+
+
+def _row_title(contract: dict, row: "Row") -> str:
+    original = (contract.get("branches") or [])[row.number - 1]
+    title = _branch_title(row.number, original)
+    if row.also is not None:
+        title += f" [+{row.also[0]} via {row.also[1]}]"
+    return title
+
+
 def render_test_file(
     screen: str, spec: dict, routes: list[Route], harness_import: str,
+    rows: list,
 ) -> tuple[str, GenerationReport]:
     bc = spec.get("branchContracts") or {}
     conditions = bc.get("conditions") or {}
@@ -1218,7 +1718,6 @@ def render_test_file(
         branches = contract.get("branches") or []
         notes = [(i + 1, b["note"]) for i, b in enumerate(branches)
                  if isinstance(b, dict) and "note" in b]
-        report.note_branches += len(notes)
 
         lines.append(f"describe({_ts(screen + '.' + method_name)}, () => {{")
         if notes:
@@ -1226,18 +1725,13 @@ def render_test_file(
             lines.append("  // contract in the spec; listed here so coverage boundaries stay visible:")
             for num, note in notes:
                 lines.append(f"  //   #{num}: {note}")
-        for i, branch in enumerate(branches):
-            if not isinstance(branch, dict) or "note" in branch:
-                continue
-            if not _branch_active(branch, "web"):
-                report.platform_skipped += 1
+        for item in _rows_in_order(contract, method_name, rows, "web", report):
+            if item[0] == "skipped":
                 lines.append(
-                    f"  // branch {i + 1} is platform-scoped "
-                    f"({branch.get('platforms')}) — not generated for web")
+                    f"  // branch {item[1]} is platform-scoped "
+                    f"({item[2]}) — not generated for web")
                 continue
-            report.declared_branches += 1
-            lines.extend(_render_branch(
-                method_name, params, contract, branch, i + 1, conditions))
+            lines.extend(_render_branch(method_name, params, contract, item[1], conditions))
         lines.append("});")
         lines.append("")
 
@@ -1271,9 +1765,10 @@ def _collect_data_refs(then: dict) -> list[str]:
 
 
 def _render_branch(
-    method_name: str, params: list[str], contract: dict, branch: dict,
-    number: int, conditions: dict,
+    method_name: str, params: list[str], contract: dict, row: "Row",
+    conditions: dict,
 ) -> list[str]:
+    branch = row.branch
     when = branch.get("when") or {}
     then = branch.get("then") or {}
     state, seed = _arrange_state(contract, branch, conditions)
@@ -1288,24 +1783,31 @@ def _render_branch(
     data_refs = _collect_data_refs(then)
 
     out: list[str] = []
-    title = _branch_title(number, branch)
-    out.append(f"  it({_ts(title)}, async () => {{")
-    out.append("    const h = createHarness();")
+    out.append(f"  it({_ts(_row_title(contract, row))}, async () => {{")
+    # The act window: the mock goes in BEFORE the harness is built, the
+    # construction's own calls settle, the arrangement is written, and only
+    # then does the recorder start counting. In the old order a call the
+    # constructor started ran during the settle that follows act — it
+    # overwrote the arranged state and landed inside the window, in an order
+    # that differed per platform.
+    if overrides:
+        out.append(f"    const rec = installFetchMock(ROUTES, {_ts(overrides)});")
+    else:
+        out.append("    const rec = installFetchMock(ROUTES);")
+    out.append("    try {")
+    out.append("      const h = createHarness();")
+    out.append("      await settle();")
     if state:
-        out.append(f"    h.setState({_ts(state)});")
+        out.append(f"      h.setState({_ts(state)});")
     if seed:
         # Strict, and read back. A harness written before seedable state
         # ignores names it does not know, so "setState was called" and "the
         # state went in" are separate claims — only the second one arranges
         # the branch.
-        out.append(f"    seedState(h, {_ts(seed)});")
-    if overrides:
-        out.append(f"    const rec = installFetchMock(ROUTES, {_ts(overrides)});")
-    else:
-        out.append("    const rec = installFetchMock(ROUTES);")
+        out.append(f"      seedState(h, {_ts(seed)});")
+    out.append("      rec.mark();")
     for fname in data_refs:
-        out.append(f"    const ref_{fname} = h.readField({_ts(fname)});")
-    out.append("    try {")
+        out.append(f"      const ref_{fname} = h.readField({_ts(fname)});")
     call_args = ", ".join(args)
     out.append(f"      await (h.vm as any).{method_name}({call_args});")
     out.append("      await settle();")
@@ -1320,6 +1822,10 @@ def _render_branch(
             f"`route '{op}' declared in when was never hit "
             f"(${{rec.countFor({_ts(op)})}} requests)`).toBeGreaterThan(0);"
         )
+    out.append(
+        f"      expect(rec.unexpectedOps({_ts(row.allowed_ops)}), "
+        f"{_ts(UNEXPECTED_OPS_MESSAGE)}).toEqual([]);"
+    )
 
     for key, value in then.items():
         if key == "api":
@@ -1435,13 +1941,23 @@ export interface RecordedCall {
 }
 
 export interface FetchRecorder {
+  /** Every call since the mock was installed, including the ones before
+   * `mark()` — for diagnostics. The reads below see only the window. */
   calls: RecordedCall[];
+  /** Start the window: every read below counts calls made after this, and
+   * none before. A generated test marks after the harness is built and the
+   * state arranged, so what the constructor fetched is not read as the
+   * method's doing. Never marked, the window is every call. */
+  mark(): void;
   /** Calls bound to a declared route — the `api: "none"` surface.
    * Unmatched traffic (third-party SDKs, undeclared endpoints) is still
    * recorded and served a 599 for diagnostics, but does not count. */
   matchedCalls(): RecordedCall[];
   countFor(op: string): number;
   lastBodyFor(op: string): unknown;
+  /** The declared ops called in the window that `allowed` does not name,
+   * each once, sorted. Empty when every call was one the contract expects. */
+  unexpectedOps(allowed: string[]): string[];
   restore(): void;
 }
 
@@ -1524,19 +2040,32 @@ export function installFetchMock(
     }
   };
 
+  let windowStart = 0;
+  const windowed = (): RecordedCall[] => calls.slice(windowStart);
+
   return {
     calls,
+    mark() {
+      windowStart = calls.length;
+    },
     matchedCalls() {
-      return calls.filter((c) => c.op !== "(unmatched)");
+      return windowed().filter((c) => c.op !== "(unmatched)");
     },
     countFor(op: string) {
       assertDeclared(op);
-      return calls.filter((c) => c.op === op).length;
+      return windowed().filter((c) => c.op === op).length;
     },
     lastBodyFor(op: string) {
       assertDeclared(op);
-      const m = calls.filter((c) => c.op === op);
+      const m = windowed().filter((c) => c.op === op);
       return m.length ? m[m.length - 1].body : undefined;
+    },
+    unexpectedOps(allowed: string[]) {
+      const ok = new Set(allowed);
+      const extra = windowed()
+        .map((c) => c.op)
+        .filter((op) => op !== "(unmatched)" && !ok.has(op));
+      return [...new Set(extra)].sort();
     },
     restore() {
       globalThis.fetch = original;
@@ -1927,7 +2456,7 @@ def _kt_expected(value) -> str:
 
 
 def render_kotlin_test_file(
-    screen: str, spec: dict, routes: list[Route], package: str,
+    screen: str, spec: dict, routes: list[Route], package: str, rows: list,
 ) -> tuple[str, GenerationReport]:
     bc = spec.get("branchContracts") or {}
     conditions = bc.get("conditions") or {}
@@ -1982,33 +2511,30 @@ def render_kotlin_test_file(
         branches = contract.get("branches") or []
         notes = [(i + 1, b["note"]) for i, b in enumerate(branches)
                  if isinstance(b, dict) and "note" in b]
-        report.note_branches += len(notes)
         lines.append("")
         lines.append(f"  // ===== {method_name} =====")
         if notes:
             lines.append("  // %d note-only branch(es) — outside the machine-checkable contract:" % len(notes))
             for num, note in notes:
                 lines.append(f"  //   #{num}: {note}")
-        for i, branch in enumerate(branches):
-            if not isinstance(branch, dict) or "note" in branch:
-                continue
-            if not _branch_active(branch, "android"):
-                report.platform_skipped += 1
+        for item in _rows_in_order(contract, method_name, rows, "android", report):
+            if item[0] == "skipped":
                 lines.append(
-                    f"  // branch {i + 1} is platform-scoped "
-                    f"({branch.get('platforms')}) — not generated for android")
+                    f"  // branch {item[1]} is platform-scoped "
+                    f"({item[2]}) — not generated for android")
                 continue
-            report.declared_branches += 1
             lines.extend(_render_kotlin_branch(
-                pascal, method_name, params, contract, branch, i + 1, conditions))
+                pascal, method_name, params, contract, item[1], conditions))
     lines.append("}")
     return "\n".join(lines) + "\n", report
 
 
 def _render_kotlin_branch(
     pascal: str, method_name: str, params: list[str], contract: dict,
-    branch: dict, number: int, conditions: dict,
+    row: "Row", conditions: dict,
 ) -> list[str]:
+    branch = row.branch
+    number = row.number
     when = branch.get("when") or {}
     then = branch.get("then") or {}
     state, seed = _arrange_state(contract, branch, conditions)
@@ -2021,19 +2547,27 @@ def _render_kotlin_branch(
     while args and args[-1] == "null":
         args.pop()
     data_refs = _collect_data_refs(then)
+    name = f"{method_name} branch {number}"
+    if row.also is not None:
+        name += f" also {row.also[0]}"
 
     out: list[str] = []
     out.append("")
-    out.append(f"  // {_branch_title(number, branch)}")
-    out.append(f"  @Test fun `{method_name} branch {number}`() {{")
+    out.append(f"  // {_row_title(contract, row)}")
+    out.append(f"  @Test fun `{name}`() {{")
     out.append(
         f"    runBranchTest(routes, {_kt({k: v for k, v in overrides.items()})}, "
         f"::create{pascal}BranchHarness) {{ h, rec ->"
     )
+    # The act window (see the web emitter): the harness was built with the
+    # server already serving; its construction settles, the arrangement goes
+    # in, and the recorder starts counting only then.
+    out.append("      h.settle()")
     if state:
         out.append(f"      h.setState({_kt(state)})")
     if seed:
         out.append(f"      seedState(h, {_kt(seed)})")
+    out.append("      rec.mark()")
     for fname in data_refs:
         out.append(f"      val ref_{fname} = h.readField({_kt_str(fname)})")
     call_args = ", ".join(args)
@@ -2048,6 +2582,11 @@ def _render_kotlin_branch(
             f"(${{rec.countFor({_kt_str(op)})}} requests)\", "
             f"rec.countFor({_kt_str(op)}) > 0)"
         )
+    allowed = ", ".join(_kt_str(op) for op in row.allowed_ops)
+    out.append(
+        f"      assertEquals({_kt_str(UNEXPECTED_OPS_MESSAGE)}, emptyList<String>(), "
+        f"rec.unexpectedOps(setOf<String>({allowed})))"
+    )
 
     for key, value in then.items():
         if key == "api":
@@ -2165,18 +2704,35 @@ class Recorder(routeOps: Set<String>? = null) {
     }
   }
 
+  private var windowStart = 0
+
+  /** Start the window: every read below counts calls made after this, and
+   * none before. A generated test marks after the harness is built and the
+   * state arranged, so what the constructor fetched is not read as the
+   * method's doing. Never marked, the window is every call. */
+  fun mark() {
+    windowStart = calls.size
+  }
+
+  private fun windowed(): List<RecordedCall> = calls.toList().drop(windowStart)
+
   /** Calls bound to a declared route — the `api: "none"` surface. */
-  fun matchedCalls(): List<RecordedCall> = calls.filter { it.op != "(unmatched)" }
+  fun matchedCalls(): List<RecordedCall> = windowed().filter { it.op != "(unmatched)" }
 
   fun countFor(op: String): Int {
     assertDeclared(op)
-    return calls.count { it.op == op }
+    return windowed().count { it.op == op }
   }
 
   fun lastBodyFor(op: String): JsonElement? {
     assertDeclared(op)
-    return calls.lastOrNull { it.op == op }?.body?.let { Json.parseToJsonElement(it) }
+    return windowed().lastOrNull { it.op == op }?.body?.let { Json.parseToJsonElement(it) }
   }
+
+  /** The declared ops called in the window that `allowed` does not name,
+   * each once, sorted. Empty when every call was one the contract expects. */
+  fun unexpectedOps(allowed: Set<String>): List<String> =
+    windowed().map { it.op }.filter { it != "(unmatched)" && it !in allowed }.distinct().sorted()
 }
 
 /** '@data.<field>' pre-act capture marker for partial matching / asserts. */
@@ -2715,7 +3271,7 @@ def _swift_expected(value) -> str:
 
 
 def render_swift_test_file(
-    screen: str, spec: dict, routes: list[Route], module: str,
+    screen: str, spec: dict, routes: list[Route], module: str, rows: list,
 ) -> tuple[str, GenerationReport]:
     bc = spec.get("branchContracts") or {}
     conditions = bc.get("conditions") or {}
@@ -2787,33 +3343,30 @@ def render_swift_test_file(
         branches = contract.get("branches") or []
         notes = [(i + 1, b["note"]) for i, b in enumerate(branches)
                  if isinstance(b, dict) and "note" in b]
-        report.note_branches += len(notes)
         lines.append("")
         lines.append(f"  // ===== {method_name} =====")
         if notes:
             lines.append("  // %d note-only branch(es) — outside the machine-checkable contract:" % len(notes))
             for num, note in notes:
                 lines.append(f"  //   #{num}: {note}")
-        for i, branch in enumerate(branches):
-            if not isinstance(branch, dict) or "note" in branch:
-                continue
-            if not _branch_active(branch, "ios"):
-                report.platform_skipped += 1
+        for item in _rows_in_order(contract, method_name, rows, "ios", report):
+            if item[0] == "skipped":
                 lines.append(
-                    f"  // branch {i + 1} is platform-scoped "
-                    f"({branch.get('platforms')}) — not generated for ios")
+                    f"  // branch {item[1]} is platform-scoped "
+                    f"({item[2]}) — not generated for ios")
                 continue
-            report.declared_branches += 1
             lines.extend(_render_swift_branch(
-                pascal, method_name, params, contract, branch, i + 1, conditions))
+                pascal, method_name, params, contract, item[1], conditions))
     lines.append("}")
     return "\n".join(lines) + "\n", report
 
 
 def _render_swift_branch(
     pascal: str, method_name: str, params: list[str], contract: dict,
-    branch: dict, number: int, conditions: dict,
+    row: "Row", conditions: dict,
 ) -> list[str]:
+    branch = row.branch
+    number = row.number
     when = branch.get("when") or {}
     then = branch.get("then") or {}
     state, seed = _arrange_state(contract, branch, conditions)
@@ -2827,23 +3380,32 @@ def _render_swift_branch(
         args.pop()
     data_refs = _collect_data_refs(then)
 
+    name = f"test_{method_name}_branch_{number}"
+    if row.also is not None:
+        name += f"_also_{row.also[0]}"
+
     out: list[str] = []
     out.append("")
-    out.append(f"  // {_branch_title(number, branch)}")
+    out.append(f"  // {_row_title(contract, row)}")
     # @MainActor: the harness factory this calls builds the real ViewModel,
     # which is MainActor-isolated in every app that builds @MainActor. The
     # class is `nonisolated` (see the class emit), so without this the body
     # cannot reach it. Harmless on a Swift 5 target and on a target whose
     # default is nonisolated — a MainActor method may call either.
-    out.append(f"  @MainActor func test_{method_name}_branch_{number}() {{")
+    out.append(f"  @MainActor func {name}() {{")
     out.append(
         f"    runBranchTest(routes: routes, overrides: {_swift(overrides) if overrides else '[:]'},"
     )
     out.append(f"                      harnessFactory: create{pascal}BranchHarness) {{ h, rec in")
+    # The act window (see the web emitter): the harness was built with the
+    # protocol already serving; its construction settles, the arrangement
+    # goes in, and the recorder starts counting only then.
+    out.append("      h.settle()")
     if state:
         out.append(f"      h.setState({_swift(state)})")
     if seed:
         out.append(f"      seedState(h, {_swift(seed)})")
+    out.append("      rec.mark()")
     for fname in data_refs:
         out.append(f"      let ref_{fname} = h.readField({_swift_str(fname)})")
     call_args = ", ".join(args)
@@ -2858,6 +3420,11 @@ def _render_swift_branch(
             f"\"route '{op}' declared in when was never hit "
             f"(\\(rec.countFor({_swift_str(op)})) requests)\")"
         )
+    allowed = ", ".join(_swift_str(op) for op in row.allowed_ops)
+    out.append(
+        f"      XCTAssertEqual(rec.unexpectedOps([{allowed}]), [], "
+        f"{_swift_str(UNEXPECTED_OPS_MESSAGE)})"
+    )
 
     for key, value in then.items():
         if key == "api":
@@ -2961,7 +3528,7 @@ nonisolated final class Recorder {
   /// the URLProtocol intercepts the whole process, so third-party SDK
   /// traffic (analytics etc.) shows up as "(unmatched)"; it is served a
   /// 599 and recorded for diagnostics but is not the contract surface.
-  func matchedCalls() -> [RecordedCall] { calls.filter { $0.op != "(unmatched)" } }
+  func matchedCalls() -> [RecordedCall] { windowed.filter { $0.op != "(unmatched)" } }
 
 //<<undeclared-op doc>>
   private let declared: Set<String>?
@@ -2982,14 +3549,30 @@ nonisolated final class Recorder {
     }
   }
 
+  private var windowStart = 0
+
+  /// Start the window: every read below counts calls made after this, and
+  /// none before. A generated test marks after the harness is built and the
+  /// state arranged, so what the constructor fetched is not read as the
+  /// method's doing. Never marked, the window is every call.
+  func mark() { windowStart = calls.count }
+
+  private var windowed: ArraySlice<RecordedCall> { calls.dropFirst(windowStart) }
+
   func countFor(_ op: String) -> Int {
     assertDeclared(op)
-    return calls.filter { $0.op == op }.count
+    return windowed.filter { $0.op == op }.count
   }
 
   func lastBodyFor(_ op: String) -> Any? {
     assertDeclared(op)
-    return calls.last { $0.op == op }?.body
+    return windowed.last { $0.op == op }?.body
+  }
+
+  /// The declared ops called in the window that `allowed` does not name,
+  /// each once, sorted. Empty when every call was one the contract expects.
+  func unexpectedOps(_ allowed: Set<String>) -> [String] {
+    Array(Set(windowed.map { $0.op }.filter { $0 != "(unmatched)" && !allowed.contains($0) })).sorted()
   }
 }
 
@@ -3729,7 +4312,20 @@ def generate_branch_tests(
     package: str | None = None,
     module: str | None = None,
     check: bool = False,
+    config_platforms: list | None = None,
+    app_rules: "AppRules | None" = None,
 ) -> GenerationReport:
+    """Generate (or, with ``check``, compare) one screen's branch tests.
+
+    ``config_platforms`` is `jui.config.json`'s `platforms` (None: not
+    declared). A platform outside the screen's effective platforms
+    (`effective_platforms`) produces nothing and expects nothing, and a file
+    generated there before is retired. ``app_rules`` is the project's
+    `find_app_contract_spec` result, read once by a caller generating many
+    screens; None reads it here.
+    """
+    from .contract_declarations import parse_declarations
+
     spec_file = resolve_spec_path(screen, project_root, spec_path)
     if not spec_file.exists():
         raise BranchTestGenerationError(f"spec not found: {spec_file}")
@@ -3751,34 +4347,54 @@ def generate_branch_tests(
             f"{spec_file.name} declares no branchContracts.methods — nothing to generate"
         )
 
-    mocks_path = (project_root / mocks_dir).resolve()
-    mocks = index_mock_files(mocks_path)
-    routes = resolve_routes(spec, bc["methods"], mocks, mocks_path)
-    check_arg_bindings(spec, bc["methods"])
-    resolve_response_refs(bc["methods"], routes)
-
-    if platform == "android":
-        if not package:
-            raise BranchTestGenerationError(
-                "--package is required for --platform android (Kotlin package "
-                "of the generated test sources)"
-            )
-        return _emit_android(
-            screen, spec, routes, project_root, out_dir, harness_dir, package,
-            check)
-    if platform == "ios":
-        if not module:
-            raise BranchTestGenerationError(
-                "--module is required for --platform ios (the app module name "
-                "for @testable import)"
-            )
-        return _emit_ios(
-            screen, spec, routes, project_root, out_dir, harness_dir, module,
-            check)
-    if platform != "web":
+    if platform not in ALL_PLATFORMS:
         raise BranchTestGenerationError(
             f"unknown platform '{platform}' — supported: web, android, ios"
         )
+    if platform == "android" and not package:
+        raise BranchTestGenerationError(
+            "--package is required for --platform android (Kotlin package "
+            "of the generated test sources)"
+        )
+    if platform == "ios" and not module:
+        raise BranchTestGenerationError(
+            "--module is required for --platform ios (the app module name "
+            "for @testable import)"
+        )
+
+    # The declarations first: a malformed `alsoStatuses` or `metadata.platforms`
+    # would otherwise be half-read by the steps below.
+    declarations = parse_declarations(spec)
+    if declarations.errors:
+        raise BranchTestGenerationError(
+            f"{spec_file.name}: " + "; ".join(
+                f"{e.path}: {e.message}" for e in declarations.errors)
+            + " (jsonui-doc validate spec reports the same)")
+
+    # Decided BEFORE binding: a platform the screen does not exist on must not
+    # fail generation over a binding error it would never have used.
+    if platform not in effective_platforms(config_platforms, declarations.platforms):
+        return _retire_excluded_platform(
+            screen, project_root, out_dir, platform, package, check)
+
+    if app_rules is None:
+        app_rules = _app_rules_for_generation(project_root)
+    mocks_path = (project_root / mocks_dir).resolve()
+    mocks = index_mock_files(mocks_path)
+    bindings = collect_bindings(
+        spec, bc["methods"], mocks, mocks_path, platform,
+        rules=app_rules.rules, declarations=declarations)
+    _raise_binding_errors(bindings.errors)
+    routes, rows = bindings.routes, bindings.rows
+
+    if platform == "android":
+        return _emit_android(
+            screen, spec, routes, rows, project_root, out_dir, harness_dir,
+            package, check)
+    if platform == "ios":
+        return _emit_ios(
+            screen, spec, routes, rows, project_root, out_dir, harness_dir,
+            module, check)
 
     emitter = _Emitter(check)
     out_path = project_root / out_dir
@@ -3788,7 +4404,7 @@ def generate_branch_tests(
     # before anything is dug — and a screen that turns out to belong to
     # another platform leaves no empty directory behind.
     rel = _relative_import(out_path, harness_path / screen)
-    content, report = render_test_file(screen, spec, routes, rel)
+    content, report = render_test_file(screen, spec, routes, rel, rows)
     if _skip_for_platform(report):
         # The screen produced a test here until its branches moved to
         # another platform. Nothing else knows to remove it: the run that
@@ -3860,9 +4476,38 @@ def _harness_predates_invoke(harness_file: Path, created: bool) -> bool:
     return "invoke(" not in text
 
 
+def _test_file_path(screen: str, project_root: Path, out_dir: str,
+                    platform: str, package: str | None) -> Path:
+    """Where this screen's generated test for ``platform`` lives."""
+    if platform == "android":
+        return (project_root / out_dir / _relative_kotlin_paths(package or "")
+                / f"{_pascal(screen)}BranchesTest.kt")
+    if platform == "ios":
+        return project_root / out_dir / f"{_pascal(screen)}BranchesTest.swift"
+    return project_root / out_dir / f"{screen}.branches.test.ts"
+
+
+def _retire_excluded_platform(
+    screen: str, project_root: Path, out_dir: str, platform: str,
+    package: str | None, check: bool,
+) -> GenerationReport:
+    """A platform outside the screen's effective platforms: nothing is
+    generated, nothing is expected, and a test generated there earlier is
+    retired — the run that stops producing a file is the only run that
+    knows it stopped."""
+    report = GenerationReport(screen=screen)
+    report.platform_applicable = False
+    report.platform_excluded = True
+    emitter = _Emitter(check)
+    emitter.retire(_test_file_path(screen, project_root, out_dir, platform, package))
+    emitter.apply_to(report)
+    return report
+
+
 def _emit_ios(
-    screen: str, spec: dict, routes: list[Route], project_root: Path,
-    out_dir: str, harness_dir: str, module: str, check: bool = False,
+    screen: str, spec: dict, routes: list[Route], rows: list,
+    project_root: Path, out_dir: str, harness_dir: str, module: str,
+    check: bool = False,
 ) -> GenerationReport:
     """iOS emission: Swift XCTest sources. With Xcode's file-system-
     synchronized test groups, dropping the files into the test target's
@@ -3872,7 +4517,7 @@ def _emit_ios(
     out_path = project_root / out_dir
     harness_path = project_root / harness_dir
 
-    content, report = render_swift_test_file(screen, spec, routes, module)
+    content, report = render_swift_test_file(screen, spec, routes, module, rows)
     if _skip_for_platform(report):
         emitter.retire(out_path / f"{pascal}BranchesTest.swift")
         emitter.apply_to(report)
@@ -3908,8 +4553,9 @@ def _emit_ios(
 
 
 def _emit_android(
-    screen: str, spec: dict, routes: list[Route], project_root: Path,
-    out_dir: str, harness_dir: str, package: str, check: bool = False,
+    screen: str, spec: dict, routes: list[Route], rows: list,
+    project_root: Path, out_dir: str, harness_dir: str, package: str,
+    check: bool = False,
 ) -> GenerationReport:
     """Android emission: Kotlin JUnit4 (Robolectric) sources.
 
@@ -3921,7 +4567,7 @@ def _emit_android(
     out_path = project_root / out_dir / pkg_path
     harness_path = project_root / harness_dir / pkg_path
 
-    content, report = render_kotlin_test_file(screen, spec, routes, package)
+    content, report = render_kotlin_test_file(screen, spec, routes, package, rows)
     if _skip_for_platform(report):
         emitter.retire(out_path / f"{pascal}BranchesTest.kt")
         emitter.apply_to(report)
