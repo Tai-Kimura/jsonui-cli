@@ -1579,7 +1579,8 @@ def _branch_check_summary(reports: list, scanned: int, orphans=()) -> int:
 def cmd_contracts_coverage(args):
     """Handle 'contracts coverage' — API outcomes no branch contract answers."""
     from .contracts_coverage import (
-        EXIT_CANNOT_START, CannotStart, format_text, run_coverage, to_json,
+        EXIT_CANNOT_START, CannotStart, CoverageTotalsError, format_text, run_coverage,
+        to_json,
     )
 
     try:
@@ -1590,6 +1591,16 @@ def cmd_contracts_coverage(args):
                               "error": str(e)}, indent=2, ensure_ascii=False))
         else:
             print(f"contracts coverage: cannot start — {e}", file=sys.stderr)
+        return EXIT_CANNOT_START
+    except CoverageTotalsError as e:
+        # A defect in this tool, not in the project: no table is printed,
+        # because one whose parts do not add up to its whole would be read.
+        if args.as_json:
+            print(json.dumps({"exit": EXIT_CANNOT_START, "verdict": "totals_do_not_close",
+                              "error": str(e)}, indent=2, ensure_ascii=False))
+        else:
+            print(f"contracts coverage: {e} — nothing printed; this is a defect "
+                  "in the tool, please report it", file=sys.stderr)
         return EXIT_CANNOT_START
     if args.as_json:
         print(json.dumps(to_json(report), indent=2, ensure_ascii=False))

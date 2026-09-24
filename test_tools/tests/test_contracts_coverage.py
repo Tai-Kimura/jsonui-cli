@@ -545,7 +545,7 @@ def test_the_block_total_is_the_sum_of_its_screens_not_the_last_one(tmp_path):
     assert [s.na_endpoints["unbound"] for s in screens] == [1, 0]   # the last one is 0
     assert block.na_totals["unbound"] == {"count": 1, "screens": 1}
     text = cc.format_text(report)
-    total = [l for l in text if l.startswith("[platform=web] total ")]
+    total = [l for l in text if l.startswith("[platform=web] total n/a")]
     assert total == ["[platform=web] total n/a(no mock) 0 (screens 0) · n/a(not in OpenAPI) 0 "
                      "(screens 0) · n/a(unbound endpoint) 1 (screens 1) · n/a(non-HTTP) 0 (screens 0)"]
     # The documented name finds it: a search for n/a(unbound endpoint) hits
@@ -738,3 +738,126 @@ def test_a_row_on_web_reaching_an_ios_only_endpoint_is_named(tmp_path):
     assert s.outside_required["na_platform_excluded"] == 2
     assert any("reaches api.getOther on web" in n and "n/a(platform-excluded)" in n
                for n in s.notes), s.notes
+
+
+# ------------------------------------------------ the block's own denominator ---
+#
+# The block printed its n/a counts and its exit, and nothing it was measured
+# against: units and statuses required existed only per screen (design §2.2
+# puts them on the same line). The totals are computed once, checked for
+# conservation in the code, and read by both printers.
+
+import re as _re
+
+_TOTAL_LINE = _re.compile(
+    r"^\[platform=(\w+)\] total units (\d+) · statuses required (\d+) = row (\d+) \+ unit (\d+) "
+    r"\+ unreachable (\d+) \+ unexpressible (\d+) \+ not-evaluated (\d+) \+ uncovered (\d+) "
+    r"\(partial (\d+) \+ default-only (\d+) \+ unattributed (\d+)\)$")
+
+
+def _text_totals(text) -> dict:
+    out = {}
+    for line in text:
+        m = _TOTAL_LINE.match(line)
+        if m:
+            keys = ("units", "statuses_required", "row", "unit", "unreachable", "unexpressible",
+                    "not_evaluated", "uncovered", "partial", "default_only", "unattributed")
+            out[m.group(1)] = dict(zip(keys, map(int, m.groups()[1:])))
+    return out
+
+
+def _flat(totals: dict) -> dict:
+    flat = {k: v for k, v in totals.items() if isinstance(v, int)}
+    flat.update(totals["uncovered_breakdown"])
+    return flat
+
+
+def test_the_block_totals_carry_the_denominator(tmp_path):
+    report = _run(_project(tmp_path))
+    t = _block(report).totals
+    assert (t["units"], t["contracted_methods"], t["statuses_required"]) == (2, 1, 12)
+    assert [t[k] for k in cc.BREAKDOWN_KEYS] == [5, 0, 1, 0, 0, 6]          # 12
+    assert t["uncovered_breakdown"] == {"partial": 4, "default_only": 0, "unattributed": 2}
+    assert sum(t["outside_required"].values()) == 1
+    assert ("[platform=web] total units 2 · statuses required 12 = row 5 + unit 0 + unreachable 1 "
+            "+ unexpressible 0 + not-evaluated 0 + uncovered 6 (partial 4 + default-only 0 + "
+            "unattributed 2)") in cc.format_text(report)
+
+
+def test_the_block_totals_are_the_sum_of_the_screens(tmp_path):
+    report = _two_screens(tmp_path)
+    block = _block(report)
+    active = [s for s in block.screens if not s.platform_excluded]
+    assert len(active) == 2
+    assert block.totals["units"] == sum(s.units for s in active) == 4
+    assert block.totals["statuses_required"] == sum(s.statuses_required for s in active) == 24
+
+
+def _with_exclusions() -> dict:
+    """unit 2 (setApproval 401, 403), unexpressible 1 (404), unreachable 1."""
+    spec = _screen()
+    spec["branchContracts"]["methods"]["approve"]["excludedOutcomes"]["api.setApproval"] = {
+        "401": {"by": "unit", "reason": "r"}, "403": {"by": "unit", "reason": "r"},
+        "404": {"by": "unexpressible", "reason": "r"}}
+    return spec
+
+
+@pytest.mark.parametrize("specimen", ["baseline", "two_op", "exclusions"])
+def test_the_text_and_the_json_totals_agree_on_every_key(tmp_path, specimen):
+    # The control: two printers, one object. Every key, every platform. Three
+    # specimens because a swap of two buckets that are EQUAL in a specimen
+    # prints the same line: across these, every pair of buckets differs in at
+    # least one (baseline: unreachable 1 vs unit / unexpressible / not-evaluated
+    # 0; exclusions: unit 2 vs unexpressible 1 vs not-evaluated 0).
+    spec = {"baseline": _screen, "two_op": _two_op_spec, "exclusions": _with_exclusions}[specimen]()
+    report = _run(_project(tmp_path, spec))
+    text = cc.format_text(report)
+    from_text = _text_totals(text)
+    data = cc.to_json(report)
+    assert set(from_text) == {p["platform"] for p in data["platforms"]}
+    for block in data["platforms"]:
+        flat = _flat(block["totals"])
+        assert {k: flat[k] for k in from_text[block["platform"]]} == from_text[block["platform"]]
+    required = sum(p["totals"]["statuses_required"] for p in data["platforms"])
+    assert any(l.startswith(f"exit {data['exit']} (composed 2 > 1 > 3 > 0) statuses required {required}")
+               for l in text)
+
+
+@pytest.mark.parametrize("name, keep", [
+    ("BREAKDOWN_KEYS", lambda keys: tuple(k for k in keys if k != "unreachable")),
+    ("UNCOVERED_KEYS", lambda keys: tuple(k for k in keys if k != "unattributed")),
+    ("OUTSIDE_KEYS", lambda keys: tuple(k for k in keys if k != "na_default_response")),
+])
+def test_a_bucket_the_totals_forget_stops_the_run(tmp_path, monkeypatch, name, keep):
+    # The mutation: drop one key from a totals list. The baseline has 1
+    # unreachable, 2 unattributed and 1 default response, so each drop is a gap.
+    monkeypatch.setattr(cc, name, keep(getattr(cc, name)))
+    with pytest.raises(cc.CoverageTotalsError, match="the totals do not close"):
+        _run(_project(tmp_path))
+
+
+def test_the_command_prints_no_table_when_the_totals_do_not_close(tmp_path, monkeypatch, capsys):
+    import argparse
+    from jsonui_test_cli import cli
+    root = _project(tmp_path)
+    monkeypatch.chdir(root)
+    monkeypatch.setattr(cc, "BREAKDOWN_KEYS", tuple(k for k in cc.BREAKDOWN_KEYS if k != "unreachable"))
+    code = cli.cmd_contracts_coverage(argparse.Namespace(platform=None, screen=None, as_json=False))
+    out, err = capsys.readouterr()
+    assert code == cc.EXIT_CANNOT_START and out == "" and "the totals do not close" in err
+
+
+def test_the_totals_close_with_both_other_fixes_moving_the_counts(tmp_path):
+    # 4f: do the three coverage fixes change each other's numbers? A copy beside
+    # an arranged op, and a method scoped away from web, in one project.
+    spec = _two_op_spec()
+    other = next(m for m in spec["dataFlow"]["repositories"][0]["methods"] if m.get("name") == "getOther")
+    other["platforms"] = ["ios"]
+    report = _run(_project(tmp_path, spec))                       # would raise if a law broke
+    web, ios = _block(report, "web"), _block(report, "ios")
+    assert web.totals["outside_required"]["na_platform_excluded"] == 2
+    assert ios.totals["outside_required"]["na_platform_excluded"] == 0
+    assert ios.totals["statuses_required"] - web.totals["statuses_required"] == 2
+    assert web.totals["uncovered_breakdown"]["unattributed"] == 0
+    assert not any("two answers to one question" in e["message"]
+                   for b in (web, ios) for s in b.screens for e in s.declaration_errors)

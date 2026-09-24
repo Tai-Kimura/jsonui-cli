@@ -872,6 +872,62 @@ def check_app(project: Project) -> list:
 
 # ------------------------------------------------------------------ blocks ---
 
+BREAKDOWN_KEYS = ("row", "unit", "unreachable", "unexpressible", "not_evaluated", "uncovered")
+UNCOVERED_KEYS = ("partial", "default_only", "unattributed")
+OUTSIDE_KEYS = ("unreached_op", "na_default_response", "na_no_scenario", "na_platform_excluded")
+
+
+class CoverageTotalsError(RuntimeError):
+    """A block's totals do not close. Nothing is printed: a table whose parts
+    do not add up to its whole is worse than no table, and the printers must
+    not close a sum on their own."""
+
+
+def block_totals(platform: str, active: list, na_totals: dict) -> dict:
+    """The block's totals over its active screens, with the conservation laws
+    checked here rather than only in the tests.
+
+    Each law compares two things computed independently, so a bucket the
+    totals forget shows up as a gap instead of vanishing:
+      statuses_required (each screen's own sum over ALL its breakdown buckets)
+                                        == the sum of the named buckets here
+      uncovered                         == partial + default_only + unattributed
+      declared (each screen's own count) == statuses_required + outside required
+    """
+    totals = {
+        "units": sum(s.units for s in active),
+        "contracted_methods": sum(s.contracted_methods for s in active),
+        "statuses_required": sum(s.statuses_required for s in active),
+        **{key: sum(s.breakdown[key] for s in active) for key in BREAKDOWN_KEYS},
+        "uncovered_breakdown": {key: sum(s.uncovered_breakdown[key] for s in active)
+                                for key in UNCOVERED_KEYS},
+        "outside_required": {key: sum(s.outside_required[key] for s in active)
+                             for key in OUTSIDE_KEYS},
+        "na_endpoints": {key: value["count"] for key, value in na_totals.items()},
+    }
+    check_totals(platform, totals, sum(s.declared for s in active))
+    return totals
+
+
+def check_totals(platform: str, totals: dict, declared: int) -> None:
+    gaps = []
+    parts = sum(totals[key] for key in BREAKDOWN_KEYS)
+    if totals["statuses_required"] != parts:
+        gaps.append(f"statuses required {totals['statuses_required']} != the sum of "
+                    f"{', '.join(BREAKDOWN_KEYS)} ({parts})")
+    uncovered = sum(totals["uncovered_breakdown"].values())
+    if totals["uncovered"] != uncovered:
+        gaps.append(f"uncovered {totals['uncovered']} != partial + default-only + "
+                    f"unattributed ({uncovered})")
+    outside = sum(totals["outside_required"].values())
+    if declared != totals["statuses_required"] + outside:
+        gaps.append(f"declared {declared} != statuses required "
+                    f"{totals['statuses_required']} + outside required {outside}")
+    if gaps:
+        raise CoverageTotalsError(f"[platform={platform}] the totals do not close: "
+                                  + "; ".join(gaps))
+
+
 @dataclass
 class PlatformBlock:
     platform: str
@@ -888,12 +944,19 @@ class PlatformBlock:
     # The exit-3 side by cause. Kept, not only summed: when exit 1 wins, these
     # are what the "uncovered is a floor" line names (design §2.6).
     unmeasured: dict = field(default_factory=dict)
+    # The block's denominator and its partition, computed ONCE and read by
+    # both printers. The block used to print its n/a counts and its exit and
+    # nothing it was measured against: units and statuses required existed
+    # only per screen, so a reader summed screens by hand to learn the block's
+    # denominator (design §2.2: units and statuses required on the same line).
+    totals: dict = field(default_factory=dict)
 
     def decide(self) -> None:
         active = [s for s in self.screens if not s.platform_excluded]
         self.na_totals = {key: {"count": sum(s.na_endpoints[key] for s in active),
                                 "screens": sum(1 for s in active if s.na_endpoints[key])}
                           for key in NA_ENDPOINT_KEYS}
+        self.totals = block_totals(self.platform, active, self.na_totals)
         if not active:
             self.exit, self.verdict = EXIT_PASS, "empty"
             return
@@ -994,6 +1057,17 @@ _CAUSE = {
 }
 
 
+def _total_line(platform: str, t: dict) -> str:
+    """The block's denominator and partition on one line — read from the same
+    totals object as the JSON, never summed here."""
+    u = t["uncovered_breakdown"]
+    return (f"[platform={platform}] total units {t['units']} · statuses required "
+            f"{t['statuses_required']} = row {t['row']} + unit {t['unit']} + unreachable "
+            f"{t['unreachable']} + unexpressible {t['unexpressible']} + not-evaluated "
+            f"{t['not_evaluated']} + uncovered {t['uncovered']} (partial {u['partial']} + "
+            f"default-only {u['default_only']} + unattributed {u['unattributed']})")
+
+
 def format_text(report: CoverageReport) -> list:
     lines = [f"contracts coverage  (project platforms: "
              f"{', '.join(report.project_platforms) if report.project_platforms else '(none)'})"]
@@ -1009,6 +1083,7 @@ def format_text(report: CoverageReport) -> list:
             lines.append(f"[platform={p}] info screens on {p} 0 of {len(block.screens)} "
                          "(metadata.platforms); config declares "
                          f"{p if report.project_platforms and p in report.project_platforms else '(not declared)'}")
+            lines.append(_total_line(p, block.totals))
             lines.append(f"[platform={p}] exit {block.exit} ({block.verdict})")
             continue
         branches_active = sum(s.branches_active for s in active)
@@ -1069,6 +1144,7 @@ def format_text(report: CoverageReport) -> list:
         lines.append(f"[platform={p}] total " + " · ".join(
             f"{NA_ENDPOINT_LABELS[k]} {t[k]['count']} (screens {t[k]['screens']})"
             for k in NA_ENDPOINT_KEYS))
+        lines.append(_total_line(p, block.totals))
         if block.floor:
             lines.append(f"[platform={p}] uncovered is a floor: " + " · ".join(
                 f"{FLOOR_LABELS[k]} {v}" for k, v in block.floor.items())
@@ -1077,10 +1153,11 @@ def format_text(report: CoverageReport) -> list:
     if report.unknown_types:
         lines.append(f"info  {report.unknown_types} spec(s) of a type that is neither a "
                      "screen nor a known non-screen were not counted")
-    total_uncovered = sum(s.breakdown["uncovered"] for b in report.platforms for s in b.screens)
+    total_uncovered = sum(b.totals["uncovered"] for b in report.platforms)
+    total_required = sum(b.totals["statuses_required"] for b in report.platforms)
     cause = _CAUSE.get(report.exit, "")
     floors = [b.platform for b in report.platforms if b.floor]
-    lines.append(f"exit {report.exit} (composed 2 > 1 > 3 > 0)"
+    lines.append(f"exit {report.exit} (composed 2 > 1 > 3 > 0) statuses required {total_required}"
                  + (f": {total_uncovered} uncovered — {cause}" if report.exit == EXIT_UNCOVERED
                     and total_uncovered else (f": {cause}" if cause else ""))
                  + (f"; uncovered is a floor on {', '.join(floors)}" if floors else ""))
@@ -1108,9 +1185,7 @@ def to_json(report: CoverageReport) -> dict:
                 "outside_required": dict(s.outside_required),
                 "na_endpoints": dict(s.na_endpoints),
                 "unbound_endpoints": list(s.unbound_endpoints), "notes": list(s.notes)})
-        totals = {k: sum(s.breakdown[k] for s in active) for k in
-                  ("row", "unit", "unreachable", "unexpressible", "not_evaluated", "uncovered")}
-        totals["na_endpoints"] = {k: v["count"] for k, v in block.na_totals.items()}
+        totals = json.loads(json.dumps(block.totals))    # the same object the text reads, copied
         platforms.append({
             "platform": block.platform, "project_platforms": report.project_platforms,
             "exit": block.exit, "verdict": block.verdict, "floor": block.floor,
