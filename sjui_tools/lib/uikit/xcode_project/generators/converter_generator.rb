@@ -3,6 +3,7 @@
 require 'fileutils'
 require 'json'
 require_relative '../../../core/logger'
+require_relative '../../../core/converter_generator_core'
 require_relative '../../../core/config_manager'
 require_relative '../../../core/generated_marker'
 
@@ -68,18 +69,10 @@ module SjuiTools
 
             file_path = File.join(handlers_dir, "#{snake_case(@name)}_binding_handler.rb")
 
-            if File.exist?(file_path)
-              # `jui build` (and other non-interactive flows) set JUI_SKIP_EXISTING=1
-              # so the prompt is bypassed and existing handler files are left alone.
-              if ENV['JUI_SKIP_EXISTING'] == '1'
-                @logger.info "Skipped existing binding handler: #{file_path}"
-                return
-              end
-              @logger.warn "Binding handler file already exists: #{file_path}"
-              print "Overwrite? (y/n): "
-              response = gets.chomp.downcase
-              return unless response == 'y'
-            end
+            # The converter core's one overwrite decision: JUI_SKIP_EXISTING,
+            # --skip-existing and --force, and a closed stdin reads as "n".
+            return unless JsonUIShared::ConverterGeneratorCore.may_write?(
+              file_path, @options, @logger, noun: 'binding handler', exists_label: 'Binding handler file')
 
             File.write(file_path, binding_handler_template)
             @logger.info "Created binding handler file: #{file_path}"
@@ -192,18 +185,10 @@ module SjuiTools
 
             file_path = File.join(attr_defs_dir, "#{snake_case(@name)}.json")
 
-            if File.exist?(file_path)
-              # `jui build` (and other non-interactive flows) set JUI_SKIP_EXISTING=1
-              # so the prompt is bypassed and existing files are left alone.
-              if ENV['JUI_SKIP_EXISTING'] == '1'
-                @logger.info "Skipped existing attribute definition: #{file_path}"
-                return
-              end
-              @logger.warn "Attribute definition file already exists: #{file_path}"
-              print "Overwrite? (y/n): "
-              response = gets.chomp.downcase
-              return unless response == 'y'
-            end
+            # The converter core's one overwrite decision: JUI_SKIP_EXISTING,
+            # --skip-existing and --force, and a closed stdin reads as "n".
+            return unless JsonUIShared::ConverterGeneratorCore.may_write?(
+              file_path, @options, @logger, noun: 'attribute definition', exists_label: 'Attribute definition file')
 
             File.write(file_path, attribute_definition_template)
             @logger.info "Created attribute definition file: #{file_path}"

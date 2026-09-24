@@ -56,7 +56,7 @@ RSpec.describe SjuiTools::SwiftUI::Generators::SwiftComponentGenerator do
 
       it 'prompts for overwrite' do
         generator = described_class.new('Existing')
-        allow(generator).to receive(:gets).and_return('n')
+        allow($stdin).to receive(:gets).and_return('n')
         expect { generator.generate }.to output(/already exists/).to_stdout
       end
     end

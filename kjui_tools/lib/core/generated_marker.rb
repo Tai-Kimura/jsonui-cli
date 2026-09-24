@@ -38,6 +38,29 @@ module KjuiTools
         lines.map { |l| "#{prefix} #{l}" }.join("\n")
       end
 
+      # The header for a SCAFFOLD: a file written once as a starting point and
+      # owned by the user from then on — a custom converter, the Swift / Kotlin
+      # component beside it, its adapters. Deliberately not the banner above:
+      # no SENTINEL, no agent warning, because people and agents are meant to
+      # edit these, and the generator never replaces one unless asked (`--force`,
+      # or "y" at its prompt). Until 1.8.112 scaffolds carried the DO-NOT-EDIT
+      # banner while the converter core called them user-owned, so an agent
+      # following the banner refused a fix the file needed (ruled 2026-09-24:
+      # every scaffold is the user's). Registries the generator appends to keep
+      # the banner — those are the tool's.
+      SCAFFOLD_NOTE = "Scaffolded — this file is yours to edit."
+
+      def scaffold_header(source:, generator:, prefix: "//")
+        lines = [
+          SCAFFOLD_NOTE,
+          "Source:    #{source}",
+          "Generator: #{generator}",
+          "Re-running the generator keeps this file: it asks first, and",
+          "--skip-existing keeps it without asking. Only --force replaces it.",
+        ]
+        lines.map { |l| "#{prefix} #{l}" }.join("\n")
+      end
+
       # One-line closing marker.
       def comment_footer(prefix: "//")
         "#{prefix} ══ #{END_LINE} ══"

@@ -114,12 +114,11 @@ module SjuiTools
         end
 
         def converter_template
-          marker_header = Core::GeneratedMarker.comment_header(
+          marker_header = Core::GeneratedMarker.scaffold_header(
             source: @component_pascal_case,
             generator: @command,
             prefix: "#"
           )
-          marker_footer = Core::GeneratedMarker.comment_footer(prefix: "#")
           <<~RUBY
             # frozen_string_literal: true
 
@@ -137,6 +136,11 @@ module SjuiTools
                         super(component, indent_level, action_manager, binding_registry)
                         @factory = converter_factory
                         @registry = view_registry
+                        # The names BaseViewConverter reads when it renders a
+                        # child (render_child_honoring_visibility). Without
+                        # them every child of a container comes out empty.
+                        @converter_factory = converter_factory
+                        @view_registry = view_registry
                       end
 
                       def convert
@@ -304,8 +308,6 @@ module SjuiTools
                 end
               end
             end
-
-            #{marker_footer}
           RUBY
         end
 

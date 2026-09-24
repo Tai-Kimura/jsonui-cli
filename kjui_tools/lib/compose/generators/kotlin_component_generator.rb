@@ -2,6 +2,7 @@
 
 require 'fileutils'
 require_relative '../../core/logger'
+require_relative '../../core/converter_generator_core'
 require_relative '../../core/config_manager'
 require_relative '../../core/project_finder'
 require_relative '../../core/generated_marker'
@@ -46,12 +47,11 @@ module KjuiTools
           
           kotlin_file_path = File.join(extension_dir, "#{@component_name}.kt")
           
-          if File.exist?(kotlin_file_path)
-            @logger.warn "Kotlin file already exists: #{kotlin_file_path}"
-            print "Overwrite? (y/n): "
-            response = gets.chomp.downcase
-            return unless response == 'y'
-          end
+          # Through the converter core's one overwrite decision, so
+          # --force / --skip-existing / JUI_SKIP_EXISTING reach this
+          # file too, and a closed stdin reads as "n" instead of raising.
+          return unless JsonUIShared::ConverterGeneratorCore.may_write?(
+            kotlin_file_path, @options, @logger, noun: 'kotlin file', exists_label: 'Kotlin file')
           
           File.write(kotlin_file_path, kotlin_template)
           @logger.info "Created Kotlin file: #{kotlin_file_path}"
@@ -74,11 +74,10 @@ module KjuiTools
         def container_template
           imports = generate_kotlin_imports
           params = generate_kotlin_parameters
-          marker_header = Core::GeneratedMarker.comment_header(
+          marker_header = Core::GeneratedMarker.scaffold_header(
             source: @component_name,
             generator: "kjui g converter #{@component_name} --container#{format_attributes_for_command}"
           )
-          marker_footer = Core::GeneratedMarker.comment_footer
 
           template = <<~KOTLIN
             #{marker_header}
@@ -117,8 +116,6 @@ module KjuiTools
                     content()
                 }
             }
-
-            #{marker_footer}
           KOTLIN
 
           template
@@ -127,11 +124,10 @@ module KjuiTools
         def non_container_template
           imports = generate_kotlin_imports
           params = generate_kotlin_parameters
-          marker_header = Core::GeneratedMarker.comment_header(
+          marker_header = Core::GeneratedMarker.scaffold_header(
             source: @component_name,
             generator: "kjui g converter #{@component_name} --no-container#{format_attributes_for_command}"
           )
-          marker_footer = Core::GeneratedMarker.comment_footer
 
           template = <<~KOTLIN
             #{marker_header}
@@ -166,8 +162,6 @@ module KjuiTools
                     // Component content
                 }
             }
-
-            #{marker_footer}
           KOTLIN
 
           template

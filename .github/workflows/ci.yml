@@ -231,6 +231,19 @@ jobs:
       # mandatory test dependency.
       - name: Install sqlalchemy (exercises the db-schema live adapter)
         run: python -m pip install "sqlalchemy>=2.0"
+      # The iOS image converter's arms need a real SVG→PDF converter. Without
+      # these they skip, and the three that show a PDF comes out
+      # byte-identical run on no machine but a developer's Mac — 1.8.112's
+      # first candidate went red on exactly those three undeclared skips.
+      # librsvg2-bin brings rsvg-convert AND libcairo, which cairosvg needs.
+      # Measured on ubuntu:24.04 (2026-09-24): rsvg-convert 2.58.0 honours
+      # SOURCE_DATE_EPOCH, cairosvg 2.9.1 runs on cairo 1.18.0, and all nine
+      # arms of test_ios_pdf_assets_are_deterministic.py pass with no skip.
+      - name: Install the SVG to PDF converters (exercises the iOS image arms)
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq librsvg2-bin
+          python -m pip install cairosvg
       # pytest, not `unittest discover`: the two runners disagree by 26 tests
       # here. Some modules are written pytest-style (bare asserts, `tmp_path`
       # fixtures) and `unittest discover` collects nothing from them — it walks

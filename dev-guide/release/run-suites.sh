@@ -548,11 +548,26 @@ CI_PIL=$(python3 -c 'try:
     print("importable")
 except ImportError:
     print("blocked")' 2>/dev/null)
-say "   shape: sha=$(git -C "$CISHAPE/repo" rev-parse --short HEAD 2>/dev/null) tags=$CI_TAGS depth=$CI_DEPTH docs=$CI_DOCS pillow=$CI_PIL"
+# 🔻 THE SVG→PDF CONVERTERS ARE PART OF CI'S SHAPE TOO (1.8.112). ci.yml
+# installs librsvg2-bin and cairosvg so the iOS image arms run there; this
+# leg therefore needs both present, and ci.yml has to still install them —
+# the same pair of facts as Pillow above, for the same reason.
+CI_RSVG=$(command -v rsvg-convert >/dev/null 2>&1 && echo present || echo absent)
+CI_CAIROSVG=$(python3 -c 'try:
+    import cairosvg, cairocffi
+    print("importable")
+except (ImportError, OSError):
+    print("blocked")' 2>/dev/null)
+say "   shape: sha=$(git -C "$CISHAPE/repo" rev-parse --short HEAD 2>/dev/null) tags=$CI_TAGS depth=$CI_DEPTH docs=$CI_DOCS pillow=$CI_PIL rsvg=$CI_RSVG cairosvg=$CI_CAIROSVG"
 if [ "$CI_TAGS" != "0" ] || [ "$CI_DEPTH" != "1" ] || [ "$CI_DOCS" != "absent" ] || [ "$CI_PIL" != "importable" ]; then
     bad "CI shape: the checkout does not look like CI's — this leg would measure the wrong thing"
 elif ! grep -q "pip install -e '.\[conformance\]'" "$CISHAPE/repo/.github/workflows/ci.yml"; then
     bad "CI shape: ci.yml no longer installs [conformance] — this leg would run arms CI skips"
+elif [ "$CI_RSVG" != "present" ] || [ "$CI_CAIROSVG" != "importable" ]; then
+    bad "CI shape: rsvg-convert / cairosvg missing here, and CI has both — the iOS image arms would skip in this leg only"
+elif ! grep -q "apt-get install -y -qq librsvg2-bin" "$CISHAPE/repo/.github/workflows/ci.yml" \
+     || ! grep -q "pip install cairosvg" "$CISHAPE/repo/.github/workflows/ci.yml"; then
+    bad "CI shape: ci.yml no longer installs librsvg2-bin / cairosvg — the iOS image arms would skip in CI"
 else
     ( cd "$CISHAPE/repo/jui_tools" \
       && PYTHONPATH="$CISHAPE/repo/jui_tools" \
