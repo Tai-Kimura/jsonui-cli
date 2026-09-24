@@ -66,6 +66,7 @@ from .branch_tests import (
     load_project_config,
     side_call_ops,
 )
+from . import contracts_data_axis as data_axis
 from .contract_declarations import (
     CONDITION_PREFIX, check_condition_uses, parse_declarations)
 
@@ -199,6 +200,9 @@ class Project:
     api: ApiIndex
     app: object                  # branch_tests.AppRules
     describes_a_screen: object   # shared spec_types.describes_a_screen
+    #: Where the data axis reads layouts and styles (config, jui's defaults).
+    layouts_dir: Path | None = None
+    styles_dir: Path | None = None
 
 
 def _screen_classifier():
@@ -270,11 +274,14 @@ def load_project(root: Path) -> Project:
     if classify is None:
         raise CannotStart("the screen-type table (shared/core/spec_types.py) could "
                           "not be read, so the screens cannot be told from the rest")
+    from .contracts_data_axis import layout_dirs
+    layouts_dir, styles_dir = layout_dirs(root, config)
     return Project(
         root=root, config_platforms=platforms, spec_dir=spec_dir,
         mocks_dir=mocks_dir, mocks=index_mock_files(mocks_dir),
         api=load_api_index(resolved, api_dir if api_dir.is_dir() else None),
-        app=app, describes_a_screen=classify)
+        app=app, describes_a_screen=classify,
+        layouts_dir=layouts_dir, styles_dir=styles_dir)
 
 
 @dataclass
@@ -351,6 +358,8 @@ class ScreenResult:
     http_endpoints: int = 0
     branches_active: int = 0
     branches_total: int = 0
+    #: The data axis (contracts_data_axis.ScreenData); report only, never an exit.
+    data: object = None
 
     @property
     def statuses_required(self) -> int:
@@ -604,6 +613,9 @@ def evaluate_screen(name: str, spec: dict, platform: str, project: Project) -> S
                 if key is not None:
                     reach.setdefault(method, set()).add(key)
     res.contracted_methods = len(active_by_method)
+
+    # ---- the data axis (§6.1 P2.5): report only, read from the layout once
+    res.data = _screen_data(spec, platform, methods, project)
 
     # ---- binding errors
     not_evaluated_units: set = set()
@@ -1217,6 +1229,7 @@ def format_text(report: CoverageReport) -> list:
             for k in NA_ENDPOINT_KEYS))
         lines.append(_total_line(p, block.totals))
         lines.append(f"[platform={p}] " + baseline_phrase(report, p))
+        lines.append(data_axis.text_line(p, active))
         if block.floor:
             lines.append(f"[platform={p}] uncovered is a floor: " + " · ".join(
                 f"{FLOOR_LABELS[k]} {v}" for k, v in block.floor.items())
@@ -1256,7 +1269,8 @@ def to_json(report: CoverageReport) -> dict:
                 "methods_without_endpoint": s.methods_without_endpoint,
                 "outside_required": dict(s.outside_required),
                 "na_endpoints": dict(s.na_endpoints),
-                "unbound_endpoints": list(s.unbound_endpoints), "notes": list(s.notes)})
+                "unbound_endpoints": list(s.unbound_endpoints), "notes": list(s.notes),
+                "data": s.data.to_json() if s.data is not None else None})
         totals = json.loads(json.dumps(block.totals))    # the same object the text reads, copied
         platforms.append({
             "platform": block.platform, "project_platforms": report.project_platforms,
@@ -1266,7 +1280,9 @@ def to_json(report: CoverageReport) -> dict:
                        "branches_active": sum(s.branches_active for s in active),
                        "branches_total": sum(s.branches_total for s in active)},
             "screens": screens, "totals": totals,
-            "baseline": _baseline_counts(report, block.platform)})
+            "baseline": _baseline_counts(report, block.platform),
+            "data_totals": data_axis.block_totals(active),
+            "data_coarse": data_axis.coarse(active)})
     return {"baseline": {"file": report.baseline_file, "present": report.baseline_present},
             "app": {"spec_file": report.app_file, "rules": report.rules,
                     "declaration_errors": list(report.app_errors),
@@ -1477,3 +1493,22 @@ def baseline_phrase(report: "CoverageReport", platform: str) -> str:
     elif c["stale"]:
         phrase += " — stale entries are closed: run `jsonui-test contracts baseline` to drop them"
     return phrase
+
+
+def _screen_data(spec: dict, platform: str, methods: dict, project: "Project"):
+    """The screen's data axis on *platform*, or None when there is no layout
+    directory to read (nothing is guessed)."""
+    if project.layouts_dir is None:
+        return None
+    from .branch_tests import _prefer_sibling_jui_cli
+
+    _prefer_sibling_jui_cli()
+    from jui_cli.core.layout_facts import layout_facts
+
+    facts = layout_facts(spec, platform, layouts_dir=project.layouts_dir,
+                         styles_dir=project.styles_dir)
+    rows = [branch for contract in methods.values()
+            for branch in (contract.get("branches") or [])
+            if isinstance(branch, dict) and "note" not in branch
+            and _branch_active(branch, platform)]
+    return data_axis.screen_data(spec, facts, rows)

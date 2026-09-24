@@ -591,6 +591,21 @@ exit 1 and something could not be evaluated as well, it also says
 never counted. The JSON carries the same: `totals.na_endpoints` and `floor`
 per platform.
 
+Each block also prints a **data** line — report only, it never moves the exit:
+`[platform=p] data (report only) units N · arranged A · produced P · neither X ·
+screens evaluated E of S (…) · Bool not in layout … · visibleElements not in
+layout … · cells not bound …`. A unit is (screen, field, value): a field
+declared `Bool` that the screen's layout binds (true and false), or a
+`stateManagement.states[].values[]` whose `visibleElements` the layout all has.
+ARRANGED means a row's `when` sets it (`data.X` or a seed `state.X`); PRODUCED,
+that a row's `then` asserts it. The layout is the spec's `metadata.layoutFile`
+only (no guessing: `layout not linked` otherwise), read by
+`jui_cli.core.layout_facts` — the normalizer's includes, styles and platform
+filter, and binding roots by the Ruby validator's grammar. When most of a
+block's screens carry more data units than statuses, the line counts fields
+instead of values (`coarse`); the values stay in `--json`
+(`screens[].data`, `data_totals`, `data_coarse`).
+
 ### contracts baseline
 
 ```
