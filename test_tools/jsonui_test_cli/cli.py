@@ -1576,6 +1576,29 @@ def _branch_check_summary(reports: list, scanned: int, orphans=()) -> int:
     return 0
 
 
+def cmd_contracts_coverage(args):
+    """Handle 'contracts coverage' — API outcomes no branch contract answers."""
+    from .contracts_coverage import (
+        EXIT_CANNOT_START, CannotStart, format_text, run_coverage, to_json,
+    )
+
+    try:
+        report = run_coverage(Path.cwd(), platforms=args.platform, screen=args.screen)
+    except CannotStart as e:
+        if args.as_json:
+            print(json.dumps({"exit": EXIT_CANNOT_START, "verdict": "cannot_start",
+                              "error": str(e)}, indent=2, ensure_ascii=False))
+        else:
+            print(f"contracts coverage: cannot start — {e}", file=sys.stderr)
+        return EXIT_CANNOT_START
+    if args.as_json:
+        print(json.dumps(to_json(report), indent=2, ensure_ascii=False))
+    else:
+        for line in format_text(report):
+            print(line)
+    return report.exit
+
+
 def cmd_generate_unit_stubs(args):
     """Handle 'generate unit-stubs' — declared-vs-implemented case sets."""
     from pathlib import Path as _Path
@@ -3224,6 +3247,25 @@ def main():
                                         help="Print result as a single JSON object")
 
     # Pregrant command (iOS addMedia)
+    contracts_parser = subparsers.add_parser(
+        "contracts",
+        help="Contract-gap checks: which API outcomes the branch contracts answer")
+    contracts_subparsers = contracts_parser.add_subparsers(
+        dest="contracts_action", help="Contracts action")
+    coverage_parser = contracts_subparsers.add_parser(
+        "coverage",
+        help="Every response status the OpenAPI declares for an operation a "
+             "screen reaches, bucketed: answered by a row, excluded with a "
+             "reason, unmeasured, or uncovered. Exit 0 pass / 1 uncovered or a "
+             "declaration error / 2 cannot start / 3 unmeasured, per platform, "
+             "composed 2 > 1 > 3 > 0. Not a gate yet")
+    coverage_parser.add_argument("screen", nargs="?", help="One screen (default: all)")
+    coverage_parser.add_argument(
+        "--platform", action="append", choices=["web", "android", "ios"],
+        help="Platform block(s) to report (default: jui.config.json platforms)")
+    coverage_parser.add_argument("--json", dest="as_json", action="store_true",
+                                 help="Machine-readable output")
+
     pregrant_parser = subparsers.add_parser(
         "pregrant",
         help="Establish per-run permission baselines before the test process "
@@ -3287,6 +3329,11 @@ def main():
         return 0
     elif args.command == "pregrant":
         return cmd_pregrant(args)
+    elif args.command == "contracts":
+        if getattr(args, "contracts_action", None) == "coverage":
+            return cmd_contracts_coverage(args)
+        contracts_parser.print_help()
+        return 0
     elif args.command in ["generate", "g"]:
         # Check for subcommand
         if hasattr(args, 'generate_type') and args.generate_type:
