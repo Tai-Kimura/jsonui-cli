@@ -551,6 +551,165 @@ def test_the_emitted_allowed_sets(tmp_path):
 
 
 # ---------------------------------------------------------------------------
+# red-check xxv: how far one row's "called" reaches, and what the red says
+# ---------------------------------------------------------------------------
+#
+# A save method whose success row refetches the list and whose error rows do
+# not. The bound is per method, so `api.listMembers: "called"` on the success
+# row allows the refetch in the error rows too — unless a row says
+# "not-called". The failure message is what a writer reads when clearing the
+# red, so it has to say that.
+
+def _roster(root: Path, *, called: bool = True, not_called_on_404: bool = False) -> Path:
+    spec_dir = root / "docs/screens/json"
+    spec_dir.mkdir(parents=True)
+    (root / "jui.config.json").write_text(json.dumps(
+        {"spec_directory": "docs/screens/json", "platforms": ["web", "android", "ios"]}),
+        encoding="utf-8")
+    ok = {"data.status": "saved"}
+    if called:
+        ok["api.listMembers"] = "called"
+    missing = {"data.status": "missing"}
+    if not_called_on_404:
+        missing["api.listMembers"] = "not-called"
+    spec = {
+        "type": "screen_spec",
+        "metadata": {"name": "roster"},
+        "dataFlow": {
+            "viewModel": {"methods": [{"name": "save"}]},
+            "repositories": [{"name": "MemberRepository", "methods": [
+                {"name": "updateMember", "endpoint": "PUT /api/members/{id}"},
+                {"name": "listMembers", "endpoint": "GET /api/members"},
+            ]}],
+        },
+        "branchContracts": {"methods": {"save": {"branches": [
+            {"when": {"api.updateMember": "default"}, "then": ok},
+            {"when": {"api.updateMember": "error_400"}, "then": {"data.status": "invalid"}},
+            {"when": {"api.updateMember": "error_404"}, "then": missing},
+        ]}}},
+    }
+    (spec_dir / "roster.spec.json").write_text(json.dumps(spec), encoding="utf-8")
+    _mock(root, "update", "PUT", "/api/members/{id}", "updateMember", {
+        "default": {"status": 200, "body": {}},
+        "error_400": {"status": 400, "body": {}},
+        "error_404": {"status": 404, "body": {}}})
+    _mock(root, "list", "GET", "/api/members", "listMembers",
+          {"default": {"status": 200, "body": []}})
+    return root
+
+
+def _roster_harness(refetch_on_error: bool) -> str:
+    return f'''import {{ applyDeclaredKeys }} from "../generated/jsonui-branch-runtime";
+
+class RosterViewModel {{
+  status = "idle";
+  async save() {{
+    const r = await fetch("https://api.test/api/members/1",
+                          {{ method: "PUT", body: JSON.stringify({{}}) }});
+    if (r.ok || {str(refetch_on_error).lower()}) {{
+      await fetch("https://api.test/api/members");
+    }}
+    this.status = r.ok ? "saved" : (r.status === 404 ? "missing" : "invalid");
+  }}
+}}
+
+export function createHarness() {{
+  const vm = new RosterViewModel();
+  return {{
+    vm,
+    setState(state: Record<string, unknown>) {{ applyDeclaredKeys(vm, state); }},
+    readField(name: string) {{ return (vm as any)[name]; }},
+    expectTransition(_d: string) {{}},
+    resolveString(key: string) {{ return key; }},
+  }};
+}}
+'''
+
+
+def _run_roster(root: Path, *, refetch_on_error: bool = False) -> dict[str, tuple[bool, str]]:
+    report = bt.generate_branch_tests("roster", root, platform="web", config_platforms=["web"])
+    harness = root / "tests/unit/branch-harness/roster.ts"
+    harness.write_text(_roster_harness(refetch_on_error), encoding="utf-8")
+    vitest = root / "node_modules/vitest"
+    vitest.mkdir(parents=True, exist_ok=True)
+    (vitest / "package.json").write_text(
+        '{"name": "vitest", "type": "module", "main": "index.js"}', encoding="utf-8")
+    (vitest / "index.js").write_text(_VITEST, encoding="utf-8")
+    (root / "package.json").write_text('{"type": "module"}', encoding="utf-8")
+    (root / "hooks.mjs").write_text(_HOOKS, encoding="utf-8")
+    (root / "register.mjs").write_text(_REGISTER, encoding="utf-8")
+    (root / "runner.mjs").write_text(
+        _RUNNER.replace("checkout.branches.test.ts", report.test_file.name), encoding="utf-8")
+    run = subprocess.run(
+        ["node", "--experimental-strip-types", "--import", "./register.mjs", "runner.mjs"],
+        cwd=root, capture_output=True, text=True, timeout=120)
+    rows = {}
+    for line in run.stdout.splitlines():
+        m = re.match(r"^(PASS|FAIL) roster\.save > branch (\d+):.*?(?: :: (.*))?$", line)
+        if m:
+            rows[int(m.group(2))] = (m.group(1) == "PASS", m.group(3) or "")
+    assert sorted(rows) == [1, 2, 3], f"expected three rows:\n{run.stdout}\n{run.stderr[:3000]}"
+    return rows
+
+
+def test_xxv_called_on_the_success_row_reaches_the_error_rows(tmp_path):
+    """What the message now says, read off the emitted file: the success row's
+    "called" is in the error rows' allowed sets too."""
+    root = _roster(tmp_path)
+    text = bt.generate_branch_tests(
+        "roster", root, platform="web", config_platforms=["web"]).test_file.read_text()
+    allowed = [json.loads(a) for a in re.findall(r"rec\.unexpectedOps\((\[.*?\])\)", text)]
+    assert allowed == [["listMembers", "updateMember"]] * 3, allowed
+
+
+@pytest.mark.parametrize("not_called, refetch_on_error, row3_passes", [
+    (False, False, True),    # the code is right: green either way
+    (True, False, True),
+    (True, True, False),     # the 404 row refuses the refetch: red
+    (False, True, True),     # nothing refuses it: green — the hole the message names
+])
+def test_xxv_only_not_called_refuses_the_call_in_an_error_row(tmp_path, not_called,
+                                                             refetch_on_error, row3_passes):
+    tc.tool("node")
+    rows = _run_roster(_roster(tmp_path, not_called_on_404=not_called),
+                       refetch_on_error=refetch_on_error)
+    assert rows[1][0], rows
+    assert rows[3][0] is row3_passes, rows
+
+
+def test_xxv_without_called_the_success_row_is_red_and_says_how_to_fix_it(tmp_path):
+    tc.tool("node")
+    rows = _run_roster(_roster(tmp_path, called=False))
+    passed, why = rows[1]
+    assert not passed and "listMembers" in why, rows
+    assert "that allows <op> in every row of this method that does not mention it" in why
+    assert 'says api.<op>: "not-called"' in why
+    assert "apiOutcomeRules" in why
+    assert rows[2][0] and rows[3][0], rows          # the error rows never refetch
+
+
+def test_xxv_control_restoring_called_turns_it_green(tmp_path):
+    tc.tool("node")
+    rows = _run_roster(_roster(tmp_path, called=True))
+    assert all(passed for passed, _ in rows.values()), rows
+
+
+def test_xxv_the_three_renderers_print_the_same_message(tmp_path):
+    """One constant, escaped per language — no face prints a different fix."""
+    root = _roster(tmp_path)
+    web = bt.generate_branch_tests("roster", root, platform="web",
+                                   config_platforms=["web", "android", "ios"]).test_file.read_text()
+    kotlin = bt.generate_branch_tests("roster", root, platform="android", package="com.example.roster",
+                                      config_platforms=["web", "android", "ios"]).test_file.read_text()
+    swift = bt.generate_branch_tests("roster", root, platform="ios", module="RosterApp",
+                                     config_platforms=["web", "android", "ios"]).test_file.read_text()
+    message = bt.UNEXPECTED_OPS_MESSAGE
+    assert web.count(bt._ts(message)) == 3
+    assert kotlin.count(bt._kt_str(message)) == 3
+    assert swift.count(bt._swift_str(message)) == 3
+
+
+# ---------------------------------------------------------------------------
 # the window's order in the Kotlin and Swift emission
 # ---------------------------------------------------------------------------
 

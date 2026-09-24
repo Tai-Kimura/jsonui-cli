@@ -526,6 +526,66 @@ def test_xxiii_c_boundary_a_renamed_path_variable_is_the_same_endpoint(tmp_path)
     assert _block(report).exit == cc.EXIT_PASS
 
 
+def _two_screens(tmp_path):
+    """The shape a face was misread on: an unbound endpoint on an earlier
+    screen, none on the LAST one — whose line sits right above the block's
+    exit line. `detail` (the baseline, exit 1) sorts before `zulu`."""
+    detail = _screen()
+    detail["dataFlow"]["apiEndpoints"] = [{"method": "GET", "path": "/api/tags"}]
+    zulu = _screen()
+    zulu["metadata"]["name"] = "zulu"
+    return _run(_project(tmp_path, detail, extra_screens=[("zulu", zulu)]))
+
+
+def test_the_block_total_is_the_sum_of_its_screens_not_the_last_one(tmp_path):
+    report = _two_screens(tmp_path)
+    block = _block(report)
+    screens = [s for s in block.screens if not s.platform_excluded]
+    assert [s.spec for s in screens] == ["detail", "zulu"]
+    assert [s.na_endpoints["unbound"] for s in screens] == [1, 0]   # the last one is 0
+    assert block.na_totals["unbound"] == {"count": 1, "screens": 1}
+    text = cc.format_text(report)
+    total = [l for l in text if l.startswith("[platform=web] total ")]
+    assert total == ["[platform=web] total n/a(no mock) 0 (screens 0) · n/a(not in OpenAPI) 0 "
+                     "(screens 0) · n/a(unbound endpoint) 1 (screens 1) · n/a(non-HTTP) 0 (screens 0)"]
+    # The documented name finds it: a search for n/a(unbound endpoint) hits
+    # the total, where the per-screen spelling alone would have found nothing.
+    assert any("n/a(unbound endpoint) 1" in l for l in text)
+    web = next(p for p in cc.to_json(report)["platforms"] if p["platform"] == "web")
+    assert web["totals"]["na_endpoints"]["unbound"] == sum(
+        s["na_endpoints"]["unbound"] for s in web["screens"]) == 1
+
+
+def test_uncovered_is_a_floor_when_the_exit_3_side_is_also_there(tmp_path):
+    report = _two_screens(tmp_path)
+    block = _block(report)
+    assert block.exit == cc.EXIT_UNCOVERED
+    assert block.floor == {"unbound": 1}
+    text = cc.format_text(report)
+    assert ("[platform=web] uncovered is a floor: n/a(unbound endpoint) 1 — not evaluated, "
+            "so more may be uncovered") in text
+    assert "uncovered is a floor on web" in text[-1]
+    web = next(p for p in cc.to_json(report)["platforms"] if p["platform"] == "web")
+    assert web["floor"] == {"unbound": 1}
+
+
+def test_no_floor_when_exit_1_has_nothing_unevaluated_beside_it(tmp_path):
+    report = _run(_project(tmp_path))                     # the baseline: exit 1, nothing unmeasured
+    block = _block(report)
+    assert block.exit == cc.EXIT_UNCOVERED and block.floor is None
+    assert not any("uncovered is a floor" in l for l in cc.format_text(report))
+    web = next(p for p in cc.to_json(report)["platforms"] if p["platform"] == "web")
+    assert web["floor"] is None
+
+
+def test_no_floor_when_the_block_is_exit_3(tmp_path):
+    """Exit 3 already says it: nothing uncovered, something not evaluated."""
+    spec, openapi, mocks = _clean([{"method": "GET", "path": "/api/tags"}])
+    report = _run(_project(tmp_path, spec, openapi=openapi, mocks=mocks))
+    assert _block(report).exit == cc.EXIT_UNMEASURED and _block(report).floor is None
+    assert not any("uncovered is a floor" in l for l in cc.format_text(report))
+
+
 def test_the_command_line_exits_with_the_composed_code(tmp_path):
     root = _project(tmp_path)
     done = subprocess.run(

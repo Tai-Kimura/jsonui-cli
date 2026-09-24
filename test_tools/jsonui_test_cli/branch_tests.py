@@ -1639,10 +1639,22 @@ def _branch_title(index: int, branch: dict) -> str:
 #: Said when a test records a call its method's rows do not reach. The bound
 #: is what keeps "delete the row that reaches an endpoint" from being the
 #: cheapest way to make its uncovered statuses disappear.
+#:
+#: 🔻 AND IT SAYS HOW FAR "called" REACHES. The bound is per method: one row
+#: writing `api.<op>: "called"` allows the op in every row of that method that
+#: does not mention it. Said only as "say so in a row", the fix for one red
+#: row silently allowed the call in the rows where it must not happen (a
+#: consumer's save method: its error rows stopped refusing the refetch). The
+#: distinction is visible only at the moment a red is cleared, so this
+#: message — the thing read at that moment — says it (design v4.9, red-check
+#: xxv). One constant: the three renderers print it escaped.
 UNEXPECTED_OPS_MESSAGE = (
     "declared routes called outside what this method's rows reach — if the "
-    "method makes the call, say so in a row (then api.<op>: \"called\"); if "
-    "the app's network layer makes it, admit it with apiOutcomeRules")
+    "method makes the call, say so in the row whose act makes it (then "
+    "api.<op>: \"called\"); that allows <op> in every row of this method "
+    "that does not mention it, so a row that must not make the call says "
+    "api.<op>: \"not-called\". If the app's network layer makes it, admit it "
+    "with apiOutcomeRules")
 
 
 def _rows_in_order(contract: dict, method_name: str, rows: list, platform: str,

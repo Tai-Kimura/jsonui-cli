@@ -802,29 +802,54 @@ class PlatformBlock:
     app_errors: list
     exit: int = 0
     verdict: str = "pass"
+    # 🔻 THE BLOCK'S OWN TOTALS, SUMMED OVER ITS SCREENS. The n/a (E) counts
+    # used to exist only per screen, and the line right above
+    # `[platform=p] exit` is the LAST screen's — on a face whose last screen
+    # had none, "unbound endpoint 0" there was read as the total while four
+    # other screens carried one each (v1.8.116 acceptance).
+    na_totals: dict = field(default_factory=dict)
+    # The exit-3 side by cause. Kept, not only summed: when exit 1 wins, these
+    # are what the "uncovered is a floor" line names (design §2.6).
+    unmeasured: dict = field(default_factory=dict)
 
     def decide(self) -> None:
         active = [s for s in self.screens if not s.platform_excluded]
+        self.na_totals = {key: {"count": sum(s.na_endpoints[key] for s in active),
+                                "screens": sum(1 for s in active if s.na_endpoints[key])}
+                          for key in NA_ENDPOINT_KEYS}
         if not active:
             self.exit, self.verdict = EXIT_PASS, "empty"
             return
         uncovered = sum(s.breakdown["uncovered"] for s in active)
         declaration = sum(len(s.declaration_errors) for s in active) + len(self.app_errors)
-        unmeasured = sum(
-            s.breakdown["not_evaluated"] + s.outside_required["na_no_scenario"]
-            + s.na_endpoints["no_mock"] + s.na_endpoints["not_in_openapi"]
-            + s.na_endpoints["unbound"]
-            + (1 if s.not_evaluated_reason else 0) for s in active)
         http = sum(s.http_endpoints for s in active)
         evaluated = sum(s.statuses_required for s in active)
+        self.unmeasured = {
+            "not_evaluated": sum(s.breakdown["not_evaluated"] for s in active),
+            "no_scenario": sum(s.outside_required["na_no_scenario"] for s in active),
+            "no_mock": self.na_totals["no_mock"]["count"],
+            "not_in_openapi": self.na_totals["not_in_openapi"]["count"],
+            "unbound": self.na_totals["unbound"]["count"],
+            "screens_not_evaluated": sum(1 for s in active if s.not_evaluated_reason),
+            "http_without_evaluation": 1 if (http and not evaluated) else 0,
+        }
         if uncovered:
             self.exit, self.verdict = EXIT_UNCOVERED, "uncovered"
         elif declaration:
             self.exit, self.verdict = EXIT_UNCOVERED, "declaration_error"
-        elif unmeasured or (http and not evaluated):
+        elif any(self.unmeasured.values()):
             self.exit, self.verdict = EXIT_UNMEASURED, "unmeasured"
         else:
             self.exit, self.verdict = EXIT_PASS, "pass"
+
+    @property
+    def floor(self) -> dict | None:
+        """Design §2.6: exit 1 with the exit-3 side present. What was counted
+        as uncovered is then a floor — the causes named here were never
+        evaluated. None when the block is not exit 1 or nothing is missing."""
+        if self.exit != EXIT_UNCOVERED:
+            return None
+        return {key: value for key, value in self.unmeasured.items() if value} or None
 
 
 @dataclass
@@ -874,6 +899,16 @@ def run_coverage(root: Path, platforms=None, screen: str | None = None) -> Cover
 
 
 # ------------------------------------------------------------------ output ---
+
+#: The n/a (E) buckets, and the names they are documented under — the total
+#: line prints these, so a search for the documented name finds it.
+NA_ENDPOINT_KEYS = ("no_mock", "not_in_openapi", "unbound", "non_http")
+NA_ENDPOINT_LABELS = {"no_mock": "n/a(no mock)", "not_in_openapi": "n/a(not in OpenAPI)",
+                      "unbound": "n/a(unbound endpoint)", "non_http": "n/a(non-HTTP)"}
+FLOOR_LABELS = {"not_evaluated": "not-evaluated", "no_scenario": "n/a(no scenario)",
+                "no_mock": "n/a(no mock)", "not_in_openapi": "n/a(not in OpenAPI)",
+                "unbound": "n/a(unbound endpoint)", "screens_not_evaluated": "screens not evaluated",
+                "http_without_evaluation": "HTTP endpoints with nothing evaluated"}
 
 _CAUSE = {
     EXIT_UNCOVERED: "write a row (alsoStatuses if the VM treats it like another status), "
@@ -953,15 +988,25 @@ def format_text(report: CoverageReport) -> list:
                 lines.append(f"  note  {note}")
         if excluded:
             lines.append(f"[platform={p}] info screens outside {p} (metadata.platforms): {excluded}")
+        t = block.na_totals
+        lines.append(f"[platform={p}] total " + " · ".join(
+            f"{NA_ENDPOINT_LABELS[k]} {t[k]['count']} (screens {t[k]['screens']})"
+            for k in NA_ENDPOINT_KEYS))
+        if block.floor:
+            lines.append(f"[platform={p}] uncovered is a floor: " + " · ".join(
+                f"{FLOOR_LABELS[k]} {v}" for k, v in block.floor.items())
+                + " — not evaluated, so more may be uncovered")
         lines.append(f"[platform={p}] exit {block.exit} ({block.verdict})")
     if report.unknown_types:
         lines.append(f"info  {report.unknown_types} spec(s) of a type that is neither a "
                      "screen nor a known non-screen were not counted")
     total_uncovered = sum(s.breakdown["uncovered"] for b in report.platforms for s in b.screens)
     cause = _CAUSE.get(report.exit, "")
+    floors = [b.platform for b in report.platforms if b.floor]
     lines.append(f"exit {report.exit} (composed 2 > 1 > 3 > 0)"
                  + (f": {total_uncovered} uncovered — {cause}" if report.exit == EXIT_UNCOVERED
-                    and total_uncovered else (f": {cause}" if cause else "")))
+                    and total_uncovered else (f": {cause}" if cause else ""))
+                 + (f"; uncovered is a floor on {', '.join(floors)}" if floors else ""))
     return lines
 
 
@@ -988,9 +1033,10 @@ def to_json(report: CoverageReport) -> dict:
                 "unbound_endpoints": list(s.unbound_endpoints), "notes": list(s.notes)})
         totals = {k: sum(s.breakdown[k] for s in active) for k in
                   ("row", "unit", "unreachable", "unexpressible", "not_evaluated", "uncovered")}
+        totals["na_endpoints"] = {k: v["count"] for k, v in block.na_totals.items()}
         platforms.append({
             "platform": block.platform, "project_platforms": report.project_platforms,
-            "exit": block.exit, "verdict": block.verdict,
+            "exit": block.exit, "verdict": block.verdict, "floor": block.floor,
             "causes": {"screens_platform_excluded": len(block.screens) - len(active),
                        "screens_total": len(block.screens),
                        "branches_active": sum(s.branches_active for s in active),
