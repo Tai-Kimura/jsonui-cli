@@ -31,8 +31,10 @@ longer makes its statuses disappear from this count.
 Exit per platform block, composed 2 > 1 > 3 > 0 for the process:
 0 pass (or `empty`: no screen exists on the platform), 1 uncovered or a
 declaration error, 2 cannot start, 3 unmeasured (something could not be
-evaluated, and nothing was found uncovered). This command is not a gate yet:
-nothing runs it for you.
+evaluated, and nothing was found uncovered). `jsonui-test validate` reports
+it in a coverage section, and from the release `VALIDATE_GATE_FROM` names it
+fails unless this exits 0 (design §6.1, P3a — announced one release ahead by
+the section's own last line).
 """
 from __future__ import annotations
 
@@ -1227,3 +1229,139 @@ def to_json(report: CoverageReport) -> dict:
                     "harness_conditions": report.conditions,
                     "harness_conditions_file": report.conditions_file},
             "platforms": platforms, "exit": report.exit}
+
+
+# --------------------------------------------------- the validate section ---
+#
+# Design §2.6 / §6.1 (P3a). `jsonui-test validate` carries a coverage section:
+# one denominator line per platform, the declaration errors, and one line
+# about the gate. Below VALIDATE_GATE_FROM that line is the notice and the
+# section moves no return code (P3a-1); from it on, validate fails unless
+# coverage exits 0 (P3a-2) — the switch is this version, not a flag (U1),
+# and not a code change someone has to remember at the next release.
+
+#: The release from which validate fails unless contracts coverage exits 0 —
+#: a LITERAL, written when the announcing release N is cut (design §6.1: "N+1
+#: の版は N を切るときに決めて文に書く"). Deliberately no default: one derived
+#: from the running version agrees with itself on every build, so the notice
+#: would pass red-check xxxi whatever it said, and a gate switched on by
+#: "running >= derived" would never switch on (ee, 2026-09-25). Unset, the
+#: section says the version is not declared instead of announcing one. The
+#: tag gate (dev-guide/release/check-tag.sh) holds it to the release: the
+#: next patch when announcing, at or below the tag once gating.
+VALIDATE_GATE_FROM: str | None = None
+
+#: ee's text (design §6.1), with the version filled in.
+VALIDATE_NOTICE = (
+    "from jsonui-cli {version}, validate fails unless contracts coverage exits 0 "
+    "— close what it reports (jsonui-define Task 6) or see the release note")
+
+
+def version_key(version: str) -> tuple:
+    """`1.8.120` -> (1, 8, 120): numeric, so 1.8.100 sorts after 1.8.99."""
+    out = []
+    for part in version.lstrip("v").split("."):
+        digits = "".join(ch for ch in part if ch.isdigit())
+        if not digits:
+            break
+        out.append(int(digits))
+    return tuple(out)
+
+
+def gate_is_on(version: str, gate_from: str | None = None) -> bool:
+    """Does validate fail on coverage in this version?"""
+    gate_from = VALIDATE_GATE_FROM if gate_from is None else gate_from
+    return bool(gate_from) and version_key(version) >= version_key(gate_from)
+
+
+def coverage_applicable(root: Path) -> tuple[bool, str]:
+    """(applies, why not). Not applicable ONLY when the project declares no
+    `mock.swagger` AND no spec carries `branchContracts` (design §6.1): with
+    either one present, coverage that cannot start is a configuration error,
+    not a project without contracts."""
+    from .branch_tests import _spec_files, load_project_config
+
+    config = load_project_config(root)
+    if not config:
+        return False, f"no jui.config.json in {root}"
+    mock = config.get("mock") if isinstance(config.get("mock"), dict) else config
+    if mock.get("swagger"):
+        return True, ""
+    spec_dir = config.get("spec_directory")
+    if isinstance(spec_dir, str) and spec_dir and (root / spec_dir).is_dir():
+        for path in _spec_files((root / spec_dir).resolve()):
+            try:
+                data = json.loads(path.read_text(encoding="utf-8"))
+            except (OSError, UnicodeDecodeError, ValueError):
+                continue
+            if isinstance(data, dict) and "branchContracts" in data:
+                return True, ""
+    return False, "the project declares no mock.swagger and no spec has branchContracts"
+
+
+def denominator_line(block: "PlatformBlock") -> str:
+    """`coverage: <platform> units N · statuses required M · row … · excluded
+    … · uncovered … · not evaluated …`, then what could not be measured (by
+    cause, only when present) and the block's exit."""
+    t = block.totals
+    excluded = t["unit"] + t["unreachable"] + t["unexpressible"]
+    line = (f"coverage: {block.platform} units {t['units']} · statuses required "
+            f"{t['statuses_required']} · row {t['row']} · excluded {excluded} · "
+            f"uncovered {t['uncovered']} · not evaluated {t['not_evaluated']}")
+    for key, value in block.unmeasured.items():
+        if value and key != "not_evaluated":
+            line += f" · {FLOOR_LABELS[key]} {value}"
+    return line + f" → exit {block.exit} ({block.verdict})"
+
+
+def _gate_line(version: str) -> str:
+    """The one line about the gate: on, announced, or not declared."""
+    if gate_is_on(version):
+        return (f"validate gates on contracts coverage (from jsonui-cli "
+                f"{VALIDATE_GATE_FROM}): it fails unless coverage exits 0")
+    if VALIDATE_GATE_FROM:
+        return VALIDATE_NOTICE.format(version=VALIDATE_GATE_FROM)
+    return ("coverage gate version not declared (VALIDATE_GATE_FROM) — this build "
+            "announces no release")
+
+
+def validate_section(root: Path | None, version: str, *, skipped: bool = False,
+                     blocked_by: int = 0) -> tuple[list, int | None]:
+    """The lines `jsonui-test validate` prints for contracts coverage, and the
+    exit coverage decided (None when it did not run, which never fails the run).
+
+    Never silent (design §2.6): skipped by flag, stopped by the run's own
+    errors, not applicable, unable to start — each says so in one line.
+    Whether the exit fails validate is `gate_is_on(version)`, the caller's.
+    """
+    if skipped:
+        return ["coverage skipped (--no-coverage-check)"], None
+    if root is None:
+        return ["coverage not applicable: this run found no project root"], None
+    applies, why = coverage_applicable(root)
+    if not applies:
+        return [f"coverage not applicable: {why}"], None
+    notice = _gate_line(version)
+    if blocked_by:
+        return [f"coverage not run: {blocked_by} error(s) above stop validate before it — "
+                "fix them and run again", notice], None
+    try:
+        report = run_coverage(root)
+    except CannotStart as e:
+        return [f"coverage cannot start: {e} → exit {EXIT_CANNOT_START} (cannot_start)",
+                notice], EXIT_CANNOT_START
+    lines = [f"contracts coverage ({root / 'jui.config.json'})"]
+    lines += [denominator_line(block) for block in report.platforms]
+    for error in report.app_errors:
+        lines.append(f"  declaration error  {error['file']}: "
+                     f"{error['path'] + ': ' if error['path'] else ''}{error['message']}")
+    for block in report.platforms:
+        for s in block.screens:
+            for error in s.declaration_errors:
+                lines.append(f"  declaration error  [{block.platform}] {s.spec}: "
+                             f"{error['message']}")
+    if report.exit != EXIT_PASS:
+        lines.append("  → `jsonui-test contracts coverage` lists what is uncovered or "
+                     "could not be measured")
+    lines.append(notice)
+    return lines, report.exit
