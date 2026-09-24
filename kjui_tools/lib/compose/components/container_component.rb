@@ -371,35 +371,23 @@ module KjuiTools
               end
             end
           elsif layout == 'Box'
-            # For Box with array gravity, resolve to single contentAlignment
+            # One contentAlignment from both axes, single value or array.
             box_alignment = resolve_box_alignment(gravity_parts)
             code += ",\n" + indent("contentAlignment = #{box_alignment}", depth + 1) if box_alignment
-            if box_alignment.nil?
-              gravity_parts.each do |g|
-                case g
-                when 'center'
-                  code += ",\n" + indent("contentAlignment = Alignment.Center", depth + 1)
-                when 'centerHorizontal'
-                  code += ",\n" + indent("contentAlignment = Alignment.TopCenter", depth + 1)
-                when 'centerVertical'
-                  code += ",\n" + indent("contentAlignment = Alignment.CenterStart", depth + 1)
-                when 'top'
-                  code += ",\n" + indent("contentAlignment = Alignment.TopCenter", depth + 1)
-                when 'bottom'
-                  code += ",\n" + indent("contentAlignment = Alignment.BottomCenter", depth + 1)
-                when 'left'
-                  code += ",\n" + indent("contentAlignment = Alignment.CenterStart", depth + 1)
-                when 'right'
-                  code += ",\n" + indent("contentAlignment = Alignment.CenterEnd", depth + 1)
-                end
-              end
-            end
           end
 
           code
         end
 
-        # Resolve array gravity to a single Box Alignment for compound gravity
+        # The Box's contentAlignment for a gravity, or nil when it names
+        # neither axis (the Box default then applies).
+        #
+        # Each axis resolves on its own, and an axis the gravity does not name
+        # takes the container default (attribute_semantics.json ->
+        # gravityDefaults). Until 2026-09-24 a single value centred the axis it
+        # did not name — `top` gave TopCenter, `left` CenterStart — and an
+        # array without a vertical value centred vertically, while ios drew
+        # the same declaration at the leading/top corner.
         def self.resolve_box_alignment(parts)
           has_center_v = parts.include?('centerVertical') || parts.include?('center')
           has_center_h = parts.include?('centerHorizontal') || parts.include?('center')
@@ -408,13 +396,14 @@ module KjuiTools
           has_left = parts.include?('left')
           has_right = parts.include?('right')
 
-          # Only resolve compound (multi-value) gravity
-          return nil if parts.length <= 1
+          names_vertical = has_center_v || has_top || has_bottom
+          names_horizontal = has_center_h || has_left || has_right
+          return nil unless names_vertical || names_horizontal
 
           vertical = if has_center_v then 'Center'
                      elsif has_top then 'Top'
                      elsif has_bottom then 'Bottom'
-                     else 'Center'
+                     else 'Top'
                      end
 
           horizontal = if has_center_h then 'Center'
