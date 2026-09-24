@@ -134,8 +134,8 @@ RSpec.describe SjuiTools::CLI::Commands::Generate do
 
       it 'generates UIKit converter successfully' do
         # Mock user input for overwrite prompt
-        allow_any_instance_of(SjuiTools::UIKit::XcodeProject::Generators::ConverterGenerator)
-          .to receive(:gets).and_return("y\n")
+        # The prompt reads $stdin through the converter core.
+        allow($stdin).to receive(:gets).and_return("y\n")
 
         command.send(:generate_converter, ['TestConverter'], 'uikit')
 

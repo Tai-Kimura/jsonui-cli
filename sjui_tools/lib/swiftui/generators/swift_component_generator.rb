@@ -2,6 +2,7 @@
 
 require 'fileutils'
 require_relative '../../core/logger'
+require_relative '../../core/converter_generator_core'
 require_relative '../../core/config_manager'
 require_relative '../../core/project_finder'
 require_relative '../../core/generated_marker'
@@ -37,12 +38,11 @@ module SjuiTools
           
           swift_file_path = File.join(swift_dir, "#{@component_name}.swift")
           
-          if File.exist?(swift_file_path)
-            @logger.warn "Swift file already exists: #{swift_file_path}"
-            print "Overwrite? (y/n): "
-            response = gets.chomp.downcase
-            return unless response == 'y'
-          end
+          # Through the converter core's one overwrite decision, so
+          # --force / --skip-existing / JUI_SKIP_EXISTING reach this
+          # file too, and a closed stdin reads as "n" instead of raising.
+          return unless JsonUIShared::ConverterGeneratorCore.may_write?(
+            swift_file_path, @options, @logger, noun: 'swift file', exists_label: 'Swift file')
           
           File.write(swift_file_path, swift_template)
           @logger.info "Created Swift file: #{swift_file_path}"
@@ -57,11 +57,10 @@ module SjuiTools
         end
 
         def container_template
-          marker_header = Core::GeneratedMarker.comment_header(
+          marker_header = Core::GeneratedMarker.scaffold_header(
             source: @component_name,
             generator: @command
           )
-          marker_footer = Core::GeneratedMarker.comment_footer
 
           <<~SWIFT
             #{marker_header}
@@ -86,17 +85,14 @@ module SjuiTools
                 }
             }
             #endif
-
-            #{marker_footer}
           SWIFT
         end
 
         def non_container_template
-          marker_header = Core::GeneratedMarker.comment_header(
+          marker_header = Core::GeneratedMarker.scaffold_header(
             source: @component_name,
             generator: @command
           )
-          marker_footer = Core::GeneratedMarker.comment_footer
 
           <<~SWIFT
             #{marker_header}
@@ -119,8 +115,6 @@ module SjuiTools
                 }
             }
             #endif
-
-            #{marker_footer}
           SWIFT
         end
 

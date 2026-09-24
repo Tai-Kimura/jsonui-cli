@@ -71,7 +71,7 @@ RSpec.describe SjuiTools::UIKit::XcodeProject::Generators::ConverterGenerator do
 
     before do
       # Stub user input for overwrite prompts
-      allow(generator).to receive(:gets).and_return("y\n")
+      allow($stdin).to receive(:gets).and_return("y\n")
       # Stub logger to avoid output during tests
       allow(SjuiTools::Core::Logger).to receive(:info)
       allow(SjuiTools::Core::Logger).to receive(:success)
@@ -201,7 +201,7 @@ RSpec.describe SjuiTools::UIKit::XcodeProject::Generators::ConverterGenerator do
   describe 'integration with existing handlers' do
     it 'does not duplicate config entries when generated twice' do
       generator = described_class.new('MyCustomView')
-      allow(generator).to receive(:gets).and_return("y\n")
+      allow($stdin).to receive(:gets).and_return("y\n")
       allow(SjuiTools::Core::Logger).to receive(:info)
       allow(SjuiTools::Core::Logger).to receive(:success)
       allow(SjuiTools::Core::Logger).to receive(:warn)
@@ -211,7 +211,7 @@ RSpec.describe SjuiTools::UIKit::XcodeProject::Generators::ConverterGenerator do
 
       # Generate again with same name
       generator2 = described_class.new('MyCustomView')
-      allow(generator2).to receive(:gets).and_return("y\n")
+      # The overwrite prompt reads $stdin (stubbed above) for both runs.
       generator2.generate
 
       # custom_view_types should still have a single entry for MyCustomView.

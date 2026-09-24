@@ -2,6 +2,7 @@
 
 require 'fileutils'
 require_relative '../../core/logger'
+require_relative '../../core/converter_generator_core'
 require_relative '../../core/config_manager'
 require_relative '../../core/project_finder'
 
@@ -44,12 +45,11 @@ module KjuiTools
 
           file_path = File.join(dynamic_dir, "#{@class_name}.kt")
 
-          if File.exist?(file_path)
-            @logger.warn "Dynamic component file already exists: #{file_path}"
-            print "Overwrite? (y/n): "
-            response = gets.chomp.downcase
-            return unless response == 'y'
-          end
+          # Through the converter core's one overwrite decision, so
+          # --force / --skip-existing / JUI_SKIP_EXISTING reach this
+          # file too, and a closed stdin reads as "n" instead of raising.
+          return unless JsonUIShared::ConverterGeneratorCore.may_write?(
+            file_path, @options, @logger, noun: 'dynamic component file', exists_label: 'Dynamic component file')
 
           File.write(file_path, dynamic_template)
           @logger.info "Created dynamic component file: #{file_path}"

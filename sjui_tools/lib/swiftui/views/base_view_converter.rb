@@ -1114,17 +1114,35 @@ module SjuiTools
         # (wrapping the VStack would hide the Spacer too and change what
         # weight / alignment mean). Returns the child's converter for state
         # propagation, or nil when the factory produced none.
+        #
+        # 🚨 A CONVERTER SCAFFOLDED BY `jui g converter` 1.8.107–1.8.111 STORES
+        # THE FACTORY UNDER OTHER NAMES. Its `initialize` sets `@factory` /
+        # `@registry`, the scaffold's own names, and never `@converter_factory`
+        # / `@view_registry` — so once its `process_children` came through this
+        # door (1.8.107), every child of a custom container was dropped: the
+        # block came out `{\n}`, the build had 0 warnings, and the content was
+        # missing on iOS only (kjui renders the same layout's children).
+        # Reported 2026-09-24. The template now sets both names, but a scaffold
+        # is user-owned once written and `jui sync_tool` never touches
+        # `views/extensions/`, so a fix in the template alone would leave every
+        # converter scaffolded in those five releases broken until someone
+        # re-scaffolds it. Reading the scaffold's names as a fallback fixes
+        # those in place with the next sync. Only the scaffold uses them
+        # (`git grep -P '@factory\b|@registry\b' sjui_tools/lib`: the template
+        # and nothing else).
         def render_child_honoring_visibility(child)
-          return nil unless @converter_factory
+          factory = @converter_factory || @factory
+          registry = @view_registry || @registry
+          return nil unless factory
           if child.is_a?(Hash) && child['visibility']
             visibility_param = SwiftUI::Binding::BindingExpression.swift_visibility_param(child['visibility'])
-            child_converter = @converter_factory.create_converter(child, @indent_level + 1, @action_manager, @converter_factory, @view_registry)
+            child_converter = factory.create_converter(child, @indent_level + 1, @action_manager, factory, registry)
             return nil unless child_converter
             add_line "VisibilityWrapper(#{visibility_param}) {"
             child_converter.convert.split("\n").each { |line| @generated_code << line }
             add_line "}"
           else
-            child_converter = @converter_factory.create_converter(child, @indent_level, @action_manager, @converter_factory, @view_registry)
+            child_converter = factory.create_converter(child, @indent_level, @action_manager, factory, registry)
             return nil unless child_converter
             child_converter.convert.split("\n").each { |line| @generated_code << line }
           end

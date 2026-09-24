@@ -2,6 +2,7 @@
 
 require 'fileutils'
 require_relative '../../core/logger'
+require_relative '../../core/converter_generator_core'
 require_relative '../../core/config_manager'
 require_relative '../../core/project_finder'
 require_relative '../../core/generated_marker'
@@ -76,12 +77,11 @@ module SjuiTools
 
           adapter_file = File.join(full_adapter_dir, "#{@adapter_class_name}.swift")
 
-          if File.exist?(adapter_file)
-            @logger.warn "Adapter file already exists: #{adapter_file}"
-            print "Overwrite? (y/n): "
-            response = gets.chomp.downcase
-            return unless response == 'y'
-          end
+          # Through the converter core's one overwrite decision, so
+          # --force / --skip-existing / JUI_SKIP_EXISTING reach this
+          # file too, and a closed stdin reads as "n" instead of raising.
+          return unless JsonUIShared::ConverterGeneratorCore.may_write?(
+            adapter_file, @options, @logger, noun: 'adapter file', exists_label: 'Adapter file')
 
           File.write(adapter_file, adapter_template)
           @logger.info "Created adapter file: #{adapter_file}"
@@ -132,11 +132,10 @@ module SjuiTools
           # Convert name to lowercase for component type matching
           # e.g., "Home" -> "home"
           component_type_lower = @name.gsub(/([A-Z])/) { "_#{$1.downcase}" }.sub(/^_/, '')
-          marker_header = Core::GeneratedMarker.comment_header(
+          marker_header = Core::GeneratedMarker.scaffold_header(
             source: @view_name,
             generator: @command
           )
-          marker_footer = Core::GeneratedMarker.comment_footer
 
           <<~SWIFT
             #{marker_header}
@@ -165,8 +164,6 @@ module SjuiTools
             }
 
             #endif
-
-            #{marker_footer}
           SWIFT
         end
 
