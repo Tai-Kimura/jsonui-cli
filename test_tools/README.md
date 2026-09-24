@@ -573,6 +573,38 @@ construction settle, writes the arranged state, and only then calls
 the mark, so what the constructor fetched is not read as the method's doing.
 A hand-written test that never calls `mark()` reads every call, as before.
 
+### Harness conditions (`harnessConditions`)
+
+When a view model's calls depend on something outside it — a signed-in
+session, say — no mock can arrange that, and the op it gates cannot be closed
+by a row. Declare the precondition once, in the app contracts spec:
+
+```json
+"harnessConditions": {
+  "session": {"values": ["absent", "present"], "default": "absent",
+              "reason": "whether a user is signed in; the VM reads it at construction"}
+}
+```
+
+and name it in a row's `when` as `"harness.session": "present"` (not `cond`,
+which names a `branchContracts.conditions` witness). Every generated test then
+calls `arrangeCondition(name, value)` for **every** declared condition — the
+row's value, or the default — after the mock is installed and before the
+harness is built. The hook is one consumer-owned file per app in the harness
+directory: `branch-conditions.ts` (web, awaited, so it may be async),
+`BranchConditions.kt` (a top-level function in the harness package),
+`BranchConditions.swift`. A skeleton that fails every unimplemented pair is
+written once when the file is missing; `--check` reports it missing. Make each
+pair produce what production would give the view model to observe; the tool
+cannot see whether it does.
+
+A row naming an undeclared condition or a value outside `values`, or any
+`harness.*` key when no app contracts spec declares `harnessConditions`, is a
+declaration error in `generate branch-tests` and in `contracts coverage`
+(exit 1). Coverage counts such rows as ordinary rows and reports them as
+`condition_rows`. An app without `harnessConditions` gets none of this: its
+generated files are byte for byte what they were.
+
 ### `seedableState` on a view model built from `init` arguments
 
 `branchContracts.seedableState` names ViewModel-internal state a branch may

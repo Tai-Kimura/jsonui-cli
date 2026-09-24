@@ -1546,6 +1546,12 @@ def _branch_check_summary(reports: list, scanned: int, orphans=()) -> int:
             print(f"  [WARN]    {report.harness_file} — harness missing; "
                   "the generated test imports it (run without --check to "
                   "emit a skeleton)")
+    # The app's one hook, said once however many screens call it.
+    for hook in sorted({str(r.conditions_hook_file) for r in reports
+                        if getattr(r, "conditions_hook_absent", False)}):
+        print(f"  [WARN]    {hook} — harness-conditions hook missing; every "
+              "generated test calls arrangeCondition (run without --check to "
+              "emit a skeleton)")
     # A note, never a failure: the file is the consumer's. But the fix ships
     # in a skeleton that never overwrites an existing harness, so without
     # naming the file the release reaches only projects that scaffold a NEW
@@ -1785,6 +1791,8 @@ def cmd_generate_branch_tests(args):
     _print_invoke_port_notes(r.harness_file for r in reports
                              if r.harness_lacks_invoke)
     print(app_rules.note())
+    if app_rules.conditions_note():
+        print(app_rules.conditions_note())
     _print_branch_toolchain(len(reports))
     return 0
 
@@ -1962,6 +1970,12 @@ def _print_branch_generation(report, show_siblings: bool = True) -> None:
         print(f"  {report.harness_file}  (NEW harness skeleton — implement createHarness())")
     else:
         print(f"  {report.harness_file}  (existing harness kept)")
+    if getattr(report, "conditions_hook_created", False):
+        # Once per app: the first screen generated creates it, and every
+        # screen's tests call it before building the harness.
+        print(f"  {report.conditions_hook_file}  (NEW harness-conditions hook "
+              "skeleton, one per app — implement arrangeCondition(); until then "
+              "every branch test throws in it)")
     # Named with its source. Two readers, on the same day, one working from a
     # real corpus and one writing a fixture, both predicted this list from the
     # contract's `when: {api.<op>: …}` clauses and both were wrong — the

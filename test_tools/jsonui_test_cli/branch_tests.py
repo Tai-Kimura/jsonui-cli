@@ -62,6 +62,16 @@ PARENT_SPEC_TYPE = "screen_parent_spec"
 #: The paired test reads `jsonui_doc_cli`'s constant and compares.
 APP_CONTRACTS_SPEC_TYPE = "app_contracts_spec"
 
+#: The app's one harness-condition hook, per platform (design v4.11, P2d):
+#: consumer-owned, in the harness directory, one per APP — the conditions are
+#: declared once in the app contracts spec, the hook runs before any screen's
+#: harness exists (so it cannot be a harness method), and Kotlin/Swift screen
+#: harnesses share one package/module, where a top-level function per screen
+#: would collide.
+WEB_CONDITIONS_MODULE = "branch-conditions"
+KOTLIN_CONDITIONS_FILE = "BranchConditions.kt"
+SWIFT_CONDITIONS_FILE = "BranchConditions.swift"
+
 #: The substring every banner this generator writes contains. Ownership is
 #: read from the FILE rather than assumed from its path, so a mistake in
 #: building a filename cannot reach a hand-written harness.
@@ -585,6 +595,12 @@ class GenerationReport:
     harness_file: Path | None = None
     harness_created: bool = False
     harness_absent: bool = False
+    #: The app's one `arrangeCondition` hook file (consumer-owned), when the
+    #: app declares `harnessConditions`; None otherwise.
+    conditions_hook_file: Path | None = None
+    conditions_hook_created: bool = False
+    #: check mode: the app declares conditions and the hook file is missing.
+    conditions_hook_absent: bool = False
     #: An EXISTING consumer harness predating `invoke` on this platform.
     #: The harness is consumer-owned and never overwritten, so shipping the
     #: fix does not reach the projects that hit the defect — the population
@@ -1220,6 +1236,10 @@ class Row:
     #: for the statuses this test serves, minus what this row says
     #: `not-called`.
     allowed_ops: list = field(default_factory=list)
+    #: `[(name, value)]` for every harness condition the app declares, in
+    #: declaration order — the row's `harness.<name>` or the default. Empty
+    #: when the app declares none, and then no renderer emits a line of it.
+    conditions: list = field(default_factory=list)
 
 
 @dataclass
@@ -1247,6 +1267,13 @@ class AppRules:
     declaring: list = field(default_factory=list)
     #: (file, message) — unreadable app specs and shape errors in the rules.
     problems: list = field(default_factory=list)
+    #: `harnessConditions` (design v4.11, P2d), in declaration order; None =
+    #: no app contracts spec declares them.
+    conditions: list | None = None
+    conditions_file: Path | None = None
+    #: App contracts specs that declare `harnessConditions`. Two is a config
+    #: error for the same reason as two sets of rules.
+    conditions_declaring: list = field(default_factory=list)
 
     def note(self) -> str:
         if self.spec_directory is None:
@@ -1256,6 +1283,15 @@ class AppRules:
             return "apiOutcomeRules: none (no app contracts spec declares them)"
         return (f"apiOutcomeRules: {len(self.rules)} rule(s) from "
                 f"{self.spec_file.name}")
+
+    def conditions_note(self) -> str | None:
+        """Said only when the app declares harnessConditions — an app that
+        does not gets the run's output as before."""
+        if not self.conditions:
+            return None
+        return (f"harnessConditions: {', '.join(c.name for c in self.conditions)} "
+                f"from {self.conditions_file.name} — every branch test calls "
+                "arrangeCondition for each")
 
 
 def find_app_contract_spec(project_root: Path) -> AppRules:
@@ -1284,17 +1320,27 @@ def find_app_contract_spec(project_root: Path) -> AppRules:
             continue
         if not isinstance(raw, dict) or raw.get("type") != APP_CONTRACTS_SPEC_TYPE:
             continue
-        if "apiOutcomeRules" not in raw:
+        declares_rules = "apiOutcomeRules" in raw
+        declares_conditions = "harnessConditions" in raw
+        if not (declares_rules or declares_conditions):
             continue
-        found.declaring.append(path)
         declarations = parse_declarations(raw)
         for error in declarations.errors:
             found.problems.append((path, f"{error.path}: {error.message}"))
-        found.spec_file = path
-        found.rules = list(declarations.rules)
+        if declares_rules:
+            found.declaring.append(path)
+            found.spec_file = path
+            found.rules = list(declarations.rules)
+        if declares_conditions:
+            found.conditions_declaring.append(path)
+            found.conditions_file = path
+            found.conditions = list(declarations.harness_conditions or [])
     if len(found.declaring) > 1:
         found.spec_file = None
         found.rules = []
+    if len(found.conditions_declaring) > 1:
+        found.conditions_file = None
+        found.conditions = None
     return found
 
 
@@ -1310,6 +1356,11 @@ def _app_rules_for_generation(project_root: Path) -> AppRules:
             "apiOutcomeRules are declared by more than one app contracts spec ("
             + ", ".join(str(p) for p in found.declaring)
             + ") — which rules apply is ambiguous; keep them in one")
+    if len(found.conditions_declaring) > 1:
+        raise BranchTestGenerationError(
+            "harnessConditions are declared by more than one app contracts spec ("
+            + ", ".join(str(p) for p in found.conditions_declaring)
+            + ") — which conditions apply is ambiguous; keep them in one")
     if found.problems:
         raise BranchTestGenerationError(
             "the app contracts spec's apiOutcomeRules could not be read: "
@@ -1695,7 +1746,7 @@ def _row_title(contract: dict, row: "Row") -> str:
 
 def render_test_file(
     screen: str, spec: dict, routes: list[Route], harness_import: str,
-    rows: list,
+    rows: list, conditions_import: str = "./" + WEB_CONDITIONS_MODULE,
 ) -> tuple[str, GenerationReport]:
     bc = spec.get("branchContracts") or {}
     conditions = bc.get("conditions") or {}
@@ -1720,6 +1771,10 @@ def render_test_file(
     lines.append("  installFetchMock, partialMismatches, resolveString, seedState, settle,\n  type RouteSpec,")
     lines.append("} from \"./jsonui-branch-runtime\";")
     lines.append(f"import {{ createHarness }} from \"{harness_import}\";")
+    if any(row.conditions for row in rows):
+        # Only when the app declares harnessConditions: an app that does not
+        # gets the file byte for byte as before (red-check xxix).
+        lines.append(f"import {{ arrangeCondition }} from \"{conditions_import}\";")
     lines.append("")
     lines.append("const ROUTES: RouteSpec[] = [")
     lines.append(route_specs)
@@ -1811,6 +1866,11 @@ def _render_branch(
     else:
         out.append("    const rec = installFetchMock(ROUTES);")
     out.append("    try {")
+    # Harness conditions (design v4.11, P2d): after the mock is in, before the
+    # harness is built — every declared condition, the row's value or its
+    # default. Awaited, so the consumer's hook may be async.
+    for cname, cvalue in row.conditions:
+        out.append(f"      await arrangeCondition({_ts(cname)}, {_ts(cvalue)});")
     out.append("      const h = createHarness();")
     out.append("      await settle();")
     if state:
@@ -2571,10 +2631,23 @@ def _render_kotlin_branch(
     out.append("")
     out.append(f"  // {_row_title(contract, row)}")
     out.append(f"  @Test fun `{name}`() {{")
-    out.append(
-        f"    runBranchTest(routes, {_kt({k: v for k, v in overrides.items()})}, "
-        f"::create{pascal}BranchHarness) {{ h, rec ->"
-    )
+    if row.conditions:
+        # Harness conditions (design v4.11, P2d): the factory is wrapped so
+        # the hook runs after the server is serving and before the harness
+        # is built — runBranchTest itself is unchanged.
+        out.append(
+            f"    runBranchTest(routes, {_kt({k: v for k, v in overrides.items()})}, "
+            "{ baseUrl, dispatcher ->"
+        )
+        for cname, cvalue in row.conditions:
+            out.append(f"      arrangeCondition({_kt_str(cname)}, {_kt_str(cvalue)})")
+        out.append(f"      create{pascal}BranchHarness(baseUrl, dispatcher)")
+        out.append("    }) { h, rec ->")
+    else:
+        out.append(
+            f"    runBranchTest(routes, {_kt({k: v for k, v in overrides.items()})}, "
+            f"::create{pascal}BranchHarness) {{ h, rec ->"
+        )
     # The act window (see the web emitter): the harness was built with the
     # server already serving; its construction settles, the arrangement goes
     # in, and the recorder starts counting only then.
@@ -3412,7 +3485,15 @@ def _render_swift_branch(
     out.append(
         f"    runBranchTest(routes: routes, overrides: {_swift(overrides) if overrides else '[:]'},"
     )
-    out.append(f"                      harnessFactory: create{pascal}BranchHarness) {{ h, rec in")
+    if row.conditions:
+        # Harness conditions (design v4.11, P2d): see the Kotlin emitter.
+        out.append("                      harnessFactory: {")
+        for cname, cvalue in row.conditions:
+            out.append(f"      arrangeCondition({_swift_str(cname)}, {_swift_str(cvalue)})")
+        out.append(f"      return create{pascal}BranchHarness()")
+        out.append("    }) { h, rec in")
+    else:
+        out.append(f"                      harnessFactory: create{pascal}BranchHarness) {{ h, rec in")
     # The act window (see the web emitter): the harness was built with the
     # protocol already serving; its construction settles, the arrangement
     # goes in, and the recorder starts counting only then.
@@ -4340,7 +4421,8 @@ def generate_branch_tests(
     `find_app_contract_spec` result, read once by a caller generating many
     screens; None reads it here.
     """
-    from .contract_declarations import parse_declarations
+    from .contract_declarations import (
+        arranged_conditions, check_condition_uses, parse_declarations)
 
     spec_file = resolve_spec_path(screen, project_root, spec_path)
     if not spec_file.exists():
@@ -4395,6 +4477,16 @@ def generate_branch_tests(
 
     if app_rules is None:
         app_rules = _app_rules_for_generation(project_root)
+    # A row naming a harness condition the app does not declare (or with a
+    # value outside it) is a declaration error, not a test with a guessed
+    # arrangement — red-check xxviii.
+    condition_errors = check_condition_uses(
+        declarations.condition_uses, app_rules.conditions,
+        app_rules.conditions_file.name if app_rules.conditions_file else None)
+    if condition_errors:
+        raise BranchTestGenerationError(
+            f"{spec_file.name}: " + "; ".join(
+                f"{e.path}: {e.message}" for e in condition_errors))
     mocks_path = (project_root / mocks_dir).resolve()
     mocks = index_mock_files(mocks_path)
     bindings = collect_bindings(
@@ -4402,18 +4494,25 @@ def generate_branch_tests(
         rules=app_rules.rules, declarations=declarations)
     _raise_binding_errors(bindings.errors)
     routes, rows = bindings.routes, bindings.rows
+    for row in rows:
+        row.conditions = arranged_conditions(app_rules.conditions, row.branch.get("when"))
     overlaps = [describe_overlap(a, b) for a, b in bindings.overlaps]
 
     if platform == "android":
         report = _emit_android(
             screen, spec, routes, rows, project_root, out_dir, harness_dir,
             package, check)
+        _emit_conditions_hook(report, app_rules, project_root / harness_dir
+                              / _relative_kotlin_paths(package), platform,
+                              package=package, check=check)
         report.route_overlaps = overlaps
         return report
     if platform == "ios":
         report = _emit_ios(
             screen, spec, routes, rows, project_root, out_dir, harness_dir,
             module, check)
+        _emit_conditions_hook(report, app_rules, project_root / harness_dir,
+                              platform, module=module, check=check)
         report.route_overlaps = overlaps
         return report
 
@@ -4425,7 +4524,9 @@ def generate_branch_tests(
     # before anything is dug — and a screen that turns out to belong to
     # another platform leaves no empty directory behind.
     rel = _relative_import(out_path, harness_path / screen)
-    content, report = render_test_file(screen, spec, routes, rel, rows)
+    content, report = render_test_file(
+        screen, spec, routes, rel, rows,
+        conditions_import=_relative_import(out_path, harness_path / WEB_CONDITIONS_MODULE))
     report.route_overlaps = overlaps
     if _skip_for_platform(report):
         # The screen produced a test here until its branches moved to
@@ -4473,6 +4574,7 @@ def generate_branch_tests(
     report.harness_created = created
     report.harness_lacks_invoke = _harness_predates_invoke(harness_file, created)
     emitter.apply_to(report)
+    _emit_conditions_hook(report, app_rules, harness_path, platform, check=check)
     return report
 
 
@@ -4644,6 +4746,127 @@ def _skip_for_platform(report: "GenerationReport") -> bool:
         return False
     report.platform_applicable = False
     return True
+
+
+def _conditions_listing(conditions: list, prefix: str) -> str:
+    """The declared conditions, one comment line each, for a hook skeleton."""
+    lines = []
+    for c in conditions:
+        values = " | ".join(
+            f'"{v}"' + (" (default)" if v == c.default else "") for v in c.values)
+        lines.append(f"{prefix}  {c.name}: {values} — {c.reason}")
+    return "\n".join(lines)
+
+
+_CONDITIONS_HOOK_DOC = """Harness conditions — CONSUMER-OWNED, one file for the whole app.
+{p}Generated once as a skeleton by `jsonui-test generate branch-tests` because the
+{p}app contracts spec ({app}) declares harnessConditions; edit freely, it will
+{p}not be overwritten.
+{p}
+{p}Every generated branch test calls arrangeCondition(name, value) for EVERY
+{p}declared condition — the row's `when` "harness.<name>" value, or the
+{p}default — after the mock is installed and BEFORE the screen's harness is
+{p}built. Make each pair produce what production would give the ViewModel to
+{p}observe (a signed-in session: what the ViewModel reads to decide it is
+{p}signed in — not a cookie the 401 rows would then carry). The tool cannot see
+{p}whether this is faithful; that is on this file.
+{p}
+{p}An unimplemented pair fails its test, so a row cannot pass on the
+{p}harness's bare state.
+{p}
+{p}Declared:
+{listing}"""
+
+
+WEB_CONDITIONS_SKELETON = """/**
+ * %(doc)s
+ */
+export function arrangeCondition(name: string, value: string): void | Promise<void> {
+  switch (`${name}=${value}`) {
+    // case "session=absent": ...; return;
+    default:
+      throw new Error(`arrangeCondition(${name}, ${value}) is not implemented — see %(module)s.ts`);
+  }
+}
+"""
+
+KOTLIN_CONDITIONS_SKELETON = """// %(doc)s
+package %(package)s
+
+fun arrangeCondition(name: String, value: String) {
+  when ("$name=$value") {
+    // "session=absent" -> { ... }
+    else -> error("arrangeCondition($name, $value) is not implemented — see %(file)s")
+  }
+}
+"""
+
+SWIFT_CONDITIONS_SKELETON = """// %(doc)s
+import Foundation
+import XCTest
+@testable import %(module)s
+
+func arrangeCondition(_ name: String, _ value: String) {
+  switch "\\(name)=\\(value)" {
+  // case "session=absent": ...
+  default:
+    XCTFail("arrangeCondition(\\(name), \\(value)) is not implemented — see %(file)s")
+  }
+}
+"""
+
+
+def render_conditions_skeleton(platform: str, conditions: list, app_file: str,
+                               package: str | None = None,
+                               module: str | None = None) -> str:
+    """The app's arrangeCondition hook skeleton for one platform."""
+    if platform == "web":
+        prefix = " * "
+    else:
+        prefix = "// "
+    doc = _CONDITIONS_HOOK_DOC.format(
+        p=prefix.rstrip() + " " if platform == "web" else prefix,
+        app=app_file, listing=_conditions_listing(conditions, prefix.rstrip()))
+    if platform == "web":
+        text = WEB_CONDITIONS_SKELETON % {"doc": doc, "module": WEB_CONDITIONS_MODULE}
+    elif platform == "android":
+        text = KOTLIN_CONDITIONS_SKELETON % {
+            "doc": doc, "package": package, "file": KOTLIN_CONDITIONS_FILE}
+    else:
+        text = SWIFT_CONDITIONS_SKELETON % {
+            "doc": doc, "module": module, "file": SWIFT_CONDITIONS_FILE}
+    return "\n".join(line.rstrip() for line in text.split("\n"))
+
+
+def _emit_conditions_hook(report: "GenerationReport", app_rules: "AppRules",
+                          directory: Path, platform: str, *,
+                          package: str | None = None, module: str | None = None,
+                          check: bool = False) -> None:
+    """Write the app's hook skeleton once, when the app declares conditions.
+
+    Consumer-owned like a harness: never compared, never overwritten. Absent
+    in check mode is reported — the generated tests call it, so a project
+    without it does not compile (Kotlin, Swift) or fails at import (web).
+    Nothing at all happens for an app without harnessConditions (xxix), nor
+    for a screen whose test was not emitted on this platform.
+    """
+    if not app_rules.conditions or report.test_file is None:
+        return
+    name = {"web": WEB_CONDITIONS_MODULE + ".ts", "android": KOTLIN_CONDITIONS_FILE,
+            "ios": SWIFT_CONDITIONS_FILE}[platform]
+    hook = directory / name
+    report.conditions_hook_file = hook
+    if hook.exists():
+        return
+    if check:
+        report.conditions_hook_absent = True
+        return
+    hook.parent.mkdir(parents=True, exist_ok=True)
+    hook.write_text(render_conditions_skeleton(
+        platform, app_rules.conditions,
+        app_rules.conditions_file.name if app_rules.conditions_file else "?",
+        package=package, module=module), encoding="utf-8")
+    report.conditions_hook_created = True
 
 
 def render_harness_skeleton(screen: str, runtime_import: str = "./jsonui-branch-runtime") -> str:

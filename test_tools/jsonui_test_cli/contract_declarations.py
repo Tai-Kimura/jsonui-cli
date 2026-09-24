@@ -34,6 +34,17 @@ such place:
   app does for every screen (sign out, an overlay, a refresh) is tested by
   ``unitContracts`` in the same file — ``verifiedBy`` names those cases —
   and is outside a screen's coverage.
+- ``harnessConditions`` in the app contracts spec (design v4.11, P2d) —
+  ``{"<name>": {values, default, reason}}``: a precondition outside the
+  ViewModel that changes what it calls (a signed-in session), which a
+  generated test cannot otherwise arrange. A row names one in its ``when``
+  as ``"harness.<name>": "<value>"``; every generated test calls the
+  consumer's ``arrangeCondition(name, value)`` for EVERY declared condition —
+  the row's value or the ``default`` — after the mock goes in and before the
+  harness is built. Not ``when.cond``, which names a
+  ``branchContracts.conditions`` witness that writes ViewModel state — the
+  key is ``harness.`` rather than ``condition.`` so the two do not read
+  alike (ee, 2026-09-25).
 
 Plus ``metadata.platforms`` on a screen: the platforms the screen exists on.
 
@@ -72,10 +83,16 @@ _STATUS_NUMBER = re.compile(r"^[1-5]\d\d$")
 _OP_KEY = re.compile(r"^api\.\S+$")
 #: `VERB /path` — the spelling `sideCalls` does NOT take (operationIds only).
 _VERB_PATH = re.compile(r"^[A-Za-z]+\s+/")
+#: A harness condition's name: an identifier, because it is spelled inside a
+#: `when` key (`harness.<name>`) and handed to three languages' hooks.
+_CONDITION_NAME = re.compile(r"^[A-Za-z][A-Za-z0-9_]*$")
+#: The `when` key prefix a row names a harness condition with.
+CONDITION_PREFIX = "harness."
 
 _EXCLUSION_KEYS = ("by", "reason", "platforms")
 _UNREACHED_KEYS = ("reason", "platforms")
 _RULE_KEYS = ("id", "statuses", "sideCalls", "verifiedBy", "reason")
+_CONDITION_KEYS = ("values", "default", "reason")
 #: Rule keys of design v3, withdrawn in v4 (2026-09-24). Named so a rule
 #: written to the old shape is told what happened, not just "unknown key".
 _RULE_WITHDRAWN = ("then", "vm", "handledBy", "security", "except")
@@ -90,6 +107,7 @@ APP_CONTRACTS_SPEC = "app_contracts_spec"
 #: `[]` after a segment means "each element of that list".
 DECLARATION_SITES = (
     "apiOutcomeRules",
+    "harnessConditions",
     "metadata.platforms",
     "branchContracts.unreachedOps",
     "branchContracts.methods.*.excludedOutcomes",
@@ -137,12 +155,35 @@ class OutcomeRule:
     reason: str
 
 
+@dataclass(frozen=True)
+class HarnessCondition:
+    name: str
+    values: tuple             # two or more, in the order written
+    default: str              # one of `values`
+    reason: str
+
+
+@dataclass(frozen=True)
+class ConditionUse:
+    """A row's `when` naming a harness condition (`harness.<name>`) — as written, not yet
+    checked against the app's declaration (that needs both documents)."""
+    method: str
+    branch: int               # 0-based index into the method's branches
+    name: str
+    value: object             # a string when well-formed; checked by check_condition_uses
+
+
 @dataclass
 class Declarations:
     exclusions: list = field(default_factory=list)
     unreached_ops: list = field(default_factory=list)
     rules: list = field(default_factory=list)
     also_statuses: list = field(default_factory=list)
+    #: `harnessConditions` of an app contracts spec, in declaration order;
+    #: None = the key is absent (a screen document is always None).
+    harness_conditions: list | None = None
+    #: Every `harness.<name>` a screen's rows name.
+    condition_uses: list = field(default_factory=list)
     #: `metadata.platforms` of a screen; None = not declared.
     platforms: tuple | None = None
     errors: list = field(default_factory=list)
@@ -163,6 +204,8 @@ def parse_declarations(spec: dict) -> Declarations:
     if is_app:
         if "apiOutcomeRules" in spec:
             _parse_rules(spec["apiOutcomeRules"], _unit_case_names(spec), out)
+        if "harnessConditions" in spec:
+            _parse_harness_conditions(spec["harnessConditions"], out)
         return out
 
     if "apiOutcomeRules" in spec:
@@ -172,6 +215,12 @@ def parse_declarations(spec: dict) -> Declarations:
             "the calls the app's network layer makes for every screen. A "
             "screen's own handling of a status is a row in branchContracts "
             "(alsoStatuses for statuses the row treats alike)"))
+    if "harnessConditions" in spec:
+        out.errors.append(DeclarationError(
+            "harnessConditions",
+            f"harnessConditions belongs in the {APP_CONTRACTS_SPEC} — the "
+            "consumer's arrangeCondition hook is one per app, and every "
+            "screen's rows name the conditions it declares"))
     metadata = spec.get("metadata")
     if isinstance(metadata, dict) and "platforms" in metadata:
         out.platforms = _platforms(metadata["platforms"], "metadata.platforms", out,
@@ -193,7 +242,64 @@ def parse_declarations(spec: dict) -> Declarations:
                 for index, branch in enumerate(branches):
                     if isinstance(branch, dict) and "alsoStatuses" in branch:
                         _parse_also_statuses(name, index, branch, out)
+                    if isinstance(branch, dict) and isinstance(branch.get("when"), dict):
+                        for key, value in branch["when"].items():
+                            if isinstance(key, str) and key.startswith(CONDITION_PREFIX):
+                                out.condition_uses.append(ConditionUse(
+                                    method=name, branch=index,
+                                    name=key[len(CONDITION_PREFIX):], value=value))
     return out
+
+
+def check_condition_uses(uses: list, conditions: list | None,
+                         app_file: str | None = None) -> list:
+    """The rows' `harness.<name>` against the app's `harnessConditions`.
+
+    Needs both documents, so it is not part of `parse_declarations`: the
+    generator and `contracts coverage` call it with the app spec they found
+    (design v4.11 red-check xxviii). `conditions` None means no app contracts
+    spec declares `harnessConditions`. Every error names the row and the key.
+    """
+    errors = []
+    by_name = {c.name: c for c in (conditions or [])}
+    for use in uses:
+        where = (f"branchContracts.methods.{use.method}.branches[{use.branch}]"
+                 f".when.{CONDITION_PREFIX}{use.name}")
+        if conditions is None:
+            errors.append(DeclarationError(where, (
+                f"'{CONDITION_PREFIX}{use.name}' names a harness condition, and "
+                f"no {APP_CONTRACTS_SPEC} declares harnessConditions — declare "
+                f"'{use.name}' there with its values, default and reason")))
+            continue
+        condition = by_name.get(use.name)
+        if condition is None:
+            declared = ", ".join(repr(n) for n in by_name) or "none"
+            errors.append(DeclarationError(where, (
+                f"'{use.name}' is not a declared harness condition — "
+                f"harnessConditions{f' in {app_file}' if app_file else ''} "
+                f"declares: {declared}")))
+            continue
+        if use.value not in condition.values:
+            errors.append(DeclarationError(where, (
+                f"{use.value!r} is not a value of harness condition "
+                f"'{use.name}' — allowed: "
+                f"{', '.join(repr(v) for v in condition.values)}")))
+    return errors
+
+
+def arranged_conditions(conditions: list | None, when: dict) -> list:
+    """`[(name, value)]` for EVERY declared condition, in declaration order:
+    the row's value when it names one, else the condition's `default`.
+
+    Every one, not only those the row names: a condition left to the
+    harness's bare state would make `default` mean whatever that happens to
+    be. `[]` when the app declares none — and then nothing is emitted.
+    """
+    if not conditions:
+        return []
+    when = when if isinstance(when, dict) else {}
+    return [(c.name, when.get(f"{CONDITION_PREFIX}{c.name}", c.default))
+            for c in conditions]
 
 
 # ---------------------------------------------------------------- helpers ---
@@ -485,6 +591,69 @@ def _parse_rules(value, case_names: set, out: Declarations) -> None:
             out.rules.append(OutcomeRule(
                 id=rule_id, statuses=tuple(statuses), side_calls=tuple(side_calls),
                 verified_by=tuple(verified_by), reason=rule["reason"]))
+
+
+def _parse_harness_conditions(value, out: Declarations) -> None:
+    base = "harnessConditions"
+    if not isinstance(value, dict) or not value:
+        _err(out, base, "harnessConditions must be a non-empty object of "
+             "{\"<name>\": {values, default, reason}} — omit it when the app "
+             "has none")
+        out.harness_conditions = []
+        return
+    conditions: list = []
+    for name, entry in value.items():
+        path = f"{base}.{name}"
+        ok = True
+        if not isinstance(name, str) or not _CONDITION_NAME.match(name):
+            _err(out, path, f"{name!r} is not a condition name — a letter, then "
+                 "letters, digits or '_' (it is spelled in a when key as "
+                 f"'{CONDITION_PREFIX}<name>' and passed to arrangeCondition)")
+            ok = False
+        if not isinstance(entry, dict):
+            _err(out, path, "must be an object {values, default, reason}")
+            continue
+        if any(key not in _CONDITION_KEYS for key in entry):
+            # Refused, as a rule with an unknown key is: a misspelt field is
+            # a field nothing reads.
+            _unknown_keys(entry, _CONDITION_KEYS, path, out)
+            ok = False
+        values = entry.get("values")
+        if not isinstance(values, list) or len(values) < 2:
+            _err(out, f"{path}.values", "values must be an array of two or more "
+                 "strings — a condition with one value arranges nothing a row "
+                 "could choose")
+            ok = False
+            values = []
+        seen: list = []
+        for j, v in enumerate(values):
+            if not _nonempty_str(v):
+                _err(out, f"{path}.values[{j}]", f"{v!r} is not a non-empty string")
+                ok = False
+            elif v in seen:
+                _err(out, f"{path}.values[{j}]", f"{v!r} is listed twice")
+                ok = False
+            else:
+                seen.append(v)
+        default = entry.get("default")
+        if "default" not in entry:
+            _err(out, f"{path}.default", "default is required: the value every "
+                 "row that does not name this condition is arranged with")
+            ok = False
+        elif default not in seen:
+            _err(out, f"{path}.default", f"{default!r} is not one of values "
+                 f"({', '.join(repr(v) for v in seen) or 'none'})")
+            ok = False
+        if not _nonempty_str(entry.get("reason")):
+            _err(out, f"{path}.reason", "reason is required — what outside the "
+                 "ViewModel this condition stands for, and why a row cannot "
+                 "arrange it through the mocks")
+            ok = False
+        if ok:
+            conditions.append(HarnessCondition(
+                name=name, values=tuple(seen), default=default,
+                reason=entry["reason"]))
+    out.harness_conditions = conditions
 
 
 def _string_list(value, path: str, out: Declarations, missing: str):

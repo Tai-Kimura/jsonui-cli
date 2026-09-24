@@ -64,7 +64,8 @@ from .branch_tests import (
     load_project_config,
     side_call_ops,
 )
-from .contract_declarations import parse_declarations
+from .contract_declarations import (
+    CONDITION_PREFIX, check_condition_uses, parse_declarations)
 
 HTTP_VERBS = frozenset({"GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"})
 
@@ -258,6 +259,10 @@ def load_project(root: Path) -> Project:
         raise CannotStart(
             "apiOutcomeRules are declared by more than one app contracts spec: "
             + ", ".join(str(p) for p in app.declaring))
+    if len(app.conditions_declaring) > 1:
+        raise CannotStart(
+            "harnessConditions are declared by more than one app contracts spec: "
+            + ", ".join(str(p) for p in app.conditions_declaring))
 
     classify = _screen_classifier()
     if classify is None:
@@ -331,7 +336,7 @@ class ScreenResult:
     info: dict = field(default_factory=lambda: dict(
         guard_only=0, note_branches=0, also_statuses_rows=0,
         also_statuses_arrange_differs=0, side_calls_admitted=0,
-        reference_holds_on_success_row=0, route_overlaps=0))
+        reference_holds_on_success_row=0, route_overlaps=0, condition_rows=0))
     methods_without_endpoint: int = 0
     outside_required: dict = field(default_factory=lambda: dict(
         unreached_op=0, na_default_response=0, na_no_scenario=0, na_platform_excluded=0))
@@ -466,6 +471,12 @@ def evaluate_screen(name: str, spec: dict, platform: str, project: Project) -> S
     declarations = parse_declarations(spec)
     for e in declarations.errors:
         res.declaration_errors.append(_error(message=f"{e.path}: {e.message}"))
+    # A row's `harness.<name>` against the app's harnessConditions (xxviii):
+    # an undeclared name, a value outside `values`, or no declaration at all.
+    conditions_file = project.app.conditions_file.name if project.app.conditions_file else None
+    for e in check_condition_uses(declarations.condition_uses, project.app.conditions,
+                                  conditions_file):
+        res.declaration_errors.append(_error(message=f"{e.path}: {e.message}"))
 
     ops = collect_endpoint_ops(spec)
     endpoints, res.methods_without_endpoint, non_http, unbound, scoped_away = \
@@ -568,6 +579,11 @@ def evaluate_screen(name: str, spec: dict, platform: str, project: Project) -> S
                 continue
             res.branches_active += 1
             active_by_method[method] = active_by_method.get(method, 0) + 1
+            if any(isinstance(k, str) and k.startswith(CONDITION_PREFIX)
+                   for k in (branch.get("when") or {})):
+                # An ordinary row for reach and coverage; counted so the reader
+                # can see how much of the coverage rests on the consumer's hook.
+                res.info["condition_rows"] += 1
             then = branch.get("then") or {}
             if "api" in then:
                 res.info["guard_only"] += 1
@@ -1001,6 +1017,9 @@ class CoverageReport:
     app_errors: list
     unknown_types: int = 0
     exit: int = 0
+    #: harnessConditions names and the file that declares them; None = none.
+    conditions: list | None = None
+    conditions_file: str | None = None
 
 
 def run_coverage(root: Path, platforms=None, screen: str | None = None) -> CoverageReport:
@@ -1033,7 +1052,11 @@ def run_coverage(root: Path, platforms=None, screen: str | None = None) -> Cover
     report = CoverageReport(
         platforms=blocks, project_platforms=project.config_platforms,
         app_file=str(project.app.spec_file) if project.app.spec_file else None,
-        rules=len(project.app.rules), app_errors=app_errors, unknown_types=unknown_types)
+        rules=len(project.app.rules), app_errors=app_errors, unknown_types=unknown_types,
+        conditions=([c.name for c in project.app.conditions]
+                    if project.app.conditions is not None else None),
+        conditions_file=(str(project.app.conditions_file)
+                         if project.app.conditions_file else None))
     report.exit = compose_exit(b.exit for b in blocks)
     return report
 
@@ -1071,7 +1094,9 @@ def _total_line(platform: str, t: dict) -> str:
 def format_text(report: CoverageReport) -> list:
     lines = [f"contracts coverage  (project platforms: "
              f"{', '.join(report.project_platforms) if report.project_platforms else '(none)'})"]
-    lines.append(f"app contracts: {report.app_file or '(none)'} · apiOutcomeRules {report.rules}")
+    lines.append(f"app contracts: {report.app_file or '(none)'} · apiOutcomeRules {report.rules}"
+                 + (f" · harnessConditions {', '.join(report.conditions)} "
+                    f"({report.conditions_file})" if report.conditions else ""))
     for error in report.app_errors:
         lines.append(f"  declaration error  {error['file']}: "
                      f"{error['path'] + ': ' if error['path'] else ''}{error['message']}")
@@ -1126,7 +1151,10 @@ def format_text(report: CoverageReport) -> list:
                 f"{i['also_statuses_arrange_differs']} · side_calls_admitted "
                 f"{i['side_calls_admitted']} · reference_holds_on_success_row "
                 f"{i['reference_holds_on_success_row']} · route_overlaps {i['route_overlaps']} · "
-                f"dataFlow methods without endpoint {s.methods_without_endpoint}")
+                f"dataFlow methods without endpoint {s.methods_without_endpoint}"
+                # Only where the app declares conditions: every other app's
+                # output stays as it was.
+                + (f" · condition rows {i['condition_rows']}" if report.conditions else ""))
             o = s.outside_required
             lines.append(
                 f"  outside required {sum(o.values())} = unreached-op {o['unreached_op']} + "
@@ -1195,5 +1223,7 @@ def to_json(report: CoverageReport) -> dict:
                        "branches_total": sum(s.branches_total for s in active)},
             "screens": screens, "totals": totals})
     return {"app": {"spec_file": report.app_file, "rules": report.rules,
-                    "declaration_errors": list(report.app_errors)},
+                    "declaration_errors": list(report.app_errors),
+                    "harness_conditions": report.conditions,
+                    "harness_conditions_file": report.conditions_file},
             "platforms": platforms, "exit": report.exit}
