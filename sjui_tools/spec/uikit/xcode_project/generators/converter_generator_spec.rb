@@ -139,6 +139,24 @@ RSpec.describe SjuiTools::UIKit::XcodeProject::Generators::ConverterGenerator do
       end
     end
 
+    # jui-g-converter-drops-spec-prop-descriptions: until 1.8.113 every
+    # regeneration wrote "<key> attribute for <Name>" over the spec's descriptions.
+    context "with the component spec's descriptions (jui g converter --from / --all)" do
+      let(:options) do
+        { attributes: { 'title' => 'String', '@value' => 'String', 'isEnabled' => 'Bool' },
+          attribute_descriptions: { 'title' => '見出し', 'value' => '入力値' } }
+      end
+      let(:generator) { described_class.new('MyCustomView', options) }
+
+      it 'writes them into the attribute definition file' do
+        generator.generate
+        json = JSON.parse(File.read(File.join(attr_defs_dir, 'my_custom_view.json'), encoding: 'UTF-8'))
+        expect(json['MyCustomView']['title']['description']).to eq('見出し')
+        expect(json['MyCustomView']['@value']['description']).to eq('入力値')   # the spec names it without "@"
+        expect(json['MyCustomView']['isEnabled']['description']).to eq('isEnabled attribute for MyCustomView')
+      end
+    end
+
     context 'with import module' do
       let(:options) { { import_module: 'CustomModule' } }
       let(:generator) { described_class.new('MyCustomView', options) }

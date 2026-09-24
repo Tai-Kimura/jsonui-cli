@@ -2,6 +2,7 @@
 
 require 'fileutils'
 require_relative '../../core/logger'
+require_relative '../../core/converter_generator_core'
 
 module RjuiTools
   module React
@@ -18,9 +19,11 @@ module RjuiTools
         def generate
           @logger.info "Generating React component: #{@name}"
 
-          create_component_file
-
-          @logger.info "Created component file: #{component_file_path}"
+          # Said only when the file was written. It used to follow the call
+          # unconditionally, so a run that kept the file (--skip-existing,
+          # "n", a closed stdin) printed "Skipped existing …" and then
+          # "Created component file" for the same untouched file.
+          @logger.info "Created component file: #{component_file_path}" if create_component_file
         end
 
         private
@@ -39,23 +42,15 @@ module RjuiTools
 
           file_path = component_file_path
 
-          if File.exist?(file_path)
-            # Same non-interactive contract as the converter file: env var /
-            # --skip-existing leave the (user-owned) scaffold alone, --force
-            # overwrites, and stdin EOF means "n" instead of a nil crash.
-            if ENV['JUI_SKIP_EXISTING'] == '1' || @options[:skip_existing]
-              @logger.info "Skipped existing component: #{file_path}"
-              return
-            end
-            unless @options[:force]
-              @logger.warn "Component file already exists: #{file_path}"
-              print "Overwrite? (y/n): "
-              response = $stdin.gets&.chomp&.downcase
-              return unless response == 'y'
-            end
-          end
+          # The converter core's one overwrite decision (JUI_SKIP_EXISTING /
+          # --skip-existing keep, --force replaces, otherwise ask; a closed
+          # stdin is "n"). This file kept its own copy of the same rules
+          # until 1.8.113 — the same behaviour, a second place to drift.
+          return false unless JsonUIShared::ConverterGeneratorCore.may_write?(
+            file_path, @options, @logger, noun: 'component', exists_label: 'Component file')
 
           File.write(file_path, component_template)
+          true
         end
 
         def component_template

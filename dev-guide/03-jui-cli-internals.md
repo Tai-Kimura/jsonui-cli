@@ -66,6 +66,12 @@ MCP の `mcp__jui-tools__jui_*` ツール群はこれらの薄いラッパ（07�
 - **screen**: `<snake_name>.spec.json` テンプレート出力。
 - **converter**: `--all` / `--from <spec>` / 直接名。`sjui/kjui/rjui g converter` へシェルアウト。
   `--skip-existing` → 環境変数 `JUI_SKIP_EXISTING=1` で Ruby 側の上書きプロンプトを回避。
+  `--force` → 各ツールへ `--force`（1.8.113 から。それまで sjui / kjui は invalid option で拒否していた）。
+  `--from` / `--all` は spec の `props.items[].description` と `exposedEvents[].description` を
+  `--attribute-descriptions '<JSON>'` で渡し、`attribute_definitions/<Name>.json` の description に残す
+  （JSON は `\u` エスケープの ASCII — LANG 未設定だと生の UTF-8 引数は Ruby に binary で届く。
+  rjui が生成物に記録するコマンドラインにはこの JSON を入れない。sjui / kjui の記録にも無い）。
+  直接名の形は spec を持たないので `"<key> attribute"` のまま。
 - **attr-bindings**: 02章 §3。
 - **api**: swagger → DTO/Domain（`--dry-run --json` が MCP の preview_api_model_sync の実体）。
 

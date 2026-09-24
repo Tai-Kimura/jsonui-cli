@@ -1,6 +1,13 @@
 #!/usr/bin/env ruby
 # frozen_string_literal: true
 
+# Read files as UTF-8 whatever the locale, as sjui and kjui do. Until 1.8.113
+# rjui did not, so with LANG unset (US-ASCII) on Ruby 3.3.1 / json 2.16.0
+# `rjui build` stopped at start-up with Encoding::InvalidByteSequenceError
+# parsing attribute_definitions.json (non-ASCII text in every tag since
+# v1.1.0). default_internal is left alone: a UTF-8 locale sees no change.
+Encoding.default_external = Encoding::UTF_8
+
 # Add lib directory to load path
 lib_path = File.expand_path('../lib', File.dirname(__FILE__))
 $LOAD_PATH.unshift(lib_path) unless $LOAD_PATH.include?(lib_path)

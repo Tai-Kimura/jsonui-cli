@@ -207,7 +207,9 @@ module SjuiTools
               @options[:attributes].each do |key, type|
                 attr_def = {
                   'type' => map_type_to_json_type(type),
-                  'description' => "#{key} attribute for #{@component_pascal_case}"
+                  'description' => JsonUIShared::ConverterGeneratorCore.attribute_description(
+                    @options, key.to_s.delete_prefix('@'),
+                    "#{key} attribute for #{@component_pascal_case}")
                 }
                 definition[@component_pascal_case][key] = attr_def
               end

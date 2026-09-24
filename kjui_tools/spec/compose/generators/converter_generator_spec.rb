@@ -225,6 +225,27 @@ RSpec.describe KjuiTools::Compose::Generators::ConverterGenerator do
     end
   end
 
+  # jui-g-converter-drops-spec-prop-descriptions: until 1.8.113 every
+  # regeneration wrote "<key> attribute" over the spec's descriptions.
+  # attr_defs_dir resolves into the tool copy, so it is pointed at the example's
+  # temp dir here instead of writing (and cleaning) under lib/.
+  describe "#generate_attribute_definition_file with the component spec's descriptions" do
+    it 'writes the descriptions handed down by jui g converter --from / --all' do
+      generator = described_class.new('DescribedCard', {
+        attributes: { 'title' => 'String', '@value' => 'String', 'count' => 'Int' },
+        attribute_descriptions: { 'title' => '見出し', 'value' => '入力値' }
+      })
+      defs_dir = File.join(temp_dir, 'attribute_definitions')
+      allow(generator).to receive(:attr_defs_dir).and_return(defs_dir)
+      generator.send(:generate_attribute_definition_file)
+
+      content = JSON.parse(File.read(File.join(defs_dir, 'DescribedCard.json'), encoding: 'UTF-8'))
+      expect(content['DescribedCard']['title']['description']).to eq('見出し')
+      expect(content['DescribedCard']['value']['description']).to eq('入力値')   # the spec names it without "@"
+      expect(content['DescribedCard']['count']['description']).to eq('count attribute')
+    end
+  end
+
   describe '#generate with attribute definition file' do
     let(:generator) { described_class.new('MyCustomCard', { attributes: { 'title' => 'String', 'count' => 'Int', 'active' => 'Boolean' } }) }
 

@@ -374,6 +374,22 @@ RSpec.describe SjuiTools::SwiftUI::Generators::ConverterGenerator do
         expect(content['MyInput']['value']['type']).to eq(['string', 'binding'])
       end
 
+      # jui-g-converter-drops-spec-prop-descriptions: until 1.8.113 every
+      # regeneration wrote "<key> attribute" over the spec's descriptions.
+      it "writes the component spec's descriptions handed down by jui g converter --from / --all" do
+        generator = described_class.new('MixedComponent',
+                                        attributes: { 'title' => 'string', '@value' => 'string', 'count' => 'int' },
+                                        attribute_descriptions: { 'title' => '見出し', 'value' => '入力値' })
+        generator.send(:generate_attribute_definition_file)
+
+        file_path = File.join(temp_dir, 'tools', 'sjui_tools', 'lib', 'swiftui', 'views', 'extensions', 'attribute_definitions', 'MixedComponent.json')
+        content = JSON.parse(File.read(file_path, encoding: 'UTF-8'))
+
+        expect(content['MixedComponent']['title']['description']).to eq('見出し')
+        expect(content['MixedComponent']['value']['description']).to eq('入力値')   # the spec names it without "@"
+        expect(content['MixedComponent']['count']['description']).to eq('count attribute')
+      end
+
       it 'handles mixed binding and non-binding attributes' do
         attributes = {
           'title' => 'string',

@@ -143,6 +143,102 @@ RSpec.describe RjuiTools::React::Generators::ConverterGenerator do
     end
   end
 
+  # rjui-component-scaffold-logs-created-when-it-kept-the-file: until 1.8.113
+  # "Created component file" followed the write call unconditionally, so a run
+  # that kept the file printed "Skipped existing component" and then "Created"
+  # for the same untouched file.
+  describe 'ReactComponentGenerator#generate reports what it did to the component file' do
+    def generate_in(tmp, options, stdin: '')
+      gen = RjuiTools::React::Generators::ReactComponentGenerator.new('Card', { attributes: {} }.merge(options), {})
+      original_stdin = $stdin
+      $stdin = StringIO.new(stdin)
+      out = nil
+      begin
+        out = capture_stdout { gen.generate }
+      ensure
+        $stdin = original_stdin
+      end
+      [out, File.read(File.join(tmp, 'src', 'components', 'extensions', 'Card.tsx'))]
+    end
+
+    def capture_stdout
+      original = $stdout
+      $stdout = StringIO.new
+      yield
+      $stdout.string
+    ensure
+      $stdout = original
+    end
+
+    around do |example|
+      saved_env = ENV.delete('JUI_SKIP_EXISTING')
+      Dir.mktmpdir do |tmp|
+        Dir.chdir(tmp) do
+          @tmp = tmp
+          example.run
+        end
+      end
+    ensure
+      saved_env.nil? ? ENV.delete('JUI_SKIP_EXISTING') : ENV['JUI_SKIP_EXISTING'] = saved_env
+    end
+
+    def plant_user_file
+      dir = File.join(@tmp, 'src', 'components', 'extensions')
+      FileUtils.mkdir_p(dir)
+      File.write(File.join(dir, 'Card.tsx'), "USER OWNED\n")
+    end
+
+    it 'says Created when there was no file' do
+      out, body = generate_in(@tmp, {})
+      expect(out).to include('Created component file')
+      expect(body).not_to eq("USER OWNED\n")
+    end
+
+    it 'does not say Created when it kept the file' do
+      [[{ skip_existing: true }, ''], [{}, "n\n"], [{}, '']].each do |options, answer|
+        plant_user_file
+        out, body = generate_in(@tmp, options, stdin: answer)
+        expect(body).to eq("USER OWNED\n")
+        expect(out).not_to include('Created component file'), [options, answer].inspect
+      end
+      plant_user_file
+      ENV['JUI_SKIP_EXISTING'] = '1'
+      out, = generate_in(@tmp, {})
+      expect(out).to include('Skipped existing component')
+      expect(out).not_to include('Created component file')
+    end
+
+    it 'says Created when it replaced the file' do
+      [[{ force: true }, ''], [{}, "y\n"]].each do |options, answer|
+        plant_user_file
+        out, body = generate_in(@tmp, options, stdin: answer)
+        expect(body).not_to eq("USER OWNED\n")
+        expect(out).to include('Created component file'), [options, answer].inspect
+      end
+    end
+  end
+
+  # jui-g-converter-drops-spec-prop-descriptions: until 1.8.113 every
+  # regeneration wrote "<key> attribute" over the spec's descriptions.
+  describe "#generate_attribute_definition_file with the component spec's descriptions" do
+    it 'writes the descriptions handed down by jui g converter --from / --all' do
+      Dir.mktmpdir do |tmp|
+        gen = described_class.new('DescribedCard', {
+          attributes: { 'title' => 'String', '@value' => 'String', 'count' => 'Int' },
+          attribute_descriptions: { 'title' => '見出し', 'value' => '入力値' }
+        }, {})
+        allow(gen).to receive(:attr_defs_dir).and_return(tmp)
+        allow(RjuiTools::Core::Logger).to receive(:info)
+        gen.send(:generate_attribute_definition_file)
+
+        content = JSON.parse(File.read(File.join(tmp, 'DescribedCard.json'), encoding: 'UTF-8'))
+        expect(content['DescribedCard']['title']['description']).to eq('見出し')
+        expect(content['DescribedCard']['value']['description']).to eq('入力値')   # the spec names it without "@"
+        expect(content['DescribedCard']['count']['description']).to eq('count attribute')
+      end
+    end
+  end
+
   describe 'ReactComponentGenerator#ruby_type_to_typescript' do
     let(:component_generator) do
       RjuiTools::React::Generators::ReactComponentGenerator.new('Card', { attributes: {} }, {})
