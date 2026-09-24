@@ -1987,6 +1987,11 @@ def _print_branch_generation(report, show_siblings: bool = True) -> None:
     print(f"  routes: {', '.join(report.routes) or '(none)'}"
           f"  (from dataFlow.repositories[].methods[].endpoint, "
           f"not from the contract's api references)")
+    if report.side_routes:
+        # Only when there are any, so an app without them prints what it did.
+        print(f"  side routes: {', '.join(report.side_routes)}  (apiOutcomeRules "
+              f"sideCalls this screen does not declare — served with the mock's "
+              f"default scenario, admitted only for the rule's statuses)")
 
 
 def cmd_generate_description(args):

@@ -585,6 +585,11 @@ class Route:
     pattern: str
     scenarios: dict
     default_scenario: str
+    #: True for a SIDE route: an `apiOutcomeRules.sideCalls` operation the
+    #: screen does not declare, served app-wide with its mock's default
+    #: scenario (design v4.15, P2e(d)). Never a contracted endpoint of the
+    #: screen — `contracts coverage` does not count it.
+    side: bool = False
 
 
 @dataclass
@@ -619,6 +624,8 @@ class GenerationReport:
     route_overlaps: list = field(default_factory=list)
     methods: list[str] = field(default_factory=list)
     routes: list[str] = field(default_factory=list)
+    #: The side routes among `routes` (P2e(d)); printed only when there are any.
+    side_routes: list[str] = field(default_factory=list)
     #: False when the screen declares contracts but none of its branches
     #: apply to this platform. Nothing is emitted and nothing is expected:
     #: a test file holding no assertion is the "column that did not run",
@@ -1449,6 +1456,60 @@ def side_call_ops(rule, mocks: list[MockFile], routes: list[Route]) -> set[str]:
     return ops
 
 
+def side_routes(rules, mocks: list[MockFile], routes: list[Route],
+                errors: list | None = None) -> list[Route]:
+    """The app's side calls this screen does not declare, as routes of their own.
+
+    A rule's `sideCalls` name operations the app's network layer makes
+    around ANY call — ApiClient's logout after a 401, say. Resolved the way
+    `side_call_ops` resolves them (operationId -> the one GENERATED mock
+    carrying it -> its method and path), an operation with no route on this
+    screen is served anyway, with its mock's default scenario, under its
+    operationId. Without this the call reaches the runtime as unmatched (a
+    599 no server returns), and admitting it would need every screen to
+    declare the app's logout (design v4.15, P2e(d)). Admission is unchanged:
+    `collect_bindings` still admits the op only in the tests whose served
+    statuses the rule names, so a call outside them is the ⊆ bound's red.
+
+    Anything that does not resolve adds nothing and raises nothing — the same
+    as `side_call_ops`, and `contracts coverage` reports it. An operationId
+    that is already the name of a different endpoint on this screen is a
+    binding error: two endpoints under one op would make every count on it
+    describe both.
+    """
+    from .mock.generate import route_key
+
+    declared = {route_key(r.method, r.path) for r in routes}
+    names = {r.op: r for r in routes}
+    added: dict[str, Route] = {}
+    for rule in rules:
+        for operation_id in rule.side_calls:
+            files = [m for m in mocks if m.operation_id == operation_id]
+            if len(files) != 1:
+                continue
+            mock = files[0]
+            identity = route_key(mock.method, mock.path)
+            if identity in declared:
+                continue            # the screen declares it: its own route serves it
+            if operation_id in added:
+                continue
+            if operation_id in names:
+                if errors is not None:
+                    errors.append(BindingError(
+                        None, None, operation_id, None,
+                        f"apiOutcomeRules sideCalls '{operation_id}' ({mock.method} "
+                        f"{mock.path}) is also this screen's name for "
+                        f"{names[operation_id].method} {names[operation_id].path} — "
+                        "rename the screen's repository method so one op names "
+                        "one endpoint"))
+                continue
+            added[operation_id] = Route(
+                op=operation_id, method=mock.method, path=mock.path,
+                pattern=path_to_pattern(mock.path), scenarios=mock.scenarios,
+                default_scenario=mock.active_scenario, side=True)
+    return list(added.values())
+
+
 def collect_bindings(
     spec: dict, methods_contracts: dict, mocks: list[MockFile],
     mocks_dir: Path | None, platform: str, rules=(), declarations=None,
@@ -1467,6 +1528,10 @@ def collect_bindings(
         declarations = parse_declarations(spec)
     errors: list[BindingError] = []
     routes = resolve_routes(spec, methods_contracts, mocks, mocks_dir, errors=errors)
+    extra = side_routes(rules, mocks, routes, errors)
+    if extra:
+        from .mock.generate import route_match_order
+        routes = sorted(routes + extra, key=lambda route: route_match_order(route.path))
     by_op = {route.op: route for route in routes}
     also_by_branch: dict[tuple, list] = {}
     for also in declarations.also_statuses:
@@ -1753,6 +1818,7 @@ def render_test_file(
     methods_contracts = bc.get("methods") or {}
     report = GenerationReport(screen=screen)
     report.routes = [r.op for r in routes]
+    report.side_routes = [r.op for r in routes if r.side]
 
     route_specs = ",\n".join(
         "  { op: %s, method: %s, pattern: %s, scenario: %s,\n    scenarios: %s }"
@@ -2539,6 +2605,7 @@ def render_kotlin_test_file(
     methods_contracts = bc.get("methods") or {}
     report = GenerationReport(screen=screen)
     report.routes = [r.op for r in routes]
+    report.side_routes = [r.op for r in routes if r.side]
     pascal = _pascal(screen)
 
     route_lines = []
@@ -3367,6 +3434,7 @@ def render_swift_test_file(
     methods_contracts = bc.get("methods") or {}
     report = GenerationReport(screen=screen)
     report.routes = [r.op for r in routes]
+    report.side_routes = [r.op for r in routes if r.side]
     pascal = _pascal(screen)
 
     route_lines = []

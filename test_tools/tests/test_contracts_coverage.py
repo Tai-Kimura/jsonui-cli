@@ -861,3 +861,21 @@ def test_the_totals_close_with_both_other_fixes_moving_the_counts(tmp_path):
     assert web.totals["uncovered_breakdown"]["unattributed"] == 0
     assert not any("two answers to one question" in e["message"]
                    for b in (web, ios) for s in b.screens for e in s.declaration_errors)
+
+
+# ------------------------------------------- side routes are not endpoints ---
+
+def test_a_side_route_adds_nothing_the_screen_must_cover(tmp_path):
+    """P2e(d): the screen does not declare logout; the rule makes the generator
+    serve it as a side route. It is admitted, not required — every count but
+    the admission info is what it is without the app spec."""
+    spec = _screen()
+    spec["branchContracts"]["methods"]["approve"]["branches"].append(
+        {"when": {"api.setApproval": "error_401"}, "then": {"data.banner": "signed-out"}})
+    without = _screen_result(_run(_project(tmp_path / "a", copy.deepcopy(spec))))
+    with_rule = _screen_result(_run(_project(tmp_path / "b", copy.deepcopy(spec), app=_APP)))
+    assert _counts(with_rule) == _counts(without)
+    # The 401 row is the one test the rule admits logout in — counted now that
+    # the side route exists (before P2e(d) it resolved to nothing on this screen).
+    assert with_rule.info["side_calls_admitted"] == 1
+    assert without.info["side_calls_admitted"] == 0
