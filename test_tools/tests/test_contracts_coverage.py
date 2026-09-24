@@ -545,7 +545,7 @@ def test_the_block_total_is_the_sum_of_its_screens_not_the_last_one(tmp_path):
     assert [s.na_endpoints["unbound"] for s in screens] == [1, 0]   # the last one is 0
     assert block.na_totals["unbound"] == {"count": 1, "screens": 1}
     text = cc.format_text(report)
-    total = [l for l in text if l.startswith("[platform=web] total ")]
+    total = [l for l in text if l.startswith("[platform=web] total n/a")]
     assert total == ["[platform=web] total n/a(no mock) 0 (screens 0) · n/a(not in OpenAPI) 0 "
                      "(screens 0) · n/a(unbound endpoint) 1 (screens 1) · n/a(non-HTTP) 0 (screens 0)"]
     # The documented name finds it: a search for n/a(unbound endpoint) hits
@@ -599,3 +599,265 @@ def test_the_command_line_exits_with_the_composed_code(tmp_path):
         cwd=tmp_path / "docs", capture_output=True, text=True,
         env={"PYTHONPATH": str(Path(__file__).resolve().parents[1]), "PATH": "/usr/bin:/bin"})
     assert broken.returncode == 2 and "cannot start" in broken.stderr
+
+
+# -------------------------------------- alsoStatuses copies and the ops they did not expand ---
+#
+# Reported by a consumer face on 1.8.117: a row that arranges one op and widens
+# ANOTHER with alsoStatuses was a declaration error ("status 200 of <the first
+# op> is answered by 3 rows with the same arrangement, one of them an
+# alsoStatuses copy"), while generate and the generated tests were fine. The
+# copy only substitutes the scenario of the op it expands (§2.3.3); for every
+# other op it IS the original row, so it is not a second answer there. The
+# consumer's exits were to drop the arrangement (not possible when the other
+# op's scenario is a non-default one the flow needs) or to spell each status as
+# its own row.
+
+def _two_op_spec(also_on_row2: bool = True, extra_row=None) -> dict:
+    """Row 2 arranges setApproval=default and serves getItem=error_404."""
+    spec = _screen()
+    approve = spec["branchContracts"]["methods"]["approve"]
+    approve.pop("excludedOutcomes")     # getItem 500 becomes answerable; no row/exclusion clash
+    if also_on_row2:
+        approve["branches"][1]["alsoStatuses"] = {"api.getItem": ["500"]}
+    if extra_row is not None:
+        approve["branches"].append(extra_row)
+    return spec
+
+
+def _two_answer_errors(s) -> list:
+    return [e["message"] for e in s.declaration_errors if "two answers to one question" in e["message"]]
+
+
+def test_a_copy_is_not_a_second_answer_for_the_op_it_did_not_expand(tmp_path):
+    # The reported shape (①②): the copy expands getItem; setApproval=default is
+    # only arranged. Red on 1.8.117 with "status 200 of setApproval …".
+    s = _screen_result(_run(_project(tmp_path, _two_op_spec())))
+    assert _two_answer_errors(s) == []
+
+
+def test_a_non_default_arrangement_beside_the_expanded_op_is_not_a_second_answer(tmp_path):
+    # The shape with no escape hatch (③): the arranged op's scenario is not its
+    # default (409), so the consumer cannot drop it without losing the path.
+    row = {"when": {"api.setApproval": "error_409", "api.getItem": "error_404"},
+           "alsoStatuses": {"api.getItem": ["500"]},
+           "then": {"data.banner": "conflict"}}
+    s = _screen_result(_run(_project(tmp_path, _two_op_spec(also_on_row2=False, extra_row=row))))
+    assert _two_answer_errors(s) == []
+
+
+def test_a_copy_still_collides_on_the_op_it_expanded(tmp_path):
+    # The control that keeps the fix from being "copies never collide": an
+    # explicit row serving getItem=error_500 under the same arrangement as the
+    # copy (setApproval=default) is two answers to one question for getItem 500.
+    row = {"when": {"api.setApproval": "default", "api.getItem": "error_500"},
+           "then": {"transition": "back"}}
+    s = _screen_result(_run(_project(tmp_path, _two_op_spec(extra_row=row))))
+    errors = _two_answer_errors(s)
+    assert len(errors) == 1 and "status 500 of getItem" in errors[0], errors
+
+
+def test_the_copy_still_answers_the_status_it_expanded(tmp_path):
+    # Restricting the copy must not cost the coverage it exists for: against the
+    # same spec without the alsoStatuses, the only difference is getItem 500
+    # moving from uncovered to a row (an alsoStatuses one).
+    without = _counts(_screen_result(_run(_project(tmp_path / "a", _two_op_spec(also_on_row2=False)))))
+    with_copy = _counts(_screen_result(_run(_project(tmp_path / "b", _two_op_spec()))))
+    assert _diff(without, with_copy) == {"row": 1, "also": 1, "uncovered": -1, "u_partial": -1}
+
+
+# ------------------------------- a repositories / useCases method's own `platforms` ---
+#
+# Reported by a consumer face on 1.8.117: an iOS-only method (Apple Sign In)
+# declared `platforms: ["ios"]`, and coverage still counted its endpoint's
+# statuses on android and web, as unattributed (7 + 7). In the fixture getOther
+# is the endpoint no row reaches: 2 statuses (200, 500), unattributed.
+
+def _other_scoped(platforms, *, drop=False, also_use_case=False, extra_row=None) -> dict:
+    spec = _screen()
+    methods = spec["dataFlow"]["repositories"][0]["methods"]
+    other = next(m for m in methods if m.get("name") == "getOther")
+    if drop:
+        methods.remove(other)
+    elif platforms is not None:
+        other["platforms"] = platforms
+    if also_use_case:
+        spec["dataFlow"]["useCases"] = [{"name": "OtherUseCase", "methods": [
+            {"name": "fetchOther", "endpoint": "GET /api/other"}]}]
+    if extra_row is not None:
+        spec["branchContracts"]["methods"]["approve"]["branches"].append(extra_row)
+    return spec
+
+
+def _both(tmp_path, spec) -> tuple:
+    report = _run(_project(tmp_path, spec))
+    return (_counts(_screen_result(report, "web")), _counts(_screen_result(report, "ios")),
+            _screen_result(report, "web"))
+
+
+def test_a_method_scoped_to_ios_is_not_counted_on_web(tmp_path):
+    # A: the reported shape.
+    web, ios, s = _both(tmp_path, _other_scoped(["ios"]))
+    assert _diff(BASELINE, web) == {"required": -2, "uncovered": -2, "u_unattributed": -2,
+                                    "outside": 2}
+    assert s.outside_required["na_platform_excluded"] == 2
+    assert _diff(BASELINE, ios) == {}
+
+
+def test_widening_the_method_to_every_platform_counts_it_again(tmp_path):
+    # B: the control the report used — ignored platforms and honoured platforms
+    # agree here, so this alone proves nothing; it pins the other side of A.
+    web, ios, _ = _both(tmp_path, _other_scoped(["ios", "web"]))
+    assert _diff(BASELINE, web) == {} and _diff(BASELINE, ios) == {}
+
+
+def test_the_count_comes_from_the_method(tmp_path):
+    # C: positive control — without the method, the endpoint is not declared at
+    # all, on either platform.
+    web, ios, _ = _both(tmp_path, _other_scoped(None, drop=True))
+    expected = {"required": -2, "uncovered": -2, "u_unattributed": -2, "declared": -2}
+    assert _diff(BASELINE, web) == expected and _diff(BASELINE, ios) == expected
+
+
+def test_an_empty_list_reads_as_every_platform_like_the_generator(tmp_path):
+    # Boundary: `jui generate project` keeps a method with `platforms: []` in
+    # every platform's protocol, so coverage must not drop its endpoint.
+    web, ios, _ = _both(tmp_path, _other_scoped([]))
+    assert _diff(BASELINE, web) == {} and _diff(BASELINE, ios) == {}
+
+
+def test_another_method_on_the_platform_keeps_the_endpoint_counted(tmp_path):
+    # The endpoint is scoped away only when EVERY method declaring it is.
+    web, _, _ = _both(tmp_path, _other_scoped(["ios"], also_use_case=True))
+    assert _diff(BASELINE, web) == {}
+
+
+def test_a_row_on_web_reaching_an_ios_only_endpoint_is_named(tmp_path):
+    row = {"when": {"api.getOther": "error_500"}, "then": {"data.banner": "other"}}
+    web, _, s = _both(tmp_path, _other_scoped(["ios"], extra_row=row))
+    assert s.outside_required["na_platform_excluded"] == 2
+    assert any("reaches api.getOther on web" in n and "n/a(platform-excluded)" in n
+               for n in s.notes), s.notes
+
+
+# ------------------------------------------------ the block's own denominator ---
+#
+# The block printed its n/a counts and its exit, and nothing it was measured
+# against: units and statuses required existed only per screen (design §2.2
+# puts them on the same line). The totals are computed once, checked for
+# conservation in the code, and read by both printers.
+
+import re as _re
+
+_TOTAL_LINE = _re.compile(
+    r"^\[platform=(\w+)\] total units (\d+) · statuses required (\d+) = row (\d+) \+ unit (\d+) "
+    r"\+ unreachable (\d+) \+ unexpressible (\d+) \+ not-evaluated (\d+) \+ uncovered (\d+) "
+    r"\(partial (\d+) \+ default-only (\d+) \+ unattributed (\d+)\)$")
+
+
+def _text_totals(text) -> dict:
+    out = {}
+    for line in text:
+        m = _TOTAL_LINE.match(line)
+        if m:
+            keys = ("units", "statuses_required", "row", "unit", "unreachable", "unexpressible",
+                    "not_evaluated", "uncovered", "partial", "default_only", "unattributed")
+            out[m.group(1)] = dict(zip(keys, map(int, m.groups()[1:])))
+    return out
+
+
+def _flat(totals: dict) -> dict:
+    flat = {k: v for k, v in totals.items() if isinstance(v, int)}
+    flat.update(totals["uncovered_breakdown"])
+    return flat
+
+
+def test_the_block_totals_carry_the_denominator(tmp_path):
+    report = _run(_project(tmp_path))
+    t = _block(report).totals
+    assert (t["units"], t["contracted_methods"], t["statuses_required"]) == (2, 1, 12)
+    assert [t[k] for k in cc.BREAKDOWN_KEYS] == [5, 0, 1, 0, 0, 6]          # 12
+    assert t["uncovered_breakdown"] == {"partial": 4, "default_only": 0, "unattributed": 2}
+    assert sum(t["outside_required"].values()) == 1
+    assert ("[platform=web] total units 2 · statuses required 12 = row 5 + unit 0 + unreachable 1 "
+            "+ unexpressible 0 + not-evaluated 0 + uncovered 6 (partial 4 + default-only 0 + "
+            "unattributed 2)") in cc.format_text(report)
+
+
+def test_the_block_totals_are_the_sum_of_the_screens(tmp_path):
+    report = _two_screens(tmp_path)
+    block = _block(report)
+    active = [s for s in block.screens if not s.platform_excluded]
+    assert len(active) == 2
+    assert block.totals["units"] == sum(s.units for s in active) == 4
+    assert block.totals["statuses_required"] == sum(s.statuses_required for s in active) == 24
+
+
+def _with_exclusions() -> dict:
+    """unit 2 (setApproval 401, 403), unexpressible 1 (404), unreachable 1."""
+    spec = _screen()
+    spec["branchContracts"]["methods"]["approve"]["excludedOutcomes"]["api.setApproval"] = {
+        "401": {"by": "unit", "reason": "r"}, "403": {"by": "unit", "reason": "r"},
+        "404": {"by": "unexpressible", "reason": "r"}}
+    return spec
+
+
+@pytest.mark.parametrize("specimen", ["baseline", "two_op", "exclusions"])
+def test_the_text_and_the_json_totals_agree_on_every_key(tmp_path, specimen):
+    # The control: two printers, one object. Every key, every platform. Three
+    # specimens because a swap of two buckets that are EQUAL in a specimen
+    # prints the same line: across these, every pair of buckets differs in at
+    # least one (baseline: unreachable 1 vs unit / unexpressible / not-evaluated
+    # 0; exclusions: unit 2 vs unexpressible 1 vs not-evaluated 0).
+    spec = {"baseline": _screen, "two_op": _two_op_spec, "exclusions": _with_exclusions}[specimen]()
+    report = _run(_project(tmp_path, spec))
+    text = cc.format_text(report)
+    from_text = _text_totals(text)
+    data = cc.to_json(report)
+    assert set(from_text) == {p["platform"] for p in data["platforms"]}
+    for block in data["platforms"]:
+        flat = _flat(block["totals"])
+        assert {k: flat[k] for k in from_text[block["platform"]]} == from_text[block["platform"]]
+    required = sum(p["totals"]["statuses_required"] for p in data["platforms"])
+    assert any(l.startswith(f"exit {data['exit']} (composed 2 > 1 > 3 > 0) statuses required {required}")
+               for l in text)
+
+
+@pytest.mark.parametrize("name, keep", [
+    ("BREAKDOWN_KEYS", lambda keys: tuple(k for k in keys if k != "unreachable")),
+    ("UNCOVERED_KEYS", lambda keys: tuple(k for k in keys if k != "unattributed")),
+    ("OUTSIDE_KEYS", lambda keys: tuple(k for k in keys if k != "na_default_response")),
+])
+def test_a_bucket_the_totals_forget_stops_the_run(tmp_path, monkeypatch, name, keep):
+    # The mutation: drop one key from a totals list. The baseline has 1
+    # unreachable, 2 unattributed and 1 default response, so each drop is a gap.
+    monkeypatch.setattr(cc, name, keep(getattr(cc, name)))
+    with pytest.raises(cc.CoverageTotalsError, match="the totals do not close"):
+        _run(_project(tmp_path))
+
+
+def test_the_command_prints_no_table_when_the_totals_do_not_close(tmp_path, monkeypatch, capsys):
+    import argparse
+    from jsonui_test_cli import cli
+    root = _project(tmp_path)
+    monkeypatch.chdir(root)
+    monkeypatch.setattr(cc, "BREAKDOWN_KEYS", tuple(k for k in cc.BREAKDOWN_KEYS if k != "unreachable"))
+    code = cli.cmd_contracts_coverage(argparse.Namespace(platform=None, screen=None, as_json=False))
+    out, err = capsys.readouterr()
+    assert code == cc.EXIT_CANNOT_START and out == "" and "the totals do not close" in err
+
+
+def test_the_totals_close_with_both_other_fixes_moving_the_counts(tmp_path):
+    # 4f: do the three coverage fixes change each other's numbers? A copy beside
+    # an arranged op, and a method scoped away from web, in one project.
+    spec = _two_op_spec()
+    other = next(m for m in spec["dataFlow"]["repositories"][0]["methods"] if m.get("name") == "getOther")
+    other["platforms"] = ["ios"]
+    report = _run(_project(tmp_path, spec))                       # would raise if a law broke
+    web, ios = _block(report, "web"), _block(report, "ios")
+    assert web.totals["outside_required"]["na_platform_excluded"] == 2
+    assert ios.totals["outside_required"]["na_platform_excluded"] == 0
+    assert ios.totals["statuses_required"] - web.totals["statuses_required"] == 2
+    assert web.totals["uncovered_breakdown"]["unattributed"] == 0
+    assert not any("two answers to one question" in e["message"]
+                   for b in (web, ios) for s in b.screens for e in s.declaration_errors)

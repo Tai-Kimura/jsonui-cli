@@ -46,6 +46,7 @@ from .branch_tests import (
     PARENT_SPEC_TYPE,
     Bindings,
     MockFile,
+    _also_op,
     _branch_active,
     _is_sub_spec_of_a_parent,
     _load_spec_result,
@@ -354,9 +355,42 @@ class ScreenResult:
         assert self.row_also_statuses <= self.breakdown["row"], self.spec
 
 
-def _endpoints(spec: dict):
+def _method_on(method: dict, platform: str | None) -> bool:
+    """Is this repositories / useCases method declared for *platform*?
+
+    Read exactly as `jui generate project` reads it when it narrows each
+    platform's Repository / UseCase protocol (`_filter_for_platform`,
+    generate_cmd.py) and as a branch row's `platforms` is read
+    (`_branch_active`): absent, not a list, or EMPTY means every platform; a
+    non-empty list names the ones the method exists on. A third reading of
+    the same field — `[]` as "nowhere" — would make coverage drop an endpoint
+    whose protocol the generator still emits everywhere.
+
+    Only the METHOD's own `platforms` is read — the field the schema declares
+    and the validator already asks authors to write; an owner (the repository
+    or use case itself) has no such field to read.
+    """
+    if platform is None:
+        return True
+    platforms = method.get("platforms")
+    if not isinstance(platforms, list) or not platforms:
+        return True
+    return platform in platforms
+
+
+def _endpoints(spec: dict, platform: str | None = None):
     """(route_key -> {method, path}, methods without an endpoint, non-HTTP count,
-    route_key -> {method, path} of the unbound endpoints).
+    route_key -> {method, path} of the unbound endpoints, route keys scoped
+    away from *platform*).
+
+    SCOPED AWAY: every method that declares the endpoint names platforms that
+    do not include *platform* (an Apple Sign In endpoint on an iOS-only
+    method). Counting it on the other platforms put statuses of a call that
+    does not exist there into their denominators, as unattributed — reported
+    by a consumer face on 1.8.117 as 7 on android and 7 on web. It stays in
+    the first dict (it IS a method endpoint, so `apiEndpoints` naming it is
+    not unbound); the caller counts its statuses n/a(platform-excluded), the
+    same treatment a platform-excluded screen gets.
 
     UNBOUND: in `dataFlow.apiEndpoints` and the endpoint of no repositories /
     useCases method. The generator routes only method endpoints, so a call
@@ -368,6 +402,7 @@ def _endpoints(spec: dict):
     from .mock.generate import route_key
 
     endpoints: dict = {}
+    on_platform: set = set()
     without = 0
     non_http = 0
     flow = spec.get("dataFlow") or {}
@@ -386,8 +421,10 @@ def _endpoints(spec: dict):
                 if not m or m.group(1) not in HTTP_VERBS:
                     non_http += 1
                     continue
-                endpoints.setdefault(route_key(m.group(1), m.group(2)),
-                                     {"method": m.group(1), "path": m.group(2)})
+                key = route_key(m.group(1), m.group(2))
+                endpoints.setdefault(key, {"method": m.group(1), "path": m.group(2)})
+                if _method_on(method, platform):
+                    on_platform.add(key)
     unbound: dict = {}
     for entry in flow.get("apiEndpoints") or []:
         if not isinstance(entry, dict):
@@ -402,7 +439,8 @@ def _endpoints(spec: dict):
         key = route_key(method, path.strip())
         if key not in endpoints:
             unbound.setdefault(key, {"method": method, "path": path.strip()})
-    return endpoints, without, non_http, unbound
+    scoped_away = set(endpoints) - on_platform
+    return endpoints, without, non_http, unbound, scoped_away
 
 
 def _callers(spec: dict, names: set) -> list:
@@ -430,7 +468,8 @@ def evaluate_screen(name: str, spec: dict, platform: str, project: Project) -> S
         res.declaration_errors.append(_error(message=f"{e.path}: {e.message}"))
 
     ops = collect_endpoint_ops(spec)
-    endpoints, res.methods_without_endpoint, non_http, unbound = _endpoints(spec)
+    endpoints, res.methods_without_endpoint, non_http, unbound, scoped_away = \
+        _endpoints(spec, platform)
     res.na_endpoints["non_http"] = non_http
     res.http_endpoints = len(endpoints)
 
@@ -468,8 +507,20 @@ def evaluate_screen(name: str, spec: dict, platform: str, project: Project) -> S
             "repositories / useCases method — branch tests do not route it (a call "
             "is recorded as (unmatched)); bind it to the method that calls it")
 
+    # An endpoint only methods of other platforms declare is not a call this
+    # platform makes: its statuses are declared but outside what is required
+    # here, counted where a platform-excluded screen's are.
+    for key in sorted(scoped_away):
+        entry = project.api.by_route.get(key)
+        if entry is not None:
+            n = len(status_keys(entry[1]))
+            res.outside_required["na_platform_excluded"] += n
+            res.declared += n
+
     evaluable: dict = {}
     for key, endpoint in endpoints.items():
+        if key in scoped_away:
+            continue
         mock = find_mock(project.mocks, endpoint["method"], endpoint["path"])
         if mock is None:
             res.na_endpoints["no_mock"] += 1
@@ -553,6 +604,18 @@ def evaluate_screen(name: str, spec: dict, platform: str, project: Project) -> S
                     not_evaluated_units.add((e.method, key))
             res.not_evaluated.append(entry)
 
+    # A row active here that reaches an endpoint whose every method is scoped to
+    # other platforms says two things that cannot both hold. Its statuses are
+    # already counted n/a(platform-excluded) above, so this is named rather
+    # than counted a second way.
+    for method, keys in sorted(reach.items()):
+        for key in sorted(keys & scoped_away):
+            res.notes.append(
+                f"{method} reaches api.{names_of.get(key, ['?'])[0]} on {platform}, but "
+                "every repositories / useCases method declaring its endpoint is "
+                "scoped to other platforms — its statuses are counted "
+                "n/a(platform-excluded), not answered by this row")
+
     # ---- unreachedOps
     unreached: dict = {}
     for u in declarations.unreached_ops:
@@ -610,11 +673,25 @@ def evaluate_screen(name: str, spec: dict, platform: str, project: Project) -> S
         original = methods[row.method]["branches"][row.number - 1]
         when = row.branch.get("when") or {}
         then = row.branch.get("then") or {}
+        # A copy answers ONE question: the status it substituted for the op it
+        # expanded (§2.3.3, "the same (M, E, s, p, arrange)" — E is the
+        # expanded op). Every other op in its `when` keeps the original row's
+        # scenario, so for those ops the copy is the original row again, not a
+        # second answer. Counting it there read one row as "two answers to one
+        # question" whenever alsoStatuses widened an op beside another the row
+        # arranges — the consumer's only exits were to delete that arrangement
+        # or to spell every status out as its own row. It adds no coverage
+        # either: the original already answers the same status with the same
+        # `then`.
+        expanded = None
         if row.also is not None:
             res.info["also_statuses_rows"] += 1
+            expanded = _also_op(row, methods[row.method])
         for op in _reached_ops(row.branch):
             key = op_key(op)
             if key not in evaluable:
+                continue
+            if expanded is not None and key != op_key(expanded):
                 continue
             scenario = when.get(f"api.{op}")
             route = by_op.get(op)
@@ -795,6 +872,62 @@ def check_app(project: Project) -> list:
 
 # ------------------------------------------------------------------ blocks ---
 
+BREAKDOWN_KEYS = ("row", "unit", "unreachable", "unexpressible", "not_evaluated", "uncovered")
+UNCOVERED_KEYS = ("partial", "default_only", "unattributed")
+OUTSIDE_KEYS = ("unreached_op", "na_default_response", "na_no_scenario", "na_platform_excluded")
+
+
+class CoverageTotalsError(RuntimeError):
+    """A block's totals do not close. Nothing is printed: a table whose parts
+    do not add up to its whole is worse than no table, and the printers must
+    not close a sum on their own."""
+
+
+def block_totals(platform: str, active: list, na_totals: dict) -> dict:
+    """The block's totals over its active screens, with the conservation laws
+    checked here rather than only in the tests.
+
+    Each law compares two things computed independently, so a bucket the
+    totals forget shows up as a gap instead of vanishing:
+      statuses_required (each screen's own sum over ALL its breakdown buckets)
+                                        == the sum of the named buckets here
+      uncovered                         == partial + default_only + unattributed
+      declared (each screen's own count) == statuses_required + outside required
+    """
+    totals = {
+        "units": sum(s.units for s in active),
+        "contracted_methods": sum(s.contracted_methods for s in active),
+        "statuses_required": sum(s.statuses_required for s in active),
+        **{key: sum(s.breakdown[key] for s in active) for key in BREAKDOWN_KEYS},
+        "uncovered_breakdown": {key: sum(s.uncovered_breakdown[key] for s in active)
+                                for key in UNCOVERED_KEYS},
+        "outside_required": {key: sum(s.outside_required[key] for s in active)
+                             for key in OUTSIDE_KEYS},
+        "na_endpoints": {key: value["count"] for key, value in na_totals.items()},
+    }
+    check_totals(platform, totals, sum(s.declared for s in active))
+    return totals
+
+
+def check_totals(platform: str, totals: dict, declared: int) -> None:
+    gaps = []
+    parts = sum(totals[key] for key in BREAKDOWN_KEYS)
+    if totals["statuses_required"] != parts:
+        gaps.append(f"statuses required {totals['statuses_required']} != the sum of "
+                    f"{', '.join(BREAKDOWN_KEYS)} ({parts})")
+    uncovered = sum(totals["uncovered_breakdown"].values())
+    if totals["uncovered"] != uncovered:
+        gaps.append(f"uncovered {totals['uncovered']} != partial + default-only + "
+                    f"unattributed ({uncovered})")
+    outside = sum(totals["outside_required"].values())
+    if declared != totals["statuses_required"] + outside:
+        gaps.append(f"declared {declared} != statuses required "
+                    f"{totals['statuses_required']} + outside required {outside}")
+    if gaps:
+        raise CoverageTotalsError(f"[platform={platform}] the totals do not close: "
+                                  + "; ".join(gaps))
+
+
 @dataclass
 class PlatformBlock:
     platform: str
@@ -811,12 +944,19 @@ class PlatformBlock:
     # The exit-3 side by cause. Kept, not only summed: when exit 1 wins, these
     # are what the "uncovered is a floor" line names (design §2.6).
     unmeasured: dict = field(default_factory=dict)
+    # The block's denominator and its partition, computed ONCE and read by
+    # both printers. The block used to print its n/a counts and its exit and
+    # nothing it was measured against: units and statuses required existed
+    # only per screen, so a reader summed screens by hand to learn the block's
+    # denominator (design §2.2: units and statuses required on the same line).
+    totals: dict = field(default_factory=dict)
 
     def decide(self) -> None:
         active = [s for s in self.screens if not s.platform_excluded]
         self.na_totals = {key: {"count": sum(s.na_endpoints[key] for s in active),
                                 "screens": sum(1 for s in active if s.na_endpoints[key])}
                           for key in NA_ENDPOINT_KEYS}
+        self.totals = block_totals(self.platform, active, self.na_totals)
         if not active:
             self.exit, self.verdict = EXIT_PASS, "empty"
             return
@@ -917,6 +1057,17 @@ _CAUSE = {
 }
 
 
+def _total_line(platform: str, t: dict) -> str:
+    """The block's denominator and partition on one line — read from the same
+    totals object as the JSON, never summed here."""
+    u = t["uncovered_breakdown"]
+    return (f"[platform={platform}] total units {t['units']} · statuses required "
+            f"{t['statuses_required']} = row {t['row']} + unit {t['unit']} + unreachable "
+            f"{t['unreachable']} + unexpressible {t['unexpressible']} + not-evaluated "
+            f"{t['not_evaluated']} + uncovered {t['uncovered']} (partial {u['partial']} + "
+            f"default-only {u['default_only']} + unattributed {u['unattributed']})")
+
+
 def format_text(report: CoverageReport) -> list:
     lines = [f"contracts coverage  (project platforms: "
              f"{', '.join(report.project_platforms) if report.project_platforms else '(none)'})"]
@@ -932,6 +1083,7 @@ def format_text(report: CoverageReport) -> list:
             lines.append(f"[platform={p}] info screens on {p} 0 of {len(block.screens)} "
                          "(metadata.platforms); config declares "
                          f"{p if report.project_platforms and p in report.project_platforms else '(not declared)'}")
+            lines.append(_total_line(p, block.totals))
             lines.append(f"[platform={p}] exit {block.exit} ({block.verdict})")
             continue
         branches_active = sum(s.branches_active for s in active)
@@ -992,6 +1144,7 @@ def format_text(report: CoverageReport) -> list:
         lines.append(f"[platform={p}] total " + " · ".join(
             f"{NA_ENDPOINT_LABELS[k]} {t[k]['count']} (screens {t[k]['screens']})"
             for k in NA_ENDPOINT_KEYS))
+        lines.append(_total_line(p, block.totals))
         if block.floor:
             lines.append(f"[platform={p}] uncovered is a floor: " + " · ".join(
                 f"{FLOOR_LABELS[k]} {v}" for k, v in block.floor.items())
@@ -1000,10 +1153,11 @@ def format_text(report: CoverageReport) -> list:
     if report.unknown_types:
         lines.append(f"info  {report.unknown_types} spec(s) of a type that is neither a "
                      "screen nor a known non-screen were not counted")
-    total_uncovered = sum(s.breakdown["uncovered"] for b in report.platforms for s in b.screens)
+    total_uncovered = sum(b.totals["uncovered"] for b in report.platforms)
+    total_required = sum(b.totals["statuses_required"] for b in report.platforms)
     cause = _CAUSE.get(report.exit, "")
     floors = [b.platform for b in report.platforms if b.floor]
-    lines.append(f"exit {report.exit} (composed 2 > 1 > 3 > 0)"
+    lines.append(f"exit {report.exit} (composed 2 > 1 > 3 > 0) statuses required {total_required}"
                  + (f": {total_uncovered} uncovered — {cause}" if report.exit == EXIT_UNCOVERED
                     and total_uncovered else (f": {cause}" if cause else ""))
                  + (f"; uncovered is a floor on {', '.join(floors)}" if floors else ""))
@@ -1031,9 +1185,7 @@ def to_json(report: CoverageReport) -> dict:
                 "outside_required": dict(s.outside_required),
                 "na_endpoints": dict(s.na_endpoints),
                 "unbound_endpoints": list(s.unbound_endpoints), "notes": list(s.notes)})
-        totals = {k: sum(s.breakdown[k] for s in active) for k in
-                  ("row", "unit", "unreachable", "unexpressible", "not_evaluated", "uncovered")}
-        totals["na_endpoints"] = {k: v["count"] for k, v in block.na_totals.items()}
+        totals = json.loads(json.dumps(block.totals))    # the same object the text reads, copied
         platforms.append({
             "platform": block.platform, "project_platforms": report.project_platforms,
             "exit": block.exit, "verdict": block.verdict, "floor": block.floor,

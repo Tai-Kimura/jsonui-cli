@@ -941,7 +941,8 @@ def cmd_validate_spec(args):
     # a dangling `specFile` used to pass here with 0 errors while the walk
     # over the same directory reported it (a downstream admin face, 2026-09-11,
     # synthetic control). When the file is not under a <face>/screens/json the
-    # check cannot derive the face, and it SAYS so instead of passing silently.
+    # check cannot derive the face, and it SAYS so instead of passing silently
+    # — when the file declares something the check would have looked at.
     from .spec_doc.validator import SpecValidationMessage
     comp_errors, comp_warnings = _component_declaration_gaps(
         [file_path], file_path.parent, this_spec_only=True)
@@ -1073,13 +1074,36 @@ def _component_sibling_dirs(input_dir: Path):
     treating as "nothing found" — the two produce the same empty list and
     mean opposite things.
     """
-    d = Path(input_dir).resolve()
-    if d.name != "json" or d.parent.name != "screens":
+    json_dir = _face_spec_dir(input_dir)
+    if json_dir is None:
         return None, None
-    face = d.parent.parent
+    face = json_dir.parent.parent
     comps = sorted(face.rglob("*.component.json"))
     layouts = face / "screens" / "layouts"
     return comps, (layouts if layouts.is_dir() else None)
+
+
+def _face_spec_dir(input_dir: Path) -> Path | None:
+    """The `<face>/screens/json` that *input_dir* is, or is inside; else None.
+
+    ⚠️ Found by walking UP, not by looking one level. Until 1.8.118 only
+    `input_dir` itself was tested, and `input_dir` is the spec's own
+    directory — so a sub-spec in `screens/json/<screen>/`, which is where the
+    rules tell authors to put one, never had a face. Every such spec got the
+    "not checked" warning, and a sub-spec that declared a component was
+    never checked at all (a consumer's admin face, 2026-09-25: 4 of 4
+    sub-specs; measured the same day across three consumer trees, every
+    sub-spec — 4 in one, 8 in another — sits exactly 1 level down, and the
+    walk covers any depth).
+
+    The nearest match wins, so a tree nested inside another face's
+    `screens/json` is its own face.
+    """
+    d = Path(input_dir).resolve()
+    for candidate in (d, *d.parents):
+        if candidate.name == "json" and candidate.parent.name == "screens":
+            return candidate
+    return None
 
 
 def _component_declaration_gaps(spec_files, input_dir, *, this_spec_only: bool = False):
@@ -1119,12 +1143,6 @@ def _component_declaration_gaps(spec_files, input_dir, *, this_spec_only: bool =
     check did not run. A severity assigned without the evidence for it is the
     line that is always wrong.
     """
-    comp_files, layouts_dir = _component_sibling_dirs(input_dir)
-    if comp_files is None:
-        return [], [f"[WARNING] component declarations were not checked: "
-                    f"{input_dir} is not a <face>/screens/json directory, so "
-                    f"the face root could not be derived"]
-
     declared: dict[str, list[str]] = {}
     #: component NAME -> specs that name it without giving a `specFile`.
     named_only: dict[str, list[str]] = {}
@@ -1150,6 +1168,27 @@ def _component_declaration_gaps(spec_files, input_dir, *, this_spec_only: bool =
             by_name = (cc or {}).get("name")
             if isinstance(by_name, str) and by_name:
                 named_only.setdefault(by_name, []).append(str(spec_file))
+
+    # A walk rooted BELOW `screens/json` read part of the face, which gives it
+    # no more standing than one file for the second direction: a component
+    # declared by a spec outside the walk would be reported as declared by
+    # nobody — an error, when a layout uses it.
+    json_dir = _face_spec_dir(input_dir)
+    if json_dir is not None and json_dir != Path(input_dir).resolve():
+        this_spec_only = True
+
+    # Nothing declared and only the first direction to run: there is nothing
+    # to check, so "was not checked" would be a warning about nothing — and
+    # one the author cannot clear (4 sub-specs of one face, 3 of them with no
+    # declarations, 2026-09-25).
+    if this_spec_only and not declared:
+        return [], []
+
+    comp_files, layouts_dir = _component_sibling_dirs(input_dir)
+    if comp_files is None:
+        return [], [f"[WARNING] component declarations were not checked: "
+                    f"{input_dir} is not under a <face>/screens/json directory, "
+                    f"so the face root could not be derived"]
 
     on_disk = {f.name: f for f in comp_files}
 

@@ -713,6 +713,23 @@ SCREEN_SPEC_SCHEMA = {
                     "type": "string",
                     "description": "Method name"
                 },
+                "platforms": {
+                    "type": "array",
+                    "items": {"type": "string", "enum": ["ios", "android", "web"]},
+                    "description": (
+                        "Platforms this method exists on — same spelling and "
+                        "values as a viewModel var's `platforms`. Omit for all; "
+                        "an empty list is read as all as well (unlike a "
+                        "viewModel var, where [] means nowhere). `jui generate "
+                        "project` leaves the method out of the other "
+                        "platforms' Repository / UseCase protocols, the spec "
+                        "validator suggests `[\"ios\"]` for a method typed "
+                        "with iOS-only types, and `jsonui-test contracts "
+                        "coverage` counts this method's endpoint on the other "
+                        "platforms as n/a(platform-excluded) — unless another "
+                        "method declaring the same endpoint exists there."
+                    )
+                },
                 "params": {
                     "oneOf": [
                         {

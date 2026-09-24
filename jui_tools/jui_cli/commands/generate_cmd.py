@@ -385,6 +385,7 @@ def _cmd_generate_project(args: argparse.Namespace) -> int:
     from ..core.type_mapper import TypeMapper
     from ..core.repository_aggregator import RepositoryAggregator
     from ..core.parent_spec_merger import ParentSpecMerger
+    from ..core.spec_kind import describes_a_screen as _describes_a_screen
     from ..generators.layout_generator import LayoutGenerator
     from ..generators.cell_layout_generator import CellLayoutGenerator
     from ..generators.ios_generator import IosGenerator
@@ -477,6 +478,20 @@ def _cmd_generate_project(args: argparse.Namespace) -> int:
             continue
         with open(sf, "r", encoding="utf-8") as f:
             spec_data = json.load(f)
+
+        # ⚠️ Asked before anything is scaffolded or aggregated from this file,
+        # as `jui build` does. Read as a screen, a spec that describes none
+        # (an `app_contracts_spec`) became a ScreenSpec named from its
+        # `metadata.name` — an app's display name — and was scaffolded as one.
+        # A known non-screen is skipped; an unknown type is skipped and SAID,
+        # because both guesses about it have been wrong before.
+        spec_kind = _describes_a_screen(spec_data.get("type"))
+        if spec_kind is False:
+            continue
+        if spec_kind is None:
+            print(f"\nWARNING: {sf.name} has type {spec_data.get('type')!r}, which is "
+                  "neither a screen nor a known non-screen type — not generated")
+            continue
 
         if spec_data.get("type") == "screen_parent_spec":
             merge_result = merger.merge_from_file(sf)
