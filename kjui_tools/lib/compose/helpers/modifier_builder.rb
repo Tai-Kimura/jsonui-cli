@@ -719,13 +719,15 @@ module KjuiTools
         # a native parameter (Segment's containerColor) or view (WebView's
         # setBackgroundColor, Blur's scrim) — and so cannot take
         # build_background without painting it twice. The same modifier and
-        # the same imports build_background emits for the pair.
-        def self.build_border(json_data, required_imports = nil)
+        # the same imports build_background emits for the pair. `shape:` is
+        # the outline of a component whose drawn shape is not the declared
+        # cornerRadius (CircleImage's circle), as for build_shadow.
+        def self.build_border(json_data, required_imports = nil, shape: nil)
           return [] unless json_data['borderColor'] && json_data['borderWidth']
 
           required_imports&.add(:border)
           required_imports&.add(:shape)
-          [build_border_modifier(json_data, required_imports)]
+          [build_border_modifier(json_data, required_imports, shape: shape)]
         end
 
         def self.build_test_tag(json_data, required_imports = nil)
@@ -1622,7 +1624,7 @@ module KjuiTools
         private
 
         # Build border modifier with support for solid/dashed/dotted styles
-        def self.build_border_modifier(json_data, required_imports = nil)
+        def self.build_border_modifier(json_data, required_imports = nil, shape: nil)
           # The width+color PAIR is what requests a border; neither half
           # summons one on its own, and there is no default border colour.
           # That is a recorded ruling, not an inference —
@@ -1643,7 +1645,9 @@ module KjuiTools
           # expression, so the `.dp` moved inside it.
           border_width = BoundValue.dp(json_data['borderWidth'])
           border_style = json_data['borderStyle'] || 'solid'
-          if json_data['cornerRadius']
+          if shape
+            border_shape = shape
+          elsif json_data['cornerRadius']
             border_shape = "RoundedCornerShape(#{BoundValue.dp(json_data['cornerRadius'])})"
           else
             # `RectangleShape` is in `androidx.compose.ui.graphics`, NOT the

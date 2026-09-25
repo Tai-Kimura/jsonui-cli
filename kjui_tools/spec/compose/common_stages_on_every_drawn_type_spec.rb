@@ -231,14 +231,8 @@ RSpec.describe 'kjui codegen: the common stages reach every type it draws' do
   # Compose's names and types (spec/support/compose_stub_universe.rb
   # `common_stages`). ⚠️ Against stubs: this says "well-typed Kotlin", not
   # "valid Compose" (see emitted_kotlin_reaches_a_compiler_spec.rb).
-  #
-  # Left out, by name: CircleImage's background and border and Web's border
-  # emit a Ruby expression as Kotlin text
-  # (docs/bugs/kjui-codegen-writes-ruby-expressions-into-kotlin.md), which
-  # no stub can compile.
   it 'compiles every type with every stage declared' do
     every = stages.values.reduce({}) { |acc, attrs| acc.merge(attrs) }
-    ruby_text = { 'CircleImage' => %w[background borderColor borderWidth], 'Web' => %w[borderColor borderWidth] }
     compiled = base.map { |type, extra| [type, { 'type' => type }.merge(extra)] }.to_h
     compiled.merge!(variants.slice('Switch with a label', 'CheckBox with a label', 'CheckBox with icons',
                                    'Radio options', 'Radio items'))
@@ -247,7 +241,7 @@ RSpec.describe 'kjui codegen: the common stages reach every type it draws' do
     compiled['TextField without margins'] = { 'type' => 'TextField', 'text' => '@{t}', '-' => %w[margins] }
     compiled['TextView without margins'] = { 'type' => 'TextView', 'text' => '@{t}', '-' => %w[margins] }
     functions = compiled.map.with_index do |(label, node), i|
-      drop = (ruby_text[label] || []) + (node['-'] || [])
+      drop = node['-'] || []
       attrs = node.reject { |k, _| k == '-' }.merge(every).reject { |k, _| drop.include?(k) }
       "// #{label}\nfun emitted#{i}(data: Data, viewModel: ViewModel) {\n#{emit.call(attrs)}\n}"
     end

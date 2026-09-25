@@ -138,23 +138,21 @@ module KjuiTools
           end
           modifiers.concat(Helpers::ModifierBuilder.build_offset(json_data, required_imports))
           modifiers.concat(Helpers::ModifierBuilder.build_alpha(json_data, required_imports))
-          # shadow → corner clip: the View slots before the click. Both are
-          # declared on `common` and were dropped
-          # (kjui-dynamic-components-that-skip-the-common-modifiers). The
-          # background is the WebView's own (setBackgroundColor), so the clip
-          # comes without it.
+          # shadow → border → corner clip: the View slots before the click.
+          # Shadow and cornerRadius were dropped
+          # (kjui-dynamic-components-that-skip-the-common-modifiers), and the
+          # border was written at the end of the chain as Ruby text —
+          # `.border(2.dp, Helpers::ResourceResolver.process_color('#FF0000',
+          # required_imports))` — which never compiled
+          # (kjui-codegen-writes-ruby-expressions-into-kotlin); it takes the
+          # background slot WebView uses. The background is the WebView's own
+          # (setBackgroundColor), so the border and the clip come without it.
           modifiers.concat(Helpers::ModifierBuilder.build_shadow(json_data, required_imports))
-          modifiers.concat(Helpers::ModifierBuilder.build_corner_clip(json_data, required_imports))
+          modifiers.concat(Helpers::ModifierBuilder.build_border_and_clip(json_data, required_imports))
           modifiers.concat(Helpers::ModifierBuilder.build_clickable(json_data, required_imports))
           modifiers.concat(Helpers::ModifierBuilder.build_padding(json_data))
           modifiers.concat(Helpers::ModifierBuilder.build_weight(json_data, parent_type))
 
-          # Border for WebView
-          if json_data['borderWidth'] && json_data['borderColor']
-            required_imports&.add(:border)
-            modifiers << ".border(#{json_data['borderWidth']}.dp, Helpers::ResourceResolver.process_color('#{json_data['borderColor']}', required_imports))"
-          end
-          
           # 🔻 THE ID LIVES ON A COMPOSE NODE, NOT ON THE AndroidView. A testTag
           # on the AndroidView's own modifier is never projected as a UiAutomator
           # resource-id: the holder exposes the real android.webkit.WebView,

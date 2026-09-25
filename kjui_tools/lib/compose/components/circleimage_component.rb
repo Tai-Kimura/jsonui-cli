@@ -73,11 +73,12 @@ module KjuiTools
           modifiers.concat(Helpers::ModifierBuilder.build_shadow(json_data, required_imports, shape: 'CircleShape'))
           modifiers << ".clip(CircleShape)"
           
-          # Border for circle
-          if json_data['borderWidth'] && json_data['borderColor']
-            required_imports&.add(:border)
-            modifiers << ".border(#{json_data['borderWidth']}.dp, Helpers::ResourceResolver.process_color('#{json_data['borderColor']}', required_imports), CircleShape)"
-          end
+          # Border for circle, through the one border builder with the circle
+          # as its outline. The colour used to be written as Ruby text into
+          # the Kotlin — `.border(2.dp, Helpers::ResourceResolver
+          # .process_color('#FF0000', required_imports), CircleShape)` — which
+          # does not compile (kjui-codegen-writes-ruby-expressions-into-kotlin).
+          modifiers.concat(Helpers::ModifierBuilder.build_border(json_data, required_imports, shape: 'CircleShape'))
           
           # cornerRadius as declared, inside the circle clip above — the circle
           # stays outermost, so the result stays a circle (ruling on
@@ -85,10 +86,12 @@ module KjuiTools
           # first, as in build_background, so the clip does not cut it.
           modifiers.concat(Helpers::ModifierBuilder.build_corner_clip(json_data, required_imports))
 
-          # Background (in case image doesn't load)
+          # Background (in case image doesn't load). The colour is resolved
+          # here; it was the Ruby call itself, written as Kotlin text
+          # (kjui-codegen-writes-ruby-expressions-into-kotlin).
           if json_data['background']
             required_imports&.add(:background)
-            modifiers << ".background(Helpers::ResourceResolver.process_color('#{json_data['background']}', required_imports))"
+            modifiers << ".background(#{Helpers::ResourceResolver.process_color(json_data['background'], required_imports)})"
           end
           
           modifiers.concat(Helpers::ModifierBuilder.build_offset(json_data, required_imports))
