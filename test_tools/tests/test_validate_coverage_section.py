@@ -263,6 +263,17 @@ class TestTheGateVersion:
     def test_control_a_release_number_is_one(self):
         assert cc.gate_state("1.8.120") == "release" and cc.gate_is_on("1.8.120", "1.8.120")
 
+    @pytest.mark.parametrize("phrase", [
+        "Task 6 of the define agent",              # no pack-specific agent name (v4.20)
+        "`jsonui-test contracts baseline --initial`",   # the command that writes it (v4.21)
+        "(the user's decision)",
+    ])
+    def test_the_notice_says_what_the_design_says(self, phrase):
+        # The arms above compare against VALIDATE_NOTICE itself, so a phrase
+        # dropped from it would pass them all; these are the phrases N's tag
+        # checks for.
+        assert phrase in cc.VALIDATE_NOTICE
+
     def test_the_shipped_value_is_a_literal_or_unset(self):
         # Whatever a release sets, it is written, not computed (see the module).
         src = (REPO / "test_tools/jsonui_test_cli/contracts_coverage.py").read_text(encoding="utf-8")

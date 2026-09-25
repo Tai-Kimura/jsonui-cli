@@ -1331,11 +1331,13 @@ def version_key(version: str) -> tuple:
     return gates.version_key(version) if gates else ()
 
 #: ee's text (design v4.17 §6.1 P3c — the notice names the baseline: without
-#: it "fails unless coverage exits 0" would no longer be true).
+#: it "fails unless coverage exits 0" would no longer be true; v4.21: the first
+#: recording needs --initial, and says whose decision it is).
 VALIDATE_NOTICE = (
     "from jsonui-cli {version}, validate fails on contracts coverage entries not in "
     "the baseline — close them (Task 6 of the define agent), or record the current ones "
-    "once with `jsonui-test contracts baseline`; see the release note")
+    "once with `jsonui-test contracts baseline --initial` (the user's decision); see the "
+    "release note")
 
 
 def gate_state(gate_from: str | None = None) -> str:
