@@ -17,7 +17,13 @@ import pytest
 from jsonui_test_cli import branch_tests as bt
 from tests import _android_runtime as android
 
-DELAY_MS = 700
+DELAY_MS = 3000
+GAP_MS = 50
+NO_DELAY_GAP_MS = 1000     # see test_branch_scenario_delay.py
+#: The runtimes' settle budget (one capped delay and a margin) — the no-delay
+#: rows are bound to half of it. test_the_runtimes_declare_the_budget
+#: holds the three runtimes to this number.
+SETTLE_BUDGET_MS = bt.DELAY_CAP_MS + 1000
 
 
 _PROBE = '''package probe
@@ -43,7 +49,9 @@ fun main(args: Array<String>) {
     RouteSpec("a", "GET", Regex("^/a$"), "ok", scen, mapOf("slow" to %(delay)dL)),
     RouteSpec("b", "GET", Regex("^/b$"), "ok", scen, mapOf("slow" to %(delay)dL)))
   val chain = args.contains("chain")
-  val overrides: Map<String, Any?> = args.filter { it != "chain" }.associateWith { "slow" }
+  val gap = args.firstOrNull { it.startsWith("gap=") }?.removePrefix("gap=")?.toLong() ?: 50L
+  val overrides: Map<String, Any?> = args.filter { it != "chain" && !it.startsWith("gap=") }
+    .associateWith { "slow" }
   runBranchTest(routes, if (chain) mapOf("a" to "slow") else overrides,
                 { url, d -> ProbeHarness(url, d) }) { h, _ ->
     val base = (h as ProbeHarness).baseUrl
@@ -59,7 +67,7 @@ fun main(args: Array<String>) {
       })
     }
     val started = System.currentTimeMillis()
-    if (chain) send("a", true) else for (name in listOf("a", "b")) { send(name, false); Thread.sleep(50) }
+    if (chain) send("a", true) else for (name in listOf("a", "b")) { send(name, false); Thread.sleep(gap) }
     try {
       h.settle()
       println("ORDER " + landed.toList().joinToString(","))
@@ -75,8 +83,13 @@ fun main(args: Array<String>) {
 '''
 
 
-def _build(work: Path, runtime: str) -> tuple[str, Path]:
-    return android.build(work, runtime, _PROBE % {"delay": DELAY_MS})
+#: The control's delay: it takes settle's wait out and reads before the
+#: response lands, so it must outlast the fixed drain on a loaded machine.
+CONTROL_DELAY_MS = 20000
+
+
+def _build(work: Path, runtime: str, delay: int = DELAY_MS) -> tuple[str, Path]:
+    return android.build(work, runtime, _PROBE % {"delay": delay})
 
 
 _run = android.run
@@ -87,27 +100,32 @@ def built(tmp_path_factory):
     return _build(tmp_path_factory.mktemp("delay-android"), bt.KOTLIN_RUNTIME)
 
 
-@pytest.mark.parametrize("slow, order, waits", [
-    ((), "a,b", False),
-    (("a",), "b,a", True),
-    (("b",), "a,b", True),
+@pytest.mark.parametrize("slow, order, waits, gap", [
+    ((), "a,b", False, NO_DELAY_GAP_MS),
+    (("a",), "b,a", True, GAP_MS),
+    (("b",), "a,b", True, GAP_MS),
 ])
-def test_android_the_delay_decides_the_order_and_settle_waits(built, slow, order, waits):
-    got = _run(built, *slow)
+def test_android_the_delay_decides_the_order_and_settle_waits(built, slow, order, waits, gap):
+    got = _run(built, *slow, f"gap={gap}")
     assert got.get("ORDER") == order, got
-    # Only the wait is timed: "returned at once" is an upper bound on wall
-    # time, which a loaded machine breaks (999 ms measured for the no-delay
-    # row during a release run). That settle's wait is load-bearing is the
-    # control below — without it the delayed response has not landed.
+    # Timed against the DECLARED budget, not the machine: a delayed row waits
+    # at least the delay; the no-delay row returns in under half the budget.
+    # A loaded machine stretched iOS's fixed drain to 7190 ms (and the no-delay
+    # row to 999 ms) and passes; a settle that always waits the budget out
+    # (31 s) fails.
+    waited = int(got["WAITED"])
     if waits:
-        assert int(got["WAITED"]) >= DELAY_MS, got
+        assert waited >= DELAY_MS, got
+    else:
+        assert waited < SETTLE_BUDGET_MS // 2, got
 
 
 def test_android_control_a_settle_that_does_not_wait_reads_before_the_arrival(tmp_path):
     runtime = bt.KOTLIN_RUNTIME
-    wait = "      while (BranchDeliveries.pending(System.currentTimeMillis()) > 0) {\n"
-    assert runtime.count(wait) == 1
-    got = _run(_build(tmp_path / "nowait", runtime.replace(wait, "      return\n" + wait)), "a")
+    quiet = ("      if (BranchDeliveries.pending(now) == 0 && "
+             "!BranchDeliveries.arrivedBetween(drainStarted, now)) return\n")
+    assert runtime.count(quiet) == 1
+    got = _run(_build(tmp_path / "nowait", runtime.replace(quiet, "      return\n"), CONTROL_DELAY_MS), "a")
     assert got.get("ORDER") == "b", got
 
 
@@ -119,6 +137,6 @@ def test_android_past_the_budget_settle_fails_by_name(tmp_path):
     assert runtime.count(cap) == 1
     got = _run(_build(tmp_path / "chain", runtime.replace(cap, "  const val CAP_MS = 100L\n")), "chain")
     thrown = got.get("THROWN", "")
-    assert thrown.startswith("settle: ") and "delayed response(s) still pending after waiting" in thrown, got
+    assert thrown.startswith("settle: delayed responses were still arriving after waiting "), got
     waited = int(re.search(r"after waiting (\d+) ms", thrown).group(1))
     assert waited >= 1100 and "budget 1100 ms" in thrown, got
