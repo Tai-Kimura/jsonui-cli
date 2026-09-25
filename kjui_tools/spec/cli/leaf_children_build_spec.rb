@@ -47,11 +47,21 @@ RSpec.describe 'a leaf given children, through kjui build' do
     FileUtils.mkdir_p(@layouts)
     FileUtils.mkdir_p(File.join(@dir, 'app', 'src', 'main', 'assets', 'Styles'))
 
-    @scaffold = {
-      'Shelf' => ['--container'], 'Auto' => [], 'Leaf' => ['--no-container']
-    }.map do |component, mode|
-      Open3.capture2e('ruby', File.join(tool, 'bin', 'kjui'), 'g', 'converter', component,
-                      '--attr', 'title:String', '--force', *mode, chdir: @dir)
+    # Leaf is scaffolded twice: with --no-container, then with neither flag
+    # and JUI_SKIP_EXISTING=1 — what `jui g converter --all --skip-existing`
+    # runs for a component spec without slots. Until 1.8.121 the second run
+    # wrote the default back over the leaf's declaration, and the build
+    # stopped refusing its children while its scaffold went on dropping them
+    # (measured 2026-09-26). Grown is the control: made a leaf, then run with
+    # --container, it takes children — the declaration changes when a flag
+    # asks, and only then.
+    @scaffold = [
+      ['Shelf', ['--container', '--force']], ['Auto', ['--force']], ['Leaf', ['--no-container', '--force']],
+      ['Leaf', [], { 'JUI_SKIP_EXISTING' => '1' }],
+      ['Grown', ['--no-container', '--force']], ['Grown', ['--container', '--force']]
+    ].map do |component, args, env = {}|
+      Open3.capture2e(env, 'ruby', File.join(tool, 'bin', 'kjui'), 'g', 'converter', component,
+                      '--attr', 'title:String', *args, chdir: @dir)
     end
 
     node = ->(type, id, kids = nil) {
@@ -67,7 +77,8 @@ RSpec.describe 'a leaf given children, through kjui build' do
     File.write(File.join(@layouts, 'healthy.json'), JSON.generate(root.call([
       node.call('Leaf', 'leaf_alone'),
       node.call('Shelf', 'shelf', [kid.call('shelf_kid')]),
-      node.call('Auto', 'auto', [kid.call('auto_kid')])
+      node.call('Auto', 'auto', [kid.call('auto_kid')]),
+      node.call('Grown', 'grown', [kid.call('grown_kid')])
     ])))
 
     @ledger = File.join(@dir, 'stage-failures.json')
@@ -86,11 +97,15 @@ RSpec.describe 'a leaf given children, through kjui build' do
     Dir.glob(File.join(@dir, '**', "#{layout}GeneratedView.kt")).map { |f| File.read(f) }.join
   end
 
-  it 'scaffolds the three modes' do
+  it 'scaffolds the three modes, and a leaf run again without a flag stays a leaf' do
     expect(@scaffold.map { |_, s| s.success? }).to all(be(true)), @scaffold.map(&:first).join("\n")
     defs = File.join(@dir, 'kjui_tools', 'lib', 'compose', 'components', 'extensions', 'attribute_definitions')
     expect(JSON.parse(File.read(File.join(defs, 'Leaf.json')))['Leaf']).to include('_children' => 'none')
+    expect(@scaffold[3].first).to include('Leaf is declared a leaf in attribute_definitions/Leaf.json — kept')
     expect(JSON.parse(File.read(File.join(defs, 'Auto.json')))['Auto'].keys).to include('child', 'children')
+    grown = JSON.parse(File.read(File.join(defs, 'Grown.json')))['Grown']
+    expect(grown.keys).to include('child', 'children')
+    expect(grown).not_to include('_children')
   end
 
   it 'records the leaf with children as the one incomplete stage, naming the node and the child' do
@@ -108,10 +123,10 @@ RSpec.describe 'a leaf given children, through kjui build' do
     expect(@log).not_to include("'Leaf' (id=leaf_alone)")
     view = generated('Healthy')
     expect(view).to include('"leaf_alone"')
-    expect(view).to include('"shelf_kid"').and include('"auto_kid"')
+    expect(view).to include('"shelf_kid"').and include('"auto_kid"').and include('"grown_kid"')
   end
 
   it "no longer says \"Unknown attribute 'child'\" for the default mode or the leaf" do
-    expect(@log).not_to match(/Unknown attribute 'child' for component type '(Auto|Shelf|Leaf)'/)
+    expect(@log).not_to match(/Unknown attribute 'child' for component type '(Auto|Shelf|Leaf|Grown)'/)
   end
 end

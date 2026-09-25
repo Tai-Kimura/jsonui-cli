@@ -30,12 +30,15 @@ RSpec.describe 'a leaf declared in its extension definition' do
   # this is the smallest profile it needs. The tool's own generator writes the
   # same file through the same method — the build path spec runs that one
   # (`g converter` end to end).
-  def definition_writer(dir)
+  def definition_writer(dir, said = [])
     Class.new(JsonUIShared::ConverterGeneratorCore) do
       define_method(:initialize) do |name, options|
         @name = name
         @options = options
-        @logger = Object.new.tap { |l| l.define_singleton_method(:info) { |*| } }
+        @logger = Object.new.tap do |l|
+          l.define_singleton_method(:info) { |m| said << [:info, m] }
+          l.define_singleton_method(:warn) { |m| said << [:warn, m] }
+        end
       end
       define_method(:attr_defs_dir) { dir }
       define_method(:command_string) { "g converter #{@name}" }
@@ -81,6 +84,62 @@ RSpec.describe 'a leaf declared in its extension definition' do
         expect(scaffold('Box1', mode).keys).to include('child', 'children', 'title')
         expect(scaffold('Box2', mode, {}).keys).to contain_exactly('child', 'children')
       end
+    end
+  end
+
+  # `g converter` with neither --container nor --no-container — what
+  # `jui g converter --all` runs, with or without --skip-existing, for a
+  # component spec without slots — keeps what the definition declares; only a
+  # flag changes it. Until 1.8.121 such a run wrote the default back over a
+  # leaf, and the build stopped refusing its children while the leaf's
+  # scaffold went on dropping them, with no warning (measured 2026-09-26).
+  describe 'a run with neither --container nor --no-container' do
+    # What `g converter` runs: keep the declaration first, then write. Returns
+    # the definition written and the mode the rest of the run (the converter,
+    # the scaffolds) was given.
+    def rerun(name, mode, said = [])
+      writer = definition_writer(@defs_dir, said).new(name, { is_container: mode, attributes: { 'title' => 'String' } })
+      writer.send(:keep_children_declaration)
+      writer.send(:generate_attribute_definition_file)
+      [JSON.parse(File.read(File.join(@defs_dir, "#{name}.json")))[name], writer.instance_variable_get(:@options)[:is_container]]
+    end
+
+    it 'keeps a leaf a leaf, says so, and the build still refuses its children' do
+      scaffold('Leaf', false)
+      said = []
+      definition, mode = rerun('Leaf', nil, said)
+      expect(definition).to include('_children' => 'none').and include('title')
+      expect(mode).to be(false)
+      expect(said).to include([:info, include('Leaf is declared a leaf in attribute_definitions/Leaf.json — kept')])
+      expect(refusals('type' => 'Leaf', 'id' => 'map', 'child' => [kid]).size).to eq(1)
+    end
+
+    it 'changes it when asked: --container makes the leaf take children (the control)' do
+      scaffold('Leaf', false)
+      definition, mode = rerun('Leaf', true)
+      expect(definition.keys).to include('child', 'children')
+      expect(definition).not_to include('_children')
+      expect(mode).to be(true)
+      expect(refusals('type' => 'Leaf', 'id' => 'map', 'child' => [kid])).to be_empty
+    end
+
+    it 'keeps a container a container, and writes the default where nothing was declared' do
+      scaffold('Box', true)
+      definition, mode = rerun('Box', nil)
+      expect(definition.keys).to include('child', 'children')
+      expect(mode).to be_nil
+      definition, mode = rerun('New', nil)
+      expect(definition.keys).to include('child', 'children')
+      expect(mode).to be_nil
+    end
+
+    it 'names a definition it cannot read, and writes the default' do
+      File.write(File.join(@defs_dir, 'Torn.json'), '{"Torn": {"_children": "none",')
+      said = []
+      definition, mode = rerun('Torn', nil, said)
+      expect(said).to include([:warn, include('attribute_definitions/Torn.json is not JSON').and(include('--no-container'))])
+      expect(definition.keys).to include('child', 'children')
+      expect(mode).to be_nil
     end
   end
 

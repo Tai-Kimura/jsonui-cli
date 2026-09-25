@@ -1139,7 +1139,10 @@ def _container_from_slots(slots) -> bool | None:
     created or re-created by ``--all`` did not compile — for components the
     face had not scaffolded yet, and for any whose wrapper is regenerated.
     Until that is settled a leaf is scaffolded by asking for one:
-    ``jui g converter <Name> --no-container``.
+    ``jui g converter <Name> --no-container``. ``--all`` keeps it one: None
+    passes neither flag, and a tool run with neither keeps what the
+    component's definition already declares (until 1.8.121 it wrote the
+    default back over the leaf, and the build stopped refusing its children).
     """
     items = slots.get("items") if isinstance(slots, dict) else None
     return True if isinstance(items, list) and items else None
