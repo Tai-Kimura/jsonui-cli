@@ -150,6 +150,21 @@ RSpec.describe 'a leaf declared in its extension definition' do
       expect(required.call('WithDecl')).to include(include("Required attribute 'title' is missing"))
     end
 
+    # The string is ignored even by a validator that reads every entry as a
+    # Hash (String#[] answers nil), so it cannot tell the entries apart. A
+    # `false` can: validators before 1.8.121 raised on it for every node.
+    # This one counts declarations only.
+    it 'counts required attributes over declarations only — a `false` entry neither raises nor counts' do
+      title = { 'title' => { 'type' => 'string', 'required' => true } }
+      File.write(File.join(@defs_dir, 'WithFalse.json'), JSON.generate('WithFalse' => title.merge('_container' => false)))
+      File.write(File.join(@defs_dir, 'Plain.json'), JSON.generate('Plain' => title))
+      required = lambda do |type|
+        validator.validate({ 'type' => type, 'id' => 'a' }).grep(/Required attribute/).map { |w| w.sub(type, 'T') }
+      end
+      expect(required.call('WithFalse')).to eq(required.call('Plain'))
+      expect(required.call('WithFalse')).to include(include("Required attribute 'title' is missing"))
+    end
+
     it 'reads the project definitions from where the build reads them' do
       scaffold('Leaf', false)
       expect(RjuiTools::Core::AttributeValidator.extension_definitions(mode)['Leaf']).to include('_children' => 'none')

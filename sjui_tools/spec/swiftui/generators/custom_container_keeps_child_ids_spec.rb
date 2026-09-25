@@ -52,6 +52,17 @@ RSpec.describe 'a scaffolded custom container and its children\'s identifiers' d
     expect(id).to be > contain
   end
 
+  # Handed over bare, several children reached a content slot drawn in a
+  # Group, which applied every modifier on the component to each child — the
+  # container's id was found twice with two children (measured, the codegen
+  # host). In one VStack, as the Dynamic adapter passes them.
+  it 'hands its children to the content slot in one VStack' do
+    klass = scaffold_class('KeepIdsV')
+    code = klass.new({ 'type' => 'KeepIdsV', 'id' => 'box', 'child' => [kid('a'), kid('b')] }, 0, nil, factory, nil).convert
+    expect(code.lines[1].strip).to eq('VStack(alignment: .leading, spacing: 0) {')
+    expect(code.scan('VStack(alignment: .leading, spacing: 0) {').size).to eq(1)
+  end
+
   it 'anchors a single child against the merge, as the built-in containers do' do
     klass = scaffold_class('KeepIdsB', is_container: true)
     code = klass.new({ 'type' => 'KeepIdsB', 'id' => 'box', 'child' => [kid('only')] }, 0, nil, factory, nil).convert
