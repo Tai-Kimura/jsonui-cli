@@ -97,6 +97,13 @@ class LayoutFacts:
     #: The cell layouts' names where written as a layout path (the string
     #: forms: `cellClasses: ["dir/cell"]`, a section's `"cell": "dir/cell"`).
     cell_layouts: set = field(default_factory=set)
+    #: id -> the node's `type`, for the ids that carry one.
+    types: dict = field(default_factory=dict)
+    #: The spellings an id inside an include that HAS an id takes on some
+    #: platform but not in `ids`: the included layout's own id (web does not
+    #: flatten includes, so it keeps it) and `<include id>_<id>` (UIKit). The
+    #: prefixed camelCase spelling native uses is what `ids` holds.
+    include_ids: set = field(default_factory=set)
 
 
 def _layout_file(spec: dict) -> str | None:
@@ -126,6 +133,22 @@ def _includes(node, found: list) -> None:
             _includes(value, found)
 
 
+def _includes_with_an_id(node, found: list) -> None:
+    """(layout, include id) of every `include` that carries an `id`, depth
+    first — the ones whose ids are spelled differently per platform."""
+    if isinstance(node, dict):
+        if isinstance(node.get("include"), str) and isinstance(node.get("id"), str) \
+                and node["id"]:
+            found.append((node["include"], node["id"]))
+        for key, value in node.items():
+            if key in CELL_KEYS:
+                continue
+            _includes_with_an_id(value, found)
+    elif isinstance(node, list):
+        for value in node:
+            _includes_with_an_id(value, found)
+
+
 def _unresolved_includes(tree, layouts_dir: Path) -> list:
     """Include references that do not resolve, following resolved ones the
     way the normalizer does (from the layouts root). Cycle-guarded."""
@@ -148,6 +171,8 @@ def _walk(node, facts: LayoutFacts) -> None:
     if isinstance(node, dict):
         if isinstance(node.get("id"), str) and node["id"]:
             facts.ids.add(node["id"])
+            if isinstance(node.get("type"), str):
+                facts.types[node["id"]] = node["type"]
         for key, value in node.items():
             if key in CELL_KEYS:
                 facts.cells += len(value) if isinstance(value, list) else 1
@@ -186,7 +211,7 @@ def _walk_nested(value, facts: LayoutFacts) -> None:
 
 
 def layout_facts(spec: dict, platform: str | None, *, layouts_dir: Path,
-                 styles_dir: Path) -> LayoutFacts:
+                 styles_dir: Path, _seen: frozenset = frozenset()) -> LayoutFacts:
     """The ids and binding roots of *spec*'s layout, resolved for *platform*."""
     from .normalizer import normalize
 
@@ -205,6 +230,16 @@ def layout_facts(spec: dict, platform: str | None, *, layouts_dir: Path,
     resolved = normalize(tree, "L2", platform=platform, styles_dir=Path(styles_dir),
                          layouts_dir=Path(layouts_dir), source=str(facts.path)).tree
     _walk(resolved, facts)
+    found: list = []
+    _includes_with_an_id(tree, found)
+    for included, prefix in found:
+        if included in _seen or included == name:
+            continue
+        inner = layout_facts({"metadata": {"layoutFile": included}}, platform,
+                             layouts_dir=layouts_dir, styles_dir=styles_dir,
+                             _seen=_seen | {name})
+        spelled = inner.ids | inner.include_ids
+        facts.include_ids |= spelled | {f"{prefix}_{i}" for i in spelled}
     if facts.unresolved_includes:
         facts.reason = "unresolved include: " + ", ".join(facts.unresolved_includes)
         return facts
@@ -212,35 +247,103 @@ def layout_facts(spec: dict, platform: str | None, *, layouts_dir: Path,
     return facts
 
 
-def layout_ids_every_platform(name: str, *, layouts_dir: Path, styles_dir: Path):
-    """(ids, cell ids, unresolved includes) of layout *name* on EVERY platform.
+@dataclass
+class Everywhere:
+    """A layout on every platform: the union of the unfiltered resolution and
+    each platform's (an id only a platform override gives a node exists on
+    that platform, and the unfiltered tree never merges an override)."""
+    ids: set
+    cell_ids: set
+    include_ids: set
+    types: dict
+    unresolved: list
 
-    The ids are the union of the unfiltered resolution and each platform's:
-    an id that only a platform override gives a node (`"platform": {"ios":
-    {"id": …}}`) exists on that platform, and the unfiltered tree never
-    merges an override. Cell ids — the cell layouts this one names, followed
-    down — are returned apart: another scope, which the caller may not count
-    as the screen's.
-    """
+
+def layout_ids_every_platform(name: str, *, layouts_dir: Path, styles_dir: Path) -> Everywhere:
+    """Layout *name* on every platform, cell ids and include spellings apart."""
     from .platform_resolver import VALID_PLATFORMS
 
-    def resolve(layout, platform):
-        return layout_facts({"metadata": {"layoutFile": layout}}, platform,
-                            layouts_dir=layouts_dir, styles_dir=styles_dir)
-
-    ids, unresolved, cells = set(), [], set()
+    out = Everywhere(set(), set(), set(), {}, [])
     for platform in (None, *VALID_PLATFORMS):
-        facts = resolve(name, platform)
-        ids |= facts.ids
-        unresolved += [u for u in facts.unresolved_includes if u not in unresolved]
-        cells |= {(c, platform) for c in facts.cell_layouts}
-    cell_ids, seen = set(), set()
-    while cells:
-        cell, platform = cells.pop()
-        if (cell, platform) in seen:
+        facts = layout_facts({"metadata": {"layoutFile": name}}, platform,
+                             layouts_dir=layouts_dir, styles_dir=styles_dir)
+        out.ids |= facts.ids
+        out.include_ids |= facts.include_ids
+        out.types.update(facts.types)
+        out.unresolved += [u for u in facts.unresolved_includes if u not in out.unresolved]
+        out.cell_ids |= cell_ids_for(facts, platform, layouts_dir=layouts_dir,
+                                     styles_dir=styles_dir)
+    out.include_ids -= out.ids
+    return out
+
+
+def fold(name: str) -> str:
+    """`sample_toggle` / `sampleToggle` -> `sampletoggle`. The
+    toolchain has three snake->camel functions that disagree on segments with
+    capitals; folding both sides is no fourth one (ee, 2026-09-25)."""
+    return name.lower().replace("_", "")
+
+
+def element_candidates(element: str, ids, types=None) -> list:
+    """Layout ids a person may have meant by *element* — never counted as a
+    match, never applied: the runtime id is the layout's spelling, and which
+    node was meant is a person's call. In order:
+
+    - the same name, folded (`sample_toggle` -> `sampleToggle`)
+    - the name with the node's TYPE after it (`sample_panel` ->
+      `samplePanelView`: the remainder ends with the node's own type)
+    - the name after an include's prefix (`sample_row` ->
+      `side_sample_row`)
+    """
+    folded = fold(element)
+    if not folded:
+        return []
+    types = types or {}
+    same, typed, prefixed = [], [], []
+    for i in sorted(ids):
+        fi = fold(i)
+        if i == element:
             continue
-        seen.add((cell, platform))
-        facts = resolve(cell, platform)
-        cell_ids |= facts.ids
-        cells |= {(c, platform) for c in facts.cell_layouts}
-    return ids, cell_ids, unresolved
+        if fi == folded:
+            same.append(i)
+        elif fi.startswith(folded) and isinstance(types.get(i), str) \
+                and fi[len(folded):].endswith(fold(types[i])):
+            typed.append(i)
+        elif fi.endswith(folded) and fi != folded:
+            prefixed.append(i)
+    return same + typed + prefixed
+
+
+def classify_element(element: str, *, ids, cell_ids=(), include_ids=(), types=None):
+    """(kind, candidates) of an id a spec names — the ONE answer the spec
+    validator and the coverage data axis both give (design v4.20):
+
+      on_layout         the layout has it, exactly
+      in_cell           a cell layout it names has it — another scope, not checked
+      include_spelling  it is how some platform spells an id inside an include
+                        with an id — cannot be checked against one resolution
+      missing           none of these; *candidates* from `element_candidates`
+    """
+    if element in ids:
+        return "on_layout", []
+    if element in cell_ids:
+        return "in_cell", []
+    if element in include_ids:
+        return "include_spelling", []
+    return "missing", element_candidates(element, ids, types)
+
+
+def cell_ids_for(facts: LayoutFacts, platform: str | None, *, layouts_dir: Path,
+                 styles_dir: Path) -> set:
+    """The ids of the cell layouts *facts* names, followed down, on *platform*."""
+    cell_ids, seen, queue = set(), set(), list(facts.cell_layouts)
+    while queue:
+        cell = queue.pop()
+        if cell in seen:
+            continue
+        seen.add(cell)
+        inner = layout_facts({"metadata": {"layoutFile": cell}}, platform,
+                             layouts_dir=layouts_dir, styles_dir=styles_dir)
+        cell_ids |= inner.ids
+        queue += list(inner.cell_layouts)
+    return cell_ids

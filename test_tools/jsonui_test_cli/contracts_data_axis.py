@@ -48,6 +48,11 @@ class ScreenData:
     units: list = field(default_factory=list)
     bool_not_in_layout: int = 0
     visible_ids_not_in_layout: int = 0
+    #: In a cell layout, or an include's per-platform spelling: not "missing".
+    visible_ids_cannot_check: int = 0
+    #: Every visibleElements id not on the layout: {id, kind, candidates} —
+    #: the same answer the spec validator gives (`classify_element`).
+    visible_ids_detail: list = field(default_factory=list)
     unresolved_includes: int = 0
     cells: int = 0
 
@@ -64,6 +69,8 @@ class ScreenData:
                 "units_detail": list(self.units),
                 "bool_not_in_layout": self.bool_not_in_layout,
                 "visible_ids_not_in_layout": self.visible_ids_not_in_layout,
+                "visible_ids_cannot_check": self.visible_ids_cannot_check,
+                "visible_ids_detail": list(self.visible_ids_detail),
                 "unresolved_includes": self.unresolved_includes, "cells": self.cells}
 
 
@@ -106,9 +113,12 @@ def _hashable(value) -> bool:
     return isinstance(value, (str, bool, int, float)) or value is None
 
 
-def screen_data(spec: dict, facts, rows: list) -> ScreenData:
+def screen_data(spec: dict, facts, rows: list, cell_ids=frozenset()) -> ScreenData:
     """The data axis of one screen on one platform. *facts* is its
-    `LayoutFacts` for the platform; *rows* the branches active there."""
+    `LayoutFacts` for the platform, *cell_ids* the ids of the cells it names;
+    *rows* the branches active there."""
+    from jui_cli.core.layout_facts import classify_element
+
     data = ScreenData(reason=facts.reason, cells=facts.cells,
                       unresolved_includes=len(facts.unresolved_includes))
     if not facts.evaluated:
@@ -128,9 +138,17 @@ def screen_data(spec: dict, facts, rows: list) -> ScreenData:
             if not isinstance(entry, dict) or not isinstance(entry.get("value"), str):
                 continue
             ids = [i for i in (entry.get("visibleElements") or []) if isinstance(i, str)]
-            missing = [i for i in ids if i not in facts.ids]
-            data.visible_ids_not_in_layout += len(missing)
-            if not ids or missing:
+            off = []
+            for i in ids:
+                kind, candidates = classify_element(
+                    i, ids=facts.ids, cell_ids=cell_ids, include_ids=facts.include_ids,
+                    types=facts.types)
+                if kind != "on_layout":
+                    off.append({"id": i, "kind": kind, "candidates": candidates})
+            data.visible_ids_not_in_layout += sum(1 for o in off if o["kind"] == "missing")
+            data.visible_ids_cannot_check += sum(1 for o in off if o["kind"] != "missing")
+            data.visible_ids_detail += off
+            if not ids or off:
                 continue
             key = (state["name"], entry["value"])
             data.units.append({"field": state["name"], "value": entry["value"], "kind": "enum",
@@ -141,7 +159,8 @@ def screen_data(spec: dict, facts, rows: list) -> ScreenData:
 #: Keys of the block's data totals, in print order.
 TOTAL_KEYS = ("units", "fields", "arranged", "produced", "neither",
               "screens_evaluated", "layout_not_linked", "layout_missing",
-              "unresolved_include", "bool_not_in_layout", "visible_ids_not_in_layout", "cells")
+              "unresolved_include", "bool_not_in_layout", "visible_ids_not_in_layout",
+              "visible_ids_cannot_check", "cells")
 
 
 def block_totals(screens: list) -> dict:
@@ -159,6 +178,7 @@ def block_totals(screens: list) -> dict:
         totals["unresolved_include"] += int(bool(d.unresolved_includes))
         totals["bool_not_in_layout"] += d.bool_not_in_layout
         totals["visible_ids_not_in_layout"] += d.visible_ids_not_in_layout
+        totals["visible_ids_cannot_check"] += d.visible_ids_cannot_check
         totals["cells"] += d.cells
     return totals
 
@@ -184,5 +204,5 @@ def text_line(platform: str, screens: list) -> str:
             f"{t['screens_evaluated']} of {active} (layout not linked {t['layout_not_linked']} · "
             f"layout missing {t['layout_missing']} · unresolved include "
             f"{t['unresolved_include']}) · Bool not in layout {t['bool_not_in_layout']} · "
-            f"visibleElements not in layout {t['visible_ids_not_in_layout']} · cells not bound "
-            f"{t['cells']}")
+            f"visibleElements not in layout {t['visible_ids_not_in_layout']} (cannot check "
+            f"{t['visible_ids_cannot_check']}) · cells not bound {t['cells']}")

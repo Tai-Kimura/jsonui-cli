@@ -1487,12 +1487,14 @@ def _screen_data(spec: dict, platform: str, methods: dict, project: "Project"):
     from .branch_tests import _prefer_sibling_jui_cli
 
     _prefer_sibling_jui_cli()
-    from jui_cli.core.layout_facts import layout_facts
+    from jui_cli.core.layout_facts import cell_ids_for, layout_facts
 
     facts = layout_facts(spec, platform, layouts_dir=project.layouts_dir,
+                         styles_dir=project.styles_dir)
+    cells = cell_ids_for(facts, platform, layouts_dir=project.layouts_dir,
                          styles_dir=project.styles_dir)
     rows = [branch for contract in methods.values()
             for branch in (contract.get("branches") or [])
             if isinstance(branch, dict) and "note" not in branch
             and _branch_active(branch, platform)]
-    return data_axis.screen_data(spec, facts, rows)
+    return data_axis.screen_data(spec, facts, rows, cell_ids=cells)

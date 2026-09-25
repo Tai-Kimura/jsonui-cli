@@ -118,10 +118,6 @@ def _running_version() -> str:
     return __version__
 
 
-def _camel(name: str) -> str:
-    """`email_form_view` and `emailFormView` -> `emailFormView`."""
-    head, *rest = name.split("_")
-    return head[:1].lower() + head[1:] + "".join(p[:1].upper() + p[1:] for p in rest)
 
 
 class SpecValidator:
@@ -3631,40 +3627,46 @@ class SpecValidator:
                     path=path, message=f"Element '{element}' not found in components list",
                     level="warning"))
 
-    def _check_against_layout(self, refs, ids, cell_ids, name, result):
-        """Each id against the layout — design v4.20's levels:
+    def _check_against_layout(self, refs, layout, name, result):
+        """Each id against the layout, by `layout_facts.classify_element` —
+        the answer the coverage data axis gives too. Design v4.20's levels:
 
-        - on the layout (any platform, includes expanded): nothing
-        - inside a cell layout it names: CANNOT CHECK (the cell is another
-          scope, which P2.5 does not bind) — one INFO counting them, always
-        - on the layout only in camelCase: an INFO of its own
-        - nowhere: WARNING from LAYOUT_ID_GATE_FROM on; below it an INFO,
-          and one INFO announcing the release
+        - on the layout (exactly; any platform, includes expanded): nothing
+        - not on it: WARNING from LAYOUT_ID_GATE_FROM on; below it an INFO,
+          and one INFO announcing the release. The message names the layout
+          ids a person may have meant (`element_candidates`) — never counted
+          as a match: the runtime id is the layout's spelling
+        - inside a cell layout it names, or spelled as an id inside an
+          include is on some platform: CANNOT CHECK — one INFO each, always
         """
+        from jui_cli.core.layout_facts import classify_element
+
         # shared/core/gate_versions, the one reader of every `*_GATE_FROM`.
         # None in a tool tree without it: then nothing becomes a WARNING — not
         # announced, it may not (U5) — and an INFO says the level is unknown.
         gates = shared_core.load("gate_versions")
         gating = bool(gates) and gates.gate_is_on(_running_version(), LAYOUT_ID_GATE_FROM)
         where = f"the layout {name}.json (includes expanded, every platform)"
-        in_cells, missing = [], 0
+        in_cells, in_includes, missing = [], [], 0
         for path, element in refs:
-            if element in ids:
+            kind, candidates = classify_element(
+                element, ids=layout.ids, cell_ids=layout.cell_ids,
+                include_ids=layout.include_ids, types=layout.types)
+            if kind == "on_layout":
                 continue
-            if element in cell_ids:
+            if kind == "in_cell":
                 in_cells.append(element)
                 continue
-            camel = sorted(i for i in ids if i != element and _camel(i) == _camel(element))
-            if camel:
-                result.infos.append(SpecValidationMessage(
-                    path=path, level="info",
-                    message=(f"Element '{element}' not found in {where}; it has "
-                             f"'{camel[0]}' — the same name in camelCase")))
+            if kind == "include_spelling":
+                in_includes.append(element)
                 continue
             missing += 1
-            message = SpecValidationMessage(
-                path=path, message=f"Element '{element}' not found in {where}",
-                level="warning" if gating else "info")
+            text = f"Element '{element}' not found in {where}"
+            if candidates:
+                text += (f"; the layout has {', '.join(repr(c) for c in candidates)} — the "
+                         "runtime id is the layout's spelling")
+            message = SpecValidationMessage(path=path, message=text,
+                                            level="warning" if gating else "info")
             (result.warnings if gating else result.infos).append(message)
         if in_cells:
             result.infos.append(SpecValidationMessage(
@@ -3672,6 +3674,13 @@ class SpecValidator:
                 message=(f"cannot check: {len(in_cells)} element id(s) inside cells of "
                          f"{name}.json ({', '.join(sorted(set(in_cells)))}) — ids in "
                          "cell layouts are not checked")))
+        if in_includes:
+            result.infos.append(SpecValidationMessage(
+                path="stateManagement", level="info",
+                message=(f"cannot check: {len(in_includes)} element id(s) inside includes "
+                         f"of {name}.json ({', '.join(sorted(set(in_includes)))}) — an "
+                         "include's ids are spelled differently per platform (web keeps "
+                         "the included layout's id; native prefixes it with the include's)")))
         if missing and gates is None:
             result.infos.append(SpecValidationMessage(
                 path="stateManagement", level="info",
@@ -3685,7 +3694,7 @@ class SpecValidator:
                 message=LAYOUT_ID_NOTICE.format(version=LAYOUT_ID_GATE_FROM)))
 
     def _layout_ids(self, layout_file: str, result: SpecValidationResult):
-        """(ids, cell ids, name) of the layout `layout_file` names, or None
+        """(the layout on every platform, name) for `layout_file`, or None
         when there is nothing to check against — said, unless the missing
         file already is (`_check_layout_ref`)."""
         name = layout_file[:-5] if layout_file.endswith(".json") else layout_file
@@ -3709,16 +3718,16 @@ class SpecValidator:
                 level="warning"))
             return None
         styles = self._declared_directory("styles_directory", "docs/screens/styles")
-        ids, cell_ids, unresolved = layout_ids_every_platform(
+        layout = layout_ids_every_platform(
             name, layouts_dir=roots[0], styles_dir=styles or roots[0])
-        if unresolved:
+        if layout.unresolved:
             result.infos.append(SpecValidationMessage(
                 path="stateManagement", level="info",
                 message=(f"cannot check: element ids against {name}.json — an include "
-                         f"does not resolve ({', '.join(unresolved)}), so its ids are "
+                         f"does not resolve ({', '.join(layout.unresolved)}), so its ids are "
                          "unknown")))
             return None
-        return ids, cell_ids, name
+        return layout, name
 
     def _spec_names_elements(self) -> bool:
         """Does this spec name any element a layout would have to hold?"""
