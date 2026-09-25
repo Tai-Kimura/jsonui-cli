@@ -837,19 +837,36 @@ all three platforms:
 - **Not stdout**: `vitest --reporter=json` writes its report there.
 - **Not both**: a runner that shows console would print each notice twice.
 
-So a run shows each notice once with any vitest reporter and in Gradle's
-console, and `grep '^jsonui-test branch test \['` over a run's stderr counts
-them. The row names the screen and method because stderr carries no runner
-heading. What still hides them: `xcodebuild -quiet` (it drops a passing test's
-output of every kind), and a pipe that keeps only stdout. On Android the lines
-are no longer in the test-results XML (`<system-err>`): that capture is what
-kept them off the console.
+Where the line lands depends on the runner, not on the reporter (the write
+does not go through one):
+
+| face | runner | the line is on | shown by |
+|---|---|---|---|
+| web | vitest | vitest's **stderr** | the agent, default and json reporters (the ones run) |
+| Android | Gradle | Gradle's **stderr** | the console, with or without a daemon |
+| iOS | xcodebuild | xcodebuild's **stdout** — it prints everything a test process writes there | the default output |
+
+So `grep '^jsonui-test branch test \['` counts them over the run's stderr on
+web and Android, and over `xcodebuild`'s stdout on iOS. The row names the
+screen and method because the line carries no runner heading. What still
+hides them: `xcodebuild -quiet` (it drops a passing test's output of every
+kind), and — on web and Android — a pipe that keeps only stdout. On Android
+the lines are no longer in the test-results XML (`<system-err>`): that capture
+is what kept them off the console.
+
+The runtime is one file per test directory, rewritten by every `generate
+branch-tests`, so `generate branch-tests <screen>` also updates it for the
+screens it did not regenerate. Their tests call it without the row and still
+compile and run; their lines read `jsonui-test branch test [] …` until they
+are regenerated.
 
 A runtime generated before this change prints them through the console, with
-no row in the line (`jsonui-test branch test: …`, `unmatched_foreign: …`,
-`condition_without_effect: <row> …`): read those with `vitest
---reporter=default` on web and from the test-results XML on Android — a 0 from
-a run that does not show console lines is not a measurement.
+no `[…]` after the prefix (`jsonui-test branch test: …`, `unmatched_foreign:
+…`, `condition_without_effect: <row> …`): read those with `vitest
+--reporter=default` on web, from the test-results XML on Android
+(`<system-err>` for unmatched, `<system-out>` for condition_without_effect),
+and from `xcodebuild`'s output on iOS unless `-quiet` — a 0 from a run that
+does not show console lines is not a measurement.
 
 ### `seedableState` on a view model built from `init` arguments
 

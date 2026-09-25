@@ -2560,7 +2560,10 @@ export function installFetchMock(
  * is set) drops everything a passing test logged, so an agent read 0 notices
  * whatever the rows did. NOT stdout: `--reporter=json` writes its report
  * there. NOT both: a reporter that shows console would show each notice
- * twice. Without a `process` (a browser), console.warn is the only exit. */
+ * twice. Without a `process` (a browser), console.warn is the only exit.
+ * The callers' `row` defaults to "": this runtime is shared by every screen
+ * and rewritten by each generate, so a screen not regenerated since the row
+ * was added still calls without it — its line reads `[]`, and it runs. */
 function notice(row: string, kind: string, body: string): void {
   const line = `jsonui-test branch test [${row}] ${kind}: ${body}`;
   const proc = (globalThis as any).process;
@@ -2583,7 +2586,7 @@ export function reportConditionWithoutEffect(holds: boolean, row: string, defaul
 /** Before the release that fails a generated test on them (P2e(a)): one
  * warning naming the requests in the act window no declared route answered.
  * `gateFrom` is that release, or null when none is announced. */
-export function reportUnmatched(calls: string[], gateFrom: string | null, row: string): void {
+export function reportUnmatched(calls: string[], gateFrom: string | null, row: string = ""): void {
   if (calls.length === 0) return;
   notice(row, "unmatched",
     `${calls.join(", ")} reached no declared route and ` +
@@ -2599,7 +2602,7 @@ export function reportUnmatched(calls: string[], gateFrom: string | null, row: s
 
 /** Requests in the act window to hosts that are not the app's API (P2e(a),
  * v4.19): info, never a failure. */
-export function reportUnmatchedForeign(calls: string[], row: string): void {
+export function reportUnmatchedForeign(calls: string[], row: string = ""): void {
   if (calls.length === 0) return;
   notice(row, "unmatched_foreign", `${calls.length} — ${calls.join(", ")}`);
 }
@@ -3361,7 +3364,9 @@ class Recorder(routeOps: Set<String>? = null) {
  * System.err: Gradle's Test task replaces both and shows a passing test's
  * output only with testLogging.showStandardStreams, so the lines reached the
  * XML report and never the console. NOT both: a face that sets
- * showStandardStreams would show each notice twice. */
+ * showStandardStreams would show each notice twice. The callers' `row`
+ * defaults to "": the runtime is shared and rewritten by each generate, so a
+ * screen not regenerated since the row was added still compiles (`[]`). */
 private val noticeStream =
   java.io.PrintStream(java.io.FileOutputStream(java.io.FileDescriptor.err), true, "UTF-8")
 
@@ -3379,7 +3384,7 @@ fun reportConditionWithoutEffect(holds: Boolean, row: String, defaults: String) 
 /** Before the release that fails a generated test on them (P2e(a)): one
  * warning naming the requests in the act window no declared route answered.
  * `gateFrom` is that release, or null when none is announced. */
-fun reportUnmatched(calls: List<String>, gateFrom: String?, row: String) {
+fun reportUnmatched(calls: List<String>, gateFrom: String?, row: String = "") {
   if (calls.isEmpty()) return
   notice(row, "unmatched",
     "${calls.joinToString(", ")} reached no declared route and " +
@@ -4406,14 +4411,16 @@ nonisolated final class Recorder {
 /// the exit the web and Android runtimes use, where a test runner's console
 /// capture hid them. xcodebuild shows a passing test's stdout and stderr
 /// alike and `-quiet` drops both, so here the exit keeps the faces on one
-/// line shape rather than making a line visible.
+/// line shape rather than making a line visible. The callers' `row` defaults
+/// to "": the runtime is shared and rewritten by each generate, so a screen
+/// not regenerated since the row was added still compiles (`[]`).
 nonisolated func notice(_ row: String, _ kind: String, _ body: String) {
   FileHandle.standardError.write(Data("jsonui-test branch test [\\(row)] \\(kind): \\(body)\\n".utf8))
 }
 
 /// Requests in the act window to hosts that are not the app's API (P2e(a),
 /// v4.19): info, never a failure.
-nonisolated func reportUnmatchedForeign(_ calls: [String], _ row: String) {
+nonisolated func reportUnmatchedForeign(_ calls: [String], _ row: String = "") {
   if calls.isEmpty { return }
   notice(row, "unmatched_foreign", "\\(calls.count) — \\(calls.joined(separator: ", "))")
 }
@@ -4428,7 +4435,7 @@ nonisolated func reportConditionWithoutEffect(_ holds: Bool, _ row: String, _ de
 /// Before the release that fails a generated test on them (P2e(a)): one
 /// warning naming the requests in the act window no declared route answered.
 /// `gateFrom` is that release, or nil when none is announced.
-nonisolated func reportUnmatched(_ calls: [String], _ gateFrom: String?, _ row: String) {
+nonisolated func reportUnmatched(_ calls: [String], _ gateFrom: String?, _ row: String = "") {
   if calls.isEmpty { return }
   notice(row, "unmatched", "\\(calls.joined(separator: ", ")) reached no declared route and "
     + "was answered 599, which no server returns — declare the route and its "

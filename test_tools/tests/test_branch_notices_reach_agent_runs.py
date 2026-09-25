@@ -60,7 +60,7 @@ AGENTS = {"AI_AGENT": {"AI_AGENT": "claude-code_test_agent"},
           "CLAUDECODE": {"CLAUDECODE": "1"},
           "CODEX_SANDBOX": {"CODEX_SANDBOX": "seatbelt"}}
 
-NOTICE = re.compile(r"^jsonui-test branch test \[(?P<row>.+?)\] "
+NOTICE = re.compile(r"^jsonui-test branch test \[(?P<row>.*?)\] "
                     r"(?P<kind>unmatched|unmatched_foreign|condition_without_effect): (?P<body>.*)$",
                     re.M)
 PROBE = "PROBE_CONSOLE_FROM_A_PASSING_ROW"
@@ -332,13 +332,13 @@ reportConditionWithoutEffect(false, "row D", "session=absent")
 '''
 
 
-def _run_swift(tmp_path: Path, runtime: str) -> subprocess.CompletedProcess:
+def _run_swift(tmp_path: Path, runtime: str, main: str = _SWIFT_MAIN) -> subprocess.CompletedProcess:
     parts = [_swift_block(runtime, "func notice("),
              _swift_block(runtime, "func reportUnmatchedForeign("),
              _swift_block(runtime, "func reportConditionWithoutEffect("),
              _swift_block(runtime, "func reportUnmatched(")]
     _write(tmp_path / "runtime.swift", "import Foundation\n\n" + "\n\n".join(parts))
-    _write(tmp_path / "main.swift", _SWIFT_MAIN)
+    _write(tmp_path / "main.swift", main)
     binary = tmp_path / "probe"
     build = subprocess.run(["swiftc", "-Onone", "-o", str(binary), str(tmp_path / "runtime.swift"),
                             str(tmp_path / "main.swift")], capture_output=True, text=True, timeout=600)
@@ -363,3 +363,59 @@ def test_ios_control_standard_output_is_not_the_exit(tmp_path):
     run = _run_swift(tmp_path, runtime)
     assert run.returncode == 0, run.stderr[-3000:]
     assert not _notices(run.stderr) and len(_notices(run.stdout)) == 3, run.stdout + run.stderr
+
+
+# ------------------------------------ a screen not regenerated since the row ---
+#
+# The runtime is one file per test directory, shared by every screen and
+# rewritten by each `generate branch-tests` (Emitter.emit, unconditional).
+# `generate branch-tests <screen>` therefore leaves the other screens' tests
+# calling the runtime the way the release before did — without the row. Those
+# calls must still compile and print their one line, with `[]` for the row.
+
+_TS_OLD_CALLS = '''import { reportUnmatched, reportUnmatchedForeign } from "./runtime.ts";
+reportUnmatched(["GET /old"], null);
+reportUnmatchedForeign(["POST https://sdk.example/old"]);
+'''
+
+
+def test_web_calls_without_the_row_print_an_empty_row(tmp_path):
+    tc.tool("node")
+    _write(tmp_path / "runtime.ts", bt.RUNTIME_TS)
+    _write(tmp_path / "probe.ts", _TS_OLD_CALLS)
+    run = subprocess.run(["node", "--experimental-strip-types", "probe.ts"], cwd=tmp_path,
+                         capture_output=True, text=True, timeout=120)
+    assert run.returncode == 0, run.stderr[-3000:]
+    assert [(r, k) for r, k, _ in _notices(run.stderr)] == \
+        [("", "unmatched"), ("", "unmatched_foreign")], run.stderr
+
+
+_KOTLIN_OLD_MAIN = '''
+fun main() {
+  reportUnmatched(listOf("GET /old"), null)
+  reportConditionWithoutEffect(true, "row C", "session=absent")
+}
+'''
+
+
+def test_android_calls_without_the_row_compile_and_print_an_empty_row(tmp_path):
+    source = _kotlin_probe(bt.KOTLIN_RUNTIME).replace(_KOTLIN_MAIN, _KOTLIN_OLD_MAIN)
+    assert _KOTLIN_OLD_MAIN in source
+    run = tc.compile_and_run_kotlin(tmp_path, tc.KOTLIN_SHIM + "\n" + source)
+    assert run.returncode == 0, run.stderr[-3000:]
+    assert [(r, k) for r, k, _ in _notices(run.stderr)] == \
+        [("", "unmatched"), ("row C", "condition_without_effect")], run.stderr
+
+
+_SWIFT_OLD_MAIN = '''
+reportUnmatched(["GET /old"], nil)
+reportUnmatchedForeign(["POST https://sdk.example/old"])
+'''
+
+
+def test_ios_calls_without_the_row_compile_and_print_an_empty_row(tmp_path):
+    tc.tool("swiftc")
+    run = _run_swift(tmp_path, bt.SWIFT_RUNTIME, _SWIFT_OLD_MAIN)
+    assert run.returncode == 0, run.stderr[-3000:]
+    assert [(r, k) for r, k, _ in _notices(run.stderr)] == \
+        [("", "unmatched"), ("", "unmatched_foreign")], run.stderr
