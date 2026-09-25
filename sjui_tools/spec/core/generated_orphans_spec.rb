@@ -57,7 +57,7 @@ RSpec.describe JsonUIShared::GeneratedOrphans do
     expect(File.exist?(gone)).to be(false)
     expect(result.removed).to eq([gone])
     lines = described_class.report_lines(result, base: @root).map(&:last)
-    expect(lines).to eq(['Pruned 1 generated file(s) whose layout is gone:', '  - Data/GoneData.swift'])
+    expect(lines).to eq(['Pruned 1 generated file(s) whose layout is gone or moved:', '  - Data/GoneData.swift'])
   end
 
   describe 'what it keeps' do
@@ -154,6 +154,68 @@ RSpec.describe JsonUIShared::GeneratedOrphans do
       write(File.join(views, 'gone', 'GoneGeneratedView.swift'), generated_head)
       view = write(File.join(views, 'gone', 'GoneView.swift'))
       expect(sweep.kept.map(&:first)).to include(view)
+    end
+  end
+
+  # An output placed by the layout's own directory (a GeneratedView): when
+  # the layout MOVES, the build writes a new copy where the layout now is and
+  # the old one stays — two Swift types of one name, or on Android an old
+  # screen still imported and no longer updated. The writer's own directory
+  # function says where each layout's copy belongs.
+  describe 'a layout that moved' do
+    let(:placed) do
+      ->(rel) { File.join(views, File.dirname(rel) == '.' ? '' : File.dirname(rel), File.basename(rel, '.json')) }
+    end
+
+    def placed_kind(owner)
+      described_class::Kind.new(dir: views, owner: owner, home_dir: placed,
+                                pattern: /\A(?<name>\w+)GeneratedView\.swift\z/)
+    end
+
+    before do
+      layout('section/moved_card.json')
+      kinds[1] = placed_kind(:generator)
+    end
+
+    it 'deletes the copy left where it was, once the copy where it is exists' do
+      stale = write(File.join(views, 'moved_card', 'moved_cardGeneratedView.swift'), generated_head)
+      current = write(File.join(views, 'section', 'moved_card', 'moved_cardGeneratedView.swift'), generated_head)
+      result = sweep
+      expect([File.exist?(stale), File.exist?(current)]).to eq([false, true])
+      expect(result.removed).to eq([stale])
+    end
+
+    it 'keeps the old copy while the new one is not written yet — it is the only one' do
+      stale = write(File.join(views, 'moved_card', 'moved_cardGeneratedView.swift'), generated_head)
+      expect(sweep.removed).to be_empty
+      expect(File.exist?(stale)).to be(true)
+    end
+
+    it 'deletes neither copy when a layout of that name is in both directories' do
+      layout('moved_card.json')
+      both = [write(File.join(views, 'moved_card', 'moved_cardGeneratedView.swift'), generated_head),
+              write(File.join(views, 'section', 'moved_card', 'moved_cardGeneratedView.swift'), generated_head)]
+      result = sweep
+      expect(both.map { |f| File.exist?(f) }).to eq([true, true])
+      expect(result.removed + result.kept.map(&:first)).to be_empty
+    end
+
+    it "names the user's view beside the old copy, and not the one beside the new copy" do
+      write(File.join(views, 'moved_card', 'moved_cardGeneratedView.swift'), generated_head)
+      write(File.join(views, 'section', 'moved_card', 'moved_cardGeneratedView.swift'), generated_head)
+      old_view = write(File.join(views, 'moved_card', 'moved_cardView.swift'))
+      new_view = write(File.join(views, 'section', 'moved_card', 'moved_cardView.swift'))
+      kept = sweep.kept
+      expect(kept).to eq([[old_view, described_class.moved_warning(:user, 'section/moved_card')]])
+      expect(kept.map(&:first)).not_to include(new_view)
+    end
+
+    it 'names a part-owned old copy instead of deleting it' do
+      kinds[1] = placed_kind(:block)
+      stale = write(File.join(views, 'moved_card', 'moved_cardGeneratedView.swift'), generated_head)
+      write(File.join(views, 'section', 'moved_card', 'moved_cardGeneratedView.swift'), generated_head)
+      expect(sweep.kept).to eq([[stale, described_class.moved_warning(:block, 'section/moved_card')]])
+      expect(File.exist?(stale)).to be(true)
     end
   end
 

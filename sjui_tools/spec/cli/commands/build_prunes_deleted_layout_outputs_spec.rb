@@ -71,6 +71,26 @@ RSpec.describe SjuiTools::CLI::Commands::Build do
     expect(SjuiTools::Core::Logger).to have_received(:warn).with(a_string_starting_with('  - ViewModel/GoneViewModel.swift: '))
   end
 
+  # A moved layout gets a new GeneratedView where it now is; the old one used
+  # to stay, and the target then held two types of one name. The path comes
+  # from generated_view_dir, the function the build writes by.
+  it 'deletes the GeneratedView a moved layout left behind, and names the View beside it' do
+    write('Layouts/section/moved_card.json', '{"type": "View"}')
+    stale = generated('View/MovedCard/MovedCardGeneratedView.swift')
+    old_view = write('View/MovedCard/MovedCardView.swift')
+    current = generated('View/Section/MovedCard/MovedCardGeneratedView.swift')
+    prune
+    expect([File.exist?(stale), File.exist?(current), File.exist?(old_view)]).to eq([false, true, true])
+    expect(SjuiTools::Core::Logger).to have_received(:info).with('  - View/MovedCard/MovedCardGeneratedView.swift')
+    expect(SjuiTools::Core::Logger).to have_received(:warn)
+      .with("  - View/MovedCard/MovedCardView.swift: #{JsonUIShared::GeneratedOrphans.moved_warning(:user, 'Section/MovedCard')}")
+  end
+
+  it 'writes each layout where generated_view_dir says' do
+    expect(described_class.generated_view_dir('/v', 'moved_card.json')).to eq('/v/MovedCard')
+    expect(described_class.generated_view_dir('/v', 'my_section/moved-card.json')).to eq('/v/MySection/MovedCard')
+  end
+
   describe 'boundaries — each one is kept' do
     it 'a file of that name with no @generated line' do
       unmarked = write('Models/Data/GoneData.swift', "import Foundation\nstruct GoneData {}\n")

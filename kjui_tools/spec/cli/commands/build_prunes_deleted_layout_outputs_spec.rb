@@ -95,6 +95,26 @@ RSpec.describe KjuiTools::CLI::Commands::Build do
       .with("  - src/main/kotlin/app/models/GoneStyleData.kt: #{JsonUIShared::GeneratedOrphans::WARNINGS[:unmarked]}")
   end
 
+  # A moved layout gets a new GeneratedView and View in its new package; the
+  # app still imports the old View, which draws the old GeneratedView — no
+  # longer updated. The old copy is named (the generator owns only its
+  # block); the path comes from generated_view_dir, the one the build writes by.
+  it 'names the GeneratedView and View a moved layout left behind, and not the new ones' do
+    write('src/main/assets/Layouts/section/moved_card.json', '{"type": "View"}')
+    stale = generated_view('src/main/kotlin/views/moved_card/MovedCardGeneratedView.kt')
+    old_view = write('src/main/kotlin/views/moved_card/MovedCardView.kt')
+    generated_view('src/main/kotlin/views/section/moved_card/MovedCardGeneratedView.kt')
+    write('src/main/kotlin/views/section/moved_card/MovedCardView.kt')
+    prune
+    expect(File.exist?(stale)).to be(true)
+    orphans = JsonUIShared::GeneratedOrphans
+    expect(KjuiTools::Core::Logger).to have_received(:warn)
+      .with("  - src/main/kotlin/views/moved_card/MovedCardGeneratedView.kt: #{orphans.moved_warning(:block, 'section/moved_card')}")
+    expect(KjuiTools::Core::Logger).to have_received(:warn)
+      .with("  - src/main/kotlin/views/moved_card/MovedCardView.kt: #{orphans.moved_warning(:user, 'section/moved_card')}")
+    expect(KjuiTools::Core::Logger).not_to have_received(:warn).with(a_string_including('views/section/moved_card/'))
+  end
+
   describe 'boundaries — each one is kept' do
     it 'a @generated file outside the directory the config declares' do
       stray = generated('src/main/kotlin/app/data/GoneData.kt')

@@ -606,7 +606,8 @@ module KjuiTools
         # generator owns only its GENERATED_CODE block — it writes
         # "DO NOT EDIT between GENERATED_CODE markers" and keeps the rest as
         # the scaffold left it — so it is named instead, as are a hand-written
-        # View and ViewModel of the same name.
+        # View and ViewModel of the same name. One a MOVED layout left behind
+        # is found too, by the path generated_view_dir gives, and named.
         def prune_layout_orphans(builder)
           require_relative '../../compose/data_model_updater'
           orphans = JsonUIShared::GeneratedOrphans
@@ -614,7 +615,8 @@ module KjuiTools
             orphans::Kind.new(dir: Compose::DataModelUpdater.new.data_dir, owner: :generator,
                               pattern: /\A(?<name>[A-Za-z0-9_]+)Data\.kt\z/),
             orphans::Kind.new(dir: builder.view_dir, owner: :block,
-                              pattern: /\A(?<name>[A-Za-z0-9_]+)GeneratedView\.kt\z/),
+                              pattern: /\A(?<name>[A-Za-z0-9_]+)GeneratedView\.kt\z/,
+                              home_dir: ->(rel) { builder.generated_view_dir(rel) }),
             orphans::Kind.new(dir: builder.view_dir, owner: :user,
                               pattern: /\A(?<name>[A-Za-z0-9_]+?)View\.kt\z/),
             orphans::Kind.new(dir: builder.viewmodel_dir, owner: :user,
