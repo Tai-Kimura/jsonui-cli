@@ -238,7 +238,9 @@ class TestGenerationHappyPath:
         assert '"amount": 0' in content
         assert '"isAgreed": true' in content
         assert '"plate": "x"' in content
-        assert 'expect(rec.countFor("createOrder")).toBe(0);' in content
+        # not-called is asserted before the bound, in its own words
+        assert ('expect(rec.countFor("createOrder"), `api.createOrder: this row says '
+                'not-called — called ${rec.countFor("createOrder")} time(s)`).toBe(0);') in content
 
     def test_arg_mapping_by_param_order(self, tmp_path):
         bc = {"methods": {"onModeSelected": {"branches": [

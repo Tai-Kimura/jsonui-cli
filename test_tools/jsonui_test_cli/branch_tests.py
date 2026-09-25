@@ -764,6 +764,48 @@ def _iter_declared_api_refs(contract: dict):
             yield op, None, f"branches[{i}].then.{key}", i
 
 
+def _side_call_ref_error(op: str, where: str, contract: dict, index: int,
+                         mock: MockFile, ops) -> str | None:
+    """Why a row cannot name the side call ``op`` the way it does, or None.
+
+    A rule's `sideCalls` operation that this screen does not declare can be
+    written in a row only as ``then "api.<op>": "not-called"`` — the one
+    thing a screen row can pin about the network layer's call (the opt-out
+    flag that must keep it from happening). Not "called": a row's "called"
+    permits an op in every row of its method, which would widen the rule's
+    statuses, and the call itself is the rule's `verifiedBy` unit case's to
+    assert. Not in `when` or as `.request`: a side route is served with its
+    mock's default scenario, which no row chooses, and its request is the
+    network layer's. And not under the operationId when the screen declares
+    the same endpoint under its own name: the side route is not added then,
+    so a count under the operationId would always read 0.
+    """
+    from .mock.generate import route_key
+
+    identity = route_key(mock.method, mock.path)
+    for name, endpoint in ops.canonical.items():
+        if route_key(endpoint["method"], endpoint["path"]) == identity:
+            return (f"{where}: '{op}' is {mock.method} {mock.path}, which this screen "
+                    f"declares as '{name}' — write api.{name}")
+    reason = None
+    if ".when." in where:
+        reason = ("a side route is served with its mock's default scenario, which "
+                  "no row chooses")
+    elif where.endswith(".request"):
+        reason = "its request is the network layer's; the rule's verifiedBy unit case asserts it"
+    else:
+        branch = (contract.get("branches") or [])[index]
+        value = (branch.get("then") or {}).get(f"api.{op}")
+        if value == "called":
+            reason = ("a row's \"called\" permits the op in every row of its method, "
+                      "which would widen the rule's statuses; the rule's verifiedBy unit "
+                      "case asserts the call")
+    if reason is None:
+        return None
+    return (f"{where}: '{op}' is an apiOutcomeRules sideCalls operation this screen "
+            f"does not declare — a row can only say it is \"not-called\" ({reason})")
+
+
 def _scenario_body(scenario: dict) -> str:
     """Response body serialized the way the project's mock server serializes it.
 
@@ -825,9 +867,15 @@ def _mocks_dir_label(mocks_dir: Path | None) -> str:
 def resolve_routes(
     spec: dict, methods_contracts: dict, mocks: list[MockFile],
     mocks_dir: Path | None = None, errors: list | None = None,
+    side_calls: dict | None = None,
 ) -> list[Route]:
     """Bind every referenced api.<op> (plus every declared endpoint with a
     mock, so incidental calls get their default scenario) to a Route.
+
+    ``side_calls`` (operationId -> its one generated mock, from the rules'
+    `sideCalls`): a row may say such an operation was NOT called without the
+    screen declaring it — its route is the side route `side_routes` adds.
+    Only "not-called": see `_side_call_ref_error`.
 
     Unbindable references raise — a branch whose scenario cannot be found
     must fail generation, not soften into a weaker test. Given an ``errors``
@@ -864,7 +912,9 @@ def resolve_routes(
             raise BranchTestGenerationError(
                 f"{where}: api operation '{op}' has no `endpoint` declaration in "
                 "dataFlow.repositories/useCases — declare the method with its "
-                "endpoint (e.g. \"endpoint\": \"POST /api/...\")"
+                "endpoint (e.g. \"endpoint\": \"POST /api/...\"), or, for a call the "
+                "app's network layer makes, name its operationId in an "
+                "apiOutcomeRules sideCalls and say \"not-called\""
             )
         endpoint = ops.canonical[canonical]
         identity = route_key(endpoint["method"], endpoint["path"])
@@ -897,6 +947,13 @@ def resolve_routes(
             continue
         for op, scenario, where, index in _iter_declared_api_refs(contract):
             try:
+                if side_calls and op in side_calls and ops.resolve(op) is None \
+                        and op not in ops.collisions:
+                    problem = _side_call_ref_error(
+                        op, where, contract, index, side_calls[op], ops)
+                    if problem:
+                        raise BranchTestGenerationError(problem)
+                    continue        # served by its side route
                 route = bind(op, where)
                 if scenario is not None and scenario not in route.scenarios:
                     raise BranchTestGenerationError(
@@ -1447,6 +1504,20 @@ def _not_called_ops(branch: dict) -> set[str]:
     }
 
 
+def _row_not_called(then: dict) -> list[str]:
+    """The ops a row says were NOT called, in the row's order — asserted
+    BEFORE the bound. The bound leaves them out of what the row allows, so
+    asserted after it a call the row forbids was reported as the bound's red,
+    whose advice is to say "called": the opposite of what the row says."""
+    return [key[len("api."):] for key, value in then.items()
+            if key.startswith("api.") and not key.endswith(".request") and value != "called"]
+
+
+def not_called_message(op: str) -> str:
+    """The prefix of a not-called row's red; each renderer appends the count."""
+    return f"api.{op}: this row says not-called — called"
+
+
 def _served_statuses(branch: dict, by_op: dict) -> set[str]:
     """The statuses the branch's `when` names a scenario for (route defaults
     are not counted — they are not what the branch arranged)."""
@@ -1478,6 +1549,18 @@ def side_call_ops(rule, mocks: list[MockFile], routes: list[Route]) -> set[str]:
             if route.method == mock.method and route.path == mock.path:
                 ops.add(route.op)
     return ops
+
+
+def side_call_mocks(rules, mocks: list[MockFile]) -> dict:
+    """operationId -> its one GENERATED mock, for every rule's `sideCalls`
+    that resolves (the resolution `side_call_ops` and `side_routes` use)."""
+    out: dict = {}
+    for rule in rules:
+        for operation_id in rule.side_calls:
+            files = [m for m in mocks if m.operation_id == operation_id]
+            if len(files) == 1:
+                out[operation_id] = files[0]
+    return out
 
 
 def side_routes(rules, mocks: list[MockFile], routes: list[Route],
@@ -1551,7 +1634,8 @@ def collect_bindings(
     if declarations is None:
         declarations = parse_declarations(spec)
     errors: list[BindingError] = []
-    routes = resolve_routes(spec, methods_contracts, mocks, mocks_dir, errors=errors)
+    routes = resolve_routes(spec, methods_contracts, mocks, mocks_dir, errors=errors,
+                            side_calls=side_call_mocks(rules, mocks))
     extra = side_routes(rules, mocks, routes, errors)
     if extra:
         from .mock.generate import route_match_order
@@ -2117,6 +2201,11 @@ def _render_branch(
             f"`route '{op}' declared in when was never hit "
             f"(${{rec.countFor({_ts(op)})}} requests)`).toBeGreaterThan(0);"
         )
+    for op in _row_not_called(then):
+        out.append(
+            f"      expect(rec.countFor({_ts(op)}), `{not_called_message(op)} "
+            f"${{rec.countFor({_ts(op)})}} time(s)`).toBe(0);"
+        )
     out.append(
         f"      expect(rec.unexpectedOps({_ts(row.allowed_ops)}), "
         f"{_ts(UNEXPECTED_OPS_MESSAGE)}).toEqual([]);"
@@ -2150,8 +2239,7 @@ def _render_branch(
             op = key[len("api."):]
             if value == "called":
                 out.append(f"      expect(rec.countFor({_ts(op)})).toBeGreaterThan(0);")
-            else:
-                out.append(f"      expect(rec.countFor({_ts(op)})).toBe(0);")
+            # not-called: asserted before the bound (`_row_not_called`)
         elif key.startswith("data."):
             fname = key[len("data."):]
             head, *tail = fname.split(".")
@@ -3066,6 +3154,11 @@ def _render_kotlin_branch(
             f"(${{rec.countFor({_kt_str(op)})}} requests)\", "
             f"rec.countFor({_kt_str(op)}) > 0)"
         )
+    for op in _row_not_called(then):
+        out.append(
+            f"      assertEquals(\"{not_called_message(op)} "
+            f"${{rec.countFor({_kt_str(op)})}} time(s)\", 0, rec.countFor({_kt_str(op)}))"
+        )
     allowed = ", ".join(_kt_str(op) for op in row.allowed_ops)
     out.append(
         f"      assertEquals({_kt_str(UNEXPECTED_OPS_MESSAGE)}, emptyList<String>(), "
@@ -3095,8 +3188,7 @@ def _render_kotlin_branch(
             op = key[len("api."):]
             if value == "called":
                 out.append(f"      assertTrue(rec.countFor({_kt_str(op)}) > 0)")
-            else:
-                out.append(f"      assertEquals(0, rec.countFor({_kt_str(op)}))")
+            # not-called: asserted before the bound (`_row_not_called`)
         elif key.startswith("data."):
             fname = key[len("data."):]
             head, *tail = fname.split(".")
@@ -4064,6 +4156,11 @@ def _render_swift_branch(
             f"\"route '{op}' declared in when was never hit "
             f"(\\(rec.countFor({_swift_str(op)})) requests)\")"
         )
+    for op in _row_not_called(then):
+        out.append(
+            f"      XCTAssertEqual(rec.countFor({_swift_str(op)}), 0, "
+            f"\"{not_called_message(op)} \\(rec.countFor({_swift_str(op)})) time(s)\")"
+        )
     allowed = ", ".join(_swift_str(op) for op in row.allowed_ops)
     out.append(
         f"      XCTAssertEqual(rec.unexpectedOps([{allowed}]), [], "
@@ -4094,8 +4191,7 @@ def _render_swift_branch(
             op = key[len("api."):]
             if value == "called":
                 out.append(f"      XCTAssertGreaterThan(rec.countFor({_swift_str(op)}), 0)")
-            else:
-                out.append(f"      XCTAssertEqual(rec.countFor({_swift_str(op)}), 0)")
+            # not-called: asserted before the bound (`_row_not_called`)
         elif key.startswith("data."):
             fname = key[len("data."):]
             head, *tail = fname.split(".")

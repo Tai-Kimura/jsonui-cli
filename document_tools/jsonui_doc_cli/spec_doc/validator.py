@@ -2587,10 +2587,40 @@ class SpecValidator:
                 level="warning",
             ))
 
+    def _side_call_operation_ids(self) -> set[str] | None:
+        """The operationIds the app's `apiOutcomeRules` name in `sideCalls`.
+
+        Read the way `jsonui-test generate branch-tests` reads them
+        (`find_app_contract_spec`), from the `jui.config.json` nearest above
+        this spec. None when that cannot be told — no spec path, no config,
+        jsonui-test not importable — and the caller then keeps its warning:
+        a side call not recognised is a warning too many, never a silence.
+        """
+        if hasattr(self, "_side_call_ids_cache"):
+            return self._side_call_ids_cache
+        found = None
+        root = next((p for p in (self._spec_file_path.parents if self._spec_file_path else ())
+                     if (p / "jui.config.json").is_file()), None)
+        if root is not None:
+            try:
+                from jsonui_test_cli.branch_tests import find_app_contract_spec
+                rules = find_app_contract_spec(root)
+                found = {oid for rule in rules.rules for oid in rule.side_calls}
+            except Exception:           # jsonui-test absent or its reader failed
+                found = None
+        self._side_call_ids_cache = found
+        return found
+
     def _check_branch_api_op(
         self, op: str, path: str, api_ops: set[str],
-        result: SpecValidationResult,
+        result: SpecValidationResult, use: str | None = None,
     ) -> None:
+        """``use``: how the row names the op — "when", "request", "called"
+        or "not-called" (None: not said). An op the screen does not declare
+        is a warning whatever the use; which warning depends on it and on
+        whether the app's apiOutcomeRules name the op in `sideCalls`: there a
+        row can say "not-called" (the generator serves it on its side route)
+        and nothing else."""
         if not re.match(
             r"^[a-zA-Z_][a-zA-Z0-9_]*(\.[a-zA-Z_][a-zA-Z0-9_]*)?$", op
         ):
@@ -2613,13 +2643,29 @@ class SpecValidator:
                 ),
             ))
         elif api_ops and op not in api_ops:
-            result.warnings.append(SpecValidationMessage(
-                path=path,
-                message=(
+            side = (self._side_call_operation_ids() or set()) if use else set()
+            if op in side and use == "not-called":
+                return
+            if op in side:
+                message = (
+                    f"API operation '{op}' is an apiOutcomeRules sideCalls "
+                    "operation this screen does not declare — a row can only "
+                    "say it is \"not-called\" (a side route is served with its "
+                    "mock's default scenario, and the call itself is the rule's "
+                    "verifiedBy unit case's to assert)"
+                )
+            else:
+                message = (
                     f"API operation '{op}' is not declared in "
                     "dataFlow.repositories[].methods or dataFlow.useCases[].methods"
-                ),
-                level="warning",
+                )
+                if use == "not-called":
+                    message += (
+                        " — or, for a call the app's network layer makes, name "
+                        "its operationId in an apiOutcomeRules sideCalls"
+                    )
+            result.warnings.append(SpecValidationMessage(
+                path=path, message=message, level="warning",
             ))
 
     def _validate_branch_when_entry(
@@ -2717,7 +2763,7 @@ class SpecValidator:
                     ),
                 ))
                 return
-            self._check_branch_api_op(op, entry_path, api_ops, result)
+            self._check_branch_api_op(op, entry_path, api_ops, result, use="when")
             if not isinstance(value, str) or not value:
                 result.errors.append(SpecValidationMessage(
                     path=entry_path,
@@ -2773,7 +2819,7 @@ class SpecValidator:
             rest = key[len("api."):]
             if rest.endswith(".request"):
                 op = rest[: -len(".request")]
-                self._check_branch_api_op(op, entry_path, api_ops, result)
+                self._check_branch_api_op(op, entry_path, api_ops, result, use="request")
                 self._validate_branch_request_match(
                     value, entry_path, data_fields, result
                 )
@@ -2788,7 +2834,9 @@ class SpecValidator:
                     ),
                 ))
                 return
-            self._check_branch_api_op(rest, entry_path, api_ops, result)
+            self._check_branch_api_op(
+                rest, entry_path, api_ops, result,
+                use=value if value in self._BRANCH_THEN_API_VERDICTS else None)
             if value not in self._BRANCH_THEN_API_VERDICTS:
                 result.errors.append(SpecValidationMessage(
                     path=entry_path,
