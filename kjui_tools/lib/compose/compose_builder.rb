@@ -879,6 +879,9 @@ module KjuiTools
         # inline helpers (plan 49 lane C, D's measurement).
         modifiers = ["Modifier"]
         modifiers.concat(Helpers::ModifierBuilder.build_test_tag(json_data, @required_imports))
+        # userInteractionEnabled stops the safe area and what is in it
+        # (ModifierBuilder.build_interaction_blocker); it builds no clickable.
+        modifiers.concat(Helpers::ModifierBuilder.build_interaction_blocker(json_data, @required_imports))
         size_modifiers = Helpers::ModifierBuilder.build_size(json_data, nil, @required_imports)
         size_modifiers << ".fillMaxWidth()" unless json_data['width']
         modifiers.concat(size_modifiers)
@@ -951,6 +954,9 @@ module KjuiTools
         # the full-size default only when the dimension is undeclared.
         modifiers = ["Modifier"]
         modifiers.concat(Helpers::ModifierBuilder.build_test_tag(json_data, @required_imports))
+        # userInteractionEnabled stops the safe area and what is in it
+        # (ModifierBuilder.build_interaction_blocker); it builds no clickable.
+        modifiers.concat(Helpers::ModifierBuilder.build_interaction_blocker(json_data, @required_imports))
         size_modifiers = Helpers::ModifierBuilder.build_size(json_data, nil, @required_imports)
         size_modifiers << ".fillMaxWidth()" unless json_data['width']
         size_modifiers << ".fillMaxHeight()" unless json_data['height']

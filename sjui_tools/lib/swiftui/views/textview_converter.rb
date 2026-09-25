@@ -320,6 +320,9 @@ module SjuiTools
 
           apply_editable_and_keyboard
 
+          # userInteractionEnabled / touchDisabledState
+          register_hit_test_gate
+
           generated_code
         end
 

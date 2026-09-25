@@ -351,6 +351,9 @@ module SjuiTools
           apply_confirmation_dialog_to_bag
           apply_alert_to_bag
 
+          # userInteractionEnabled / touchDisabledState
+          register_hit_test_gate
+
           generated_code
         end
 

@@ -57,6 +57,11 @@ module KjuiTools
           end
 
           code += "\n\n" + indent("Scaffold(", depth)
+          # userInteractionEnabled stops the tab view and what is in it
+          # (ModifierBuilder.build_interaction_blocker). The Scaffold takes no
+          # other modifier here, so it gets one only when the flag is set.
+          blocker = Helpers::ModifierBuilder.build_interaction_blocker(json_data, required_imports)
+          code += Helpers::ModifierBuilder.format(blocker, depth) + ',' if blocker.any?
           code += "\n" + indent("bottomBar = {", depth + 1)
 
           # NavigationBar

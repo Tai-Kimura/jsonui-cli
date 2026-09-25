@@ -303,6 +303,9 @@ module SjuiTools
             @modifier_bag.register(:hidden, ".opacity(#{hidden_expr} ? 0 : 1).accessibilityHidden(#{hidden_expr})")
           end
 
+          # userInteractionEnabled / touchDisabledState
+          register_hit_test_gate
+
           generated_code
         end
 

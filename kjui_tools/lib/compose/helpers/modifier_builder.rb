@@ -973,9 +973,31 @@ module KjuiTools
         # Handler resolution follows camelCase onClick conventions:
         # @{binding} → get_event_handler_invocation (data-definition aware),
         # plain name → data.<name>?.invoke().
+        # The gate a node's own long press, pan and pinch obey:
+        # userInteractionEnabled and `enabled`, joined — either false stops
+        # every handler of the node (the tap rule reads the same: a disabled
+        # long press does not operate). nil: no gate; 'false': shut.
+        def self.gesture_gate(json_data)
+          gates = [boolean_expression(json_data['userInteractionEnabled']), enabled_expression(json_data)].compact
+          return nil if gates.empty?
+          return 'false' if gates.include?('false')
+
+          gates.join(' && ')
+        end
+
         def self.build_long_pressable(json_data, required_imports = nil)
           handler = json_data['onLongPress']
           return [] unless handler
+
+          # The detector watches the Initial pass from outside the node's
+          # other modifiers, so neither build_interaction_blocker nor the
+          # clickable's `enabled` stopped it: it fired under
+          # `userInteractionEnabled: false` and under `enabled: false`
+          # (measured, API 35 emulator, conformance-host
+          # InteractionGateProbeTest). gesture_gate: `false` emits no long
+          # press; a binding gates it where it fires.
+          interaction = gesture_gate(json_data)
+          return [] if interaction == 'false'
 
           required_imports&.add(:long_press_gesture)
           view_id = json_data['id']
@@ -1000,7 +1022,7 @@ module KjuiTools
                     } catch (_: PointerEventTimeoutCancellationException) {
                         true
                     }
-                    if (longPressed) {
+                    if (longPressed#{interaction ? " && #{interaction}" : ''}) {
                         #{handler_call}
                         var event: PointerEvent
                         do {
@@ -1029,8 +1051,13 @@ module KjuiTools
           handler = json_data['onPan']
           return [] unless handler && is_binding?(handler)
 
+          # gesture_gate: `false` emits no pan; a binding gates the call.
+          interaction = gesture_gate(json_data)
+          return [] if interaction == 'false'
+
           required_imports&.add(:pan_gesture)
           handler_call = get_event_handler_invocation(handler, json_data['id'], 'total')
+          handler_call = "if (#{interaction}) #{handler_call}" if interaction
 
           gesture = <<~KOTLIN.rstrip
             .pointerInput(data) {
@@ -1060,8 +1087,16 @@ module KjuiTools
           handler = json_data['onPinch']
           return [] unless handler && is_binding?(handler)
 
+          # gesture_gate: `false` emits no pinch; a binding gates the call.
+          # (It reads the pointers in the Main pass without asking whether
+          # they were consumed, so build_interaction_blocker did not stop it —
+          # read, not measured: a pinch needs two pointers.)
+          interaction = gesture_gate(json_data)
+          return [] if interaction == 'false'
+
           required_imports&.add(:pinch_gesture)
           handler_call = get_event_handler_invocation(handler, json_data['id'], 'scale')
+          handler_call = "if (#{interaction}) #{handler_call}" if interaction
 
           gesture = <<~KOTLIN.rstrip
             .pointerInput(data) {
