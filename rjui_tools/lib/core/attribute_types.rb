@@ -234,6 +234,57 @@ module JsonUIShared
       t.nullable == true && !t.forced
     end
 
+    LANGUAGES = { 'sjui' => :swift, 'kjui' => :kotlin, 'rjui' => :ts }.freeze
+
+    # What a prop the converter does not write becomes, in each language —
+    # the layout left it out, gave it null, or gave a value it cannot write.
+    #   Swift       the default the component's init declares: nil for an
+    #               optional type, the vocabulary's value (swift_default)
+    #               for any other since 1.8.121; a `T!!` model has none, and
+    #               the call does not compile without it
+    #   Kotlin      the composable's default (kotlin_default)
+    #   TypeScript  nothing: every prop is optional, and it is undefined
+    # Until 1.8.121 every tool said "the prop keeps its default", and in Swift
+    # no non-optional parameter had one (swiftc: "missing argument for
+    # parameter"). Ticket sjui-unwritten-non-optional-prop-does-not-compile.
+    def unwritten_outcome(type, language)
+      t = type.is_a?(Type) ? type : parse(type)
+      case language
+      when :swift
+        if takes_null?(t)
+          'the prop keeps its default (nil)'
+        elsif (default = swift_default(t))
+          "the prop keeps its default (#{default}), which the component declares — one scaffolded before " \
+            '1.8.121 declares none, and then the call does not compile'
+        else
+          "#{t.raw} has no default in Swift, so the call does not compile"
+        end
+      when :kotlin then "the prop keeps its default (#{kotlin_default(t)})"
+      else 'the prop is not passed (the component gets undefined)'
+      end
+    end
+
+    # The one sentence the three converters print for a value they do not
+    # write. `tool`: 'sjui' / 'kjui' / 'rjui'.
+    def unwritten_warning(tool, component, key, value, type)
+      "[#{tool}] #{component}.#{key}: the layout's #{value.inspect} is not a #{type} literal this converter can " \
+        "write — #{unwritten_outcome(type, LANGUAGES.fetch(tool))}. Give a #{type} value, or bind it (@{…})."
+    end
+
+    # A prop the layout leaves out, said only where that is not harmless:
+    # a Swift parameter with no default (`T!!`).
+    def absent_warning(tool, component, key, type)
+      "[#{tool}] #{component}.#{key}: the layout gives no value — " \
+        "#{unwritten_outcome(type, LANGUAGES.fetch(tool))}. Give a #{type} value, or bind it (@{…})."
+    end
+
+    # Whether a Swift parameter of `type` is given no default: not optional,
+    # and no value in the vocabulary — a `T!!` model.
+    def swift_required?(type)
+      t = type.is_a?(Type) ? type : parse(type)
+      !takes_null?(t) && swift_default(t).nil?
+    end
+
     def swift_literal(type, value, &hook)
       t = type.is_a?(Type) ? type : parse(type)
       return takes_null?(t) ? 'nil' : nil if value.nil?
