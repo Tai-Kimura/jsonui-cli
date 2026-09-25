@@ -136,6 +136,139 @@ module KjuiTools
           peak
         end
 
+        # Raised when a SectionN call ends up where a @Composable call cannot
+        # be made. The build records the layout as failed (non-zero exit)
+        # instead of writing Kotlin that only Gradle would reject.
+        class UnsafeCutError < StandardError; end
+
+        # PascalCase calls whose trailing lambda is NOT a @Composable content
+        # lambda (a coroutine block, an effect scope). The call itself is a
+        # composable; what runs inside its braces is not.
+        NON_COMPOSABLE_TRAILING_CALLS = %w[LaunchedEffect DisposableEffect SideEffect].freeze
+
+        # Member calls whose lambda is inline and adds no receiver: it runs
+        # in whatever context encloses it (`section?.let { cellData -> … }`,
+        # `cellData.data.forEachIndexed { cellIndex, item -> … }`).
+        TRANSPARENT_MEMBER_CALLS = %w[let forEach forEachIndexed].freeze
+
+        # Named lambda arguments kjui emits whose parameter is a @Composable
+        # slot (Tab `text` / `icon`, TextField `placeholder`, NavigationBar
+        # item `label` / BadgedBox `badge`, Scaffold `bottomBar`, the
+        # Collection `lazyContent` / `eagerContent`). Every other named
+        # lambda kjui emits is a callback or a value (`onClick`, `factory`,
+        # `update`, `span`, `key`, `progress`, …).
+        COMPOSABLE_SLOT_LAMBDAS = %w[
+          content lazyContent eagerContent text placeholder icon label badge bottomBar
+        ].freeze
+
+        CONTROL_FLOW_CALLS = %w[if when for while].freeze
+
+        # What kind of lambda the last `{` on lines[idx] opens:
+        #   :composable  — the content lambda of a PascalCase composable
+        #                  (`Box {`, `Column(…) {`, the `) {` closing such a
+        #                  call's arguments), a COMPOSABLE_SLOT_LAMBDAS slot
+        #                  (`lazyContent = {`), a lazy item block, or
+        #                  `key(…) {`;
+        #   :transparent — control flow (`if (…) {`, `} else {`, `when (…) {`,
+        #                  `x -> {`) and TRANSPARENT_MEMBER_CALLS (`.let {`),
+        #                  which take their context from the lambda around
+        #                  them;
+        #   :opaque      — anything else. That covers lambdas that are not
+        #                  @Composable (AndroidView's `factory = {` / `update =
+        #                  {`, event handlers, LaunchedEffect's block,
+        #                  `remember {`) and lambdas that supply a receiver
+        #                  (`WebView(context).apply {`). Unknown shapes land
+        #                  here on purpose: a missed cut leaves a body longer
+        #                  than it needs to be, a wrong cut does not compile.
+        def self.lambda_kind(lines, idx)
+          line = lines[idx].strip
+          brace = line.rindex('{')
+          return :opaque unless brace
+          head = line[0...brace].rstrip
+          return :transparent if head.match?(/\A(?:\}\s*)?(?:(?:if|for|while)\s*\(|else\b|when\b)/) || head.end_with?('->')
+          slot = head.match(/(?:\A|[\s(,])(\w+)\s*=\z/)
+          return(COMPOSABLE_SLOT_LAMBDAS.include?(slot[1]) ? :composable : :opaque) if slot
+
+          call = head.end_with?(')') ? call_head(lines, idx, head) : head
+          return :opaque unless call
+          m = call.match(/(\.\s*)?\b([A-Za-z_]\w*)\s*\z/)
+          return :opaque unless m
+          name = m[2]
+          return :transparent if !m[1] && CONTROL_FLOW_CALLS.include?(name)
+          if m[1]
+            return TRANSPARENT_MEMBER_CALLS.include?(name) ? :transparent : :opaque
+          end
+          return :composable if LAZY_DSL_KEYWORDS.include?(name) || name == 'key'
+          return :opaque if NON_COMPOSABLE_TRAILING_CALLS.include?(name)
+          return :composable if name.match?(/\A[A-Z]/)
+          :opaque
+        end
+
+        # The text before the `(` that matches the `)` ending `head` (the
+        # part of lines[idx] before its last `{`), walking back over earlier
+        # lines for a multi-line argument list. nil when it never balances.
+        def self.call_head(lines, idx, head)
+          balance = 0
+          text = head
+          i = idx
+          loop do
+            (text.length - 1).downto(0) do |k|
+              case text[k]
+              when ')' then balance += 1
+              when '('
+                balance -= 1
+                return text[0...k] if balance.zero?
+              end
+            end
+            i -= 1
+            return nil if i.negative?
+            text = lines[i].strip
+          end
+        end
+
+        # For each line, whether it starts inside an :opaque lambda — at any
+        # depth, since a receiver stays in scope for everything nested in its
+        # lambda. Brace counting is the same raw per-line count the cut paths
+        # use, so these flags line up with the stacks they build.
+        def self.opaque_flags(lines)
+          opaque_openers(lines).map { |opener| !opener.nil? }
+        end
+
+        # Per line: the index of the innermost :opaque lambda it sits in, or
+        # nil.
+        def self.opaque_openers(lines)
+          stack = []
+          lines.each_with_index.map do |raw, idx|
+            inside = stack.reverse.find { |kind, _| kind == :opaque }
+            s = raw.strip
+            net = s.count('{') - s.count('}')
+            if net.positive?
+              kind = lambda_kind(lines, idx)
+              net.times { stack << [kind, idx] }
+            elsif net.negative?
+              (-net).times { stack.pop }
+            end
+            inside && inside[1]
+          end
+        end
+
+        SECTION_CALL = /\bSection\d+(?:_\d+)*\(data, viewModel\b/
+
+        # The last word on every cut, whichever path made it: a SectionN call
+        # inside an :opaque lambda is a @Composable call where none can be
+        # made, or a statement cut away from the receiver it resolves
+        # against. Raise rather than write Kotlin only Gradle would reject.
+        def self.assert_calls_composable!(code, where)
+          lines = code.lines.map(&:chomp)
+          opaque_openers(lines).each_with_index do |opener, i|
+            next unless opener && lines[i].match?(SECTION_CALL)
+            raise UnsafeCutError,
+                  "section extractor: #{where} calls `#{lines[i].strip}` inside " \
+                  "`#{lines[opener].strip}`, where a @Composable call cannot be made " \
+                  "(the generated Kotlin would not compile). This is a kjui_tools bug."
+          end
+        end
+
         LAZY_DSL_KEYWORDS = %w[item items itemsIndexed stickyHeader stickyHeaders].freeze
 
         # Identifier patterns that kjui's Collection / Lazy emit binds in the
@@ -276,6 +409,12 @@ module KjuiTools
               changed = true
             end
             break unless changed
+          end
+
+          assert_calls_composable!(new_body, "#{view_name} (main body)")
+          state.functions.each do |fn|
+            parsed = parse_function(fn)
+            assert_calls_composable!(parsed ? parsed[:body] : fn, parsed ? parsed[:name] : 'a section')
           end
 
           [new_body, state.functions, state.waivers(new_body)]
@@ -447,6 +586,7 @@ module KjuiTools
           # Returns the rewritten code, or nil when no gate qualifies.
           def extract_if_else_branches(code, prefix, env)
             lines = code.lines.map(&:chomp)
+            opaque = SectionExtractor.opaque_flags(lines)
             depth = 0
 
             lines.each_with_index do |line, idx|
@@ -454,7 +594,7 @@ module KjuiTools
               opens = stripped.count('{')
               closes = stripped.count('}')
 
-              if stripped =~ /\Aif\s*\(/ && opens > closes
+              if stripped =~ /\Aif\s*\(/ && opens > closes && !opaque[idx]
                 segments = if_else_segments(lines, idx)
                 if segments
                   branch_line_total = segments[:branches].sum { |b| b[:end_idx] - b[:start] + 1 }
@@ -645,10 +785,15 @@ module KjuiTools
               end
             end
             return nil unless deep_idx && deep_stack
+            opaque = SectionExtractor.opaque_flags(lines)
 
             # Containers only (PascalCase Composables), never lazy-DSL blocks
             # or lambda scopes — the lifted segment's first line must be a
-            # complete composable statement.
+            # complete composable statement, standing where a @Composable
+            # call can be made (not inside an :opaque lambda — the
+            # AndroidView factory of a Web with an id and a visibility
+            # binding sat past the depth budget, and `WebView(context).apply
+            # {` read as a container).
             # NOTE: kjui runs under the host's system Ruby (2.6) in consumer
             # projects — Enumerable#filter_map (2.7+) is unavailable there,
             # and a NoMethodError here is swallowed by the per-file rescue as
@@ -661,7 +806,7 @@ module KjuiTools
                 # a unit: the segment starts at the KEYWORD line, carrying
                 # the whole argument list into the lifted function.
                 seg_start = container_open_start(lines, open_idx)
-                next if seg_start.nil? || seg_start.zero?
+                next if seg_start.nil? || seg_start.zero? || opaque[seg_start]
                 [open_idx, seg_start, order]
               elsif lines[open_idx].strip.match?(/\A(?:lazyContent|content)\s*=\s*\{\z/)
                 # A named lambda ARGUMENT (`CollectionStack(..., lazyContent =
@@ -669,7 +814,7 @@ module KjuiTools
                 # unit is the whole enclosing CALL. Walk back over the open
                 # paren to the PascalCase call opener.
                 call_start = call_open_start(lines, open_idx)
-                next if call_start.nil? || call_start.zero?
+                next if call_start.nil? || call_start.zero? || opaque[call_start]
                 [open_idx, call_start, order]
               end
             end.compact
@@ -927,6 +1072,7 @@ module KjuiTools
             end
 
             best_result = nil
+            opaque = SectionExtractor.opaque_flags(lines)
 
             candidates.each do |container|
               # Find the call keyword (e.g. `Column`). For multi-line opens
@@ -934,6 +1080,12 @@ module KjuiTools
               # line that opens the matching `(` further up.
               first_word = container_keyword(lines, container[:open_idx])
               next unless splittable_container_keyword?(first_word)
+              # A capital letter does not make a Compose container: the
+              # children of `WebView(context).apply {` are statements on the
+              # WebView, and the lambda sits in AndroidView's `factory`, where
+              # no @Composable call can be made.
+              next if opaque[container[:open_idx]]
+              next unless SectionExtractor.lambda_kind(lines, container[:open_idx]) == :composable
 
               children = find_children_inside(lines, container[:open_idx], container[:depth])
               next unless children && children.size > 1
