@@ -9,6 +9,21 @@ Measured on an iOS 18 simulator (SwiftJsonUI ConformanceHost,
 -decorativeImageProbe): the same element satisfies both `visible` and
 `notVisible`. Android (By.res) and web (data-testid) are unaffected.
 
+Only the ASSERTION. A `when` / `while` condition's notVisible is the
+driver's `!isInstantlyVisible` — `exists && (isHittable || !frame.isEmpty)`,
+the `visible` assertion's predicate — and it reads a decorative image on
+screen as visible: measured with the driver itself (the probe calls the
+vendored XCUITestAssertionExecutor, jsonui-test-runner-ios fc50701; iOS 18.6
+and 26.4, SwiftJsonUI e16d535), `when: {notVisible: <image>}` is false while
+the image shows and true once it is gone. So a condition is not named.
+
+The advice holds on iOS: an id on the view around the image is on an
+accessibility container (`.contain`, what `jui build` emits and the dynamic
+runtime renders), and every such container measured there — around a
+decorative image, around text, one text, two texts, an image with an alt,
+a tappable — is hittable, so the driver's notVisible on it fails while it
+shows. So does it on an image given an alt.
+
 Judged on the screen the step runs on: a screen test's `source.layout`, a
 flow step's `screen` (the steps a repeat or retry runs take their step's),
 looked up by screen id — the layout's basename, as the screen check looks it
@@ -37,7 +52,7 @@ from __future__ import annotations
 from collections import Counter
 
 from ..install import _platform_matches
-from .element_ids import CONDITION_KEYS, run_project
+from .element_ids import run_project
 from .models import ValidationMessage, ValidationResult
 from .step import _reaches, project_platforms
 
@@ -117,7 +132,8 @@ def _off_ios(step: dict) -> bool:
 
 
 def _not_visible_ids(step, path: str, screen, out: list, flow: bool = False) -> None:
-    """(path, id, screen) of every notVisible *step* names that iOS can run."""
+    """(path, id, screen) of every notVisible assertion in *step* that iOS
+    can run. Not a `when` / `while` notVisible: see the module docstring."""
     if not isinstance(step, dict) or _off_ios(step) or "file" in step:
         return
     if flow:
@@ -126,10 +142,6 @@ def _not_visible_ids(step, path: str, screen, out: list, flow: bool = False) -> 
         screen = named.strip() if isinstance(named, str) and named.strip() else None
     if step.get("assert") == "notVisible" and isinstance(step.get("id"), str):
         out.append((path, step["id"], screen))
-    for key in CONDITION_KEYS:
-        condition = step.get(key)
-        if isinstance(condition, dict) and isinstance(condition.get("notVisible"), str):
-            out.append((f"{path}.{key}", condition["notVisible"], screen))
     for i, inner in enumerate(step.get("steps") or []):
         _not_visible_ids(inner, f"{path}.steps[{i}]", screen, out)
 

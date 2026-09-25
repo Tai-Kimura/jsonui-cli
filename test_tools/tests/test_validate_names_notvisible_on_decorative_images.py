@@ -22,6 +22,11 @@ SHARED_CORE = Path(__file__).resolve().parents[2] / "shared" / "core"
 
 
 def _rule():
+    # This tree's jui_cli, as the check itself takes it: run first, or alone,
+    # this otherwise read an installed jui_cli whose shared/core predates the
+    # rule (and passed only after another module had put this tree's first).
+    from jsonui_test_cli.validation.screen_ids import _prefer_sibling_jui_cli
+    _prefer_sibling_jui_cli()
     from jui_cli.core import shared_core
     return shared_core.load("image_accessibility")
 
@@ -96,11 +101,19 @@ def test_not_visible_on_a_decorative_image_is_named_with_both_fixes(tmp_path):
     assert result.warnings == [] and result.errors == []
 
 
-def test_a_condition_waiting_on_it_is_named_too(tmp_path):
-    result = _validate(tmp_path, [{"action": "tap", "id": "logo", "when": {"notVisible": "hero_image"}}])
+def test_a_condition_waiting_on_it_is_not_named(tmp_path):
+    # A `when` / `while` notVisible is the driver's !isInstantlyVisible, which
+    # reads a decorative image on screen as visible (measured with the driver
+    # itself, SwiftJsonUI ConformanceHost -decorativeImageProbe): it can fail.
+    # The assertion on the same image, in the same test, is the control.
+    result = _validate(tmp_path, [
+        {"action": "tap", "id": "logo", "when": {"notVisible": "hero_image"}},
+        {"action": "repeat", "times": 2, "while": {"notVisible": "hero_image"},
+         "steps": [{"action": "tap", "id": "logo"}]},
+        {"assert": "notVisible", "id": "hero_image"},
+    ])
     named = _named(result)
-    assert len(named) == 1
-    assert named[0][0].endswith(".cases[0].steps[0].when")
+    assert [where.rsplit(".", 1)[-1] for where, _ in named] == ["steps[2]"], named
 
 
 def test_control_the_same_assertion_on_images_that_stay_readable_says_nothing(tmp_path):

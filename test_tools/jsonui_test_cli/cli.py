@@ -1820,6 +1820,19 @@ def cmd_generate_unit_stubs(args):
         # rather than in the declaration it is naming.
         print(f"ERROR: {e}")
         return 1
+    # A name several targets declare, with fewer tests than targets and none
+    # a target's name places, is MISSING for `--check` ("at least N") — but
+    # which target lacks it cannot be told, so no stub can be written for it.
+    # Saying "every declared case has an implementation" and exiting 0 there
+    # contradicted the MISSING line printed just above.
+    unwritable = [(platform, name, short)
+                  for platform in report.platforms
+                  for name, short in sorted(report.short.get(platform, {}).items())]
+    # Names whose tests may all be there but cannot be placed: `--check`
+    # does not fail on them, and neither does this — but they are not
+    # "implemented" either.
+    unplaced = sum(1 for platform in report.platforms for name in report.unattributed(platform)
+                   if name not in report.short.get(platform, {}))
     if not touched:
         # `missing == 0` has two states and they are opposite facts: every
         # case is implemented, or nothing was compared. write_stubs skips
@@ -1840,6 +1853,13 @@ def cmd_generate_unit_stubs(args):
                 "unitContracts block(s) above, so there was nothing to write"
             )
             return 1
+        if unwritable:
+            _print_unwritable(unwritable)
+            return 1
+        if unplaced:
+            print(f"  no stubs to write — every declared case has an implementation or a "
+                  f"test no target's name places ({unplaced} UNATTRIBUTED line(s) above: not checked)")
+            return 0
         print("  no stubs to write — every declared case has an implementation")
         return 0
     verb = "would write" if getattr(args, "dry_run", False) else "wrote"
@@ -1849,7 +1869,22 @@ def cmd_generate_unit_stubs(args):
         "  ⚠️  stubs fail rather than pass: a stub that passes is a case "
         "reporting success without a body"
     )
+    if unwritable:
+        _print_unwritable(unwritable)
+        return 1
     return 0
+
+
+def _print_unwritable(unwritable) -> None:
+    """The MISSING cases `generate` cannot write a stub for."""
+    total = sum(short for _platform, _name, short in unwritable)
+    print(f"  no stub can be written for {total} missing case(s): the targets that lack "
+          f"them cannot be told apart, because the tests of the case are in no target's "
+          f"class, describe or file (the MISSING \"at least\" line(s) above):")
+    for platform, name, short in unwritable:
+        print(f"    {platform}: {name}  (at least {short})")
+    print("  put each target's test of the case in its own class, describe or file "
+          "(the name `generate` gives a target's stubs), then run this again")
 
 
 def cmd_generate_branch_tests(args):
