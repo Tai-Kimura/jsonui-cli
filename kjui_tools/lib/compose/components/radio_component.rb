@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require_relative '../helpers/modifier_builder'
+require_relative '../helpers/binding_expression'
 require_relative '../helpers/bound_value'
 require_relative '../helpers/font_spec_helper'
 require_relative '../helpers/resource_resolver'
@@ -316,7 +317,22 @@ module KjuiTools
         end
         
         def self.generate_radio_group_with_items(json_data, depth, required_imports, parent_type)
+          # `items` is declared ["array", "binding"]: an array is the options,
+          # written out one by one; a binding is a list the data holds, drawn
+          # with forEach — what DynamicRadioComponent.itemsOf does with it.
+          # Until 1.8.121 a bound `items` raised NoMethodError (`each` on a
+          # String) and took the build down (ticket
+          # kjui-codegen-table-crashes-on-an-items-array).
           items = json_data['items']
+          bound_items = if items.is_a?(String) && items.match?(/@\{[^}]+\}/)
+                          Helpers::BindingExpression.value_access(items[/@\{([^}]+)\}/, 1])
+                        end
+          # [the option as Kotlin, its text]
+          options = if bound_items
+                      [['item', 'item.toString()']]
+                    else
+                      Array(items).map { |item| [JsonUIShared::StringLiterals.kotlin(item)] * 2 }
+                    end
           selected_value = json_data['selectedValue']
           
           # Add required import for clickable
@@ -363,8 +379,8 @@ module KjuiTools
           end
           
           # Generate radio items
-          items.each do |item|
-            item_literal = JsonUIShared::StringLiterals.kotlin(item)
+          rows_from = code.length
+          options.each do |item_literal, item_text|
             code += "\n" + indent("    Row(", depth)
             code += "\n" + indent("        verticalAlignment = Alignment.CenterVertically,", depth)
             code += "\n" + indent("        modifier = Modifier", depth)
@@ -394,12 +410,18 @@ module KjuiTools
             if json_data['fontColor'] || json_data['textColor']
               text_color = json_data['fontColor'] || json_data['textColor']
               color_resolved = Helpers::ResourceResolver.process_color(text_color, required_imports)
-              code += "\n" + indent("        Text(#{item_literal}, color = #{color_resolved})", depth)
+              code += "\n" + indent("        Text(#{item_text}, color = #{color_resolved})", depth)
             else
               # Default to black color
-              code += "\n" + indent("        Text(#{item_literal}, color = Color.Black)", depth)
+              code += "\n" + indent("        Text(#{item_text}, color = Color.Black)", depth)
             end
             code += "\n" + indent("    }", depth)
+          end
+          if bound_items
+            # The one row, drawn for each item the data holds.
+            rows = code.slice!(rows_from..)
+            code += "\n" + indent("    #{bound_items}.forEach { item ->", depth) +
+                    rows.gsub("\n", "\n    ") + "\n" + indent("    }", depth)
           end
           
           code += "\n" + indent("}", depth)
