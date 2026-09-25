@@ -8,6 +8,7 @@ require_relative '../core/config_manager'
 require_relative '../core/project_finder'
 require_relative '../core/logger'
 require_relative '../core/type_converter'
+require_relative '../core/attribute_validator'
 require_relative '../core/layout_validator'
 require_relative '../core/image_accessibility'
 require_relative '../core/tap_accessibility'
@@ -186,7 +187,8 @@ module KjuiTools
           json_data = StyleLoader.load_and_merge(json_data)
 
           shared_warnings = JsonUIShared::LayoutValidator.validate_layout(
-            json_data, source_path: File.basename(json_file)
+            json_data, source_path: File.basename(json_file),
+            extension_definitions: Core::AttributeValidator.extension_definitions(:compose)
           )
           JsonUIShared::LayoutValidator.print_warnings(shared_warnings) unless shared_warnings.empty?
 
@@ -1319,7 +1321,8 @@ module KjuiTools
         json_data = StyleLoader.load_and_merge(json_data)
 
         shared_warnings = JsonUIShared::LayoutValidator.validate_layout(
-          json_data, source_path: File.basename(variant_file)
+          json_data, source_path: File.basename(variant_file),
+          extension_definitions: Core::AttributeValidator.extension_definitions(:compose)
         )
         JsonUIShared::LayoutValidator.print_warnings(shared_warnings) unless shared_warnings.empty?
 

@@ -328,7 +328,11 @@ RSpec.describe KjuiTools::Compose::Generators::ConverterGenerator do
       FileUtils.rm_f(definition_file)
     end
 
-    it 'does not generate definition file when no attributes' do
+    # Since 1.8.121 the file is written with no attributes too: it is where the
+    # build reads whether the component takes children (child / children for
+    # the default). Until then a component with no attributes had none.
+    # Ticket sjui-leaf-custom-component-cannot-reject-children.
+    it 'writes only whether the component takes children when there are no attributes' do
       generator_no_attrs = described_class.new('SimpleCard', {})
 
       # Stub generators
@@ -336,17 +340,19 @@ RSpec.describe KjuiTools::Compose::Generators::ConverterGenerator do
       allow_any_instance_of(KjuiTools::Compose::Generators::DynamicComponentGenerator).to receive(:generate)
       allow($stdin).to receive(:gets).and_return('n')
 
-      generator_no_attrs.generate
-
       extensions_dir = File.join(File.dirname(__FILE__), '..', '..', '..', 'lib', 'compose', 'components', 'extensions')
       definitions_dir = File.join(extensions_dir, 'attribute_definitions')
       definition_file = File.expand_path(File.join(definitions_dir, 'SimpleCard.json'))
-
-      expect(File.exist?(definition_file)).to be false
-
-      # Cleanup
-      FileUtils.rm_f(File.join(extensions_dir, 'simple_card_component.rb'))
-      FileUtils.rm_f(File.join(extensions_dir, 'component_mappings.rb'))
+      begin
+        generator_no_attrs.generate
+        expect(JSON.parse(File.read(definition_file))['SimpleCard'].keys).to contain_exactly('child', 'children')
+      ensure
+        # Written into the tool's own tree: cleaned whether or not the
+        # expectation holds (a failure here used to leave it behind).
+        FileUtils.rm_f(definition_file)
+        FileUtils.rm_f(File.join(extensions_dir, 'simple_card_component.rb'))
+        FileUtils.rm_f(File.join(extensions_dir, 'component_mappings.rb'))
+      end
     end
   end
 

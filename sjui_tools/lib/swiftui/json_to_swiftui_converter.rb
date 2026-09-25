@@ -230,7 +230,8 @@ module SjuiTools
         # first file, restored at the end), and a declaration violation has
         # to be caught in every file, not just the first one seen.
         shared_warnings = JsonUIShared::LayoutValidator.validate_layout(
-          json_data, source_path: File.basename(json_file_path)
+          json_data, source_path: File.basename(json_file_path),
+          extension_definitions: Core::AttributeValidator.extension_definitions(:swiftui)
         )
         JsonUIShared::LayoutValidator.print_warnings(shared_warnings) unless shared_warnings.empty?
         if JsonUIShared::LayoutValidator.blocking?(shared_warnings)
@@ -492,7 +493,8 @@ module SjuiTools
         @validator.print_warnings
 
         shared_warnings = JsonUIShared::LayoutValidator.validate_layout(
-          json_data, source_path: file_name || '(unknown)'
+          json_data, source_path: file_name || '(unknown)',
+          extension_definitions: Core::AttributeValidator.extension_definitions(:swiftui)
         )
         JsonUIShared::LayoutValidator.print_warnings(shared_warnings) unless shared_warnings.empty?
         @blocking_layout_errors = JsonUIShared::LayoutValidator.blocking?(shared_warnings)

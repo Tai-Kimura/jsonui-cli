@@ -164,7 +164,9 @@ def _chdir(path: Path):
 def _converter_args(**overrides) -> argparse.Namespace:
     defaults = dict(
         name=None, from_spec=None, all_specs=False,
-        attributes=None, container=False, skip_existing=False,
+        # None, as the parser leaves it without --container / --no-container
+        # (False is --no-container since 1.8.121).
+        attributes=None, container=None, skip_existing=False,
     )
     defaults.update(overrides)
     return argparse.Namespace(**defaults)

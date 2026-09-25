@@ -1,0 +1,117 @@
+# frozen_string_literal: true
+
+require 'open3'
+require 'tmpdir'
+require 'json'
+require 'fileutils'
+
+# A component scaffolded as a leaf (`kjui g converter <Name> --no-container`)
+# that a layout gives children: the build refuses the layout by name.
+#
+# Before 1.8.121 (measured on e1a85ca2) kjui failed LATER and by accident:
+# its converter scaffold never read the mode, so it emitted a trailing lambda
+# for the children and kotlinc rejected it at the generated call site ("too
+# many arguments for fun Leaf(...)") — naming neither the layout node nor
+# the reason. Ticket sjui-leaf-custom-component-cannot-reject-children.
+#
+# The tool is COPIED (links dereferenced), not linked: `g converter` writes
+# its converter into the tool's own components/extensions and the build
+# loads it from there, so a linked checkout would be written into.
+RSpec.describe 'a leaf given children, through kjui build' do
+  def tool_root
+    File.expand_path('../..', __dir__)
+  end
+
+  before(:all) do
+    @dir = Dir.mktmpdir('kjui_leaf')
+    tool = File.join(@dir, 'kjui_tools')
+    FileUtils.mkdir_p(tool)
+    # `-L`: lib/core's files are relative links into shared/core.
+    %w[bin lib].each do |d|
+      raise "could not copy #{d}" unless system('cp', '-RL', File.join(tool_root, d), tool)
+    end
+    File.write(File.join(@dir, 'kjui.config.json'), JSON.pretty_generate(
+      'mode' => 'compose', 'project_name' => 'LeafProbe',
+      'source_directory' => 'app/src/main', 'layouts_directory' => 'assets/Layouts',
+      'styles_directory' => 'assets/Styles',
+      'data_directory' => 'kotlin/com/example/app/data',
+      'viewmodel_directory' => 'kotlin/com/example/app/viewmodels',
+      'view_directory' => 'kotlin/com/example/app/views',
+      'extension_directory' => 'kotlin/com/example/app/extensions',
+      'adapter_directory' => 'kotlin/com/example/app/adapters',
+      'resource_manager_directory' => 'app/src/main/kotlin/com/kotlinjsonui/generated',
+      'package_name' => 'com.example.app',
+      'string_files' => ['res/values/strings.xml'], 'use_network' => true
+    ))
+    @layouts = File.join(@dir, 'app', 'src', 'main', 'assets', 'Layouts')
+    FileUtils.mkdir_p(@layouts)
+    FileUtils.mkdir_p(File.join(@dir, 'app', 'src', 'main', 'assets', 'Styles'))
+
+    @scaffold = {
+      'Shelf' => ['--container'], 'Auto' => [], 'Leaf' => ['--no-container']
+    }.map do |component, mode|
+      Open3.capture2e('ruby', File.join(tool, 'bin', 'kjui'), 'g', 'converter', component,
+                      '--attr', 'title:String', '--force', *mode, chdir: @dir)
+    end
+
+    node = ->(type, id, kids = nil) {
+      n = { 'type' => type, 'id' => id, 'title' => id, 'width' => 'matchParent', 'height' => 'wrapContent' }
+      n['child'] = kids if kids
+      n
+    }
+    kid = ->(id) { { 'type' => 'Label', 'id' => id, 'text' => id, 'width' => 'wrapContent', 'height' => 'wrapContent' } }
+    root = ->(kids) { { 'type' => 'View', 'id' => 'root', 'width' => 'matchParent', 'height' => 'matchParent', 'orientation' => 'vertical', 'child' => kids } }
+    File.write(File.join(@layouts, 'refused.json'), JSON.generate(root.call([
+      node.call('Leaf', 'leaf', [kid.call('leaf_kid')])
+    ])))
+    File.write(File.join(@layouts, 'healthy.json'), JSON.generate(root.call([
+      node.call('Leaf', 'leaf_alone'),
+      node.call('Shelf', 'shelf', [kid.call('shelf_kid')]),
+      node.call('Auto', 'auto', [kid.call('auto_kid')])
+    ])))
+
+    @ledger = File.join(@dir, 'stage-failures.json')
+    @log, @status = Open3.capture2e({ 'JUI_STAGE_FAILURES' => @ledger },
+                                    'ruby', File.join(tool, 'bin', 'kjui'), 'build', chdir: @dir)
+    @log = @log.gsub(/\e\[[0-9;]*m/, '')
+  end
+
+  after(:all) { FileUtils.rm_rf(@dir) }
+
+  def ledger
+    File.exist?(@ledger) ? JSON.parse(File.read(@ledger)) : []
+  end
+
+  def generated(layout)
+    Dir.glob(File.join(@dir, '**', "#{layout}GeneratedView.kt")).map { |f| File.read(f) }.join
+  end
+
+  it 'scaffolds the three modes' do
+    expect(@scaffold.map { |_, s| s.success? }).to all(be(true)), @scaffold.map(&:first).join("\n")
+    defs = File.join(@dir, 'kjui_tools', 'lib', 'compose', 'components', 'extensions', 'attribute_definitions')
+    expect(JSON.parse(File.read(File.join(defs, 'Leaf.json')))['Leaf']).to include('_children' => 'none')
+    expect(JSON.parse(File.read(File.join(defs, 'Auto.json')))['Auto'].keys).to include('child', 'children')
+  end
+
+  it 'records the leaf with children as the one incomplete stage, naming the node and the child' do
+    entries = ledger.select { |e| e['stage'] == 'layout' }
+    expect(entries.size).to eq(1), "#{ledger.inspect}\n#{@log}"
+    expect(entries.first['message']).to include('refused.json').and include('was not generated')
+      .and include("'Leaf' (id=leaf) takes no children").and include('child[0] (id=leaf_kid)')
+  end
+
+  it 'writes no view for the refused layout' do
+    expect(generated('Refused')).to be_empty
+  end
+
+  it 'says nothing about a leaf without children, and draws the containers\' children' do
+    expect(@log).not_to include("'Leaf' (id=leaf_alone)")
+    view = generated('Healthy')
+    expect(view).to include('"leaf_alone"')
+    expect(view).to include('"shelf_kid"').and include('"auto_kid"')
+  end
+
+  it "no longer says \"Unknown attribute 'child'\" for the default mode or the leaf" do
+    expect(@log).not_to match(/Unknown attribute 'child' for component type '(Auto|Shelf|Leaf)'/)
+  end
+end

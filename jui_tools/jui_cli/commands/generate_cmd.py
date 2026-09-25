@@ -37,7 +37,16 @@ def register_generate_command(subparsers: argparse._SubParsersAction) -> None:
     converter_parser.add_argument("--all", dest="all_specs", action="store_true",
                                   help="Generate from all component specs")
     converter_parser.add_argument("--attributes", help="Attributes (key:type,...)")
-    converter_parser.add_argument("--container", action="store_true", help="Container component")
+    # Three states, as in each platform tool: --container, --no-container, or
+    # neither (the tool's default — a content slot drawn when the layout
+    # gives children). Until 1.8.121 only --container crossed, so a leaf
+    # could not be scaffolded through jui at all.
+    converter_parser.add_argument("--container", dest="container", action="store_const",
+                                  const=True, default=None, help="Container component")
+    converter_parser.add_argument("--no-container", dest="container", action="store_const",
+                                  const=False,
+                                  help="Leaf component: takes no children, and a layout that "
+                                       "gives it some is refused by the build")
     converter_parser.add_argument(
         "--skip-existing", action="store_true",
         help="Leave existing converter and scaffold files untouched (no prompt)",
@@ -1100,11 +1109,11 @@ def _run_converters_from_specs(
                 if isinstance(text, str) and text.strip():
                     descriptions[event_name] = text
         attrs = ",".join(f"{name}:{type_}" for name, type_ in attr_pairs)
-        has_slots = bool(spec_data.get("slots", {}).get("items", []))
+        container = _container_from_slots(spec_data.get("slots"))
 
         print(f"\nGenerating converter: {comp_name}")
         result = _run_converter_direct(
-            comp_name, attrs or None, has_slots, platforms, config_mgr,
+            comp_name, attrs or None, container, platforms, config_mgr,
             skip_existing=skip_existing, force=force,
             descriptions=descriptions or None,
         )
@@ -1115,6 +1124,25 @@ def _run_converters_from_specs(
         print(f"\nERROR: Converter generation failed for: {', '.join(failed)}")
         return 1
     return 0
+
+
+def _container_from_slots(slots) -> bool | None:
+    """The container mode a component spec's ``slots`` gives ``--from``.
+
+    - slots listed          → True  (``--container``)
+    - anything else         → None  (the tool's default)
+
+    An empty ``"items": []`` says the component has no place for content — a
+    leaf — and is deliberately NOT read as ``--no-container`` yet. Measured
+    2026-09-25 on copies of a face (KotlinJsonUI 2.41.1): the leaf wrapper kjui
+    writes calls a library helper that version does not have, so a wrapper
+    created or re-created by ``--all`` did not compile — for components the
+    face had not scaffolded yet, and for any whose wrapper is regenerated.
+    Until that is settled a leaf is scaffolded by asking for one:
+    ``jui g converter <Name> --no-container``.
+    """
+    items = slots.get("items") if isinstance(slots, dict) else None
+    return True if isinstance(items, list) and items else None
 
 
 def split_top_level_commas(value: str) -> list[str]:
@@ -1143,10 +1171,20 @@ def split_top_level_commas(value: str) -> list[str]:
     return parts
 
 
+def _container_flag(container: bool | None) -> list[str]:
+    """``--container`` / ``--no-container`` / nothing: the same three states
+    every platform tool parses."""
+    if container is True:
+        return ["--container"]
+    if container is False:
+        return ["--no-container"]
+    return []
+
+
 def _run_converter_direct(
     name: str,
     attributes: str | None,
-    container: bool,
+    container: bool | None,
     platforms: dict,
     config_mgr,
     *,
@@ -1177,23 +1215,20 @@ def _run_converter_direct(
             cmd = [tool_name, "g", "converter", name]
             if attributes:
                 cmd += ["--attributes", attributes]
-            if container:
-                cmd.append("--container")
+            cmd += _container_flag(container)
         elif platform == "android":
             tool_name = "kjui"
             cmd = [tool_name, "g", "converter", name]
             if attributes:
                 for attr in split_top_level_commas(attributes):
                     cmd += ["--attr", attr]
-            if container:
-                cmd.append("--container")
+            cmd += _container_flag(container)
         elif platform == "web":
             tool_name = "rjui"
             cmd = [tool_name, "g", "converter", name]
             if attributes:
                 cmd += ["--attributes", attributes]
-            if container:
-                cmd.append("--container")
+            cmd += _container_flag(container)
         else:
             continue
         # The same two options on every tool: each CLI parses them since
