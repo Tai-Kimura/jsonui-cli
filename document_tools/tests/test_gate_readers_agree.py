@@ -16,6 +16,10 @@ goes through every reader this tree has, and they must agree:
                   the literal kept from the previous tag at the table's version
   include ids     jui's decision for web's include ids, handed to rjui as
                   JSONUI_INCLUDE_ID_PREFIX (jui_tools; U8)
+  test element ids  `jsonui-test validate`: an id a test step names that is on
+                  no layout is a WARNING when LAYOUT_ID_GATE_FROM is on, else
+                  INFO — plus the notice (test_tools; U8 (5)). It reads the
+                  spec validator's literal, so it is patched there
 
 The three `shared_core` loaders that find the module must stay one loader
 in three copies: a copy that diverged would be a second way to find it.
@@ -136,6 +140,32 @@ def _reader_include_prefix(literal, version, monkeypatch):
     return state == "on", state == "announce"
 
 
+def _reader_test_element_ids(literal, version, monkeypatch, tmp_path):
+    """`jsonui-test validate` on one test naming an id no layout has."""
+    import jsonui_test_cli
+    from jsonui_test_cli.validation import element_ids
+    from jsonui_test_cli.validator import TestValidator as Validator
+    monkeypatch.setattr(validator_mod, "LAYOUT_ID_GATE_FROM", literal)
+    monkeypatch.setattr(jsonui_test_cli, "__version__", version)
+    root = tmp_path / "tests_face"
+    (root / "layouts").mkdir(parents=True)
+    (root / "layouts/s.json").write_text(json.dumps({"type": "View", "id": "root"}))
+    config = {"layouts_directory": "layouts"}
+    (root / "jui.config.json").write_text(json.dumps(config))
+    test = root / "s.test.json"
+    test.write_text(json.dumps({
+        "type": "screen", "metadata": {"name": "s"}, "source": {"layout": "layouts/s.json"},
+        "cases": [{"name": "c", "description": "d", "steps": [
+            {"action": "tap", "id": "nowhere"}]}]}))
+    element_ids.set_run_project(config, root / "jui.config.json")
+    try:
+        result = Validator().validate_file(test)
+    finally:
+        element_ids.set_run_project()
+    warned = any("'nowhere'" in m.message for m in result.warnings)
+    return warned, element_ids.gate_notice(version) is not None
+
+
 @pytest.mark.parametrize("literal, version, state, gates, announces", TABLE)
 def test_every_reader_gives_the_tables_answer(literal, version, state, gates, announces,
                                              monkeypatch, tmp_path):
@@ -148,6 +178,8 @@ def test_every_reader_gives_the_tables_answer(literal, version, state, gates, an
         "tag gate": _reader_tag_gate(literal, version),
         "include ids (jui -> rjui)": (state, *_reader_include_prefix(literal, version,
                                                                      monkeypatch)),
+        "test element ids": (state, *_reader_test_element_ids(literal, version, monkeypatch,
+                                                               tmp_path)),
     }
     assert answers == {name: (state, gates, announces) for name in answers}, answers
 

@@ -113,7 +113,16 @@ def cmd_validate(args):
     _root = _project_root(getattr(args, "config", None))
     set_path_roots(_root, _read_config_doc(getattr(args, "config", None))[0]
                    if _root else None)
+    # And the layouts a step's element ids are checked against: the config
+    # this run read, for the same reason (element_ids' docstring).
+    from .validation.element_ids import set_run_project
+    set_run_project(*_read_config_doc(getattr(args, "config", None)))
     platform_warnings = 0
+    # INFO: printed, never counted in `Warnings:` and never the exit.
+    total_infos = 0
+    from collections import Counter
+    element_totals: Counter = Counter()
+    element_unchecked: dict = {}
 
     if not files_to_validate:
         print("No test or description files found")
@@ -124,7 +133,7 @@ def cmd_validate(args):
         files_checked += 1
         result = validator.validate_file(file_path)
 
-        if args.verbose or result.errors or result.warnings:
+        if args.verbose or result.errors or result.warnings or (result.infos and not args.quiet):
             print(f"\n{file_path}")
 
         if result.errors:
@@ -140,11 +149,50 @@ def cmd_validate(args):
                 print(warning)
             total_warnings += len(result.warnings)
 
+        if result.infos and not args.quiet:
+            for info in result.infos:
+                print(info)
+        total_infos += len(result.infos)
+        element_totals.update(result.element_ids)
+        if result.element_ids_unchecked_why:
+            why = result.element_ids_unchecked_why
+            element_unchecked[why] = element_unchecked.get(why, 0) + result.element_ids["named"]
+
         if result.is_valid and not result.warnings and args.verbose:
             print("  OK")
 
         if result.is_valid and Path(file_path).name.endswith(".test.json"):
             valid_test_files.append(Path(file_path))
+
+    # The element ids the steps name (design U8 (5)): the count and its
+    # denominator on one line — named is the sum of the five — and, while a
+    # release is announced, the one line that says when "on no layout"
+    # becomes a WARNING. A run that checked none says why instead of a clean
+    # line; a `test.appOwnedIds` entry no step of the run named is named.
+    if element_totals["named"] and not args.quiet:
+        from .validation.element_ids import gate_notice, level_unknown, unnamed_app_owned
+        print(f"\n[INFO] element ids: {element_totals['named']} named in the steps — "
+              f"{element_totals['on_layout']} on a layout, {element_totals['app_owned']} "
+              f"declared in test.appOwnedIds, {element_totals['missing']} on no layout, "
+              f"{element_totals['cannot_check']} cannot check, "
+              f"{element_totals['not_checked']} not checked")
+        unnamed = unnamed_app_owned()
+        if unnamed:
+            print(f"[INFO] test.appOwnedIds: {len(unnamed)} entr{'y' if len(unnamed) == 1 else 'ies'} "
+                  f"no step in this run names ({', '.join(unnamed)}) — remove it if the "
+                  f"app no longer draws it")
+        for why, n in sorted(element_unchecked.items()):
+            print(f"[INFO] element ids: {n} in files whose layouts were not read — {why}")
+        if element_totals["missing"]:
+            # The version the check itself read (validation/validator.py).
+            import jsonui_test_cli
+            notice = gate_notice(jsonui_test_cli.__version__)
+            unknown = level_unknown(jsonui_test_cli.__version__)
+            if notice:
+                print(f"[INFO] {notice}")
+            elif unknown:
+                print(f"[INFO] the level of {element_totals['missing']} element id(s) on no "
+                      f"layout cannot be decided — {unknown}; they are listed as INFO")
 
     # Mock contract drift, on the same gate. `--check` existed but nothing
     # called it, so a mock encoding a contract the server does not have kept
@@ -386,6 +434,10 @@ def cmd_validate(args):
     # the next finding hides behind.
     if skipped_kinds():
         summary += f", Path checks skipped: {', '.join(skipped_kinds())}"
+    # Named apart from `Warnings:`, which it never moves; only when there is
+    # one (a standing `Info: 0` would be a line nobody reads).
+    if total_infos:
+        summary += f", Info: {total_infos} (not counted)"
     # Only once it gates: before that the section reports and moves nothing,
     # and a field on every run would be a standing line.
     if coverage_gates:

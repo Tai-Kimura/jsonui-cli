@@ -92,3 +92,20 @@ def declared_app_owned_screens(config: dict | None) -> list:
         return []
     declared = test_config.get("appOwnedScreens")
     return declared if isinstance(declared, list) else []
+
+
+def declared_app_owned_ids(config: dict | None) -> list:
+    """The ``test.appOwnedIds`` list, or ``[]``: element ids the app draws
+    outside every JsonUI layout (a native navigation bar's menu item, an app
+    toast), which a test may name. An entry ending in ``*`` is a prefix.
+    Non-string entries are dropped here; the reader reports none of them as
+    ids."""
+    if not isinstance(config, dict):
+        return []
+    test_config = config.get("test")
+    if not isinstance(test_config, dict):
+        return []
+    declared = test_config.get("appOwnedIds")
+    if not isinstance(declared, list):
+        return []
+    return [d for d in declared if isinstance(d, str) and d.strip() and d.strip() != "*"]

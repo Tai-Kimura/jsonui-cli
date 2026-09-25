@@ -74,10 +74,11 @@ class TestValidator:
         """Validate test data directly (for testing)."""
         result = ValidationResult(file_path=Path(name))
         result.test_data = data
-        self._validate_test(data, name, result)
+        self._validate_test(data, name, result, element_ids=False)
         return result
 
-    def _validate_test(self, data: dict, path: str, result: ValidationResult):
+    def _validate_test(self, data: dict, path: str, result: ValidationResult,
+                       element_ids: bool = True):
         """Validate test structure."""
         test_type = data.get("type")
 
@@ -90,3 +91,11 @@ class TestValidator:
                 path=path,
                 message=f"Unknown or missing test type: {test_type}"
             ))
+            return
+        # The element ids its steps name, against the layout of the screen
+        # each runs on (design U8 (5)); needs the file's project, so not for
+        # `validate_data` (which keeps no path of its own).
+        if element_ids and self._test_file_path is not None:
+            import jsonui_test_cli
+            from .element_ids import check_element_ids
+            check_element_ids(data, path, result, jsonui_test_cli.__version__)

@@ -118,6 +118,38 @@ Installed 1 test file(s) → 1 target(s) (cleaned 0 stale):
 Declare `test.testDir` when your tests do not live under `tests/`; without it the
 run cannot establish the full set and declines the clean.
 
+**Element ids the steps name.** Every id a step names — `id`, `ids`, `container`,
+`cropId`, and `visible` / `notVisible` under `when` and `while`, nested `steps`
+included — is looked up in the layouts of the project whose config the run read:
+every layout, each resolved on every platform with its includes expanded (a test
+moves between screens without saying which one each step is on, and the runner finds
+an id wherever it is), through the classifier the spec validator uses.
+
+| the id | reported as |
+|---|---|
+| on a layout, or declared in `test.appOwnedIds` | nothing |
+| on no layout and not declared | INFO below the release `LAYOUT_ID_GATE_FROM` names (the spec validator's), WARNING from it — never an error; while a release is announced, one line names it. The message names the layout ids a person may have meant |
+| web's spelling of an id inside an include with an id, before `INCLUDE_ID_PREFIX_GATE_FROM` | `cannot check: … inside includes …`, naming what web spells it as from that release (`'hint' -> 'sideHint'`); from that release it is checked like any other id |
+| UIKit's spelling of it (`<include id>_<id>`) | `cannot check` |
+| derived by the generated code from a layout id: a Collection's cells `<id>_item_<n>`, a Segment's or TabView's tabs `<id>_tab_<n>` | `cannot check` (the layout id must be on a layout) |
+| a part of a component the project defines (`<id>_…` under a node whose type is not a built-in one) | `cannot check` — its own converter names them |
+| web's CSS descendant form `A #B` | `cannot check` when each part is on a layout; otherwise the part is reported |
+| a character outside `[A-Za-z0-9_]` (the OS's own UI, an id built from data) | `cannot check` |
+| built from a case argument (`@{…}`) | `cannot check` |
+
+One line counts them — `element ids: N named in the steps — N on a layout, N declared
+in test.appOwnedIds, N on no layout, N cannot check, N not checked` — and INFO never
+moves `Warnings:` or the exit code (`Info: N (not counted)` on the summary line).
+
+Ids the app draws outside every layout — a native navigation bar's menu item, an app
+toast — are declared in `jui.config.json`; an entry ending in `*` is a prefix. A
+declaration is not looked up in the layouts, and one no step of the run names is
+listed, so a stale one can be removed:
+
+```json
+{ "test": { "appOwnedIds": ["sampleToast", "sample_menu_button", "sample_day_*"] } }
+```
+
 **Contracts coverage section.** After its summary, `validate` reports
 `jsonui-test contracts coverage` for the project whose config it read — one line
 per platform:
