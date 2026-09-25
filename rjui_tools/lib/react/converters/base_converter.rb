@@ -356,7 +356,7 @@ module RjuiTools
             if border_width_binding || border_color_binding || border_style_binding
               # Dynamic border - use inline styles
               if border_width_binding
-                prop = convert_binding(attributes['borderWidth']).gsub(/[{}]/, '')
+                prop = attribute_expression(attributes['borderWidth'])
                 @dynamic_styles['borderWidth'] = "`${#{prop}}px`"
               elsif attributes['borderWidth']
                 @dynamic_styles['borderWidth'] = "'#{attributes['borderWidth']}px'"
@@ -646,6 +646,41 @@ module RjuiTools
         # off; only the outer pair, so a template literal's `${…}` survives.
         def unwrap_jsx_braces(expr)
           expr.to_s.gsub(/\A\{|\}\z/, '')
+        end
+
+        # An attribute's value as ONE JavaScript expression, for `attr={…}`:
+        #
+        #   "@{img}"             => data.img                 (the value itself)
+        #   "https://x/@{id}.png" => `https://x/${data.id ?? ""}.png`
+        #   "{literal}"          => "{literal}"
+        #
+        # convert_binding writes a JSX CHILD (`https://x/{data.id}.png`), and
+        # the attribute sites took every brace out of it to make an
+        # expression, so text around a binding became code
+        # (`https://x/data.id.png`) and a literal brace was lost. The text
+        # around bindings is stringified as in a text sink (`?? ""`,
+        # text_binding_expression); a binding that is not an expression stays
+        # the author's text, as convert_text_binding keeps it.
+        def attribute_expression(value)
+          text = value.to_s
+          parts = text.split(/(@\{[^}]+\})/).reject(&:empty?)
+          binding = ->(part) { part[/\A@\{([^}]+)\}\z/, 1] }
+          valid = ->(inner) { inner && !JsonUIShared::AttributeValidatorCore.binding_content_problem(inner) }
+
+          if parts.length == 1 && valid.(binding.(parts.first))
+            return add_viewmodel_data_prefix(binding.(parts.first))
+          end
+          return JsonUIShared::StringLiterals.ts(text) unless parts.any? { |part| valid.(binding.(part)) }
+
+          body = parts.map do |part|
+            if valid.(binding.(part))
+              expr = text_binding_expression(binding.(part))
+              expr.nil? ? '' : "${#{expr}}"
+            else
+              escape_template_literal_segment(part)
+            end
+          end.join
+          "`#{body}`"
         end
 
         # Values CSS already understands. Everything else in a color

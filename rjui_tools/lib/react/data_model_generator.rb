@@ -11,6 +11,7 @@ require_relative 'style_loader'
 require_relative '../core/layout_variant'
 require_relative 'helpers/string_manager_helper'
 require_relative '../core/string_manager_core'
+require_relative '../core/string_literals'
 
 module RjuiTools
   module React
@@ -143,6 +144,8 @@ module RjuiTools
         # data-default lookup runs with no namespace context (the sjui
         # data face gained the same announcement in 1.6.3).
         announce_own_namespaces(json_file)
+        # The layout a warning about one of its data properties names.
+        @current_layout = json_file.to_s.sub(/\A#{Regexp.escape(@layouts_dir)}\/?/, '')
 
         json_content = File.read(json_file, encoding: 'UTF-8')
         json_data = JSON.parse(json_content)
@@ -509,7 +512,7 @@ module RjuiTools
               json_data['data'].each do |data_item|
                 if data_item.is_a?(Hash)
                   # Normalize type using TypeConverter (mode: react)
-                  normalized = Core::TypeConverter.normalize_data_property(data_item, 'react')
+                  normalized = Core::TypeConverter.normalize_data_property(data_item, 'react', source: @current_layout)
 
                   # Check if this property is bound to an event and has Event type
                   prop_name = normalized['name']
@@ -959,10 +962,9 @@ module RjuiTools
         return nil unless ts_type == 'string'
         return nil if default_value.nil?
 
-        v = default_value.to_s
-        return nil if v == "''" || v.empty?
-
-        inner = v.gsub(/^["']|["']$/, '')
+        # The text the spelling means (StringLiterals.default_text) — the
+        # text format_default_value writes when nothing resolves.
+        inner = JsonUIShared::StringLiterals.default_text(default_value)
         return nil if inner.empty? || inner.match?(/^@\{.*\}$/)
 
         resolved = convert_string_key(inner, warnings: false) ||
@@ -981,8 +983,18 @@ module RjuiTools
 
         case ts_type
         when 'string'
-          # Handle '' as empty string (common shorthand)
-          if value == "''"
+          if json_class == 'String' && value.is_a?(String)
+            # The text the layout's spelling means ('' / "…" / '…' / bare,
+            # StringLiterals.default_text), as a TS literal. Until 1.8.121
+            # a quoted spelling passed through as written (`'it''s'` was
+            # not TS) and a bare one was quoted unescaped. A value that is
+            # not a String (a dictionary given to a String property) stays
+            # on the path below, which writes code that does not parse: a
+            # quoted Hash#to_s would build and show it. A dictionary written
+            # per platform no longer arrives here — the TypeConverter gives
+            # it this platform's value, or the String default "".
+            JsonUIShared::StringLiterals.ts(JsonUIShared::StringLiterals.default_text(value))
+          elsif value == "''"
             '""'
           elsif value.is_a?(String) && (value.start_with?('"') || value.start_with?("'"))
             # Already quoted (e.g., from TypeConverter for Color/Image types)
