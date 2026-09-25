@@ -587,6 +587,13 @@ module SjuiTools
           # only binding-driven modifiers that don't make sense per-branch.
           apply_binding_modifiers
 
+          # ... and `.disabled` again after the identifier, as every other
+          # path writes it (apply_outer_disabled): inside the wrapper it is
+          # outside the accessibility element the identifier forms. Read off
+          # the node's own `enabled`; a size class that overrides `enabled`
+          # still gets its own `.disabled` inside the wrapper.
+          @outer_disabled = disabled_line(@component['enabled'])
+
           generated_code
         end
       end

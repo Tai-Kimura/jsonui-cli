@@ -330,10 +330,18 @@ module SjuiTools
         # Double application is harmless — `.disabled(true)` is idempotent and
         # the inner one still governs the subtree's own controls — and this is
         # NOT a duplicate to be tidied away.
+        #
+        # A responsive container emits its modifiers per size class INSIDE its
+        # `responsiveN` wrapper (ResponsiveHelper.generate_container_function),
+        # so its own bag holds no `:disabled` while the identifier is applied
+        # at the call site, outside the wrapper — and nothing followed the
+        # identifier: XCUITest read the node as enabled while it was disabled
+        # (a View with `responsive` and a bound `enabled`, measured on an iOS
+        # simulator by a UI test). `@outer_disabled` carries the
+        # line for that path.
         def apply_outer_disabled
-          return unless @modifier_bag.key?(:disabled)
-
-          add_modifier_line @modifier_bag[:disabled]
+          line = @modifier_bag[:disabled] || @outer_disabled
+          add_modifier_line line if line
         end
 
         # A Collection wraps every cell it renders with
@@ -820,12 +828,8 @@ module SjuiTools
         #   this method once it has run.
         def register_interaction_gates
           @interaction_gates_registered = true
-          enabled = @component['enabled']
-          if enabled == false
-            @modifier_bag.register(:disabled, ".disabled(true)")
-          elsif is_binding?(enabled)
-            @modifier_bag.register(:disabled, ".disabled(!(#{tap_gate_expr(enabled)}))")
-          end
+          disabled = disabled_line(@component['enabled'])
+          @modifier_bag.register(:disabled, disabled) if disabled
 
           gates = []
           gates << 'false' if @component['touchDisabledState']
@@ -841,6 +845,15 @@ module SjuiTools
 
           condition = gates.include?('false') ? 'false' : gates.join(' && ')
           @modifier_bag.register(:allows_hit_testing, ".allowsHitTesting(#{condition})")
+        end
+
+        # `.disabled` for an `enabled` value: the literal false, or the binding
+        # negated; nil when it does not disable.
+        def disabled_line(enabled)
+          return '.disabled(true)' if enabled == false
+          return nil unless is_binding?(enabled)
+
+          ".disabled(!(#{tap_gate_expr(enabled)}))"
         end
 
         def tap_gate_expr(binding)
