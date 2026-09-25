@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require_relative '../helpers/binding_expression'
+require_relative '../helpers/static_seed'
 require_relative '../helpers/bound_value'
 require_relative '../helpers/modifier_builder'
 require_relative '../helpers/resource_resolver'
@@ -63,6 +64,18 @@ module KjuiTools
             '""'
           end
           
+          # A static selection (a Kotlin string literal here — none is "") is the
+          # seed of the box's own state (Helpers::StaticSeed); a bound one is the
+          # view model's.
+          if selected.start_with?('"')
+            return Helpers::StaticSeed.wrap(selected, depth, required_imports) do |d, state|
+              generate_body(json_data, d, required_imports, parent_type, state, is_date_picker, state)
+            end
+          end
+          generate_body(json_data, depth, required_imports, parent_type, selected, is_date_picker, nil)
+        end
+
+        def self.generate_body(json_data, depth, required_imports, parent_type, selected, is_date_picker, seeded)
           # Use DateSelectBox for date type
           if is_date_picker
             required_imports&.add(:date_selectbox_component)
@@ -125,7 +138,7 @@ module KjuiTools
                 code += "\n" + indent("#{handler_call}", depth + 2)
                 code += "\n" + indent("},", depth + 1)
               else
-                code += "\n" + indent("onValueChange = { newValue -> #{handler_call} },", depth + 1)
+                code += "\n" + indent("onValueChange = { newValue -> #{seeded ? "#{seeded} = newValue; " : ''}#{handler_call} },", depth + 1)
               end
             else
               code += "\n" + indent("onValueChange = { // ERROR: #{json_data['onValueChange']} - camelCase events require binding format @{functionName} },", depth + 1)
@@ -135,7 +148,7 @@ module KjuiTools
             code += "\n" + indent("viewModel.updateData(mapOf(\"#{Helpers::BindingExpression.path_only(binding_variable)}\" to newValue))", depth + 2)
             code += "\n" + indent("},", depth + 1)
           else
-            code += "\n" + indent("onValueChange = { },", depth + 1)
+            code += "\n" + indent(seeded ? "onValueChange = { #{seeded} = it }," : "onValueChange = { },", depth + 1)
           end
           
           # For date picker, add date-specific parameters

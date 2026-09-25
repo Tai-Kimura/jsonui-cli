@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require_relative '../helpers/modifier_builder'
+require_relative '../helpers/static_seed'
 require_relative '../helpers/bound_value'
 require_relative '../helpers/font_spec_helper'
 require_relative '../helpers/resource_resolver'
@@ -34,6 +35,20 @@ module KjuiTools
             'false'
           end
 
+          # A static value (or none) is the seed of the checkbox's own state
+          # (Helpers::StaticSeed); a bound one is the view model's.
+          unless checked.start_with?('data.')
+            return Helpers::StaticSeed.wrap(checked, depth, required_imports) do |d, state|
+              generate_control(json_data, d, required_imports, parent_type, state, state)
+            end
+          end
+          generate_control(json_data, depth, required_imports, parent_type, checked, nil)
+        end
+
+        # The checkbox itself, reading `checked`; `seeded` names the state a
+        # static value seeded (nil when the value is bound), which every change
+        # writes.
+        def self.generate_control(json_data, depth, required_imports, parent_type, checked, seeded)
           has_label = json_data['label'] || json_data['text']
           # 'src' is the common spelling of the unchecked icon (33).
           has_custom_icon = json_data['src'] || json_data['icon'] ||
@@ -41,7 +56,7 @@ module KjuiTools
 
           # If custom icons are specified, use IconToggleButton instead of Checkbox
           if has_custom_icon
-            return generate_icon_checkbox(json_data, depth, required_imports, parent_type, checked)
+            return generate_icon_checkbox(json_data, depth, required_imports, parent_type, checked, seeded)
           end
 
           if has_label
@@ -85,7 +100,7 @@ module KjuiTools
                 if binding_variable
                   code += "\n" + indent("onCheckedChange = { newValue -> viewModel.updateData(mapOf(\"#{binding_variable}\" to newValue)); #{handler_call} }", depth + 2)
                 else
-                  code += "\n" + indent("onCheckedChange = { #{handler_call} }", depth + 2)
+                  code += "\n" + indent("onCheckedChange = { #{seeded ? "#{seeded} = it; " : ''}#{handler_call} }", depth + 2)
                 end
               else
                 code += "\n" + indent("onCheckedChange = { // ERROR: #{json_data['onValueChange']} - camelCase events require binding format @{functionName} }", depth + 2)
@@ -93,7 +108,7 @@ module KjuiTools
             elsif binding_variable
               code += "\n" + indent("onCheckedChange = { newValue -> viewModel.updateData(mapOf(\"#{binding_variable}\" to newValue)) }", depth + 2)
             else
-              code += "\n" + indent("onCheckedChange = { }", depth + 2)
+              code += "\n" + indent(seeded ? "onCheckedChange = { #{seeded} = it }" : "onCheckedChange = { }", depth + 2)
             end
 
             # iconSize on the labeled default checkbox sizes the box itself —
@@ -172,7 +187,7 @@ module KjuiTools
                 if binding_variable
                   code += "\n" + indent("onCheckedChange = { newValue -> viewModel.updateData(mapOf(\"#{binding_variable}\" to newValue)); #{handler_call} },", depth + 1)
                 else
-                  code += "\n" + indent("onCheckedChange = { #{handler_call} },", depth + 1)
+                  code += "\n" + indent("onCheckedChange = { #{seeded ? "#{seeded} = it; " : ''}#{handler_call} },", depth + 1)
                 end
               else
                 code += "\n" + indent("onCheckedChange = { // ERROR: #{json_data['onValueChange']} - camelCase events require binding format @{functionName} },", depth + 1)
@@ -180,7 +195,7 @@ module KjuiTools
             elsif binding_variable
               code += "\n" + indent("onCheckedChange = { newValue -> viewModel.updateData(mapOf(\"#{binding_variable}\" to newValue)) },", depth + 1)
             else
-              code += "\n" + indent("onCheckedChange = { },", depth + 1)
+              code += "\n" + indent(seeded ? "onCheckedChange = { #{seeded} = it }," : "onCheckedChange = { },", depth + 1)
             end
 
             # Build modifiers
@@ -276,7 +291,7 @@ module KjuiTools
         private
 
         # Generate checkbox with custom icon/selectedIcon
-        def self.generate_icon_checkbox(json_data, depth, required_imports, parent_type, checked)
+        def self.generate_icon_checkbox(json_data, depth, required_imports, parent_type, checked, seeded = nil)
           required_imports&.add(:icon_toggle_button)
           required_imports&.add(:icon)
 
@@ -315,7 +330,7 @@ module KjuiTools
               if binding_variable
                 code += "\n" + indent("onCheckedChange = { newValue -> viewModel.updateData(mapOf(\"#{binding_variable}\" to newValue)); #{handler_call} },", depth + 1)
               else
-                code += "\n" + indent("onCheckedChange = { #{handler_call} },", depth + 1)
+                code += "\n" + indent("onCheckedChange = { #{seeded ? "#{seeded} = it; " : ''}#{handler_call} },", depth + 1)
               end
             else
               code += "\n" + indent("onCheckedChange = { /* ERROR: #{json_data['onValueChange']} - camelCase events require binding format @{functionName} */ },", depth + 1)
@@ -323,7 +338,7 @@ module KjuiTools
           elsif binding_variable
             code += "\n" + indent("onCheckedChange = { newValue -> viewModel.updateData(mapOf(\"#{binding_variable}\" to newValue)) },", depth + 1)
           else
-            code += "\n" + indent("onCheckedChange = { },", depth + 1)
+            code += "\n" + indent(seeded ? "onCheckedChange = { #{seeded} = it }," : "onCheckedChange = { },", depth + 1)
           end
 
           # Build modifiers — declared width/height must reach the control

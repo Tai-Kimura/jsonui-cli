@@ -301,6 +301,13 @@ RSpec.describe KjuiTools::Compose::Components::SelectBoxComponent do
           class Dp(val value: Float)
           val Int.dp: Dp get() = Dp(toFloat())
           class SemanticsScope { var testTagsAsResourceId: Boolean = false }
+          // The runtime's state holder, as androidx.compose.runtime declares it:
+          // a static selection seeds the box's own state (Helpers::StaticSeed).
+          interface MutableState<T> { var value: T }
+          fun <T> mutableStateOf(v: T): MutableState<T> = object : MutableState<T> { override var value = v }
+          inline fun <T> remember(calculation: () -> T): T = calculation()
+          operator fun <T> MutableState<T>.getValue(thisObj: Any?, property: kotlin.reflect.KProperty<*>): T = value
+          operator fun <T> MutableState<T>.setValue(thisObj: Any?, property: kotlin.reflect.KProperty<*>, v: T) { value = v }
           object Modifier {
               fun testTag(tag: String): Modifier = this
               fun semantics(block: SemanticsScope.() -> Unit): Modifier = this

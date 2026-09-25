@@ -314,6 +314,14 @@ module KjuiTools
             # NOT measured, so 1.3.x may or may not work.
             hilt_viewmodel: "import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel",
             composition_local_provider: "import androidx.compose.runtime.CompositionLocalProvider",
+            # A group of single Radios written with a static selection keeps it in
+            # the view's own map (RadioComponent / ComposeBuilder
+            # #provide_radio_groups): the provider, its CompositionLocal and the
+            # observable map.
+            radio_group_selections: ["import androidx.compose.runtime.CompositionLocalProvider",
+                                     "import androidx.compose.runtime.compositionLocalOf",
+                                     "import androidx.compose.runtime.mutableStateMapOf",
+                                     "import androidx.compose.runtime.remember"],
             # Responsive branches read LocalWindowInfo.containerSize (pixels)
             # and convert to dp via LocalDensity — replaces the deprecated
             # LocalConfiguration.screenWidthDp / .orientation reads.

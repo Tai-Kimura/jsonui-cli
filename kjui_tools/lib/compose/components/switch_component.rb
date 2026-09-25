@@ -3,6 +3,7 @@
 require_relative '../helpers/modifier_builder'
 require_relative '../helpers/resource_resolver'
 require_relative '../helpers/bound_value'
+require_relative '../helpers/static_seed'
 
 module KjuiTools
   module Compose
@@ -36,6 +37,18 @@ module KjuiTools
           # with a plain `label` drew the control and dropped the text.
           has_label = json_data['labelAttributes'] || label_text_of(json_data)
 
+          # A static value (or none) is the seed of the switch's own state
+          # (Helpers::StaticSeed); a bound one is the view model's.
+          unless checked.start_with?('data.')
+            return Helpers::StaticSeed.wrap(checked, depth, required_imports) do |d, state|
+              if has_label
+                generate_with_label(json_data, d, required_imports, parent_type, state, seeded: state)
+              else
+                generate_switch_only(json_data, d, required_imports, parent_type, state, seeded: state)
+              end
+            end
+          end
+
           if has_label
             generate_with_label(json_data, depth, required_imports, parent_type, checked)
           else
@@ -43,7 +56,7 @@ module KjuiTools
           end
         end
 
-        def self.generate_switch_only(json_data, depth, required_imports, parent_type, checked)
+        def self.generate_switch_only(json_data, depth, required_imports, parent_type, checked, seeded: nil)
           code = indent("Switch(", depth)
           code += "\n" + indent("checked = #{checked},", depth + 1)
 
@@ -69,7 +82,7 @@ module KjuiTools
                 code += "\n" + indent("onCheckedChange = { newValue -> viewModel.updateData(mapOf(\"#{binding_variable}\" to newValue)); #{handler_call} },", depth + 1)
               else
                 # Event handler only
-                code += "\n" + indent("onCheckedChange = { newValue -> #{handler_call} },", depth + 1)
+                code += "\n" + indent("onCheckedChange = { newValue -> #{seeded ? "#{seeded} = newValue; " : ''}#{handler_call} },", depth + 1)
               end
             else
               code += "\n" + indent("onCheckedChange = { // ERROR: #{handler} - camelCase events require binding format @{functionName} },", depth + 1)
@@ -78,7 +91,7 @@ module KjuiTools
             # Update the bound variable only
             code += "\n" + indent("onCheckedChange = { newValue -> viewModel.updateData(mapOf(\"#{binding_variable}\" to newValue)) },", depth + 1)
           else
-            code += "\n" + indent("onCheckedChange = { },", depth + 1)
+            code += "\n" + indent(seeded ? "onCheckedChange = { #{seeded} = it }," : "onCheckedChange = { },", depth + 1)
           end
 
           # Build modifiers
@@ -151,7 +164,7 @@ module KjuiTools
           code
         end
 
-        def self.generate_with_label(json_data, depth, required_imports, parent_type, checked)
+        def self.generate_with_label(json_data, depth, required_imports, parent_type, checked, seeded: nil)
           # Row container for label + switch
           code = indent("Row(", depth)
           code += "\n" + indent("verticalAlignment = Alignment.CenterVertically,", depth + 1)
@@ -209,7 +222,7 @@ module KjuiTools
                 code += "\n" + indent("onCheckedChange = { newValue -> viewModel.updateData(mapOf(\"#{binding_variable}\" to newValue)); #{handler_call} }", depth + 2)
               else
                 # Event handler only
-                code += "\n" + indent("onCheckedChange = { newValue -> #{handler_call} }", depth + 2)
+                code += "\n" + indent("onCheckedChange = { newValue -> #{seeded ? "#{seeded} = newValue; " : ''}#{handler_call} }", depth + 2)
               end
             else
               code += "\n" + indent("onCheckedChange = { // ERROR: #{handler} - camelCase events require binding format @{functionName} }", depth + 2)
@@ -217,7 +230,7 @@ module KjuiTools
           elsif binding_variable
             code += "\n" + indent("onCheckedChange = { newValue -> viewModel.updateData(mapOf(\"#{binding_variable}\" to newValue)) }", depth + 2)
           else
-            code += "\n" + indent("onCheckedChange = { }", depth + 2)
+            code += "\n" + indent(seeded ? "onCheckedChange = { #{seeded} = it }" : "onCheckedChange = { }", depth + 2)
           end
 
           # Switch colors — same canonical/legacy pair as the block above.

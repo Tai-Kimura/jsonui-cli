@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require_relative '../helpers/bound_value'
+require_relative '../helpers/static_seed'
 require_relative '../helpers/modifier_builder'
 require_relative '../helpers/resource_resolver'
 require_relative '../../core/normalization'
@@ -36,7 +37,20 @@ module KjuiTools
           # DEFAULT moves; a layout that declares its own bounds is untouched.
           min_value = Core::Normalization.attr_lookup(json_data, 'minimum', 'minimumValue', 'minValue') || json_data['min'] || 0
           max_value = Core::Normalization.attr_lookup(json_data, 'maximum', 'maximumValue', 'maxValue') || json_data['max'] || 1
-          
+
+          # A static value is the seed of the slider's own state
+          # (Helpers::StaticSeed); with no value the thumb starts at the
+          # minimum, as on the other faces. A bound value is the view model's.
+          unless value.start_with?('data.')
+            seed = json_data['value'].nil? ? Helpers::BoundValue.float(min_value, fallback: 0) : value
+            return Helpers::StaticSeed.wrap(seed, depth, required_imports) do |d, state|
+              generate_body(json_data, d, required_imports, parent_type, state, min_value, max_value, state)
+            end
+          end
+          generate_body(json_data, depth, required_imports, parent_type, value, min_value, max_value, nil)
+        end
+
+        def self.generate_body(json_data, depth, required_imports, parent_type, value, min_value, max_value, seeded)
           code = indent("Slider(", depth)
           code += "\n" + indent("value = #{value},", depth + 1)
           
@@ -62,7 +76,7 @@ module KjuiTools
               else
                 # Event handler only (implicit `it` parameter)
                 handler_call = Helpers::ModifierBuilder.get_event_handler_invocation(on_value_change, view_id, 'it')
-                code += "\n" + indent("onValueChange = { #{handler_call} },", depth + 1)
+                code += "\n" + indent("onValueChange = { #{seeded ? "#{seeded} = it; " : ''}#{handler_call} },", depth + 1)
               end
             else
               code += "\n" + indent("onValueChange = { // ERROR: #{on_value_change} - camelCase events require binding format @{functionName} },", depth + 1)
@@ -71,7 +85,7 @@ module KjuiTools
             # Update the bound variable only
             code += "\n" + indent("onValueChange = { newValue -> viewModel.updateData(mapOf(\"#{binding_variable}\" to newValue.toDouble())) },", depth + 1)
           else
-            code += "\n" + indent("onValueChange = { },", depth + 1)
+            code += "\n" + indent(seeded ? "onValueChange = { #{seeded} = it }," : "onValueChange = { },", depth + 1)
           end
           
           # Value range
