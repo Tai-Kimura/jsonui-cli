@@ -21,8 +21,17 @@ import pytest
 
 import jsonui_test_cli
 from jsonui_test_cli.validation import element_ids
+from jsonui_test_cli.validation.screen_ids import _prefer_sibling_jui_cli
 from jsonui_test_cli.validator import TestValidator as Validator
-from jsonui_doc_cli.spec_doc import validator as spec_validator
+
+# This tree's jui_cli and document_tools, as the check itself takes them. The
+# arms below patch `spec_validator` and `layout_facts`; run first or alone,
+# those imports reached an installed jsonui-cli, and the check then swapped in
+# this tree's modules — so the patches landed on modules it no longer read,
+# and 9 arms failed on nothing but the order they ran in.
+_prefer_sibling_jui_cli()
+element_ids.layout_id_gate_from()
+from jsonui_doc_cli.spec_doc import validator as spec_validator  # noqa: E402
 
 
 def _write(path: Path, data) -> Path:
