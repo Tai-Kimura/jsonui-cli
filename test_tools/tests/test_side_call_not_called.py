@@ -248,4 +248,112 @@ def test_with_no_config_to_read_the_rules_from_the_warning_stays(tmp_path):
     assert _warnings(tmp_path / SPEC) == [
         "API operation 'postLogout' is not declared in dataFlow.repositories[].methods or "
         "dataFlow.useCases[].methods — or, for a call the app's network layer makes, name its "
-        "operationId in an apiOutcomeRules sideCalls"]
+        "operationId in an apiOutcomeRules sideCalls (the app contracts spec could not be "
+        "read from here: no jui.config.json above this spec, so sideCalls was not checked)"]
+
+
+# ------------------------------------------------------------ extends stub --
+# A face keeps a doc-tree stub above its specs — `{extends, layouts_directory}`,
+# so `jsonui-doc generate html --app` resolves layouts from a spec — and the
+# validator read the stub as the app's config: no spec_directory, no rules, an
+# EMPTY set, and a warning advising to name in sideCalls an op already named
+# (1.8.120, found by a face adopting it). It now follows `extends` with the
+# resolver the html generator uses (`project_config._follow_extends`), checks
+# that the config it lands on owns the spec, and tells "read, not named" from
+# "could not read".
+
+READ_NOT_NAMED = (" — or, for a call the app's network layer makes, name its operationId in "
+                  "an apiOutcomeRules sideCalls")
+
+
+def _stub(root: Path, rel: str, config: dict) -> None:
+    path = root / rel
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(config), encoding="utf-8")
+
+
+@pytest.mark.parametrize("op, stub, expected", [
+    ("postLogout", False, []),
+    ("postLogout", True, []),                       # the defect: 1 warning before
+    ("getProfile", True, [                          # control: read, and not named
+        "API operation 'getProfile' is not declared in dataFlow.repositories[].methods or "
+        "dataFlow.useCases[].methods" + READ_NOT_NAMED]),
+])
+def test_a_doc_tree_stub_leads_to_the_app_s_rules(tmp_path, op, stub, expected):
+    _spec(tmp_path, then={f"api.{op}": "not-called"})
+    if stub:
+        _stub(tmp_path, "docs/jui.config.json",
+              {"extends": "../jui.config.json", "layouts_directory": "screens/layouts"})
+    assert _warnings(tmp_path / SPEC) == expected
+
+
+def test_two_hops_and_a_directory_spelling_are_followed(tmp_path):
+    _spec(tmp_path, then={"api.postLogout": "not-called"})
+    _stub(tmp_path, "docs/jui.config.json", {"extends": "../cfg", "layouts_directory": "x"})
+    _stub(tmp_path, "cfg/jui.config.json", {"extends": "../jui.config.json"})
+    assert _warnings(tmp_path / SPEC) == []
+
+
+def _unread(op: str, why: str) -> list[str]:
+    return [f"API operation '{op}' is not declared in dataFlow.repositories[].methods or "
+            f"dataFlow.useCases[].methods{READ_NOT_NAMED} (the app contracts spec could not "
+            f"be read from here: {why}, so sideCalls was not checked)"]
+
+
+def test_a_chain_that_reaches_no_spec_directory_is_unknown_not_empty(tmp_path):
+    _spec(tmp_path, then={"api.postLogout": "not-called"})
+    _stub(tmp_path, "docs/jui.config.json", {"extends": "../other", "layouts_directory": "x"})
+    _stub(tmp_path, "other/jui.config.json", {"layouts_directory": "y"})
+    stub, other = (tmp_path / "docs/jui.config.json"), (tmp_path / "other/jui.config.json").resolve()
+    assert _warnings(tmp_path / SPEC) == _unread(
+        "postLogout", f"no config on the extends chain from {stub} declares spec_directory "
+                      f"(it ended at {other})")
+
+
+def test_a_config_that_does_not_own_the_spec_is_not_read(tmp_path):
+    # The stub points at another app, whose spec_directory is elsewhere: its
+    # rules answer for that app, not for this spec.
+    _spec(tmp_path, then={"api.postLogout": "not-called"})
+    _stub(tmp_path, "docs/jui.config.json", {"extends": "../other", "layouts_directory": "x"})
+    _stub(tmp_path, "other/jui.config.json", {"spec_directory": "specs"})
+    (tmp_path / "other/specs").mkdir()
+    owner = (tmp_path / "other/jui.config.json").resolve()
+    assert _warnings(tmp_path / SPEC) == _unread(
+        "postLogout", f"{owner}'s spec_directory ({owner.parent / 'specs'}) does not hold this spec")
+
+
+def test_a_stub_that_extends_itself_ends_as_unknown(tmp_path):
+    _spec(tmp_path, then={"api.postLogout": "not-called"})
+    _stub(tmp_path, "docs/jui.config.json", {"extends": ".", "layouts_directory": "x"})
+    stub = tmp_path / "docs/jui.config.json"
+    assert _warnings(tmp_path / SPEC) == _unread(
+        "postLogout", f"no config on the extends chain from {stub} declares spec_directory "
+                      f"(it ended at {stub.resolve()})")
+
+
+def test_generation_from_a_stub_says_the_rules_were_not_read(tmp_path):
+    # jsonui-test does not follow `extends` (4f 2026-09-25: run from the app's
+    # config directory). Run from the stub with the spec and mocks given, the
+    # "no endpoint declaration" error must not read as advice to name an op
+    # the rules already name: it says the rules were not read, and why.
+    _spec(tmp_path, then={"api.postLogout": "not-called"})
+    _stub(tmp_path, "docs/jui.config.json",
+          {"extends": "../jui.config.json", "layouts_directory": "screens/layouts"})
+    with pytest.raises(bt.BranchTestGenerationError) as e:
+        bt.generate_branch_tests("checkout", tmp_path / "docs", spec_path=str(tmp_path / SPEC),
+                                 mocks_dir=str(tmp_path / "tests/mocks"), platform="web",
+                                 config_platforms=["web"])
+    assert (f"apiOutcomeRules could not be read from here (no spec_directory in "
+            f"{tmp_path / 'docs' / 'jui.config.json'}) — run from the app's config directory, "
+            "or declare the operation") in str(e.value)
+
+
+def test_generation_that_read_the_rules_does_not_say_it_could_not(tmp_path):
+    # The control: spec_directory declared, no app contracts spec — the rules
+    # were read and are empty, so the error has no "could not be read".
+    _spec(tmp_path, then={"api.postLogout": "not-called"})
+    (tmp_path / "docs/screens/json/app_contracts.spec.json").unlink()
+    with pytest.raises(bt.BranchTestGenerationError) as e:
+        bt.generate_branch_tests("checkout", tmp_path, platform="web", config_platforms=["web"])
+    assert "has no `endpoint` declaration" in str(e.value)
+    assert "could not be read" not in str(e.value)

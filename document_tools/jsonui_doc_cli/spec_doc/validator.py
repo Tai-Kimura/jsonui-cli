@@ -2587,29 +2587,63 @@ class SpecValidator:
                 level="warning",
             ))
 
-    def _side_call_operation_ids(self) -> set[str] | None:
-        """The operationIds the app's `apiOutcomeRules` name in `sideCalls`.
+    def _side_call_operation_ids(self) -> tuple[set[str] | None, str | None]:
+        """``(the operationIds the app's apiOutcomeRules name in sideCalls,
+        why they could not be read)`` — one of the two is None.
 
         Read the way `jsonui-test generate branch-tests` reads them
-        (`find_app_contract_spec`), from the `jui.config.json` nearest above
-        this spec. None when that cannot be told — no spec path, no config,
-        jsonui-test not importable — and the caller then keeps its warning:
-        a side call not recognised is a warning too many, never a silence.
+        (`find_app_contract_spec`), from the config that OWNS this spec: the
+        `jui.config.json` nearest above it, then its `extends` chain to the
+        first config that declares `spec_directory` — `_follow_extends`, the
+        resolver `jsonui-doc generate html --app` uses, so a doc-tree stub
+        (`{extends, layouts_directory}`) leads to the app's config instead of
+        reading as an app with no rules. And that config's spec_directory must
+        hold this spec: a config that does not own it answers for another app.
+
+        An empty set is an answer (the app's rules name no side calls); None is
+        not, and the caller's warning says so with the reason. It was an empty
+        set for a stub, which read as "name it in sideCalls" to a spec that
+        already had (1.8.120).
         """
         if hasattr(self, "_side_call_ids_cache"):
             return self._side_call_ids_cache
-        found = None
-        root = next((p for p in (self._spec_file_path.parents if self._spec_file_path else ())
-                     if (p / "jui.config.json").is_file()), None)
-        if root is not None:
-            try:
-                from jsonui_test_cli.branch_tests import find_app_contract_spec
-                rules = find_app_contract_spec(root)
-                found = {oid for rule in rules.rules for oid in rule.side_calls}
-            except Exception:           # jsonui-test absent or its reader failed
-                found = None
-        self._side_call_ids_cache = found
+        self._side_call_ids_cache = found = self._read_side_call_operation_ids()
         return found
+
+    def _read_side_call_operation_ids(self) -> tuple[set[str] | None, str | None]:
+        if not self._spec_file_path:
+            return None, "this spec was not read from a file"
+        spec = self._spec_file_path.resolve()
+        nearest = next((p / "jui.config.json" for p in spec.parents
+                        if (p / "jui.config.json").is_file()), None)
+        if nearest is None:
+            return None, "no jui.config.json above this spec"
+        from ..project_config import _follow_extends
+        owner, last = _follow_extends(nearest.resolve())
+        if owner is None:
+            return None, (f"no config on the extends chain from {nearest} declares "
+                          f"spec_directory (it ended at {last})")
+        if owner.name != "jui.config.json":
+            return None, (f"{owner} is not a jui.config.json, which is the file "
+                          "jsonui-test reads the rules through")
+        try:
+            declared = json.loads(owner.read_text(encoding="utf-8")).get("spec_directory")
+        except (OSError, ValueError, AttributeError):
+            return None, f"{owner} is not readable JSON"
+        spec_dir = (owner.parent / declared).resolve()
+        if spec != spec_dir and spec_dir not in spec.parents:
+            return None, f"{owner}'s spec_directory ({spec_dir}) does not hold this spec"
+        try:
+            from jsonui_test_cli.branch_tests import find_app_contract_spec
+            rules = find_app_contract_spec(owner.parent)
+        except Exception as exc:        # jsonui-test absent or its reader failed
+            return None, f"jsonui-test could not read them ({type(exc).__name__}: {exc})"
+        if len(rules.declaring) > 1:
+            return None, ("more than one app contracts spec declares apiOutcomeRules ("
+                          + ", ".join(p.name for p in rules.declaring) + ")")
+        if rules.problems:
+            return None, "; ".join(f"{p.name}: {m}" for p, m in rules.problems)
+        return {oid for rule in rules.rules for oid in rule.side_calls}, None
 
     def _check_branch_api_op(
         self, op: str, path: str, api_ops: set[str],
@@ -2643,10 +2677,10 @@ class SpecValidator:
                 ),
             ))
         elif api_ops and op not in api_ops:
-            side = (self._side_call_operation_ids() or set()) if use else set()
-            if op in side and use == "not-called":
+            side, unread = self._side_call_operation_ids() if use else (set(), None)
+            if side is not None and op in side and use == "not-called":
                 return
-            if op in side:
+            if side is not None and op in side:
                 message = (
                     f"API operation '{op}' is an apiOutcomeRules sideCalls "
                     "operation this screen does not declare — a row can only "
@@ -2664,6 +2698,11 @@ class SpecValidator:
                         " — or, for a call the app's network layer makes, name "
                         "its operationId in an apiOutcomeRules sideCalls"
                     )
+                    if side is None:
+                        message += (
+                            f" (the app contracts spec could not be read from here: "
+                            f"{unread}, so sideCalls was not checked)"
+                        )
             result.warnings.append(SpecValidationMessage(
                 path=path, message=message, level="warning",
             ))

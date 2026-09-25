@@ -867,7 +867,7 @@ def _mocks_dir_label(mocks_dir: Path | None) -> str:
 def resolve_routes(
     spec: dict, methods_contracts: dict, mocks: list[MockFile],
     mocks_dir: Path | None = None, errors: list | None = None,
-    side_calls: dict | None = None,
+    side_calls: dict | None = None, side_calls_unread: str | None = None,
 ) -> list[Route]:
     """Bind every referenced api.<op> (plus every declared endpoint with a
     mock, so incidental calls get their default scenario) to a Route.
@@ -875,7 +875,10 @@ def resolve_routes(
     ``side_calls`` (operationId -> its one generated mock, from the rules'
     `sideCalls`): a row may say such an operation was NOT called without the
     screen declaring it — its route is the side route `side_routes` adds.
-    Only "not-called": see `_side_call_ref_error`.
+    Only "not-called": see `_side_call_ref_error`. ``side_calls_unread``:
+    why the rules could not be read at all (no spec_directory to find the app
+    contracts spec in) — said in the "no endpoint declaration" error, which
+    otherwise reads as advice to name an op the rules may already name.
 
     Unbindable references raise — a branch whose scenario cannot be found
     must fail generation, not soften into a weaker test. Given an ``errors``
@@ -915,6 +918,9 @@ def resolve_routes(
                 "endpoint (e.g. \"endpoint\": \"POST /api/...\"), or, for a call the "
                 "app's network layer makes, name its operationId in an "
                 "apiOutcomeRules sideCalls and say \"not-called\""
+                + (f"; apiOutcomeRules could not be read from here ({side_calls_unread}) "
+                   "— run from the app's config directory, or declare the operation"
+                   if side_calls_unread else "")
             )
         endpoint = ops.canonical[canonical]
         identity = route_key(endpoint["method"], endpoint["path"])
@@ -1432,6 +1438,15 @@ def find_app_contract_spec(project_root: Path) -> AppRules:
     return found
 
 
+def _rules_unread(project_root: Path) -> str:
+    """Why `find_app_contract_spec` found no spec_directory to read rules in,
+    naming the config it read (the one `load_project_config` reads)."""
+    for name in ("jui.config.json", "jsonui-test.config.json"):
+        if (project_root / name).exists():
+            return f"no spec_directory in {project_root / name}"
+    return f"no jui.config.json in {project_root}"
+
+
 def _app_rules_for_generation(project_root: Path) -> AppRules:
     """`find_app_contract_spec`, with the cases that must stop generation raised.
 
@@ -1620,6 +1635,7 @@ def side_routes(rules, mocks: list[MockFile], routes: list[Route],
 def collect_bindings(
     spec: dict, methods_contracts: dict, mocks: list[MockFile],
     mocks_dir: Path | None, platform: str, rules=(), declarations=None,
+    rules_unread: str | None = None,
 ) -> Bindings:
     """Everything one platform's generated tests need, and everything that
     stops them — collected, not raised.
@@ -1635,7 +1651,8 @@ def collect_bindings(
         declarations = parse_declarations(spec)
     errors: list[BindingError] = []
     routes = resolve_routes(spec, methods_contracts, mocks, mocks_dir, errors=errors,
-                            side_calls=side_call_mocks(rules, mocks))
+                            side_calls=side_call_mocks(rules, mocks),
+                            side_calls_unread=rules_unread)
     extra = side_routes(rules, mocks, routes, errors)
     if extra:
         from .mock.generate import route_match_order
@@ -5337,7 +5354,8 @@ def generate_branch_tests(
     mocks = index_mock_files(mocks_path)
     bindings = collect_bindings(
         spec, bc["methods"], mocks, mocks_path, platform,
-        rules=app_rules.rules, declarations=declarations)
+        rules=app_rules.rules, declarations=declarations,
+        rules_unread=None if app_rules.spec_directory else _rules_unread(project_root))
     _raise_binding_errors(bindings.errors)
     routes, rows = bindings.routes, bindings.rows
     for row in rows:
