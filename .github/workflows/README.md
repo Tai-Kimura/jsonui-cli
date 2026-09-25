@@ -64,7 +64,16 @@ Pinning decisions:
 ```sh
 gh workflow run conformance-mobile.yml           # against main
 gh run watch                                     # follow it
+
+# Before a SwiftJsonUI tag: both iOS jobs against the release branch, with
+# the opt-in image probes (DecorativeImageProbe, ImageEventsProbe) raised.
+gh workflow run conformance-mobile.yml -f swiftjsonui_ref=<release-branch> -f image_probes=true
 ```
+
+`swiftjsonui_ref` (default `master`) is the SwiftJsonUI ref both iOS jobs
+check out; each job prints the ref and the commit it got. The schedule has
+no inputs and keeps `master`. ConformanceHost's TapIdentifierOnceUITests is
+not opt-in: it runs in both iOS jobs whatever the inputs.
 
 Or: Actions tab → `conformance-mobile` → "Run workflow".
 
