@@ -460,6 +460,24 @@ say "   exit=$rc"
 [ "$rc" = 0 ] || bad "branch runtime (Android): exit $rc — $(printf '%s' "$out" | grep -E '^(FAILED|ERROR)' | head -3 | tr '\n' ' ')"
 rm -f "$_x"
 
+# The emitted iOS branch runtime RUN under XCTest on two simulator runtimes:
+# the harness released from iOS 26 (a kept one answers notifications inside
+# later tests' windows), kept below 26 without the isolated-deinit crash, and
+# what keeping it leaves open named. The runtimes (one from 26, one below)
+# are in no CI image, so this runner owns the arm; required — a missing
+# runtime FAILS naming itself. The simulators are the arm's own, by name;
+# Xcode is DEVELOPER_DIR's, else the selected one (xcode-select is only read).
+say "== branch runtime, iOS EXECUTED (harness release by iOS version; two simulator runtimes)"
+_x="$(mktemp -t release-ios).xml"
+out=$( cd "$C/test_tools" && JSONUI_REQUIRE_IOS_SIMULATORS=1 python3 -m pytest -q -p no:cacheprovider \
+         tests/test_branch_harness_release_ios.py --junitxml="$_x" 2>&1 )
+rc=$?
+say "   $(xcodebuild -version 2>&1 | head -1) — $(xcrun --sdk iphonesimulator --show-sdk-version 2>&1 | sed 's/^/SDK /')"
+say "   $(python3 "$C/dev-guide/ci/executed-or-skipped.py" "$_x" 2>&1 | tail -1)"
+say "   exit=$rc"
+[ "$rc" = 0 ] || bad "branch runtime (iOS): exit $rc — $(printf '%s' "$out" | grep -E '^(FAILED|ERROR)' | head -3 | tr '\n' ' ')"
+rm -f "$_x"
+
 say "== misfiled tickets (a ticket under reports/ is invisible to the inbox scan)"
 if [ ! -d "$C/docs/bugs/reports" ]; then
   say "   SKIPPED: no docs/bugs/reports in this checkout (docs/ is gitignored,"
