@@ -857,7 +857,14 @@ module SjuiTools
                         "#{indent_str}    .frame(width: 0.5, height: 0.5)\n" \
                         "#{indent_str}    .accessibilityElement(children: .ignore)\n#{indent_str[0...-4]}}"
             end
-            anchor + ['.accessibilityElement(children: .combine)', '.accessibilityAddTraits(.isButton)']
+            # An id-less combined tap takes its children's identifiers as its
+            # own (measured, XCUITest 2026-09-25): one child's id was found
+            # twice — on the button and on the child — and two children's
+            # were joined ("a-b") on the button. An explicit empty identifier
+            # keeps the button's own; a container with an id gets that id on
+            # the button from the id path instead.
+            own_id = @component['id'] ? [] : ['.accessibilityIdentifier("")']
+            anchor + ['.accessibilityElement(children: .combine)', '.accessibilityAddTraits(.isButton)'] + own_id
           else []
           end
         end

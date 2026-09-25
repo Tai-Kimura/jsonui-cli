@@ -47,6 +47,39 @@ RSpec.describe 'sjui tap accessibility emission' do
     expect(anchor).to be < code.index('.accessibilityElement(children: .combine)')
   end
 
+  # An id-less combined tap took its children's identifiers as its own
+  # (XCUITest, iOS 26.5 and 18.6, 2026-09-25): one child's id was found twice
+  # — on the button and on the child — and two children's were joined
+  # ("a-b") on the button. With an explicit empty identifier after `.combine`
+  # every id is found exactly once and the button stays one element; a
+  # container with an id gets that id on the button instead, so no empty one.
+  {
+    'one child with an id' => [{ 'type' => 'Label', 'id' => 'l', 'text' => 'x' }],
+    'one child without an id' => [{ 'type' => 'Label', 'text' => 'x' }],
+    'two children' => [{ 'type' => 'Label', 'id' => 'l', 'text' => 'x' }, { 'type' => 'Label', 'id' => 'm', 'text' => 'y' }]
+  }.each do |name, children|
+    it "an id-less combined tap (#{name}) keeps its own empty identifier, and compiles" do
+      layout = { 'type' => 'View', 'onClick' => '@{onOpen}', 'child' => children }
+      JsonUIShared::TapAccessibility.annotate!(layout)
+      code = SjuiTools::SwiftUI::ConverterFactory.new.create_converter(layout).convert
+      combine = code.index('.accessibilityElement(children: .combine)')
+      empty = code.index('.accessibilityIdentifier("")')
+      expect(combine).not_to be_nil
+      expect(empty).not_to be_nil
+      expect(empty).to be > combine
+      expect(code.scan('.accessibilityIdentifier("")').size).to eq(1)
+      expect(compilable_view(code, data: ['var onOpen: (() -> Void)? = nil'])).to compile_as_swift
+    end
+
+    it "a combined tap with its own id (#{name}) carries that id, not an empty one" do
+      layout = { 'type' => 'View', 'id' => 't', 'onClick' => '@{onOpen}', 'child' => children }
+      JsonUIShared::TapAccessibility.annotate!(layout)
+      code = SjuiTools::SwiftUI::ConverterFactory.new.create_converter(layout).convert
+      expect(code).not_to include('.accessibilityIdentifier("")')
+      expect(code.index('.accessibilityIdentifier("t")')).to be > code.index('.accessibilityElement(children: .combine)')
+    end
+  end
+
   it 'a combined tap with two children carries no anchor' do
     layout = { 'type' => 'View', 'id' => 't', 'onClick' => '@{onOpen}',
                'child' => [{ 'type' => 'Label', 'id' => 'l', 'text' => 'x' },
