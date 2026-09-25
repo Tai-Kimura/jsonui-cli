@@ -52,6 +52,10 @@ module KjuiTools
             # Build modifiers for Row
             modifiers = []
             modifiers.concat(Helpers::ModifierBuilder.build_test_tag(json_data, required_imports))
+            # userInteractionEnabled / touchDisabledState stop this node and
+            # what is in it (ModifierBuilder.build_interaction_blocker); this
+            # component builds no clickable, which is where it came from.
+            modifiers.concat(Helpers::ModifierBuilder.build_interaction_blocker(json_data, required_imports))
             modifiers.concat(Helpers::ModifierBuilder.build_margins(json_data))
             modifiers.concat(Helpers::ModifierBuilder.build_offset(json_data, required_imports))
             modifiers.concat(Helpers::ModifierBuilder.build_alpha(json_data, required_imports))
@@ -182,6 +186,10 @@ module KjuiTools
             # Build modifiers
             modifiers = []
             modifiers.concat(Helpers::ModifierBuilder.build_test_tag(json_data, required_imports))
+            # userInteractionEnabled / touchDisabledState stop this node and
+            # what is in it (ModifierBuilder.build_interaction_blocker); this
+            # component builds no clickable, which is where it came from.
+            modifiers.concat(Helpers::ModifierBuilder.build_interaction_blocker(json_data, required_imports))
             modifiers.concat(Helpers::ModifierBuilder.build_margins(json_data))
             modifiers.concat(Helpers::ModifierBuilder.build_offset(json_data, required_imports))
             modifiers.concat(Helpers::ModifierBuilder.build_alpha(json_data, required_imports))
@@ -324,6 +332,10 @@ module KjuiTools
           # shifted the glyph and let the button's shape clip it.
           modifiers = []
           modifiers.concat(Helpers::ModifierBuilder.build_test_tag(json_data, required_imports))
+          # userInteractionEnabled / touchDisabledState stop this node and
+          # what is in it (ModifierBuilder.build_interaction_blocker); this
+          # component builds no clickable, which is where it came from.
+          modifiers.concat(Helpers::ModifierBuilder.build_interaction_blocker(json_data, required_imports))
           modifiers.concat(Helpers::ModifierBuilder.build_margins(json_data))
           modifiers.concat(Helpers::ModifierBuilder.build_size(json_data, parent_type, required_imports))
           modifiers.concat(Helpers::ModifierBuilder.build_offset(json_data, required_imports))
