@@ -59,6 +59,14 @@ module SjuiTools
               puts "Setting as root view controller"
             end
 
+            # What each file was before this run: the ViewController and the
+            # JSON are written either way (an existing one is overwritten),
+            # the ViewModel only when it is not there.
+            planned = { vc: "#{@view_path}/#{camel_name}/#{camel_name}ViewController.swift",
+                        json: "#{@layout_path}/#{snake_name}.json",
+                        vm: "#{@viewmodel_path}/#{camel_name}ViewModel.swift" }
+            existed = planned.transform_values { |path| File.exist?(path) }
+
             # 1. Viewフォルダの作成
             view_folder_path = create_view_folder(camel_name)
 
@@ -76,24 +84,25 @@ module SjuiTools
             add_to_xcode_project([view_controller_path, json_path, viewmodel_path])
 
             # 7. rootオプションが指定された場合、AppDelegateを修正
-            if is_root
-              update_app_delegate(camel_name)
-            end
+            root_updated = is_root && update_app_delegate(camel_name)
 
-            puts "Successfully generated:"
-            puts "  - View folder: #{view_folder_path}"
-            puts "  - ViewController: #{view_controller_path}"
-            puts "  - JSON layout: #{json_path}"
-            puts "  - ViewModel: #{viewmodel_path}"
-            if is_root
-              puts "  - Updated AppDelegate to use #{camel_name}ViewController as root"
+            # Each file as what happened to it. Until 1.8.121 this said
+            # "Successfully generated:" with every file — a kept ViewModel
+            # too — and the AppDelegate line whether or not it was updated
+            # (ticket kjui-g-view-reports-what-it-did-not-do).
+            puts "Generated view #{camel_name}:"
+            puts "  - ViewController: #{view_controller_path} (#{existed[:vc] ? 'overwritten' : 'created'})"
+            puts "  - JSON layout: #{json_path} (#{existed[:json] ? 'overwritten' : 'created'})"
+            puts "  - ViewModel: #{viewmodel_path} (#{existed[:vm] ? 'kept: it exists' : 'created'})"
+            if root_updated
+              puts "  - Updated SceneDelegate to use #{camel_name}ViewController as root"
             end
 
             # 6. 自動的にbuildコマンドを実行してbindingファイルを生成
             puts "\nRunning build command to generate binding files..."
             run_build_command
 
-            puts "\nView generation completed successfully!"
+            puts "\nView generation finished."
             puts "Next steps:"
             puts "  - Edit #{json_path} to customize your layout"
             if is_root
@@ -130,28 +139,32 @@ module SjuiTools
 
         def create_view_folder(camel_name)
           folder_path = "#{@view_path}/#{camel_name}"
-          FileUtils.mkdir_p(folder_path)
-          puts "Created folder: #{folder_path}"
+          unless Dir.exist?(folder_path)
+            FileUtils.mkdir_p(folder_path)
+            puts "Created folder: #{folder_path}"
+          end
           folder_path
         end
 
         def create_view_controller(folder_path, camel_name)
           file_path = "#{folder_path}/#{camel_name}ViewController.swift"
-          
+          existed = File.exist?(file_path)
+
           content = generate_view_controller_content(camel_name)
           
           File.write(file_path, content)
-          puts "Created ViewController: #{file_path}"
+          puts "#{existed ? 'Overwrote' : 'Created'} ViewController: #{file_path}"
           file_path
         end
 
         def create_json_file(snake_name, camel_name)
           file_path = "#{@layout_path}/#{snake_name}.json"
+          existed = File.exist?(file_path)
 
           content = generate_json_content
 
           File.write(file_path, content)
-          puts "Created JSON layout: #{file_path}"
+          puts "#{existed ? 'Overwrote' : 'Created'} JSON layout: #{file_path}"
           file_path
         end
 
@@ -212,7 +225,10 @@ module SjuiTools
         def create_viewmodel_file(camel_name, snake_name)
           file_path = "#{@viewmodel_path}/#{camel_name}ViewModel.swift"
 
-          return file_path if File.exist?(file_path)
+          if File.exist?(file_path)
+            puts "Kept existing ViewModel: #{file_path}"
+            return file_path
+          end
 
           content = generate_viewmodel_content(camel_name, snake_name)
 
@@ -274,13 +290,14 @@ module SjuiTools
             json_path = nil
             viewmodel_path = nil
 
+            results = []
             file_paths.each do |file_path|
               file_name = File.basename(file_path)
               if file_name.include?("ViewController.swift")
                 view_controller_path = file_path
                 folder_name = File.basename(File.dirname(file_path))
                 # View/フォルダ名 のグループ構造で追加
-                @xcode_manager.add_file(file_path, "View/#{folder_name}")
+                results << @xcode_manager.add_file(file_path, "View/#{folder_name}")
               elsif file_name.include?("ViewModel.swift")
                 viewmodel_path = file_path
               elsif file_name.end_with?(".json")
@@ -290,16 +307,19 @@ module SjuiTools
 
             # JSONファイルをLayoutsグループに追加
             if json_path
-              @xcode_manager.add_file(json_path, "Layouts")
+              results << @xcode_manager.add_file(json_path, "Layouts")
             end
 
             # ViewModelファイルをViewModelグループに追加
             if viewmodel_path
               viewmodel_dir = @config['viewmodel_directory'] || 'ViewModel'
-              @xcode_manager.add_file(viewmodel_path, viewmodel_dir)
+              results << @xcode_manager.add_file(viewmodel_path, viewmodel_dir)
             end
 
-            puts "Added files to Xcode project"
+            # What add_file did, counted: until 1.8.121 "Added files to Xcode
+            # project" followed "File already in project" for every file.
+            added = results.count(:added)
+            puts(added.zero? ? 'Xcode project: no file added' : "Added #{added} file(s) to Xcode project")
           rescue => e
             puts "Error adding files to Xcode project: #{e.message}"
             # ファイルを削除してロールバック
@@ -347,7 +367,10 @@ module SjuiTools
             loader = JsonLoader.new(nil, @project_file_path)
             loader.start_analyze
             
-            puts "Successfully generated binding files"
+            # The loader says per file what it wrote, and names a file it
+            # could not (ERROR …) — until 1.8.121 this line claimed success
+            # after such an error.
+            puts "Binding generation ran: its lines above say what it wrote"
           rescue => e
             puts "Warning: Could not generate binding files: #{e.message}"
             puts "You can run 'sjui build' manually to generate binding files"
@@ -376,7 +399,7 @@ module SjuiTools
           
           if scene_delegate_path.nil?
             puts "Warning: Could not find SceneDelegate.swift file"
-            return
+            return false
           end
 
           puts "Updating SceneDelegate: #{scene_delegate_path}"
@@ -385,14 +408,14 @@ module SjuiTools
           unless File.file?(scene_delegate_path)
             puts "Warning: SceneDelegate path is not a file: #{scene_delegate_path}"
             puts "  File type: #{File.ftype(scene_delegate_path)}" if File.exist?(scene_delegate_path)
-            return
+            return false
           end
           
           begin
             content = File.read(scene_delegate_path)
           rescue => e
             puts "Error reading SceneDelegate file: #{e.message}"
-            return
+            return false
           end
           
           # 安全にSceneDelegateを更新
@@ -401,6 +424,7 @@ module SjuiTools
           # ファイルに書き戻す
           File.write(scene_delegate_path, updated_content)
           puts "SceneDelegate updated successfully"
+          true
         end
 
         def find_scene_delegate_file(project_dir)

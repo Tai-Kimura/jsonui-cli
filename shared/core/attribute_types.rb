@@ -234,6 +234,57 @@ module JsonUIShared
       t.nullable == true && !t.forced
     end
 
+    LANGUAGES = { 'sjui' => :swift, 'kjui' => :kotlin, 'rjui' => :ts }.freeze
+
+    # What a prop the converter does not write becomes, in each language —
+    # the layout left it out, gave it null, or gave a value it cannot write.
+    #   Swift       the default the component's init declares: nil for an
+    #               optional type, the vocabulary's value (swift_default)
+    #               for any other since 1.8.121; a `T!!` model has none, and
+    #               the call does not compile without it
+    #   Kotlin      the composable's default (kotlin_default)
+    #   TypeScript  nothing: every prop is optional, and it is undefined
+    # Until 1.8.121 every tool said "the prop keeps its default", and in Swift
+    # no non-optional parameter had one (swiftc: "missing argument for
+    # parameter"). Ticket sjui-unwritten-non-optional-prop-does-not-compile.
+    def unwritten_outcome(type, language)
+      t = type.is_a?(Type) ? type : parse(type)
+      case language
+      when :swift
+        if takes_null?(t)
+          'the prop keeps its default (nil)'
+        elsif (default = swift_default(t))
+          "the prop keeps its default (#{default}), which the component declares — one scaffolded before " \
+            '1.8.121 declares none, and then the call does not compile'
+        else
+          "#{t.raw} has no default in Swift, so the call does not compile"
+        end
+      when :kotlin then "the prop keeps its default (#{kotlin_default(t)})"
+      else 'the prop is not passed (the component gets undefined)'
+      end
+    end
+
+    # The one sentence the three converters print for a value they do not
+    # write. `tool`: 'sjui' / 'kjui' / 'rjui'.
+    def unwritten_warning(tool, component, key, value, type)
+      "[#{tool}] #{component}.#{key}: the layout's #{value.inspect} is not a #{type} literal this converter can " \
+        "write — #{unwritten_outcome(type, LANGUAGES.fetch(tool))}. Give a #{type} value, or bind it (@{…})."
+    end
+
+    # A prop the layout leaves out, said only where that is not harmless:
+    # a Swift parameter with no default (`T!!`).
+    def absent_warning(tool, component, key, type)
+      "[#{tool}] #{component}.#{key}: the layout gives no value — " \
+        "#{unwritten_outcome(type, LANGUAGES.fetch(tool))}. Give a #{type} value, or bind it (@{…})."
+    end
+
+    # Whether a Swift parameter of `type` is given no default: not optional,
+    # and no value in the vocabulary — a `T!!` model.
+    def swift_required?(type)
+      t = type.is_a?(Type) ? type : parse(type)
+      !takes_null?(t) && swift_default(t).nil?
+    end
+
     def swift_literal(type, value, &hook)
       t = type.is_a?(Type) ? type : parse(type)
       return takes_null?(t) ? 'nil' : nil if value.nil?
@@ -348,6 +399,66 @@ module JsonUIShared
       when :list then "#{t.element.vocabulary? && t.element.kind == :scalar ? ts_type(t.element) : 'any'}[]"
       when :scalar then t.entry[:ts]
       else 'any'
+      end
+    end
+
+    # The expression rjui's converter writes for a literal the layout gives a
+    # prop of `type` — the same rules as swift_literal / kotlin_literal: the
+    # value has to be of the type's kind (a String for String and Color, a
+    # whole number for Int and Long, a number for the floating types,
+    # true / false for Bool, an object for a map, an array of them for a
+    # list), else nil — the converter then passes nothing and says so. A
+    # callback or a data source takes no literal. One difference, the one
+    # TypeScript's declarations make: a type outside the vocabulary is `any`
+    # there (ts_type), so its JSON value is written as it is — Swift and
+    # Kotlin cannot. A JSON null is never written: every prop is optional,
+    # and null is none of their types. Strings go through the one escaper
+    # (StringLiterals.ts). `hook` answers for a top-level scalar first (rjui:
+    # its strings.json keys and template literals); a list's items are
+    # written as JSON is, so a list reads as it always has.
+    #
+    # Until 1.8.121 rjui wrote literals through its own path and checked
+    # none: a `false` was dropped (`if value`), `"abc"` for an Int became
+    # `{abc}`, "yes" for a Bool `{true}`, a number for a String its text, a
+    # callback's string `{"x"}` (measured 2026-09-26). Ticket
+    # rjui-literal-props-are-not-checked-against-the-type.
+    def ts_literal(type, value, &hook)
+      t = type.is_a?(Type) ? type : parse(type)
+      return nil if value.nil?
+
+      case t.kind
+      when :list
+        return nil unless value.is_a?(Array)
+
+        items = value.map do |v|
+          t.element.any? || t.element.kind == :outside ? ts_any(v) : ts_literal(t.element, v)
+        end
+        items.include?(nil) ? nil : "[#{items.join(',')}]"
+      when :scalar
+        (hook && hook.call(t.canonical, value)) || ts_scalar(t.canonical, value)
+      when :outside
+        ts_any(value)
+      end
+    end
+
+    def ts_scalar(canonical, value)
+      case canonical
+      when 'string', 'color' then value.is_a?(String) ? StringLiterals.ts(value) : nil
+      when 'int', 'long' then (n = whole(value)) && n.to_s
+      when 'float', 'double', 'cgfloat' then value.is_a?(Numeric) ? value.to_s : nil
+      when 'bool' then [true, false].include?(value) ? value.to_s : nil
+      when 'map' then value.is_a?(Hash) ? ts_any(value) : nil
+      end
+    end
+
+    # A JSON value as TypeScript, compact as JSON.generate writes it.
+    def ts_any(value)
+      case value
+      when nil then 'null'
+      when String then StringLiterals.ts(value)
+      when true, false, Numeric then value.to_s
+      when Array then "[#{value.map { |v| ts_any(v) }.join(',')}]"
+      when Hash then "{#{value.map { |k, v| "#{StringLiterals.ts(k.to_s)}:#{ts_any(v)}" }.join(',')}}"
       end
     end
   end

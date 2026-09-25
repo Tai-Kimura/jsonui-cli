@@ -62,39 +62,39 @@ module KjuiTools
           FileUtils.mkdir_p(viewmodel_path)
           FileUtils.mkdir_p(data_path)
           
-          # Create JSON file
+          # Each file is written only when it is not there (an existing one
+          # is the app's), and said as it went: created or kept.
           json_file = File.join(json_path, "#{json_file_name}.json")
-          create_json_template(json_file, view_class_name)
-          
-          # Create Main View file (add View suffix to class name)
           main_kotlin_file = File.join(swift_path, "#{view_class_name}View.kt")
-          create_main_view_template(main_kotlin_file, view_class_name, json_file_name, subdirectory, package_name)
-          
-          # Create Generated View file
           generated_kotlin_file = File.join(swift_path, "#{view_class_name}GeneratedView.kt")
-          create_generated_view_template(generated_kotlin_file, view_class_name, json_file_name, subdirectory, package_name)
-          
-          # Create Data file
           data_file = File.join(data_path, "#{view_class_name}Data.kt")
-          create_data_template(data_file, view_class_name, package_name)
-          
-          # Create ViewModel file
           viewmodel_file = File.join(viewmodel_path, "#{view_class_name}ViewModel.kt")
+          files = [['JSON:          ', json_file], ['Main View:     ', main_kotlin_file],
+                   ['Generated View:', generated_kotlin_file], ['Data:          ', data_file],
+                   ['ViewModel:     ', viewmodel_file]]
+          existed = files.map { |_, path| File.exist?(path) }
+
+          create_json_template(json_file, view_class_name)
+          create_main_view_template(main_kotlin_file, view_class_name, json_file_name, subdirectory, package_name)
+          create_generated_view_template(generated_kotlin_file, view_class_name, json_file_name, subdirectory, package_name)
+          create_data_template(data_file, view_class_name, package_name)
           create_viewmodel_template(viewmodel_file, view_class_name, json_file_name, subdirectory, package_name)
-          
+
           # Update MainActivity if --root option is specified
-          if @options[:root]
-            update_main_activity(view_class_name, package_name)
+          activity_updated = update_main_activity(view_class_name, package_name) if @options[:root]
+
+          # Until 1.8.121 this said "Generated Compose view:" and listed the
+          # five files whatever it had done — after a run that wrote none of
+          # them, and after --force, which this generator does not read (ticket
+          # kjui-g-view-reports-what-it-did-not-do).
+          created = existed.count(false)
+          puts(created.zero? ? "Compose view #{view_class_name}: every file exists and was kept" :
+                               "Generated Compose view #{view_class_name}:")
+          files.zip(existed).each do |(label, path), was|
+            puts "  #{label} #{path} (#{was ? 'kept: it exists' : 'created'})"
           end
-          
-          puts "Generated Compose view:"
-          puts "  JSON:           #{json_file}"
-          puts "  Main View:      #{main_kotlin_file}"
-          puts "  Generated View: #{generated_kotlin_file}"
-          puts "  Data:           #{data_file}"
-          puts "  ViewModel:      #{viewmodel_file}"
-          
-          if @options[:root]
+
+          if activity_updated
             puts "  Updated MainActivity to use #{view_class_name}View as root"
           end
           
@@ -445,7 +445,7 @@ module KjuiTools
           activity_files = Dir.glob(File.join(source_dir, '**/MainActivity.kt'))
           if activity_files.empty?
             puts "Warning: Could not find MainActivity.kt file to update"
-            return
+            return false
           end
 
           activity_file = activity_files.first
@@ -523,6 +523,7 @@ module KjuiTools
             puts "Warning: Could not update MainActivity automatically"
             puts "Please manually update your MainActivity to use #{view_name}View()"
           end
+          updated
         end
       end
     end

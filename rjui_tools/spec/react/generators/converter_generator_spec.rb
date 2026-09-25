@@ -270,66 +270,55 @@ RSpec.describe RjuiTools::React::Generators::ConverterGenerator do
     end
   end
 
-  describe '#emit_literal_branch' do
-    def lines_for(type_str)
-      t = generator.send(:normalize_type, type_str)
-      generator.send(:emit_literal_branch, 'filename', t).join("\n")
+  # The literal path (the converter scaffold's format_literal, through the
+  # shared JsonUIShared::AttributeTypes.ts_literal since 1.8.121 — ticket
+  # rjui-literal-props-are-not-checked-against-the-type). These examples
+  # pinned the old emit_literal_branch's text; they now run the converter it
+  # writes and hold the same intents.
+  describe 'the literal path' do
+    EXTENSIONS_LITERAL = File.expand_path('../../../lib/react/converters/extensions', __dir__)
+
+    def converter_code(type_str)
+      described_class.new('LiteralCard', { attributes: { 'filename' => type_str }, is_container: false }, {}, 'spec')
+                     .send(:converter_template)
     end
 
-    it 'emits a template-literal escape path for String?, not .inspect' do
-      out = lines_for('String?')
-      expect(out).to include('escaped = filename_value.to_s.gsub')
-      expect(out).to include('filename={`')
-      expect(out).not_to include('.inspect')
+    def emit(type_str, value)
+      code = converter_code(type_str)
+                .gsub(/require_relative '([^']+)'/) { "require '#{File.expand_path(Regexp.last_match(1), EXTENSIONS_LITERAL)}'" }
+      eval(code, TOPLEVEL_BINDING, 'literal_card_converter.rb') # rubocop:disable Security/Eval
+      RjuiTools::React::Converters::Extensions::LiteralCardConverter
+        .new({ 'type' => 'LiteralCard', 'filename' => value }, {}).convert(0)
     end
 
-    it 'routes snake_case string literals through StringManager for localization' do
-      # Matches the standard Label `text` pass: `"title": "toc_title"` in
-      # layout → `title={StringManager.currentLanguage.xxx}` in generated
-      # JSX. Hand-written English like `"title": "On this page"` still
-      # falls through the template-literal path.
-      out = lines_for('String?')
-      # convert_string_key returns nil on strings.json miss — the scaffold
-      # captures the result with assignment-in-conditional and falls back
-      # to the template-literal path when nil.
-      expect(out).to include('(resolved = convert_string_key(filename_value))')
-      # Template-literal fallback present for literals and unregistered
-      # identifiers (e.g. "bash", "yaml").
-      expect(out).to include('filename={`')
+    it 'writes String? as a template literal escaped by the shared escaper, not .inspect' do
+      expect(emit('String?', 'a`b${c}\\d')).to include('filename={`a\\`b\\${c}\\\\d`}')
+      expect(converter_code('String?')).not_to include('.inspect')
     end
 
-    it 'emits a numeric embed for Int?' do
-      out = lines_for('Int?')
-      expect(out).to include('filename={#{filename_value}}')
-      expect(out).not_to include('.inspect')
+    it 'routes a string literal through StringManager when strings.json has it (the Label `text` contract)' do
+      code = converter_code('String?')
+      expect(code).to include('resolved = convert_string_key(text)')
+      expect(code).to include('resolved ? resolved[1..-2]')
     end
 
-    it 'emits a boolean embed for Bool' do
-      out = lines_for('Bool')
-      expect(out).to include("filename_value ? 'true' : 'false'")
-      expect(out).not_to include('.inspect')
+    it 'writes a number for Int?, and nothing for a value that is not one' do
+      expect(emit('Int?', 3)).to include('filename={3}')
+      expect(emit('Int?', 'abc')).not_to include('filename=')
     end
 
-    it 'emits JSON.generate for arrays instead of .inspect' do
-      out = lines_for('[Int]?')
-      expect(out).to include('JSON.generate(filename_value)')
-      expect(out).not_to include('.inspect')
+    it 'writes a boolean for Bool — false too' do
+      expect(emit('Bool', true)).to include('filename={true}')
+      expect(emit('Bool', false)).to include('filename={false}')
     end
 
-    it 'routes array JSON output through rewrite_json_string_values for in-element localization' do
-      # Array-of-objects props (TableOfContents.items, Breadcrumb.items) need
-      # element-level StringManager rewriting: `label: "toc_row_x"` in layout
-      # must become `label: StringManager.currentLanguage.xxx` in the emitted
-      # JSX, while non-resolving identifier fields stay literal.
-      out = lines_for('[String]?')
-      expect(out).to include('rewrite_json_string_values')
-      expect(out).to include('JSON.generate(filename_value)')
+    it 'writes arrays as JSON, not .inspect, and routes them through rewrite_json_string_values' do
+      expect(emit('[Int]?', [1, 2])).to include('filename={[1,2]}')
+      expect(converter_code('[String]?')).to include('rewrite_json_string_values(literal)')
     end
 
-    it 'emits JSON.generate for custom types instead of .inspect' do
-      out = lines_for('MyModel?')
-      expect(out).to include('JSON.generate(filename_value)')
-      expect(out).not_to include('.inspect')
+    it 'writes a type outside the vocabulary (`any` in TypeScript) as JSON' do
+      expect(emit('MyModel?', { 'a' => [1, 'x'] })).to include('filename={{"a":[1,"x"]}}')
     end
   end
 

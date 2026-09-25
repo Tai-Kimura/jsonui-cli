@@ -302,9 +302,8 @@ module KjuiTools
             lines << "                if formatted_value"
             lines << "                  params << \"#{actual_key} = \#{formatted_value}\""
             lines << "                else"
-            lines << "                  warn \"[kjui] #{@component_pascal_case}.#{actual_key}: the layout's \#{value.inspect} is not a #{type} \" \\"
-            lines << "                       \"literal this converter can write — the prop keeps its default. Give a #{type} value, \" \\"
-            lines << "                       \"or bind it (@{…}).\""
+            lines << "                  warn JsonUIShared::AttributeTypes.unwritten_warning('kjui', '#{@component_pascal_case}', " \
+                     "'#{actual_key}', value, '#{type}')"
             lines << "                end"
             lines << "              end"
             lines << "            end"
