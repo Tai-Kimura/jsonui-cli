@@ -71,7 +71,11 @@ module KotlinCompiler
     end
   end
 
-  def compile(source)
+  # Libraries a source may compile against beyond the stdlib, by name — for
+  # emitted code that calls them for real (the Dynamic wrappers read Gson).
+  LIBRARIES = { gson: %w[com.google.code.gson gson] }.freeze
+
+  def compile(source, libraries: [])
     stdlib   = newest('org.jetbrains.kotlin', 'kotlin-stdlib')
     reflect  = newest('org.jetbrains.kotlin', 'kotlin-reflect')
     annots   = newest('org.jetbrains', 'annotations')
@@ -82,7 +86,8 @@ module KotlinCompiler
     # are different sets; conflating them fails inside the compiler with
     # NoClassDefFoundError instead of a diagnostic about the source.
     compiler_cp = [compiler_jar, stdlib, reflect, coroutin, annots, trove].compact.join(':')
-    target_cp   = [stdlib, reflect, annots, coroutin].compact.join(':')
+    extra       = libraries.map { |lib| newest(*LIBRARIES.fetch(lib)) }
+    target_cp   = ([stdlib, reflect, annots, coroutin] + extra).compact.join(':')
 
     Dir.mktmpdir('kjui_kotlin') do |dir|
       file = File.join(dir, 'Emitted.kt')
@@ -99,7 +104,7 @@ module KotlinCompiler
   end
 end
 
-RSpec::Matchers.define :compile_as_kotlin do
+RSpec::Matchers.define :compile_as_kotlin do |*libraries|
   match do |source|
     # Skipped, not passed and not failed. Recorded BEFORE raising, as `skip`
     # itself does: a bare raise ends the example as PASSED, which is how an
@@ -110,8 +115,15 @@ RSpec::Matchers.define :compile_as_kotlin do
       RSpec::Core::Pending.mark_skipped!(example, message) if example
       raise RSpec::Core::Pending::SkipDeclaredInExample, message
     end
+    missing = libraries.reject { |lib| KotlinCompiler.newest(*KotlinCompiler::LIBRARIES.fetch(lib)) }
+    unless missing.empty?
+      message = "compile_as_kotlin: not in the Gradle cache: #{missing.join(', ')}"
+      example = RSpec.current_example
+      RSpec::Core::Pending.mark_skipped!(example, message) if example
+      raise RSpec::Core::Pending::SkipDeclaredInExample, message
+    end
 
-    @result = KotlinCompiler.compile(source)
+    @result = KotlinCompiler.compile(source, libraries: libraries)
     @result.success?
   end
 

@@ -119,15 +119,67 @@ module JsonUIShared
       end
     end
 
+    #: Children given to a component whose definition says it takes none.
+    #:
+    #: `g converter <Name> --no-container` scaffolds a component with no
+    #: content slot, and every generated reading of it drops a layout's
+    #: children without a word: sjui and rjui emit the call without them,
+    #: the Dynamic adapter never reads them, and kjui's call fails kotlinc on
+    #: the generated line rather than on the layout (measured on 1.8.120 /
+    #: e1a85ca2). Children that are not drawn are a missing part of the
+    #: screen, so the layout is refused by name, as several cellClasses
+    #: without sections are.
+    #:
+    #: Only a DECLARED leaf (`"_children": "none"`, which the generator
+    #: writes). A definition without `child` is not one: before 1.8.121 the
+    #: default mode wrote none either, and those components draw children.
+    #: They keep the attribute validator's "Unknown attribute 'child'".
+    def check_leaf_children(component, source_path:, extension_definitions:, path: nil)
+      component_type = component['type']
+      return [] unless component_type.is_a?(String) && extension_definitions.is_a?(Hash)
+
+      definition = extension_definitions[component_type]
+      return [] unless definition.is_a?(Hash) &&
+                       definition[AttributeValidatorCore::CHILDREN_DECLARATION] == AttributeValidatorCore::NO_CHILDREN
+
+      dropped = AttributeValidatorCore::CHILD_KEYS.flat_map do |key|
+        value = component[key]
+        items = value.is_a?(Array) ? value.each_with_index.to_a : (value.is_a?(Hash) ? [[value, nil]] : [])
+        # `map` + `compact`, not `filter_map`: consumers run this on the
+        # system Ruby 2.6, which has no filter_map.
+        items.map do |item, index|
+          next unless item.is_a?(Hash) && (item.key?('type') || item.key?('include'))
+
+          label = index ? "#{key}[#{index}]" : key
+          label += " (id=#{item['id']})" if item['id']
+          label
+        end.compact
+      end
+      return [] if dropped.empty?
+
+      node = component['id'] ? "id=#{component['id']}" : (path || 'root')
+      [{
+        level: :error,
+        message: "'#{component_type}' (#{node}) takes no children — it is declared a leaf " \
+                 "(`g converter #{component_type} --no-container`), so #{dropped.join(', ')} " \
+                 'would be dropped. Remove the children, or regenerate the component with --container.',
+        location: source_path
+      }]
+    end
+
     # Walks `layout_json` and returns an aggregated warnings Array for every
-    # Collection node found.
-    def validate_layout(layout_json, source_path:)
+    # Collection node found. `extension_definitions` is the project's
+    # (AttributeValidator.extension_definitions): without it, a declared leaf
+    # is not recognised and its children are not checked.
+    def validate_layout(layout_json, source_path:, extension_definitions: nil)
       warnings = []
-      walk(layout_json) do |node|
+      walk_with_path(layout_json, nil) do |node, path|
         next unless node.is_a?(Hash)
 
         warnings.concat(check_undeclared_bindings(node, source_path: source_path))
         warnings.concat(check_collection(node, source_path: source_path)) if node['type'] == 'Collection'
+        warnings.concat(check_leaf_children(node, source_path: source_path,
+                                                  extension_definitions: extension_definitions, path: path))
       end
       warnings
     end
@@ -158,6 +210,18 @@ module JsonUIShared
       case node
       when Hash then node.each_value { |v| walk(v, &block) }
       when Array then node.each { |v| walk(v, &block) }
+      end
+    end
+
+    # `walk`, with where each value sits ("child[1].child[0]"; nil for the
+    # root), so a node without an id can still be named.
+    def walk_with_path(node, path, &block)
+      yield node, path
+      case node
+      when Hash
+        node.each { |k, v| walk_with_path(v, path ? "#{path}.#{k}" : k.to_s, &block) }
+      when Array
+        node.each_with_index { |v, i| walk_with_path(v, "#{path}[#{i}]", &block) }
       end
     end
   end

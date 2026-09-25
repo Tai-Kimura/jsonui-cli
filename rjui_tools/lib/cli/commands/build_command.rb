@@ -161,7 +161,8 @@ module RjuiTools
 
               # Shared layout checks (autoChangeTrackingId without cellIdProperty, etc.)
               shared_warnings = JsonUIShared::LayoutValidator.validate_layout(
-                json_content, source_path: File.basename(json_file)
+                json_content, source_path: File.basename(json_file),
+                extension_definitions: Core::AttributeValidator.extension_definitions(:react)
               )
               JsonUIShared::LayoutValidator.print_warnings(shared_warnings) unless shared_warnings.empty?
 
@@ -241,7 +242,8 @@ module RjuiTools
                 validate_component(v_json, variant_file)
                 validate_bindings(v_json, variant_file)
                 v_shared_warnings = JsonUIShared::LayoutValidator.validate_layout(
-                  v_json, source_path: File.basename(variant_file)
+                  v_json, source_path: File.basename(variant_file),
+                  extension_definitions: Core::AttributeValidator.extension_definitions(:react)
                 )
                 JsonUIShared::LayoutValidator.print_warnings(v_shared_warnings) unless v_shared_warnings.empty?
 

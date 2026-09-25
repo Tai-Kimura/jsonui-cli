@@ -271,23 +271,28 @@ RSpec.describe SjuiTools::SwiftUI::Generators::ConverterGenerator do
   end
 
   describe '#generate_attribute_definition_file (private)' do
+    # Since 1.8.121 the file is written with no attributes too: it is where the
+    # build reads whether the component takes children (child / children for
+    # the default, "_children": "none" for --no-container). Until then a
+    # component with no attributes had no definition at all. Ticket
+    # sjui-leaf-custom-component-cannot-reject-children.
     context 'when attributes are empty' do
-      it 'does not create attribute definition file' do
+      it 'writes only whether the component takes children' do
         generator = described_class.new('MyComponent')
         generator.send(:generate_attribute_definition_file)
 
-        attr_defs_dir = File.join(temp_dir, 'tools', 'sjui_tools', 'lib', 'swiftui', 'views', 'extensions', 'attribute_definitions')
-        expect(Dir.exist?(attr_defs_dir)).to be false
+        file_path = File.join(temp_dir, 'tools', 'sjui_tools', 'lib', 'swiftui', 'views', 'extensions', 'attribute_definitions', 'MyComponent.json')
+        expect(JSON.parse(File.read(file_path))['MyComponent'].keys).to contain_exactly('child', 'children')
       end
     end
 
     context 'when attributes are nil' do
-      it 'does not create attribute definition file' do
-        generator = described_class.new('MyComponent', attributes: nil)
+      it 'writes only whether the component takes children' do
+        generator = described_class.new('MyComponent', attributes: nil, is_container: false)
         generator.send(:generate_attribute_definition_file)
 
-        attr_defs_dir = File.join(temp_dir, 'tools', 'sjui_tools', 'lib', 'swiftui', 'views', 'extensions', 'attribute_definitions')
-        expect(Dir.exist?(attr_defs_dir)).to be false
+        file_path = File.join(temp_dir, 'tools', 'sjui_tools', 'lib', 'swiftui', 'views', 'extensions', 'attribute_definitions', 'MyComponent.json')
+        expect(JSON.parse(File.read(file_path))['MyComponent']).to eq('_children' => 'none')
       end
     end
 
@@ -355,7 +360,8 @@ RSpec.describe SjuiTools::SwiftUI::Generators::ConverterGenerator do
         file_path = File.join(temp_dir, 'tools', 'sjui_tools', 'lib', 'swiftui', 'views', 'extensions', 'attribute_definitions', 'MyCard.json')
         content = JSON.parse(File.read(file_path))
 
-        expect(content['MyCard'].keys).to contain_exactly('title', 'count', 'price', 'isActive')
+        # child / children: the default mode takes children (since 1.8.121).
+        expect(content['MyCard'].keys).to contain_exactly('title', 'count', 'price', 'isActive', 'child', 'children')
         expect(content['MyCard']['title']['type']).to eq(['string', 'binding'])
         expect(content['MyCard']['count']['type']).to eq(['number', 'binding'])
         expect(content['MyCard']['price']['type']).to eq(['number', 'binding'])
@@ -402,7 +408,7 @@ RSpec.describe SjuiTools::SwiftUI::Generators::ConverterGenerator do
         file_path = File.join(temp_dir, 'tools', 'sjui_tools', 'lib', 'swiftui', 'views', 'extensions', 'attribute_definitions', 'MixedComponent.json')
         content = JSON.parse(File.read(file_path))
 
-        expect(content['MixedComponent'].keys).to contain_exactly('title', 'value', 'count')
+        expect(content['MixedComponent'].keys).to contain_exactly('title', 'value', 'count', 'child', 'children')
         expect(content['MixedComponent']['value']['type']).to eq(['string', 'binding'])
       end
 

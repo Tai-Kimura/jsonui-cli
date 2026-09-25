@@ -80,6 +80,39 @@ module JsonUIShared
     # view and a green run.
     CHILD_KEYS = %w[child children].freeze
 
+    # How an extension component's definition says it takes no children
+    # (`<tool> g converter <Name> --no-container`), inside the component's
+    # entry in attribute_definitions/<Name>.json:
+    #
+    #   "Name": { "title": { … }, "_children": "none" }
+    #
+    # The shared LayoutValidator refuses a layout that gives such a component
+    # children (check_leaf_children). It is a declaration because the absence
+    # of `child` / `children` already means something else: definitions
+    # written before 1.8.121 declare no child for the default mode either,
+    # and those components draw the children they are given.
+    #
+    # A string, not `false`: validators before 1.8.121 read every entry here
+    # as a Hash, and `false['required']` raised on every node of that type —
+    # measured on 1.8.120 — where a string is passed over the way the SSoT's
+    # own `_comment` entries are.
+    CHILDREN_DECLARATION = '_children'
+    NO_CHILDREN = 'none'
+
+    # The project's extension definitions alone, read the way a validator in
+    # `mode` reads them (the paths are the platform profile's). For the
+    # shared LayoutValidator, which knows the SSoT but not the project.
+    #
+    # Not cached: a build asks once per layout and these are a few small
+    # files, while a cache would answer "what did the tree say when this
+    # process started" — the question sjui's build cache used to answer
+    # instead of "what does this tree say".
+    def self.extension_definitions(mode = :all)
+      reader = allocate
+      reader.instance_variable_set(:@mode, mode)
+      reader.send(:load_extension_definitions)
+    end
+
     def initialize(mode = :all, styles_dir = nil)
       @mode = mode
       @definitions = load_definitions
@@ -130,6 +163,11 @@ module JsonUIShared
         # Skip child/children if all items are data-only definitions (no type)
         if (key == 'child' || key == 'children') && !valid_attrs.key?(key)
           next if value.is_a?(Array) && value.all? { |item| item.is_a?(Hash) && item.key?('data') && !item.key?('type') }
+          # A declared leaf's children are refused by name by the shared
+          # LayoutValidator; "Unknown attribute 'child'" would say the same
+          # defect a second time, in the sentence a container in the default
+          # mode also draws.
+          next if valid_attrs[CHILDREN_DECLARATION] == NO_CHILDREN
         end
 
         if valid_attrs.key?(key)
@@ -156,6 +194,9 @@ module JsonUIShared
 
       # Check for required attributes (only for current platform)
       valid_attrs.each do |attr_name, attr_def|
+        # Only attribute declarations: the SSoT's `_comment` strings and an
+        # extension's `_children` declaration are not attributes.
+        next unless attr_def.is_a?(Hash)
         next unless platform_compatible?(attr_def)
         if attr_def['required'] && !merged_component.key?(attr_name)
           # Skip width/height required check if weight is set and parent orientation allows it

@@ -163,7 +163,8 @@ module SjuiTools
             # file.
             merged = SjuiTools::SwiftUI::StyleLoader.load_and_merge(json_data)
             shared_warnings = JsonUIShared::LayoutValidator.validate_layout(
-              merged, source_path: File.basename(json_file)
+              merged, source_path: File.basename(json_file),
+              extension_definitions: Core::AttributeValidator.extension_definitions(:swiftui)
             )
             next if shared_warnings.empty?
 

@@ -63,6 +63,15 @@ module KjuiTools
           "#{base_package}.extensions"
         end
 
+        # The three modes, read the same way by the converter, this composable
+        # and the Dynamic wrapper (until 1.8.121 each read them differently,
+        # and two of the combinations did not compile — ticket
+        # kjui-converter-scaffolds-disagree-on-content):
+        #   --container      content required; the converter always passes it
+        #   default (nil)    content with a default `{}`; the converter passes
+        #                    it when the layout gives children
+        #   --no-container   no content; the build refuses a layout that gives
+        #                    this component children
         def kotlin_template
           if @options[:is_container] != false
             container_template
@@ -71,12 +80,20 @@ module KjuiTools
           end
         end
 
+        def mode_flag
+          case @options[:is_container]
+          when true then ' --container'
+          when false then ' --no-container'
+          else ''
+          end
+        end
+
         def container_template
           imports = generate_kotlin_imports
           params = generate_kotlin_parameters
           marker_header = Core::GeneratedMarker.scaffold_header(
             source: @component_name,
-            generator: "kjui g converter #{@component_name} --container#{format_attributes_for_command}"
+            generator: "kjui g converter #{@component_name}#{mode_flag}#{format_attributes_for_command}"
           )
 
           template = <<~KOTLIN
@@ -105,9 +122,12 @@ module KjuiTools
             template += params
           end
 
+          # The default mode's converter calls this without a lambda when the
+          # layout gives no children, so there `content` has a default.
+          content_default = @options[:is_container] == true ? '' : ' = {}'
           template += <<~KOTLIN
                 modifier: Modifier = Modifier,
-                content: @Composable BoxScope.() -> Unit
+                content: @Composable BoxScope.() -> Unit#{content_default}
             ) {
                 Box(
                     modifier = modifier
@@ -126,7 +146,7 @@ module KjuiTools
           params = generate_kotlin_parameters
           marker_header = Core::GeneratedMarker.scaffold_header(
             source: @component_name,
-            generator: "kjui g converter #{@component_name} --no-container#{format_attributes_for_command}"
+            generator: "kjui g converter #{@component_name}#{mode_flag}#{format_attributes_for_command}"
           )
 
           template = <<~KOTLIN

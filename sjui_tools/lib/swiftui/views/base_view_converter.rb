@@ -503,7 +503,24 @@ module SjuiTools
         # ("types whose SwiftUI representation is a plain layout container")
         # would become false for the shapes that do not match.
         def accessibility_container?
-          ACCESSIBILITY_CONTAINER_TYPES.include?((@component['type'] || '').downcase)
+          ACCESSIBILITY_CONTAINER_TYPES.include?((@component['type'] || '').downcase) || custom_container?
+        end
+
+        # A project's own component (a converter `sjui g converter` scaffolded
+        # into views/extensions) that the layout gives children. Its view draws
+        # them inside a content slot that is no more an accessibility element
+        # than a VStack is, so the bare identifier was pushed down onto them:
+        # measured (XCUITest, iOS 26.5, 2026-09-25, the codegen host) a custom
+        # container with one child had its id found on the child and the
+        # child's own id 0 times; with two, its id twice. The list above names
+        # this tool's types and cannot name a project's. SwiftJsonUI's
+        # DynamicModifierHelper.isCustomContainer answers the same for a
+        # registered adapter. Ticket
+        # sjui-custom-container-takes-its-childrens-identifiers.
+        def custom_container?
+          return false unless self.class.name.to_s.start_with?('SjuiTools::SwiftUI::Views::Extensions::')
+
+          JsonUIShared::TapAccessibility.children(@component).any? { |c| c['type'] || c['include'] }
         end
 
         # A container is at risk of the single-child accessibility merge

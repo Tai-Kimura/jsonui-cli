@@ -2,6 +2,7 @@
 
 require 'fileutils'
 require 'json'
+require_relative 'attribute_validator_core'
 
 module JsonUIShared
   # Shared body of the three `<tool> g converter` scaffolders: the
@@ -231,11 +232,23 @@ module JsonUIShared
     # Generate attribute definition file for validation. Rewritten on every
     # run (unlike the scaffold, which is user-owned once generated), so it
     # carries the _generated marker on every platform.
+    #
+    # It also says whether the component takes children — this file is the
+    # one place outside the user-owned scaffolds that a build reads:
+    #   --container, and the default   `child` / `children` (both scaffold a
+    #                                   content slot; the default's converter
+    #                                   draws the children it is given)
+    #   --no-container                  `"_children": "none"`, a leaf; the
+    #                                   shared LayoutValidator refuses a
+    #                                   layout that gives it children
+    # Until 1.8.121 only --container declared anything, so the default read
+    # as "no children" to the validator ("Unknown attribute 'child'") while
+    # its children were drawn, and a leaf read the same — one sentence for
+    # both outcomes. Written for every mode now, attributes or not: a leaf
+    # with no attributes still has to say it is one.
     def generate_attribute_definition_file
-      # Skip if no attributes and not a container
       has_attributes = @options[:attributes] && !@options[:attributes].empty?
-      is_container = @options[:is_container] == true
-      return if !has_attributes && !is_container
+      leaf = @options[:is_container] == false
 
       dir = attr_defs_dir
       FileUtils.mkdir_p(dir)
@@ -251,8 +264,9 @@ module JsonUIShared
         end
       end
 
-      # Add child/children for container components
-      if is_container
+      if leaf
+        attributes[AttributeValidatorCore::CHILDREN_DECLARATION] = AttributeValidatorCore::NO_CHILDREN
+      else
         attributes["child"] = { "type" => "array", "description" => "Child component(s)" }
         attributes["children"] = { "type" => "array", "description" => "Child components (alias for child)" }
       end

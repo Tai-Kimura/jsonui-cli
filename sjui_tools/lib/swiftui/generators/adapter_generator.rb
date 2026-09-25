@@ -162,7 +162,7 @@ module SjuiTools
           #if DEBUG
 
           struct #{@adapter_class_name}: CustomComponentAdapter {
-              var componentType: String { "#{@name}" }
+              var componentType: String { "#{@name}" }#{accepts_children_line}
 
               func buildView(
                   component: DynamicComponent,
@@ -178,9 +178,24 @@ module SjuiTools
           SWIFT
         end
         
+        # A leaf says so, and DynamicComponentBuilder (SwiftJsonUI 10.29.0)
+        # draws an error naming the component and its children instead of the
+        # component — the Debug counterpart of the build refusing the layout.
+        # Before 10.29.0 the property is simply unused.
+        def accepts_children_line
+          return '' unless leaf?
+
+          "\n\n    // A leaf (--no-container): a layout that gives it children is refused.\n" \
+            "    var acceptsChildren: Bool { false }"
+        end
+
+        def leaf?
+          @options[:no_container] || @options[:is_container] == false
+        end
+
         def build_view_implementation(attributes)
           # Check both :no_container flag and :is_container flag
-          if @options[:no_container] || @options[:is_container] == false
+          if leaf?
             # Non-container component
             build_non_container_implementation(attributes)
           else
