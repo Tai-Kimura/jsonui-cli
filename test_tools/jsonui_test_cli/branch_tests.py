@@ -3562,8 +3562,16 @@ abstract class BaseBranchHarness(
 
   private fun dataValue(): Any? = dataFlow()?.value
 
+  /** Each key goes to the view model's field and to the `_data` copy() —
+   * to each only when its type takes the value. A view model's state and a
+   * layout's data can share a name with different types (a List of choices
+   * and the card collection drawing them), and handing the List to the
+   * collection's parameter threw "argument type mismatch" from inside the
+   * seed. A key neither side took, when either side has a member of that
+   * name, fails naming the key and both types. */
   override fun setState(state: Map<String, Any?>) {
-    val dataKeys = mutableMapOf<String, Any?>()
+    val onVm = mutableSetOf<String>()
+    val vmRefused = mutableMapOf<String, String>()
     for ((k, v) in state) {
       val field = findField(vm, k)
       if (field != null && !Modifier.isStatic(field.modifiers)) {
@@ -3571,31 +3579,59 @@ abstract class BaseBranchHarness(
         if (current is MutableStateFlow<*>) {
           @Suppress("UNCHECKED_CAST")
           (current as MutableStateFlow<Any?>).value = coerce(v, current.value?.javaClass)
+          onVm.add(k)
         } else {
-          field.set(vm, coerce(v, field.type))
+          val coerced = coerce(v, field.type)
+          if (accepts(field.type, coerced, !field.type.isPrimitive)) {
+            field.set(vm, coerced)
+            onVm.add(k)
+          } else {
+            vmRefused[k] = field.type.simpleName
+          }
         }
       }
-      dataKeys[k] = v
     }
-    applyToData(dataKeys)
+    val (onData, dataRefused) = applyToData(state)
+    for ((k, v) in state) {
+      if (k in onVm || k in onData) continue
+      if (k !in vmRefused && k !in dataRefused) continue      // no member of that name: as before
+      error(
+        "branch-harness: state '" + k + "' could not be written — the view model's '" + k + "' is " +
+          (vmRefused[k] ?: "absent") + ", the data's is " + (dataRefused[k] ?: "absent") +
+          ", and the value is " + (v?.javaClass?.simpleName ?: "null")
+      )
+    }
   }
 
-  /** Copy the `_data` data class with every state key it declares. */
-  private fun applyToData(state: Map<String, Any?>) {
-    val flow = dataFlow() ?: return
-    val current = flow.value ?: return
-    val copyFn = current::class.memberFunctions.firstOrNull { it.name == "copy" } ?: return
+  /** Does a member of *type* take *value* (boxed for a primitive)? */
+  private fun accepts(type: Class<*>, value: Any?, nullable: Boolean): Boolean =
+    if (value == null) nullable else type.kotlin.javaObjectType.isInstance(value)
+
+  /** Copy the `_data` data class with every state key it declares whose
+   * parameter takes the value. Returns the keys it took, and the parameter
+   * type of each it refused. */
+  private fun applyToData(state: Map<String, Any?>): Pair<Set<String>, Map<String, String>> {
+    val taken = mutableSetOf<String>()
+    val refused = mutableMapOf<String, String>()
+    val flow = dataFlow() ?: return taken to refused
+    val current = flow.value ?: return taken to refused
+    val copyFn = current::class.memberFunctions.firstOrNull { it.name == "copy" } ?: return taken to refused
     copyFn.isAccessible = true
     val callArgs = mutableMapOf(copyFn.instanceParameter!! to current as Any?)
-    var any = false
     for (param in copyFn.parameters) {
       val name = param.name ?: continue
-      if (name in state) {
-        callArgs[param] = coerce(state[name], (param.type.classifier as? KClass<*>)?.java)
-        any = true
+      if (name !in state) continue
+      val klass = param.type.classifier as? KClass<*>
+      val coerced = coerce(state[name], klass?.java)
+      if (klass == null || accepts(klass.java, coerced, param.type.isMarkedNullable)) {
+        callArgs[param] = coerced
+        taken.add(name)
+      } else {
+        refused[name] = klass.simpleName ?: klass.toString()
       }
     }
-    if (any) flow.value = copyFn.callBy(callArgs)
+    if (taken.isNotEmpty()) flow.value = copyFn.callBy(callArgs)
+    return taken to refused
   }
 
   private fun coerce(value: Any?, type: Class<*>?): Any? {

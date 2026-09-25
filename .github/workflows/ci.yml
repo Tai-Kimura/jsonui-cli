@@ -352,13 +352,14 @@ jobs:
             --ignore=tests/test_branch_unmatched_origin.py \
             --ignore=tests/test_unit_stubs_ios_typecheck.py \
             --ignore=tests/test_branch_scenario_delay.py \
-            --ignore=tests/test_branch_scenario_delay_android.py
+            --ignore=tests/test_branch_scenario_delay_android.py \
+            --ignore=tests/test_branch_seed_state_android.py
       # ⚠️ test_unit_stubs_ios_typecheck.py is in no job here: it needs swiftc
       # 6.2+ for `-default-isolation`, and the compiler job's image answers
       # 6.1.2 (run 36051178116). run-suites.sh's test_tools leg owns it, as it
       # owns the executed branch runtime. test_branch_scenario_delay_android.py
-      # likewise: it runs the Kotlin runtime against MockWebServer, whose jars
-      # only a Gradle cache has. test_branch_scenario_delay.py (node + swiftc)
+      # and test_branch_seed_state_android.py likewise: they run the Kotlin
+      # runtime compiled whole, whose jars only a Gradle cache has. test_branch_scenario_delay.py (node + swiftc)
       # runs with the compilers below.
       - name: Run document_tools tests
         working-directory: document_tools

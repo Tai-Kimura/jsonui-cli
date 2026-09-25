@@ -422,20 +422,21 @@ else
   bad "unit-stub isolation typecheck: no xcrun — this leg needs a toolchain, and a release gate does not skip it"
 fi
 
-# A scenario's `delayMs` on Android: the emitted Kotlin runtime compiled whole
-# and RUN against MockWebServer. Its jars (okhttp, mockwebserver, coroutines-
+# The emitted Kotlin branch runtime compiled whole and RUN: a scenario's
+# `delayMs` against MockWebServer, and the harness seeding state by type. Its jars (okhttp, mockwebserver, coroutines-
 # test, serialization) are in a Gradle cache and in no CI image, so this runner
 # owns the arm; named as its own leg, with the versions it compiled against
 # and its executed / skipped count, and required — a missing jar FAILS.
-say "== branch runtime delayMs, Android EXECUTED (MockWebServer, pinned jars)"
+say "== branch runtime, Android EXECUTED (delayMs, seed state; pinned jars)"
 _x="$(mktemp -t delay-android).xml"
 out=$( cd "$C/test_tools" && JSONUI_REQUIRE_ANDROID_JARS=1 python3 -m pytest -q -p no:cacheprovider \
-         tests/test_branch_scenario_delay_android.py --junitxml="$_x" 2>&1 )
+         tests/test_branch_scenario_delay_android.py tests/test_branch_seed_state_android.py \
+         --junitxml="$_x" 2>&1 )
 rc=$?
-say "   $(cd "$C/test_tools" && python3 -c 'from tests.test_branch_scenario_delay_android import PINNED; print(" ".join(a.split("/")[1] + ":" + v for a, v in PINNED))' 2>&1 | tail -1)"
+say "   $(cd "$C/test_tools" && python3 -c 'from tests._android_runtime import PINNED; print(" ".join(a.split("/")[1] + ":" + v for a, v in PINNED))' 2>&1 | tail -1)"
 say "   $(python3 "$C/dev-guide/ci/executed-or-skipped.py" "$_x" 2>&1 | tail -1)"
 say "   exit=$rc"
-[ "$rc" = 0 ] || bad "branch runtime delayMs (Android): exit $rc — $(printf '%s' "$out" | grep -E '^(FAILED|ERROR)' | head -3 | tr '\n' ' ')"
+[ "$rc" = 0 ] || bad "branch runtime (Android): exit $rc — $(printf '%s' "$out" | grep -E '^(FAILED|ERROR)' | head -3 | tr '\n' ' ')"
 rm -f "$_x"
 
 say "== misfiled tickets (a ticket under reports/ is invisible to the inbox scan)"
