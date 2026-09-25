@@ -34,6 +34,7 @@ from __future__ import annotations
 
 import json
 import re
+from collections import Counter
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -99,6 +100,9 @@ class LayoutFacts:
     cell_layouts: set = field(default_factory=set)
     #: id -> the node's `type`, for the ids that carry one.
     types: dict = field(default_factory=dict)
+    #: id -> how many nodes carry it: more than one is a duplicate after the
+    #: includes expanded (`duplicate_ids`).
+    id_counts: Counter = field(default_factory=Counter)
     #: The spellings an id inside an include that HAS an id takes on some
     #: platform but not in `ids`: the included layout's own id (web does not
     #: flatten includes, so it keeps it) and `<include id>_<id>` (UIKit). The
@@ -171,6 +175,7 @@ def _walk(node, facts: LayoutFacts) -> None:
     if isinstance(node, dict):
         if isinstance(node.get("id"), str) and node["id"]:
             facts.ids.add(node["id"])
+            facts.id_counts[node["id"]] += 1
             if isinstance(node.get("type"), str):
                 facts.types[node["id"]] = node["type"]
         for key, value in node.items():
@@ -347,3 +352,24 @@ def cell_ids_for(facts: LayoutFacts, platform: str | None, *, layouts_dir: Path,
         cell_ids |= inner.ids
         queue += list(inner.cell_layouts)
     return cell_ids
+
+
+def duplicate_ids(name: str, platforms, *, layouts_dir: Path, styles_dir: Path) -> dict:
+    """{platform: {id: count}} — the ids of layout *name* that more than one
+    node carries once includes expand with their prefixes, on each of
+    *platforms* (design U8). The runtime and every driver find an element by
+    its id as written, so two nodes under one id are one element to a test:
+    `type_badge` and `typeBadge` under the include `hero` both become
+    `heroTypeBadge`; `hero` + `card_type_badge` and `hero_card` + `type_badge`
+    both `heroCardTypeBadge`; one partial included twice under the same id.
+    Per platform, because a node another platform filters out is not there.
+    Cells are their own layouts, checked on their own."""
+    out = {}
+    for platform in platforms:
+        facts = layout_facts({"metadata": {"layoutFile": name}}, platform,
+                             layouts_dir=layouts_dir, styles_dir=styles_dir)
+        dups = {i: n for i, n in facts.id_counts.items() if n > 1}
+        if dups:
+            out[platform] = dups
+    return out
+
