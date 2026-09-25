@@ -124,63 +124,90 @@ module SjuiTools
         # `:error` is recorded in the stage ledger here too: a layout the
         # generators cannot accept must be named on every run, not only on
         # the run that tried to convert it.
+        # The layouts refused while converting: each mark is a layout and
+        # where its conversion began in the stage ledger, so its stretch runs
+        # to the next mark (or the end).
+        def refused_in(marks)
+          entries = JsonUI::StageFailures.entries
+          marks.each_with_index.map do |(file, start), i|
+            stop = marks[i + 1] ? marks[i + 1][1] : entries.size
+            file if entries[start...stop].any? { |e| e[:stage] == 'layout' }
+          end.compact
+        end
+
         def validate_cached_layouts(files, layouts_dir, validator, binding_validator)
           return if files.nil? || files.empty?
 
           files.each do |json_file|
-            relative_path = Pathname.new(json_file).relative_path_from(Pathname.new(layouts_dir)).to_s
-            file_name = File.basename(json_file, '.json')
-
-            begin
-              json_data = JSON.parse(File.read(json_file))
-            rescue JSON::ParserError => e
-              Core::Logger.error("Invalid JSON in #{json_file}: #{e.message}")
-              next
+            # A cached screen's variant files are cached with it, and are
+            # checked with it, as the conversion loop checks them. Until
+            # 1.8.121 only the base was: a variant that a component change
+            # made invalid (a Box made a leaf, the layout files untouched)
+            # was neither refused nor named on a cached run — sjui printed
+            # "all cached" and exited 0 (measured 2026-09-26).
+            [json_file, *JsonUIShared::LayoutVariant.variants_for(json_file).values].each do |file|
+              validate_cached_layout(file, json_file, layouts_dir, validator, binding_validator)
             end
+          end
+        end
 
-            if validator
-              validator.normalized = Core::Normalization.canonicalized?(json_data)
-              warnings = validate_json(json_data, validator, file_name)
-              if warnings.any?
-                @validation_warnings.concat(warnings.map { |w| "[#{relative_path}] #{w}" })
-                @validation_errors += warnings.length
-                Core::Logger.warn "  #{warnings.length} attribute warning(s) in #{relative_path}"
-              end
+        # One cached layout file (a base or one of its variants): the three
+        # checks the conversion loop performs. A refusal is recorded against
+        # the base, which is what the next build converts.
+        def validate_cached_layout(json_file, base_file, layouts_dir, validator, binding_validator)
+          relative_path = Pathname.new(json_file).relative_path_from(Pathname.new(layouts_dir)).to_s
+          file_name = File.basename(json_file, '.json')
+
+          begin
+            json_data = JSON.parse(File.read(json_file))
+          rescue JSON::ParserError => e
+            Core::Logger.error("Invalid JSON in #{json_file}: #{e.message}")
+            return
+          end
+
+          if validator
+            validator.normalized = Core::Normalization.canonicalized?(json_data)
+            warnings = validate_json(json_data, validator, file_name)
+            if warnings.any?
+              @validation_warnings.concat(warnings.map { |w| "[#{relative_path}] #{w}" })
+              @validation_errors += warnings.length
+              Core::Logger.warn "  #{warnings.length} attribute warning(s) in #{relative_path}"
             end
+          end
 
-            if binding_validator
-              binding_warnings = binding_validator.validate(json_data, relative_path)
-              @binding_errors.concat(binding_validator.errors)
-              if binding_warnings.any?
-                @validation_warnings.concat(binding_warnings)
-                @validation_errors += binding_warnings.length
-                Core::Logger.warn "  #{binding_warnings.length} binding warning(s) in #{relative_path}"
-              end
+          if binding_validator
+            binding_warnings = binding_validator.validate(json_data, relative_path)
+            @binding_errors.concat(binding_validator.errors)
+            if binding_warnings.any?
+              @validation_warnings.concat(binding_warnings)
+              @validation_errors += binding_warnings.length
+              Core::Logger.warn "  #{binding_warnings.length} binding warning(s) in #{relative_path}"
             end
+          end
 
-            # Styles are merged first, exactly as the conversion path does:
-            # a rule reads the layout the generators would see, not the raw
-            # file.
-            merged = SjuiTools::SwiftUI::StyleLoader.load_and_merge(json_data)
-            shared_warnings = JsonUIShared::LayoutValidator.validate_layout(
-              merged, source_path: File.basename(json_file),
-              extension_definitions: Core::AttributeValidator.extension_definitions(:swiftui)
+          # Styles are merged first, exactly as the conversion path does:
+          # a rule reads the layout the generators would see, not the raw
+          # file.
+          merged = SjuiTools::SwiftUI::StyleLoader.load_and_merge(json_data)
+          shared_warnings = JsonUIShared::LayoutValidator.validate_layout(
+            merged, source_path: File.basename(json_file),
+            extension_definitions: Core::AttributeValidator.extension_definitions(:swiftui)
+          )
+          return if shared_warnings.empty?
+
+          JsonUIShared::LayoutValidator.print_warnings(shared_warnings)
+          return unless JsonUIShared::LayoutValidator.blocking?(shared_warnings)
+
+          reason = shared_warnings.select { |w| w[:level] == :error }
+                                  .map { |w| w[:message] }.join('; ')
+          (@refused_layouts ||= []) << base_file
+          begin
+            require_relative '../../core/stage_failures'
+            JsonUI::StageFailures.record(
+              'layout', "#{json_file} was not generated: #{reason}"
             )
-            next if shared_warnings.empty?
-
-            JsonUIShared::LayoutValidator.print_warnings(shared_warnings)
-            next unless JsonUIShared::LayoutValidator.blocking?(shared_warnings)
-
-            reason = shared_warnings.select { |w| w[:level] == :error }
-                                    .map { |w| w[:message] }.join('; ')
-            begin
-              require_relative '../../core/stage_failures'
-              JsonUI::StageFailures.record(
-                'layout', "#{json_file} was not generated: #{reason}"
-              )
-            rescue LoadError
-              nil
-            end
+          rescue LoadError
+            nil
           end
         end
 
@@ -342,6 +369,8 @@ module SjuiTools
           last_updated = cache_manager.load_last_updated
           last_including_files = cache_manager.load_last_including_files
           style_dependencies = cache_manager.load_style_dependencies
+          refused_before = cache_manager.load_refused_layouts
+          @refused_layouts = []
 
           # Process all JSON files in Layouts directory
           json_files = Dir.glob(File.join(layouts_dir, '**/*.json')).reject do |file|
@@ -391,7 +420,8 @@ module SjuiTools
               vrel = Pathname.new(vf).relative_path_from(Pathname.new(layouts_dir)).to_s
               cache_manager.needs_update?(vf, last_updated, layouts_dir, last_including_files, style_dependencies, vrel.sub(/\.json$/, ''))
             end
-            if variant_dirty || cache_manager.needs_update?(json_file, last_updated, layouts_dir, last_including_files, style_dependencies, cache_key)
+            if variant_dirty || refused_before.include?(cache_key) ||
+               cache_manager.needs_update?(json_file, last_updated, layouts_dir, last_including_files, style_dependencies, cache_key)
               files_to_update << json_file
             else
               # Keep existing includes and style dependencies for unchanged files
@@ -453,7 +483,13 @@ module SjuiTools
           )
           screen_index.report_lines.each { |line| Core::Logger.info line }
 
+          # Where each layout's conversion begins in the stage ledger: a
+          # layout is refused when a `layout` entry lands in its stretch
+          # (refusals are recorded deep in the converters, base and variants).
+          require_relative '../../core/stage_failures'
+          conversion_marks = []
           files_to_update.each do |json_file|
+            conversion_marks << [json_file, JsonUI::StageFailures.entries.size]
             # Get relative path from layouts directory
             relative_path = Pathname.new(json_file).relative_path_from(Pathname.new(layouts_dir)).to_s
             base_name = File.basename(relative_path, '.json')
@@ -670,8 +706,12 @@ module SjuiTools
 
           prune_layout_orphans(source_path, config, layouts_dir, view_dir)
 
-          # Save cache for next build
+          # Save cache for next build — and which layouts it did NOT build.
           cache_manager.save_cache(new_including_files, new_style_dependencies)
+          refused = (@refused_layouts || []) + refused_in(conversion_marks)
+          cache_manager.save_refused_layouts(refused.map do |f|
+            Pathname.new(f).relative_path_from(Pathname.new(layouts_dir)).to_s.sub(/\.json$/, '')
+          end)
 
           # Stages that failed while the build carried on. `record` only fills
           # an in-memory array — the ledger file `jui build` reads is written

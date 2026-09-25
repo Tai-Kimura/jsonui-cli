@@ -19,11 +19,12 @@ module SjuiTools
         @last_updated_file = File.join(@cache_dir, "swiftui_last_updated.txt")
         @including_file = File.join(@cache_dir, "swiftui_including.json")
         @style_dependencies_file = File.join(@cache_dir, "swiftui_style_deps.json")
+        @refused_file = File.join(@cache_dir, "swiftui_refused.json")
       end
 
       # Clean all cache files
       def clean_cache
-        [@last_updated_file, @including_file, @style_dependencies_file].each do |file|
+        [@last_updated_file, @including_file, @style_dependencies_file, @refused_file].each do |file|
           if File.exist?(file)
             File.delete(file)
             Core::Logger.debug "Deleted cache file: #{File.basename(file)}"
@@ -191,9 +192,30 @@ module SjuiTools
         end
       end
 
+      # The layouts the last build refused (their cache keys). The cache is
+      # one timestamp: a layout older than the last build is skipped, and a
+      # refused layout is older than the build that refused it — so without
+      # this list it was skipped from then on, and the remedy the refusal
+      # names (regenerate the component) was followed by a build that
+      # generated nothing for it, exit 0 (measured 2026-09-26). A refused
+      # layout is not built, so the next build converts it again.
+      def load_refused_layouts
+        return [] unless File.exist?(@refused_file)
+
+        keys = JSON.parse(File.read(@refused_file))
+        keys.is_a?(Array) ? keys : []
+      rescue JSON::ParserError
+        []
+      end
+
+      def save_refused_layouts(keys)
+        File.write(@refused_file, JSON.pretty_generate(keys.uniq.sort))
+      end
+
       # Clear cache (force full rebuild)
       def clear_cache
         FileUtils.rm_f(@last_updated_file)
+        FileUtils.rm_f(@refused_file)
         FileUtils.rm_f(@including_file)
         FileUtils.rm_f(@style_dependencies_file)
         Core::Logger.info "Cache cleared - next build will rebuild all files"
