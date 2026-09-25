@@ -40,6 +40,12 @@ class ValidationResult:
     element_ids: Counter = field(default_factory=Counter)
     #: Why none of this file's element ids could be checked ("" when they were).
     element_ids_unchecked_why: str = ""
+    #: The screen values the steps name (a flow step's `screen`, an
+    #: `assert: screen`'s `name`): checked against the project's layouts,
+    #: or not_checked when they could not be located.
+    screen_ids: Counter = field(default_factory=Counter)
+    #: Why this file's screen values could not be checked ("" when they were).
+    screen_ids_unchecked_why: str = ""
 
     @property
     def is_valid(self) -> bool:

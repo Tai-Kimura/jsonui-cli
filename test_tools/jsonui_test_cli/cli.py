@@ -117,12 +117,18 @@ def cmd_validate(args):
     # this run read, for the same reason (element_ids' docstring).
     from .validation.element_ids import set_run_project
     set_run_project(*_read_config_doc(getattr(args, "config", None)))
+    # And the layouts a step's screen values are checked against — the same
+    # config, for the same reason (screen_ids' docstring).
+    from .validation.screen_ids import set_run_config
+    set_run_config(*_read_config_doc(getattr(args, "config", None)))
     platform_warnings = 0
     # INFO: printed, never counted in `Warnings:` and never the exit.
     total_infos = 0
     from collections import Counter
     element_totals: Counter = Counter()
     element_unchecked: dict = {}
+    screen_totals: Counter = Counter()
+    screen_unchecked: dict = {}
 
     if not files_to_validate:
         print("No test or description files found")
@@ -153,6 +159,10 @@ def cmd_validate(args):
             for info in result.infos:
                 print(info)
         total_infos += len(result.infos)
+        screen_totals.update(result.screen_ids)
+        if result.screen_ids_unchecked_why:
+            why = result.screen_ids_unchecked_why
+            screen_unchecked[why] = screen_unchecked.get(why, 0) + result.screen_ids["not_checked"]
         element_totals.update(result.element_ids)
         if result.element_ids_unchecked_why:
             why = result.element_ids_unchecked_why
@@ -163,6 +173,16 @@ def cmd_validate(args):
 
         if result.is_valid and Path(file_path).name.endswith(".test.json"):
             valid_test_files.append(Path(file_path))
+
+    # The screen values the steps name, checked against the run's layouts:
+    # a run where none could be checked used to print nothing, the same as
+    # a run where all passed.
+    screen_named = screen_totals["checked"] + screen_totals["not_checked"]
+    if screen_named and not args.quiet:
+        print(f"\n[INFO] screen ids: {screen_named} named in the steps — "
+              f"{screen_totals['checked']} checked, {screen_totals['not_checked']} not checked")
+        for why, n in sorted(screen_unchecked.items()):
+            print(f"[INFO] screen ids: {n} not checked — {why}")
 
     # The element ids the steps name (design U8 (5)): the count and its
     # denominator on one line — named is the sum of the five — and, while a

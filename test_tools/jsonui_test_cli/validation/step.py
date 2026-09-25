@@ -117,6 +117,13 @@ class StepValidator:
         "unknown screen" errors there would block their install pipeline.
         """
         index = load_screen_index(self._test_file_path)
+        if index.available:
+            result.screen_ids["checked"] += 1
+        else:
+            # Counted, so the run can say so: a skip that says nothing
+            # looks exactly like a clean result.
+            result.screen_ids["not_checked"] += 1
+            result.screen_ids_unchecked_why = index.why
         message = check_screen_value(screen_id, index)
         if message:
             result.errors.append(ValidationMessage(path=path, message=message))
