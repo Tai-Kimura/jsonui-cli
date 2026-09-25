@@ -34,7 +34,6 @@ module KjuiTools
           @logger.info "Generating custom converter: #{@class_name}"
           track_scaffold_files
           keep_children_declaration
-          warn_outside_attribute_types
 
           # Create converter file for static generation
           create_converter_file
@@ -49,6 +48,9 @@ module KjuiTools
           # Generate dynamic component file
           dynamic_generator = DynamicComponentGenerator.new(@name, @options)
           dynamic_generator.generate
+
+          # After the scaffold: it says "kept" when the run wrote none.
+          warn_outside_attribute_types
 
           # Create or update DynamicComponentInitializer files
           create_dynamic_initializers

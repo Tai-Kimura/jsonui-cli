@@ -33,7 +33,6 @@ module SjuiTools
           @logger.info "Generating custom converter: #{@class_name}"
           track_scaffold_files
           keep_children_declaration
-          warn_outside_attribute_types
 
           # Create converter file
           create_converter_file
@@ -49,6 +48,9 @@ module SjuiTools
           # Generate adapter file if adapter_directory is configured (pass command for comment)
           adapter_generator = AdapterGenerator.new(@name, swift_options)
           adapter_generator.generate
+
+          # After the scaffold: it says "kept" when the run wrote none.
+          warn_outside_attribute_types
 
           # The attribute definition, after the scaffold (as on kjui and
           # rjui): a run that takes children but kept a leaf-form adapter or

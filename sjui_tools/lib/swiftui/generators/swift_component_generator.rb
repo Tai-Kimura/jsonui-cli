@@ -229,12 +229,13 @@ module SjuiTools
         # became `Long?` (no such Swift type), and `String?` became `String??`
         # (ticket kjui-sjui-converter-attr-types-do-not-compile).
         # A type outside the vocabulary stays a model type the app declares:
-        # optional, or not with the `!!` mark.
+        # optional, or not with the `!!` mark — which the shared table reads
+        # (Type#forced) and answers for, so the warning that names the type
+        # names this one (until 1.8.121 this file read `!!` itself and the
+        # warning said `Row?` for the `Row` declared here — ticket
+        # converter-attr-types-warning-wording).
         def map_to_swift_type(type)
-          t = JsonUIShared::AttributeTypes.parse(type)
-          return t.name if t.kind == :outside && type.to_s.strip.end_with?('!!')
-
-          JsonUIShared::AttributeTypes.swift_type(t)
+          JsonUIShared::AttributeTypes.swift_type(JsonUIShared::AttributeTypes.parse(type))
         end
 
         def get_swift_default_value(type)
@@ -243,7 +244,7 @@ module SjuiTools
             { 'string' => '"Sample Text"', 'bool' => 'true', 'color' => '.blue' }.fetch(t.canonical, t.entry[:swift_default])
           elsif t.kind == :list && !t.nullable
             '[]'
-          elsif t.kind == :outside && type.to_s.strip.end_with?('!!')
+          elsif t.kind == :outside && t.forced
             "#{t.name}.mock"
           else
             'nil'

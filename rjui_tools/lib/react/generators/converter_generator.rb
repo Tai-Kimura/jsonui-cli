@@ -31,7 +31,6 @@ module RjuiTools
           @logger.info "Generating custom converter: #{@class_name}"
           track_scaffold_files
           keep_children_declaration
-          warn_outside_attribute_types
 
           # Create converter file
           create_converter_file
@@ -42,6 +41,9 @@ module RjuiTools
           # Create React component skeleton
           component_generator = ReactComponentGenerator.new(@name, @options, @config, @command_line)
           component_generator.generate
+
+          # After the scaffold: it says "kept" when the run wrote none.
+          warn_outside_attribute_types
 
           # Generate attribute definition file for validation
           generate_attribute_definition_file

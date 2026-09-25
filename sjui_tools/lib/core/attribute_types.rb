@@ -16,6 +16,8 @@ module JsonUIShared
   #
   # A type is read as:
   #   T?                 nullable T
+  #   T!!                sjui's "not optional" mark: a model type outside the
+  #                      vocabulary that Swift declares without `?` (forced)
   #   [T] / Array(T)     a list of T
   #   (…) -> …           a callback (closure spellings), as are Callback,
   #                      Action and Event
@@ -53,8 +55,12 @@ module JsonUIShared
     CALLBACK_NAMES = %w[callback action event].freeze
 
     # One parsed attribute type. `kind` is :scalar (a vocabulary name),
-    # :callback, :list or :outside.
-    Type = Struct.new(:raw, :kind, :canonical, :nullable, :element, :closure, :name, keyword_init: true) do
+    # :callback, :list or :outside. `forced`: an :outside type written with
+    # sjui's `!!` — Swift declares it as the name itself (`Row`), not `Row?`.
+    # Kotlin and TypeScript have no such mark and keep it nullable (`nullable`
+    # stays true: it is what those two declare).
+    Type = Struct.new(:raw, :kind, :canonical, :nullable, :element, :closure, :name, :forced,
+                      keyword_init: true) do
       def vocabulary?
         kind != :outside && (kind != :list || element.vocabulary?)
       end
@@ -71,7 +77,8 @@ module JsonUIShared
 
     def parse(raw)
       text = raw.to_s.strip
-      text = text[0..-3] if text.end_with?('!!') # sjui's "not optional" mark; the type is what follows
+      forced = text.end_with?('!!') # sjui's "not optional" mark; the type is what precedes it
+      text = text[0..-3] if forced
       nullable = false
       if text.end_with?('?') && !text.match?(/\A\(.*\)\?\z/m)
         nullable = true
@@ -96,17 +103,32 @@ module JsonUIShared
         return Type.new(raw: raw, kind: :scalar, canonical: canonical, nullable: nullable)
       end
 
-      Type.new(raw: raw, kind: :outside, name: text, nullable: true)
+      Type.new(raw: raw, kind: :outside, name: text, nullable: true, forced: forced)
     end
 
     # The one sentence every tool prints for a type outside the vocabulary.
-    def outside_warning(attribute, type)
+    # The types it names are the ones the scaffolds declare (swift_type /
+    # kotlin_type / ts_type, which the generators write from). `kept`: the run
+    # wrote no scaffold file that declares the type — the existing ones were
+    # kept (--skip-existing, "n", a closed stdin) and declare whatever they
+    # already did — so it says so, and what a new scaffold would declare.
+    #
+    # Until 1.8.121 it named `Row?` in Swift for `Row!!` while sjui's
+    # scaffold declared `Row`, and said "it is scaffolded as" when nothing
+    # was written (ticket converter-attr-types-warning-wording).
+    def outside_warning(attribute, type, kept: false)
       t = type.is_a?(Type) ? type : parse(type)
       subject = t.kind == :list ? "the element type of '#{t.raw}'" : "'#{t.raw}'"
+      declared = "#{swift_type(t)} in Swift, #{kotlin_type(t)} in Kotlin and #{ts_type(t)} in TypeScript"
+      said = if kept
+               'the existing scaffold was kept (this run wrote none), so it declares whatever type it already ' \
+                 "did; a new scaffold would declare #{declared}"
+             else
+               "it is scaffolded as #{declared}"
+             end
       "Attribute '#{attribute}': #{subject} is not in the attribute type vocabulary " \
         "(String, Int, Long, Float, Double, CGFloat, Bool, Color, CollectionDataSource, Object, a callback, T?, [T]) — " \
-        "it is scaffolded as #{swift_type(t)} in Swift, #{kotlin_type(t)} in Kotlin and #{ts_type(t)} in TypeScript. " \
-        'Declare that type in the app, or use a vocabulary type.'
+        "#{said}. Declare that type in the app, or use a vocabulary type."
     end
 
     # Every attribute of `attributes` (key => type) outside the vocabulary.
@@ -131,7 +153,7 @@ module JsonUIShared
                   end
         "[#{element}]#{t.nullable ? '?' : ''}"
       when :scalar then "#{t.entry[:swift]}#{t.nullable ? '?' : ''}"
-      else "#{t.name}?"
+      else t.forced ? t.name : "#{t.name}?"
       end
     end
 

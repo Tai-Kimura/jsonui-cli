@@ -249,10 +249,28 @@ module JsonUIShared
     # on every tool. Not a refusal: faces declare their own model types
     # (`[AppRow]`, `Date`), and refusing stopped `jui g converter --all` on
     # three of them (measured 2026-09-26).
+    #
+    # Called AFTER the scaffold: whether it was written or kept is known only
+    # then, and a run that wrote none says "kept" instead of "is scaffolded
+    # as" (until 1.8.121 it was called first and said "is scaffolded as" of
+    # files it went on to keep — ticket converter-attr-types-warning-wording).
     def warn_outside_attribute_types
+      kept = typed_scaffold_kept?
       JsonUIShared::AttributeTypes.outside(@options[:attributes]).each do |key, type|
-        @logger.warn JsonUIShared::AttributeTypes.outside_warning(key, type)
+        @logger.warn JsonUIShared::AttributeTypes.outside_warning(key, type, kept: kept)
       end
+    end
+
+    # Whether this run kept the files that declare the attribute types (the
+    # component, and the Dynamic adapter / wrapper — not the converter, which
+    # declares none) and wrote none of them. false when nothing was recorded.
+    def typed_scaffold_kept?
+      record = @options[:scaffold_files]
+      return false unless record.is_a?(Hash)
+
+      converter = File.expand_path(converter_file_path)
+      typed = ->(paths) { paths.reject { |path| File.expand_path(path) == converter } }
+      typed.call(record[:written]).empty? && !typed.call(record[:kept]).empty?
     end
 
     # `--container` / `--no-container` change what a component declares about
