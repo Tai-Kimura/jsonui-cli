@@ -84,7 +84,7 @@ fun main(args: Array<String>) {
 
 
 #: The control's delay: it takes settle's wait out and reads before the
-#: response lands, so it must outlast the fixed drain on a loaded machine.
+#: response lands, so it must outlast one drain slice on a loaded machine.
 CONTROL_DELAY_MS = 20000
 
 
@@ -122,8 +122,7 @@ def test_android_the_delay_decides_the_order_and_settle_waits(built, slow, order
 
 def test_android_control_a_settle_that_does_not_wait_reads_before_the_arrival(tmp_path):
     runtime = bt.KOTLIN_RUNTIME
-    quiet = ("      if (BranchDeliveries.pending(now) == 0 && "
-             "!BranchDeliveries.arrivedBetween(drainStarted, now)) return\n")
+    quiet = "      if (BranchDeliveries.pending(now) == 0 && quietFor >= BranchDeliveries.QUIET_MS) return\n"
     assert runtime.count(quiet) == 1
     got = _run(_build(tmp_path / "nowait", runtime.replace(quiet, "      return\n"), CONTROL_DELAY_MS), "a")
     assert got.get("ORDER") == "b", got
@@ -137,6 +136,7 @@ def test_android_past_the_budget_settle_fails_by_name(tmp_path):
     assert runtime.count(cap) == 1
     got = _run(_build(tmp_path / "chain", runtime.replace(cap, "  const val CAP_MS = 100L\n")), "chain")
     thrown = got.get("THROWN", "")
-    assert thrown.startswith("settle: delayed responses were still arriving after waiting "), got
-    waited = int(re.search(r"after waiting (\d+) ms", thrown).group(1))
+    assert thrown.startswith("settle: still busy after "), got
+    assert "1 response(s) still due" in thrown, got
+    waited = int(re.search(r"still busy after (\d+) ms", thrown).group(1))
     assert waited >= 1100 and "budget 1100 ms" in thrown, got

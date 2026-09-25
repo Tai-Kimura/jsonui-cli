@@ -354,14 +354,18 @@ jobs:
             --ignore=tests/test_branch_scenario_delay.py \
             --ignore=tests/test_branch_scenario_delay_android.py \
             --ignore=tests/test_branch_seed_state_android.py \
+            --ignore=tests/test_branch_settle_quiescence.py \
+            --ignore=tests/test_branch_settle_quiescence_android.py \
             --ignore=tests/test_branch_notices_reach_agent_runs.py
       # ⚠️ test_unit_stubs_ios_typecheck.py is in no job here: it needs swiftc
       # 6.2+ for `-default-isolation`, and the compiler job's image answers
       # 6.1.2 (run 36051178116). run-suites.sh's test_tools leg owns it, as it
-      # owns the executed branch runtime. test_branch_scenario_delay_android.py
-      # and test_branch_seed_state_android.py likewise: they run the Kotlin
-      # runtime compiled whole, whose jars only a Gradle cache has. test_branch_scenario_delay.py (node + swiftc)
-      # runs with the compilers below.
+      # owns the executed branch runtime. test_branch_scenario_delay_android.py,
+      # test_branch_seed_state_android.py and test_branch_settle_quiescence_android.py
+      # likewise: they run the Kotlin runtime compiled whole, whose jars only a
+      # Gradle cache has. test_branch_scenario_delay.py and
+      # test_branch_settle_quiescence.py (node + swiftc + the pinned vitest) run
+      # with the compilers below.
       - name: Run document_tools tests
         working-directory: document_tools
         run: python -m pytest
@@ -476,6 +480,7 @@ jobs:
             tests/test_branch_condition_controls.py \
             tests/test_branch_unmatched_origin.py \
             tests/test_branch_scenario_delay.py \
+            tests/test_branch_settle_quiescence.py \
             tests/test_branch_notices_reach_agent_runs.py \
             -v -rs --junitxml=guard-branch-runtime.xml
           ../dev-guide/ci/executed-or-skipped.py guard-branch-runtime.xml

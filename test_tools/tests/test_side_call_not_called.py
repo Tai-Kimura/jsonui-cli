@@ -44,7 +44,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "document_tools"))
 from jsonui_doc_cli.spec_doc.validator import SpecValidator  # noqa: E402
 
 SPEC = "docs/screens/json/checkout.spec.json"
-MESSAGE = "api.postLogout: this row says not-called — called"
+MESSAGE = ("api.postLogout: this row says not-called (within the act and until no request "
+           "was in flight for 400 ms after it) — called")
 
 
 def _spec(root: Path, *, then: dict | None = None, when: dict | None = None,
@@ -172,14 +173,17 @@ def test_the_row_binds_so_coverage_can_judge_it(tmp_path):
 # ------------------------------------------------------------ G2, emitted --
 
 @pytest.mark.parametrize("platform, extra, assertion, old", [
-    ("web", {}, 'expect(rec.countFor("postLogout"), `api.postLogout: this row says not-called — '
+    ("web", {}, 'expect(rec.countFor("postLogout"), `api.postLogout: this row says not-called '
+                '(within the act and until no request was in flight for 400 ms after it) — '
                 'called ${rec.countFor("postLogout")} time(s)`).toBe(0);',
      'expect(rec.countFor("postLogout")).toBe(0);'),
     ("ios", {"module": "App"}, 'XCTAssertEqual(rec.countFor("postLogout"), 0, "api.postLogout: '
-                               'this row says not-called — called \\(rec.countFor("postLogout")) time(s)")',
+                               'this row says not-called (within the act and until no request was in flight '
+                               'for 400 ms after it) — called \\(rec.countFor("postLogout")) time(s)")',
      'XCTAssertEqual(rec.countFor("postLogout"), 0)'),
     ("android", {"package": "com.example.app"},
-     'assertEquals("api.postLogout: this row says not-called — called ${rec.countFor("postLogout")} '
+     'assertEquals("api.postLogout: this row says not-called (within the act and until no request '
+     'was in flight for 400 ms after it) — called ${rec.countFor("postLogout")} '
      'time(s)", 0, rec.countFor("postLogout"))',
      'assertEquals(0, rec.countFor("postLogout"))'),
 ])

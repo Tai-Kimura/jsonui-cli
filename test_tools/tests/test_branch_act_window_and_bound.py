@@ -760,7 +760,9 @@ def test_kotlin_emits_the_window_in_order(tmp_path):
     text = report.test_file.read_text(encoding="utf-8")
     order = _body_order(text, "fun `submit branch 1`()", [
         "h.settle()", "h.setState(", "rec.mark()", 'h.invoke("submit")',
-        "h.settle()\n      assert", "rec.unexpectedOps(setOf<String>(\"submitOrder\"))"])
+        # In place of the act's h.settle(): the row expects submitOrder.
+        "h.invoke(\"submit\")\n      settleUntilAnswered(h, rec, listOf(\"submitOrder\"))\n      assert",
+        "rec.unexpectedOps(setOf<String>(\"submitOrder\"))"])
     assert order == sorted(order), order
     assert "fun `submit branch 2 also 429`()" in text
 
@@ -774,7 +776,9 @@ def test_swift_emits_the_window_in_order(tmp_path):
     text = report.test_file.read_text(encoding="utf-8")
     order = _body_order(text, "func test_submit_branch_1()", [
         "h.settle()", "h.setState(", "rec.mark()", 'h.invoke("submit"',
-        "h.settle()\n      XCT", 'rec.unexpectedOps(["submitOrder"])'])
+        # In place of the act's h.settle(): the row expects submitOrder.
+        'h.invoke("submit", args: [])\n      settleUntilAnswered(h, rec, ["submitOrder"])\n      XCT',
+        'rec.unexpectedOps(["submitOrder"])'])
     assert order == sorted(order), order
     assert "func test_submit_branch_2_also_429()" in text
 
