@@ -104,7 +104,7 @@ class SpecValidationResult:
 #: WARNING (design v4.20, P2.5): below it, an INFO and one line announcing it
 #: — the specs with a layout were never checked before, and a face holding
 #: "0 warnings" as its bar would turn red with no notice (U5). A literal,
-#: read by `jsonui_test_cli.gate_literal` like every `*_GATE_FROM`:
+#: read by `shared/core/gate_versions` like every `*_GATE_FROM`:
 #: "withdrawn" or anything that is not a release number never gates.
 LAYOUT_ID_GATE_FROM: str | None = "1.8.120"
 
@@ -3641,18 +3641,11 @@ class SpecValidator:
         - nowhere: WARNING from LAYOUT_ID_GATE_FROM on; below it an INFO,
           and one INFO announcing the release
         """
-        # Imported HERE and guarded, like `_validate_contract_declarations`: a
-        # failed import escaping `validate_file` lands in `jui generate`'s
-        # `except ImportError`, which folds the whole validation into one line.
-        try:
-            from jsonui_test_cli.gate_literal import gate_is_on, gate_state
-        except ImportError as exc:
-            unreadable = f"jsonui-test (jsonui_test_cli) is not importable ({exc})"
-            gate_is_on, gate_state = (lambda _v, _l: False), (lambda _l: "unreadable")
-        else:
-            unreadable = None
-
-        gating = gate_is_on(_running_version(), LAYOUT_ID_GATE_FROM)
+        # shared/core/gate_versions, the one reader of every `*_GATE_FROM`.
+        # None in a tool tree without it: then nothing becomes a WARNING — not
+        # announced, it may not (U5) — and an INFO says the level is unknown.
+        gates = shared_core.load("gate_versions")
+        gating = bool(gates) and gates.gate_is_on(_running_version(), LAYOUT_ID_GATE_FROM)
         where = f"the layout {name}.json (includes expanded, every platform)"
         in_cells, missing = [], 0
         for path, element in refs:
@@ -3679,13 +3672,14 @@ class SpecValidator:
                 message=(f"cannot check: {len(in_cells)} element id(s) inside cells of "
                          f"{name}.json ({', '.join(sorted(set(in_cells)))}) — ids in "
                          "cell layouts are not checked")))
-        if missing and unreadable:
-            result.warnings.append(SpecValidationMessage(
-                path="stateManagement", level="warning",
+        if missing and gates is None:
+            result.infos.append(SpecValidationMessage(
+                path="stateManagement", level="info",
                 message=(f"the level of {missing} element id(s) not in {name}.json cannot "
-                         f"be decided — LAYOUT_ID_GATE_FROM is read by {unreadable}; "
-                         "they are listed as INFO")))
-        if missing and not gating and gate_state(LAYOUT_ID_GATE_FROM) == "release":
+                         "be decided — shared/core/gate_versions.py is not in this tool "
+                         "tree; they are listed as INFO")))
+        if missing and gates and gates.gate_state(LAYOUT_ID_GATE_FROM) == "release" \
+                and not gating:
             result.infos.append(SpecValidationMessage(
                 path="stateManagement", level="info",
                 message=LAYOUT_ID_NOTICE.format(version=LAYOUT_ID_GATE_FROM)))

@@ -157,19 +157,21 @@ def test_control_a_spec_without_a_layout_still_checks_its_components(tmp_path, a
     assert [m for _, m in _element_warnings(spec)] == ["Element 'missing' not found in components list"]
 
 
-def test_without_jsonui_test_cli_the_ids_are_still_checked_and_it_says_so(tmp_path, at,
-                                                                           monkeypatch):
-    # `jui generate` catches ImportError around the whole validation: one that
-    # escaped would fold every spec's check into a single "not available" line.
+def test_without_gate_versions_the_ids_are_still_checked_all_info(tmp_path, at, monkeypatch):
+    # A tool tree without shared/core/gate_versions.py: nothing may become a
+    # WARNING that was never announced (U5), and it says why — as INFO.
     at("1.8.121")
-    monkeypatch.setitem(sys.modules, "jsonui_test_cli.gate_literal", None)
+    load = validator_mod.shared_core.load
+    monkeypatch.setattr(validator_mod.shared_core, "load",
+                        lambda name: None if name == "gate_versions" else load(name))
     spec = _face(tmp_path, visible=["summary", "sumary"])
     messages = _messages(spec)
     assert ("info", "stateManagement.states[0].values[0].visibleElements", MISSING) in messages
-    assert [m for lv, _, m in messages if lv == "warning"] == [
-        m for lv, _, m in messages
-        if lv == "warning" and m.startswith("the level of 1 element id(s) not in detail.json "
-                                            "cannot be decided")] != []
+    assert not any(lv == "warning" for lv, *_ in messages), messages
+    assert ("info", "stateManagement",
+            "the level of 1 element id(s) not in detail.json cannot be decided — "
+            "shared/core/gate_versions.py is not in this tool tree; they are listed as "
+            "INFO") in messages
 
 
 class TestEveryPlatform:

@@ -252,6 +252,14 @@ class TestTheGateVersion:
         assert not cc.gate_is_on("999.0.0", literal)
         assert not cc.gate_is_on("1.8.119", literal)
 
+    def test_a_tree_without_gate_versions_never_gates_and_says_so(self, monkeypatch):
+        monkeypatch.setattr(cc, "_gates", lambda: None)
+        monkeypatch.setattr(cc, "VALIDATE_GATE_FROM", "1.8.120")
+        assert cc.gate_state() == "unavailable" and not cc.gate_is_on("9.9.9")
+        assert cc._gate_line("9.9.9") == (
+            "coverage gate cannot be read — shared/core/gate_versions.py is not in this "
+            "tool tree, so this build announces no release and does not gate")
+
     def test_control_a_release_number_is_one(self):
         assert cc.gate_state("1.8.120") == "release" and cc.gate_is_on("1.8.120", "1.8.120")
 
