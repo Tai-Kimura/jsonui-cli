@@ -19,6 +19,16 @@ RSpec.describe JsonUI::StageFailures do
   before { described_class.clear! }
   after { described_class.clear! }
 
+  # The three tools' copies, pinned to the canon here rather than in each
+  # tool's shared_core_mirror_spec list — which other lanes are editing.
+  it 'is the same file in every tool as in shared/core' do
+    repo = File.expand_path('../../..', __dir__)
+    canon = File.join(repo, 'shared', 'core', 'stage_failures.rb')
+    skip 'shared/core copy not present in this layout' unless File.exist?(canon)
+    copies = %w[sjui_tools kjui_tools rjui_tools].map { |t| File.join(repo, t, 'lib', 'core', 'stage_failures.rb') }
+    expect(copies.map { |c| File.read(c) }).to all(eq(File.read(canon)))
+  end
+
   it 'records a failure met on every visit once, and two different ones twice' do
     3.times { described_class.record_once('config', 'a.json could not be parsed') }
     described_class.record_once('config', 'b.json could not be parsed')
