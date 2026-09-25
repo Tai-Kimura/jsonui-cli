@@ -202,8 +202,8 @@ RSpec.describe 'a String defaultValue reads the same on every sjui path' do
 
           skip 'swiftc is not on PATH: the round trip is UNMEASURED here'
         end
-        rows = vectors['optionalStrings']
-        emitted = rows.map { |row| emit.(row['spelling']) }
+        optional_rows = vectors['optionalStrings']
+        emitted = optional_rows.map { |row| emit.(row['spelling']) }
         expect(emitted).to all(be_a(String))
         program = "extension String { func localized() -> String { self } }\n" +
                   emitted.each_with_index.map do |e, i|
@@ -217,7 +217,7 @@ RSpec.describe 'a String defaultValue reads the same on every sjui path' do
           Open3.capture3(File.join(dir, 'main')).first.lines.map(&:strip)
         end
         aggregate_failures do
-          rows.each_with_index do |row, i|
+          optional_rows.each_with_index do |row, i|
             want = row['text'].nil? ? 'nil' : row['text'].codepoints.to_s.delete(' ')
             expect(got[i].delete(' ')).to eq(want), "#{row['name']}: #{row['spelling'].inspect} was written #{emitted[i]}"
           end

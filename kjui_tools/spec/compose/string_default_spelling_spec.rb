@@ -133,8 +133,8 @@ RSpec.describe 'a String defaultValue reads the same on every kjui path' do
     writer.instance_variable_set(:@package_name, 'com.example')
     writer.instance_variable_set(:@config, {})
     writer.instance_variable_set(:@source_path, Dir.pwd)
-    rows = vectors['optionalStrings']
-    emitted = rows.map do |row|
+    optional_rows = vectors['optionalStrings']
+    emitted = optional_rows.map do |row|
       prop = { 'name' => 'probe', 'class' => 'String?' }
       prop['defaultValue'] = row['spelling'] unless row['spelling'].nil?
       normalized = KjuiTools::Core::TypeConverter.normalize_data_property(prop, 'compose')
@@ -158,7 +158,7 @@ RSpec.describe 'a String defaultValue reads the same on every kjui path' do
       Open3.capture3(k.java_bin, '-cp', "#{File.join(dir, 'out')}:#{stdlib}", 'MainKt').first.lines.map(&:strip)
     end
     aggregate_failures do
-      rows.each_with_index do |row, i|
+      optional_rows.each_with_index do |row, i|
         want = row['text'].nil? ? 'nil' : row['text'].codepoints.to_s.delete(' ')
         expect(got[i]).to eq(want), "#{row['name']}: #{row['spelling'].inspect} was written #{emitted[i]}"
       end

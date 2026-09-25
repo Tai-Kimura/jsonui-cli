@@ -113,8 +113,8 @@ RSpec.describe 'a String defaultValue reads the same on every rjui path' do
 
       skip 'node is not on PATH: the round trip is UNMEASURED here'
     end
-    rows = vectors['optionalStrings']
-    emitted = rows.map { |row| generator.send(:format_default_value, row['spelling'], 'string | undefined', 'String?') }
+    optional_rows = vectors['optionalStrings']
+    emitted = optional_rows.map { |row| generator.send(:format_default_value, row['spelling'], 'string | undefined', 'String?') }
     program = emitted.map do |e|
       "{ const v = (#{e}); console.log(v === undefined ? 'nil' : JSON.stringify([...v].map((c) => c.codePointAt(0)))); }"
     end.join("\n")
@@ -126,7 +126,7 @@ RSpec.describe 'a String defaultValue reads the same on every rjui path' do
       out.lines.map(&:strip)
     end
     aggregate_failures do
-      rows.each_with_index do |row, i|
+      optional_rows.each_with_index do |row, i|
         want = row['text'].nil? ? 'nil' : row['text'].codepoints.to_s.delete(' ')
         expect(got[i]).to eq(want), "#{row['name']}: #{row['spelling'].inspect} was written #{emitted[i]}"
       end
