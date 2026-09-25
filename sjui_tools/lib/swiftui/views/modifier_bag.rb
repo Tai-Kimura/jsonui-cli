@@ -35,12 +35,20 @@ module SjuiTools
           :hidden,              # hidden
           :offset,              # offset
           :margin,              # outer margin entries
-          :allows_hit_testing,  # allowsHitTesting
           :tint_color,          # tint
           :on_click,            # contentShape + onTapGesture
           :on_long_press,       # onLongPressGesture
           :on_pan,              # contentShape + simultaneousGesture(DragGesture)
           :on_pinch,            # contentShape + simultaneousGesture(MagnifyGesture)
+          # allowsHitTesting (userInteractionEnabled, touchDisabledState)
+          # stops the whole view, so it wraps the view's own gestures: a
+          # gesture attached outside it is not stopped. It sat before
+          # :on_click, and a View with `userInteractionEnabled: false` and an
+          # onClick still called its handler — for a tap in its padding and
+          # for one in its child's frame — while the child's tap stopped
+          # (measured on iOS 18.6 and 26.4, SwiftJsonUI ConformanceHost
+          # -interactionGateProbe).
+          :allows_hit_testing,  # allowsHitTesting
           :on_value_change,     # onChange handlers
           :on_text_change,      # text change handlers
           :on_appear,           # onAppear

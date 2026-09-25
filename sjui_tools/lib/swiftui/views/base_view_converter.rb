@@ -832,6 +832,17 @@ module SjuiTools
           disabled = disabled_line(@component['enabled'])
           @modifier_bag.register(:disabled, disabled) if disabled
 
+          register_hit_test_gate
+        end
+
+        # `userInteractionEnabled` and `touchDisabledState`: one
+        # `.allowsHitTesting`, which the bag writes outside the view's own
+        # gestures (MODIFIER_ORDER). The converters that build their own
+        # modifiers and handle `enabled` themselves — Button, TextField,
+        # TextView, SelectBox — call this alone: they read neither flag, and
+        # a TextField read the binding only (ViewBindingHandler).
+        def register_hit_test_gate
+          @interaction_gates_registered = true
           gates = []
           gates << 'false' if @component['touchDisabledState']
           value = @component['userInteractionEnabled']
