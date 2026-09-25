@@ -62,7 +62,7 @@ module SjuiTools
       end
 
       def expand_includes(json_data, dir)
-        IncludeExpander.process_includes(json_data, dir)
+        IncludeExpander.process_includes(json_data, dir, nil, @layouts_dir)
       end
 
       def event_binding_attrs

@@ -60,11 +60,20 @@ warning count:
 
 | the id | reported as |
 |---|---|
-| on the layout | nothing |
-| in none of it | WARNING from the release `LAYOUT_ID_GATE_FROM` names; below it INFO, with one INFO line per spec announcing that release |
-| only in camelCase (`save_button` / `saveButton`) | INFO, naming the layout's spelling |
+| on the layout, exactly | nothing |
+| not on it | WARNING from the release `LAYOUT_ID_GATE_FROM` names; below it INFO, with one INFO line per spec announcing that release |
 | inside a cell layout the screen names (`cellClasses`, a section's `cell` / `header` / `footer`) | one INFO per spec: `cannot check: N element id(s) inside cells …` — a cell is another scope, not checked |
+| an id inside an include with an `id`, spelled as web (`hint`) or UIKit (`side_hint`) spells it | one INFO per spec: `cannot check: N element id(s) inside includes …` — the resolved layout holds native's `sideHint`, and the spelling differs per platform |
 | — the layout has an include that does not resolve | one INFO: `cannot check: element ids against … — an include does not resolve` |
+
+The match is exact: the runtime id is the layout's spelling on every
+platform, and every driver looks it up as written. A mismatch names the
+layout ids a person may have meant — never counted, never applied: the same
+name folded (`sample_toggle` → `sampleToggle`), the name with the node's own type
+after it (`sample_panel` → `samplePanelView`), and the name after an
+include's prefix (`sample_row` → `side_sample_row`). The
+coverage data axis classifies visibleElements ids the same way
+(`jui_cli.core.layout_facts.classify_element`).
 
 `LAYOUT_ID_GATE_FROM` is a literal like every `*_GATE_FROM`: `"withdrawn"`, or
 anything that is not a release number, never turns it into a WARNING. A spec

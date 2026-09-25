@@ -124,7 +124,7 @@ per platform:
 
 ```
 coverage: web units 2 · statuses required 12 · row 5 · excluded 1 · uncovered 6 · not evaluated 0 → exit 1 (uncovered) · baselined 0 (matched 0 · new 6 · stale 0) — no baseline file: every entry is new
-from jsonui-cli <next release>, validate fails on contracts coverage entries not in the baseline — close them (Task 6 of the define agent), or record the current ones once with `jsonui-test contracts baseline`; see the release note
+from jsonui-cli <next release>, validate fails on contracts coverage entries not in the baseline — close them (Task 6 of the define agent), or record the current ones once with `jsonui-test contracts baseline --initial` (the user's decision); see the release note
 ```
 
 with any declaration errors, and what could not be measured by cause
@@ -609,7 +609,7 @@ instead of values (`coarse`); the values stay in `--json`
 ### contracts baseline
 
 ```
-jsonui-test contracts baseline
+jsonui-test contracts baseline [--initial]
 ```
 
 When the gate starts, a project with uncovered statuses has two ways out:
@@ -622,16 +622,39 @@ exit 0, sorted and without timestamps, so the same set is the same bytes:
 
 - **uncovered** — (platform, spec, method, op, status)
 - **unmeasured** — (platform, spec, op, cause), cause one of `unbound
-  endpoint`, `no scenario`, `no mock`, `not in OpenAPI`
+  endpoint`, `no mock`, `not in OpenAPI`; and (platform, spec, op, status,
+  cause) for `no scenario`, which is per status — another status of the same
+  op losing its scenario later is a new entry, not the recorded one
 
-With no file, the command writes the current entries (`wrote …`; nothing is
-written when there are none). With a file, it writes only what the file AND
-the current run hold — **the command never adds an entry**:
+With no file, the command writes nothing unless it is given `--initial`:
+recording the first baseline accepts every current entry as debt, which is
+the user's decision (`wrote …` with it; nothing is written when there are no
+entries). With a file, it writes only what the file AND the current run hold
+— **the command never adds an entry**:
 
 ```
 updated docs/screens/json/contracts_coverage_baseline.json
 removed 2 · kept 10 · new 1 not added (close them, or add by hand)
 ```
+
+A recorded entry under what cannot be measured NOW — its op has no mock, is
+not in the OpenAPI, or is an unbound endpoint; or, for one status, it has no
+scenario — is not closed, only unmeasured: the command keeps it (`kept 12 (4
+unmeasured now — not closed, kept)`), and the gate counts it as neither
+matched nor stale (`· unmeasured now 4` on the line).
+
+A recorded entry whose unit is not in the run at all — its screen left the
+platform (`metadata.platforms`), its spec file is gone (a rename too), its
+method or op is no longer declared, its status left the OpenAPI — has
+**vanished**: it is not closed either. Only an entry the run measured and
+found answered by a decision (a row, `alsoStatuses`, `excludedOutcomes`,
+`unreachedOps`; for an unmeasured one, its op or status measured again) is
+closed. A vanished entry fails the gate (`web: 2 baselined but gone from the
+run (detail 2)`, `· vanished 2` on the line) and the command keeps it
+(`(2 vanished — not closed, kept; remove or re-key them by hand)`):
+removing or re-keying it is done by hand, where the diff shows it — the
+user's decision. Dropping an endpoint, a status or a platform is not a way
+out of the debt. baselined = matched + stale + unmeasured now + vanished.
 
 Close a new entry with a row (Task 6 of the define agent). Adding it to the file by
 hand also works, and the tool cannot tell it from the recorded debt — only the
@@ -648,8 +671,14 @@ only unmeasured.
 
 `contracts coverage` prints the comparison under each platform —
 `[platform=web] baselined 6 (matched 6 · new 0 · stale 0)` — and `--json`
-carries it as `baseline` per platform and `baseline: {file, present}` at the
-top. A run on `--platform` or one screen compares only what it measured.
+carries it as `baseline` per platform (the counts, and the entries
+themselves as `new_entries` / `stale_entries` / `hidden_entries` /
+`vanished_entries`) and
+`baseline: {file, present}` at the top; each screen lists what could not be
+measured as `unmeasured` (`{op, status?, cause}`). validate's summary names
+the screens: `Coverage: FAILED (exit 1; web: 3 not in the baseline
+(detail 2, other 1))`. A run on `--platform` or one screen
+compares only what it measured.
 
 ### Generated branch tests: the act window
 

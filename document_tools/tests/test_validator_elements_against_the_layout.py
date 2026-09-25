@@ -107,12 +107,41 @@ def test_withdrawn_or_unreadable_never_warns_and_announces_nothing(tmp_path, at,
     assert not any("become WARNING" in m for *_, m in messages)
 
 
-def test_the_unprefixed_include_id_is_not_the_layouts(tmp_path, at):
-    # The include's own id `hint` becomes `sideHint` in the screen: the same
-    # prefixing the runtime and the normalizer apply.
-    at("1.8.121")
-    spec = _face(tmp_path, visible=["hint"])
-    assert any("'hint' not found in the layout" in m for _, m in _element_warnings(spec))
+@pytest.mark.parametrize("spelling", ["hint", "side_hint"])
+def test_an_include_ids_other_spellings_cannot_be_checked(tmp_path, at, spelling):
+    # `hint` inside the include `side` is `sideHint` on native (what the
+    # resolved layout holds), `side_hint` on UIKit, `hint` on web (it does not
+    # flatten includes). Against one resolution only the first can be told
+    # right; the others are CANNOT CHECK, not missing (ee, design v4.20).
+    at("1.8.119")                      # below INCLUDE_ID_PREFIX_GATE_FROM
+    spec = _face(tmp_path, visible=["summary", spelling])
+    assert _messages(spec) == [(
+        "info", "stateManagement",
+        f"cannot check: 1 element id(s) inside includes of detail.json ({spelling}) — an "
+        "include's ids are spelled differently per platform (web keeps the included "
+        "layout's id; native prefixes it with the include's)")]
+
+
+@pytest.mark.parametrize("version", ["1.8.120", "1.8.121"])     # 1.8.120: the equal point
+@pytest.mark.parametrize("spelling", ["hint", "side_hint"])
+def test_from_the_include_gate_an_include_ids_spelling_is_checked_exactly(tmp_path, at,
+                                                                         version, spelling):
+    # From INCLUDE_ID_PREFIX_GATE_FROM web spells it as native does (U8): the
+    # web and UIKit spellings are mismatches, and the candidates name native's.
+    at(version)
+    spec = _face(tmp_path, visible=["summary", spelling])
+    assert _element_warnings(spec) == [(
+        "stateManagement.states[0].values[0].visibleElements",
+        f"Element '{spelling}' not found in the layout detail.json (includes expanded, every "
+        "platform); the layout has 'sideHint' — the runtime id is the layout's spelling")]
+
+
+def test_a_withdrawn_include_gate_never_checks_them_exactly(tmp_path, at, monkeypatch):
+    from jui_cli.core import layout_facts
+    at("9.9.9")
+    monkeypatch.setattr(layout_facts, "INCLUDE_ID_PREFIX_GATE_FROM", "withdrawn")
+    spec = _face(tmp_path, visible=["summary", "hint"])
+    assert [lv for lv, *_ in _messages(spec)] == ["info"]
 
 
 def test_an_unresolved_include_says_it_cannot_check(tmp_path, at):
@@ -215,15 +244,71 @@ class TestWhatIsNotAMissingId:
             "cannot check: 3 element id(s) inside cells of detail.json (cellRoot, cellTitle) — "
             "ids in cell layouts are not checked")]
 
-    @pytest.mark.parametrize("version", ["1.8.119", "1.8.121"])
-    def test_a_camelcase_only_match_is_an_info_of_its_own(self, tmp_path, at, version):
+
+
+class TestCandidates:
+    """A spelling that matches only when folded is NOT a match (ee, design
+    v4.20): the runtime id is the layout's spelling, on every platform and in
+    every driver. The mismatch names what a person may have meant."""
+
+    EXTRA = ({"type": "Toggle", "id": "sampleToggle"},
+             {"type": "View", "id": "samplePanelView"},
+             {"type": "View", "id": "samplePanelWrapper"},
+             {"type": "View", "id": "side_sample_row"})
+
+    @pytest.mark.parametrize("element, candidates", [
+        ("sample_toggle", "'sampleToggle'"),                 # the same name, folded
+        ("sample_panel", "'samplePanelView'"),           # its type after it
+        ("sample_row", "'side_sample_row'"),   # after an include prefix
+    ])
+    @pytest.mark.parametrize("version, level", [("1.8.119", "info"), ("1.8.121", "warning")])
+    def test_a_mismatch_names_its_candidates_at_the_missing_level(self, tmp_path, at, element,
+                                                                 candidates, version, level):
         at(version)
-        spec = _face(tmp_path, visible=["summary"], effect="save_button",
-                     layout_extra=({"type": "Button", "id": "saveButton"},))
-        assert _messages(spec) == [(
-            "info", "stateManagement.displayLogic[0].effects[0].element",
-            "Element 'save_button' not found in the layout detail.json (includes expanded, "
-            "every platform); it has 'saveButton' — the same name in camelCase")]
+        spec = _face(tmp_path, visible=["summary"], effect=element, layout_extra=self.EXTRA)
+        assert (level, "stateManagement.displayLogic[0].effects[0].element",
+                f"Element '{element}' not found in the layout detail.json (includes expanded, "
+                f"every platform); the layout has {candidates} — the runtime id is the "
+                "layout's spelling") in _messages(spec)
+
+    def test_boundary_a_remainder_that_is_not_the_nodes_type_is_no_candidate(self, tmp_path, at):
+        # `samplePanelWrapper` is a View: "wrapper" is not its type.
+        at("1.8.121")
+        spec = _face(tmp_path, visible=["summary"], effect="sample_panel",
+                     layout_extra=(self.EXTRA[2],))
+        assert _element_warnings(spec) == [(
+            "stateManagement.displayLogic[0].effects[0].element",
+            "Element 'sample_panel' not found in the layout detail.json (includes expanded, "
+            "every platform)")]
+
+
+def test_the_coverage_data_axis_gives_the_same_answer(tmp_path, at):
+    """Both readers classify through `layout_facts.classify_element`: the
+    validator's messages and the data axis's detail name the same ids with
+    the same kinds and candidates."""
+    at("1.8.121")
+    from jsonui_test_cli import contracts_data_axis
+    from jui_cli.core.layout_facts import cell_ids_for, layout_facts
+    extra = ({"type": "Toggle", "id": "sampleToggle"},
+             {"type": "Collection", "id": "rows", "cellClasses": ["detail/row_cell"]})
+    _write(tmp_path / "docs/screens/layouts/detail/row_cell.json",
+           {"type": "View", "id": "cellTitle"})
+    spec = _face(tmp_path, visible=["summary", "sample_toggle", "cellTitle", "nowhere"],
+                 layout_extra=extra)
+    layouts = tmp_path / "docs/screens/layouts"
+    data = json.loads(spec.read_text())
+    facts = layout_facts(data, "ios", layouts_dir=layouts, styles_dir=layouts)
+    axis = contracts_data_axis.screen_data(
+        data, facts, [], cell_ids=cell_ids_for(facts, "ios", layouts_dir=layouts,
+                                               styles_dir=layouts))
+    by_axis = {o["id"]: (o["kind"], o["candidates"]) for o in axis.visible_ids_detail}
+    assert by_axis == {"sample_toggle": ("missing", ["sampleToggle"]), "cellTitle": ("in_cell", []),
+                       "nowhere": ("missing", [])}
+    messages = [m for *_, m in _messages(spec)]
+    assert any("'sample_toggle' not found" in m and "has 'sampleToggle'" in m for m in messages)
+    assert any("'nowhere' not found" in m and "the layout has" not in m for m in messages)
+    assert any(m.startswith("cannot check: 1 element id(s) inside cells") and "cellTitle" in m
+               for m in messages)
 
 
 class TestThePrintedReport:

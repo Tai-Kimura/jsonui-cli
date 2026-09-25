@@ -354,6 +354,17 @@ class ScreenResult:
     unbound_endpoints: list = field(default_factory=list)
     #: The exit-3 side item by item, for the baseline (§6.1 P3c): {op, cause}.
     unmeasured_items: list = field(default_factory=list)
+    #: What this run measured, and what answered it — for the baseline's
+    #: closed / vanished split (v4.22): a baselined key the run does not hold
+    #: is CLOSED only when its unit was measured and a decision answers it.
+    #: (method, op, status) answered by a row, an alsoStatuses copy or an
+    #: excludedOutcomes entry; (op, status) answered for every method
+    #: (unreachedOps); the ops measured (names and "METHOD path"); the
+    #: (op, status) measured (a scenario exists).
+    answered: set = field(default_factory=set)
+    answered_any: set = field(default_factory=set)
+    measured_ops: set = field(default_factory=set)
+    measured_statuses: set = field(default_factory=set)
     notes: list = field(default_factory=list)
     http_endpoints: int = 0
     branches_active: int = 0
@@ -564,6 +575,11 @@ def evaluate_screen(name: str, spec: dict, platform: str, project: Project) -> S
                 "add it to mock.swagger" if where else f"{label} is in no OpenAPI document")
             continue
         evaluable[key] = (status_keys(entry[1]), mock)
+        op = _op_name(names_of, key, endpoint)
+        res.measured_ops |= {op, f"{endpoint['method']} {endpoint['path']}"}
+        statuses = status_keys(entry[1])
+        res.measured_statuses |= {(op, s) for s in statuses
+                                  if s != "default" and not _no_scenario(s, statuses, mock)}
 
     bc = spec.get("branchContracts") if isinstance(spec.get("branchContracts"), dict) else {}
     methods = {m: c for m, c in (bc.get("methods") or {}).items() if isinstance(c, dict)}
@@ -830,13 +846,15 @@ def evaluate_screen(name: str, spec: dict, platform: str, project: Project) -> S
                     res.outside_required["na_default_response"] += 1
                 elif _no_scenario(status, statuses, mock):
                     res.outside_required["na_no_scenario"] += 1
-                    _note_no_scenario(res, names_of, key, endpoints[key])
+                    _note_no_scenario(res, names_of, key, endpoints[key], status)
                 elif status in answered:
                     res.breakdown["row"] += 1
+                    res.answered.add((method, names_of.get(key, ["?"])[0], status))
                     if all(kind == "also" for kind in answered[status]):
                         res.row_also_statuses += 1
                 elif (method, key, status) in exclusions:
                     res.breakdown[exclusions[(method, key, status)].by] += 1
+                    res.answered.add((method, names_of.get(key, ["?"])[0], status))
                 elif (method, key) in not_evaluated_units or \
                         (method, key, status) in not_evaluated_statuses:
                     res.breakdown["not_evaluated"] += 1
@@ -855,6 +873,7 @@ def evaluate_screen(name: str, spec: dict, platform: str, project: Project) -> S
         if key in unreached:
             res.outside_required["unreached_op"] += len(statuses)
             res.declared += len(statuses)
+            res.answered_any |= {(names_of.get(key, ["?"])[0], s) for s in statuses}
             continue
         if key in reached_any:
             continue
@@ -865,7 +884,7 @@ def evaluate_screen(name: str, spec: dict, platform: str, project: Project) -> S
                 res.outside_required["na_default_response"] += 1
             elif _no_scenario(status, statuses, mock):
                 res.outside_required["na_no_scenario"] += 1
-                _note_no_scenario(res, names_of, key, endpoints[key])
+                _note_no_scenario(res, names_of, key, endpoints[key], status)
             else:
                 res.breakdown["uncovered"] += 1
                 left.append(status)
@@ -885,8 +904,9 @@ def _op_name(names_of: dict, key, endpoint: dict) -> str:
     return names_of.get(key, [f"{endpoint['method']} {endpoint['path']}"])[0]
 
 
-def _note_no_scenario(res: "ScreenResult", names_of: dict, key, endpoint: dict) -> None:
-    item = {"op": _op_name(names_of, key, endpoint), "cause": "no scenario"}
+def _note_no_scenario(res: "ScreenResult", names_of: dict, key, endpoint: dict,
+                      status: str) -> None:
+    item = {"op": _op_name(names_of, key, endpoint), "status": status, "cause": "no scenario"}
     if item not in res.unmeasured_items:
         res.unmeasured_items.append(item)
 
@@ -1059,6 +1079,8 @@ class CoverageReport:
     baseline_present: bool = False
     entries: list = field(default_factory=list)
     baseline: dict = field(default_factory=dict)
+    #: Per platform {new, stale, hidden, vanished}: the entries themselves.
+    baseline_items: dict = field(default_factory=dict)
 
 
 def run_coverage(root: Path, platforms=None, screen: str | None = None) -> CoverageReport:
@@ -1112,7 +1134,9 @@ def run_coverage(root: Path, platforms=None, screen: str | None = None) -> Cover
     report.entries = cb.current_entries(report)
     report.baseline_file = str(path)
     report.baseline_present = recorded is not None
-    report.baseline = cb.compare(report.entries, recorded)
+    units = cb.measured(report)
+    report.baseline = cb.compare(report.entries, recorded, units)
+    report.baseline_items = cb.compare_items(report.entries, recorded, units)
     return report
 
 
@@ -1270,6 +1294,7 @@ def to_json(report: CoverageReport) -> dict:
                 "outside_required": dict(s.outside_required),
                 "na_endpoints": dict(s.na_endpoints),
                 "unbound_endpoints": list(s.unbound_endpoints), "notes": list(s.notes),
+                "unmeasured": [dict(i) for i in s.unmeasured_items],
                 "data": s.data.to_json() if s.data is not None else None})
         totals = json.loads(json.dumps(block.totals))    # the same object the text reads, copied
         platforms.append({
@@ -1280,7 +1305,10 @@ def to_json(report: CoverageReport) -> dict:
                        "branches_active": sum(s.branches_active for s in active),
                        "branches_total": sum(s.branches_total for s in active)},
             "screens": screens, "totals": totals,
-            "baseline": _baseline_counts(report, block.platform),
+            "baseline": {**_baseline_counts(report, block.platform),
+                         **{f"{k}_entries": list(v) for k, v in report.baseline_items.get(
+                             block.platform,
+                             {"new": [], "stale": [], "hidden": [], "vanished": []}).items()}},
             "data_totals": data_axis.block_totals(active),
             "data_coarse": data_axis.coarse(active)})
     return {"baseline": {"file": report.baseline_file, "present": report.baseline_present},
@@ -1324,11 +1352,13 @@ def version_key(version: str) -> tuple:
     return gates.version_key(version) if gates else ()
 
 #: ee's text (design v4.17 §6.1 P3c — the notice names the baseline: without
-#: it "fails unless coverage exits 0" would no longer be true).
+#: it "fails unless coverage exits 0" would no longer be true; v4.21: the first
+#: recording needs --initial, and says whose decision it is).
 VALIDATE_NOTICE = (
     "from jsonui-cli {version}, validate fails on contracts coverage entries not in "
     "the baseline — close them (Task 6 of the define agent), or record the current ones "
-    "once with `jsonui-test contracts baseline`; see the release note")
+    "once with `jsonui-test contracts baseline --initial` (the user's decision); see the "
+    "release note")
 
 
 def gate_state(gate_from: str | None = None) -> str:
@@ -1448,13 +1478,22 @@ def validate_section(root: Path | None, version: str, *, skipped: bool = False,
     if report.exit != EXIT_PASS:
         lines.append("  → `jsonui-test contracts coverage` lists what is uncovered or "
                      "could not be measured")
+    from .contracts_baseline import by_spec
+
     why = []
     for block in report.platforms:
         c = _baseline_counts(report, block.platform)
+        items = report.baseline_items.get(block.platform, {})
+        # Which screens: define measures one screen at a time (v4.21).
         if c["new"]:
-            why.append(f"{block.platform}: {c['new']} not in the baseline")
+            why.append(f"{block.platform}: {c['new']} not in the baseline "
+                       f"({by_spec(items.get('new', []))})")
         if c["stale"]:
-            why.append(f"{block.platform}: {c['stale']} baselined but closed")
+            why.append(f"{block.platform}: {c['stale']} baselined but closed "
+                       f"({by_spec(items.get('stale', []))})")
+        if c["vanished"]:
+            why.append(f"{block.platform}: {c['vanished']} baselined but gone from the run "
+                       f"({by_spec(items.get('vanished', []))})")
         for cause, n in unbaselinable(block).items():
             why.append(f"{block.platform}: {cause} {n} (cannot be baselined)")
     lines.append(notice)
@@ -1471,11 +1510,16 @@ def baseline_phrase(report: "CoverageReport", platform: str) -> str:
     the numbers whether or not a baseline exists (§6.1 P3c)."""
     c = _baseline_counts(report, platform)
     phrase = (f"baselined {c['baselined']} (matched {c['matched']} · new {c['new']} · "
-              f"stale {c['stale']})")
+              f"stale {c['stale']}" + (f" · unmeasured now {c['hidden']}" if c["hidden"] else "")
+              + (f" · vanished {c['vanished']}" if c["vanished"] else "") + ")")
     if not report.baseline_present:
         phrase += " — no baseline file: every entry is new"
     elif c["stale"]:
         phrase += " — stale entries are closed: run `jsonui-test contracts baseline` to drop them"
+    if report.baseline_present and c["vanished"]:
+        phrase += (" — vanished entries left the run (a screen off the platform, a spec, "
+                   "method, op or status gone): remove or re-key them by hand — the user's "
+                   "decision")
     return phrase
 
 
@@ -1487,12 +1531,14 @@ def _screen_data(spec: dict, platform: str, methods: dict, project: "Project"):
     from .branch_tests import _prefer_sibling_jui_cli
 
     _prefer_sibling_jui_cli()
-    from jui_cli.core.layout_facts import layout_facts
+    from jui_cli.core.layout_facts import cell_ids_for, layout_facts
 
     facts = layout_facts(spec, platform, layouts_dir=project.layouts_dir,
+                         styles_dir=project.styles_dir)
+    cells = cell_ids_for(facts, platform, layouts_dir=project.layouts_dir,
                          styles_dir=project.styles_dir)
     rows = [branch for contract in methods.values()
             for branch in (contract.get("branches") or [])
             if isinstance(branch, dict) and "note" not in branch
             and _branch_active(branch, platform)]
-    return data_axis.screen_data(spec, facts, rows)
+    return data_axis.screen_data(spec, facts, rows, cell_ids=cells)

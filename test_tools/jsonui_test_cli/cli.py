@@ -1616,8 +1616,9 @@ def _branch_check_summary(reports: list, scanned: int, orphans=()) -> int:
 def cmd_contracts_baseline(args):
     """Handle 'contracts baseline' — record today's coverage debt, or shrink it.
 
-    Design §6.1 P3c. No file: write the current entries. A file: write only
-    what it AND the current run hold. The tool never adds an entry; a new one
+    Design §6.1 P3c. No file: write the current entries — only with
+    `--initial` (v4.21: accepting all current debt is the user's decision).
+    A file: write only what it AND the current run hold. The tool never adds an entry; a new one
     is closed (Task 6 of the define agent) or added by hand, where the diff shows it.
 
     Nothing is written while the run holds what cannot be baselined (the gate
@@ -1646,10 +1647,19 @@ def cmd_contracts_baseline(args):
               f"the baseline says, and what they hide was never counted: "
               f"{'; '.join(blocking)}. Fix them, then run it again.", file=sys.stderr)
         return EXIT_UNCOVERED
-    entries, removed, kept, new = cb.shrink(report.entries, recorded)
+    entries, removed, kept, new, hidden, vanished = cb.shrink(report.entries, recorded,
+                                                              cb.measured(report))
     if recorded is None and not entries:
         print(f"nothing to record — no entry keeps coverage from exit 0; {path} not written")
         return 0
+    if recorded is None and not args.initial:
+        # A latch, not a switch (v4.21): the first recording accepts every
+        # entry there is as debt, which is the user's decision — made on
+        # purpose, never by an agent running the command it was told to run.
+        print(f"contracts baseline: nothing written — recording the first baseline accepts "
+              f"all current debt ({len(entries)} entr{'y' if len(entries) == 1 else 'ies'}) — "
+              "the user's decision; run with --initial", file=sys.stderr)
+        return EXIT_UNCOVERED
     text = cb.dump(entries)
     if path.is_file() and path.read_text(encoding="utf-8") == text:
         verb = "unchanged"
@@ -1657,8 +1667,11 @@ def cmd_contracts_baseline(args):
         verb = "wrote" if recorded is None else "updated"
         path.write_text(text, encoding="utf-8")
     print(f"{verb} {path}")
-    print(f"removed {removed} · kept {kept} · new {new} not added"
-          + (" (close them, or add by hand)" if new else ""))
+    print(f"removed {removed} · kept {kept}"
+          + (f" ({hidden} unmeasured now — not closed, kept)" if hidden else "")
+          + (f" ({vanished} vanished — not closed, kept; remove or re-key them by hand)"
+             if vanished else "")
+          + f" · new {new} not added" + (" (close them, or add by hand)" if new else ""))
     return 0
 
 
@@ -3387,13 +3400,19 @@ def main():
         help="Contract-gap checks: which API outcomes the branch contracts answer")
     contracts_subparsers = contracts_parser.add_subparsers(
         dest="contracts_action", help="Contracts action")
-    contracts_subparsers.add_parser(
+    baseline_parser = contracts_subparsers.add_parser(
         "baseline",
         help="Record the entries that make contracts coverage exit non-zero in "
              "<spec_directory>/contracts_coverage_baseline.json — all of them when "
-             "there is no file, and otherwise only those still present (it only "
-             "shrinks; a new entry is closed or added by hand). validate's gate "
-             "fails on entries not in it and on entries in it that are closed")
+             "there is no file (only with --initial), and otherwise only those still "
+             "present or unmeasured now (it only shrinks; a new entry is closed or "
+             "added by hand). validate's gate fails on entries not in it and on "
+             "entries in it that are closed")
+    baseline_parser.add_argument(
+        "--initial", action="store_true",
+        help="Write the FIRST baseline: it accepts every current entry as debt, "
+             "which is the user's decision. Without it, a run with no file writes "
+             "nothing")
     coverage_parser = contracts_subparsers.add_parser(
         "coverage",
         help="Every response status the OpenAPI declares for an operation a "

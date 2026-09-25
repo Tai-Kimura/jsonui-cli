@@ -99,6 +99,20 @@ module SjuiTools
           
           puts "Converting #{input_file} to SwiftUI..."
           
+          # Every include path resolves from the layouts root (U8) — when the
+          # file is under a project's; otherwise (no project here: the lookup
+          # raises) from its own directory, as a lone file always did.
+          layouts_dir = begin
+            config = Core::ConfigManager.load_config
+            source_path = Core::ProjectFinder.get_full_source_path || Dir.pwd
+            File.expand_path(File.join(source_path, config['layouts_directory'] || 'Layouts'))
+          rescue StandardError
+            nil
+          end
+          if layouts_dir && File.expand_path(input_file).start_with?(layouts_dir + File::SEPARATOR)
+            SwiftUI::IncludeExpander.layouts_root = layouts_dir
+          end
+
           converter = SwiftUI::JsonToSwiftUIConverter.new
           generated_file = converter.convert_file(input_file, output_file)
           

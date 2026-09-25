@@ -188,7 +188,7 @@ module KjuiTools
           end
 
           # Process includes - expand inline with ID prefix support (like SwiftJsonUI)
-          json_data = IncludeExpander.process_includes(json_data, File.dirname(json_file))
+          json_data = IncludeExpander.process_includes(json_data, File.dirname(json_file), nil, @layouts_dir)
 
           @required_imports = Set.new
           @included_views = Set.new
@@ -1308,7 +1308,7 @@ module KjuiTools
           return
         end
 
-        json_data = IncludeExpander.process_includes(json_data, File.dirname(variant_file))
+        json_data = IncludeExpander.process_includes(json_data, File.dirname(variant_file), nil, @layouts_dir)
 
         @required_imports = Set.new
         @included_views = Set.new
@@ -1324,7 +1324,7 @@ module KjuiTools
         # Optionality checks resolve against the BASE data section
         base_json = JSON.parse(File.read(base_json_file))
         base_json = StyleLoader.load_and_merge(base_json)
-        base_json = IncludeExpander.process_includes(base_json, File.dirname(base_json_file))
+        base_json = IncludeExpander.process_includes(base_json, File.dirname(base_json_file), nil, @layouts_dir)
         data_definitions = {}
         extract_data_properties(base_json).each do |prop|
           data_definitions[prop['name']] = prop

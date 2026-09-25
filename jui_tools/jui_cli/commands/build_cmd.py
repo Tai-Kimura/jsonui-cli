@@ -292,6 +292,12 @@ def cmd_build(args: argparse.Namespace) -> int:
     if variants_ok is False:
         return 1
 
+    # Hard gate: no two nodes under one id once includes expand (design U8).
+    with clock.stage("layout id uniqueness"):
+        ids_ok = _check_layout_id_uniqueness(config_mgr, platforms)
+    if ids_ok is False:
+        return 1
+
     # Localize scan (opt-in). Findings are PRINTED as build warnings and
     # do NOT change the exit code: this command has no warning tally and no
     # path that fails on one. To fail on findings, run `jui lint-strings`
@@ -1038,7 +1044,14 @@ def _run_tool(cmd: list[str], cwd: Path) -> bool:
     tool_name = cmd[0]
     resolved = resolve_tool(tool_name, cwd)
     actual_cmd = [resolved] + cmd[1:]
-    env = build_tool_env(resolved, tool_name)
+    extra = None
+    if tool_name == "rjui":
+        # Design U8: whether web prefixes the ids inside an include is decided
+        # HERE, once, from INCLUDE_ID_PREFIX_GATE_FROM; rjui only follows it
+        # (run standalone it keeps the old spelling and says so).
+        from ..core.layout_facts import include_id_prefix_env
+        extra = {"JSONUI_INCLUDE_ID_PREFIX": include_id_prefix_env()}
+    env = build_tool_env(resolved, tool_name, extra=extra)
 
     try:
         result = subprocess.run(actual_cmd, cwd=cwd, env=env)
@@ -2100,6 +2113,54 @@ def _spec_cell_layout_stems(config_mgr: ConfigManager) -> set[str]:
         except json.JSONDecodeError:
             continue
     return stems
+
+
+def _check_layout_id_uniqueness(config_mgr: ConfigManager, platforms) -> bool:
+    """Hard gate: every layout's ids are unique once includes expand (U8).
+
+    An include's id prefixes the ids inside it (`hero` + `type_badge` ->
+    `heroTypeBadge`), so two spellings can meet: `type_badge` and
+    `typeBadge` in one partial, `hero` + `card_type_badge` beside
+    `hero_card` + `type_badge`, one partial included twice under one id.
+    The runtime and every driver find an element by its id as written, so
+    a test would reach one of them and never know about the other. Read with
+    `jui_cli.core.layout_facts` — the one expander the spec validator and
+    coverage read — per platform the project builds (all three when it
+    declares none).
+    """
+    from ..core.layout_facts import duplicate_ids
+    from ..core.platform_resolver import VALID_PLATFORMS
+
+    layouts_dir = config_mgr.layouts_directory
+    if not layouts_dir.exists():
+        return True
+    skip_prefixes = {"Resources"}
+    styles_src = config_mgr.styles_directory
+    if styles_src.exists() and layouts_dir in styles_src.parents:
+        skip_prefixes.add(styles_src.relative_to(layouts_dir).parts[0])
+    targets = [p for p in VALID_PLATFORMS if not platforms or p in platforms]
+    styles_dir = styles_src if styles_src.exists() else layouts_dir
+
+    errors: list[str] = []
+    for src_file in sorted(layouts_dir.rglob("*.json")):
+        rel = src_file.relative_to(layouts_dir)
+        if rel.parts[0] in skip_prefixes:
+            continue
+        name = rel.with_suffix("").as_posix()
+        for platform, dups in duplicate_ids(name, targets, layouts_dir=layouts_dir,
+                                            styles_dir=styles_dir).items():
+            for element, count in sorted(dups.items()):
+                errors.append(f"{rel.as_posix()} ({platform}): '{element}' is the id of "
+                              f"{count} nodes once includes expand")
+    if not errors:
+        return True
+    print("ERROR [layout-ids]: an id must name one element — the runtime and every "
+          "driver find an element by its id, so a test would reach only one of these. "
+          "Rename one of each (an include's id prefixes the ids inside it: "
+          "`hero` + `type_badge` -> `heroTypeBadge`):")
+    for line in errors:
+        print(f"  - {line}")
+    return False
 
 
 def _check_variant_constraints(config_mgr: ConfigManager) -> bool:

@@ -14,6 +14,8 @@ goes through every reader this tree has, and they must agree:
                   (test_tools branch_tests)
   tag gate        dev-guide/release/validate_gate_version.py: its verdict on
                   the literal kept from the previous tag at the table's version
+  include ids     jui's decision for web's include ids, handed to rjui as
+                  JSONUI_INCLUDE_ID_PREFIX (jui_tools; U8)
 
 The three `shared_core` loaders that find the module must stay one loader
 in three copies: a copy that diverged would be a second way to find it.
@@ -126,6 +128,14 @@ def _reader_tag_gate(literal, version):
     return ("no verdict the table knows", ok, why)
 
 
+def _reader_include_prefix(literal, version, monkeypatch):
+    """jui's decision for web's include ids (design U8) — what it hands rjui."""
+    from jui_cli.core import layout_facts
+    monkeypatch.setattr(layout_facts, "INCLUDE_ID_PREFIX_GATE_FROM", literal)
+    state = layout_facts.include_id_prefix_state(version)
+    return state == "on", state == "announce"
+
+
 @pytest.mark.parametrize("literal, version, state, gates, announces", TABLE)
 def test_every_reader_gives_the_tables_answer(literal, version, state, gates, announces,
                                              monkeypatch, tmp_path):
@@ -136,6 +146,8 @@ def test_every_reader_gives_the_tables_answer(literal, version, state, gates, an
         "layout ids": (state, *_reader_layout_ids(literal, version, monkeypatch, tmp_path)),
         "unmatched": _reader_unmatched(literal, version, monkeypatch),
         "tag gate": _reader_tag_gate(literal, version),
+        "include ids (jui -> rjui)": (state, *_reader_include_prefix(literal, version,
+                                                                     monkeypatch)),
     }
     assert answers == {name: (state, gates, announces) for name in answers}, answers
 

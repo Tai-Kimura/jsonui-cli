@@ -143,3 +143,28 @@ class TestTheCoarseSwitch:
 
     def test_equal_is_not_more(self):
         assert not da.coarse([self._S(4, 4), self._S(4, 4), self._S(1, 5)])
+
+
+class TestIdsNotOnTheLayout:
+    """An id is on the layout, missing (with candidates), or cannot be checked
+    (in a cell, an include's per-platform spelling) — `classify_element`, the
+    spec validator's answer too."""
+
+    def test_missing_with_candidates_and_cannot_check_are_kept_apart(self, tmp_path):
+        spec = _screen_with_state(ROWS)
+        spec["stateManagement"]["states"][0]["values"] += [
+            {"value": "typo", "description": "d", "visibleElements": ["save"]},
+            {"value": "incell", "description": "d", "visibleElements": ["cellTitle"]}]
+        layout = copy.deepcopy(LAYOUT)
+        layout["child"][3]["cellClasses"] = ["detail/row_cell"]
+        root = _project(tmp_path, spec, layout)
+        _write(root / "docs/screens/layouts/detail/row_cell.json",
+               {"type": "View", "id": "cellRoot", "child": [{"type": "Label", "id": "cellTitle"}]})
+        d = _data(cc.run_coverage(root))
+        assert {o["id"]: (o["kind"], o["candidates"]) for o in d.visible_ids_detail} == {
+            "nowhere": ("missing", []),
+            "save": ("missing", ["save_button"]),      # "button" is the node's type
+            "cellTitle": ("in_cell", [])}
+        assert (d.visible_ids_not_in_layout, d.visible_ids_cannot_check) == (2, 1)
+        assert "visibleElements not in layout 2 (cannot check 1)" in "\n".join(
+            cc.format_text(cc.run_coverage(root)))
