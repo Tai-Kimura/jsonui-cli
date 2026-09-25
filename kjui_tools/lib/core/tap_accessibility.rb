@@ -1,0 +1,137 @@
+# frozen_string_literal: true
+
+module JsonUIShared
+  # Whether a screen reader is told a tappable is a button — one rule for the
+  # sjui and kjui codegen (the Dynamic runtimes of both libraries implement
+  # the same rule, and all four run shared/core/tap_accessibility_vectors.json).
+  #
+  # A tappable (onClick / onclick, not statically disabled) is a
+  # `.onTapGesture` on iOS and a `.clickable` on Android, neither of which says
+  # "button" by itself. Each tappable gets one shape:
+  #
+  #   button  — it holds no children: it becomes a button as it is
+  #             (iOS `.accessibilityAddTraits(.isButton)`, Android
+  #             `role = Role.Button`).
+  #   combine — it holds children and nothing inside it can be operated on its
+  #             own: it becomes ONE button whose name is its content (iOS
+  #             `.accessibilityElement(children: .combine)` + `.isButton`, in
+  #             place of the `.contain` an id would get; Android `role`).
+  #   none    — its own type is a control already (Button, Switch, …), or
+  #             something inside it can be operated on its own (an interactive
+  #             type, or a descendant with its own tap): left as it was. On iOS
+  #             neither measured shape works there — `.isButton` under
+  #             `.contain` makes every child a button, and `.combine` turns the
+  #             container into the control inside it (XCUITest elementType,
+  #             2026-09-25). That is the silence this rule chooses.
+  #
+  # Which types are operable is DECLARED, per type, as `interactive` in
+  # shared/core/component_metadata.json — every type states it; absence is
+  # not read as "not interactive" (Button, Radio and Web declare no two-way
+  # binding and are operable). INTERACTIVE_TYPES and KNOWN_TYPES below are
+  # that declaration with its aliases, pinned to it by spec. A type the
+  # declaration does not know (a custom component) counts as operable: a
+  # container that might hold a control is not flattened.
+  module TapAccessibility
+    module_function
+
+    # component_metadata.json types with `interactive: true`, and their aliases.
+    INTERACTIVE_TYPES = %w[
+      TextField EditText Input TextView Button Switch Toggle CheckBox Check Checkbox
+      Radio SelectBox Segment Slider TabView ScrollView Collection Table TableView
+      RecyclerView Web Embed
+    ].freeze
+
+    # Every component_metadata.json type, and its aliases.
+    KNOWN_TYPES = (INTERACTIVE_TYPES + %w[
+      Label Text Image CircleImage CircleImageView ImageView Img NetworkImage View
+      SafeAreaView Progress Indicator CircleView GradientView Blur IconLabel
+    ]).freeze
+
+    TAP_KEYS = %w[onClick onclick].freeze
+
+    # Operable inside a tappable even when its type is not: a long press (a
+    # screen-reader action — image_accessibility.rb counts it too), and a
+    # Label that carries links of its own (`linkable`, or a partialAttributes
+    # range with its own tap). A tappable holding one is not flattened. A
+    # tappable whose only handler is a long press is not a tap here: there is
+    # nothing to call a button. `canTap` without onClick is not a tap either —
+    # it has no handler (both runtimes require onClick; see the canTap ticket).
+    LONG_PRESS_KEY = 'onLongPress'
+    TEXT_TYPES = %w[Label Text].freeze
+
+    SHAPE_KEY = '_tapShape'
+
+    def interactive_type?(type)
+      INTERACTIVE_TYPES.include?(type) || !KNOWN_TYPES.include?(type)
+    end
+
+    # A tap the codegen emits: a handler, and not statically disabled.
+    def tappable?(node)
+      node.is_a?(Hash) && node['enabled'] != false &&
+        TAP_KEYS.any? { |key| present?(node[key]) }
+    end
+
+    def children(node)
+      %w[child children].flat_map do |key|
+        value = node[key]
+        case value
+        when Array then value.select { |c| c.is_a?(Hash) }
+        when Hash then [value]
+        else []
+        end
+      end
+    end
+
+    def present?(value)
+      !value.nil? && !(value.respond_to?(:empty?) && value.empty?)
+    end
+
+    def linked_text?(node)
+      return false unless TEXT_TYPES.include?(node['type'])
+
+      linkable = node['linkable']
+      return true if linkable == true || (linkable.is_a?(String) && linkable.start_with?('@{'))
+
+      Array(node['partialAttributes']).any? do |range|
+        range.is_a?(Hash) && (present?(range['onClick']) || present?(range['onclick']))
+      end
+    end
+
+    # A node a user can operate on its own, inside a tappable.
+    def operable?(node)
+      interactive_type?(node['type']) || tappable?(node) ||
+        (node['enabled'] != false && present?(node[LONG_PRESS_KEY])) || linked_text?(node)
+    end
+
+    # Something inside `node` (not itself) a user can operate on its own.
+    def holds_a_control?(node)
+      children(node).any? { |c| operable?(c) || holds_a_control?(c) }
+    end
+
+    # The shape of one node, or nil when it is not a tappable.
+    def shape(node)
+      return nil unless tappable?(node)
+      return 'none' if interactive_type?(node['type'])
+      return 'button' if children(node).empty?
+      return 'none' if holds_a_control?(node)
+
+      'combine'
+    end
+
+    # Writes SHAPE_KEY on every tappable of an include-expanded tree.
+    def annotate!(root)
+      walk(root) do |node|
+        value = shape(node)
+        node[SHAPE_KEY] = value if value
+      end
+      root
+    end
+
+    def walk(node, &block)
+      return unless node.is_a?(Hash)
+
+      yield node
+      children(node).each { |c| walk(c, &block) }
+    end
+  end
+end

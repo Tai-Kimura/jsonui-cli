@@ -11,6 +11,7 @@ require_relative 'modifier_helper'
 require_relative 'modifier_bag'
 require_relative '../binding/binding_handler_registry'
 require_relative '../../core/attribute_validator'
+require_relative '../../core/tap_accessibility'
 require_relative '../helpers/string_manager_helper'
 
 module SjuiTools
@@ -374,6 +375,10 @@ module SjuiTools
         # be the DEPTH BUDGET regression on every cell. Whether dynamic
         # needs one is left to the conformance fixtures that run through it.
         def apply_collection_cell_root_container
+          # A root combined into one button (tap_accessibility_lines) is an
+          # element already; a container around it would hide it again.
+          return if combined_tap?
+
           # The same single-child merge the id path guards against, for the
           # same reason and by the same means. `.contain` alone is not enough
           # when the container can end up with fewer than two accessibility
@@ -448,7 +453,10 @@ module SjuiTools
           # spellings must suppress the identifier for the same reason.
           return if @component['visibility'] == 'invisible' || @component['hidden'] == true
 
-          if accessibility_container?
+          # A tappable combined into one button carries its own element
+          # (tap_accessibility_lines): the identifier lands on it, and the
+          # container — and its anchor — would split it back into children.
+          if accessibility_container? && !combined_tap?
             if accessibility_merge_hazard?
               add_modifier_line ".overlay(alignment: .topLeading) {"
               indent do
@@ -787,18 +795,7 @@ module SjuiTools
           # layouts, and read by nobody on the SwiftUI path, so every screen
           # migrating from UIKit lost its taps silently. camelCase wins when
           # both are present.
-          # ただし、Buttonの場合は既にactionで処理しているのでスキップ
-          unless @component['type'] == 'Button'
-            # enabled=falseの場合はクリックイベントを追加しない
-            unless @component['enabled'] == false
-              if @component['onClick']
-                on_click_lines = build_on_click_lines(@component['onClick'])
-                @modifier_bag.register(:on_click, on_click_lines)
-              elsif @component['onclick']
-                @modifier_bag.register(:on_click, build_selector_click_lines(@component['onclick']))
-              end
-            end
-          end
+          register_click_lines
 
           apply_long_press_to_bag
           apply_pan_to_bag
@@ -813,12 +810,60 @@ module SjuiTools
           apply_alert_to_bag
         end
 
+        # The tap, one rule for every converter (label_converter calls it too:
+        # it builds its own modifiers and had kept only the binding onClick, so
+        # the `onclick` fix above never reached a Label). camelCase wins when
+        # both are present; a Button's tap is its action; a statically
+        # disabled view gets none.
+        def register_click_lines
+          return if @component['type'] == 'Button'
+          return if @component['enabled'] == false
+
+          if @component['onClick']
+            @modifier_bag.register(:on_click, build_on_click_lines(@component['onClick']))
+          elsif @component['onclick']
+            @modifier_bag.register(:on_click, build_selector_click_lines(@component['onclick']))
+          end
+        end
+
         # `onclick` values are method names, not bindings: a bare string, or an
         # array of them to call in order.
         def build_selector_click_lines(value)
           names = value.is_a?(Array) ? value : [value]
           calls = names.map { |n| "    data.#{to_camel_case(n.to_s)}?()" }
-          [".onTapGesture {"] + calls + ["}"]
+          [".onTapGesture {"] + calls + ["}"] + tap_accessibility_lines
+        end
+
+        # What a screen reader is told about this tap
+        # (shared/core/tap_accessibility.rb, set on the node before conversion):
+        # a button as it is, one button made of its content, or — where it
+        # holds a control of its own — nothing. Measured with XCUITest
+        # (elementType, 2026-09-25): `.onTapGesture` alone is not a button;
+        # `.isButton` under `.contain` makes every child a button; `.combine`
+        # + `.isButton` is one button named by its content.
+        def tap_accessibility_lines
+          case @component[JsonUIShared::TapAccessibility::SHAPE_KEY]
+          when 'button' then ['.accessibilityAddTraits(.isButton)']
+          when 'combine'
+            # The anchor the id path uses, for the same single-child merge:
+            # with one accessible child, `.combine` took the child's own
+            # identifier away (measured: the child's id found 0 times; with
+            # the anchor, or two children, it is found). BEFORE `.combine`,
+            # so the anchor is one of the children it combines.
+            anchor = []
+            if accessibility_merge_hazard?
+              indent_str = "    " * (@indent_level + 1)
+              anchor << ".overlay(alignment: .topLeading) {\n#{indent_str}Color.clear\n" \
+                        "#{indent_str}    .frame(width: 0.5, height: 0.5)\n" \
+                        "#{indent_str}    .accessibilityElement(children: .ignore)\n#{indent_str[0...-4]}}"
+            end
+            anchor + ['.accessibilityElement(children: .combine)', '.accessibilityAddTraits(.isButton)']
+          else []
+          end
+        end
+
+        def combined_tap?
+          @component[JsonUIShared::TapAccessibility::SHAPE_KEY] == 'combine'
         end
 
         # onLongPress — binding-only (`@{handler}`), applied by the SwiftUI
@@ -1569,7 +1614,7 @@ module SjuiTools
           [
             ".contentShape(Rectangle())",
             ".onTapGesture {\n#{indent_str}#{handler_call}\n#{indent_str[0...-4]}}"
-          ]
+          ] + tap_accessibility_lines
         end
 
         # Build lifecycle handler lines

@@ -10,6 +10,7 @@ require_relative '../core/logger'
 require_relative '../core/type_converter'
 require_relative '../core/layout_validator'
 require_relative '../core/image_accessibility'
+require_relative '../core/tap_accessibility'
 require_relative '../core/normalization'
 require_relative '../core/layout_variant'
 require_relative '../core/screen_index'
@@ -214,6 +215,7 @@ module KjuiTools
           # Process includes - expand inline with ID prefix support (like SwiftJsonUI)
           json_data = IncludeExpander.process_includes(json_data, File.dirname(json_file), nil, @layouts_dir)
           annotate_image_roles(json_data, json_file)
+          JsonUIShared::TapAccessibility.annotate!(json_data)
 
           @required_imports = Set.new
           @included_views = Set.new
@@ -1339,6 +1341,7 @@ module KjuiTools
 
         json_data = IncludeExpander.process_includes(json_data, File.dirname(variant_file), nil, @layouts_dir)
         annotate_image_roles(json_data, variant_file)
+        JsonUIShared::TapAccessibility.annotate!(json_data)
 
         @required_imports = Set.new
         @included_views = Set.new

@@ -16,6 +16,7 @@ require_relative 'include_expander'
 require_relative '../core/attribute_validator'
 require_relative '../core/layout_validator'
 require_relative '../core/image_accessibility'
+require_relative '../core/tap_accessibility'
 require_relative '../core/normalization'
 require_relative 'views/color_helper'
 
@@ -88,6 +89,7 @@ module SjuiTools
         # includeを処理
         json_data = process_includes(json_data, File.dirname(json_file_path))
         annotate_image_roles(json_data, json_file_path)
+        JsonUIShared::TapAccessibility.annotate!(json_data)
         mark_root_if_scrolling_cell(json_data, json_file_path)
         mark_root_if_collection_cell(json_data, json_file_path)
 
@@ -250,6 +252,7 @@ module SjuiTools
         # Process includes
         json_data = process_includes(json_data, File.dirname(json_file_path))
         annotate_image_roles(json_data, json_file_path)
+        JsonUIShared::TapAccessibility.annotate!(json_data)
         mark_root_if_scrolling_cell(json_data, json_file_path)
         mark_root_if_collection_cell(json_data, json_file_path)
 
