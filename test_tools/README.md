@@ -606,6 +606,18 @@ release. Clear one by declaring the route and its scenarios (a repositories /
 useCases `endpoint` and a mock); a call the app's network layer makes around
 every request is admitted once, with `apiOutcomeRules` (below).
 
+Only the app's own API counts. A request to another host — an analytics SDK,
+say — is the info `unmatched_foreign: N — METHOD origin/path`, never a
+failure, and routes answer only the app's requests (another host's POST to a
+declared path is not served). Tell the runtime which hosts are the app's: on
+web, export `apiOrigins` from the screen's harness module (`export const
+apiOrigins = ["https://api.example.com"]`; a relative URL is always the
+app's); on iOS, give the harness `apiOrigin` (override it on
+`BaseBranchHarness`, or declare it on your own `BranchHarness`). Undeclared,
+the hosts cannot be told apart and every unmatched request counts as the
+app's — the message says to declare them. Android needs nothing: MockWebServer
+only ever sees the app's own requests.
+
 ### Side calls the screen does not declare
 
 A rule's `sideCalls` name operations the app's network layer makes around a

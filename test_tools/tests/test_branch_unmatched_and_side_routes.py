@@ -177,7 +177,8 @@ def test_xxxii_an_undeclared_route_in_the_act_window_is_red_and_named(tmp_path, 
     tc.tool("node")
     _, rows, _ = _generate_and_run(_project(tmp_path, rule=True))
     passed, why = _row(rows, "refresh", 1)
-    assert not passed and "GET /api/unknown" in why and "reached no declared route" in why, rows
+    assert not passed and "GET https://api.test/api/unknown" in why, rows
+    assert "reached no declared route" in why and "apiOrigins" in why, rows
 
 
 def test_xxxii_control_declaring_the_route_makes_it_green(tmp_path, red):
@@ -191,7 +192,7 @@ def test_before_the_gate_the_request_is_a_warning_naming_the_release(tmp_path, m
     monkeypatch.setattr(bt, "UNMATCHED_GATE_FROM", "999.0.0")
     _, rows, stderr = _generate_and_run(_project(tmp_path, rule=True))
     assert _row(rows, "refresh", 1)[0], rows
-    assert "GET /api/unknown reached no declared route" in stderr, stderr
+    assert "GET https://api.test/api/unknown reached no declared route" in stderr, stderr
     assert "from jsonui-cli 999.0.0 this fails the test" in stderr, stderr
 
 
@@ -200,7 +201,7 @@ def test_unset_the_warning_promises_no_release(tmp_path, monkeypatch):
     monkeypatch.setattr(bt, "UNMATCHED_GATE_FROM", None)
     _, rows, stderr = _generate_and_run(_project(tmp_path, rule=True))
     assert _row(rows, "refresh", 1)[0], rows
-    assert "GET /api/unknown reached no declared route" in stderr, stderr
+    assert "GET https://api.test/api/unknown reached no declared route" in stderr, stderr
     assert "this fails the test" not in stderr, stderr
 
 
@@ -227,7 +228,7 @@ def test_xxxiv_no_rule_and_401_is_red_naming_the_request(tmp_path, red):
     report, rows, _ = _generate_and_run(_project(tmp_path, rule=False, declare_unknown=True))
     assert report.side_routes == []
     passed, why = _row(rows, "submit", 1)
-    assert not passed and "POST /api/logout" in why, rows
+    assert not passed and "POST https://api.test/api/logout" in why, rows
     assert _row(rows, "submit", 2)[0], rows
 
 
@@ -265,3 +266,24 @@ def test_the_released_tool_announces_no_red_yet():
     """Guard for the release: the literal ships unset until the release that
     announces the red is cut (it is set then, not derived)."""
     assert bt.UNMATCHED_GATE_FROM is None
+
+
+# ------------------------------------------------------------- withdrawn ---
+
+@pytest.mark.parametrize("running", ["1.8.118", "1.8.119", "1.8.120"])
+def test_a_withdrawn_gate_is_never_red_and_does_not_stop_generation(monkeypatch, running):
+    """Design v4.18 makes "withdrawn" a lawful literal, and the tag gate passes
+    it; reading it as a version would stop every face's generation."""
+    monkeypatch.setattr(bt, "UNMATCHED_GATE_FROM", "withdrawn")
+    monkeypatch.setattr(bt, "_running_version", lambda: running)
+    assert bt.unmatched_gate() == (False, "withdrawn")
+
+
+def test_a_withdrawn_gate_warns_that_it_was_withdrawn(tmp_path, monkeypatch):
+    tc.tool("node")
+    monkeypatch.setattr(bt, "UNMATCHED_GATE_FROM", "withdrawn")
+    _, rows, stderr = _generate_and_run(_project(tmp_path, rule=True))
+    assert all(v[0] for v in rows.values()), rows
+    assert "GET https://api.test/api/unknown reached no declared route" in stderr, stderr
+    assert "was withdrawn — it does not fail" in stderr, stderr
+    assert "from jsonui-cli withdrawn" not in stderr, stderr

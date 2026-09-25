@@ -110,7 +110,7 @@ await fetch("https://x.test/b", { method: "POST", body: JSON.stringify({ before:
 await fetch("https://x.test/early", { method: "POST" });
 check("unmarked-sees-everything", rec.countFor("a") === 1 && rec.countFor("b") === 1);
 check("unmatched-unmarked-sees-the-early-one",
-      JSON.stringify(rec.unmatchedCalls()) === '["POST /early"]');
+      JSON.stringify(rec.unmatchedCalls()) === '["POST https://x.test/early"]');
 rec.mark();
 check("pre-mark-not-counted", rec.countFor("a") === 0);
 check("pre-mark-no-body", rec.lastBodyFor("b") === undefined);
@@ -126,7 +126,7 @@ check("unexpected-ignores-unmatched", !rec.unexpectedOps(["a"]).includes("(unmat
 check("unexpected-empty-when-allowed", rec.unexpectedOps(["a", "b"]).length === 0);
 await fetch("https://x.test/elsewhere");
 check("unmatched-names-only-the-window",
-      JSON.stringify(rec.unmatchedCalls()) === '["GET /elsewhere"]');
+      JSON.stringify(rec.unmatchedCalls()) === '["GET https://x.test/elsewhere"]');
 rec.restore();
 '''
 

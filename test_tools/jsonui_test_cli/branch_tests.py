@@ -1799,6 +1799,24 @@ UNMATCHED_MESSAGE = (
     "a call the app's network layer makes around every request is admitted "
     "once, with apiOutcomeRules sideCalls")
 
+#: Only requests to the app's own API fail (design v4.19): another host is
+#: the info `unmatched_foreign`. A face that cannot tell the two apart counts
+#: the request as the app's, and the message says how to tell them apart.
+#: Android needs none: MockWebServer records only its own host:port.
+UNMATCHED_CLASSIFY = {
+    "web": (" If a host named here is not the app's API, export `apiOrigins` from the "
+            "harness (the app's API origins, e.g. [\"https://api.example.com\"]): "
+            "requests to other hosts then become the info unmatched_foreign"),
+    "ios": (" If a host named here is not the app's API, give the harness `apiOrigin` "
+            "(the app's API base URL): requests to other hosts then become the info "
+            "unmatched_foreign"),
+    "android": "",
+}
+
+
+def unmatched_message(platform: str) -> str:
+    return UNMATCHED_MESSAGE + "." + UNMATCHED_CLASSIFY.get(platform, "")
+
 
 def _version_tuple(version: str) -> tuple:
     try:
@@ -1814,12 +1832,20 @@ def _running_version() -> str:
     return __version__
 
 
+#: The literal that withdraws an announced gate (design v4.18): no gate, and
+#: the warning says the release that was to fail the test was withdrawn.
+GATE_WITHDRAWN = "withdrawn"
+
+
 def unmatched_gate() -> tuple[bool, str | None]:
     """(red, gate): whether unmatched requests in the act window fail the
-    generated test, and the release that makes them fail (None when unset)."""
+    generated test, and the release that makes them fail (None when unset,
+    "withdrawn" when an announcement was withdrawn — never red)."""
     gate = UNMATCHED_GATE_FROM
     if not gate:
         return False, None
+    if gate == GATE_WITHDRAWN:
+        return False, GATE_WITHDRAWN
     return _version_tuple(_running_version()) >= _version_tuple(gate), gate
 
 
@@ -1919,12 +1945,15 @@ def render_test_file(
     lines.append("import { describe, expect, it } from \"vitest\";")
     lines.append("import {")
     red, _gate = unmatched_gate()
-    lines.append("  installFetchMock, partialMismatches, "
+    lines.append("  apiOriginsOf, installFetchMock, partialMismatches, "
                  + ("reportConditionWithoutEffect, " if any(r.control_of for r in rows) else "")
                  + ("" if red else "reportUnmatched, ")
-                 + "resolveString, seedState, settle,\n  type RouteSpec,")
+                 + "reportUnmatchedForeign, resolveString, seedState, settle,\n  type RouteSpec,")
     lines.append("} from \"./jsonui-branch-runtime\";")
     lines.append(f"import {{ createHarness }} from \"{harness_import}\";")
+    # The harness may export `apiOrigins` (P2e(a), v4.19): the app's API
+    # origins, so a request to another host is told apart from the app's own.
+    lines.append(f"import * as harnessModule from \"{harness_import}\";")
     if any(row.conditions for row in rows):
         # Only when the app declares harnessConditions: an app that does not
         # gets the file byte for byte as before (red-check xxix).
@@ -2015,10 +2044,8 @@ def _render_branch(
     # constructor started ran during the settle that follows act — it
     # overwrote the arranged state and landed inside the window, in an order
     # that differed per platform.
-    if overrides:
-        out.append(f"    const rec = installFetchMock(ROUTES, {_ts(overrides)});")
-    else:
-        out.append("    const rec = installFetchMock(ROUTES);")
+    out.append(f"    const rec = installFetchMock(ROUTES, {_ts(overrides) if overrides else '{}'}, "
+               "apiOriginsOf(harnessModule));")
     out.append("    try {")
     # Harness conditions (design v4.11, P2d): after the mock is in, before the
     # harness is built — every declared condition, the row's value or its
@@ -2059,9 +2086,10 @@ def _render_branch(
     )
     red, gate = unmatched_gate()
     if red:
-        out.append(f"      expect(rec.unmatchedCalls(), {_ts(UNMATCHED_MESSAGE)}).toEqual([]);")
+        out.append(f"      expect(rec.unmatchedCalls(), {_ts(unmatched_message('web'))}).toEqual([]);")
     else:
         out.append(f"      reportUnmatched(rec.unmatchedCalls(), {_ts(gate) if gate else 'null'});")
+    out.append("      reportUnmatchedForeign(rec.unmatchedForeign());")
 
     for key, value in then.items():
         if key == "api":
@@ -2181,6 +2209,10 @@ export interface RecordedCall {
   method: string;
   path: string;
   body: unknown;
+  /** The request's origin ("" for a relative URL). */
+  origin?: string;
+  /** A request to a host that is not the app's API (P2e(a), v4.19). */
+  foreign?: boolean;
 }
 
 export interface FetchRecorder {
@@ -2202,9 +2234,22 @@ export interface FetchRecorder {
    * each once, sorted. Empty when every call was one the contract expects. */
   unexpectedOps(allowed: string[]): string[];
   /** The requests in the window that no declared route answered (they got
-   * the 599), as "METHOD path", each once, sorted. */
+   * the 599) and that are the app's own — a relative URL, an origin in
+   * `apiOrigins`, or any absolute URL when none is declared — as
+   * "METHOD <origin>path", each once, sorted. */
   unmatchedCalls(): string[];
+  /** The same for requests to another host (the info unmatched_foreign). */
+  unmatchedForeign(): string[];
   restore(): void;
+}
+
+/** The harness module's optional `apiOrigins` export, when it is a list of
+ * strings; null (none declared) otherwise. */
+export function apiOriginsOf(harnessModule: unknown): string[] | null {
+  const declared = (harnessModule as { apiOrigins?: unknown } | null)?.apiOrigins;
+  return Array.isArray(declared) && declared.every((o) => typeof o === "string")
+    ? declared
+    : null;
 }
 
 /** Stub globalThis.fetch: serve each route's (possibly overridden) named
@@ -2212,11 +2257,13 @@ export interface FetchRecorder {
  * 599 so incidental un-declared calls surface instead of hanging. */
 export function installFetchMock(
   routes: RouteSpec[],
-  scenarioOverrides: Record<string, string> = {}
+  scenarioOverrides: Record<string, string> = {},
+  apiOrigins: string[] | null = null
 ): FetchRecorder {
   const original = globalThis.fetch;
   const calls: RecordedCall[] = [];
   const compiled = routes.map((r) => ({ ...r, re: new RegExp(r.pattern) }));
+  const own = apiOrigins === null ? null : new Set(apiOrigins.map((o) => new URL(o).origin));
 
   globalThis.fetch = (async (input: unknown, init?: RequestInit) => {
     const url =
@@ -2226,6 +2273,12 @@ export function installFetchMock(
           ? input.toString()
           : (input as Request).url;
     const path = url.replace(/^https?:\\/\\/[^/]+/, "").split("?")[0];
+    // P2e(a), v4.19: a relative URL is the app's; an absolute one is when its
+    // origin is in `apiOrigins`, or — none declared — cannot be told apart and
+    // counts as the app's. Only the app's requests are matched against routes:
+    // another host's POST to the same path is not served a scenario.
+    const origin = /^https?:\\/\\//.test(url) ? new URL(url).origin : "";
+    const foreign = origin !== "" && own !== null && !own.has(origin);
     const method = (
       init?.method ??
       (typeof input === "object" && input !== null && "method" in (input as object)
@@ -2233,7 +2286,7 @@ export function installFetchMock(
         : "GET")
     ).toUpperCase();
 
-    for (const r of compiled) {
+    for (const r of foreign ? [] : compiled) {
       if (r.method === method && r.re.test(path)) {
         let body: unknown;
         if (init?.body !== undefined) {
@@ -2263,7 +2316,7 @@ export function installFetchMock(
         );
       }
     }
-    calls.push({ op: "(unmatched)", method, path, body: undefined });
+    calls.push({ op: "(unmatched)", method, path, body: undefined, origin, foreign });
     return new Response(
       JSON.stringify({
         error: { code: "unmocked_endpoint", message: `${method} ${path}` },
@@ -2315,8 +2368,14 @@ export function installFetchMock(
     },
     unmatchedCalls() {
       const seen = windowed()
-        .filter((c) => c.op === "(unmatched)")
-        .map((c) => `${c.method} ${c.path}`);
+        .filter((c) => c.op === "(unmatched)" && !c.foreign)
+        .map((c) => `${c.method} ${c.origin ?? ""}${c.path}`);
+      return [...new Set(seen)].sort();
+    },
+    unmatchedForeign() {
+      const seen = windowed()
+        .filter((c) => c.op === "(unmatched)" && c.foreign)
+        .map((c) => `${c.method} ${c.origin ?? ""}${c.path}`);
       return [...new Set(seen)].sort();
     },
     restore() {
@@ -2350,9 +2409,21 @@ export function reportUnmatched(calls: string[], gateFrom: string | null): void 
   console.warn(
     `jsonui-test branch test: ${calls.join(", ")} reached no declared route and ` +
       "was answered 599, which no server returns — declare the route and its " +
-      "scenarios (dataFlow + mock)" +
-      (gateFrom ? `; from jsonui-cli ${gateFrom} this fails the test` : "")
+      "scenarios (dataFlow + mock); if a host named here is not the app's API, " +
+      "export apiOrigins from the harness" +
+      (gateFrom === "withdrawn"
+        ? "; the release announced to fail this test was withdrawn — it does not fail"
+        : gateFrom
+          ? `; from jsonui-cli ${gateFrom} this fails the test`
+          : "")
   );
+}
+
+/** Requests in the act window to hosts that are not the app's API (P2e(a),
+ * v4.19): info, never a failure. */
+export function reportUnmatchedForeign(calls: string[]): void {
+  if (calls.length === 0) return;
+  console.info(`unmatched_foreign: ${calls.length} — ${calls.join(", ")}`);
 }
 
 export function setMismatches(
@@ -2882,7 +2953,7 @@ def _render_kotlin_branch(
     )
     red, gate = unmatched_gate()
     if red:
-        out.append(f"      assertEquals({_kt_str(UNMATCHED_MESSAGE)}, emptyList<String>(), "
+        out.append(f"      assertEquals({_kt_str(unmatched_message('android'))}, emptyList<String>(), "
                    "rec.unmatchedCalls())")
     else:
         out.append(f"      reportUnmatched(rec.unmatchedCalls(), {_kt_str(gate) if gate else 'null'})")
@@ -3063,7 +3134,9 @@ fun reportUnmatched(calls: List<String>, gateFrom: String?) {
     "jsonui-test branch test: ${calls.joinToString(", ")} reached no declared route and " +
       "was answered 599, which no server returns — declare the route and its " +
       "scenarios (dataFlow + mock)" +
-      (if (gateFrom != null) "; from jsonui-cli $gateFrom this fails the test" else "")
+      (if (gateFrom == null) ""
+       else if (gateFrom == "withdrawn") "; the release announced to fail this test was withdrawn — it does not fail"
+       else "; from jsonui-cli $gateFrom this fails the test")
   )
 }
 
@@ -3780,9 +3853,10 @@ def _render_swift_branch(
     )
     red, gate = unmatched_gate()
     if red:
-        out.append(f"      XCTAssertEqual(rec.unmatchedCalls(), [], {_swift_str(UNMATCHED_MESSAGE)})")
+        out.append(f"      XCTAssertEqual(rec.unmatchedCalls(), [], {_swift_str(unmatched_message('ios'))})")
     else:
         out.append(f"      reportUnmatched(rec.unmatchedCalls(), {_swift_str(gate) if gate else 'nil'})")
+    out.append("      reportUnmatchedForeign(rec.unmatchedForeign())")
 
     for key, value in then.items():
         if key == "api":
@@ -3866,6 +3940,30 @@ nonisolated struct RecordedCall {
   let method: String
   let path: String
   let body: Any?
+  /// The request's origin (scheme://host[:port]) when it had a URL.
+  var origin: String? = nil
+  /// A request to a host that is not the app's API (P2e(a), v4.19).
+  var foreign: Bool = false
+}
+
+/// P2e(a), v4.19: whose request this is. With no `apiOrigin` the two cannot
+/// be told apart, and the request counts as the app's (a red whose message
+/// says to set `apiOrigin`, rather than a gate that goes quiet).
+nonisolated enum BranchOrigin: Equatable { case own, foreign, undetermined }
+
+nonisolated func branchOriginString(_ url: URL?) -> String? {
+  guard let url = url, let scheme = url.scheme?.lowercased(), let host = url.host?.lowercased()
+  else { return nil }
+  var parts = URLComponents()
+  parts.scheme = scheme
+  parts.host = host
+  parts.port = url.port
+  return parts.string
+}
+
+nonisolated func branchOriginClass(_ url: URL?, _ apiOrigin: URL?) -> BranchOrigin {
+  guard let apiOrigin = apiOrigin, let origin = branchOriginString(url) else { return .undetermined }
+  return origin == branchOriginString(apiOrigin) ? .own : .foreign
 }
 
 nonisolated final class Recorder {
@@ -3943,10 +4041,25 @@ nonisolated final class Recorder {
   }
 
   /// The requests in the window that no declared route answered (they got
-  /// the 599), as "METHOD path", each once, sorted.
+  /// the 599) and that are the app's own (or cannot be told apart), as
+  /// "METHOD <origin>path", each once, sorted.
   func unmatchedCalls() -> [String] {
-    Array(Set(windowed.filter { $0.op == "(unmatched)" }.map { "\\($0.method) \\($0.path)" })).sorted()
+    Array(Set(windowed.filter { $0.op == "(unmatched)" && !$0.foreign }
+      .map { "\\($0.method) \\($0.origin ?? "")\\($0.path)" })).sorted()
   }
+
+  /// The same for requests to another host (the info unmatched_foreign).
+  func unmatchedForeign() -> [String] {
+    Array(Set(windowed.filter { $0.op == "(unmatched)" && $0.foreign }
+      .map { "\\($0.method) \\($0.origin ?? "")\\($0.path)" })).sorted()
+  }
+}
+
+/// Requests in the act window to hosts that are not the app's API (P2e(a),
+/// v4.19): info, never a failure.
+nonisolated func reportUnmatchedForeign(_ calls: [String]) {
+  if calls.isEmpty { return }
+  print("unmatched_foreign: \\(calls.count) — \\(calls.joined(separator: ", "))")
 }
 
 /// P2e(b): see the web runtime. Info, never a failure.
@@ -3963,8 +4076,11 @@ nonisolated func reportUnmatched(_ calls: [String], _ gateFrom: String?) {
   if calls.isEmpty { return }
   print("jsonui-test branch test: \\(calls.joined(separator: ", ")) reached no declared route and "
     + "was answered 599, which no server returns — declare the route and its "
-    + "scenarios (dataFlow + mock)"
-    + (gateFrom.map { "; from jsonui-cli \\($0) this fails the test" } ?? ""))
+    + "scenarios (dataFlow + mock); if a host named here is not the app's API, "
+    + "give the harness apiOrigin"
+    + (gateFrom == "withdrawn"
+       ? "; the release announced to fail this test was withdrawn — it does not fail"
+       : gateFrom.map { "; from jsonui-cli \\($0) this fails the test" } ?? ""))
 }
 
 /// '@data.<field>' pre-act capture marker.
@@ -3982,6 +4098,14 @@ protocol BranchHarness {
 //<<resolve-string harness doc>>
   func resolveString(_ key: String) -> String
   func settle()
+  /// The app's API base URL (P2e(a), v4.19): a request to another host is the
+  /// info unmatched_foreign rather than a failure. nil (the default) cannot
+  /// tell hosts apart, so every unmatched request counts as the app's.
+  var apiOrigin: URL? { get }
+}
+
+extension BranchHarness {
+  var apiOrigin: URL? { nil }
 }
 
 // 🔻 `nonisolated`, AND `nonisolated(unsafe)` ON THE THREE STATICS. A test
@@ -4009,6 +4133,8 @@ nonisolated final class BranchURLProtocol: URLProtocol {
   nonisolated(unsafe) static var routes: [RouteSpec] = []
   nonisolated(unsafe) static var overrides: [String: String] = [:]
   nonisolated(unsafe) static var recorder: Recorder?
+  /// The harness's `apiOrigin` (P2e(a), v4.19); nil = cannot tell hosts apart.
+  nonisolated(unsafe) static var apiOrigin: URL?
 
   override class func canInit(with request: URLRequest) -> Bool { true }
   override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
@@ -4037,8 +4163,11 @@ nonisolated final class BranchURLProtocol: URLProtocol {
     let method = (request.httpMethod ?? "GET").uppercased()
     let raw = Self.bodyData(of: request)
     let body = raw.flatMap { try? JSONSerialization.jsonObject(with: $0) }
+    // Only the app's requests are matched against routes: another host's
+    // request to the same path is not served a scenario (v4.19).
+    let foreign = branchOriginClass(request.url, Self.apiOrigin) == .foreign
 
-    for route in Self.routes {
+    for route in (foreign ? [] : Self.routes) {
       guard route.method == method,
             let regex = try? NSRegularExpression(pattern: route.pattern),
             regex.firstMatch(in: path, range: NSRange(path.startIndex..., in: path)) != nil
@@ -4054,7 +4183,8 @@ nonisolated final class BranchURLProtocol: URLProtocol {
       respond(status: scenario.0, body: scenario.1, contentType: scenario.2)
       return
     }
-    Self.recorder?.record(RecordedCall(op: "(unmatched)", method: method, path: path, body: nil))
+    Self.recorder?.record(RecordedCall(op: "(unmatched)", method: method, path: path, body: nil,
+                                       origin: branchOriginString(request.url), foreign: foreign))
     respond(status: 599, body: "{\\"error\\":{\\"code\\":\\"unmocked_endpoint\\"}}",
             contentType: "application/json")
   }
@@ -4202,6 +4332,8 @@ func runBranchTest(
     BranchURLProtocol.recorder = nil
   }
   let harness = harnessFactory()
+  BranchURLProtocol.apiOrigin = harness.apiOrigin
+  defer { BranchURLProtocol.apiOrigin = nil }
   defer {
     // Deliberate retain-for-process-lifetime: deallocating @MainActor
     // types goes through the isolated-deinit back-deploy shim on pre-26
@@ -4278,6 +4410,9 @@ private nonisolated func flattenOptional(_ value: Any) -> Any? {
 class BaseBranchHarness: BranchHarness {
   let vm: AnyObject
   init(vm: AnyObject) { self.vm = vm }
+
+  /// Override with the app's API base URL (see BranchHarness.apiOrigin).
+  var apiOrigin: URL? { nil }
 
   func readField(_ name: String) -> Any? {
     if let own = mirrorField(vm, name), !(own is NSNull) {
