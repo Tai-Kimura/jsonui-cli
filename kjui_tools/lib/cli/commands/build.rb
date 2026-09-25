@@ -315,6 +315,13 @@ module KjuiTools
           end
 
           last_updated = cache_manager.load_last_updated
+          # The tool, a component (definition / converter) or the config
+          # changed since the last build: nothing it generated can be kept.
+          inputs = cache_manager.inputs_digest(config)
+          if cache_manager.inputs_changed?(inputs) && !last_updated.empty?
+            Core::Logger.info "The tool, a component or the config changed since the last build — every layout is converted"
+            last_updated = {}
+          end
           last_including_files = cache_manager.load_last_including_files
           style_dependencies = cache_manager.load_style_dependencies
           @refused_layouts = []
@@ -509,6 +516,7 @@ module KjuiTools
           # Save cache for next build — every layout but the ones not built.
           not_built = (@refused_layouts + refused_in(build_marks)).map { |f| File.basename(f, '.json') } +
                       failed_files.map { |f| File.basename(f, '.json') }
+          cache_manager.save_inputs(inputs)
           cache_manager.save_cache(
             new_including_files, new_style_dependencies,
             json_files.map { |f| File.basename(f, '.json') },

@@ -25,8 +25,9 @@ require 'fileutils'
 #   3  after `g converter Leaf --container --force` — the leaf refusal's own
 #      remedy — the leaf's layout is generated, with its child
 # and the other way in: `plain` holds a Box, a container, with a child —
-#   4  Box made a leaf: plain, cached, is refused where the build validates
-#      the cached layouts
+#   4  Box made a leaf: plain and the variant are refused — every layout is
+#      converted, a component having changed (before that ticket the cached
+#      pass refused them; that path is not reached here any more)
 #   5  nothing changed: plain is converted again, as a refused layout
 # and a cached screen's variant (`variant@regular`, a Box with a child) is
 # checked with it: at 4 it is refused on the cached run too. Until 1.8.121 the
@@ -152,7 +153,9 @@ RSpec.describe 'a refused layout, through sjui build and the build cache' do
   it 'keeps refusing the layout that is still refused, and caches the plain one' do
     expect(@log3).to include('2 cellClasses declared without sections')
     expect(@views3['TwoCells']).to be_empty
-    expect(@log3).to include('Updating 2 of 4 files'), @log3
+    # A component changed (`g converter`): every layout is converted since
+    # build-cache-ignores-a-changed-component-definition-or-converter.
+    expect(@log3).to include('every layout is converted').and(include('Updating 4 of 4 files')), @log3
   end
 
   it 'refuses a cached layout once a component in it becomes a leaf, and converts it again next time' do
@@ -160,7 +163,7 @@ RSpec.describe 'a refused layout, through sjui build and the build cache' do
     expect(@log4).to include("'Box' (id=box) takes no children")
     expect(@log4).to include("'Box' (id=wide_box) takes no children"), @log4
     expect(@log4).to include('variant@regular.json was not generated'), @log4
-    expect(@log4).to include('Updating 1 of 4 files'), @log4 # two_cells; plain is cached, and refused
+    expect(@log4).to include('every layout is converted').and(include('Updating 4 of 4 files')), @log4
     expect(@log5).to include('Updating 3 of 4 files'), @log5 # two_cells, plain and variant
   end
 end

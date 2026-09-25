@@ -367,6 +367,13 @@ module SjuiTools
             cache_manager.clean_cache
           end
           last_updated = cache_manager.load_last_updated
+          # The tool, a component (definition / converter) or the config
+          # changed since the last build: nothing it generated can be kept.
+          inputs = cache_manager.inputs_digest(config)
+          if cache_manager.inputs_changed?(inputs) && last_updated
+            Core::Logger.info "The tool, a component or the config changed since the last build — every layout is converted"
+            last_updated = nil
+          end
           last_including_files = cache_manager.load_last_including_files
           style_dependencies = cache_manager.load_style_dependencies
           refused_before = cache_manager.load_refused_layouts
@@ -708,6 +715,7 @@ module SjuiTools
 
           # Save cache for next build — and which layouts it did NOT build.
           cache_manager.save_cache(new_including_files, new_style_dependencies)
+          cache_manager.save_inputs(inputs)
           refused = (@refused_layouts || []) + refused_in(conversion_marks)
           cache_manager.save_refused_layouts(refused.map do |f|
             Pathname.new(f).relative_path_from(Pathname.new(layouts_dir)).to_s.sub(/\.json$/, '')

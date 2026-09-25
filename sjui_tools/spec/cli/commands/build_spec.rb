@@ -111,6 +111,9 @@ RSpec.describe SjuiTools::CLI::Commands::Build do
         allow(cache_manager).to receive(:load_style_dependencies).and_return({})
         allow(cache_manager).to receive(:load_refused_layouts).and_return([])
         allow(cache_manager).to receive(:save_refused_layouts)
+        allow(cache_manager).to receive(:inputs_digest).and_return('digest')
+        allow(cache_manager).to receive(:inputs_changed?).and_return(false)
+        allow(cache_manager).to receive(:save_inputs)
 
         # Allow multiple info calls
         allow(SjuiTools::Core::Logger).to receive(:info)
