@@ -802,6 +802,10 @@ def collect_findings(
             own_sections_by_layout=own_sections_by_layout,
             platform_roots=platform_roots,
             spec_dir=config_mgr.spec_directory,
+            test_paths=(
+                lint_cfg.get("stringsUsageTestPaths")
+                if isinstance(lint_cfg, dict) else None
+            ),
         )
 
     return report
@@ -905,6 +909,8 @@ def cmd_lint_strings(args: argparse.Namespace) -> int:
                         else {
                             "faces": report.usage.faces,
                             "scannedFiles": report.usage.scanned_files,
+                            "testFiles": report.usage.test_files,
+                            "testCode": report.usage.test_code,
                             "unusedKeys": [f.site for f in report.usage.unused],
                             "missingKeys": [
                                 {"site": f.site, "reference": f.detail}
@@ -928,6 +934,9 @@ def cmd_lint_strings(args: argparse.Namespace) -> int:
         f"lint-strings: scanned {report.scanned_layouts} layout(s), "
         f"{len(report.allowed)} allowlisted literal(s)"
     )
+    if report.usage is not None:
+        for line in report.usage.summary_lines():
+            print(line)
     if report.clean:
         print("lint-strings: clean")
         return EXIT_OK
