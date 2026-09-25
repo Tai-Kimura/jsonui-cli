@@ -396,7 +396,10 @@ def check_element_ids(data: dict, path: str, result: ValidationResult,
         if candidates:
             text += (f"; the layouts have {', '.join(repr(c) for c in candidates)} — the "
                      "runtime id is the layout's spelling")
-        text += "; an id the app draws itself is declared in test.appOwnedIds"
+        else:
+            # Only here (ee, pack review): beside a near spelling, the hint
+            # would offer a way to declare a typo instead of fixing it.
+            text += "; an id the app draws itself is declared in test.appOwnedIds"
         message = ValidationMessage(path=ref_path, message=text,
                                     level="warning" if warn else "info")
         (result.warnings if warn else result.infos).append(message)

@@ -173,7 +173,7 @@ def test_validate_data_checks_no_element_ids(tmp_path, at):
 
 NOWHERE = ("Element 'sample_toggle' is on no layout of this project (includes expanded, "
            "every platform); the layouts have 'sampleToggle' — the runtime id is the "
-           "layout's spelling; an id the app draws itself is declared in test.appOwnedIds")
+           "layout's spelling")
 
 
 @pytest.mark.parametrize("version, level", [("1.8.119", "info"), ("1.8.120", "warning"),
@@ -258,8 +258,7 @@ def test_from_the_include_release_web_s_old_spelling_is_a_warning(tmp_path, at, 
     _, msgs = _one(tmp_path, element)
     assert msgs == [("warning",
         f"Element '{element}' is on no layout of this project (includes expanded, every "
-        f"platform); the layouts have '{now}' — the runtime id is the layout's spelling; an "
-        "id the app draws itself is declared in test.appOwnedIds")]
+        f"platform); the layouts have '{now}' — the runtime id is the layout's spelling")]
 
 
 @pytest.mark.parametrize("version", ["1.8.119", "1.8.121"])
@@ -390,3 +389,12 @@ def test_without_gate_versions_they_stay_info_and_the_run_says_why(tmp_path, at,
     assert re.search(r"^Files: \d+, Errors: 0, Warnings: 0, Info: 1 \(not counted\)$", out, re.M)
     assert ("[INFO] the level of 1 element id(s) on no layout cannot be decided — "
             "shared/core/gate_versions.py is not in this tool tree; they are listed as INFO") in out
+
+
+@pytest.mark.parametrize("element, hint", [("sample_toggle", False), ("zz_unrelated", True)])
+def test_the_declaration_hint_only_where_no_layout_id_is_near(tmp_path, at, element, hint):
+    # Beside a near spelling the fix is the spelling; the hint would offer a
+    # way to declare the typo instead (ee, pack review).
+    at("1.8.121")
+    _, msgs = _one(tmp_path, element)
+    assert ("test.appOwnedIds" in msgs[0][1]) is hint, msgs
