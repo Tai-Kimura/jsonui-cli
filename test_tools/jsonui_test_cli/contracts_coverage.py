@@ -1356,7 +1356,7 @@ def to_json(report: CoverageReport) -> dict:
 #: section says the version is not declared instead of announcing one. The
 #: tag gate (dev-guide/release/check-tag.sh) holds it to the release: the
 #: next patch when announcing, at or below the tag once gating.
-VALIDATE_GATE_FROM: str | None = "1.8.120"
+VALIDATE_GATE_FROM: str | None = "1.8.121"
 
 
 def _gates():

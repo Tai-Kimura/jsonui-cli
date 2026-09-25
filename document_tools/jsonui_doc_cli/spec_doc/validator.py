@@ -106,7 +106,7 @@ class SpecValidationResult:
 #: "0 warnings" as its bar would turn red with no notice (U5). A literal,
 #: read by `shared/core/gate_versions` like every `*_GATE_FROM`:
 #: "withdrawn" or anything that is not a release number never gates.
-LAYOUT_ID_GATE_FROM: str | None = "1.8.120"
+LAYOUT_ID_GATE_FROM: str | None = "1.8.121"
 
 #: ee's text (design v4.20).
 LAYOUT_ID_NOTICE = ("from jsonui-cli {version}, spec element ids not in the layout "

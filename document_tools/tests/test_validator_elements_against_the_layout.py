@@ -62,10 +62,18 @@ def _element_warnings(spec: Path):
 
 @pytest.fixture
 def at(monkeypatch):
-    """Run the validator as jsonui-cli *version*, the layout-id gate at *gate*."""
+    """Run the validator as jsonui-cli *version*, the layout-id gate and the
+    include-id gate (`classify_element`'s) both at *gate*. Both are synthetic:
+    an arm here is about the switch, so it reads a release against the gate it
+    names, not against the literal this tree ships — moving that literal to
+    the next release turned five arms here red that were not about the value.
+    The shipped literal is pinned in jui_tools and judged by the tag gate."""
+    from jui_cli.core import layout_facts
+
     def go(version, gate="1.8.120"):
         monkeypatch.setattr(validator_mod, "_running_version", lambda: version)
         monkeypatch.setattr(validator_mod, "LAYOUT_ID_GATE_FROM", gate)
+        monkeypatch.setattr(layout_facts, "INCLUDE_ID_PREFIX_GATE_FROM", gate)
     return go
 
 
