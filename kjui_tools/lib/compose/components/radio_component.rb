@@ -5,6 +5,7 @@ require_relative '../helpers/bound_value'
 require_relative '../helpers/font_spec_helper'
 require_relative '../helpers/resource_resolver'
 require_relative '../../core/string_literals'
+require_relative '../../core/layout_path'
 
 module KjuiTools
   module Compose
@@ -209,7 +210,13 @@ module KjuiTools
 
         def self.generate_radio_item(json_data, depth, required_imports, parent_type)
           group = json_data['group'] || 'default'
-          id = json_data['id'] || "radio_#{rand(1000)}"
+          # The item's value when no id names it: its position in the layout
+          # (shared/core/layout_path.rb — `radio_0_2_1`), the same on every
+          # build and unique within the view. It was `"radio_#{rand(1000)}"`:
+          # every build emitted different Kotlin, and two items could draw the
+          # same number (kjui-radio-default-id-is-random). A node emitted on
+          # its own, with no tree around it, is its own root.
+          id = json_data['id'] || "radio_#{json_data[JsonUIShared::LayoutPath::KEY] || '0'}"
           id_literal = JsonUIShared::StringLiterals.kotlin(id)
           # `text`/`label` are `["string", "binding"]`. They used to be
           # interpolated straight into the Kotlin literal, so a bound label put

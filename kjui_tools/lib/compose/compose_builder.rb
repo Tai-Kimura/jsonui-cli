@@ -12,6 +12,7 @@ require_relative '../core/attribute_validator'
 require_relative '../core/layout_validator'
 require_relative '../core/image_accessibility'
 require_relative '../core/tap_accessibility'
+require_relative '../core/layout_path'
 require_relative '../core/normalization'
 require_relative '../core/layout_variant'
 require_relative '../core/screen_index'
@@ -231,6 +232,9 @@ module KjuiTools
 
           annotate_image_roles(json_data, json_file)
           JsonUIShared::TapAccessibility.annotate!(json_data)
+          # Each node's position, for the names a layout does not give
+          # (shared/core/layout_path.rb) — on the same include-expanded tree.
+          JsonUIShared::LayoutPath.stamp!(json_data)
 
           @required_imports = Set.new
           @included_views = Set.new
@@ -339,6 +343,11 @@ module KjuiTools
 
       def generate_component(json_data, depth = 0, parent_type = nil, is_root: false)
         return "" unless json_data.is_a?(Hash)
+
+        # A tree the build entry points did not stamp (a caller emitting a
+        # node directly) is stamped from the node it is reached at, so the
+        # position names stay a function of the tree.
+        JsonUIShared::LayoutPath.stamp!(json_data) unless JsonUIShared::LayoutPath.stamped?(json_data)
 
         # Skip data-spec / shared_data / variables entries that may appear
         # inline in a `child:` array (no `type` key, no `include`). Without
@@ -1394,6 +1403,7 @@ module KjuiTools
 
         annotate_image_roles(json_data, variant_file)
         JsonUIShared::TapAccessibility.annotate!(json_data)
+        JsonUIShared::LayoutPath.stamp!(json_data)
 
         @required_imports = Set.new
         @included_views = Set.new
