@@ -7,6 +7,12 @@ module SjuiTools
       # Later `register` calls win (binding overrides static).
       # Multi-value keys (padding, margin, component_specific) use arrays.
       class ModifierBag
+        # SwiftJsonUI's Dynamic runtime applies its standard modifiers in this
+        # order too, held to it through modifier_order.json (next to this
+        # file), which it copies byte for byte. Change the two together:
+        # spec/swiftui/views/modifier_order_json_spec.rb goes red when they
+        # disagree, and SwiftJsonUI's tests go red until its copy and its
+        # chain follow.
         MODIFIER_ORDER = [
           :component_specific,  # font, resizable, aspectRatio, etc.
           :padding,             # inner padding entries
