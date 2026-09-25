@@ -14,14 +14,16 @@ The validator is found by the first of these that imports:
    document_tools/ side by side (~/.jsonui-cli, or a jsonui-cli checkout).
    The root goes on sys.path so `document_tools.` resolves, and its
    test_tools/ goes FIRST: the validator imports `jsonui_test_cli`
-   (`gate_literal`, `contract_declarations`), and `install_jsonui_test.sh`
-   installs that package with a plain `pip install .` at whatever version it
-   was given — a copy the validator was not released with. Found first, that
-   copy decided the validator's answers: measured with this jui and a
-   jsonui-test one release older, every spec whose layout lacked an id got
-   "LAYOUT_ID_GATE_FROM … is not importable (No module named
-   'jsonui_test_cli.gate_literal')" in place of its verdict. Before the pip
-   name, so the validator and what it imports are the release this jui is;
+   (`contract_declarations`), and `install_jsonui_test.sh` installs that
+   package with a plain `pip install .` at whatever version it was given — a
+   copy the validator was not released with. Found first, that copy decides
+   the validator's answers, and where it lacks the module, a spec that
+   declares contracts gets an ERROR ("jsonui-test (jsonui_test_cli) is not
+   importable") and generate stops. Measured with this jui and a jsonui-test
+   one release older, on the module the validator imported then
+   (`gate_literal`, now shared/core/gate_versions.py): every spec whose layout
+   lacked an id got "is not importable" in place of its verdict. Before the
+   pip name, so the validator and what it imports are the release this jui is;
 3. the pip name — `jsonui_doc_cli`, document_tools installed with `pip -e`.
 
 Routes 2 and 3 reach the same file in a checkout (the validator's own imports

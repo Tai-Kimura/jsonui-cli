@@ -7,9 +7,12 @@ document_tools not available, skipping validation" and generated from specs
 nobody validated. `load_spec_validator` finds it beside the running
 jui_tools (the distribution's own document_tools), or by its pip name.
 
-The arms run in fresh interpreters with the launcher's sys.path (`-I`: no
-PYTHONPATH, no user site), since the defect is a property of that path and
-not of this test process.
+The arms run in fresh interpreters with the launcher's sys.path and no
+site-packages (`-I -S`), since the defect is a property of that path and not
+of this test process. Not `-I` alone: an editable install's finder sits in
+site-packages and supplies `jsonui_test_cli.<module>` by name even when the
+`jsonui_test_cli` found first is another copy — with it, the control below
+imported the module it exists to show missing.
 """
 from __future__ import annotations
 
@@ -25,7 +28,7 @@ VALIDATOR_FILE = REPO / "document_tools/jsonui_doc_cli/spec_doc/validator.py"
 
 def _python(paths: list[Path], code: str) -> subprocess.CompletedProcess:
     prelude = f"import sys; sys.path[:0] = {[str(p) for p in paths]!r}\n"
-    return subprocess.run([sys.executable, "-I", "-c", prelude + code],
+    return subprocess.run([sys.executable, "-I", "-S", "-c", prelude + code],
                           capture_output=True, text=True, timeout=120)
 
 
@@ -70,29 +73,31 @@ def test_the_pip_name_reaches_the_same_validator(tmp_path):
 
 def _older_jsonui_test(tmp_path: Path) -> Path:
     """A jsonui-test one release older, as `install_jsonui_test.sh` leaves it
-    (`pip install .`, not editable): a `jsonui_test_cli` with no gate_literal."""
+    (`pip install .`, not editable): a `jsonui_test_cli` without the module
+    the validator imports from it."""
     pkg = tmp_path / "site" / "jsonui_test_cli"
     pkg.mkdir(parents=True)
-    (pkg / "__init__.py").write_text("# an older jsonui-test: no gate_literal\n", encoding="utf-8")
+    (pkg / "__init__.py").write_text("# an older jsonui-test: no contract_declarations\n", encoding="utf-8")
     return pkg.parent
 
 
 def test_control_an_older_jsonui_test_found_first_lacks_what_the_validator_imports(tmp_path):
     run = _python([_older_jsonui_test(tmp_path), REPO / "test_tools"],
-                  "import jsonui_test_cli.gate_literal")
-    assert run.returncode != 0 and "No module named 'jsonui_test_cli.gate_literal'" in run.stderr, run.stderr
+                  "import jsonui_test_cli.contract_declarations")
+    assert run.returncode != 0 and \
+        "No module named 'jsonui_test_cli.contract_declarations'" in run.stderr, run.stderr
 
 
 def test_the_validator_imports_the_jsonui_test_it_was_released_with(tmp_path):
     """The same site found first; the loader puts the distribution's
     test_tools ahead of it, so what the validator imports is this release."""
     run = _python([_older_jsonui_test(tmp_path), REPO / "jui_tools"], _LOAD + (
-        "import jsonui_test_cli.gate_literal as g\n"
-        "print('GATE', g.__file__)\n"))
+        "import jsonui_test_cli.contract_declarations as m\n"
+        "print('DECL', m.__file__)\n"))
     assert run.returncode == 0, run.stderr
     got = _fields(run.stdout)
     assert "beside jui_tools" in got["WHERE"], got
-    assert Path(got["GATE"]) == REPO / "test_tools/jsonui_test_cli/gate_literal.py", got
+    assert Path(got["DECL"]) == REPO / "test_tools/jsonui_test_cli/contract_declarations.py", got
 
 
 def _project(root: Path) -> Path:
