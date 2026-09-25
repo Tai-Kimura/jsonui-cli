@@ -1392,11 +1392,12 @@ def _render_description_cell(comp: dict, colors: dict[str, str]) -> str:
     return style_html or "-"
 
 
-_EVENT_BINDING_KEYS = {
-    "onClick", "onLongPress", "onValueChange", "onTextChange",
-    "onSelect", "onTabChange", "onSubmit", "onSignIn",
-    "onAppear", "onDisappear", "onRefresh",
-}
+#: Whether a binding key is an event: any `on` + capital. The layout importer
+#: that fills `comp["binding"]` decides with this same pattern, so the badge
+#: says what the import did. This was a closed list of eleven keys, and every
+#: other event (onLoadFailed, onPan, onPinch, onItemAppear, …) was drawn as a
+#: two-way data binding (doc-html-generator-event-badge-uses-a-closed-hand-list).
+from .layout_importer import _EVENT_KEY as _EVENT_BINDING_KEY
 
 
 def _render_bindings_cell(comp: dict) -> str:
@@ -1412,8 +1413,8 @@ def _render_bindings_cell(comp: dict) -> str:
 
     rows: list[str] = []
     # Events first, bindings second — stable insertion order otherwise.
-    events = [(k, v) for k, v in binding.items() if k in _EVENT_BINDING_KEYS]
-    data = [(k, v) for k, v in binding.items() if k not in _EVENT_BINDING_KEYS]
+    events = [(k, v) for k, v in binding.items() if _EVENT_BINDING_KEY.match(k)]
+    data = [(k, v) for k, v in binding.items() if not _EVENT_BINDING_KEY.match(k)]
 
     for k, v in events:
         rows.append(
