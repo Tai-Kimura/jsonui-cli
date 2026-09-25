@@ -220,6 +220,7 @@ module SjuiTools
           skip = []
           # Skip keys already handled by converter (registered in bag)
           skip << 'background' if @modifier_bag.key?(:background)
+          skip.concat(%w[canTap userInteractionEnabled]) if @interaction_gates_registered
           modifiers = @binding_handler.process_bindings(@component, skip_keys: skip)
           modifiers.each do |modifier|
             next unless modifier
@@ -704,22 +705,8 @@ module SjuiTools
           # safeAreaInsetPositions
           apply_safe_area_insets_to_bag
 
-          # disabled状態の処理
-          #
-          # The binding form used to fall through: `enabled` is declared
-          # boolean|binding, and `== false` only matches the literal. A layout
-          # that wrote `enabled: "@{isEnabled}"` got nothing at all, on a
-          # declared attribute that raises no build warning — which is worse than
-          # an unknown one. SwiftUI's `.disabled` also covers interactive
-          # descendants, so it is the right modifier for a container.
-          if @component['enabled'] == false
-            @modifier_bag.register(:disabled, ".disabled(true)")
-          elsif is_binding?(@component['enabled'])
-            expr = SwiftUI::Binding::BindingExpression.swift_bool_expr(
-              @component['enabled'][2..-2]
-            )
-            @modifier_bag.register(:disabled, ".disabled(!(#{expr}))")
-          end
+          # enabled, canTap, userInteractionEnabled, touchDisabledState
+          register_interaction_gates
 
           # tagプロパティの適用（TabViewなどで使用）
           if @component['tag']
@@ -731,20 +718,8 @@ module SjuiTools
             add_line "// className: #{@component['className']}"
           end
 
-          # touchDisabledState（タッチ無効化状態）
           if @component['touchDisabledState']
-            @modifier_bag.register(:allows_hit_testing, ".allowsHitTesting(false)")
             add_line "// touchDisabledState applied"
-          end
-
-          # userInteractionEnabled（タッチ有効/無効）
-          #
-          # `canTap` joins it here: the binding forms of both already resolve to
-          # `.allowsHitTesting(...)` through ViewBindingHandler, but the literal
-          # `canTap: false` matched nothing and did nothing. Same modifier, so
-          # the two forms of the same attribute agree.
-          if @component['userInteractionEnabled'] == false || @component['canTap'] == false
-            @modifier_bag.register(:allows_hit_testing, ".allowsHitTesting(false)")
           end
 
           # tintColor（アクセントカラー）
@@ -827,6 +802,51 @@ module SjuiTools
           apply_alert_to_bag
         end
 
+        # The gates on a view's interaction, static or bound, for every
+        # converter (label_converter calls it too — it builds its own
+        # modifiers, and a Label with a tap used to keep it under
+        # `canTap: false` and ignore a bound `enabled`):
+        #
+        # - `enabled` is `.disabled` (the literal, or the binding negated).
+        #   SwiftUI's `.disabled` also covers interactive descendants, so it
+        #   is the right modifier for a container.
+        # - `canTap` (attribute_definitions common.canTap: the SwiftUI tap
+        #   gate), `userInteractionEnabled` and `touchDisabledState` are
+        #   `.allowsHitTesting`: one modifier, their conditions joined. The
+        #   bound forms were ViewBindingHandler's, which only the converters
+        #   that process bindings reach — a bound canTap gated nothing on
+        #   IconLabel, GradientView, CircleView, Blur, Progress and the
+        #   interactive types. `apply_binding_modifiers` leaves these keys to
+        #   this method once it has run.
+        def register_interaction_gates
+          @interaction_gates_registered = true
+          enabled = @component['enabled']
+          if enabled == false
+            @modifier_bag.register(:disabled, ".disabled(true)")
+          elsif is_binding?(enabled)
+            @modifier_bag.register(:disabled, ".disabled(!(#{tap_gate_expr(enabled)}))")
+          end
+
+          gates = []
+          gates << 'false' if @component['touchDisabledState']
+          %w[userInteractionEnabled canTap].each do |key|
+            value = @component[key]
+            if value == false
+              gates << 'false'
+            elsif is_binding?(value)
+              gates << tap_gate_expr(value)
+            end
+          end
+          return if gates.empty?
+
+          condition = gates.include?('false') ? 'false' : gates.join(' && ')
+          @modifier_bag.register(:allows_hit_testing, ".allowsHitTesting(#{condition})")
+        end
+
+        def tap_gate_expr(binding)
+          SwiftUI::Binding::BindingExpression.swift_bool_expr(binding[2..-2])
+        end
+
         # The tap, one rule for every converter (label_converter calls it too:
         # it builds its own modifiers and had kept only the binding onClick, so
         # the `onclick` fix above never reached a Label). camelCase wins when
@@ -863,7 +883,7 @@ module SjuiTools
         # + `.isButton` is one button named by its content.
         def tap_accessibility_lines
           case @component[JsonUIShared::TapAccessibility::SHAPE_KEY]
-          when 'button' then ['.accessibilityAddTraits(.isButton)']
+          when 'button' then [button_trait_line]
           when 'combine'
             # The anchor the id path uses, for the same single-child merge:
             # with one accessible child, `.combine` took the child's own
@@ -884,9 +904,20 @@ module SjuiTools
             # keeps the button's own; a container with an id gets that id on
             # the button from the id path instead.
             own_id = @component['id'] ? [] : ['.accessibilityIdentifier("")']
-            anchor + ['.accessibilityElement(children: .combine)', '.accessibilityAddTraits(.isButton)'] + own_id
+            anchor + ['.accessibilityElement(children: .combine)', button_trait_line] + own_id
           else []
           end
+        end
+
+        # `.isButton`, or — under a bound canTap — `.isButton` while the gate is
+        # open: the dynamic runtime attaches neither the tap nor its traits
+        # while the binding is false (DynamicEventHelper.applyOnClick), and a
+        # tap `.allowsHitTesting` has shut is not a button to VoiceOver either.
+        def button_trait_line
+          can_tap = @component['canTap']
+          return '.accessibilityAddTraits(.isButton)' unless is_binding?(can_tap)
+
+          ".accessibilityAddTraits(#{tap_gate_expr(can_tap)} ? AccessibilityTraits.isButton : [])"
         end
 
         def combined_tap?
