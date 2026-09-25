@@ -120,7 +120,7 @@ module RjuiTools
           end
 
           # Clickable cursor
-          if attributes['canTap'] || attributes['onclick'] || attributes['onClick']
+          if attributes['canTap'] || tap_handler?(attributes['onClick'], attributes['onclick'])
             classes << 'cursor-pointer'
           end
 
@@ -147,7 +147,8 @@ module RjuiTools
         def build_onclick_attr
           return '' unless attributes['canTap'] || attributes['onclick'] || attributes['onClick']
 
-          onclick = attributes['onclick'] || attributes['onClick']
+          # An empty or blank handler is no handler (TapAccessibility.handler?).
+          onclick = [attributes['onclick'], attributes['onClick']].find { |v| JsonUIShared::TapAccessibility.handler?(v) }
           return '' unless onclick
 
           # The array face first: `end_with?` on an Array is a NoMethodError

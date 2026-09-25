@@ -4,6 +4,7 @@ module JsonUIShared
   # Whether a screen reader is told a tappable is a button — one rule for the
   # sjui and kjui codegen (the Dynamic runtimes of both libraries implement
   # the same rule, and all four run shared/core/tap_accessibility_vectors.json).
+  # What counts as a handler (`handler?`) is read by the rjui codegen too.
   #
   # A tappable (onClick / onclick, not statically disabled) is a
   # `.onTapGesture` on iOS and a `.clickable` on Android, neither of which says
@@ -49,6 +50,31 @@ module JsonUIShared
 
     TAP_KEYS = %w[onClick onclick].freeze
 
+    # A handler is a method name that is not blank: a binding's inside
+    # (`@{onOpen}`), a bare selector (`onOpen`), or each string of an
+    # `onclick` array. `""`, `"   "`, `"@{}"`, `[]` and `[""]` name none, so
+    # they are no tap — every codegen and both runtimes read handlers through
+    # this, and the calls drop the blank elements of an array. (The codegens
+    # used to emit `data.?.invoke()` / `data.?()` / `data.` for them: output
+    # that does not compile.)
+    def names_a_method?(value)
+      return false unless value.is_a?(String)
+
+      # Blank is Unicode white space (a full-width space too), as the Swift and
+      # Kotlin copies read it.
+      inner = value[/\A@\{(.*)\}\z/m, 1] || value
+      !inner.match?(/\A[[:space:]]*\z/)
+    end
+
+    # The elements of a handler value that name a method, in the order written.
+    def handler_values(value)
+      (value.is_a?(Array) ? value : [value]).select { |v| names_a_method?(v) }
+    end
+
+    def handler?(value)
+      handler_values(value).any?
+    end
+
     # Operable inside a tappable even when its type is not: a long press (a
     # screen-reader action — image_accessibility.rb counts it too), and a
     # Label that carries links of its own (`linkable`, or a partialAttributes
@@ -70,7 +96,7 @@ module JsonUIShared
     # (attribute_definitions.json common.canTap), so the tap is not there.
     def tappable?(node)
       node.is_a?(Hash) && node['enabled'] != false && node['canTap'] != false &&
-        TAP_KEYS.any? { |key| present?(node[key]) }
+        TAP_KEYS.any? { |key| handler?(node[key]) }
     end
 
     def children(node)
@@ -95,7 +121,7 @@ module JsonUIShared
       return true if linkable == true || (linkable.is_a?(String) && linkable.start_with?('@{'))
 
       Array(node['partialAttributes']).any? do |range|
-        range.is_a?(Hash) && (present?(range['onClick']) || present?(range['onclick']))
+        range.is_a?(Hash) && TAP_KEYS.any? { |key| handler?(range[key]) }
       end
     end
 

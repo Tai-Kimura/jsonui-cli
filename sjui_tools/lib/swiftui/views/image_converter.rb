@@ -134,7 +134,7 @@ module SjuiTools
           # already declared).
 
           # onClick handler (canTap is optional, onClick alone is sufficient)
-          if @component['onClick'] && is_binding?(@component['onClick'])
+          if JsonUIShared::TapAccessibility.handler?(@component['onClick']) && is_binding?(@component['onClick'])
             handler_call = get_event_handler_invocation(@component['onClick'], @component['id'] || 'image')
             on_click_lines = [
               ".contentShape(Rectangle())",

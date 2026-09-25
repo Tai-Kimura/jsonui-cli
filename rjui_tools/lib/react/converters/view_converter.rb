@@ -195,7 +195,7 @@ module RjuiTools
           end
 
           # Cursor pointer for clickable items
-          classes << 'cursor-pointer' if attributes['onClick'] || attributes['onclick']
+          classes << 'cursor-pointer' if tap_handler?(attributes['onClick'], attributes['onclick'])
           # touch-action: none — without it the browser turns the touches into
           # scrolling/pinch-zoom before the element's pan/pinch handlers see them.
           classes << 'touch-none' if attributes['onPan'] || attributes['onPinch']

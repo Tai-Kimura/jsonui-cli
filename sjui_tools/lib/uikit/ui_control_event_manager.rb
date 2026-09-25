@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require_relative '../core/tap_accessibility'
+
 module SjuiTools
   module UIKit
     class UIControlEventManager
@@ -11,8 +13,11 @@ module SjuiTools
         @ui_control_events = []
       end
 
+      # An empty or blank onClick names no method
+      # (JsonUIShared::TapAccessibility.handler?) and gets no click: it
+      # emitted `self?.?()`, which is not Swift.
       def add_click_event(view_name, value, callback_type: nil)
-        return if value == "nil"
+        return if value == "nil" || !JsonUIShared::TapAccessibility.handler?(value)
         @ui_control_events << {
           view_name: view_name,
           value: value.sub(/^@\{/, "").sub(/\}$/, ""),
