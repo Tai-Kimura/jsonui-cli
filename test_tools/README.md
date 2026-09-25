@@ -774,12 +774,19 @@ generates what it did.
 
 When a view model's calls depend on something outside it — a signed-in
 session, say — no mock can arrange that, and the op it gates cannot be closed
-by a row. Declare the precondition once, in the app contracts spec:
+by a row. Declare the precondition once, in the app contracts spec — a whole
+one can be as small as this (`unitContracts` is needed only beside
+`apiOutcomeRules`, whose `verifiedBy` names its cases):
 
 ```json
-"harnessConditions": {
-  "session": {"values": ["absent", "present"], "default": "absent",
-              "reason": "whether a user is signed in; the VM reads it at construction"}
+{
+  "type": "app_contracts_spec",
+  "version": "1.0",
+  "metadata": {"name": "app", "description": "What the app owns and no screen does"},
+  "harnessConditions": {
+    "session": {"values": ["absent", "present"], "default": "absent",
+                "reason": "whether a user is signed in; the VM reads it at construction"}
+  }
 }
 ```
 

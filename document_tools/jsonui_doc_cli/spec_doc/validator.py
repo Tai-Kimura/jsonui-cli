@@ -435,13 +435,24 @@ class SpecValidator:
     def _validate_app_contracts_spec(self, data: dict, result: SpecValidationResult):
         """Validate a `app_contracts_spec`.
 
-        A container for declarations the app owns and no screen does. It
-        carries `unitContracts` (required) and optionally `apiOutcomeRules` —
-        and nothing that describes a screen. A rules-only app spec cannot
-        stand: every rule's `verifiedBy` names unit cases of this same file.
+        A container for declarations the app owns and no screen does:
+        `unitContracts`, `apiOutcomeRules`, `harnessConditions` — and nothing
+        that describes a screen.
+
+        `unitContracts` is required EXCEPT in a conditions-only spec. The
+        reason it is required is apiOutcomeRules': every rule's `verifiedBy`
+        names unit cases of this same file, so a rules-only spec cannot stand.
+        `harnessConditions` names no unit case, and requiring one made an app
+        that only declares its harness preconditions invent a unit test to
+        pass validate (P2d shipped in 1.8.118 with that requirement; found in
+        the pilot, 2026-09-25). So: required when the spec has rules, and
+        when it has no conditions either — an app spec declaring nothing
+        still fails, as before.
         """
+        requires_units = "apiOutcomeRules" in data or "harnessConditions" not in data
         self._validate_required_fields(
-            data, ["type", "version", "metadata", "unitContracts"], "", result)
+            data, ["type", "version", "metadata"] + (["unitContracts"] if requires_units else []),
+            "", result)
         # Unknown keys were let through until the second declaration arrived:
         # a key the validator does not know is a key nothing reads, and a
         # misspelt `apiOutcomeRule` would have been a rule with no effect and
