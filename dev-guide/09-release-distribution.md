@@ -48,11 +48,13 @@ push せず、rsync/sync_tool による同期のみ。
     同じ `test_version_lockstep.py` が root との一致を強制する。
   - **タグ門**: `dev-guide/release/check-tag.sh <repo> <prev-tag> <tag> <branch> <version> <words,comma> <remote>`
     を **`git tag -a` の後・`git push` の前**に撃つ（5 検査がタグ object を要求するので
-    「緑をもらってから打つ」は実行不能）。⚠️ **今はこれが唯一の門**（2026-09-25 実測）。
-    triage レーンが `prev-main` から期待値を導出していた別の門（verify_tag.sh）は repo に
-    入ったことがなく、この機械のどこにも無い（triage の記録で最後の実行は v1.8.94）。
-    2 本目は repo に入れ直す。**独立なのはファイルの場所ではなく期待値の出所**なので、
-    入った後は重複に見えても統合しない。
+    「緑をもらってから打つ」は実行不能）。
+  - **2 本目のタグ門**: `python3 dev-guide/release/check-tag-from-prev.py <repo> <prev-tag> <tag> [tested-sha]`
+    を同じ窓（`git tag -a` の後・`git push --atomic` の前）で撃ち、**終了コードで読む**
+    （後ろにパイプを付けない。`| tail` は tail の終了コードを返す）。期待値は前タグの木と
+    first-parent 履歴・`git rev-list`・タグ名からだけ導く。⚠️ **独立なのはファイルの場所ではなく
+    期待値の出所**なので、重複に見えても統合しない。以前の 2 本目（triage の verify_tag.sh）は
+    repo に入ったことがなく、v1.8.94 を最後に消えた（v1.8.95〜v1.8.118 は check-tag.sh 1 本で打った。v1.8.119 は push 前にこの門でも 17/17）。
   - リリース手順: テスト green → commit → `git tag vX.Y.Z` →
     **`git push --atomic origin main vX.Y.Z`**（main とタグを 1 回で押す）→
     （shared/core を触っていれば）MCP snapshot 更新。
