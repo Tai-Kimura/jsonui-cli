@@ -37,6 +37,7 @@ _STATUS_LABEL = {
     "implemented": "implemented",
     "missing": "missing",
     "never_runs": "never runs",
+    "unattributed": "unattributed",
     "not_declared_for_face": "not declared",
     "undeclared": "undeclared",
 }
@@ -48,6 +49,10 @@ _STATUS_HELP = {
     "missing": "declared for this face, no implementation found — write it",
     "never_runs": "a method with this name exists but the runner will not discover it "
                   "(XCTest needs a 'test' prefix); it compiles, reads as present, and runs zero times",
+    "unattributed": "other targets declare this case too, and a test implements it that no "
+                    "target's name places (its class or outermost describe, or its file) — "
+                    "which target it is for cannot be told, so it is not counted as this "
+                    "target's implementation",
     "not_declared_for_face": "this case does not name this face — nothing is expected here",
     "undeclared": "implemented in this face, declared in no spec",
 }
@@ -153,7 +158,7 @@ def generate_unit_html(
         # the two from reading as a contradiction.
         html_parts.append(
             "    <p class='denominator'>Cases declared by this target only. "
-            "Implemented + Missing + Never runs = Declared, per face.</p>"
+            "Implemented + Missing + Never runs + Unattributed = Declared, per face.</p>"
         )
         html_parts.append("    <table class='face-table'>")
         # No `undeclared` column: a case implemented but declared nowhere has
@@ -163,18 +168,18 @@ def generate_unit_html(
         # a target by guessing from its filename.
         html_parts.append(
             "      <tr><th>Face</th><th>Declared</th><th>Implemented</th>"
-            "<th>Missing</th><th>Never runs</th></tr>"
+            "<th>Missing</th><th>Never runs</th><th>Unattributed</th></tr>"
         )
         for face in platforms:
             entry = faces.get(face) or {}
             if face in unscannable:
                 html_parts.append(
                     f"      <tr><td><code>{escape_html(face)}</code></td>"
-                    f"<td colspan='4'>not checked</td></tr>"
+                    f"<td colspan='5'>not checked</td></tr>"
                 )
                 continue
             cells = []
-            for key in ("declared", "implemented", "missing", "never_runs"):
+            for key in ("declared", "implemented", "missing", "never_runs", "unattributed"):
                 n = len(entry.get(key) or [])
                 css = "num zero" if n == 0 else "num"
                 cells.append(f"<td class='{css}'>{n}</td>")

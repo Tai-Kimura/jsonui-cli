@@ -23,7 +23,11 @@ Three behaviours, and no more:
    spec no longer declares. Removing one is the author's edit to make.
 2. ``check`` fails when the sets disagree: declared but unimplemented,
    implemented but undeclared, or declared for two platforms and present on
-   one.
+   one. A case is declared FOR a target, so the sets are of (target, case)
+   pairs: a test implements a case for the target its class, outermost
+   describe or file is named after (`_owner`, the names ``generate`` gives a
+   target's stubs), and a name several targets declare is implemented for
+   each only by a test of its own (`_resolve_pairs`).
 3. Both name a denominator. "0 drifted" over an empty scan and "0 drifted"
    over forty cases are the same sentence and opposite facts, and this
    project has shipped wrong findings from instruments that could not tell
@@ -514,6 +518,9 @@ _ALL_TESTS_PATTERNS = {
 #: BOTH columns -- not "undeclared", simply absent, which is the one state
 #: this check cannot report.
 _WEB_TEST_HEAD = re.compile(r"(?<![.\w$])(?:it|test)\b")
+#: Where a `describe` block starts: read the same way, so a title a test
+#: reader can see is a title a block reader can see.
+_WEB_DESCRIBE_HEAD = re.compile(r"(?<![.\w$])describe\b")
 _WEB_MODIFIER = re.compile(r"\s*\.\s*(?P<mod>[A-Za-z_$][\w$]*)")
 
 #: The one modifier that TAKES an argument list of its own. `it.skip("x")`
@@ -699,7 +706,7 @@ def _swift_code_only(text: str) -> str:
 
 
 #: `class Foo: XCTestCase {` / `final class Foo : XCTestCase, Bar {`
-_SWIFT_TESTCASE_RE = re.compile(r"\bclass\s+\w+\s*:[^{]*\bXCTestCase\b[^{]*\{")
+_SWIFT_TESTCASE_RE = re.compile(r"\bclass\s+(?P<cls>\w+)\s*:[^{]*\bXCTestCase\b[^{]*\{")
 #: a method declaration inside one, with the modifiers that precede it and
 #: whether its parameter list is empty.
 #:
@@ -750,7 +757,12 @@ def _could_ever_run(mods: str, empty_params: bool) -> bool:
 
 
 def _swift_test_methods(text: str) -> list[str]:
-    """Method names declared inside XCTestCase subclasses, in order.
+    """Method names declared inside XCTestCase subclasses, in order."""
+    return [name for _cls, name in _swift_tests(text)]
+
+
+def _swift_tests(text: str) -> list[tuple[str, str]]:
+    """``(class, method)`` for the methods `_swift_test_methods` returns.
 
     Only methods XCTest could actually execute are returned: brace-matched
     to the class body (a regex cannot tell where the body ends and the
@@ -773,7 +785,7 @@ def _swift_test_methods(text: str) -> list[str]:
     exactly as much as a real one to a character scan and neither opens a
     scope.
     """
-    names: list[str] = []
+    names: list[tuple[str, str]] = []
     code = _swift_code_only(text)
     for match in _SWIFT_TESTCASE_RE.finditer(code):
         depth, i = 0, match.end() - 1
@@ -804,7 +816,7 @@ def _swift_test_methods(text: str) -> list[str]:
             spans.append((level_start, i))
         for span_start, span_end in spans:
             names.extend(
-                m.group("name")
+                (match.group("cls"), m.group("name"))
                 for m in _SWIFT_FUNC_RE.finditer(text[span_start:span_end])
                 if m.group("name") not in _XCTEST_LIFECYCLE
                 and _could_ever_run(m.group("mods"), m.group("empty") is not None)
@@ -833,6 +845,16 @@ class UnitCase:
     #: no single screen owns the target, so filing it under one would put back
     #: the false ownership the app spec was added to remove.
     app: str = ""
+
+
+#: What a declared (target, case) pair is on one platform.
+PAIR_IMPLEMENTED = "implemented"
+PAIR_MISSING = "missing"
+#: A test implements the name, but nothing says which of the targets that
+#: declare it the test is for — neither its class or outermost describe nor
+#: its file carries a target's name (`_owner`), and more than one target
+#: declares the name.
+PAIR_UNATTRIBUTED = "unattributed"
 
 
 @dataclass
@@ -885,10 +907,62 @@ class UnitContractReport:
     #: gains no line -- a line that always prints is a line nobody reads, and
     #: the next real finding on it is skipped with it.
     unreadable_titles: dict[str, int] = field(default_factory=dict)
+    #: platform -> the (target, case) pairs declared for it. A case is
+    #: declared FOR a target, and implemented when a test of that target
+    #: implements it: `declared` / `implemented` above are sets of names, and
+    #: a name several targets declare is one name there, so one test anywhere
+    #: answered for all of them.
+    declared_pairs: dict[str, set[tuple[str, str]]] = field(default_factory=dict)
+    #: platform -> case name -> [(file, class or outermost describe)]
+    implemented_sites: dict[str, dict[str, list[tuple[str, str | None]]]] = field(
+        default_factory=dict)
+    #: platform -> (target, case) -> PAIR_IMPLEMENTED / PAIR_MISSING /
+    #: PAIR_UNATTRIBUTED (`_resolve_pairs`)
+    pair_status: dict[str, dict[tuple[str, str], str]] = field(default_factory=dict)
+    #: platform -> (target, case) -> the files of the tests that implement it
+    pair_files: dict[str, dict[tuple[str, str], list[str]]] = field(default_factory=dict)
+    #: platform -> case name -> (targets no test of their own implements it
+    #: for, the tests that implement it but that no target's name places):
+    #: the names whose tests cannot be told apart
+    unplaced: dict[str, dict[str, tuple[list[str], list[tuple[str, str | None]]]]] = field(
+        default_factory=dict)
+    #: platform -> case name -> how many of `unplaced`'s targets have no test
+    #: whichever way the tests are placed (fewer tests than targets)
+    short: dict[str, dict[str, int]] = field(default_factory=dict)
+    #: platform -> (target, case): a test in that target's tests implements a
+    #: case the target does not declare — another target does
+    misplaced: dict[str, list[tuple[str, str]]] = field(default_factory=dict)
+
+    def missing_pairs(self, platform: str) -> list[tuple[str, str]]:
+        """(target, case) declared for this platform that no test of the
+        target implements, while the tests can be placed."""
+        return sorted(pair for pair, status in self.pair_status.get(platform, {}).items()
+                      if status == PAIR_MISSING)
 
     def missing(self, platform: str) -> list[str]:
-        """Declared for this platform, not implemented on it."""
-        return sorted(self.declared.get(platform, set()) - self.implemented.get(platform, set()))
+        """Case names declared for this platform that some declaring target
+        has no implementation of — a missing pair, or fewer tests than the
+        targets that declare the name."""
+        return sorted({name for _target, name in self.missing_pairs(platform)}
+                      | set(self.short.get(platform, {})))
+
+    def missing_count(self, platform: str) -> int:
+        """Pairs known to have no implementation: the missing pairs, plus,
+        for a name whose tests cannot be placed, targets minus tests."""
+        return len(self.missing_pairs(platform)) + sum(self.short.get(platform, {}).values())
+
+    def unattributed(self, platform: str) -> list[str]:
+        """Case names whose tests cannot be told apart by target."""
+        return sorted(self.unplaced.get(platform, {}))
+
+    def unattributed_count(self, platform: str) -> int:
+        """Pairs whose implementation may exist but cannot be placed."""
+        return sum(min(len(targets), len(tests))
+                   for targets, tests in self.unplaced.get(platform, {}).values())
+
+    def implemented_count(self, platform: str) -> int:
+        return sum(1 for status in self.pair_status.get(platform, {}).values()
+                   if status == PAIR_IMPLEMENTED)
 
     def undeclared(self, platform: str) -> list[str]:
         """Implemented on this platform, declared nowhere."""
@@ -909,7 +983,8 @@ class UnitContractReport:
         if self.declaring_specs and not self.cases:
             return False
         return all(
-            not self.missing(p) and not self.undeclared(p) for p in self.platforms
+            not self.missing(p) and not self.undeclared(p) and not self.misplaced.get(p)
+            for p in self.platforms
         )
 
 
@@ -1383,9 +1458,18 @@ def _web_test_names(text: str) -> tuple[list[str], int]:
     that prints it only when it is non-zero turns "18 tests are absent from
     both columns" into something the reader can see without knowing to look.
     """
-    names: list[str] = []
+    calls, unreadable = _web_calls(text, _WEB_TEST_HEAD)
+    return [title for _start, _paren, title in calls], unreadable
+
+
+def _web_calls(text: str, head: re.Pattern) -> tuple[list[tuple[int, int, str]], int]:
+    """``([(start, index of its '(', static title)], unreadable)`` for every
+    call of *head* — `it`/`test` for `_web_test_names`, `describe` for the
+    describes that `_web_tests` places them in. One reader for both, so the
+    rules above hold for a block's title exactly as for a test's."""
+    calls: list[tuple[int, int, str]] = []
     unreadable = 0
-    for m in _WEB_TEST_HEAD.finditer(text):
+    for m in head.finditer(text):
         i = m.end()
         while True:
             mod = _WEB_MODIFIER.match(text, i)
@@ -1407,6 +1491,7 @@ def _web_test_names(text: str) -> tuple[list[str], int]:
             # `it` that is not called: a variable, a property, a word in a
             # string. Not a test, and not something we failed to read.
             continue
+        paren = i
         i += 1
         while i < len(text) and text[i] in " \t\r\n":
             i += 1
@@ -1426,8 +1511,21 @@ def _web_test_names(text: str) -> tuple[list[str], int]:
         if after < len(text) and text[after] not in ",)":
             unreadable += 1
             continue
-        names.append(value)
-    return names, unreadable
+        calls.append((m.start(), paren, value))
+    return calls, unreadable
+
+
+def _web_tests(text: str) -> list[tuple[str | None, str]]:
+    """``(outermost describe title, or None, test title)`` for every test
+    `_web_test_names` reads — the block a stub file puts a target's cases in
+    (`describe('<target>', …)`) is the outermost one."""
+    suites = [(start, _skip_call_args(text, paren), title)
+              for start, paren, title in _web_calls(text, _WEB_DESCRIBE_HEAD)[0]]
+    out: list[tuple[str | None, str]] = []
+    for start, _paren, title in _web_calls(text, _WEB_TEST_HEAD)[0]:
+        around = [b for b in suites if b[0] < start < b[1]]
+        out.append((min(around)[2] if around else None, title))
+    return out
 
 
 def _discoverable(platform: str, found: str) -> str | None:
@@ -1446,10 +1544,31 @@ def _discoverable(platform: str, found: str) -> str | None:
     return None
 
 
+_KOTLIN_CLASS = re.compile(r"\bclass\s+(?P<cls>\w+)")
+
+
+def _kotlin_tests(text: str) -> list[tuple[str | None, str]]:
+    """``(class, test name)``: the class is the nearest one declared above the
+    test. A test in a nested class takes the nested class's name, which is no
+    target's stub class, so it is placed by its file (`_owner`)."""
+    classes = [(m.start(), m.group("cls")) for m in _KOTLIN_CLASS.finditer(text)]
+    out: list[tuple[str | None, str]] = []
+    for m in _ALL_TESTS_PATTERNS["android"].finditer(text):
+        above = [name for start, name in classes if start < m.start()]
+        out.append((above[-1] if above else None, m.group("name")))
+    return out
+
+
 def _implemented_names(
     root: Path, platform: str
-) -> tuple[set[str], list[str], set[str], dict[str, list[str]], int]:
-    """``(names, files read, undiscoverable, name -> files, unreadable titles)``.
+) -> tuple[set[str], list[str], set[str], dict[str, list[str]], int,
+           dict[str, list[tuple[str, str | None]]]]:
+    """``(names, files read, undiscoverable, name -> files, unreadable titles,
+    name -> [(file, class or outermost describe)])``.
+
+    The last one is what places a test in a target (`_owner`): the same
+    name implemented in two targets' test classes is two implementations,
+    and one set of names cannot tell them apart.
 
     The name -> files map is what lets a caller link a case to the file that
     implements it. The scan used to collapse every file into one set of names
@@ -1470,12 +1589,13 @@ def _implemented_names(
         # today can tell a correct early exit from a crash here. The next
         # platform added to PLATFORM_TEST_SUFFIX without a pattern is what
         # finds it, and it would find it as a traceback in a --check run.
-        return set(), [], set(), {}, 0
+        return set(), [], set(), {}, 0, {}
     names: set[str] = set()
     unreadable_titles = 0
     undiscoverable: set[str] = set()
     read: list[str] = []
     by_name: dict[str, list[str]] = {}
+    sites: dict[str, list[tuple[str, str | None]]] = {}
     for path in sorted(root.rglob(f"*{suffix}")):
         try:
             text = path.read_text(encoding="utf-8")
@@ -1486,12 +1606,12 @@ def _implemented_names(
             text = _without_comments(
                 text, nested_blocks=_NESTED_COMMENT_BLOCKS[platform])
         if platform == "web":
-            raws, unreadable = _web_test_names(text)
+            _titles, unreadable = _web_test_names(text)
             unreadable_titles += unreadable
+            raws = _web_tests(text)
         else:
-            raws = (_swift_test_methods(text) if platform == "ios"
-                    else [m.group("name") for m in pattern.finditer(text)])
-        for found in raws:
+            raws = (_swift_tests(text) if platform == "ios" else _kotlin_tests(text))
+        for container, found in raws:
             raw = _as_declared(platform, found)
             mapped = _discoverable(platform, raw)
             if mapped is None:
@@ -1501,7 +1621,81 @@ def _implemented_names(
                 where = by_name.setdefault(mapped, [])
                 if str(path) not in where:
                     where.append(str(path))
-    return names, read, undiscoverable, by_name, unreadable_titles
+                site = (str(path), container)
+                if site not in sites.setdefault(mapped, []):
+                    sites[mapped].append(site)
+    return names, read, undiscoverable, by_name, unreadable_titles, sites
+
+
+def _owner(platform: str, path: str, container: str | None, targets) -> str | None:
+    """The target a test belongs to, read from the names `generate` gives a
+    target's stubs: its class (`{target}ContractTests` on ios,
+    `{target}ContractTest` on android) or outermost describe
+    (`describe('{target}')` on web) first, else its file (`_STUB_FILENAME`).
+    None when neither names one of *targets*."""
+    by_container = {_STUB_CONTAINER[platform].format(target=t): t for t in targets}
+    if container in by_container:
+        return by_container[container]
+    by_file = {_STUB_FILENAME[platform].format(target=t): t for t in targets}
+    return by_file.get(Path(path).name)
+
+
+def _resolve_pairs(report: "UnitContractReport", platform: str) -> None:
+    """Judge each declared (target, case) pair of *platform*.
+
+    A test belongs to the target its class, outermost describe or file names
+    (`_owner`). A test no target's name places still belongs to the one
+    target that declares its case name, when only one does — the name then
+    says which. For a name several targets declare, a test no name places
+    could be any of theirs: the targets with no test of their own are then
+    `unplaced`, and when there are fewer such tests than targets, the
+    difference has none whichever way they are placed (`short`).
+
+    A test that a target's name places, implementing a case that target does
+    not declare while another does, is `misplaced`: it is that target's test,
+    not the declaring one's.
+    """
+    pairs = report.declared_pairs.get(platform, set())
+    targets = {target for target, _name in pairs}
+    declarers: dict[str, set[str]] = {}
+    for target, name in pairs:
+        declarers.setdefault(name, set()).add(target)
+    placed: dict[tuple[str, str], list[str]] = {}
+    loose: dict[str, list[tuple[str, str | None]]] = {}
+    misplaced: set[tuple[str, str]] = set()
+    for name, found in report.implemented_sites.get(platform, {}).items():
+        declaring = declarers.get(name, set())
+        for path, container in found:
+            owner = _owner(platform, path, container, targets)
+            if owner is not None and owner in declaring:
+                placed.setdefault((owner, name), []).append(path)
+            elif owner is not None and declaring:
+                misplaced.add((owner, name))
+            elif len(declaring) == 1:
+                placed.setdefault((next(iter(declaring)), name), []).append(path)
+            elif declaring:
+                loose.setdefault(name, []).append((path, container))
+            # A name no target declares is `undeclared` by name, as before.
+    status: dict[tuple[str, str], str] = {}
+    files: dict[tuple[str, str], list[str]] = {}
+    for name, declaring in declarers.items():
+        rest = sorted(t for t in declaring if (t, name) not in placed)
+        for target in declaring - set(rest):
+            status[(target, name)] = PAIR_IMPLEMENTED
+            files[(target, name)] = sorted(set(placed[(target, name)]))
+        free = loose.get(name, [])
+        for target in rest:
+            status[(target, name)] = PAIR_UNATTRIBUTED if free else PAIR_MISSING
+            files[(target, name)] = sorted({path for path, _container in free})
+        if rest and free:
+            report.unplaced.setdefault(platform, {})[name] = (
+                rest, sorted(free, key=lambda site: (site[0], site[1] or "")))
+            if len(free) < len(rest):
+                report.short.setdefault(platform, {})[name] = len(rest) - len(free)
+    report.pair_status[platform] = status
+    report.pair_files[platform] = files
+    if misplaced:
+        report.misplaced[platform] = sorted(misplaced)
 
 
 def check_unit_contracts(
@@ -1535,6 +1729,7 @@ def check_unit_contracts(
         targets = case.platforms or tuple(project_platforms)
         for platform in targets:
             report.declared.setdefault(platform, set()).add(case.name)
+            report.declared_pairs.setdefault(platform, set()).add((case.target, case.name))
             why = identifier_problem(platform, case.name)
             if why:
                 # Reported per platform on purpose: android accepts names ios
@@ -1593,19 +1788,24 @@ def check_unit_contracts(
         read: list[str] = []
         undiscoverable: set[str] = set()
         by_name: dict[str, list[str]] = {}
+        sites: dict[str, list[tuple[str, str | None]]] = {}
         unreadable_titles = 0
         for root in dirs:
             (d_found, d_read, d_undiscoverable, d_by_name,
-             d_unreadable) = _implemented_names(root, platform)
+             d_unreadable, d_sites) = _implemented_names(root, platform)
             found |= d_found
             read.extend(d_read)
             undiscoverable |= d_undiscoverable
             for name, files in d_by_name.items():
                 by_name.setdefault(name, []).extend(files)
+            for name, found_at in d_sites.items():
+                sites.setdefault(name, []).extend(found_at)
             unreadable_titles += d_unreadable
         report.implemented[platform] = found
         report.scanned_files[platform] = read
         report.implemented_files[platform] = by_name
+        report.implemented_sites[platform] = sites
+        _resolve_pairs(report, platform)
         if undiscoverable:
             report.undiscoverable[platform] = sorted(undiscoverable)
         if unreadable_titles:
@@ -1698,19 +1898,50 @@ def format_report(report: UnitContractReport) -> list[str]:
         if platform in report.unscannable:
             lines.append(f"  {platform}: NOT CHECKED — {report.unscannable[platform]}")
             continue
-        declared = len(report.declared.get(platform, set()))
-        implemented = len(report.implemented.get(platform, set()))
-        missing = report.missing(platform)
+        # Counted in (target, case) pairs: a case is declared for a target,
+        # and a name several targets declare is several declarations. The
+        # names are given alongside, because they are what was counted before.
+        pairs = len(report.declared_pairs.get(platform, set()))
+        names = len(report.declared.get(platform, set()))
         undeclared = report.undeclared(platform)
+        misplaced = report.misplaced.get(platform, [])
+        unattributed = report.unattributed_count(platform)
         lines.append(
-            f"  {platform}: declared {declared}, implemented {implemented}, "
-            f"missing {len(missing)}, undeclared {len(undeclared)} "
-            f"({len(report.scanned_files.get(platform, []))} file(s) read)"
+            f"  {platform}: declared {pairs}, implemented {report.implemented_count(platform)}, "
+            f"missing {report.missing_count(platform)}, "
+            f"undeclared {len(undeclared) + len(misplaced)}"
+            + (f", unattributed {unattributed}" if unattributed else "")
+            + f" ((target, case) pairs, over {names} case name(s); "
+            f"{len(report.scanned_files.get(platform, []))} file(s) read)"
         )
-        for name in missing:
-            lines.append(f"    MISSING     {name}  (declared, no implementation)")
+        unplaced = report.unplaced.get(platform, {})
+        for target, name in report.missing_pairs(platform):
+            lines.append(f"    MISSING     {name}  (declared for {target}, no test of "
+                         f"{target} implements it)")
+        for name, short in sorted(report.short.get(platform, {}).items()):
+            targets, tests = unplaced[name]
+            lines.append(
+                f"    MISSING     {name}  (declared for {', '.join(targets)} with no test of "
+                f"their own; {len(tests)} test(s) implement it that no target's name "
+                f"places, so at least {short} of them have none)")
         for name in undeclared:
             lines.append(f"    UNDECLARED  {name}  (implemented, declared nowhere)")
+        for target, name in misplaced:
+            lines.append(f"    UNDECLARED  {name}  (implemented in {target}'s tests, which "
+                         f"does not declare it — another target does)")
+        for name in report.unattributed(platform):
+            if name in report.short.get(platform, {}):
+                continue
+            targets, tests = unplaced[name]
+            where = ", ".join(sorted({Path(path).name + (f" ({c})" if c else "")
+                                      for path, c in tests}))
+            lines.append(
+                f"    UNATTRIBUTED  {name}  (declared for {', '.join(targets)}; implemented "
+                f"by {len(tests)} test(s) that no target's name places — {where}. Which "
+                f"target each is for cannot be told, so this is not checked; put each "
+                f"target's case in its {_STUB_CONTAINER[platform].format(target='<target>')} "
+                f"{'describe' if platform == 'web' else 'class'} or "
+                f"{_STUB_FILENAME[platform].format(target='<target>')})")
         for name in report.undiscoverable.get(platform, []):
             lines.append(
                 f"    NEVER RUNS  {name}  (method exists but the runner will not "
@@ -1747,6 +1978,9 @@ CASE_NOT_DECLARED_FOR_FACE = "not_declared_for_face"
 #: line for it, so collapsing it here would lose on the site what the CLI
 #: already says.
 CASE_NEVER_RUNS = "never_runs"
+#: A test implements the case name, but not one this target's name places,
+#: and other targets declare the name too (`PAIR_UNATTRIBUTED`).
+CASE_UNATTRIBUTED = "unattributed"
 
 
 def _relative_to_project(path: str, project_root: Path) -> str:
@@ -1802,7 +2036,7 @@ def unit_contract_pages(
             {"target": case.target, "screens": [], "cases": [],
              "spec_files": [],
              "faces": {p: {"declared": [], "implemented": [], "missing": [],
-                           "never_runs": [], "files": []}
+                           "never_runs": [], "unattributed": [], "files": []}
                        for p in platforms}},
         )
         if case.screen and case.screen not in entry["screens"]:
@@ -1815,10 +2049,16 @@ def unit_contract_pages(
             if platform not in faces:
                 status[platform] = CASE_NOT_DECLARED_FOR_FACE
                 continue
-            implemented = case.name in report.implemented.get(platform, set())
+            # The pair's judgment, not the name's: a name several targets
+            # declare is implemented for this one only by a test of its own.
+            pair = report.pair_status.get(platform, {}).get((case.target, case.name))
+            implemented = pair == PAIR_IMPLEMENTED
+            unattributed = pair == PAIR_UNATTRIBUTED
             never_runs = case.name in report.undiscoverable.get(platform, [])
             if implemented:
                 status[platform] = CASE_IMPLEMENTED
+            elif unattributed:
+                status[platform] = CASE_UNATTRIBUTED
             elif never_runs:
                 status[platform] = CASE_NEVER_RUNS
             else:
@@ -1827,11 +2067,13 @@ def unit_contract_pages(
             bucket["declared"].append(case.name)
             if implemented:
                 bucket["implemented"].append(case.name)
+            elif unattributed:
+                bucket["unattributed"].append(case.name)
             elif never_runs:
                 bucket["never_runs"].append(case.name)
             else:
                 bucket["missing"].append(case.name)
-            for path in report.implemented_files.get(platform, {}).get(case.name, []):
+            for path in report.pair_files.get(platform, {}).get((case.target, case.name), []):
                 rel = _relative_to_project(path, project_root)
                 if rel not in bucket["files"]:
                     bucket["files"].append(rel)
@@ -1849,7 +2091,8 @@ def unit_contract_pages(
         entry["spec_files"] = sorted(entry["spec_files"])
         entry["cases"] = sorted(entry["cases"], key=lambda c: c["name"])
         for bucket in entry["faces"].values():
-            for key in ("declared", "implemented", "missing", "never_runs", "files"):
+            for key in ("declared", "implemented", "missing", "never_runs", "unattributed",
+                        "files"):
                 bucket[key] = sorted(set(bucket[key]))
         targets.append(entry)
 
@@ -1870,6 +2113,8 @@ def unit_contract_pages(
         "undiscoverable": {p: list(v) for p, v in sorted(report.undiscoverable.items())},
         "unreadableTitles": dict(sorted(report.unreadable_titles.items())),
         "undeclared": {p: report.undeclared(p) for p in platforms if report.undeclared(p)},
+        "misplaced": {p: [list(pair) for pair in pairs]
+                      for p, pairs in sorted(report.misplaced.items())},
         "targets": targets,
     }
 
@@ -2113,7 +2358,7 @@ def stub_text(
     )
     return template.format(
         target=target or "Unit", body=body, module=module or "", package=package or "",
-        ios_class=xctest_class_header(f"{target or 'Unit'}ContractTests"),
+        ios_class=xctest_class_header(_STUB_CONTAINER["ios"].format(target=target or "Unit")),
     )
 
 
@@ -2157,6 +2402,15 @@ def merge_stubs(existing: str, generated: str) -> str:
     return head + STUB_BEGIN + "\n" + body + "\n" + STUB_END + tail
 
 
+#: The class (ios, android) or outermost describe (web) a target's stubs are
+#: written in — what `stub_text` writes and `_owner` reads a test's target
+#: from.
+_STUB_CONTAINER = {
+    "ios": "{target}ContractTests",
+    "android": "{target}ContractTest",
+    "web": "{target}",
+}
+
 #: Where a target's stub file lives, per platform. A convention rather than a
 #: declaration: the spec says which cases exist, not where a face keeps its
 #: files, and asking it to would put the same fact in two places.
@@ -2189,7 +2443,11 @@ def write_stubs(
         for platform in case.platforms or tuple(report.platforms):
             if platform in report.unscannable or roots.get(platform) is None:
                 continue
-            if case.name in report.implemented.get(platform, set()):
+            # Only a pair KNOWN to have no test: a name implemented for
+            # another target is not this target's implementation, and a pair
+            # whose tests cannot be placed may have one.
+            if report.pair_status.get(platform, {}).get(
+                    (case.target, case.name)) != PAIR_MISSING:
                 continue
             by_platform_target.setdefault((platform, case.target or "Unit"), []).append(case)
 

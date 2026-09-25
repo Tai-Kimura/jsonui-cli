@@ -223,6 +223,7 @@ def get_unit_styles() -> list[str]:
         "    .status-implemented { background: #e6f7ed; color: #1d7a44; }",
         "    .status-missing { background: #fdeaea; color: #b3261e; }",
         "    .status-never_runs { background: #fff3e0; color: #a15c00; }",
+        "    .status-unattributed { background: #fef9e7; color: #8a6d00; }",
         "    .status-not_declared_for_face { background: #f1f3f5; color: #6b7280; }",
         "    .status-undeclared { background: #f3e8fd; color: #7b2cbf; }",
         "    .status-unknown { background: #f1f3f5; color: #6b7280; }",
