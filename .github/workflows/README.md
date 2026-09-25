@@ -44,6 +44,7 @@ reflects the last such run, not a per-push mobile execution.
 | `web` | ubuntu | same suite as ci.yml (rerun so all platforms test the same commit) |
 | `ios` | macos-15, Xcode 16.4 pinned | checks out public `Tai-Kimura/SwiftJsonUI` (`ConformanceHost/`) + `Tai-Kimura/jsonui-test-runner`, then `sync_fixtures.sh` → `generate_project.rb` → `run_conformance.sh` on a headless "iPhone 16 Pro" simulator |
 | `android` | ubuntu (KVM) | checks out public `Tai-Kimura/KotlinJsonUI` (`conformance-host/`), boots an API 34 `pixel_tablet` emulator via `reactivecircus/android-emulator-runner`, runs `run_conformance.sh --fresh` + `collect_results.sh` |
+| `android-library-tests` | ubuntu (KVM) | checks out `Tai-Kimura/KotlinJsonUI` at `kotlinjsonui_ref`, runs `library` and `library-dynamic`'s `connectedDebugAndroidTest` on the same API 34 `pixel_tablet` emulator, and judges from the results XML (`.github/scripts/kjui_device_tests.py`): a failure, an error, a module with no results, or a class with `@Test` and no case in the results is red; skips are printed by name |
 | `report` | ubuntu | `jui conformance gate --platform ios --platform android --platform web` — renders REPORT.md from the three fresh `*.results.json`, then gates: **0 cross-platform mismatches / 0 fail / 0 error / not stale / screenshots actually compared / no visual or attribute-effect regressions / `missing_artifact` + `no_baseline` within their `conformance/gate_ratchet.json` ceilings** |
 
 Artifacts: `results-{web,ios,android}` (per-platform results + screenshots)
@@ -65,13 +66,18 @@ Pinning decisions:
 gh workflow run conformance-mobile.yml           # against main
 gh run watch                                     # follow it
 
-# Before a SwiftJsonUI tag: both iOS jobs against the release branch, with
-# the opt-in image probes (DecorativeImageProbe, ImageEventsProbe) raised.
-gh workflow run conformance-mobile.yml -f swiftjsonui_ref=<release-branch> -f image_probes=true
+# Before a SwiftJsonUI / KotlinJsonUI tag: every mobile job against the
+# release branches, with the opt-in probes raised.
+gh workflow run conformance-mobile.yml -f swiftjsonui_ref=<sjui-release-branch> -f image_probes=true \
+    -f kotlinjsonui_ref=<kjui-release-branch> -f android_probes=true
 ```
 
 `swiftjsonui_ref` (default `master`) is the SwiftJsonUI ref both iOS jobs
-check out; each job prints the ref and the commit it got. The schedule has
+check out, and `kotlinjsonui_ref` (default `main`) the KotlinJsonUI ref the
+three Android jobs check out; each job prints the ref and the commit it got.
+`android_probes` raises every instrumentation argument a KotlinJsonUI device
+test compares to `"1"` — the list is derived from the tests, so a new probe
+needs no workflow edit. The schedule has
 no inputs and keeps `master`. ConformanceHost's TapIdentifierOnceUITests is
 not opt-in: it runs in both iOS jobs whatever the inputs.
 
