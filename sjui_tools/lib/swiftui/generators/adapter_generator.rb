@@ -5,6 +5,7 @@ require_relative '../../core/logger'
 require_relative '../../core/converter_generator_core'
 require_relative '../../core/config_manager'
 require_relative '../../core/generated_marker'
+require_relative '../../core/attribute_types'
 
 module SjuiTools
   module SwiftUI
@@ -265,75 +266,71 @@ module SjuiTools
 
         # Generate attribute extraction code using DynamicBindingHelper.resolveValue
         # This produces clean one-liners instead of verbose manual @{} parsing
+        # One reader per attribute, from the shared vocabulary
+        # (lib/core/attribute_types.rb) — the table the component's parameter
+        # types come from, so the two agree for every type. Until 1.8.121 this
+        # file kept its own list: Float was read as Float for a Double
+        # parameter, Color as Color? for a Color one, `Integer` / `Boolean`
+        # became type names (ticket kjui-sjui-converter-attr-types-do-not-compile).
         def generate_attribute_extraction(attributes)
           impl = ""
-          callback_attrs = []
-          value_attrs = []
+          callbacks = []
 
-          # Separate callbacks from value attributes
           attributes.each do |name, attr_info|
             type = attr_info.is_a?(Hash) ? attr_info[:type] : attr_info
-            if type =~ /^\(.*\)\s*->\s*/
-              callback_attrs << [name, attr_info]
-            else
-              value_attrs << [name, attr_info]
-            end
-          end
-
-          # Generate value attribute extractions
-          value_attrs.each do |name, attr_info|
-            type = attr_info.is_a?(Hash) ? attr_info[:type] : attr_info
             is_binding = attr_info.is_a?(Hash) ? attr_info[:is_binding] : false
-
-            if is_binding
-              # Binding properties still need explicit Binding extraction
+            t = JsonUIShared::AttributeTypes.parse(type)
+            if t.kind == :callback
+              callbacks << [name, t]
+            elsif is_binding
               impl += generate_binding_extraction(name, type)
             else
-              case type
-              when 'String'
-                impl += "        let #{name}: String = DynamicBindingHelper.resolveValue(component.rawData[\"#{name}\"], data: data) ?? \"\"\n"
-              when 'Bool'
-                impl += "        let #{name}: Bool = DynamicBindingHelper.resolveValue(component.rawData[\"#{name}\"], data: data)\n"
-                impl += "            ?? (component.rawData[\"#{name}\"] as? Bool) ?? false\n"
-              when 'Int'
-                impl += "        let #{name}: Int = DynamicBindingHelper.resolveValue(component.rawData[\"#{name}\"], data: data)\n"
-                impl += "            ?? (component.rawData[\"#{name}\"] as? Int) ?? 0\n"
-              when 'Double'
-                impl += "        let #{name}: Double = DynamicBindingHelper.resolveValue(component.rawData[\"#{name}\"], data: data)\n"
-                impl += "            ?? (component.rawData[\"#{name}\"] as? Double) ?? 0.0\n"
-              when 'Float'
-                impl += "        let #{name}: Float = DynamicBindingHelper.resolveValue(component.rawData[\"#{name}\"], data: data)\n"
-                impl += "            ?? (component.rawData[\"#{name}\"] as? Float) ?? 0.0\n"
-              when 'Color'
-                impl += "        let #{name} = DynamicHelpers.getColor(component.rawData[\"#{name}\"] as? String, data: data)\n"
-              else
-                # Model/custom types
-                actual_type = type.is_a?(Hash) ? type[:type] : type
-                force_non_optional = actual_type.is_a?(String) ? actual_type.end_with?('!!') : false
-                clean_type = force_non_optional ? actual_type[0..-3] : actual_type
-                swift_type = force_non_optional ? clean_type : "#{clean_type}?"
-
-                impl += "        let #{name}: #{swift_type} = DynamicBindingHelper.resolveValue(component.rawData[\"#{name}\"], data: data)\n"
-              end
+              impl += value_extraction(name, type, t)
             end
           end
 
-          # Generate callback extractions
-          if !callback_attrs.empty?
+          unless callbacks.empty?
             impl += "\n        // Extract callbacks\n"
-            callback_attrs.each do |name, attr_info|
-              type = attr_info.is_a?(Hash) ? attr_info[:type] : attr_info
-              impl += "        var #{name}: #{type}? = nil\n"
+            callbacks.each do |name, t|
+              closure = JsonUIShared::AttributeTypes.swift_type(t).chomp('?')
+              impl += "        var #{name}: #{closure}? = nil\n"
               impl += "        if let str = component.rawData[\"#{name}\"] as? String,\n"
               impl += "           let propName = DynamicEventHelper.extractPropertyName(from: str) {\n"
-              impl += "            #{name} = data[propName] as? (#{type})\n"
+              impl += "            #{name} = data[propName] as? #{closure}\n"
               impl += "        }\n"
             end
           end
 
           impl
         end
-        
+
+        def value_extraction(name, type, t)
+          raw = "component.rawData[\"#{name}\"]"
+          resolve = "DynamicBindingHelper.resolveValue(#{raw}, data: data)"
+          swift = JsonUIShared::AttributeTypes.swift_type(t)
+          default = JsonUIShared::AttributeTypes.swift_default(t)
+          fallback = default ? " ?? #{default}" : ''
+          if (model = forced_model(type, t))
+            return "        let #{name}: #{model} = #{resolve} ?? #{model}.mock\n"
+          end
+          return "        let #{name}: #{swift} = #{resolve}\n" if t.kind == :outside
+          return "        let #{name}: #{swift} = #{resolve}#{fallback}\n" unless t.kind == :scalar
+
+          case t.canonical
+          when 'color'
+            "        let #{name}: #{swift} = DynamicHelpers.getColor(#{raw} as? String, data: data)#{fallback}\n"
+          when 'cgfloat'
+            "        let #{name}: #{swift} = #{resolve}\n" \
+              "            ?? (#{raw} as? Double).map { CGFloat($0) }#{fallback}\n"
+          when 'collection_data_source'
+            "        let #{name}: #{swift} = #{resolve}\n"
+          else
+            base = t.entry[:swift]
+            "        let #{name}: #{swift} = #{resolve}\n" \
+              "            ?? (#{raw} as? #{base})#{fallback}\n"
+          end
+        end
+
         def parse_attributes
           return {} unless @options[:attributes]
           
@@ -395,65 +392,42 @@ module SjuiTools
           parts
         end
         
+        # A binding attribute (`@name:Type`): the data's Binding when the
+        # layout names one, else a constant. `#{name}Value` was read here and
+        # declared nowhere, so no adapter with a binding attribute compiled
+        # before 1.8.121.
         def generate_binding_extraction(name, type)
+          t = JsonUIShared::AttributeTypes.parse(type)
+          model = forced_model(type, t)
+          swift = model || JsonUIShared::AttributeTypes.swift_type(t)
+          default = model ? "#{model}.mock" : JsonUIShared::AttributeTypes.swift_default(t)
+          value_type = swift.chomp('?')
+          constant = default ? "(data[propertyName] as? #{value_type}) ?? #{default}" : "data[propertyName] as? #{value_type}"
+          literal = default ? "(#{name}Value as? #{value_type}) ?? #{default}" : "#{name}Value as? #{value_type}"
           impl = ""
-
-          # For binding properties, extract Binding from data dictionary
-          case type
-          when 'String', 'Bool', 'Int', 'Double', 'Float'
-            default_value = get_default_value_for_type(type)
-            impl += "        let #{name}: SwiftUI.Binding<#{type}>\n"
-            impl += "        if let stringValue = #{name}Value as? String,\n"
-            impl += "           stringValue.hasPrefix(\"@{\") && stringValue.hasSuffix(\"}\") {\n"
-            impl += "            let propertyName = String(stringValue.dropFirst(2).dropLast(1))\n"
-            impl += "            if let binding = data[propertyName] as? SwiftUI.Binding<#{type}> {\n"
-            impl += "                #{name} = binding\n"
-            impl += "            } else {\n"
-            impl += "                #{name} = .constant(data[propertyName] as? #{type} ?? #{default_value})\n"
-            impl += "            }\n"
-            impl += "        } else {\n"
-            impl += "            #{name} = .constant(#{name}Value as? #{type} ?? #{default_value})\n"
-            impl += "        }\n"
-          else
-            # Model types
-            force_non_optional = type.end_with?('!!')
-            clean_type = force_non_optional ? type[0..-3] : type
-            swift_type = force_non_optional ? clean_type : "#{clean_type}?"
-
-            impl += "        let #{name}: SwiftUI.Binding<#{swift_type}>\n"
-            impl += "        if let stringValue = #{name}Value as? String,\n"
-            impl += "           stringValue.hasPrefix(\"@{\") && stringValue.hasSuffix(\"}\") {\n"
-            impl += "            let propertyName = String(stringValue.dropFirst(2).dropLast(1))\n"
-            impl += "            if let binding = data[propertyName] as? SwiftUI.Binding<#{swift_type}> {\n"
-            impl += "                #{name} = binding\n"
-            impl += "            } else {\n"
-            impl += "                #{name} = .constant(data[propertyName] as? #{clean_type})\n"
-            impl += "            }\n"
-            impl += "        } else {\n"
-            impl += "            #{name} = .constant(nil)\n"
-            impl += "        }\n"
-          end
-
+          impl += "        let #{name}Value = component.rawData[\"#{name}\"]\n"
+          impl += "        let #{name}: SwiftUI.Binding<#{swift}>\n"
+          impl += "        if let stringValue = #{name}Value as? String,\n"
+          impl += "           stringValue.hasPrefix(\"@{\") && stringValue.hasSuffix(\"}\") {\n"
+          impl += "            let propertyName = String(stringValue.dropFirst(2).dropLast(1))\n"
+          impl += "            if let binding = data[propertyName] as? SwiftUI.Binding<#{swift}> {\n"
+          impl += "                #{name} = binding\n"
+          impl += "            } else {\n"
+          impl += "                #{name} = .constant(#{constant})\n"
+          impl += "            }\n"
+          impl += "        } else {\n"
+          impl += "            #{name} = .constant(#{literal})\n"
+          impl += "        }\n"
           impl
         end
-        
-        def get_default_value_for_type(type)
-          case type
-          when 'String'
-            '""'
-          when 'Bool'
-            'false'
-          when 'Int'
-            '0'
-          when 'Double'
-            '0.0'
-          when 'Float'
-            '0.0'
-          else
-            'nil'
-          end
+
+        # A model type outside the vocabulary marked `!!` ("not optional"): the
+        # component declares it non-optional, so the adapter reads it as one and
+        # falls back to `.mock`, as the component's preview does.
+        def forced_model(type, t)
+          t.name if t.kind == :outside && type.to_s.strip.end_with?('!!')
         end
-        
+
         def registration_template
           marker_header = Core::GeneratedMarker.comment_header(
             source: "CustomComponentRegistration",

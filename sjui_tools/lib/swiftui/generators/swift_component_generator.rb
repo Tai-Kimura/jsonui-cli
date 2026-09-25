@@ -6,6 +6,7 @@ require_relative '../../core/converter_generator_core'
 require_relative '../../core/config_manager'
 require_relative '../../core/project_finder'
 require_relative '../../core/generated_marker'
+require_relative '../../core/attribute_types'
 
 module SjuiTools
   module SwiftUI
@@ -65,7 +66,7 @@ module SjuiTools
           <<~SWIFT
             #{marker_header}
 
-            import SwiftUI
+            import SwiftUI#{library_import}
 
             struct #{@component_name}<Content: View>: View {
             #{generate_swift_properties}
@@ -97,7 +98,7 @@ module SjuiTools
           <<~SWIFT
             #{marker_header}
 
-            import SwiftUI
+            import SwiftUI#{library_import}
 
             struct #{@component_name}: View {
             #{generate_swift_properties}
@@ -222,54 +223,38 @@ module SjuiTools
           end.join(", ")
         end
 
+        # Types come from the shared vocabulary (lib/core/attribute_types.rb),
+        # which the Dynamic adapter reads too. Until 1.8.121 this file kept its
+        # own list: Float became Double here and Float in the adapter, a Long
+        # became `Long?` (no such Swift type), and `String?` became `String??`
+        # (ticket kjui-sjui-converter-attr-types-do-not-compile).
+        # A type outside the vocabulary stays a model type the app declares:
+        # optional, or not with the `!!` mark.
         def map_to_swift_type(type)
-          # Check if type ends with !! (force non-optional)
-          force_non_optional = type.end_with?('!!')
-          clean_type = force_non_optional ? type[0..-3] : type
-          
-          swift_type = case clean_type.downcase
-          when 'string'
-            'String'
-          when 'int', 'integer'
-            'Int'
-          when 'double', 'float'
-            'Double'
-          when 'bool', 'boolean'
-            'Bool'
-          when 'color'
-            'Color'
-          when 'edgeinsets'
-            'EdgeInsets'
-          else
-            # Model types are optional by default
-            return force_non_optional ? clean_type : "#{clean_type}?"
-          end
-          
-          # Basic types remain non-optional by default
-          swift_type
+          t = JsonUIShared::AttributeTypes.parse(type)
+          return t.name if t.kind == :outside && type.to_s.strip.end_with?('!!')
+
+          JsonUIShared::AttributeTypes.swift_type(t)
         end
 
         def get_swift_default_value(type)
-          # Remove !! suffix if present
-          clean_type = type.end_with?('!!') ? type[0..-3] : type
-          
-          case clean_type.downcase
-          when 'string'
-            '"Sample Text"'
-          when 'int', 'integer'
-            '0'
-          when 'double', 'float'
-            '0.0'
-          when 'bool', 'boolean'
-            'true'
-          when 'color'
-            '.blue'
-          when 'edgeinsets'
-            'EdgeInsets(top: 10, leading: 10, bottom: 10, trailing: 10)'
+          t = JsonUIShared::AttributeTypes.parse(type)
+          if t.kind == :scalar && !t.nullable
+            { 'string' => '"Sample Text"', 'bool' => 'true', 'color' => '.blue' }.fetch(t.canonical, t.entry[:swift_default])
+          elsif t.kind == :list && !t.nullable
+            '[]'
+          elsif t.kind == :outside && type.to_s.strip.end_with?('!!')
+            "#{t.name}.mock"
           else
-            # For model types, use .mock for non-optional or nil for optional
-            type.end_with?('!!') ? "#{clean_type}.mock" : "nil"
+            'nil'
           end
+        end
+
+        # CollectionDataSource is SwiftJsonUI's.
+        def library_import
+          types = (@options[:attributes] || {}).values.map { |type| JsonUIShared::AttributeTypes.parse(type) }
+          uses = types.any? { |t| (t.kind == :list ? t.element : t).canonical == 'collection_data_source' }
+          uses ? "\nimport SwiftJsonUI" : ''
         end
 
         def to_camel_case(str)

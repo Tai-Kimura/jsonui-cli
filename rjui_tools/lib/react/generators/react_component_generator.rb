@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require 'fileutils'
+require_relative '../../core/attribute_types'
 require_relative '../../core/logger'
 require_relative '../../core/converter_generator_core'
 
@@ -122,26 +123,16 @@ module RjuiTools
           "{ #{props.join(', ')} }"
         end
 
+        # From the shared vocabulary (lib/core/attribute_types.rb), the table
+        # sjui and kjui scaffold from. Until 1.8.121 a Long, a CGFloat, a Color,
+        # `String?` or `[String]` became `any` here without a word (ticket
+        # kjui-sjui-converter-attr-types-do-not-compile). `array`, `object`
+        # and `hash` keep their old answers.
         def ruby_type_to_typescript(type)
-          case type.downcase
-          when 'string'
-            'string'
-          when 'int', 'integer', 'number', 'double', 'float'
-            'number'
-          when 'bool', 'boolean'
-            'boolean'
-          when 'array'
-            'any[]'
-          when 'object', 'hash'
-            'Record<string, any>'
-          when 'callback'
-            # Exposed events from the component spec — param types live in
-            # the spec's stateManagement.exposedEvents; refine when filling
-            # in the scaffold.
-            '(...args: any[]) => void'
-          else
-            # Closure types from props.items (e.g. `((String, String) -> Void)?`)
-            type.include?('->') ? '(...args: any[]) => void' : 'any'
+          case type.to_s.strip.downcase
+          when 'array' then 'any[]'
+          when 'object', 'hash' then 'Record<string, any>'
+          else JsonUIShared::AttributeTypes.ts_type(JsonUIShared::AttributeTypes.parse(type))
           end
         end
 
