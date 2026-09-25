@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from ..core.normalizer.include_expander import _to_camel_case as _snake_to_camel
 from ..core.spec_extractor import ScreenSpec, UIVariableDef
 from ..core.type_mapper import TypeMapper
 
@@ -426,8 +427,3 @@ class LayoutGenerator:
             "selectedIndex": "@{selectedTabIndex}",
             "tabs": tabs,
         }
-
-def _snake_to_camel(snake: str) -> str:
-    """Convert snake_case to camelCase."""
-    parts = snake.split("_")
-    return parts[0] + "".join(p.capitalize() for p in parts[1:])
