@@ -2,6 +2,7 @@
   "_description": "Per-component presentation metadata consumed by jsonui-mcp-server. Augments attribute_definitions.json (which defines the raw attribute schema, including binding_direction per attribute) with human descriptions, aliases, platform availability, platform-specific implementation notes, and agent-facing rules. Edit this file to change what `lookup_component` / `search_components` / `lookup_attribute` return from the MCP.",
   "_schema": {
     "description": "string",
+    "interactive": "boolean — REQUIRED on every type: whether a user can operate this component on its own (a control, an input, or a scrolling / embedding container). A tappable that holds one is not flattened into a single button for screen readers (shared/core/tap_accessibility.rb). Declared, never derived: Button, Radio and Web declare no two-way binding and are operable.",
     "aliases": "string[]",
     "platforms": {
       "swift_generated": "boolean",
@@ -15,6 +16,7 @@
   },
   "Label": {
     "description": "Text display component",
+    "interactive": false,
     "aliases": [
       "Text"
     ],
@@ -49,6 +51,7 @@
   },
   "TextField": {
     "description": "Text input field",
+    "interactive": true,
     "aliases": [
       "EditText",
       "Input"
@@ -86,6 +89,7 @@
   },
   "Button": {
     "description": "Tappable button component",
+    "interactive": true,
     "aliases": [],
     "platforms": {
       "swift_generated": true,
@@ -117,6 +121,7 @@
   },
   "Image": {
     "description": "Local image component",
+    "interactive": false,
     "aliases": [
       "CircleImage",
       "CircleImageView",
@@ -153,6 +158,7 @@
   },
   "NetworkImage": {
     "description": "Remote/network image component",
+    "interactive": false,
     "aliases": [],
     "platforms": {
       "swift_generated": true,
@@ -180,6 +186,7 @@
   },
   "View": {
     "description": "Container view (HStack/VStack/ZStack)",
+    "interactive": false,
     "aliases": [],
     "platforms": {
       "swift_generated": true,
@@ -212,6 +219,7 @@
   },
   "ScrollView": {
     "description": "Scrollable container",
+    "interactive": true,
     "aliases": [],
     "platforms": {
       "swift_generated": true,
@@ -238,6 +246,7 @@
   },
   "Collection": {
     "description": "List/grid collection with data binding",
+    "interactive": true,
     "aliases": [
       "Table",
       "TableView",
@@ -275,6 +284,7 @@
   },
   "Switch": {
     "description": "Toggle switch (iOS style)",
+    "interactive": true,
     "aliases": [],
     "platforms": {
       "swift_generated": true,
@@ -302,6 +312,7 @@
   },
   "Toggle": {
     "description": "Toggle control (checkbox style)",
+    "interactive": true,
     "aliases": [],
     "platforms": {
       "swift_generated": true,
@@ -328,6 +339,7 @@
   },
   "CheckBox": {
     "description": "Checkbox input",
+    "interactive": true,
     "aliases": [
       "Check",
       "Checkbox"
@@ -357,6 +369,7 @@
   },
   "Radio": {
     "description": "Radio button group",
+    "interactive": true,
     "aliases": [],
     "platforms": {
       "swift_generated": true,
@@ -382,6 +395,7 @@
   },
   "SelectBox": {
     "description": "Dropdown/picker selection",
+    "interactive": true,
     "aliases": [],
     "platforms": {
       "swift_generated": true,
@@ -407,6 +421,7 @@
   },
   "Segment": {
     "description": "Segmented control",
+    "interactive": true,
     "aliases": [],
     "platforms": {
       "swift_generated": true,
@@ -433,6 +448,7 @@
   },
   "Slider": {
     "description": "Slider/range input",
+    "interactive": true,
     "aliases": [],
     "platforms": {
       "swift_generated": true,
@@ -460,6 +476,7 @@
   },
   "Progress": {
     "description": "Progress bar/indicator",
+    "interactive": false,
     "aliases": [],
     "platforms": {
       "swift_generated": true,
@@ -485,6 +502,7 @@
   },
   "Indicator": {
     "description": "Activity indicator / loading spinner",
+    "interactive": false,
     "aliases": [],
     "platforms": {
       "swift_generated": true,
@@ -508,6 +526,7 @@
   },
   "CircleView": {
     "description": "Circular shape view",
+    "interactive": false,
     "aliases": [],
     "platforms": {
       "swift_generated": false,
@@ -531,6 +550,7 @@
   },
   "GradientView": {
     "description": "Gradient background view",
+    "interactive": false,
     "aliases": [],
     "platforms": {
       "swift_generated": true,
@@ -556,6 +576,7 @@
   },
   "Blur": {
     "description": "Blur effect view",
+    "interactive": false,
     "aliases": [],
     "platforms": {
       "swift_generated": true,
@@ -581,6 +602,7 @@
   },
   "IconLabel": {
     "description": "Icon with label combination",
+    "interactive": false,
     "aliases": [],
     "platforms": {
       "swift_generated": true,
@@ -606,6 +628,7 @@
   },
   "Web": {
     "description": "Web view / embedded browser",
+    "interactive": true,
     "aliases": [],
     "platforms": {
       "swift_generated": true,
@@ -632,6 +655,7 @@
   },
   "SafeAreaView": {
     "description": "Safe area respecting container",
+    "interactive": false,
     "aliases": [],
     "platforms": {
       "swift_generated": true,
@@ -654,6 +678,7 @@
   },
   "TabView": {
     "description": "Tab-based navigation container",
+    "interactive": true,
     "aliases": [],
     "platforms": {
       "swift_generated": true,
@@ -679,6 +704,7 @@
   },
   "TextView": {
     "description": "Multi-line text input",
+    "interactive": true,
     "aliases": [],
     "platforms": {
       "swift_generated": true,
@@ -705,6 +731,7 @@
   },
   "EditText": {
     "description": "Text input (Android naming convention)",
+    "interactive": true,
     "aliases": [],
     "platforms": {
       "swift_generated": true,
@@ -725,6 +752,7 @@
   },
   "Input": {
     "description": "Generic input (React naming convention)",
+    "interactive": true,
     "aliases": [],
     "platforms": {
       "swift_generated": true,
@@ -745,6 +773,7 @@
   },
   "Embed": {
     "description": "Embeds another screen as a region of this layout. The embedded screen owns its own ViewModel — independent from the parent VM.",
+    "interactive": true,
     "aliases": [],
     "platforms": {
       "swift_generated": true,

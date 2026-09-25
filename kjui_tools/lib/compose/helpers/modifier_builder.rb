@@ -5,6 +5,7 @@ require_relative 'binding_expression'
 require_relative 'bound_value'
 require_relative 'resource_resolver'
 require_relative '../../core/normalization'
+require_relative '../../core/tap_accessibility'
 
 module KjuiTools
   module Compose
@@ -839,7 +840,17 @@ module KjuiTools
             else
               handler_call = get_event_handler_call(json_data['onclick'], is_camel_case: false)
             end
-            gate = tap_gate.any? ? "(enabled = #{tap_gate.join(' && ')})" : ''
+            # A tap a screen reader should call a button
+            # (shared/core/tap_accessibility.rb): `role = Role.Button`. Left off
+            # where the tappable is a control already or holds one — the same
+            # decision the iOS codegen makes.
+            args = []
+            args << "enabled = #{tap_gate.join(' && ')}" if tap_gate.any?
+            if %w[button combine].include?(json_data[JsonUIShared::TapAccessibility::SHAPE_KEY])
+              required_imports&.add(:role)
+              args << 'role = Role.Button'
+            end
+            gate = args.any? ? "(#{args.join(', ')})" : ''
             modifiers << ".clickable#{gate} { #{handler_call} }"
           end
           # `disabled()` follows `enabled` only: a view that is merely not

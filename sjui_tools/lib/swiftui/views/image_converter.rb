@@ -139,7 +139,7 @@ module SjuiTools
             on_click_lines = [
               ".contentShape(Rectangle())",
               build_on_tap_gesture(handler_call)
-            ]
+            ] + tap_accessibility_lines
             @modifier_bag.register(:on_click, on_click_lines)
           end
 

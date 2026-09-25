@@ -434,11 +434,9 @@ module SjuiTools
             @modifier_bag.register(:hidden, ".opacity(#{hidden_expr} ? 0 : 1).accessibilityHidden(#{hidden_expr})")
           end
 
-          # onClick
-          if @component['onClick'] && is_binding?(@component['onClick']) && @component['enabled'] != false
-            on_click_lines = build_on_click_lines(@component['onClick'])
-            @modifier_bag.register(:on_click, on_click_lines)
-          end
+          # The tap: base's rule (onClick, else the onclick selector), not a
+          # second copy of it — the copy here read only a binding onClick.
+          register_click_lines
 
           generated_code
         end

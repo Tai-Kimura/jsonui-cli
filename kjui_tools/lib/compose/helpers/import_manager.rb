@@ -208,6 +208,7 @@ module KjuiTools
             circle_shape: "import androidx.compose.foundation.shape.CircleShape",
             alpha: "import androidx.compose.ui.draw.alpha",
             semantics: "import androidx.compose.ui.semantics.semantics",
+            role: "import androidx.compose.ui.semantics.Role",
             semantics_disabled: ["import androidx.compose.ui.semantics.semantics",
                                  "import androidx.compose.ui.semantics.disabled"],
             # userInteractionEnabled consumes events in the Initial pass.
