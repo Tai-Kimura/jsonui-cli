@@ -153,8 +153,11 @@ class GenerateProjectBuildsOnlyScreens(unittest.TestCase):
 
     def test_without_the_validator_an_unknown_type_is_skipped_and_said(self):
         _write(self.root / "docs/screens/json/mystery.spec.json", UNKNOWN_SPEC)
-        with mock.patch.dict(sys.modules,
-                             {"document_tools.jsonui_doc_cli.spec_doc.validator": None}):
+        # No validator by any route: `load_spec_validator` is the one seam
+        # (blocking the old import name alone no longer removes it — the
+        # validator is also found beside jui_tools and by its pip name).
+        with mock.patch("jui_cli.core.document_tools_import.load_spec_validator",
+                        return_value=(None, "patched away")):
             rc, generated, out = self._generate()
         self.assertIn("skipping validation", out)
         self.assertEqual(rc, 0, out)
