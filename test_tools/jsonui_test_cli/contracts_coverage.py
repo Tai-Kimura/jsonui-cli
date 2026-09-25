@@ -830,7 +830,7 @@ def evaluate_screen(name: str, spec: dict, platform: str, project: Project) -> S
                     res.outside_required["na_default_response"] += 1
                 elif _no_scenario(status, statuses, mock):
                     res.outside_required["na_no_scenario"] += 1
-                    _note_no_scenario(res, names_of, key, endpoints[key])
+                    _note_no_scenario(res, names_of, key, endpoints[key], status)
                 elif status in answered:
                     res.breakdown["row"] += 1
                     if all(kind == "also" for kind in answered[status]):
@@ -865,7 +865,7 @@ def evaluate_screen(name: str, spec: dict, platform: str, project: Project) -> S
                 res.outside_required["na_default_response"] += 1
             elif _no_scenario(status, statuses, mock):
                 res.outside_required["na_no_scenario"] += 1
-                _note_no_scenario(res, names_of, key, endpoints[key])
+                _note_no_scenario(res, names_of, key, endpoints[key], status)
             else:
                 res.breakdown["uncovered"] += 1
                 left.append(status)
@@ -885,8 +885,9 @@ def _op_name(names_of: dict, key, endpoint: dict) -> str:
     return names_of.get(key, [f"{endpoint['method']} {endpoint['path']}"])[0]
 
 
-def _note_no_scenario(res: "ScreenResult", names_of: dict, key, endpoint: dict) -> None:
-    item = {"op": _op_name(names_of, key, endpoint), "cause": "no scenario"}
+def _note_no_scenario(res: "ScreenResult", names_of: dict, key, endpoint: dict,
+                      status: str) -> None:
+    item = {"op": _op_name(names_of, key, endpoint), "status": status, "cause": "no scenario"}
     if item not in res.unmeasured_items:
         res.unmeasured_items.append(item)
 
@@ -1059,6 +1060,8 @@ class CoverageReport:
     baseline_present: bool = False
     entries: list = field(default_factory=list)
     baseline: dict = field(default_factory=dict)
+    #: Per platform {new, stale, hidden}: the entries themselves (v4.21).
+    baseline_items: dict = field(default_factory=dict)
 
 
 def run_coverage(root: Path, platforms=None, screen: str | None = None) -> CoverageReport:
@@ -1113,6 +1116,7 @@ def run_coverage(root: Path, platforms=None, screen: str | None = None) -> Cover
     report.baseline_file = str(path)
     report.baseline_present = recorded is not None
     report.baseline = cb.compare(report.entries, recorded)
+    report.baseline_items = cb.compare_items(report.entries, recorded)
     return report
 
 
@@ -1270,6 +1274,7 @@ def to_json(report: CoverageReport) -> dict:
                 "outside_required": dict(s.outside_required),
                 "na_endpoints": dict(s.na_endpoints),
                 "unbound_endpoints": list(s.unbound_endpoints), "notes": list(s.notes),
+                "unmeasured": [dict(i) for i in s.unmeasured_items],
                 "data": s.data.to_json() if s.data is not None else None})
         totals = json.loads(json.dumps(block.totals))    # the same object the text reads, copied
         platforms.append({
@@ -1280,7 +1285,9 @@ def to_json(report: CoverageReport) -> dict:
                        "branches_active": sum(s.branches_active for s in active),
                        "branches_total": sum(s.branches_total for s in active)},
             "screens": screens, "totals": totals,
-            "baseline": _baseline_counts(report, block.platform),
+            "baseline": {**_baseline_counts(report, block.platform),
+                         **{f"{k}_entries": list(v) for k, v in report.baseline_items.get(
+                             block.platform, {"new": [], "stale": [], "hidden": []}).items()}},
             "data_totals": data_axis.block_totals(active),
             "data_coarse": data_axis.coarse(active)})
     return {"baseline": {"file": report.baseline_file, "present": report.baseline_present},
@@ -1448,13 +1455,19 @@ def validate_section(root: Path | None, version: str, *, skipped: bool = False,
     if report.exit != EXIT_PASS:
         lines.append("  → `jsonui-test contracts coverage` lists what is uncovered or "
                      "could not be measured")
+    from .contracts_baseline import by_spec
+
     why = []
     for block in report.platforms:
         c = _baseline_counts(report, block.platform)
+        items = report.baseline_items.get(block.platform, {})
+        # Which screens: define measures one screen at a time (v4.21).
         if c["new"]:
-            why.append(f"{block.platform}: {c['new']} not in the baseline")
+            why.append(f"{block.platform}: {c['new']} not in the baseline "
+                       f"({by_spec(items.get('new', []))})")
         if c["stale"]:
-            why.append(f"{block.platform}: {c['stale']} baselined but closed")
+            why.append(f"{block.platform}: {c['stale']} baselined but closed "
+                       f"({by_spec(items.get('stale', []))})")
         for cause, n in unbaselinable(block).items():
             why.append(f"{block.platform}: {cause} {n} (cannot be baselined)")
     lines.append(notice)
@@ -1471,7 +1484,8 @@ def baseline_phrase(report: "CoverageReport", platform: str) -> str:
     the numbers whether or not a baseline exists (§6.1 P3c)."""
     c = _baseline_counts(report, platform)
     phrase = (f"baselined {c['baselined']} (matched {c['matched']} · new {c['new']} · "
-              f"stale {c['stale']})")
+              f"stale {c['stale']}" + (f" · unmeasured now {c['hidden']}" if c["hidden"] else "")
+              + ")")
     if not report.baseline_present:
         phrase += " — no baseline file: every entry is new"
     elif c["stale"]:

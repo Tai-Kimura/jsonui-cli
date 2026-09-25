@@ -10,8 +10,10 @@ is closed over time.
   committed. It holds the entries that make coverage exit non-zero, sorted, no
   timestamps (the diff is deterministic):
     uncovered   (platform, spec, method|null, op, status)
-    unmeasured  (platform, spec, op, cause) — unbound endpoint, no scenario,
-                no mock, not in OpenAPI
+    unmeasured  (platform, spec, op, cause) — unbound endpoint, no mock, not
+                in OpenAPI; and (platform, spec, op, STATUS, cause) for no
+                scenario, which is per status (v4.21: keyed per op, a status
+                that lost its scenario later passed as matched)
   Declaration errors and cannot-start are never recorded: they are fixed on the
   spot. Neither is anything else on the exit-3 side (a row that could not be
   bound — not evaluated —, an unreadable screen, HTTP with nothing evaluated):
@@ -23,6 +25,12 @@ is closed over time.
   stale (baseline only — closed, still listed). The gate passes only when new
   and stale are both 0: a closed entry left in the baseline would silently
   swallow the same entry when it came back.
+- HIDDEN (v4.21): a baselined entry under what cannot be measured NOW — its
+  op has no mock, is not in the OpenAPI, or is an unbound endpoint; or, for a
+  status, it has no scenario — is not closed, only unmeasured. It is neither
+  matched nor stale, and the command keeps it. (Dropping it was the loss the
+  "nothing written" guard exists for; these causes are baselinable, so the
+  guard did not see them.) baselined = matched + stale + hidden.
 """
 from __future__ import annotations
 
@@ -31,6 +39,8 @@ from pathlib import Path
 
 BASELINE_FILE = "contracts_coverage_baseline.json"
 UNMEASURED_CAUSES = ("unbound endpoint", "no scenario", "no mock", "not in OpenAPI")
+#: The causes that hide every status of an op; "no scenario" hides one.
+OP_LEVEL_CAUSES = ("unbound endpoint", "no mock", "not in OpenAPI")
 
 
 def entry_key(entry: dict) -> tuple:
@@ -38,7 +48,23 @@ def entry_key(entry: dict) -> tuple:
     if entry["kind"] == "uncovered":
         return ("uncovered", entry["platform"], entry["spec"], entry["method"] or "",
                 entry["op"], entry["status"])
-    return ("unmeasured", entry["platform"], entry["spec"], "", entry["op"], entry["cause"])
+    return ("unmeasured", entry["platform"], entry["spec"], "", entry["op"], entry["cause"],
+            entry.get("status") or "")
+
+
+def _status_of(key: tuple) -> str:
+    return key[5] if key[0] == "uncovered" else key[6]
+
+
+def _hidden_keys(base: set, now: set) -> set:
+    """The baselined keys under what cannot be measured in the current run."""
+    op_level = {(k[1], k[2], k[4]) for k in now
+                if k[0] == "unmeasured" and k[5] in OP_LEVEL_CAUSES}
+    no_scenario = {(k[1], k[2], k[4], k[6]) for k in now
+                   if k[0] == "unmeasured" and k[5] == "no scenario"}
+    return {k for k in base - now
+            if (k[1], k[2], k[4]) in op_level
+            or (k[1], k[2], k[4], _status_of(k)) in no_scenario}
 
 
 def current_entries(report) -> list:
@@ -54,8 +80,11 @@ def current_entries(report) -> list:
                                     "spec": s.spec, "method": item["method"],
                                     "op": item["op"], "status": status})
             for item in getattr(s, "unmeasured_items", []):
-                entries.append({"kind": "unmeasured", "platform": block.platform,
-                                "spec": s.spec, "op": item["op"], "cause": item["cause"]})
+                entry = {"kind": "unmeasured", "platform": block.platform,
+                         "spec": s.spec, "op": item["op"], "cause": item["cause"]}
+                if item.get("status"):
+                    entry["status"] = item["status"]
+                entries.append(entry)
     unique = {entry_key(e): e for e in entries}
     return [unique[k] for k in sorted(unique)]
 
@@ -93,31 +122,59 @@ def dump(entries: list) -> str:
                       ensure_ascii=False, indent=2, sort_keys=True) + "\n"
 
 
+def compare_items(current: list, baseline) -> dict:
+    """Per platform: {new, stale, hidden} as lists of entries (sorted). No
+    baseline: every current entry is new (the gate then asks exactly what
+    exit 0 asked)."""
+    base = {entry_key(e): e for e in (baseline or [])}
+    now = {entry_key(e): e for e in current}
+    hidden = _hidden_keys(set(base), set(now))
+    out = {}
+    for p in sorted({k[1] for k in set(base) | set(now)}):
+        out[p] = {
+            "new": [now[k] for k in sorted(now) if k[1] == p and k not in base],
+            "stale": [base[k] for k in sorted(base)
+                      if k[1] == p and k not in now and k not in hidden],
+            "hidden": [base[k] for k in sorted(base) if k[1] == p and k in hidden]}
+    return out
+
+
 def compare(current: list, baseline) -> dict:
-    """Per platform: {baselined, matched, new, stale}. No baseline: every
-    current entry is new (the gate then asks exactly what exit 0 asked)."""
+    """Per platform: {baselined, matched, new, stale, hidden} — baselined =
+    matched + stale + hidden."""
     base = {entry_key(e) for e in (baseline or [])}
     now = {entry_key(e) for e in current}
-    platforms = {k[1] for k in base | now}
+    items = compare_items(current, baseline)
     out = {}
-    for p in sorted(platforms):
+    for p, lists in items.items():
         b = {k for k in base if k[1] == p}
-        c = {k for k in now if k[1] == p}
-        out[p] = {"baselined": len(b), "matched": len(b & c), "new": len(c - b),
-                  "stale": len(b - c)}
+        out[p] = {"baselined": len(b), "matched": len(b & now), "new": len(lists["new"]),
+                  "stale": len(lists["stale"]), "hidden": len(lists["hidden"])}
+        assert out[p]["baselined"] == out[p]["matched"] + out[p]["stale"] + out[p]["hidden"]
     return out
 
 
 def counts_for(comparison: dict, platform: str) -> dict:
-    return comparison.get(platform, {"baselined": 0, "matched": 0, "new": 0, "stale": 0})
+    return comparison.get(platform, {"baselined": 0, "matched": 0, "new": 0, "stale": 0,
+                                     "hidden": 0})
+
+
+def by_spec(entries: list) -> str:
+    """`detail 2, other 1` — where to look, most first."""
+    counts: dict = {}
+    for e in entries:
+        counts[e["spec"]] = counts.get(e["spec"], 0) + 1
+    return ", ".join(f"{s} {n}" for s, n in sorted(counts.items(), key=lambda x: (-x[1], x[0])))
 
 
 def shrink(current: list, baseline) -> tuple:
-    """(entries to write, removed, kept, new-not-added). With no baseline, the
-    current set is written; with one, only what both hold — never more."""
+    """(entries to write, removed, kept, new-not-added, kept-hidden). With no
+    baseline, the current set is written; with one, only what both hold, and
+    what is hidden under what cannot be measured now — never more."""
     if baseline is None:
-        return list(current), 0, len(current), 0
+        return list(current), 0, len(current), 0, 0
     base = {entry_key(e): e for e in baseline}
     now = {entry_key(e) for e in current}
-    kept = [base[k] for k in sorted(base) if k in now]
-    return kept, len(base) - len(kept), len(kept), len(now - set(base))
+    hidden = _hidden_keys(set(base), now)
+    kept = [base[k] for k in sorted(base) if k in now or k in hidden]
+    return kept, len(base) - len(kept), len(kept), len(now - set(base)), len(hidden)

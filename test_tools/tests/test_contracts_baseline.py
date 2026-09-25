@@ -84,7 +84,7 @@ class TestXxxv:
 
     def test_everything_recorded_passes_though_coverage_exits_1(self, tmp_path, run):
         root = _project(tmp_path)
-        rc, out = run(root, "contracts", "baseline")
+        rc, out = run(root, "contracts", "baseline", "--initial")
         assert rc == 0 and "removed 0 · kept 12 · new 0 not added" in out, out
         rc, out = _validate(run, root)
         assert rc == 0, out
@@ -94,7 +94,7 @@ class TestXxxv:
 
     def test_one_new_uncovered_is_red_and_named(self, tmp_path, run):
         root = _project(tmp_path)
-        run(root, "contracts", "baseline")
+        run(root, "contracts", "baseline", "--initial")
         root2 = tcc._project(tmp_path / "second", openapi=_with_new_status())
         _with_test(root2)
         _baseline_file(root2).write_bytes(_baseline_file(root).read_bytes())
@@ -104,7 +104,7 @@ class TestXxxv:
 
     def test_a_closed_entry_left_in_the_baseline_is_red_and_says_how(self, tmp_path, run):
         root = _project(tmp_path)
-        run(root, "contracts", "baseline")
+        run(root, "contracts", "baseline", "--initial")
         spec_file = root / "docs/screens/json/detail.spec.json"
         spec_file.write_text(json.dumps(_closing_one()), encoding="utf-8")
         rc, out = _validate(run, root)
@@ -114,7 +114,7 @@ class TestXxxv:
 
     def test_the_command_never_adds_a_new_entry(self, tmp_path, run):
         root = _project(tmp_path)
-        run(root, "contracts", "baseline")
+        run(root, "contracts", "baseline", "--initial")
         before = cb.load(_baseline_file(root))
         # A new uncovered status appears; the command must not record it.
         (root / "docs/api/api.json").write_text(json.dumps(_with_new_status()), encoding="utf-8")
@@ -127,7 +127,7 @@ class TestXxxv:
 class TestTheFile:
     def test_first_write_then_the_same_bytes_again(self, tmp_path, run):
         root = _project(tmp_path)
-        rc, out = run(root, "contracts", "baseline")
+        rc, out = run(root, "contracts", "baseline", "--initial")
         assert out.startswith("wrote "), out
         first = _baseline_file(root).read_bytes()
         rc, out = run(root, "contracts", "baseline")
@@ -140,7 +140,7 @@ class TestTheFile:
 
     def test_closing_shrinks_it(self, tmp_path, run):
         root = _project(tmp_path)
-        run(root, "contracts", "baseline")
+        run(root, "contracts", "baseline", "--initial")
         (root / "docs/screens/json/detail.spec.json").write_text(
             json.dumps(_closing_one()), encoding="utf-8")
         rc, out = run(root, "contracts", "baseline")
@@ -151,7 +151,7 @@ class TestTheFile:
     def test_unmeasured_entries_carry_their_cause(self, tmp_path, run):
         spec, openapi, mocks = tcc._clean([{"method": "GET", "path": "/api/tags"}])
         root = _with_test(tcc._project(tmp_path, spec, openapi=openapi, mocks=mocks))
-        run(root, "contracts", "baseline")
+        run(root, "contracts", "baseline", "--initial")
         entries = cb.load(_baseline_file(root))
         assert {(e["platform"], e["op"], e["cause"]) for e in entries} == {
             ("web", "GET /api/tags", "unbound endpoint"), ("ios", "GET /api/tags", "unbound endpoint")}
@@ -200,7 +200,7 @@ class TestWhatCannotBeBaselined:
     ])
     def test_it_fails_whatever_the_baseline(self, tmp_path, run, break_it, why):
         root = _project(tmp_path)
-        run(root, "contracts", "baseline")
+        run(root, "contracts", "baseline", "--initial")
         break_it(root)
         rc, out = _validate(run, root)
         assert rc == 1 and why in _summary(out), out
@@ -218,7 +218,7 @@ class TestWhatCannotBeBaselined:
         assert rc == 1 and not _baseline_file(root).exists()
         assert out == "" and "nothing written" in run.err and why in run.err, run.err
         run_clean = _project(tmp_path / "clean")
-        run(run_clean, "contracts", "baseline")
+        run(run_clean, "contracts", "baseline", "--initial")
         _baseline_file(root).write_bytes(_baseline_file(run_clean).read_bytes())
         before = _baseline_file(root).read_bytes()
         rc, _ = run(root, "contracts", "baseline")        # a shrink: nothing dropped
@@ -240,25 +240,113 @@ class TestCoverageShowsIt:
         js = cc.to_json(report)
         assert js["baseline"]["present"] is False
         web = next(p for p in js["platforms"] if p["platform"] == "web")
-        assert web["baseline"] == {"baselined": 0, "matched": 0, "new": 6, "stale": 0}
+        assert {k: v for k, v in web["baseline"].items() if isinstance(v, int)} == {
+            "baselined": 0, "matched": 0, "new": 6, "stale": 0, "hidden": 0}
+        assert len(web["baseline"]["new_entries"]) == 6 and web["baseline"]["stale_entries"] == []
 
     def test_a_run_on_one_platform_does_not_call_the_others_stale(self, tmp_path, run):
         root = _project(tmp_path)
-        run(root, "contracts", "baseline")
+        run(root, "contracts", "baseline", "--initial")
         report = cc.run_coverage(root, platforms=["web"])
-        assert report.baseline == {"web": {"baselined": 6, "matched": 6, "new": 0, "stale": 0}}
+        assert report.baseline == {"web": {"baselined": 6, "matched": 6, "new": 0, "stale": 0, "hidden": 0}}
 
     def test_a_run_on_one_screen_does_not_call_the_others_stale(self, tmp_path, run):
         other = tcc._screen()
         other["metadata"]["name"] = "other"
         root = _with_test(tcc._project(tmp_path, extra_screens=[("other", other)]))
-        run(root, "contracts", "baseline")
+        run(root, "contracts", "baseline", "--initial")
         assert cc.run_coverage(root).baseline["web"]["baselined"] == 12
         report = cc.run_coverage(root, screen="detail")
-        assert report.baseline["web"] == {"baselined": 6, "matched": 6, "new": 0, "stale": 0}
+        assert report.baseline["web"] == {"baselined": 6, "matched": 6, "new": 0, "stale": 0, "hidden": 0}
 
     def test_an_unreadable_baseline_cannot_start(self, tmp_path):
         root = _project(tmp_path)
         _baseline_file(root).write_text("[]", encoding="utf-8")
         with pytest.raises(cc.CannotStart, match="baseline cannot be read"):
             cc.run_coverage(root)
+
+
+def _mock_file(root: Path, op: str) -> Path:
+    return root / f"tests/mocks/generated/{op}.mock.json"
+
+
+def _drop_scenario(root: Path, op: str, scenario: str) -> None:
+    mock = _mock_file(root, op)
+    data = json.loads(mock.read_text())
+    del data["scenarios"][scenario]
+    mock.write_text(json.dumps(data), encoding="utf-8")
+
+
+class TestV421:
+    """Design v4.21 (ee, the second review of P3b): two fail-open gaps, what
+    define needs to see, and the first recording as the user's decision."""
+
+    def test_1_no_scenario_is_per_status(self, tmp_path, run):
+        # getOther declares 404 with no scenario: baselined as (op, 404, no scenario).
+        root = _with_test(tcc._project(tmp_path, openapi=_with_new_status()))
+        run(root, "contracts", "baseline", "--initial")
+        assert {(e["op"], e.get("status"), e["cause"]) for e in cb.load(_baseline_file(root))
+                if e["kind"] == "unmeasured"} == {("getOther", "404", "no scenario")}
+        # Now 500 loses its scenario too. Keyed per op, it matched the recorded
+        # entry and passed: new code outside the rule.
+        _drop_scenario(root, "getOther", "error_500")
+        rc, out = _validate(run, root)
+        assert rc == 1, out
+        assert "web: 1 not in the baseline (detail 1)" in _summary(out)
+        assert "baselined but closed" not in _summary(out)   # 500's uncovered: hidden
+
+    def test_2_a_shrink_under_no_mock_keeps_what_it_hides(self, tmp_path, run):
+        root = _project(tmp_path)
+        run(root, "contracts", "baseline", "--initial")
+        before = _baseline_file(root).read_bytes()
+        _mock_file(root, "getOther").unlink()              # getOther: no mock
+        rc, out = run(root, "contracts", "baseline")
+        assert rc == 0 and out.startswith("unchanged "), out
+        # getOther is unattributed: its 200 and 500 were both uncovered (web, ios).
+        assert "removed 0 · kept 12 (4 unmeasured now — not closed, kept) · new 2 not added" in out
+        assert _baseline_file(root).read_bytes() == before
+        rc, out = _validate(run, root)
+        web = next(l for l in _section(out) if l.startswith("coverage: web"))
+        assert "stale 0 · unmeasured now 2)" in web, web
+        assert "baselined but closed" not in _summary(out)
+        assert "web: 1 not in the baseline (detail 1)" in _summary(out)   # the no mock itself
+
+    def test_3_the_json_lists_agree_with_the_file_both_ways(self, tmp_path, run):
+        root = _project(tmp_path)
+        run(root, "contracts", "baseline", "--initial")
+        (root / "docs/screens/json/detail.spec.json").write_text(
+            json.dumps(_closing_one()), encoding="utf-8")                   # 2 closed
+        (root / "docs/api/api.json").write_text(json.dumps(_with_new_status()),
+                                                encoding="utf-8")           # 2 new
+        report = cc.run_coverage(root)
+        js = cc.to_json(report)
+        key = cb.entry_key
+        recorded = {key(e) for e in cb.load(_baseline_file(root))}
+        current = {key(e) for e in report.entries}
+        for block in js["platforms"]:
+            b = block["baseline"]
+            p = block["platform"]
+            new = {key(e) for e in b["new_entries"]}
+            gone = {key(e) for e in b["stale_entries"] + b["hidden_entries"]}
+            assert new == {k for k in current - recorded if k[1] == p}
+            assert gone == {k for k in recorded - current if k[1] == p}
+            assert (b["new"], b["stale"] + b["hidden"]) == (len(new), len(gone))
+            assert b["baselined"] == b["matched"] + b["stale"] + b["hidden"]
+        screen = next(s for s in js["platforms"][0]["screens"] if s["spec"] == "detail")
+        assert {"op": "getOther", "status": "404", "cause": "no scenario"} in screen["unmeasured"]
+
+    def test_4_the_why_names_the_screens(self, tmp_path, run):
+        other = tcc._screen()
+        other["metadata"]["name"] = "other"
+        root = _with_test(tcc._project(tmp_path, extra_screens=[("other", other)]))
+        rc, out = _validate(run, root)
+        assert "web: 12 not in the baseline (detail 6, other 6)" in _summary(out), _summary(out)
+
+    def test_5_the_first_recording_needs_initial(self, tmp_path, run):
+        root = _project(tmp_path)
+        rc, out = run(root, "contracts", "baseline")
+        assert rc == 1 and out == "" and not _baseline_file(root).exists()
+        assert "recording the first baseline accepts all current debt (12 entries) — the " \
+               "user's decision; run with --initial" in run.err
+        rc, out = run(root, "contracts", "baseline", "--initial")
+        assert rc == 0 and out.startswith("wrote ") and _baseline_file(root).exists()
