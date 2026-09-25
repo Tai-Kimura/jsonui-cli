@@ -113,7 +113,16 @@ def cmd_validate(args):
     _root = _project_root(getattr(args, "config", None))
     set_path_roots(_root, _read_config_doc(getattr(args, "config", None))[0]
                    if _root else None)
+    # And the layouts a step's element ids are checked against: the config
+    # this run read, for the same reason (element_ids' docstring).
+    from .validation.element_ids import set_run_project
+    set_run_project(*_read_config_doc(getattr(args, "config", None)))
     platform_warnings = 0
+    # INFO: printed, never counted in `Warnings:` and never the exit.
+    total_infos = 0
+    from collections import Counter
+    element_totals: Counter = Counter()
+    element_unchecked: dict = {}
 
     if not files_to_validate:
         print("No test or description files found")
@@ -124,7 +133,7 @@ def cmd_validate(args):
         files_checked += 1
         result = validator.validate_file(file_path)
 
-        if args.verbose or result.errors or result.warnings:
+        if args.verbose or result.errors or result.warnings or (result.infos and not args.quiet):
             print(f"\n{file_path}")
 
         if result.errors:
@@ -140,11 +149,50 @@ def cmd_validate(args):
                 print(warning)
             total_warnings += len(result.warnings)
 
+        if result.infos and not args.quiet:
+            for info in result.infos:
+                print(info)
+        total_infos += len(result.infos)
+        element_totals.update(result.element_ids)
+        if result.element_ids_unchecked_why:
+            why = result.element_ids_unchecked_why
+            element_unchecked[why] = element_unchecked.get(why, 0) + result.element_ids["named"]
+
         if result.is_valid and not result.warnings and args.verbose:
             print("  OK")
 
         if result.is_valid and Path(file_path).name.endswith(".test.json"):
             valid_test_files.append(Path(file_path))
+
+    # The element ids the steps name (design U8 (5)): the count and its
+    # denominator on one line — named is the sum of the five — and, while a
+    # release is announced, the one line that says when "on no layout"
+    # becomes a WARNING. A run that checked none says why instead of a clean
+    # line; a `test.appOwnedIds` entry no step of the run named is named.
+    if element_totals["named"] and not args.quiet:
+        from .validation.element_ids import gate_notice, level_unknown, unnamed_app_owned
+        print(f"\n[INFO] element ids: {element_totals['named']} named in the steps — "
+              f"{element_totals['on_layout']} on a layout, {element_totals['app_owned']} "
+              f"declared in test.appOwnedIds, {element_totals['missing']} on no layout, "
+              f"{element_totals['cannot_check']} cannot check, "
+              f"{element_totals['not_checked']} not checked")
+        unnamed = unnamed_app_owned()
+        if unnamed:
+            print(f"[INFO] test.appOwnedIds: {len(unnamed)} entr{'y' if len(unnamed) == 1 else 'ies'} "
+                  f"no step in this run names ({', '.join(unnamed)}) — remove it if the "
+                  f"app no longer draws it")
+        for why, n in sorted(element_unchecked.items()):
+            print(f"[INFO] element ids: {n} in files whose layouts were not read — {why}")
+        if element_totals["missing"]:
+            # The version the check itself read (validation/validator.py).
+            import jsonui_test_cli
+            notice = gate_notice(jsonui_test_cli.__version__)
+            unknown = level_unknown(jsonui_test_cli.__version__)
+            if notice:
+                print(f"[INFO] {notice}")
+            elif unknown:
+                print(f"[INFO] the level of {element_totals['missing']} element id(s) on no "
+                      f"layout cannot be decided — {unknown}; they are listed as INFO")
 
     # Mock contract drift, on the same gate. `--check` existed but nothing
     # called it, so a mock encoding a contract the server does not have kept
@@ -340,9 +388,23 @@ def cmd_validate(args):
     # Moving it into `Warnings:` would change the baseline of every project
     # that has one, so it is named in the footnote and left where it is.
 
+    # Contracts coverage (design §2.6 / §6.1, P3a): a section, and from
+    # VALIDATE_GATE_FROM on a gate. Computed HERE, before the summary, so
+    # that when it gates, `Result:`, the summary line and the exit code are
+    # three readings of one decision — not a PASSED followed by a FAILED.
+    # A run stopped by its own errors says coverage did not run.
+    from .contracts_coverage import gate_is_on, validate_section
+    coverage_lines, coverage_gate = validate_section(
+        _project_root(getattr(args, "config", None)), __version__,
+        skipped=getattr(args, "no_coverage_check", False),
+        blocked_by=total_errors or (1 if mock_rc else 0))
+    coverage_gates = gate_is_on(__version__) and coverage_gate is not None
+    coverage_fails = coverage_gates and coverage_gate["fails"]
+
     # Summary
     print(f"\n{'='*50}")
-    status = "PASSED" if total_errors == 0 and mock_rc == 0 else "FAILED"
+    status = ("PASSED" if total_errors == 0 and mock_rc == 0 and not coverage_fails
+              else "FAILED")
     print(f"Result: {status}")
     summary = f"Files: {files_checked}, Errors: {total_errors}, Warnings: {total_warnings}"
     # Omitted, not zeroed, when the check did not run: "Orphan mocks: 0" from a
@@ -372,9 +434,26 @@ def cmd_validate(args):
     # the next finding hides behind.
     if skipped_kinds():
         summary += f", Path checks skipped: {', '.join(skipped_kinds())}"
+    # Named apart from `Warnings:`, which it never moves; only when there is
+    # one (a standing `Info: 0` would be a line nobody reads).
+    if total_infos:
+        summary += f", Info: {total_infos} (not counted)"
+    # Only once it gates: before that the section reports and moves nothing,
+    # and a field on every run would be a standing line.
+    if coverage_gates:
+        summary += (f", Coverage: {'FAILED' if coverage_fails else 'passed'} "
+                    f"(exit {coverage_gate['exit']}"
+                    + (f"; {'; '.join(coverage_gate['why'])}" if coverage_gate["why"] else "")
+                    + ")")
     print(summary)
     _print_uncounted_footnote(uncounted, command="validate")
     _print_editor_schema_drift(getattr(args, "config", None))
+
+    # The section is printed after the summary; it was computed before it,
+    # so the summary could already count it.
+    print()
+    for line in coverage_lines:
+        print(line)
 
     if total_errors > 0:
         return 1
@@ -388,6 +467,10 @@ def cmd_validate(args):
         if install_rc != 0:
             return install_rc
 
+    # After the install (red-check xxiv): a coverage failure does not keep
+    # valid tests off the devices, and the summary above already said FAILED.
+    if coverage_fails:
+        return 1
     return 0
 
 
@@ -1582,6 +1665,68 @@ def _branch_check_summary(reports: list, scanned: int, orphans=()) -> int:
     return 0
 
 
+def cmd_contracts_baseline(args):
+    """Handle 'contracts baseline' — record today's coverage debt, or shrink it.
+
+    Design §6.1 P3c. No file: write the current entries — only with
+    `--initial` (v4.21: accepting all current debt is the user's decision).
+    A file: write only what it AND the current run hold. The tool never adds an entry; a new one
+    is closed (Task 6 of the define agent) or added by hand, where the diff shows it.
+
+    Nothing is written while the run holds what cannot be baselined (the gate
+    fails on it whatever the file says): under a row that could not be
+    evaluated, or a screen that could not be read, the statuses were never
+    counted — a first write would record a floor, and a shrink would drop
+    entries as closed that were only unmeasured.
+    """
+    from . import contracts_baseline as cb
+    from .contracts_coverage import (
+        EXIT_CANNOT_START, EXIT_UNCOVERED, CannotStart, load_project, run_coverage,
+    )
+
+    try:
+        project = load_project(Path.cwd())
+        path = cb.path_for(project.spec_dir)
+        recorded = cb.load(path)
+        report = run_coverage(Path.cwd())
+    except (CannotStart, ValueError) as e:
+        print(f"contracts baseline: cannot start — {e}", file=sys.stderr)
+        return EXIT_CANNOT_START
+    blocking = [f"{b.platform}: {cause} {n}" for b in report.platforms
+                for cause, n in cb.unbaselinable(b).items()]
+    if blocking:
+        print(f"contracts baseline: nothing written — the gate fails on these whatever "
+              f"the baseline says, and what they hide was never counted: "
+              f"{'; '.join(blocking)}. Fix them, then run it again.", file=sys.stderr)
+        return EXIT_UNCOVERED
+    entries, removed, kept, new, hidden, vanished = cb.shrink(report.entries, recorded,
+                                                              cb.measured(report))
+    if recorded is None and not entries:
+        print(f"nothing to record — no entry keeps coverage from exit 0; {path} not written")
+        return 0
+    if recorded is None and not args.initial:
+        # A latch, not a switch (v4.21): the first recording accepts every
+        # entry there is as debt, which is the user's decision — made on
+        # purpose, never by an agent running the command it was told to run.
+        print(f"contracts baseline: nothing written — recording the first baseline accepts "
+              f"all current debt ({len(entries)} entr{'y' if len(entries) == 1 else 'ies'}) — "
+              "the user's decision; run with --initial", file=sys.stderr)
+        return EXIT_UNCOVERED
+    text = cb.dump(entries)
+    if path.is_file() and path.read_text(encoding="utf-8") == text:
+        verb = "unchanged"
+    else:
+        verb = "wrote" if recorded is None else "updated"
+        path.write_text(text, encoding="utf-8")
+    print(f"{verb} {path}")
+    print(f"removed {removed} · kept {kept}"
+          + (f" ({hidden} unmeasured now — not closed, kept)" if hidden else "")
+          + (f" ({vanished} vanished — not closed, kept; remove or re-key them by hand)"
+             if vanished else "")
+          + f" · new {new} not added" + (" (close them, or add by hand)" if new else ""))
+    return 0
+
+
 def cmd_contracts_coverage(args):
     """Handle 'contracts coverage' — API outcomes no branch contract answers."""
     from .contracts_coverage import (
@@ -1793,6 +1938,9 @@ def cmd_generate_branch_tests(args):
     print(app_rules.note())
     if app_rules.conditions_note():
         print(app_rules.conditions_note())
+    from .branch_tests import unmatched_gate_note
+    if unmatched_gate_note():
+        print(unmatched_gate_note())
     _print_branch_toolchain(len(reports))
     return 0
 
@@ -1875,6 +2023,7 @@ def _generate_one_branch_test(args, screen: str, app_rules=None):
             # config the run was pointed at: a platform outside
             # config ∩ metadata.platforms generates nothing for the screen.
             config_platforms=_project_platforms(None),
+            condition_controls=getattr(args, "condition_controls", False),
             app_rules=app_rules,
         )
     except BranchTestGenerationError as e:
@@ -1955,6 +2104,11 @@ def _print_branch_generation(report, show_siblings: bool = True) -> None:
           + (f"{also} more from alsoStatuses, " if also else "")
           + f"{report.note_branches} note-only listed as comments)")
     print(f"  {report.runtime_file}  (shared runtime)")
+    controls = getattr(report, "condition_controls", 0)
+    if controls:
+        # Only when asked for and there are any.
+        print(f"  condition controls: {controls} (each runs its row with every harness "
+              f"condition at its default; condition_without_effect is printed when it holds)")
     siblings = _sibling_branch_tests(report) if show_siblings else []
     if siblings:
         # The runtime is one file for the whole directory, so a release that
@@ -1987,6 +2141,11 @@ def _print_branch_generation(report, show_siblings: bool = True) -> None:
     print(f"  routes: {', '.join(report.routes) or '(none)'}"
           f"  (from dataFlow.repositories[].methods[].endpoint, "
           f"not from the contract's api references)")
+    if report.side_routes:
+        # Only when there are any, so an app without them prints what it did.
+        print(f"  side routes: {', '.join(report.side_routes)}  (apiOutcomeRules "
+              f"sideCalls this screen does not declare — served with the mock's "
+              f"default scenario, admitted only for the rule's statuses)")
 
 
 def cmd_generate_description(args):
@@ -2983,6 +3142,13 @@ def main():
         "--config",
         help="Config file for test.install destinations (default: jui.config.json)"
     )
+    validate_parser.add_argument(
+        "--no-coverage-check",
+        action="store_true",
+        help="Skip the contracts coverage section (said, not silent: the run "
+             "prints 'coverage skipped'). The section reports `contracts "
+             "coverage`, and fails on it from the release the section names"
+    )
 
     # Generate command with subcommands
     generate_parser = subparsers.add_parser(
@@ -3086,6 +3252,13 @@ def main():
     gen_branch_parser.add_argument(
         "--module",
         help="App module name for @testable import (required for ios)"
+    )
+    gen_branch_parser.add_argument(
+        "--condition-controls", action="store_true",
+        help="For each row that names a harness condition away from its default, "
+             "also emit a control that runs the row with every default and never "
+             "fails; it prints condition_without_effect when the row still holds "
+             "(the condition changes nothing the row asserts). Doubles those rows"
     )
 
     # Unit contracts: the spec declares the SET of hand-written cases; the
@@ -3279,13 +3452,27 @@ def main():
         help="Contract-gap checks: which API outcomes the branch contracts answer")
     contracts_subparsers = contracts_parser.add_subparsers(
         dest="contracts_action", help="Contracts action")
+    baseline_parser = contracts_subparsers.add_parser(
+        "baseline",
+        help="Record the entries that make contracts coverage exit non-zero in "
+             "<spec_directory>/contracts_coverage_baseline.json — all of them when "
+             "there is no file (only with --initial), and otherwise only those still "
+             "present or unmeasured now (it only shrinks; a new entry is closed or "
+             "added by hand). validate's gate fails on entries not in it and on "
+             "entries in it that are closed")
+    baseline_parser.add_argument(
+        "--initial", action="store_true",
+        help="Write the FIRST baseline: it accepts every current entry as debt, "
+             "which is the user's decision. Without it, a run with no file writes "
+             "nothing")
     coverage_parser = contracts_subparsers.add_parser(
         "coverage",
         help="Every response status the OpenAPI declares for an operation a "
              "screen reaches, bucketed: answered by a row, excluded with a "
              "reason, unmeasured, or uncovered. Exit 0 pass / 1 uncovered or a "
              "declaration error / 2 cannot start / 3 unmeasured, per platform, "
-             "composed 2 > 1 > 3 > 0. Not a gate yet")
+             "composed 2 > 1 > 3 > 0. `validate` reports it, and fails on it "
+             "from the release its section names")
     coverage_parser.add_argument("screen", nargs="?", help="One screen (default: all)")
     coverage_parser.add_argument(
         "--platform", action="append", choices=["web", "android", "ios"],
@@ -3359,6 +3546,8 @@ def main():
     elif args.command == "contracts":
         if getattr(args, "contracts_action", None) == "coverage":
             return cmd_contracts_coverage(args)
+        if getattr(args, "contracts_action", None) == "baseline":
+            return cmd_contracts_baseline(args)
         contracts_parser.print_help()
         return 0
     elif args.command in ["generate", "g"]:

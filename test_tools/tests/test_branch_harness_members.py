@@ -20,6 +20,20 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from jsonui_test_cli import branch_tests as bt
 
 
+#: Members one platform's harness declares on purpose, with the reason. The
+#: parity below holds for everything else.
+_PLATFORM_ONLY = {
+    "swift": {
+        # P2e(a), design v4.19: the app's API origin, so an unmatched request to
+        # another host is the info unmatched_foreign. Web says the same through a
+        # MODULE export (`apiOrigins`) — its harness interface lives in the
+        # consumer-owned skeleton, which is never regenerated. Android needs
+        # none: MockWebServer only ever records the app's own requests.
+        "apiOrigin": "the app's API origin (v4.19)",
+    },
+}
+
+
 def _members(block: str) -> set[str]:
     """Member names declared in one harness interface/protocol block."""
     return set(re.findall(r"^\s*(?:val |var |fun |func )?(\w+)\s*[(:]",
@@ -81,8 +95,17 @@ class TestMemberParity:
         which is the whole defect, one member later.
         """
         blocks = _harness_blocks()
-        sets = {k: _members(v) for k, v in blocks.items()}
+        sets = {k: _members(v) - set(_PLATFORM_ONLY.get(k, {})) for k, v in blocks.items()}
         assert sets["ts"] == sets["kotlin"] == sets["swift"], sets
+
+    def test_the_platform_only_members_are_exactly_the_named_ones(self):
+        """The exception above is named, reasoned, and cannot grow quietly:
+        each platform's extra members are exactly the ones listed."""
+        blocks = _harness_blocks()
+        sets = {k: _members(v) for k, v in blocks.items()}
+        shared = sets["ts"] & sets["kotlin"] & sets["swift"]
+        for label, members in sets.items():
+            assert members - shared == set(_PLATFORM_ONLY.get(label, {})), (label, members - shared)
 
 
 class TestTheRuntimeOwnsTheSemantics:

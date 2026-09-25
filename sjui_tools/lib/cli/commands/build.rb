@@ -325,6 +325,9 @@ module SjuiTools
           source_path = Core::ProjectFinder.get_full_source_path || Dir.pwd
           layouts_dir = File.join(source_path, config['layouts_directory'] || 'Layouts')
           view_dir = File.join(source_path, config['view_directory'] || 'View')
+          # Every include path resolves from the layouts root (U8).
+          require_relative '../../swiftui/include_expander'
+          SjuiTools::SwiftUI::IncludeExpander.layouts_root = layouts_dir
 
           # Initialize cache manager
           cache_manager = SjuiTools::SwiftUI::BuildCacheManager.new(source_path)

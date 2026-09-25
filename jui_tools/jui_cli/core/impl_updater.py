@@ -54,13 +54,23 @@ def atomic_write_text(path: Path, content: str, *, encoding: str = "utf-8") -> b
 # Swift
 # --------------------------------------------------------------------------- #
 
+#: Balanced parentheses, three levels deep: a primary constructor's default
+#: arguments (`x: Foo = foo(bar(baz()))`) and an annotation's arguments.
+_PARENS = r"\((?:[^()]|\((?:[^()]|\((?:[^()]|\([^()]*\))*\))*\))*\)"
+#: One annotation / attribute: `@Inject`, `@param:Named("a")`, `@objc(Name)`,
+#: `@MainActor`. Kotlin's use-site target (`param:`) is optional.
+_ANNOTATION = r"@(?:\w+:)?[\w.]+(?:" + _PARENS + r")?"
+
 # Match `class <Name> [: <inheritance>] [where <clause>] {`
 # - inheritance captures a comma list that can span lines
 # - where clause optional, captured separately so we can keep its body intact
 SWIFT_CLASS_HEADER_RE = re.compile(
     r"(?P<prefix>"
     r"(?:(?:^|\n)[ \t]*)"
-    r"(?:(?:public|internal|private|fileprivate|open|final)\s+)*"
+    # Attributes on the class's own line (`@MainActor final class …`) and
+    # every access / inheritance modifier, in any order (ticket
+    # jui-protocol-sync-kotlin-class-header-…: the same shape on both sides).
+    r"(?:(?:" + _ANNOTATION + r"|public|package|internal|private|fileprivate|open|final)\s+)*"
     r"class\s+(?P<name>\w+)(?:<[^>{]+>)?"
     r")"
     r"(?P<inherit>\s*:\s*[\s\S]+?)?"
@@ -129,15 +139,25 @@ def _split_inheritance(raw: str) -> list[str]:
 # Kotlin
 # --------------------------------------------------------------------------- #
 
-# Kotlin class header: class <Name>[<Generics>] [@Ann constructor] [(...)]
+# Kotlin class header: class <Name>[<Generics>] [modifiers constructor] [(...)]
 # [: Super(...) [, Iface...]] [where ...] {
+#
+# The primary constructor is Kotlin's grammar: any annotations and at most a
+# visibility modifier, then `constructor` (`@Inject constructor`, `internal
+# constructor`, `@Inject internal constructor`, a bare `constructor`). Only
+# `@Ann constructor` was accepted, so a class written with a visibility on its
+# constructor — the usual way to give a test its own dependencies — failed
+# protocol sync with "Kotlin class '…' not found in source" (a consumer lane,
+# 2026-09-25).
 KOTLIN_CLASS_HEADER_RE = re.compile(
     r"(?P<prefix>"
     r"(?:(?:^|\n)[ \t]*)"
-    r"(?:(?:public|internal|private|protected|abstract|open|sealed|data|value|inner|final)\s+)*"
+    r"(?:(?:" + _ANNOTATION + r"|public|internal|private|protected|abstract|open|sealed"
+    r"|data|value|inner|final|expect|actual)\s+)*"
     r"class\s+(?P<name>\w+)(?:<[^>{]+>)?"
-    r"(?:\s*@\w+(?:\([^)]*\))?\s+constructor)?"
-    r"(?:\s*\((?:[^()]|\([^()]*\))*\))?"
+    r"(?:\s*(?:" + _ANNOTATION + r"\s+)*(?:(?:public|internal|private|protected)\s+)?"
+    r"(?:" + _ANNOTATION + r"\s+)*constructor\b)?"
+    r"(?:\s*" + _PARENS + r")?"
     r")"
     r"(?P<inherit>\s*:\s*[\s\S]+?)?"
     r"(?P<where>\s+where\s+[\s\S]+?)?"

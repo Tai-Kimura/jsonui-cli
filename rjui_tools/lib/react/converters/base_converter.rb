@@ -1605,6 +1605,10 @@ module RjuiTools
           if has_binding?(id_value.to_s)
             prop = id_value.to_s.gsub(/@\{|\}/, '')
             " id={String(#{add_viewmodel_data_prefix(prop)})}"
+          elsif @config['_include_id_prefix']
+            # Design U8: under an include with an id, the include's prefix —
+            # `idPrefix` is undefined on a screen, and the id is as written.
+            " id={jsonuiIncludeId(idPrefix, \"#{id_value}\")}"
           else
             " id=\"#{id_value}\""
           end

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import sys
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -63,10 +64,10 @@ class SpecValidationMessage:
     """A validation message (error or warning)."""
     path: str
     message: str
-    level: str = "error"  # "error" or "warning"
+    level: str = "error"  # "error", "warning" or "info"
 
     def __str__(self) -> str:
-        prefix = "ERROR" if self.level == "error" else "WARNING"
+        prefix = {"error": "ERROR", "info": "INFO"}.get(self.level, "WARNING")
         return f"  [{prefix}] {self.path}: {self.message}"
 
 
@@ -77,6 +78,10 @@ class SpecValidationResult:
     spec_data: dict | None = None
     errors: list[SpecValidationMessage] = field(default_factory=list)
     warnings: list[SpecValidationMessage] = field(default_factory=list)
+    #: Reported, never counted: neither the result nor the warning count
+    #: reads them (design v4.20 — layout ids announced before they warn, and
+    #: what cannot be checked).
+    infos: list[SpecValidationMessage] = field(default_factory=list)
 
     @property
     def is_valid(self) -> bool:
@@ -89,6 +94,30 @@ class SpecValidationResult:
     @property
     def warning_count(self) -> int:
         return len(self.warnings)
+
+    @property
+    def info_count(self) -> int:
+        return len(self.infos)
+
+
+#: The release from which an element id the layout does not have is a
+#: WARNING (design v4.20, P2.5): below it, an INFO and one line announcing it
+#: — the specs with a layout were never checked before, and a face holding
+#: "0 warnings" as its bar would turn red with no notice (U5). A literal,
+#: read by `shared/core/gate_versions` like every `*_GATE_FROM`:
+#: "withdrawn" or anything that is not a release number never gates.
+LAYOUT_ID_GATE_FROM: str | None = "1.8.120"
+
+#: ee's text (design v4.20).
+LAYOUT_ID_NOTICE = ("from jsonui-cli {version}, spec element ids not in the layout "
+                    "become WARNING")
+
+
+def _running_version() -> str:
+    from .. import __version__
+    return __version__
+
+
 
 
 class SpecValidator:
@@ -600,6 +629,28 @@ class SpecValidator:
         for i, sub_spec in enumerate(sub_specs):
             prefix = f"subSpecs[{i}]"
             self._validate_required_fields(sub_spec, ["file", "name"], prefix, result)
+
+    def _parent_spec_layout_file(self) -> str | None:
+        """The parent spec's `metadata.layoutFile` for a sub-spec, or None."""
+        if self._spec_type != "screen_sub_spec" or not self._spec_file_path:
+            return None
+        metadata = (self._spec_data or {}).get("metadata") or {}
+        parent_ref = metadata.get("parentSpec")
+        if not isinstance(parent_ref, str) or not parent_ref:
+            return None
+        candidate = (self._spec_file_path.parent / parent_ref).resolve()
+        if not candidate.exists():
+            candidate = (self._spec_file_path.parent.parent / parent_ref).resolve()
+            if not candidate.exists():
+                return None
+        try:
+            with open(candidate, "r", encoding="utf-8") as f:
+                parent_data = json.load(f)
+        except (OSError, json.JSONDecodeError):
+            return None
+        layout = (parent_data.get("metadata") or {}).get("layoutFile") \
+            if isinstance(parent_data, dict) else None
+        return layout if isinstance(layout, str) and layout else None
 
     def _parent_spec_has_layout_file(self) -> bool:
         """True when the current sub-spec declares a `metadata.parentSpec` that
@@ -3525,15 +3576,43 @@ class SpecValidator:
                     ))
 
     def _validate_cross_references(self, data: dict, result: SpecValidationResult):
-        """Validate cross-references between sections."""
-        # Skip cross-reference checks when layoutFile is set — components live
-        # in the Layout JSON, not in the spec. Sub-specs inherit the parent's
-        # layoutFile (via metadata.parentSpec), so check the parent too.
-        has_layout_file = (
-            bool(data.get("metadata", {}).get("layoutFile"))
-            or self._parent_spec_has_layout_file()
-        )
-        if has_layout_file:
+        """Validate cross-references between sections.
+
+        The ids a `visibleElements` or a `displayLogic` effect names are
+        checked against where the elements are: `structure.components` for a
+        spec that authors them, and — since P2.5 — the LAYOUT for one with a
+        `layoutFile` (the parent's, for a sub-spec). Until then a spec with a
+        layout returned here unchecked: 86 of 93 specs with contracts across
+        five consumer faces (ee, 2026-09-25), and on one face 71 names that
+        exist in neither spelling. The layout's ids come from
+        `jui_cli.core.layout_facts` — includes expanded with their prefixes,
+        every platform — the one reader the coverage data axis uses too.
+        """
+        layout_file = (data.get("metadata", {}) or {}).get("layoutFile") \
+            or self._parent_spec_layout_file()
+        state_mgmt = data.get("stateManagement", {})
+        refs = []
+        for i, rule in enumerate(state_mgmt.get("displayLogic", [])):
+            if not isinstance(rule, dict):
+                continue
+            for j, effect in enumerate(rule.get("effects", [])):
+                if isinstance(effect, dict) and effect.get("element", ""):
+                    refs.append((f"stateManagement.displayLogic[{i}].effects[{j}].element",
+                                 effect["element"]))
+        for i, state in enumerate(state_mgmt.get("states", [])):
+            if not isinstance(state, dict):
+                continue
+            for j, val in enumerate(state.get("values", [])):
+                if not isinstance(val, dict):
+                    continue
+                for element in val.get("visibleElements", []):
+                    refs.append((f"stateManagement.states[{i}].values[{j}].visibleElements",
+                                  element))
+
+        if layout_file:
+            checked = self._layout_ids(layout_file, result)
+            if checked is not None:
+                self._check_against_layout(refs, *checked, result)
             return
 
         # Collect all component IDs
@@ -3542,37 +3621,140 @@ class SpecValidator:
         for comp in structure.get("components", []):
             if isinstance(comp, dict) and "id" in comp:
                 component_ids.add(comp["id"])
+        for path, element in refs:
+            if element not in component_ids:
+                result.warnings.append(SpecValidationMessage(
+                    path=path, message=f"Element '{element}' not found in components list",
+                    level="warning"))
 
-        # Check displayLogic element references
-        state_mgmt = data.get("stateManagement", {})
-        for i, rule in enumerate(state_mgmt.get("displayLogic", [])):
-            if not isinstance(rule, dict):
-                continue
-            for j, effect in enumerate(rule.get("effects", [])):
-                if not isinstance(effect, dict):
-                    continue
-                element = effect.get("element", "")
-                if element and element not in component_ids:
-                    result.warnings.append(SpecValidationMessage(
-                        path=f"stateManagement.displayLogic[{i}].effects[{j}].element",
-                        message=f"Element '{element}' not found in components list",
-                        level="warning"
-                    ))
+    def _check_against_layout(self, refs, layout, name, result):
+        """Each id against the layout, by `layout_facts.classify_element` —
+        the answer the coverage data axis gives too. Design v4.20's levels:
 
-        # Check state visibleElements references
-        for i, state in enumerate(state_mgmt.get("states", [])):
-            if not isinstance(state, dict):
+        - on the layout (exactly; any platform, includes expanded): nothing
+        - not on it: WARNING from LAYOUT_ID_GATE_FROM on; below it an INFO,
+          and one INFO announcing the release. The message names the layout
+          ids a person may have meant (`element_candidates`) — never counted
+          as a match: the runtime id is the layout's spelling
+        - inside a cell layout it names: CANNOT CHECK — one INFO, always
+        - spelled as an id inside an include is on web: CANNOT CHECK below
+          INCLUDE_ID_PREFIX_GATE_FROM (the spelling differs per platform),
+          naming the spelling web takes from that release; from it, web spells
+          it as native does (design U8), so it is checked exactly — a
+          mismatch, the native spelling first among the candidates.
+          `classify_element` makes the switch, so every reader agrees
+        - spelled as UIKit / XML spell it (`<include id>_<id>`): CANNOT CHECK,
+          before the release and after it (U8 (8))
+        """
+        from jui_cli.core.layout_facts import (
+            classify_element, include_id_prefix_state, include_spelling_note,
+        )
+
+        include_state = include_id_prefix_state(_running_version())
+
+        # shared/core/gate_versions, the one reader of every `*_GATE_FROM`.
+        # None in a tool tree without it: then nothing becomes a WARNING — not
+        # announced, it may not (U5) — and an INFO says the level is unknown.
+        gates = shared_core.load("gate_versions")
+        gating = bool(gates) and gates.gate_is_on(_running_version(), LAYOUT_ID_GATE_FROM)
+        where = f"the layout {name}.json (includes expanded, every platform)"
+        in_cells, in_includes, missing = [], [], 0
+        for path, element in refs:
+            kind, candidates = classify_element(
+                element, ids=layout.ids, cell_ids=layout.cell_ids,
+                include_ids=layout.include_ids, types=layout.types,
+                include_web=layout.include_web, include_exact=include_state == "on")
+            if kind == "on_layout":
                 continue
-            for j, val in enumerate(state.get("values", [])):
-                if not isinstance(val, dict):
-                    continue
-                for element in val.get("visibleElements", []):
-                    if element not in component_ids:
-                        result.warnings.append(SpecValidationMessage(
-                            path=f"stateManagement.states[{i}].values[{j}].visibleElements",
-                            message=f"Element '{element}' not found in components list",
-                            level="warning"
-                        ))
+            if kind == "in_cell":
+                in_cells.append(element)
+                continue
+            if kind == "include_spelling":
+                in_includes.append((element, candidates))
+                continue
+            missing += 1
+            text = f"Element '{element}' not found in {where}"
+            if candidates:
+                text += (f"; the layout has {', '.join(repr(c) for c in candidates)} — the "
+                         "runtime id is the layout's spelling")
+            message = SpecValidationMessage(path=path, message=text,
+                                            level="warning" if gating else "info")
+            (result.warnings if gating else result.infos).append(message)
+        if in_cells:
+            result.infos.append(SpecValidationMessage(
+                path="stateManagement", level="info",
+                message=(f"cannot check: {len(in_cells)} element id(s) inside cells of "
+                         f"{name}.json ({', '.join(sorted(set(in_cells)))}) — ids in "
+                         "cell layouts are not checked")))
+        if in_includes:
+            result.infos.append(SpecValidationMessage(
+                path="stateManagement", level="info",
+                message=(f"cannot check: {len(in_includes)} element id(s) inside includes "
+                         f"of {name}.json ({', '.join(sorted({e for e, _ in in_includes}))}) "
+                         "— " + include_spelling_note(in_includes, layout.include_web,
+                                                      include_state))))
+        if missing and gates is None:
+            result.infos.append(SpecValidationMessage(
+                path="stateManagement", level="info",
+                message=(f"the level of {missing} element id(s) not in {name}.json cannot "
+                         "be decided — shared/core/gate_versions.py is not in this tool "
+                         "tree; they are listed as INFO")))
+        if missing and gates and gates.gate_state(LAYOUT_ID_GATE_FROM) == "release" \
+                and not gating:
+            result.infos.append(SpecValidationMessage(
+                path="stateManagement", level="info",
+                message=LAYOUT_ID_NOTICE.format(version=LAYOUT_ID_GATE_FROM)))
+
+    def _layout_ids(self, layout_file: str, result: SpecValidationResult):
+        """(the layout on every platform, name) for `layout_file`, or None
+        when there is nothing to check against — said, unless the missing
+        file already is (`_check_layout_ref`)."""
+        name = layout_file[:-5] if layout_file.endswith(".json") else layout_file
+        roots = [r for r in self._declared_path_roots("layout")
+                 if (r / f"{name}.json").is_file()]
+        if not roots:
+            return None
+        if not self._spec_names_elements():
+            return None
+        try:
+            here = Path(__file__).resolve()
+            jui_tools = here.parents[3] / "jui_tools"
+            if jui_tools.is_dir() and str(jui_tools) not in sys.path:
+                sys.path.insert(0, str(jui_tools))
+            from jui_cli.core.layout_facts import layout_ids_every_platform
+        except ImportError as exc:
+            result.warnings.append(SpecValidationMessage(
+                path="stateManagement",
+                message=(f"visibleElements / displayLogic element ids were not checked "
+                         f"against {name}.json: jui_cli is not importable ({exc})"),
+                level="warning"))
+            return None
+        styles = self._declared_directory("styles_directory", "docs/screens/styles")
+        layout = layout_ids_every_platform(
+            name, layouts_dir=roots[0], styles_dir=styles or roots[0])
+        if layout.unresolved:
+            result.infos.append(SpecValidationMessage(
+                path="stateManagement", level="info",
+                message=(f"cannot check: element ids against {name}.json — an include "
+                         f"does not resolve ({', '.join(layout.unresolved)}), so its ids are "
+                         "unknown")))
+            return None
+        return layout, name
+
+    def _spec_names_elements(self) -> bool:
+        """Does this spec name any element a layout would have to hold?"""
+        state = (self._spec_data or {}).get("stateManagement") or {}
+        if not isinstance(state, dict):
+            return False
+        for rule in state.get("displayLogic") or []:
+            if isinstance(rule, dict) and any(
+                    isinstance(e, dict) and e.get("element") for e in rule.get("effects") or []):
+                return True
+        for st in state.get("states") or []:
+            if isinstance(st, dict) and any(
+                    isinstance(v, dict) and v.get("visibleElements") for v in st.get("values") or []):
+                return True
+        return False
 
     # ========== Component Spec Validation ==========
 

@@ -293,6 +293,45 @@ def list_impl_method_names(impl_source: str) -> set[str]:
     return {m.group(1) for m in pattern.finditer(impl_source)}
 
 
+#: Access modifiers that narrow a property's READER below a protocol member's,
+#: per platform. `_ACCESS_MODIFIER` also accepts them bare — it has to accept
+#: `private(set)` — so a bare `private var X` counted as implementing X and
+#: Kotlin then got `private override var X`, which it refuses. Swift's
+#: `internal` is the default and satisfies the generated (internal) protocol.
+NARROWING_MODIFIERS = {
+    "android": {"private", "protected", "internal"},
+    "ios": {"private", "fileprivate"},
+}
+
+
+def list_impl_narrowed_vars(impl_source: str, platform: str) -> dict[str, str]:
+    """{name: modifier} for every ``var``/``val``/``let`` in *impl_source*
+    declared ONLY with a modifier that narrows its reader on *platform* —
+    ``private var X``, not ``private(set) var X`` nor ``override var X …
+    private set`` (the setter-only forms). A name also declared without one
+    elsewhere in the file is left out: the narrowed one is then another
+    member (a nested class's), not the Impl's."""
+    import re
+    narrowing = NARROWING_MODIFIERS.get(platform, set())
+    pattern = re.compile(
+        r"^[ \t]*"
+        r"(?:@\w+(?:\([^)]*\))?\s+)*"
+        r"(?P<mods>(?:(?:" + _ACCESS_MODIFIER + r"|override|lateinit|abstract|final|"
+        r"static|class|weak|unowned)\s+)*)"
+        r"(?:var|val|let)\s+(?P<name>\w+)",
+        re.MULTILINE,
+    )
+    narrowed: dict[str, str] = {}
+    open_names: set[str] = set()
+    for m in pattern.finditer(impl_source):
+        bare = [t for t in m.group("mods").split() if t in narrowing]
+        if bare:
+            narrowed.setdefault(m.group("name"), bare[0])
+        else:
+            open_names.add(m.group("name"))
+    return {name: mod for name, mod in narrowed.items() if name not in open_names}
+
+
 def list_impl_var_names(impl_source: str) -> set[str]:
     """Names of every top-level ``var``/``val``/``let`` in *impl_source*.
 

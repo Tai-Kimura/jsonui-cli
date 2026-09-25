@@ -482,3 +482,89 @@ def test_no_app_spec_means_no_rules_and_says_so(tmp_path):
     assert found.rules == [] and "none" in found.note()
     assert _allowed(_generate(root).test_file.read_text()) == [
         ["submitOrder"], ["submitOrder"]]
+
+
+# --------------------------------------------------- side routes (P2e(d)) ---
+#
+# A rule's sideCalls name operations the app's network layer makes around any
+# call (a logout after a 401). A screen that does not declare the endpoint used
+# to leave the call unmatched — a 599 no server returns — so admitting it meant
+# every screen declaring the app's logout. The generator now serves such an
+# operation as a SIDE route, under its operationId, with its mock's default
+# scenario; admission is still by the rule's statuses.
+
+def _side_project(root: Path, app_specs, *, declare_logout=False, logout_id="postLogout"):
+    branches = [
+        {"when": {"api.submitOrder": "error_401"}, "then": {"data.status": "failed"}},
+        {"when": {"api.submitOrder": "error_500"}, "then": {"data.status": "failed"}},
+    ]
+    endpoints = [("submitOrder", "POST /api/orders")]
+    if declare_logout:
+        endpoints.append(("logout", "POST /api/logout"))
+    root = _project(root, branches, app_specs=app_specs, endpoints=endpoints)
+    _orders_mock(root)
+    _mock(root, "logout", "POST", "/api/logout", {"default": {"status": 204}}, logout_id)
+    return root
+
+
+def _route_ops(text: str) -> list:
+    return re.findall(r'\{ op: "([^"]+)", method: "\w+", pattern: "([^"]+)"', text)
+
+
+def test_an_undeclared_side_call_becomes_a_side_route_admitted_by_status(tmp_path):
+    root = _side_project(tmp_path, [_app([_RULE])])
+    report = _generate(root)
+    text = report.test_file.read_text()
+    assert ("postLogout", "^/api/logout$") in _route_ops(text)
+    assert report.side_routes == ["postLogout"]
+    # The 401 row may call it; the 500 row may not (the ⊆ bound would name it).
+    assert _allowed(text) == [["postLogout", "submitOrder"], ["submitOrder"]]
+
+
+def test_a_declared_side_call_is_the_screens_own_route(tmp_path):
+    root = _side_project(tmp_path, [_app([_RULE])], declare_logout=True)
+    report = _generate(root)
+    assert report.side_routes == []
+    assert _allowed(report.test_file.read_text()) == [["logout", "submitOrder"], ["submitOrder"]]
+
+
+def test_no_rule_no_side_route_and_the_same_file(tmp_path):
+    """An app without apiOutcomeRules generates what it generated before."""
+    with_rule = _side_project(tmp_path / "a", [_app([_RULE])])
+    without = _side_project(tmp_path / "b", [])
+    report = _generate(without)
+    text = report.test_file.read_text()
+    assert report.side_routes == [] and "postLogout" not in text
+    # Control: the rule is what added it.
+    assert "postLogout" in _generate(with_rule).test_file.read_text()
+
+
+def test_an_unresolvable_side_call_adds_no_route(tmp_path):
+    root = _side_project(tmp_path, [_app([_RULE])], logout_id="someOtherId")
+    report = _generate(root)
+    assert report.side_routes == []
+    assert _allowed(report.test_file.read_text()) == [["submitOrder"], ["submitOrder"]]
+
+
+def test_a_side_call_named_like_another_endpoint_stops_generation(tmp_path):
+    """One op naming two endpoints would make every count on it describe both."""
+    rule = dict(_RULE, sideCalls=["submitOrder"])
+    root = _side_project(tmp_path, [_app([rule])], logout_id="submitOrder")
+    # The orders mock also carries operationId submitOrder: two generated files
+    # carry it, so it does not resolve — make only the logout one carry it.
+    (root / "tests/mocks/generated/orders.mock.json").write_text(json.dumps({
+        "source": {"method": "POST", "path": "/api/orders"},
+        "activeScenario": "default", "scenarios": _ORDERS}), encoding="utf-8")
+    with pytest.raises(BranchTestGenerationError, match="also this screen's name"):
+        _generate(root)
+
+
+@pytest.mark.parametrize("platform, needle", [
+    ("android", 'RouteSpec("postLogout"'),
+    ("ios", 'RouteSpec(op: "postLogout"'),
+])
+def test_the_side_route_reaches_every_platform(tmp_path, platform, needle):
+    root = _side_project(tmp_path, [_app([_RULE])])
+    report = _generate(root, platform=platform)
+    assert report.side_routes == ["postLogout"]
+    assert needle in report.test_file.read_text()

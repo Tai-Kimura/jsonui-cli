@@ -31,8 +31,10 @@ longer makes its statuses disappear from this count.
 Exit per platform block, composed 2 > 1 > 3 > 0 for the process:
 0 pass (or `empty`: no screen exists on the platform), 1 uncovered or a
 declaration error, 2 cannot start, 3 unmeasured (something could not be
-evaluated, and nothing was found uncovered). This command is not a gate yet:
-nothing runs it for you.
+evaluated, and nothing was found uncovered). `jsonui-test validate` reports
+it in a coverage section, and from the release `VALIDATE_GATE_FROM` names it
+fails unless this exits 0 (design §6.1, P3a — announced one release ahead by
+the section's own last line).
 """
 from __future__ import annotations
 
@@ -64,6 +66,7 @@ from .branch_tests import (
     load_project_config,
     side_call_ops,
 )
+from . import contracts_data_axis as data_axis
 from .contract_declarations import (
     CONDITION_PREFIX, check_condition_uses, parse_declarations)
 
@@ -197,6 +200,9 @@ class Project:
     api: ApiIndex
     app: object                  # branch_tests.AppRules
     describes_a_screen: object   # shared spec_types.describes_a_screen
+    #: Where the data axis reads layouts and styles (config, jui's defaults).
+    layouts_dir: Path | None = None
+    styles_dir: Path | None = None
 
 
 def _screen_classifier():
@@ -268,11 +274,14 @@ def load_project(root: Path) -> Project:
     if classify is None:
         raise CannotStart("the screen-type table (shared/core/spec_types.py) could "
                           "not be read, so the screens cannot be told from the rest")
+    from .contracts_data_axis import layout_dirs
+    layouts_dir, styles_dir = layout_dirs(root, config)
     return Project(
         root=root, config_platforms=platforms, spec_dir=spec_dir,
         mocks_dir=mocks_dir, mocks=index_mock_files(mocks_dir),
         api=load_api_index(resolved, api_dir if api_dir.is_dir() else None),
-        app=app, describes_a_screen=classify)
+        app=app, describes_a_screen=classify,
+        layouts_dir=layouts_dir, styles_dir=styles_dir)
 
 
 @dataclass
@@ -343,10 +352,29 @@ class ScreenResult:
     na_endpoints: dict = field(default_factory=lambda: dict(
         no_mock=0, not_in_openapi=0, unbound=0, non_http=0))
     unbound_endpoints: list = field(default_factory=list)
+    #: The exit-3 side item by item, for the baseline (§6.1 P3c): {op, cause}.
+    unmeasured_items: list = field(default_factory=list)
+    #: What this run measured, and what answered it — for the baseline's
+    #: closed / vanished split (v4.22): a baselined key the run does not hold
+    #: is CLOSED only when its unit was measured and a decision answers it.
+    #: (method, op, status) answered by a row, an alsoStatuses copy or an
+    #: excludedOutcomes entry; (op, status) answered for every method
+    #: (unreachedOps); the ops measured (names and "METHOD path"); the
+    #: (op, status) measured (a scenario exists).
+    answered: set = field(default_factory=set)
+    answered_any: set = field(default_factory=set)
+    measured_ops: set = field(default_factory=set)
+    measured_statuses: set = field(default_factory=set)
+    #: (method, op, status) the run holds but could not evaluate — a row that
+    #: does not bind, or whose `@response` path the body lacks. A baselined
+    #: key under one is hidden, not vanished (ee review 4 (a)).
+    unevaluated: set = field(default_factory=set)
     notes: list = field(default_factory=list)
     http_endpoints: int = 0
     branches_active: int = 0
     branches_total: int = 0
+    #: The data axis (contracts_data_axis.ScreenData); report only, never an exit.
+    data: object = None
 
     @property
     def statuses_required(self) -> int:
@@ -513,6 +541,7 @@ def evaluate_screen(name: str, spec: dict, platform: str, project: Project) -> S
     for endpoint in unbound.values():
         label = f"{endpoint['method']} {endpoint['path']}"
         res.unbound_endpoints.append(label)
+        res.unmeasured_items.append({"op": label, "cause": "unbound endpoint"})
         res.notes.append(
             f"{label} is in dataFlow.apiEndpoints but is the endpoint of no "
             "repositories / useCases method — branch tests do not route it (a call "
@@ -535,10 +564,14 @@ def evaluate_screen(name: str, spec: dict, platform: str, project: Project) -> S
         mock = find_mock(project.mocks, endpoint["method"], endpoint["path"])
         if mock is None:
             res.na_endpoints["no_mock"] += 1
+            res.unmeasured_items.append({"op": _op_name(names_of, key, endpoint),
+                                         "cause": "no mock"})
             continue
         entry = project.api.by_route.get(key)
         if entry is None:
             res.na_endpoints["not_in_openapi"] += 1
+            res.unmeasured_items.append({"op": _op_name(names_of, key, endpoint),
+                                         "cause": "not in OpenAPI"})
             where = project.api.elsewhere.get(key)
             label = f"{endpoint['method']} {endpoint['path']}"
             res.notes.append(
@@ -546,6 +579,11 @@ def evaluate_screen(name: str, spec: dict, platform: str, project: Project) -> S
                 "add it to mock.swagger" if where else f"{label} is in no OpenAPI document")
             continue
         evaluable[key] = (status_keys(entry[1]), mock)
+        op = _op_name(names_of, key, endpoint)
+        res.measured_ops |= {op, f"{endpoint['method']} {endpoint['path']}"}
+        statuses = status_keys(entry[1])
+        res.measured_statuses |= {(op, s) for s in statuses
+                                  if s != "default" and not _no_scenario(s, statuses, mock)}
 
     bc = spec.get("branchContracts") if isinstance(spec.get("branchContracts"), dict) else {}
     methods = {m: c for m, c in (bc.get("methods") or {}).items() if isinstance(c, dict)}
@@ -595,6 +633,9 @@ def evaluate_screen(name: str, spec: dict, platform: str, project: Project) -> S
                 if key is not None:
                     reach.setdefault(method, set()).add(key)
     res.contracted_methods = len(active_by_method)
+
+    # ---- the data axis (§6.1 P2.5): report only, read from the layout once
+    res.data = _screen_data(spec, platform, methods, project)
 
     # ---- binding errors
     not_evaluated_units: set = set()
@@ -809,15 +850,19 @@ def evaluate_screen(name: str, spec: dict, platform: str, project: Project) -> S
                     res.outside_required["na_default_response"] += 1
                 elif _no_scenario(status, statuses, mock):
                     res.outside_required["na_no_scenario"] += 1
+                    _note_no_scenario(res, names_of, key, endpoints[key], status)
                 elif status in answered:
                     res.breakdown["row"] += 1
+                    res.answered.add((method, names_of.get(key, ["?"])[0], status))
                     if all(kind == "also" for kind in answered[status]):
                         res.row_also_statuses += 1
                 elif (method, key, status) in exclusions:
                     res.breakdown[exclusions[(method, key, status)].by] += 1
+                    res.answered.add((method, names_of.get(key, ["?"])[0], status))
                 elif (method, key) in not_evaluated_units or \
                         (method, key, status) in not_evaluated_statuses:
                     res.breakdown["not_evaluated"] += 1
+                    res.unevaluated.add((method, names_of.get(key, ["?"])[0], status))
                 else:
                     res.breakdown["uncovered"] += 1
                     left.append(status)
@@ -833,6 +878,7 @@ def evaluate_screen(name: str, spec: dict, platform: str, project: Project) -> S
         if key in unreached:
             res.outside_required["unreached_op"] += len(statuses)
             res.declared += len(statuses)
+            res.answered_any |= {(names_of.get(key, ["?"])[0], s) for s in statuses}
             continue
         if key in reached_any:
             continue
@@ -843,6 +889,7 @@ def evaluate_screen(name: str, spec: dict, platform: str, project: Project) -> S
                 res.outside_required["na_default_response"] += 1
             elif _no_scenario(status, statuses, mock):
                 res.outside_required["na_no_scenario"] += 1
+                _note_no_scenario(res, names_of, key, endpoints[key], status)
             else:
                 res.breakdown["uncovered"] += 1
                 left.append(status)
@@ -856,6 +903,17 @@ def evaluate_screen(name: str, spec: dict, platform: str, project: Project) -> S
                 "callers": _callers(spec, set(names_of.get(key, [])))})
     res.check_arithmetic()
     return res
+
+
+def _op_name(names_of: dict, key, endpoint: dict) -> str:
+    return names_of.get(key, [f"{endpoint['method']} {endpoint['path']}"])[0]
+
+
+def _note_no_scenario(res: "ScreenResult", names_of: dict, key, endpoint: dict,
+                      status: str) -> None:
+    item = {"op": _op_name(names_of, key, endpoint), "status": status, "cause": "no scenario"}
+    if item not in res.unmeasured_items:
+        res.unmeasured_items.append(item)
 
 
 # --------------------------------------------------------------- app level ---
@@ -1020,6 +1078,17 @@ class CoverageReport:
     #: harnessConditions names and the file that declares them; None = none.
     conditions: list | None = None
     conditions_file: str | None = None
+    #: The baseline (§6.1 P3c): its file, whether it exists, the current
+    #: baselinable entries, and per platform {baselined, matched, new, stale}.
+    baseline_file: str | None = None
+    baseline_present: bool = False
+    entries: list = field(default_factory=list)
+    baseline: dict = field(default_factory=dict)
+    #: Per platform {new, stale, hidden, vanished}: the entries themselves.
+    baseline_items: dict = field(default_factory=dict)
+    #: Platforms the baseline records that the config no longer declares
+    #: (only when `--platform` does not narrow the run): all vanished.
+    undeclared_platforms: list = field(default_factory=list)
 
 
 def run_coverage(root: Path, platforms=None, screen: str | None = None) -> CoverageReport:
@@ -1058,6 +1127,28 @@ def run_coverage(root: Path, platforms=None, screen: str | None = None) -> Cover
         conditions_file=(str(project.app.conditions_file)
                          if project.app.conditions_file else None))
     report.exit = compose_exit(b.exit for b in blocks)
+
+    from . import contracts_baseline as cb
+    path = cb.path_for(project.spec_dir)
+    try:
+        recorded = cb.load(path)
+    except (ValueError, OSError) as e:
+        raise CannotStart(f"the coverage baseline cannot be read ({e})")
+    # Only what this run was asked about is compared: an entry for a platform
+    # `--platform` did not name, or a screen `--screen` did not, is neither
+    # matched nor stale here. A platform the config no longer declares is
+    # not narrowed away — its entries vanish (ee review 4 (b)): dropping a
+    # platform is no way out of its debt.
+    if recorded is not None:
+        recorded = [e for e in recorded if (not platforms or e.get("platform") in chosen)
+                    and (screen is None or e.get("spec") == screen)]
+        report.undeclared_platforms = sorted({e.get("platform") for e in recorded} - set(chosen))
+    report.entries = cb.current_entries(report)
+    report.baseline_file = str(path)
+    report.baseline_present = recorded is not None
+    units = cb.measured(report)
+    report.baseline = cb.compare(report.entries, recorded, units)
+    report.baseline_items = cb.compare_items(report.entries, recorded, units)
     return report
 
 
@@ -1173,11 +1264,16 @@ def format_text(report: CoverageReport) -> list:
             f"{NA_ENDPOINT_LABELS[k]} {t[k]['count']} (screens {t[k]['screens']})"
             for k in NA_ENDPOINT_KEYS))
         lines.append(_total_line(p, block.totals))
+        lines.append(f"[platform={p}] " + baseline_phrase(report, p))
+        lines.append(data_axis.text_line(p, active))
         if block.floor:
             lines.append(f"[platform={p}] uncovered is a floor: " + " · ".join(
                 f"{FLOOR_LABELS[k]} {v}" for k, v in block.floor.items())
                 + " — not evaluated, so more may be uncovered")
         lines.append(f"[platform={p}] exit {block.exit} ({block.verdict})")
+    for p in report.undeclared_platforms:
+        lines.append(f"[platform={p}] not declared in jui.config.json platforms · "
+                     + baseline_phrase(report, p))
     if report.unknown_types:
         lines.append(f"info  {report.unknown_types} spec(s) of a type that is neither a "
                      "screen nor a known non-screen were not counted")
@@ -1212,7 +1308,9 @@ def to_json(report: CoverageReport) -> dict:
                 "methods_without_endpoint": s.methods_without_endpoint,
                 "outside_required": dict(s.outside_required),
                 "na_endpoints": dict(s.na_endpoints),
-                "unbound_endpoints": list(s.unbound_endpoints), "notes": list(s.notes)})
+                "unbound_endpoints": list(s.unbound_endpoints), "notes": list(s.notes),
+                "unmeasured": [dict(i) for i in s.unmeasured_items],
+                "data": s.data.to_json() if s.data is not None else None})
         totals = json.loads(json.dumps(block.totals))    # the same object the text reads, copied
         platforms.append({
             "platform": block.platform, "project_platforms": report.project_platforms,
@@ -1221,9 +1319,256 @@ def to_json(report: CoverageReport) -> dict:
                        "screens_total": len(block.screens),
                        "branches_active": sum(s.branches_active for s in active),
                        "branches_total": sum(s.branches_total for s in active)},
-            "screens": screens, "totals": totals})
-    return {"app": {"spec_file": report.app_file, "rules": report.rules,
+            "screens": screens, "totals": totals,
+            "baseline": {**_baseline_counts(report, block.platform),
+                         **{f"{k}_entries": list(v) for k, v in report.baseline_items.get(
+                             block.platform,
+                             {"new": [], "stale": [], "hidden": [], "vanished": []}).items()}},
+            "data_totals": data_axis.block_totals(active),
+            "data_coarse": data_axis.coarse(active)})
+    undeclared = {p: {**_baseline_counts(report, p),
+                      **{f"{k}_entries": list(v) for k, v in report.baseline_items.get(p, {}).items()}}
+                  for p in report.undeclared_platforms}
+    return {"baseline": {"file": report.baseline_file, "present": report.baseline_present,
+                         "undeclared_platforms": undeclared},
+            "app": {"spec_file": report.app_file, "rules": report.rules,
                     "declaration_errors": list(report.app_errors),
                     "harness_conditions": report.conditions,
                     "harness_conditions_file": report.conditions_file},
             "platforms": platforms, "exit": report.exit}
+
+
+# --------------------------------------------------- the validate section ---
+#
+# Design §2.6 / §6.1 (P3a). `jsonui-test validate` carries a coverage section:
+# one denominator line per platform, the declaration errors, and one line
+# about the gate. Below VALIDATE_GATE_FROM that line is the notice and the
+# section moves no return code (P3a-1); from it on, validate fails unless
+# coverage exits 0 (P3a-2) — the switch is this version, not a flag (U1),
+# and not a code change someone has to remember at the next release.
+
+#: The release from which validate gates on contracts coverage —
+#: a LITERAL, written when the announcing release N is cut (design §6.1: "N+1
+#: の版は N を切るときに決めて文に書く"). Deliberately no default: one derived
+#: from the running version agrees with itself on every build, so the notice
+#: would pass red-check xxxi whatever it said, and a gate switched on by
+#: "running >= derived" would never switch on (ee, 2026-09-25). Unset, the
+#: section says the version is not declared instead of announcing one. The
+#: tag gate (dev-guide/release/check-tag.sh) holds it to the release: the
+#: next patch when announcing, at or below the tag once gating.
+VALIDATE_GATE_FROM: str | None = None
+
+
+def _gates():
+    """shared/core/gate_versions — the one reader of every `*_GATE_FROM` —
+    or None in a tool tree without it (then nothing gates, and it says so)."""
+    from . import shared_core
+    return shared_core.load("gate_versions")
+
+
+def version_key(version: str) -> tuple:
+    gates = _gates()
+    return gates.version_key(version) if gates else ()
+
+#: ee's text (design v4.17 §6.1 P3c — the notice names the baseline: without
+#: it "fails unless coverage exits 0" would no longer be true; v4.21: the first
+#: recording needs --initial, and says whose decision it is).
+VALIDATE_NOTICE = (
+    "from jsonui-cli {version}, validate fails on contracts coverage entries not in "
+    "the baseline — close them (Task 6 of the define agent), or record the current ones "
+    "once with `jsonui-test contracts baseline --initial` (the user's decision); see the "
+    "release note")
+
+
+def gate_state(gate_from: str | None = None) -> str:
+    """`undeclared`, `withdrawn`, `unreadable` or `release` of
+    VALIDATE_GATE_FROM (or *gate_from*) — only `release` ever gates — or
+    `unavailable` when shared/core/gate_versions.py is not in the tree."""
+    gates = _gates()
+    if gates is None:
+        return "unavailable"
+    return gates.gate_state(VALIDATE_GATE_FROM if gate_from is None else gate_from)
+
+
+def gate_is_on(version: str, gate_from: str | None = None) -> bool:
+    """Does validate fail on coverage in this version?"""
+    gates = _gates()
+    return bool(gates) and gates.gate_is_on(
+        version, VALIDATE_GATE_FROM if gate_from is None else gate_from)
+
+
+def coverage_applicable(root: Path) -> tuple[bool, str]:
+    """(applies, why not). Not applicable ONLY when the project declares no
+    `mock.swagger` AND no spec carries `branchContracts` (design §6.1): with
+    either one present, coverage that cannot start is a configuration error,
+    not a project without contracts."""
+    from .branch_tests import _spec_files, load_project_config
+
+    config = load_project_config(root)
+    if not config:
+        return False, f"no jui.config.json in {root}"
+    mock = config.get("mock") if isinstance(config.get("mock"), dict) else config
+    if mock.get("swagger"):
+        return True, ""
+    spec_dir = config.get("spec_directory")
+    if isinstance(spec_dir, str) and spec_dir and (root / spec_dir).is_dir():
+        for path in _spec_files((root / spec_dir).resolve()):
+            try:
+                data = json.loads(path.read_text(encoding="utf-8"))
+            except (OSError, UnicodeDecodeError, ValueError):
+                continue
+            if isinstance(data, dict) and "branchContracts" in data:
+                return True, ""
+    return False, "the project declares no mock.swagger and no spec has branchContracts"
+
+
+def denominator_line(block: "PlatformBlock") -> str:
+    """`coverage: <platform> units N · statuses required M · row … · excluded
+    … · uncovered … · not evaluated …`, then what could not be measured (by
+    cause, only when present) and the block's exit."""
+    t = block.totals
+    excluded = t["unit"] + t["unreachable"] + t["unexpressible"]
+    line = (f"coverage: {block.platform} units {t['units']} · statuses required "
+            f"{t['statuses_required']} · row {t['row']} · excluded {excluded} · "
+            f"uncovered {t['uncovered']} · not evaluated {t['not_evaluated']}")
+    for key, value in block.unmeasured.items():
+        if value and key != "not_evaluated":
+            line += f" · {FLOOR_LABELS[key]} {value}"
+    return line + f" → exit {block.exit} ({block.verdict})"
+
+
+def _gate_line(version: str) -> str:
+    """The one line about the gate: on, announced, withdrawn, unreadable, or
+    not declared."""
+    if gate_is_on(version):
+        return (f"validate gates on contracts coverage (from jsonui-cli "
+                f"{VALIDATE_GATE_FROM}): it fails on entries not in the baseline, on "
+                "baselined entries that are closed, on baselined entries gone from the "
+                "run, and on what cannot be baselined")
+    state = gate_state()
+    if state == "release":
+        return VALIDATE_NOTICE.format(version=VALIDATE_GATE_FROM)
+    if state == "unavailable":
+        return ("coverage gate cannot be read — shared/core/gate_versions.py is not in "
+                "this tool tree, so this build announces no release and does not gate")
+    return "coverage gate " + _gates().state_note("VALIDATE_GATE_FROM", VALIDATE_GATE_FROM)
+
+
+def validate_section(root: Path | None, version: str, *, skipped: bool = False,
+                     blocked_by: int = 0) -> tuple[list, dict | None]:
+    """The lines `jsonui-test validate` prints for contracts coverage, and the
+    gate's reading — None when coverage did not run (which never fails the
+    run), else {"exit", "fails", "why"}: `fails` is what the gate would do
+    with it (§6.1 P3c) — entries not in the baseline, baselined entries that
+    are closed, anything that cannot be baselined, or cannot-start. Whether it
+    applies is `gate_is_on(version)`, the caller's.
+
+    Never silent (design §2.6): skipped by flag, stopped by the run's own
+    errors, not applicable, unable to start — each says so in one line.
+    """
+    if skipped:
+        return ["coverage skipped (--no-coverage-check)"], None
+    if root is None:
+        return ["coverage not applicable: this run found no project root"], None
+    applies, why = coverage_applicable(root)
+    if not applies:
+        return [f"coverage not applicable: {why}"], None
+    notice = _gate_line(version)
+    if blocked_by:
+        return [f"coverage not run: {blocked_by} error(s) above stop validate before it — "
+                "fix them and run again", notice], None
+    try:
+        report = run_coverage(root)
+    except CannotStart as e:
+        return ([f"coverage cannot start: {e} → exit {EXIT_CANNOT_START} (cannot_start)",
+                 notice],
+                {"exit": EXIT_CANNOT_START, "fails": True, "why": ["cannot start"]})
+    from .contracts_baseline import unbaselinable
+    lines = [f"contracts coverage ({root / 'jui.config.json'})"]
+    lines += [denominator_line(block) + " · " + baseline_phrase(report, block.platform)
+              for block in report.platforms]
+    lines += [f"{p}: not declared in jui.config.json platforms · " + baseline_phrase(report, p)
+              for p in report.undeclared_platforms]
+    for error in report.app_errors:
+        lines.append(f"  declaration error  {error['file']}: "
+                     f"{error['path'] + ': ' if error['path'] else ''}{error['message']}")
+    for block in report.platforms:
+        for s in block.screens:
+            for error in s.declaration_errors:
+                lines.append(f"  declaration error  [{block.platform}] {s.spec}: "
+                             f"{error['message']}")
+    if report.exit != EXIT_PASS:
+        lines.append("  → `jsonui-test contracts coverage` lists what is uncovered or "
+                     "could not be measured")
+    from .contracts_baseline import by_spec
+
+    why = []
+    for block in report.platforms:
+        c = _baseline_counts(report, block.platform)
+        items = report.baseline_items.get(block.platform, {})
+        # Which screens: define measures one screen at a time (v4.21).
+        if c["new"]:
+            why.append(f"{block.platform}: {c['new']} not in the baseline "
+                       f"({by_spec(items.get('new', []))})")
+        if c["stale"]:
+            why.append(f"{block.platform}: {c['stale']} baselined but closed "
+                       f"({by_spec(items.get('stale', []))})")
+        if c["vanished"]:
+            why.append(f"{block.platform}: {c['vanished']} baselined but gone from the run "
+                       f"({by_spec(items.get('vanished', []))})")
+        for cause, n in unbaselinable(block).items():
+            why.append(f"{block.platform}: {cause} {n} (cannot be baselined)")
+    for p in report.undeclared_platforms:
+        c = _baseline_counts(report, p)
+        if c["vanished"]:
+            why.append(f"{p}: {c['vanished']} baselined but gone from the run "
+                       f"({by_spec(report.baseline_items[p]['vanished'])})")
+    lines.append(notice)
+    return lines, {"exit": report.exit, "fails": bool(why), "why": why}
+
+
+def _baseline_counts(report: "CoverageReport", platform: str) -> dict:
+    from .contracts_baseline import counts_for
+    return counts_for(report.baseline, platform)
+
+
+def baseline_phrase(report: "CoverageReport", platform: str) -> str:
+    """`baselined N (matched M · new K · stale S)`, always — the debt stays in
+    the numbers whether or not a baseline exists (§6.1 P3c)."""
+    c = _baseline_counts(report, platform)
+    phrase = (f"baselined {c['baselined']} (matched {c['matched']} · new {c['new']} · "
+              f"stale {c['stale']}" + (f" · unmeasured now {c['hidden']}" if c["hidden"] else "")
+              + (f" · vanished {c['vanished']}" if c["vanished"] else "") + ")")
+    if not report.baseline_present:
+        phrase += " — no baseline file: every entry is new"
+    elif c["stale"]:
+        phrase += " — stale entries are closed: run `jsonui-test contracts baseline` to drop them"
+    if report.baseline_present and c["vanished"]:
+        phrase += (" — vanished entries left the run (a screen off the platform, a spec, "
+                   "method, op or status gone): remove or re-key them by hand — the user's "
+                   "decision")
+    return phrase
+
+
+def _screen_data(spec: dict, platform: str, methods: dict, project: "Project"):
+    """The screen's data axis on *platform*, or None when there is no layout
+    directory to read (nothing is guessed)."""
+    if project.layouts_dir is None:
+        return None
+    from .branch_tests import _prefer_sibling_jui_cli
+
+    _prefer_sibling_jui_cli()
+    from jui_cli.core.layout_facts import cell_ids_for, include_id_prefix_state, layout_facts
+
+    from . import __version__
+
+    facts = layout_facts(spec, platform, layouts_dir=project.layouts_dir,
+                         styles_dir=project.styles_dir)
+    cells = cell_ids_for(facts, platform, layouts_dir=project.layouts_dir,
+                         styles_dir=project.styles_dir)
+    rows = [branch for contract in methods.values()
+            for branch in (contract.get("branches") or [])
+            if isinstance(branch, dict) and "note" not in branch
+            and _branch_active(branch, platform)]
+    return data_axis.screen_data(spec, facts, rows, cell_ids=cells,
+                                 include_exact=include_id_prefix_state(__version__) == "on")

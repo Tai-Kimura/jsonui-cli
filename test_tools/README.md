@@ -74,7 +74,8 @@ pyenv local 3.11.0
 | `artifacts pull` | `a pull` | Pull test artifacts (screenshots/recordings) from devices and xcresults |
 | `artifacts status` | `a status` | Show resolved artifacts config and existing artifact files |
 | `artifacts prune-legacy` | `a prune-legacy` | List (default) or delete (`--yes`) the suites left in the flat legacy Android mirror |
-| `contracts coverage` | — | Every response status the OpenAPI declares for an operation a screen reaches, bucketed by who answers it (not a gate yet) |
+| `contracts coverage` | — | Every response status the OpenAPI declares for an operation a screen reaches, bucketed by who answers it — `validate` reports it, and fails on it from the release its section names |
+| `contracts baseline` | — | Record today's coverage entries once in `contracts_coverage_baseline.json`, then only shrink the file as they close — the gate passes on what it holds |
 
 ### validate (v)
 
@@ -116,6 +117,63 @@ Installed 1 test file(s) → 1 target(s) (cleaned 0 stale):
 
 Declare `test.testDir` when your tests do not live under `tests/`; without it the
 run cannot establish the full set and declines the clean.
+
+**Element ids the steps name.** Every id a step names — `id`, `ids`, `container`,
+`cropId`, and `visible` / `notVisible` under `when` and `while`, nested `steps`
+included — is looked up in the layouts of the project whose config the run read:
+every layout, each resolved on every platform with its includes expanded (a test
+moves between screens without saying which one each step is on, and the runner finds
+an id wherever it is), through the classifier the spec validator uses.
+
+| the id | reported as |
+|---|---|
+| on a layout, or declared in `test.appOwnedIds` | nothing |
+| on no layout and not declared | INFO below the release `LAYOUT_ID_GATE_FROM` names (the spec validator's), WARNING from it — never an error; while a release is announced, one line names it. The message names the layout ids a person may have meant |
+| web's spelling of an id inside an include with an id, before `INCLUDE_ID_PREFIX_GATE_FROM` | `cannot check: … inside includes …`, naming what web spells it as from that release (`'hint' -> 'sideHint'`); from that release it is checked like any other id |
+| UIKit's spelling of it (`<include id>_<id>`) | `cannot check` |
+| derived by the generated code from a layout id: a Collection's cells `<id>_item_<n>`, a Segment's or TabView's tabs `<id>_tab_<n>` | `cannot check` (the layout id must be on a layout) |
+| a part of a component the project defines (`<id>_…` under a node whose type is not a built-in one) | `cannot check` — its own converter names them |
+| web's CSS descendant form `A #B` | `cannot check` when each part is on a layout; otherwise the part is reported |
+| a character outside `[A-Za-z0-9_]` (the OS's own UI, an id built from data) | `cannot check` |
+| built from a case argument (`@{…}`) | `cannot check` |
+
+One line counts them — `element ids: N named in the steps — N on a layout, N declared
+in test.appOwnedIds, N on no layout, N cannot check, N not checked` — and INFO never
+moves `Warnings:` or the exit code (`Info: N (not counted)` on the summary line).
+
+Ids the app draws outside every layout — a native navigation bar's menu item, an app
+toast — are declared in `jui.config.json`; an entry ending in `*` is a prefix. A
+declaration is not looked up in the layouts, and one no step of the run names is
+listed, so a stale one can be removed:
+
+```json
+{ "test": { "appOwnedIds": ["sampleToast", "sample_menu_button", "sample_day_*"] } }
+```
+
+**Contracts coverage section.** After its summary, `validate` reports
+`jsonui-test contracts coverage` for the project whose config it read — one line
+per platform:
+
+```
+coverage: web units 2 · statuses required 12 · row 5 · excluded 1 · uncovered 6 · not evaluated 0 → exit 1 (uncovered) · baselined 0 (matched 0 · new 6 · stale 0) — no baseline file: every entry is new
+from jsonui-cli <next release>, validate fails on contracts coverage entries not in the baseline — close them (Task 6 of the define agent), or record the current ones once with `jsonui-test contracts baseline --initial` (the user's decision); see the release note
+```
+
+with any declaration errors, and what could not be measured by cause
+(`n/a(unbound endpoint) 1`, …). Each line ends with how the entries compare with the
+[baseline](#contracts-baseline). Its last line says where the gate stands: below the
+release it names, the section **does not change the exit code**; from that release on,
+validate fails — after installing the valid tests — on entries not in the baseline
+(new), on baselined entries that are closed (stale), and on what can never be
+baselined (declaration errors, rows or screens that could not be evaluated, HTTP with
+nothing evaluated, cannot start). The summary line then says which:
+`Coverage: FAILED (exit 1; web: 1 not in the baseline)`, or `Coverage: passed (exit 1)`
+when everything coverage reports is baselined. It is never silent:
+`coverage not run: N error(s) above …` when the run's own errors stop it,
+`coverage not applicable: …` when the project declares no `mock.swagger` and no
+spec has `branchContracts`, `coverage cannot start: …` when it has one of them and
+coverage still cannot start, and `coverage skipped (--no-coverage-check)` when
+asked.
 
 ### generate test screen (g t screen)
 
@@ -565,6 +623,95 @@ exit 1 and something could not be evaluated as well, it also says
 never counted. The JSON carries the same: `totals.na_endpoints` and `floor`
 per platform.
 
+Each block also prints a **data** line — report only, it never moves the exit:
+`[platform=p] data (report only) units N · arranged A · produced P · neither X ·
+screens evaluated E of S (…) · Bool not in layout … · visibleElements not in
+layout … · cells not bound …`. A unit is (screen, field, value): a field
+declared `Bool` that the screen's layout binds (true and false), or a
+`stateManagement.states[].values[]` whose `visibleElements` the layout all has.
+ARRANGED means a row's `when` sets it (`data.X` or a seed `state.X`); PRODUCED,
+that a row's `then` asserts it. The layout is the spec's `metadata.layoutFile`
+only (no guessing: `layout not linked` otherwise), read by
+`jui_cli.core.layout_facts` — the normalizer's includes, styles and platform
+filter, and binding roots by the Ruby validator's grammar. When most of a
+block's screens carry more data units than statuses, the line counts fields
+instead of values (`coarse`); the values stay in `--json`
+(`screens[].data`, `data_totals`, `data_coarse`).
+
+### contracts baseline
+
+```
+jsonui-test contracts baseline [--initial]
+```
+
+When the gate starts, a project with uncovered statuses has two ways out:
+close them all, or switch the check off. The baseline is the third: today's
+entries recorded once, the gate holding every NEW one to the rule at once.
+
+The file is `<spec_directory>/contracts_coverage_baseline.json`, next to the
+app contracts spec; commit it. It holds the entries that keep coverage from
+exit 0, sorted and without timestamps, so the same set is the same bytes:
+
+- **uncovered** — (platform, spec, method, op, status)
+- **unmeasured** — (platform, spec, op, cause), cause one of `unbound
+  endpoint`, `no mock`, `not in OpenAPI`; and (platform, spec, op, status,
+  cause) for `no scenario`, which is per status — another status of the same
+  op losing its scenario later is a new entry, not the recorded one
+
+With no file, the command writes nothing unless it is given `--initial`:
+recording the first baseline accepts every current entry as debt, which is
+the user's decision (`wrote …` with it; nothing is written when there are no
+entries). With a file, it writes only what the file AND the current run hold
+— **the command never adds an entry**:
+
+```
+updated docs/screens/json/contracts_coverage_baseline.json
+removed 2 · kept 10 · new 1 not added (close them, or add by hand)
+```
+
+A recorded entry under what cannot be measured NOW — its op has no mock, is
+not in the OpenAPI, or is an unbound endpoint; or, for one status, it has no
+scenario — is not closed, only unmeasured: the command keeps it (`kept 12 (4
+unmeasured now — not closed, kept)`), and the gate counts it as neither
+matched nor stale (`· unmeasured now 4` on the line).
+
+A recorded entry whose unit is not in the run at all — its screen left the
+platform (`metadata.platforms`), its spec file is gone (a rename too), its
+method or op is no longer declared, its status left the OpenAPI — has
+**vanished**: it is not closed either. Only an entry the run measured and
+found answered by a decision (a row, `alsoStatuses`, `excludedOutcomes`,
+`unreachedOps`; for an unmeasured one, its op or status measured again) is
+closed. A vanished entry fails the gate (`web: 2 baselined but gone from the
+run (detail 2)`, `· vanished 2` on the line) and the command keeps it
+(`(2 vanished — not closed, kept; remove or re-key them by hand)`):
+removing or re-keying it is done by hand, where the diff shows it — the
+user's decision. Dropping an endpoint, a status or a platform is not a way
+out of the debt. baselined = matched + stale + unmeasured now + vanished.
+
+Close a new entry with a row (Task 6 of the define agent). Adding it to the file by
+hand also works, and the tool cannot tell it from the recorded debt — only the
+commit's diff shows it. Once an entry is closed, run the command to drop it:
+a closed entry left in the file is **stale** and fails the gate, because it
+would silently swallow the same entry if it came back.
+
+What the gate fails on whatever the file says is never recorded — declaration
+errors, a row or a screen that could not be evaluated, HTTP with nothing
+evaluated, cannot start. While any is present the command writes nothing and
+exits 1, naming them: the statuses behind them were never counted, so a first
+write would record a floor and a shrink would drop entries as closed that were
+only unmeasured.
+
+`contracts coverage` prints the comparison under each platform —
+`[platform=web] baselined 6 (matched 6 · new 0 · stale 0)` — and `--json`
+carries it as `baseline` per platform (the counts, and the entries
+themselves as `new_entries` / `stale_entries` / `hidden_entries` /
+`vanished_entries`) and
+`baseline: {file, present}` at the top; each screen lists what could not be
+measured as `unmeasured` (`{op, status?, cause}`). validate's summary names
+the screens: `Coverage: FAILED (exit 1; web: 3 not in the baseline
+(detail 2, other 1))`. A run on `--platform` or one screen
+compares only what it measured.
+
 ### Generated branch tests: the act window
 
 Every generated test installs the mock, builds the harness, lets the
@@ -572,6 +719,56 @@ construction settle, writes the arranged state, and only then calls
 `rec.mark()` — `countFor`, `matchedCalls` and `lastBodyFor` read calls after
 the mark, so what the constructor fetched is not read as the method's doing.
 A hand-written test that never calls `mark()` reads every call, as before.
+
+### A scenario's `delayMs`: the order responses arrive in
+
+A scenario's `delayMs` delays its whole response by that many milliseconds
+after the request (at most 30000) — what `mock serve` does, on all three
+faces of the generated tests. So a row whose `when` picks a delayed scenario
+for one of two parallel requests makes that one arrive last, and a view model
+whose outcome depends on the arrival order can be driven by rows. `settle()`
+waits for every delayed response before it returns, draining again after
+each arrival, so `then` reads the state after they landed; past 31000 ms
+(one capped delay and a margin) it fails the test by name, with how long it
+waited. A screen with no `delayMs` generates what it did.
+
+### Requests no route declares
+
+A request during act that matches no declared route is answered 599 by the
+runtime — a response no server returns — so whatever the view model did next
+is made up. `rec.unmatchedCalls()` lists those requests in the window as
+`METHOD path`. Until the release `UNMATCHED_GATE_FROM` names, every generated
+test prints one warning per test that has any (`… reached no declared route
+and was answered 599 …; from jsonui-cli <release> this fails the test`); from
+that release it fails the test and names them. Unset, the warning names no
+release. Clear one by declaring the route and its scenarios (a repositories /
+useCases `endpoint` and a mock); a call the app's network layer makes around
+every request is admitted once, with `apiOutcomeRules` (below).
+
+Only the app's own API counts. A request to another host — an analytics SDK,
+say — is the info `unmatched_foreign: N — METHOD origin/path`, never a
+failure, and routes answer only the app's requests (another host's POST to a
+declared path is not served). Tell the runtime which hosts are the app's: on
+web, export `apiOrigins` from the screen's harness module (`export const
+apiOrigins = ["https://api.example.com"]`; a relative URL is always the
+app's); on iOS, give the harness `apiOrigin` (override it on
+`BaseBranchHarness`, or declare it on your own `BranchHarness`). Undeclared,
+the hosts cannot be told apart and every unmatched request counts as the
+app's — the message says to declare them. Android needs nothing: MockWebServer
+only ever sees the app's own requests.
+
+### Side calls the screen does not declare
+
+A rule's `sideCalls` name operations the app's network layer makes around a
+call — ApiClient's logout after a 401, say. When the screen does not declare
+such an operation, the generated test serves it anyway, as a **side route**:
+under its operationId, with its mock's default scenario (`generate
+branch-tests` prints a `side routes:` line). It is admitted only in the tests
+whose served statuses the rule names — a call to it anywhere else is the
+bound's red — and it is not an endpoint of the screen: `contracts coverage`
+requires nothing of it. An operationId that is already the screen's name for a
+different endpoint stops generation. An app without `apiOutcomeRules`
+generates what it did.
 
 ### Harness conditions (`harnessConditions`)
 
@@ -605,6 +802,16 @@ declaration error in `generate branch-tests` and in `contracts coverage`
 `condition_rows`. An app without `harnessConditions` gets none of this: its
 generated files are byte for byte what they were.
 
+Whether a condition changes anything is a question the rows do not answer: a
+row naming `harness.session: "present"` stays green if the session decides
+nothing it asserts. `generate branch-tests --condition-controls` adds, after
+each row that names a condition away from its default, a **control**
+(`[control: session=absent instead of present]`) that runs the same act and
+assertions with every condition at its default and never fails; when all of
+them still hold it prints `condition_without_effect: <row> …` (info, on the
+console — a JSON reporter does not show it). Off by default: it doubles those
+rows.
+
 ### `seedableState` on a view model built from `init` arguments
 
 `branchContracts.seedableState` names ViewModel-internal state a branch may
@@ -617,6 +824,13 @@ arrange step wrote before the seed then live on the old instance — the
 harness must replay them onto the new one (or apply the seed first). This
 is the harness's contract, not the runtime's: the read-back only tells you
 the seed took.
+
+On Android the runtime's `BaseBranchHarness.setState` writes each key to the
+view model's field and to the `_data` class — to each only when its type
+takes the value. A view model's state and the layout's data may share a name
+with different types (a `List<String>` of choices and the card collection
+drawing them): the key goes to the side that takes it. A key neither side
+takes, when either declares that name, fails naming the key and both types.
 
 ### Legacy Syntax
 

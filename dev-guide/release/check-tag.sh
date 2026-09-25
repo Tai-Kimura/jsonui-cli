@@ -76,6 +76,18 @@ case "$TAG" in v*) TAGSTAMP="v$STAMP";; *) TAGSTAMP="$STAMP";; esac
 ck "version stamp ($STAMP_FROM) == tag" "$TAGSTAMP" "$TAG"
 ck "version stamp ($STAMP_FROM) == arg" "$STAMP" "$VER"
 ck "working tree clean"           "$(g status --porcelain | wc -l | tr -d ' ')" "0"
+# Red-check xxxi (design §6.1, P3a-1, v4.18): every `*_GATE_FROM` literal —
+# the release from which something starts failing (validate on contracts
+# coverage, a branch test on an unmatched request, …) — judged on the pair
+# (the previous tag's value, this tree's): announcing names a release that can
+# follow the tag; at or below it only if the PREVIOUS tag carried the same
+# literal; unset stays unset unless withdrawn by hand ("withdrawn"); and
+# VALIDATE_GATE_FROM must be set. The constants are collected from the tree,
+# not named here; the count and every verdict are printed.
+GATE_VERDICT=$(python3 "$(dirname "$0")/validate_gate_version.py" "$VER" \
+  --repo "$R" "$BRANCH" "$PREV")
+printf '%s\n' "$GATE_VERDICT" | sed 's/^/     gate constants: /'
+ck "validate gate version (xxxi)"  "${GATE_VERDICT%% *}" "ok"
 
 # RANGE: the line and its contents must come from the SAME range.
 CNT=$(g rev-list --count "$PREV..$BRANCH")

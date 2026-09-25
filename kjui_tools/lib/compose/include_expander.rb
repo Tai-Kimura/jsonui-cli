@@ -11,6 +11,19 @@ module KjuiTools
     module IncludeExpander
       module_function
 
+      # The layouts ROOT every include path resolves from — top level and
+      # nested alike (design U8, 2026-09-25). The Python normalizer, rjui and
+      # both dynamic runtimes read include paths from the root, and the
+      # layouts measured on the consumer faces are written that way (all 3
+      # nested references resolve from the root, none from the including
+      # file's directory — which this expander used, so a screen or partial in
+      # a subdirectory failed with "Include file not found"). Set by the
+      # entry points that know the root; unset, a path resolves from
+      # base_dir as before.
+      class << self
+        attr_accessor :layouts_root
+      end
+
       # Convert snake_case to camelCase
       # e.g., "header1_title_label" -> "header1TitleLabel"
       def to_camel_case(str)
@@ -33,13 +46,14 @@ module KjuiTools
       # @param json_data [Hash] The JSON data to process
       # @param base_dir [String] Base directory for resolving include paths
       # @param id_prefix [String, nil] Optional ID prefix to apply
+      # @param layouts_root [String, nil] The root include paths resolve from
       # @return [Hash] The processed JSON with includes expanded
-      def process_includes(json_data, base_dir, id_prefix = nil)
+      def process_includes(json_data, base_dir, id_prefix = nil, layouts_root = IncludeExpander.layouts_root)
         return json_data unless json_data.is_a?(Hash)
 
         # includeがある場合、ファイルを読み込んでインライン展開する
         if json_data['include']
-          include_file_path = File.join(base_dir, "#{json_data['include']}.json")
+          include_file_path = File.join(layouts_root || base_dir, "#{json_data['include']}.json")
           unless File.exist?(include_file_path)
             raise "Include file not found: #{include_file_path}"
           end
@@ -82,7 +96,8 @@ module KjuiTools
 
           # IDプレフィックスを適用して再帰処理
           json_data = apply_id_prefix(included_json, new_prefix)
-          json_data = process_includes(json_data, File.dirname(include_file_path), new_prefix)
+          json_data = process_includes(json_data, layouts_root || File.dirname(include_file_path),
+                                       new_prefix, layouts_root)
           return json_data
         end
 
@@ -95,9 +110,9 @@ module KjuiTools
         child_key = json_data['child'] ? 'child' : (json_data['children'] ? 'children' : nil)
         if child_key
           if json_data[child_key].is_a?(Array)
-            json_data[child_key] = json_data[child_key].map { |child| process_includes(child, base_dir, id_prefix) }
+            json_data[child_key] = json_data[child_key].map { |child| process_includes(child, base_dir, id_prefix, layouts_root) }
           else
-            json_data[child_key] = process_includes(json_data[child_key], base_dir, id_prefix)
+            json_data[child_key] = process_includes(json_data[child_key], base_dir, id_prefix, layouts_root)
           end
 
           # childrenをchildに正規化 (後の処理で一貫性を保つため)

@@ -77,6 +77,7 @@ def _fresh_mock_source():
     """
     from jsonui_test_cli.validation import mock as _mock_mod
     from jsonui_test_cli.validation import step as _step_mod
+    from jsonui_test_cli.validation import declared_paths as _paths_mod
     _mock_mod.set_mock_source()
     _mock_mod._MOCK_INDEX_CACHE.clear()
     # The project's declared platforms are resolved once per run and held the
@@ -84,7 +85,14 @@ def _fresh_mock_source():
     # otherwise decide what later modules' warnings mean. Undeclared is the
     # default a fresh process starts from.
     _step_mod.set_project_platforms()
+    # And where declared paths resolve from — set once per run from the config
+    # it read, held the same way. Missing here until an in-process `validate`
+    # on a project with a config (the coverage-section arms) ran before
+    # test_validator: its document-path arms then checked against that
+    # project's root and failed on nothing but the order (2026-09-25).
+    _paths_mod.set_path_roots(None)
     yield
     _mock_mod.set_mock_source()
     _mock_mod._MOCK_INDEX_CACHE.clear()
     _step_mod.set_project_platforms()
+    _paths_mod.set_path_roots(None)

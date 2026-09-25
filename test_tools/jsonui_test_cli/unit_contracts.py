@@ -37,6 +37,7 @@ import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from .swift_isolation import TEST_METHOD_ISOLATION, xctest_class_header
 from .branch_tests import (
     BranchTestGenerationError,
     _is_sub_spec_of_a_parent,
@@ -2037,7 +2038,10 @@ _STUB_ESCAPE = {
 
 
 _STUB_BODY = {
-    "ios": '    func ' + IOS_TEST_PREFIX + '{name}() throws {{\n        XCTFail("not implemented: {intent}")\n    }}',
+    # The attribute: a filled-in body calls the app, MainActor wherever the
+    # app builds @MainActor (swift_isolation).
+    "ios": '    ' + TEST_METHOD_ISOLATION + ' func ' + IOS_TEST_PREFIX
+           + '{name}() throws {{\n        XCTFail("not implemented: {intent}")\n    }}',
     "android": '    @Test\n    fun `{name}`() {{\n        fail("not implemented: {intent}")\n    }}',
     "web": "  it('{name}', () => {{\n    throw new Error('not implemented: {intent}');\n  }});",
 }
@@ -2048,7 +2052,12 @@ _STUB_BODY = {
 #: These come from config, and generation refuses without them rather than
 #: emitting a file that cannot build.
 _STUB_FILE = {
-    "ios": "import XCTest\n@testable import {module}\n\nfinal class {target}ContractTests: XCTestCase {{\n"
+    # The class line is written once, when the file is created (it is
+    # outside the markers), by swift_isolation — the declaration branch-tests
+    # writes, so a test target whose default isolation is MainActor compiles
+    # it as generated. Existing files keep the line they have: merge_stubs
+    # replaces only the marker region.
+    "ios": "import XCTest\n@testable import {module}\n\n{ios_class}\n"
            + STUB_BEGIN + "\n{body}\n" + STUB_END + "\n}}\n",
     "android": "package {package}\n\nimport org.junit.Test\nimport org.junit.Assert.fail\n\n"
                "class {target}ContractTest {{\n"
@@ -2103,7 +2112,8 @@ def stub_text(
         for c in cases
     )
     return template.format(
-        target=target or "Unit", body=body, module=module or "", package=package or ""
+        target=target or "Unit", body=body, module=module or "", package=package or "",
+        ios_class=xctest_class_header(f"{target or 'Unit'}ContractTests"),
     )
 
 

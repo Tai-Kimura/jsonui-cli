@@ -971,6 +971,11 @@ def cmd_validate_spec(args):
         for warning in result.warnings:
             print(warning)
 
+    if result.infos:
+        print(f"\nInfo ({len(result.infos)}) — reported, not counted:")
+        for info in result.infos:
+            print(info)
+
     print()
     if result.is_valid:
         print("Result: PASSED")
@@ -978,6 +983,8 @@ def cmd_validate_spec(args):
         print("Result: FAILED")
 
     print(f"Errors: {result.error_count}, Warnings: {result.warning_count}")
+    if result.infos:
+        print(f"Info: {result.info_count}")
 
     return 0 if result.is_valid else 1
 
@@ -999,18 +1006,22 @@ def cmd_validate_spec_batch(input_dir: Path):
     failed: list[Path] = []
     total_errors = 0
     total_warnings = 0
+    total_infos = 0
     for spec_file in spec_files:
         result = validator.validate_file(spec_file)
         total_errors += result.error_count
         total_warnings += result.warning_count
+        total_infos += result.info_count
         if not result.is_valid:
             failed.append(spec_file)
-        if result.errors or result.warnings:
+        if result.errors or result.warnings or result.infos:
             print(f"\n{spec_file}")
             for error in result.errors:
                 print(error)
             for warning in result.warnings:
                 print(warning)
+            for info in result.infos:
+                print(info)
 
     # Only reachable in batch mode, and only worth reaching there: one
     # repository method declared by several screens is how a shared component
@@ -1054,6 +1065,8 @@ def cmd_validate_spec_batch(input_dir: Path):
     else:
         print(f"Result: PASSED ({len(spec_files)} spec file(s))")
     print(f"Errors: {total_errors}, Warnings: {total_warnings}")
+    if total_infos:
+        print(f"Info: {total_infos} (reported, not counted)")
 
     return 1 if (failed or cross or comp_errors) else 0
 
@@ -1897,6 +1910,11 @@ def cmd_validate_component(args):
         for warning in result.warnings:
             print(warning)
 
+    if result.infos:
+        print(f"\nInfo ({len(result.infos)}) — reported, not counted:")
+        for info in result.infos:
+            print(info)
+
     print()
     if result.is_valid:
         print("Result: PASSED")
@@ -1904,6 +1922,8 @@ def cmd_validate_component(args):
         print("Result: FAILED")
 
     print(f"Errors: {result.error_count}, Warnings: {result.warning_count}")
+    if result.infos:
+        print(f"Info: {result.info_count}")
 
     return 0 if result.is_valid else 1
 

@@ -38,6 +38,7 @@ from ..core.platform_resolver import PlatformResolver
 from ..core.protocol_sync import (
     collect_protocol_members,
     list_impl_method_names,
+    list_impl_narrowed_vars,
     list_impl_var_names,
 )
 from ..core.spec_extractor import ScreenSpec, extract_screen_spec
@@ -290,6 +291,12 @@ def cmd_build(args: argparse.Namespace) -> int:
     with clock.stage("responsive variant check"):
         variants_ok = _check_variant_constraints(config_mgr)
     if variants_ok is False:
+        return 1
+
+    # Hard gate: no two nodes under one id once includes expand (design U8).
+    with clock.stage("layout id uniqueness"):
+        ids_ok = _check_layout_id_uniqueness(config_mgr, platforms)
+    if ids_ok is False:
         return 1
 
     # Localize scan (opt-in). Findings are PRINTED as build warnings and
@@ -1038,7 +1045,14 @@ def _run_tool(cmd: list[str], cwd: Path) -> bool:
     tool_name = cmd[0]
     resolved = resolve_tool(tool_name, cwd)
     actual_cmd = [resolved] + cmd[1:]
-    env = build_tool_env(resolved, tool_name)
+    extra = None
+    if tool_name == "rjui":
+        # Design U8: whether web prefixes the ids inside an include is decided
+        # HERE, once, from INCLUDE_ID_PREFIX_GATE_FROM; rjui only follows it
+        # (run standalone it keeps the old spelling and says so).
+        from ..core.layout_facts import include_id_prefix_env
+        extra = {"JSONUI_INCLUDE_ID_PREFIX": include_id_prefix_env()}
+    env = build_tool_env(resolved, tool_name, extra=extra)
 
     try:
         result = subprocess.run(actual_cmd, cwd=cwd, env=env)
@@ -2102,6 +2116,54 @@ def _spec_cell_layout_stems(config_mgr: ConfigManager) -> set[str]:
     return stems
 
 
+def _check_layout_id_uniqueness(config_mgr: ConfigManager, platforms) -> bool:
+    """Hard gate: every layout's ids are unique once includes expand (U8).
+
+    An include's id prefixes the ids inside it (`hero` + `type_badge` ->
+    `heroTypeBadge`), so two spellings can meet: `type_badge` and
+    `typeBadge` in one partial, `hero` + `card_type_badge` beside
+    `hero_card` + `type_badge`, one partial included twice under one id.
+    The runtime and every driver find an element by its id as written, so
+    a test would reach one of them and never know about the other. Read with
+    `jui_cli.core.layout_facts` — the one expander the spec validator and
+    coverage read — per platform the project builds (all three when it
+    declares none).
+    """
+    from ..core.layout_facts import duplicate_ids
+    from ..core.platform_resolver import VALID_PLATFORMS
+
+    layouts_dir = config_mgr.layouts_directory
+    if not layouts_dir.exists():
+        return True
+    skip_prefixes = {"Resources"}
+    styles_src = config_mgr.styles_directory
+    if styles_src.exists() and layouts_dir in styles_src.parents:
+        skip_prefixes.add(styles_src.relative_to(layouts_dir).parts[0])
+    targets = [p for p in VALID_PLATFORMS if not platforms or p in platforms]
+    styles_dir = styles_src if styles_src.exists() else layouts_dir
+
+    errors: list[str] = []
+    for src_file in sorted(layouts_dir.rglob("*.json")):
+        rel = src_file.relative_to(layouts_dir)
+        if rel.parts[0] in skip_prefixes:
+            continue
+        name = rel.with_suffix("").as_posix()
+        for platform, dups in duplicate_ids(name, targets, layouts_dir=layouts_dir,
+                                            styles_dir=styles_dir).items():
+            for element, count in sorted(dups.items()):
+                errors.append(f"{rel.as_posix()} ({platform}): '{element}' is the id of "
+                              f"{count} nodes once includes expand")
+    if not errors:
+        return True
+    print("ERROR [layout-ids]: an id must name one element — the runtime and every "
+          "driver find an element by its id, so a test would reach only one of these. "
+          "Rename one of each (an include's id prefixes the ids inside it: "
+          "`hero` + `type_badge` -> `heroTypeBadge`):")
+    for line in errors:
+        print(f"  - {line}")
+    return False
+
+
 def _check_variant_constraints(config_mgr: ConfigManager) -> bool:
     """Hard gate for responsive variant files (``home@regular.json``).
 
@@ -2505,6 +2567,23 @@ def _sync_repository_protocols(
     return True
 
 
+def _narrowed_var_fix(platform: str, var) -> str:
+    """The declaration the protocol accepts for a spec var the Impl narrowed:
+    a read-only member may keep its setter private, a settable one may not."""
+    sig = var.signature
+    if platform == "ios":
+        if "{ get set }" in sig:
+            return f"write `var {var.name}` — the protocol declares {{ get set }}"
+        return f"write `private(set) var {var.name}` to keep the setter private"
+    if "StateFlow<" in sig:
+        return (f"write `override val {var.name}: StateFlow<…>` over a private "
+                f"MutableStateFlow — the protocol declares a StateFlow")
+    if sig.lstrip().startswith("var "):
+        return f"write `override var {var.name}` — the protocol declares a setter"
+    return (f"write `override var {var.name} … private set` (or `override val "
+            f"{var.name}`) to keep the setter private")
+
+
 def _sync_viewmodel_protocols(
     config_mgr: ConfigManager,
     config: dict,
@@ -2673,6 +2752,21 @@ def _sync_viewmodel_protocols(
                     f"declares '{missing}' but no matching var/val found in Impl. "
                     f"Add the property declaration or remove from spec."
                 )
+            # A spec var the Impl declares with a modifier that narrows its
+            # reader counts as present (the scan accepts `private(set)`), but
+            # it cannot satisfy the protocol: Kotlin refuses the
+            # `private override var` injecting `override` would write, and
+            # Swift's `private var` meets no requirement. Named with the fix
+            # the protocol allows, and left out of the injection below.
+            narrowed = (list_impl_narrowed_vars(impl_source, platform)
+                        if impl_source is not None else {})
+            narrowed_spec_vars = {v.name: v for v in sync_result.vars if v.name in narrowed}
+            for name, var in sorted(narrowed_spec_vars.items()):
+                errors.append(
+                    f"[{platform}] {impl_path}: dataFlow.viewModel.vars "
+                    f"declares '{name}' but the Impl declares it `{narrowed[name]}` — a "
+                    f"protocol member cannot be narrowed; {_narrowed_var_fix(platform, var)}."
+                )
 
             # Swift: external-label drift between Protocol signature and Impl.
             # Kotlin and TS don't have external labels, so this is iOS-only.
@@ -2737,7 +2831,8 @@ def _sync_viewmodel_protocols(
                         # so the existing Impl declaration needs `override`
                         # too — otherwise kotlinc warns
                         # "data hides member of supertype".
-                        var_names = ["data"] + [v.name for v in sync_result.vars]
+                        var_names = ["data"] + [v.name for v in sync_result.vars
+                                                if v.name not in narrowed_spec_vars]
                         updated = inject_kotlin_override(updated, method_names)
                         updated = inject_kotlin_var_override(updated, var_names)
                 except ValueError as e:

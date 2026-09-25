@@ -1806,6 +1806,7 @@ def _extract_fields(
                 wire_name=prop_name,
                 type=ftype_with_null,
                 required=is_required,
+                nullable=bool(prop_body.get("nullable")),
                 description=_str_or_none(prop_body.get("description")),
                 deprecated=bool(prop_body.get("deprecated", False)),
                 default=prop_body.get("default") if "default" in prop_body else None,

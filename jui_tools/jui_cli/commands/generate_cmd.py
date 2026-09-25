@@ -428,13 +428,24 @@ def _cmd_generate_project(args: argparse.Namespace) -> int:
             return 1
         print(f"Found {len(spec_files)} spec file(s)")
 
-    # Validate specs
+    # Validate specs. The validator is found beside this jui (see
+    # document_tools_import): the launcher's sys.path alone never reached it,
+    # so every face skipped this step with one WARNING line.
     config_mgr.ensure_document_tools_importable()
-    try:
-        from document_tools.jsonui_doc_cli.spec_doc.validator import SpecValidator
+    from ..core.document_tools_import import load_spec_validator
+    SpecValidator, where = load_spec_validator()
+    if SpecValidator is None:
+        print(f"WARNING: document_tools not available, skipping validation ({where})")
+    else:
         validator = SpecValidator()
         for sf in spec_files:
-            result = validator.validate_file(sf)
+            try:
+                result = validator.validate_file(sf)
+            except ImportError as e:
+                # The validator was found but a module it needs was not — name
+                # it rather than folding it into "not available".
+                print(f"WARNING: spec validation could not run ({e}); skipping validation")
+                break
             if not result.is_valid:
                 print(f"\nERROR: Validation failed for {sf.name}:")
                 for e in result.errors:
@@ -442,8 +453,8 @@ def _cmd_generate_project(args: argparse.Namespace) -> int:
                 return 1
             for w in result.warnings:
                 print(f"  {w}")
-    except ImportError:
-        print("WARNING: document_tools not available, skipping validation")
+            for i in getattr(result, "infos", []):
+                print(f"  {i}")
 
     # Load type mapper
     type_map_path = Path(args.type_map) if args.type_map else config_mgr.type_map_file
