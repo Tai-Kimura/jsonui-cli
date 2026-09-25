@@ -191,8 +191,8 @@ call(rec, "(unmatched)")
 check("unmatched-names-only-the-window", rec.unmatchedCalls() == ["GET /(unmatched)"])
 // The warning before the gate: compiled and run here (nothing else compiles
 // the file-scope Swift runtime without an app's XCTest target).
-reportUnmatched(rec.unmatchedCalls(), "9.9.9")
-reportUnmatched([], nil)
+reportUnmatched(rec.unmatchedCalls(), "9.9.9", "row A")
+reportUnmatched([], nil, "row B")
 '''
 
 
@@ -200,6 +200,7 @@ def _run_swift_window(tmp_path: Path, runtime: str) -> tuple[dict, str]:
     parts = [_swift_block(runtime, "struct RecordedCall {"),
              _swift_block(runtime, "private func quotedValue("),
              _swift_block(runtime, "final class Recorder {"),
+             _swift_block(runtime, "func notice("),
              _swift_block(runtime, "func reportUnmatched(")]
     (tmp_path / "shim.swift").write_text(_SWIFT_SHIM, encoding="utf-8")
     (tmp_path / "runtime.swift").write_text(
@@ -255,8 +256,8 @@ fun main() {
   call(rec, "(unmatched)")
   check("unmatched-names-only-the-window", rec.unmatchedCalls() == listOf("GET /(unmatched)"))
   // The warning before the gate, compiled and run (see the Swift probe).
-  reportUnmatched(rec.unmatchedCalls(), "9.9.9")
-  reportUnmatched(emptyList(), null)
+  reportUnmatched(rec.unmatchedCalls(), "9.9.9", "row A")
+  reportUnmatched(emptyList(), null, "row B")
 }
 '''
 
@@ -268,8 +269,12 @@ def _kotlin_window_source(runtime: str) -> str:
         i = runtime.index(signature)
         return runtime[i:runtime.index("\n}\n", i) + 3]
 
+    # The notice exit: the stream it writes to, then the function.
+    notice = runtime[runtime.index("private val noticeStream ="):]
+    notice = notice[:notice.index("\n}\n", notice.index("fun notice(")) + 3]
     return "\n\n".join([recorded_call, block("private fun quotedValue("),
-                        block("class Recorder("), block("fun reportUnmatched(")]) + _KOTLIN_WINDOW_MAIN
+                        block("class Recorder("), notice,
+                        block("fun reportUnmatched(")]) + _KOTLIN_WINDOW_MAIN
 
 
 def _run_kotlin_window(tmp_path: Path, runtime: str) -> tuple[dict, str]:

@@ -738,15 +738,17 @@ A request during act that matches no declared route is answered 599 by the
 runtime — a response no server returns — so whatever the view model did next
 is made up. `rec.unmatchedCalls()` lists those requests in the window as
 `METHOD path`. Until the release `UNMATCHED_GATE_FROM` names, every generated
-test prints one warning per test that has any (`… reached no declared route
-and was answered 599 …; from jsonui-cli <release> this fails the test`); from
-that release it fails the test and names them. Unset, the warning names no
+test prints one warning per test that has any (`jsonui-test branch test
+[<screen>.<method> branch N: …] unmatched: … reached no declared route and was
+answered 599 …; from jsonui-cli <release> this fails the test` — where it goes:
+[Where the notices go](#where-the-notices-go)); from that release it fails the
+test and names them. Unset, the warning names no
 release. Clear one by declaring the route and its scenarios (a repositories /
 useCases `endpoint` and a mock); a call the app's network layer makes around
 every request is admitted once, with `apiOutcomeRules` (below).
 
 Only the app's own API counts. A request to another host — an analytics SDK,
-say — is the info `unmatched_foreign: N — METHOD origin/path`, never a
+say — is the info `… unmatched_foreign: N — METHOD origin/path`, never a
 failure, and routes answer only the app's requests (another host's POST to a
 declared path is not served). Tell the runtime which hosts are the app's: on
 web, export `apiOrigins` from the screen's harness module (`export const
@@ -815,9 +817,39 @@ nothing it asserts. `generate branch-tests --condition-controls` adds, after
 each row that names a condition away from its default, a **control**
 (`[control: session=absent instead of present]`) that runs the same act and
 assertions with every condition at its default and never fails; when all of
-them still hold it prints `condition_without_effect: <row> …` (info, on the
-console — a JSON reporter does not show it). Off by default: it doubles those
-rows.
+them still hold it prints `jsonui-test branch test [<row>]
+condition_without_effect: holds with … too …` (info; see [Where the notices
+go](#where-the-notices-go)). Off by default: it doubles those rows.
+
+### Where the notices go
+
+The three notices — `unmatched`, `unmatched_foreign`, `condition_without_effect`
+— are one line each, `jsonui-test branch test [<screen>.<method> <row title>]
+<kind>: <body>`, written to the test process's own stderr and nowhere else, on
+all three platforms:
+
+- **Not through the test runner's console capture.** The runner decides what
+  of it to show. vitest picks its agent reporter when an agent runs it
+  (`AI_AGENT`, or `CLAUDECODE`, `CODEX_SANDBOX`, … — std-env decides) and that
+  reporter drops every console line a passing test wrote; Gradle's Test task
+  shows a passing test's `System.out` / `System.err` only with
+  `testLogging.showStandardStreams`. Through the console, an agent read 0.
+- **Not stdout**: `vitest --reporter=json` writes its report there.
+- **Not both**: a runner that shows console would print each notice twice.
+
+So a run shows each notice once with any vitest reporter and in Gradle's
+console, and `grep '^jsonui-test branch test \['` over a run's stderr counts
+them. The row names the screen and method because stderr carries no runner
+heading. What still hides them: `xcodebuild -quiet` (it drops a passing test's
+output of every kind), and a pipe that keeps only stdout. On Android the lines
+are no longer in the test-results XML (`<system-err>`): that capture is what
+kept them off the console.
+
+A runtime generated before this change prints them through the console, with
+no row in the line (`jsonui-test branch test: …`, `unmatched_foreign: …`,
+`condition_without_effect: <row> …`): read those with `vitest
+--reporter=default` on web and from the test-results XML on Android — a 0 from
+a run that does not show console lines is not a measurement.
 
 ### `seedableState` on a view model built from `init` arguments
 

@@ -43,7 +43,7 @@ def _project(tmp_path: Path) -> Path:
     return _summary(tmp_path / "p", rows=_ROWS)
 
 
-def _run_web(root: Path) -> tuple[dict, str]:
+def _run_web(root: Path) -> tuple[dict, str, str, object]:
     report = _generate(root, condition_controls=True)
     harness = root / "tests/unit/branch-harness"
     (harness / "summary.ts").write_text(_SUMMARY_HARNESS, encoding="utf-8")
@@ -66,18 +66,22 @@ def _run_web(root: Path) -> tuple[dict, str]:
         if m:
             rows[m.group(2)] = (m.group(1) == "PASS", m.group(3) or "")
     assert rows, f"no rows:\n{run.stdout}\n{run.stderr[:4000]}"
-    return rows, run.stdout, report
+    return rows, run.stdout, run.stderr, report
 
 
 def test_xxxiii_the_control_says_when_a_condition_changes_nothing(tmp_path):
     tc.tool("node")
-    rows, out, report = _run_web(_project(tmp_path))
+    rows, out, err, report = _run_web(_project(tmp_path))
     assert report.condition_controls == 2           # rows 1 and 3 name the session
     controls = {n: v for n, v in rows.items() if "[control:" in n}
     assert len(controls) == 2 and all(v[0] for v in controls.values()), rows   # never fail
     assert all(v[0] for v in rows.values()), rows   # nor do the rows themselves
-    infos = [l for l in out.splitlines() if l.startswith("condition_without_effect:")]
-    assert len(infos) == 1, out
+    # The notice's exit is the process's stderr (a runner's console capture
+    # hid it), one line naming the row; stdout carries none of it.
+    infos = [l for l in err.splitlines()
+             if l.startswith("jsonui-test branch test [") and "] condition_without_effect: " in l]
+    assert len(infos) == 1, err
+    assert "condition_without_effect" not in out, out
     assert "branch 3:" in infos[0] and "session=absent instead of present" in infos[0], infos
     # Row 1: the session decides whether the account is read — no info for it.
     assert not any("branch 1:" in l for l in infos), infos
@@ -135,7 +139,7 @@ fun assertEquals(expected: Any?, actual: Any?) { if (expected != actual) throw A
 fun assertTrue(message: String, value: Boolean) { if (!value) throw AssertionError(message) }
 fun assertTrue(value: Boolean) { if (!value) throw AssertionError() }
 fun assertFieldEquals(expected: Any?, actual: Any?) { if (expected != actual) throw AssertionError() }
-fun reportUnmatched(calls: List<String>, gateFrom: String?) {}
+fun reportUnmatched(calls: List<String>, gateFrom: String?, row: String) {}
 '''
 
 
@@ -145,6 +149,9 @@ def _kotlin_control_probe(tmp_path: Path) -> str:
     runtime = report.runtime_file.read_text(encoding="utf-8")
     start = runtime.index("fun reportConditionWithoutEffect(")
     reporter = runtime[start:runtime.index("\n}\n", start) + 3]
+    notice = runtime[runtime.index("private val noticeStream ="):]
+    notice = notice[:notice.index("\n}\n", notice.index("fun notice(")) + 3]
+    reporter = notice + "\n" + reporter
     test = report.test_file.read_text(encoding="utf-8")
     body = test[test.index("fun `loadSummary branch 3 control`()"):]
     body = body[body.index("{ h, rec ->") + len("{ h, rec ->"):]
@@ -159,11 +166,12 @@ def _kotlin_control_probe(tmp_path: Path) -> str:
 def test_the_kotlin_control_compiles_holds_and_never_fails(tmp_path):
     run = tc.compile_and_run_kotlin(tmp_path, _kotlin_control_probe(tmp_path))
     assert run.returncode == 0, run.stderr[:3000]
-    lines = run.stdout.strip().splitlines()
-    # First call: every assertion holds -> the info. Second: status differs ->
-    # caught, silent. Then the probe goes on (the control did not throw).
-    assert len(lines) == 2 and lines[0].startswith("condition_without_effect:"), run.stdout
-    assert "branch 3:" in lines[0] and lines[1] == "done", run.stdout
+    # First call: every assertion holds -> the info, on fd 2. Second: status
+    # differs -> caught, silent. Then the probe goes on (it did not throw).
+    lines = run.stderr.strip().splitlines()
+    assert len(lines) == 1 and lines[0].startswith("jsonui-test branch test ["), run.stderr
+    assert "] condition_without_effect: holds with" in lines[0] and "branch 3:" in lines[0], run.stderr
+    assert run.stdout.strip() == "done", run.stdout
 
 
 # ------------------------------------------- Swift: type-checked, XCTest ---

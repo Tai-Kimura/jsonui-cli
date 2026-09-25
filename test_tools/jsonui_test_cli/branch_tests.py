@@ -1918,6 +1918,13 @@ def _row_title(contract: dict, row: "Row") -> str:
     return title
 
 
+def _notice_row(screen: str, method_name: str, contract: dict, row: "Row") -> str:
+    """The row a runtime notice names: `<screen>.<method> <row title>`. The line
+    goes to the process's stderr, which carries no runner heading (vitest's
+    `feed.load > branch 1: …`), and `branch 1` alone repeats in every method."""
+    return f"{screen}.{method_name} {_row_title(contract, row)}"
+
+
 def _control_label(row: "Row") -> str:
     """`session=absent instead of present` — the defaults a control runs with."""
     defaults = dict(row.conditions)
@@ -2014,7 +2021,8 @@ def render_test_file(
                     f"  // branch {item[1]} is platform-scoped "
                     f"({item[2]}) — not generated for web")
                 continue
-            lines.extend(_render_branch(method_name, params, contract, item[1], conditions))
+            lines.extend(_render_branch(method_name, params, contract, item[1], conditions,
+                                        screen=screen))
         lines.append("});")
         lines.append("")
 
@@ -2049,7 +2057,7 @@ def _collect_data_refs(then: dict) -> list[str]:
 
 def _render_branch(
     method_name: str, params: list[str], contract: dict, row: "Row",
-    conditions: dict,
+    conditions: dict, *, screen: str,
 ) -> list[str]:
     branch = row.branch
     when = branch.get("when") or {}
@@ -2117,8 +2125,10 @@ def _render_branch(
     if red:
         out.append(f"      expect(rec.unmatchedCalls(), {_ts(unmatched_message('web'))}).toEqual([]);")
     else:
-        out.append(f"      reportUnmatched(rec.unmatchedCalls(), {_ts(gate) if gate else 'null'});")
-    out.append("      reportUnmatchedForeign(rec.unmatchedForeign());")
+        out.append(f"      reportUnmatched(rec.unmatchedCalls(), {_ts(gate) if gate else 'null'}, "
+                   f"{_ts(_notice_row(screen, method_name, contract, row))});")
+    out.append(f"      reportUnmatchedForeign(rec.unmatchedForeign(), "
+               f"{_ts(_notice_row(screen, method_name, contract, row))});")
 
     for key, value in then.items():
         if key == "api":
@@ -2162,7 +2172,8 @@ def _render_branch(
         out[act_start:] = (["      let holds = true;", "      try {"] + body
                            + ["      } catch {", "        holds = false;", "      }",
                               f"      reportConditionWithoutEffect(holds, "
-                              f"{_ts(_row_title(contract, row))}, {_ts(_control_label(row))});"])
+                              f"{_ts(_notice_row(screen, method_name, contract, row))}, "
+                              f"{_ts(_control_label(row))});"])
     out.append("    } finally {")
     out.append("      rec.restore();")
     out.append("    }")
@@ -2454,24 +2465,40 @@ export function installFetchMock(
  * the declared "null" outcome. */
 /** Membership comparison for an unordered collection: every expected element
  *  must match a distinct actual element, in any order. */
+/** The one exit for this runtime's notices (unmatched, unmatched_foreign,
+ * condition_without_effect): the process's own stderr, one line naming the
+ * row. NOT console: a test runner decides which console output to show, and
+ * vitest's agent reporter (chosen when AI_AGENT, CLAUDECODE, CODEX_SANDBOX …
+ * is set) drops everything a passing test logged, so an agent read 0 notices
+ * whatever the rows did. NOT stdout: `--reporter=json` writes its report
+ * there. NOT both: a reporter that shows console would show each notice
+ * twice. Without a `process` (a browser), console.warn is the only exit. */
+function notice(row: string, kind: string, body: string): void {
+  const line = `jsonui-test branch test [${row}] ${kind}: ${body}`;
+  const proc = (globalThis as any).process;
+  if (proc && proc.stderr && typeof proc.stderr.write === "function") {
+    proc.stderr.write(line + "\\n");
+  } else {
+    console.warn(line);
+  }
+}
+
 /** P2e(b): a condition control ran the row with its conditions at their
  * defaults; when every assertion still held, the condition does not change
  * what the row asserts. Info, never a failure. */
 export function reportConditionWithoutEffect(holds: boolean, row: string, defaults: string): void {
   if (!holds) return;
-  console.info(
-    `condition_without_effect: ${row} holds with ${defaults} too — ` +
-      "the condition does not change what the row asserts"
-  );
+  notice(row, "condition_without_effect",
+    `holds with ${defaults} too — the condition does not change what the row asserts`);
 }
 
 /** Before the release that fails a generated test on them (P2e(a)): one
  * warning naming the requests in the act window no declared route answered.
  * `gateFrom` is that release, or null when none is announced. */
-export function reportUnmatched(calls: string[], gateFrom: string | null): void {
+export function reportUnmatched(calls: string[], gateFrom: string | null, row: string): void {
   if (calls.length === 0) return;
-  console.warn(
-    `jsonui-test branch test: ${calls.join(", ")} reached no declared route and ` +
+  notice(row, "unmatched",
+    `${calls.join(", ")} reached no declared route and ` +
       "was answered 599, which no server returns — declare the route and its " +
       "scenarios (dataFlow + mock); if a host named here is not the app's API, " +
       "export apiOrigins from the harness" +
@@ -2479,15 +2506,14 @@ export function reportUnmatched(calls: string[], gateFrom: string | null): void 
         ? "; the release announced to fail this test was withdrawn — it does not fail"
         : gateFrom
           ? `; from jsonui-cli ${gateFrom} this fails the test`
-          : "")
-  );
+          : ""));
 }
 
 /** Requests in the act window to hosts that are not the app's API (P2e(a),
  * v4.19): info, never a failure. */
-export function reportUnmatchedForeign(calls: string[]): void {
+export function reportUnmatchedForeign(calls: string[], row: string): void {
   if (calls.length === 0) return;
-  console.info(`unmatched_foreign: ${calls.length} — ${calls.join(", ")}`);
+  notice(row, "unmatched_foreign", `${calls.length} — ${calls.join(", ")}`);
 }
 
 export function setMismatches(
@@ -2966,14 +2992,14 @@ def render_kotlin_test_file(
                     f"({item[2]}) — not generated for android")
                 continue
             lines.extend(_render_kotlin_branch(
-                pascal, method_name, params, contract, item[1], conditions))
+                pascal, method_name, params, contract, item[1], conditions, screen=screen))
     lines.append("}")
     return "\n".join(lines) + "\n", report
 
 
 def _render_kotlin_branch(
     pascal: str, method_name: str, params: list[str], contract: dict,
-    row: "Row", conditions: dict,
+    row: "Row", conditions: dict, *, screen: str,
 ) -> list[str]:
     branch = row.branch
     number = row.number
@@ -3050,7 +3076,8 @@ def _render_kotlin_branch(
         out.append(f"      assertEquals({_kt_str(unmatched_message('android'))}, emptyList<String>(), "
                    "rec.unmatchedCalls())")
     else:
-        out.append(f"      reportUnmatched(rec.unmatchedCalls(), {_kt_str(gate) if gate else 'null'})")
+        out.append(f"      reportUnmatched(rec.unmatchedCalls(), {_kt_str(gate) if gate else 'null'}, "
+                   f"{_kt_str(_notice_row(screen, method_name, contract, row))})")
 
     for key, value in then.items():
         if key == "api":
@@ -3091,7 +3118,8 @@ def _render_kotlin_branch(
         out[act_start:] = (["      val holds = try {"] + body
                            + ["        true", "      } catch (e: Throwable) {", "        false", "      }",
                               f"      reportConditionWithoutEffect(holds, "
-                              f"{_kt_str(_row_title(contract, row))}, {_kt_str(_control_label(row))})"])
+                              f"{_kt_str(_notice_row(screen, method_name, contract, row))}, "
+                              f"{_kt_str(_control_label(row))})"])
     out.append("    }")
     out.append("  }")
     return out
@@ -3236,26 +3264,38 @@ class Recorder(routeOps: Set<String>? = null) {
     windowed().filter { it.op == "(unmatched)" }.map { "${it.method} ${it.path}" }.distinct().sorted()
 }
 
+/** The one exit for this runtime's notices (unmatched, condition_without_effect):
+ * the JVM's own file descriptor 2, one line naming the row. NOT System.out /
+ * System.err: Gradle's Test task replaces both and shows a passing test's
+ * output only with testLogging.showStandardStreams, so the lines reached the
+ * XML report and never the console. NOT both: a face that sets
+ * showStandardStreams would show each notice twice. */
+private val noticeStream =
+  java.io.PrintStream(java.io.FileOutputStream(java.io.FileDescriptor.err), true, "UTF-8")
+
+fun notice(row: String, kind: String, body: String) {
+  noticeStream.println("jsonui-test branch test [$row] $kind: $body")
+}
+
 /** P2e(b): see the web runtime. Info, never a failure. */
 fun reportConditionWithoutEffect(holds: Boolean, row: String, defaults: String) {
   if (!holds) return
-  println("condition_without_effect: $row holds with $defaults too — " +
-    "the condition does not change what the row asserts")
+  notice(row, "condition_without_effect",
+    "holds with $defaults too — the condition does not change what the row asserts")
 }
 
 /** Before the release that fails a generated test on them (P2e(a)): one
  * warning naming the requests in the act window no declared route answered.
  * `gateFrom` is that release, or null when none is announced. */
-fun reportUnmatched(calls: List<String>, gateFrom: String?) {
+fun reportUnmatched(calls: List<String>, gateFrom: String?, row: String) {
   if (calls.isEmpty()) return
-  System.err.println(
-    "jsonui-test branch test: ${calls.joinToString(", ")} reached no declared route and " +
+  notice(row, "unmatched",
+    "${calls.joinToString(", ")} reached no declared route and " +
       "was answered 599, which no server returns — declare the route and its " +
       "scenarios (dataFlow + mock)" +
       (if (gateFrom == null) ""
        else if (gateFrom == "withdrawn") "; the release announced to fail this test was withdrawn — it does not fail"
-       else "; from jsonui-cli $gateFrom this fails the test")
-  )
+       else "; from jsonui-cli $gateFrom this fails the test"))
 }
 
 /** '@data.<field>' pre-act capture marker for partial matching / asserts. */
@@ -3949,14 +3989,14 @@ def render_swift_test_file(
                     f"({item[2]}) — not generated for ios")
                 continue
             lines.extend(_render_swift_branch(
-                pascal, method_name, params, contract, item[1], conditions))
+                pascal, method_name, params, contract, item[1], conditions, screen=screen))
     lines.append("}")
     return "\n".join(lines) + "\n", report
 
 
 def _render_swift_branch(
     pascal: str, method_name: str, params: list[str], contract: dict,
-    row: "Row", conditions: dict,
+    row: "Row", conditions: dict, *, screen: str,
 ) -> list[str]:
     branch = row.branch
     number = row.number
@@ -4033,8 +4073,10 @@ def _render_swift_branch(
     if red:
         out.append(f"      XCTAssertEqual(rec.unmatchedCalls(), [], {_swift_str(unmatched_message('ios'))})")
     else:
-        out.append(f"      reportUnmatched(rec.unmatchedCalls(), {_swift_str(gate) if gate else 'nil'})")
-    out.append("      reportUnmatchedForeign(rec.unmatchedForeign())")
+        out.append(f"      reportUnmatched(rec.unmatchedCalls(), {_swift_str(gate) if gate else 'nil'}, "
+                   f"{_swift_str(_notice_row(screen, method_name, contract, row))})")
+    out.append(f"      reportUnmatchedForeign(rec.unmatchedForeign(), "
+               f"{_swift_str(_notice_row(screen, method_name, contract, row))})")
 
     for key, value in then.items():
         if key == "api":
@@ -4076,7 +4118,8 @@ def _render_swift_branch(
                            + ["      let holds = (self.controlIssues ?? 0) == 0",
                               "      self.controlIssues = nil",
                               f"      reportConditionWithoutEffect(holds, "
-                              f"{_swift_str(_row_title(contract, row))}, {_swift_str(_control_label(row))})"])
+                              f"{_swift_str(_notice_row(screen, method_name, contract, row))}, "
+                              f"{_swift_str(_control_label(row))})"])
     out.append("    }")
     out.append("  }")
     return out
@@ -4262,26 +4305,36 @@ nonisolated final class Recorder {
   }
 }
 
+/// The one exit for this runtime's notices (unmatched, unmatched_foreign,
+/// condition_without_effect): the process's stderr, one line naming the row —
+/// the exit the web and Android runtimes use, where a test runner's console
+/// capture hid them. xcodebuild shows a passing test's stdout and stderr
+/// alike and `-quiet` drops both, so here the exit keeps the faces on one
+/// line shape rather than making a line visible.
+nonisolated func notice(_ row: String, _ kind: String, _ body: String) {
+  FileHandle.standardError.write(Data("jsonui-test branch test [\\(row)] \\(kind): \\(body)\\n".utf8))
+}
+
 /// Requests in the act window to hosts that are not the app's API (P2e(a),
 /// v4.19): info, never a failure.
-nonisolated func reportUnmatchedForeign(_ calls: [String]) {
+nonisolated func reportUnmatchedForeign(_ calls: [String], _ row: String) {
   if calls.isEmpty { return }
-  print("unmatched_foreign: \\(calls.count) — \\(calls.joined(separator: ", "))")
+  notice(row, "unmatched_foreign", "\\(calls.count) — \\(calls.joined(separator: ", "))")
 }
 
 /// P2e(b): see the web runtime. Info, never a failure.
 nonisolated func reportConditionWithoutEffect(_ holds: Bool, _ row: String, _ defaults: String) {
   if !holds { return }
-  print("condition_without_effect: \\(row) holds with \\(defaults) too — "
-    + "the condition does not change what the row asserts")
+  notice(row, "condition_without_effect",
+    "holds with \\(defaults) too — the condition does not change what the row asserts")
 }
 
 /// Before the release that fails a generated test on them (P2e(a)): one
 /// warning naming the requests in the act window no declared route answered.
 /// `gateFrom` is that release, or nil when none is announced.
-nonisolated func reportUnmatched(_ calls: [String], _ gateFrom: String?) {
+nonisolated func reportUnmatched(_ calls: [String], _ gateFrom: String?, _ row: String) {
   if calls.isEmpty { return }
-  print("jsonui-test branch test: \\(calls.joined(separator: ", ")) reached no declared route and "
+  notice(row, "unmatched", "\\(calls.joined(separator: ", ")) reached no declared route and "
     + "was answered 599, which no server returns — declare the route and its "
     + "scenarios (dataFlow + mock); if a host named here is not the app's API, "
     + "give the harness apiOrigin"

@@ -172,6 +172,12 @@ rc=$?; say "   exit=$rc"; [ "$rc" = 0 ] || bad "rjui_tools: spec support not ins
 # why, because `| tail -3` had already thrown the reasons away. Measured
 # 2026-09-11: worktree created 15:02:22, test_tools ran 15:02:35–15:03:33,
 # npm ci created tsc at 15:06:47. Order is the defect; this is the fix.
+# The same order, for the pinned vitest the agent-reporter arms run
+# (test_branch_notices_reach_agent_runs.py): absent, they skip with a named
+# reason, and a skip is not a failure here — so the install is the leg.
+say "== vitest for the agent-reporter arms (npm ci --prefix test_tools/tests/fixtures/vitest-pin)"
+(cd "$C" && npm ci --prefix test_tools/tests/fixtures/vitest-pin --prefer-offline --no-audit --no-fund 2>&1 | tail -1)
+rc=$?; say "   exit=$rc"; [ "$rc" = 0 ] || bad "test_tools: the pinned vitest is not installed — the agent-reporter arms would skip"
 say "== CI=${CI:-(unset)} — the test_tools leg mirrors ci.yml:184's --ignore"
 py_suite test_tools jsonui_test_cli \
     --ignore=tests/test_stub_name_tables_reach_a_compiler.py
