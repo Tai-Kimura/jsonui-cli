@@ -352,20 +352,43 @@ def _feed_with_a_delay(root: Path, *, without_the_row_timeout: bool = False) -> 
     return root
 
 
-def _vitest(root: Path) -> subprocess.CompletedProcess:
+def _vitest(root: Path) -> tuple[subprocess.CompletedProcess, list[tuple[str, str, str]]]:
+    """Run the pinned vitest; each test's (name, outcome, failure message),
+    read from the junit reporter's file.
+
+    Not from what vitest prints: that depends on where it runs. On GitHub
+    Actions it adds a `::error file=…` annotation carrying each failure's
+    message, so a count of "Test timed out in 5000ms" over the output read 4
+    there and 2 on a developer machine for the same two timeouts (CI run
+    36139124943). The file holds one entry per test whatever the reporters
+    around it print. Not the JSON reporter's: vitest 4.1.11 writes a timeout
+    there as "Error: STACK_TRACE_ERROR" and a stack, without the message."""
+    import xml.etree.ElementTree as ET
+
     from tests import test_branch_notices_reach_agent_runs as n
     tc.tool("node")
     n._vitest()
-    return n._vitest_run(root, {})
+    out = root / "vitest-junit.xml"
+    run = n._vitest_run(root, {}, "--reporter=junit", f"--outputFile={out}")
+    assert out.is_file(), (run.stdout + run.stderr)[-4000:]
+    tests = []
+    for case in ET.parse(out).getroot().iter("testcase"):
+        failure = case.find("failure")
+        outcome = ("failed" if failure is not None
+                   else "skipped" if case.find("skipped") is not None else "passed")
+        tests.append((case.get("name", ""), outcome,
+                      "" if failure is None else failure.get("message", "")))
+    return run, tests
 
 
 def test_web_a_row_that_waits_past_vitests_default_timeout_runs_to_its_end(tmp_path):
     assert PAST_VITEST_DEFAULT_MS > 5000
-    run = _vitest(_feed_with_a_delay(tmp_path / "p"))
-    assert run.returncode == 0 and "Tests  2 passed (2)" in run.stdout, (run.stdout + run.stderr)[-4000:]
+    run, tests = _vitest(_feed_with_a_delay(tmp_path / "p"))
+    assert run.returncode == 0 and [s for _, s, _ in tests] == ["passed", "passed"], tests
 
 
 def test_web_control_without_the_row_timeout_vitest_ends_it_naming_nothing(tmp_path):
-    run = _vitest(_feed_with_a_delay(tmp_path / "p", without_the_row_timeout=True))
-    both = run.stdout + run.stderr
-    assert run.returncode != 0 and both.count("Test timed out in 5000ms") == 2, both[-4000:]
+    run, tests = _vitest(_feed_with_a_delay(tmp_path / "p", without_the_row_timeout=True))
+    assert run.returncode != 0, tests
+    # Per test, not per line: each of the two rows failed, and on the timeout.
+    assert [(s, "Test timed out in 5000ms" in m) for _, s, m in tests] == [("failed", True)] * 2, tests
