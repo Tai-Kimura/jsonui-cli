@@ -14,6 +14,7 @@ require_relative '../../core/resources/color_manager'
 require_relative '../../react/react_generator'
 require_relative '../../react/style_loader'
 require_relative '../../core/layout_validator'
+require_relative '../../core/generated_orphans'
 require_relative '../../core/plural_validator'
 require_relative '../../react/data_model_generator'
 require_relative '../../react/viewmodel_generator'
@@ -306,6 +307,7 @@ module RjuiTools
           # them as missing markers.
           prune_orphan_components(expected_component_paths)
           prune_orphan_viewmodel_bases(json_files)
+          prune_layout_orphans
 
           # Print all collected warnings at the end
           print_validation_summary
@@ -403,6 +405,29 @@ module RjuiTools
           removed.each { |p| Core::Logger.info("  - #{p}") }
 
           cleanup_empty_dirs(vm_base_dir)
+        end
+
+        # A deleted layout's Data model and hook, by the rule the three faces
+        # share (lib/core/generated_orphans.rb): deleted when the file carries
+        # @generated, sits where the config puts that output, and no layout
+        # has its name. A hand-written ViewModel of that name is named, not
+        # deleted. The two prunes above predate it and keep their own rules.
+        def prune_layout_orphans
+          data = React::DataModelGenerator.new
+          hooks = React::HookGenerator.new
+          orphans = JsonUIShared::GeneratedOrphans
+          kinds = [
+            orphans::Kind.new(dir: data.data_dir, owner: :generator,
+                              pattern: /\A(?<name>[A-Za-z0-9_]+)Data\.(?:ts|js)\z/),
+            orphans::Kind.new(dir: hooks.hooks_dir, owner: :generator,
+                              pattern: /\Ause(?<name>[A-Za-z0-9_]+)ViewModel\.(?:ts|js)\z/),
+            orphans::Kind.new(dir: hooks.viewmodels_dir, owner: :user,
+                              pattern: /\A(?<name>[A-Za-z0-9_]+)ViewModel\.(?:ts|js)\z/)
+          ]
+          result = orphans.sweep(layouts_dir: data.layouts_dir, kinds: kinds)
+          orphans.report_lines(result, base: data.source_path).each do |level, line|
+            level == :warn ? Core::Logger.warn(line) : Core::Logger.info(line)
+          end
         end
 
         def cleanup_empty_dirs(root)

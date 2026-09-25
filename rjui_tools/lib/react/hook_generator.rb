@@ -11,6 +11,10 @@ require_relative 'style_loader'
 module RjuiTools
   module React
     class HookGenerator
+      # Where this generator writes hooks and finds the ViewModels they wrap;
+      # the build's orphan sweep reads them here rather than spelling them again.
+      attr_reader :hooks_dir, :viewmodels_dir
+
       def initialize
         @config = Core::ConfigManager.load_config
         @source_path = @config['source_path'] || Dir.pwd

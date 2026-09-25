@@ -16,6 +16,10 @@ module RjuiTools
     class DataModelGenerator
       include Helpers::StringManagerHelper
 
+      # Where this generator reads layouts and writes Data models; the build's
+      # orphan sweep reads them here rather than spelling them again.
+      attr_reader :source_path, :layouts_dir, :data_dir
+
       def initialize
         @config = Core::ConfigManager.load_config
         @source_path = @config['source_path'] || Dir.pwd

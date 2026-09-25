@@ -12,6 +12,7 @@ require_relative '../../core/normalization'
 require_relative '../../core/binding_validator'
 require_relative '../../core/layout_variant'
 require_relative '../../core/screen_index'
+require_relative '../../core/generated_orphans'
 
 module SjuiTools
   module CLI
@@ -508,14 +509,10 @@ module SjuiTools
             # Convert to PascalCase for Swift file
             view_name = base_name.split(/[_\-]/).map(&:capitalize).join
 
-            # Determine Swift file path - now targeting GeneratedView in view folder
-            # Convert directory segments to PascalCase to match View folder naming convention
-            swift_file = if dir_path == '.'
-              File.join(view_dir, view_name, "#{view_name}GeneratedView.swift")
-            else
-              pascal_dir = dir_path.split('/').map { |s| s.split(/[_\-]/).map(&:capitalize).join }.join('/')
-              File.join(view_dir, pascal_dir, view_name, "#{view_name}GeneratedView.swift")
-            end
+            # GeneratedView in the view folder, under the layout's directories
+            # in PascalCase (see generated_view_dir)
+            swift_file = File.join(self.class.generated_view_dir(view_dir, relative_path),
+                                   "#{view_name}GeneratedView.swift")
 
             # Responsive variant files attached to this base screen
             # (home@regular.json → HomeRegularVariantGeneratedView + a size
@@ -670,6 +667,8 @@ module SjuiTools
             end
           end
 
+          prune_layout_orphans(source_path, config, layouts_dir, view_dir)
+
           # Save cache for next build
           cache_manager.save_cache(new_including_files, new_style_dependencies)
 
@@ -692,6 +691,46 @@ module SjuiTools
             )
           else
             Core::Logger.success "SwiftUI build completed!"
+          end
+        end
+
+        # Where a layout's GeneratedView (and its variants') is written:
+        # View/<the layout's directories in PascalCase>/<Name>/. The orphan
+        # sweep asks this too, so a moved layout's old copy is found by the
+        # path the build writes.
+        def self.generated_view_dir(view_dir, relative_path)
+          view_name = File.basename(relative_path, '.json').split(/[_\-]/).map(&:capitalize).join
+          dir_path = File.dirname(relative_path)
+          return File.join(view_dir, view_name) if dir_path == '.'
+
+          pascal_dir = dir_path.split('/').map { |s| s.split(/[_\-]/).map(&:capitalize).join }.join('/')
+          File.join(view_dir, pascal_dir, view_name)
+        end
+
+        # A deleted layout's outputs, by the rule the three faces share
+        # (lib/core/generated_orphans.rb): the Data model and the
+        # GeneratedView carry @generated — the build rewrites the whole
+        # GeneratedView — and are deleted; a hand-written View and ViewModel
+        # of the same name are named, not deleted. A GeneratedView is also
+        # found where a MOVED layout left it, by generated_view_dir. The
+        # ViewModel directory is the one `sjui g view` scaffolds into.
+        def prune_layout_orphans(source_path, config, layouts_dir, view_dir)
+          orphans = JsonUIShared::GeneratedOrphans
+          viewmodel_dir = File.join(source_path, config['viewmodel_directory'] || 'ViewModel')
+          kinds = [
+            orphans::Kind.new(dir: SjuiTools::SwiftUI::DataModelUpdater.new.data_dir, owner: :generator,
+                              pattern: /\A(?<name>[A-Za-z0-9_]+)Data\.swift\z/),
+            orphans::Kind.new(dir: view_dir, owner: :generator,
+                              pattern: /\A(?<name>[A-Za-z0-9_]+)GeneratedView\.swift\z/,
+                              home_dir: ->(rel) { self.class.generated_view_dir(view_dir, rel) }),
+            orphans::Kind.new(dir: view_dir, owner: :user,
+                              pattern: /\A(?<name>[A-Za-z0-9_]+?)View\.swift\z/),
+            orphans::Kind.new(dir: viewmodel_dir, owner: :user,
+                              pattern: /\A(?<name>[A-Za-z0-9_]+)ViewModel\.swift\z/)
+          ]
+          result = orphans.sweep(layouts_dir: layouts_dir, kinds: kinds)
+          orphans.report_lines(result, base: source_path).each do |level, line|
+            level == :warn ? Core::Logger.warn(line) : Core::Logger.info(line)
           end
         end
 

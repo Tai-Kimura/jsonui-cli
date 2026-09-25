@@ -75,6 +75,10 @@ module KjuiTools
       # this, for exactly this reason).
       attr_reader :failed_files
 
+      # Where layouts are read and GeneratedViews written; the build's orphan
+      # sweep reads them here rather than spelling them again.
+      attr_reader :layouts_dir, :view_dir
+
       def initialize
         @failed_files = []
         @config = Core::ConfigManager.load_config
@@ -85,6 +89,25 @@ module KjuiTools
         @package_name = @config['package_name'] || Core::ProjectFinder.get_package_name || 'com.example.app'
 
         FileUtils.mkdir_p(@view_dir) unless File.exist?(@view_dir)
+      end
+
+      # Where a layout's GeneratedView (and its variants') is written, relative
+      # to the view directory: the layout's own directories, then its
+      # snake_case name. The build's orphan sweep asks generated_view_dir too,
+      # so a moved layout's old copy is found by the path this writes.
+      def view_subdir_for(relative_path)
+        snake_case_name = to_snake_case(File.basename(relative_path, '.json'))
+        relative_dir = File.dirname(relative_path)
+        relative_dir == '.' ? snake_case_name : File.join(relative_dir, snake_case_name)
+      end
+
+      def generated_view_dir(relative_path)
+        File.join(@view_dir, view_subdir_for(relative_path))
+      end
+
+      def viewmodel_dir
+        source_directory = @config['source_directory'] || 'src/main'
+        File.join(@source_path, source_directory, @config['viewmodel_directory'] || 'kotlin/viewmodels')
       end
 
       # Screen identity: only screens carry a marker (cells and partials
@@ -221,17 +244,11 @@ module KjuiTools
           # resolution prefers them over a section that merely holds the
           # same text (same per-layout channel as data_definitions).
           Helpers::ResourceResolver.begin_layout(relative_path)
-          relative_dir = File.dirname(relative_path)
-          if relative_dir == '.'
-            view_subdir = snake_case_name
-          else
-            view_subdir = File.join(relative_dir, snake_case_name)
-          end
+          view_subdir = view_subdir_for(relative_path)
           generated_view_file = File.join(@view_dir, view_subdir, "#{pascal_case_name}GeneratedView.kt")
 
           # Update ViewModel's updateData function
           source_directory = @config['source_directory'] || 'src/main'
-          viewmodel_dir = File.join(@source_path, source_directory, @config['viewmodel_directory'] || 'kotlin/viewmodels')
           viewmodel_file = File.join(viewmodel_dir, "#{pascal_case_name}ViewModel.kt")
 
           # If MainView / GeneratedView / ViewModel haven't been scaffolded yet
