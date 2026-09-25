@@ -30,9 +30,14 @@ class prints that happening).
 Needs two iOS simulator runtimes, one from 26 (no newer than the SDK) and
 one below; the file is in no CI job, and run-suites.sh's iOS leg owns it
 with JSONUI_REQUIRE_IOS_SIMULATORS=1, where a missing runtime FAILS naming
-itself. The simulators are this file's own, found or made by name
-(jsonui-branch-release-<version>); shared ones and `xcode-select` are never
-touched — Xcode is whatever DEVELOPER_DIR, else the selected one, resolves.
+itself. The simulators are this run's own (tests/_ios_simulators.py): made
+per run and runtime as jsonui-branch-release-<version>-<pid>-<token>, deleted
+when the module ends, and what a killed run left is swept by the next. Until
+1.8.121 they were one fixed-name device per runtime, found by name and
+reused, and two runs at once drove the same device (ticket test-tools-ios-
+simulator-arms-collide-across-concurrent-runs). Shared devices and
+`xcode-select` are never touched — Xcode is whatever DEVELOPER_DIR, else the
+selected one, resolves.
 """
 from __future__ import annotations
 
@@ -46,12 +51,12 @@ from pathlib import Path
 import pytest
 
 from jsonui_test_cli import branch_tests as bt
+from tests._ios_simulators import RunDevices
 
 PROBE = Path(__file__).parent / "fixtures" / "branch-harness-release"
 #: Row 1's view model posting 1 s after its act, from a Task that holds it
 #: strongly (the app's view model leaks) or weakly; row 2 calls nothing.
 LATE_PROBE = Path(__file__).parent / "fixtures" / "branch-late-calls"
-PREFERRED_DEVICE = "com.apple.CoreSimulator.SimDeviceType.iPhone-16-Pro"
 #: The one retain call, inside `if #unavailable(iOS 26)` — the control takes it out.
 NO_RETAIN = "      BranchHarnessRetainer.retain(harness)\n"
 
@@ -90,21 +95,14 @@ def _runtimes() -> tuple[dict, dict]:
     return newest(from26), newest(below)
 
 
-def _device(runtime: dict) -> str:
-    """This file's own simulator for *runtime*: found by name, else made."""
-    name = f"jsonui-branch-release-{runtime['version']}"
-    devices = json.loads(_xcrun("simctl", "list", "devices", "-j").stdout)["devices"]
-    for d in devices.get(runtime["identifier"], []):
-        if d["name"] == name and d.get("isAvailable", True):
-            return d["udid"]
-    types = [t["identifier"] for t in runtime.get("supportedDeviceTypes", [])
-             if t.get("productFamily") == "iPhone"]
-    if not types:
-        _missing(f"iOS {runtime['version']} lists no iPhone device type")
-    kind = PREFERRED_DEVICE if PREFERRED_DEVICE in types else types[-1]
-    made = _xcrun("simctl", "create", name, kind, runtime["identifier"])
-    assert made.returncode == 0, made.stderr
-    return made.stdout.strip()
+@pytest.fixture(scope="module")
+def sims():
+    """This run's simulators: made on first use, deleted when the module
+    ends; what killed runs left is swept first."""
+    devices = RunDevices()
+    devices.sweep()
+    yield devices
+    devices.release()
 
 
 def _run(work: Path, runtime_source: str, udid: str, probe: Path = PROBE) -> tuple[int, str]:
@@ -132,14 +130,14 @@ CRASH = "pointer being freed was not allocated"
 
 
 @pytest.fixture(scope="module")
-def runs(tmp_path_factory) -> dict:
+def runs(tmp_path_factory, sims) -> dict:
     from26, below = _runtimes()
     fixed = bt.SWIFT_RUNTIME
     assert fixed.count(NO_RETAIN) == 1
     out = {}
     for key, runtime, source in (("from26", from26, fixed), ("below", below, fixed),
                                  ("below-unretained", below, fixed.replace(NO_RETAIN, "      _ = harness\n"))):
-        rc, log = _run(tmp_path_factory.mktemp(key) / "pkg", source, _device(runtime))
+        rc, log = _run(tmp_path_factory.mktemp(key) / "pkg", source, sims.device(runtime, _missing))
         out[key] = (runtime["version"], rc, log)
     return out
 
@@ -208,11 +206,12 @@ def test_control_below_26_a_released_harness_crashes_the_process(runs):
 # the next row; weakly held, the view model was released and none did.
 
 @pytest.fixture(scope="module")
-def late_runs(tmp_path_factory) -> dict:
+def late_runs(tmp_path_factory, sims) -> dict:
     from26, below = _runtimes()
     out = {}
     for key, runtime in (("from26", from26), ("below", below)):
-        rc, log = _run(tmp_path_factory.mktemp(f"late-{key}") / "pkg", bt.SWIFT_RUNTIME, _device(runtime), LATE_PROBE)
+        rc, log = _run(tmp_path_factory.mktemp(f"late-{key}") / "pkg", bt.SWIFT_RUNTIME,
+                       sims.device(runtime, _missing), LATE_PROBE)
         out[key] = (runtime["version"], rc, log)
     return out
 
