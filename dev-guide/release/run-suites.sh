@@ -17,7 +17,17 @@
 # Usage: dev-guide/release/run-suites.sh [checkout]   (default: repo of this script)
 set -u
 set -o pipefail
-C=${1:-$(cd "$(dirname "$0")/../.." && pwd)}
+# 🔻 ABSOLUTE BEFORE ANYTHING USES IT. `C=${1:-…}` kept a relative argument as
+# given, and py_suite compares the package path python prints (absolute) with
+# "$C"/* — so `run-suites.sh .` failed three suites with "resolves outside the
+# checkout" on a tree that is green (measured 2026-09-25: failures=6). The
+# driver was avoiding it by hand; the gate should not need them to.
+C=$(cd "${1:-$(dirname "$0")/../..}" && pwd) || { printf '%s\n' "!! no such checkout: ${1:-}"; exit 1; }
+# 🔻 THE LOCALE IS THE GATE'S, NOT THE SHELL'S. Ruby takes its default external
+# encoding from the locale, and a shell with none (an agent's tool shell, a
+# cron) makes it US-ASCII: the suites' Japanese fixtures read as "???" and
+# sjui / kjui / rjui went red 80 / 27 / 47 on a tree that is green (2026-09-25).
+export LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8
 export RBENV_VERSION=${RBENV_VERSION:-3.2.2}
 export JAVA_HOME=${JAVA_HOME:-/opt/homebrew/opt/openjdk@17}
 export ANDROID_HOME=${ANDROID_HOME:-$HOME/Library/Android/sdk}
@@ -26,6 +36,9 @@ say() { printf '%s\n' "$*"; }
 bad() { fail=$((fail+1)); say "!! $*"; }
 
 say "== start $(date -u +%FT%TZ) / $(date +%H:%M:%S) local"
+# What the Ruby suites will actually read with, not what was exported: the
+# answer of the ruby they run (RBENV_VERSION above).
+say "== locale LANG=$LANG LC_ALL=$LC_ALL ruby $(ruby -e 'print RUBY_VERSION, " default_external=", Encoding.default_external' 2>&1)"
 say "== HEAD $(git -C "$C" rev-parse HEAD) porcelain_lines=$(git -C "$C" status --porcelain | wc -l | tr -d ' ')"
 # 🔻 WHICH TREE THIS RUN MEASURED, not just which commit it is on. A branch can
 # be green on its own base while the tree that ships has moved: on 2026-09-09 a
