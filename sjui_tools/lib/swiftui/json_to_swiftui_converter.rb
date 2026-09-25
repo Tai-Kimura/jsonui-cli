@@ -66,28 +66,11 @@ module SjuiTools
           validate_json_tree(json_data, File.basename(json_file_path))
           Views::BaseViewConverter.validation_enabled = false
           @validation_was_enabled = true
-
-          # A declaration violation the converters cannot survive: they
-          # would receive a String where the declaration promises a list
-          # and raise on `.each`. Refuse the layout by name here; the
-          # ledger turns it into a non-zero exit and every other layout
-          # still generates.
-          if blocking_layout_errors?
-            begin
-              require_relative '../core/stage_failures'
-              JsonUI::StageFailures.record(
-                'layout',
-                "#{json_file_path} was not generated: #{@blocking_layout_reason}"
-              )
-            rescue LoadError
-              nil
-            end
-            return nil
-          end
         end
 
         # includeを処理
         json_data = process_includes(json_data, File.dirname(json_file_path))
+        return nil if refused_drawn_tree?(json_data, json_file_path)
         annotate_image_roles(json_data, json_file_path)
         JsonUIShared::TapAccessibility.annotate!(json_data)
         mark_root_if_scrolling_cell(json_data, json_file_path)
@@ -217,41 +200,9 @@ module SjuiTools
         # Apply styles
         json_data = StyleLoader.load_and_merge(json_data)
 
-        # The shared layout checks, on the path `jui build` actually takes.
-        # `validate_json_tree` runs them too, but only `convert_file` calls
-        # it and only the `convert` command calls that — so on iOS a build
-        # reached the converters with no shared check at all, and a binding
-        # where the declaration takes a list came back as
-        # `NoMethodError: undefined method 'each' for String` from whichever
-        # converter touched it first.
-        #
-        # Deliberately outside `validation_enabled?`: that flag is a
-        # once-per-run toggle for the convert command (set false after the
-        # first file, restored at the end), and a declaration violation has
-        # to be caught in every file, not just the first one seen.
-        shared_warnings = JsonUIShared::LayoutValidator.validate_layout(
-          json_data, source_path: File.basename(json_file_path),
-          extension_definitions: Core::AttributeValidator.extension_definitions(:swiftui)
-        )
-        JsonUIShared::LayoutValidator.print_warnings(shared_warnings) unless shared_warnings.empty?
-        if JsonUIShared::LayoutValidator.blocking?(shared_warnings)
-          reason = blocking_layout_reason(shared_warnings)
-          begin
-            require_relative '../core/stage_failures'
-            JsonUI::StageFailures.record(
-              'layout', "#{json_file_path} was not generated: #{reason}"
-            )
-          rescue LoadError
-            nil
-          end
-          # nil, so the caller writes nothing for this layout. Returning a
-          # partial tuple would let `update_generated_body` run with a nil
-          # body and damage the GeneratedView that is already on disk.
-          return nil
-        end
-
         # Process includes
         json_data = process_includes(json_data, File.dirname(json_file_path))
+        return nil if refused_drawn_tree?(json_data, json_file_path)
         annotate_image_roles(json_data, json_file_path)
         JsonUIShared::TapAccessibility.annotate!(json_data)
         mark_root_if_scrolling_cell(json_data, json_file_path)
@@ -491,22 +442,43 @@ module SjuiTools
         @current_validation_file = file_name
         validate_component_recursive(json_data, nil)
         @validator.print_warnings
+      end
 
+      # The shared layout checks (JsonUIShared::LayoutValidator), on the tree
+      # this layout DRAWS: styles merged and includes expanded, on both the
+      # build path and the `convert` command. A violation the generators
+      # cannot survive — a leaf given children, several cellClasses without
+      # sections, a binding the declaration refuses — refuses the layout by
+      # name and is recorded in the stage ledger (the non-zero exit), and
+      # the caller writes nothing for it.
+      #
+      # Until 1.8.121 this read the layout before its includes were
+      # expanded: a leaf given children inside an included layout was
+      # drawn into this one with its children dropped, and nothing was
+      # refused (a partial include: nothing at all; a screen include: only
+      # the included file, while this view dropped them) — measured
+      # 2026-09-26. Ticket leaf-refusal-does-not-see-inside-a-partial-include.
+      #
+      # Deliberately outside `validation_enabled?`: that flag is a
+      # once-per-run toggle for the convert command, and a declaration
+      # violation has to be caught in every file.
+      def refused_drawn_tree?(json_data, json_file_path)
         shared_warnings = JsonUIShared::LayoutValidator.validate_layout(
-          json_data, source_path: file_name || '(unknown)',
+          json_data, source_path: File.basename(json_file_path),
           extension_definitions: Core::AttributeValidator.extension_definitions(:swiftui)
         )
         JsonUIShared::LayoutValidator.print_warnings(shared_warnings) unless shared_warnings.empty?
-        @blocking_layout_errors = JsonUIShared::LayoutValidator.blocking?(shared_warnings)
-        @blocking_layout_reason = blocking_layout_reason(shared_warnings)
-      end
+        return false unless JsonUIShared::LayoutValidator.blocking?(shared_warnings)
 
-      # True when the last validated layout declared something the
-      # converters cannot survive (a binding where the declaration takes a
-      # list). The caller skips conversion and records the layout as not
-      # generated, rather than letting a converter raise on `.each`.
-      def blocking_layout_errors?
-        @blocking_layout_errors == true
+        begin
+          require_relative '../core/stage_failures'
+          JsonUI::StageFailures.record(
+            'layout', "#{json_file_path} was not generated: #{blocking_layout_reason(shared_warnings)}"
+          )
+        rescue LoadError
+          nil
+        end
+        true
       end
 
       def blocking_layout_reason(warnings)

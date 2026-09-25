@@ -135,6 +135,46 @@ module SjuiTools
           end.compact
         end
 
+        # A layout as it is drawn: styles merged, includes expanded — what
+        # the conversion path (JsonToSwiftUIConverter) validates and converts.
+        # A copy: the expander rewrites the tree it is given.
+        def drawn_tree(json_data, json_file)
+          merged = SjuiTools::SwiftUI::StyleLoader.load_and_merge(JSON.parse(JSON.generate(json_data)))
+          SjuiTools::SwiftUI::IncludeExpander.process_includes(merged, File.dirname(json_file))
+        end
+
+        # Partial layouts are never converted as screens — a screen that
+        # includes one draws it, and a Collection draws its cell layouts —
+        # so the shared checks run on each here, on every build, as they do
+        # on rjui (which converts partials as components). A cell layout's
+        # leaf given children was drawn with them dropped and nothing named
+        # until 1.8.121 (measured 2026-09-26). The shared checks only: the
+        # attribute and binding checks never ran on partials here, and
+        # adding them is not this fix.
+        def validate_partial_layouts(files)
+          files.each do |file|
+            data = begin
+              JSON.parse(File.read(file))
+            rescue JSON::ParserError
+              next
+            end
+            shared_warnings = JsonUIShared::LayoutValidator.validate_layout(
+              drawn_tree(data, file), source_path: File.basename(file),
+              extension_definitions: Core::AttributeValidator.extension_definitions(:swiftui)
+            )
+            next if shared_warnings.empty?
+
+            JsonUIShared::LayoutValidator.print_warnings(shared_warnings)
+            next unless JsonUIShared::LayoutValidator.blocking?(shared_warnings)
+
+            reason = shared_warnings.select { |w| w[:level] == :error }.map { |w| w[:message] }.join('; ')
+            require_relative '../../core/stage_failures'
+            JsonUI::StageFailures.record(
+              'layout', "#{file} (a partial, drawn by the layouts that include it) is refused: #{reason}"
+            )
+          end
+        end
+
         def validate_cached_layouts(files, layouts_dir, validator, binding_validator)
           return if files.nil? || files.empty?
 
@@ -185,12 +225,11 @@ module SjuiTools
             end
           end
 
-          # Styles are merged first, exactly as the conversion path does:
-          # a rule reads the layout the generators would see, not the raw
-          # file.
-          merged = SjuiTools::SwiftUI::StyleLoader.load_and_merge(json_data)
+          # The tree the layout draws, as the conversion path reads it:
+          # styles merged, includes expanded (until 1.8.121 the includes were
+          # not, so a violation inside one was never seen here).
           shared_warnings = JsonUIShared::LayoutValidator.validate_layout(
-            merged, source_path: File.basename(json_file),
+            drawn_tree(json_data, json_file), source_path: File.basename(json_file),
             extension_definitions: Core::AttributeValidator.extension_definitions(:swiftui)
           )
           return if shared_warnings.empty?
@@ -373,6 +412,7 @@ module SjuiTools
           @refused_layouts = []
 
           # Process all JSON files in Layouts directory
+          partial_files = []
           json_files = Dir.glob(File.join(layouts_dir, '**/*.json')).reject do |file|
             # Skip Resources folder
             next true if file.include?(File.join(layouts_dir, 'Resources'))
@@ -383,8 +423,13 @@ module SjuiTools
             # Skip files with "mode": "uikit" (only process swiftui or unspecified)
             begin
               json_content = JSON.parse(File.read(file))
-              # Skip partials (cell layouts included via Collection)
-              next true if json_content['partial'] == true
+              # Skip partials (cell layouts included via Collection) — they
+              # are not screens; their shared checks run below
+              # (validate_partial_layouts).
+              if json_content['partial'] == true
+                partial_files << file
+                next true
+              end
               file_mode = json_content['mode']
               file_mode && file_mode.downcase == 'uikit'
             rescue JSON::ParserError
@@ -451,6 +496,7 @@ module SjuiTools
           # exactly once per run and nothing is reported twice.
           cached_files = json_files - files_to_update
           validate_cached_layouts(cached_files, layouts_dir, validator, binding_validator)
+          validate_partial_layouts(partial_files)
 
           # Update Data models if any files need updating
           if files_to_update.any?
