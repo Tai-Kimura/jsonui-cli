@@ -349,7 +349,12 @@ jobs:
             --ignore=tests/test_harness_conditions.py \
             --ignore=tests/test_branch_unmatched_and_side_routes.py \
             --ignore=tests/test_branch_condition_controls.py \
-            --ignore=tests/test_branch_unmatched_origin.py
+            --ignore=tests/test_branch_unmatched_origin.py \
+            --ignore=tests/test_unit_stubs_ios_typecheck.py
+      # ⚠️ test_unit_stubs_ios_typecheck.py is in no job here: it needs swiftc
+      # 6.2+ for `-default-isolation`, and the compiler job's image answers
+      # 6.1.2 (run 36051178116). run-suites.sh's test_tools leg owns it, as it
+      # owns the executed branch runtime.
       - name: Run document_tools tests
         working-directory: document_tools
         run: python -m pytest
