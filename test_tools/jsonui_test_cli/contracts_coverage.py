@@ -1311,9 +1311,17 @@ def to_json(report: CoverageReport) -> dict:
 #: next patch when announcing, at or below the tag once gating.
 VALIDATE_GATE_FROM: str | None = None
 
-from .gate_literal import GATE_WITHDRAWN, version_key  # noqa: E402  (re-exported)
-from .gate_literal import gate_is_on as _literal_is_on  # noqa: E402
-from .gate_literal import gate_state as _literal_state  # noqa: E402
+
+def _gates():
+    """shared/core/gate_versions — the one reader of every `*_GATE_FROM` —
+    or None in a tool tree without it (then nothing gates, and it says so)."""
+    from . import shared_core
+    return shared_core.load("gate_versions")
+
+
+def version_key(version: str) -> tuple:
+    gates = _gates()
+    return gates.version_key(version) if gates else ()
 
 #: ee's text (design v4.17 §6.1 P3c — the notice names the baseline: without
 #: it "fails unless coverage exits 0" would no longer be true).
@@ -1325,14 +1333,19 @@ VALIDATE_NOTICE = (
 
 def gate_state(gate_from: str | None = None) -> str:
     """`undeclared`, `withdrawn`, `unreadable` or `release` of
-    VALIDATE_GATE_FROM (or *gate_from*) — only `release` ever gates; see
-    `gate_literal`, the one reader of every `*_GATE_FROM`."""
-    return _literal_state(VALIDATE_GATE_FROM if gate_from is None else gate_from)
+    VALIDATE_GATE_FROM (or *gate_from*) — only `release` ever gates — or
+    `unavailable` when shared/core/gate_versions.py is not in the tree."""
+    gates = _gates()
+    if gates is None:
+        return "unavailable"
+    return gates.gate_state(VALIDATE_GATE_FROM if gate_from is None else gate_from)
 
 
 def gate_is_on(version: str, gate_from: str | None = None) -> bool:
     """Does validate fail on coverage in this version?"""
-    return _literal_is_on(version, VALIDATE_GATE_FROM if gate_from is None else gate_from)
+    gates = _gates()
+    return bool(gates) and gates.gate_is_on(
+        version, VALIDATE_GATE_FROM if gate_from is None else gate_from)
 
 
 def coverage_applicable(root: Path) -> tuple[bool, str]:
@@ -1385,14 +1398,10 @@ def _gate_line(version: str) -> str:
     state = gate_state()
     if state == "release":
         return VALIDATE_NOTICE.format(version=VALIDATE_GATE_FROM)
-    if state == "withdrawn":
-        return f'coverage gate withdrawn (VALIDATE_GATE_FROM = "{GATE_WITHDRAWN}")'
-    if state == "unreadable":
-        return (f'coverage gate version unreadable (VALIDATE_GATE_FROM = '
-                f'"{VALIDATE_GATE_FROM}") — not a release number: this build announces '
-                "no release and does not gate")
-    return ("coverage gate version not declared (VALIDATE_GATE_FROM) — this build "
-            "announces no release")
+    if state == "unavailable":
+        return ("coverage gate cannot be read — shared/core/gate_versions.py is not in "
+                "this tool tree, so this build announces no release and does not gate")
+    return "coverage gate " + _gates().state_note("VALIDATE_GATE_FROM", VALIDATE_GATE_FROM)
 
 
 def validate_section(root: Path | None, version: str, *, skipped: bool = False,

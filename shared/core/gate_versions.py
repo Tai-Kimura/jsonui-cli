@@ -12,9 +12,16 @@ release; this is how the running code reads one:
                               never gates (U5) — the tag gate turns it red
   release     "1.8.120"       announced below it, gating from it on
 
-One reader for every such gate: validate's contracts coverage
-(`VALIDATE_GATE_FROM`) and the spec validator's layout ids
-(`LAYOUT_ID_GATE_FROM`).
+ONE reader for every such gate (design v4.20, ee): validate's contracts
+coverage (`VALIDATE_GATE_FROM`, test_tools), the spec validator's layout ids
+(`LAYOUT_ID_GATE_FROM`, document_tools), P2e's generator
+(`UNMATCHED_GATE_FROM`) and the tag gate. The "withdrawn" defect appeared in
+two of them in two different shapes (the gate always on; generation
+stopping) precisely because each had its own copy. The literals stay next to
+their owners; only the reading is here.
+
+Loaded by file path through each package's `shared_core` loader (it imports
+nothing of its own, like every module under shared/core).
 """
 from __future__ import annotations
 
@@ -54,3 +61,19 @@ def gate_state(literal: str | None) -> str:
 def gate_is_on(version: str, literal: str | None) -> bool:
     """Is the gate *literal* names on in the running *version*?"""
     return gate_state(literal) == "release" and version_key(version) >= version_key(literal)
+
+
+def state_note(name: str, literal: str | None) -> str:
+    """What a gate that is not a release number says about itself, after its
+    subject ("coverage gate …"): `withdrawn (NAME = "withdrawn")`, `version
+    unreadable (NAME = "…") — …`, `version not declared (NAME) — …`. Empty
+    for a release number: its line is the owner's notice or its gate."""
+    state = gate_state(literal)
+    if state == "withdrawn":
+        return f'withdrawn ({name} = "{GATE_WITHDRAWN}")'
+    if state == "unreadable":
+        return (f'version unreadable ({name} = "{literal}") — not a release number: '
+                "this build announces no release and does not gate")
+    if state == "undeclared":
+        return f"version not declared ({name}) — this build announces no release"
+    return ""
