@@ -9,6 +9,7 @@ require_relative '../core/type_converter'
 require_relative 'helpers/resource_resolver'
 require_relative '../core/generated_marker'
 require_relative '../core/data_model_updater_core'
+require_relative '../core/string_literals'
 require_relative 'style_loader'
 require_relative 'include_expander'
 
@@ -446,15 +447,14 @@ module KjuiTools
             '""'
           elsif value_str.start_with?("'") && value_str.end_with?("'") && value_str.length > 1
             # Handle single-quoted strings like "'gone'" -> "gone"
-            inner_content = value_str[1...-1]
-            escaped_content = inner_content.gsub('\\', '\\\\').gsub('"', '\\"')
-            "\"#{escaped_content}\""
+            kotlin_string_literal(value_str[1...-1])
           elsif !value_str.start_with?('"') || !value_str.end_with?('"')
             # Handle unquoted strings like "gone" -> "gone"
-            escaped_content = value_str.gsub('\\', '\\\\').gsub('"', '\\"')
-            "\"#{escaped_content}\""
+            kotlin_string_literal(value_str)
           else
-            # Already properly quoted
+            # Already quoted: passed through as written. TypeConverter
+            # quotes a Visibility default this way (`gone` -> `"gone"`), and
+            # layouts write the quotes themselves (`"defaultValue": "\"\""`).
             value_str
           end
         when 'Bool', 'Boolean'
@@ -561,14 +561,9 @@ module KjuiTools
       # `$` must be escaped as well as `\` and `"`: Kotlin expands `$name`
       # and `${...}` inside a string, so an unescaped `$` in declared data
       # either fails to compile or silently interpolates something else.
-      # Written with block replacements — gsub with a STRING replacement
-      # reads a backslash pair as a back-reference and emits one backslash
-      # where two were meant.
+      # The one escaper (control characters included).
       def kotlin_string_literal(str)
-        escaped = str.to_s.gsub(0x5c.chr) { 0x5c.chr * 2 }
-                     .gsub(0x22.chr) { 0x5c.chr + 0x22.chr }
-                     .gsub('$') { 0x5c.chr + '$' }
-        0x22.chr + escaped + 0x22.chr
+        JsonUIShared::StringLiterals.kotlin(str)
       end
 
       # CollectionDataSource defaultValue → Kotlin constructor literal.
@@ -594,14 +589,14 @@ module KjuiTools
             pairs = cell.map do |k, v|
               literal =
                 case v
-                when String then v.inspect
+                when String then kotlin_string_literal(v)
                 when true, false, Numeric then v.to_s
                 end
-              literal && "#{k.to_s.inspect} to #{literal}"
+              literal && "#{kotlin_string_literal(k.to_s)} to #{literal}"
             end.compact
             "mapOf(#{pairs.join(', ')})"
           end
-          view_name = section['cell'].is_a?(String) ? section['cell'].inspect : '""'
+          view_name = section['cell'].is_a?(String) ? kotlin_string_literal(section['cell']) : '""'
           "com.kotlinjsonui.data.CollectionDataSection(cells = " \
             "com.kotlinjsonui.data.CollectionDataSection.CellData(" \
             "viewName = #{view_name}, data = listOf(#{cell_maps.join(', ')})))"

@@ -171,7 +171,7 @@ module RjuiTools
               # and plain literals fall through unchanged.
               attrs << " placeholder=#{string_resolved}"
             else
-              attrs << " placeholder=\"#{placeholder}\""
+              attrs << jsx_attr_text('placeholder', placeholder)
             end
           end
 
@@ -186,7 +186,7 @@ module RjuiTools
               attrs << " value={#{value.gsub(/[{}]/, '')}}"
             else
               # No binding: use uncontrolled component (defaultValue only)
-              attrs << " defaultValue=\"#{text_value}\""
+              attrs << jsx_attr_text('defaultValue', text_value)
             end
           end
 
@@ -227,7 +227,7 @@ module RjuiTools
           # Native browser validation. Both are declared `platform: react`, i.e.
           # they exist FOR the web, so there is no other surface to defer to.
           if attributes['pattern']
-            attrs << " pattern=\"#{escape_attribute(attributes['pattern'])}\""
+            attrs << jsx_attr_text('pattern', attributes['pattern'])
           end
           attrs << ' required' if attributes['required'] == true || attributes['required'] == 'true'
 
@@ -265,10 +265,6 @@ module RjuiTools
           when 'no', 'off', 'false' then 'off'
           when 'yes', 'on', 'true' then 'on'
           end
-        end
-
-        def escape_attribute(value)
-          value.to_s.gsub('"', '&quot;')
         end
 
         def determine_input_type

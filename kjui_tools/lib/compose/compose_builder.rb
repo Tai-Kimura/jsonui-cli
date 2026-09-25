@@ -15,6 +15,7 @@ require_relative '../core/tap_accessibility'
 require_relative '../core/normalization'
 require_relative '../core/layout_variant'
 require_relative '../core/screen_index'
+require_relative '../core/string_literals'
 require_relative 'style_loader'
 require_relative 'include_expander'
 require_relative 'data_model_updater'
@@ -1949,14 +1950,9 @@ module KjuiTools
         end
       end
 
+      # A Kotlin string literal — the one escaper (`$` included).
       def quote(text)
-        # Escape special characters properly
-        escaped = text.gsub('\\', '\\\\\\\\')  # Escape backslashes first
-                     .gsub('"', '\\"')           # Escape quotes
-                     .gsub("\n", '\\n')           # Escape newlines
-                     .gsub("\r", '\\r')           # Escape carriage returns
-                     .gsub("\t", '\\t')           # Escape tabs
-        "\"#{escaped}\""
+        JsonUIShared::StringLiterals.kotlin(text)
       end
 
       def indent(text, level)

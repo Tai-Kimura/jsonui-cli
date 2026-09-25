@@ -5,6 +5,7 @@ require_relative '../helpers/modifier_builder'
 require_relative '../helpers/resource_resolver'
 require_relative '../helpers/font_spec_helper'
 require_relative '../../core/normalization'
+require_relative '../../core/string_literals'
 
 module KjuiTools
   module Compose
@@ -424,8 +425,9 @@ module KjuiTools
           parts[0] + parts[1..-1].map(&:capitalize).join
         end
 
+        # A Kotlin string literal — the one escaper (`$` included).
         def self.quote(text)
-          "\"#{text.gsub('"', '\\"')}\""
+          JsonUIShared::StringLiterals.kotlin(text)
         end
 
         def self.indent(text, level)

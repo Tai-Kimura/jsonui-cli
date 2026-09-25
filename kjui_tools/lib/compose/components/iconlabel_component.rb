@@ -5,6 +5,7 @@ require_relative '../helpers/bound_value'
 require_relative '../helpers/modifier_builder'
 require_relative '../helpers/resource_resolver'
 require_relative '../helpers/font_spec_helper'
+require_relative '../../core/string_literals'
 
 module KjuiTools
   module Compose
@@ -254,8 +255,9 @@ module KjuiTools
           "painterResource(id = R.drawable.#{Helpers::ResourceResolver.drawable_name(name)})"
         end
 
+        # A Kotlin string literal — the one escaper (`$` included).
         def self.quote(text)
-          "\"#{text.to_s.gsub('"', '\\"')}\""
+          JsonUIShared::StringLiterals.kotlin(text)
         end
 
         def self.indent(text, level)

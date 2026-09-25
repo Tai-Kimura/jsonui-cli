@@ -9,6 +9,7 @@ require_relative '../core/type_converter'
 require_relative '../core/generated_marker'
 require_relative '../core/data_model_updater_core'
 require_relative '../core/tap_accessibility'
+require_relative '../core/string_literals'
 require_relative 'style_loader'
 require_relative 'include_expander'
 require_relative 'helpers/string_manager_helper'
@@ -495,19 +496,9 @@ module SjuiTools
         end
       end
 
-      # A Swift string literal.
-      #
-      # Block form on purpose: gsub with a STRING replacement reads a
-      # backslash pair as a back-reference escape, so the obvious spelling
-      # emitted ONE backslash where two were meant and a value containing a
-      # backslash produced an invalid Swift escape. A block replacement is
-      # taken literally.
-      #
-      # Backslash first, or the one added for the quote is escaped again.
+      # A Swift string literal (the shared escaper).
       def swift_string_literal(str)
-        escaped = str.gsub(0x5c.chr) { 0x5c.chr * 2 }
-                     .gsub(0x22.chr) { 0x5c.chr + 0x22.chr }
-        0x22.chr + escaped + 0x22.chr
+        JsonUIShared::StringLiterals.swift(str)
       end
 
       # CollectionDataSource defaultValue → Swift initializer literal.
@@ -534,14 +525,14 @@ module SjuiTools
             pairs = cell.map do |k, v|
               literal =
                 case v
-                when String then v.inspect
+                when String then swift_string_literal(v)
                 when true, false, Numeric then v.to_s
                 end
-              literal && "#{k.to_s.inspect}: #{literal}"
+              literal && "#{swift_string_literal(k.to_s)}: #{literal}"
             end.compact
             pairs.empty? ? '[:]' : "[#{pairs.join(', ')}]"
           end
-          view_name = section['cell'].is_a?(String) ? section['cell'].inspect : '""'
+          view_name = section['cell'].is_a?(String) ? swift_string_literal(section['cell']) : '""'
           "CollectionDataSection(cells: (viewName: #{view_name}, " \
             "data: [#{cell_dicts.join(', ')}]))"
         end.compact

@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require 'json'
+require_relative '../../core/string_literals'
 
 module RjuiTools
   module React
@@ -151,8 +152,7 @@ module RjuiTools
         def js_string(value)
           return value.source.to_s if value.is_a?(JsExpr)
 
-          escaped = value.to_s.gsub('\\', '\\\\').gsub("'", "\\\\'")
-          "'#{escaped}'"
+          JsonUIShared::StringLiterals.ts_single(value)
         end
 
         # Render the weight as a JS literal. Numeric → bare number,

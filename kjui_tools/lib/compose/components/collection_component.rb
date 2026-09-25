@@ -3,6 +3,7 @@
 require_relative '../helpers/content_inset_helper'
 require_relative '../helpers/modifier_builder'
 require_relative '../../core/normalization'
+require_relative '../../core/string_literals'
 
 module KjuiTools
   module Compose
@@ -31,7 +32,7 @@ module KjuiTools
         # bind ($cellIndex / $index / $page); `extra` is any modifier chain
         # that arm needs after the tag.
         def self.cell_test_tag_modifier(collection_id, index_expr, depth, extra = '')
-          tag = collection_id ? ".testTag(\"#{collection_id}_item_\$#{index_expr}\")" : ''
+          tag = collection_id ? ".testTag(\"#{JsonUIShared::StringLiterals.kotlin_body(collection_id)}_item_\$#{index_expr}\")" : ''
           indent("modifier = Modifier#{tag}#{extra}", depth)
         end
 

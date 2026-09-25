@@ -6,6 +6,7 @@ require_relative '../../core/config_manager'
 require_relative '../../core/project_finder'
 require_relative '../../core/logger'
 require_relative '../../core/string_manager_core'
+require_relative '../../core/string_literals'
 require_relative 'binding_expression'
 
 module KjuiTools
@@ -474,14 +475,9 @@ module KjuiTools
             color.sub(/^#/, '').downcase
           end
           
+          # A Kotlin string literal — the one escaper (`$` included).
           def quote(text)
-            # Escape special characters properly
-            escaped = text.to_s.gsub('\\', '\\\\\\\\')
-                              .gsub('"', '\\"')
-                              .gsub("\n", '\\n')
-                              .gsub("\r", '\\r')
-                              .gsub("\t", '\\t')
-            "\"#{escaped}\""
+            JsonUIShared::StringLiterals.kotlin(text)
           end
         end
       end

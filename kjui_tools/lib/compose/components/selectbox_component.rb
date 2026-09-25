@@ -4,6 +4,7 @@ require_relative '../helpers/binding_expression'
 require_relative '../helpers/bound_value'
 require_relative '../helpers/modifier_builder'
 require_relative '../helpers/resource_resolver'
+require_relative '../../core/string_literals'
 
 module KjuiTools
   module Compose
@@ -37,7 +38,7 @@ module KjuiTools
               items_var = $1
               "data.#{items_var}.getOrElse(data.#{index_var}) { \"\" }"
             elsif items.is_a?(Array)
-              items_literal = items.map { |i| "\"#{i}\"" }.join(", ")
+              items_literal = items.map { |i| JsonUIShared::StringLiterals.kotlin(i) }.join(", ")
               "listOf(#{items_literal}).getOrElse(data.#{index_var}) { \"\" }"
             else
               "\"\""
@@ -50,7 +51,7 @@ module KjuiTools
             # `.match` on 1:Integer — leaving the template scaffold in place;
             # caught by the codegen parity host on SelectBox/selectedIndex.)
             item = json_data['items'][json_data['selectedIndex']]
-            item.nil? ? '""' : "\"#{item}\""
+            item.nil? ? '""' : JsonUIShared::StringLiterals.kotlin(item)
           elsif json_data['selectedItem'] || json_data['selectedValue'] || json_data['selectedDate']
             # STATIC selections were dropped: every branch above tests for a
             # `@{...}`, so a plain `selectedValue: "Two"` fell through to the
@@ -112,7 +113,7 @@ module KjuiTools
                     items_var = $1
                     code += "\n" + indent("val index = data.#{items_var}.indexOf(newValue)", depth + 2)
                   elsif items.is_a?(Array)
-                    items_literal = items.map { |i| "\"#{i}\"" }.join(", ")
+                    items_literal = items.map { |i| JsonUIShared::StringLiterals.kotlin(i) }.join(", ")
                     code += "\n" + indent("val index = listOf(#{items_literal}).indexOf(newValue)", depth + 2)
                   else
                     code += "\n" + indent("val index = 0", depth + 2)
@@ -141,18 +142,18 @@ module KjuiTools
           if is_date_picker
             # Date picker mode (date, time, dateAndTime)
             if json_data['datePickerMode']
-              code += "\n" + indent("datePickerMode = \"#{json_data['datePickerMode']}\",", depth + 1)
+              code += "\n" + indent("datePickerMode = #{JsonUIShared::StringLiterals.kotlin(json_data['datePickerMode'])},", depth + 1)
             end
             
             # Date picker style
             if json_data['datePickerStyle']
-              code += "\n" + indent("datePickerStyle = \"#{json_data['datePickerStyle']}\",", depth + 1)
+              code += "\n" + indent("datePickerStyle = #{JsonUIShared::StringLiterals.kotlin(json_data['datePickerStyle'])},", depth + 1)
             end
             
             # Date format (or dateStringFormat)
             date_format = json_data['dateFormat'] || json_data['dateStringFormat']
             if date_format
-              code += "\n" + indent("dateFormat = \"#{date_format}\",", depth + 1)
+              code += "\n" + indent("dateFormat = #{JsonUIShared::StringLiterals.kotlin(date_format)},", depth + 1)
             end
             
             # Minute interval for time pickers
@@ -184,9 +185,9 @@ module KjuiTools
               # Static options array
               options_list = options_data.map do |option|
                 if option.is_a?(Hash)
-                  "\"#{option['label'] || option['value']}\""
+                  JsonUIShared::StringLiterals.kotlin(option['label'] || option['value'])
                 else
-                  "\"#{option}\""
+                  JsonUIShared::StringLiterals.kotlin(option)
                 end
               end.join(", ")
               code += "\n" + indent("options = listOf(#{options_list}),", depth + 1)

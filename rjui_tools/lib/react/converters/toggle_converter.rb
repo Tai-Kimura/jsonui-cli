@@ -44,7 +44,7 @@ module RjuiTools
             if icon_off || icon_on
               off_src = icon_off || icon_on
               control_jsx =
-                "<input type=\"checkbox\"#{value_attr}#{checked_attr}#{on_change}#{disabled_attr} className=\"peer sr-only\" />"                 "<img src=\"#{off_src}\" alt=\"\" className=\"w-6 h-6 peer-checked:hidden\" />"                 "<img src=\"#{icon_on}\" alt=\"\" className=\"w-6 h-6 hidden peer-checked:block\" />"
+                "<input type=\"checkbox\"#{value_attr}#{checked_attr}#{on_change}#{disabled_attr} className=\"peer sr-only\" />"                 "<img#{jsx_attr_text('src', off_src)} alt=\"\" className=\"w-6 h-6 peer-checked:hidden\" />"                 "<img#{jsx_attr_text('src', icon_on)} alt=\"\" className=\"w-6 h-6 hidden peer-checked:block\" />"
               <<~JSX.chomp
                 #{indent_str(indent)}<label#{id_attr} className="#{class_name}"#{style_attr}#{testid_attr}#{tag_attr}#{build_aria_disabled_attr}>
                 #{indent_str(indent + 2)}#{control_jsx}
@@ -107,7 +107,7 @@ module RjuiTools
 
           return " value={#{extract_binding_property(value)}}" if has_binding?(value)
 
-          " value=\"#{value}\""
+          jsx_attr_text('value', value)
         end
 
         def build_checked_attr

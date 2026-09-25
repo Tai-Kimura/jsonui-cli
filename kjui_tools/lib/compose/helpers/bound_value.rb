@@ -1,5 +1,6 @@
 # frozen_string_literal: true
 
+require_relative '../../core/string_literals'
 require_relative 'binding_expression'
 # BindingExpression#property_nullable? calls ResourceResolver but does not
 # require it (the cycle resource_resolver -> binding_expression means it
@@ -199,8 +200,7 @@ module KjuiTools
 
         # The escaping half of BindingExpression.quote, without the quotes.
         def escaped_run(segment)
-          return '' if segment.nil? || segment.empty?
-          BindingExpression.quote(segment)[1..-2]
+          JsonUIShared::StringLiterals.kotlin_body(segment)
         end
 
         # A vocabulary attribute (`contentMode`, `textAlign`, `fontWeight`, …).

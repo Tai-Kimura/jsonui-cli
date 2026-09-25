@@ -63,7 +63,7 @@ module SjuiTools
                           # field opened empty showing its placeholder. Local
                           # @State keeps the field editable, matching UIKit.
                           state_name = "#{to_camel_case(@component['id'] || 'textField')}Text"
-                          @state_variables << "@State private var #{state_name}: String = #{@component['text'].inspect}"
+                          @state_variables << "@State private var #{state_name}: String = #{swift_string_literal(@component['text'])}"
                           "$#{state_name}"
                         else
                           # If no binding, create a constant binding with empty string

@@ -6,6 +6,7 @@ require_relative '../../core/config_manager'
 require_relative '../../core/project_finder'
 require_relative '../../core/logger'
 require_relative '../../core/string_manager_core'
+require_relative '../../core/string_literals'
 
 module SjuiTools
   module SwiftUI
@@ -58,12 +59,18 @@ module SjuiTools
         # spelling, or a value match) claim it, keep the literal otherwise,
         # and never gate the build over it (a date sentinel made zero-warning
         # unreachable by authoring, 2026-08-11 filing).
+        #
+        # text_content is the author's text between double quotes, NOT
+        # escaped: when nothing resolves, it is written back as a Swift
+        # literal through the shared escaper, which is the one place it is
+        # escaped (a caller that escaped first would get it escaped twice).
         def get_text_with_string_manager(text_content, warnings: true)
           # Remove quotes if present
           text_without_quotes = text_content.gsub(/^\"|\"|^'|'$/, '')
+          literal = swift_literal_of_quoted(text_content)
 
           # Check if it's a binding (starts with @{)
-          return text_content if text_without_quotes.match?(/^@\{.*\}$/)
+          return literal if text_without_quotes.match?(/^@\{.*\}$/)
 
           # A text that IS a declared strings.json key resolves as that key,
           # before any value reverse-lookup or spelling heuristic: membership
@@ -81,8 +88,10 @@ module SjuiTools
 
           # Undeclared snake_case-shaped text falls back to .localized().
           # Same spelling the extractor's should_extract_string? skips,
-          # trailing underscore included.
-          if text_without_quotes.match?(/^[a-z][a-z0-9]*(_[a-z0-9]+)*_?$/)
+          # trailing underscore included. \A..\z, not ^..$: those anchor at
+          # every line, so a multi-line text with one snake_case line was
+          # written here unescaped, raw newline and all.
+          if text_without_quotes.match?(/\A[a-z][a-z0-9]*(_[a-z0-9]+)*_?\z/)
             # If the bare key IS declared — just under a section this layout
             # does not own — the .localized() below is known-unresolvable
             # (the section-prefixed key never lands in Localizable.strings
@@ -94,11 +103,18 @@ module SjuiTools
             return "\"#{text_without_quotes}\".localized()"
           end
 
-          # Return original text content for non-matched strings
-          text_content
+          # Non-matched strings: the author's text as a Swift literal
+          literal
         end
 
         private
+
+        # `"text"` (unescaped) as the Swift literal of text.
+        def swift_literal_of_quoted(text_content)
+          return text_content unless text_content.length >= 2 && text_content.start_with?('"') && text_content.end_with?('"')
+
+          JsonUIShared::StringLiterals.swift(text_content[1...-1])
+        end
 
         # Lookup by value (e.g., "AppFinder" -> StringManager.Login.appfinder())
         #

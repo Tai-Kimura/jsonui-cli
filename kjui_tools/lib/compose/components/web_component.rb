@@ -4,6 +4,7 @@ require_relative '../helpers/binding_expression'
 require_relative '../helpers/modifier_builder'
 require_relative '../helpers/resource_resolver'
 require_relative '../helpers/web_load_state'
+require_relative '../../core/string_literals'
 
 module KjuiTools
   module Compose
@@ -22,7 +23,7 @@ module KjuiTools
             # expression) — plan 49 lane C.
             Helpers::BindingExpression.value_access($1)
           elsif json_data['url']
-            "\"#{json_data['url']}\""
+            JsonUIShared::StringLiterals.kotlin(json_data['url'])
           else
             '""'
           end
@@ -47,7 +48,7 @@ module KjuiTools
           code += "\n" + indent("settings.javaScriptEnabled = #{json_data['javaScriptEnabled'] != false}", depth + 3)
 
           if json_data['userAgent']
-            code += "\n" + indent("settings.userAgentString = \"#{json_data['userAgent']}\"", depth + 3)
+            code += "\n" + indent("settings.userAgentString = #{JsonUIShared::StringLiterals.kotlin(json_data['userAgent'])}", depth + 3)
           end
 
           if json_data['allowZoom']
@@ -184,16 +185,10 @@ module KjuiTools
         
         private
         
-        # A Kotlin string literal. HTML carries quotes, backslashes and newlines
-        # that would otherwise break the generated source.
+        # A Kotlin string literal. HTML carries quotes, backslashes, `$` and
+        # newlines that would otherwise break the generated source.
         def self.kotlin_string(value)
-          escaped = value.to_s
-                         .gsub('\\', '\\\\')
-                         .gsub('"', '\\"')
-                         .gsub('$', '\\$')
-                         .gsub("\n", '\\n')
-                         .gsub("\t", '\\t')
-          "\"#{escaped}\""
+          JsonUIShared::StringLiterals.kotlin(value)
         end
 
         def self.indent(text, level)

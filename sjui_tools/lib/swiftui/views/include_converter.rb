@@ -141,7 +141,7 @@ module SjuiTools
             end
           else
             # 通常の文字列
-            "\"#{value}\""
+            swift_string_literal(value)
           end
         when Hash
           # ネストされたHashの処理
@@ -156,7 +156,7 @@ module SjuiTools
         when NilClass
           "nil"
         else
-          "\"#{value}\""
+          swift_string_literal(value)
         end
       end
       end

@@ -4,6 +4,7 @@ require_relative '../helpers/content_scale_helper'
 require_relative '../helpers/modifier_builder'
 require_relative '../helpers/resource_resolver'
 require_relative '../helpers/image_accessibility_helper'
+require_relative '../../core/string_literals'
 # The renderingMode -> ColorFilter mapping lives on the Image converter and is
 # called from here. The full suite happened to load it first, so the missing
 # require only showed up running this file alone.
@@ -190,12 +191,10 @@ module KjuiTools
         end
 
         # A Kotlin string literal: a backslash, a quote and a `$` all need
-        # escaping — an unescaped `$` opens a string template. Block form on
-        # purpose: gsub's replacement string treats backslashes specially, which
-        # is how the first cut of this silently dropped the `$` case.
+        # escaping — an unescaped `$` opens a string template — and so does a
+        # control character. The one escaper.
         def self.quote(text)
-          escaped = text.to_s.gsub(/[\\"$]/) { |char| "\\#{char}" }
-          "\"#{escaped}\""
+          JsonUIShared::StringLiterals.kotlin(text)
         end
 
         def self.indent(text, level)

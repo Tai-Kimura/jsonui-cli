@@ -3,6 +3,7 @@
 require 'json'
 require_relative 'bound_value'
 require_relative 'resource_resolver'
+require_relative '../../core/string_literals'
 
 module KjuiTools
   module Compose
@@ -251,14 +252,14 @@ module KjuiTools
               # FontSpec.family is a String?; the binding's runtime value is a String.
               return "data.#{variable}"
             end
-            return value.inspect # quoted Kotlin string literal
+            return JsonUIShared::StringLiterals.kotlin(value)
           end
 
           # `font` is a custom family name when it is NOT a recognised weight.
           if json_data['font']
             value = json_data['font'].to_s
             return nil if value.match?(/^@\{.*\}$/)
-            return value.inspect unless weight_name?(value)
+            return JsonUIShared::StringLiterals.kotlin(value) unless weight_name?(value)
           end
 
           nil

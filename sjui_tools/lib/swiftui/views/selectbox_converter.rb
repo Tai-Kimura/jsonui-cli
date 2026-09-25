@@ -147,7 +147,7 @@ module SjuiTools
                   prop = extract_binding_property(@component['selectedDate'])
                   add_line "selectedDate: data.#{prop}.toDate(format: \"#{date_format}\"),"
                 else
-                  add_line "selectedDate: \"#{@component['selectedDate']}\".toDate(format: \"#{date_format}\"),"
+                  add_line "selectedDate: #{swift_string_literal(@component['selectedDate'])}.toDate(format: \"#{date_format}\"),"
                 end
               end
 
@@ -189,7 +189,7 @@ module SjuiTools
                 add_line "items: Array(data.#{prop}), "
               elsif items.is_a?(Array) && items.any?
                 # 静的配列の場合
-                add_line "items: [#{items.map { |item| "\"#{item}\"" }.join(", ")}],"
+                add_line "items: [#{items.map { |item| swift_string_literal(item) }.join(", ")}],"
               else
                 add_line "items: [],"
               end
@@ -343,7 +343,7 @@ module SjuiTools
           if items.is_a?(String) && bound_value?(items)
             "Array(data.#{extract_binding_property(items)})"
           elsif items.is_a?(Array)
-            "[#{items.map { |item| "\"#{item}\"" }.join(', ')}]"
+            "[#{items.map { |item| swift_string_literal(item) }.join(', ')}]"
           else
             '[String]()'
           end
@@ -353,7 +353,7 @@ module SjuiTools
         # supplies the string at run time; the parse and the fallback are
         # identical either way.
         def date_operand(value)
-          text = bound_string(value) || "\"#{value}\""
+          text = bound_string(value) || swift_string_literal(value)
           "#{text}.toDate(format: \"yyyy-MM-dd\") ?? Date()"
         end
       end

@@ -3,6 +3,7 @@
 require_relative 'base_view_converter'
 require_relative 'responsive_helper'
 require_relative '../../core/responsive_resolver'
+require_relative '../../core/string_literals'
 
 module SjuiTools
   module SwiftUI
@@ -655,7 +656,7 @@ module SjuiTools
         def apply_cell_item_identifier(index_var)
           return unless @component['id']
 
-          add_modifier_line ".accessibilityIdentifier(\"#{@component['id']}_item_\\(#{index_var})\")"
+          add_modifier_line ".accessibilityIdentifier(\"#{JsonUIShared::StringLiterals.swift_body(@component['id'])}_item_\\(#{index_var})\")"
         end
 
         def apply_cell_frame(grid: false)

@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require_relative '../binding/binding_expression'
+require_relative '../../core/string_literals'
 
 module SjuiTools
   module SwiftUI
@@ -162,7 +163,7 @@ module SjuiTools
 
           pairs = map.each_with_index.map do |(key, swift), index|
             literal = index.zero? ? "#{type}#{swift}" : swift
-            "#{key.to_s.downcase.inspect}: #{literal}"
+            "#{JsonUIShared::StringLiterals.swift(key.to_s.downcase)}: #{literal}"
           end
           lookup = "[#{pairs.join(', ')}][(#{expr}).lowercased()]"
           default.nil? ? "(#{lookup})" : "(#{lookup} ?? #{default})"

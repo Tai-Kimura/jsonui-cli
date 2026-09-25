@@ -2,6 +2,7 @@
 
 require_relative '../helpers/binding_expression'
 require_relative '../helpers/modifier_builder'
+require_relative '../../core/string_literals'
 
 # Generates Compose code for the `Embed` view type. Embeds another screen as
 # a region of the parent layout; the embedded screen owns its own ViewModel.
@@ -156,7 +157,7 @@ module KjuiTools
             # emit valid Kotlin even for invalid authoring.
             "data.#{Helpers::BindingExpression.path_only(Regexp.last_match(1))}"
           elsif value.is_a?(String)
-            "\"#{value}\""
+            JsonUIShared::StringLiterals.kotlin(value)
           elsif value == true || value == false
             value.to_s
           elsif value.is_a?(Integer)

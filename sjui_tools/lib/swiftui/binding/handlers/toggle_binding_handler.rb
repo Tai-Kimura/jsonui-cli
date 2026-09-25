@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require_relative '../view_binding_handler'
+require_relative '../../../core/string_literals'
 
 module SjuiTools
   module SwiftUI
@@ -41,7 +42,7 @@ module SjuiTools
           if is_binding?(label)
             parse_binding(label, read_only: true)
           else
-            "\"#{label}\""
+            JsonUIShared::StringLiterals.swift(label)
           end
         end
       end

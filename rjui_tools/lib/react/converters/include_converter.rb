@@ -75,14 +75,19 @@ module RjuiTools
               # Whole-value binding -> parent data reference
               add_viewmodel_data_prefix(m[1].gsub(/^this\./, ''))
             elsif value.match?(/@\{([^}]+)\}/)
-              # Interpolated binding(s) -> template literal
-              interpolated = value.gsub(/@\{([^}]+)\}/) do
-                "${#{add_viewmodel_data_prefix(::Regexp.last_match(1).gsub(/^this\./, ''))}}"
-              end
-              "`#{interpolated.gsub('`') { '\\`' }}`"
+              # Interpolated binding(s) -> template literal; the text
+              # between them is escaped by StringLiterals.ts_template_body
+              interpolated = value.split(/(@\{[^}]+\})/).map do |part|
+                if (inner = part[/\A@\{([^}]+)\}\z/, 1])
+                  "${#{add_viewmodel_data_prefix(inner.gsub(/^this\./, ''))}}"
+                else
+                  JsonUIShared::StringLiterals.ts_template_body(part)
+                end
+              end.join
+              "`#{interpolated}`"
             else
               # Regular string
-              "\"#{value}\""
+              JsonUIShared::StringLiterals.ts(value)
             end
           when Hash
             # Nested object
@@ -99,7 +104,7 @@ module RjuiTools
           when NilClass
             'null'
           else
-            "\"#{value}\""
+            JsonUIShared::StringLiterals.ts(value)
           end
         end
       end

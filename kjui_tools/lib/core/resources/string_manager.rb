@@ -230,9 +230,7 @@ module KjuiTools
         #
         # Quoting is applied only where it changes something. Wrapping every
         # value would rewrite the whole file on the next build and bury the
-        # real change in thousands of lines of noise, and `"` inside a quoted
-        # value then needs escaping — a second edit to every string that
-        # contains one.
+        # real change in thousands of lines of noise.
         #
         # The condition is the EDGE only, deliberately. An internal run is
         # not saved by quoting — REXML folds it when the Text node is built,
@@ -240,10 +238,25 @@ module KjuiTools
         # produce a file where the quotes say "preserved" and the value is
         # folded anyway. Quotes here mean exactly one thing: this value's
         # leading or trailing whitespace survived.
+        #
+        # A `"` inside the value is already `\"` (android_string_escape runs
+        # first), so the wrap adds the quotes and nothing else.
         def quote_whitespace_edges(text)
           return text if text.nil? || text.empty?
           return text if text == text.strip
-          %("#{text.gsub('"') { '\\"' }}")
+          %("#{text}")
+        end
+
+        ANDROID_STRING_ESCAPES = { '\\' => '\\\\', '"' => '\\"', "'" => "\\'", "\n" => '\\n', "\t" => '\\t' }.freeze
+
+        # A text as an Android string resource value. aapt reads `\` as an
+        # escape, drops an unescaped `"` (a quote delimiter), rejects a bare
+        # `'`, and reads a leading `@` / `?` as a resource / attribute
+        # reference; a newline or tab is kept as `\n` / `\t` (REXML would
+        # fold it). One pass, block form, so no escape it writes is escaped
+        # again. `&`, `<` and `>` are REXML's: the Text node escapes them.
+        def android_string_escape(text)
+          text.gsub(/[\\"'\n\t]/) { |c| ANDROID_STRING_ESCAPES[c] }.sub(/\A[@?]/) { |c| "\\#{c}" }
         end
 
         def update_strings_xml(lang_dir)
@@ -299,11 +312,10 @@ module KjuiTools
               # Preserve \n as literal \\n for Android (renders as newline at runtime).
               # The value is NOT trimmed and its whitespace runs are NOT folded:
               # see quote_whitespace_edges for why, and what replaces it.
-              normalized_value = translated_value.gsub("\n", "\\n")
-              # Escape for Android XML strings:
-              # - Apostrophes must be backslash-escaped for Android resource compiler
+              # Escape for Android XML strings (android_string_escape):
+              # - \, ", ' and a leading @ / ? are backslash-escaped for the Android resource compiler
               # - &, <, > are handled by REXML's .text= (auto-escapes to &amp; etc.)
-              normalized_value = normalized_value.gsub("'") { "\\'" }
+              normalized_value = android_string_escape(translated_value)
               # Convert iOS format specifiers to Android format
               # %@ -> %s, %N$@ -> %N$s (positional)
               normalized_value = convert_ios_to_android_format(normalized_value)
@@ -451,8 +463,7 @@ module KjuiTools
           JsonUIShared::PluralValidator::CATEGORIES.each do |cat|
             body = forms[cat]
             next unless body.is_a?(String)
-            normalized = body.gsub("\n", "\\n")
-            normalized = normalized.gsub("'") { "\\'" }
+            normalized = android_string_escape(body)
             normalized = JsonUIShared::PluralValidator.substitute_count(
               normalized, token: '%d', positional_token: '%1$d'
             )

@@ -12,6 +12,7 @@ require_relative 'modifier_bag'
 require_relative '../binding/binding_handler_registry'
 require_relative '../../core/attribute_validator'
 require_relative '../../core/tap_accessibility'
+require_relative '../../core/string_literals'
 require_relative '../helpers/string_manager_helper'
 
 module SjuiTools
@@ -489,9 +490,9 @@ module SjuiTools
           hidden_binding = @component['hidden'] if is_binding?(@component['hidden'])
           if hidden_binding
             expr = binding_data_expr(hidden_binding)
-            add_modifier_line ".accessibilityIdentifier(#{expr} ? \"\" : \"#{@component['id']}\")"
+            add_modifier_line ".accessibilityIdentifier(#{expr} ? \"\" : #{swift_string_literal(@component['id'])})"
           else
-            add_modifier_line ".accessibilityIdentifier(\"#{@component['id']}\")"
+            add_modifier_line ".accessibilityIdentifier(#{swift_string_literal(@component['id'])})"
           end
         end
 
@@ -1551,11 +1552,10 @@ module SjuiTools
             {}
         end
 
-        # Swift string literal, escaped. Small enough to inline, but the
-        # escaping matters: a style or shape spelling arrives from JSON and
-        # goes into generated source.
+        # Swift string literal, escaped (the shared escaper): a style or
+        # shape spelling arrives from JSON and goes into generated source.
         def swift_string_literal(value)
-          %("#{value.to_s.gsub('\\', '\\\\').gsub('"', '\\"')}")
+          JsonUIShared::StringLiterals.swift(value)
         end
 
         def border_color_expr(value)

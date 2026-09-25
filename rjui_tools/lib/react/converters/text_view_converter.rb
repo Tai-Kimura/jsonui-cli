@@ -236,7 +236,7 @@ module RjuiTools
               # and plain literals fall through unchanged.
               attrs << " placeholder=#{string_resolved}"
             else
-              attrs << " placeholder=\"#{placeholder}\""
+              attrs << jsx_attr_text('placeholder', placeholder)
             end
           end
 
@@ -251,7 +251,7 @@ module RjuiTools
               attrs << " value={#{value.gsub(/[{}]/, '')}}"
             else
               # No binding: use uncontrolled component (defaultValue only)
-              attrs << " defaultValue=\"#{attributes['text']}\""
+              attrs << jsx_attr_text('defaultValue', attributes['text'])
             end
           end
 
@@ -291,12 +291,12 @@ module RjuiTools
           # blocks form submission and still drives :invalid.
           attrs << ' required' if attributes['required'] == true || attributes['required'] == 'true'
           if attributes['pattern']
-            escaped = attributes['pattern'].to_s.gsub('\\', '\\\\\\\\').gsub("'", "\\\\'")
+            pattern = JsonUIShared::StringLiterals.ts_single("^(?:#{attributes['pattern']})$")
             # `currentTarget`, not `target`: React types onInput as a FormEvent,
             # whose `target` is a bare EventTarget — reading `.value` off it is
             # a type error in a strict consumer, and the file is @generated.
             attrs << " onInput={(e) => e.currentTarget.setCustomValidity(" \
-                     "new RegExp('^(?:#{escaped})$').test(e.currentTarget.value) ? '' : 'Invalid format')}"
+                     "new RegExp(#{pattern}).test(e.currentTarget.value) ? '' : 'Invalid format')}"
           end
 
           # Soft keyboard. `input` is the TextField spelling of the same idea and

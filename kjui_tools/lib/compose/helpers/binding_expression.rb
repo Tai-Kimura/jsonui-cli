@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require_relative '../../core/string_literals'
+
 module KjuiTools
   module Compose
     module Helpers
@@ -194,13 +196,9 @@ module KjuiTools
             end
           end
 
+          # A Kotlin string literal — the one escaper (`$` included).
           def quote(text)
-            escaped = text.to_s.gsub('\\', '\\\\\\\\')
-                          .gsub('"', '\\"')
-                          .gsub("\n", '\\n')
-                          .gsub("\r", '\\r')
-                          .gsub("\t", '\\t')
-            "\"#{escaped}\""
+            JsonUIShared::StringLiterals.kotlin(text)
           end
         end
       end

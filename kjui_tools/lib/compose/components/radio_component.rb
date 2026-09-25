@@ -4,6 +4,7 @@ require_relative '../helpers/modifier_builder'
 require_relative '../helpers/bound_value'
 require_relative '../helpers/font_spec_helper'
 require_relative '../helpers/resource_resolver'
+require_relative '../../core/string_literals'
 
 module KjuiTools
   module Compose
@@ -49,6 +50,7 @@ module KjuiTools
               json_data['options'].each do |option|
                 option_value = option.is_a?(Hash) ? option['value'] : option
                 option_label = option.is_a?(Hash) ? option['label'] : option
+                value_literal = JsonUIShared::StringLiterals.kotlin(option_value)
                 
                 code += "\n" + indent("Row(", depth + 1)
                 code += "\n" + indent("verticalAlignment = Alignment.CenterVertically,", depth + 2)
@@ -60,16 +62,16 @@ module KjuiTools
                 if json_data['bind'] && json_data['bind'].match(/@\{([^}]+)\}/)
                   variable = $1
                   if json_data['onValueChange'] && Helpers::ModifierBuilder.is_binding?(json_data['onValueChange'])
-                    handler_call = Helpers::ModifierBuilder.get_event_handler_invocation(json_data['onValueChange'], view_id, "\"#{option_value}\"")
-                    code += "\n" + indent("        viewModel.updateData(mapOf(\"#{variable}\" to \"#{option_value}\"))", depth + 2)
+                    handler_call = Helpers::ModifierBuilder.get_event_handler_invocation(json_data['onValueChange'], view_id, value_literal)
+                    code += "\n" + indent("        viewModel.updateData(mapOf(\"#{variable}\" to #{value_literal}))", depth + 2)
                     code += "\n" + indent("        #{handler_call}", depth + 2)
                   else
-                    code += "\n" + indent("        viewModel.updateData(mapOf(\"#{variable}\" to \"#{option_value}\"))", depth + 2)
+                    code += "\n" + indent("        viewModel.updateData(mapOf(\"#{variable}\" to #{value_literal}))", depth + 2)
                   end
                 elsif json_data['onValueChange']
                   # onValueChange (camelCase) -> binding format only (@{functionName})
                   if Helpers::ModifierBuilder.is_binding?(json_data['onValueChange'])
-                    handler_call = Helpers::ModifierBuilder.get_event_handler_invocation(json_data['onValueChange'], view_id, "\"#{option_value}\"")
+                    handler_call = Helpers::ModifierBuilder.get_event_handler_invocation(json_data['onValueChange'], view_id, value_literal)
                     code += "\n" + indent("        #{handler_call}", depth + 2)
                   else
                     code += "\n" + indent("        // ERROR: #{json_data['onValueChange']} - camelCase events require binding format @{functionName}", depth + 2)
@@ -81,22 +83,22 @@ module KjuiTools
                 
                 # RadioButton
                 code += "\n" + indent("RadioButton(", depth + 2)
-                code += "\n" + indent("selected = (#{selected} == \"#{option_value}\"),", depth + 3)
+                code += "\n" + indent("selected = (#{selected} == #{value_literal}),", depth + 3)
                 code += "\n" + indent("onClick = {", depth + 3)
                 
                 if json_data['bind'] && json_data['bind'].match(/@\{([^}]+)\}/)
                   variable = $1
                   if json_data['onValueChange'] && Helpers::ModifierBuilder.is_binding?(json_data['onValueChange'])
-                    handler_call = Helpers::ModifierBuilder.get_event_handler_invocation(json_data['onValueChange'], view_id, "\"#{option_value}\"")
-                    code += "\n" + indent("viewModel.updateData(mapOf(\"#{variable}\" to \"#{option_value}\"))", depth + 4)
+                    handler_call = Helpers::ModifierBuilder.get_event_handler_invocation(json_data['onValueChange'], view_id, value_literal)
+                    code += "\n" + indent("viewModel.updateData(mapOf(\"#{variable}\" to #{value_literal}))", depth + 4)
                     code += "\n" + indent("#{handler_call}", depth + 4)
                   else
-                    code += "\n" + indent("viewModel.updateData(mapOf(\"#{variable}\" to \"#{option_value}\"))", depth + 4)
+                    code += "\n" + indent("viewModel.updateData(mapOf(\"#{variable}\" to #{value_literal}))", depth + 4)
                   end
                 elsif json_data['onValueChange']
                   # onValueChange (camelCase) -> binding format only (@{functionName})
                   if Helpers::ModifierBuilder.is_binding?(json_data['onValueChange'])
-                    handler_call = Helpers::ModifierBuilder.get_event_handler_invocation(json_data['onValueChange'], view_id, "\"#{option_value}\"")
+                    handler_call = Helpers::ModifierBuilder.get_event_handler_invocation(json_data['onValueChange'], view_id, value_literal)
                     code += "\n" + indent("#{handler_call}", depth + 4)
                   else
                     code += "\n" + indent("// ERROR: #{json_data['onValueChange']} - camelCase events require binding format @{functionName}", depth + 4)
@@ -136,7 +138,7 @@ module KjuiTools
                 
                 # Label text
                 code += "\n" + indent("Spacer(modifier = Modifier.width(8.dp))", depth + 2)
-                code += "\n" + indent("Text(\"#{option_label}\")", depth + 2)
+                code += "\n" + indent("Text(#{JsonUIShared::StringLiterals.kotlin(option_label)})", depth + 2)
                 
                 code += "\n" + indent("}", depth + 1)
               end
@@ -182,6 +184,7 @@ module KjuiTools
         def self.generate_radio_item(json_data, depth, required_imports, parent_type)
           group = json_data['group'] || 'default'
           id = json_data['id'] || "radio_#{rand(1000)}"
+          id_literal = JsonUIShared::StringLiterals.kotlin(id)
           # `text`/`label` are `["string", "binding"]`. They used to be
           # interpolated straight into the Kotlin literal, so a bound label put
           # the characters `@{...}` on screen (plan 49 lane C: Radio.text,
@@ -226,7 +229,7 @@ module KjuiTools
             # Use default RadioButton for standard radio appearance
             code += "\n" + indent("    RadioButton(", depth)
             code += "\n" + indent("        selected = #{selected_expr},", depth)
-            code += "\n" + indent("        onClick = { viewModel.updateData(mapOf(\"#{selected_var}\" to \"#{id}\")) }", depth)
+            code += "\n" + indent("        onClick = { viewModel.updateData(mapOf(\"#{selected_var}\" to #{id_literal})) }", depth)
             icon_appearance_args(json_data, required_imports, :radio).each do |arg|
               code += ",\n" + indent("        #{arg}", depth)
             end
@@ -237,7 +240,7 @@ module KjuiTools
             required_imports&.add(:checkbox)
             code += "\n" + indent("    Checkbox(", depth)
             code += "\n" + indent("        checked = #{selected_expr},", depth)
-            code += "\n" + indent("        onCheckedChange = { viewModel.updateData(mapOf(\"#{selected_var}\" to \"#{id}\")) }", depth)
+            code += "\n" + indent("        onCheckedChange = { viewModel.updateData(mapOf(\"#{selected_var}\" to #{id_literal})) }", depth)
             icon_appearance_args(json_data, required_imports, :checkbox).each do |arg|
               code += ",\n" + indent("        #{arg}", depth)
             end
@@ -252,7 +255,7 @@ module KjuiTools
             
             code += "\n" + indent("    val isSelected = #{selected_expr}", depth)
             code += "\n" + indent("    IconButton(", depth)
-            code += "\n" + indent("        onClick = { viewModel.updateData(mapOf(\"#{selected_var}\" to \"#{id}\")) }", depth)
+            code += "\n" + indent("        onClick = { viewModel.updateData(mapOf(\"#{selected_var}\" to #{id_literal})) }", depth)
             code += "\n" + indent("    ) {", depth)
             code += "\n" + indent("        Icon(", depth)
             code += "\n" + indent("            imageVector = if (isSelected) #{selected_icon} else #{icon},", depth)
@@ -280,7 +283,7 @@ module KjuiTools
             # Default RadioButton
             code += "\n" + indent("    RadioButton(", depth)
             code += "\n" + indent("        selected = #{selected_expr},", depth)
-            code += "\n" + indent("        onClick = { viewModel.updateData(mapOf(\"#{selected_var}\" to \"#{id}\")) }", depth)
+            code += "\n" + indent("        onClick = { viewModel.updateData(mapOf(\"#{selected_var}\" to #{id_literal})) }", depth)
             icon_appearance_args(json_data, required_imports, :radio).each do |arg|
               code += ",\n" + indent("        #{arg}", depth)
             end
@@ -347,16 +350,17 @@ module KjuiTools
             if json_data['fontColor'] || json_data['textColor']
               text_color = json_data['fontColor'] || json_data['textColor']
               color_resolved = Helpers::ResourceResolver.process_color(text_color, required_imports)
-              code += "\n" + indent("    Text(\"#{json_data['text']}\", color = #{color_resolved})", depth)
+              code += "\n" + indent("    Text(#{JsonUIShared::StringLiterals.kotlin(json_data['text'])}, color = #{color_resolved})", depth)
             else
               # Default to black color
-              code += "\n" + indent("    Text(\"#{json_data['text']}\", color = Color.Black)", depth)
+              code += "\n" + indent("    Text(#{JsonUIShared::StringLiterals.kotlin(json_data['text'])}, color = Color.Black)", depth)
             end
             code += "\n" + indent("    Spacer(modifier = Modifier.height(8.dp))", depth)
           end
           
           # Generate radio items
           items.each do |item|
+            item_literal = JsonUIShared::StringLiterals.kotlin(item)
             code += "\n" + indent("    Row(", depth)
             code += "\n" + indent("        verticalAlignment = Alignment.CenterVertically,", depth)
             code += "\n" + indent("        modifier = Modifier", depth)
@@ -365,18 +369,18 @@ module KjuiTools
             
             if selected_value && selected_value.match(/@\{([^}]+)\}/)
               variable = $1
-              code += "\n" + indent("                viewModel.updateData(mapOf(\"#{variable}\" to \"#{item}\"))", depth)
+              code += "\n" + indent("                viewModel.updateData(mapOf(\"#{variable}\" to #{item_literal}))", depth)
             end
             
             code += "\n" + indent("            }", depth)
             code += "\n" + indent("    ) {", depth)
             code += "\n" + indent("        RadioButton(", depth)
-            code += "\n" + indent("            selected = #{selected_var} == \"#{item}\",", depth)
+            code += "\n" + indent("            selected = #{selected_var} == #{item_literal},", depth)
             code += "\n" + indent("            onClick = {", depth)
             
             if selected_value && selected_value.match(/@\{([^}]+)\}/)
               variable = $1
-              code += "\n" + indent("                viewModel.updateData(mapOf(\"#{variable}\" to \"#{item}\"))", depth)
+              code += "\n" + indent("                viewModel.updateData(mapOf(\"#{variable}\" to #{item_literal}))", depth)
             end
             
             code += "\n" + indent("            }", depth)
@@ -386,10 +390,10 @@ module KjuiTools
             if json_data['fontColor'] || json_data['textColor']
               text_color = json_data['fontColor'] || json_data['textColor']
               color_resolved = Helpers::ResourceResolver.process_color(text_color, required_imports)
-              code += "\n" + indent("        Text(\"#{item}\", color = #{color_resolved})", depth)
+              code += "\n" + indent("        Text(#{item_literal}, color = #{color_resolved})", depth)
             else
               # Default to black color
-              code += "\n" + indent("        Text(\"#{item}\", color = Color.Black)", depth)
+              code += "\n" + indent("        Text(#{item_literal}, color = Color.Black)", depth)
             end
             code += "\n" + indent("    }", depth)
           end

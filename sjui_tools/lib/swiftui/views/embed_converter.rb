@@ -173,7 +173,7 @@ module SjuiTools
           if value.is_a?(String) && is_binding?(value)
             "data.#{extract_binding_property(value)}"
           elsif value.is_a?(String)
-            "\"#{value}\""
+            swift_string_literal(value)
           elsif value == true || value == false
             value.to_s
           elsif value.is_a?(Numeric)

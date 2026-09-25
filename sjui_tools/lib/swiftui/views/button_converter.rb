@@ -4,6 +4,7 @@ require_relative 'base_view_converter'
 require_relative 'text_style_helper'
 require_relative '../helpers/font_helper'
 require_relative '../helpers/string_manager_helper'
+require_relative '../../core/string_literals'
 
 module SjuiTools
   module SwiftUI
@@ -44,14 +45,17 @@ module SjuiTools
           indent do
             # Process text with binding support
             if text.include?('@{')
-              # Text with interpolation: "Some text @{property} more text"
-              interpolated = text.gsub(/@\{([^}]+)\}/) do |match|
-                property_name = $1
-                # For interpolated text, use data directly
-                "\\(data.#{property_name})"
-              end
-              escaped_text = interpolated.gsub('"', '\\"').gsub("\n", "\\n")
-              add_line "text: \"#{escaped_text}\","
+              # Text with interpolation: "Some text @{property} more text".
+              # Only the literal segments are escaped.
+              interpolated = text.split(/(@\{[^}]+\})/).map do |part|
+                if (m = part.match(/\A@\{([^}]+)\}\z/))
+                  # For interpolated text, use data directly
+                  "\\(data.#{m[1]})"
+                else
+                  JsonUIShared::StringLiterals.swift_body(part)
+                end
+              end.join
+              add_line "text: \"#{interpolated}\","
             else
               # Check if it's snake_case for localized strings
               text_content = get_text_with_string_manager("\"#{text}\"")
@@ -59,9 +63,8 @@ module SjuiTools
               if text_content.start_with?('StringManager.') || text_content.end_with?('.localized()')
                 add_line "text: #{text_content},"
               else
-                # Regular text - escape double quotes
-                escaped_text = text.gsub('"', '\\"')
-                add_line "text: \"#{escaped_text}\","
+                # Regular text
+                add_line "text: #{swift_string_literal(text)},"
               end
             end
 

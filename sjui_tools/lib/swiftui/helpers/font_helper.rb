@@ -2,6 +2,7 @@
 
 require 'json'
 require_relative '../views/value_expression_helper'
+require_relative '../../core/string_literals'
 
 module SjuiTools
   module SwiftUI
@@ -300,7 +301,7 @@ module SjuiTools
           # weight, so it tests membership against the same keys rather than
           # repeating the whole dictionary — a second 12-entry literal in the
           # same expression is what makes Swift's type checker crawl.
-          names = weight_vocabulary.map { |name| name.to_s.inspect }.join(', ')
+          names = weight_vocabulary.map { |name| JsonUIShared::StringLiterals.swift(name) }.join(', ')
           ["([#{names}].contains(#{text}.lowercased()) ? nil : #{text})", lookup]
         end
 

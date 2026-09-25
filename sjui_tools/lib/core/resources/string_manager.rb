@@ -11,6 +11,7 @@ require_relative '../generated_marker'
 require_relative '../plural_validator'
 require_relative '../layout_variant'
 require_relative '../string_manager_core'
+require_relative '../string_literals'
 
 module SjuiTools
   module Core
@@ -462,8 +463,14 @@ module SjuiTools
           str.gsub('&', '&amp;').gsub('<', '&lt;').gsub('>', '&gt;')
         end
 
+        # Localizable.strings escapes: `\\ \" \n \r \t` (no `\u{}` — that is
+        # Swift's, not the .strings format's). Backslash is escaped too, or a
+        # value's own `\n` would read back as a newline. Block form: a gsub
+        # STRING replacement reads a backslash pair as a back-reference.
+        LOCALIZABLE_STRINGS_ESCAPES = { '\\' => '\\\\', '"' => '\\"', "\n" => '\\n', "\r" => '\\r', "\t" => '\\t' }.freeze
+
         def escape_json_string(str)
-          str.gsub('"', '\\"').gsub("\n", '\\n').gsub("\r", '\\r').gsub("\t", '\\t')
+          str.gsub(/[\\"\n\r\t]/) { |c| LOCALIZABLE_STRINGS_ESCAPES[c] }
         end
 
         # Convert Android format specifiers to iOS format
@@ -617,13 +624,9 @@ module SjuiTools
           components[0] + (components[1..-1] || []).map(&:capitalize).join
         end
 
+        # Inside of a Swift string literal (the shared escaper).
         def escape_swift_string(str)
-          # Escape special characters for Swift string literals
-          str.gsub('\\', '\\\\')     # Backslash must be first
-             .gsub('"', '\\"')       # Double quotes
-             .gsub("\n", '\\n')      # Newlines
-             .gsub("\r", '\\r')      # Carriage returns
-             .gsub("\t", '\\t')      # Tabs
+          JsonUIShared::StringLiterals.swift_body(str)
         end
 
         def update_strings_file(file_path, strings_data)
