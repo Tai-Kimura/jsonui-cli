@@ -9,6 +9,7 @@ require_relative '../core/project_finder'
 require_relative '../core/logger'
 require_relative '../core/type_converter'
 require_relative '../core/layout_validator'
+require_relative '../core/image_accessibility'
 require_relative '../core/normalization'
 require_relative '../core/layout_variant'
 require_relative '../core/screen_index'
@@ -212,6 +213,7 @@ module KjuiTools
 
           # Process includes - expand inline with ID prefix support (like SwiftJsonUI)
           json_data = IncludeExpander.process_includes(json_data, File.dirname(json_file), nil, @layouts_dir)
+          annotate_image_roles(json_data, json_file)
 
           @required_imports = Set.new
           @included_views = Set.new
@@ -307,6 +309,16 @@ module KjuiTools
       end
 
       private
+
+      # Writes each image's screen-reader role (shared/core/image_accessibility
+      # .rb) on the include-expanded tree the converters read: whether a
+      # tappable around an image is named by other content is only visible
+      # here, not from the image's own node. Names every image that operates
+      # a control and has no alt (INFO).
+      def annotate_image_roles(json_data, json_file)
+        infos = JsonUIShared::ImageAccessibility.annotate!(json_data, source_path: File.basename(json_file))
+        JsonUIShared::LayoutValidator.print_warnings(infos) unless infos.empty?
+      end
 
       def generate_component(json_data, depth = 0, parent_type = nil, is_root: false)
         return "" unless json_data.is_a?(Hash)
@@ -1326,6 +1338,7 @@ module KjuiTools
         end
 
         json_data = IncludeExpander.process_includes(json_data, File.dirname(variant_file), nil, @layouts_dir)
+        annotate_image_roles(json_data, variant_file)
 
         @required_imports = Set.new
         @included_views = Set.new

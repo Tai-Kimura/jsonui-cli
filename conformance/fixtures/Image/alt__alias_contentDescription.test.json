@@ -1,10 +1,10 @@
 {
   "type": "screen",
   "source": {
-    "layout": "fixtures/Image/alt__static.layout.json"
+    "layout": "fixtures/Image/alt__alias_contentDescription.layout.json"
   },
   "metadata": {
-    "name": "conformance Image.alt (static)",
+    "name": "conformance Image.alt (alias_contentDescription)",
     "description": "Conformance fixture for 'alt' on Image (section: Image, class: visual). Value under test: \"sample\".",
     "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
     "tags": [
@@ -15,7 +15,7 @@
   "platform": "all",
   "cases": [
     {
-      "name": "alt__static",
+      "name": "alt__alias_contentDescription",
       "description": "Conformance fixture for 'alt' on Image (section: Image, class: visual). Value under test: \"sample\".",
       "steps": [
         {
@@ -24,7 +24,7 @@
         },
         {
           "action": "screenshot",
-          "name": "Image_alt__static"
+          "name": "Image_alt__alias_contentDescription"
         }
       ]
     }

@@ -1727,10 +1727,14 @@ module RjuiTools
         # Build the alt attribute for image-family converters. alt is
         # user-visible text (screen readers), so it resolves strings.json
         # keys exactly like text/hint. Decorative images keep alt=""
-        # untouched; unregistered literals pass through raw.
+        # untouched; unregistered literals pass through raw. The declared
+        # aliases (accessibilityLabel, contentDescription) read the same; a
+        # bound alt is text that is "" when unset, so decorative then too
+        # (shared/core/image_accessibility.rb).
         def build_alt_attr
-          raw = attributes['alt'] || attributes['accessibilityLabel'] || ''
+          raw = attributes['alt'] || attributes['accessibilityLabel'] || attributes['contentDescription'] || ''
           return " alt=\"#{raw}\"" if raw.empty?
+          return " alt=#{convert_text_binding(raw)}" if bound_value_expr(raw)
 
           if (resolved = convert_string_key(raw))
             " alt=#{resolved}"

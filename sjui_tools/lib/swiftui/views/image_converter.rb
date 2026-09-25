@@ -1,6 +1,7 @@
 #!/usr/bin/env ruby
 
 require_relative 'base_view_converter'
+require_relative 'image_accessibility_modifiers'
 
 module SjuiTools
   module SwiftUI
@@ -8,6 +9,8 @@ module SjuiTools
       # Generated code image converter
       # Dynamic mode equivalent: Sources/SwiftJsonUI/Classes/SwiftUI/Dynamic/Converters/ImageViewConverter.swift
       class ImageConverter < BaseViewConverter
+        include ImageAccessibilityModifiers
+
         def convert
           # srcName優先（srcNameはアセット名を直接指定）
           if @component['srcName']
@@ -139,6 +142,10 @@ module SjuiTools
             ]
             @modifier_bag.register(:on_click, on_click_lines)
           end
+
+          # What VoiceOver reads for the image: its alt, nothing, or (an image
+          # operating a control with no alt) the asset name as before.
+          apply_image_accessibility
 
           # Apply all common modifiers (padding, frame, background, cornerRadius, border, margins, opacity, etc.)
           apply_modifiers

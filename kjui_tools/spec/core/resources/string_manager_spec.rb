@@ -166,9 +166,10 @@ RSpec.describe KjuiTools::Core::Resources::StringManager do
     describe 'STRING_PROPERTIES (localizable attribute set)' do
       # W3-2: is_string_property? became the shared core's
       # STRING_PROPERTIES constant (checked inline during extraction).
+      # `alt` joined when images gained a localized screen-reader text.
       it 'contains every localizable string attribute' do
         expect(JsonUIShared::StringManagerCore::STRING_PROPERTIES)
-          .to contain_exactly('text', 'hint', 'placeholder', 'label', 'prompt')
+          .to contain_exactly('text', 'hint', 'placeholder', 'label', 'prompt', 'alt')
       end
 
       it 'excludes non-string properties' do

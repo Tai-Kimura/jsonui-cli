@@ -104,3 +104,134 @@ RSpec.describe KjuiTools::Compose::Components::ImageComponent, 'renderingMode' d
     expect(image({})).not_to include('colorFilter')
   end
 end
+
+# What TalkBack reads for an image: its alt (a strings.json key or text,
+# localized like `text`, or a binding), nothing for a decorative image, and —
+# for an image that operates a control and has no alt — what it read before
+# alt existed (shared/core/image_accessibility.rb). The roles come from the
+# vectors the sjui codegen and both Dynamic runtimes also run.
+RSpec.describe 'kjui image contentDescription from alt' do
+  require 'compose/components/networkimage_component'
+  require 'compose/components/circleimage_component'
+  require 'compose/components/iconlabel_component'
+  require 'core/image_accessibility'
+  require 'json'
+
+  rule = JsonUIShared::ImageAccessibility
+  vectors_path = File.expand_path('../../../../shared/core/image_accessibility_vectors.json', __dir__)
+
+  # What each converter read before alt existed, kept for a control image.
+  LEGACY = { 'Image' => ->(node) { node['id'] }, 'NetworkImage' => ->(_) { 'Image' },
+             'CircleImage' => ->(_) { 'Profile Image' } }.freeze
+
+  def emit(node)
+    component = case node['type']
+                when 'NetworkImage' then KjuiTools::Compose::Components::NetworkImageComponent
+                when 'CircleImage' then KjuiTools::Compose::Components::CircleImageComponent
+                else KjuiTools::Compose::Components::ImageComponent
+                end
+    component.generate(node, 0, Set.new)
+  end
+
+  def spoken(result)
+    result[/contentDescription = (.*?),?$/, 1]
+  end
+
+  def images(node, out = [])
+    return out unless node.is_a?(Hash)
+
+    out << node if JsonUIShared::ImageAccessibility.image?(node)
+    JsonUIShared::ImageAccessibility.children(node).each { |c| images(c, out) }
+    out
+  end
+
+  if File.exist?(vectors_path)
+    JSON.parse(File.read(vectors_path))['cases'].each do |vector|
+      it "emits each role: #{vector['name']}" do
+        layout = JSON.parse(JSON.generate(vector['layout']))
+        rule.annotate!(layout, source_path: 'probe.json')
+        images(layout).each do |node|
+          said = spoken(emit(node))
+          case vector['roles'][node['id']]
+          when 'decorative' then expect(said).to eq('null'), node['id']
+          when 'control' then expect(said).to eq("\"#{LEGACY.fetch(node['type']).call(node)}\""), node['id']
+          when 'label'
+            alt = rule.alt(node)
+            if alt.start_with?('@{')
+              expect(said).to match(/\A\(".*data\.#{alt[2..-2]}.*"\)\.ifEmpty \{ null \}\z/), node['id']
+            else
+              expect(said).to eq("\"#{alt}\""), node['id']
+            end
+          else raise "no role for #{node['id']}"
+          end
+        end
+      end
+    end
+  end
+
+  it 'reads nothing from the icon of an IconLabel, whose label names it' do
+    result = KjuiTools::Compose::Components::IconLabelComponent.generate(
+      { 'type' => 'IconLabel', 'text' => 'Home', 'icon' => 'ic_home' }, 0, Set.new
+    )
+    expect(spoken(result)).to eq('null')
+  end
+end
+
+# The tappable around an image is only visible to the builder, which writes
+# each image's role after expanding includes. The same image, alone in a
+# tappable and then beside a Label in it.
+RSpec.describe 'kjui build: the role reaches the image converter' do
+  require 'compose/compose_builder'
+  require 'json'
+  require 'tmpdir'
+  require 'stringio'
+
+  let(:temp_dir) { Dir.mktmpdir('kjui_image_role') }
+  let(:layouts_dir) { File.join(temp_dir, 'src/main/assets/Layouts') }
+
+  before do
+    FileUtils.mkdir_p(layouts_dir)
+    config = { 'source_directory' => 'src/main', 'layouts_directory' => 'assets/Layouts',
+               'view_directory' => 'kotlin/com/example/app/views', 'package_name' => 'com.example.app' }
+    allow(KjuiTools::Core::ConfigManager).to receive(:load_config).and_return(config)
+    allow(KjuiTools::Core::ProjectFinder).to receive(:get_full_source_path).and_return(temp_dir)
+    allow(KjuiTools::Core::ProjectFinder).to receive(:get_package_name).and_return('com.example.app')
+    allow(Dir).to receive(:pwd).and_return(temp_dir)
+  end
+
+  after { FileUtils.rm_rf(temp_dir) }
+
+  def build(children)
+    layout = { 'type' => 'View', 'child' => [
+      { 'data' => [{ 'name' => 'onMenu', 'class' => '(() -> Void)?' }] },
+      { 'type' => 'View', 'onClick' => '@{onMenu}', 'child' => children }
+    ] }
+    File.write(File.join(layouts_dir, 'probe.json'), JSON.generate(layout))
+    printed = StringIO.new
+    errors = StringIO.new
+    $stdout = printed
+    $stderr = errors
+    begin
+      KjuiTools::Compose::ComposeBuilder.new.build_file(File.join(layouts_dir, 'probe.json'))
+    ensure
+      $stdout = STDOUT
+      $stderr = STDERR
+    end
+    [File.read(Dir.glob(File.join(temp_dir, '**', 'ProbeGeneratedView.kt')).first), errors.string]
+  end
+
+  let(:icon) { { 'type' => 'Image', 'id' => 'menu_icon', 'src' => 'menu' } }
+
+  it 'keeps the id of the only image of a tappable, and names it' do
+    src, printed = build([icon])
+    expect(src).to include('contentDescription = "menu_icon"')
+    expect(printed).to include("[info] probe.json: Image 'menu_icon' operates a control and has no alt")
+  end
+
+  it 'skips the same image beside text, and says nothing' do
+    src, printed = build([icon, { 'type' => 'Label', 'text' => 'Menu' }])
+    expect(src).to include('contentDescription = null')
+    expect(src).not_to include('contentDescription = "menu_icon"')
+    expect(printed).not_to include('[info]')
+  end
+end

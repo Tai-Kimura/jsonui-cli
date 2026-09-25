@@ -169,7 +169,12 @@ def visible_attrs_by_component(
     component whose vocabulary attrs are all plain ``string`` is using
     the names for resource references. Calibrated against the downstream-find
     consumers (NetworkImage.placeholder="downstream_placeholder" was the
-    false-positive class this removes)."""
+    false-positive class this removes).
+
+    ``alt`` stays out of that vote and is always text: it is what a screen
+    reader says, and never names a resource. Letting it vote made
+    NetworkImage text-bearing the day its alt became bindable, and dragged
+    the placeholder IMAGE NAMES in with it."""
     out: dict[str, frozenset[str]] = {}
     for comp, attrs in definitions.items():
         if comp.startswith("_") or not isinstance(attrs, dict):
@@ -179,9 +184,20 @@ def visible_attrs_by_component(
             for name, spec in attrs.items()
             if isinstance(spec, dict) and name in vocabulary
         }
-        text_bearing = any(_declares_binding(spec) for spec in vocab_specs.values())
-        out[comp] = frozenset(vocab_specs) if text_bearing else frozenset()
+        text_bearing = any(
+            _declares_binding(spec)
+            for name, spec in vocab_specs.items()
+            if name not in _ALWAYS_TEXT
+        )
+        visible = set(vocab_specs) if text_bearing else set()
+        visible |= {name for name in vocab_specs if name in _ALWAYS_TEXT}
+        out[comp] = frozenset(visible)
     return out
+
+
+#: Vocabulary attributes that are text on every component that declares
+#: them (see visible_attrs_by_component).
+_ALWAYS_TEXT = frozenset({"alt"})
 
 
 # ----------------------------------------------------------------------

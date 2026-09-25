@@ -15,6 +15,7 @@ require_relative 'helpers/string_manager_helper'
 require_relative 'include_expander'
 require_relative '../core/attribute_validator'
 require_relative '../core/layout_validator'
+require_relative '../core/image_accessibility'
 require_relative '../core/normalization'
 require_relative 'views/color_helper'
 
@@ -86,6 +87,7 @@ module SjuiTools
 
         # includeを処理
         json_data = process_includes(json_data, File.dirname(json_file_path))
+        annotate_image_roles(json_data, json_file_path)
         mark_root_if_scrolling_cell(json_data, json_file_path)
         mark_root_if_collection_cell(json_data, json_file_path)
 
@@ -247,6 +249,7 @@ module SjuiTools
 
         # Process includes
         json_data = process_includes(json_data, File.dirname(json_file_path))
+        annotate_image_roles(json_data, json_file_path)
         mark_root_if_scrolling_cell(json_data, json_file_path)
         mark_root_if_collection_cell(json_data, json_file_path)
 
@@ -360,6 +363,16 @@ module SjuiTools
       end
 
       # Delegate to shared IncludeExpander module
+      # Writes each image's screen-reader role (shared/core/image_accessibility
+      # .rb) on the include-expanded tree the converters read: whether a
+      # tappable around an image is named by other content is only visible
+      # here, not from the image's own node. Names every image that operates
+      # a control and has no alt (INFO).
+      def annotate_image_roles(json_data, json_file_path)
+        infos = JsonUIShared::ImageAccessibility.annotate!(json_data, source_path: File.basename(json_file_path))
+        JsonUIShared::LayoutValidator.print_warnings(infos) unless infos.empty?
+      end
+
       def process_includes(json_data, base_dir, id_prefix = nil)
         IncludeExpander.process_includes(json_data, base_dir, id_prefix)
       end

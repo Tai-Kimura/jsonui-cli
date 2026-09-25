@@ -80,8 +80,16 @@ RSpec.describe KjuiTools::Compose::Components::CircleImageComponent do
     end
 
     context 'content description' do
-      it 'uses default contentDescription' do
+      # Decorative unless it has an alt (shared/core/image_accessibility.rb):
+      # the English "Profile Image" is what TalkBack read in every language.
+      it 'is decorative when it has no alt' do
         json_data = { 'type' => 'CircleImage' }
+        result = described_class.generate(json_data, 0, required_imports)
+        expect(result).to include('contentDescription = null')
+      end
+
+      it 'keeps "Profile Image" only when it operates a control and has no alt' do
+        json_data = { 'type' => 'CircleImage', 'onClick' => '@{onProfile}' }
         result = described_class.generate(json_data, 0, required_imports)
         expect(result).to include('contentDescription = "Profile Image"')
       end
