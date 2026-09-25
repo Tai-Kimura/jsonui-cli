@@ -3,6 +3,7 @@
 require 'core/attribute_types'
 require 'swiftui/generators/swift_component_generator'
 require 'swiftui/generators/adapter_generator'
+require 'swiftui/generators/converter_generator'
 
 # Every attribute type `sjui g converter` understands: the Swift component it
 # scaffolds and the Dynamic adapter that reads the prop — a plain prop and a
@@ -31,7 +32,7 @@ RSpec.describe 'sjui g converter and every attribute type' do
     vocab + ['String?', 'Int?', 'Long?', 'Bool?', 'Color?', 'CGFloat?', '[String]', '[Int]?', 'Array(Double)', 'Array', 'Object?',
              '(() -> Void)?', '((String) -> Void)?', 'Callback'] +
       # outside the vocabulary: model types the app declares, and one as a list
-      %w[Date AppRow [AppRow] Array(AppSection)]
+      %w[Date AppRow AppRow!! [AppRow] Array(AppSection)]
   end
 
   LIBRARY = <<~SWIFT
@@ -57,7 +58,7 @@ RSpec.describe 'sjui g converter and every attribute type' do
     }
     final class CollectionDataSource {}
     // The app's own model types.
-    struct AppRow {}
+    struct AppRow { static var mock: AppRow { AppRow() } }
     struct AppSection {}
   SWIFT
 
@@ -94,5 +95,37 @@ RSpec.describe 'sjui g converter and every attribute type' do
               .new('T', is_container: nil, attributes: { 'v' => type }, command: 'spec').send(:swift_template)
       expect(swift[/^\s*let v: (.*)$/, 1]).not_to end_with('??'), type
     end
+  end
+
+  # A type outside the vocabulary: `g converter` names it, in the one sentence
+  # the three tools share (JsonUIShared::AttributeTypes.outside_warning — the
+  # file is byte-identical in each tool, shared_core_mirror_spec), and says
+  # nothing of the others. Not a refusal: faces declare their own model types,
+  # and refusing stopped `jui g converter --all` on three of them (measured
+  # 2026-09-26). The file writers are stubbed; nothing here is written.
+  def warnings_for(attributes)
+    said = []
+    allow(SjuiTools::Core::Logger).to receive(:warn) { |m| said << m }
+    %i[info debug success error].each { |m| allow(SjuiTools::Core::Logger).to receive(m) }
+    generator = SjuiTools::SwiftUI::Generators::ConverterGenerator.new('Probe', attributes: attributes)
+    %i[create_converter_file update_mappings_file generate_attribute_definition_file
+       update_membership_exceptions_if_needed].each { |m| allow(generator).to receive(m) }
+    allow_any_instance_of(SjuiTools::SwiftUI::Generators::SwiftComponentGenerator).to receive(:generate)
+    allow_any_instance_of(SjuiTools::SwiftUI::Generators::AdapterGenerator).to receive(:generate)
+    generator.generate
+    said
+  end
+
+  it 'names the type once, in the shared sentence' do
+    said = warnings_for('rows' => '[AppRow]', 'when' => 'Date', 'title' => 'String', 'count' => 'Long')
+    expect(said).to eq([
+      JsonUIShared::AttributeTypes.outside_warning('rows', '[AppRow]'),
+      JsonUIShared::AttributeTypes.outside_warning('when', 'Date')
+    ])
+    expect(said.first).to include("'[AppRow]'").and include('List<Any?> in Kotlin')
+  end
+
+  it 'says nothing when every type is in the vocabulary' do
+    expect(warnings_for('title' => 'String', 'tap' => '(() -> Void)?', 'rows' => '[Int]?')).to be_empty
   end
 end

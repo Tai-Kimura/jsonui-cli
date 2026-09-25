@@ -144,31 +144,24 @@ RSpec.describe SjuiTools::SwiftUI::Generators::AdapterGenerator do
     end
   end
 
-  describe '#get_default_value_for_type' do
+  # The value a bound attribute falls back to when the layout names no
+  # binding — the shared table's (lib/core/attribute_types.rb), the one the
+  # component and its preview use; this generator kept its own list until
+  # 1.8.121 (Float was 0.0 of a Float the component declared as Double).
+  describe 'a bound attribute\'s fallback' do
     let(:generator) { described_class.new('Test') }
 
-    it 'returns empty string for String' do
-      expect(generator.send(:get_default_value_for_type, 'String')).to eq('""')
+    {
+      'String' => '?? ""', 'Bool' => '?? false', 'Int' => '?? 0', 'Double' => '?? 0.0', 'Float' => '?? 0.0'
+    }.each do |type, fallback|
+      it "is the table's for #{type}" do
+        expect(generator.send(:generate_binding_extraction, 'v', type)).to include(".constant((vValue as? #{type == 'Float' ? 'Double' : type}) #{fallback})")
+      end
     end
 
-    it 'returns false for Bool' do
-      expect(generator.send(:get_default_value_for_type, 'Bool')).to eq('false')
-    end
-
-    it 'returns 0 for Int' do
-      expect(generator.send(:get_default_value_for_type, 'Int')).to eq('0')
-    end
-
-    it 'returns 0.0 for Double' do
-      expect(generator.send(:get_default_value_for_type, 'Double')).to eq('0.0')
-    end
-
-    it 'returns 0.0 for Float' do
-      expect(generator.send(:get_default_value_for_type, 'Float')).to eq('0.0')
-    end
-
-    it 'returns nil for unknown types' do
-      expect(generator.send(:get_default_value_for_type, 'CustomType')).to eq('nil')
+    it 'is none for a model type — the binding is optional' do
+      code = generator.send(:generate_binding_extraction, 'v', 'CustomType')
+      expect(code).to include('SwiftUI.Binding<CustomType?>').and include('.constant(vValue as? CustomType)')
     end
   end
 
@@ -279,8 +272,18 @@ RSpec.describe SjuiTools::SwiftUI::Generators::AdapterGenerator do
 
     it 'generates binding code for custom model type' do
       code = generator.send(:generate_binding_extraction, 'model', 'CustomModel')
+      expect(code).to include('let modelValue = component.rawData["model"]')
       expect(code).to include('SwiftUI.Binding<CustomModel?>')
-      expect(code).to include('.constant(nil)')
+      expect(code).to include('.constant(modelValue as? CustomModel)')
+    end
+
+    # `!!`: the component declares `Binding<CustomModel>`, so the adapter
+    # hands it one — it passed `Binding<CustomModel?>` until 1.8.121.
+    it 'keeps a `!!` model type non-optional, falling back to .mock' do
+      code = generator.send(:generate_binding_extraction, 'model', 'CustomModel!!')
+      expect(code).to include('SwiftUI.Binding<CustomModel>')
+      expect(code).to include('.constant((modelValue as? CustomModel) ?? CustomModel.mock)')
+      expect(code).not_to include('CustomModel?')
     end
   end
 

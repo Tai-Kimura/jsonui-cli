@@ -181,8 +181,11 @@ RSpec.describe SjuiTools::SwiftUI::Generators::SwiftComponentGenerator do
       expect(generator.send(:map_to_swift_type, 'Color')).to eq('Color')
     end
 
-    it 'maps EdgeInsets type' do
-      expect(generator.send(:map_to_swift_type, 'EdgeInsets')).to eq('EdgeInsets')
+    # EdgeInsets left the vocabulary in 1.8.121 (with Dp, Size and Alignment:
+    # the component and the adapter never compiled it as a pair). Outside the
+    # vocabulary a type is kept optional, like any model type.
+    it 'keeps EdgeInsets, outside the vocabulary, optional' do
+      expect(generator.send(:map_to_swift_type, 'EdgeInsets')).to eq('EdgeInsets?')
     end
 
     it 'makes custom types optional by default' do
@@ -224,8 +227,8 @@ RSpec.describe SjuiTools::SwiftUI::Generators::SwiftComponentGenerator do
       expect(generator.send(:get_swift_default_value, 'Color')).to eq('.blue')
     end
 
-    it 'returns default for EdgeInsets' do
-      expect(generator.send(:get_swift_default_value, 'EdgeInsets')).to include('EdgeInsets')
+    it 'returns nil for EdgeInsets, outside the vocabulary' do
+      expect(generator.send(:get_swift_default_value, 'EdgeInsets')).to eq('nil')
     end
 
     it 'returns nil for optional custom types' do

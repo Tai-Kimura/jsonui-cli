@@ -310,10 +310,10 @@ module SjuiTools
           swift = JsonUIShared::AttributeTypes.swift_type(t)
           default = JsonUIShared::AttributeTypes.swift_default(t)
           fallback = default ? " ?? #{default}" : ''
-          if t.kind == :outside
-            forced = type.to_s.strip.end_with?('!!')
-            return "        let #{name}: #{forced ? t.name : swift}#{" = #{resolve}"}#{forced ? " ?? #{t.name}.mock" : ''}\n"
+          if (model = forced_model(type, t))
+            return "        let #{name}: #{model} = #{resolve} ?? #{model}.mock\n"
           end
+          return "        let #{name}: #{swift} = #{resolve}\n" if t.kind == :outside
           return "        let #{name}: #{swift} = #{resolve}#{fallback}\n" unless t.kind == :scalar
 
           case t.canonical
@@ -398,8 +398,9 @@ module SjuiTools
         # before 1.8.121.
         def generate_binding_extraction(name, type)
           t = JsonUIShared::AttributeTypes.parse(type)
-          swift = JsonUIShared::AttributeTypes.swift_type(t)
-          default = JsonUIShared::AttributeTypes.swift_default(t)
+          model = forced_model(type, t)
+          swift = model || JsonUIShared::AttributeTypes.swift_type(t)
+          default = model ? "#{model}.mock" : JsonUIShared::AttributeTypes.swift_default(t)
           value_type = swift.chomp('?')
           constant = default ? "(data[propertyName] as? #{value_type}) ?? #{default}" : "data[propertyName] as? #{value_type}"
           literal = default ? "(#{name}Value as? #{value_type}) ?? #{default}" : "#{name}Value as? #{value_type}"
@@ -420,23 +421,13 @@ module SjuiTools
           impl
         end
 
-        def get_default_value_for_type(type)
-          case type
-          when 'String'
-            '""'
-          when 'Bool'
-            'false'
-          when 'Int'
-            '0'
-          when 'Double'
-            '0.0'
-          when 'Float'
-            '0.0'
-          else
-            'nil'
-          end
+        # A model type outside the vocabulary marked `!!` ("not optional"): the
+        # component declares it non-optional, so the adapter reads it as one and
+        # falls back to `.mock`, as the component's preview does.
+        def forced_model(type, t)
+          t.name if t.kind == :outside && type.to_s.strip.end_with?('!!')
         end
-        
+
         def registration_template
           marker_header = Core::GeneratedMarker.comment_header(
             source: "CustomComponentRegistration",
