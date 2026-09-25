@@ -13,8 +13,9 @@ either, and was counted the same way.
 
 Now protocol-sync names the key, the modifier and the fix, leaves the line as
 it is, and fails. The fix follows the protocol: a `readOnly` var can keep its
-setter private (`override var X … private set`, `private(set) var X`); a
-settable one needs a public setter; Android's default observable var is a
+setter private (`override var X … private set`, `private(set) var X`; in an
+open Kotlin class `final override var X … private set`, as Kotlin prohibits a
+private setter on an open property); a settable one needs a public setter; Android's default observable var is a
 StateFlow (`override val X: StateFlow<…>` over a private MutableStateFlow).
 
     Impl declaration                         android            ios
@@ -141,6 +142,10 @@ class BuildSyncTests(unittest.TestCase):
             ok, out = _sync(root)
             self.assertIs(ok, False, out)
             self.assertIn("write `override var isLoading … private set` (or `override val isLoading`)", out)
+            # `override` in an open class is open, and Kotlin prohibits a private
+            # setter on an open property — the spelling that compiles there.
+            self.assertIn("in an open class, `final override var isLoading … private set`, since "
+                          "Kotlin prohibits a private setter on an open property", out)
 
     def test_control_kotlin_override_with_a_private_setter_passes(self):
         with tempfile.TemporaryDirectory() as d:
