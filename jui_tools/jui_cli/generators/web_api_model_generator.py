@@ -290,9 +290,10 @@ class WebApiModelGenerator:
                 field.type, enum_names, format_native=format_native
             )
         name = self._ts_property_name(field)
-        # Optional fields use ``?:`` rather than ``| undefined`` for ergonomics.
-        sep = "?:" if field.type.nullable else ":"
-        out.append(f"  {name}{sep} {type_str};")
+        # Optional fields use ``?:`` rather than ``| undefined`` for ergonomics;
+        # a field that may be null says ``| null`` (_ts_optional / _ts_null).
+        sep = "?:" if _ts_optional(field) else ":"
+        out.append(f"  {name}{sep} {type_str}{_ts_null_suffix(field)};")
         return out
 
     def _ts_property_name(self, field: FieldDef) -> str:
@@ -335,8 +336,8 @@ class WebApiModelGenerator:
         out.append(f"export interface {wire_iface} {{")
         for f in schema.fields:
             type_str = _ts_type_with_enums(f.type, enum_names)
-            sep = "?:" if f.type.nullable else ":"
-            out.append(f"  {f.wire_name}{sep} {type_str};")
+            sep = "?:" if _ts_optional(f) else ":"
+            out.append(f"  {f.wire_name}{sep} {type_str}{_ts_null_suffix(f)};")
         out.append("}")
         out.append("")
         out.append(f"export const parse{name} = (wire: {wire_iface}): {name}Dto => ({{")
@@ -383,8 +384,8 @@ class WebApiModelGenerator:
                 wire_type = "unknown"
             else:
                 wire_type = _ts_wire_type(f.type, enum_names, affected)
-            sep = "?:" if f.type.nullable else ":"
-            out.append(f"  {_ts_obj_key(f.wire_name)}{sep} {wire_type};")
+            sep = "?:" if _ts_optional(f) else ":"
+            out.append(f"  {_ts_obj_key(f.wire_name)}{sep} {wire_type}{_ts_null_suffix(f)};")
         out.append("}")
 
         # ---------- parse ----------
@@ -428,8 +429,7 @@ class WebApiModelGenerator:
             src = f"wire.{f.wire_name}" if _ts_is_identifier(f.wire_name) else f"wire[{_ts_oneof_kind_literal(f.wire_name)}]"
             if _ts_needs_conversion(f.type, affected):
                 converted = _ts_parse_expr(f.type, src, affected, depth=0)
-                if f.type.nullable:
-                    converted = f"{src} == null ? undefined : {converted}"
+                converted = _ts_absent_guard(f, src, converted)
                 return_parts.append(f"{prop}: {converted}")
             else:
                 return_parts.append(f"{prop}: {src}")
@@ -465,8 +465,7 @@ class WebApiModelGenerator:
             src = f"model.{prop}"
             if _ts_needs_conversion(f.type, affected):
                 converted = _ts_serialize_expr(f.type, src, affected, depth=0)
-                if f.type.nullable:
-                    converted = f"{src} == null ? undefined : {converted}"
+                converted = _ts_absent_guard(f, src, converted)
                 obj_parts.append(f"{key}: {converted}")
             else:
                 obj_parts.append(f"{key}: {src}")
@@ -748,6 +747,34 @@ _FORMAT_TO_TS: dict[str, str] = {
 }
 
 
+def _ts_optional(field: FieldDef) -> bool:
+    """May the field be omitted (``?:``)? Not in ``required``."""
+    return field.type.nullable and not field.required
+
+
+def _ts_null(field: FieldDef) -> bool:
+    """May the field be JSON ``null`` (``| null``)? ``nullable: true`` — or,
+    for a field built without the loader, the folded flag on a required one
+    (the only way it can be set there)."""
+    return field.nullable or (field.type.nullable and field.required)
+
+
+def _ts_null_suffix(field: FieldDef) -> str:
+    return " | null" if _ts_null(field) else ""
+
+
+def _ts_absent_guard(field: FieldDef, src: str, converted: str) -> str:
+    """Wrap a conversion so a value that is not there is carried as it is
+    typed: ``null`` stays ``null`` (and an omitted one stays omitted) where
+    the field may be null; where it may only be omitted, a ``null`` on the
+    wire becomes ``undefined``, as the type says."""
+    if _ts_null(field):
+        return f"{src} == null ? {src} : {converted}"
+    if _ts_optional(field):
+        return f"{src} == null ? undefined : {converted}"
+    return converted
+
+
 def _ts_type_with_enums(
     ftype: FieldType,
     enum_names: set[str],
@@ -756,8 +783,8 @@ def _ts_type_with_enums(
 ) -> str:
     """Render a :class:`FieldType` as a TypeScript type expression.
 
-    Optional/nullable is signaled by the parent (``?:`` in field
-    declaration) — this function only returns the bare type.
+    Optional / nullable are signaled by the parent (``?:`` and ``| null`` in
+    the field declaration) — this function only returns the bare type.
     """
     if ftype.is_primitive:
         base = _PRIMITIVE_TO_TS[ftype.primitive]

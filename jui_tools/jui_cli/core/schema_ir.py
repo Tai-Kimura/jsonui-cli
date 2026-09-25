@@ -120,7 +120,10 @@ class FieldType:
         is_map: ``element`` carries the value type
             (``additionalProperties: <typed>``).
         is_one_of_ref: ``one_of`` carries the discriminated union spec.
-        nullable: True if the field is optional or ``nullable: true``.
+        nullable: True if the field is optional or ``nullable: true`` —
+            the two folded into one, which is what iOS and Android need (an
+            optional there admits nil either way). Web says them apart and
+            reads :attr:`FieldDef.required` and :attr:`FieldDef.nullable`.
         format: retained OpenAPI string ``format`` hint — one of
             ``"date-time"`` / ``"uuid"`` / ``"binary"`` when the swagger
             declared it on a ``type: string`` schema, else ``None``.
@@ -179,7 +182,9 @@ class FieldDef:
         wire_name: Field name exactly as written in swagger.
         type: :class:`FieldType` describing the value shape.
         required: True if listed in the schema's ``required`` array.
-        nullable: True if ``nullable: true`` is set.
+        nullable: True if ``nullable: true`` is set on the property — the
+            value may be JSON ``null`` (web: ``| null``), apart from whether
+            it may be omitted (``required``; web: ``?:``).
         description: OpenAPI ``description`` text, emitted as doc comment.
         deprecated: True if ``deprecated: true``.
         default: Default value literal as written in swagger
@@ -189,6 +194,7 @@ class FieldDef:
     wire_name: str
     type: FieldType
     required: bool = False
+    nullable: bool = False
     description: str | None = None
     deprecated: bool = False
     default: Any = None  # `None` means "not set"; null default is sentinel-encoded
