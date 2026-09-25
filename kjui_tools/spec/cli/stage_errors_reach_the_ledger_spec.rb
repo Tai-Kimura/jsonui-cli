@@ -57,8 +57,8 @@ RSpec.describe 'kjui build: a stage that printed an error is in the ledger' do
     [log.gsub(/\e\[[0-9;]*m/, ''), status.exitstatus, File.exist?(ledger) ? JSON.parse(File.read(ledger)) : []]
   end
 
-  def expect_incomplete(log, code, entries, stage, *words)
-    expect(code).to eq(0), log # the exit is `jui build`'s, from the ledger
+  def expect_incomplete(log, exit_code, entries, stage, *words)
+    expect(exit_code).to eq(0), log # the exit is `jui build`'s, from the ledger
     expect(entries.map { |e| e['stage'] }).to eq([stage]), "#{entries.inspect}\n#{log}"
     words.each { |w| expect(entries.first['message']).to include(w) }
     expect(log).to include('Build finished with 1 stage(s) incomplete — see above'), log
@@ -76,8 +76,8 @@ RSpec.describe 'kjui build: a stage that printed an error is in the ledger' do
   it 'a healthy build still ends "Compose build completed!" with an empty ledger (the control)' do
     dir = project
     layout(dir, 'home')
-    log, code, entries = build(dir)
-    expect([code, entries]).to eq([0, []]), log
+    log, exit_code, entries = build(dir)
+    expect([exit_code, entries]).to eq([0, []]), log
     expect(log).to include('Compose build completed!')
   end
 
@@ -86,8 +86,8 @@ RSpec.describe 'kjui build: a stage that printed an error is in the ledger' do
     layout(dir, 'home')
     FileUtils.mkdir_p(File.join(dir, SRC, 'assets/Layouts/Resources'))
     File.write(File.join(dir, SRC, 'assets/Layouts/Resources/colors.json'), '{ "a": ')
-    log, code, entries = build(dir)
-    expect_incomplete(log, code, entries, 'colors', 'colors.json could not be parsed')
+    log, exit_code, entries = build(dir)
+    expect_incomplete(log, exit_code, entries, 'colors', 'colors.json could not be parsed')
   end
 
   it 'a style that does not parse: in the ledger once' do
@@ -97,9 +97,9 @@ RSpec.describe 'kjui build: a stage that printed an error is in the ledger' do
       'child' => %w[a b].map { |id| { 'type' => 'Label', 'id' => id, 'text' => id, 'style' => 'broken' } }
     ))
     File.write(File.join(dir, SRC, 'assets/Styles/broken.json'), '{ "fontSize": ')
-    log, code, entries = build(dir)
+    log, exit_code, entries = build(dir)
     expect(log).to include('Failed to parse style file')
-    expect_incomplete(log, code, entries, 'styles', 'broken.json', 'drawn without it')
+    expect_incomplete(log, exit_code, entries, 'styles', 'broken.json', 'drawn without it')
   end
 
   it 'colors.xml with no root element: in the ledger' do
@@ -107,9 +107,9 @@ RSpec.describe 'kjui build: a stage that printed an error is in the ledger' do
     layout(dir, 'home', 'fontColor' => '#123456')
     FileUtils.mkdir_p(File.join(dir, SRC, 'res/values'))
     File.write(File.join(dir, SRC, 'res/values/colors.xml'), '')
-    log, code, entries = build(dir)
+    log, exit_code, entries = build(dir)
     expect(log).to include('Invalid colors.xml structure')
-    expect_incomplete(log, code, entries, 'colors', 'colors.xml', 'no root element')
+    expect_incomplete(log, exit_code, entries, 'colors', 'colors.xml', 'no root element')
   end
 
   it 'a layout whose colours could not be written back: in the ledger' do
@@ -118,25 +118,25 @@ RSpec.describe 'kjui build: a stage that printed an error is in the ledger' do
     file = File.join(dir, SRC, 'assets/Layouts/home.json')
     FileUtils.chmod(0o444, file)
     skip "#{file} is still writable (running as root?)" if File.writable?(file)
-    log, code, entries = build(dir)
-    expect_incomplete(log, code, entries, 'colors', 'home.json', 'colour extraction failed')
+    log, exit_code, entries = build(dir)
+    expect_incomplete(log, exit_code, entries, 'colors', 'home.json', 'colour extraction failed')
   end
 
   it 'kjui.config.json that does not parse: the build on the defaults is named, once for every load' do
     dir = project
     layout(dir, 'home')
     File.write(File.join(dir, 'kjui.config.json'), '{ "mode": ')
-    log, code, entries = build(dir)
+    log, exit_code, entries = build(dir)
     expect(log.scan('Error parsing config file').size).to be > 1 # the control: loaded more than once
-    expect_incomplete(log, code, entries, 'config', 'kjui.config.json', 'default configuration')
+    expect_incomplete(log, exit_code, entries, 'config', 'kjui.config.json', 'default configuration')
   end
 
   it 'attribute_definitions.json missing (a copy that left its link dangling): in the ledger once' do
     dir = project(dangling_definitions: true)
     layout(dir, 'home')
-    log, code, entries = build(dir)
+    log, exit_code, entries = build(dir)
     expect(log).to include('attribute_definitions.json not found')
-    expect(code).to eq(0)
+    expect(exit_code).to eq(0)
     expect(entries.map { |e| e['stage'] }).to eq(['validation']), "#{entries.inspect}\n#{log}"
     expect(log).not_to include('Compose build completed!')
   end

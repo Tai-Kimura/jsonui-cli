@@ -77,8 +77,8 @@ RSpec.describe 'sjui build: a stage that printed an error is in the ledger' do
     skip "#{path} is still writable (running as root?)" if File.writable?(path)
   end
 
-  def expect_incomplete(log, code, entries, stage, *words)
-    expect(code).to eq(0), log # the exit is `jui build`'s, from the ledger
+  def expect_incomplete(log, exit_code, entries, stage, *words)
+    expect(exit_code).to eq(0), log # the exit is `jui build`'s, from the ledger
     expect(entries.map { |e| e['stage'] }).to eq([stage]), "#{entries.inspect}\n#{log}"
     words.each { |w| expect(entries.first['message']).to include(w) }
     last = log.lines.map(&:strip).reject(&:empty?)
@@ -99,13 +99,13 @@ RSpec.describe 'sjui build: a stage that printed an error is in the ledger' do
       dir = project('uikit')
       layout(dir, 'home')
       read_only(File.join(dir, NAME, 'Bindings'), 0o555)
-      log, code, entries = build(dir)
+      log, exit_code, entries = build(dir)
       expect(log).to include('Error generating binding file for home')
-      expect_incomplete(log, code, entries, 'layout', 'home.json', 'HomeBinding.swift')
+      expect_incomplete(log, exit_code, entries, 'layout', 'home.json', 'HomeBinding.swift')
 
       # The next run tries the layout again and says so again.
-      log, code, entries = build(dir)
-      expect_incomplete(log, code, entries, 'layout', 'home.json')
+      log, exit_code, entries = build(dir)
+      expect_incomplete(log, exit_code, entries, 'layout', 'home.json')
     end
 
     it 'says ERROR only for what failed: a project with an empty group and none for the source directory builds clean' do
@@ -114,11 +114,11 @@ RSpec.describe 'sjui build: a stage that printed an error is in the ledger' do
       x.main_group.new_group('Leftover')
       x.save
       layout(dir, 'home')
-      log, code, entries = build(dir)
+      log, exit_code, entries = build(dir)
       # The two it did say, at their level now.
       expect(log).to include('Removing empty group: Leftover').and include("Creating new group '#{NAME}'")
       expect(log.lines.grep(/ERROR/)).to be_empty, log
-      expect([code, entries]).to eq([0, []])
+      expect([exit_code, entries]).to eq([0, []])
       expect(log).to include('Build completed successfully!')
     end
 
@@ -141,9 +141,9 @@ RSpec.describe 'sjui build: a stage that printed an error is in the ledger' do
     it 'attribute_definitions.json missing (a copy that left its link dangling): in the ledger once' do
       dir = project('uikit', dangling_definitions: true)
       layout(dir, 'home')
-      log, code, entries = build(dir)
+      log, exit_code, entries = build(dir)
       expect(log.scan('attribute_definitions.json not found').size).to be >= 2 # the control: met more than once
-      expect_incomplete(log, code, entries, 'validation', 'attribute_definitions.json')
+      expect_incomplete(log, exit_code, entries, 'validation', 'attribute_definitions.json')
     end
 
     it 'under --mode all, one failure is one entry in the ledger (the UIKit and the SwiftUI stages each report)' do
@@ -152,9 +152,9 @@ RSpec.describe 'sjui build: a stage that printed an error is in the ledger' do
       layout(dir, 'home')
       FileUtils.mkdir_p(File.join(dir, NAME, 'Layouts', 'Resources'))
       File.write(File.join(dir, NAME, 'Layouts', 'Resources', 'colors.json'), '{ "a": ')
-      log, code, entries = build(dir)
+      log, exit_code, entries = build(dir)
       expect(entries.map { |e| e['stage'] }).to eq(['colors']), "#{entries.inspect}\n#{log}"
-      expect(code).to eq(0)
+      expect(exit_code).to eq(0)
     end
   end
 
@@ -167,9 +167,9 @@ RSpec.describe 'sjui build: a stage that printed an error is in the ledger' do
       stamp = File.mtime(file) - 3600
       File.write(file, '{ "type": ')
       File.utime(stamp, stamp, file) # the cache still takes it as built
-      log, code, entries = build(dir)
+      log, exit_code, entries = build(dir)
       expect(log).to include('Invalid JSON in')
-      expect_incomplete(log, code, entries, 'layout', 'home.json', 'could not be read')
+      expect_incomplete(log, exit_code, entries, 'layout', 'home.json', 'could not be read')
     end
 
     it 'a style that does not parse: in the ledger once, however many nodes use it' do
@@ -179,9 +179,9 @@ RSpec.describe 'sjui build: a stage that printed an error is in the ledger' do
         'child' => %w[a b].map { |id| { 'type' => 'Label', 'id' => id, 'text' => id, 'style' => 'broken' } }
       ))
       File.write(File.join(dir, NAME, 'Styles', 'broken.json'), '{ "fontSize": ')
-      log, code, entries = build(dir)
+      log, exit_code, entries = build(dir)
       expect(log.scan('Error parsing style file').size).to be >= 2 # the control: met more than once
-      expect_incomplete(log, code, entries, 'styles', 'broken.json', 'drawn without it')
+      expect_incomplete(log, exit_code, entries, 'styles', 'broken.json', 'drawn without it')
     end
 
     it 'a generated view it cannot update (no GeneratedView struct in it): in the ledger' do
@@ -191,17 +191,17 @@ RSpec.describe 'sjui build: a stage that printed an error is in the ledger' do
       view = Dir.glob(File.join(dir, '**', 'HomeGeneratedView.swift')).first
       File.write(view, "// emptied by hand\n")
       FileUtils.touch(File.join(dir, NAME, 'Layouts', 'home.json'))
-      log, code, entries = build(dir)
+      log, exit_code, entries = build(dir)
       expect(log).to include('Could not find struct definition')
-      expect_incomplete(log, code, entries, 'layout', 'HomeGeneratedView.swift', 'was not updated')
+      expect_incomplete(log, exit_code, entries, 'layout', 'HomeGeneratedView.swift', 'was not updated')
     end
 
     it 'a layout whose colours could not be written back: in the ledger' do
       dir = project('swiftui')
       layout(dir, 'home', 'fontColor' => '#123456')
       read_only(File.join(dir, NAME, 'Layouts', 'home.json'), 0o444)
-      log, code, entries = build(dir)
-      expect_incomplete(log, code, entries, 'colors', 'home.json', 'colour extraction failed')
+      log, exit_code, entries = build(dir)
+      expect_incomplete(log, exit_code, entries, 'colors', 'home.json', 'colour extraction failed')
     end
 
   end

@@ -46,8 +46,8 @@ RSpec.describe 'rjui build: a stage that printed an error is in the ledger' do
     [log.gsub(/\e\[[0-9;]*m/, ''), status.exitstatus, File.exist?(ledger) ? JSON.parse(File.read(ledger)) : []]
   end
 
-  def expect_incomplete(log, code, entries, stages, *words)
-    expect(code).to eq(0), log # the exit is `jui build`'s, from the ledger
+  def expect_incomplete(log, exit_code, entries, stages, *words)
+    expect(exit_code).to eq(0), log # the exit is `jui build`'s, from the ledger
     expect(entries.map { |e| e['stage'] }).to eq(Array(stages)), "#{entries.inspect}\n#{log}"
     words.each { |w| expect(entries.map { |e| e['message'] }.join("\n")).to include(w) }
     expect(log).to include("Build finished with #{Array(stages).size} stage(s) incomplete — see above"), log
@@ -65,8 +65,8 @@ RSpec.describe 'rjui build: a stage that printed an error is in the ledger' do
   it 'a healthy build still ends "Build completed!" with an empty ledger (the control)' do
     dir = project
     layout(dir, 'home')
-    log, code, entries = build(dir)
-    expect([code, entries]).to eq([0, []]), log
+    log, exit_code, entries = build(dir)
+    expect([exit_code, entries]).to eq([0, []]), log
     expect(log).to include('Build completed!')
   end
 
@@ -74,27 +74,27 @@ RSpec.describe 'rjui build: a stage that printed an error is in the ledger' do
     dir = project
     layout(dir, 'home')
     File.write(File.join(dir, 'src/viewmodels'), 'a file where the directory goes')
-    log, code, entries = build(dir)
+    log, exit_code, entries = build(dir)
     expect(log).to include('Error generating viewmodels')
-    expect_incomplete(log, code, entries, 'viewmodels', 'the ViewModels were not generated')
+    expect_incomplete(log, exit_code, entries, 'viewmodels', 'the ViewModels were not generated')
   end
 
   it 'the Data models, which stop at the first layout they cannot read: in the ledger beside that layout' do
     dir = project
     layout(dir, 'home')
     File.write(File.join(dir, 'src/Layouts/bad.json'), '{ "type": ')
-    log, code, entries = build(dir)
+    log, exit_code, entries = build(dir)
     expect(log).to include('Error generating data models')
-    expect_incomplete(log, code, entries, ['data models', 'layout'], 'the Data models were not generated', 'bad.json')
+    expect_incomplete(log, exit_code, entries, ['data models', 'layout'], 'the Data models were not generated', 'bad.json')
   end
 
   it 'a style that does not parse: in the ledger once' do
     dir = project
     layout(dir, 'home', 'style' => 'broken')
     File.write(File.join(dir, 'src/Styles/broken.json'), '{ "fontSize": ')
-    log, code, entries = build(dir)
+    log, exit_code, entries = build(dir)
     expect(log).to include('Error parsing style file')
-    expect_incomplete(log, code, entries, 'styles', 'broken.json', 'drawn without it')
+    expect_incomplete(log, exit_code, entries, 'styles', 'broken.json', 'drawn without it')
   end
 
   it 'a layout whose colours could not be written back: in the ledger' do
@@ -103,16 +103,16 @@ RSpec.describe 'rjui build: a stage that printed an error is in the ledger' do
     file = File.join(dir, 'src/Layouts/home.json')
     FileUtils.chmod(0o444, file)
     skip "#{file} is still writable (running as root?)" if File.writable?(file)
-    log, code, entries = build(dir)
-    expect_incomplete(log, code, entries, 'colors', 'home.json', 'colour extraction failed')
+    log, exit_code, entries = build(dir)
+    expect_incomplete(log, exit_code, entries, 'colors', 'home.json', 'colour extraction failed')
   end
 
   it 'attribute_definitions.json missing (a copy that left its link dangling): in the ledger once' do
     dir = project(dangling_definitions: true)
     layout(dir, 'home')
-    log, code, entries = build(dir)
+    log, exit_code, entries = build(dir)
     expect(log).to include('attribute_definitions.json not found')
-    expect_incomplete(log, code, entries, 'validation', 'attribute_definitions.json')
+    expect_incomplete(log, exit_code, entries, 'validation', 'attribute_definitions.json')
   end
 
   describe 'stages driven directly' do
