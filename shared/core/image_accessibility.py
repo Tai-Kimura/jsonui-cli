@@ -24,8 +24,12 @@ IMAGE_TYPES = frozenset({"Image", "CircleImage", "CircleImageView", "ImageView",
 #: The canonical spelling first, then the aliases declared on `alt`.
 ALT_KEYS = ("alt", "accessibilityLabel", "contentDescription")
 
-#: What a screen-reader user activates: a tap and a long press.
-TAP_KEYS = ("onClick", "onclick", "onLongPress")
+#: What a screen-reader user activates, read as shared/core/tap_accessibility.rb
+#: reads it (this module imports nothing, so the tap rule's predicate is copied
+#: here, and the shared vectors hold the two together): a tap is a handler on
+#: onClick / onclick, and a long press one on onLongPress.
+TAP_KEYS = ("onClick", "onclick")
+LONG_PRESS_KEY = "onLongPress"
 
 #: Text that names a control it sits in (on an image, hint / placeholder name an image).
 TEXT_KEYS = ("text", "hint", "placeholder", "label", "prompt")
@@ -43,8 +47,32 @@ def alt(node):
     return None
 
 
+def names_a_method(value) -> bool:
+    """A handler names a method that is not blank: a binding's inside
+    (`@{onOpen}`), a bare selector, or each string of an `onclick` array.
+    Blank is Unicode white space (`str.isspace`, a full-width space too)."""
+    if not isinstance(value, str):
+        return False
+    inner = value[2:-1] if value.startswith("@{") and value.endswith("}") else value
+    return inner.strip() != ""
+
+
+def is_handler(value) -> bool:
+    values = value if isinstance(value, list) else [value]
+    return any(names_a_method(v) for v in values)
+
+
 def is_tappable(node) -> bool:
-    return isinstance(node, dict) and any(key in node for key in TAP_KEYS)
+    """Whether `node` operates something a screen-reader user can activate —
+    a tap (a handler, `enabled` not false, `canTap` not false) or a long press
+    (a handler, `enabled` not false) — as the tap rule judges it. It read the
+    handler KEY before, so an empty, disabled or shut tap made an image a
+    control. A bound gate still operates: it opens at run time."""
+    if not isinstance(node, dict) or node.get("enabled") is False:
+        return False
+    if node.get("canTap") is not False and any(is_handler(node.get(key)) for key in TAP_KEYS):
+        return True
+    return is_handler(node.get(LONG_PRESS_KEY))
 
 
 def children(node) -> list:

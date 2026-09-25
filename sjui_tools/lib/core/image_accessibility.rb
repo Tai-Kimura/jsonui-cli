@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require_relative 'tap_accessibility'
+
 module JsonUIShared
   # What a screen reader hears for each image of a layout — one rule for the
   # sjui and kjui codegen (the Dynamic runtimes of both libraries implement
@@ -35,8 +37,6 @@ module JsonUIShared
     # carries only `alt`.
     ALT_KEYS = %w[alt accessibilityLabel contentDescription].freeze
 
-    # What a screen-reader user activates: a tap and a long press.
-    TAP_KEYS = %w[onClick onclick onLongPress].freeze
 
     # Text that names a control when it sits inside it (string_manager_core's
     # STRING_PROPERTIES less `alt`, which is read off images below). On an
@@ -60,8 +60,16 @@ module JsonUIShared
       nil
     end
 
+    # Whether `node` operates something a screen-reader user can activate —
+    # a tap or a long press — as the tap rule judges it (TapAccessibility):
+    # a handler that names a method, not statically disabled, and for a tap
+    # not gated shut by `canTap: false`. It read the handler KEY before, so
+    # an image with an empty onClick, `enabled: false` or `canTap: false`
+    # was a control (an INFO, and its id read out) while the tap rule said
+    # it taps nothing. A bound `canTap` / `enabled` still operates: the gate
+    # opens at run time.
     def tappable?(node)
-      node.is_a?(Hash) && TAP_KEYS.any? { |key| node.key?(key) }
+      TapAccessibility.tappable?(node) || TapAccessibility.long_press?(node)
     end
 
     def children(node)

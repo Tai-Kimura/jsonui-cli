@@ -85,15 +85,25 @@ module KjuiTools
           # A handler names a method (TapAccessibility.handler?): an empty or
           # blank one is no handler, and the Button gets `onClick = { }`.
           tap = JsonUIShared::TapAccessibility
+          # `canTap` gates the handler's call (attribute_definitions
+          # common.canTap: false turns onClick / onclick off), as `clickable`
+          # gates every other type's — not `enabled`: a button that cannot be
+          # tapped is not disabled to a screen reader.
+          can_tap = Helpers::ModifierBuilder.boolean_expression(json_data['canTap'])
+          on_click = lambda do |call|
+            next 'onClick = { }' if can_tap == 'false'
+
+            "onClick = { #{can_tap ? "if (#{can_tap}) { #{call} }" : call} }"
+          end
           if tap.handler?(json_data['onclick'])
             # Lowercase onclick - legacy selector format
             handler_call = Helpers::ModifierBuilder.get_event_handler_call(json_data['onclick'], is_camel_case: false)
-            code += "\n" + indent("onClick = { #{handler_call} }", depth + 1)
+            code += "\n" + indent(on_click.call(handler_call), depth + 1)
           elsif tap.handler?(json_data['onClick'])
             # camelCase onClick - binding format only (@{functionName})
             if Helpers::ModifierBuilder.is_binding?(json_data['onClick'])
               handler_call = Helpers::ModifierBuilder.get_event_handler_invocation(json_data['onClick'], view_id, nil)
-              code += "\n" + indent("onClick = { #{handler_call} }", depth + 1)
+              code += "\n" + indent(on_click.call(handler_call), depth + 1)
             else
               code += "\n" + indent("onClick = { // ERROR: #{json_data['onClick']} - camelCase events require binding format @{functionName} }", depth + 1)
             end

@@ -2,6 +2,8 @@
 
 require 'compose/helpers/modifier_builder'
 require 'compose/helpers/resource_resolver'
+require 'set'
+require_relative '../../support/kotlin_compiler'
 
 RSpec.describe KjuiTools::Compose::Helpers::ModifierBuilder do
   describe '.build_padding' do
@@ -1196,25 +1198,43 @@ RSpec.describe KjuiTools::Compose::Helpers::ModifierBuilder, 'touch gating' do
     ).join("\n")
   end
 
+  # canTap decides whether there is a click; `enabled` whether it is
+  # enabled. Compose's clickable marks a node disabled() while it is not
+  # enabled, so a gate passed as `clickable(enabled = … && canTap)` made a
+  # merely gated view — a Switch still switching under it — read as disabled
+  # (measured, API 35 emulator, KotlinJsonUI conformance-host
+  # CanTapGateProbeTest). An arm that looked for no `disabled()` in the
+  # emission passed that form.
   describe 'canTap' do
-    it 'gates the click on a binding' do
+    it 'emits no click on the literal false: what no onClick emits' do
+      expect(clickable('canTap' => false)).to eq('')
+      expect(clickable('canTap' => false, 'enabled' => '@{isEnabled}'))
+        .to eq(described_class.build_clickable({ 'type' => 'View', 'id' => 'w', 'enabled' => '@{isEnabled}' }, Set.new).join("\n"))
+    end
+
+    it 'attaches the click while a binding resolves true' do
       expect(clickable('canTap' => '@{isTappable}'))
-        .to include('.clickable(enabled = (data.isTappable ?: false)) {')
+        .to eq('.then(if ((data.isTappable ?: false)) Modifier.clickable { data.tap?.invoke() } else Modifier)')
     end
 
-    it 'gates it on the literal false' do
-      expect(clickable('canTap' => false)).to include('.clickable(enabled = false) {')
+    it 'leaves the enabled state to enabled alone' do
+      expect(clickable('enabled' => '@{isEnabled}', 'canTap' => '@{isTappable}')).to eq(
+        ".then(if ((data.isTappable ?: false)) Modifier.clickable(enabled = (data.isEnabled ?: false)) { data.tap?.invoke() } else Modifier)\n" \
+        '.semantics { if (!(data.isEnabled ?: false)) disabled() }'
+      )
     end
 
-    # Both gate the click, so both apply.
-    it 'ands with enabled' do
-      expect(clickable('enabled' => '@{isEnabled}', 'canTap' => '@{isTappable}'))
-        .to include('.clickable(enabled = (data.isEnabled ?: false) && (data.isTappable ?: false)) {')
-    end
-
-    # A view that is merely not tappable is not "disabled" to a screen reader.
-    it 'does not mark the a11y node disabled' do
-      expect(clickable('canTap' => false)).not_to include('disabled()')
+    it 'emits Kotlin that compiles' do
+      emitted = clickable('enabled' => '@{isEnabled}', 'canTap' => '@{isTappable}').lines.first.strip
+      expect(<<~KOTLIN).to compile_as_kotlin
+        interface Modifier {
+            infix fun then(other: Modifier): Modifier = this
+            companion object : Modifier
+        }
+        fun Modifier.clickable(enabled: Boolean = true, onClick: () -> Unit): Modifier = this
+        class Data(val tap: (() -> Unit)? = null, val isTappable: Boolean? = null, val isEnabled: Boolean? = null)
+        fun chain(data: Data): Modifier = Modifier#{emitted}
+      KOTLIN
     end
   end
 

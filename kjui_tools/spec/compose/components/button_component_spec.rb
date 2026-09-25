@@ -3,6 +3,8 @@
 require 'compose/components/button_component'
 require 'compose/helpers/modifier_builder'
 require 'compose/helpers/resource_resolver'
+require_relative '../../support/kotlin_compiler'
+require 'set'
 
 RSpec.describe KjuiTools::Compose::Components::ButtonComponent do
   let(:required_imports) { Set.new }
@@ -31,6 +33,33 @@ RSpec.describe KjuiTools::Compose::Components::ButtonComponent do
       json_data = { 'type' => 'Button', 'text' => 'Submit', 'onclick' => 'handleSubmit' }
       result = described_class.generate(json_data, 0, required_imports)
       expect(result).to include('onClick = { data.handleSubmit?.invoke() }')
+    end
+
+    # canTap gates the handler's call and nothing else: the button stays
+    # an enabled button (attribute_definitions.json common.canTap).
+    describe 'canTap' do
+      let(:open) { described_class.generate({ 'type' => 'Button', 'text' => 'Go', 'onClick' => '@{onTap}' }, 0, Set.new) }
+
+      it 'false leaves the onClick empty, as no handler does' do
+        shut = described_class.generate({ 'type' => 'Button', 'text' => 'Go', 'onClick' => '@{onTap}', 'canTap' => false }, 0, Set.new)
+        expect(shut).to eq(described_class.generate({ 'type' => 'Button', 'text' => 'Go' }, 0, Set.new))
+      end
+
+      it 'a binding gates the call inside onClick, and changes nothing else' do
+        bound = described_class.generate({ 'type' => 'Button', 'text' => 'Go', 'onClick' => '@{onTap}', 'canTap' => '@{c}' }, 0, Set.new)
+        expect(open).to include('onClick = { data.onTap?.invoke() }')
+        expect(bound).to eq(open.sub('onClick = { data.onTap?.invoke() }', 'onClick = { if ((data.c ?: false)) { data.onTap?.invoke() } }'))
+      end
+
+      it 'the gated onClick compiles' do
+        bound = described_class.generate({ 'type' => 'Button', 'text' => 'Go', 'onClick' => '@{onTap}', 'canTap' => '@{c}' }, 0, Set.new)
+        lambda = bound[/onClick = (\{.*\}),?$/, 1]
+        expect(lambda).to eq('{ if ((data.c ?: false)) { data.onTap?.invoke() } }')
+        expect(<<~KOTLIN).to compile_as_kotlin
+          class Data(val onTap: (() -> Unit)? = null, val c: Boolean? = null)
+          fun click(data: Data): () -> Unit = #{lambda}
+        KOTLIN
+      end
     end
 
     it 'generates Button with empty onClick when no handler' do

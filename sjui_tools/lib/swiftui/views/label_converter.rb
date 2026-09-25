@@ -407,6 +407,10 @@ module SjuiTools
             @modifier_bag.register(:border, border_code)
           end
 
+          # enabled / canTap / userInteractionEnabled: base's gates, before
+          # the bindings (which then leave those keys to them).
+          register_interaction_gates
+
           # Apply binding-specific modifiers (borderColor, fontColor, etc.)
           # Must be BEFORE margins so borders don't include margin area
           apply_binding_modifiers
