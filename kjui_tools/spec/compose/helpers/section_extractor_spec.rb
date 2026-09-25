@@ -849,4 +849,88 @@ RSpec.describe KjuiTools::Compose::Helpers::SectionExtractor do
     end
   end
 
+
+  # The extractor rewrites generated code, so what it returns must still be
+  # Kotlin: this is where the WebView factory lost its receiver (1.8.119) and
+  # nothing but Gradle said so. One broad arm, the cut body and every lifted
+  # SectionN together, well-typed against stubs in which each scope-bound
+  # API exists only in its scope — `weight` in RowScope, `item` in
+  # LazyListScope, `constraints` in BoxWithConstraintsScope, `settings` on the
+  # WebView — so a cut that carries one out of its scope is an unresolved
+  # reference here. Types against stubs only — not the Compose compiler's
+  # rules (@Composable call context included).
+  it 'returns a cut body and sections that compile, every scope-bound call still in its scope' do
+    body = <<~KOTLIN
+      Column(
+          modifier = Modifier.fillMaxSize()
+      ) {
+          Text(text = data.line1)
+          Row {
+              Text(text = data.a, modifier = Modifier.weight(1f))
+              Text(text = data.b)
+          }
+          LazyColumn {
+              item {
+                  Text(text = data.c)
+                  Text(text = data.d)
+              }
+          }
+          BoxWithConstraints {
+              if (constraints.maxWidth > 100) {
+                  Text(text = data.e)
+                  Text(text = data.f)
+              }
+          }
+          LaunchedEffect(data.key) {
+              viewModel.load()
+              viewModel.track()
+          }
+          AndroidView(
+              factory = { context ->
+                  WebView(context).apply {
+                      settings.javaScriptEnabled = true
+                      loadUrl(data.url)
+                  }
+              },
+              update = { webView ->
+                  webView.loadUrl(data.url)
+              }
+          )
+      }
+    KOTLIN
+    new_body, fns = described_class.extract(body, view_name: 'Probe', data_type: 'ProbeData',
+                                                  viewmodel_type: 'ProbeViewModel', line_threshold: 4)
+    expect(fns).not_to be_empty # the cut happened: this is not the extractor left idle
+    expect(<<~KOTLIN).to compile_as_kotlin
+      annotation class Composable
+      interface Modifier { companion object : Modifier }
+      fun Modifier.fillMaxSize(): Modifier = this
+      interface ColumnScope
+      interface RowScope { fun Modifier.weight(weight: Float): Modifier = this }
+      interface LazyListScope { fun item(content: () -> Unit) {} }
+      class Constraints(val maxWidth: Int = 0)
+      interface BoxWithConstraintsScope { val constraints: Constraints }
+      fun Column(modifier: Modifier = Modifier, content: ColumnScope.() -> Unit) {}
+      fun Row(modifier: Modifier = Modifier, content: RowScope.() -> Unit) {}
+      fun LazyColumn(modifier: Modifier = Modifier, content: LazyListScope.() -> Unit) {}
+      fun BoxWithConstraints(modifier: Modifier = Modifier, content: BoxWithConstraintsScope.() -> Unit) {}
+      fun Text(text: String, modifier: Modifier = Modifier) {}
+      fun LaunchedEffect(key1: Any?, block: suspend () -> Unit) {}
+      class Context
+      class WebSettings { var javaScriptEnabled: Boolean = false }
+      class WebView(context: Context) { val settings = WebSettings(); fun loadUrl(url: String) {} }
+      fun <T> AndroidView(factory: (Context) -> T, update: (T) -> Unit = {}) {}
+      class ProbeData(val line1: String = "", val a: String = "", val b: String = "", val c: String = "",
+                      val d: String = "", val e: String = "", val f: String = "", val key: Int = 0,
+                      val url: String = "")
+      class ProbeViewModel { fun load() {}; fun track() {} }
+
+      @Composable
+      fun ProbeView(data: ProbeData, viewModel: ProbeViewModel) {
+      #{new_body}
+      }
+
+      #{fns.join("\n")}
+    KOTLIN
+  end
 end

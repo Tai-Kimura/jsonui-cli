@@ -120,57 +120,15 @@ RSpec.describe KjuiTools::Compose::Components::TabviewComponent do
     end
   end
 
-  # One broad arm: every badge shape, labelled and not, well-typed against a
-  # stub universe (spec/support/kotlin_compiler.rb). Types against stubs
-  # only — not the Compose compiler's rules. Before the fix this failed on
-  # the braces alone.
+  # One broad arm: every badge shape, labelled and not, well-typed against
+  # the TabView stub universe (spec/support/compose_stub_universe.rb). Types
+  # against stubs only — not the Compose compiler's rules. Before the fix
+  # this failed on the braces alone.
   it 'emits Kotlin that compiles, for every badge shape' do
     labelled = described_class.generate(tabs(:none, 3, 'NEW', '@{unread}', 0), 1, required_imports)
     unlabelled = described_class.generate(tabs(:none, 3, '@{unread}', show_labels: false), 1, Set.new)
     expect(<<~KOTLIN).to compile_as_kotlin
-      annotation class Composable
-      interface Modifier { companion object : Modifier }
-      class Dp
-      class PaddingValues { fun calculateBottomPadding(): Dp = Dp() }
-      fun Modifier.padding(bottom: Dp): Modifier = this
-      class SemanticsPropertyReceiver
-      var SemanticsPropertyReceiver.stateDescription: String
-          get() = ""
-          set(value) {}
-      fun Modifier.semantics(properties: SemanticsPropertyReceiver.() -> Unit): Modifier = this
-      class Color
-      class ImageVector
-      class ColorScheme { val primary = Color(); val onSurfaceVariant = Color() }
-      object MaterialTheme { val colorScheme = ColorScheme() }
-      class NavigationBarItemColors
-      object NavigationBarItemDefaults {
-          fun colors(selectedIconColor: Color, selectedTextColor: Color,
-                     unselectedIconColor: Color, unselectedTextColor: Color) = NavigationBarItemColors()
-      }
-      interface RowScope
-      fun Scaffold(bottomBar: () -> Unit = {}, content: (PaddingValues) -> Unit) {}
-      fun NavigationBar(containerColor: Color? = null, content: RowScope.() -> Unit) {}
-      fun RowScope.NavigationBarItem(selected: Boolean, onClick: () -> Unit, icon: () -> Unit,
-                                     modifier: Modifier = Modifier, label: (() -> Unit)? = null,
-                                     colors: NavigationBarItemColors = NavigationBarItemColors()) {}
-      object Icons { object Filled; object Outlined }
-      val Icons.Filled.Star: ImageVector get() = ImageVector()
-      val Icons.Outlined.Star: ImageVector get() = ImageVector()
-      fun Icon(imageVector: ImageVector, contentDescription: String?) {}
-      fun BadgedBox(badge: () -> Unit, content: () -> Unit) {}
-      fun Badge(content: () -> Unit) {}
-      fun Text(text: String) {}
-      fun Box(modifier: Modifier = Modifier, content: () -> Unit) {}
-      class ProvidedValue
-      class SafeAreaConfig(val ignoreBottom: Boolean = false)
-      object LocalSafeAreaConfig { infix fun provides(value: SafeAreaConfig) = ProvidedValue() }
-      fun CompositionLocalProvider(vararg values: ProvidedValue, content: () -> Unit) {}
-      class MutableState<T>(var value: T)
-      operator fun <T> MutableState<T>.getValue(thisRef: Any?, property: kotlin.reflect.KProperty<*>): T = value
-      operator fun <T> MutableState<T>.setValue(thisRef: Any?, property: kotlin.reflect.KProperty<*>, v: T) { value = v }
-      fun <T> remember(calculation: () -> T): T = calculation()
-      fun <T> mutableStateOf(value: T) = MutableState(value)
-
+      #{ComposeStubUniverse.tabview(labelled + unlabelled)}
       data class Data(val unread: Int? = null)
 
       fun labelled(data: Data) {
