@@ -625,11 +625,11 @@ jobs:
   # ------------------------------------------------------------------ #
   android-library-tests:
     runs-on: ubuntu-latest
-    # ⚠️ NOT YET MEASURED on a hosted runner. A guess to be replaced by the
-    # first run's step time: gradle (two androidTest APKs) ~8 + boot ~2 +
-    # tests ~10 on a good runner; the android job's degraded runner is ~6x
-    # slower on the emulator part → ~80. Step 90, job 105 (attempt < step <
-    # job). A cancelled run here means suspect this number first.
+    # Budget. First run (36196156936, 2026-09-26, API 34): step 17.5 min,
+    # gradle 15m47s for 262 cases on a good runner. The android job's
+    # degraded runner is ~6x slower on the emulator part, so allow ~80 of
+    # the 90-minute step. Step 90, job 105 (attempt < step < job). A
+    # cancelled run here means suspect this number first.
     timeout-minutes: 105
     steps:
       - uses: actions/checkout@v4
@@ -654,8 +654,25 @@ jobs:
         uses: reactivecircus/android-emulator-runner@v2
         env:
           ANDROID_PROBES: ${{ inputs.android_probes && 'true' || 'false' }}
+        # API 35, not the conformance jobs' 34 (those keep 34 for their
+        # baselines; this job has none). Measured 2026-09-26, same
+        # KotlinJsonUI 329f5d6 and the same runner image. Only the classes
+        # that had failed were run (10 + 13 cases).
+        # - On this API 34 image the IME never shows: logcat has
+        #   `onFailed at PHASE_CLIENT_REQUEST_IME_SHOW`. The accessibility walk
+        #   of the active window intermittently finds nothing, not even a tab
+        #   label.
+        #   - api 34:         10/10 + 13/13 failed on one run,
+        #                     6 + 6 on another.
+        #   - api 34, raised: show_ime_with_hard_keyboard was already 1, and
+        #                     it failed the same way.
+        #   - api 35:         0 failed, with the setting 0 or 1.
+        # Read as the test window not taking window focus on the API 34 CI
+        # emulator; focus during the tests was not measured. The run was
+        # 36197930038 (scratch branch). On API 34 these arms measure the
+        # emulator, not the library.
         with:
-          api-level: 34
+          api-level: 35
           arch: x86_64
           target: google_apis
           profile: pixel_tablet
