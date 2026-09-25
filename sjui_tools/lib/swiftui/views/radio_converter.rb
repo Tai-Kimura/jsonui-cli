@@ -45,10 +45,10 @@ module SjuiTools
               items.each_with_index do |item, index|
                 add_line "HStack#{icon_text_spacing} {"
                 indent do
-                  add_radio_icon_lines("#{selection_binding} == \"#{item}\"")
+                  add_radio_icon_lines("#{selection_binding} == #{swift_string_literal(item)}")
                   add_modifier_line ".onTapGesture {"
                   indent do
-                    add_line "#{selection_binding} = \"#{item}\""
+                    add_line "#{selection_binding} = #{swift_string_literal(item)}"
                     # onValueChange handler - called when radio selection changes
                     # onValueChange (camelCase) -> binding format only (@{functionName})
                     #
@@ -60,14 +60,12 @@ module SjuiTools
                     # same split as SelectBox
                     # (jui-selectbox-onvaluechange-argument-differs-between-sjui-and-kjui).
                     if @component['onValueChange'] && is_binding?(@component['onValueChange'])
-                      handler_call = get_event_handler_invocation(@component['onValueChange'], id, "\"#{item.gsub('"', '\\"')}\"")
+                      handler_call = get_event_handler_invocation(@component['onValueChange'], id, swift_string_literal(item))
                       add_line handler_call
                     end
                   end
                   add_line "}"
-                  # Escape double quotes in item text for Swift string literal
-                  escaped_item = item.gsub('"', '\\"')
-                  add_line "Text(\"#{escaped_item}\")"
+                  add_line "Text(#{swift_string_literal(item)})"
                 end
                 add_line "}"
               end
@@ -97,7 +95,7 @@ module SjuiTools
             # A literal selectedValue names the selected option of the group
             # and wins over this option's own `checked` — it is the group-level
             # statement.
-            seed = static_selection || (checked_literal ? "\"#{radio_value}\"" : '""')
+            seed = static_selection || (checked_literal ? swift_string_literal(radio_value) : '""')
             add_state_variable(state_var, "String", seed)
 
             # A BOUND checked/isOn cannot seed the @State declaration — a
@@ -113,10 +111,10 @@ module SjuiTools
             # カスタムRadioButton実装
             add_line "HStack#{icon_text_spacing} {"
             indent do
-              add_radio_icon_lines("#{state_var} == \"#{radio_value}\"#{seed}")
+              add_radio_icon_lines("#{state_var} == #{swift_string_literal(radio_value)}#{seed}")
               add_modifier_line ".onTapGesture {"
               indent do
-                add_line "#{state_var} = \"#{radio_value}\""
+                add_line "#{state_var} = #{swift_string_literal(radio_value)}"
                 # onClick handler - called when radio is clicked
                 # onClick (camelCase) -> binding format only (@{functionName})
                 # canTap gates the call, not the selection
@@ -186,7 +184,7 @@ module SjuiTools
           value = @component['selectedValue']
           return nil if value.nil? || is_binding?(value)
 
-          "\"#{value.to_s.gsub('"', '\\"')}\""
+          swift_string_literal(value)
         end
 
         # The `spacing:` argument of the row that holds the glyph and the
@@ -206,7 +204,7 @@ module SjuiTools
         # be pasted inside the quotes, so the row rendered the characters
         # `@{label}`; a literal keeps the escaping it always had.
         def label_expression(text)
-          bound_string(text) || "\"#{text.gsub('"', '\\"')}\""
+          bound_string(text) || swift_string_literal(text)
         end
 
         # The radio glyph.

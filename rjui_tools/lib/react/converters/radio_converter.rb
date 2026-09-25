@@ -62,13 +62,12 @@ module RjuiTools
 
           gap, gap_style = item_gap_parts
           items_jsx = items.map do |item|
-            escaped_item = item.gsub('"', '&quot;')
             input_style = tint_color ? " style={{ accentColor: #{color_style_expr(tint_color)} }}" : ''
-            state_attrs = build_state_attrs(selected_binding, on_change, escaped_item)
+            state_attrs = build_state_attrs(selected_binding, on_change, item)
             <<~JSX.chomp
               #{indent_str(indent + 2)}<label className="flex items-center #{gap} cursor-pointer"#{gap_style}>
-              #{indent_str(indent + 4)}<input type="radio" name="#{group}" value="#{escaped_item}"#{state_attrs}#{disabled_attr}#{input_style} />
-              #{indent_str(indent + 4)}<span>#{item}</span>
+              #{indent_str(indent + 4)}<input type="radio" name="#{group}"#{jsx_attr_text('value', item)}#{state_attrs}#{disabled_attr}#{input_style} />
+              #{indent_str(indent + 4)}<span>#{JsonUIShared::StringLiterals.jsx_text(item)}</span>
               #{indent_str(indent + 2)}</label>
             JSX
           end.join("\n")
@@ -112,7 +111,7 @@ module RjuiTools
             off_src = icon_off || icon_on
             on_src = icon_on || icon_off
             control_jsx =
-              "<input type=\"radio\" name=\"#{group}\" value=\"#{radio_value}\"#{state_attrs}#{disabled_attr} className=\"peer sr-only\" />"               "<img src=\"#{off_src}\" alt=\"\" className=\"w-6 h-6 peer-checked:hidden\" />"               "<img src=\"#{on_src}\" alt=\"\" className=\"w-6 h-6 hidden peer-checked:block\" />"
+              "<input type=\"radio\" name=\"#{group}\"#{jsx_attr_text('value', radio_value)}#{state_attrs}#{disabled_attr} className=\"peer sr-only\" />"               "<img#{jsx_attr_text('src', off_src)} alt=\"\" className=\"w-6 h-6 peer-checked:hidden\" />"               "<img#{jsx_attr_text('src', on_src)} alt=\"\" className=\"w-6 h-6 hidden peer-checked:block\" />"
             return <<~JSX.chomp
               #{indent_str(indent)}<label#{id_attr} className="#{class_name} flex items-center #{@root_gap_class}"#{style_attr}#{testid_attr}#{tag_attr}#{build_aria_disabled_attr}>
               #{indent_str(indent + 2)}#{control_jsx}
@@ -123,7 +122,7 @@ module RjuiTools
 
           <<~JSX.chomp
             #{indent_str(indent)}<label#{id_attr} className="#{class_name} flex items-center #{@root_gap_class}"#{style_attr}#{testid_attr}#{tag_attr}#{build_aria_disabled_attr}>
-            #{indent_str(indent + 2)}<input type="radio" name="#{group}" value="#{radio_value}"#{state_attrs}#{disabled_attr}#{input_style} />
+            #{indent_str(indent + 2)}<input type="radio" name="#{group}"#{jsx_attr_text('value', radio_value)}#{state_attrs}#{disabled_attr}#{input_style} />
             #{indent_str(indent + 2)}<span>#{convert_text_binding(text)}</span>
             #{indent_str(indent)}</label>
           JSX
@@ -179,7 +178,7 @@ module RjuiTools
           if has_binding?(selected)
             extract_binding_property(selected)
           else
-            "\"#{selected.to_s.gsub('"', '&quot;')}\""
+            JsonUIShared::StringLiterals.ts(selected)
           end
         end
 
@@ -211,7 +210,8 @@ module RjuiTools
           selected_binding[/\A"(.*)"\z/m, 1]
         end
 
-        def build_state_attrs(selected_binding, on_change, value_literal)
+        def build_state_attrs(selected_binding, on_change, value)
+          value_literal = JsonUIShared::StringLiterals.ts(value)
           if selected_binding
             # A STATIC `selectedValue` puts a string literal on both sides of
             # the comparison, and TypeScript narrows each to its own literal
@@ -226,17 +226,20 @@ module RjuiTools
             static_selected = static_selected_value(selected_binding)
             checked =
               if static_selected
-                " checked={#{static_selected == value_literal}}"
+                # A string value compares as the literal it is written as; any
+                # other value (a JSON number) as it always has — escaping does
+                # not decide whether "1" and 1 are the same item.
+                " checked={#{static_selected == (value.is_a?(String) ? JsonUIShared::StringLiterals.ts_body(value) : value)}}"
               else
-                " checked={#{selected_binding} === \"#{value_literal}\"}"
+                " checked={#{selected_binding} === #{value_literal}}"
               end
             if on_change
-              "#{checked} onChange={() => #{on_change}?.(\"#{value_literal}\")}"
+              "#{checked} onChange={() => #{on_change}?.(#{value_literal})}"
             else
               "#{checked} readOnly"
             end
           elsif on_change
-            " onChange={() => #{on_change}?.(\"#{value_literal}\")}"
+            " onChange={() => #{on_change}?.(#{value_literal})}"
           else
             ''
           end

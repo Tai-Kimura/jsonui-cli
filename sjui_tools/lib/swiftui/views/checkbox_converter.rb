@@ -35,8 +35,7 @@ module SjuiTools
               if is_binding?(text)
                 add_line "label: data.#{extract_binding_property(text)},"
               else
-                escaped_text = text.gsub('"', '\\"')
-                add_line "label: \"#{escaped_text}\","
+                add_line "label: #{swift_string_literal(text)},"
               end
             end
 

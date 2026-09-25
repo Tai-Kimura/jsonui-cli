@@ -460,9 +460,9 @@ module RjuiTools
             if item.is_a?(Hash)
               value = item['value'] || item['id'] || item['text']
               label = item['text'] || item['label'] || value
-              "#{indent_str(indent + 2)}<option value=\"#{value}\">#{label}</option>"
+              "#{indent_str(indent + 2)}<option#{jsx_attr_text('value', value)}>#{JsonUIShared::StringLiterals.jsx_text(label)}</option>"
             else
-              "#{indent_str(indent + 2)}<option value=\"#{item}\">#{item}</option>"
+              "#{indent_str(indent + 2)}<option#{jsx_attr_text('value', item)}>#{JsonUIShared::StringLiterals.jsx_text(item)}</option>"
             end
           end.join("\n")
 
@@ -497,7 +497,7 @@ module RjuiTools
 
             " value={#{prop}}"
           elsif value
-            multiple_select? ? " defaultValue={[\"#{value}\"]}" : " defaultValue=\"#{value}\""
+            multiple_select? ? " defaultValue={[#{JsonUIShared::StringLiterals.ts(value)}]}" : jsx_attr_text('defaultValue', value)
           elsif (index_binding = attributes['selectedIndex']) && has_binding?(index_binding)
             build_index_value_attr(index_binding)
           elsif attributes['selectedIndex'].is_a?(Numeric)
@@ -507,7 +507,7 @@ module RjuiTools
             if items.is_a?(Array)
               item = items[attributes['selectedIndex'].to_i]
               literal = item.is_a?(Hash) ? (item['value'] || item['label']) : item
-              literal ? " defaultValue=\"#{literal}\"" : ''
+              literal ? jsx_attr_text('defaultValue', literal) : ''
             else
               ''
             end
@@ -535,7 +535,7 @@ module RjuiTools
           elsif items.is_a?(Array)
             values = items.map do |item|
               raw = item.is_a?(Hash) ? (item['value'] || item['id'] || item['text']) : item
-              "'#{raw.to_s.gsub("'") { "\\'" }}'"
+              JsonUIShared::StringLiterals.ts_single(raw)
             end
             " value={[#{values.join(', ')}][#{index_prop} ?? -1] ?? ''}"
           else
@@ -625,12 +625,12 @@ module RjuiTools
                          prop = extract_binding_property(date_value)
                          if format
                            @uses_date_format = true
-                           " value={toIsoDateValue(#{prop}, '#{format}', '#{input_type}')}"
+                           " value={toIsoDateValue(#{prop}, #{JsonUIShared::StringLiterals.ts_single(format)}, '#{input_type}')}"
                          else
                            " value={#{prop} || ''}"
                          end
                        elsif date_value
-                         " value=\"#{date_value}\""
+                         jsx_attr_text('value', date_value)
                        else
                          ''
                        end
@@ -677,7 +677,7 @@ module RjuiTools
         def build_date_on_change(date_value, input_type = 'date')
           value_expr = if (format = date_string_format)
                          @uses_date_format = true
-                         "formatDateValue(e.target.value, '#{format}', '#{input_type}')"
+                         "formatDateValue(e.target.value, #{JsonUIShared::StringLiterals.ts_single(format)}, '#{input_type}')"
                        else
                          'e.target.value'
                        end
@@ -710,7 +710,7 @@ module RjuiTools
           return '' unless value
 
           expr = bound_value_expr(value)
-          expr ? " #{name}={#{expr}}" : " #{name}=\"#{value}\""
+          expr ? " #{name}={#{expr}}" : jsx_attr_text(name, value)
         end
 
         # minuteInterval — `step` is in seconds, so the interval is minutes * 60.

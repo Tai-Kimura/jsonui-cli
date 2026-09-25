@@ -22,8 +22,14 @@ module SjuiTools
                           @binding_handler :
                           SjuiTools::SwiftUI::Binding::LabelBindingHandler.new
 
-          # Get text content with binding support
-          text_content = get_text_with_string_manager(label_handler.get_text_content(@component))
+          # Get text content with binding support. A text with a binding in it
+          # is Swift already; only a plain text resolves through strings.json,
+          # which takes it unescaped and escapes what it writes back.
+          text_content = if @component['text'].to_s.include?('@{')
+                           label_handler.get_text_content(@component)
+                         else
+                           get_text_with_string_manager("\"#{@component['text']}\"")
+                         end
 
           # hint / hintAttributes — the Label placeholder (canonical: UIKit
           # SJUILabel swaps in the styled hint when the text is empty, and

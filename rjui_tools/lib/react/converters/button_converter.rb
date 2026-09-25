@@ -27,7 +27,7 @@ module RjuiTools
             if attributes['href']
               href = attributes['href']
               link_attr = Core::Frameworks.for(@config).link_href_attribute
-              "#{indent_str(indent)}<Link #{link_attr}=\"#{href}\"><button#{id_attr}#{build_button_type_attr} className=\"#{class_name}\"#{style_attr}#{on_click}#{disabled_attr}#{testid_attr}#{tag_attr}>#{body}</button></Link>"
+              "#{indent_str(indent)}<Link#{jsx_attr_text(link_attr, href)}><button#{id_attr}#{build_button_type_attr} className=\"#{class_name}\"#{style_attr}#{on_click}#{disabled_attr}#{testid_attr}#{tag_attr}>#{body}</button></Link>"
             else
               "#{indent_str(indent)}<button#{id_attr}#{build_button_type_attr} className=\"#{class_name}\"#{style_attr}#{on_click}#{disabled_attr}#{testid_attr}#{tag_attr}>#{body}</button>"
             end
@@ -179,7 +179,7 @@ module RjuiTools
             %(<span aria-hidden="true" className="#{size} bg-current" ) +
               %(style={{ #{styles} }} />)
           else
-            %(<img src={`#{src}`} alt="#{image_alt(image)}" ) +
+            %(<img src={`#{src}`}#{jsx_attr_text('alt', image_alt(image))} ) +
               %(className="#{size} object-contain" />)
           end
         end
@@ -189,7 +189,7 @@ module RjuiTools
           if has_binding?(image)
             "/images/${#{extract_binding_property(image)}}"
           else
-            "/images/#{resolve_image_extension(image.to_s)}"
+            "/images/#{JsonUIShared::StringLiterals.ts_template_body(resolve_image_extension(image.to_s))}"
           end
         end
 
@@ -283,14 +283,6 @@ module RjuiTools
           classes << 'line-through' if partial['strikethrough']
           classes << 'cursor-pointer' if JsonUIShared::TapAccessibility.handler?(partial['onclick'])
           classes.reject { |c| c.nil? || c.empty? }.join(' ')
-        end
-
-        def escape_jsx_text(text)
-          return text unless text.is_a?(String)
-          return text unless text.include?('{') || text.include?('}') || text.include?('<') || text.include?('>')
-
-          escaped = text.gsub('`', '\\`').gsub('${', '\\${')
-          "{`#{escaped}`}"
         end
       end
     end

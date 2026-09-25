@@ -3,6 +3,7 @@
 require_relative '../helpers/modifier_builder'
 require_relative '../helpers/resource_resolver'
 require_relative '../../core/normalization'
+require_relative '../../core/string_literals'
 
 module KjuiTools
   module Compose
@@ -115,7 +116,7 @@ module KjuiTools
                         else
                           "painterResource(R.drawable.#{Helpers::ResourceResolver.drawable_name(icon)})"
                         end
-              ["Icon(", "    painter = #{painter},", "    contentDescription = \"#{title}\"", ")"]
+              ["Icon(", "    painter = #{painter},", "    contentDescription = #{kotlin_string_literal(title)}", ")"]
             else
               # Use Material Icons (system)
               required_imports&.add(:material_icons)
@@ -128,7 +129,7 @@ module KjuiTools
               # solid (parity family kjui-codegen-tabview).
               ["Icon(",
                "    imageVector = if (#{state_expr} == #{index}) Icons.Filled.#{material_selected_icon} else Icons.Outlined.#{material_icon},",
-               "    contentDescription = \"#{title}\"",
+               "    contentDescription = #{kotlin_string_literal(title)}",
                ")"]
             end
 
@@ -158,7 +159,7 @@ module KjuiTools
 
             # Label (show/hide based on showLabels)
             if show_labels
-              code += "\n" + indent("label = { Text(\"#{title}\") },", depth + 4)
+              code += "\n" + indent("label = { Text(#{kotlin_string_literal(title)}) },", depth + 4)
             end
 
             # Tint colors — ALWAYS emitted with the same fallback chain the
@@ -205,7 +206,8 @@ module KjuiTools
                 pascal_name = view_name.split('_').map(&:capitalize).join
                 code += "\n" + indent("#{pascal_name}View()", depth + 5)
               else
-                code += "\n" + indent("Text(\"#{tab['title'] || "Tab #{index + 1}"} content\")", depth + 5)
+                placeholder = "#{tab['title'] || "Tab #{index + 1}"} content"
+                code += "\n" + indent("Text(#{kotlin_string_literal(placeholder)})", depth + 5)
               end
 
               code += "\n" + indent("}", depth + 4)
@@ -293,11 +295,9 @@ module KjuiTools
             "else -> null }"
         end
 
-        # A Kotlin string literal. Block-form gsub: a replacement STRING reads
-        # a backslash pair as a back-reference and emits one backslash.
+        # A Kotlin string literal — the one escaper (`$` included).
         def self.kotlin_string_literal(str)
-          escaped = str.to_s.gsub('\\') { '\\\\' }.gsub('"') { '\\"' }.gsub('$') { '\\$' }
-          "\"#{escaped}\""
+          JsonUIShared::StringLiterals.kotlin(str)
         end
       end
     end

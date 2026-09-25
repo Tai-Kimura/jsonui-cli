@@ -4,6 +4,7 @@ require_relative '../helpers/modifier_builder'
 require_relative '../helpers/visibility_helper'
 require_relative '../helpers/resource_resolver'
 require_relative '../helpers/font_spec_helper'
+require_relative '../../core/string_literals'
 
 module KjuiTools
   module Compose
@@ -1100,12 +1101,10 @@ module KjuiTools
           nil
         end
 
+        # The inside of a Kotlin string literal — the one escaper (`$`
+        # included).
         def self.escape_string(text)
-          text.gsub('\\', '\\\\\\\\')
-              .gsub('"', '\\"')
-              .gsub("\n", '\\n')
-              .gsub("\r", '\\r')
-              .gsub("\t", '\\t')
+          JsonUIShared::StringLiterals.kotlin_body(text)
         end
 
         def self.quote(text)

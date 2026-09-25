@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require_relative 'string_literals'
+
 module JsonUIShared
   # The attribute types `<tool> g converter --attributes key:type` understands,
   # and what each becomes on each platform — ONE table for the three
@@ -274,16 +276,12 @@ module JsonUIShared
     end
 
     def swift_string(text)
-      escaped = text.gsub('\\') { '\\\\' }.gsub('"') { '\\"' }
-                    .gsub("\n") { '\\n' }.gsub("\r") { '\\r' }.gsub("\t") { '\\t' }
-      "\"#{escaped}\""
+      StringLiterals.swift(text)
     end
 
     # `$` too: in Kotlin it opens a template.
     def kotlin_string(text)
-      escaped = text.gsub('\\') { '\\\\' }.gsub('"') { '\\"' }.gsub('$') { '\\$' }
-                    .gsub("\n") { '\\n' }.gsub("\r") { '\\r' }.gsub("\t") { '\\t' }
-      "\"#{escaped}\""
+      StringLiterals.kotlin(text)
     end
 
     # A value inside a map or a bare `Array`: JSON as the language's own

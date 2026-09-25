@@ -89,7 +89,7 @@ module RjuiTools
           if value.is_a?(String) && value =~ /^@\{(.+)\}$/
             add_viewmodel_data_prefix(Regexp.last_match(1))
           elsif value.is_a?(String)
-            "'#{value.gsub("'", "\\\\'")}'"
+            JsonUIShared::StringLiterals.ts_single(value)
           elsif value == true || value == false
             value.to_s
           elsif value.is_a?(Numeric)

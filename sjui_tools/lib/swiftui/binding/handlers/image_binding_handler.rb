@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require_relative '../view_binding_handler'
+require_relative '../../../core/string_literals'
 
 module SjuiTools
   module SwiftUI
@@ -32,7 +33,7 @@ module SjuiTools
             # SwiftUI Image doesn't directly support binding for the image name
             parse_binding(src_value, read_only: true)
           else
-            "\"#{src_value || 'placeholder'}\""
+            JsonUIShared::StringLiterals.swift(src_value || 'placeholder')
           end
         end
 

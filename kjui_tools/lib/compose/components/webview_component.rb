@@ -3,6 +3,7 @@
 require_relative '../helpers/binding_expression'
 require_relative '../helpers/modifier_builder'
 require_relative '../helpers/web_load_state'
+require_relative '../../core/string_literals'
 
 module KjuiTools
   module Compose
@@ -21,7 +22,7 @@ module KjuiTools
             # expression) — plan 49 lane C.
             Helpers::BindingExpression.value_access($1)
           elsif json_data['url']
-            "\"#{json_data['url']}\""
+            JsonUIShared::StringLiterals.kotlin(json_data['url'])
           else
             '""'
           end
@@ -46,7 +47,7 @@ module KjuiTools
           code += "\n" + indent("settings.javaScriptEnabled = #{json_data['javaScriptEnabled'] != false}", depth + 3)
 
           if json_data['userAgent']
-            code += "\n" + indent("settings.userAgentString = \"#{json_data['userAgent']}\"", depth + 3)
+            code += "\n" + indent("settings.userAgentString = #{JsonUIShared::StringLiterals.kotlin(json_data['userAgent'])}", depth + 3)
           end
 
           code += "\n" + indent("webViewClient = KjuiWebViewClient()", depth + 3)

@@ -49,9 +49,7 @@ module SjuiTools
             if (bound_label = bound_string(text))
               add_line "Text(#{bound_label})"
             else
-              # Escape double quotes in text for Swift string literal
-              escaped_text = text.gsub('"', '\\"')
-              add_line "Text(\"#{escaped_text}\")"
+              add_line "Text(#{swift_string_literal(text)})"
             end
 
             # labelAttributes の処理

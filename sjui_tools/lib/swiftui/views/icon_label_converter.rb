@@ -27,7 +27,7 @@ module SjuiTools
           indent do
             # text. A binding was pasted between the quotes, so the label
             # showed the characters `@{...}` instead of the bound value.
-            add_line "text: #{bound_string(@component['text']) || "\"#{text}\""},"
+            add_line "text: #{bound_string(@component['text']) || swift_string_literal(text)},"
             
             # icons
             if iconOn

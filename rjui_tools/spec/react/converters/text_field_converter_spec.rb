@@ -493,7 +493,9 @@ RSpec.describe RjuiTools::React::Converters::TextFieldConverter do
 
     it 'escapes a quote in the pattern so the attribute cannot be broken out of' do
       result = create_converter({ 'type' => 'TextField', 'pattern' => 'a"b' }).convert
-      expect(result).to include('pattern="a&quot;b"')
+      # The expression form from the one escaper (StringLiterals.ts); the
+      # `&quot;` entity form it replaces left `&` itself unescaped.
+      expect(result).to include('pattern={"a\"b"}')
     end
 
     it 'maps the UIKit autocapitalization spellings to HTML values' do

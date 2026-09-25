@@ -2,6 +2,7 @@
 
 require_relative '../view_binding_handler'
 require_relative '../../views/color_helper'
+require_relative '../../../core/string_literals'
 
 module SjuiTools
   module SwiftUI
@@ -72,12 +73,12 @@ module SjuiTools
                 expr = BindingExpression.swift_text_expr(m[1], prefix: 'data')
                 expr ? "\\(#{expr})" : ''
               else
-                part.gsub('"', '\\"').gsub("\n", "\\n")
+                JsonUIShared::StringLiterals.swift_body(part)
               end
             end.join
             "\"#{interpolated}\""
           else
-            "\"#{(text_value || '').gsub('"', '\\"').gsub("\n", "\\n")}\""
+            JsonUIShared::StringLiterals.swift(text_value || '')
           end
         end
       end

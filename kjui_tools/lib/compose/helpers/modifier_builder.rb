@@ -6,6 +6,7 @@ require_relative 'bound_value'
 require_relative 'resource_resolver'
 require_relative '../../core/normalization'
 require_relative '../../core/tap_accessibility'
+require_relative '../../core/string_literals'
 
 module KjuiTools
   module Compose
@@ -715,7 +716,7 @@ module KjuiTools
             required_imports&.add(:test_tag)
             required_imports&.add(:test_tags_as_resource_id)
             # Add testTag for UI testing (used by Espresso/UI Automator)
-            modifiers << ".testTag(\"#{id_value}\")"
+            modifiers << ".testTag(#{JsonUIShared::StringLiterals.kotlin(id_value)})"
             # Expose testTag as resource-id for UIAutomator compatibility (Compose 1.2+)
             modifiers << ".semantics { testTagsAsResourceId = true }"
           end
@@ -1484,9 +1485,9 @@ module KjuiTools
               # Handler expects viewId (and optionally value) arguments
               if value_expr.nil?
                 # Click events without value - only pass viewId
-                "data.#{method_name}?.invoke(\"#{view_id}\")"
+                "data.#{method_name}?.invoke(#{JsonUIShared::StringLiterals.kotlin(view_id)})"
               else
-                "data.#{method_name}?.invoke(\"#{view_id}\", #{value_expr})"
+                "data.#{method_name}?.invoke(#{JsonUIShared::StringLiterals.kotlin(view_id)}, #{value_expr})"
               end
             elsif class_type.match?(/\(\s*\)\s*->/)
               # Handler is () -> Unit (no arguments)

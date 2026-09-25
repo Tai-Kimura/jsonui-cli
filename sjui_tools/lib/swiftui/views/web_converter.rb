@@ -70,9 +70,7 @@ module SjuiTools
           if text.start_with?('@{') && text.end_with?('}')
             SwiftUI::Binding::BindingExpression.swift_value_expr(text[2..-2])
           else
-            escaped = text.gsub('\\', '\\\\').gsub('"', '\\"')
-                          .gsub("\n", '\\n').gsub("\t", '\\t')
-            "\"#{escaped}\""
+            swift_string_literal(text)
           end
         end
       end

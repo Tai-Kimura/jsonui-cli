@@ -48,15 +48,14 @@ module RjuiTools
             if has_binding?(url)
               " src={#{extract_binding_property(url)}}"
             else
-              " src=\"#{url}\""
+              jsx_attr_text('src', url)
             end
           elsif html
             # For HTML content, use srcdoc
             if has_binding?(html)
               " srcDoc={#{extract_binding_property(html)}}"
             else
-              escaped_html = html.gsub('"', '&quot;')
-              " srcDoc=\"#{escaped_html}\""
+              jsx_attr_text('srcDoc', html)
             end
           else
             ''
@@ -131,7 +130,7 @@ module RjuiTools
           title = attributes['title'] || attributes['accessibilityLabel']
           return '' unless title
 
-          " title=\"#{title}\""
+          jsx_attr_text('title', title)
         end
 
         def build_loading_attr

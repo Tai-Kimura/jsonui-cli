@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require_relative '../../core/image_accessibility'
+require_relative '../../core/string_literals'
 require_relative 'modifier_builder'
 require_relative 'resource_resolver'
 
@@ -32,7 +33,7 @@ module KjuiTools
           when 'decorative'
             'null'
           else
-            "\"#{legacy.to_s.gsub(/[\\"$]/) { |c| "\\#{c}" }}\""
+            JsonUIShared::StringLiterals.kotlin(legacy)
           end
         end
       end

@@ -2,6 +2,7 @@
 
 require_relative '../helpers/binding_expression'
 require_relative '../helpers/modifier_builder'
+require_relative '../../core/string_literals'
 
 module KjuiTools
   module Compose
@@ -126,7 +127,7 @@ module KjuiTools
           if header_data.is_a?(Array)
             header_data.each do |column|
               code += "\n" + indent("Text(", depth + 1)
-              code += "\n" + indent("text = \"#{column}\",", depth + 2)
+              code += "\n" + indent("text = #{JsonUIShared::StringLiterals.kotlin(column)},", depth + 2)
               code += "\n" + indent("fontWeight = FontWeight.Bold,", depth + 2)
               code += "\n" + indent("modifier = Modifier.weight(1f)", depth + 2)
               code += "\n" + indent(")", depth + 1)

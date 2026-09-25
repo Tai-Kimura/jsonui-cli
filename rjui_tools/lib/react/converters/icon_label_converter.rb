@@ -30,7 +30,7 @@ module RjuiTools
           icon_element = if icon_src.include?('{')
             "<img className=\"#{icon_style}\" src={#{icon_src.gsub(/[{}]/, '')}} alt=\"\" />"
           else
-            "<img className=\"#{icon_style}\" src=\"#{icon_src}\" alt=\"\" />"
+            "<img className=\"#{icon_style}\"#{jsx_attr_text('src', icon_src)} alt=\"\" />"
           end
 
           text_style = build_text_style
@@ -117,7 +117,7 @@ module RjuiTools
             binding_expr = extract_binding_property(attributes['selected'])
             icon_on = attributes['icon_on'] || attributes['iconOn'] || ''
             icon_off = attributes['icon_off'] || attributes['iconOff'] || ''
-            "{#{binding_expr} ? '#{icon_on}' : '#{icon_off}'}"
+            "{#{binding_expr} ? #{JsonUIShared::StringLiterals.ts_single(icon_on)} : #{JsonUIShared::StringLiterals.ts_single(icon_off)}}"
           else
             attributes['icon_off'] || attributes['iconOff'] || attributes['icon_on'] || attributes['iconOn'] || attributes['icon'] || ''
           end

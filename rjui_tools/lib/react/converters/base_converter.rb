@@ -5,6 +5,8 @@ require_relative '../../core/typed_attributes'
 # binding's content can be an expression at all.
 require_relative '../../core/attribute_validator_core'
 require_relative '../../core/tap_accessibility'
+# The one escaper for an author's text in the generated TS/TSX.
+require_relative '../../core/string_literals'
 require_relative '../tailwind_mapper'
 require_relative '../responsive_helper'
 require_relative '../helpers/string_manager_helper'
@@ -1518,14 +1520,12 @@ module RjuiTools
           js.include?(' ?? ') ? js : "#{js} ?? \"\""
         end
 
-        # Literal text inside the generated template literal: backticks and
-        # '${' must be escaped so authored braces/backticks render verbatim;
-        # raw newlines become '\n' so the emitted JSX stays single-line.
-        # Block-form gsub is deliberate: in a plain replacement STRING the
-        # sequence backslash-backtick is the PREMATCH special sequence and
-        # would corrupt the output.
+        # Literal text inside the generated template literal, escaped by
+        # StringLiterals.ts_template_body (`\`, backticks, '${', CR); raw
+        # newlines additionally become '\n' so the emitted JSX stays
+        # single-line.
         def escape_template_literal_segment(text)
-          text.gsub('`') { '\\`' }.gsub('${') { '\\${' }.gsub("\n") { '\\n' }
+          JsonUIShared::StringLiterals.ts_template_body(text).gsub("\n") { '\\n' }
         end
 
         # Convert text with newline characters to JSX with <br /> tags
@@ -1547,15 +1547,16 @@ module RjuiTools
           escape_jsx_braces(value)
         end
 
-        # Escape special characters in text for JSX (without wrapping)
+        # An author's text as a JSX child. A text with braces or single
+        # quotes keeps the {`…`} form it has always been written in (so such
+        # layouts regenerate byte for byte), its body escaped by
+        # StringLiterals.ts_template_body; anything else JSX text cannot hold
+        # (`<`, `>`) goes through StringLiterals.jsx_text.
         def escape_text_for_jsx(text)
           return text unless text.is_a?(String)
-          # Escape if text contains braces or single quotes
-          return text unless text.include?('{') || text.include?('}') || text.include?("'")
+          return "{`#{JsonUIShared::StringLiterals.ts_template_body(text)}`}" if text.match?(/[{}']/)
 
-          # Wrap text containing special characters in JSX expression
-          escaped = text.gsub('`', '\\`').gsub('${', '\\${')
-          "{`#{escaped}`}"
+          JsonUIShared::StringLiterals.jsx_text(text)
         end
 
         def escape_jsx_braces_with_bindings(value)
@@ -1569,21 +1570,15 @@ module RjuiTools
           # bindings start with an identifier or a '!' negation prefix)
           if value.start_with?('{') && !value.match?(/^\{!?[a-zA-Z]/)
             # Likely JSON code block, wrap in template literal
-            escaped = value.gsub('`', '\\`').gsub('${', '\\${')
-            return "{`#{escaped}`}"
+            return "{`#{JsonUIShared::StringLiterals.ts_template_body(value)}`}"
           end
 
           value
         end
 
+        # Same judgment as escape_text_for_jsx: one text, one JSX child form.
         def escape_jsx_braces(value)
-          return value unless value.is_a?(String)
-          # Escape if text contains braces or single quotes (which can break JSX attributes)
-          return value unless value.include?('{') || value.include?('}') || value.include?("'")
-
-          # For text containing special characters, wrap entire string in JSX expression with template literal
-          escaped = value.gsub('`', '\\`').gsub('${', '\\${')
-          "{`#{escaped}`}"
+          escape_text_for_jsx(value)
         end
 
         def extract_id
@@ -1740,22 +1735,37 @@ module RjuiTools
           if (resolved = convert_string_key(raw))
             " alt=#{resolved}"
           else
-            " alt=\"#{raw}\""
+            jsx_attr_text('alt', raw)
           end
+        end
+
+        # Characters a JSX attribute string cannot hold as they are: its
+        # closing quote, `&` (JSX decodes HTML entities there), and control
+        # characters. A backslash is literal there (tsc and esbuild both).
+        JSX_ATTR_SPECIAL = /["&\x00-\x1f\x7f\u2028\u2029]/.freeze
+
+        # A JSX attribute holding an author's text: ` name="text"` as before
+        # when nothing in it is special there, else ` name={"…"}` with the
+        # string literal from StringLiterals.ts.
+        def jsx_attr_text(name, text)
+          text = text.to_s
+          return " #{name}={#{JsonUIShared::StringLiterals.ts(text)}}" if text.match?(JSX_ATTR_SPECIAL)
+
+          " #{name}=\"#{text}\""
         end
 
         # Build data-testid attribute for testing
         def build_testid_attr
           test_id = attributes['testId']
           return '' unless test_id
-          " data-testid=\"#{test_id}\""
+          jsx_attr_text('data-testid', test_id)
         end
 
         # Build tag attribute (as data-tag for reference)
         def build_tag_attr
           tag = attributes['tag']
           return '' unless tag
-          " data-tag=\"#{tag}\""
+          jsx_attr_text('data-tag', tag)
         end
 
         # Build onClick attribute
@@ -1773,7 +1783,7 @@ module RjuiTools
               # Action object: { "action": "link", "url": "..." }
               if handler['action'] == 'link' && handler['url']
                 url = handler['url']
-                return " onClick={() => window.open('#{url}', '_blank')}"
+                return " onClick={() => window.open(#{JsonUIShared::StringLiterals.ts_single(url)}, '_blank')}"
               else
                 return ''
               end
@@ -2302,7 +2312,7 @@ module RjuiTools
             elsif (resolved = convert_string_key(range))
               resolved.sub(/\A\{/, '').sub(/\}\z/, '')
             else
-              "'#{range.gsub("\\", "\\\\").gsub("'", "\\'")}'"
+              JsonUIShared::StringLiterals.ts_single(range)
             end
           else "''"
           end

@@ -137,16 +137,12 @@ module RjuiTools
             parts << "color: '#{css}'"
           end
           parts << "fontSize: '#{attrs['fontSize']}px'" if attrs['fontSize']
-          parts << "fontFamily: '#{attrs['font']}'" if attrs['font']
+          parts << "fontFamily: #{JsonUIShared::StringLiterals.ts_single(attrs['font'])}" if attrs['font']
           { text: hint, parts: parts }
         end
 
         def pure_binding_text?(raw)
           raw.is_a?(String) && raw.strip.match?(/\A@\{[^}]+\}\z/)
-        end
-
-        def escape_jsx_text(text)
-          text.to_s.gsub('{', '&#123;').gsub('}', '&#125;').gsub('<', '&lt;')
         end
 
         # The partialAttributes entries, or nil when the label has none. One
@@ -729,18 +725,18 @@ module RjuiTools
           elsif has_binding?(text)
             " text={#{bound_value_expr(text)}}"
           else
-            escaped = text.gsub('\\', '\\\\').gsub('`', '\\`').gsub('${', '\\${')
-            " text={`#{escaped}`}"
+            " text={`#{JsonUIShared::StringLiterals.ts_template_body(text)}`}"
           end
         end
 
+        # The hint as a JSX child: as it is unless JSX reads something in it
+        # (StringLiterals::JSX_TEXT_SPECIAL), else the {`…`} form it has always
+        # been written in, its body escaped by StringLiterals.ts_template_body.
         def escape_jsx_text(text)
           return text unless text.is_a?(String)
-          return text unless text.include?('{') || text.include?('}') || text.include?('<') || text.include?('>')
+          return text unless text.match?(JsonUIShared::StringLiterals::JSX_TEXT_SPECIAL)
 
-          # Wrap in JSX expression with template literal for safe rendering
-          escaped = text.gsub('`', '\\`').gsub('${', '\\${')
-          "{`#{escaped}`}"
+          "{`#{JsonUIShared::StringLiterals.ts_template_body(text)}`}"
         end
       end
     end

@@ -21,7 +21,7 @@ module RjuiTools
                      elsif src.include?('{')
                        " src={#{src.gsub(/[{}]/, '')}}"
                      else
-                       " src=\"#{src}\""
+                       jsx_attr_text('src', src)
                      end
 
           jsx = "#{indent_str(indent)}<img#{id_attr} className=\"#{class_name}\"#{style_attr}#{src_attr}#{build_alt_attr}#{loading_attr}#{onclick_attr}#{testid_attr}#{tag_attr} />"

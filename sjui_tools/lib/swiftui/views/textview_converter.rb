@@ -34,7 +34,7 @@ module SjuiTools
             # literal-seed precedent) — an empty seed dropped the declared
             # text and the editor rendered placeholder-gray (32 parity).
             state_var = "#{id}Text"
-            seed = text_binding.is_a?(String) && !text_binding.empty? ? text_binding.inspect : '""'
+            seed = text_binding.is_a?(String) && !text_binding.empty? ? swift_string_literal(text_binding) : '""'
             add_state_variable(state_var, "String", seed)
             binding_path = state_var
           end
@@ -53,10 +53,9 @@ module SjuiTools
                 hint_expr = SwiftUI::Binding::BindingExpression.swift_value_expr(hint_value[2..-2])
                 add_line "hint: #{hint_expr},"
               else
-                # Escape newlines in hint text
-                escaped_hint = hint_value.gsub("\n", "\\n")
-                # Use localized strings for snake_case hint text
-                hint_text = get_text_with_string_manager("\"#{escaped_hint}\"")
+                # Use localized strings for snake_case hint text (unescaped:
+                # the helper escapes what it writes back)
+                hint_text = get_text_with_string_manager("\"#{hint_value}\"")
                 add_line "hint: #{hint_text},"
               end
             end

@@ -53,9 +53,8 @@ module SjuiTools
           add_line "Picker(\"\", selection: #{selection_binding}) {"
           indent do
             items.each_with_index do |item, index|
-              # Escape double quotes in item text for Swift string literal
-              escaped_item = item.to_s.gsub('\\', '\\\\').gsub('"', '\\"')
-              localized_text = get_text_with_string_manager("\"#{escaped_item}\"")
+              # Unescaped: the helper escapes what it writes back
+              localized_text = get_text_with_string_manager("\"#{item}\"")
               add_line "Text(#{localized_text}).tag(#{index})"
             end
           end

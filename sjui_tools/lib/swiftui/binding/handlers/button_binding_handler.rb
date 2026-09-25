@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require_relative '../view_binding_handler'
+require_relative '../../../core/string_literals'
 
 module SjuiTools
   module SwiftUI
@@ -33,7 +34,7 @@ module SjuiTools
           if is_binding?(text_value)
             parse_binding(text_value, read_only: true)
           else
-            "\"#{text_value || ''}\""
+            JsonUIShared::StringLiterals.swift(text_value || '')
           end
         end
 

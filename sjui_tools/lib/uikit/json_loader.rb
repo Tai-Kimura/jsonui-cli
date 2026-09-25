@@ -18,6 +18,7 @@ require_relative "../core/config_manager"
 require_relative "../core/logger"
 require_relative "../core/binding_validator"
 require_relative "../core/resources/string_manager"
+require_relative "../core/string_literals"
 require_relative '../core/layout_variant'
 require_relative '../core/screen_index'
 
@@ -267,8 +268,7 @@ module SjuiTools
                           default_value = '""'
                         elsif value_str.start_with?("'") && value_str.end_with?("'") && value_str.length > 1
                           inner_content = value_str[1...-1]
-                          escaped_content = inner_content.gsub('\\', '\\\\').gsub('"', '\\"')
-                          default_value = "\"#{escaped_content}\""
+                          default_value = JsonUIShared::StringLiterals.swift(inner_content)
                         elsif value_str.start_with?('"') && value_str.end_with?('"')
                           # Already a complete Swift string literal - use as is
                           default_value = value_str
@@ -278,8 +278,7 @@ module SjuiTools
                           if @string_manager.string_registered?(value_str)
                             default_value = @string_manager.string_manager_call(value_str)
                           else
-                            escaped_content = value_str.gsub('\\', '\\\\').gsub('"', '\\"')
-                            default_value = "\"#{escaped_content}\".localized()"
+                            default_value = "#{JsonUIShared::StringLiterals.swift(value_str)}.localized()"
                           end
                         end
                       elsif data_with_default["class"] == "Bool"
@@ -531,9 +530,8 @@ module SjuiTools
                 elsif value_str.start_with?("'") && value_str.end_with?("'") && value_str.length > 1
                   # String wrapped in single quotes - remove outer quotes and use inner content
                   inner_content = value_str[1...-1]
-                  # Escape any backslashes and double quotes for Swift string literal
-                  escaped_content = inner_content.gsub('\\', '\\\\').gsub('"', '\\"')
-                  default_value = "\"#{escaped_content}\""
+                  # Escaped for a Swift string literal (the shared escaper)
+                  default_value = JsonUIShared::StringLiterals.swift(inner_content)
                 elsif value_str.start_with?('"') && value_str.end_with?('"')
                   # Already a complete Swift string literal - use as is
                   default_value = value_str
@@ -543,8 +541,7 @@ module SjuiTools
                   if @string_manager.string_registered?(value_str)
                     default_value = @string_manager.string_manager_call(value_str)
                   else
-                    escaped_content = value_str.gsub('\\', '\\\\').gsub('"', '\\"')
-                    default_value = "\"#{escaped_content}\".localized()"
+                    default_value = "#{JsonUIShared::StringLiterals.swift(value_str)}.localized()"
                   end
                 end
               elsif data["class"] == "Bool"

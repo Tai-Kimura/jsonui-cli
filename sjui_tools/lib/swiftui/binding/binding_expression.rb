@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require_relative '../../core/string_literals'
+
 module SjuiTools
   module SwiftUI
     module Binding
@@ -79,16 +81,14 @@ module SjuiTools
 
         # A Swift string literal carrying the author's own text.
         def swift_literal_for(text)
-          escaped = text.to_s.gsub('\\', '\\\\').gsub('"', '\\"')
-          "\"#{escaped}\""
+          JsonUIShared::StringLiterals.swift(text)
         end
 
         # Swift literal for the parsed default, or nil when none/null.
         def swift_default_literal(parsed)
           case parsed.default_kind
           when :string
-            escaped = parsed.default_value.gsub('\\', '\\\\\\\\').gsub('"', '\\"')
-            "\"#{escaped}\""
+            JsonUIShared::StringLiterals.swift(parsed.default_value)
           when :bool, :number
             parsed.default_value
           end
@@ -153,13 +153,9 @@ module SjuiTools
           JSON_CONTAINER_CLASSES.include?(klass)
         end
 
-        # A Swift string literal. Written with block replacements: gsub with
-        # a STRING replacement reads a backslash pair as a back-reference and
-        # emits one backslash where two were meant.
+        # A Swift string literal (the shared escaper).
         def swift_string_literal(str)
-          escaped = str.to_s.gsub(0x5c.chr) { 0x5c.chr * 2 }
-                        .gsub(0x22.chr) { 0x5c.chr + 0x22.chr }
-          0x22.chr + escaped + 0x22.chr
+          JsonUIShared::StringLiterals.swift(str)
         end
 
         # Read the path through the canonical resolver rather than deriving a
@@ -406,7 +402,7 @@ module SjuiTools
         # error) a negated bool binding — bridged to a visible/gone ternary so
         # the emitted Swift still compiles.
         def swift_visibility_param(value, prefix: 'data')
-          return "\"#{value}\"" unless binding?(value)
+          return JsonUIShared::StringLiterals.swift(value) unless binding?(value)
 
           inner = value[2..-2]
           parsed = parse(inner)

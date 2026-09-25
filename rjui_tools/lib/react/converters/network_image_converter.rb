@@ -16,7 +16,7 @@ module RjuiTools
           src = build_src_attr
           content_mode = build_content_mode_attr
           placeholder_attr = build_placeholder_attr
-          error_image = attributes['errorImage'] ? " errorImage=\"#{attributes['errorImage']}\"" : ''
+          error_image = attributes['errorImage'] ? jsx_attr_text('errorImage', attributes['errorImage']) : ''
 
           # Build event handlers
           on_load = build_event_handler('onLoad')
@@ -81,7 +81,7 @@ module RjuiTools
           if has_binding?(src)
             " src={#{convert_binding(src).gsub(/^\{|\}$/, '')}}"
           else
-            " src=\"#{src}\""
+            jsx_attr_text('src', src)
           end
         end
 
@@ -133,12 +133,12 @@ module RjuiTools
               if has_binding?(placeholder)
                 " placeholder={#{convert_binding(placeholder).gsub(/^\{|\}$/, '')}}"
               else
-                " placeholder=\"#{placeholder}\""
+                jsx_attr_text('placeholder', placeholder)
               end
           end
           default_image = attributes['defaultImage']
           if default_image && !has_binding?(default_image)
-            attr += " defaultImage=\"#{default_image}\""
+            attr += jsx_attr_text('defaultImage', default_image)
           end
           attr
         end

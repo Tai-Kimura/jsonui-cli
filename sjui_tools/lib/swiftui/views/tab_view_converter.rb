@@ -40,7 +40,7 @@ module SjuiTools
                 add_line "#{view_name.split('_').map(&:capitalize).join}View()"
               else
                 # Placeholder content
-                add_line "Text(\"#{tab['title'] || "Tab #{index + 1}"}\")"
+                add_line "Text(#{swift_string_literal(tab['title'] || "Tab #{index + 1}")})"
               end
 
               # Add tabItem modifier
@@ -83,7 +83,7 @@ module SjuiTools
                       # Different icons for selected/unselected
                       add_line "Label {"
                       indent do
-                        add_line "Text(\"#{title}\")"
+                        add_line "Text(#{swift_string_literal(title)})"
                       end
                       add_line "} icon: {"
                       indent do
@@ -94,7 +94,7 @@ module SjuiTools
                     else
                       add_line "Label {"
                       indent do
-                        add_line "Text(\"#{title}\")"
+                        add_line "Text(#{swift_string_literal(title)})"
                       end
                       add_line "} icon: {"
                       indent do
@@ -109,7 +109,7 @@ module SjuiTools
                       # Different icons for selected/unselected
                       add_line "Label {"
                       indent do
-                        add_line "Text(\"#{title}\")"
+                        add_line "Text(#{swift_string_literal(title)})"
                       end
                       add_line "} icon: {"
                       indent do
@@ -117,7 +117,7 @@ module SjuiTools
                       end
                       add_line "}"
                     else
-                      add_line "Label(\"#{title}\", systemImage: \"#{icon}\")"
+                      add_line "Label(#{swift_string_literal(title)}, systemImage: \"#{icon}\")"
                     end
                   end
                 end
@@ -132,7 +132,7 @@ module SjuiTools
                   elsif badge_value.is_a?(Integer)
                     add_line ".badge(#{badge_value})"
                   else
-                    add_line ".badge(\"#{badge_value}\")"
+                    add_line ".badge(#{swift_string_literal(badge_value)})"
                   end
                 end
 

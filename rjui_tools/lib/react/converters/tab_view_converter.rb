@@ -199,7 +199,7 @@ module RjuiTools
           elsif badge.is_a?(Integer) && badge > 0
             "#{indent_str(10)}<span className=\"absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full w-4 h-4 flex items-center justify-center\">#{badge}</span>"
           elsif badge.is_a?(String) && !badge.empty?
-            "#{indent_str(10)}<span className=\"absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full px-1 min-w-4 h-4 flex items-center justify-center\">#{badge}</span>"
+            "#{indent_str(10)}<span className=\"absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full px-1 min-w-4 h-4 flex items-center justify-center\">#{JsonUIShared::StringLiterals.jsx_text(badge)}</span>"
           end
         end
 
@@ -219,7 +219,7 @@ module RjuiTools
             data_prop_name = base_name.split('_').each_with_index.map { |part, i| i == 0 ? part.downcase : part.capitalize }.join + 'Data'
             content = "<#{pascal_name} data={data.#{data_prop_name}!} />"
           else
-            content = "<div className=\"p-4\">#{tab['title'] || "Tab #{index + 1}"} content</div>"
+            content = "<div className=\"p-4\">#{JsonUIShared::StringLiterals.jsx_text("#{tab['title'] || "Tab #{index + 1}"} content")}</div>"
           end
 
           <<~JSX.chomp

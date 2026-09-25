@@ -2,6 +2,7 @@
 
 require_relative '../core/generated_marker'
 require_relative 'binding/binding_expression'
+require_relative '../core/string_literals'
 require_relative 'section_bounder'
 
 module SjuiTools
@@ -372,7 +373,7 @@ module SjuiTools
             expr = SwiftUI::Binding::BindingExpression.swift_value_expr(text[2...-1])
             code << "Text(#{expr})"
           else
-            code << "Text(\"#{text}\")"
+            code << "Text(#{JsonUIShared::StringLiterals.swift(text)})"
           end
 
           # Add modifiers
@@ -388,7 +389,7 @@ module SjuiTools
           action = json['onClick'] || "onTap"
 
           code << "Button(action: { data.#{action}?() }) {"
-          code << "    Text(\"#{text}\")"
+          code << "    Text(#{JsonUIShared::StringLiterals.swift(text)})"
           code << "}"
 
           # Add modifiers

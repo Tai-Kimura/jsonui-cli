@@ -24,14 +24,14 @@ module SjuiTools
             if processed_url.is_a?(Hash) && processed_url[:template_var]
               add_line "url: data.#{to_camel_case(processed_url[:template_var])},"
             else
-              add_line "url: \"#{url}\","
+              add_line "url: #{swift_string_literal(url)},"
             end
 
             # プレースホルダー — `hint` is the canonical spelling,
             # `placeholder` the alias (kjui reads hint first; parity).
             hint_value = @component['hint'] || @component['placeholder']
             if hint_value
-              add_line "placeholder: \"#{hint_value}\","
+              add_line "placeholder: #{swift_string_literal(hint_value)},"
             end
 
             # defaultImage / loadingImage / errorImage.
@@ -78,7 +78,7 @@ module SjuiTools
               indent do
                 @component['headers'].each_with_index do |(key, value), index|
                   comma = index < @component['headers'].length - 1 ? "," : ""
-                  add_line "\"#{key}\": \"#{value}\"#{comma}"
+                  add_line "#{swift_string_literal(key)}: #{swift_string_literal(value)}#{comma}"
                 end
               end
               add_line "]"
