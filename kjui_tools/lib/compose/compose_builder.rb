@@ -171,10 +171,10 @@ module KjuiTools
           json_content = File.read(json_file)
           json_data = JSON.parse(json_content)
 
-          # Skip partial files (they are included in other views, not standalone)
-          if json_data['partial'] == true
-            return nil
-          end
+          # A partial is not built on its own — the layouts that include it,
+          # and a Collection's cells, draw it — but it is checked on its own
+          # below, before it is skipped.
+          partial = json_data['partial'] == true
 
           # Per-file normalization state: an L1-normalized layout (`$jui`
           # marker from `jui build`) takes the canonical-only attribute
@@ -185,6 +185,16 @@ module KjuiTools
           json_data.delete(Core::Normalization::MARKER_KEY)
 
           json_data = StyleLoader.load_and_merge(json_data)
+
+          # Process includes - expand inline with ID prefix support (like
+          # SwiftJsonUI). BEFORE the shared checks: they read the tree this
+          # layout draws. Until 1.8.121 they read it before its includes were
+          # expanded, so a leaf given children inside an included layout was
+          # drawn here with its children dropped and nothing refused — and a
+          # partial was skipped before any check, while a cached build checked
+          # it (the two paths answered differently). Ticket
+          # leaf-refusal-does-not-see-inside-a-partial-include.
+          json_data = IncludeExpander.process_includes(json_data, File.dirname(json_file), nil, @layouts_dir)
 
           shared_warnings = JsonUIShared::LayoutValidator.validate_layout(
             json_data, source_path: File.basename(json_file),
@@ -203,7 +213,9 @@ module KjuiTools
             begin
               require_relative '../core/stage_failures'
               JsonUI::StageFailures.record(
-                'layout', "#{json_file} was not generated: #{reason}"
+                'layout',
+                partial ? "#{json_file} (a partial, drawn by the layouts that include it) is refused: #{reason}"
+                        : "#{json_file} was not generated: #{reason}"
               )
             rescue LoadError
               nil
@@ -214,8 +226,8 @@ module KjuiTools
             return
           end
 
-          # Process includes - expand inline with ID prefix support (like SwiftJsonUI)
-          json_data = IncludeExpander.process_includes(json_data, File.dirname(json_file), nil, @layouts_dir)
+          return nil if partial
+
           annotate_image_roles(json_data, json_file)
           JsonUIShared::TapAccessibility.annotate!(json_data)
 
@@ -1319,6 +1331,8 @@ module KjuiTools
         Core::Normalization.layout_canonicalized = Core::Normalization.canonicalized?(json_data)
         json_data.delete(Core::Normalization::MARKER_KEY)
         json_data = StyleLoader.load_and_merge(json_data)
+        # Expanded first, as the base is: the checks read the drawn tree.
+        json_data = IncludeExpander.process_includes(json_data, File.dirname(variant_file), nil, @layouts_dir)
 
         shared_warnings = JsonUIShared::LayoutValidator.validate_layout(
           json_data, source_path: File.basename(variant_file),
@@ -1342,7 +1356,6 @@ module KjuiTools
           return
         end
 
-        json_data = IncludeExpander.process_includes(json_data, File.dirname(variant_file), nil, @layouts_dir)
         annotate_image_roles(json_data, variant_file)
         JsonUIShared::TapAccessibility.annotate!(json_data)
 

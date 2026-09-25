@@ -196,7 +196,13 @@ module KjuiTools
             end
           end
 
-          merged = Compose::StyleLoader.load_and_merge(json_data)
+          # The tree the layout draws, as the builder reads it: styles
+          # merged, includes expanded (until 1.8.121 the includes were not,
+          # so a violation inside one was never seen here). A copy: the
+          # expander rewrites the tree it is given.
+          require_relative '../../compose/include_expander'
+          merged = Compose::StyleLoader.load_and_merge(JSON.parse(JSON.generate(json_data)))
+          merged = Compose::IncludeExpander.process_includes(merged, File.dirname(json_file), nil, layouts_dir)
           shared_warnings = JsonUIShared::LayoutValidator.validate_layout(
             merged, source_path: File.basename(json_file),
             extension_definitions: Core::AttributeValidator.extension_definitions(:compose)
