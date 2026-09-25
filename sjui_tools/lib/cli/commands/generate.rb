@@ -13,7 +13,7 @@ module SjuiTools
           'view' => 'Generate a new view with JSON and binding',
           'partial' => 'Generate a partial view',
           'collection' => 'Generate a collection view',
-          'binding' => 'Generate binding file',
+          'binding' => 'Not a generator: `sjui build` writes the binding files (UIKit)',
           'converter' => 'Generate a custom converter',
           'adapter' => 'Generate adapter for existing View (for Dynamic mode)'
         }.freeze
@@ -42,7 +42,10 @@ module SjuiTools
             generate_partial(args, mode)
           when 'collection'
             generate_collection(args, mode)
-          when 'uikit'
+          when 'binding'
+            # Until 1.8.121 this branch read `when 'uikit'`, which no
+            # subcommand is: `sjui g binding X` did nothing, said nothing and
+            # exited 0 (ticket generate-commands-overwrite-edited-files-and-ignore-their-flags).
             generate_binding(args, mode)
           when 'converter'
             generate_converter(args, mode)
@@ -85,6 +88,7 @@ module SjuiTools
         end
 
         def generate_partial(args, mode)
+          options = parse_overwrite_options(args)
           name = args.shift
 
           if name.nil? || name.empty?
@@ -103,11 +107,11 @@ module SjuiTools
           when 'uikit'
             require_relative '../../uikit/xcode_project/generators/partial_generator'
             project_file = Core::ProjectFinder.find_project_file
-            generator = SjuiTools::UIKit::XcodeProject::Generators::PartialGenerator.new(project_file)
+            generator = SjuiTools::UIKit::XcodeProject::Generators::PartialGenerator.new(project_file, options)
             generator.generate(name)
           when 'swiftui'
             require_relative '../../swiftui/generators/partial_generator'
-            generator = SjuiTools::SwiftUI::Generators::PartialGenerator.new(name)
+            generator = SjuiTools::SwiftUI::Generators::PartialGenerator.new(name, options)
             generator.generate
           else
             puts "Error: Unknown mode: #{mode}"
@@ -116,6 +120,7 @@ module SjuiTools
         end
 
         def generate_collection(args, mode)
+          options = parse_overwrite_options(args)
           name = args.shift
 
           if name.nil? || name.empty?
@@ -134,11 +139,11 @@ module SjuiTools
           when 'uikit'
             require_relative '../../uikit/xcode_project/generators/collection_generator'
             project_file = Core::ProjectFinder.find_project_file
-            generator = SjuiTools::UIKit::XcodeProject::Generators::CollectionGenerator.new(project_file)
+            generator = SjuiTools::UIKit::XcodeProject::Generators::CollectionGenerator.new(project_file, options)
             generator.generate(name)
           when 'swiftui'
             require_relative '../../swiftui/generators/collection_generator'
-            generator = SjuiTools::SwiftUI::Generators::CollectionGenerator.new(name)
+            generator = SjuiTools::SwiftUI::Generators::CollectionGenerator.new(name, options)
             generator.generate
           else
             puts "Error: Unknown mode: #{mode}"
@@ -160,9 +165,14 @@ module SjuiTools
             exit 1
           end
 
-          require_relative '../../uikit/xcode_project/generators/binding_generator'
-          generator = SjuiTools::UIKit::XcodeProject::Generators::BindingGenerator.new(name)
-          generator.generate
+          # There is no binding generator to call (the file this required
+          # never existed): a binding file is written from its layout by
+          # `sjui build`, and by `sjui g view / partial / collection`, which run
+          # it. Said, and not a success.
+          puts "sjui g binding #{name}: nothing written — binding files are not generated one by one; " \
+               "`sjui build` writes #{name.sub(/Binding\z/, '')}Binding.swift from its layout " \
+               "(and `sjui g view / partial / collection` run it)"
+          exit 1
         end
 
         def generate_converter(args, mode)
@@ -204,8 +214,22 @@ module SjuiTools
             opts.on('--mode MODE', 'Override mode (uikit, swiftui, dynamic)') do |mode|
               options[:mode] = mode
             end
+
+            JsonUIShared::ConverterGeneratorCore.declare_overwrite_options(opts, options)
           end.parse!(args)
 
+          options
+        end
+
+        # --force / --skip-existing, for the commands that take no other
+        # option (partial, collection, adapter). Until 1.8.121 these commands
+        # parsed nothing, so both flags were ignored: `g partial --force`
+        # kept the file, `g collection --skip-existing` (SwiftUI) overwrote it.
+        def parse_overwrite_options(args)
+          options = {}
+          OptionParser.new do |opts|
+            JsonUIShared::ConverterGeneratorCore.declare_overwrite_options(opts, options)
+          end.parse!(args)
           options
         end
 
@@ -305,6 +329,7 @@ module SjuiTools
         end
 
         def generate_adapter(args, mode)
+          options = parse_overwrite_options(args)
           name = args.shift
 
           if name.nil? || name.empty?
@@ -326,7 +351,7 @@ module SjuiTools
           end
 
           require_relative '../../swiftui/generators/view_adapter_generator'
-          generator = SjuiTools::SwiftUI::Generators::ViewAdapterGenerator.new(name)
+          generator = SjuiTools::SwiftUI::Generators::ViewAdapterGenerator.new(name, options)
           generator.generate
         end
 
@@ -343,7 +368,10 @@ module SjuiTools
           puts "  sjui g view RootView --root    # Generate root view"
           puts "  sjui g partial Header          # Generate a partial"
           puts "  sjui g collection Post/Cell    # Generate collection cell"
-          puts "  sjui g binding CustomBinding   # Generate binding file"
+          puts
+          puts "  # Every command above keeps a file that exists: it asks first (a"
+          puts "  # closed stdin is \"n\"); --skip-existing keeps it without asking,"
+          puts "  # --force replaces it."
           puts
           puts "  # SwiftUI converter"
           puts "  sjui g converter MyConverter   # Generate custom converter"

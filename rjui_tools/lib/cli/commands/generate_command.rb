@@ -18,6 +18,11 @@ module RjuiTools
           @config = Core::ConfigManager.load_config
         end
 
+        # A missing name and an unknown type exit 1 (until 1.8.121 they said
+        # the error and exited 0), and an option the command does not declare
+        # is said in one line, exit 1 — until 1.8.121 `g view --force` ended
+        # in an OptionParser::InvalidOption stack trace (ticket
+        # generate-commands-overwrite-edited-files-and-ignore-their-flags).
         def execute
           if @args.empty?
             show_help
@@ -29,37 +34,60 @@ module RjuiTools
           case type
           when 'view', 'v'
             options = parse_view_options
-            name = @args.shift
-            unless name
-              Core::Logger.error("Name is required for '#{type}'")
-              return
-            end
-            generate_view(name, options)
+            generate_view(require_name(type), options)
           when 'component', 'c'
             options = parse_view_options
-            name = @args.shift
-            unless name
-              Core::Logger.error("Name is required for '#{type}'")
-              return
-            end
-            generate_component(name, options)
+            generate_component(require_name(type), options)
           when 'collection', 'col'
-            name = @args.shift
-            unless name
-              Core::Logger.error("Name is required for 'collection'")
-              Core::Logger.info("Usage: rjui g collection <CellName>")
-              return
-            end
-            generate_collection(name)
+            options = parse_overwrite_options
+            generate_collection(require_name(type, usage: 'rjui g collection <CellName>'), options)
           when 'converter', 'conv'
             generate_converter
           else
             Core::Logger.error("Unknown generator type: #{type}")
             show_help
+            exit 1
           end
+        rescue OptionParser::ParseError => e
+          Core::Logger.error("rjui g #{type}: #{e.message}")
+          exit 1
+        rescue SystemCallError, IOError => e
+          # A write that fails midway (a read-only file, a full disk): said in
+          # one line, exit 1, as sjui and kjui do — the files decided before
+          # it have each been said. Until 1.8.121 a stack trace.
+          Core::Logger.error("rjui g #{type}: #{e.message}")
+          exit 1
         end
 
         private
+
+        def require_name(type, usage: nil)
+          name = @args.shift
+          return name if name
+
+          Core::Logger.error("Name is required for '#{type}'")
+          Core::Logger.info("Usage: #{usage}") if usage
+          exit 1
+        end
+
+        # Each scaffold file through the one overwrite decision the generate
+        # commands of the three tools share: an existing file is the app's —
+        # kept unless --force (or "y" at the prompt); a closed stdin and
+        # --skip-existing keep it. Said as it is decided.
+        def scaffold(path, options, noun, &content)
+          FileUtils.mkdir_p(File.dirname(path))
+          JsonUIShared::ConverterGeneratorCore.write_scaffold(
+            path, options, Core::Logger, noun: noun, label: noun, exists_label: noun.sub(/\A\w/, &:upcase), &content
+          )
+        end
+
+        def scaffold_options(options)
+          options.merge(scaffold_files: JsonUIShared::ConverterGeneratorCore.scaffold_record)
+        end
+
+        def report(name, options)
+          JsonUIShared::ConverterGeneratorCore.report_scaffold_record(name, options[:scaffold_files], Core::Logger)
+        end
 
         def generate_view(name, options = {})
           with_viewmodel = options[:with_viewmodel]
@@ -81,12 +109,10 @@ module RjuiTools
           json_dir = File.join(layouts_dir, "pages", *kebab_dir_parts)
           json_path = File.join(json_dir, "#{json_name}.json")
 
-          if File.exist?(json_path)
-            Core::Logger.warn("Layout already exists: #{json_path}")
-            return
-          end
-
-          FileUtils.mkdir_p(json_dir)
+          # Each of the layout, the page and the ViewModel is decided on its
+          # own: until 1.8.121 an existing layout ended the run, and a page or
+          # a ViewModel that was missing beside it was not written.
+          options = scaffold_options(options)
 
           # Build layout based on --with-viewmodel option
           if with_viewmodel
@@ -144,17 +170,17 @@ module RjuiTools
             }
           end
 
-          File.write(json_path, JSON.pretty_generate(layout))
-          Core::Logger.success("Created layout: #{json_path}")
+          scaffold(json_path, options, 'layout') { JSON.pretty_generate(layout) }
 
           # Generate page.tsx
-          generate_page_file(view_name, kebab_path, with_viewmodel)
+          generate_page_file(view_name, kebab_path, with_viewmodel, options)
 
           # Generate ViewModel only if --with-viewmodel is specified
           if with_viewmodel
-            generate_viewmodel_file(view_name)
+            generate_viewmodel_file(view_name, options)
           end
 
+          report("view #{name}", options)
           Core::Logger.info('Run "rjui build" to generate the React component')
         end
 
@@ -173,13 +199,7 @@ module RjuiTools
           # Build nested path for JSON file under components/
           json_dir = File.join(layouts_dir, "components", *dir_parts)
           json_path = File.join(json_dir, "#{json_name}.json")
-
-          if File.exist?(json_path)
-            Core::Logger.warn("Layout already exists: #{json_path}")
-            return
-          end
-
-          FileUtils.mkdir_p(json_dir)
+          options = scaffold_options(options)
 
           # Build layout based on --with-viewmodel option
           if with_viewmodel
@@ -213,30 +233,26 @@ module RjuiTools
             }
           end
 
-          File.write(json_path, JSON.pretty_generate(layout))
-          Core::Logger.success("Created component layout: #{json_path}")
+          scaffold(json_path, options, 'component layout') { JSON.pretty_generate(layout) }
 
           # Generate ViewModel if --with-viewmodel is specified
           if with_viewmodel
-            generate_component_viewmodel_file(view_name)
+            generate_component_viewmodel_file(view_name, options)
           end
 
+          report("component #{name}", options)
           Core::Logger.info('Run "rjui build" to generate the React component')
         end
 
-        def generate_page_file(view_name, kebab_path, with_viewmodel = false)
+        def generate_page_file(view_name, kebab_path, with_viewmodel, options)
           # kebab_path can be nested like "learn/components/view"
           path_parts = kebab_path.split('/')
           page_dir = File.join('src', 'app', *path_parts)
           page_path = File.join(page_dir, 'page.tsx')
+          scaffold(page_path, options, 'page') { page_content(view_name, with_viewmodel) }
+        end
 
-          if File.exist?(page_path)
-            Core::Logger.warn("Page already exists: #{page_path}")
-            return
-          end
-
-          FileUtils.mkdir_p(page_dir)
-
+        def page_content(view_name, with_viewmodel)
           fw = Core::Frameworks.for(@config)
           if with_viewmodel
             page_content = <<~TSX
@@ -276,21 +292,15 @@ module RjuiTools
             TSX
           end
 
-          File.write(page_path, page_content)
-          Core::Logger.success("Created page: #{page_path}")
+          page_content
         end
 
-        def generate_viewmodel_file(view_name)
-          viewmodel_dir = File.join('src', 'viewmodels')
-          viewmodel_path = File.join(viewmodel_dir, "#{view_name}ViewModel.ts")
+        def generate_viewmodel_file(view_name, options)
+          viewmodel_path = File.join('src', 'viewmodels', "#{view_name}ViewModel.ts")
+          scaffold(viewmodel_path, options, 'ViewModel') { viewmodel_content(view_name) }
+        end
 
-          if File.exist?(viewmodel_path)
-            Core::Logger.warn("ViewModel already exists: #{viewmodel_path}")
-            return
-          end
-
-          FileUtils.mkdir_p(viewmodel_dir)
-
+        def viewmodel_content(view_name)
           fw = Core::Frameworks.for(@config)
           viewmodel_content = <<~TS
             // ViewModel for #{view_name}
@@ -313,21 +323,15 @@ module RjuiTools
             }
           TS
 
-          File.write(viewmodel_path, viewmodel_content)
-          Core::Logger.success("Created ViewModel: #{viewmodel_path}")
+          viewmodel_content
         end
 
-        def generate_component_viewmodel_file(view_name)
-          viewmodel_dir = File.join('src', 'viewmodels')
-          viewmodel_path = File.join(viewmodel_dir, "#{view_name}ViewModel.ts")
+        def generate_component_viewmodel_file(view_name, options)
+          viewmodel_path = File.join('src', 'viewmodels', "#{view_name}ViewModel.ts")
+          scaffold(viewmodel_path, options, 'ViewModel') { component_viewmodel_content(view_name) }
+        end
 
-          if File.exist?(viewmodel_path)
-            Core::Logger.warn("ViewModel already exists: #{viewmodel_path}")
-            return
-          end
-
-          FileUtils.mkdir_p(viewmodel_dir)
-
+        def component_viewmodel_content(view_name)
           fw = Core::Frameworks.for(@config)
           viewmodel_content = <<~TS
             // ViewModel for #{view_name}
@@ -350,8 +354,7 @@ module RjuiTools
             }
           TS
 
-          File.write(viewmodel_path, viewmodel_content)
-          Core::Logger.success("Created ViewModel: #{viewmodel_path}")
+          viewmodel_content
         end
 
         def parse_view_options
@@ -363,8 +366,18 @@ module RjuiTools
             opts.on('--no-viewmodel', 'Skip ViewModel generation') do
               options[:with_viewmodel] = false
             end
+
+            JsonUIShared::ConverterGeneratorCore.declare_overwrite_options(opts, options)
           end.parse!(@args)
 
+          options
+        end
+
+        def parse_overwrite_options
+          options = {}
+          OptionParser.new do |opts|
+            JsonUIShared::ConverterGeneratorCore.declare_overwrite_options(opts, options)
+          end.parse!(@args)
           options
         end
 
@@ -505,7 +518,7 @@ module RjuiTools
             .gsub(/[_\/]/, '-')
         end
 
-        def generate_collection(name)
+        def generate_collection(name, options = {})
           # Handle nested paths like "home/product_cell"
           path_parts = name.split('/')
           base_name = path_parts.last
@@ -518,13 +531,7 @@ module RjuiTools
           # Place under components/ (cells are components, not pages)
           json_dir = File.join(layouts_dir, 'components', *dir_parts)
           json_path = File.join(json_dir, "#{json_name}.json")
-
-          if File.exist?(json_path)
-            Core::Logger.warn("Collection cell already exists: #{json_path}")
-            return
-          end
-
-          FileUtils.mkdir_p(json_dir)
+          options = scaffold_options(options)
 
           # Generate cell layout template (no ViewModel, no page)
           layout = {
@@ -565,8 +572,8 @@ module RjuiTools
             ]
           }
 
-          File.write(json_path, JSON.pretty_generate(layout))
-          Core::Logger.success("Created collection cell: #{json_path}")
+          scaffold(json_path, options, 'collection cell') { JSON.pretty_generate(layout) }
+          report("collection cell #{name}", options)
           Core::Logger.info("This is a component (no ViewModel/page generated)")
           Core::Logger.info("Use in a Collection's sections: { \"cell\": \"#{json_name}\" }")
           Core::Logger.info('Run "rjui build" to generate the React component')
@@ -584,6 +591,11 @@ module RjuiTools
 
             Options for view/component:
               --no-viewmodel    Skip ViewModel generation (ViewModel is generated by default)
+
+            Options for view/component/collection/converter:
+              An existing file is kept: the command asks first (a closed stdin is "n").
+              --force           Overwrite existing scaffold files without asking
+              --skip-existing   Keep existing scaffold files without asking
 
             Options for converter:
               --attributes      Comma-separated key:type pairs (e.g., file:String,language:String)
