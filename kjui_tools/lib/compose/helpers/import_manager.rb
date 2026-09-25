@@ -210,6 +210,9 @@ module KjuiTools
             semantics: "import androidx.compose.ui.semantics.semantics",
             semantics_disabled: ["import androidx.compose.ui.semantics.semantics",
                                  "import androidx.compose.ui.semantics.disabled"],
+            # A TabView item's badge, on the item where a screen reader reads it.
+            semantics_state_description: ["import androidx.compose.ui.semantics.semantics",
+                                          "import androidx.compose.ui.semantics.stateDescription"],
             # userInteractionEnabled consumes events in the Initial pass.
             interaction_blocker: ["import androidx.compose.ui.input.pointer.PointerEventPass",
                                   "import androidx.compose.ui.input.pointer.pointerInput"],

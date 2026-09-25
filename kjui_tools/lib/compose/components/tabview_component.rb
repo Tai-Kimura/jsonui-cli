@@ -76,52 +76,87 @@ module KjuiTools
             selected_icon = tab['selectedIcon'] || icon
             icon_type = tab['iconType'] || 'system'
 
+            show_labels = json_data['showLabels'] != false
+            badge = badge_spec(tab['badge'], index)
+
+            # A bound badge is decided at run time, once per tab, by the same
+            # rule the dynamic component's getBadgeValue applies.
+            if badge && badge[:kind] == :binding
+              code += "\n" + indent("val #{badge[:var]}: String? = #{badge[:expr]}", depth + 3)
+            end
+
             code += "\n" + indent("NavigationBarItem(", depth + 3)
             code += "\n" + indent("selected = #{state_expr} == #{index},", depth + 4)
             code += "\n" + indent("onClick = { #{setter_expr.gsub('it', index.to_s)} },", depth + 4)
 
-            # Icon - handle iconType for system vs resource
-            code += "\n" + indent("icon = {", depth + 4)
-            if icon_type == 'resource'
-              # Use drawable resource
-              if icon != selected_icon
-                # Different icons for selected/unselected
-                code += "\n" + indent("Icon(", depth + 5)
-                code += "\n" + indent("painter = if (#{state_expr} == #{index}) painterResource(R.drawable.#{Helpers::ResourceResolver.drawable_name(selected_icon)}) else painterResource(R.drawable.#{Helpers::ResourceResolver.drawable_name(icon)}),", depth + 6)
-                code += "\n" + indent("contentDescription = \"#{title}\"", depth + 6)
-                code += "\n" + indent(")", depth + 5)
+            # The badge reaches a screen reader only through the item. Material3's
+            # NavigationBarItem clears the icon slot's semantics — the badge with
+            # it — when `label != null && (alwaysShowLabel || selected)`. This
+            # emitter never passes alwaysShowLabel (the default, true), so that
+            # is "a label is shown"; tabview_badge_spec.rb pins that no
+            # alwaysShowLabel is emitted. Without a label the slot is not
+            # cleared, the badge is already announced, and a stateDescription
+            # would announce it twice (measured on an emulator, 2026-09-25).
+            if badge && show_labels
+              required_imports&.add(:semantics_state_description)
+              if badge[:kind] == :static
+                code += "\n" + indent("modifier = Modifier.semantics { stateDescription = #{badge[:literal]} },", depth + 4)
               else
-                code += "\n" + indent("Icon(", depth + 5)
-                code += "\n" + indent("painter = painterResource(R.drawable.#{Helpers::ResourceResolver.drawable_name(icon)}),", depth + 6)
-                code += "\n" + indent("contentDescription = \"#{title}\"", depth + 6)
-                code += "\n" + indent(")", depth + 5)
+                code += "\n" + indent("modifier = if (#{badge[:var]} != null) Modifier.semantics { stateDescription = #{badge[:var]} } else Modifier,", depth + 4)
               end
+            end
+
+            # Icon - handle iconType for system vs resource
+            icon_lines = if icon_type == 'resource'
+              # Use drawable resource
+              painter = if icon != selected_icon
+                          # Different icons for selected/unselected
+                          "if (#{state_expr} == #{index}) painterResource(R.drawable.#{Helpers::ResourceResolver.drawable_name(selected_icon)}) else painterResource(R.drawable.#{Helpers::ResourceResolver.drawable_name(icon)})"
+                        else
+                          "painterResource(R.drawable.#{Helpers::ResourceResolver.drawable_name(icon)})"
+                        end
+              ["Icon(", "    painter = #{painter},", "    contentDescription = \"#{title}\"", ")"]
             else
               # Use Material Icons (system)
               required_imports&.add(:material_icons)
               material_icon = to_icon_name(icon)
               material_selected_icon = to_icon_name(selected_icon)
-              if icon != selected_icon
-                code += "\n" + indent("Icon(", depth + 5)
-                code += "\n" + indent("imageVector = if (#{state_expr} == #{index}) Icons.Filled.#{material_selected_icon} else Icons.Outlined.#{material_icon},", depth + 6)
-                code += "\n" + indent("contentDescription = \"#{title}\"", depth + 6)
-                code += "\n" + indent(")", depth + 5)
-              else
-                # Same icon name for both states still follows the Material
-                # selected→Filled / unselected→Outlined convention — the
-                # dynamic component's filled/outlined drawable pair does the
-                # same; emitting Filled unconditionally left unselected tabs
-                # solid (parity family kjui-codegen-tabview).
-                code += "\n" + indent("Icon(", depth + 5)
-                code += "\n" + indent("imageVector = if (#{state_expr} == #{index}) Icons.Filled.#{material_icon} else Icons.Outlined.#{material_icon},", depth + 6)
-                code += "\n" + indent("contentDescription = \"#{title}\"", depth + 6)
-                code += "\n" + indent(")", depth + 5)
-              end
+              # Same icon name for both states still follows the Material
+              # selected→Filled / unselected→Outlined convention — the
+              # dynamic component's filled/outlined drawable pair does the
+              # same; emitting Filled unconditionally left unselected tabs
+              # solid (parity family kjui-codegen-tabview).
+              ["Icon(",
+               "    imageVector = if (#{state_expr} == #{index}) Icons.Filled.#{material_selected_icon} else Icons.Outlined.#{material_icon},",
+               "    contentDescription = \"#{title}\"",
+               ")"]
+            end
+
+            # The badge wraps THIS tab's icon only, and every brace it opens
+            # closes here. It used to be spliced in afterwards with
+            # `code.gsub(/icon = \{/, …)` over the whole string — every earlier
+            # tab got the badge too, and the opened `BadgedBox(…) {` never
+            # closed, so any TabView with a badge emitted Kotlin that did not
+            # compile.
+            code += "\n" + indent("icon = {", depth + 4)
+            if badge.nil?
+              icon_lines.each { |l| code += "\n" + indent(l, depth + 5) }
+            elsif badge[:kind] == :static
+              code += "\n" + indent("BadgedBox(badge = { Badge { Text(#{badge[:literal]}) } }) {", depth + 5)
+              icon_lines.each { |l| code += "\n" + indent(l, depth + 6) }
+              code += "\n" + indent("}", depth + 5)
+            else
+              code += "\n" + indent("if (#{badge[:var]} != null) {", depth + 5)
+              code += "\n" + indent("BadgedBox(badge = { Badge { Text(#{badge[:var]}) } }) {", depth + 6)
+              icon_lines.each { |l| code += "\n" + indent(l, depth + 7) }
+              code += "\n" + indent("}", depth + 6)
+              code += "\n" + indent("} else {", depth + 5)
+              icon_lines.each { |l| code += "\n" + indent(l, depth + 6) }
+              code += "\n" + indent("}", depth + 5)
             end
             code += "\n" + indent("},", depth + 4)
 
             # Label (show/hide based on showLabels)
-            show_labels = json_data['showLabels'] != false
             if show_labels
               code += "\n" + indent("label = { Text(\"#{title}\") },", depth + 4)
             end
@@ -142,17 +177,6 @@ module KjuiTools
             code += "\n" + indent("unselectedIconColor = #{unselected},", depth + 5)
             code += "\n" + indent("unselectedTextColor = #{unselected}", depth + 5)
             code += "\n" + indent(")", depth + 4)
-
-            # Badge
-            if tab['badge']
-              badge_value = tab['badge']
-              if badge_value.is_a?(String) && badge_value.start_with?('@{')
-                binding_prop = badge_value.gsub(/@\{|\}/, '')
-                code = code.gsub(/icon = \{/, "icon = {\n#{indent('BadgedBox(badge = { Badge { Text(\"${data.' + binding_prop + '}\") } }) {', depth + 5)}")
-              elsif badge_value.is_a?(Integer) && badge_value > 0
-                code = code.gsub(/icon = \{/, "icon = {\n#{indent("BadgedBox(badge = { Badge { Text(\"#{badge_value}\") } }) {", depth + 5)}")
-              end
-            end
 
             code += "\n" + indent(")", depth + 3)
           end
@@ -232,6 +256,48 @@ module KjuiTools
             'circle' => 'Circle'
           }
           icon_map[icon] || icon.split('.').first.capitalize
+        end
+
+        # What a tab's `badge` shows, by the dynamic component's rule
+        # (DynamicTabViewComponent.getBadgeValue): a number shows when its
+        # integer part is > 0, a string when it is not empty, a binding by
+        # the same rule at run time; anything else shows no badge.
+        #   nil                                  — no badge
+        #   { kind: :static,  literal: '"3"' }   — a Kotlin string literal
+        #   { kind: :binding, var:, expr: }      — `val <var>: String? = <expr>`
+        def self.badge_spec(value, index)
+          case value
+          when Numeric
+            n = value.to_i
+            n > 0 ? { kind: :static, literal: kotlin_string_literal(n.to_s) } : nil
+          when String
+            if value.start_with?('@{') && value.end_with?('}')
+              prop = value[2..-2]
+              { kind: :binding, var: "badge#{index}", expr: bound_badge_expr("data.#{prop}") }
+            elsif value.empty?
+              nil
+            else
+              { kind: :static, literal: kotlin_string_literal(value) }
+            end
+          end
+        end
+
+        # getBadgeValue's rule for a bound value, as a Kotlin expression. The
+        # subject is typed `Any?` so the branches are the same whatever the
+        # data field's declared type is; a whole-valued Double prints as the
+        # dynamic side's DataBindingContext.stringify prints it ("3", not "3.0").
+        def self.bound_badge_expr(value_expr)
+          "when (val v: Any? = #{value_expr}) { " \
+            "is Number -> if (v.toInt() > 0) { if (v is Int || v is Long || v.toDouble() % 1.0 != 0.0) v.toString() else v.toLong().toString() } else null; " \
+            "is String -> v.ifEmpty { null }; " \
+            "else -> null }"
+        end
+
+        # A Kotlin string literal. Block-form gsub: a replacement STRING reads
+        # a backslash pair as a back-reference and emits one backslash.
+        def self.kotlin_string_literal(str)
+          escaped = str.to_s.gsub('\\') { '\\\\' }.gsub('"') { '\\"' }.gsub('$') { '\\$' }
+          "\"#{escaped}\""
         end
       end
     end
