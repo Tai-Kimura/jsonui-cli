@@ -102,9 +102,13 @@ module RjuiTools
           lines << "  children?: React.ReactNode;" unless is_container == false
           lines << "  className?: string;"
 
+          # A binding attribute (`@key`) is the prop `key`: React passes it
+          # one way. Until 1.8.121 it was declared `@key?:`, which is not
+          # TypeScript (TS1131) — ticket
+          # binding-prop-with-a-non-binding-value-does-not-compile.
           @options[:attributes].each do |key, type|
             ts_type = ruby_type_to_typescript(type)
-            lines << "  #{key}?: #{ts_type};"
+            lines << "  #{key.delete_prefix('@')}?: #{ts_type};"
           end
 
           lines << "}"
@@ -118,7 +122,7 @@ module RjuiTools
           # Only include children in destructure if container mode
           props << 'children' unless is_container == false
           props << 'className'
-          props += @options[:attributes].keys
+          props += @options[:attributes].keys.map { |key| key.delete_prefix('@') }
 
           "{ #{props.join(', ')} }"
         end

@@ -309,9 +309,13 @@ module JsonUIShared
         return nil unless value.is_a?(Array)
         return 'emptyList()' if value.empty?
 
-        items = value.map do |v|
-          t.element.vocabulary? && t.element.kind == :scalar ? kotlin_literal(t.element, v, &hook) : kotlin_any(v)
-        end
+        # Each item by the rule a scalar of its type follows — a type outside
+        # the vocabulary or a callback takes no literal here either — and a
+        # bare `Array`'s items as any value, as swift_literal does. Until
+        # 1.8.121 every item that was not a vocabulary scalar went out as
+        # JSON (`kotlin_any`), so `[Row]` was written while `Row` was refused
+        # (ticket binding-prop-with-a-non-binding-value-does-not-compile).
+        items = value.map { |v| t.element.any? ? kotlin_any(v) : kotlin_literal(t.element, v, &hook) }
         items.include?(nil) ? nil : "listOf(#{items.join(', ')})"
       when :scalar
         (hook && hook.call(t.canonical, value)) || kotlin_scalar(t.canonical, value)
