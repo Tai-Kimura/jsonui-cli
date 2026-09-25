@@ -208,12 +208,15 @@ RSpec.describe RjuiTools::React::Generators::ConverterGenerator do
       expect(out).not_to include('Created component file')
     end
 
-    it 'says Created when it replaced the file' do
+    # "Overwrote", not "Created", since 1.8.121: the file was there (ticket
+    # g-converter-reports-files-it-did-not-write).
+    it 'says Overwrote when it replaced the file' do
       [[{ force: true }, ''], [{}, "y\n"]].each do |options, answer|
         plant_user_file
         out, body = generate_in(@tmp, options, stdin: answer)
         expect(body).not_to eq("USER OWNED\n")
-        expect(out).to include('Created component file'), [options, answer].inspect
+        expect(out).to include('Overwrote component file'), [options, answer].inspect
+        expect(out).not_to include('Created component file'), [options, answer].inspect
       end
     end
   end

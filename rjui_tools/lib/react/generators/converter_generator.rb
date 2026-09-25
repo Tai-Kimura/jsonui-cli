@@ -48,7 +48,11 @@ module RjuiTools
           # Generate attribute definition file for validation
           generate_attribute_definition_file
 
-          @logger.success "Successfully generated converter: #{@class_name}"
+          # What the run did, from what it recorded — each file has said its
+          # own line above (Created / Overwrote / Skipped / Kept, with its
+          # path). Until 1.8.121: "Successfully generated converter" whatever
+          # it had done (ticket g-converter-reports-files-it-did-not-write).
+          report_scaffold
           @logger.info "Converter file: #{converter_file_path}"
           @logger.info "Run 'rjui build' to use the new component in your layouts"
         end

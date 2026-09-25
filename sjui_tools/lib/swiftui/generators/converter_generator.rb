@@ -60,9 +60,9 @@ module SjuiTools
           # leaf-turned-container-keeps-its-leaf-scaffold-silently).
           generate_attribute_definition_file
 
-          @logger.success "Successfully generated converter: #{@class_name}"
-          @logger.info "Converter file created at: views/extensions/#{@name}_converter.rb"
-          @logger.info "Mappings file updated with '#{@component_pascal_case}' => '#{@class_name}'"
+          # What the run did, from what it recorded — each file has said its
+          # own line above (Created / Overwrote / Skipped / Kept, with its path).
+          report_scaffold
 
           # Update membership exceptions to exclude the extensions directory
           update_membership_exceptions_if_needed

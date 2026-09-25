@@ -36,18 +36,25 @@ module SjuiTools
             @logger.info "Generating UIKit custom converter: #{@class_name}"
 
             # Create binding handler file
-            create_binding_handler_file
+            handler_written = create_binding_handler_file
 
             # Update config file
             update_config_file
 
             # Create attribute definition file
-            create_attribute_definition_file
+            definition_written = create_attribute_definition_file
 
-            @logger.success "Successfully generated UIKit converter: #{@class_name}"
-            @logger.info "Binding handler created at: handlers/extensions/#{snake_case(@name)}_binding_handler.rb"
-            @logger.info "Attribute definition created at: extensions/attribute_definitions/#{snake_case(@name)}.json"
-            @logger.info "Config file updated with custom_view_types entry"
+            # What the run did — each file has said its own line with its
+            # path. Until 1.8.121 this said "Successfully generated", "Binding
+            # handler created at: …", "Attribute definition created at: …" and
+            # "Config file updated …" whatever the run had done (ticket
+            # g-converter-reports-files-it-did-not-write).
+            if handler_written || definition_written
+              @logger.success "Scaffolded UIKit converter #{@class_name}"
+            else
+              @logger.info "#{@class_name}: the binding handler and the attribute definition already existed and " \
+                           'were kept; --force overwrites them'
+            end
             @logger.info ""
             @logger.info "Next steps:"
             @logger.info "1. Implement binding logic in the handler file"
@@ -70,12 +77,12 @@ module SjuiTools
             file_path = File.join(handlers_dir, "#{snake_case(@name)}_binding_handler.rb")
 
             # The converter core's one overwrite decision: JUI_SKIP_EXISTING,
-            # --skip-existing and --force, and a closed stdin reads as "n".
-            return unless JsonUIShared::ConverterGeneratorCore.may_write?(
-              file_path, @options, @logger, noun: 'binding handler', exists_label: 'Binding handler file')
-
-            File.write(file_path, binding_handler_template)
-            @logger.info "Created binding handler file: #{file_path}"
+            # --skip-existing and --force, and a closed stdin reads as "n";
+            # it says Created or Overwrote. Returns whether it wrote.
+            JsonUIShared::ConverterGeneratorCore.write_scaffold(
+              file_path, @options, @logger,
+              noun: 'binding handler', label: 'binding handler file', exists_label: 'Binding handler file'
+            ) { binding_handler_template }
           end
 
           def update_config_file
@@ -109,8 +116,18 @@ module SjuiTools
 
             config['custom_view_types'][@component_pascal_case] = view_type_config
 
-            File.write(config_path, JSON.pretty_generate(config))
-            @logger.info "Updated #{config_path}"
+            content = JSON.pretty_generate(config)
+            before = File.exist?(config_path) ? File.read(config_path) : nil
+            File.write(config_path, content)
+            # What changed in it, said: until 1.8.121 "Updated" when it was
+            # written back as it was.
+            @logger.info(if before.nil?
+                           "Created #{config_path} with custom_view_types['#{@component_pascal_case}']"
+                         elsif before == content
+                           "Rewrote #{config_path} as it was (custom_view_types['#{@component_pascal_case}'] unchanged)"
+                         else
+                           "Updated #{config_path}: custom_view_types['#{@component_pascal_case}']"
+                         end)
           end
 
           def binding_handler_template
@@ -186,12 +203,13 @@ module SjuiTools
             file_path = File.join(attr_defs_dir, "#{snake_case(@name)}.json")
 
             # The converter core's one overwrite decision: JUI_SKIP_EXISTING,
-            # --skip-existing and --force, and a closed stdin reads as "n".
-            return unless JsonUIShared::ConverterGeneratorCore.may_write?(
-              file_path, @options, @logger, noun: 'attribute definition', exists_label: 'Attribute definition file')
-
-            File.write(file_path, attribute_definition_template)
-            @logger.info "Created attribute definition file: #{file_path}"
+            # --skip-existing and --force, and a closed stdin reads as "n";
+            # it says Created or Overwrote. Returns whether it wrote.
+            JsonUIShared::ConverterGeneratorCore.write_scaffold(
+              file_path, @options, @logger,
+              noun: 'attribute definition', label: 'attribute definition file',
+              exists_label: 'Attribute definition file'
+            ) { attribute_definition_template }
           end
 
           def attribute_definition_template

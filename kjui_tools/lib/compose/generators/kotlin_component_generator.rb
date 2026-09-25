@@ -50,12 +50,11 @@ module KjuiTools
           
           # Through the converter core's one overwrite decision, so
           # --force / --skip-existing / JUI_SKIP_EXISTING reach this
-          # file too, and a closed stdin reads as "n" instead of raising.
-          return unless JsonUIShared::ConverterGeneratorCore.may_write?(
-            kotlin_file_path, @options, @logger, noun: 'kotlin file', exists_label: 'Kotlin file')
-          
-          File.write(kotlin_file_path, kotlin_template)
-          @logger.info "Created Kotlin file: #{kotlin_file_path}"
+          # file too, and a closed stdin reads as "n" instead of raising;
+          # it says Created or Overwrote.
+          JsonUIShared::ConverterGeneratorCore.write_scaffold(
+            kotlin_file_path, @options, @logger, noun: 'kotlin file', label: 'Kotlin file', exists_label: 'Kotlin file'
+          ) { kotlin_template }
         end
         
         def get_package_name
