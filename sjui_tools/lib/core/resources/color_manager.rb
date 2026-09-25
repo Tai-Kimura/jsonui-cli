@@ -79,6 +79,21 @@ module SjuiTools
           Core::Logger.info "✓ Generated ColorManager.swift"
         end
 
+        # A Swift dictionary literal, one entry per line. EMPTY IS `[:]`: a `[`
+        # and a `]` with nothing between them is an ARRAY literal to Swift, and
+        # a dictionary-typed declaration rejects it ("use [:] to get an empty
+        # dictionary literal"). A project with no colours, a mode whose palette
+        # is `{}` or all null, and a systemModeMapping that is `{}` — declared,
+        # or derived from modes that are neither light nor dark — each emitted
+        # that and did not compile
+        # (sjui-color-manager-emits-an-empty-dictionary-as-array-literal).
+        # Non-empty output is byte-identical to before.
+        def swift_dictionary_lines(prefix, entries, closing_indent, suffix = '')
+          return ["#{prefix}[:]#{suffix}"] if entries.empty?
+
+          ["#{prefix}["] + entries + ["#{closing_indent}]#{suffix}"]
+        end
+
         def swift_enum_case(mode)
           # `light` / `dark` / `highContrast` (camelCase).
           snake_to_camel(mode)
@@ -132,12 +147,14 @@ module SjuiTools
           lines << "    public static let fallbackMode: ColorMode = .#{swift_enum_case(@fallback_mode)}"
           lines << ''
           lines << '    /// Map from OS-reported appearance to project-specific mode.'
-          lines << '    public static let systemModeMapping: [UIUserInterfaceStyle: ColorMode] = ['
-          (@system_mode_mapping || {}).each do |os_mode, project_mode|
+          mapping_entries = (@system_mode_mapping || {}).map do |os_mode, project_mode|
             os_case = os_mode == 'light' ? '.light' : (os_mode == 'dark' ? '.dark' : '.unspecified')
-            lines << "        #{os_case}: .#{swift_enum_case(project_mode)},"
+            "        #{os_case}: .#{swift_enum_case(project_mode)},"
           end
-          lines << '    ]'
+          lines.concat(swift_dictionary_lines(
+            '    public static let systemModeMapping: [UIUserInterfaceStyle: ColorMode] = ',
+            mapping_entries, '    '
+          ))
           lines << ''
 
           # ---- Raw palettes ----
@@ -145,13 +162,12 @@ module SjuiTools
           lines << '    fileprivate static let palettes: [ColorMode: [String: String]] = ['
           @modes.each do |mode|
             palette = merged_palettes[mode] || {}
-            lines << "        .#{swift_enum_case(mode)}: ["
-            palette.keys.sort.each do |key|
+            entries = palette.keys.sort.reject { |key| palette[key].nil? }.map do |key|
               value = palette[key]
               value_lit = value.is_a?(String) ? "\"#{value}\"" : 'nil as String? ?? ""'
-              lines << "            \"#{key}\": #{value_lit}," unless value.nil?
+              "            \"#{key}\": #{value_lit},"
             end
-            lines << '        ],'
+            lines.concat(swift_dictionary_lines("        .#{swift_enum_case(mode)}: ", entries, '        ', ','))
           end
           lines << '    ]'
           lines << ''
