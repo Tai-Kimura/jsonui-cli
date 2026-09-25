@@ -2151,7 +2151,7 @@ def render_test_file(
     lines.append("  ROW_TIMEOUT_MS, apiOriginsOf, installFetchMock, partialMismatches, "
                  + ("reportConditionWithoutEffect, " if any(r.control_of for r in rows) else "")
                  + ("" if red else "reportUnmatched, ")
-                 + "reportUnmatchedForeign, resolveString, seedState, settle,\n  type RouteSpec,")
+                 + "reportEarlierRowCalls, reportUnmatchedForeign, resolveString, seedState, settle,\n  type RouteSpec,")
     lines.append("} from \"./jsonui-branch-runtime\";")
     lines.append(f"import {{ createHarness }} from \"{harness_import}\";")
     # The harness may export `apiOrigins` (P2e(a), v4.19): the app's API
@@ -2249,7 +2249,7 @@ def _render_branch(
     # overwrote the arranged state and landed inside the window, in an order
     # that differed per platform.
     out.append(f"    const rec = installFetchMock(ROUTES, {_ts(overrides) if overrides else '{}'}, "
-               "apiOriginsOf(harnessModule));")
+               f"apiOriginsOf(harnessModule), {_ts(_notice_row(screen, method_name, contract, row))});")
     out.append("    try {")
     # Harness conditions (design v4.11, P2d): after the mock is in, before the
     # harness is built — every declared condition, the row's value or its
@@ -2310,6 +2310,8 @@ def _render_branch(
         out.append(f"      reportUnmatched(rec.unmatchedCalls(), {_ts(gate) if gate else 'null'}, "
                    f"{_ts(_notice_row(screen, method_name, contract, row))});")
     out.append(f"      reportUnmatchedForeign(rec.unmatchedForeign(), "
+               f"{_ts(_notice_row(screen, method_name, contract, row))});")
+    out.append(f"      reportEarlierRowCalls(rec.earlierRowCalls(), "
                f"{_ts(_notice_row(screen, method_name, contract, row))});")
 
     for key, value in then.items():
@@ -2461,6 +2463,10 @@ export interface FetchRecorder {
   unmatchedCalls(): string[];
   /** The same for requests to another host (the info unmatched_foreign). */
   unmatchedForeign(): string[];
+  /** Requests an earlier row's view model started (a timer or task that
+   * outlived its row) that landed in this row: not recorded above, answered
+   * 599 — as "METHOD path from <row>", in arrival order. */
+  earlierRowCalls(): string[];
   restore(): void;
 }
 
@@ -2484,8 +2490,35 @@ export function apiOriginsOf(harnessModule: unknown): string[] | null {
 interface Traffic {
   inFlight: number;
   lastActivityAt: number;
+  /** The row's name (installFetchMock's `row`), for another row's notice. */
+  row: string;
+  /** Requests an earlier row's view model started, that landed here. */
+  earlier: string[];
 }
-let traffic: Traffic = { inFlight: 0, lastActivityAt: 0 };
+let traffic: Traffic = { inFlight: 0, lastActivityAt: 0, row: "", earlier: [] };
+
+/** Which row's async context a request was started in: Node's
+ * AsyncLocalStorage, reached through process.getBuiltinModule rather than an
+ * import, so this file still loads where there is none (it is then null, and
+ * rows cannot be told apart — reportEarlierRowCalls says so once).
+ *
+ * installFetchMock enters its row; a timer or a task a view model starts
+ * carries that row with it, and a request it makes after its row ended is
+ * told apart from the current row's own — so it cannot fail this row's
+ * not-called / unexpectedOps, nor satisfy a call this row waits for.
+ * Measured before this (2026-09-26): row 1's view model posting 1 s after
+ * its act turned row 2 red on "not-called … called 1 time(s)", and satisfied
+ * row 2's `when` wait. What it cannot tell apart: a call an earlier row's
+ * view model makes from an event THIS row posts (a subscription) runs in
+ * this row's context, and counts here. */
+const rowContext: { enterWith(store: object): void; getStore(): object | undefined } | null = (() => {
+  try {
+    const Storage = (globalThis as any).process?.getBuiltinModule?.("node:async_hooks")?.AsyncLocalStorage;
+    return Storage ? new Storage() : null;
+  } catch {
+    return null;
+  }
+})();
 
 /** How long `settle` waits, with no request in flight, after the last one
  * arrived or was answered — the window every "not called" and "no
@@ -2523,27 +2556,40 @@ export function scenarioDelayMs(value: unknown): number {
 export function installFetchMock(
   routes: RouteSpec[],
   scenarioOverrides: Record<string, string> = {},
-  apiOrigins: string[] | null = null
+  apiOrigins: string[] | null = null,
+  row: string = ""
 ): FetchRecorder {
   const original = globalThis.fetch;
   const calls: RecordedCall[] = [];
   const compiled = routes.map((r) => ({ ...r, re: new RegExp(r.pattern) }));
   const own = apiOrigins === null ? null : new Set(apiOrigins.map((o) => new URL(o).origin));
-  const mine: Traffic = { inFlight: 0, lastActivityAt: Date.now() };
+  const mine: Traffic = { inFlight: 0, lastActivityAt: Date.now(), row, earlier: [] };
   traffic = mine;
+  rowContext?.enterWith(mine);
 
   globalThis.fetch = (async (input: unknown, init?: RequestInit) => {
+    const url =
+      typeof input === "string"
+        ? input
+        : input instanceof URL
+          ? input.toString()
+          : (input as Request).url;
+    const path = url.replace(/^https?:\\/\\/[^/]+/, "").split("?")[0];
+    // Started in an earlier row (a timer or task its view model left
+    // behind): not this row's call. Not recorded, not counted by settle,
+    // answered 599, and named at the end of this row (reportEarlierRowCalls).
+    const from = rowContext?.getStore() as Traffic | undefined;
+    if (from !== undefined && from !== mine) {
+      const verb = (init?.method ?? (typeof input === "object" && input !== null && "method" in (input as object)
+        ? (input as Request).method : "GET")).toUpperCase();
+      mine.earlier.push(`${verb} ${path} from ${from.row ? JSON.stringify(from.row) : "an earlier row"}`);
+      return new Response(JSON.stringify({ error: { code: "earlier_row_call" } }),
+        { status: 599, headers: { "Content-Type": "application/json" } });
+    }
     // In flight from here to the Response handed back, delayed or not.
     mine.inFlight += 1;
     mine.lastActivityAt = Date.now();
     try {
-      const url =
-        typeof input === "string"
-          ? input
-          : input instanceof URL
-            ? input.toString()
-            : (input as Request).url;
-      const path = url.replace(/^https?:\\/\\/[^/]+/, "").split("?")[0];
       // P2e(a), v4.19: a relative URL is the app's; an absolute one is when its
       // origin is in `apiOrigins`, or — none declared — cannot be told apart and
       // counts as the app's. Only the app's requests are matched against routes:
@@ -2660,6 +2706,9 @@ export function installFetchMock(
         .map((c) => `${c.method} ${c.origin ?? ""}${c.path}`);
       return [...new Set(seen)].sort();
     },
+    earlierRowCalls() {
+      return [...mine.earlier];
+    },
     restore() {
       globalThis.fetch = original;
     },
@@ -2717,6 +2766,26 @@ export function reportUnmatched(calls: string[], gateFrom: string | null, row: s
         : gateFrom
           ? `; from jsonui-cli ${gateFrom} this fails the test`
           : ""));
+}
+
+/** A call an earlier row's view model started, that landed in this row
+ * (rec.earlierRowCalls()): named, never counted — info, never a failure. And
+ * once per process where rows cannot be told apart (no AsyncLocalStorage),
+ * that they cannot. */
+let saidNoRowContext = false;
+export function reportEarlierRowCalls(calls: string[], row: string = ""): void {
+  if (rowContext === null && !saidNoRowContext) {
+    saidNoRowContext = true;
+    notice(row, "earlier_row_call", "rows cannot be told apart here (no process.getBuiltinModule — " +
+      "Node 20.16 / 22.3 or later has it): a call an earlier row's view model makes after its row " +
+      "ended lands in a later row's window, where it can fail not-called / unexpectedOps and " +
+      "satisfy a row that waits for the call");
+  }
+  if (calls.length === 0) return;
+  notice(row, "earlier_row_call", `${calls.length} — ${calls.join(", ")}: started by an earlier ` +
+    "row's view model (a timer or task that outlived its row) — not counted in this row, " +
+    "answered 599. A call an earlier view model makes from an event this row posts (a " +
+    "subscription) runs in this row and is counted here");
 }
 
 /** Requests in the act window to hosts that are not the app's API (P2e(a),
@@ -2828,9 +2897,14 @@ export async function settle(
     if (quiet && missing.length === 0) return;
     const waited = now - started;
     if (quiet && waited >= EXPECT_MS) {
+      // A call an earlier row's view model started may be the one this row
+      // expected by name: it landed, and was not counted (installFetchMock).
+      const earlier = traffic.earlier.length === 0 ? "" :
+        `; not counted here, ${traffic.earlier.length} call(s) an earlier row's view model started: ` +
+        traffic.earlier.join(", ");
       throw new Error(
         `settle: the row expects ${missing.join(", ")}, never called within EXPECT_MS (${EXPECT_MS} ms) ` +
-          `after the act, 0 request(s) in flight (waited ${waited} ms)`
+          `after the act, 0 request(s) in flight (waited ${waited} ms)${earlier}`
       );
     }
     if (waited >= SETTLE_DELAY_BUDGET_MS) {
@@ -3310,6 +3384,10 @@ def _render_kotlin_branch(
     else:
         out.append(f"      reportUnmatched(rec.unmatchedCalls(), {_kt_str(gate) if gate else 'null'}, "
                    f"{_kt_str(_notice_row(screen, method_name, contract, row))})")
+    # A request an earlier row's view model made after its row ended, to
+    # that row's kept server (BranchEndedRows): named here, never counted.
+    out.append(f"      reportEarlierRowCalls(BranchEndedRows.drain(), "
+               f"{_kt_str(_notice_row(screen, method_name, contract, row))})")
 
     for key, value in then.items():
         if key == "api":
@@ -3778,16 +3856,66 @@ fun runBranchTest(
   try {
     block(harnessFactory(server.url("/").toString(), dispatcher), recorder)
   } finally {
+    // Not shut down yet: kept answering through the next row, so a request
+    // this row's view model makes after the row ended is named there
+    // (BranchEndedRows) rather than failing unseen inside the view model.
+    BranchEndedRows.retire(server)
+    Dispatchers.resetMain()
+  }
+}
+
+/** The previous row's server, kept open through the next row.
+ *
+ * A view model can outlive its row: a real thread, a timer or a
+ * Dispatchers.IO task it started makes its call after the row ended. (Its
+ * viewModelScope coroutines do not: they run on the row's test dispatcher,
+ * which settle advances within the row — measured.) Sent to the URL the
+ * harness factory was given, that call used to reach a closed server and
+ * fail unseen inside the view model; it now gets a 599 and is named in the
+ * next row (reportEarlierRowCalls). A view model that reads a process-wide
+ * base URL instead sends it to the NEXT row's server, where it is counted
+ * like that row's own — which is why the harness skeleton gives the view
+ * model the factory's url. */
+object BranchEndedRows {
+  private var previous: MockWebServer? = null
+  private val late = java.util.Collections.synchronizedList(mutableListOf<String>())
+
+  @Synchronized fun retire(server: MockWebServer) {
+    server.dispatcher = object : Dispatcher() {
+      override fun dispatch(request: RecordedRequest): MockResponse {
+        late.add((request.method ?: "GET") + " " + (request.path ?: "/").substringBefore("?"))
+        return MockResponse().setResponseCode(599)
+          .setHeader("Content-Type", "application/json")
+          .setBody("{\\"error\\":{\\"code\\":\\"earlier_row_call\\"}}")
+      }
+    }
+    val older = previous
+    previous = server
     // A response a scenario's `delayMs` is still holding back keeps the
     // server's queue busy, and shutdown gives up with an IOException — which,
     // thrown from here, would replace the test's own failure (settle's named
     // one among them). The test's outcome is the one to report.
     try {
-      server.shutdown()
+      older?.shutdown()
     } catch (_: java.io.IOException) {
     }
-    Dispatchers.resetMain()
   }
+
+  /** The late requests the kept server answered since the last drain. */
+  fun drain(): List<String> = synchronized(late) { late.toList().also { late.clear() } }
+  fun peek(): List<String> = synchronized(late) { late.toList() }
+}
+
+/** A request an earlier row's view model made after its row ended, to that
+ * row's server (BranchEndedRows): named, never counted — info, never a
+ * failure. */
+fun reportEarlierRowCalls(calls: List<String>, row: String = "") {
+  if (calls.isEmpty()) return
+  notice(row, "earlier_row_call", calls.size.toString() + " — " + calls.joinToString(", ") +
+    ": made by an earlier row's view model after its row ended (a thread, timer or IO task " +
+    "that outlived it), to that row's server — answered 599, not counted in this row. A " +
+    "view model that reads a process-wide base URL sends such a call to this row's server " +
+    "instead, where it is counted")
 }
 
 /** In place of `h.settle()` after the act, for a row that expects ops (its
@@ -3808,9 +3936,14 @@ fun settleUntilAnswered(h: BranchHarness, rec: Recorder, ops: List<String>) {
     if (missing.isEmpty() && due == 0) return
     val waited = now - started
     if (due == 0 && waited >= BranchDeliveries.EXPECT_MS) {
+      // A call an earlier row's view model made to its ended row's server may
+      // be the one this row expected by name: it landed there, not here.
+      val earlier = BranchEndedRows.peek()
       throw AssertionError(
         "settle: the row expects " + missing.joinToString(", ") + ", never called within EXPECT_MS (" +
-          BranchDeliveries.EXPECT_MS + " ms) after the act, 0 request(s) in flight (waited " + waited + " ms)")
+          BranchDeliveries.EXPECT_MS + " ms) after the act, 0 request(s) in flight (waited " + waited + " ms)" +
+          (if (earlier.isEmpty()) "" else "; not counted here, " + earlier.size + " call(s) an earlier " +
+            "row's view model made to its ended row's server: " + earlier.joinToString(", ")))
     }
     if (waited >= BranchDeliveries.SETTLE_BUDGET_MS) {
       throw AssertionError(
@@ -4136,6 +4269,12 @@ fun create%(pascal)sBranchHarness(baseUrl: String, dispatcher: TestDispatcher): 
   // with ApplicationProvider.getApplicationContext() (Robolectric), then
   // return an object extending BaseBranchHarness(vm, dispatcher) that
   // implements expectTransition (SCREEN_FLOWS) and resolveString.
+  //
+  // Build it with THIS baseUrl, per test — not a process-wide setting the
+  // client reads per call. A call an earlier row's view model makes after
+  // its row ended (a thread, timer or IO task) then reaches that row's kept
+  // server and is named (earlier_row_call); read from a process-wide
+  // setting, it reaches this row's server and counts as this row's own.
   throw NotImplementedError("branch-harness for %(screen)s is not implemented yet")
 }
 '''
@@ -4379,6 +4518,8 @@ def _render_swift_branch(
     out.append(f"      reportUnmatchedForeign(rec.unmatchedForeign(), "
                f"{_swift_str(_notice_row(screen, method_name, contract, row))})")
     out.append(f"      reportRetainedHarnesses("
+               f"{_swift_str(_notice_row(screen, method_name, contract, row))})")
+    out.append(f"      reportOutlivedViewModels("
                f"{_swift_str(_notice_row(screen, method_name, contract, row))})")
 
     for key, value in then.items():
@@ -4633,8 +4774,8 @@ nonisolated final class Recorder {
 }
 
 /// The one exit for this runtime's notices (unmatched, unmatched_foreign,
-/// condition_without_effect, and below iOS 26 retained_harnesses): the
-/// process's stderr, one line naming the row —
+/// condition_without_effect; below iOS 26 retained_harnesses, from 26
+/// outlived_its_test): the process's stderr, one line naming the row —
 /// the exit the web and Android runtimes use, where a test runner's console
 /// capture hid them. xcodebuild shows a passing test's stdout and stderr
 /// alike and `-quiet` drops both, so here the exit keeps the faces on one
@@ -4657,6 +4798,21 @@ nonisolated func reportRetainedHarnesses(_ row: String = "") {
     + "view model makes lands in this window: it can fail not-called / unexpectedOps, and it "
     + "can satisfy a called / request / when row this test's view model never made. Run on "
     + "iOS 26 or later to rule it out")
+}
+
+/// iOS 26 and later: an earlier test's view model still alive now — the
+/// app's view model leaks (BranchOutlivedViewModels). Info, never a failure;
+/// and it notes this row's name for the next one.
+nonisolated func reportOutlivedViewModels(_ row: String = "") {
+  for earlier in BranchOutlivedViewModels.takeOutlived() {
+    notice(row, "outlived_its_test",
+      "the view model of " + (earlier.isEmpty ? "an earlier test" : "\\"\\(earlier)\\"")
+      + " is still alive after its test ended — the app's view model leaks: a Task, Timer or "
+      + "observer holds it strongly, as it would keep it past its screen in the app. A call it "
+      + "makes lands in later rows' windows, where it can fail not-called / unexpectedOps and "
+      + "satisfy a called / request / when row")
+  }
+  BranchOutlivedViewModels.running(row)
 }
 
 /// Requests in the act window to hosts that are not the app's API (P2e(a),
@@ -4964,6 +5120,7 @@ func runBranchTest(
   block: (BranchHarness, Recorder) throws -> Void
 ) rethrows {
   installBranchURLInterception()
+  BranchOutlivedViewModels.sweep()
   BranchDeliveries.shared.reset()
   let recorder = Recorder(routeOps: Set(routes.map { $0.op }))
   BranchURLProtocol.routes = routes
@@ -4995,7 +5152,11 @@ func runBranchTest(
     // model released inside it takes the shim's fast path. So there the
     // harness stays alive for the process, and the rows' absence messages
     // say what that leaves open (branchRetainedHarnessesNote).
-    if #unavailable(iOS 26) { BranchHarnessRetainer.retain(harness) }
+    if #unavailable(iOS 26) {
+      BranchHarnessRetainer.retain(harness)
+    } else {
+      BranchOutlivedViewModels.watch(harness.vm)
+    }
   }
   try block(harness, recorder)
 }
@@ -5012,6 +5173,52 @@ nonisolated enum BranchHarnessRetainer {
     if noticed { return false }
     noticed = true
     return true
+  }
+}
+
+/// A view model watched past its test (iOS 26 and later, where the harness
+/// is released at the test's end), weakly.
+nonisolated final class BranchOutlivedWatch {
+  weak var viewModel: AnyObject?
+  let row: String
+  init(_ viewModel: AnyObject, row: String) {
+    self.viewModel = viewModel
+    self.row = row
+  }
+}
+
+/// The view models of earlier tests, watched weakly once their harness is
+/// released (iOS 26 and later), so that one still alive is named: the app's
+/// view model leaks — a Task, a Timer or an observer holds it strongly, as
+/// it would keep it past its screen in the app — and a call it makes lands
+/// in later rows' windows. Measured (2026-09-26, iOS 26.5): a view model
+/// whose Timer, Task or observer captured `self` strongly made its call in
+/// the next test's window; with `[weak self]` it was released and did not.
+/// Named, not told apart: which view model made a request is not something
+/// the URL protocol can see.
+nonisolated enum BranchOutlivedViewModels {
+  nonisolated(unsafe) private static var watching: [BranchOutlivedWatch] = []
+  nonisolated(unsafe) private static var outlived: [String] = []
+  nonisolated(unsafe) private static var runningRow = ""
+  /// The row now running, as its generated code names it.
+  static func running(_ row: String) { runningRow = row }
+  /// At the end of a test whose harness is released: watch its view model.
+  static func watch(_ viewModel: AnyObject) {
+    watching.append(BranchOutlivedWatch(viewModel, row: runningRow))
+    runningRow = ""
+  }
+  /// At the start of a test — the earlier one's harness released moments
+  /// ago: a view model still alive now is held by the app. Looked for here,
+  /// not later: a Task that holds it may finish (and let it go) after its
+  /// call has landed in this test.
+  static func sweep() {
+    outlived += watching.filter { $0.viewModel != nil }.map { $0.row }
+    watching.removeAll()
+  }
+  /// The rows whose view model outlived its test; each is said once.
+  static func takeOutlived() -> [String] {
+    defer { outlived.removeAll() }
+    return outlived
   }
 }
 

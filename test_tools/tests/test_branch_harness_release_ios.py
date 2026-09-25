@@ -48,8 +48,12 @@ import pytest
 from jsonui_test_cli import branch_tests as bt
 
 PROBE = Path(__file__).parent / "fixtures" / "branch-harness-release"
+#: Row 1's view model posting 1 s after its act, from a Task that holds it
+#: strongly (the app's view model leaks) or weakly; row 2 calls nothing.
+LATE_PROBE = Path(__file__).parent / "fixtures" / "branch-late-calls"
 PREFERRED_DEVICE = "com.apple.CoreSimulator.SimDeviceType.iPhone-16-Pro"
-NO_RETAIN = "    if #unavailable(iOS 26) { BranchHarnessRetainer.retain(harness) }\n"
+#: The one retain call, inside `if #unavailable(iOS 26)` — the control takes it out.
+NO_RETAIN = "      BranchHarnessRetainer.retain(harness)\n"
 
 
 def _missing(why: str) -> None:
@@ -103,10 +107,10 @@ def _device(runtime: dict) -> str:
     return made.stdout.strip()
 
 
-def _run(work: Path, runtime_source: str, udid: str) -> tuple[int, str]:
-    """`xcodebuild test` of the probe with *runtime_source* as the emitted
+def _run(work: Path, runtime_source: str, udid: str, probe: Path = PROBE) -> tuple[int, str]:
+    """`xcodebuild test` of *probe* with *runtime_source* as the emitted
     runtime; its exit code and log."""
-    shutil.copytree(PROBE, work)
+    shutil.copytree(probe, work)
     (work / "Tests" / "ProbeTests" / "JsonuiBranchRuntime.swift").write_text(runtime_source, encoding="utf-8")
     run = subprocess.run(
         ["xcodebuild", "test", "-scheme", "RetainProbe", "-destination", f"id={udid}",
@@ -134,7 +138,7 @@ def runs(tmp_path_factory) -> dict:
     assert fixed.count(NO_RETAIN) == 1
     out = {}
     for key, runtime, source in (("from26", from26, fixed), ("below", below, fixed),
-                                 ("below-unretained", below, fixed.replace(NO_RETAIN, "    _ = harness\n"))):
+                                 ("below-unretained", below, fixed.replace(NO_RETAIN, "      _ = harness\n"))):
         rc, log = _run(tmp_path_factory.mktemp(key) / "pkg", source, _device(runtime))
         out[key] = (runtime["version"], rc, log)
     return out
@@ -191,3 +195,53 @@ def test_control_below_26_a_released_harness_crashes_the_process(runs):
     """Why below 26 keeps them: the same probe with the retain taken out."""
     version, rc, log = runs["below-unretained"]
     assert log.count(CRASH) >= 1 and "Restarting after unexpected exit" in log, (version, log[-3000:])
+
+
+# ------------------------------------------- an earlier row's view model ---
+#
+# From 26 the harness is released at its test's end, and a view model that
+# is still alive after that is kept by the app: a Task, Timer or observer
+# holding it strongly — the app's view model leaks. Its call lands in the
+# next row's window, and the URL protocol cannot see which view model sent
+# it, so it counts there; the row after names the leak (outlived_its_test).
+# Measured before this (2026-09-26, iOS 26.5): strongly held, 1 call landed in
+# the next row; weakly held, the view model was released and none did.
+
+@pytest.fixture(scope="module")
+def late_runs(tmp_path_factory) -> dict:
+    from26, below = _runtimes()
+    out = {}
+    for key, runtime in (("from26", from26), ("below", below)):
+        rc, log = _run(tmp_path_factory.mktemp(f"late-{key}") / "pkg", bt.SWIFT_RUNTIME, _device(runtime), LATE_PROBE)
+        out[key] = (runtime["version"], rc, log)
+    return out
+
+
+def _notices(log: str, kind: str) -> list[str]:
+    return [line for line in log.splitlines() if f"] {kind}: " in line]
+
+
+def test_from_26_a_view_model_that_outlives_its_test_is_named_as_the_apps_leak(late_runs):
+    version, rc, log = late_runs["from26"]
+    assert rc == 0, (version, log[-3000:])
+    # Counted where it landed: the protocol cannot tell which view model sent it.
+    assert "row2=1" in _probe(log, "strong"), version
+    said = _notices(log, "outlived_its_test")
+    assert len(said) == 1, (version, said)
+    assert said[0].startswith('jsonui-test branch test [strong row 2] outlived_its_test: the view model of '
+                              '"strong row 1" is still alive after its test ended — the app\'s view model leaks'), said
+
+
+def test_from_26_a_view_model_held_weakly_is_released_and_not_named(late_runs):
+    version, rc, log = late_runs["from26"]
+    assert "row2=0" in _probe(log, "weak"), version
+    assert not any("weak row" in line for line in _notices(log, "outlived_its_test")), version
+
+
+def test_below_26_the_kept_harnesses_are_named_instead(late_runs):
+    version, rc, log = late_runs["below"]
+    assert rc == 0, (version, log[-3000:])
+    assert "row2=1" in _probe(log, "strong") and "row2=1" in _probe(log, "weak"), version
+    assert _notices(log, "outlived_its_test") == [], version
+    assert len(_notices(log, "retained_harnesses")) == 1, version
+
