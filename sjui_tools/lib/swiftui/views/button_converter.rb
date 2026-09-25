@@ -135,9 +135,19 @@ module SjuiTools
 
             # Action (onClick uses binding format @{functionName})
             # onClick (camelCase) -> binding format only (@{functionName})
-            if action && is_binding?(action)
+            # `canTap` gates the action's handler call (attribute_definitions
+            # common.canTap: false turns onClick off), as it gates every other
+            # type's tap — not `.disabled`: a button that cannot be tapped is
+            # not disabled to a screen reader. In the action rather than as a
+            # hit-testing gate, because VoiceOver activates a Button through
+            # its action, not a touch.
+            can_tap = @component['canTap']
+            if action && is_binding?(action) && can_tap != false
               id = @component['id'] || 'button'
               handler_call = get_event_handler_invocation(action, id, nil)
+              if is_binding?(can_tap)
+                handler_call = "if #{tap_gate_expr(can_tap)} { #{handler_call} }"
+              end
               add_line "action: { #{handler_call} },"
             else
               add_line "action: { },"

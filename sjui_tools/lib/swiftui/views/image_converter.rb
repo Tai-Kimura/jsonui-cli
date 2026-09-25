@@ -133,8 +133,11 @@ module SjuiTools
           # asset. Removed per the 51-E ruling (SSoT unchanged; the alias was
           # already declared).
 
-          # onClick handler (canTap is optional, onClick alone is sufficient)
-          if JsonUIShared::TapAccessibility.handler?(@component['onClick']) && is_binding?(@component['onClick'])
+          # onClick handler (canTap is optional, onClick alone is sufficient;
+          # `canTap: false` is no tap — register_click_lines, which replaces
+          # this line for every other gate, emits none for it)
+          if JsonUIShared::TapAccessibility.handler?(@component['onClick']) && is_binding?(@component['onClick']) &&
+             @component['canTap'] != false
             handler_call = get_event_handler_invocation(@component['onClick'], @component['id'] || 'image')
             on_click_lines = [
               ".contentShape(Rectangle())",

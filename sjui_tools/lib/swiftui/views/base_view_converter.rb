@@ -220,7 +220,9 @@ module SjuiTools
           skip = []
           # Skip keys already handled by converter (registered in bag)
           skip << 'background' if @modifier_bag.key?(:background)
-          skip.concat(%w[canTap userInteractionEnabled]) if @interaction_gates_registered
+          # canTap is the tap's gate (tap_gesture_line), never hit testing.
+          skip << 'canTap'
+          skip << 'userInteractionEnabled' if @interaction_gates_registered
           modifiers = @binding_handler.process_bindings(@component, skip_keys: skip)
           modifiers.each do |modifier|
             next unless modifier
@@ -818,14 +820,13 @@ module SjuiTools
         # - `enabled` is `.disabled` (the literal, or the binding negated).
         #   SwiftUI's `.disabled` also covers interactive descendants, so it
         #   is the right modifier for a container.
-        # - `canTap` (attribute_definitions common.canTap: the SwiftUI tap
-        #   gate), `userInteractionEnabled` and `touchDisabledState` are
-        #   `.allowsHitTesting`: one modifier, their conditions joined. The
-        #   bound forms were ViewBindingHandler's, which only the converters
-        #   that process bindings reach — a bound canTap gated nothing on
-        #   IconLabel, GradientView, CircleView, Blur, Progress and the
-        #   interactive types. `apply_binding_modifiers` leaves these keys to
-        #   this method once it has run.
+        # - `userInteractionEnabled` and `touchDisabledState` are
+        #   `.allowsHitTesting`: one modifier, their conditions joined — they
+        #   stop the whole view. The bound form was ViewBindingHandler's,
+        #   which only the converters that process bindings reach;
+        #   `apply_binding_modifiers` leaves it to this method once it has run.
+        # - `canTap` is not here: it gates the tap's handler, not the view
+        #   (register_click_lines, tap_gesture_line).
         def register_interaction_gates
           @interaction_gates_registered = true
           disabled = disabled_line(@component['enabled'])
@@ -833,13 +834,11 @@ module SjuiTools
 
           gates = []
           gates << 'false' if @component['touchDisabledState']
-          %w[userInteractionEnabled canTap].each do |key|
-            value = @component[key]
-            if value == false
-              gates << 'false'
-            elsif is_binding?(value)
-              gates << tap_gate_expr(value)
-            end
+          value = @component['userInteractionEnabled']
+          if value == false
+            gates << 'false'
+          elsif is_binding?(value)
+            gates << tap_gate_expr(value)
           end
           return if gates.empty?
 
@@ -867,9 +866,20 @@ module SjuiTools
         # disabled view gets none. A handler names a method
         # (TapAccessibility.handler?): `""`, `"   "`, `"@{}"`, `[]` and `[""]`
         # are no tap — they emitted `data.?()`, which is not Swift.
+        #
+        # `canTap` (attribute_definitions common.canTap, the SwiftUI tap gate)
+        # stops the handler's call and nothing else: `false` emits no tap —
+        # and so no button trait — and a binding gates the gesture itself
+        # (tap_gesture_line). It was `.allowsHitTesting`, which stopped the
+        # whole view: a control's own operation (a Switch, a Slider, a
+        # TextField's input) and every control inside a tappable container,
+        # which only `enabled` / `userInteractionEnabled` are for. The
+        # dynamic runtime attaches no tap while the gate is shut and leaves
+        # the view as it is (DynamicEventHelper.applyOnClick).
         def register_click_lines
           return if @component['type'] == 'Button'
           return if @component['enabled'] == false
+          return if @component['canTap'] == false
 
           tap = JsonUIShared::TapAccessibility
           if tap.handler?(@component['onClick'])
@@ -884,7 +894,39 @@ module SjuiTools
         def build_selector_click_lines(value)
           names = JsonUIShared::TapAccessibility.handler_values(value)
           calls = names.map { |n| "    data.#{to_camel_case(n)}?()" }
+          can_tap = @component['canTap']
+          if is_binding?(can_tap)
+            return [".gesture(TapGesture().onEnded {"] + calls +
+                   ["}, including: #{tap_gate_expr(can_tap)} ? .all : .subviews)"] + tap_accessibility_lines
+          end
           [".onTapGesture {"] + calls + ["}"] + tap_accessibility_lines
+        end
+
+        # The tap for one handler call. Under a bound `canTap` the gesture is
+        # masked while the binding is false — `including: .subviews` takes
+        # this view's tap away and leaves its subviews' gestures (a control's
+        # own, a child's tap) as they are.
+        def tap_gesture_line(handler_call)
+          indent_str = "    " * (@indent_level + 1)
+          can_tap = @component['canTap']
+          unless is_binding?(can_tap)
+            return ".onTapGesture {\n#{indent_str}#{handler_call}\n#{indent_str[0...-4]}}"
+          end
+
+          ".gesture(TapGesture().onEnded {\n#{indent_str}#{handler_call}\n#{indent_str[0...-4]}}, " \
+            "including: #{tap_gate_expr(can_tap)} ? .all : .subviews)"
+        end
+
+        # A handler call that a component makes from its own operation — a
+        # Radio's selection, a CheckBox's value change, an IconLabel's action —
+        # gated as the tap is: under a bound `canTap` it runs while the
+        # binding is true. (`canTap: false` makes no call; the caller leaves it
+        # out.) The component's own operation runs either way.
+        def gated_handler_call(call)
+          can_tap = @component['canTap']
+          return call unless is_binding?(can_tap)
+
+          "if #{tap_gate_expr(can_tap)} { #{call} }"
         end
 
         # What a screen reader is told about this tap
@@ -1684,7 +1726,7 @@ module SjuiTools
           indent_str = "    " * (@indent_level + 1)
           [
             ".contentShape(Rectangle())",
-            ".onTapGesture {\n#{indent_str}#{handler_call}\n#{indent_str[0...-4]}}"
+            tap_gesture_line(handler_call)
           ] + tap_accessibility_lines
         end
 

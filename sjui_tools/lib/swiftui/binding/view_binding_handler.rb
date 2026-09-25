@@ -168,8 +168,9 @@ module SjuiTools
             # saw, while an argument is resolved at render time and tracks the
             # property.
             ".clipToBounds(#{BindingExpression.swift_bool_expr(value[2..-2])})"
-          # User interaction
-          when 'userInteractionEnabled', 'canTap'
+          # User interaction. Not `canTap`: it gates the tap's handler
+          # (BaseViewConverter#tap_gesture_line), not the view.
+          when 'userInteractionEnabled'
             ".allowsHitTesting(#{BindingExpression.swift_bool_expr(value[2..-2])})"
           else
             nil

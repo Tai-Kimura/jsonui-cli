@@ -983,24 +983,28 @@ RSpec.describe SjuiTools::SwiftUI::Views::ViewConverter, 'touch gating' do
     described_class.new({ 'type' => 'View', 'onClick' => '@{tap}' }.merge(extra), 0, nil).convert
   end
 
-  it 'blocks hit testing for a literal canTap false' do
-    expect(view('canTap' => false)).to include('.allowsHitTesting(false)')
+  # canTap gates the tap's handler, not the view (tap_gates_on_every_tap_spec.rb):
+  # a literal false is no tap.
+  it 'emits no tap for a literal canTap false' do
+    expect(view('canTap' => false)).to eq(described_class.new({ 'type' => 'View' }, 0, nil).convert)
   end
 
-  it 'still blocks it for userInteractionEnabled false' do
+  it 'stops hit testing for userInteractionEnabled false' do
     expect(view('userInteractionEnabled' => false)).to include('.allowsHitTesting(false)')
   end
 
-  # Same modifier as the binding form takes, so the two forms agree.
-  it 'blocks it for the binding forms' do
-    expect(view('canTap' => '@{isTappable}')).to include('.allowsHitTesting((data.isTappable ?? false))')
+  # The binding forms: canTap masks the tap, userInteractionEnabled the view.
+  it 'gates the binding forms' do
+    expect(view('canTap' => '@{isTappable}')).to include('including: (data.isTappable ?? false) ? .all : .subviews)')
+    expect(view('canTap' => '@{isTappable}')).not_to include('.allowsHitTesting')
     expect(view('userInteractionEnabled' => '@{isInteractive}'))
       .to include('.allowsHitTesting((data.isInteractive ?? false))')
   end
 
   it 'emits nothing for true or absent' do
-    expect(view('canTap' => true)).not_to include('.allowsHitTesting')
+    expect(view('canTap' => true)).to eq(view({}))
     expect(view({})).not_to include('.allowsHitTesting')
+    expect(view({})).to include('.onTapGesture')
   end
 end
 

@@ -119,9 +119,12 @@ module SjuiTools
                 add_line "#{state_var} = \"#{radio_value}\""
                 # onClick handler - called when radio is clicked
                 # onClick (camelCase) -> binding format only (@{functionName})
-                if JsonUIShared::TapAccessibility.handler?(@component['onClick']) && is_binding?(@component['onClick'])
+                # canTap gates the call, not the selection
+                # (gated_handler_call).
+                if JsonUIShared::TapAccessibility.handler?(@component['onClick']) && is_binding?(@component['onClick']) &&
+                   @component['canTap'] != false
                   handler_call = get_event_handler_invocation(@component['onClick'], id, nil)
-                  add_line handler_call
+                  add_line gated_handler_call(handler_call)
                 end
               end
               add_line "}"

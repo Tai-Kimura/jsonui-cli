@@ -80,12 +80,17 @@ RSpec.describe SjuiTools::SwiftUI::JsonToSwiftUIConverter, 'a responsive contain
     expect(wrapped[at + 1].to_s).not_to start_with('.disabled')
   end
 
-  # Control, not a finding: the tap gate was never lost on this path (before
-  # register_interaction_gates it sat at the call site, from the binding
-  # handler; now it is inside the wrapper with the tap). Either gates the tap.
-  it 'the tap gate is not dropped on this path' do
+  # The tap gate on this path: the gesture that calls the handler, masked by
+  # the gate, inside the wrapper with the tap. (It was `.allowsHitTesting`
+  # before `.contentShape` + `.onTapGesture` — at the call site from the
+  # binding handler, then inside the wrapper — which, measured on iOS, did not
+  # stop the view's own tap: tap_gates_on_every_tap_spec.rb.)
+  it 'the tap gate masks the gesture that calls the handler on this path' do
     wrapped, functions = call_site(button.merge('canTap' => '@{canNext}').merge(responsive))
-    expect(functions).to include('.onTapGesture')
-    expect((wrapped.join("\n") + functions)).to include('.allowsHitTesting((data.canNext ?? false))')
+    both = wrapped.join("\n") + functions
+    expect(both.scan(/\.gesture\(TapGesture\(\)\.onEnded \{\n\s*data\.onNext\?\(\)\n\s*\}, including: \(data\.canNext \?\? false\) \? \.all : \.subviews\)/).size)
+      .to eq(2) # one per size class
+    expect(both).not_to include('.onTapGesture')
+    expect(both).not_to include('.allowsHitTesting')
   end
 end
