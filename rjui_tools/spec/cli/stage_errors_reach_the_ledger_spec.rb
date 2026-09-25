@@ -94,7 +94,31 @@ RSpec.describe 'rjui build: a stage that printed an error is in the ledger' do
     File.write(File.join(dir, 'src/Styles/broken.json'), '{ "fontSize": ')
     log, exit_code, entries = build(dir)
     expect(log).to include('Error parsing style file')
+    # The file is there: it is not "not found" (it was, after its parse error, until 1.8.121).
+    expect(log).not_to include("Style file 'broken' not found")
     expect_incomplete(log, exit_code, entries, 'styles', 'broken.json', 'drawn without it')
+  end
+
+  it 'a style that is not there is still said to be not found (the other side of the line above)' do
+    dir = project
+    layout(dir, 'home', 'style' => 'absent')
+    log, exit_code, entries = build(dir)
+    expect(log).to include("Style file 'absent' not found")
+    expect([exit_code, entries]).to eq([0, []])
+  end
+
+  it 'no layouts yet: not a failure, but what an earlier stage could not do still reaches the ledger' do
+    dir = project
+    log, exit_code, entries = build(dir)
+    expect(log).to include('No JSON layout files found')
+    expect([exit_code, entries]).to eq([0, []]) # the control: an empty project is not a failure
+
+    # The Data-model stage runs before the layouts are counted.
+    FileUtils.rm_rf(File.join(dir, 'src/generated/data'))
+    File.write(File.join(dir, 'src/generated/data'), 'a file where the directory goes')
+    log, exit_code, entries = build(dir)
+    expect(log).to include('No JSON layout files found')
+    expect_incomplete(log, exit_code, entries, 'data models', 'the Data models were not generated')
   end
 
   it 'a layout whose colours could not be written back: in the ledger' do

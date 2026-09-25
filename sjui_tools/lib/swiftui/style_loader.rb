@@ -8,6 +8,9 @@ require_relative '../core/project_finder'
 module SjuiTools
   module SwiftUI
     class StyleLoader
+      # What load_style_file returns for a file that exists and does not parse.
+      UNPARSED = :unparsed
+
       def self.load_and_merge(component, styles_dir = nil)
         return component unless component.is_a?(Hash)
         
@@ -16,7 +19,7 @@ module SjuiTools
           style_name = component['style']
           style_data = load_style_file(style_name, styles_dir)
           
-          if style_data
+          if style_data && style_data != UNPARSED
             # スタイルファイルのデータをベースに、コンポーネントのデータで上書き
             # style属性自体は削除（無限ループ防止）
             component_without_style = component.dup
@@ -32,8 +35,14 @@ module SjuiTools
             # スタイルをベースに、コンポーネントのプロパティで上書き
             merged = deep_merge(style_data_for_merge, component_without_style)
             component = merged
-          else
+          elsif style_data.nil?
+            # Only a file that is not there. One that is there and did not
+            # parse was named with its parse error where it was read; until
+            # 1.8.121 this line followed it and said it was not found
+            # (ticket uikit-build-reports-success-after-a-binding-error).
             puts "Warning: Style file '#{style_name}' not found"
+            component.delete('style')
+          else
             # style属性を削除して続行
             component.delete('style')
           end
@@ -113,7 +122,7 @@ module SjuiTools
           JsonUI::StageFailures.record_once(
             'styles', "#{style_file} could not be parsed (#{e.message}); the layouts using it were drawn without it"
           )
-          nil
+          UNPARSED
         end
       end
       

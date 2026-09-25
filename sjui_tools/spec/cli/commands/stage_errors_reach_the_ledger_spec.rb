@@ -146,6 +146,28 @@ RSpec.describe 'sjui build: a stage that printed an error is in the ledger' do
       expect_incomplete(log, exit_code, entries, 'validation', 'attribute_definitions.json')
     end
 
+    it 'a style that does not parse: named, drawn without it, in the ledger — not a crash with no file named' do
+      dir = project('uikit')
+      layout(dir, 'home', 'style' => 'broken')
+      File.write(File.join(dir, NAME, 'Styles', 'broken.json'), '{ "fontSize": ')
+      log, exit_code, entries = build(dir)
+      expect(log).to match(%r{Error parsing style file '[^']*/Styles/broken\.json': unexpected end of input})
+      expect_incomplete(log, exit_code, entries, 'styles', 'broken.json', 'drawn without it')
+      expect(Dir.glob(File.join(dir, '**', 'HomeBinding.swift'))).not_to be_empty # the layout was still built
+    end
+
+    it 'a Layouts directory that is not there: a named failure, and not created' do
+      %w[uikit swiftui].each do |mode|
+        dir = project(mode)
+        FileUtils.rm_rf(File.join(dir, NAME, 'Layouts'))
+        log, exit_code, = build(dir)
+        expect(exit_code).to eq(1), "#{mode}\n#{log}"
+        expect(log).to include("Layouts directory not found: #{File.join(File.realpath(dir), NAME, 'Layouts')}")
+        expect(Dir.exist?(File.join(dir, NAME, 'Layouts'))).to be(false), mode
+        expect(log).not_to match(/completed successfully!|SwiftUI build completed!/)
+      end
+    end
+
     it 'under --mode all, one failure is one entry in the ledger (the UIKit and the SwiftUI stages each report)' do
       dir = project('uikit')
       File.write(File.join(dir, 'sjui.config.json'), File.read(File.join(dir, 'sjui.config.json')).sub('"uikit"', '"all"'))
@@ -181,7 +203,30 @@ RSpec.describe 'sjui build: a stage that printed an error is in the ledger' do
       File.write(File.join(dir, NAME, 'Styles', 'broken.json'), '{ "fontSize": ')
       log, exit_code, entries = build(dir)
       expect(log.scan('Error parsing style file').size).to be >= 2 # the control: met more than once
+      # The file is there: it is not "not found" (it was, after its parse error, until 1.8.121).
+      expect(log).not_to include("Style file 'broken' not found")
       expect_incomplete(log, exit_code, entries, 'styles', 'broken.json', 'drawn without it')
+    end
+
+    it 'a style that is not there is still said to be not found (the other side of the line above)' do
+      dir = project('swiftui')
+      layout(dir, 'home', 'style' => 'absent')
+      log, exit_code, entries = build(dir)
+      expect(log).to include("Style file 'absent' not found")
+      expect([exit_code, entries]).to eq([0, []])
+    end
+
+    it 'no layouts yet: not a failure, but what an earlier stage could not do still reaches the ledger' do
+      dir = project('swiftui')
+      log, exit_code, entries = build(dir)
+      expect(log).to include('No JSON files found')
+      expect([exit_code, entries]).to eq([0, []]) # the control: an empty project is not a failure
+      expect(log.lines.grep(/ERROR/)).to be_empty, log
+
+      FileUtils.mkdir_p(File.join(dir, NAME, 'Layouts', 'Resources'))
+      File.write(File.join(dir, NAME, 'Layouts', 'Resources', 'colors.json'), '{ "a": ')
+      log, exit_code, entries = build(dir)
+      expect_incomplete(log, exit_code, entries, 'colors', 'colors.json could not be parsed')
     end
 
     it 'a generated view it cannot update (no GeneratedView struct in it): in the ledger' do

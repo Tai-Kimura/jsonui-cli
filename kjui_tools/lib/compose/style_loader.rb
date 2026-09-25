@@ -52,7 +52,13 @@ module KjuiTools
           
           style_file = File.join(styles_dir, "#{style_name}.json")
           
-          return nil unless File.exist?(style_file)
+          unless File.exist?(style_file)
+            # Said, as sjui and rjui say it: until 1.8.121 a layout naming a
+            # style that is not there was drawn without it and nothing was
+            # printed (ticket uikit-build-reports-success-after-a-binding-error).
+            puts "Warning: Style file '#{style_name}' not found: #{style_file}"
+            return nil
+          end
           
           begin
             style_content = File.read(style_file)

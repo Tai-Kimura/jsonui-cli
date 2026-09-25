@@ -102,6 +102,13 @@ module RjuiTools
 
           if json_files.empty?
             Core::Logger.warn('No JSON layout files found')
+            # Nothing to build is not a failure — but what the stages before
+            # this one could not do still is: it was recorded and then never
+            # written, so the ledger came back empty (measured on 0f7140a3:
+            # SwiftUI, colors.json unparseable, no layouts yet — exit 0, 0
+            # entries). Ticket uikit-build-reports-success-after-a-binding-error.
+            JsonUI::StageFailures.report!(Core::Logger)
+            JsonUI::StageFailures.conclude(Core::Logger, nil) if JsonUI::StageFailures.any?
             return
           end
 
