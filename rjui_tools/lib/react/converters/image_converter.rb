@@ -19,7 +19,8 @@ module RjuiTools
           src_attr = if src.start_with?('`')
                        " src={#{src}}"
                      elsif src.include?('{')
-                       " src={#{src.gsub(/[{}]/, '')}}"
+                       # A JSX expression: only its own braces come off.
+                       " src={#{unwrap_jsx_braces(src)}}"
                      else
                        jsx_attr_text('src', src)
                      end
@@ -58,7 +59,9 @@ module RjuiTools
         # (rjui-image-src-bare-name-string-key-collision). Bindings resolve
         # as usual; bare names get a build warning steering to srcName.
         def convert_src_value(value, attr_name)
-          return convert_binding(value) if has_binding?(value)
+          # One expression (attribute_expression), braced as a JSX child is:
+          # convert_binding's child form loses the text around a binding.
+          return "{#{attribute_expression(value)}}" if has_binding?(value)
           return value unless value.is_a?(String)
 
           if bare_image_name?(value)

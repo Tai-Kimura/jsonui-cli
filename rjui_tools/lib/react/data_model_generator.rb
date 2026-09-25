@@ -11,6 +11,7 @@ require_relative 'style_loader'
 require_relative '../core/layout_variant'
 require_relative 'helpers/string_manager_helper'
 require_relative '../core/string_manager_core'
+require_relative '../core/string_literals'
 
 module RjuiTools
   module React
@@ -959,10 +960,9 @@ module RjuiTools
         return nil unless ts_type == 'string'
         return nil if default_value.nil?
 
-        v = default_value.to_s
-        return nil if v == "''" || v.empty?
-
-        inner = v.gsub(/^["']|["']$/, '')
+        # The text the spelling means (StringLiterals.default_text) — the
+        # text format_default_value writes when nothing resolves.
+        inner = JsonUIShared::StringLiterals.default_text(default_value)
         return nil if inner.empty? || inner.match?(/^@\{.*\}$/)
 
         resolved = convert_string_key(inner, warnings: false) ||
@@ -981,8 +981,16 @@ module RjuiTools
 
         case ts_type
         when 'string'
-          # Handle '' as empty string (common shorthand)
-          if value == "''"
+          if json_class == 'String' && value.is_a?(String)
+            # The text the layout's spelling means ('' / "…" / '…' / bare,
+            # StringLiterals.default_text), as a TS literal. Until 1.8.121
+            # a quoted spelling passed through as written (`'it''s'` was
+            # not TS) and a bare one was quoted unescaped. Not a String —
+            # a platform dict with no `typescript` key reaches here as the
+            # Hash — stays on the path below, which writes code that does
+            # not parse: a quoted Hash#to_s would build and show it.
+            JsonUIShared::StringLiterals.ts(JsonUIShared::StringLiterals.default_text(value))
+          elsif value == "''"
             '""'
           elsif value.is_a?(String) && (value.start_with?('"') || value.start_with?("'"))
             # Already quoted (e.g., from TypeConverter for Color/Image types)

@@ -163,7 +163,11 @@ module RjuiTools
           placeholder = attributes['hint'] || attributes['placeholder']
           if placeholder
             resolved = convert_binding(placeholder)
-            if resolved != placeholder && resolved.include?('{')
+            if has_binding?(placeholder)
+              # One expression (attribute_expression): the JSX child form
+              # below loses the text around a binding.
+              attrs << " placeholder={#{attribute_expression(placeholder)}}"
+            elsif resolved != placeholder && resolved.include?('{')
               attrs << " placeholder={#{resolved.gsub(/^\{|\}$/, '')}}"
             elsif (string_resolved = convert_string_key(placeholder))
               # strings.json key -> StringManager, matching sjui's hint
@@ -182,8 +186,7 @@ module RjuiTools
           if text_value
             if has_binding?(text_value)
               # Binding present: use controlled component (value + onChange)
-              value = convert_binding(text_value)
-              attrs << " value={#{value.gsub(/[{}]/, '')}}"
+              attrs << " value={#{attribute_expression(text_value)}}"
             else
               # No binding: use uncontrolled component (defaultValue only)
               attrs << jsx_attr_text('defaultValue', text_value)

@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require 'json'
+
 module JsonUIShared
   # A text a layout author wrote, as a string literal in generated source —
   # ONE escaper per target language, for every generator helper that writes
@@ -80,6 +82,50 @@ module JsonUIShared
     # is, but reads a raw CR (or CRLF) as a newline.
     def ts_template_body(text)
       text.to_s.gsub(/\\|`|\$\{|\r/) { |m| m == "\r" ? '\\r' : "\\#{m}" }
+    end
+
+    # The text an author's String default means, before any language's
+    # escaping — ONE reading of the layout's spellings for the three
+    # generators:
+    #   anything  the text as written — the CANONICAL spelling: `jui g
+    #             project` writes a spec's uiVariables default this way, and
+    #             the dynamic runtimes (SwiftJsonUI / KotlinJsonUI
+    #             DynamicView) read only this one, taking the value as it
+    #             stands, quotes included
+    #   ''        empty
+    #   "…"       a literal: its escapes are JSON's (`\"` `\\` `\n` `\t`
+    #             `\uXXXX`), the ones Swift, Kotlin and TypeScript share;
+    #             when they do not parse as JSON, the text between the quotes
+    #   '…'       the text between the quotes, as written
+    # The quoted spellings are read by these generators only (`jui g
+    # project` does not write them); in dynamic mode the same layout shows
+    # the quotes.
+    # Until 1.8.121 the three read `"Test"` three ways: Kotlin and TS as
+    # `Test`, Swift as `""Test""` (not Swift) — then as `"Test"` with its
+    # quotes; `'it''s'` became invalid TS, and a bare `Say "hi"` was written
+    # unescaped into TS (ticket
+    # codegen-string-literals-are-not-escaped-for-the-target-language,
+    # remaining 1).
+    def default_text(raw)
+      text = raw.to_s
+      return '' if text == "''"
+      if text.length >= 2 && text.start_with?('"') && text.end_with?('"')
+        # Only JSON's escapes, read two characters at a time (so `\\d` is
+        # a backslash and a d): Ruby's parser takes an unknown one (`\d`)
+        # and drops its backslash, which is not "as written".
+        escapes = text[1...-1].scan(/\\(u\h{4}|.)/m).flatten
+        return text[1...-1] unless escapes.all? { |e| e.length == 5 || '"\\/bfnrt'.include?(e) }
+        begin
+          decoded = JSON.parse("[#{text}]")
+          return decoded.first if decoded.length == 1 && decoded.first.is_a?(String)
+        rescue JSON::ParserError
+          nil
+        end
+        return text[1...-1]
+      end
+      return text[1...-1] if text.length >= 2 && text.start_with?("'") && text.end_with?("'")
+
+      text
     end
 
     # What JSX text cannot hold as it is: braces and angle brackets, and an

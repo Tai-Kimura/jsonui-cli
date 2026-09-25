@@ -270,8 +270,10 @@ module SjuiTools
                           inner_content = value_str[1...-1]
                           default_value = JsonUIShared::StringLiterals.swift(inner_content)
                         elsif value_str.start_with?('"') && value_str.end_with?('"')
-                          # Already a complete Swift string literal - use as is
-                          default_value = value_str
+                          # A literal in JSON's escapes (StringLiterals.default_text),
+                          # written as Swift: passed through as written until
+                          # 1.8.121, where `\(x)` interpolated
+                          default_value = JsonUIShared::StringLiterals.swift(JsonUIShared::StringLiterals.default_text(value_str))
                         else
                           # No quotes - treat as localization key
                           # Use StringManager function if registered, otherwise use .localized()
@@ -533,8 +535,10 @@ module SjuiTools
                   # Escaped for a Swift string literal (the shared escaper)
                   default_value = JsonUIShared::StringLiterals.swift(inner_content)
                 elsif value_str.start_with?('"') && value_str.end_with?('"')
-                  # Already a complete Swift string literal - use as is
-                  default_value = value_str
+                  # A literal in JSON's escapes (StringLiterals.default_text),
+                  # written as Swift: passed through as written until 1.8.121,
+                  # where `\(x)` interpolated
+                  default_value = JsonUIShared::StringLiterals.swift(JsonUIShared::StringLiterals.default_text(value_str))
                 else
                   # No quotes - treat as localization key
                   # Use StringManager function if registered, otherwise use .localized()
