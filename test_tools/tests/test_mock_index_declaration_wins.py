@@ -85,10 +85,18 @@ class DeclarationBeatsDiscoveryTests(unittest.TestCase):
         (where / "decoy.mock.json").write_text(json.dumps(_mock("zzz_decoy")),
                                                encoding="utf-8")
 
+    # --no-coverage-check: these arms ask the mock gate, not contracts coverage.
+    # From jsonui-cli 1.8.121 (VALIDATE_GATE_FROM) coverage gates validate, and
+    # these fixtures declare a mock.swagger and no spec_directory: coverage
+    # cannot start and the run fails on that, at every release from the gate
+    # on. On a copy stamped 1.8.121, 49 validate runs in these eight files
+    # failed on coverage and 15 of their arms went red; below it, none
+    # (2026-09-26). The flag is how a user says coverage is not the run's
+    # subject; coverage's own arms are test_validate_coverage_section.
     def validate(self):
         proc = subprocess.run(
             [sys.executable, "-m", "jsonui_test_cli.cli", "validate",
-             "../tests/app", "--no-install"],
+             "../tests/app", "--no-install", "--no-coverage-check"],
             cwd=self.app, capture_output=True, text=True,
             env={"PYTHONPATH": str(REPO_TOOL), "PATH": "/usr/bin:/bin"})
         return proc.returncode, proc.stdout + proc.stderr
@@ -144,7 +152,7 @@ class NoDeclarationStillDiscoversTests(unittest.TestCase):
     def test_discovery_still_resolves_when_nothing_is_declared(self):
         proc = subprocess.run(
             [sys.executable, "-m", "jsonui_test_cli.cli", "validate", "tests",
-             "--no-install"],
+             "--no-install", "--no-coverage-check"],
             cwd=self.root, capture_output=True, text=True,
             env={"PYTHONPATH": str(REPO_TOOL), "PATH": "/usr/bin:/bin"})
         out = proc.stdout + proc.stderr
@@ -187,7 +195,7 @@ class NormalLayoutAlsoLosesTests(unittest.TestCase):
             json.dumps(_mock("zzz_decoy")), encoding="utf-8")
         proc = subprocess.run(
             [sys.executable, "-m", "jsonui_test_cli.cli", "validate", "tests",
-             "--no-install"],
+             "--no-install", "--no-coverage-check"],
             cwd=self.root, capture_output=True, text=True,
             env={"PYTHONPATH": str(REPO_TOOL), "PATH": "/usr/bin:/bin"})
         out = proc.stdout + proc.stderr
@@ -202,7 +210,7 @@ class NormalLayoutAlsoLosesTests(unittest.TestCase):
                                                           encoding="utf-8")
         proc = subprocess.run(
             [sys.executable, "-m", "jsonui_test_cli.cli", "validate", "tests",
-             "--no-install"],
+             "--no-install", "--no-coverage-check"],
             cwd=self.root, capture_output=True, text=True,
             env={"PYTHONPATH": str(REPO_TOOL), "PATH": "/usr/bin:/bin"})
         out = proc.stdout + proc.stderr

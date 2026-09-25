@@ -39,6 +39,15 @@ from jsonui_test_cli.mock.generate import (
     UNMATCHED_NOTE_CLASSES, classify_unmatched_note, generate,
 )
 
+# --no-coverage-check: these arms ask the mock gate, not contracts coverage.
+# From jsonui-cli 1.8.121 (VALIDATE_GATE_FROM) coverage gates validate, and
+# these fixtures declare a mock.swagger and no spec_directory: coverage
+# cannot start and the run fails on that, at every release from the gate
+# on. On a copy stamped 1.8.121, 49 validate runs in these eight files
+# failed on coverage and 15 of their arms went red; below it, none
+# (2026-09-26). The flag is how a user says coverage is not the run's
+# subject; coverage's own arms are test_validate_coverage_section.
+
 _OK = {"description": "d",
        "content": {"application/json": {"schema": {"type": "object"}}}}
 
@@ -205,7 +214,7 @@ class TestTheBaselineDoesNotMove:
 
         cli.cmd_validate(argparse.Namespace(
             files=["tests"], verbose=False, quiet=False, config=None,
-            no_mock_check=False, no_install=True, strict=False))
+            no_mock_check=False, no_coverage_check=True, no_install=True, strict=False))
         out = capsys.readouterr().out
 
         # ONE summary line, and it says zero. `"Warnings: 0" in out` was
@@ -282,7 +291,7 @@ class TestTheFourExits:
         monkeypatch.chdir(proj)
         args = lambda: argparse.Namespace(
             files=["tests"], verbose=False, quiet=False, config=None,
-            no_mock_check=False, no_install=True, strict=False)
+            no_mock_check=False, no_coverage_check=True, no_install=True, strict=False)
         cli.cmd_validate(args())
         capsys.readouterr()
 
@@ -343,7 +352,7 @@ class TestTheFourExits:
         monkeypatch.chdir(proj)
         cli.cmd_validate(argparse.Namespace(
             files=["tests"], verbose=False, quiet=False, config=None,
-            no_mock_check=False, no_install=True, strict=False))
+            no_mock_check=False, no_coverage_check=True, no_install=True, strict=False))
 
         assert "does NOT fail this check" not in capsys.readouterr().out
 
@@ -362,7 +371,7 @@ class TestTheMockLineSaysWhatItIsLookingAt:
 
         cli.cmd_validate(argparse.Namespace(
             files=["tests"], verbose=False, quiet=False, config=None,
-            no_mock_check=False, no_install=True, strict=False))
+            no_mock_check=False, no_coverage_check=True, no_install=True, strict=False))
         out = capsys.readouterr().out
 
         assert "mock generate --check" in out
@@ -451,7 +460,7 @@ class TestWhichCommandEachClassCanReach:
         monkeypatch.chdir(proj)
         rc = cli.cmd_validate(argparse.Namespace(
             files=["tests"], verbose=False, quiet=False, config=None,
-            no_mock_check=False, no_install=True, strict=False))
+            no_mock_check=False, no_coverage_check=True, no_install=True, strict=False))
         return rc, capsys.readouterr().out
 
     def _check(self, proj, monkeypatch, capsys):
