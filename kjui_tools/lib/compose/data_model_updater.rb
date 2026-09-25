@@ -54,7 +54,7 @@ module KjuiTools
       end
 
       def expand_includes(json_data, dir)
-        IncludeExpander.process_includes(json_data, dir)
+        IncludeExpander.process_includes(json_data, dir, nil, @layouts_dir)
       end
 
       # kjui also listens to the legacy lowercase 'onclick' (bare method
