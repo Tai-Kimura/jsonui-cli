@@ -241,6 +241,38 @@ module JsonUIShared
       end
     end
 
+    # `--container` / `--no-container` change what a component declares about
+    # children; a run with neither keeps the declaration it already has. Until
+    # 1.8.121 a run with neither rewrote the definition in the default form
+    # over a leaf's `"_children": "none"` — `jui g converter --all`, with or
+    # without --skip-existing, which does not read a leaf from a component
+    # spec — and the build stopped refusing the leaf's children while its
+    # scaffold went on dropping them, with no warning (measured 2026-09-26).
+    # Called first, so the converter, the scaffolds and the definition of
+    # this run all follow the kept declaration.
+    def keep_children_declaration
+      return unless @options[:is_container].nil?
+      return unless declared_children == AttributeValidatorCore::NO_CHILDREN
+
+      @options[:is_container] = false
+      @logger.info "#{@name} is declared a leaf in attribute_definitions/#{@name}.json — kept " \
+                   '(pass --container to change it)'
+    end
+
+    # What attribute_definitions/<Name>.json says about children now: nil when
+    # the file or the key is absent, or the file cannot be read.
+    def declared_children
+      path = File.join(attr_defs_dir, "#{@name}.json")
+      return nil unless File.file?(path)
+
+      definition = JSON.parse(File.read(path))[@name]
+      definition.is_a?(Hash) ? definition[AttributeValidatorCore::CHILDREN_DECLARATION] : nil
+    rescue JSON::ParserError => e
+      @logger.warn "attribute_definitions/#{@name}.json is not JSON (#{e.message.lines.first.to_s.strip}) — " \
+                   'what it declared about children cannot be kept; pass --container or --no-container'
+      nil
+    end
+
     # Generate attribute definition file for validation. Rewritten on every
     # run (unlike the scaffold, which is user-owned once generated), so it
     # carries the _generated marker on every platform.
