@@ -29,6 +29,7 @@ module RjuiTools
 
         def generate
           @logger.info "Generating custom converter: #{@class_name}"
+          track_scaffold_files
           keep_children_declaration
           warn_outside_attribute_types
 
@@ -101,6 +102,23 @@ module RjuiTools
 
         def json_marker(source:, generator:)
           Core::GeneratedMarker.json_marker(source: source, generator: generator)
+        end
+
+        # The component .tsx a leaf was scaffolded with says nothing of
+        # `children` at all (no prop, no render), so a kept one drops the
+        # children the converter passes — with no compiler to object where the
+        # build does not type-check, or where React's types still add
+        # `children` to every FC. (A kept Swift view or composable in the leaf
+        # form fails to compile when given content, so sjui and kjui need no
+        # such rule.) Read only for a component that was declared a leaf
+        # before this run: a component the app wrote without `children` in
+        # the default mode is not this ticket's to turn into a leaf.
+        def kept_view_leaf_form(path, text)
+          return nil unless File.extname(path) == '.tsx'
+          return nil unless declared_children == ::JsonUIShared::AttributeValidatorCore::NO_CHILDREN
+          return nil if text.include?('children')
+
+          'does not render `children`'
         end
 
         def converter_template

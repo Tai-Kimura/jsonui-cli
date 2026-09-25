@@ -32,6 +32,7 @@ module KjuiTools
 
         def generate
           @logger.info "Generating custom converter: #{@class_name}"
+          track_scaffold_files
           keep_children_declaration
           warn_outside_attribute_types
 

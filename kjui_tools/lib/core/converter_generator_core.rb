@@ -65,7 +65,20 @@ module JsonUIShared
     #
     # `noun` / `exists_label` name the file in the two log lines, so the
     # converter's lines read as they always have.
+    #
+    # A `g converter` run also records here what it wrote and what it kept
+    # (track_scaffold_files starts the record; the sub-generators get this
+    # options hash or a merge of it, and a merge shares the record), so what
+    # follows the scaffold can read what the kept files say — see
+    # kept_leaf_scaffold.
     def self.may_write?(file_path, options, logger, noun:, exists_label: nil)
+      write = overwrite_decision(file_path, options, logger, noun: noun, exists_label: exists_label)
+      record = options[:scaffold_files]
+      record[write ? :written : :kept] << file_path if record.is_a?(Hash)
+      write
+    end
+
+    def self.overwrite_decision(file_path, options, logger, noun:, exists_label:)
       return true unless File.exist?(file_path)
 
       if ENV['JUI_SKIP_EXISTING'] == '1' || options[:skip_existing]
@@ -78,6 +91,7 @@ module JsonUIShared
       print "Overwrite? (y/n): "
       $stdin.gets&.chomp&.downcase == 'y'
     end
+    private_class_method :overwrite_decision
 
     # `--attribute-descriptions '<json>'`: {attribute name => description},
     # the component spec's `props.items[].description`, which `jui g
@@ -248,8 +262,9 @@ module JsonUIShared
     # without --skip-existing, which does not read a leaf from a component
     # spec — and the build stopped refusing the leaf's children while its
     # scaffold went on dropping them, with no warning (measured 2026-09-26).
-    # Called first, so the converter, the scaffolds and the definition of
-    # this run all follow the kept declaration.
+    # Called first (after track_scaffold_files), so the converter, the
+    # scaffolds and the definition of this run all follow the kept
+    # declaration.
     def keep_children_declaration
       return unless @options[:is_container].nil?
       return unless declared_children == AttributeValidatorCore::NO_CHILDREN
@@ -259,9 +274,16 @@ module JsonUIShared
                    '(pass --container to change it)'
     end
 
-    # What attribute_definitions/<Name>.json says about children now: nil when
-    # the file or the key is absent, or the file cannot be read.
+    # What attribute_definitions/<Name>.json said about children before this
+    # run wrote it: nil when the file or the key is absent, or the file cannot
+    # be read. Read once (the run writes the file last).
     def declared_children
+      return @declared_children if defined?(@declared_children)
+
+      @declared_children = read_declared_children
+    end
+
+    def read_declared_children
       path = File.join(attr_defs_dir, "#{@name}.json")
       return nil unless File.file?(path)
 
@@ -271,6 +293,87 @@ module JsonUIShared
       @logger.warn "attribute_definitions/#{@name}.json is not JSON (#{e.message.lines.first.to_s.strip}) — " \
                    'what it declared about children cannot be kept; pass --container or --no-container'
       nil
+    end
+
+    # Called first by each profile's `generate`: from here on may_write?
+    # records every scaffold file this run writes and every one it keeps.
+    def track_scaffold_files
+      @options[:scaffold_files] = { written: [], kept: [] }
+    end
+
+    # What a kept file says when it is in the leaf form: the code
+    # `--no-container` writes, and only it.
+    LEAF_FORMS = [
+      # the converter (sjui / kjui / rjui): draws the component without them
+      [/^\s*is_container = false\s*$/, 'draws %s without the children a layout gives it'],
+      # sjui's Dynamic adapter, kjui's Dynamic wrapper: an error in their place
+      ['var acceptsChildren: Bool { false }', 'refuses children in Dynamic mode'],
+      ['private fun leafRejection(', 'refuses children in Dynamic mode']
+    ].freeze
+
+    # The files this run KEPT (--skip-existing, JUI_SKIP_EXISTING, "n", a
+    # closed stdin) that are in the leaf form while the definition it is about
+    # to write takes children: [[path, what the file does], ...].
+    #
+    # Until 1.8.121 a leaf turned back into a container — `--container`, or
+    # `jui g converter --from` a spec that gained slots — with its scaffold
+    # kept wrote `child` / `children` into the definition while the kept
+    # converter went on drawing the component without them: the build
+    # accepted the children and dropped them, rc 0, not a word (measured on
+    # f16f3a11 on all three tools, 2026-09-26; ticket
+    # leaf-turned-container-keeps-its-leaf-scaffold-silently). Written files
+    # are not read: they are in the form this run asked for.
+    def kept_leaf_scaffold
+      return [] if @options[:is_container] == false
+
+      record = @options[:scaffold_files]
+      return [] unless record.is_a?(Hash)
+
+      record[:kept].map { |path| [path, leaf_form(path)] }.select { |_, form| form }
+    end
+
+    # What `path` does as a leaf, or nil. Read as bytes: the markers are
+    # ASCII, and the file may not be valid in the locale's encoding.
+    def leaf_form(path)
+      text = File.binread(path)
+      LEAF_FORMS.each do |marker, what|
+        found = marker.is_a?(Regexp) ? text.match?(marker) : text.include?(marker)
+        return format(what, @name) if found
+      end
+      kept_view_leaf_form(path, text)
+    rescue SystemCallError, IOError
+      nil
+    end
+
+    # Profile hook: a kept component view that cannot draw children although
+    # nothing in it says "leaf" (rjui's .tsx). nil: none.
+    def kept_view_leaf_form(_path, _text)
+      nil
+    end
+
+    # Names the kept leaf-form files, and answers whether the definition must
+    # stay a leaf because of them. A leaf the build refuses children for is
+    # the one of the two outcomes that is not silent; `--force` (or editing
+    # the files) makes the component take children, `--no-container` keeps it
+    # a leaf without this warning.
+    def keep_leaf_for_kept_scaffold
+      kept = kept_leaf_scaffold
+      return false if kept.empty?
+
+      mode = @options[:is_container] == true ? '--container' : 'the default mode'
+      files = kept.map { |path, form| "#{display_path(path)} (#{form})" }.join(', ')
+      @logger.warn "#{@name} would take children (#{mode}), but this run kept " \
+                   "#{kept.size == 1 ? 'a file' : "#{kept.size} files"} in the leaf form: #{files}. " \
+                   "attribute_definitions/#{@name}.json still declares a leaf, so the build refuses children " \
+                   "given to #{@name} instead of dropping them. To make it take children, run again with " \
+                   '--force (it overwrites them) or change them by hand; to keep it a leaf, pass --no-container.'
+      true
+    end
+
+    def display_path(path)
+      full = File.expand_path(path)
+      base = File.join(File.expand_path(Dir.pwd), '')
+      full.start_with?(base) ? full[base.size..-1] : full
     end
 
     # Generate attribute definition file for validation. Rewritten on every
@@ -290,9 +393,13 @@ module JsonUIShared
     # its children were drawn, and a leaf read the same — one sentence for
     # both outcomes. Written for every mode now, attributes or not: a leaf
     # with no attributes still has to say it is one.
+    #
+    # Written AFTER the scaffold: a run that takes children but kept files in
+    # the leaf form writes a leaf (keep_leaf_for_kept_scaffold), and only the
+    # scaffold step knows what it kept. Until 1.8.121 sjui wrote it before.
     def generate_attribute_definition_file
       has_attributes = @options[:attributes] && !@options[:attributes].empty?
-      leaf = @options[:is_container] == false
+      leaf = @options[:is_container] == false || keep_leaf_for_kept_scaffold
 
       dir = attr_defs_dir
       FileUtils.mkdir_p(dir)
