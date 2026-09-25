@@ -493,12 +493,15 @@ class TestEveryFaceHasTheGuard:
         THE CALL, not the declaration: an arm that counted the enum would stay
         green on an emitter that still defines `BranchHarnessRetainer` and
         stops invoking it. And one call, inside the condition: a second,
-        unconditional one would put every 26+ window back.
+        unconditional one would put every 26+ window back. From 26 the
+        released view model is watched instead, to name one that outlives
+        its test (outlived_its_test).
         """
         swift = bt.SWIFT_RUNTIME
         assert swift.count("BranchHarnessRetainer.retain(") == 1, (
             "the emitted Swift retains the harness in more than one place, or none")
-        assert "    if #unavailable(iOS 26) { BranchHarnessRetainer.retain(harness) }\n" in swift, (
+        assert ("    if #unavailable(iOS 26) {\n      BranchHarnessRetainer.retain(harness)\n"
+                "    } else {\n      BranchOutlivedViewModels.watch(harness.vm)\n    }\n") in swift, (
             "the emitted Swift no longer retains the harness below iOS 26 only: a "
             "consumer's pre-26 branch tests SIGABRT, or its 26+ view models outlive "
             "their test")

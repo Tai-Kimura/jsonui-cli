@@ -140,6 +140,8 @@ fun assertTrue(message: String, value: Boolean) { if (!value) throw AssertionErr
 fun assertTrue(value: Boolean) { if (!value) throw AssertionError() }
 fun assertFieldEquals(expected: Any?, actual: Any?) { if (expected != actual) throw AssertionError() }
 fun reportUnmatched(calls: List<String>, gateFrom: String?, row: String) {}
+object BranchEndedRows { fun drain(): List<String> = emptyList() }
+fun reportEarlierRowCalls(calls: List<String>, row: String) {}
 '''
 
 

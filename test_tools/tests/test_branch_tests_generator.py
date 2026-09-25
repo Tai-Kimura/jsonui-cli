@@ -130,7 +130,8 @@ class TestGenerationHappyPath:
         # api none assertion
         assert "expect(rec.matchedCalls()).toEqual([]);" in content
         # scenario override for when.api
-        assert 'installFetchMock(ROUTES, {"createOrder": "conflict"}, apiOriginsOf(harnessModule))' in content
+        # (the row's own name last: a late call from it is named in a later row)
+        assert 'installFetchMock(ROUTES, {"createOrder": "conflict"}, apiOriginsOf(harnessModule), "checkout.' in content
         # data assertion
         assert 'expect(h.readField("screenState")).toEqual("order_error");' in content
         # note branch is listed as a comment with its number, not a test
