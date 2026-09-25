@@ -794,6 +794,21 @@ def _scenario_body(scenario: dict) -> str:
     return json.dumps(body, ensure_ascii=False)
 
 
+#: `mock serve` sleeps `min(delayMs, 30000)`; the runtimes cap it the same.
+DELAY_CAP_MS = 30000
+
+
+def _scenario_delay_ms(scenario: dict) -> int:
+    """A scenario's `delayMs` as the runtimes apply it: whole milliseconds,
+    0 when absent or not a positive number, at most DELAY_CAP_MS. The web
+    runtime reads the scenario itself (the routes carry it whole); the
+    mobile routes carry this, and only for a route that has one."""
+    value = scenario.get("delayMs") if isinstance(scenario, dict) else None
+    if isinstance(value, bool) or not isinstance(value, (int, float)) or value <= 0:
+        return 0
+    return int(min(value, DELAY_CAP_MS))
+
+
 def _scenario_content_type(scenario: dict) -> str:
     value = scenario.get("contentType")
     return value if isinstance(value, str) and value else "application/json"
@@ -2269,6 +2284,23 @@ export function apiOriginsOf(harnessModule: unknown): string[] | null {
 /** Stub globalThis.fetch: serve each route's (possibly overridden) named
  * scenario and record request bodies. Unmatched paths get an unmistakable
  * 599 so incidental un-declared calls surface instead of hanging. */
+/** Responses a scenario's `delayMs` is holding back. `settle` waits for
+ * every one of them: a row's `then` reads the state after they arrived. */
+const pendingDeliveries = new Set<Promise<void>>();
+
+/** `mock serve` sleeps `min(delayMs, 30000)`: the same cap here. */
+export const DELAY_CAP_MS = 30000;
+/** How long `settle` waits for delayed responses in all — one capped delay
+ * and a margin. A chain of delays past it fails the row by name rather than
+ * letting `then` read the state before they arrived. */
+export const SETTLE_DELAY_BUDGET_MS = DELAY_CAP_MS + 1000;
+
+/** The scenario's `delayMs` in ms — 0 when absent or not a positive number,
+ * at most DELAY_CAP_MS. */
+export function scenarioDelayMs(value: unknown): number {
+  return typeof value === "number" && value > 0 ? Math.min(value, DELAY_CAP_MS) : 0;
+}
+
 export function installFetchMock(
   routes: RouteSpec[],
   scenarioOverrides: Record<string, string> = {},
@@ -2324,6 +2356,19 @@ export function installFetchMock(
         // status and headers are still faithful).
         const contentType =
           typeof sc.contentType === "string" ? sc.contentType : "application/json";
+        // `delayMs`: the whole response arrives that long after the request,
+        // as `mock serve` sends it (capped the same). Pending until then, so
+        // `settle` waits for it and the arrival order follows the delays.
+        const delay = scenarioDelayMs(sc.delayMs);
+        if (delay > 0) {
+          const delivered = new Promise<void>((resolve) => setTimeout(resolve, delay));
+          pendingDeliveries.add(delivered);
+          try {
+            await delivered;
+          } finally {
+            pendingDeliveries.delete(delivered);
+          }
+        }
         return new Response(
           sc.body === undefined ? null : JSON.stringify(sc.body),
           { status: sc.status, headers: { "Content-Type": contentType } }
@@ -2512,11 +2557,31 @@ export function partialMismatches(
     : [`${label}: expected ${JSON.stringify(expected)}, got ${JSON.stringify(actual)}`];
 }
 
-/** Drain queued macrotasks so fire-and-forget promise chains that only
- * await already-resolved mock responses reach their terminal state. */
+/** Drain queued macrotasks so fire-and-forget promise chains reach their
+ * terminal state — and wait for every response a scenario's `delayMs` is
+ * holding back, draining again after each arrival (the view model may send
+ * a request of its own once one lands). Past SETTLE_DELAY_BUDGET_MS it
+ * throws, naming how long it waited: stopping quietly would let `then` read
+ * the state before the responses arrived. */
 export async function settle(turns = 10): Promise<void> {
-  for (let i = 0; i < turns; i += 1) {
-    await new Promise((resolve) => setTimeout(resolve, 0));
+  const started = Date.now();
+  for (;;) {
+    for (let i = 0; i < turns; i += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    }
+    if (pendingDeliveries.size === 0) return;
+    const waited = Date.now() - started;
+    if (waited >= SETTLE_DELAY_BUDGET_MS) {
+      throw new Error(
+        `settle: ${pendingDeliveries.size} delayed response(s) still pending after waiting ` +
+          `${waited} ms (budget ${SETTLE_DELAY_BUDGET_MS} ms: one delayMs of at most ` +
+          `${DELAY_CAP_MS} and a margin) — the row's then would read the state before they arrived`
+      );
+    }
+    await Promise.race([
+      Promise.all([...pendingDeliveries]),
+      new Promise<void>((resolve) => setTimeout(resolve, SETTLE_DELAY_BUDGET_MS - waited)),
+    ]);
   }
 }
 
@@ -2834,10 +2899,16 @@ def render_kotlin_test_file(
             f"{_kt_str(_scenario_body(sc))}, {_kt_str(_scenario_content_type(sc))})"
             for name, sc in r.scenarios.items()
         )
+        delays = {name: _scenario_delay_ms(sc) for name, sc in r.scenarios.items()
+                  if _scenario_delay_ms(sc) > 0}
+        # Only a route with a `delayMs` names it: without one, the line is
+        # what it was (the parameter defaults to empty).
+        tail = (",\n    mapOf(" + ", ".join(f"{_kt_str(n)} to {d}L" for n, d in delays.items()) + ")"
+                if delays else "")
         route_lines.append(
             f"  RouteSpec({_kt_str(r.op)}, {_kt_str(r.method)}, "
             f"Regex({_kt_str(r.pattern)}), {_kt_str(r.default_scenario)},\n"
-            f"    mapOf({scen}))"
+            f"    mapOf({scen}){tail})"
         )
 
     lines: list[str] = []
@@ -3048,6 +3119,7 @@ import okhttp3.mockwebserver.Dispatcher
 import okhttp3.mockwebserver.MockResponse
 import okhttp3.mockwebserver.MockWebServer
 import okhttp3.mockwebserver.RecordedRequest
+import java.util.concurrent.TimeUnit
 import java.lang.reflect.Field
 import java.lang.reflect.Modifier
 import kotlin.reflect.KClass
@@ -3066,7 +3138,26 @@ data class RouteSpec(
    * declared content type — the same shape the project's own mock
    * server serves. */
   val scenarios: Map<String, Triple<Int, String, String>>,
+  /** A scenario's `delayMs` (ms): its whole response arrives that long
+   * after the request, as `mock serve` sends it. Written only for a route
+   * that has one, so a screen without `delayMs` generates what it did. */
+  val delays: Map<String, Long> = emptyMap(),
 )
+
+/** Responses a scenario's `delayMs` is holding back: when each is due.
+ * `settle()` waits past the last one, so a row's `then` reads the state after
+ * they arrived. */
+object BranchDeliveries {
+  /** `mock serve` sleeps `min(delayMs, 30000)`: the same cap here. */
+  const val CAP_MS = 30000L
+  /** How long `settle()` waits for delayed responses in all — one capped
+   * delay and a margin. */
+  const val SETTLE_BUDGET_MS = CAP_MS + 1000L
+  private val due = mutableListOf<Long>()
+  @Synchronized fun schedule(delayMs: Long) { due.add(System.currentTimeMillis() + delayMs) }
+  @Synchronized fun pending(now: Long): Int = due.count { it > now }
+  @Synchronized fun lastDue(): Long = due.maxOrNull() ?: 0L
+}
 
 data class RecordedCall(val op: String, val method: String, val path: String, val body: String?)
 
@@ -3356,10 +3447,18 @@ fun runBranchTest(
           val name = (scenarioOverrides[r.op] as? String) ?: r.defaultScenario
           val sc = r.scenarios[name]
             ?: error("branch-runtime: scenario '" + name + "' missing for op '" + r.op + "'")
-          return MockResponse()
+          val response = MockResponse()
             .setResponseCode(sc.first)
             .setHeader("Content-Type", sc.third)
             .setBody(sc.second)
+          val delay = (r.delays[name] ?: 0L).coerceIn(0L, BranchDeliveries.CAP_MS)
+          if (delay > 0L) {
+            // The whole response, headers included, waits: `mock serve`
+            // sleeps before it sends anything.
+            BranchDeliveries.schedule(delay)
+            response.setHeadersDelay(delay, TimeUnit.MILLISECONDS)
+          }
+          return response
         }
       }
       recorder.calls.add(RecordedCall("(unmatched)", method, path, null))
@@ -3388,12 +3487,34 @@ abstract class BaseBranchHarness(
   override fun settle() {
     // Real HTTP I/O (MockWebServer + OkHttp threads) completes off the test
     // dispatcher; the coroutine then resumes ON it. Interleave virtual-time
-    // draining with short real-time waits until the pipeline is quiet.
-    repeat(60) {
+    // draining with short real-time waits until the pipeline is quiet — and
+    // wait past every response a scenario's `delayMs` is holding back,
+    // draining again after they arrive (the view model may send a request of
+    // its own once one lands). Past the budget it fails by name, with how
+    // long it waited: stopping quietly would let `then` read the state
+    // before the responses arrived.
+    val started = System.currentTimeMillis()
+    while (true) {
+      repeat(60) {
+        dispatcher.scheduler.advanceUntilIdle()
+        Thread.sleep(5)
+      }
       dispatcher.scheduler.advanceUntilIdle()
-      Thread.sleep(5)
+      if (BranchDeliveries.pending(System.currentTimeMillis()) == 0) return
+      while (BranchDeliveries.pending(System.currentTimeMillis()) > 0) {
+        val waited = System.currentTimeMillis() - started
+        if (waited >= BranchDeliveries.SETTLE_BUDGET_MS) {
+          throw AssertionError(
+            "settle: " + BranchDeliveries.pending(System.currentTimeMillis()) +
+              " delayed response(s) still pending after waiting " + waited + " ms (budget " +
+              BranchDeliveries.SETTLE_BUDGET_MS + " ms: one delayMs of at most " +
+              BranchDeliveries.CAP_MS + " and a margin) — the row's then would read the " +
+              "state before they arrived")
+        }
+        dispatcher.scheduler.advanceUntilIdle()
+        Thread.sleep(5)
+      }
     }
-    dispatcher.scheduler.advanceUntilIdle()
   }
 
   private fun findField(target: Any, name: String): Field? {
@@ -3708,10 +3829,16 @@ def render_swift_test_file(
             f"{_swift_str(_scenario_content_type(sc))})"
             for name, sc in r.scenarios.items()
         )
+        delays = {name: _scenario_delay_ms(sc) for name, sc in r.scenarios.items()
+                  if _scenario_delay_ms(sc) > 0}
+        # Only a route with a `delayMs` names it: without one, the line is
+        # what it was (the member defaults to empty).
+        tail = (",\n      delays: [" + ", ".join(f"{_swift_str(n)}: {d}" for n, d in delays.items()) + "]"
+                if delays else "")
         route_lines.append(
             f"    RouteSpec(op: {_swift_str(r.op)}, method: {_swift_str(r.method)},\n"
             f"      pattern: {_swift_str(r.pattern)}, defaultScenario: {_swift_str(r.default_scenario)},\n"
-            f"      scenarios: [{scen}])"
+            f"      scenarios: [{scen}]{tail})"
         )
 
     lines: list[str] = []
@@ -3912,6 +4039,29 @@ nonisolated struct RouteSpec {
   /// status, body (empty for a file-backed response) and the declared
   /// content type — the shape the project's own mock server serves.
   let scenarios: [String: (Int, String, String)]
+  /// A scenario's `delayMs` (ms): its whole response arrives that long after
+  /// the request, as `mock serve` sends it. Written only for a route that has
+  /// one, so a screen without `delayMs` generates what it did.
+  var delays: [String: Int] = [:]
+}
+
+/// Responses a scenario's `delayMs` is holding back. `settle()` waits for
+/// every one: a row's `then` reads the state after they arrived.
+nonisolated final class BranchDeliveries {
+  nonisolated(unsafe) static let shared = BranchDeliveries()
+  // Instance constants, not statics: a `static let` of a Sendable type is a
+  // warning with `nonisolated(unsafe)` and outside the rule the runtime's
+  // statics follow without it.
+  /// `mock serve` sleeps `min(delayMs, 30000)`: the same cap here.
+  let capMs = 30000
+  /// How long `settle()` waits for delayed responses in all — one capped
+  /// delay and a margin.
+  var settleBudgetMs: Int { capMs + 1000 }
+  private let lock = NSLock()
+  private var count = 0
+  func begin() { lock.lock(); count += 1; lock.unlock() }
+  func end() { lock.lock(); count -= 1; lock.unlock() }
+  var pending: Int { lock.lock(); defer { lock.unlock() }; return count }
 }
 
 // 🔻 `nonisolated` HERE TOO, AND FOR THE SAME REASON ONE LAYER DOWN. The
@@ -4129,7 +4279,26 @@ nonisolated final class BranchURLProtocol: URLProtocol {
 
   override class func canInit(with request: URLRequest) -> Bool { true }
   override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
-  override func stopLoading() {}
+  /// A delayed delivery (`delayMs`): the response it will send. Scheduled
+  /// with `perform(_:with:afterDelay:)` on the run loop of the thread that
+  /// called startLoading — the thread the client is to be called on — and
+  /// not with a Timer block, which is @Sendable and cannot capture `self`
+  /// without a warning in every Swift mode.
+  private var delayed: (Int, String, String)?
+  @objc private func deliverDelayed() {
+    guard let response = delayed else { return }
+    delayed = nil
+    respond(status: response.0, body: response.1, contentType: response.2)
+    BranchDeliveries.shared.end()
+  }
+  override func stopLoading() {
+    // Cancelled before it arrived: it is no longer pending.
+    guard delayed != nil else { return }
+    NSObject.cancelPreviousPerformRequests(
+      withTarget: self, selector: #selector(deliverDelayed), object: nil)
+    delayed = nil
+    BranchDeliveries.shared.end()
+  }
 
   private static func bodyData(of request: URLRequest) -> Data? {
     if let body = request.httpBody { return body }
@@ -4171,7 +4340,15 @@ nonisolated final class BranchURLProtocol: URLProtocol {
           userInfo: [NSLocalizedDescriptionKey: "scenario '\\(name)' missing for op '\\(route.op)'"]))
         return
       }
-      respond(status: scenario.0, body: scenario.1, contentType: scenario.2)
+      let delay = min(max(route.delays[name] ?? 0, 0), BranchDeliveries.shared.capMs)
+      if delay > 0 {
+        BranchDeliveries.shared.begin()
+        delayed = scenario
+        perform(#selector(deliverDelayed), with: nil, afterDelay: Double(delay) / 1000.0,
+                inModes: [.common])
+      } else {
+        respond(status: scenario.0, body: scenario.1, contentType: scenario.2)
+      }
       return
     }
     Self.recorder?.record(RecordedCall(op: "(unmatched)", method: method, path: path, body: nil,
@@ -4437,9 +4614,29 @@ class BaseBranchHarness: BranchHarness {
   func settle() {
     // Task { @MainActor } continuations land on the main queue; URLProtocol
     // work completes on URLSession's queues. Drain the main run loop with
-    // short real-time slices until the pipeline is quiet.
-    for _ in 0..<80 {
-      RunLoop.main.run(until: Date().addingTimeInterval(0.005))
+    // short real-time slices until the pipeline is quiet — and wait for
+    // every response a scenario's `delayMs` is holding back, draining again
+    // after they arrive (the view model may send a request of its own once
+    // one lands). Past the budget it fails the test by name, with how long
+    // it waited: stopping quietly would let `then` read the state before the
+    // responses arrived.
+    let started = Date()
+    while true {
+      for _ in 0..<80 {
+        RunLoop.main.run(until: Date().addingTimeInterval(0.005))
+      }
+      if BranchDeliveries.shared.pending == 0 { return }
+      while BranchDeliveries.shared.pending > 0 {
+        let waited = Int(Date().timeIntervalSince(started) * 1000)
+        if waited >= BranchDeliveries.shared.settleBudgetMs {
+          XCTFail("settle: \\(BranchDeliveries.shared.pending) delayed response(s) still pending after "
+                  + "waiting \\(waited) ms (budget \\(BranchDeliveries.shared.settleBudgetMs) ms: one delayMs of "
+                  + "at most \\(BranchDeliveries.shared.capMs) and a margin) — the row's then would read the "
+                  + "state before they arrived")
+          return
+        }
+        RunLoop.main.run(until: Date().addingTimeInterval(0.005))
+      }
     }
   }
 }

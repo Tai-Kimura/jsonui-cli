@@ -659,6 +659,18 @@ construction settle, writes the arranged state, and only then calls
 the mark, so what the constructor fetched is not read as the method's doing.
 A hand-written test that never calls `mark()` reads every call, as before.
 
+### A scenario's `delayMs`: the order responses arrive in
+
+A scenario's `delayMs` delays its whole response by that many milliseconds
+after the request (at most 30000) — what `mock serve` does, on all three
+faces of the generated tests. So a row whose `when` picks a delayed scenario
+for one of two parallel requests makes that one arrive last, and a view model
+whose outcome depends on the arrival order can be driven by rows. `settle()`
+waits for every delayed response before it returns, draining again after
+each arrival, so `then` reads the state after they landed; past 31000 ms
+(one capped delay and a margin) it fails the test by name, with how long it
+waited. A screen with no `delayMs` generates what it did.
+
 ### Requests no route declares
 
 A request during act that matches no declared route is answered 599 by the
