@@ -30,7 +30,7 @@ module RjuiTools
           # every built-in converter (they reference the PARENT's data).
           data_prop = build_data_prop(merged_data)
 
-          id_attr = build_id_attr
+          id_attr = include_id_attr
 
           if data_prop.empty?
             "#{indent_str(indent)}<#{component_name}#{id_attr} />"
@@ -40,6 +40,23 @@ module RjuiTools
         end
 
         private
+
+        # Design U8, when `jui build` turned the prefix on: the include's id is
+        # not an element of its own — it is the prefix of the ids inside
+        # (combined with the prefix above it), as on native; an include
+        # without an id hands the prefix above it straight through.
+        def include_id_attr
+          return build_id_attr unless @config['_include_id_prefix']
+
+          include_id = attributes['id']
+          if include_id.is_a?(String) && !include_id.empty? && !has_binding?(include_id)
+            " idPrefix={jsonuiIncludePrefix(idPrefix, \"#{include_id}\")}"
+          elsif include_id
+            build_id_attr
+          else
+            ' idPrefix={idPrefix}'
+          end
+        end
 
         def build_data_prop(data)
           return '' if data.empty?

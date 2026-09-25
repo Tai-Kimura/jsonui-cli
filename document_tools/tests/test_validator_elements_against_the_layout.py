@@ -113,13 +113,35 @@ def test_an_include_ids_other_spellings_cannot_be_checked(tmp_path, at, spelling
     # resolved layout holds), `side_hint` on UIKit, `hint` on web (it does not
     # flatten includes). Against one resolution only the first can be told
     # right; the others are CANNOT CHECK, not missing (ee, design v4.20).
-    at("1.8.121")
+    at("1.8.119")                      # below INCLUDE_ID_PREFIX_GATE_FROM
     spec = _face(tmp_path, visible=["summary", spelling])
     assert _messages(spec) == [(
         "info", "stateManagement",
         f"cannot check: 1 element id(s) inside includes of detail.json ({spelling}) — an "
         "include's ids are spelled differently per platform (web keeps the included "
         "layout's id; native prefixes it with the include's)")]
+
+
+@pytest.mark.parametrize("version", ["1.8.120", "1.8.121"])     # 1.8.120: the equal point
+@pytest.mark.parametrize("spelling", ["hint", "side_hint"])
+def test_from_the_include_gate_an_include_ids_spelling_is_checked_exactly(tmp_path, at,
+                                                                         version, spelling):
+    # From INCLUDE_ID_PREFIX_GATE_FROM web spells it as native does (U8): the
+    # web and UIKit spellings are mismatches, and the candidates name native's.
+    at(version)
+    spec = _face(tmp_path, visible=["summary", spelling])
+    assert _element_warnings(spec) == [(
+        "stateManagement.states[0].values[0].visibleElements",
+        f"Element '{spelling}' not found in the layout detail.json (includes expanded, every "
+        "platform); the layout has 'sideHint' — the runtime id is the layout's spelling")]
+
+
+def test_a_withdrawn_include_gate_never_checks_them_exactly(tmp_path, at, monkeypatch):
+    from jui_cli.core import layout_facts
+    at("9.9.9")
+    monkeypatch.setattr(layout_facts, "INCLUDE_ID_PREFIX_GATE_FROM", "withdrawn")
+    spec = _face(tmp_path, visible=["summary", "hint"])
+    assert [lv for lv, *_ in _messages(spec)] == ["info"]
 
 
 def test_an_unresolved_include_says_it_cannot_check(tmp_path, at):

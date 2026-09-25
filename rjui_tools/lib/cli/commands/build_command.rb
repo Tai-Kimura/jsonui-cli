@@ -82,6 +82,11 @@ module RjuiTools
           # Emit the date-format helper (SelectBox dateStringFormat)
           emit_date_format_helper
 
+          # Design U8: do the ids inside an include with an id carry the
+          # include's prefix, as on iOS and Android? `jui build` decides it
+          # (INCLUDE_ID_PREFIX_GATE_FROM) and hands the answer over.
+          apply_include_id_prefix_decision
+
           all_json_files = Dir.glob(File.join(layouts_dir, '**', '*.json')).reject do |file|
             # Skip Resources folder (colors.json, strings.json, etc.)
             # Skip Styles folder (reusable style definitions, not components)
@@ -1186,6 +1191,89 @@ module RjuiTools
         # lets the plain member read type-check, and
         # spec/cli/commands/screen_marker_helper_spec.rb runs the emitted text
         # through a define, so the fold is measured rather than described.
+        # The answer `jui build` hands over in JSONUI_INCLUDE_ID_PREFIX — rjui
+        # reads no version literal of its own (design U8):
+        #   on               prefix them; emit the helper
+        #   announce:<rel>   not yet; one line naming the release
+        #   off              not at all (withdrawn / undeclared); silent
+        #   (absent)         run on its own: keep the unprefixed spelling, say so
+        def apply_include_id_prefix_decision
+          decision = ENV['JSONUI_INCLUDE_ID_PREFIX'].to_s
+          if decision == 'on'
+            @config['_include_id_prefix'] = true
+            emit_include_id_helper
+          elsif decision.start_with?('announce:')
+            Core::Logger.info(
+              "NOTICE [include-ids]: from jsonui-cli #{decision.split(':', 2)[1]}, the ids " \
+              "inside an include with an id carry the include's prefix on web, as on iOS " \
+              "and Android (`hero` + `type_badge` -> `heroTypeBadge`)"
+            )
+          elsif decision.empty?
+            Core::Logger.info(
+              "NOTICE [include-ids]: whether the ids inside an include with an id carry the " \
+              "include's prefix on web (`hero` + `type_badge` -> `heroTypeBadge`, as on iOS " \
+              "and Android) is decided by `jui build`; run on its own, this build keeps the " \
+              "unprefixed spelling"
+            )
+          end
+        end
+
+        # The web side of an include's id prefix (design U8), the spelling the
+        # SwiftUI and Compose builds give the same ids — codegen's
+        # (sjui/kjui include_expander.rb, held to shared/core/
+        # camel_case_vectors.json): `to_camel_case` splits on `_`, each part
+        # after the first capitalized with the REST lower-cased (an empty part
+        # adds nothing, so Ruby dropping trailing ones changes no answer);
+        # `combine` upper-cases the name's first letter only when it is a-z. A
+        # runtime function because one partial can sit under two include ids.
+        def emit_include_id_helper
+          generated_dir = @config['generated_directory'] || 'src/generated'
+          FileUtils.mkdir_p(generated_dir)
+          is_ts = @config['typescript']
+          extension = is_ts ? 'ts' : 'js'
+          path = File.join(generated_dir, "includeId.#{extension}")
+          s = is_ts ? ': string' : ''
+          opt = is_ts ? ': string | undefined' : ''
+
+          marker_header = Core::GeneratedMarker.comment_header(
+            source: "includeId (include id prefix helper)",
+            generator: "rjui build"
+          )
+          marker_footer = Core::GeneratedMarker.comment_footer
+
+          content = <<~JS
+            #{marker_header}
+            // The ids inside an include with an id carry the include's prefix,
+            // spelled as the SwiftUI and Compose builds spell them:
+            // `hero` + `type_badge` -> `heroTypeBadge`.
+            export function jsonuiCamel(name#{s})#{s} {
+              if (!name.includes('_')) {
+                return name;
+              }
+              const parts = name.split('_');
+              return parts[0] + parts.slice(1).map(
+                (p) => (p ? p[0].toUpperCase() + p.slice(1).toLowerCase() : '')
+              ).join('');
+            }
+
+            export function jsonuiIncludeId(prefix#{opt}, name#{s})#{s} {
+              if (!prefix) {
+                return name;
+              }
+              return prefix + jsonuiCamel(name).replace(/^[a-z]/, (c) => c.toUpperCase());
+            }
+
+            export function jsonuiIncludePrefix(outer#{opt}, includeId#{s})#{s} {
+              return outer ? jsonuiIncludeId(outer, includeId) : jsonuiCamel(includeId);
+            }
+
+            #{marker_footer}
+          JS
+
+          File.write(path, content)
+          Core::Logger.info("Generated: #{path}")
+        end
+
         def emit_screen_marker_helper
           generated_dir = @config['generated_directory'] || 'src/generated'
           FileUtils.mkdir_p(generated_dir)

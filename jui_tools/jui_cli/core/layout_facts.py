@@ -38,6 +38,15 @@ from collections import Counter
 from dataclasses import dataclass, field
 from pathlib import Path
 
+#: The release from which an id inside an include that has an id is prefixed
+#: on WEB as it already is on native (design U8: `hero` + `type_badge` ->
+#: `heroTypeBadge`), and from which the spec validator checks those ids
+#: exactly instead of "cannot check". Below it, rjui keeps the unprefixed
+#: spelling and prints one line announcing the release. A literal read by
+#: shared/core/gate_versions like every `*_GATE_FROM`; jui decides and hands
+#: rjui the answer (JSONUI_INCLUDE_ID_PREFIX) — rjui reads no literal.
+INCLUDE_ID_PREFIX_GATE_FROM: str | None = "1.8.120"
+
 #: One `@{...}` occurrence, as the Ruby validator scans for it.
 BINDING_OCCURRENCE = re.compile(r"@\{([^}]*)\}")
 _STRING_LITERALS = re.compile(r"'[^']*'|\"[^\"]*\"")
@@ -372,4 +381,29 @@ def duplicate_ids(name: str, platforms, *, layouts_dir: Path, styles_dir: Path) 
         if dups:
             out[platform] = dups
     return out
+
+
+def include_id_prefix_state(version: str | None = None, literal: str | None = None) -> str:
+    """`on` (prefix the ids inside an include on web; check them exactly),
+    `announce` (not yet — a release is named), or `off` (undeclared,
+    withdrawn, unreadable, or no gate_versions to read it with). *version*
+    defaults to this toolchain's, *literal* to INCLUDE_ID_PREFIX_GATE_FROM."""
+    from ..version import toolchain_version
+    from . import shared_core
+
+    gates = shared_core.load("gate_versions")
+    if gates is None:
+        return "off"
+    literal = INCLUDE_ID_PREFIX_GATE_FROM if literal is None else literal
+    version = toolchain_version() if version is None else version
+    if gates.gate_is_on(version, literal):
+        return "on"
+    return "announce" if gates.gate_state(literal) == "release" else "off"
+
+
+def include_id_prefix_env(version: str | None = None) -> str:
+    """The value `jui build` hands rjui as JSONUI_INCLUDE_ID_PREFIX:
+    `on`, `announce:<release>` or `off`."""
+    state = include_id_prefix_state(version)
+    return f"announce:{INCLUDE_ID_PREFIX_GATE_FROM}" if state == "announce" else state
 

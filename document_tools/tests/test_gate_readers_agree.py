@@ -9,6 +9,8 @@ goes through every reader this tree has, and they must agree:
   coverage        validate's contracts coverage gate (test_tools)
   layout ids      the spec validator: an id not in the layout is a WARNING
                   when the gate is on, else INFO — plus the notice (document_tools)
+  include ids     jui's decision for web's include ids, handed to rjui as
+                  JSONUI_INCLUDE_ID_PREFIX (jui_tools; U8)
 
 P2e's generator and the tag gate (dev-guide/release/validate_gate_version.py)
 read the same module once 1e moves them onto it; add them to READERS then.
@@ -80,6 +82,14 @@ def _reader_layout_ids(literal, version, monkeypatch, tmp_path):
     return warned, announced
 
 
+def _reader_include_prefix(literal, version, monkeypatch):
+    """jui's decision for web's include ids (design U8) — what it hands rjui."""
+    from jui_cli.core import layout_facts
+    monkeypatch.setattr(layout_facts, "INCLUDE_ID_PREFIX_GATE_FROM", literal)
+    state = layout_facts.include_id_prefix_state(version)
+    return state == "on", state == "announce"
+
+
 @pytest.mark.parametrize("literal, version, state, gates, announces", TABLE)
 def test_every_reader_gives_the_tables_answer(literal, version, state, gates, announces,
                                              monkeypatch, tmp_path):
@@ -88,6 +98,8 @@ def test_every_reader_gives_the_tables_answer(literal, version, state, gates, an
         "gate_versions": _reader_module(literal, version),
         "coverage": _reader_coverage(literal, version, monkeypatch),
         "layout ids": (state, *_reader_layout_ids(literal, version, monkeypatch, tmp_path)),
+        "include ids (jui -> rjui)": (state, *_reader_include_prefix(literal, version,
+                                                                     monkeypatch)),
     }
     assert answers == {name: (state, gates, announces) for name in answers}, answers
 

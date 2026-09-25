@@ -536,11 +536,22 @@ module RjuiTools
         # with a Partial, and pages/cells pass the full object. A
         # data-consuming component merges the prop over its createXxxData()
         # defaults so every member is present for the body's reads.
-        props_interface = generate_data_props_interface(name, uses_data, data_type: data_name)
+        include_prefix = @config['_include_id_prefix']
+        uses_id_prefix = include_prefix && jsx_content.match?(/\bidPrefix\b/)
+        props_interface = generate_data_props_interface(name, uses_data, data_type: data_name,
+                                                                    id_prefix: include_prefix)
         # `id` is destructured only when it was injected into the root —
         # the interface always accepts it (call sites can't know), but an
         # unused binding would trip noUnusedParameters setups.
         id_part = root_id_injected ? ', id' : ''
+        id_part += ', idPrefix' if uses_id_prefix
+        include_id_names = %w[jsonuiIncludeId jsonuiIncludePrefix].select { |f| jsx_content.include?("#{f}(") }
+        include_id_import =
+          if include_prefix && include_id_names.any?
+            "\nimport { #{include_id_names.join(', ')} } from '@/generated/includeId';"
+          else
+            ''
+          end
         props_sig =
           if uses_data
             @config['typescript'] ? "{ data: dataProp#{id_part} }: #{name}Props" : "{ data: dataProp#{id_part} }"
@@ -566,7 +577,7 @@ module RjuiTools
 
         <<~JSX
           #{use_client}#{marker_header}
-          #{react_import}#{media_query_import}#{link_import}#{string_manager_import}#{cell_id_import}#{collection_scroll_import}#{relative_position_import}#{auto_shrink_import}#{date_format_import}#{screen_marker_import}#{partial_text_import}#{configuration_import}#{color_manager_import}#{lucide_import}#{data_import}#{extension_imports}#{component_imports}#{variant_component_imports}
+          #{react_import}#{media_query_import}#{link_import}#{string_manager_import}#{cell_id_import}#{collection_scroll_import}#{relative_position_import}#{auto_shrink_import}#{date_format_import}#{screen_marker_import}#{partial_text_import}#{include_id_import}#{configuration_import}#{color_manager_import}#{lucide_import}#{data_import}#{extension_imports}#{component_imports}#{variant_component_imports}
 
           #{props_interface if @config['typescript']}
           export const #{name} = (#{props_sig}) => {#{data_merge_declaration}#{state_declarations}#{focus_declarations}#{collection_scroll_declarations}#{relative_position_declarations}#{auto_shrink_declarations}#{landscape_declaration}#{string_manager_declaration}#{variant_dispatch_declaration}
@@ -586,13 +597,17 @@ module RjuiTools
       # data-passing includes provide a Partial that the component merges
       # over its createXxxData() defaults, and pages/cells pass the full
       # object (a full XxxData is assignable to Partial<XxxData>).
-      def generate_data_props_interface(name, uses_data = true, data_type: nil)
+      def generate_data_props_interface(name, uses_data = true, data_type: nil, id_prefix: false)
         data_name = data_type || name
         data_field = uses_data ? "data?: Partial<#{data_name}Data>;" : "data?: #{data_name}Data;"
+        # `idPrefix`: the include prefix above this component (design U8) —
+        # declared only when `jui build` turned it on, so an unchanged build
+        # emits unchanged bytes.
+        prefix_field = id_prefix ? "\n  idPrefix?: string;" : ''
         <<~TS
           interface #{name}Props {
             #{data_field}
-            id?: string;
+            id?: string;#{prefix_field}
           }
         TS
       end

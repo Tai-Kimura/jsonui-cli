@@ -1044,7 +1044,14 @@ def _run_tool(cmd: list[str], cwd: Path) -> bool:
     tool_name = cmd[0]
     resolved = resolve_tool(tool_name, cwd)
     actual_cmd = [resolved] + cmd[1:]
-    env = build_tool_env(resolved, tool_name)
+    extra = None
+    if tool_name == "rjui":
+        # Design U8: whether web prefixes the ids inside an include is decided
+        # HERE, once, from INCLUDE_ID_PREFIX_GATE_FROM; rjui only follows it
+        # (run standalone it keeps the old spelling and says so).
+        from ..core.layout_facts import include_id_prefix_env
+        extra = {"JSONUI_INCLUDE_ID_PREFIX": include_id_prefix_env()}
+    env = build_tool_env(resolved, tool_name, extra=extra)
 
     try:
         result = subprocess.run(actual_cmd, cwd=cwd, env=env)

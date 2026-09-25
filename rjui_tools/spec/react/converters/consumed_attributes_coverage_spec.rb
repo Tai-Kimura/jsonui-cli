@@ -101,7 +101,7 @@ RSpec.describe 'Converter consumed-attribute coverage' do
       srcName
       url
     ],
-    'include_converter.rb' => %w[shared_data],
+    'include_converter.rb' => %w[id shared_data],
     'indicator_converter.rb' => %w[borderWidth color halfSpinner height size strokeWidth tintColor width],
     # `minimumScaleFactor` is absent on purpose: the fit is measured at
     # runtime, so ReactGenerator#extract_auto_shrink_targets reads the size and

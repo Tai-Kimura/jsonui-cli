@@ -3636,10 +3636,18 @@ class SpecValidator:
           and one INFO announcing the release. The message names the layout
           ids a person may have meant (`element_candidates`) — never counted
           as a match: the runtime id is the layout's spelling
-        - inside a cell layout it names, or spelled as an id inside an
-          include is on some platform: CANNOT CHECK — one INFO each, always
+        - inside a cell layout it names: CANNOT CHECK — one INFO, always
+        - spelled as an id inside an include is on web or UIKit: CANNOT CHECK
+          below INCLUDE_ID_PREFIX_GATE_FROM (the spelling differs per
+          platform); from it, web spells it as native does (design U8), so it
+          is checked exactly — a mismatch, with the native spelling among the
+          candidates
         """
-        from jui_cli.core.layout_facts import classify_element
+        from jui_cli.core.layout_facts import (
+            classify_element, element_candidates, include_id_prefix_state,
+        )
+
+        include_exact = include_id_prefix_state(_running_version()) == "on"
 
         # shared/core/gate_versions, the one reader of every `*_GATE_FROM`.
         # None in a tool tree without it: then nothing becomes a WARNING — not
@@ -3657,9 +3665,12 @@ class SpecValidator:
             if kind == "in_cell":
                 in_cells.append(element)
                 continue
-            if kind == "include_spelling":
+            if kind == "include_spelling" and not include_exact:
                 in_includes.append(element)
                 continue
+            if kind == "include_spelling":
+                kind, candidates = "missing", element_candidates(element, layout.ids,
+                                                                 layout.types)
             missing += 1
             text = f"Element '{element}' not found in {where}"
             if candidates:
