@@ -442,14 +442,16 @@ else
 fi
 
 # The emitted Kotlin branch runtime compiled whole and RUN: a scenario's
-# `delayMs` against MockWebServer, and the harness seeding state by type. Its jars (okhttp, mockwebserver, coroutines-
+# `delayMs` against MockWebServer, the harness seeding state by type, and
+# settle waiting for quiet and for the ops a row expects. Its jars (okhttp, mockwebserver, coroutines-
 # test, serialization) are in a Gradle cache and in no CI image, so this runner
 # owns the arm; named as its own leg, with the versions it compiled against
 # and its executed / skipped count, and required — a missing jar FAILS.
-say "== branch runtime, Android EXECUTED (delayMs, seed state; pinned jars)"
+say "== branch runtime, Android EXECUTED (delayMs, seed state, settle; pinned jars)"
 _x="$(mktemp -t delay-android).xml"
 out=$( cd "$C/test_tools" && JSONUI_REQUIRE_ANDROID_JARS=1 python3 -m pytest -q -p no:cacheprovider \
          tests/test_branch_scenario_delay_android.py tests/test_branch_seed_state_android.py \
+         tests/test_branch_settle_quiescence_android.py \
          --junitxml="$_x" 2>&1 )
 rc=$?
 say "   $(cd "$C/test_tools" && python3 -c 'from tests._android_runtime import PINNED; print(" ".join(a.split("/")[1] + ":" + v for a, v in PINNED))' 2>&1 | tail -1)"

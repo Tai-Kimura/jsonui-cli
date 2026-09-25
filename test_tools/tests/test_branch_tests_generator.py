@@ -240,7 +240,8 @@ class TestGenerationHappyPath:
         assert '"plate": "x"' in content
         # not-called is asserted before the bound, in its own words
         assert ('expect(rec.countFor("createOrder"), `api.createOrder: this row says '
-                'not-called — called ${rec.countFor("createOrder")} time(s)`).toBe(0);') in content
+                'not-called (within the act and until no request was in flight for 400 ms after it) — '
+                'called ${rec.countFor("createOrder")} time(s)`).toBe(0);') in content
 
     def test_arg_mapping_by_param_order(self, tmp_path):
         bc = {"methods": {"onModeSelected": {"branches": [
@@ -1809,6 +1810,7 @@ class TestTheSwiftRuntimeSurvivesTheTargetsDefaultIsolation:
         HARNESS_FACING = {
             "BranchHarness", "BaseBranchHarness",     # a consumer subclasses these
             "runBranchTest",                          # the @MainActor test calls it
+            "settleUntilAnswered",                    # takes a harness, calls its settle()
             "withBranchRoutes", "seedState",          # take a harness
             "assertFieldEquals", "resolveString",     # ditto
         }

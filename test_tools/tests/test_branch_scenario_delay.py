@@ -10,10 +10,11 @@ lands first could not be driven by a row's `when`. A consumer had to write
 that red-check by hand.
 
 The meaning is `mock serve`'s: the whole response arrives `delayMs` after the
-request, capped at 30000. `settle` waits for every delayed response before
-it returns, draining again after each arrival, so a row's `then` reads the
-state after they landed; past its budget (one capped delay and a margin) it
-fails by name, with how long it waited.
+request, capped at 30000. `settle` counts a delayed response as in flight
+until it arrives, and returns only once nothing is in flight and QUIET_MS
+has passed since the last arrival, so a row's `then` reads the state after
+they landed; past its budget (one capped delay and a margin) it fails by
+name, with how long it waited.
 
 The probe on each face: a view model sends A, then B a gap later (50 ms;
 1000 ms in the no-delay row, whose order is the sending order), and records
@@ -28,9 +29,9 @@ seconds.
     A delayed, no wait   b        (control: settle's wait taken out — A has
                                   not landed when the row would read)
 
-Each delay is far longer than the face's fixed drain (web: ten
-setTimeout(0) turns; iOS: 80 x 5 ms), so a settle that did not wait could
-not see it land.
+Each delay is far longer than QUIET_MS and than the fixed drain settle used
+to be (web: ten setTimeout(0) turns; iOS: 80 x 5 ms), so a settle that did
+not wait for it could not see it land.
 Android is in test_branch_scenario_delay_android.py: its runtime needs the
 okhttp jars, which only a Gradle cache has.
 """
@@ -128,8 +129,8 @@ def test_web_the_delay_decides_the_order_and_settle_waits(tmp_path, overrides, o
 
 
 def _web_without_the_wait(runtime: str) -> str:
-    """settle returning after its first drain, whatever is still pending."""
-    quiet = "    if (pendingDeliveries.size === 0 && lastDeliveryAt < drainStarted) return;\n"
+    """settle returning after its first slice, whatever is still in flight."""
+    quiet = "    if (quiet && missing.length === 0) return;\n"
     assert runtime.count(quiet) == 1
     return runtime.replace(quiet, "    return;\n")
 
@@ -166,8 +167,9 @@ def test_web_past_the_budget_settle_fails_by_name(tmp_path):
     run = subprocess.run(["node", "--experimental-strip-types", "probe.ts"],
                          cwd=tmp_path, capture_output=True, text=True, timeout=120)
     out = run.stdout.strip()
-    assert out.startswith("THROWN settle: delayed responses were still arriving after waiting "), out
-    waited = int(re.search(r"after waiting (\d+) ms", out).group(1))
+    assert out.startswith("THROWN settle: still busy after "), out
+    assert "1 request(s) in flight" in out, out
+    waited = int(re.search(r"still busy after (\d+) ms", out).group(1))
     assert waited >= 1100 and "budget 1100 ms" in out, out
 
 
@@ -284,10 +286,10 @@ def test_ios_the_delay_decides_the_order_and_settle_waits(swift_binary, slow, or
 
 
 def _swift_without_the_wait(runtime: str) -> str:
-    """settle returning after its first drain, whatever is still pending."""
-    quiet = "      if BranchDeliveries.shared.pending == 0 && BranchDeliveries.shared.lastDelivery < drainStarted {\n"
+    """settle returning after its first slice, whatever is still in flight."""
+    quiet = "      if deliveries.pending == 0 && quietFor >= deliveries.quietMs { return }\n"
     assert runtime.count(quiet) == 1
-    return runtime.replace(quiet, "      if true {\n")
+    return runtime.replace(quiet, "      if true { return }\n")
 
 
 def test_ios_control_a_settle_that_does_not_wait_reads_before_the_arrival(swift_runtime, tmp_path):
@@ -328,8 +330,8 @@ def test_ios_past_the_budget_settle_fails_by_name(swift_runtime, tmp_path):
                           _SWIFT_CHAIN)
     run = subprocess.run([str(binary)], capture_output=True, text=True, timeout=300)
     fails = [l for l in run.stdout.splitlines() if l.startswith("XCTFail settle: ")]
-    assert len(fails) == 1 and "delayed responses were still arriving after waiting" in fails[0], run.stdout
-    waited = int(re.search(r"after waiting (\d+) ms", fails[0]).group(1))
+    assert len(fails) == 1 and "1 request(s) in flight" in fails[0], run.stdout
+    waited = int(re.search(r"still busy after (\d+) ms", fails[0]).group(1))
     assert waited >= 1100 and "budget 1100 ms" in fails[0], fails
 
 

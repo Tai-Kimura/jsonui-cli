@@ -839,6 +839,29 @@ def _scenario_body(scenario: dict) -> str:
 #: `mock serve` sleeps `min(delayMs, 30000)`; the runtimes cap it the same.
 DELAY_CAP_MS = 30000
 
+#: How long a runtime's settle waits, with no request in flight, after one
+#: last arrived or was answered — the window a row's "not called" and "no
+#: undeclared call" are claimed over. Declared, not measured, and one value on
+#: every face: the three runtimes declare it (QUIET_MS / BranchDeliveries.
+#: QUIET_MS / quietMs) and the messages below name it.
+QUIET_MS = 400
+
+#: How long after the act a runtime waits, once nothing is in flight and the
+#: quiet has held, for an op the row expects (its `when` routes, its `called`,
+#: its `.request`) that has not been called yet — past it the row fails naming
+#: the op. A request in flight is waited for up to the settle budget instead
+#: (one capped `delayMs` and a margin); this is the view model's time to SEND,
+#: which `delayMs` says nothing about. Declared, one value on every face (the
+#: runtimes declare EXPECT_MS / BranchDeliveries.EXPECT_MS / expectMs). Its
+#: source: a consumer's own harness that waits on a condition and fails at
+#: 10 s passed 20 of 20 iterations at load average 118-854 (2026-09-25) — a
+#: face's measurement cited, not today's machine taken as the floor.
+EXPECT_MS = 10000
+
+#: What a row's absence claims hold over, in the words its reds print.
+ABSENCE_WINDOW = (f"within the act and until no request was in flight for "
+                  f"{QUIET_MS} ms after it")
+
 
 def _scenario_delay_ms(scenario: dict) -> int:
     """A scenario's `delayMs` as the runtimes apply it: whole milliseconds,
@@ -1530,7 +1553,7 @@ def _row_not_called(then: dict) -> list[str]:
 
 def not_called_message(op: str) -> str:
     """The prefix of a not-called row's red; each renderer appends the count."""
-    return f"api.{op}: this row says not-called — called"
+    return f"api.{op}: this row says not-called ({ABSENCE_WINDOW}) — called"
 
 
 def _served_statuses(branch: dict, by_op: dict) -> set[str]:
@@ -1798,6 +1821,26 @@ def _unspoken_when_ops(when: dict, then: dict) -> list[str]:
     return [op for op in dict.fromkeys(ops) if op not in spoken]
 
 
+
+def _expected_ops(when: dict, then: dict) -> list[str]:
+    """The ops a row expects answered before its `then` is read: the `when`
+    routes `then` says nothing about (the reach check below), and the ones
+    `then` says were "called" or reads the `.request` of. The runtimes'
+    settleUntilAnswered waits until the recorder has each since `mark()`
+    (settle({ rec, expect }) on web) and nothing is in flight, so a request
+    the view model sends late is waited for rather than read as never sent —
+    and, EXPECT_MS after the act with nothing in flight, named. Not for a
+    control row: what it observes is the call's absence."""
+    ops = list(_unspoken_when_ops(when, then))
+    for key, value in then.items():
+        if not key.startswith("api."):
+            continue
+        if key.endswith(".request"):
+            ops.append(key[len("api."):-len(".request")])
+        elif value == "called":
+            ops.append(key[len("api."):])
+    return sorted(set(ops))
+
 def _ts(value) -> str:
     return json.dumps(value, ensure_ascii=False)
 
@@ -1890,7 +1933,7 @@ def _branch_title(index: int, branch: dict) -> str:
 #: message — the thing read at that moment — says it (design v4.9, red-check
 #: xxv). One constant: the three renderers print it escaped.
 UNEXPECTED_OPS_MESSAGE = (
-    "declared routes called outside what this method's rows reach — if the "
+    f"declared routes called ({ABSENCE_WINDOW}) outside what this method's rows reach — if the "
     "method makes the call, say so in the row whose act makes it (then "
     "api.<op>: \"called\"); that allows <op> in every row of this method "
     "that does not mention it, so a row that must not make the call says "
@@ -2082,7 +2125,7 @@ def render_test_file(
     lines.append("import { describe, expect, it } from \"vitest\";")
     lines.append("import {")
     red, _gate = unmatched_gate()
-    lines.append("  apiOriginsOf, installFetchMock, partialMismatches, "
+    lines.append("  ROW_TIMEOUT_MS, apiOriginsOf, installFetchMock, partialMismatches, "
                  + ("reportConditionWithoutEffect, " if any(r.control_of for r in rows) else "")
                  + ("" if red else "reportUnmatched, ")
                  + "reportUnmatchedForeign, resolveString, seedState, settle,\n  type RouteSpec,")
@@ -2206,7 +2249,17 @@ def _render_branch(
     call_args = ", ".join(args)
     act_start = len(out)
     out.append(f"      await (h.vm as any).{method_name}({call_args});")
-    out.append("      await settle();")
+    # A control's "never hit" is what it observes, not what it waits for:
+    # the row without its condition is expected NOT to make the call, so it
+    # is read over the quiet window like any absence — and a control that
+    # waited EXPECT_MS for it would spend that on every condition that works.
+    # The cost of the window, as for every absence: under load, a view model
+    # that sends the call later than QUIET_MS after the act reads as "the
+    # condition changes the outcome" when it does not, and the
+    # condition_without_effect notice is not printed.
+    expected = [] if row.control_of else _expected_ops(when, then)
+    out.append(f"      await settle({{ rec, expect: [{', '.join(_ts(o) for o in expected)}] }});" if expected
+               else "      await settle();")
 
     # Reach, before the `then` assertions: a route that was never called
     # makes every data assertion below ambiguous, and reporting the cause
@@ -2282,7 +2335,7 @@ def _render_branch(
     out.append("    } finally {")
     out.append("      rec.restore();")
     out.append("    }")
-    out.append("  });")
+    out.append("  }, ROW_TIMEOUT_MS);")
     return out
 
 
@@ -2400,20 +2453,43 @@ export function apiOriginsOf(harnessModule: unknown): string[] | null {
 /** Stub globalThis.fetch: serve each route's (possibly overridden) named
  * scenario and record request bodies. Unmatched paths get an unmistakable
  * 599 so incidental un-declared calls surface instead of hanging. */
-/** Responses a scenario's `delayMs` is holding back. `settle` waits for
- * every one of them: a row's `then` reads the state after they arrived. */
-const pendingDeliveries = new Set<Promise<void>>();
-/** When the last of them arrived (ms). A view model often sends its next
- * request a moment after one lands; between the two nothing is pending, and
- * a settle that looked only at the count returned in that gap. */
-let lastDeliveryAt = 0;
+/** What the installed fetch stub is doing, for `settle`: the requests it
+ * holds (every one, from the call to the Response it hands back — a
+ * scenario's `delayMs` included) and when a request last arrived or was
+ * answered. One per installFetchMock, so a response still due from an
+ * earlier row's stub cannot count in this one. */
+interface Traffic {
+  inFlight: number;
+  lastActivityAt: number;
+}
+let traffic: Traffic = { inFlight: 0, lastActivityAt: 0 };
+
+/** How long `settle` waits, with no request in flight, after the last one
+ * arrived or was answered — the window every "not called" and "no
+ * undeclared call" in a row is claimed over. Declared, not measured: the
+ * same on every face, and a machine's speed does not move it. */
+export const QUIET_MS = 400;
+
+/** How long after the act `settle` waits, once nothing is in flight and the
+ * quiet has held, for an op the row expects that has not been called yet —
+ * past it the row fails naming the op. A request in flight is waited for up
+ * to SETTLE_DELAY_BUDGET_MS instead: this is the view model's time to SEND,
+ * which `delayMs` says nothing about. Declared, the same on every face; its
+ * source is a consumer harness that waits on a condition and fails at 10 s,
+ * 20 of 20 at load average 118-854. */
+export const EXPECT_MS = 10000;
 
 /** `mock serve` sleeps `min(delayMs, 30000)`: the same cap here. */
 export const DELAY_CAP_MS = 30000;
-/** How long `settle` waits for delayed responses in all — one capped delay
- * and a margin. A chain of delays past it fails the row by name rather than
- * letting `then` read the state before they arrived. */
+/** How long `settle` waits in all — one capped delay and a margin. Work
+ * still in flight past it fails the row by name rather than letting `then`
+ * read the state before it landed. */
 export const SETTLE_DELAY_BUDGET_MS = DELAY_CAP_MS + 1000;
+/** How long a generated row may run: it settles twice (after the harness is
+ * built, after the act), each up to the budget, and a margin. vitest's own
+ * default (5000 ms) would end a row that waits for its work first — with
+ * "Test timed out", naming nothing. */
+export const ROW_TIMEOUT_MS = 2 * SETTLE_DELAY_BUDGET_MS + 5000;
 
 /** The scenario's `delayMs` in ms — 0 when absent or not a positive number,
  * at most DELAY_CAP_MS. */
@@ -2430,79 +2506,82 @@ export function installFetchMock(
   const calls: RecordedCall[] = [];
   const compiled = routes.map((r) => ({ ...r, re: new RegExp(r.pattern) }));
   const own = apiOrigins === null ? null : new Set(apiOrigins.map((o) => new URL(o).origin));
+  const mine: Traffic = { inFlight: 0, lastActivityAt: Date.now() };
+  traffic = mine;
 
   globalThis.fetch = (async (input: unknown, init?: RequestInit) => {
-    const url =
-      typeof input === "string"
-        ? input
-        : input instanceof URL
-          ? input.toString()
-          : (input as Request).url;
-    const path = url.replace(/^https?:\\/\\/[^/]+/, "").split("?")[0];
-    // P2e(a), v4.19: a relative URL is the app's; an absolute one is when its
-    // origin is in `apiOrigins`, or — none declared — cannot be told apart and
-    // counts as the app's. Only the app's requests are matched against routes:
-    // another host's POST to the same path is not served a scenario.
-    const origin = /^https?:\\/\\//.test(url) ? new URL(url).origin : "";
-    const foreign = origin !== "" && own !== null && !own.has(origin);
-    const method = (
-      init?.method ??
-      (typeof input === "object" && input !== null && "method" in (input as object)
-        ? (input as Request).method
-        : "GET")
-    ).toUpperCase();
+    // In flight from here to the Response handed back, delayed or not.
+    mine.inFlight += 1;
+    mine.lastActivityAt = Date.now();
+    try {
+      const url =
+        typeof input === "string"
+          ? input
+          : input instanceof URL
+            ? input.toString()
+            : (input as Request).url;
+      const path = url.replace(/^https?:\\/\\/[^/]+/, "").split("?")[0];
+      // P2e(a), v4.19: a relative URL is the app's; an absolute one is when its
+      // origin is in `apiOrigins`, or — none declared — cannot be told apart and
+      // counts as the app's. Only the app's requests are matched against routes:
+      // another host's POST to the same path is not served a scenario.
+      const origin = /^https?:\\/\\//.test(url) ? new URL(url).origin : "";
+      const foreign = origin !== "" && own !== null && !own.has(origin);
+      const method = (
+        init?.method ??
+        (typeof input === "object" && input !== null && "method" in (input as object)
+          ? (input as Request).method
+          : "GET")
+      ).toUpperCase();
 
-    for (const r of foreign ? [] : compiled) {
-      if (r.method === method && r.re.test(path)) {
-        let body: unknown;
-        if (init?.body !== undefined) {
-          try {
-            body = JSON.parse(init.body as string);
-          } catch {
-            body = init.body;
+      for (const r of foreign ? [] : compiled) {
+        if (r.method === method && r.re.test(path)) {
+          let body: unknown;
+          if (init?.body !== undefined) {
+            try {
+              body = JSON.parse(init.body as string);
+            } catch {
+              body = init.body;
+            }
           }
-        }
-        calls.push({ op: r.op, method, path, body });
-        const name = scenarioOverrides[r.op] ?? r.scenario;
-        const sc = r.scenarios[name];
-        if (!sc) {
-          throw new Error(
-            `branch-runtime: scenario '${name}' missing for op '${r.op}'`
+          calls.push({ op: r.op, method, path, body });
+          const name = scenarioOverrides[r.op] ?? r.scenario;
+          const sc = r.scenarios[name];
+          if (!sc) {
+            throw new Error(
+              `branch-runtime: scenario '${name}' missing for op '${r.op}'`
+            );
+          }
+          // Same shape the project's own mock server serves: the declared
+          // content type, and an empty body when the scenario has none (a
+          // file-backed response names a file this runtime cannot embed —
+          // status and headers are still faithful).
+          const contentType =
+            typeof sc.contentType === "string" ? sc.contentType : "application/json";
+          // `delayMs`: the whole response arrives that long after the request,
+          // as `mock serve` sends it (capped the same). Pending until then, so
+          // `settle` waits for it and the arrival order follows the delays.
+          const delay = scenarioDelayMs(sc.delayMs);
+          if (delay > 0) {
+            await new Promise<void>((resolve) => setTimeout(resolve, delay));
+          }
+          return new Response(
+            sc.body === undefined ? null : JSON.stringify(sc.body),
+            { status: sc.status, headers: { "Content-Type": contentType } }
           );
         }
-        // Same shape the project's own mock server serves: the declared
-        // content type, and an empty body when the scenario has none (a
-        // file-backed response names a file this runtime cannot embed —
-        // status and headers are still faithful).
-        const contentType =
-          typeof sc.contentType === "string" ? sc.contentType : "application/json";
-        // `delayMs`: the whole response arrives that long after the request,
-        // as `mock serve` sends it (capped the same). Pending until then, so
-        // `settle` waits for it and the arrival order follows the delays.
-        const delay = scenarioDelayMs(sc.delayMs);
-        if (delay > 0) {
-          const delivered = new Promise<void>((resolve) => setTimeout(resolve, delay));
-          pendingDeliveries.add(delivered);
-          try {
-            await delivered;
-          } finally {
-            pendingDeliveries.delete(delivered);
-            lastDeliveryAt = Date.now();
-          }
-        }
-        return new Response(
-          sc.body === undefined ? null : JSON.stringify(sc.body),
-          { status: sc.status, headers: { "Content-Type": contentType } }
-        );
       }
+      calls.push({ op: "(unmatched)", method, path, body: undefined, origin, foreign });
+      return new Response(
+        JSON.stringify({
+          error: { code: "unmocked_endpoint", message: `${method} ${path}` },
+        }),
+        { status: 599, headers: { "Content-Type": "application/json" } }
+      );
+    } finally {
+      mine.inFlight -= 1;
+      mine.lastActivityAt = Date.now();
     }
-    calls.push({ op: "(unmatched)", method, path, body: undefined, origin, foreign });
-    return new Response(
-      JSON.stringify({
-        error: { code: "unmocked_endpoint", message: `${method} ${path}` },
-      }),
-      { status: 599, headers: { "Content-Type": "application/json" } }
-    );
   }) as typeof fetch;
 
 //<<undeclared-op doc>>
@@ -2696,34 +2775,48 @@ export function partialMismatches(
     : [`${label}: expected ${JSON.stringify(expected)}, got ${JSON.stringify(actual)}`];
 }
 
-/** Drain queued macrotasks so fire-and-forget promise chains reach their
- * terminal state — and wait for every response a scenario's `delayMs` is
- * holding back, draining again after each arrival (the view model may send
- * a request of its own once one lands). Past SETTLE_DELAY_BUDGET_MS it
- * throws, naming how long it waited: stopping quietly would let `then` read
- * the state before the responses arrived. */
-export async function settle(turns = 10): Promise<void> {
+/** Wait until the work the act started has landed: no request in flight,
+ * QUIET_MS since a request last arrived or was answered, and — given
+ * `until` — every op in `until.expect` (the row's `when` routes, its
+ * `called`, its `.request`) recorded by `until.rec` since `mark()`. Draining
+ * in 5 ms slices lets fire-and-forget chains and timers run in between; any
+ * activity starts the quiet over, so a chain however deep is waited for as
+ * long as each link follows within QUIET_MS.
+ *
+ * It used to drain ten macrotask turns and look only at responses a
+ * `delayMs` held back: a chain deeper than ten turns, or a view model that
+ * thought a moment before its next request, was read half done — a `then`
+ * red, or worse, an undeclared call not yet recorded when `unexpectedOps`
+ * was checked, a vacuous green.
+ *
+ * It never stops quietly: stopping would let `then` read the state before
+ * the work landed. An expected op still not called once the pipeline is idle
+ * and EXPECT_MS have passed since the act fails naming it; work still in
+ * flight past SETTLE_DELAY_BUDGET_MS fails naming what was in flight. */
+export async function settle(
+  until?: { rec: { countFor(op: string): number }; expect: string[] }
+): Promise<void> {
   const started = Date.now();
   for (;;) {
-    const drainStarted = Date.now();
-    for (let i = 0; i < turns; i += 1) {
-      await new Promise((resolve) => setTimeout(resolve, 0));
-    }
-    // Quiet: nothing pending, and nothing landed while draining.
-    if (pendingDeliveries.size === 0 && lastDeliveryAt < drainStarted) return;
-    const waited = Date.now() - started;
-    if (waited >= SETTLE_DELAY_BUDGET_MS) {
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    const now = Date.now();
+    const missing = until ? until.expect.filter((op) => until.rec.countFor(op) === 0) : [];
+    const quiet = traffic.inFlight === 0 && now - Math.max(traffic.lastActivityAt, started) >= QUIET_MS;
+    if (quiet && missing.length === 0) return;
+    const waited = now - started;
+    if (quiet && waited >= EXPECT_MS) {
       throw new Error(
-        `settle: delayed responses were still arriving after waiting ${waited} ms ` +
-          `(${pendingDeliveries.size} pending; budget ${SETTLE_DELAY_BUDGET_MS} ms: one delayMs ` +
-          `of at most ${DELAY_CAP_MS} and a margin) — the row's then would read the state before they arrived`
+        `settle: the row expects ${missing.join(", ")}, never called within EXPECT_MS (${EXPECT_MS} ms) ` +
+          `after the act, 0 request(s) in flight (waited ${waited} ms)`
       );
     }
-    if (pendingDeliveries.size > 0) {
-      await Promise.race([
-        Promise.all([...pendingDeliveries]),
-        new Promise<void>((resolve) => setTimeout(resolve, SETTLE_DELAY_BUDGET_MS - waited)),
-      ]);
+    if (waited >= SETTLE_DELAY_BUDGET_MS) {
+      throw new Error(
+        `settle: still busy after ${waited} ms — ${traffic.inFlight} request(s) in flight` +
+          (missing.length > 0 ? `; the row expects ${missing.join(", ")}, never called` : "") +
+          ` (budget ${SETTLE_DELAY_BUDGET_MS} ms: one delayMs of at most ${DELAY_CAP_MS} and a margin)` +
+          " — the row's then would read the state before the work landed"
+      );
     }
   }
 }
@@ -3164,7 +3257,10 @@ def _render_kotlin_branch(
     call_args = ", ".join(args)
     act_start = len(out)
     out.append(f"      h.invoke({_kt_str(method_name)}{', ' + call_args if call_args else ''})")
-    out.append("      h.settle()")
+    # A control reads its "never hit" over the quiet window (see the web emitter).
+    expected = [] if row.control_of else _expected_ops(when, then)
+    out.append(f"      settleUntilAnswered(h, rec, listOf({', '.join(_kt_str(o) for o in expected)}))"
+               if expected else "      h.settle()")
 
     # See the web emitter: reach is asserted before the `then` entries so an
     # unreached route is reported as such, not as a wrong value.
@@ -3293,23 +3389,41 @@ data class RouteSpec(
   val delays: Map<String, Long> = emptyMap(),
 )
 
-/** Responses a scenario's `delayMs` is holding back: when each is due.
- * `settle()` waits past the last one, so a row's `then` reads the state after
- * they arrived. */
+/** What the mock server is doing, for `settle()`: every request, with when
+ * it arrived and when its response is due (now, or after a scenario's
+ * `delayMs`). `settle()` waits until none is still due and none arrived or
+ * came due for QUIET_MS. The server's side only: once a response is due,
+ * the rest of its way to the view model is inside that quiet window. */
 object BranchDeliveries {
   /** `mock serve` sleeps `min(delayMs, 30000)`: the same cap here. */
   const val CAP_MS = 30000L
-  /** How long `settle()` waits for delayed responses in all — one capped
-   * delay and a margin. */
+  /** How long `settle()` waits in all — one capped delay and a margin. */
   const val SETTLE_BUDGET_MS = CAP_MS + 1000L
-  private val due = mutableListOf<Long>()
-  @Synchronized fun schedule(delayMs: Long) { due.add(System.currentTimeMillis() + delayMs) }
-  @Synchronized fun pending(now: Long): Int = due.count { it > now }
-  @Synchronized fun lastDue(): Long = due.maxOrNull() ?: 0L
-  /** Did one arrive in (from, to]? A view model often sends its next request
-   * a moment after one lands; between the two nothing is pending, and a
-   * settle that looked only at the count returned in that gap. */
-  @Synchronized fun arrivedBetween(from: Long, to: Long): Boolean = due.any { it in (from + 1)..to }
+  /** How long `settle()` waits, with nothing due, after the last request
+   * arrived or came due — the window every "not called" and "no undeclared
+   * call" in a row is claimed over. Declared, not measured: the same on
+   * every face, and a machine's speed does not move it. */
+  const val QUIET_MS = 400L
+  /** How long after the act `settleUntilAnswered` waits, once nothing is due
+   * and the quiet has held, for an op the row expects that has not been
+   * called yet. A response still due is waited for up to SETTLE_BUDGET_MS
+   * instead: this is the view model's time to SEND, which `delayMs` says
+   * nothing about. Declared, the same on every face; its source is a
+   * consumer harness that waits on a condition and fails at 10 s, 20 of 20
+   * at load average 118-854. */
+  const val EXPECT_MS = 10000L
+  private class Delivery(val arrived: Long, val due: Long)
+  private val deliveries = mutableListOf<Delivery>()
+  /** A new test's server: an earlier test's requests do not count. */
+  @Synchronized fun reset() { deliveries.clear() }
+  @Synchronized fun schedule(delayMs: Long) {
+    val now = System.currentTimeMillis()
+    deliveries.add(Delivery(now, now + delayMs))
+  }
+  @Synchronized fun pending(now: Long): Int = deliveries.count { it.due > now }
+  /** When a request last arrived or a response last came due, up to now. */
+  @Synchronized fun lastActivity(now: Long): Long =
+    deliveries.maxOfOrNull { if (it.due <= now) maxOf(it.arrived, it.due) else it.arrived } ?: 0L
 }
 
 data class RecordedCall(val op: String, val method: String, val path: String, val body: String?)
@@ -3603,6 +3717,7 @@ fun runBranchTest(
   val dispatcher = StandardTestDispatcher()
   Dispatchers.setMain(dispatcher)
   val recorder = Recorder(routes.map { it.op }.toSet())
+  BranchDeliveries.reset()
   val server = MockWebServer()
   server.dispatcher = object : Dispatcher() {
     override fun dispatch(request: RecordedRequest): MockResponse {
@@ -3619,16 +3734,18 @@ fun runBranchTest(
             .setHeader("Content-Type", sc.third)
             .setBody(sc.second)
           val delay = (r.delays[name] ?: 0L).coerceIn(0L, BranchDeliveries.CAP_MS)
+          // Every request counts for `settle()`, delayed or not.
+          BranchDeliveries.schedule(delay)
           if (delay > 0L) {
             // The whole response, headers included, waits: `mock serve`
             // sleeps before it sends anything.
-            BranchDeliveries.schedule(delay)
             response.setHeadersDelay(delay, TimeUnit.MILLISECONDS)
           }
           return response
         }
       }
       recorder.calls.add(RecordedCall("(unmatched)", method, path, null))
+      BranchDeliveries.schedule(0L)
       return MockResponse().setResponseCode(599)
         .setHeader("Content-Type", "application/json")
         .setBody("{\\"error\\":{\\"code\\":\\"unmocked_endpoint\\"}}")
@@ -3650,6 +3767,39 @@ fun runBranchTest(
   }
 }
 
+/** In place of `h.settle()` after the act, for a row that expects ops (its
+ * `when` routes, its `called`, its `.request`): settle — through
+ * `h.settle()`, so a harness's own override of it runs too — until `rec` has
+ * recorded every one since `mark()` and no response is still due. A view
+ * model that sends its request late is waited for rather than read as never
+ * having sent it. It never stops quietly: an op still not called once
+ * nothing is due and EXPECT_MS have passed since the act fails naming it,
+ * and a response still due past the budget fails naming that. */
+fun settleUntilAnswered(h: BranchHarness, rec: Recorder, ops: List<String>) {
+  val started = System.currentTimeMillis()
+  while (true) {
+    h.settle()
+    val now = System.currentTimeMillis()
+    val missing = ops.filter { rec.countFor(it) == 0 }
+    val due = BranchDeliveries.pending(now)
+    if (missing.isEmpty() && due == 0) return
+    val waited = now - started
+    if (due == 0 && waited >= BranchDeliveries.EXPECT_MS) {
+      throw AssertionError(
+        "settle: the row expects " + missing.joinToString(", ") + ", never called within EXPECT_MS (" +
+          BranchDeliveries.EXPECT_MS + " ms) after the act, 0 request(s) in flight (waited " + waited + " ms)")
+    }
+    if (waited >= BranchDeliveries.SETTLE_BUDGET_MS) {
+      throw AssertionError(
+        "settle: still busy after " + waited + " ms — " + due + " response(s) still due" +
+          (if (missing.isEmpty()) "" else "; the row expects " + missing.joinToString(", ") + ", never called") +
+          " (budget " + BranchDeliveries.SETTLE_BUDGET_MS + " ms: one delayMs of at most " +
+          BranchDeliveries.CAP_MS + " and a margin) — the row's then would read the state before " +
+          "the work landed")
+    }
+  }
+}
+
 /** Reflection base: readField / setState / invoke work on any VM whose state
  * lives in fields, StateFlows, or a `_data` MutableStateFlow<data class>. */
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -3661,36 +3811,33 @@ abstract class BaseBranchHarness(
   override fun settle() {
     // Real HTTP I/O (MockWebServer + OkHttp threads) completes off the test
     // dispatcher; the coroutine then resumes ON it. Interleave virtual-time
-    // draining with short real-time waits until the pipeline is quiet — and
-    // wait past every response a scenario's `delayMs` is holding back,
-    // draining again after they arrive (the view model may send a request of
-    // its own once one lands). Past the budget it fails by name, with how
-    // long it waited: stopping quietly would let `then` read the state
-    // before the responses arrived.
+    // draining with 5 ms real-time waits until the work the act started has
+    // landed: no response still due (a scenario's `delayMs` included), and
+    // QUIET_MS since a request last arrived or came due — any activity starts
+    // the quiet over, so a view model that sends its next request a moment
+    // after one lands is waited for, link by link.
+    //
+    // It used to drain a fixed 60 slices and look only at delayed responses:
+    // a chain longer than that was read half done — a `then` red, or worse,
+    // an undeclared call not yet recorded when `unexpectedOps` was checked, a
+    // vacuous green. Past the budget it fails by name, with how long it
+    // waited: stopping quietly would let `then` read the state before the
+    // work landed.
     val started = System.currentTimeMillis()
     while (true) {
-      val drainStarted = System.currentTimeMillis()
-      repeat(60) {
-        dispatcher.scheduler.advanceUntilIdle()
-        Thread.sleep(5)
-      }
       dispatcher.scheduler.advanceUntilIdle()
-      // Quiet: nothing pending, and nothing landed while draining.
+      Thread.sleep(5)
+      dispatcher.scheduler.advanceUntilIdle()
       val now = System.currentTimeMillis()
-      if (BranchDeliveries.pending(now) == 0 && !BranchDeliveries.arrivedBetween(drainStarted, now)) return
-      while (true) {
-        val waited = System.currentTimeMillis() - started
-        if (waited >= BranchDeliveries.SETTLE_BUDGET_MS) {
-          throw AssertionError(
-            "settle: delayed responses were still arriving after waiting " + waited + " ms (" +
-              BranchDeliveries.pending(System.currentTimeMillis()) + " pending; budget " +
-              BranchDeliveries.SETTLE_BUDGET_MS + " ms: one delayMs of at most " +
-              BranchDeliveries.CAP_MS + " and a margin) — the row's then would read the " +
-              "state before they arrived")
-        }
-        if (BranchDeliveries.pending(System.currentTimeMillis()) == 0) break
-        dispatcher.scheduler.advanceUntilIdle()
-        Thread.sleep(5)
+      val quietFor = now - maxOf(BranchDeliveries.lastActivity(now), started)
+      if (BranchDeliveries.pending(now) == 0 && quietFor >= BranchDeliveries.QUIET_MS) return
+      val waited = now - started
+      if (waited >= BranchDeliveries.SETTLE_BUDGET_MS) {
+        throw AssertionError(
+          "settle: still busy after " + waited + " ms — " + BranchDeliveries.pending(now) +
+            " response(s) still due (budget " + BranchDeliveries.SETTLE_BUDGET_MS +
+            " ms: one delayMs of at most " + BranchDeliveries.CAP_MS + " and a margin) — the row's " +
+            "then would read the state before the work landed")
       }
     }
   }
@@ -4168,7 +4315,10 @@ def _render_swift_branch(
     call_args = ", ".join(args)
     act_start = len(out)
     out.append(f"      h.invoke({_swift_str(method_name)}, args: [{call_args}])")
-    out.append("      h.settle()")
+    # A control reads its "never hit" over the quiet window (see the web emitter).
+    expected = [] if row.control_of else _expected_ops(when, then)
+    out.append(f"      settleUntilAnswered(h, rec, [{', '.join(_swift_str(o) for o in expected)}])"
+               if expected else "      h.settle()")
 
     # See the web emitter: reach is asserted before the `then` entries so an
     # unreached route is reported as such, not as a wrong value.
@@ -4266,8 +4416,11 @@ nonisolated struct RouteSpec {
   var delays: [String: Int] = [:]
 }
 
-/// Responses a scenario's `delayMs` is holding back. `settle()` waits for
-/// every one: a row's `then` reads the state after they arrived.
+/// What the protocol is doing, for `settle()`: the requests it holds (every
+/// one, from startLoading to the response handed to the client — a
+/// scenario's `delayMs` included) and when a request last arrived or was
+/// answered. `settle()` waits until none is held and none arrived or was
+/// answered for `quietMs`.
 nonisolated final class BranchDeliveries {
   nonisolated(unsafe) static let shared = BranchDeliveries()
   // Instance constants, not statics: a `static let` of a Sendable type is a
@@ -4275,20 +4428,42 @@ nonisolated final class BranchDeliveries {
   // statics follow without it.
   /// `mock serve` sleeps `min(delayMs, 30000)`: the same cap here.
   let capMs = 30000
-  /// How long `settle()` waits for delayed responses in all — one capped
-  /// delay and a margin.
+  /// How long `settle()` waits in all — one capped delay and a margin.
   var settleBudgetMs: Int { capMs + 1000 }
+  /// How long `settle()` waits, with nothing held, after a request last
+  /// arrived or was answered — the window every "not called" and "no
+  /// undeclared call" in a row is claimed over. Declared, not measured: the
+  /// same on every face (QUIET_MS), and a machine's speed does not move it.
+  let quietMs = 400
+  /// How long after the act `settleUntilAnswered` waits, once nothing is
+  /// held and the quiet has held, for an op the row expects that has not
+  /// been called yet. A request still held is waited for up to
+  /// `settleBudgetMs` instead: this is the view model's time to SEND, which
+  /// `delayMs` says nothing about. Declared, the same on every face
+  /// (EXPECT_MS); its source is a consumer harness that waits on a
+  /// condition and fails at 10 s, 20 of 20 at load average 118-854.
+  let expectMs = 10000
   private let lock = NSLock()
+  private var epoch = 0
   private var count = 0
-  private var lastEnd = Date.distantPast
-  func begin() { lock.lock(); count += 1; lock.unlock() }
-  func end() { lock.lock(); count -= 1; lastEnd = Date(); lock.unlock() }
+  private var lastActivityAt = Date.distantPast
+  /// A new test: an earlier test's requests do not count, even if one of
+  /// them finishes late.
+  func reset() {
+    lock.lock(); epoch += 1; count = 0; lastActivityAt = Date(); lock.unlock()
+  }
+  /// A request arrived; hand the ticket back to `end` when it is answered.
+  func begin() -> Int {
+    lock.lock(); defer { lock.unlock() }
+    count += 1; lastActivityAt = Date(); return epoch
+  }
+  func end(ticket: Int) {
+    lock.lock(); defer { lock.unlock() }
+    guard ticket == epoch else { return }
+    count -= 1; lastActivityAt = Date()
+  }
   var pending: Int { lock.lock(); defer { lock.unlock() }; return count }
-  /// When the last of them arrived (or was cancelled). A view model often
-  /// sends its next request a moment after one lands; between the two
-  /// nothing is pending, and a settle that looked only at the count
-  /// returned in that gap.
-  var lastDelivery: Date { lock.lock(); defer { lock.unlock() }; return lastEnd }
+  var lastActivity: Date { lock.lock(); defer { lock.unlock() }; return lastActivityAt }
 }
 
 // 🔻 `nonisolated` HERE TOO, AND FOR THE SAME REASON ONE LAYER DOWN. The
@@ -4524,19 +4699,29 @@ nonisolated final class BranchURLProtocol: URLProtocol {
   /// not with a Timer block, which is @Sendable and cannot capture `self`
   /// without a warning in every Swift mode.
   private var delayed: (Int, String, String)?
+  /// Held from startLoading until the response is handed to the client (or
+  /// the load is cancelled): the request is in flight for `settle()` until
+  /// then, delayed or not.
+  private var ticket: Int?
+  private func answered() {
+    guard let t = ticket else { return }
+    ticket = nil
+    BranchDeliveries.shared.end(ticket: t)
+  }
   @objc private func deliverDelayed() {
     guard let response = delayed else { return }
     delayed = nil
     respond(status: response.0, body: response.1, contentType: response.2)
-    BranchDeliveries.shared.end()
+    answered()
   }
   override func stopLoading() {
-    // Cancelled before it arrived: it is no longer pending.
-    guard delayed != nil else { return }
-    NSObject.cancelPreviousPerformRequests(
-      withTarget: self, selector: #selector(deliverDelayed), object: nil)
-    delayed = nil
-    BranchDeliveries.shared.end()
+    // Cancelled before it arrived: it is no longer in flight.
+    if delayed != nil {
+      NSObject.cancelPreviousPerformRequests(
+        withTarget: self, selector: #selector(deliverDelayed), object: nil)
+      delayed = nil
+    }
+    answered()
   }
 
   private static func bodyData(of request: URLRequest) -> Data? {
@@ -4565,6 +4750,7 @@ nonisolated final class BranchURLProtocol: URLProtocol {
     // Only the app's requests are matched against routes: another host's
     // request to the same path is not served a scenario (v4.19).
     let foreign = branchOriginClass(request.url, Self.apiOrigin) == .foreign
+    ticket = BranchDeliveries.shared.begin()
 
     for route in (foreign ? [] : Self.routes) {
       guard route.method == method,
@@ -4577,16 +4763,17 @@ nonisolated final class BranchURLProtocol: URLProtocol {
         client?.urlProtocol(self, didFailWithError: NSError(
           domain: "branch-runtime", code: 1,
           userInfo: [NSLocalizedDescriptionKey: "scenario '\\(name)' missing for op '\\(route.op)'"]))
+        answered()
         return
       }
       let delay = min(max(route.delays[name] ?? 0, 0), BranchDeliveries.shared.capMs)
       if delay > 0 {
-        BranchDeliveries.shared.begin()
         delayed = scenario
         perform(#selector(deliverDelayed), with: nil, afterDelay: Double(delay) / 1000.0,
                 inModes: [.common])
       } else {
         respond(status: scenario.0, body: scenario.1, contentType: scenario.2)
+        answered()
       }
       return
     }
@@ -4594,6 +4781,7 @@ nonisolated final class BranchURLProtocol: URLProtocol {
                                        origin: branchOriginString(request.url), foreign: foreign))
     respond(status: 599, body: "{\\"error\\":{\\"code\\":\\"unmocked_endpoint\\"}}",
             contentType: "application/json")
+    answered()
   }
 
   private func respond(status: Int, body: String, contentType: String) {
@@ -4727,6 +4915,7 @@ func runBranchTest(
   block: (BranchHarness, Recorder) throws -> Void
 ) rethrows {
   installBranchURLInterception()
+  BranchDeliveries.shared.reset()
   let recorder = Recorder(routeOps: Set(routes.map { $0.op }))
   BranchURLProtocol.routes = routes
   BranchURLProtocol.overrides = overrides
@@ -4852,36 +5041,68 @@ class BaseBranchHarness: BranchHarness {
 
   func settle() {
     // Task { @MainActor } continuations land on the main queue; URLProtocol
-    // work completes on URLSession's queues. Drain the main run loop with
-    // short real-time slices until the pipeline is quiet — and wait for
-    // every response a scenario's `delayMs` is holding back, draining again
-    // after they arrive (the view model may send a request of its own once
-    // one lands). Past the budget it fails the test by name, with how long
+    // work completes on URLSession's queues. Drain the main run loop in 5 ms
+    // slices until the work the act started has landed: no request held by
+    // the protocol (a scenario's `delayMs` included), and `quietMs` since a
+    // request last arrived or was answered — any activity starts the quiet
+    // over, so a view model that sends its next request a moment after one
+    // lands is waited for, link by link.
+    //
+    // It used to drain a fixed 80 slices and look only at delayed responses:
+    // a chain longer than that was read half done — a `then` red, or worse,
+    // an undeclared call not yet recorded when `unexpectedOps` was checked, a
+    // vacuous green. Past the budget it fails the test by name, with how long
     // it waited: stopping quietly would let `then` read the state before the
-    // responses arrived.
+    // work landed.
+    let deliveries = BranchDeliveries.shared
     let started = Date()
     while true {
-      let drainStarted = Date()
-      for _ in 0..<80 {
-        RunLoop.main.run(until: Date().addingTimeInterval(0.005))
-      }
-      // Quiet: nothing pending, and nothing landed while draining.
-      if BranchDeliveries.shared.pending == 0 && BranchDeliveries.shared.lastDelivery < drainStarted {
+      RunLoop.main.run(until: Date().addingTimeInterval(0.005))
+      let now = Date()
+      let quietFor = Int(now.timeIntervalSince(max(deliveries.lastActivity, started)) * 1000)
+      if deliveries.pending == 0 && quietFor >= deliveries.quietMs { return }
+      let waited = Int(now.timeIntervalSince(started) * 1000)
+      if waited >= deliveries.settleBudgetMs {
+        XCTFail("settle: still busy after \\(waited) ms — \\(deliveries.pending) request(s) in flight "
+                + "(budget \\(deliveries.settleBudgetMs) ms: one delayMs of at most "
+                + "\\(deliveries.capMs) and a margin) — the row's then would read the state before "
+                + "the work landed")
         return
       }
-      while true {
-        let waited = Int(Date().timeIntervalSince(started) * 1000)
-        if waited >= BranchDeliveries.shared.settleBudgetMs {
-          XCTFail("settle: delayed responses were still arriving after waiting \\(waited) ms "
-                  + "(\\(BranchDeliveries.shared.pending) pending; budget "
-                  + "\\(BranchDeliveries.shared.settleBudgetMs) ms: one delayMs of at most "
-                  + "\\(BranchDeliveries.shared.capMs) and a margin) — the row's then would read the "
-                  + "state before they arrived")
-          return
-        }
-        if BranchDeliveries.shared.pending == 0 { break }
-        RunLoop.main.run(until: Date().addingTimeInterval(0.005))
-      }
+    }
+  }
+}
+
+/// In place of `h.settle()` after the act, for a row that expects ops (its
+/// `when` routes, its `called`, its `.request`): settle — through
+/// `h.settle()`, so a harness's own override of it runs too — until `rec`
+/// has recorded every one since `mark()` and no request is held. A view
+/// model that sends its request late is waited for rather than read as
+/// never having sent it. It never stops quietly: an op still not called once
+/// nothing is held and `expectMs` have passed since the act fails naming it,
+/// and a request still held past the budget fails naming that.
+func settleUntilAnswered(_ h: BranchHarness, _ rec: Recorder, _ ops: [String]) {
+  let deliveries = BranchDeliveries.shared
+  let started = Date()
+  while true {
+    h.settle()
+    let missing = ops.filter { rec.countFor($0) == 0 }
+    let held = deliveries.pending
+    if missing.isEmpty && held == 0 { return }
+    let waited = Int(Date().timeIntervalSince(started) * 1000)
+    if held == 0 && waited >= deliveries.expectMs {
+      XCTFail("settle: the row expects \\(missing.joined(separator: ", ")), never called within "
+              + "EXPECT_MS (\\(deliveries.expectMs) ms) after the act, 0 request(s) in flight "
+              + "(waited \\(waited) ms)")
+      return
+    }
+    if waited >= deliveries.settleBudgetMs {
+      XCTFail("settle: still busy after \\(waited) ms — \\(held) request(s) in flight"
+              + (missing.isEmpty ? "" : "; the row expects \\(missing.joined(separator: ", ")), never called")
+              + " (budget \\(deliveries.settleBudgetMs) ms: one delayMs of at most "
+              + "\\(deliveries.capMs) and a margin) — the row's then would read the state before "
+              + "the work landed")
+      return
     }
   }
 }

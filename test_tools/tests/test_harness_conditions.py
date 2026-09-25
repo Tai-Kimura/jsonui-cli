@@ -313,7 +313,12 @@ class TestTheWebTestRuns:
              "then": {"data.status": "ready", "data.me": "loaded"}}]
         rows = _run_summary(_summary(tmp_path, rows=rows_spec))
         ok, why = rows[1]
-        assert not ok and "route 'getAccount' declared in when was never hit" in why, rows
+        # The row expects getAccount (a `when` route), so settle waits for it
+        # — and, once nothing is in flight, EXPECT_MS after the act names it.
+        # (The row's own "route 'getAccount' declared in when was never hit"
+        # follows it; settle speaks first, with the window it waited.)
+        assert not ok and ("the row expects getAccount, never called within EXPECT_MS "
+                           "(10000 ms) after the act, 0 request(s) in flight") in why, rows
 
     def test_control_arranged_after_the_harness_is_built_is_not_seen(self, tmp_path):
         """The ORDER is the claim: move the arrangement below createHarness()
