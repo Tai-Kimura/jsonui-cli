@@ -1618,7 +1618,7 @@ def cmd_contracts_baseline(args):
 
     Design §6.1 P3c. No file: write the current entries. A file: write only
     what it AND the current run hold. The tool never adds an entry; a new one
-    is closed (jsonui-define Task 6) or added by hand, where the diff shows it.
+    is closed (Task 6 of the define agent) or added by hand, where the diff shows it.
 
     Nothing is written while the run holds what cannot be baselined (the gate
     fails on it whatever the file says): under a row that could not be

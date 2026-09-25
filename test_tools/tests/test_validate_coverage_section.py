@@ -131,6 +131,23 @@ class TestXxxiAnnouncing:
         assert section[-1].startswith("coverage gate version not declared"), section
         assert not any(NOTICE_HEAD in line for line in section)
 
+    @pytest.mark.parametrize("gate, line", [
+        ("withdrawn", 'coverage gate withdrawn (VALIDATE_GATE_FROM = "withdrawn")'),
+        ("1.8", 'coverage gate version unreadable (VALIDATE_GATE_FROM = "1.8") — not a '
+                "release number: this build announces no release and does not gate"),
+    ])
+    def test_withdrawn_or_unreadable_says_so_and_does_not_fail(self, tmp_path, validate,
+                                                               gate, line):
+        # The project is uncovered: at BELOW a gate would fail it (rc 1).
+        root = _uncovered(tmp_path)
+        rc, out = validate(root, gate=gate)
+        rc_without, _ = validate(root, "--no-coverage-check", gate=gate)
+        assert rc == rc_without == 0, out
+        assert "Coverage:" not in _summary(out)
+        section = _section(out)
+        assert section[-1] == line, section
+        assert not any(NOTICE_HEAD in l or l.startswith("validate gates on") for l in section)
+
     def test_the_numbers_are_the_coverage_commands_own(self, tmp_path, validate):
         root = _uncovered(tmp_path)
         report = cc.run_coverage(root)
@@ -222,6 +239,21 @@ class TestTheGateVersion:
     def test_unset_is_never_on(self, monkeypatch):
         monkeypatch.setattr(cc, "VALIDATE_GATE_FROM", None)
         assert not cc.gate_is_on(__version__) and not cc.gate_is_on("999.0.0")
+
+    # A literal that is not a release number never gates, however far the
+    # running version is past it. `version_key` read "withdrawn" as () and "1.8"
+    # as (1, 8) — prefixes every version is at or above, so each of these was
+    # ON (ee, 2026-09-25). "1.8.l20" read as 1.8.20.
+    @pytest.mark.parametrize("literal, state", [
+        ("withdrawn", "withdrawn"), ("next", "unreadable"), ("1.8", "unreadable"),
+        ("1.8.l20", "unreadable"), ("v1.8.120", "unreadable"), ("1.8.120rc1", "unreadable")])
+    def test_a_literal_that_is_not_a_release_never_gates(self, literal, state):
+        assert cc.gate_state(literal) == state
+        assert not cc.gate_is_on("999.0.0", literal)
+        assert not cc.gate_is_on("1.8.119", literal)
+
+    def test_control_a_release_number_is_one(self):
+        assert cc.gate_state("1.8.120") == "release" and cc.gate_is_on("1.8.120", "1.8.120")
 
     def test_the_shipped_value_is_a_literal_or_unset(self):
         # Whatever a release sets, it is written, not computed (see the module).

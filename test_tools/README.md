@@ -124,7 +124,7 @@ per platform:
 
 ```
 coverage: web units 2 · statuses required 12 · row 5 · excluded 1 · uncovered 6 · not evaluated 0 → exit 1 (uncovered) · baselined 0 (matched 0 · new 6 · stale 0) — no baseline file: every entry is new
-from jsonui-cli <next release>, validate fails on contracts coverage entries not in the baseline — close them (jsonui-define Task 6), or record the current ones once with `jsonui-test contracts baseline`; see the release note
+from jsonui-cli <next release>, validate fails on contracts coverage entries not in the baseline — close them (Task 6 of the define agent), or record the current ones once with `jsonui-test contracts baseline`; see the release note
 ```
 
 with any declaration errors, and what could not be measured by cause
@@ -618,7 +618,7 @@ updated docs/screens/json/contracts_coverage_baseline.json
 removed 2 · kept 10 · new 1 not added (close them, or add by hand)
 ```
 
-Close a new entry with a row (jsonui-define Task 6). Adding it to the file by
+Close a new entry with a row (Task 6 of the define agent). Adding it to the file by
 hand also works, and the tool cannot tell it from the recorded debt — only the
 commit's diff shows it. Once an entry is closed, run the command to drop it:
 a closed entry left in the file is **stale** and fails the gate, because it

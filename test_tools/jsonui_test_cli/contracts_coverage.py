@@ -1299,7 +1299,7 @@ VALIDATE_GATE_FROM: str | None = None
 #: it "fails unless coverage exits 0" would no longer be true).
 VALIDATE_NOTICE = (
     "from jsonui-cli {version}, validate fails on contracts coverage entries not in "
-    "the baseline — close them (jsonui-define Task 6), or record the current ones "
+    "the baseline — close them (Task 6 of the define agent), or record the current ones "
     "once with `jsonui-test contracts baseline`; see the release note")
 
 
@@ -1314,10 +1314,34 @@ def version_key(version: str) -> tuple:
     return tuple(out)
 
 
+#: The one literal besides a release number: the notice withdrawn by hand
+#: (design v4.18, the gate literals' transition table: "任意 → withdrawn …
+#: 門は入らない").
+GATE_WITHDRAWN = "withdrawn"
+#: A release number, all of it: `version_key` reads a part up to its digits and
+#: stops at the first part without one, so "withdrawn", "next" or "1.8" came
+#: out as a PREFIX that every running version is at or above — the gate went
+#: ON for the literal that says it never will (ee, 2026-09-25).
+_GATE_RELEASE = re.compile(r"^\d+\.\d+\.\d+$")
+
+
+def gate_state(gate_from: str | None = None) -> str:
+    """`undeclared`, `withdrawn`, `unreadable` or `release` — only the last
+    ever gates: a literal that is not a release number announces nothing, so
+    it cannot switch a gate on (U5); the tag gate is what turns it red."""
+    gate_from = VALIDATE_GATE_FROM if gate_from is None else gate_from
+    if not gate_from:
+        return "undeclared"
+    if gate_from == GATE_WITHDRAWN:
+        return "withdrawn"
+    return "release" if _GATE_RELEASE.match(gate_from) else "unreadable"
+
+
 def gate_is_on(version: str, gate_from: str | None = None) -> bool:
     """Does validate fail on coverage in this version?"""
     gate_from = VALIDATE_GATE_FROM if gate_from is None else gate_from
-    return bool(gate_from) and version_key(version) >= version_key(gate_from)
+    return (gate_state(gate_from) == "release"
+            and version_key(version) >= version_key(gate_from))
 
 
 def coverage_applicable(root: Path) -> tuple[bool, str]:
@@ -1361,13 +1385,21 @@ def denominator_line(block: "PlatformBlock") -> str:
 
 
 def _gate_line(version: str) -> str:
-    """The one line about the gate: on, announced, or not declared."""
+    """The one line about the gate: on, announced, withdrawn, unreadable, or
+    not declared."""
     if gate_is_on(version):
         return (f"validate gates on contracts coverage (from jsonui-cli "
                 f"{VALIDATE_GATE_FROM}): it fails on entries not in the baseline, on "
                 "baselined entries that are closed, and on what cannot be baselined")
-    if VALIDATE_GATE_FROM:
+    state = gate_state()
+    if state == "release":
         return VALIDATE_NOTICE.format(version=VALIDATE_GATE_FROM)
+    if state == "withdrawn":
+        return f'coverage gate withdrawn (VALIDATE_GATE_FROM = "{GATE_WITHDRAWN}")'
+    if state == "unreadable":
+        return (f'coverage gate version unreadable (VALIDATE_GATE_FROM = '
+                f'"{VALIDATE_GATE_FROM}") — not a release number: this build announces '
+                "no release and does not gate")
     return ("coverage gate version not declared (VALIDATE_GATE_FROM) — this build "
             "announces no release")
 
