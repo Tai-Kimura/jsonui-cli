@@ -191,6 +191,7 @@ class ProjectIds:
         from jui_cli.core.screen_identity import NON_LAYOUT_SUBTREES
 
         self.layouts_dir = layouts_dir
+        self.styles_dir = styles_dir
         names = []
         for path in sorted(layouts_dir.rglob("*.json")):
             rel = path.relative_to(layouts_dir)

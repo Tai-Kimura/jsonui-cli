@@ -131,6 +131,8 @@ class LayoutFacts:
     include_web: dict = field(default_factory=dict)
     #: The resolved root's id (an include's partial root is spelled apart on web).
     root_id: str | None = None
+    #: The resolved tree itself (None when the file was not read).
+    tree: dict | None = field(default=None, repr=False)
 
 
 def _layout_file(spec: dict) -> str | None:
@@ -289,6 +291,7 @@ def layout_facts(spec: dict, platform: str | None, *, layouts_dir: Path,
     resolved = normalize(tree, "L2", platform=platform, styles_dir=Path(styles_dir),
                          layouts_dir=Path(layouts_dir), source=str(facts.path)).tree
     _walk(resolved, facts)
+    facts.tree = resolved if isinstance(resolved, dict) else None
     if isinstance(resolved, dict) and isinstance(resolved.get("id"), str) and resolved["id"]:
         facts.root_id = resolved["id"]
     found: list = []

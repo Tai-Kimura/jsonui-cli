@@ -6,6 +6,7 @@ import json
 import re
 from pathlib import Path
 
+from ..install import _platform_matches
 from .models import ValidationMessage, ValidationResult
 from .mock import find_mock_index, validate_mock_reference
 from .responsive import validate_responsive_field
@@ -48,12 +49,28 @@ def set_project_platforms(platforms=None):
     _PROJECT_PLATFORMS = set(platforms) if platforms else None
 
 
-def _step_platforms(step: dict) -> set | None:
-    """Platforms `when.platform` limits this step to, or `None` for all."""
-    declared = (step.get("when") or {}).get("platform")
-    if declared is None:
-        return None
-    return set(declared if isinstance(declared, list) else [declared])
+def project_platforms() -> set | None:
+    """The run's target platforms, or `None` when the config declares none."""
+    return _PROJECT_PLATFORMS
+
+
+def _gate(step: dict):
+    """The step's `when.platform` as written, or `None` when it has none."""
+    when = step.get("when")
+    return when.get("platform") if isinstance(when, dict) else None
+
+
+def _reaches(step: dict, platform: str) -> bool:
+    """Does the step's own `when.platform` let it run on *platform*?
+
+    Read by `install._platform_matches` — the rule the bundles are shaped by
+    and the drivers filter with — so the scalar `"all"` (a legal value,
+    CONDITION_PLATFORMS) runs everywhere. It was read as a set of words, in
+    which `"all"` names no platform: such a step was warned as running
+    nowhere, and every mobile warning on it was silenced as if it were gated
+    off the mobile drivers.
+    """
+    return _platform_matches(_gate(step), platform)
 
 
 def _gated_off(step: dict, platforms) -> bool:
@@ -71,9 +88,8 @@ def _gated_off(step: dict, platforms) -> bool:
     Either being absent means "no limit from that side", so a project that
     declares nothing behaves exactly as it did before the declaration existed.
     """
-    reach = _step_platforms(step)
     for platform in platforms:
-        if reach is not None and platform not in reach:
+        if not _reaches(step, platform):
             continue
         if _PROJECT_PLATFORMS is not None and platform not in _PROJECT_PLATFORMS:
             continue
@@ -90,12 +106,12 @@ def _mobile_reach_note(step: dict) -> str:
     did not ask — they have said where they want it to run, and the point is
     that it does not run there.
     """
-    declared = (step.get("when") or {}).get("platform")
-    if declared is None:
+    declared = _gate(step)
+    if declared is None or declared == "all":
+        # `"all"` is no narrowing: the step reaches the mobile drivers the
+        # way an ungated one does, and the remedy is the same.
         return "gate it with 'when': {'platform': 'web'} in cross-platform tests"
-    if not isinstance(declared, list):
-        declared = [declared]
-    reaching = [p for p in ("ios", "android") if p in declared]
+    reaching = [p for p in ("ios", "android") if _reaches(step, p)]
     return (f"this step is gated onto {'/'.join(reaching)}, where it does not run")
 
 
@@ -237,10 +253,11 @@ class StepValidator:
         """
         if _PROJECT_PLATFORMS is None:
             return
-        reach = _step_platforms(step)
-        if reach is None or (reach & _PROJECT_PLATFORMS):
+        declared = _gate(step)
+        if declared is None or any(_reaches(step, p) for p in _PROJECT_PLATFORMS):
             return
-        gated = "/".join(sorted(reach))
+        gated = ("/".join(sorted({str(p) for p in declared})) if isinstance(declared, list)
+                 else str(declared))
         targets = "/".join(sorted(_PROJECT_PLATFORMS))
         result.warnings.append(ValidationMessage(
             path=path,
