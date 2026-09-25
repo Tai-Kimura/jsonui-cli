@@ -1,5 +1,6 @@
 # frozen_string_literal: true
 
+require 'stringio'
 require 'core/attribute_types'
 require 'swiftui/generators/swift_component_generator'
 require 'swiftui/generators/converter_generator'
@@ -86,5 +87,66 @@ RSpec.describe 'sjui g converter: a literal the layout gives a prop' do
   it 'keeps a string literal whole: its quotes, backslashes and interpolation markers are escaped' do
     call = emitted('LiteralString', { 'v' => 'String' }, { 'type' => 'LiteralString', 'v' => STRING })
     expect(call).to include('v: "Say \\"hi\\" \\\\ $x \\\\(y)"')
+  end
+
+  # A JSON null the layout gives a prop. `nil` is written only where the
+  # component the same attributes scaffold declares the prop optional — read
+  # back from that Swift, not from the table the converter asks — and every
+  # other prop gets nothing and a line naming it. Until 1.8.121 a `Row!!`
+  # model (declared `Row`) got `nil`, which swiftc refuses, without a word.
+  # Ticket converter-writes-nil-for-a-forced-model-prop.
+  describe 'a JSON null' do
+    def null_types
+      JsonUIShared::AttributeTypes::VOCABULARY.keys + JsonUIShared::AttributeTypes::ALIASES.keys +
+        ['String?', 'Int?', 'Object?', '[String]', '[Int]?', 'Array(Float)', 'Array', 'Row', 'Row?', 'Row!!',
+         '[Row]', 'Callback', '(() -> Void)?']
+    end
+
+    # [type, what the scaffold declares, the call, what it said]
+    def null_rows
+      null_types.each_with_index.map do |type, i|
+        name = "NullProbe#{i}"
+        said = StringIO.new
+        saved = $stderr
+        call = begin
+          $stderr = said
+          emitted(name, { 'v' => type }, { 'type' => name, 'v' => nil })
+        ensure
+          $stderr = saved
+        end
+        scaffold = SjuiTools::SwiftUI::Generators::SwiftComponentGenerator
+                   .new(name, is_container: false, attributes: { 'v' => type }, command: 'spec').send(:swift_template)
+        [type, scaffold[/^\s*let v: (.+)$/, 1], call, said.string, scaffold]
+      end
+    end
+
+    it 'writes nil only where the scaffold declares the prop optional, and names every other' do
+      rows = null_rows
+      expect(rows.map { |_, declared, *| declared }).to all(be_a(String))
+      aggregate_failures do
+        rows.each do |type, declared, call, said, _|
+          optional = declared.end_with?('?')
+          expect(call.match?(/^\s*v: nil,?$/)).to eq(optional), "#{type} (declared #{declared}): #{call}"
+          next if optional
+
+          expect(call).not_to match(/^\s*v: /), "#{type}: #{call}"
+          expect(said).to include("the layout's nil is not a #{type} literal"), "#{type}: #{said.inspect}"
+        end
+      end
+      # The table the converter asks answers the same for Swift, Kotlin and
+      # TypeScript; here it is held to what Swift declares.
+      expect(rows.map { |type, declared, *| [type, declared.end_with?('?')] })
+        .to eq(rows.map { |type, *| [type, JsonUIShared::AttributeTypes.takes_null?(type)] })
+    end
+
+    it 'writes a nil that swiftc takes, wherever it writes one' do
+      rows = null_rows.select { |_, _, call, *| call.match?(/^\s*v: nil,?$/) }
+      source = +"struct Row { static var mock: Row { Row() } }\nclass CollectionDataSource {}\n"
+      rows.each_with_index do |(_, _, call, _, scaffold), i|
+        source << "#{plain(scaffold)}\nstruct NullHost#{i}: View {\n    var body: some View {\n#{call}\n    }\n}\n"
+      end
+      expect(rows.size).to be >= 10
+      expect(source).to compile_as_swift
+    end
   end
 end
