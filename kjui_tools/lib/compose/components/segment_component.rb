@@ -138,6 +138,17 @@ module KjuiTools
           modifiers.concat(Helpers::ModifierBuilder.build_size(json_data, parent_type, required_imports))
           modifiers.concat(Helpers::ModifierBuilder.build_offset(json_data, required_imports))
           modifiers.concat(Helpers::ModifierBuilder.build_alpha(json_data, required_imports))
+          # shadow → border → corner clip → click: the View slots between alpha
+          # and padding. All four are declared on `common` and were dropped
+          # (kjui-dynamic-components-that-skip-the-common-modifiers). The
+          # background is the Segment's containerColor above, so the border and
+          # the clip come without it — the clip rounds that colour too, since
+          # the component draws it inside this chain. The click is the click
+          # alone: the blocker is emitted before the margins and `enabled`
+          # reaches each Tab.
+          modifiers.concat(Helpers::ModifierBuilder.build_shadow(json_data, required_imports))
+          modifiers.concat(Helpers::ModifierBuilder.build_border_and_clip(json_data, required_imports))
+          modifiers.concat(Helpers::ModifierBuilder.build_click(json_data, required_imports))
           modifiers.concat(Helpers::ModifierBuilder.build_padding(json_data))
           modifiers.concat(Helpers::ModifierBuilder.build_weight(json_data, parent_type))
 

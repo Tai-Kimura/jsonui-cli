@@ -57,8 +57,10 @@ module KjuiTools
             # component builds no clickable, which is where it came from.
             modifiers.concat(Helpers::ModifierBuilder.build_interaction_blocker(json_data, required_imports))
             modifiers.concat(Helpers::ModifierBuilder.build_margins(json_data))
+            modifiers.concat(Helpers::ModifierBuilder.build_size(json_data, parent_type, required_imports))
             modifiers.concat(Helpers::ModifierBuilder.build_offset(json_data, required_imports))
             modifiers.concat(Helpers::ModifierBuilder.build_alpha(json_data, required_imports))
+            modifiers.concat(decoration_stages(json_data, required_imports))
             modifiers.concat(Helpers::ModifierBuilder.build_padding(json_data))
 
             code += Helpers::ModifierBuilder.format(modifiers, depth) if modifiers.any?
@@ -191,8 +193,10 @@ module KjuiTools
             # component builds no clickable, which is where it came from.
             modifiers.concat(Helpers::ModifierBuilder.build_interaction_blocker(json_data, required_imports))
             modifiers.concat(Helpers::ModifierBuilder.build_margins(json_data))
+            modifiers.concat(Helpers::ModifierBuilder.build_size(json_data, parent_type, required_imports))
             modifiers.concat(Helpers::ModifierBuilder.build_offset(json_data, required_imports))
             modifiers.concat(Helpers::ModifierBuilder.build_alpha(json_data, required_imports))
+            modifiers.concat(decoration_stages(json_data, required_imports))
             modifiers.concat(Helpers::ModifierBuilder.build_padding(json_data))
             modifiers.concat(Helpers::ModifierBuilder.build_alignment(json_data, required_imports, parent_type))
 
@@ -340,6 +344,7 @@ module KjuiTools
           modifiers.concat(Helpers::ModifierBuilder.build_size(json_data, parent_type, required_imports))
           modifiers.concat(Helpers::ModifierBuilder.build_offset(json_data, required_imports))
           modifiers.concat(Helpers::ModifierBuilder.build_alpha(json_data, required_imports))
+          modifiers.concat(decoration_stages(json_data, required_imports))
           modifiers.concat(Helpers::ModifierBuilder.build_padding(json_data))
           modifiers.concat(Helpers::ModifierBuilder.build_alignment(json_data, required_imports, parent_type))
 
@@ -377,6 +382,21 @@ module KjuiTools
           code += "\n" + indent("}", depth)
 
           code
+        end
+
+        # shadow → background → click: the View slots between alpha and
+        # padding, on every branch. Size (on the two branches without it),
+        # shadow, background (with its cornerRadius and border) and onClick are
+        # declared on `common` and were dropped
+        # (kjui-dynamic-components-that-skip-the-common-modifiers). The click
+        # is the click alone — the blocker is emitted before the margins and
+        # `enabled` reaches the control through its own parameter.
+        def self.decoration_stages(json_data, required_imports)
+          modifiers = []
+          modifiers.concat(Helpers::ModifierBuilder.build_shadow(json_data, required_imports))
+          modifiers.concat(Helpers::ModifierBuilder.build_background(json_data, required_imports))
+          modifiers.concat(Helpers::ModifierBuilder.build_click(json_data, required_imports))
+          modifiers
         end
 
         def self.indent(text, level)

@@ -89,8 +89,7 @@ module KjuiTools
           # component builds no clickable, which is where it came from.
           modifiers.concat(Helpers::ModifierBuilder.build_interaction_blocker(json_data, required_imports))
           modifiers.concat(Helpers::ModifierBuilder.build_margins(json_data))
-          modifiers.concat(Helpers::ModifierBuilder.build_offset(json_data, required_imports))
-          modifiers.concat(Helpers::ModifierBuilder.build_alpha(json_data, required_imports))
+          modifiers.concat(common_stages(json_data, parent_type, required_imports))
           modifiers.concat(Helpers::ModifierBuilder.build_padding(json_data))
           modifiers.concat(Helpers::ModifierBuilder.build_alignment(json_data, required_imports, parent_type))
 
@@ -164,8 +163,7 @@ module KjuiTools
           # component builds no clickable, which is where it came from.
           modifiers.concat(Helpers::ModifierBuilder.build_interaction_blocker(json_data, required_imports))
           modifiers.concat(Helpers::ModifierBuilder.build_margins(json_data))
-          modifiers.concat(Helpers::ModifierBuilder.build_offset(json_data, required_imports))
-          modifiers.concat(Helpers::ModifierBuilder.build_alpha(json_data, required_imports))
+          modifiers.concat(common_stages(json_data, parent_type, required_imports))
           modifiers.concat(Helpers::ModifierBuilder.build_padding(json_data))
 
           if parent_type == 'Row' || parent_type == 'Column'
@@ -266,6 +264,24 @@ module KjuiTools
           code += label_code if label_position == 'trailing'
           code += "\n" + indent("}", depth)
           code
+        end
+
+        # size → offset → alpha → shadow → background → click: the View slots
+        # between margins and padding. Size, shadow, background (with its
+        # cornerRadius and border) and onClick are declared on `common` and
+        # were dropped by both branches
+        # (kjui-dynamic-components-that-skip-the-common-modifiers). The click
+        # is the click alone — the blocker is emitted above and `enabled`
+        # reaches the Switch through its own parameter.
+        def self.common_stages(json_data, parent_type, required_imports)
+          modifiers = []
+          modifiers.concat(Helpers::ModifierBuilder.build_size(json_data, parent_type, required_imports))
+          modifiers.concat(Helpers::ModifierBuilder.build_offset(json_data, required_imports))
+          modifiers.concat(Helpers::ModifierBuilder.build_alpha(json_data, required_imports))
+          modifiers.concat(Helpers::ModifierBuilder.build_shadow(json_data, required_imports))
+          modifiers.concat(Helpers::ModifierBuilder.build_background(json_data, required_imports))
+          modifiers.concat(Helpers::ModifierBuilder.build_click(json_data, required_imports))
+          modifiers
         end
 
         # The label's TEXT: the bag's own `text` outranks the flat spelling,

@@ -138,6 +138,13 @@ module KjuiTools
           end
           modifiers.concat(Helpers::ModifierBuilder.build_offset(json_data, required_imports))
           modifiers.concat(Helpers::ModifierBuilder.build_alpha(json_data, required_imports))
+          # shadow → corner clip: the View slots before the click. Both are
+          # declared on `common` and were dropped
+          # (kjui-dynamic-components-that-skip-the-common-modifiers). The
+          # background is the WebView's own (setBackgroundColor), so the clip
+          # comes without it.
+          modifiers.concat(Helpers::ModifierBuilder.build_shadow(json_data, required_imports))
+          modifiers.concat(Helpers::ModifierBuilder.build_corner_clip(json_data, required_imports))
           modifiers.concat(Helpers::ModifierBuilder.build_clickable(json_data, required_imports))
           modifiers.concat(Helpers::ModifierBuilder.build_padding(json_data))
           modifiers.concat(Helpers::ModifierBuilder.build_weight(json_data, parent_type))

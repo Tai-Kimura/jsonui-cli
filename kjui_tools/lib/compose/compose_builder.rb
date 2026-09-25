@@ -882,11 +882,16 @@ module KjuiTools
         # userInteractionEnabled stops the safe area and what is in it
         # (ModifierBuilder.build_interaction_blocker); it builds no clickable.
         modifiers.concat(Helpers::ModifierBuilder.build_interaction_blocker(json_data, @required_imports))
+        # Margins are the outer spacing: before (outside) the size. They were
+        # last in the chain — inside the size, the background and the system
+        # bar padding — where they padded the content instead of spacing the
+        # node from its siblings (kjui-dynamic-components-that-skip-the-common-
+        # modifiers, measured as CG_ORDER SafeAreaView margins INSIDE).
+        modifiers.concat(Helpers::ModifierBuilder.build_margins(json_data))
         size_modifiers = Helpers::ModifierBuilder.build_size(json_data, nil, @required_imports)
         size_modifiers << ".fillMaxWidth()" unless json_data['width']
         modifiers.concat(size_modifiers)
-        modifiers.concat(Helpers::ModifierBuilder.build_offset(json_data, @required_imports))
-        modifiers.concat(Helpers::ModifierBuilder.build_background(json_data, @required_imports))
+        modifiers.concat(safe_area_decoration_stages(json_data))
 
         # Apply safe area padding based on edges (after background)
         # Use conditional modifiers based on runtime edges
@@ -899,7 +904,6 @@ module KjuiTools
         modifiers << ".imePadding()" unless ignore_keyboard
 
         modifiers.concat(Helpers::ModifierBuilder.build_padding(json_data))
-        modifiers.concat(Helpers::ModifierBuilder.build_margins(json_data))
 
         # `is_root` flows from generate_component when SafeAreaView is the
         # *GeneratedView's root composable. ModifierBuilder.format then
@@ -916,6 +920,27 @@ module KjuiTools
 
         code += "\n" + indent("}", depth)
         code
+      end
+
+      # offset → alpha → shadow → background → click: the View slots after the
+      # size, shared by both SafeAreaView helpers. Alpha, shadow, onClick and
+      # enabled are declared on `common` and these inline helpers dropped them
+      # (kjui-dynamic-components-that-skip-the-common-modifiers — the same
+      # trap as the testTag / size repair above: kwargs threaded through
+      # components/ miss the helpers here). The blocker is emitted before the
+      # size, so the click stage is the click and the disabled semantics, not
+      # build_clickable's blocker again.
+      def safe_area_decoration_stages(json_data)
+        modifiers = []
+        modifiers.concat(Helpers::ModifierBuilder.build_offset(json_data, @required_imports))
+        modifiers.concat(Helpers::ModifierBuilder.build_alpha(json_data, @required_imports))
+        modifiers.concat(Helpers::ModifierBuilder.build_shadow(json_data, @required_imports))
+        modifiers.concat(Helpers::ModifierBuilder.build_background(json_data, @required_imports))
+        modifiers.concat(Helpers::ModifierBuilder.build_click(json_data, @required_imports))
+        modifiers.concat(Helpers::ModifierBuilder.build_disabled_semantics(
+          json_data, Helpers::ModifierBuilder.enabled_expression(json_data), @required_imports
+        ))
+        modifiers
       end
 
       def has_relative_positioning_in_children?(children)
@@ -957,12 +982,17 @@ module KjuiTools
         # userInteractionEnabled stops the safe area and what is in it
         # (ModifierBuilder.build_interaction_blocker); it builds no clickable.
         modifiers.concat(Helpers::ModifierBuilder.build_interaction_blocker(json_data, @required_imports))
+        # Margins are the outer spacing: before (outside) the size. They were
+        # last in the chain — inside the size, the background and the system
+        # bar padding — where they padded the content instead of spacing the
+        # node from its siblings (kjui-dynamic-components-that-skip-the-common-
+        # modifiers, measured as CG_ORDER SafeAreaView margins INSIDE).
+        modifiers.concat(Helpers::ModifierBuilder.build_margins(json_data))
         size_modifiers = Helpers::ModifierBuilder.build_size(json_data, nil, @required_imports)
         size_modifiers << ".fillMaxWidth()" unless json_data['width']
         size_modifiers << ".fillMaxHeight()" unless json_data['height']
         modifiers.concat(size_modifiers)
-        modifiers.concat(Helpers::ModifierBuilder.build_offset(json_data, @required_imports))
-        modifiers.concat(Helpers::ModifierBuilder.build_background(json_data, @required_imports))
+        modifiers.concat(safe_area_decoration_stages(json_data))
 
         # Apply safe area padding based on edges (after background)
         modifiers << ".then(if (edges.contains(\"all\")) Modifier.systemBarsPadding() else Modifier)"
@@ -974,7 +1004,6 @@ module KjuiTools
         modifiers << ".imePadding()" unless ignore_keyboard
 
         modifiers.concat(Helpers::ModifierBuilder.build_padding(json_data))
-        modifiers.concat(Helpers::ModifierBuilder.build_margins(json_data))
 
         # See `generate_safe_area_view` — `is_root` opens the chain from
         # caller's `modifier` so SafeAreaView roots wrapping a

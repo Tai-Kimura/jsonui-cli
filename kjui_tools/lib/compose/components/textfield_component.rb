@@ -307,6 +307,9 @@ module KjuiTools
               box_modifiers.concat(Helpers::ModifierBuilder.build_offset(json_data, required_imports))
               box_modifiers.concat(Helpers::ModifierBuilder.build_alpha(json_data, required_imports))
             end
+            # Shadow after alpha, the View slot; declared on `common` and
+            # dropped (kjui-dynamic-components-that-skip-the-common-modifiers).
+            box_modifiers.concat(Helpers::ModifierBuilder.build_shadow(json_data, required_imports))
             box_modifiers.concat(Helpers::ModifierBuilder.build_weight(json_data, parent_type))
             box_modifiers.concat(Helpers::ModifierBuilder.build_clickable(json_data, required_imports))
             if box_modifiers.any?
@@ -367,6 +370,7 @@ module KjuiTools
               modifiers.concat(Helpers::ModifierBuilder.build_offset(json_data, required_imports))
               modifiers.concat(Helpers::ModifierBuilder.build_alpha(json_data, required_imports))
             end
+            modifiers.concat(Helpers::ModifierBuilder.build_shadow(json_data, required_imports))
             modifiers.concat(Helpers::ModifierBuilder.build_clickable(json_data, required_imports))
             if focus_prop
               required_imports&.add(:focus_changed)

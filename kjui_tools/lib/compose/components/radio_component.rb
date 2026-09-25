@@ -33,16 +33,7 @@ module KjuiTools
           code = indent("Column(", depth)
 
           # Build modifiers
-          modifiers = []
-          modifiers.concat(Helpers::ModifierBuilder.build_test_tag(json_data, required_imports))
-          # userInteractionEnabled / touchDisabledState stop this node and
-          # what is in it (ModifierBuilder.build_interaction_blocker); this
-          # component builds no clickable, which is where it came from.
-          modifiers.concat(Helpers::ModifierBuilder.build_interaction_blocker(json_data, required_imports))
-          modifiers.concat(Helpers::ModifierBuilder.build_margins(json_data))
-          modifiers.concat(Helpers::ModifierBuilder.build_offset(json_data, required_imports))
-          modifiers.concat(Helpers::ModifierBuilder.build_alpha(json_data, required_imports))
-          modifiers.concat(Helpers::ModifierBuilder.build_padding(json_data))
+          modifiers = stage_modifiers(json_data, parent_type, required_imports)
           modifiers.concat(Helpers::ModifierBuilder.build_weight(json_data, parent_type))
 
           code += Helpers::ModifierBuilder.format(modifiers, depth) if modifiers.any?
@@ -185,6 +176,37 @@ module KjuiTools
         
         private
         
+        # The node's common stages, in the View order: testTag → (blocker) →
+        # margins → size → offset → alpha → shadow → background → click →
+        # padding — the same list for the options Column, a Radio item's Row
+        # and an items Column. The item Row and the items Column carried the
+        # margins alone and the options Column no size, shadow, background or
+        # click: all declared on `common` and dropped
+        # (kjui-dynamic-components-that-skip-the-common-modifiers). The blocker
+        # stays ahead of the margins where the options Column always had it,
+        # so the click stage is the click and the disabled semantics, not
+        # build_clickable's blocker again. The RadioButton's own selection is
+        # its onClick, as before; a declared onClick is the node's.
+        def self.stage_modifiers(json_data, parent_type, required_imports)
+          modifiers = []
+          modifiers.concat(Helpers::ModifierBuilder.build_test_tag(json_data, required_imports))
+          # userInteractionEnabled / touchDisabledState stop this node and
+          # what is in it (ModifierBuilder.build_interaction_blocker).
+          modifiers.concat(Helpers::ModifierBuilder.build_interaction_blocker(json_data, required_imports))
+          modifiers.concat(Helpers::ModifierBuilder.build_margins(json_data))
+          modifiers.concat(Helpers::ModifierBuilder.build_size(json_data, parent_type, required_imports))
+          modifiers.concat(Helpers::ModifierBuilder.build_offset(json_data, required_imports))
+          modifiers.concat(Helpers::ModifierBuilder.build_alpha(json_data, required_imports))
+          modifiers.concat(Helpers::ModifierBuilder.build_shadow(json_data, required_imports))
+          modifiers.concat(Helpers::ModifierBuilder.build_background(json_data, required_imports))
+          modifiers.concat(Helpers::ModifierBuilder.build_click(json_data, required_imports))
+          modifiers.concat(Helpers::ModifierBuilder.build_disabled_semantics(
+            json_data, Helpers::ModifierBuilder.enabled_expression(json_data), required_imports
+          ))
+          modifiers.concat(Helpers::ModifierBuilder.build_padding(json_data))
+          modifiers
+        end
+
         def self.generate_radio_item(json_data, depth, required_imports, parent_type)
           group = json_data['group'] || 'default'
           id = json_data['id'] || "radio_#{rand(1000)}"
@@ -213,14 +235,15 @@ module KjuiTools
           code = indent("Row(", depth)
           code += "\n" + indent("    verticalAlignment = Alignment.CenterVertically,", depth)
           
-          # Build modifiers
-          modifiers = []
-          modifiers.concat(Helpers::ModifierBuilder.build_margins(json_data))
+          # Build modifiers — every common stage, not the margins alone
+          # (stage_modifiers). A multi-line modifier (the blocker's
+          # pointerInput) keeps its own indentation under the chain.
+          modifiers = stage_modifiers(json_data, parent_type, required_imports)
           
           if modifiers.any?
             code += "\n" + indent("    modifier = Modifier", depth)
             modifiers.each do |mod|
-              code += "\n" + indent("        #{mod}", depth)
+              code += "\n" + indent(indent(mod, 2), depth)
             end
           end
           
@@ -336,14 +359,15 @@ module KjuiTools
           
           code = indent("Column(", depth)
           
-          # Build modifiers
-          modifiers = []
-          modifiers.concat(Helpers::ModifierBuilder.build_margins(json_data))
+          # Build modifiers — every common stage, not the margins alone
+          # (stage_modifiers). A multi-line modifier (the blocker's
+          # pointerInput) keeps its own indentation under the chain.
+          modifiers = stage_modifiers(json_data, parent_type, required_imports)
           
           if modifiers.any?
             code += "\n" + indent("    modifier = Modifier", depth)
             modifiers.each do |mod|
-              code += "\n" + indent("        #{mod}", depth)
+              code += "\n" + indent(indent(mod, 2), depth)
             end
           end
           

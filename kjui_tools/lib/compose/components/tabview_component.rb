@@ -57,11 +57,30 @@ module KjuiTools
           end
 
           code += "\n\n" + indent("Scaffold(", depth)
-          # userInteractionEnabled stops the tab view and what is in it
-          # (ModifierBuilder.build_interaction_blocker). The Scaffold takes no
-          # other modifier here, so it gets one only when the flag is set.
-          blocker = Helpers::ModifierBuilder.build_interaction_blocker(json_data, required_imports)
-          code += Helpers::ModifierBuilder.format(blocker, depth) + ',' if blocker.any?
+          # The Scaffold carries the node's common stages in the View order:
+          # testTag → (blocker) → margins → size → offset → alpha → shadow →
+          # background → click → padding. Only the blocker used to reach it —
+          # every other stage was declared on `common` and dropped
+          # (kjui-dynamic-components-that-skip-the-common-modifiers). The
+          # blocker (userInteractionEnabled stops the tab view and what is in
+          # it) stays where it was, ahead of the margins, so the click stage is
+          # the click and the disabled semantics, not build_clickable's blocker
+          # again. With none of them declared the Scaffold takes no modifier.
+          modifiers = []
+          modifiers.concat(Helpers::ModifierBuilder.build_test_tag(json_data, required_imports))
+          modifiers.concat(Helpers::ModifierBuilder.build_interaction_blocker(json_data, required_imports))
+          modifiers.concat(Helpers::ModifierBuilder.build_margins(json_data))
+          modifiers.concat(Helpers::ModifierBuilder.build_size(json_data, parent_type, required_imports))
+          modifiers.concat(Helpers::ModifierBuilder.build_offset(json_data, required_imports))
+          modifiers.concat(Helpers::ModifierBuilder.build_alpha(json_data, required_imports))
+          modifiers.concat(Helpers::ModifierBuilder.build_shadow(json_data, required_imports))
+          modifiers.concat(Helpers::ModifierBuilder.build_background(json_data, required_imports))
+          modifiers.concat(Helpers::ModifierBuilder.build_click(json_data, required_imports))
+          modifiers.concat(Helpers::ModifierBuilder.build_disabled_semantics(
+            json_data, Helpers::ModifierBuilder.enabled_expression(json_data), required_imports
+          ))
+          modifiers.concat(Helpers::ModifierBuilder.build_padding(json_data))
+          code += Helpers::ModifierBuilder.format(modifiers, depth) + ',' if modifiers.any?
           code += "\n" + indent("bottomBar = {", depth + 1)
 
           # NavigationBar
