@@ -76,8 +76,10 @@ RSpec.describe JsonUIShared::ImageAccessibility do
     end
 
     it 'takes as taps only activations declared on every component' do
+      # The tap rule's keys: the image rule asks it whether a node operates.
       common = JSON.parse(File.read(definitions_path))['common']
-      described_class::TAP_KEYS.each { |key| expect(common).to have_key(key) }
+      tap = JsonUIShared::TapAccessibility
+      (tap::TAP_KEYS + [tap::LONG_PRESS_KEY]).each { |key| expect(common).to have_key(key) }
     end
 
     it 'takes as naming text the localized text vocabulary, less alt (read off images)' do

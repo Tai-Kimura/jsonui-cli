@@ -125,10 +125,17 @@ module JsonUIShared
       end
     end
 
+    # A long press a user can perform: a handler, on a view not statically
+    # disabled. `canTap` gates the tap, not the long press. A handler is what
+    # `handler?` says it is — an empty or blank value names no method, here as
+    # for a tap (this read "any value" before: a blank long press counted).
+    def long_press?(node)
+      node.is_a?(Hash) && node['enabled'] != false && handler?(node[LONG_PRESS_KEY])
+    end
+
     # A node a user can operate on its own, inside a tappable.
     def operable?(node)
-      interactive_type?(node['type']) || tappable?(node) ||
-        (node['enabled'] != false && present?(node[LONG_PRESS_KEY])) || linked_text?(node)
+      interactive_type?(node['type']) || tappable?(node) || long_press?(node) || linked_text?(node)
     end
 
     # Something inside `node` (not itself) a user can operate on its own.
