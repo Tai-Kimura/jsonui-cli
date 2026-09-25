@@ -4131,6 +4131,11 @@ fun create%(pascal)sBranchHarness(baseUrl: String, dispatcher: TestDispatcher): 
 # event-handler routing for VM-internal state).
 # ---------------------------------------------------------------------------
 
+#: Interpolated at the end of the Swift absence messages: "" unless an
+#: earlier test's harness is still alive (below iOS 26).
+SWIFT_RETAINED_NOTE = "\\(branchRetainedHarnessesNote())"
+
+
 def _swift_str(s: str) -> str:
     """Swift string literal (JSON escapes are Swift-compatible except the
     \\uXXXX form, which Swift writes as \\u{XXXX})."""
@@ -4328,15 +4333,19 @@ def _render_swift_branch(
             f"\"route '{op}' declared in when was never hit "
             f"(\\(rec.countFor({_swift_str(op)})) requests)\")"
         )
+    # Below iOS 26 an earlier test's harness is kept alive (see
+    # runBranchTest), and a call its view model makes lands in this window:
+    # each absence message says so when that is the case.
     for op in _row_not_called(then):
         out.append(
             f"      XCTAssertEqual(rec.countFor({_swift_str(op)}), 0, "
-            f"\"{not_called_message(op)} \\(rec.countFor({_swift_str(op)})) time(s)\")"
+            f"\"{not_called_message(op)} \\(rec.countFor({_swift_str(op)})) time(s)"
+            f"{SWIFT_RETAINED_NOTE}\")"
         )
     allowed = ", ".join(_swift_str(op) for op in row.allowed_ops)
     out.append(
         f"      XCTAssertEqual(rec.unexpectedOps([{allowed}]), [], "
-        f"{_swift_str(UNEXPECTED_OPS_MESSAGE)})"
+        f"{_swift_str(UNEXPECTED_OPS_MESSAGE)[:-1]}{SWIFT_RETAINED_NOTE}\")"
     )
     red, gate = unmatched_gate()
     if red:
@@ -4345,6 +4354,8 @@ def _render_swift_branch(
         out.append(f"      reportUnmatched(rec.unmatchedCalls(), {_swift_str(gate) if gate else 'nil'}, "
                    f"{_swift_str(_notice_row(screen, method_name, contract, row))})")
     out.append(f"      reportUnmatchedForeign(rec.unmatchedForeign(), "
+               f"{_swift_str(_notice_row(screen, method_name, contract, row))})")
+    out.append(f"      reportRetainedHarnesses("
                f"{_swift_str(_notice_row(screen, method_name, contract, row))})")
 
     for key, value in then.items():
@@ -4599,7 +4610,8 @@ nonisolated final class Recorder {
 }
 
 /// The one exit for this runtime's notices (unmatched, unmatched_foreign,
-/// condition_without_effect): the process's stderr, one line naming the row —
+/// condition_without_effect, and below iOS 26 retained_harnesses): the
+/// process's stderr, one line naming the row —
 /// the exit the web and Android runtimes use, where a test runner's console
 /// capture hid them. xcodebuild shows a passing test's stdout and stderr
 /// alike and `-quiet` drops both, so here the exit keeps the faces on one
@@ -4608,6 +4620,20 @@ nonisolated final class Recorder {
 /// not regenerated since the row was added still compiles (`[]`).
 nonisolated func notice(_ row: String, _ kind: String, _ body: String) {
   FileHandle.standardError.write(Data("jsonui-test branch test [\\(row)] \\(kind): \\(body)\\n".utf8))
+}
+
+/// Below iOS 26 only, once per process: the first row that runs while an
+/// earlier test's harness is kept alive (see runBranchTest) says what that
+/// leaves open, in both directions. Info, never a failure.
+nonisolated func reportRetainedHarnesses(_ row: String = "") {
+  let count = BranchHarnessRetainer.retainedCount()
+  guard count > 0, BranchHarnessRetainer.firstNotice() else { return }
+  notice(row, "retained_harnesses",
+    "below iOS 26 this process keeps every earlier test's harness and view model alive "
+    + "(\\(count) so far; the isolated-deinit back-deploy crash) — a call an earlier test's "
+    + "view model makes lands in this window: it can fail not-called / unexpectedOps, and it "
+    + "can satisfy a called / request / when row this test's view model never made. Run on "
+    + "iOS 26 or later to rule it out")
 }
 
 /// Requests in the act window to hosts that are not the app's API (P2e(a),
@@ -4931,14 +4957,22 @@ func runBranchTest(
   BranchURLProtocol.apiOrigin = harness.apiOrigin
   defer { BranchURLProtocol.apiOrigin = nil }
   defer {
-    // Deliberate retain-for-process-lifetime: deallocating @MainActor
-    // types goes through the isolated-deinit back-deploy shim on pre-26
-    // simulators, which crashes with an invalid free
-    // (swift_task_deinitOnExecutorMainActorBackDeploy ->
-    // BUG_IN_CLIENT_OF_LIBMALLOC, observed on the iOS 18.6 runtime).
-    // A handful of retained test VMs per process is harmless; a runtime
-    // crash on teardown fails every branch test at 0.000s.
-    BranchHarnessRetainer.retain(harness)
+    // Released here on iOS 26 and later, as the app releases a screen's view
+    // model — kept alive, it goes on answering notifications, timers and
+    // its own Tasks inside every later test's window.
+    //
+    // Below iOS 26 it cannot be released. A MainActor type's deinit there
+    // goes through the isolated-deinit back-deploy shim, and it crashes
+    // with an invalid free (swift_task_deinitOnExecutorMainActorBackDeploy
+    // -> TaskLocal::StopLookupScope -> BUG_IN_CLIENT_OF_LIBMALLOC) — for a
+    // type declared without `isolated deinit` too, under the MainActor
+    // default isolation. Measured on iOS 18.6: every test crashed at its
+    // end without this, and releasing on another thread crashed as well —
+    // the harness's deinit then runs as a main-actor job, and the view
+    // model released inside it takes the shim's fast path. So there the
+    // harness stays alive for the process, and the rows' absence messages
+    // say what that leaves open (branchRetainedHarnessesNote).
+    if #unavailable(iOS 26) { BranchHarnessRetainer.retain(harness) }
   }
   try block(harness, recorder)
 }
@@ -4946,6 +4980,28 @@ func runBranchTest(
 nonisolated enum BranchHarnessRetainer {
   nonisolated(unsafe) private static var retained: [BranchHarness] = []
   static func retain(_ harness: BranchHarness) { retained.append(harness) }
+  /// How many earlier tests' harnesses this process keeps alive: 0 on
+  /// iOS 26 and later.
+  static func retainedCount() -> Int { retained.count }
+  nonisolated(unsafe) private static var noticed = false
+  /// True the first time only: the retained_harnesses notice is said once.
+  static func firstNotice() -> Bool {
+    if noticed { return false }
+    noticed = true
+    return true
+  }
+}
+
+/// What a row's "not called" and "no undeclared call" cannot rule out on
+/// this runtime: "" when no earlier test's harness is alive — always on iOS
+/// 26 and later — and below 26, where they are kept alive, how many, since
+/// a call their view models make lands in this row's window too.
+nonisolated func branchRetainedHarnessesNote() -> String {
+  let count = BranchHarnessRetainer.retainedCount()
+  guard count > 0 else { return "" }
+  return " — below iOS 26 the harnesses of \\(count) earlier test(s) in this process are kept alive "
+    + "(the isolated-deinit back-deploy crash), and a call their view models make lands in this "
+    + "window too"
 }
 
 /// Generic READ access: Mirror over the subject (labels match `name` or

@@ -356,6 +356,7 @@ jobs:
             --ignore=tests/test_branch_seed_state_android.py \
             --ignore=tests/test_branch_settle_quiescence.py \
             --ignore=tests/test_branch_settle_quiescence_android.py \
+            --ignore=tests/test_branch_harness_release_ios.py \
             --ignore=tests/test_branch_notices_reach_agent_runs.py
       # ⚠️ test_unit_stubs_ios_typecheck.py is in no job here: it needs swiftc
       # 6.2+ for `-default-isolation`, and the compiler job's image answers
@@ -365,7 +366,9 @@ jobs:
       # likewise: they run the Kotlin runtime compiled whole, whose jars only a
       # Gradle cache has. test_branch_scenario_delay.py and
       # test_branch_settle_quiescence.py (node + swiftc + the pinned vitest) run
-      # with the compilers below.
+      # with the compilers below. test_branch_harness_release_ios.py runs the
+      # iOS runtime under XCTest on two simulator runtimes (from 26 and below)
+      # that no job here provisions; run-suites.sh's iOS leg owns it.
       - name: Run document_tools tests
         working-directory: document_tools
         run: python -m pytest

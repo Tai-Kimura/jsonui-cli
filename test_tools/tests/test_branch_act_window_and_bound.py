@@ -737,7 +737,10 @@ def test_xxv_the_three_renderers_print_the_same_message(tmp_path):
     message = bt.UNEXPECTED_OPS_MESSAGE
     assert web.count(bt._ts(message)) == 3
     assert kotlin.count(bt._kt_str(message)) == 3
-    assert swift.count(bt._swift_str(message)) == 3
+    # Swift adds, inside the same literal, what an earlier test's harness kept
+    # alive below iOS 26 leaves open (branchRetainedHarnessesNote) — the
+    # message itself is the same.
+    assert swift.count(bt._swift_str(message)[:-1] + bt.SWIFT_RETAINED_NOTE + '"') == 3
 
 
 # ---------------------------------------------------------------------------

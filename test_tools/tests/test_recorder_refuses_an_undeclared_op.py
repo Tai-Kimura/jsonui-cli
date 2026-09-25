@@ -476,22 +476,30 @@ class TestEveryFaceHasTheGuard:
             f"{'does' if can_build_unarmed else 'does not'} allow a recorder "
             "with no route table")
 
-    def test_the_swift_harness_is_still_retained(self):
-        """A consumer's whole iOS suite depends on this CALL existing.
+    def test_the_swift_harness_is_retained_below_ios_26_only(self):
+        """A consumer's whole pre-26 iOS suite depends on this CALL existing,
+        and every later test's window on it being conditional.
 
-        On a pre-26 simulator a harness that is not retained is released
-        while its view model is still settling, and the process dies in
+        Below iOS 26 a harness that is not retained is released at the end of
+        its test, and the process dies in
         `swift_task_deinitOnExecutorMainActorBackDeploy` with a corrupted
-        malloc — SIGABRT, not a failing assertion. The file is `@generated`,
-        so the consuming project cannot hold it in place; only this emitter
-        can, and nothing else here would notice it going.
+        malloc — SIGABRT, not a failing assertion (measured 2026-09-26 on iOS
+        18.6: 6 of 6 tests). On 26 and later a retained harness keeps its view
+        model answering notifications inside every later test's window
+        (measured on 26.5: a later test's recorder saw 3 requests for its own
+        1). The file is `@generated`, so the consuming project cannot hold
+        either half in place; only this emitter can.
 
-        THE CALL, not the declaration. An arm that counted the enum would
-        stay green on an emitter that still defines `BranchHarnessRetainer`
-        and stops invoking it — which is the direction a refactor moves in.
+        THE CALL, not the declaration: an arm that counted the enum would stay
+        green on an emitter that still defines `BranchHarnessRetainer` and
+        stops invoking it. And one call, inside the condition: a second,
+        unconditional one would put every 26+ window back.
         """
         swift = bt.SWIFT_RUNTIME
-        assert "BranchHarnessRetainer.retain(" in swift, (
-            "the emitted Swift no longer RETAINS the harness; a consumer's "
-            "pre-26 iOS branch tests will SIGABRT rather than fail")
+        assert swift.count("BranchHarnessRetainer.retain(") == 1, (
+            "the emitted Swift retains the harness in more than one place, or none")
+        assert "    if #unavailable(iOS 26) { BranchHarnessRetainer.retain(harness) }\n" in swift, (
+            "the emitted Swift no longer retains the harness below iOS 26 only: a "
+            "consumer's pre-26 branch tests SIGABRT, or its 26+ view models outlive "
+            "their test")
         assert "enum BranchHarnessRetainer" in swift

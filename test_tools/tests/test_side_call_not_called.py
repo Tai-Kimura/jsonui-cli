@@ -179,7 +179,8 @@ def test_the_row_binds_so_coverage_can_judge_it(tmp_path):
      'expect(rec.countFor("postLogout")).toBe(0);'),
     ("ios", {"module": "App"}, 'XCTAssertEqual(rec.countFor("postLogout"), 0, "api.postLogout: '
                                'this row says not-called (within the act and until no request was in flight '
-                               'for 400 ms after it) — called \\(rec.countFor("postLogout")) time(s)")',
+                               'for 400 ms after it) — called \\(rec.countFor("postLogout")) time(s)'
+                               '\\(branchRetainedHarnessesNote())")',
      'XCTAssertEqual(rec.countFor("postLogout"), 0)'),
     ("android", {"package": "com.example.app"},
      'assertEquals("api.postLogout: this row says not-called (within the act and until no request '
@@ -361,3 +362,35 @@ def test_generation_that_read_the_rules_does_not_say_it_could_not(tmp_path):
         bt.generate_branch_tests("checkout", tmp_path, platform="web", config_platforms=["web"])
     assert "has no `endpoint` declaration" in str(e.value)
     assert "could not be read" not in str(e.value)
+
+
+def test_below_ios_26_every_swift_absence_message_and_row_says_what_a_kept_harness_leaves_open(tmp_path):
+    """Below iOS 26 the runtime keeps every earlier test's harness alive
+    (runBranchTest), and a call its view model makes lands in this row's
+    window. Both directions are named: each absence message carries the note
+    (a red that may belong to another test), and each row reports it — once
+    per process, in the retained_harnesses notice — because the other
+    direction, an earlier view model satisfying this row's `called`, passes
+    and prints nothing. The runtime returns "" / says nothing on 26+."""
+    _spec(tmp_path, then={"api.postLogout": "not-called"})
+    report = bt.generate_branch_tests("checkout", tmp_path, platform="ios", module="App",
+                                      config_platforms=["ios"])
+    lines = [line.strip() for line in report.test_file.read_text().splitlines()]
+    rows = [line for line in lines if line.startswith("@MainActor func test_")]
+    absence = [line for line in lines
+               if line.startswith("XCTAssertEqual(rec.unexpectedOps(") or "this row says not-called" in line]
+    reports = [line for line in lines if line.startswith("reportRetainedHarnesses(")]
+    assert len(rows) >= 2 and len(absence) > len(rows), (rows, absence)
+    # Spelled out, not read from the generator's constant: a constant emptied
+    # by mistake would satisfy an expectation derived from it.
+    assert all(line.endswith('\\(branchRetainedHarnessesNote())")') for line in absence), absence
+    assert "func branchRetainedHarnessesNote() -> String {" in report.runtime_file.read_text()
+    assert len(reports) == len(rows), reports
+    runtime = report.runtime_file.read_text()
+    kind = 'notice(row, "retained_harnesses",'
+    assert runtime.count(kind) == 1
+    said = runtime[runtime.index(kind):runtime.index("\n}\n", runtime.index(kind))]
+    for words in ("it can fail not-called / unexpectedOps",
+                  "it can satisfy a called / request / when row this test's view model never made"):
+        assert words in said.replace('"\n    + "', ""), said
+
