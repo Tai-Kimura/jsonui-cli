@@ -1823,30 +1823,42 @@ def _running_version() -> str:
     return __version__
 
 
-#: The literal that withdraws an announced gate (design v4.18). How a gate
-#: literal is read — a whole release number gates, "withdrawn" and anything
-#: unreadable never do — has ONE home, `gate_literal`, shared with validate's
-#: coverage gate and the spec validator's layout ids.
-from .gate_literal import GATE_WITHDRAWN, gate_is_on, gate_state  # noqa: E402
+def _gates():
+    """shared/core/gate_versions — how every `*_GATE_FROM` is read (a whole
+    release number gates; unset, "withdrawn" and anything unreadable never
+    do), shared with validate's coverage gate, the spec validator's layout ids
+    and the tag gate (design v4.21) — or None in a tool tree without it."""
+    from . import shared_core
+    return shared_core.load("gate_versions")
 
 
 def unmatched_gate() -> tuple[bool, str | None]:
     """(red, gate): whether unmatched requests in the act window fail the
-    generated test, and the release that makes them fail (None when unset or
-    unreadable, "withdrawn" when an announcement was withdrawn — never red)."""
-    state = gate_state(UNMATCHED_GATE_FROM)
+    generated test, and the release that makes them fail (None when unset,
+    unreadable or not readable here, "withdrawn" when an announcement was
+    withdrawn — never red)."""
+    gates = _gates()
+    if gates is None:
+        return False, None
+    state = gates.gate_state(UNMATCHED_GATE_FROM)
     if state == "withdrawn":
-        return False, GATE_WITHDRAWN
+        return False, gates.GATE_WITHDRAWN
     if state != "release":
         return False, None
-    return gate_is_on(_running_version(), UNMATCHED_GATE_FROM), UNMATCHED_GATE_FROM
+    return gates.gate_is_on(_running_version(), UNMATCHED_GATE_FROM), UNMATCHED_GATE_FROM
 
 
 def unmatched_gate_note() -> str | None:
-    """The line `generate branch-tests` prints when the literal is unreadable."""
-    if gate_state(UNMATCHED_GATE_FROM) == "unreadable":
-        return (f"UNMATCHED_GATE_FROM {UNMATCHED_GATE_FROM!r} is unreadable (a gate version is "
-                "x.y.z, or \"withdrawn\") — no gate, and the tag gate fails it")
+    """The line `generate branch-tests` prints when the literal gates nothing
+    it looks like it would: unreadable, or no reader in this tool tree."""
+    gates = _gates()
+    if gates is None:
+        return ("unmatched-request gate cannot be read — shared/core/gate_versions.py is not "
+                "in this tool tree, so this build announces no release and does not gate")
+    if gates.gate_state(UNMATCHED_GATE_FROM) == "unreadable":
+        return ("unmatched-request gate "
+                + gates.state_note("UNMATCHED_GATE_FROM", UNMATCHED_GATE_FROM)
+                + " — the tag gate fails it")
     return None
 
 

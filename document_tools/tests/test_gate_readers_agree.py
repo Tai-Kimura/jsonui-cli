@@ -9,9 +9,11 @@ goes through every reader this tree has, and they must agree:
   coverage        validate's contracts coverage gate (test_tools)
   layout ids      the spec validator: an id not in the layout is a WARNING
                   when the gate is on, else INFO — plus the notice (document_tools)
-
-P2e's generator and the tag gate (dev-guide/release/validate_gate_version.py)
-read the same module once 1e moves them onto it; add them to READERS then.
+  unmatched       P2e's generator: whether an unmatched request fails the
+                  generated test, and the gate it hands the runtime to print
+                  (test_tools branch_tests)
+  tag gate        dev-guide/release/validate_gate_version.py: its verdict on
+                  the literal kept from the previous tag at the table's version
 
 The three `shared_core` loaders that find the module must stay one loader
 in three copies: a copy that diverged would be a second way to find it.
@@ -24,12 +26,26 @@ from pathlib import Path
 
 import pytest
 
+import importlib.util
+
 from jsonui_doc_cli import shared_core as doc_shared_core
 from jsonui_doc_cli.spec_doc import validator as validator_mod
+from jsonui_test_cli import branch_tests as bt
 from jsonui_test_cli import contracts_coverage as cc
 
 REPO = Path(__file__).resolve().parents[2]
 GATES = doc_shared_core.load("gate_versions")
+
+
+def _load_tag_gate():
+    path = REPO / "dev-guide/release/validate_gate_version.py"
+    spec = importlib.util.spec_from_file_location("_tag_gate_under_test", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+TAG_GATE = _load_tag_gate()
 
 #: (literal, running version) -> state, gates?, announces?
 TABLE = [
@@ -80,6 +96,36 @@ def _reader_layout_ids(literal, version, monkeypatch, tmp_path):
     return warned, announced
 
 
+def _reader_unmatched(literal, version, monkeypatch):
+    """What the four renderers are handed: red, and the gate string the
+    runtime prints (a release announces it; "withdrawn" says so; None says no
+    release) — plus the line `generate branch-tests` prints for unreadable."""
+    monkeypatch.setattr(bt, "UNMATCHED_GATE_FROM", literal)
+    monkeypatch.setattr(bt, "_running_version", lambda: version)
+    red, gate = bt.unmatched_gate()
+    state = ("withdrawn" if gate == GATES.GATE_WITHDRAWN else "release" if gate
+             else "unreadable" if bt.unmatched_gate_note() else "undeclared")
+    return state, red, state == "release" and not red
+
+
+#: The tag gate's verdict on (L -> L) at the table's version, by what it says.
+_TAG_VERDICTS = [
+    (True, "gates since", ("release", True, False)),
+    (True, "announces", ("release", False, True)),
+    (True, "withdrawn", ("withdrawn", False, False)),
+    (True, "unset", ("undeclared", False, False)),
+    (False, "version unreadable", ("unreadable", False, False)),
+]
+
+
+def _reader_tag_gate(literal, version):
+    ok, why = TAG_GATE.judge("X_GATE_FROM", version, literal, literal)
+    for want_ok, start, answer in _TAG_VERDICTS:
+        if ok == want_ok and (why.startswith(start) if ok else start in why):
+            return answer
+    return ("no verdict the table knows", ok, why)
+
+
 @pytest.mark.parametrize("literal, version, state, gates, announces", TABLE)
 def test_every_reader_gives_the_tables_answer(literal, version, state, gates, announces,
                                              monkeypatch, tmp_path):
@@ -88,6 +134,8 @@ def test_every_reader_gives_the_tables_answer(literal, version, state, gates, an
         "gate_versions": _reader_module(literal, version),
         "coverage": _reader_coverage(literal, version, monkeypatch),
         "layout ids": (state, *_reader_layout_ids(literal, version, monkeypatch, tmp_path)),
+        "unmatched": _reader_unmatched(literal, version, monkeypatch),
+        "tag gate": _reader_tag_gate(literal, version),
     }
     assert answers == {name: (state, gates, announces) for name in answers}, answers
 
@@ -96,7 +144,8 @@ def test_the_readers_load_the_same_file():
     from jsonui_test_cli import shared_core as test_shared_core
     here = GATES.__file__
     assert test_shared_core.load("gate_versions").__file__ == here
-    assert Path(here) == REPO / "shared/core/gate_versions.py"
+    assert bt._gates().__file__ == here
+    assert Path(TAG_GATE.gates.__file__) == Path(here) == REPO / "shared/core/gate_versions.py"
 
 
 def _loader_functions(path: Path) -> dict:

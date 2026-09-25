@@ -279,14 +279,47 @@ def test_a_third_literal_in_document_tools_is_collected(tmp_path):
                and "announces 1.8.120" in l for l in lines), lines
 
 
-@pytest.mark.parametrize("literal", [
-    None, "", "withdrawn", "1.8.120", "0.0.1", "10.20.300",
-    "next", "1.8", "1.8.l20", "v1.8.120", "1.8.120rc1", " 1.8.120", "1.8.120.1",
-])
-def test_the_tag_gate_reads_a_literal_the_way_the_gates_do(literal):
-    """The tag gate runs without the tree's test_tools on its path, so it keeps
-    its own reading of "is this a release number"; the gates read theirs from
-    jsonui_test_cli.gate_literal. Held equal here, so one cannot move alone."""
-    from jsonui_test_cli.gate_literal import gate_state
-    tag_gate_reads_release = bool(literal) and literal != vgv.WITHDRAWN and bool(vgv._VERSION.match(literal))
-    assert tag_gate_reads_release == (gate_state(literal) == "release"), literal
+def test_the_tag_gate_has_no_reading_of_its_own():
+    """It reads literals with shared/core/gate_versions.py (design v4.21), the
+    module every gate reads them with — not a copy held equal to it by an arm.
+    That the answers agree is document_tools/tests/test_gate_readers_agree.py."""
+    import ast
+    tree = ast.parse(SCRIPT.read_text(encoding="utf-8"))
+    functions = {n.name for n in ast.walk(tree) if isinstance(n, ast.FunctionDef)}
+    assert not functions & {"_key", "version_key", "gate_state", "gate_is_on"}, functions
+    patterns = [a.value for n in ast.walk(tree) if isinstance(n, ast.Call)
+                and getattr(n.func, "attr", "") == "compile"
+                for a in n.args if isinstance(a, ast.Constant)]
+    assert not [p for p in patterns if "\\d" in p and "\\." in p], patterns
+    assert Path(vgv.gates.__file__) == REPO / "shared/core/gate_versions.py"
+
+
+def test_an_empty_literal_is_unset_as_the_gates_read_it():
+    """"" was "unreadable" (FAIL) here and "undeclared" in every gate."""
+    assert vgv.judge("UNMATCHED_GATE_FROM", "1.8.119", "", None) == (
+        True, "unset — nothing announced, no gate")
+    assert vgv.judge("VALIDATE_GATE_FROM", "1.8.119", "", None)[0] is False
+    assert "had it unset" in vgv.judge("UNMATCHED_GATE_FROM", "1.8.119", "1.8.119", "")[1]
+
+
+_READER = "shared/core/gate_versions.py"
+
+
+@pytest.mark.parametrize("shipped, red", [
+    ("the same", False), ("different", True), ("absent", False)])
+def test_the_ref_ships_the_reader_the_literals_were_read_with(tmp_path, shipped, red):
+    here = (REPO / _READER).read_text(encoding="utf-8")
+    reader = {"the same": here, "different": here + "\n# another reading\n", "absent": None}[shipped]
+    root = _repo(tmp_path, {}, {
+        _VALIDATE_PATH: _module("VALIDATE_GATE_FROM", "1.8.120"), _READER: reader})
+    rc, lines = _run(root)
+    named = [l for l in lines if l.startswith("  FAIL") and "run the tag gate from the tree being tagged" in l]
+    assert (rc, len(named)) == ((1, 1) if red else (0, 0)), lines
+
+
+def test_without_the_reader_nothing_is_judged(tmp_path):
+    copy = tmp_path / "dev-guide/release/validate_gate_version.py"
+    copy.parent.mkdir(parents=True)
+    copy.write_text(SCRIPT.read_text(encoding="utf-8"), encoding="utf-8")
+    run = subprocess.run(["python3", str(copy), "1.8.119", str(copy)], capture_output=True, text=True)
+    assert run.returncode == 1 and run.stdout.startswith("FAIL the gate constants cannot be judged"), run

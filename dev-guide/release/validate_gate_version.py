@@ -40,6 +40,14 @@ constant quietly left out. The count and the names are printed. As a positive
 control, a tree whose contracts coverage module names VALIDATE_GATE_FROM must
 yield it.
 
+A literal is READ by shared/core/gate_versions.py — the one reader every gate
+uses (validate's coverage, P2e's generator, the spec validator's layout ids;
+design v4.21) — loaded by path from this checkout. Before it the tag gate kept
+its own regular expression and its own numeric key, held equal to the gates by
+an arm; now "" is unset here as it is there, not "unreadable". The tree form
+also fails when the ref's gate_versions.py is not the file this check read: the
+judgment would be made with a reader the release does not ship.
+
 Usage:
   validate_gate_version.py <tag version> --repo <dir> <this ref> <previous tag>
   validate_gate_version.py <tag version> <this tree's file> [<previous tag's file>]
@@ -49,11 +57,28 @@ Prints `ok` or `FAIL` and a summary, then one line per constant; exits 0 / 1.
 from __future__ import annotations
 
 import ast
+import importlib.util
 import re
 import subprocess
 import sys
+from pathlib import Path
 
-WITHDRAWN = "withdrawn"
+#: shared/core/gate_versions.py of the checkout this script is in.
+GATE_VERSIONS_REL = "shared/core/gate_versions.py"
+GATE_VERSIONS_PATH = Path(__file__).resolve().parents[2] / GATE_VERSIONS_REL
+
+
+def _load_gates():
+    if not GATE_VERSIONS_PATH.is_file():
+        return None
+    spec = importlib.util.spec_from_file_location("_tag_gate_gate_versions", GATE_VERSIONS_PATH)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+gates = _load_gates()
+WITHDRAWN = gates.GATE_WITHDRAWN if gates else "withdrawn"
 ABSENT = "absent"                     # not in the tree at all
 VALIDATE = "VALIDATE_GATE_FROM"
 #: The module the positive control reads: if it names VALIDATE_GATE_FROM, the
@@ -61,24 +86,12 @@ VALIDATE = "VALIDATE_GATE_FROM"
 CONTROL_PATH = "test_tools/jsonui_test_cli/contracts_coverage.py"
 
 _NAME = re.compile(r"^[A-Z][A-Z0-9_]*_GATE_FROM$")
-#: A gate version is three numbers and nothing else (the rule the gates read).
-_VERSION = re.compile(r"^\d+\.\d+\.\d+$")
 _LINE = re.compile(r"^([A-Z][A-Z0-9_]*_GATE_FROM)\s*(?::[^=\n]*)?=(?!=)", re.M)
 #: An assignment below module level (inside an `if`, a function): both readers
 #: above look at the top level only, so without this a gate literal written
 #: there would be missed by both, and agreement would prove nothing.
 _INDENTED = re.compile(r"^[ \t]+([A-Z][A-Z0-9_]*_GATE_FROM)\s*(?::[^=\n]*)?=(?!=)", re.M)
 _LITERAL = re.compile(r'^VALIDATE_GATE_FROM\s*:[^=\n]*=\s*(None|"([^"]*)"|\'([^\']*)\')\s*$', re.M)
-
-
-def _key(version: str) -> tuple:
-    out = []
-    for part in version.lstrip("v").split("."):
-        digits = "".join(ch for ch in part if ch.isdigit())
-        if not digits:
-            break
-        out.append(int(digits))
-    return tuple(out)
 
 
 def next_patch(version: str) -> str:
@@ -96,7 +109,7 @@ def next_releases(version: str) -> tuple:
 def _describe(value) -> str:
     if value == ABSENT:
         return "not in the tree"
-    if value is None:
+    if not value:
         return "unset"
     return repr(value)
 
@@ -104,19 +117,22 @@ def _describe(value) -> str:
 def judge(name: str, tag_version: str, current, previous=ABSENT) -> tuple[bool, str]:
     """One constant's verdict on the pair (previous tag's value, this tree's).
 
-    Values are ABSENT, None (unset), WITHDRAWN, or a version string.
+    Values are ABSENT, or a literal as the gates read it (gate_versions):
+    unset (None or ""), WITHDRAWN, a release number, or unreadable.
     """
     tag = tag_version.lstrip("v")
-    # A previous value that is not a version (unreadable) announced nothing.
-    before = previous if isinstance(previous, str) and _VERSION.match(previous) else None
+    key = gates.version_key
+    # A previous value that is not a release number announced nothing.
+    before = previous if previous != ABSENT and gates.gate_state(previous) == "release" else None
+    state = None if current == ABSENT else gates.gate_state(current)
     if current == ABSENT:
         if before is None:
             return True, f"n/a — no {name} in this tree"
         return False, (f"{name} was {before!r} at the previous tag and is gone from this tree "
                        f"— withdraw it with \"{WITHDRAWN}\" first (an announcement must not vanish)")
-    if current == WITHDRAWN:
+    if state == "withdrawn":
         return True, f"withdrawn (was {_describe(previous)}) — no gate, and the release note says so"
-    if current is None:
+    if state == "undeclared":
         if name == VALIDATE:
             return False, (f"{name} is unset — the section would ship announcing no release; "
                            f"set it to {next_patch(tag)} (the next patch)")
@@ -124,10 +140,10 @@ def judge(name: str, tag_version: str, current, previous=ABSENT) -> tuple[bool, 
             return True, "unset — nothing announced, no gate"
         return False, (f"unset, but the previous tag announced {before!r} — withdraw it with "
                        f"\"{WITHDRAWN}\" (unsetting makes an announcement vanish)")
-    if not _VERSION.match(current):
-        return False, (f"{current!r} is unreadable — a gate version is three numbers "
-                       f"(x.y.z) or \"{WITHDRAWN}\"; the gates read it as no gate")
-    if before is not None and _key(current) < _key(before):
+    if state != "release":
+        return False, (f"{gates.state_note(name, current)} — a gate version is three numbers "
+                       f"(x.y.z) or \"{WITHDRAWN}\"")
+    if before is not None and key(current) < key(before):
         return False, (f"{current} is earlier than the release the previous tag announced "
                        f"{before!r} — a gate brought forward")
     if current in next_releases(tag):
@@ -136,12 +152,12 @@ def judge(name: str, tag_version: str, current, previous=ABSENT) -> tuple[bool, 
         if current == before:
             return True, f"announces {current} again, a release that can follow {tag}"
         return True, f"postpones {before!r} to {current}, a release that can follow {tag}"
-    if _key(current) <= _key(tag):
+    if key(current) <= key(tag):
         if before == current:
             return True, f"gates since {current} (tag {tag}; the previous tag announced it)"
         was = ("had no section" if previous == ABSENT
-               else "had it unset" if previous is None
-               else "had it withdrawn" if previous == WITHDRAWN
+               else "had it unset" if gates.gate_state(previous) == "undeclared"
+               else "had it withdrawn" if gates.gate_state(previous) == "withdrawn"
                else f"announced {previous!r}")
         return False, (f"gates from {current} at {tag}, but the previous tag {was}"
                        " — a gate no release announced (design U5: announce once first)")
@@ -256,6 +272,7 @@ def check_tree(tag_version: str, repo: str, ref: str, previous_ref: str) -> tupl
     lines: list[str] = []
     current, problems = collect(repo, ref)
     before, previous_problems = collect(repo, previous_ref)
+    problems += reader_problems(repo, ref)
     for problem in problems:
         lines.append(f"  FAIL {problem}")
     for problem in previous_problems:
@@ -274,6 +291,20 @@ def check_tree(tag_version: str, repo: str, ref: str, previous_ref: str) -> tupl
     return ok, [head] + lines
 
 
+def reader_problems(repo: str, ref: str) -> list:
+    """The literals were read with GATE_VERSIONS_PATH; if *ref* ships a
+    different gate_versions.py, the gates of that release read them another
+    way, and this verdict is not about the release."""
+    shipped = _git(repo, "show", f"{ref}:{GATE_VERSIONS_REL}") if _git(
+        repo, "ls-tree", "--name-only", ref, "--", GATE_VERSIONS_REL).strip() else None
+    if shipped is None:
+        return []           # a tree from before the one reader: nothing to hold it to
+    if shipped != GATE_VERSIONS_PATH.read_text(encoding="utf-8"):
+        return [f"{ref}:{GATE_VERSIONS_REL} is not the {GATE_VERSIONS_PATH} this check read the "
+                "literals with — run the tag gate from the tree being tagged"]
+    return []
+
+
 def _read(path: str) -> str:
     try:
         with open(path, encoding="utf-8") as f:
@@ -283,6 +314,10 @@ def _read(path: str) -> str:
 
 
 def main(argv: list) -> int:
+    if gates is None:
+        print(f"FAIL the gate constants cannot be judged: {GATE_VERSIONS_PATH} is not there "
+              "(the one reader of every *_GATE_FROM)")
+        return 1
     if len(argv) >= 6 and argv[2] == "--repo":
         try:
             ok, lines = check_tree(argv[1], argv[3], argv[4], argv[5])
