@@ -58,9 +58,9 @@ module KjuiTools
           # Generate attribute definition file
           generate_attribute_definition_file
 
-          @logger.success "Successfully generated converter: #{@class_name}"
-          @logger.info "Converter file created at: kjui_tools/lib/compose/components/extensions/#{@component_snake_case}_component.rb"
-          @logger.info "Mappings file updated with '#{@component_pascal_case}' => '#{@class_name}'"
+          # What the run did, from what it recorded — each file has said its
+          # own line above (Created / Overwrote / Skipped / Kept, with its path).
+          report_scaffold
         end
 
         private
@@ -332,7 +332,7 @@ module KjuiTools
           # Only create if it doesn't exist yet
           if !File.exist?(debug_file)
             File.write(debug_file, generate_debug_initializer_content(package_name))
-            @logger.info "Created DynamicComponentInitializer (debug)"
+            @logger.info "Created DynamicComponentInitializer (debug): #{debug_file}"
           end
 
           # Create release version
@@ -349,7 +349,7 @@ module KjuiTools
           # Only create if it doesn't exist yet
           if !File.exist?(release_file)
             File.write(release_file, generate_release_initializer_content(package_name))
-            @logger.info "Created DynamicComponentInitializer (release)"
+            @logger.info "Created DynamicComponentInitializer (release): #{release_file}"
           end
         end
 

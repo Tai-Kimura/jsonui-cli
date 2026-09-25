@@ -205,17 +205,38 @@ module JsonUIShared
     # a callback, a data source, a type outside the vocabulary, or a value of
     # the wrong kind; the converter then passes nothing, the prop keeps its
     # default, and the converter says so. A JSON null is written only for a
-    # nullable type. `hook` (optional) answers for a scalar first — each
-    # converter's own colours and string resources — and nil falls back here.
+    # type that takes one (takes_null?). `hook` (optional) answers for a
+    # scalar first — each converter's own colours and string resources — and
+    # nil falls back here.
     #
     # Until 1.8.121 each converter formatted literals from its own spellings:
     # a `String?` or `text` literal went out unquoted, a Kotlin Float as a
     # Double, a list or a map as Ruby's inspect. Ticket
     # converter-literal-props-do-not-compile.
 
+    # Whether a JSON null the layout gives a prop of `type` is written as the
+    # language's null: for a type that is optional in the vocabulary — `T?`, a
+    # type outside it (a model the app declares, optional), a callback, a data
+    # source. Not for `T!!`: sjui's mark makes the model non-optional, and the
+    # Swift scaffold declares it so. Every other type is not given a null on
+    # any tool — the converter writes nothing and says so, as it always did
+    # for `String`. The same answer on the three tools (rjui, whose props are
+    # all optional in TypeScript, never writes a null and says so for the
+    # same types).
+    #
+    # Until 1.8.121 this was `nullable`, which a `T!!` model keeps for Kotlin
+    # and TypeScript: sjui wrote `nil` into its non-optional `Row` argument
+    # (swiftc: "'nil' is not compatible with expected argument type 'Row'")
+    # and kjui wrote `null`, neither with a word. Ticket
+    # converter-writes-nil-for-a-forced-model-prop.
+    def takes_null?(type)
+      t = type.is_a?(Type) ? type : parse(type)
+      t.nullable == true && !t.forced
+    end
+
     def swift_literal(type, value, &hook)
       t = type.is_a?(Type) ? type : parse(type)
-      return t.nullable ? 'nil' : nil if value.nil?
+      return takes_null?(t) ? 'nil' : nil if value.nil?
 
       case t.kind
       when :list
@@ -230,7 +251,7 @@ module JsonUIShared
 
     def kotlin_literal(type, value, &hook)
       t = type.is_a?(Type) ? type : parse(type)
-      return t.nullable ? 'null' : nil if value.nil?
+      return takes_null?(t) ? 'null' : nil if value.nil?
 
       case t.kind
       when :list

@@ -72,12 +72,20 @@ module JsonUIShared
     # follows the scaffold can read what the kept files say — see
     # kept_leaf_scaffold.
     def self.may_write?(file_path, options, logger, noun:, exists_label: nil)
+      existed = File.exist?(file_path)
       write = overwrite_decision(file_path, options, logger, noun: noun, exists_label: exists_label)
       record = options[:scaffold_files]
-      record[write ? :written : :kept] << file_path if record.is_a?(Hash)
+      if record.is_a?(Hash)
+        record[write ? :written : :kept] << file_path
+        (record[:overwritten] ||= []) << file_path if write && existed
+      end
       write
     end
 
+    # A file kept by an answer is said, as one kept by --skip-existing is
+    # ("Skipped existing …"): until 1.8.121 an "n" or a closed stdin left the
+    # prompt's line open and said nothing, and the run went on to report the
+    # file as created (ticket g-converter-reports-files-it-did-not-write).
     def self.overwrite_decision(file_path, options, logger, noun:, exists_label:)
       return true unless File.exist?(file_path)
 
@@ -89,9 +97,32 @@ module JsonUIShared
 
       logger.warn "#{exists_label || noun.capitalize} already exists: #{file_path}"
       print "Overwrite? (y/n): "
-      $stdin.gets&.chomp&.downcase == 'y'
+      answer = $stdin.gets
+      puts if answer.nil? # stdin closed: end the prompt's line
+      return true if answer&.chomp&.downcase == 'y'
+
+      logger.info "Kept existing #{noun}: #{file_path}#{answer.nil? ? ' (stdin closed)' : ''}"
+      false
     end
     private_class_method :overwrite_decision
+
+    # Writes one scaffold file through the overwrite decision above, and says
+    # what it did with the path it wrote: "Created" when there was no file,
+    # "Overwrote" when there was (--force, "y"). A kept file is said by the
+    # decision. The content is built only when it is written. Returns
+    # whether it wrote.
+    #
+    # Every scaffold writer says it through here: until 1.8.121 each wrote
+    # its own "Created …" line, which said "Created" for a file it replaced
+    # (ticket g-converter-reports-files-it-did-not-write).
+    def self.write_scaffold(file_path, options, logger, noun:, label:, exists_label: nil)
+      existed = File.exist?(file_path)
+      return false unless may_write?(file_path, options, logger, noun: noun, exists_label: exists_label)
+
+      File.write(file_path, yield)
+      logger.info "#{existed ? 'Overwrote' : 'Created'} #{label}: #{file_path}"
+      true
+    end
 
     # `--attribute-descriptions '<json>'`: {attribute name => description},
     # the component spec's `props.items[].description`, which `jui g
@@ -166,12 +197,10 @@ module JsonUIShared
       # `jui build` (and other non-interactive flows) set JUI_SKIP_EXISTING=1
       # so the prompt is bypassed and existing converter files are left alone.
       # `--skip-existing` is the CLI equivalent; `--force` overwrites.
-      return unless self.class.may_write?(file_path, @options, @logger,
-                                          noun: 'converter',
-                                          exists_label: 'Converter file')
-
-      File.write(file_path, converter_template)
-      @logger.info "Created converter file: #{file_path}"
+      self.class.write_scaffold(file_path, @options, @logger,
+                                noun: 'converter', label: 'converter file', exists_label: 'Converter file') do
+        converter_template
+      end
     end
 
     def update_mappings_file
@@ -189,7 +218,7 @@ module JsonUIShared
 
       # Check if mapping already exists
       if content.include?("'#{@name}' =>")
-        @logger.warn "Mapping for '#{@name}' already exists in #{File.basename(mappings_file)}"
+        @logger.info "Unchanged #{mappings_file}: it already maps '#{@name}'"
         return
       end
 
@@ -217,7 +246,7 @@ module JsonUIShared
 
       # Insert the new mapping before the closing brace of the mappings
       # constant (indentation differs per tool — capture and reuse it)
-      content.sub!(/(#{spec[:const]} = \{.*?)(,?)(\s*)([ ]*\}\.freeze)/m) do
+      added = content.sub!(/(#{spec[:const]} = \{.*?)(,?)(\s*)([ ]*\}\.freeze)/m) do
         existing_mappings = $1
         closing = $4
 
@@ -231,8 +260,17 @@ module JsonUIShared
         end
       end
 
+      # Said only when it was added: a file without the `#{spec[:const]} = {…}
+      # .freeze` this looks for was written back unchanged and reported as
+      # updated until 1.8.121.
+      unless added
+        @logger.warn "Could not add the mapping '#{@name}' to #{mappings_file}: it has no " \
+                     "`#{spec[:const]} = { … }.freeze` — add `#{spec[:mapping_line].strip}` by hand"
+        return
+      end
+
       File.write(mappings_file, content)
-      @logger.info "Updated #{File.basename(mappings_file)} with new mapping"
+      @logger.info "Updated #{mappings_file}: added the mapping '#{@name}'"
     end
 
     def create_initial_mappings_file
@@ -241,7 +279,7 @@ module JsonUIShared
       FileUtils.mkdir_p(File.dirname(mappings_file))
 
       File.write(mappings_file, spec[:initial_content])
-      @logger.info "Created #{File.basename(mappings_file)} with initial mapping"
+      @logger.info "Created #{mappings_file} with the mapping '#{@name}'"
     end
 
     # Names every attribute whose type is outside the shared vocabulary
@@ -316,7 +354,30 @@ module JsonUIShared
     # Called first by each profile's `generate`: from here on may_write?
     # records every scaffold file this run writes and every one it keeps.
     def track_scaffold_files
-      @options[:scaffold_files] = { written: [], kept: [] }
+      @options[:scaffold_files] = { written: [], kept: [], overwritten: [] }
+    end
+
+    # The run's last line, from the record may_write? keeps: how many of the
+    # files it scaffolds it created, overwrote and kept. Until 1.8.121 the
+    # run ended "Successfully generated converter" — sjui and kjui adding
+    # "Converter file created at: …" and "Mappings file updated with …" —
+    # whatever it had done: after --skip-existing, "n" or a closed stdin too,
+    # and with a path that was not the file's (sjui's `Leaf_converter.rb` for
+    # `leaf_converter.rb`). Ticket g-converter-reports-files-it-did-not-write.
+    def report_scaffold
+      record = @options[:scaffold_files]
+      return unless record.is_a?(Hash)
+
+      overwritten = record[:overwritten] || []
+      created = record[:written] - overwritten
+      kept = record[:kept]
+      counts = "#{created.size} created, #{overwritten.size} overwritten, #{kept.size} kept"
+      if record[:written].empty? && !kept.empty?
+        @logger.info "#{@name}: every scaffold file already existed and was kept (#{counts}); " \
+                     '--force overwrites them'
+      else
+        @logger.success "Scaffolded #{@name}: #{counts}"
+      end
     end
 
     # What a kept file says when it is in the leaf form: the code
@@ -452,9 +513,12 @@ module JsonUIShared
 
       # Write to file
       file_path = File.join(dir, "#{@name}.json")
+      existed = File.exist?(file_path)
       File.write(file_path, JSON.pretty_generate(json_content))
 
-      @logger.info "Created attribute definition file: attribute_definitions/#{@name}.json"
+      # "Rewrote" when it was there (it is rewritten on every run), with the
+      # path written — until 1.8.121 "Created …: attribute_definitions/X.json".
+      @logger.info "#{existed ? 'Rewrote' : 'Created'} attribute definition file: #{file_path}"
     end
 
     # Normalize a type string that arrives from component specs (`String?`,

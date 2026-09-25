@@ -2,6 +2,7 @@
 
 require 'json'
 require 'set'
+require 'stringio'
 require 'tmpdir'
 require 'core/logger'
 require 'core/attribute_types'
@@ -113,5 +114,53 @@ RSpec.describe 'kjui g converter: a literal the layout gives a prop' do
   it 'keeps a string literal whole: its quotes, backslashes and templates are escaped' do
     call = emitted('LiteralString', { 'v' => 'String' }, { 'type' => 'LiteralString', 'v' => STRING })
     expect(call).to include('v = "Say \\"hi\\" \\\\ \\$x \\${y}"')
+  end
+
+  # A JSON null the layout gives a prop. `null` is written only for a type
+  # every tool writes a null for — the ones sjui's Swift scaffold declares
+  # optional (the shared table's swift_type, the declaration, not the
+  # question the converter asks) — and every other prop gets nothing and a
+  # line naming it; the composable's default stands. Until 1.8.121 a `Row!!`
+  # model got `null` here without a word while sjui refused it. Ticket
+  # converter-writes-nil-for-a-forced-model-prop.
+  describe 'a JSON null' do
+    def null_types
+      JsonUIShared::AttributeTypes::VOCABULARY.keys + JsonUIShared::AttributeTypes::ALIASES.keys +
+        ['String?', 'Int?', 'Object?', '[String]', '[Int]?', 'Array(Float)', 'Array', 'Row', 'Row?', 'Row!!',
+         '[Row]', 'Callback', '(() -> Void)?']
+    end
+
+    it 'writes null only where Swift declares the prop optional, names every other, and compiles each call' do
+      rows = null_types.each_with_index.map do |type, i|
+        name = "NullProbe#{i}"
+        said = StringIO.new
+        saved = $stderr
+        call = begin
+          $stderr = said
+          emitted(name, { 'v' => type }, { 'type' => name, 'v' => nil })
+        ensure
+          $stderr = saved
+        end
+        scaffold = in_project do
+          KjuiTools::Compose::Generators::KotlinComponentGenerator
+            .new(name, { is_container: false, attributes: { 'v' => type } }).send(:kotlin_template)
+        end
+        [type, call, said.string, scaffold, i]
+      end
+      aggregate_failures do
+        rows.each do |type, call, said, _, _|
+          optional = JsonUIShared::AttributeTypes.swift_type(JsonUIShared::AttributeTypes.parse(type)).end_with?('?')
+          expect(call.match?(/^\s*v = null,?$/)).to eq(optional), "#{type}: #{call}"
+          next if optional
+
+          expect(call).not_to match(/^\s*v = /), "#{type}: #{call}"
+          expect(said).to include("the layout's nil is not a #{type} literal"), "#{type}: #{said.inspect}"
+        end
+      end
+      source = rows.map do |_, call, _, scaffold, i|
+        "#{body(scaffold)}\n@Composable fun nullProbeHost#{i}() {\n#{call}\n}\n"
+      end.join
+      expect("#{STUB}\n#{source}").to compile_as_kotlin
+    end
   end
 end

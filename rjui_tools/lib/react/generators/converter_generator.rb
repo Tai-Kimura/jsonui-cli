@@ -48,7 +48,11 @@ module RjuiTools
           # Generate attribute definition file for validation
           generate_attribute_definition_file
 
-          @logger.success "Successfully generated converter: #{@class_name}"
+          # What the run did, from what it recorded — each file has said its
+          # own line above (Created / Overwrote / Skipped / Kept, with its
+          # path). Until 1.8.121: "Successfully generated converter" whatever
+          # it had done (ticket g-converter-reports-files-it-did-not-write).
+          report_scaffold
           @logger.info "Converter file: #{converter_file_path}"
           @logger.info "Run 'rjui build' to use the new component in your layouts"
         end
@@ -245,9 +249,28 @@ module RjuiTools
             lines << "              else"
             lines.concat(emit_literal_branch(key, t))
             lines << "              end"
+            lines.concat(null_literal_branch(key, type))
             lines << "            end"
           end
           lines
+        end
+
+        # A JSON null the layout gives a prop: never written (every prop is
+        # optional in TypeScript, and `null` is not one of the types the
+        # component declares), and — for a type that takes no null on any
+        # tool (JsonUIShared::AttributeTypes.takes_null?: `String`, `[Int]`,
+        # `Object`, `Row!!` …) — said, in the sentence the sjui and kjui
+        # converters print for a literal they cannot write. Until 1.8.121 rjui
+        # dropped it without a word for every type. Ticket
+        # converter-writes-nil-for-a-forced-model-prop.
+        def null_literal_branch(key, type)
+          return [] if JsonUIShared::AttributeTypes.takes_null?(type)
+
+          [
+            "            elsif json.key?('#{key}') && #{key}_value.nil?",
+            "              warn \"[rjui] #{@name}.#{key}: the layout's nil is not a #{type} literal this converter can \" \\",
+            "                   \"write — the prop keeps its default. Give a #{type} value, or bind it (@{…}).\""
+          ]
         end
 
         # Emit the literal-value branch for a single prop, given a normalized
