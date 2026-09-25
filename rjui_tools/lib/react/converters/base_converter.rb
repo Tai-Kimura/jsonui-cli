@@ -2092,6 +2092,18 @@ module RjuiTools
 
         # Wrap JSX with visibility condition (conditional render)
         # "gone" → removes from DOM, "invisible" → hidden but keeps space
+        # A control written with a static value starts there and the user
+        # changes it: the value seeds the control's own state (ticket
+        # static-valued-controls-do-not-change-on-a-users-tap — a static
+        # Segment and TabView had no state and a Radio group was `checked`
+        # read-only, so a tap did nothing). The state is held by the file's
+        # JsonUISeeded (ReactGenerator writes it where a file uses it) and
+        # handed to the markup as `seeded` / `setSeeded` — no name per control,
+        # so two controls can never share one.
+        def wrap_seeded(jsx, indent, seed)
+          "#{indent_str(indent)}<JsonUISeeded seed={#{seed}}>{(seeded, setSeeded) => (\n#{jsx}\n#{indent_str(indent)})}</JsonUISeeded>"
+        end
+
         def wrap_with_visibility(jsx, indent)
           # Idempotent per instance: converters that wrap inside their own
           # `convert` must not be wrapped a second time by convert_node.

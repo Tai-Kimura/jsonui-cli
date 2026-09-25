@@ -78,7 +78,8 @@ RSpec.describe RjuiTools::React::Converters::TabViewConverter do
           ]
         })
         result = converter.convert
-        expect(result).to include('onClick={() => data.handleTabChange?.(0)}')
+        # The tab view's own state moves, and the handler hears it.
+        expect(result).to include('onClick={() => { setSeeded(0); data.handleTabChange?.(0); }}')
       end
     end
 
@@ -308,15 +309,19 @@ RSpec.describe RjuiTools::React::Converters::TabViewConverter do
     it 'reads and writes selectedTabIndex when selectedIndex is not bound' do
       result = create_converter({ 'type' => 'TabView', 'tabs' => tabs }).convert
 
-      expect(result).to include('data.selectedTabIndex ?? 0')
-      expect(result).to include('data.setSelectedTabIndex?.(')
+      # Unbound, the tab view holds its own state (seeded 0) unless the page
+      # passes selectedTabIndex; a tap writes both.
+      expect(result).to include('<JsonUISeeded seed={0}>')
+      expect(result).to include('data.selectedTabIndex ?? seeded')
+      expect(result).to include('setSeeded(0); data.setSelectedTabIndex?.(0);')
       expect(result).not_to include('data.selectedTab ')
     end
 
     it 'seeds the state from a literal selectedIndex' do
       result = create_converter({ 'type' => 'TabView', 'tabs' => tabs, 'selectedIndex' => 1 }).convert
 
-      expect(result).to include('data.selectedTabIndex ?? 1')
+      expect(result).to include('<JsonUISeeded seed={1}>')
+      expect(result).to include('data.selectedTabIndex ?? seeded')
     end
 
     it 'uses the declared property when selectedIndex is bound' do

@@ -271,8 +271,11 @@ module RjuiTools
         # Props come from 'data' attribute - can be at root level or as first child element
         data = extract_data_from_json(json)
 
-        # Determine if we need useState or "use client"
-        needs_state = !state_vars.empty?
+        # Determine if we need useState or "use client". A control seeded from
+        # a static value (BaseConverter#wrap_seeded) holds its state in the
+        # file's JsonUISeeded.
+        uses_seeded = jsx_content.include?('<JsonUISeeded')
+        needs_state = !state_vars.empty? || uses_seeded
         uses_extensions = !extension_components.empty?
         needs_focus = !focus_fields.empty?
         needs_collection_scroll = !collection_scrolls.empty?
@@ -579,7 +582,7 @@ module RjuiTools
           #{use_client}#{marker_header}
           #{react_import}#{media_query_import}#{link_import}#{string_manager_import}#{cell_id_import}#{collection_scroll_import}#{relative_position_import}#{auto_shrink_import}#{date_format_import}#{screen_marker_import}#{partial_text_import}#{include_id_import}#{configuration_import}#{color_manager_import}#{lucide_import}#{data_import}#{extension_imports}#{component_imports}#{variant_component_imports}
 
-          #{props_interface if @config['typescript']}
+          #{props_interface if @config['typescript']}#{seeded_helper(@config['typescript']) if uses_seeded}
           export const #{name} = (#{props_sig}) => {#{data_merge_declaration}#{state_declarations}#{focus_declarations}#{collection_scroll_declarations}#{relative_position_declarations}#{auto_shrink_declarations}#{landscape_declaration}#{string_manager_declaration}#{variant_dispatch_declaration}
             return (
           #{jsx_content}
@@ -975,30 +978,33 @@ module RjuiTools
         parts[0] + parts[1..].map(&:capitalize).join
       end
 
-      def extract_state_variables(json, vars = [])
-        # Check for Segment/Radio that need state
-        type = json['type']
+      # Component-level state hooks. None today: a static Segment / Radio used
+      # to declare `selectedIndex` / `selectedValue` here — one fixed name per
+      # kind, folded by name, and read by no markup — while the controls
+      # stayed where they started (ticket
+      # static-valued-controls-do-not-change-on-a-users-tap). A control's
+      # own state is now the file's JsonUISeeded (#seeded_helper).
+      def extract_state_variables(_json)
+        []
+      end
 
-        if type == 'Segment'
-          id = json['id'] || 'segment'
-          selected = json['selectedIndex'] || json['selectedTabIndex']
-          unless selected.is_a?(String) && selected.start_with?('@{')
-            vars << { name: 'selectedIndex', default: selected || 0 }
-          end
-        elsif type == 'Radio'
-          id = json['id'] || 'radio'
-          selected = json['selectedValue']
-          unless selected.is_a?(String) && selected.start_with?('@{')
-            vars << { name: 'selectedValue', default: '""' }
-          end
-        end
+      # The one holder of every static-seeded control's state in a file:
+      # `seed` starts it, the markup gets the value and its setter.
+      def seeded_helper(typescript)
+        signature = if typescript
+                      '<T,>({ seed, children }: { seed: T; children: (value: T, set: (value: T) => void) => React.ReactNode })'
+                    else
+                      '({ seed, children })'
+                    end
+        <<~TSX.chomp
 
-        # Recurse into children
-        json['child']&.each do |child|
-          extract_state_variables(child, vars) if child.is_a?(Hash)
-        end
-
-        vars.uniq { |v| v[:name] }
+          // A control written with a static value starts there and the user changes it
+          // (the value is a seed, as `defaultChecked` is): its state, handed to its markup.
+          const JsonUISeeded = #{signature} => {
+            const [value, setValue] = useState(seed);
+            return <>{children(value, setValue)}</>;
+          };
+        TSX
       end
 
       def generate_props_signature(props)
