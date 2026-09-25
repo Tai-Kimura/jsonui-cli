@@ -2570,7 +2570,12 @@ def _sync_repository_protocols(
 
 def _narrowed_var_fix(platform: str, var) -> str:
     """The declaration the protocol accepts for a spec var the Impl narrowed:
-    a read-only member may keep its setter private, a settable one may not."""
+    a read-only member may keep its setter private, a settable one may not.
+
+    Kotlin prohibits a private setter on an OPEN property, and an `override`
+    in an open class is open: `override var X … private set` compiles in the
+    generated ViewModel only because that class is final. The text names the
+    `final override` spelling for an Impl the consumer made open."""
     sig = var.signature
     if platform == "ios":
         if "{ get set }" in sig:
@@ -2582,7 +2587,9 @@ def _narrowed_var_fix(platform: str, var) -> str:
     if sig.lstrip().startswith("var "):
         return f"write `override var {var.name}` — the protocol declares a setter"
     return (f"write `override var {var.name} … private set` (or `override val "
-            f"{var.name}`) to keep the setter private")
+            f"{var.name}`) to keep the setter private — in an open class, "
+            f"`final override var {var.name} … private set`, since Kotlin "
+            f"prohibits a private setter on an open property")
 
 
 def _sync_viewmodel_protocols(
