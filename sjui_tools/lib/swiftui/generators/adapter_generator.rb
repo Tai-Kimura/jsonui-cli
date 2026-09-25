@@ -32,12 +32,15 @@ module SjuiTools
           end
           
           # Create adapter file
-          create_adapter_file(adapter_dir)
+          written = create_adapter_file(adapter_dir)
           
           # Update registration file if it exists
           update_registration_file(adapter_dir)
           
-          @logger.success "Successfully generated adapter: #{@adapter_class_name}"
+          # Only when the adapter was written: a kept one has said "Skipped
+          # existing" / "Kept existing" (until 1.8.121 this line followed
+          # either way — ticket g-converter-reports-files-it-did-not-write).
+          @logger.success "Successfully generated adapter: #{@adapter_class_name}" if written
           true
         end
         
@@ -98,12 +101,11 @@ module SjuiTools
           
           # Through the converter core's one overwrite decision, so
           # --force / --skip-existing / JUI_SKIP_EXISTING reach this
-          # file too, and a closed stdin reads as "n" instead of raising.
-          return unless JsonUIShared::ConverterGeneratorCore.may_write?(
-            adapter_file, @options, @logger, noun: 'adapter file', exists_label: 'Adapter file')
-          
-          File.write(adapter_file, adapter_template)
-          @logger.info "Created adapter file: #{adapter_file}"
+          # file too, and a closed stdin reads as "n" instead of raising;
+          # it says Created or Overwrote. Returns whether it wrote.
+          JsonUIShared::ConverterGeneratorCore.write_scaffold(
+            adapter_file, @options, @logger, noun: 'adapter file', label: 'adapter file', exists_label: 'Adapter file'
+          ) { adapter_template }
         end
         
         def update_registration_file(adapter_dir)
@@ -114,7 +116,7 @@ module SjuiTools
             
             # Check if adapter is already registered
             if content.include?("#{@adapter_class_name}()")
-              @logger.info "Adapter already registered in CustomComponentRegistration.swift"
+              @logger.info "Unchanged #{registration_file}: it already registers #{@adapter_class_name}"
               return
             end
             
@@ -138,12 +140,17 @@ module SjuiTools
               )
               
               File.write(registration_file, new_content)
-              @logger.info "Updated CustomComponentRegistration.swift with #{@adapter_class_name}"
+              @logger.info "Updated #{registration_file}: registered #{@adapter_class_name}"
+            else
+              # Said: until 1.8.121 a file without this list was left as it
+              # was without a word.
+              @logger.warn "Could not register #{@adapter_class_name} in #{registration_file}: it has no " \
+                           "`let adapters: [CustomComponentAdapter] = [ … ]` — add `#{@adapter_class_name}()` by hand"
             end
           else
             # Create registration file if it doesn't exist
             File.write(registration_file, registration_template)
-            @logger.info "Created CustomComponentRegistration.swift"
+            @logger.info "Created #{registration_file} registering #{@adapter_class_name}"
           end
         end
         

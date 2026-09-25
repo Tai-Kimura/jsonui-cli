@@ -41,12 +41,11 @@ module SjuiTools
           
           # Through the converter core's one overwrite decision, so
           # --force / --skip-existing / JUI_SKIP_EXISTING reach this
-          # file too, and a closed stdin reads as "n" instead of raising.
-          return unless JsonUIShared::ConverterGeneratorCore.may_write?(
-            swift_file_path, @options, @logger, noun: 'swift file', exists_label: 'Swift file')
-          
-          File.write(swift_file_path, swift_template)
-          @logger.info "Created Swift file: #{swift_file_path}"
+          # file too, and a closed stdin reads as "n" instead of raising;
+          # it says Created or Overwrote.
+          JsonUIShared::ConverterGeneratorCore.write_scaffold(
+            swift_file_path, @options, @logger, noun: 'swift file', label: 'Swift file', exists_label: 'Swift file'
+          ) { swift_template }
         end
 
         def swift_template

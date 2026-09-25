@@ -48,12 +48,12 @@ module KjuiTools
 
           # Through the converter core's one overwrite decision, so
           # --force / --skip-existing / JUI_SKIP_EXISTING reach this
-          # file too, and a closed stdin reads as "n" instead of raising.
-          return unless JsonUIShared::ConverterGeneratorCore.may_write?(
-            file_path, @options, @logger, noun: 'dynamic component file', exists_label: 'Dynamic component file')
-
-          File.write(file_path, dynamic_template)
-          @logger.info "Created dynamic component file: #{file_path}"
+          # file too, and a closed stdin reads as "n" instead of raising;
+          # it says Created or Overwrote.
+          JsonUIShared::ConverterGeneratorCore.write_scaffold(
+            file_path, @options, @logger,
+            noun: 'dynamic component file', label: 'dynamic component file', exists_label: 'Dynamic component file'
+          ) { dynamic_template }
         end
 
         def update_dynamic_registry
@@ -82,7 +82,7 @@ module KjuiTools
 
           # Check if component already registered
           if content.include?("\"#{@component_name}\"")
-            @logger.warn "Component '#{@component_name}' already registered in DynamicComponentRegistry"
+            @logger.info "Unchanged #{registry_file}: it already registers '#{@component_name}'"
             return
           end
 
@@ -95,10 +95,17 @@ module KjuiTools
           REGISTRATION
 
           # Insert before the else statement in when block
-          content.sub!(/(when \(type\) \{.*?)(\n            else)/m) do
+          added = content.sub!(/(when \(type\) \{.*?)(\n            else)/m) do
             existing = $1
             else_clause = $2
             "#{existing}\n#{new_registration}#{else_clause}"
+          end
+          # Said: until 1.8.121 a registry without this `when` was written
+          # back unchanged and reported as updated.
+          unless added
+            @logger.warn "Could not register '#{@component_name}' in #{registry_file}: it has no " \
+                         '`when (type) { … else …` to add it to — add it by hand'
+            return
           end
 
           # Add import if not present
@@ -113,7 +120,7 @@ module KjuiTools
           end
 
           File.write(registry_file, content)
-          @logger.info "Updated DynamicComponentRegistry with new component"
+          @logger.info "Updated #{registry_file}: registered '#{@component_name}'"
         end
 
         def create_initial_registry
@@ -168,7 +175,7 @@ module KjuiTools
           KOTLIN
 
           File.write(registry_file, content)
-          @logger.info "Created DynamicComponentRegistry with initial component"
+          @logger.info "Created #{registry_file} registering '#{@component_name}'"
         end
 
         def dynamic_template

@@ -20,11 +20,13 @@ module RjuiTools
         def generate
           @logger.info "Generating React component: #{@name}"
 
-          # Said only when the file was written. It used to follow the call
-          # unconditionally, so a run that kept the file (--skip-existing,
-          # "n", a closed stdin) printed "Skipped existing …" and then
-          # "Created component file" for the same untouched file.
-          @logger.info "Created component file: #{component_file_path}" if create_component_file
+          # Said by the write itself, and only when it wrote: "Created" when
+          # there was no file, "Overwrote" when it replaced one. The line used
+          # to follow the call unconditionally, so a run that kept the file
+          # (--skip-existing, "n", a closed stdin) printed "Skipped existing
+          # …" and then "Created component file" for the same untouched file;
+          # until 1.8.121 a replaced file was "Created" too.
+          create_component_file
         end
 
         private
@@ -47,11 +49,9 @@ module RjuiTools
           # --skip-existing keep, --force replaces, otherwise ask; a closed
           # stdin is "n"). This file kept its own copy of the same rules
           # until 1.8.113 — the same behaviour, a second place to drift.
-          return false unless JsonUIShared::ConverterGeneratorCore.may_write?(
-            file_path, @options, @logger, noun: 'component', exists_label: 'Component file')
-
-          File.write(file_path, component_template)
-          true
+          JsonUIShared::ConverterGeneratorCore.write_scaffold(
+            file_path, @options, @logger, noun: 'component', label: 'component file', exists_label: 'Component file'
+          ) { component_template }
         end
 
         def component_template
