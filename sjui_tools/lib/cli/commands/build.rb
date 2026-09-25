@@ -202,6 +202,13 @@ module SjuiTools
             json_data = JSON.parse(File.read(json_file))
           rescue JSON::ParserError => e
             Core::Logger.error("Invalid JSON in #{json_file}: #{e.message}")
+            # Refused like a layout the checks refuse, so the next build
+            # converts it (and meets the same JSON) — until 1.8.121 it was
+            # an ERROR above "SwiftUI build completed!" (ticket
+            # uikit-build-reports-success-after-a-binding-error).
+            (@refused_layouts ||= []) << base_file
+            require_relative '../../core/stage_failures'
+            JsonUI::StageFailures.record('layout', "#{json_file} could not be read: #{e.message}")
             return
           end
 
@@ -779,14 +786,7 @@ module SjuiTools
           # The closing line does not say completed when it did not. The exit
           # code is left alone deliberately, as on the other faces: `jui build`
           # turns the ledger into the non-zero exit.
-          if JsonUI::StageFailures.any?
-            Core::Logger.error(
-              "Build finished with #{JsonUI::StageFailures.entries.size} " \
-              'stage(s) incomplete — see above'
-            )
-          else
-            Core::Logger.success "SwiftUI build completed!"
-          end
+          JsonUI::StageFailures.conclude(Core::Logger, 'SwiftUI build completed!')
         end
 
         # Where a layout's GeneratedView (and its variants') is written:

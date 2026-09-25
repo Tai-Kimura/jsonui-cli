@@ -107,6 +107,12 @@ module SjuiTools
           JSON.parse(File.read(style_file))
         rescue JSON::ParserError => e
           puts "Error parsing style file '#{style_file}': #{e.message}"
+          # The layouts using it are drawn without it; the build says so at
+          # its end, once (ticket uikit-build-reports-success-after-a-binding-error).
+          require_relative '../core/stage_failures'
+          JsonUI::StageFailures.record_once(
+            'styles', "#{style_file} could not be parsed (#{e.message}); the layouts using it were drawn without it"
+          )
           nil
         end
       end

@@ -1338,7 +1338,9 @@ module RjuiTools
           return nil unless File.exist?(style_path)
 
           JSON.parse(File.read(style_path))
-        rescue JSON::ParserError
+        rescue JSON::ParserError => e
+          require_relative '../style_loader'
+          StyleLoader.unparsed_style(style_path, e)
           nil
         end
 

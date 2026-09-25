@@ -2,6 +2,7 @@
 
 require 'json'
 require_relative '../core/config_manager'
+require_relative '../core/stage_failures'
 
 module RjuiTools
   module React
@@ -58,6 +59,18 @@ module RjuiTools
         component
       end
 
+      # A style that could not be parsed: the layouts using it are drawn
+      # without it, which the build names at its end, once. Until 1.8.121
+      # this path printed an "Error parsing" line above "Build completed!",
+      # and the converters' own loader (BaseConverter#load_style) said
+      # nothing at all (ticket uikit-build-reports-success-after-a-binding-error).
+      def self.unparsed_style(style_file, error)
+        JsonUI::StageFailures.record_once(
+          'styles', "#{File.expand_path(style_file)} could not be parsed (#{error.message}); " \
+                    'the layouts using it were drawn without it'
+        )
+      end
+
       class << self
         private
 
@@ -100,6 +113,7 @@ module RjuiTools
           JSON.parse(File.read(style_file))
         rescue JSON::ParserError => e
           puts "Error parsing style file '#{style_file}': #{e.message}"
+          StyleLoader.unparsed_style(style_file, e)
           nil
         end
 

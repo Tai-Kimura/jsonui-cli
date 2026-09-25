@@ -173,6 +173,12 @@ module KjuiTools
             json_data = JSON.parse(File.read(json_file))
           rescue JSON::ParserError => e
             Core::Logger.error("Invalid JSON in #{json_file}: #{e.message}")
+            # Refused like a layout the checks refuse, so the next build
+            # converts it — as sjui does with the same file (ticket
+            # uikit-build-reports-success-after-a-binding-error).
+            (@refused_layouts ||= []) << base_file
+            require_relative '../../core/stage_failures'
+            JsonUI::StageFailures.record('layout', "#{json_file} could not be read: #{e.message}")
             return
           end
 
@@ -579,7 +585,10 @@ module KjuiTools
           require_relative '../../core/stage_failures'
           JsonUI::StageFailures.report!(Core::Logger)
 
-          Core::Logger.success "Compose build completed!"
+          # Until 1.8.121 "Compose build completed!" came directly under the
+          # list of stages that had not (ticket
+          # uikit-build-reports-success-after-a-binding-error).
+          JsonUI::StageFailures.conclude(Core::Logger, 'Compose build completed!')
         end
 
         # Cell views a Collection renders, by class name. Collected while the

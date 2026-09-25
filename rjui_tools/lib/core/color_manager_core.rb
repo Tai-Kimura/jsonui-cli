@@ -391,6 +391,15 @@ module JsonUIShared
           logger.warn "Failed to parse #{json_file}: #{e.message}"
         rescue => e
           logger.error "Error processing #{json_file}: #{e.message}"
+          # Named at the end of the build — until 1.8.121 the build ended in
+          # its success line under it (ticket
+          # uikit-build-reports-success-after-a-binding-error).
+          begin
+            require_relative 'stage_failures'
+            JsonUI::StageFailures.record('colors', "#{json_file}: colour extraction failed (#{e.message})")
+          rescue LoadError
+            nil
+          end
         end
       end
 

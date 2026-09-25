@@ -334,6 +334,18 @@ module JsonUIShared
         JSON.parse(File.read(definitions_path))
       else
         puts "\e[31m[#{log_tag} Error] attribute_definitions.json not found at #{definitions_path}\e[0m"
+        # Every attribute is then checked against no definitions. Named at
+        # the end of the build, once — until 1.8.121 this line was all, and
+        # the build ended in its success line (ticket
+        # uikit-build-reports-success-after-a-binding-error).
+        begin
+          require_relative 'stage_failures'
+          JsonUI::StageFailures.record_once(
+            'validation', "#{definitions_path} was not found; the attributes were checked without it"
+          )
+        rescue LoadError
+          nil
+        end
         {}
       end
 

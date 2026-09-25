@@ -41,6 +41,12 @@ module KjuiTools
               config_data
             rescue JSON::ParserError => e
               puts "Error parsing config file: #{e.message}"
+              # A build on the defaults is not the project's build: named at
+              # its end, once (ticket uikit-build-reports-success-after-a-binding-error).
+              require_relative 'stage_failures'
+              JsonUI::StageFailures.record_once(
+                'config', "#{config_path} could not be parsed (#{e.message}); the build ran on the default configuration"
+              )
               {}
             end
           else
