@@ -8,17 +8,29 @@ Enforces the canonical rules from ``shared/core/screen_identity.json``:
 * ``screen-not-a-screen`` (error) — the value resolves to a Collection cell
   or a partial. Cells are sub-areas of the screen the step already runs on.
 * ``screen-id-collision`` (error) — two layouts share a basename, so the id
-  is ambiguous.
+  a step names is ambiguous. Reported on the step that names it; a collision
+  no step names is left to ``jui build``, which already stops on a
+  duplicated layout basename on every face.
 
 Classification comes from ``jui_cli.core.screen_identity`` — the single
 implementation of the canon. When the layout tree cannot be located the
 whole check is SKIPPED rather than guessed: this validator also runs in
 projects it knows nothing about (CI checkouts, doc-only trees), and a
-false "unknown screen" error would block their install pipeline.
+false "unknown screen" error would block their install pipeline. A skip is
+counted and said, though (``not_checked`` in the run's summary): silent, it
+looks exactly like a clean result.
+
+The layout tree comes from the config the run read (``set_run_config``,
+called by ``validate``), not from a walk up from the test file. The walk
+found the wrong config wherever the tests sit outside the app — a split
+tree, with the app's layouts declared in ``<app>/jui.config.json`` and the
+tests beside it — and the check stood down for every test there, saying
+nothing. The walk is kept only for a caller that sets no run config.
 """
 
 from __future__ import annotations
 
+import os
 import sys
 from pathlib import Path
 
@@ -111,11 +123,13 @@ def _layouts_dir_from_config(config: dict, config_path: Path) -> Path | None:
 
 
 class ScreenIdIndex:
-    """Project screen vocabulary, or an inert index when it is unknown."""
+    """Project screen vocabulary, or an inert index when it is unknown
+    (``why`` then says why)."""
 
-    def __init__(self, index=None, collisions: dict | None = None):
+    def __init__(self, index=None, collisions: dict | None = None, why: str = ""):
         self._index = index
         self.collisions = collisions or {}
+        self.why = why if index is None else ""
 
     @property
     def available(self) -> bool:
@@ -134,16 +148,20 @@ class ScreenIdIndex:
 
 _CACHE: dict[str, ScreenIdIndex] = {}
 
+#: The config of this run (`set_run_config`); empty when none was set.
+_RUN: dict = {}
 
-def load_screen_index(test_file_path: Path | None) -> ScreenIdIndex:
-    """Build (and cache) the screen index for the project owning a test."""
-    if test_file_path is None:
-        return ScreenIdIndex()
 
-    config, config_path = _find_project_config(Path(test_file_path).resolve().parent)
-    if config is None:
-        return ScreenIdIndex()
+def set_run_config(config: dict | None = None, config_path: Path | None = None) -> None:
+    """Take the layout tree from the config the run read (None clears, and
+    a caller that sets nothing keeps the walk up from the test file)."""
+    _RUN.clear()
+    if not config or config_path is None:
+        return
+    _RUN["config"] = (config, Path(config_path).resolve())
 
+
+def _index_from_config(config: dict, config_path: Path) -> ScreenIdIndex:
     cache_key = str(config_path)
     if cache_key in _CACHE:
         return _CACHE[cache_key]
@@ -152,8 +170,10 @@ def load_screen_index(test_file_path: Path | None) -> ScreenIdIndex:
     app_owned = _declared_app_owned(config)
     build_screen_index = _import_build_screen_index()
 
-    if layouts_dir is None or build_screen_index is None:
-        result = ScreenIdIndex()
+    if layouts_dir is None:
+        result = ScreenIdIndex(why=f"{config_path} declares no layouts directory that exists")
+    elif build_screen_index is None:
+        result = ScreenIdIndex(why="jui_cli's screen classifier is not importable")
     else:
         index = build_screen_index(layouts_dir, app_owned)
         result = ScreenIdIndex(index, index.collisions)
@@ -162,15 +182,41 @@ def load_screen_index(test_file_path: Path | None) -> ScreenIdIndex:
     return result
 
 
+def load_screen_index(test_file_path: Path | None) -> ScreenIdIndex:
+    """The screen index of this run's project (see the module docstring)."""
+    if "config" in _RUN:
+        return _index_from_config(*_RUN["config"])
+
+    if test_file_path is None:
+        return ScreenIdIndex(why="no test file and no project config")
+
+    config, config_path = _find_project_config(Path(test_file_path).resolve().parent)
+    if config is None:
+        return ScreenIdIndex(why="no jui.config.json above the test file, and the run read none")
+    return _index_from_config(config, config_path)
+
+
 def clear_cache() -> None:
-    """Drop the per-project cache (tests build throwaway projects)."""
+    """Drop the per-project cache and the run's config (tests build
+    throwaway projects)."""
     _CACHE.clear()
+    _RUN.clear()
 
 
 def check_screen_value(screen_id: str, index: ScreenIdIndex) -> str | None:
     """Return a rule violation message for a ``screen`` value, or None."""
     if not index.available or not screen_id:
         return None
+    if screen_id in index.collisions:
+        # Checked first: the index keeps one of the colliding layouts, so the
+        # id also reads as known — which is how this passed silently.
+        paths = [Path(p) for p in index.collisions[screen_id]]
+        root = Path(os.path.commonpath([str(p.parent) for p in paths]))
+        joined = ", ".join(str(p.relative_to(root)) for p in paths)
+        return (
+            f"Screen id '{screen_id}' is ambiguous — several layouts share the basename "
+            f"(screen-id-collision): {joined} under {root}. Rename one of them."
+        )
     if not index.is_known(screen_id):
         return (
             f"Unknown screen '{screen_id}' (screen-unknown). Use a layout's basename, "
@@ -184,14 +230,3 @@ def check_screen_value(screen_id: str, index: ScreenIdIndex) -> str | None:
         )
     return None
 
-
-def collision_messages(index: ScreenIdIndex) -> list[str]:
-    """One message per ambiguous basename in the project."""
-    messages = []
-    for screen_id, paths in sorted(index.collisions.items()):
-        joined = ", ".join(str(p) for p in paths)
-        messages.append(
-            f"Screen id '{screen_id}' is ambiguous — several layouts share the basename "
-            f"(screen-id-collision): {joined}"
-        )
-    return messages
