@@ -17,7 +17,17 @@
 # Usage: dev-guide/release/run-suites.sh [checkout]   (default: repo of this script)
 set -u
 set -o pipefail
-C=${1:-$(cd "$(dirname "$0")/../.." && pwd)}
+# 🔻 ABSOLUTE BEFORE ANYTHING USES IT. `C=${1:-…}` kept a relative argument as
+# given, and py_suite compares the package path python prints (absolute) with
+# "$C"/* — so `run-suites.sh .` failed three suites with "resolves outside the
+# checkout" on a tree that is green (measured 2026-09-25: failures=6). The
+# driver was avoiding it by hand; the gate should not need them to.
+C=$(cd "${1:-$(dirname "$0")/../..}" && pwd) || { printf '%s\n' "!! no such checkout: ${1:-}"; exit 1; }
+# 🔻 THE LOCALE IS THE GATE'S, NOT THE SHELL'S. Ruby takes its default external
+# encoding from the locale, and a shell with none (an agent's tool shell, a
+# cron) makes it US-ASCII: the suites' Japanese fixtures read as "???" and
+# sjui / kjui / rjui went red 80 / 27 / 47 on a tree that is green (2026-09-25).
+export LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8
 export RBENV_VERSION=${RBENV_VERSION:-3.2.2}
 export JAVA_HOME=${JAVA_HOME:-/opt/homebrew/opt/openjdk@17}
 export ANDROID_HOME=${ANDROID_HOME:-$HOME/Library/Android/sdk}
@@ -26,6 +36,9 @@ say() { printf '%s\n' "$*"; }
 bad() { fail=$((fail+1)); say "!! $*"; }
 
 say "== start $(date -u +%FT%TZ) / $(date +%H:%M:%S) local"
+# What the Ruby suites will actually read with, not what was exported: the
+# answer of the ruby they run (RBENV_VERSION above).
+say "== locale LANG=$LANG LC_ALL=$LC_ALL ruby $(ruby -e 'print RUBY_VERSION, " default_external=", Encoding.default_external' 2>&1)"
 say "== HEAD $(git -C "$C" rev-parse HEAD) porcelain_lines=$(git -C "$C" status --porcelain | wc -l | tr -d ' ')"
 # 🔻 WHICH TREE THIS RUN MEASURED, not just which commit it is on. A branch can
 # be green on its own base while the tree that ships has moved: on 2026-09-09 a
@@ -422,20 +435,21 @@ else
   bad "unit-stub isolation typecheck: no xcrun — this leg needs a toolchain, and a release gate does not skip it"
 fi
 
-# A scenario's `delayMs` on Android: the emitted Kotlin runtime compiled whole
-# and RUN against MockWebServer. Its jars (okhttp, mockwebserver, coroutines-
+# The emitted Kotlin branch runtime compiled whole and RUN: a scenario's
+# `delayMs` against MockWebServer, and the harness seeding state by type. Its jars (okhttp, mockwebserver, coroutines-
 # test, serialization) are in a Gradle cache and in no CI image, so this runner
 # owns the arm; named as its own leg, with the versions it compiled against
 # and its executed / skipped count, and required — a missing jar FAILS.
-say "== branch runtime delayMs, Android EXECUTED (MockWebServer, pinned jars)"
+say "== branch runtime, Android EXECUTED (delayMs, seed state; pinned jars)"
 _x="$(mktemp -t delay-android).xml"
 out=$( cd "$C/test_tools" && JSONUI_REQUIRE_ANDROID_JARS=1 python3 -m pytest -q -p no:cacheprovider \
-         tests/test_branch_scenario_delay_android.py --junitxml="$_x" 2>&1 )
+         tests/test_branch_scenario_delay_android.py tests/test_branch_seed_state_android.py \
+         --junitxml="$_x" 2>&1 )
 rc=$?
-say "   $(cd "$C/test_tools" && python3 -c 'from tests.test_branch_scenario_delay_android import PINNED; print(" ".join(a.split("/")[1] + ":" + v for a, v in PINNED))' 2>&1 | tail -1)"
+say "   $(cd "$C/test_tools" && python3 -c 'from tests._android_runtime import PINNED; print(" ".join(a.split("/")[1] + ":" + v for a, v in PINNED))' 2>&1 | tail -1)"
 say "   $(python3 "$C/dev-guide/ci/executed-or-skipped.py" "$_x" 2>&1 | tail -1)"
 say "   exit=$rc"
-[ "$rc" = 0 ] || bad "branch runtime delayMs (Android): exit $rc — $(printf '%s' "$out" | grep -E '^(FAILED|ERROR)' | head -3 | tr '\n' ' ')"
+[ "$rc" = 0 ] || bad "branch runtime (Android): exit $rc — $(printf '%s' "$out" | grep -E '^(FAILED|ERROR)' | head -3 | tr '\n' ' ')"
 rm -f "$_x"
 
 say "== misfiled tickets (a ticket under reports/ is invisible to the inbox scan)"

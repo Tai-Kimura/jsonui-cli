@@ -2287,6 +2287,10 @@ export function apiOriginsOf(harnessModule: unknown): string[] | null {
 /** Responses a scenario's `delayMs` is holding back. `settle` waits for
  * every one of them: a row's `then` reads the state after they arrived. */
 const pendingDeliveries = new Set<Promise<void>>();
+/** When the last of them arrived (ms). A view model often sends its next
+ * request a moment after one lands; between the two nothing is pending, and
+ * a settle that looked only at the count returned in that gap. */
+let lastDeliveryAt = 0;
 
 /** `mock serve` sleeps `min(delayMs, 30000)`: the same cap here. */
 export const DELAY_CAP_MS = 30000;
@@ -2367,6 +2371,7 @@ export function installFetchMock(
             await delivered;
           } finally {
             pendingDeliveries.delete(delivered);
+            lastDeliveryAt = Date.now();
           }
         }
         return new Response(
@@ -2566,22 +2571,26 @@ export function partialMismatches(
 export async function settle(turns = 10): Promise<void> {
   const started = Date.now();
   for (;;) {
+    const drainStarted = Date.now();
     for (let i = 0; i < turns; i += 1) {
       await new Promise((resolve) => setTimeout(resolve, 0));
     }
-    if (pendingDeliveries.size === 0) return;
+    // Quiet: nothing pending, and nothing landed while draining.
+    if (pendingDeliveries.size === 0 && lastDeliveryAt < drainStarted) return;
     const waited = Date.now() - started;
     if (waited >= SETTLE_DELAY_BUDGET_MS) {
       throw new Error(
-        `settle: ${pendingDeliveries.size} delayed response(s) still pending after waiting ` +
-          `${waited} ms (budget ${SETTLE_DELAY_BUDGET_MS} ms: one delayMs of at most ` +
-          `${DELAY_CAP_MS} and a margin) — the row's then would read the state before they arrived`
+        `settle: delayed responses were still arriving after waiting ${waited} ms ` +
+          `(${pendingDeliveries.size} pending; budget ${SETTLE_DELAY_BUDGET_MS} ms: one delayMs ` +
+          `of at most ${DELAY_CAP_MS} and a margin) — the row's then would read the state before they arrived`
       );
     }
-    await Promise.race([
-      Promise.all([...pendingDeliveries]),
-      new Promise<void>((resolve) => setTimeout(resolve, SETTLE_DELAY_BUDGET_MS - waited)),
-    ]);
+    if (pendingDeliveries.size > 0) {
+      await Promise.race([
+        Promise.all([...pendingDeliveries]),
+        new Promise<void>((resolve) => setTimeout(resolve, SETTLE_DELAY_BUDGET_MS - waited)),
+      ]);
+    }
   }
 }
 
@@ -3157,6 +3166,10 @@ object BranchDeliveries {
   @Synchronized fun schedule(delayMs: Long) { due.add(System.currentTimeMillis() + delayMs) }
   @Synchronized fun pending(now: Long): Int = due.count { it > now }
   @Synchronized fun lastDue(): Long = due.maxOrNull() ?: 0L
+  /** Did one arrive in (from, to]? A view model often sends its next request
+   * a moment after one lands; between the two nothing is pending, and a
+   * settle that looked only at the count returned in that gap. */
+  @Synchronized fun arrivedBetween(from: Long, to: Long): Boolean = due.any { it in (from + 1)..to }
 }
 
 data class RecordedCall(val op: String, val method: String, val path: String, val body: String?)
@@ -3471,7 +3484,14 @@ fun runBranchTest(
   try {
     block(harnessFactory(server.url("/").toString(), dispatcher), recorder)
   } finally {
-    server.shutdown()
+    // A response a scenario's `delayMs` is still holding back keeps the
+    // server's queue busy, and shutdown gives up with an IOException — which,
+    // thrown from here, would replace the test's own failure (settle's named
+    // one among them). The test's outcome is the one to report.
+    try {
+      server.shutdown()
+    } catch (_: java.io.IOException) {
+    }
     Dispatchers.resetMain()
   }
 }
@@ -3495,22 +3515,26 @@ abstract class BaseBranchHarness(
     // before the responses arrived.
     val started = System.currentTimeMillis()
     while (true) {
+      val drainStarted = System.currentTimeMillis()
       repeat(60) {
         dispatcher.scheduler.advanceUntilIdle()
         Thread.sleep(5)
       }
       dispatcher.scheduler.advanceUntilIdle()
-      if (BranchDeliveries.pending(System.currentTimeMillis()) == 0) return
-      while (BranchDeliveries.pending(System.currentTimeMillis()) > 0) {
+      // Quiet: nothing pending, and nothing landed while draining.
+      val now = System.currentTimeMillis()
+      if (BranchDeliveries.pending(now) == 0 && !BranchDeliveries.arrivedBetween(drainStarted, now)) return
+      while (true) {
         val waited = System.currentTimeMillis() - started
         if (waited >= BranchDeliveries.SETTLE_BUDGET_MS) {
           throw AssertionError(
-            "settle: " + BranchDeliveries.pending(System.currentTimeMillis()) +
-              " delayed response(s) still pending after waiting " + waited + " ms (budget " +
+            "settle: delayed responses were still arriving after waiting " + waited + " ms (" +
+              BranchDeliveries.pending(System.currentTimeMillis()) + " pending; budget " +
               BranchDeliveries.SETTLE_BUDGET_MS + " ms: one delayMs of at most " +
               BranchDeliveries.CAP_MS + " and a margin) — the row's then would read the " +
               "state before they arrived")
         }
+        if (BranchDeliveries.pending(System.currentTimeMillis()) == 0) break
         dispatcher.scheduler.advanceUntilIdle()
         Thread.sleep(5)
       }
@@ -3562,8 +3586,16 @@ abstract class BaseBranchHarness(
 
   private fun dataValue(): Any? = dataFlow()?.value
 
+  /** Each key goes to the view model's field and to the `_data` copy() —
+   * to each only when its type takes the value. A view model's state and a
+   * layout's data can share a name with different types (a List of choices
+   * and the card collection drawing them), and handing the List to the
+   * collection's parameter threw "argument type mismatch" from inside the
+   * seed. A key neither side took, when either side has a member of that
+   * name, fails naming the key and both types. */
   override fun setState(state: Map<String, Any?>) {
-    val dataKeys = mutableMapOf<String, Any?>()
+    val onVm = mutableSetOf<String>()
+    val vmRefused = mutableMapOf<String, String>()
     for ((k, v) in state) {
       val field = findField(vm, k)
       if (field != null && !Modifier.isStatic(field.modifiers)) {
@@ -3571,31 +3603,59 @@ abstract class BaseBranchHarness(
         if (current is MutableStateFlow<*>) {
           @Suppress("UNCHECKED_CAST")
           (current as MutableStateFlow<Any?>).value = coerce(v, current.value?.javaClass)
+          onVm.add(k)
         } else {
-          field.set(vm, coerce(v, field.type))
+          val coerced = coerce(v, field.type)
+          if (accepts(field.type, coerced, !field.type.isPrimitive)) {
+            field.set(vm, coerced)
+            onVm.add(k)
+          } else {
+            vmRefused[k] = field.type.simpleName
+          }
         }
       }
-      dataKeys[k] = v
     }
-    applyToData(dataKeys)
+    val (onData, dataRefused) = applyToData(state)
+    for ((k, v) in state) {
+      if (k in onVm || k in onData) continue
+      if (k !in vmRefused && k !in dataRefused) continue      // no member of that name: as before
+      error(
+        "branch-harness: state '" + k + "' could not be written — the view model's '" + k + "' is " +
+          (vmRefused[k] ?: "absent") + ", the data's is " + (dataRefused[k] ?: "absent") +
+          ", and the value is " + (v?.javaClass?.simpleName ?: "null")
+      )
+    }
   }
 
-  /** Copy the `_data` data class with every state key it declares. */
-  private fun applyToData(state: Map<String, Any?>) {
-    val flow = dataFlow() ?: return
-    val current = flow.value ?: return
-    val copyFn = current::class.memberFunctions.firstOrNull { it.name == "copy" } ?: return
+  /** Does a member of *type* take *value* (boxed for a primitive)? */
+  private fun accepts(type: Class<*>, value: Any?, nullable: Boolean): Boolean =
+    if (value == null) nullable else type.kotlin.javaObjectType.isInstance(value)
+
+  /** Copy the `_data` data class with every state key it declares whose
+   * parameter takes the value. Returns the keys it took, and the parameter
+   * type of each it refused. */
+  private fun applyToData(state: Map<String, Any?>): Pair<Set<String>, Map<String, String>> {
+    val taken = mutableSetOf<String>()
+    val refused = mutableMapOf<String, String>()
+    val flow = dataFlow() ?: return taken to refused
+    val current = flow.value ?: return taken to refused
+    val copyFn = current::class.memberFunctions.firstOrNull { it.name == "copy" } ?: return taken to refused
     copyFn.isAccessible = true
     val callArgs = mutableMapOf(copyFn.instanceParameter!! to current as Any?)
-    var any = false
     for (param in copyFn.parameters) {
       val name = param.name ?: continue
-      if (name in state) {
-        callArgs[param] = coerce(state[name], (param.type.classifier as? KClass<*>)?.java)
-        any = true
+      if (name !in state) continue
+      val klass = param.type.classifier as? KClass<*>
+      val coerced = coerce(state[name], klass?.java)
+      if (klass == null || accepts(klass.java, coerced, param.type.isMarkedNullable)) {
+        callArgs[param] = coerced
+        taken.add(name)
+      } else {
+        refused[name] = klass.simpleName ?: klass.toString()
       }
     }
-    if (any) flow.value = copyFn.callBy(callArgs)
+    if (taken.isNotEmpty()) flow.value = copyFn.callBy(callArgs)
+    return taken to refused
   }
 
   private fun coerce(value: Any?, type: Class<*>?): Any? {
@@ -4059,9 +4119,15 @@ nonisolated final class BranchDeliveries {
   var settleBudgetMs: Int { capMs + 1000 }
   private let lock = NSLock()
   private var count = 0
+  private var lastEnd = Date.distantPast
   func begin() { lock.lock(); count += 1; lock.unlock() }
-  func end() { lock.lock(); count -= 1; lock.unlock() }
+  func end() { lock.lock(); count -= 1; lastEnd = Date(); lock.unlock() }
   var pending: Int { lock.lock(); defer { lock.unlock() }; return count }
+  /// When the last of them arrived (or was cancelled). A view model often
+  /// sends its next request a moment after one lands; between the two
+  /// nothing is pending, and a settle that looked only at the count
+  /// returned in that gap.
+  var lastDelivery: Date { lock.lock(); defer { lock.unlock() }; return lastEnd }
 }
 
 // 🔻 `nonisolated` HERE TOO, AND FOR THE SAME REASON ONE LAYER DOWN. The
@@ -4622,19 +4688,25 @@ class BaseBranchHarness: BranchHarness {
     // responses arrived.
     let started = Date()
     while true {
+      let drainStarted = Date()
       for _ in 0..<80 {
         RunLoop.main.run(until: Date().addingTimeInterval(0.005))
       }
-      if BranchDeliveries.shared.pending == 0 { return }
-      while BranchDeliveries.shared.pending > 0 {
+      // Quiet: nothing pending, and nothing landed while draining.
+      if BranchDeliveries.shared.pending == 0 && BranchDeliveries.shared.lastDelivery < drainStarted {
+        return
+      }
+      while true {
         let waited = Int(Date().timeIntervalSince(started) * 1000)
         if waited >= BranchDeliveries.shared.settleBudgetMs {
-          XCTFail("settle: \\(BranchDeliveries.shared.pending) delayed response(s) still pending after "
-                  + "waiting \\(waited) ms (budget \\(BranchDeliveries.shared.settleBudgetMs) ms: one delayMs of "
-                  + "at most \\(BranchDeliveries.shared.capMs) and a margin) — the row's then would read the "
+          XCTFail("settle: delayed responses were still arriving after waiting \\(waited) ms "
+                  + "(\\(BranchDeliveries.shared.pending) pending; budget "
+                  + "\\(BranchDeliveries.shared.settleBudgetMs) ms: one delayMs of at most "
+                  + "\\(BranchDeliveries.shared.capMs) and a margin) — the row's then would read the "
                   + "state before they arrived")
           return
         }
+        if BranchDeliveries.shared.pending == 0 { break }
         RunLoop.main.run(until: Date().addingTimeInterval(0.005))
       }
     }

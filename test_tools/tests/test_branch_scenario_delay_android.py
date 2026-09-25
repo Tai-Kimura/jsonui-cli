@@ -3,62 +3,27 @@ RUN against MockWebServer.
 
 The same probe as test_branch_scenario_delay.py (A, then B 50 ms later; the
 order they land in; `settle` waits for the delayed one; a control with the
-wait taken out; the budget failing by name). The runtime needs the okhttp,
-mockwebserver, coroutines-test and serialization jars, which only a Gradle
-cache has and CI does not, so this file is in no CI job: run-suites.sh's
-leg runs it with JSONUI_REQUIRE_ANDROID_JARS set, and there a missing jar
-FAILS rather than skips. The versions are pinned and printed — not the
-newest found — so a run says what it compiled against.
+wait taken out; the budget failing by name), on the runtime compiled whole
+by tests/_android_runtime.py — pinned jars from a Gradle cache, so this file
+is in no CI job and run-suites.sh's Android leg owns it.
 """
 from __future__ import annotations
 
-import os
 import re
-import subprocess
 from pathlib import Path
 
 import pytest
 
 from jsonui_test_cli import branch_tests as bt
-from tests import _toolchain as tc
+from tests import _android_runtime as android
 
-DELAY_MS = 700
-CACHE = Path.home() / ".gradle/caches/modules-2/files-2.1"
-#: (group/artifact, version) the runtime is compiled and run against.
-PINNED = [
-    ("com.squareup.okhttp3/okhttp", "4.12.0"),
-    ("com.squareup.okhttp3/mockwebserver", "4.12.0"),
-    ("com.squareup.okio/okio-jvm", "3.6.0"),
-    ("org.jetbrains.kotlinx/kotlinx-coroutines-core-jvm", "1.10.2"),
-    ("org.jetbrains.kotlinx/kotlinx-coroutines-test-jvm", "1.10.2"),
-    ("org.jetbrains.kotlinx/kotlinx-serialization-core-jvm", "1.9.0"),
-    ("org.jetbrains.kotlinx/kotlinx-serialization-json-jvm", "1.9.0"),
-    ("junit/junit", "4.13.2"),
-    ("org.hamcrest/hamcrest-core", "1.3"),
-]
-
-
-def _missing(why: str) -> None:
-    if os.environ.get("CI") or os.environ.get("JSONUI_REQUIRE_ANDROID_JARS"):
-        pytest.fail(why)
-    pytest.skip(why)
-
-
-def _classpath() -> tuple[str, str]:
-    """(compiler classpath, target classpath) — the compiler and its stdlib
-    from _toolchain, the rest pinned above."""
-    jars = tc.kotlin_jars()
-    if jars is None:
-        _missing("no Kotlin compiler in the Gradle cache (kotlin-compiler-embeddable)")
-    compiler_cp, target_cp = jars
-    extra = []
-    for artifact, version in PINNED:
-        found = sorted(p for p in (CACHE / artifact / version).glob("*/*.jar")
-                       if not p.name.endswith("-sources.jar"))
-        if not found:
-            _missing(f"{artifact}:{version} is not in the Gradle cache")
-        extra.append(str(found[0]))
-    return compiler_cp, ":".join([target_cp, *extra])
+DELAY_MS = 3000
+GAP_MS = 50
+NO_DELAY_GAP_MS = 1000     # see test_branch_scenario_delay.py
+#: The runtimes' settle budget (one capped delay and a margin) — the no-delay
+#: rows are bound to half of it. test_the_runtimes_declare_the_budget
+#: holds the three runtimes to this number.
+SETTLE_BUDGET_MS = bt.DELAY_CAP_MS + 1000
 
 
 _PROBE = '''package probe
@@ -84,7 +49,9 @@ fun main(args: Array<String>) {
     RouteSpec("a", "GET", Regex("^/a$"), "ok", scen, mapOf("slow" to %(delay)dL)),
     RouteSpec("b", "GET", Regex("^/b$"), "ok", scen, mapOf("slow" to %(delay)dL)))
   val chain = args.contains("chain")
-  val overrides: Map<String, Any?> = args.filter { it != "chain" }.associateWith { "slow" }
+  val gap = args.firstOrNull { it.startsWith("gap=") }?.removePrefix("gap=")?.toLong() ?: 50L
+  val overrides: Map<String, Any?> = args.filter { it != "chain" && !it.startsWith("gap=") }
+    .associateWith { "slow" }
   runBranchTest(routes, if (chain) mapOf("a" to "slow") else overrides,
                 { url, d -> ProbeHarness(url, d) }) { h, _ ->
     val base = (h as ProbeHarness).baseUrl
@@ -100,7 +67,7 @@ fun main(args: Array<String>) {
       })
     }
     val started = System.currentTimeMillis()
-    if (chain) send("a", true) else for (name in listOf("a", "b")) { send(name, false); Thread.sleep(50) }
+    if (chain) send("a", true) else for (name in listOf("a", "b")) { send(name, false); Thread.sleep(gap) }
     try {
       h.settle()
       println("ORDER " + landed.toList().joinToString(","))
@@ -116,27 +83,16 @@ fun main(args: Array<String>) {
 '''
 
 
-def _build(work: Path, runtime: str) -> tuple[str, Path]:
-    compiler_cp, target_cp = _classpath()
-    work.mkdir(parents=True, exist_ok=True)
-    # Rendered as the generator renders it (branch_tests: `KOTLIN_RUNTIME % {"package": …}`).
-    (work / "Runtime.kt").write_text(runtime % {"package": "probe"}, encoding="utf-8")
-    (work / "Probe.kt").write_text(_PROBE % {"delay": DELAY_MS}, encoding="utf-8")
-    out = work / "out"
-    build = subprocess.run(
-        [str(tc.JAVA), "-cp", compiler_cp, "org.jetbrains.kotlin.cli.jvm.K2JVMCompiler",
-         "-no-stdlib", "-cp", target_cp, "-d", str(out), str(work / "Runtime.kt"), str(work / "Probe.kt")],
-        capture_output=True, text=True, timeout=900)
-    assert build.returncode == 0, f"emitted runtime did not compile:\n{(build.stdout + build.stderr)[-4000:]}"
-    return target_cp, out
+#: The control's delay: it takes settle's wait out and reads before the
+#: response lands, so it must outlast the fixed drain on a loaded machine.
+CONTROL_DELAY_MS = 20000
 
 
-def _run(built: tuple[str, Path], *args: str) -> dict:
-    target_cp, out = built
-    run = subprocess.run([str(tc.JAVA), "-cp", f"{out}:{target_cp}", "probe.ProbeKt", *args],
-                         capture_output=True, text=True, timeout=300)
-    assert run.returncode == 0, (run.stdout + run.stderr)[-3000:]
-    return dict(line.split(" ", 1) for line in run.stdout.strip().splitlines() if " " in line)
+def _build(work: Path, runtime: str, delay: int = DELAY_MS) -> tuple[str, Path]:
+    return android.build(work, runtime, _PROBE % {"delay": delay})
+
+
+_run = android.run
 
 
 @pytest.fixture(scope="module")
@@ -144,22 +100,32 @@ def built(tmp_path_factory):
     return _build(tmp_path_factory.mktemp("delay-android"), bt.KOTLIN_RUNTIME)
 
 
-@pytest.mark.parametrize("slow, order, waits", [
-    ((), "a,b", False),
-    (("a",), "b,a", True),
-    (("b",), "a,b", True),
+@pytest.mark.parametrize("slow, order, waits, gap", [
+    ((), "a,b", False, NO_DELAY_GAP_MS),
+    (("a",), "b,a", True, GAP_MS),
+    (("b",), "a,b", True, GAP_MS),
 ])
-def test_android_the_delay_decides_the_order_and_settle_waits(built, slow, order, waits):
-    got = _run(built, *slow)
+def test_android_the_delay_decides_the_order_and_settle_waits(built, slow, order, waits, gap):
+    got = _run(built, *slow, f"gap={gap}")
     assert got.get("ORDER") == order, got
-    assert (int(got["WAITED"]) >= DELAY_MS) is waits, got
+    # Timed against the DECLARED budget, not the machine: a delayed row waits
+    # at least the delay; the no-delay row returns in under half the budget.
+    # A loaded machine stretched iOS's fixed drain to 7190 ms (and the no-delay
+    # row to 999 ms) and passes; a settle that always waits the budget out
+    # (31 s) fails.
+    waited = int(got["WAITED"])
+    if waits:
+        assert waited >= DELAY_MS, got
+    else:
+        assert waited < SETTLE_BUDGET_MS // 2, got
 
 
 def test_android_control_a_settle_that_does_not_wait_reads_before_the_arrival(tmp_path):
     runtime = bt.KOTLIN_RUNTIME
-    wait = "      while (BranchDeliveries.pending(System.currentTimeMillis()) > 0) {\n"
-    assert runtime.count(wait) == 1
-    got = _run(_build(tmp_path / "nowait", runtime.replace(wait, "      return\n" + wait)), "a")
+    quiet = ("      if (BranchDeliveries.pending(now) == 0 && "
+             "!BranchDeliveries.arrivedBetween(drainStarted, now)) return\n")
+    assert runtime.count(quiet) == 1
+    got = _run(_build(tmp_path / "nowait", runtime.replace(quiet, "      return\n"), CONTROL_DELAY_MS), "a")
     assert got.get("ORDER") == "b", got
 
 
@@ -171,6 +137,6 @@ def test_android_past_the_budget_settle_fails_by_name(tmp_path):
     assert runtime.count(cap) == 1
     got = _run(_build(tmp_path / "chain", runtime.replace(cap, "  const val CAP_MS = 100L\n")), "chain")
     thrown = got.get("THROWN", "")
-    assert thrown.startswith("settle: ") and "delayed response(s) still pending after waiting" in thrown, got
+    assert thrown.startswith("settle: delayed responses were still arriving after waiting "), got
     waited = int(re.search(r"after waiting (\d+) ms", thrown).group(1))
     assert waited >= 1100 and "budget 1100 ms" in thrown, got

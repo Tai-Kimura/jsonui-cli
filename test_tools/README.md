@@ -825,6 +825,13 @@ harness must replay them onto the new one (or apply the seed first). This
 is the harness's contract, not the runtime's: the read-back only tells you
 the seed took.
 
+On Android the runtime's `BaseBranchHarness.setState` writes each key to the
+view model's field and to the `_data` class — to each only when its type
+takes the value. A view model's state and the layout's data may share a name
+with different types (a `List<String>` of choices and the card collection
+drawing them): the key goes to the side that takes it. A key neither side
+takes, when either declares that name, fails naming the key and both types.
+
 ### Legacy Syntax
 
 For backwards compatibility, the old syntax still works:

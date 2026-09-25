@@ -38,6 +38,7 @@ from ..core.platform_resolver import PlatformResolver
 from ..core.protocol_sync import (
     collect_protocol_members,
     list_impl_method_names,
+    list_impl_narrowed_vars,
     list_impl_var_names,
 )
 from ..core.spec_extractor import ScreenSpec, extract_screen_spec
@@ -2566,6 +2567,23 @@ def _sync_repository_protocols(
     return True
 
 
+def _narrowed_var_fix(platform: str, var) -> str:
+    """The declaration the protocol accepts for a spec var the Impl narrowed:
+    a read-only member may keep its setter private, a settable one may not."""
+    sig = var.signature
+    if platform == "ios":
+        if "{ get set }" in sig:
+            return f"write `var {var.name}` — the protocol declares {{ get set }}"
+        return f"write `private(set) var {var.name}` to keep the setter private"
+    if "StateFlow<" in sig:
+        return (f"write `override val {var.name}: StateFlow<…>` over a private "
+                f"MutableStateFlow — the protocol declares a StateFlow")
+    if sig.lstrip().startswith("var "):
+        return f"write `override var {var.name}` — the protocol declares a setter"
+    return (f"write `override var {var.name} … private set` (or `override val "
+            f"{var.name}`) to keep the setter private")
+
+
 def _sync_viewmodel_protocols(
     config_mgr: ConfigManager,
     config: dict,
@@ -2734,6 +2752,21 @@ def _sync_viewmodel_protocols(
                     f"declares '{missing}' but no matching var/val found in Impl. "
                     f"Add the property declaration or remove from spec."
                 )
+            # A spec var the Impl declares with a modifier that narrows its
+            # reader counts as present (the scan accepts `private(set)`), but
+            # it cannot satisfy the protocol: Kotlin refuses the
+            # `private override var` injecting `override` would write, and
+            # Swift's `private var` meets no requirement. Named with the fix
+            # the protocol allows, and left out of the injection below.
+            narrowed = (list_impl_narrowed_vars(impl_source, platform)
+                        if impl_source is not None else {})
+            narrowed_spec_vars = {v.name: v for v in sync_result.vars if v.name in narrowed}
+            for name, var in sorted(narrowed_spec_vars.items()):
+                errors.append(
+                    f"[{platform}] {impl_path}: dataFlow.viewModel.vars "
+                    f"declares '{name}' but the Impl declares it `{narrowed[name]}` — a "
+                    f"protocol member cannot be narrowed; {_narrowed_var_fix(platform, var)}."
+                )
 
             # Swift: external-label drift between Protocol signature and Impl.
             # Kotlin and TS don't have external labels, so this is iOS-only.
@@ -2798,7 +2831,8 @@ def _sync_viewmodel_protocols(
                         # so the existing Impl declaration needs `override`
                         # too — otherwise kotlinc warns
                         # "data hides member of supertype".
-                        var_names = ["data"] + [v.name for v in sync_result.vars]
+                        var_names = ["data"] + [v.name for v in sync_result.vars
+                                                if v.name not in narrowed_spec_vars]
                         updated = inject_kotlin_override(updated, method_names)
                         updated = inject_kotlin_var_override(updated, var_names)
                 except ValueError as e:
