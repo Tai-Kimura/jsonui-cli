@@ -48,6 +48,11 @@ def set_project_platforms(platforms=None):
     _PROJECT_PLATFORMS = set(platforms) if platforms else None
 
 
+def project_platforms() -> set | None:
+    """The run's target platforms, or `None` when the config declares none."""
+    return _PROJECT_PLATFORMS
+
+
 def _step_platforms(step: dict) -> set | None:
     """Platforms `when.platform` limits this step to, or `None` for all."""
     declared = (step.get("when") or {}).get("platform")
