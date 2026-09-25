@@ -137,6 +137,7 @@ push せず、rsync/sync_tool による同期のみ。
 - attr-codegen の Swift 出力（Dynamic/Generated/Attributes/）は**コミットに含める**
   （cli checkout なしでビルド可能に保つ）。
 - リリース前にテスト: xcodebuild + iOS Simulator（swift build 不可 — 04章）。
+- **タグの前に conformance-mobile を release 枝で撃つ**（下の「タグ・公開の前の dispatch」）。
 
 ### KotlinJsonUI
 - バージョンは root `gradle.properties` の `version=` **一本**。
@@ -147,6 +148,17 @@ push せず、rsync/sync_tool による同期のみ。
   jitpack.yml は best-effort の publishToMavenLocal。
 - 罠: library-dynamic の空 javadoc jar は仕様（Dokka × Java17 sealed class 回避）。
   旧 publishing{} ブロック（コメントアウト）は復活させない。
+- **publish の前に conformance-mobile を release 枝で撃つ**（下の「タグ・公開の前の dispatch」）。
+  `library` / `library-dynamic` の androidTest（端末で走るテスト）は、この dispatch の
+  `android-library-tests` 以外のどの CI でも走らない（KotlinJsonUI の ci.yml は JVM の unit だけ）。
+
+### タグ・公開の前の dispatch（SwiftJsonUI / KotlinJsonUI 共通）
+1. 両ライブラリの release 枝を push する（main でもタグでもないので、消費側には届かない）。
+2. `gh workflow run conformance-mobile.yml -R Tai-Kimura/jsonui-cli --ref <jsonui-cli の検証する枝>
+   -f swiftjsonui_ref=<SJUI の枝> -f image_probes=true -f kotlinjsonui_ref=<KJUI の枝> -f android_probes=true`
+3. **全 job の緑**を見てから、SPM のタグと Maven の publish に進む。読むのは緑だけではない:
+   各 job が印字する ref と HEAD が撃った枝か、`android-library-tests` の skip の名前、probe の印字。
+   Maven の publish は取り消せない。
 
 ### ReactJsonUI / rjui_tools
 - npm 公開物なし。rjui_tools の VERSION 更新 + jsonui-cli main への push が実質のリリース。
