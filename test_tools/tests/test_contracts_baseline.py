@@ -259,11 +259,20 @@ class TestCoverageShowsIt:
         report = cc.run_coverage(root, screen="detail")
         assert report.baseline["web"] == {"baselined": 6, "matched": 6, "new": 0, "stale": 0, "hidden": 0}
 
-    def test_an_unreadable_baseline_cannot_start(self, tmp_path):
+    @pytest.mark.parametrize("content", ["[]", "<<<<<<< HEAD\n{}\n=======\n"])
+    def test_an_unreadable_baseline_cannot_start_and_names_the_file(self, tmp_path, run,
+                                                                   content):
+        # A list, and a conflict-marked file: each names the file and whose
+        # call the repair is — in coverage and in the command alike (v4.21).
         root = _project(tmp_path)
-        _baseline_file(root).write_text("[]", encoding="utf-8")
-        with pytest.raises(cc.CannotStart, match="baseline cannot be read"):
+        _baseline_file(root).write_text(content, encoding="utf-8")
+        with pytest.raises(cc.CannotStart, match="baseline cannot be read") as caught:
             cc.run_coverage(root)
+        assert str(_baseline_file(root)) in str(caught.value)
+        assert "repairing it is the user's decision" in str(caught.value)
+        rc, out = run(root, "contracts", "baseline")
+        assert rc == 2 and str(_baseline_file(root)) in run.err, run.err
+        assert "repairing it is the user's decision" in run.err
 
 
 def _mock_file(root: Path, op: str) -> Path:

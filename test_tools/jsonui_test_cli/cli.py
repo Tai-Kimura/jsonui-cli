@@ -1616,8 +1616,9 @@ def _branch_check_summary(reports: list, scanned: int, orphans=()) -> int:
 def cmd_contracts_baseline(args):
     """Handle 'contracts baseline' — record today's coverage debt, or shrink it.
 
-    Design §6.1 P3c. No file: write the current entries. A file: write only
-    what it AND the current run hold. The tool never adds an entry; a new one
+    Design §6.1 P3c. No file: write the current entries — only with
+    `--initial` (v4.21: accepting all current debt is the user's decision).
+    A file: write only what it AND the current run hold. The tool never adds an entry; a new one
     is closed (Task 6 of the define agent) or added by hand, where the diff shows it.
 
     Nothing is written while the run holds what cannot be baselined (the gate

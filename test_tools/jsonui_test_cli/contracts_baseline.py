@@ -19,8 +19,9 @@ is closed over time.
   bound — not evaluated —, an unreadable screen, HTTP with nothing evaluated):
   those are NOT baselinable, so they keep failing the gate.
 - `jsonui-test contracts baseline` writes it: the current set when there is no
-  file; existing ∩ current when there is. THE TOOL ONLY SHRINKS IT. Adding is
-  done by hand, and shows in the commit's diff.
+  file — only with `--initial` (v4.21: the first recording accepts all current
+  debt, the user's decision); existing ∩ current when there is. THE TOOL ONLY
+  SHRINKS IT. Adding is done by hand, and shows in the commit's diff.
 - Compared with the current entries: matched (in both), new (current only),
   stale (baseline only — closed, still listed). The gate passes only when new
   and stale are both 0: a closed entry left in the baseline would silently
@@ -109,10 +110,17 @@ def load(path: Path):
     """The recorded entries, sorted — or None when there is no file."""
     if not path.is_file():
         return None
-    data = json.loads(path.read_text(encoding="utf-8"))
+    # Every way it cannot be read names the file and whose call the repair is
+    # (v4.21, ee): a conflict-marked file used to surface as a bare
+    # "Expecting value: line 1 column 1".
+    repair = "repairing it is the user's decision"
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError, ValueError) as e:
+        raise ValueError(f"{path} cannot be read ({e}) — {repair}") from e
     entries = data.get("entries") if isinstance(data, dict) else None
     if not isinstance(entries, list):
-        raise ValueError(f"{path}: expected an object with an 'entries' list")
+        raise ValueError(f"{path}: expected an object with an 'entries' list — {repair}")
     return sorted(entries, key=entry_key)
 
 
