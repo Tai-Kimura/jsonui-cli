@@ -400,6 +400,28 @@ else
   say "   SKIPPED — no swift on PATH (this leg needs a toolchain, not a checkout)"
 fi
 
+# The unit stub's iOS declaration, TYPECHECKED under both default isolations.
+# `-default-isolation` is swiftc 6.2+, and CI's compiler job answers 6.1.2, so
+# this runner owns the arm (as it owns the executed branch runtime above).
+# Named as its own leg with its executed / skipped count: inside the
+# test_tools leg a skip is one number in a total nobody reads, and a release
+# gate that skipped it silently would be a gate without the arm. Required
+# here, so a swiftc without the flag FAILS instead of skipping.
+say "== unit-stub iOS isolation, TYPECHECKED (swift 6, defaultIsolation MainActor / nonisolated)"
+if command -v xcrun >/dev/null 2>&1; then
+  _x="$(mktemp -t stub-isolation).xml"
+  out=$( cd "$C/test_tools" && JSONUI_REQUIRE_DEFAULT_ISOLATION=1 python3 -m pytest -q -p no:cacheprovider \
+           tests/test_unit_stubs_ios_typecheck.py --junitxml="$_x" 2>&1 )
+  rc=$?
+  say "   $(xcrun swiftc --version 2>&1 | head -1)"
+  say "   $(python3 "$C/dev-guide/ci/executed-or-skipped.py" "$_x" 2>&1 | tail -1)"
+  say "   exit=$rc"
+  [ "$rc" = 0 ] || bad "unit-stub isolation typecheck: exit $rc — $(printf '%s' "$out" | grep -E '^(FAILED|ERROR)' | head -3 | tr '\n' ' ')"
+  rm -f "$_x"
+else
+  bad "unit-stub isolation typecheck: no xcrun — this leg needs a toolchain, and a release gate does not skip it"
+fi
+
 say "== misfiled tickets (a ticket under reports/ is invisible to the inbox scan)"
 if [ ! -d "$C/docs/bugs/reports" ]; then
   say "   SKIPPED: no docs/bugs/reports in this checkout (docs/ is gitignored,"

@@ -13,7 +13,8 @@ does). The `@testable import` of that app is the one line removed.
 (measured 2026-09-24, run 36051178116), so ci.yml's python-suite ignores this
 file and dev-guide/release/run-suites.sh's test_tools leg runs it with the
 release machine's toolchain — the same owner as the executed branch runtime.
-Without the flag it fails under CI and skips with the reason elsewhere.
+Without the flag it fails under CI or JSONUI_REQUIRE_DEFAULT_ISOLATION (which
+run-suites.sh sets) and skips with the reason elsewhere.
 """
 from __future__ import annotations
 
@@ -48,7 +49,9 @@ def _require_default_isolation(tmp_path: Path) -> None:
         return
     why = (f"swiftc has no -default-isolation (6.2+): {_xcrun('swiftc', '--version').splitlines()[0]}"
            f" — {run.stderr.strip()[:200]}")
-    if os.environ.get("CI"):
+    # run-suites.sh sets JSONUI_REQUIRE_DEFAULT_ISOLATION: the release gate
+    # owns this arm, and a gate that skips it has no arm.
+    if os.environ.get("CI") or os.environ.get("JSONUI_REQUIRE_DEFAULT_ISOLATION"):
         pytest.fail(why)
     pytest.skip(why)
 
