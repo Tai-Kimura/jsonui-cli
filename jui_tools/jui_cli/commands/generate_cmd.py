@@ -442,6 +442,8 @@ def _cmd_generate_project(args: argparse.Namespace) -> int:
                 return 1
             for w in result.warnings:
                 print(f"  {w}")
+            for i in getattr(result, "infos", []):
+                print(f"  {i}")
     except ImportError:
         print("WARNING: document_tools not available, skipping validation")
 

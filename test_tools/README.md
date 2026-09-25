@@ -75,6 +75,7 @@ pyenv local 3.11.0
 | `artifacts status` | `a status` | Show resolved artifacts config and existing artifact files |
 | `artifacts prune-legacy` | `a prune-legacy` | List (default) or delete (`--yes`) the suites left in the flat legacy Android mirror |
 | `contracts coverage` | — | Every response status the OpenAPI declares for an operation a screen reaches, bucketed by who answers it — `validate` reports it, and fails on it from the release its section names |
+| `contracts baseline` | — | Record today's coverage entries once in `contracts_coverage_baseline.json`, then only shrink the file as they close — the gate passes on what it holds |
 
 ### validate (v)
 
@@ -122,15 +123,20 @@ run cannot establish the full set and declines the clean.
 per platform:
 
 ```
-coverage: web units 2 · statuses required 12 · row 5 · excluded 1 · uncovered 6 · not evaluated 0 → exit 1 (uncovered)
-from jsonui-cli <next release>, validate fails unless contracts coverage exits 0 — close what it reports (jsonui-define Task 6) or see the release note
+coverage: web units 2 · statuses required 12 · row 5 · excluded 1 · uncovered 6 · not evaluated 0 → exit 1 (uncovered) · baselined 0 (matched 0 · new 6 · stale 0) — no baseline file: every entry is new
+from jsonui-cli <next release>, validate fails on contracts coverage entries not in the baseline — close them (Task 6 of the define agent), or record the current ones once with `jsonui-test contracts baseline`; see the release note
 ```
 
 with any declaration errors, and what could not be measured by cause
-(`n/a(unbound endpoint) 1`, …). Its last line says where the gate stands: below the
+(`n/a(unbound endpoint) 1`, …). Each line ends with how the entries compare with the
+[baseline](#contracts-baseline). Its last line says where the gate stands: below the
 release it names, the section **does not change the exit code**; from that release on,
-validate fails unless coverage exits 0 — after installing the valid tests, with
-`Result: FAILED` and `Coverage: exit N` on the summary line. It is never silent:
+validate fails — after installing the valid tests — on entries not in the baseline
+(new), on baselined entries that are closed (stale), and on what can never be
+baselined (declaration errors, rows or screens that could not be evaluated, HTTP with
+nothing evaluated, cannot start). The summary line then says which:
+`Coverage: FAILED (exit 1; web: 1 not in the baseline)`, or `Coverage: passed (exit 1)`
+when everything coverage reports is baselined. It is never silent:
 `coverage not run: N error(s) above …` when the run's own errors stop it,
 `coverage not applicable: …` when the project declares no `mock.swagger` and no
 spec has `branchContracts`, `coverage cannot start: …` when it has one of them and
@@ -584,6 +590,66 @@ exit 1 and something could not be evaluated as well, it also says
 `uncovered is a floor:` and names what, since the statuses behind those were
 never counted. The JSON carries the same: `totals.na_endpoints` and `floor`
 per platform.
+
+Each block also prints a **data** line — report only, it never moves the exit:
+`[platform=p] data (report only) units N · arranged A · produced P · neither X ·
+screens evaluated E of S (…) · Bool not in layout … · visibleElements not in
+layout … · cells not bound …`. A unit is (screen, field, value): a field
+declared `Bool` that the screen's layout binds (true and false), or a
+`stateManagement.states[].values[]` whose `visibleElements` the layout all has.
+ARRANGED means a row's `when` sets it (`data.X` or a seed `state.X`); PRODUCED,
+that a row's `then` asserts it. The layout is the spec's `metadata.layoutFile`
+only (no guessing: `layout not linked` otherwise), read by
+`jui_cli.core.layout_facts` — the normalizer's includes, styles and platform
+filter, and binding roots by the Ruby validator's grammar. When most of a
+block's screens carry more data units than statuses, the line counts fields
+instead of values (`coarse`); the values stay in `--json`
+(`screens[].data`, `data_totals`, `data_coarse`).
+
+### contracts baseline
+
+```
+jsonui-test contracts baseline
+```
+
+When the gate starts, a project with uncovered statuses has two ways out:
+close them all, or switch the check off. The baseline is the third: today's
+entries recorded once, the gate holding every NEW one to the rule at once.
+
+The file is `<spec_directory>/contracts_coverage_baseline.json`, next to the
+app contracts spec; commit it. It holds the entries that keep coverage from
+exit 0, sorted and without timestamps, so the same set is the same bytes:
+
+- **uncovered** — (platform, spec, method, op, status)
+- **unmeasured** — (platform, spec, op, cause), cause one of `unbound
+  endpoint`, `no scenario`, `no mock`, `not in OpenAPI`
+
+With no file, the command writes the current entries (`wrote …`; nothing is
+written when there are none). With a file, it writes only what the file AND
+the current run hold — **the command never adds an entry**:
+
+```
+updated docs/screens/json/contracts_coverage_baseline.json
+removed 2 · kept 10 · new 1 not added (close them, or add by hand)
+```
+
+Close a new entry with a row (Task 6 of the define agent). Adding it to the file by
+hand also works, and the tool cannot tell it from the recorded debt — only the
+commit's diff shows it. Once an entry is closed, run the command to drop it:
+a closed entry left in the file is **stale** and fails the gate, because it
+would silently swallow the same entry if it came back.
+
+What the gate fails on whatever the file says is never recorded — declaration
+errors, a row or a screen that could not be evaluated, HTTP with nothing
+evaluated, cannot start. While any is present the command writes nothing and
+exits 1, naming them: the statuses behind them were never counted, so a first
+write would record a floor and a shrink would drop entries as closed that were
+only unmeasured.
+
+`contracts coverage` prints the comparison under each platform —
+`[platform=web] baselined 6 (matched 6 · new 0 · stale 0)` — and `--json`
+carries it as `baseline` per platform and `baseline: {file, present}` at the
+top. A run on `--platform` or one screen compares only what it measured.
 
 ### Generated branch tests: the act window
 
