@@ -8,7 +8,9 @@ Enforces the canonical rules from ``shared/core/screen_identity.json``:
 * ``screen-not-a-screen`` (error) — the value resolves to a Collection cell
   or a partial. Cells are sub-areas of the screen the step already runs on.
 * ``screen-id-collision`` (error) — two layouts share a basename, so the id
-  is ambiguous.
+  a step names is ambiguous. Reported on the step that names it; a collision
+  no step names is left to ``jui build``, which already stops on a
+  duplicated layout basename on every face.
 
 Classification comes from ``jui_cli.core.screen_identity`` — the single
 implementation of the canon. When the layout tree cannot be located the
@@ -28,6 +30,7 @@ nothing. The walk is kept only for a caller that sets no run config.
 
 from __future__ import annotations
 
+import os
 import sys
 from pathlib import Path
 
@@ -204,6 +207,16 @@ def check_screen_value(screen_id: str, index: ScreenIdIndex) -> str | None:
     """Return a rule violation message for a ``screen`` value, or None."""
     if not index.available or not screen_id:
         return None
+    if screen_id in index.collisions:
+        # Checked first: the index keeps one of the colliding layouts, so the
+        # id also reads as known — which is how this passed silently.
+        paths = [Path(p) for p in index.collisions[screen_id]]
+        root = Path(os.path.commonpath([str(p.parent) for p in paths]))
+        joined = ", ".join(str(p.relative_to(root)) for p in paths)
+        return (
+            f"Screen id '{screen_id}' is ambiguous — several layouts share the basename "
+            f"(screen-id-collision): {joined} under {root}. Rename one of them."
+        )
     if not index.is_known(screen_id):
         return (
             f"Unknown screen '{screen_id}' (screen-unknown). Use a layout's basename, "
@@ -217,14 +230,3 @@ def check_screen_value(screen_id: str, index: ScreenIdIndex) -> str | None:
         )
     return None
 
-
-def collision_messages(index: ScreenIdIndex) -> list[str]:
-    """One message per ambiguous basename in the project."""
-    messages = []
-    for screen_id, paths in sorted(index.collisions.items()):
-        joined = ", ".join(str(p) for p in paths)
-        messages.append(
-            f"Screen id '{screen_id}' is ambiguous — several layouts share the basename "
-            f"(screen-id-collision): {joined}"
-        )
-    return messages
