@@ -354,6 +354,17 @@ class ScreenResult:
     unbound_endpoints: list = field(default_factory=list)
     #: The exit-3 side item by item, for the baseline (§6.1 P3c): {op, cause}.
     unmeasured_items: list = field(default_factory=list)
+    #: What this run measured, and what answered it — for the baseline's
+    #: closed / vanished split (v4.22): a baselined key the run does not hold
+    #: is CLOSED only when its unit was measured and a decision answers it.
+    #: (method, op, status) answered by a row, an alsoStatuses copy or an
+    #: excludedOutcomes entry; (op, status) answered for every method
+    #: (unreachedOps); the ops measured (names and "METHOD path"); the
+    #: (op, status) measured (a scenario exists).
+    answered: set = field(default_factory=set)
+    answered_any: set = field(default_factory=set)
+    measured_ops: set = field(default_factory=set)
+    measured_statuses: set = field(default_factory=set)
     notes: list = field(default_factory=list)
     http_endpoints: int = 0
     branches_active: int = 0
@@ -564,6 +575,11 @@ def evaluate_screen(name: str, spec: dict, platform: str, project: Project) -> S
                 "add it to mock.swagger" if where else f"{label} is in no OpenAPI document")
             continue
         evaluable[key] = (status_keys(entry[1]), mock)
+        op = _op_name(names_of, key, endpoint)
+        res.measured_ops |= {op, f"{endpoint['method']} {endpoint['path']}"}
+        statuses = status_keys(entry[1])
+        res.measured_statuses |= {(op, s) for s in statuses
+                                  if s != "default" and not _no_scenario(s, statuses, mock)}
 
     bc = spec.get("branchContracts") if isinstance(spec.get("branchContracts"), dict) else {}
     methods = {m: c for m, c in (bc.get("methods") or {}).items() if isinstance(c, dict)}
@@ -833,10 +849,12 @@ def evaluate_screen(name: str, spec: dict, platform: str, project: Project) -> S
                     _note_no_scenario(res, names_of, key, endpoints[key], status)
                 elif status in answered:
                     res.breakdown["row"] += 1
+                    res.answered.add((method, names_of.get(key, ["?"])[0], status))
                     if all(kind == "also" for kind in answered[status]):
                         res.row_also_statuses += 1
                 elif (method, key, status) in exclusions:
                     res.breakdown[exclusions[(method, key, status)].by] += 1
+                    res.answered.add((method, names_of.get(key, ["?"])[0], status))
                 elif (method, key) in not_evaluated_units or \
                         (method, key, status) in not_evaluated_statuses:
                     res.breakdown["not_evaluated"] += 1
@@ -855,6 +873,7 @@ def evaluate_screen(name: str, spec: dict, platform: str, project: Project) -> S
         if key in unreached:
             res.outside_required["unreached_op"] += len(statuses)
             res.declared += len(statuses)
+            res.answered_any |= {(names_of.get(key, ["?"])[0], s) for s in statuses}
             continue
         if key in reached_any:
             continue
@@ -1060,7 +1079,7 @@ class CoverageReport:
     baseline_present: bool = False
     entries: list = field(default_factory=list)
     baseline: dict = field(default_factory=dict)
-    #: Per platform {new, stale, hidden}: the entries themselves (v4.21).
+    #: Per platform {new, stale, hidden, vanished}: the entries themselves.
     baseline_items: dict = field(default_factory=dict)
 
 
@@ -1115,8 +1134,9 @@ def run_coverage(root: Path, platforms=None, screen: str | None = None) -> Cover
     report.entries = cb.current_entries(report)
     report.baseline_file = str(path)
     report.baseline_present = recorded is not None
-    report.baseline = cb.compare(report.entries, recorded)
-    report.baseline_items = cb.compare_items(report.entries, recorded)
+    units = cb.measured(report)
+    report.baseline = cb.compare(report.entries, recorded, units)
+    report.baseline_items = cb.compare_items(report.entries, recorded, units)
     return report
 
 
@@ -1287,7 +1307,8 @@ def to_json(report: CoverageReport) -> dict:
             "screens": screens, "totals": totals,
             "baseline": {**_baseline_counts(report, block.platform),
                          **{f"{k}_entries": list(v) for k, v in report.baseline_items.get(
-                             block.platform, {"new": [], "stale": [], "hidden": []}).items()}},
+                             block.platform,
+                             {"new": [], "stale": [], "hidden": [], "vanished": []}).items()}},
             "data_totals": data_axis.block_totals(active),
             "data_coarse": data_axis.coarse(active)})
     return {"baseline": {"file": report.baseline_file, "present": report.baseline_present},
@@ -1470,6 +1491,9 @@ def validate_section(root: Path | None, version: str, *, skipped: bool = False,
         if c["stale"]:
             why.append(f"{block.platform}: {c['stale']} baselined but closed "
                        f"({by_spec(items.get('stale', []))})")
+        if c["vanished"]:
+            why.append(f"{block.platform}: {c['vanished']} baselined but gone from the run "
+                       f"({by_spec(items.get('vanished', []))})")
         for cause, n in unbaselinable(block).items():
             why.append(f"{block.platform}: {cause} {n} (cannot be baselined)")
     lines.append(notice)
@@ -1487,11 +1511,15 @@ def baseline_phrase(report: "CoverageReport", platform: str) -> str:
     c = _baseline_counts(report, platform)
     phrase = (f"baselined {c['baselined']} (matched {c['matched']} · new {c['new']} · "
               f"stale {c['stale']}" + (f" · unmeasured now {c['hidden']}" if c["hidden"] else "")
-              + ")")
+              + (f" · vanished {c['vanished']}" if c["vanished"] else "") + ")")
     if not report.baseline_present:
         phrase += " — no baseline file: every entry is new"
     elif c["stale"]:
         phrase += " — stale entries are closed: run `jsonui-test contracts baseline` to drop them"
+    if report.baseline_present and c["vanished"]:
+        phrase += (" — vanished entries left the run (a screen off the platform, a spec, "
+                   "method, op or status gone): remove or re-key them by hand — the user's "
+                   "decision")
     return phrase
 
 

@@ -641,8 +641,20 @@ A recorded entry under what cannot be measured NOW — its op has no mock, is
 not in the OpenAPI, or is an unbound endpoint; or, for one status, it has no
 scenario — is not closed, only unmeasured: the command keeps it (`kept 12 (4
 unmeasured now — not closed, kept)`), and the gate counts it as neither
-matched nor stale (`· unmeasured now 4` on the line; baselined = matched +
-stale + unmeasured now).
+matched nor stale (`· unmeasured now 4` on the line).
+
+A recorded entry whose unit is not in the run at all — its screen left the
+platform (`metadata.platforms`), its spec file is gone (a rename too), its
+method or op is no longer declared, its status left the OpenAPI — has
+**vanished**: it is not closed either. Only an entry the run measured and
+found answered by a decision (a row, `alsoStatuses`, `excludedOutcomes`,
+`unreachedOps`; for an unmeasured one, its op or status measured again) is
+closed. A vanished entry fails the gate (`web: 2 baselined but gone from the
+run (detail 2)`, `· vanished 2` on the line) and the command keeps it
+(`(2 vanished — not closed, kept; remove or re-key them by hand)`):
+removing or re-keying it is done by hand, where the diff shows it — the
+user's decision. Dropping an endpoint, a status or a platform is not a way
+out of the debt. baselined = matched + stale + unmeasured now + vanished.
 
 Close a new entry with a row (Task 6 of the define agent). Adding it to the file by
 hand also works, and the tool cannot tell it from the recorded debt — only the
@@ -660,7 +672,8 @@ only unmeasured.
 `contracts coverage` prints the comparison under each platform —
 `[platform=web] baselined 6 (matched 6 · new 0 · stale 0)` — and `--json`
 carries it as `baseline` per platform (the counts, and the entries
-themselves as `new_entries` / `stale_entries` / `hidden_entries`) and
+themselves as `new_entries` / `stale_entries` / `hidden_entries` /
+`vanished_entries`) and
 `baseline: {file, present}` at the top; each screen lists what could not be
 measured as `unmeasured` (`{op, status?, cause}`). validate's summary names
 the screens: `Coverage: FAILED (exit 1; web: 3 not in the baseline

@@ -241,14 +241,14 @@ class TestCoverageShowsIt:
         assert js["baseline"]["present"] is False
         web = next(p for p in js["platforms"] if p["platform"] == "web")
         assert {k: v for k, v in web["baseline"].items() if isinstance(v, int)} == {
-            "baselined": 0, "matched": 0, "new": 6, "stale": 0, "hidden": 0}
+            "baselined": 0, "matched": 0, "new": 6, "stale": 0, "hidden": 0, "vanished": 0}
         assert len(web["baseline"]["new_entries"]) == 6 and web["baseline"]["stale_entries"] == []
 
     def test_a_run_on_one_platform_does_not_call_the_others_stale(self, tmp_path, run):
         root = _project(tmp_path)
         run(root, "contracts", "baseline", "--initial")
         report = cc.run_coverage(root, platforms=["web"])
-        assert report.baseline == {"web": {"baselined": 6, "matched": 6, "new": 0, "stale": 0, "hidden": 0}}
+        assert report.baseline == {"web": {"baselined": 6, "matched": 6, "new": 0, "stale": 0, "hidden": 0, "vanished": 0}}
 
     def test_a_run_on_one_screen_does_not_call_the_others_stale(self, tmp_path, run):
         other = tcc._screen()
@@ -257,7 +257,7 @@ class TestCoverageShowsIt:
         run(root, "contracts", "baseline", "--initial")
         assert cc.run_coverage(root).baseline["web"]["baselined"] == 12
         report = cc.run_coverage(root, screen="detail")
-        assert report.baseline["web"] == {"baselined": 6, "matched": 6, "new": 0, "stale": 0, "hidden": 0}
+        assert report.baseline["web"] == {"baselined": 6, "matched": 6, "new": 0, "stale": 0, "hidden": 0, "vanished": 0}
 
     @pytest.mark.parametrize("content", ["[]", "<<<<<<< HEAD\n{}\n=======\n"])
     def test_an_unreadable_baseline_cannot_start_and_names_the_file(self, tmp_path, run,
@@ -359,3 +359,172 @@ class TestV421:
                "user's decision; run with --initial" in run.err
         rc, out = run(root, "contracts", "baseline", "--initial")
         assert rc == 0 and out.startswith("wrote ") and _baseline_file(root).exists()
+
+
+def _spec_file(root: Path) -> Path:
+    return root / "docs/screens/json/detail.spec.json"
+
+
+def _edit_spec(root: Path, change) -> None:
+    spec = json.loads(_spec_file(root).read_text())
+    change(spec)
+    _spec_file(root).write_text(json.dumps(spec), encoding="utf-8")
+
+
+def _edit_openapi(root: Path, change) -> None:
+    api_file = root / "docs/api/api.json"
+    api = json.loads(api_file.read_text())
+    change(api)
+    api_file.write_text(json.dumps(api), encoding="utf-8")
+
+
+def _with_other_screen(tmp_path):
+    other = tcc._screen()
+    other["metadata"]["name"] = "other"
+    return _with_test(tcc._project(tmp_path, extra_screens=[("other", other)]))
+
+
+class TestVanished:
+    """Design v4.22 (ee; hole #41 generalised). A baselined entry the run does
+    not hold is CLOSED only when the run measured its unit and a decision
+    answers it; otherwise it VANISHED — the screen left the platform, the
+    spec is gone, the method or the op is no longer declared, the status left
+    the OpenAPI. Vanished fails the gate and survives the shrink: removing or
+    re-keying it is the user's decision, by hand. One specimen per cause; the
+    method and the op each, because an uncovered key carries a method and an
+    unmeasured key does not."""
+
+    def _recorded(self, root, run):
+        rc, _ = run(root, "contracts", "baseline", "--initial")
+        assert rc == 0
+        return _baseline_file(root).read_bytes()
+
+    def _red_and_kept(self, root, run, before, why, count=None):
+        rc, out = _validate(run, root)
+        assert rc == 1, out
+        assert why in _summary(out), _summary(out)
+        assert "baselined but closed" not in _summary(out), _summary(out)
+        rc, out = run(root, "contracts", "baseline")
+        assert rc == 0 and "vanished — not closed, kept; remove or re-key them by hand" in out, out
+        kept = {cb.entry_key(e) for e in cb.load(_baseline_file(root))}
+        assert {cb.entry_key(e) for e in json.loads(before)["entries"]} <= kept
+        return out
+
+    def test_the_screen_left_the_platform(self, tmp_path, run):
+        root = _project(tmp_path)
+        before = self._recorded(root, run)
+        _edit_spec(root, lambda s: s["metadata"].__setitem__("platforms", ["ios"]))
+        self._red_and_kept(root, run, before, "web: 6 baselined but gone from the run (detail 6)")
+
+    def test_the_spec_file_is_gone(self, tmp_path, run):
+        root = _with_other_screen(tmp_path)
+        before = self._recorded(root, run)
+        _spec_file(root).unlink()
+        self._red_and_kept(root, run, before, "web: 6 baselined but gone from the run (detail 6)")
+
+    def test_the_method_is_no_longer_declared(self, tmp_path, run):
+        # approve's rows go: its setApproval statuses are unattributed now
+        # (new) and the approve-keyed ones vanished — both red, side by side.
+        root = _project(tmp_path)
+        before = self._recorded(root, run)
+        _edit_spec(root, lambda s: s["branchContracts"]["methods"].clear())
+        approve_keyed = sum(1 for e in json.loads(before)["entries"]
+                            if e["platform"] == "web" and e.get("method") == "approve")
+        assert approve_keyed > 0
+        rc, out = _validate(run, root)
+        summary = _summary(out)
+        assert "web: " in summary and " not in the baseline (detail " in summary, summary  # re-keyed
+        assert f"web: {approve_keyed} baselined but gone from the run (detail {approve_keyed})" \
+            in summary, summary                                                           # old keys
+        self._red_and_kept(root, run, before, "baselined but gone from the run (detail")
+
+    def test_the_op_is_no_longer_declared(self, tmp_path, run):
+        root = _project(tmp_path)
+        before = self._recorded(root, run)
+        _edit_spec(root, lambda s: s["dataFlow"]["repositories"][0]["methods"].__delitem__(2))
+        self._red_and_kept(root, run, before, "web: 2 baselined but gone from the run (detail 2)")
+
+    def test_the_status_left_the_openapi(self, tmp_path, run):
+        root = _project(tmp_path)
+        before = self._recorded(root, run)
+        _edit_openapi(root, lambda a: a["paths"]["/api/other"]["get"]["responses"].pop("500"))
+        self._red_and_kept(root, run, before, "web: 1 baselined but gone from the run (detail 1)")
+
+    def test_an_unmeasured_key_vanishes_too(self, tmp_path, run):
+        # getOther 404 has no scenario (an unmeasured key: no method); the
+        # status leaves the OpenAPI.
+        root = _with_test(tcc._project(tmp_path, openapi=_with_new_status()))
+        before = self._recorded(root, run)
+        _edit_openapi(root, lambda a: a["paths"]["/api/other"]["get"]["responses"].pop("404"))
+        self._red_and_kept(root, run, before, "web: 1 baselined but gone from the run (detail 1)")
+
+    def test_boundary_the_same_key_closed_by_a_row_is_stale_and_dropped(self, tmp_path, run):
+        root = _project(tmp_path)
+        self._recorded(root, run)
+        _spec_file(root).write_text(json.dumps(_closing_one()), encoding="utf-8")
+        report = cc.run_coverage(root)
+        assert (report.baseline["web"]["stale"], report.baseline["web"]["vanished"]) == (1, 0)
+        rc, out = run(root, "contracts", "baseline")
+        assert "removed 2 · kept 10 · new 0 not added" in out and "vanished" not in out, out
+
+    def test_boundary_an_unmeasured_key_closed_by_its_scenario_is_stale(self, tmp_path, run):
+        # The no-scenario 404 gets its scenario: the status is measured now,
+        # so the unmeasured key is CLOSED (its 404 is a plain uncovered now).
+        root = _with_test(tcc._project(tmp_path, openapi=_with_new_status()))
+        self._recorded(root, run)
+        mock = _mock_file(root, "getOther")
+        data = json.loads(mock.read_text())
+        data["scenarios"]["error_404"] = {"status": 404, "body": {}}
+        mock.write_text(json.dumps(data), encoding="utf-8")
+        report = cc.run_coverage(root)
+        stale = report.baseline_items["web"]["stale"]
+        assert [(e["op"], e.get("status"), e["cause"]) for e in stale] == [
+            ("getOther", "404", "no scenario")]
+        assert report.baseline["web"]["vanished"] == 0
+
+    def test_json_and_text_carry_vanished(self, tmp_path, run):
+        root = _project(tmp_path)
+        self._recorded(root, run)
+        _edit_openapi(root, lambda a: a["paths"]["/api/other"]["get"]["responses"].pop("500"))
+        report = cc.run_coverage(root)
+        web = next(p for p in cc.to_json(report)["platforms"] if p["platform"] == "web")
+        b = web["baseline"]
+        assert b["vanished"] == 1 and [e["status"] for e in b["vanished_entries"]] == ["500"]
+        assert b["baselined"] == b["matched"] + b["stale"] + b["hidden"] + b["vanished"]
+        text = "\n".join(cc.format_text(report))
+        assert "stale 0 · vanished 1)" in text and "remove or re-key them by hand" in text
+
+    # ---- every way a decision closes a key is CLOSED, not vanished
+
+    def test_closed_by_an_excluded_outcome(self, tmp_path, run):
+        root = _project(tmp_path)
+        self._recorded(root, run)
+        _edit_spec(root, lambda s: s["branchContracts"]["methods"]["approve"]["excludedOutcomes"]
+                   .__setitem__("api.setApproval", {"401": {"by": "unit", "reason": "r"}}))
+        report = cc.run_coverage(root)
+        assert [(e["op"], e["status"]) for e in report.baseline_items["web"]["stale"]] == [
+            ("setApproval", "401")]
+        assert report.baseline["web"]["vanished"] == 0
+
+    def test_closed_by_unreached_ops(self, tmp_path, run):
+        root = _project(tmp_path)
+        self._recorded(root, run)
+        _edit_spec(root, lambda s: s["branchContracts"].__setitem__(
+            "unreachedOps", {"api.getOther": {"reason": "the parent calls it"}}))
+        report = cc.run_coverage(root)
+        assert sorted(e["status"] for e in report.baseline_items["web"]["stale"]) == ["200", "500"]
+        assert report.baseline["web"]["vanished"] == 0
+
+    def test_closed_when_the_mock_comes_back(self, tmp_path, run):
+        # Recorded under no mock (an unmeasured op key); the mock returns, the
+        # op is measured again: that key is CLOSED (its statuses count as
+        # themselves now), not vanished.
+        root = _project(tmp_path)
+        saved = _mock_file(root, "getOther").read_bytes()
+        _mock_file(root, "getOther").unlink()
+        self._recorded(root, run)
+        _mock_file(root, "getOther").write_bytes(saved)
+        report = cc.run_coverage(root)
+        assert [(e["op"], e["cause"]) for e in report.baseline_items["web"]["stale"]] == [
+            ("getOther", "no mock")]
+        assert report.baseline["web"]["vanished"] == 0

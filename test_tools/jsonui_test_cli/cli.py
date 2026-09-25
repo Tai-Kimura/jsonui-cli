@@ -1647,7 +1647,8 @@ def cmd_contracts_baseline(args):
               f"the baseline says, and what they hide was never counted: "
               f"{'; '.join(blocking)}. Fix them, then run it again.", file=sys.stderr)
         return EXIT_UNCOVERED
-    entries, removed, kept, new, hidden = cb.shrink(report.entries, recorded)
+    entries, removed, kept, new, hidden, vanished = cb.shrink(report.entries, recorded,
+                                                              cb.measured(report))
     if recorded is None and not entries:
         print(f"nothing to record — no entry keeps coverage from exit 0; {path} not written")
         return 0
@@ -1668,6 +1669,8 @@ def cmd_contracts_baseline(args):
     print(f"{verb} {path}")
     print(f"removed {removed} · kept {kept}"
           + (f" ({hidden} unmeasured now — not closed, kept)" if hidden else "")
+          + (f" ({vanished} vanished — not closed, kept; remove or re-key them by hand)"
+             if vanished else "")
           + f" · new {new} not added" + (" (close them, or add by hand)" if new else ""))
     return 0
 
