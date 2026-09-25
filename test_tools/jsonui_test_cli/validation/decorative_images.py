@@ -39,7 +39,7 @@ from collections import Counter
 from ..install import _platform_matches
 from .element_ids import CONDITION_KEYS, run_project
 from .models import ValidationMessage, ValidationResult
-from .step import project_platforms
+from .step import _reaches, project_platforms
 
 #: (layouts dir, screen id) -> {image id: (role, layout file)}.
 _SCREENS: dict = {}
@@ -113,9 +113,7 @@ def screen_images(project, screen_id: str) -> dict:
 
 
 def _off_ios(step: dict) -> bool:
-    when = step.get("when")
-    return (isinstance(when, dict) and "platform" in when
-            and not _platform_matches(when["platform"], "ios"))
+    return not _reaches(step, "ios")
 
 
 def _not_visible_ids(step, path: str, screen, out: list, flow: bool = False) -> None:
