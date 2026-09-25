@@ -6,12 +6,17 @@
 # so "get a green and then tag" is not executable. Run it after `git tag -a`
 # and before `git push --atomic`.
 #
-# 🔻 THIS IS DELIBERATELY NOT THE ONLY TAG GATE. A second one lives in the
-# triage lane and derives its expectations from `prev-main` instead of from
-# the working tree. What makes the two independent is not their file paths but
-# WHERE EACH GETS ITS EXPECTED VALUES — merging them, or deleting one as a
-# duplicate, collapses two sources into one and the agreement of the survivors
-# stops meaning anything. If this file looks redundant, that is the point.
+# 🔻 THIS IS THE ONLY TAG GATE TODAY, AND IT WAS NOT MEANT TO BE. A second one
+# (the triage lane's verify_tag.sh, expectations derived from `prev-main`
+# instead of the working tree) was never in the repo: triage's record has its
+# last run at v1.8.94 (2026-09-16 01:34 JST), and on 2026-09-25 mdfind and
+# find return no copy of it on this machine (the same search finds this
+# file). What made the two independent was not their file paths but WHERE
+# EACH GOT ITS EXPECTED VALUES. Until a second gate is back — in the repo
+# this time — a green here is one source's word. That gate's RANGE check
+# compared counts only, so one deleted listing line plus a duplicated or
+# out-of-range one passed it: a replacement has to judge membership per
+# commit, as the listing check below does.
 #
 # ⚠️ WHAT WAS REMOVED AND WHY. An earlier version took the branch's tree OID as
 # an argument, "passed in, not re-derived here". It caught nothing: the caller
