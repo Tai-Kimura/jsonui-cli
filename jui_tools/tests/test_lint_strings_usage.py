@@ -68,13 +68,14 @@ class DeclaredKeysTests(unittest.TestCase):
                          {("login", "title")})
 
 
-def _usage(groups, trees=None, own=None, roots=None, spec_dir=None):
+def _usage(groups, trees=None, own=None, roots=None, spec_dir=None, test_paths=None):
     return collect_usage(
         strings_groups=groups,
         trees=trees or {},
         own_sections_by_layout=own or {},
         platform_roots=roots or {},
         spec_dir=spec_dir,
+        test_paths=test_paths,
     )
 
 
@@ -624,6 +625,237 @@ class AggregationTests(unittest.TestCase):
                          ["screen.web_only"])
 
 
+# A unit-test and a UI-test target, each fed by a synchronized folder, plus
+# the app target — the three shapes a project.pbxproj has to be read for.
+_PBXPROJ = """// !$*UTF8*$!
+{
+	objects = {
+
+/* Begin PBXFileSystemSynchronizedRootGroup section */
+		AAAAAAAAAAAAAAAAAAAAAA01 /* App */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = App;
+			sourceTree = "<group>";
+		};
+		AAAAAAAAAAAAAAAAAAAAAA02 /* AppTests */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = AppTests;
+			sourceTree = "<group>";
+		};
+		AAAAAAAAAAAAAAAAAAAAAA03 /* AppUITests */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = AppUITests;
+			sourceTree = "<group>";
+		};
+/* End PBXFileSystemSynchronizedRootGroup section */
+
+/* Begin PBXNativeTarget section */
+		BBBBBBBBBBBBBBBBBBBBBB01 /* App */ = {
+			isa = PBXNativeTarget;
+			fileSystemSynchronizedGroups = (
+				AAAAAAAAAAAAAAAAAAAAAA01 /* App */,
+			);
+			name = App;
+			productType = "com.apple.product-type.application";
+		};
+		BBBBBBBBBBBBBBBBBBBBBB02 /* AppTests */ = {
+			isa = PBXNativeTarget;
+			fileSystemSynchronizedGroups = (
+				AAAAAAAAAAAAAAAAAAAAAA02 /* AppTests */,
+			);
+			name = AppTests;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
+		BBBBBBBBBBBBBBBBBBBBBB03 /* AppUITests */ = {
+			isa = PBXNativeTarget;
+			fileSystemSynchronizedGroups = (
+				AAAAAAAAAAAAAAAAAAAAAA03 /* AppUITests */,
+			);
+			name = AppUITests;
+			productType = "com.apple.product-type.bundle.ui-testing";
+		};
+/* End PBXNativeTarget section */
+	};
+}
+"""
+
+
+class TestCodeIsNotUsageTests(unittest.TestCase):
+    """jui-lint-strings-usage-counts-test-code-as-usage.
+
+    A test that reads a key keeps passing after the app stops using it (an
+    assert that a text is NOT the fixed string, for one), so a reference
+    from test code must not make the key used. Where test code is comes
+    from the face's build declaration where it can be read.
+    """
+
+    GROUPS = {"screen": {"title": "T", "help": "H"}}
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        base = Path(self._tmp.name)
+        self.web = VmFixture(base / "web")
+        self.ios = VmFixture(base / "ios")
+        self.android = VmFixture(base / "android")
+
+    def tearDown(self):
+        self._tmp.cleanup()
+
+    def _unused(self, report):
+        return sorted(f.site for f in report.unused)
+
+    # --- web: the runners' default test file names -----------------------
+
+    def test_web_a_key_only_a_test_reads_is_unused(self):
+        self.web.write("src/page.tsx", 'str("screen_title");\n')
+        self.web.write("tests/unit/notice.test.ts",
+                       'expect(x).not.toBe(str("screen_help"));\n')
+        report = _usage(self.GROUPS, roots={"web": self.web.root})
+        self.assertEqual(self._unused(report), ["screen.help"])
+        self.assertEqual((report.scanned_files, report.test_files), (2, 1))
+
+    def test_web_a_key_the_app_and_a_test_both_read_stays_used(self):
+        self.web.write("src/page.tsx", 'str("screen_title"); str("screen_help");\n')
+        self.web.write("src/page.spec.tsx", 'str("screen_help");\n')
+        report = _usage(self.GROUPS, roots={"web": self.web.root})
+        self.assertEqual(self._unused(report), [])
+
+    def test_web_an_app_path_that_merely_contains_test_is_not_excluded(self):
+        self.web.write("src/testimonials/Card.tsx", 'str("screen_title"); str("screen_help");\n')
+        self.web.write("src/latest.tsx", "export {};\n")
+        report = _usage(self.GROUPS, roots={"web": self.web.root})
+        self.assertEqual(self._unused(report), [])
+        self.assertEqual(report.test_files, 0)
+
+    def test_web_anything_under_dunder_tests_is_test_code(self):
+        self.web.write("src/page.tsx", 'str("screen_title");\n')
+        self.web.write("src/__tests__/helpers.ts", 'str("screen_help");\n')
+        report = _usage(self.GROUPS, roots={"web": self.web.root})
+        self.assertEqual(self._unused(report), ["screen.help"])
+
+    def test_web_a_typo_in_a_test_is_still_a_missing_key(self):
+        self.web.write("src/page.tsx", 'str("screen_title"); str("screen_help");\n')
+        self.web.write("tests/a.test.ts", 'StringManager.getString("screen_hlep");\n')
+        report = _usage(self.GROUPS, roots={"web": self.web.root})
+        self.assertEqual([f.site.split("/")[-1] for f in report.missing], ["a.test.ts:1"])
+
+    def test_web_a_dynamic_reference_in_a_test_is_not_a_finding(self):
+        self.web.write("src/page.tsx", 'str("screen_title"); str("screen_help");\n')
+        self.web.write("tests/a.test.ts", "StringManager.currentLanguage[key];\n")
+        report = _usage(self.GROUPS, roots={"web": self.web.root})
+        self.assertEqual(report.dynamic, [])
+
+    def test_web_a_configured_directory_is_test_code_too(self):
+        self.web.write("src/page.tsx", 'str("screen_title");\n')
+        self.web.write("tests/helpers/fixture.ts", 'str("screen_help");\n')
+        self.assertEqual(self._unused(_usage(self.GROUPS, roots={"web": self.web.root})), [])
+        report = _usage(self.GROUPS, roots={"web": self.web.root},
+                        test_paths={"web": ["tests"]})
+        self.assertEqual(self._unused(report), ["screen.help"])
+        self.assertIn("lint.stringsUsageTestPaths: tests", report.test_code["web"])
+
+    # --- iOS: the Xcode project's test targets ---------------------------
+
+    def test_ios_files_of_the_projects_test_targets_are_test_code(self):
+        self.ios.write("Proj.xcodeproj/project.pbxproj", _PBXPROJ)
+        self.ios.write("App/ScreenViewModel.swift",
+                       "let a = StringManager.Screen.title()\n")
+        self.ios.write("AppTests/ScreenTests.swift",
+                       "let b = StringManager.Screen.help()\n")
+        self.ios.write("AppUITests/ScreenUITests.swift",
+                       "let c = StringManager.Screen.help()\n")
+        report = _usage(self.GROUPS, roots={"ios": self.ios.root})
+        self.assertEqual(self._unused(report), ["screen.help"])
+        self.assertEqual(report.test_files, 2)
+        self.assertEqual(report.test_code["ios"],
+                         "test targets in Proj.xcodeproj: AppTests, AppUITests")
+
+    def test_ios_a_folder_that_no_test_target_takes_is_app_code(self):
+        # The same folder name, but the project declares no test target.
+        self.ios.write("Proj.xcodeproj/project.pbxproj",
+                       _PBXPROJ.replace("bundle.unit-test", "framework")
+                               .replace("bundle.ui-testing", "framework"))
+        self.ios.write("App/ScreenViewModel.swift",
+                       "let a = StringManager.Screen.title()\n")
+        self.ios.write("AppTests/Helpers.swift",
+                       "let b = StringManager.Screen.help()\n")
+        report = _usage(self.GROUPS, roots={"ios": self.ios.root})
+        self.assertEqual(self._unused(report), [])
+        self.assertEqual(report.test_code["ios"], "none found")
+
+    def test_ios_a_target_without_a_synchronized_folder_uses_its_own_folder(self):
+        classic = _PBXPROJ.replace(
+            "\t\t\tfileSystemSynchronizedGroups = (\n\t\t\t\tAAAAAAAAAAAAAAAAAAAAAA02 /* AppTests */,\n\t\t\t);\n", "")
+        self.assertNotEqual(classic, _PBXPROJ)
+        self.ios.write("Proj.xcodeproj/project.pbxproj", classic)
+        self.ios.write("App/ScreenViewModel.swift",
+                       "let a = StringManager.Screen.title()\n")
+        self.ios.write("AppTests/ScreenTests.swift",
+                       "let b = StringManager.Screen.help()\n")
+        report = _usage(self.GROUPS, roots={"ios": self.ios.root})
+        self.assertEqual(self._unused(report), ["screen.help"])
+
+    def test_a_generated_branch_harness_keeps_counting(self):
+        # The branchContracts closure: a generated test checks these keys
+        # against the VM, so they stay used even inside a test target.
+        self.ios.write("Proj.xcodeproj/project.pbxproj", _PBXPROJ)
+        self.ios.write("App/ScreenViewModel.swift",
+                       "let a = StringManager.Screen.title()\n")
+        self.ios.write("AppTests/ScreenBranchHarness.swift",
+                       'let SCREEN_BRANCH_STRING_KEYS = ["screen_help"]\n')
+        report = _usage(self.GROUPS, roots={"ios": self.ios.root})
+        self.assertEqual(self._unused(report), [])
+        self.assertEqual(report.test_files, 0)
+
+    def test_a_web_branch_harness_keeps_counting_under_a_configured_test_dir(self):
+        # On the web the generator names the directory, not the file:
+        # tests/unit/branch-harness/<screen>.ts.
+        self.web.write("src/page.tsx", 'str("screen_title");\n')
+        self.web.write("tests/unit/branch-harness/screen.ts",
+                       'const SCREEN_BRANCH_STRING_KEYS = ["screen_help"];\n')
+        report = _usage(self.GROUPS, roots={"web": self.web.root},
+                        test_paths={"web": ["tests"]})
+        self.assertEqual(self._unused(report), [])
+        self.assertEqual(report.test_files, 0)
+
+    # --- Android: the Gradle plugin's test source sets --------------------
+
+    def test_android_test_source_sets_are_test_code(self):
+        self.android.write("app/src/main/java/a/ScreenViewModel.kt",
+                           "val a = R.string.screen_title\n")
+        self.android.write("app/src/test/java/a/ScreenTest.kt",
+                           "val b = R.string.screen_help\n")
+        self.android.write("app/src/androidTest/java/a/ScreenUiTest.kt",
+                           "val c = R.string.screen_help\n")
+        self.android.write("app/src/testDebug/java/a/DebugTest.kt",
+                           "val d = R.string.screen_help\n")
+        report = _usage(self.GROUPS, roots={"android": self.android.root})
+        self.assertEqual(self._unused(report), ["screen.help"])
+        self.assertEqual(report.test_files, 3)
+        self.assertEqual(report.test_code["android"],
+                         "test source sets: androidTest, test, testDebug")
+
+    def test_android_a_source_set_that_only_starts_with_test_is_app_code(self):
+        self.android.write("app/src/main/java/a/ScreenViewModel.kt",
+                           "val a = R.string.screen_title\n")
+        self.android.write("app/src/testimonials/java/a/Quote.kt",
+                           "val b = R.string.screen_help\n")
+        report = _usage(self.GROUPS, roots={"android": self.android.root})
+        self.assertEqual(self._unused(report), [])
+        self.assertEqual(report.test_files, 0)
+
+    # --- the printed count -------------------------------------------------
+
+    def test_the_summary_says_how_many_were_excluded_and_why(self):
+        self.web.write("src/page.tsx", 'str("screen_title");\n')
+        self.web.write("tests/a.test.ts", 'str("screen_help");\n')
+        report = _usage(self.GROUPS, roots={"web": self.web.root})
+        self.assertEqual(report.summary_lines(), [
+            "lint-strings: usage scanned 2 source file(s), excluded 1 as test code",
+            "  test code (web): test runner defaults: *.test.*, *.spec.*, __tests__/",
+        ])
+
+
 class CollectFindingsIntegrationTests(unittest.TestCase):
     def setUp(self):
         self._tmp = tempfile.TemporaryDirectory()
@@ -686,6 +918,19 @@ class CollectFindingsIntegrationTests(unittest.TestCase):
         from jui_cli.commands.lint_strings_cmd import LintStringsSetupError
         with self.assertRaises(LintStringsSetupError):
             self.fx.collect(usage=True)
+
+    def test_configured_test_paths_reach_the_usage_check(self):
+        self._enable_web()
+        config = json.loads((self.fx.root / "jui.config.json").read_text())
+        config["lint"] = {"stringsUsageTestPaths": {"web": ["e2e"]}}
+        (self.fx.root / "jui.config.json").write_text(json.dumps(config))
+        (self.fx.root / "web" / "e2e").mkdir()
+        (self.fx.root / "web" / "e2e" / "flow.ts").write_text(
+            'StringManager.getString("login_greeting");\n', encoding="utf-8")
+        self.fx.write_layout("login.json", {"type": "Label", "text": "title"})
+        report = self.fx.collect(usage=True)
+        self.assertIn("login.greeting", {f.site for f in report.usage.unused})
+        self.assertEqual(report.usage.test_files, 1)
 
     def test_web_vm_usage_joins_the_union(self):
         self._enable_web()

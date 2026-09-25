@@ -377,11 +377,27 @@ class UsageReport:
     missing: list[UsageFinding] = field(default_factory=list)
     dynamic: list[UsageFinding] = field(default_factory=list)
     scanned_files: int = 0
+    # Of scanned_files, how many were test code (scanned for missing keys,
+    # not counted as usage), and per face what decided where test code is.
+    test_files: int = 0
+    test_code: dict[str, str] = field(default_factory=dict)
     faces: list[str] = field(default_factory=list)
 
     @property
     def clean(self) -> bool:
         return not (self.unused or self.missing or self.dynamic)
+
+    def summary_lines(self) -> list[str]:
+        """Printed even when clean: without them test code would leave the
+        used set in silence, and a count that moves between runs should
+        show."""
+        lines = [
+            f"lint-strings: usage scanned {self.scanned_files} source file(s), "
+            f"excluded {self.test_files} as test code"
+        ]
+        for face in sorted(self.test_code):
+            lines.append(f"  test code ({face}): {self.test_code[face]}")
+        return lines
 
     def warning_lines(self) -> list[str]:
         lines = []
@@ -535,6 +551,158 @@ def _iter_source_files(root: Path, suffixes: tuple[str, ...]) -> Iterable[Path]:
                 if child.name.startswith(_EXCLUDED_BASENAME_PREFIX):
                     continue
                 yield child
+
+
+# ----------------------------------------------------------------------
+# Test code
+#
+# A reference from test code does not make a key used: a test that reads a
+# key keeps passing after the app stops using it — an assert that a text is
+# NOT the fixed string, for one. Test code is still scanned: a key it
+# references that strings.json lacks is a missing-key (the typo direction).
+# Generated branch harnesses are the exception and keep counting: they are
+# the branchContracts closure, whose keys a generated test checks against
+# the VM, so a key they hold that the VM stops producing turns a test red.
+#
+# Where test code is comes from each face's own build declaration where one
+# can be read, and from the test runners' defaults where it cannot:
+#   ios      the Xcode project's test targets (unit / UI testing bundles):
+#            the folders synchronized into them, else the folder named
+#            after the target; and a Swift package's Tests/.
+#   android  the Android Gradle plugin's test source sets: src/test*,
+#            src/androidTest*, src/testFixtures*. Source directories
+#            redeclared in a Gradle script are not followed.
+#   web      the runners' default test file names — *.test.*, *.spec.*,
+#            and anything under __tests__/ (vitest, jest and playwright
+#            agree on these); their config files are code and are not run.
+# lint.stringsUsageTestPaths ({"web": ["tests"], ...}: directories relative
+# to that face's root) adds to them.
+
+_ANDROID_TEST_SOURCE_SET_RE = re.compile(
+    r"^(?:test|androidTest|testFixtures)(?:[A-Z][A-Za-z0-9]*)?$"
+)
+_WEB_TEST_FILE_RE = re.compile(r"\.(?:test|spec)\.[cm]?[jt]sx?$")
+_PBX_TEST_PRODUCT_TYPES = (
+    "com.apple.product-type.bundle.unit-test",
+    "com.apple.product-type.bundle.ui-testing",
+)
+_PBX_OBJECT_RE = re.compile(
+    r"^\t\t([0-9A-F]{24}) (?:/\*.*?\*/ )?= \{(.*?)^\t\t\};", re.S | re.M
+)
+
+
+def _is_branch_harness(path: Path) -> bool:
+    """A generated branch harness: `<Screen>BranchHarness.swift` / `.kt`, or
+    on the web a file in the generator's `branch-harness/` directory
+    (`tests/unit/branch-harness/<screen>.ts` by default)."""
+    return bool(_BRANCH_HARNESS_RE.search(path.name)) or any(
+        part.lower() in ("branch-harness", "branch_harness") for part in path.parts[:-1]
+    )
+
+
+@dataclass
+class TestCode:
+    """Which source files under one face's root are test code."""
+
+    dirs: list[Path] = field(default_factory=list)
+    runner_names: bool = False
+    basis: list[str] = field(default_factory=list)
+
+    def contains(self, path: Path) -> bool:
+        if self.runner_names and (
+            _WEB_TEST_FILE_RE.search(path.name) or "__tests__" in path.parts
+        ):
+            return True
+        for directory in self.dirs:
+            try:
+                path.relative_to(directory)
+                return True
+            except ValueError:
+                continue
+        return False
+
+
+def _iter_dirs(root: Path) -> Iterable[Path]:
+    stack = [root]
+    while stack:
+        current = stack.pop()
+        yield current
+        try:
+            children = sorted(current.iterdir())
+        except OSError:
+            continue
+        for child in children:
+            if (child.is_dir() and child.name not in _SKIP_DIRS
+                    and not child.name.startswith(".")):
+                stack.append(child)
+
+
+def _pbx_value(body: str, name: str) -> str | None:
+    m = re.search(rf"\b{name} = (\"[^\"]*\"|[^;]+);", body)
+    return m.group(1).strip().strip('"') if m else None
+
+
+def _ios_test_code(root: Path, code: TestCode) -> None:
+    for project in sorted(p for p in _iter_dirs(root) if p.suffix == ".xcodeproj"):
+        try:
+            text = (project / "project.pbxproj").read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            continue
+        objects = {m.group(1): m.group(2) for m in _PBX_OBJECT_RE.finditer(text)}
+        targets = []
+        for body in objects.values():
+            if "isa = PBXNativeTarget;" not in body:
+                continue
+            if _pbx_value(body, "productType") not in _PBX_TEST_PRODUCT_TYPES:
+                continue
+            name = _pbx_value(body, "name") or "?"
+            targets.append(name)
+            groups = re.search(r"\bfileSystemSynchronizedGroups = \((.*?)\);", body, re.S)
+            found = False
+            for gid in re.findall(r"[0-9A-F]{24}", groups.group(1) if groups else ""):
+                path = _pbx_value(objects.get(gid, ""), "path")
+                if path:
+                    code.dirs.append(project.parent / path)
+                    found = True
+            if not found and (project.parent / name).is_dir():
+                code.dirs.append(project.parent / name)
+        if targets:
+            code.basis.append(
+                f"test targets in {project.name}: {', '.join(sorted(targets))}"
+            )
+    if (root / "Package.swift").is_file() and (root / "Tests").is_dir():
+        code.dirs.append(root / "Tests")
+        code.basis.append("the Swift package's Tests/")
+
+
+def _android_test_code(root: Path, code: TestCode) -> None:
+    sets = []
+    for directory in _iter_dirs(root):
+        if directory.name != "src":
+            continue
+        for child in sorted(directory.iterdir()):
+            if child.is_dir() and _ANDROID_TEST_SOURCE_SET_RE.match(child.name):
+                code.dirs.append(child)
+                sets.append(child.name)
+    if sets:
+        code.basis.append(f"test source sets: {', '.join(sorted(set(sets)))}")
+
+
+def find_test_code(face: str, root: Path, extra: Iterable[str] = ()) -> TestCode:
+    """Where test code is under one face's root (see the note above)."""
+    code = TestCode()
+    if face == "ios":
+        _ios_test_code(root, code)
+    elif face == "android":
+        _android_test_code(root, code)
+    elif face == "web":
+        code.runner_names = True
+        code.basis.append("test runner defaults: *.test.*, *.spec.*, __tests__/")
+    configured = [rel for rel in extra if isinstance(rel, str) and rel.strip()]
+    if configured:
+        code.dirs.extend(root / rel for rel in configured)
+        code.basis.append(f"lint.stringsUsageTestPaths: {', '.join(configured)}")
+    return code
 
 
 def collect_ios_catalog_keys(root: Path) -> set[str]:
@@ -698,8 +866,14 @@ def scan_vm_sources(
     report: UsageReport,
     used: set[tuple[str, str]],
     harness_keys: set[str] | None = None,
+    test_code: TestCode | None = None,
 ) -> None:
-    """Scan one platform root; add to *used* and append findings."""
+    """Scan one platform root; add to *used* and append findings.
+
+    A test file is scanned the same way, but what it references goes to a
+    set nobody reads, and it reports no dynamic reference (that rule keeps
+    the used set computable, and test code is not part of it).
+    """
     suffixes = {
         "web": _WEB_SUFFIXES,
         "ios": _IOS_SUFFIXES,
@@ -714,6 +888,15 @@ def scan_vm_sources(
         text = _strip_comments(text)
         report.scanned_files += 1
         rel = src.as_posix()
+        is_test = (
+            test_code is not None
+            and test_code.contains(src)
+            and not _is_branch_harness(src)
+        )
+        if is_test:
+            report.test_files += 1
+        sink: set[tuple[str, str]] = set() if is_test else used
+        dynamic = [] if is_test else report.dynamic
 
         # *_STRING_KEYS declarations: every literal is a used key; a
         # literal that is not a declared flat key is a missing finding
@@ -734,7 +917,7 @@ def scan_vm_sources(
         for literal in strict_literals:
             pairs = declared.by_flat.get(literal)
             if pairs:
-                used |= pairs
+                sink |= pairs
             else:
                 report.missing.append(UsageFinding(
                     kind="missing-key",
@@ -744,7 +927,7 @@ def scan_vm_sources(
         for literal in lenient_literals:
             pairs = declared.by_flat.get(literal)
             if pairs:
-                used |= pairs
+                sink |= pairs
             # a tuple array interleaves non-key strings — no missing
             # judgment on the list shape
 
@@ -753,7 +936,7 @@ def scan_vm_sources(
                 ident = m.group(1)
                 pairs = declared.by_camel.get(ident) or declared.by_flat.get(ident)
                 if pairs:
-                    used |= pairs
+                    sink |= pairs
                 else:
                     report.missing.append(UsageFinding(
                         kind="missing-key",
@@ -764,7 +947,7 @@ def scan_vm_sources(
                 literal = m.group(2)
                 pairs = declared.by_flat.get(literal)
                 if pairs:
-                    used |= pairs
+                    sink |= pairs
                 else:
                     report.missing.append(UsageFinding(
                         kind="missing-key",
@@ -783,7 +966,7 @@ def scan_vm_sources(
                     composed = prefix + literal
                     pairs = declared.by_flat.get(composed)
                     if pairs:
-                        used |= pairs
+                        sink |= pairs
                     else:
                         report.missing.append(UsageFinding(
                             kind="missing-key",
@@ -798,7 +981,7 @@ def scan_vm_sources(
                     literal
                 )
                 if pairs:
-                    used |= pairs
+                    sink |= pairs
                 # unmatched: str/tpl are ordinary identifiers elsewhere —
                 # only getString is unambiguous enough for a missing finding
             for m in _PLURAL_LITERAL_RE.finditer(text):
@@ -807,7 +990,7 @@ def scan_vm_sources(
                     literal
                 )
                 if pairs:
-                    used |= pairs
+                    sink |= pairs
                 else:
                     report.missing.append(UsageFinding(
                         kind="missing-key",
@@ -816,7 +999,7 @@ def scan_vm_sources(
                     ))
             for m in _WEB_BRACKET_RE.finditer(text):
                 if not _statement_mentions_keys_map(text, m.start()):
-                    report.dynamic.append(UsageFinding(
+                    dynamic.append(UsageFinding(
                         kind="dynamic-ref",
                         site=f"{rel}:{_line_of(text, m.start())}",
                         detail="StringManager.currentLanguage[...] with no "
@@ -843,11 +1026,11 @@ def scan_vm_sources(
                     pairs = declared.by_flat.get(lm.group(2)) or \
                         declared.by_bare.get(lm.group(2))
                     if pairs:
-                        used |= pairs
+                        sink |= pairs
                 if _is_static_choice_of_literals(arg):
                     continue  # every producible value is a literal
                 if not _statement_mentions_keys_map(text, m.start()):
-                    report.dynamic.append(UsageFinding(
+                    dynamic.append(UsageFinding(
                         kind="dynamic-ref",
                         site=f"{rel}:{_line_of(text, m.start())}",
                         detail="str/tpl/getString/plural(<expression>) "
@@ -857,13 +1040,13 @@ def scan_vm_sources(
             for m in _IOS_ACCESSOR_RE.finditer(text):
                 pairs = declared.by_accessor.get((m.group(1), m.group(2)))
                 if pairs:
-                    used |= pairs
+                    sink |= pairs
                 # unmatched: a compile error on iOS, and StringManager
                 # also has non-accessor members — not reported here
             for m in _IOS_LOCALIZED_RE.finditer(text):
                 pairs = declared.by_flat.get(m.group(2))
                 if pairs:
-                    used |= pairs
+                    sink |= pairs
                 # unmatched: usage only. The SwiftUI generator emits this
                 # form for sentinel vocabulary too (a visibility's "gone"),
                 # so absence here does not mean a broken key reference.
@@ -875,7 +1058,7 @@ def scan_vm_sources(
                     key = m.group(2)
                     pairs = declared.by_flat.get(key) or declared.by_bare.get(key)
                     if pairs:
-                        used |= pairs
+                        sink |= pairs
                     elif key not in catalog_keys:
                         report.missing.append(UsageFinding(
                             kind="missing-key",
@@ -890,7 +1073,7 @@ def scan_vm_sources(
             for m in _ANDROID_R_STRING_RE.finditer(text):
                 pairs = declared.by_flat.get(m.group(1))
                 if pairs:
-                    used |= pairs
+                    sink |= pairs
                 # unmatched: plain Android resources share R.string,
                 # and a truly absent symbol fails Android compile
 
@@ -994,12 +1177,14 @@ def collect_usage(
     own_sections_by_layout: dict[str, tuple[str, ...]],
     platform_roots: dict[str, Path],
     spec_dir: Path | None = None,
+    test_paths: dict[str, Any] | None = None,
 ) -> UsageReport:
     """Aggregate the used set over every face, then judge both directions.
 
     *platform_roots* holds only the faces the project declares; a face
     with no configured root simply contributes nothing (its absence is
-    the project's shape, not a scanning gap).
+    the project's shape, not a scanning gap). *test_paths* is
+    lint.stringsUsageTestPaths: per face, more directories of test code.
     """
     declared = DeclaredKeys(strings_groups)
     report = UsageReport()
@@ -1007,9 +1192,16 @@ def collect_usage(
 
     used = collect_layout_used(trees, own_sections_by_layout, declared)
     harness_keys: set[str] = set()
+    test_paths = test_paths if isinstance(test_paths, dict) else {}
     for face in sorted(platform_roots):
+        extra = test_paths.get(face)
+        test_code = find_test_code(
+            face, platform_roots[face], extra if isinstance(extra, list) else ()
+        )
+        report.test_code[face] = "; ".join(test_code.basis) or "none found"
         scan_vm_sources(
-            face, platform_roots[face], declared, report, used, harness_keys
+            face, platform_roots[face], declared, report, used, harness_keys,
+            test_code,
         )
     if spec_dir is not None:
         report.faces.append("spec")
