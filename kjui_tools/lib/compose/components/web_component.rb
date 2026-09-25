@@ -3,6 +3,7 @@
 require_relative '../helpers/binding_expression'
 require_relative '../helpers/modifier_builder'
 require_relative '../helpers/resource_resolver'
+require_relative '../helpers/web_load_state'
 
 module KjuiTools
   module Compose
@@ -94,6 +95,24 @@ module KjuiTools
           # still reload every time. A static url keeps its empty block.
           code += "\n" + indent("update = { webView ->", depth + 1)
           
+          # onLoadFailed / reloadToken. A reload repeats the factory's own
+          # load. With a bound url it only forgets the last load (`tag`), so
+          # the url follow just below loads once — a token that moves together
+          # with the url is served by that same load, not by a second one
+          # that would cancel it (SwiftJsonUI's updateUIView does the same).
+          reload_call = if url_is_bound
+                          'webView.tag = null'
+                        elsif json_data['url'].nil? && json_data['html']
+                          "webView.loadDataWithBaseURL(null, #{kotlin_string(json_data['html'])}, \"text/html\", \"utf-8\", null)"
+                        else
+                          "webView.loadUrl(#{url})"
+                        end
+          load_state = Helpers::WebLoadState.update_lines(json_data, reload_call)
+          unless load_state.empty?
+            required_imports&.add(:web_load_state)
+            load_state.each { |line| code += "\n" + indent(line, depth + 2) }
+          end
+
           if url_is_bound
             code += "\n" + indent("val url = #{url}", depth + 2)
             code += "\n" + indent("if (webView.tag != url) {", depth + 2)
@@ -101,7 +120,7 @@ module KjuiTools
             code += "\n" + indent("webView.loadUrl(url)", depth + 3)
             code += "\n" + indent("}", depth + 2)
           end
-          
+
           code += "\n" + indent("},", depth + 1)
           
           # Build modifiers

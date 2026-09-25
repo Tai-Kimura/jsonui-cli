@@ -183,6 +183,8 @@ module KjuiTools
                       "import android.webkit.WebChromeClient",
                       "import com.kotlinjsonui.core.KjuiWebViewClient",
                       "import androidx.compose.ui.viewinterop.AndroidView"],
+            # Web onLoadFailed / reloadToken (Helpers::WebLoadState).
+            web_load_state: "import com.kotlinjsonui.core.KjuiWebLoadState",
             constraint_layout: ["import androidx.constraintlayout.compose.ConstraintLayout",
                                 "import androidx.constraintlayout.compose.Dimension"],
             remember_state: ["import androidx.compose.runtime.remember",

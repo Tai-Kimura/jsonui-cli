@@ -446,6 +446,41 @@ def _negation_hidden() -> InteractiveSpec:
 
 _FIRE_BINDING = f"@{{{FIRE_HANDLER}}}"
 
+#: A page whose load fails with no network in the path: a file that does not
+#: exist. It was `https://conformance.invalid/` (RFC 2606, the host
+#: NetworkImage.errorImage fails on) — but a WKWebView / android WebView request
+#: does not pass through the hosts' URLProtocol / OkHttp interceptor, so the
+#: RUNNER's resolver decided when it failed: the SwiftJsonUI unit arm on that
+#: url passed on both CI legs once and waited 30 s for nothing on the Xcode
+#: 26.3 leg the next run. Measured before the switch, iOS 26.4 and 18.6: the
+#: file url reaches didFailProvisionalNavigation (NSURLErrorFileDoesNotExist)
+#: in 0.3–0.5 s, while a refused loopback port (`http://127.0.0.1:1/`) is not
+#: reported as a failure at all (didFinish).
+WEB_FAILING_URL = "file:///jsonui-conformance-missing.html"
+
+
+def _web_load_failed() -> InteractiveSpec:
+    """``Web.onLoadFailed``: the page's own url fails, so the handler fires
+    with no runner action — the ``onAppear`` shape (trigger None), asserting
+    only the post state. The text assertion polls to the driver's timeout, which
+    is what a failure that arrives asynchronously needs.
+
+    The discrimination is the mirror: ``fired`` only if the Web reported the
+    failure. Without the attribute (or with a page that loads) it stays
+    ``ready`` and the arm fails, so a face that never wires the event cannot
+    pass it. ``url`` wins over the Web base ``html`` on every platform.
+    """
+    spec = _callback_fire("Web", "onLoadFailed", _FIRE_BINDING, None)
+    return InteractiveSpec(
+        case=spec.case,
+        host=spec.host,
+        target_attrs=spec.target_attrs + (("url", WEB_FAILING_URL),),
+        vars=spec.vars,
+        handlers=spec.handlers,
+        steps=spec.steps,
+        mirror_var=spec.mirror_var,
+    )
+
 #: visibility enum value -> assertion (mirrors rules._assertable_cases).
 _VISIBILITY_ASSERTS = {
     "visible": _target_visible,
@@ -578,6 +613,8 @@ INTERACTIVE_SPECS: dict[tuple[str, str], tuple[InteractiveSpec, ...]] = {
         _callback_fire("View", "onPan", _FIRE_BINDING, _swipe_target(), HANDLER_EVENT),
     ),
     ("common", "onAppear"): (_callback_fire("View", "onAppear", FIRE_HANDLER, None),),
+    # Fires on its own: the Web's url is a page that cannot load.
+    ("Web", "onLoadFailed"): (_web_load_failed(),),
     ("TextField", "onTextChange"): (
         _callback_fire(
             "TextField", "onTextChange", _FIRE_BINDING, _input_target(TYPED_TEXT), HANDLER_TEXT

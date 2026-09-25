@@ -626,7 +626,8 @@
       }
     },
     "rules": [
-      "url attribute specifies the web page to load"
+      "url attribute specifies the web page to load",
+      "Error face + retry (iOS / Android only): bind onLoadFailed to a ViewModel method that hides the Web and shows the error, and bind reloadToken to an Int the retry method increments — the Web reloads its own url each time the value changes. Rewriting url to the same value does not reload."
     ]
   },
   "SafeAreaView": {

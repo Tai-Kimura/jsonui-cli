@@ -123,4 +123,48 @@ RSpec.describe SjuiTools::SwiftUI::Views::WebConverter do
         .to eq('WebView(url: URL(string: "https://a.test"))')
     end
   end
+
+  # ssot-web-component-has-no-load-failure-event-or-reload-trigger: the two
+  # attributes are the last two WebView initializer arguments, in that order
+  # (Swift matches labels positionally).
+  describe 'onLoadFailed and reloadToken' do
+    def generated(component)
+      described_class.new(component, 0, nil).convert
+    end
+
+    it 'passes the handler as a closure and the token as its bound value' do
+      code = generated({
+        'type' => 'Web', 'url' => '@{pageUrl}',
+        'onLoadFailed' => '@{onLoadFailed}', 'reloadToken' => '@{reloadToken}'
+      })
+      expect(code).to eq(
+        "// Requires SwiftJsonUI >= 10.28.0 (Web onLoadFailed / reloadToken)\n" \
+        'WebView(url: URL(string: data.pageUrl), onLoadFailed: { data.onLoadFailed?() }, reloadToken: data.reloadToken)'
+      )
+    end
+
+    it 'names the library floor only when one of them is emitted' do
+      expect(generated({ 'type' => 'Web', 'url' => 'https://a.test', 'reloadToken' => '@{t}' }))
+        .to include('// Requires SwiftJsonUI >= 10.28.0')
+      expect(generated({ 'type' => 'Web', 'url' => 'https://a.test', 'allowsLinkPreview' => false }))
+        .not_to include('Requires')
+    end
+
+    it 'keeps them after the flags, in initializer order' do
+      code = generated({
+        'type' => 'Web', 'url' => 'https://a.test', 'allowsLinkPreview' => false,
+        'reloadToken' => '@{token}', 'onLoadFailed' => '@{failed}'
+      })
+      expect(code.index('allowsLinkPreview')).to be < code.index('onLoadFailed:')
+      expect(code.index('onLoadFailed:')).to be < code.index('reloadToken:')
+    end
+
+    it 'emits nothing for a bare string, which names no handler and no value' do
+      code = generated({
+        'type' => 'Web', 'url' => 'https://a.test',
+        'onLoadFailed' => 'failed', 'reloadToken' => '1'
+      })
+      expect(code).to eq('WebView(url: URL(string: "https://a.test"))')
+    end
+  end
 end

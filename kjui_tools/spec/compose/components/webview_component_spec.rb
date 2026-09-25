@@ -196,4 +196,39 @@ RSpec.describe KjuiTools::Compose::Components::WebviewComponent do
       expect(required_imports).to include(:shape)
     end
   end
+  describe 'onLoadFailed and reloadToken' do
+    # A static url emitted no `update` at all; a node that declares either
+    # attribute needs one, because that is where the view state is fed.
+    it 'opens an update block for a static url that declares them' do
+      code = described_class.generate(
+        { 'type' => 'WebView', 'url' => 'https://a.test',
+          'onLoadFailed' => '@{failed}', 'reloadToken' => '@{token}' }, 0, required_imports
+      )
+      # The body sits two levels in (8 spaces at depth 0).
+      update = code[/update = \{ webView ->\n(.*?)\n    \},/m, 1].gsub(/^ {8}/, '')
+      expect(update).to eq(<<~KOTLIN.chomp)
+            // Requires KotlinJsonUI >= 2.41.0 (Web onLoadFailed / reloadToken)
+            val loadState = KjuiWebLoadState.of(webView)
+            loadState.onLoadFailed = { data.failed?.invoke() }
+            if (loadState.reloadTokenChanged(data.token)) {
+                webView.loadUrl("https://a.test")
+            }
+      KOTLIN
+      expect(required_imports).to include(:web_load_state)
+    end
+
+    it 'puts the token before the bound-url follow, which then loads once' do
+      code = described_class.generate(
+        { 'type' => 'WebView', 'url' => '@{pageUrl}', 'reloadToken' => '@{token}' }, 0, Set.new
+      )
+      expect(code).to include("if (loadState.reloadTokenChanged(data.token)) {\n            webView.tag = null\n        }\n        val url = data.pageUrl")
+      expect(code.scan('loadUrl(').size).to eq(2) # the factory's and the follow's
+    end
+
+    it 'still emits no update block for a static url without them' do
+      code = described_class.generate({ 'type' => 'WebView', 'url' => 'https://a.test' }, 0, required_imports)
+      expect(code).not_to include('update =')
+      expect(required_imports).not_to include(:web_load_state)
+    end
+  end
 end

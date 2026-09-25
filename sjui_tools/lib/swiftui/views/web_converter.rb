@@ -37,6 +37,23 @@ module SjuiTools
             args << "allowsBackForwardNavigationGestures: #{gestures == true || gestures == 'true'}"
           end
 
+          # Both are binding-only (attribute_definitions.json Web). A bare
+          # string names nothing on either, so it emits nothing — the same
+          # rule onLongPress follows.
+          handler = @component['onLoadFailed']
+          if handler && is_binding?(handler)
+            args << "onLoadFailed: { #{get_event_handler_invocation(handler, @component['id'])} }"
+          end
+          token = @component['reloadToken']
+          if token && is_binding?(token)
+            args << "reloadToken: #{swift_string_or_binding(token)}"
+          end
+
+          # `onLoadFailed:` / `reloadToken:` are new WebView parameters, so this
+          # output does not compile against an older library.
+          if args.any? { |a| a.start_with?('onLoadFailed:', 'reloadToken:') }
+            add_line '// Requires SwiftJsonUI >= 10.28.0 (Web onLoadFailed / reloadToken)'
+          end
           add_line "WebView(#{args.join(', ')})"
           
           # 共通のモディファイアを適用

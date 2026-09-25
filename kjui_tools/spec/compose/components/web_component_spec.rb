@@ -339,4 +339,61 @@ RSpec.describe KjuiTools::Compose::Components::WebComponent do
       expect(code).to include('\\$y')
     end
   end
+  # ssot-web-component-has-no-load-failure-event-or-reload-trigger. Both feed
+  # KjuiWebLoadState from `update`, which runs again when the data it reads
+  # changes — the handler handed over is always the current one.
+  describe 'onLoadFailed and reloadToken' do
+    # With a bound url the token only forgets the last load; the url follow
+    # after it then loads once, so a token and url that move together cost
+    # one load, not two.
+    it 'hands the handler to the view state and lets the url follow reload on a moved token' do
+      code = described_class.generate(
+        { 'type' => 'Web', 'url' => '@{pageUrl}',
+          'onLoadFailed' => '@{onLoadFailed}', 'reloadToken' => '@{reloadToken}' },
+        0, required_imports
+      )
+      # The body sits two levels in (8 spaces at depth 0).
+      update = code[/update = \{ webView ->\n(.*?)\n    \},/m, 1].gsub(/^ {8}/, '')
+      expect(update).to eq(<<~KOTLIN.chomp)
+            // Requires KotlinJsonUI >= 2.41.0 (Web onLoadFailed / reloadToken)
+            val loadState = KjuiWebLoadState.of(webView)
+            loadState.onLoadFailed = { data.onLoadFailed?.invoke() }
+            if (loadState.reloadTokenChanged(data.reloadToken)) {
+                webView.tag = null
+            }
+            val url = data.pageUrl
+            if (webView.tag != url) {
+                webView.tag = url
+                webView.loadUrl(url)
+            }
+      KOTLIN
+      expect(required_imports).to include(:web_load_state)
+    end
+
+    it 'reloads a static url as the literal the factory loaded' do
+      code = described_class.generate(
+        { 'type' => 'Web', 'url' => 'https://a.test', 'reloadToken' => '@{token}' }, 0, Set.new
+      )
+      expect(code).to include("if (loadState.reloadTokenChanged(data.token)) {\n            webView.loadUrl(\"https://a.test\")")
+      expect(code).not_to include('loadState.onLoadFailed')
+    end
+
+    it 'reloads the html when there is no url' do
+      code = described_class.generate(
+        { 'type' => 'Web', 'html' => '<b>hi</b>', 'reloadToken' => '@{token}' }, 0, Set.new
+      )
+      expect(code).to include('webView.loadDataWithBaseURL(null, "<b>hi</b>", "text/html", "utf-8", null)')
+      expect(code).not_to include('loadUrl')
+    end
+
+    it 'emits nothing, and no import, for bare strings' do
+      imports = Set.new
+      bare = described_class.generate(
+        { 'type' => 'Web', 'url' => 'https://a.test', 'onLoadFailed' => 'f', 'reloadToken' => '1' }, 0, imports
+      )
+      plain = described_class.generate({ 'type' => 'Web', 'url' => 'https://a.test' }, 0, Set.new)
+      expect(bare).to eq(plain)
+      expect(imports).not_to include(:web_load_state)
+    end
+  end
 end

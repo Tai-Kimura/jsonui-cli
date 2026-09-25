@@ -2,6 +2,7 @@
 
 require_relative '../helpers/binding_expression'
 require_relative '../helpers/modifier_builder'
+require_relative '../helpers/web_load_state'
 
 module KjuiTools
   module Compose
@@ -75,13 +76,26 @@ module KjuiTools
           # recomposition after one (SwiftJsonUI keeps `lastLoadedURL` for the
           # same reason). A static url has nothing to follow, and its emit is
           # unchanged.
-          if url_is_bound
+          # onLoadFailed / reloadToken also live in `update`, so a node that
+          # declares either gets the block even with a static url. A reload
+          # repeats the factory's load; with a bound url it only forgets the
+          # last load, so the follow below loads once (web_component.rb).
+          load_state = Helpers::WebLoadState.update_lines(
+            json_data, url_is_bound ? 'webView.tag = null' : "webView.loadUrl(#{url})"
+          )
+          if url_is_bound || !load_state.empty?
             code += "\n" + indent("update = { webView ->", depth + 1)
-            code += "\n" + indent("val url = #{url}", depth + 2)
-            code += "\n" + indent("if (webView.tag != url) {", depth + 2)
-            code += "\n" + indent("webView.tag = url", depth + 3)
-            code += "\n" + indent("webView.loadUrl(url)", depth + 3)
-            code += "\n" + indent("}", depth + 2)
+            unless load_state.empty?
+              required_imports&.add(:web_load_state)
+              load_state.each { |line| code += "\n" + indent(line, depth + 2) }
+            end
+            if url_is_bound
+              code += "\n" + indent("val url = #{url}", depth + 2)
+              code += "\n" + indent("if (webView.tag != url) {", depth + 2)
+              code += "\n" + indent("webView.tag = url", depth + 3)
+              code += "\n" + indent("webView.loadUrl(url)", depth + 3)
+              code += "\n" + indent("}", depth + 2)
+            end
             code += "\n" + indent("},", depth + 1)
           end
           
