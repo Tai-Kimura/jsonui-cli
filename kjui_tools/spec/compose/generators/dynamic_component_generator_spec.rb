@@ -105,9 +105,13 @@ RSpec.describe KjuiTools::Compose::Generators::DynamicComponentGenerator do
         expect(result).to eq('false')
       end
 
-      it 'returns 0.0 for float type' do
+      # `0f`: resolveFloat takes `default: Float`. This said `0.0` — a Double —
+      # and the wrapper it wrote did not compile; the text was asserted and
+      # never compiled (ticket kjui-dynamic-wrapper-float-default-is-a-double;
+      # the compile arm is dynamic_wrapper_prop_types_spec.rb).
+      it 'returns 0f for float type' do
         result = generator.send(:get_default_value, 'float')
-        expect(result).to eq('0.0')
+        expect(result).to eq('0f')
       end
 
       it 'returns Color.Unspecified for color type' do

@@ -109,6 +109,31 @@ module KjuiTools
           @command ||= build_command_string('kjui g converter')
         end
 
+        # The mode, as the composable and the Dynamic wrapper read it (see
+        # KotlinComponentGenerator#kotlin_template). Until 1.8.121 this
+        # template never read it and always decided from the layout, so a
+        # --container call without children omitted the lambda its
+        # composable requires, and a --no-container call with children passed
+        # one its composable does not take (ticket
+        # kjui-converter-scaffolds-disagree-on-content).
+        def generate_container_check
+          case @options[:is_container]
+          when true
+            "            # Container (--container): its composable requires the content\n" \
+              "            # lambda, so it is passed even when the layout gives no children.\n" \
+              "            is_container = true\n" \
+              "            children = [] unless children.is_a?(Array)"
+          when false
+            "            # Leaf (--no-container): its composable takes no content. The build\n" \
+              "            # refuses a layout that gives this component children.\n" \
+              "            is_container = false"
+          else
+            "            # Default: a content lambda when the layout gives children (the\n" \
+              "            # composable's content defaults to empty otherwise).\n" \
+              "            is_container = children.is_a?(Array) && !children.empty?"
+          end
+        end
+
         def json_marker(source:, generator:)
           Core::GeneratedMarker.json_marker(source: source, generator: generator)
         end
@@ -127,9 +152,8 @@ module KjuiTools
                       def self.generate(json_data, depth, required_imports = nil, parent_type = nil)
                         required_imports&.add(:box)
 
-                        # Check if this is a container component
                         children = json_data['children'] || json_data['child']
-                        is_container = children && children.is_a?(Array) && !children.empty?
+            #{generate_container_check}
 
                         # Collect parameters
                         params = []

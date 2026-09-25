@@ -174,8 +174,12 @@ module KjuiTools
           config = Core::ConfigManager.load_config
           package_name = config['package_name'] || 'com.example.kotlinjsonui.sample'
 
-          # Determine if this is a container component
-          is_container = @options[:is_container]
+          # The default mode is a container, as its composable is (it takes a
+          # content lambda): until 1.8.121 this read the default's nil as "no
+          # content" and called a composable that requires one — the Debug
+          # build did not compile (ticket
+          # kjui-converter-scaffolds-disagree-on-content).
+          is_container = @options[:is_container] != false
 
           imports = generate_dynamic_imports(package_name)
           parsing = generate_dynamic_parameter_parsing
@@ -224,13 +228,53 @@ module KjuiTools
                         "            }\n" +
                         "        }"
                       else
-                        "#{@component_name}(\n" +
+                        # A leaf: children in the layout are refused here the
+                        # way the build refuses them — an error in their place,
+                        # not a component drawn without them. Written into the
+                        # wrapper rather than called from the library, so it
+                        # compiles against any KotlinJsonUI (a library helper
+                        # broke a 2.41.1 face's Debug build, measured).
+                        "leafRejection(json)?.let { message ->\n" +
+                        "            android.util.Log.w(\"DynamicView\", message)\n" +
+                        "            androidx.compose.material3.Text(text = \"⚠️ $message\", color = androidx.compose.ui.graphics.Color.Red)\n" +
+                        "            return\n" +
+                        "        }\n" +
+                        "        #{@component_name}(\n" +
                         params +
                         "            modifier = modifier\n" +
                         "        )"
                       end}
                 }
-            #{helpers}
+            #{helpers}#{leaf_rejection_helper}
+            }
+          KOTLIN
+        end
+
+        # The sentence a leaf shows in Dynamic when a layout gives it children —
+        # the same as SwiftJsonUI's LeafChildren.rejection, bound by jsonui-cli
+        # shared/core/leaf_children_vectors.json
+        # (spec/compose/generators/leaf_wrapper_message_spec.rb runs this
+        # function against it).
+        def leaf_rejection_helper
+          return '' unless @options[:is_container] == false
+
+          <<~KOTLIN.gsub(/^/, '    ')
+
+            /** What a layout that gives this leaf children is told (null: it gives none). */
+            private fun leafRejection(json: JsonObject): String? {
+                val key = if (json.has("child")) "child" else "children"
+                val value = json.get(key) ?: return null
+                fun isNode(e: com.google.gson.JsonElement) = e.isJsonObject && (e.asJsonObject.has("type") || e.asJsonObject.has("include"))
+                fun idOf(o: JsonObject) = o.get("id")?.takeIf { it.isJsonPrimitive }?.let { " (id=" + it.asString + ")" } ?: ""
+                val dropped = when {
+                    value.isJsonArray -> value.asJsonArray.mapIndexedNotNull { i, e -> if (isNode(e)) "$key[$i]" + idOf(e.asJsonObject) else null }
+                    isNode(value) -> listOf(key + idOf(value.asJsonObject))
+                    else -> emptyList()
+                }
+                if (dropped.isEmpty()) return null
+                return "'#{@component_name}'" + idOf(json) + " takes no children — it is declared a leaf, so " +
+                    dropped.joinToString(", ") + (if (dropped.size == 1) " is" else " are") +
+                    " not drawn. Remove the children, or regenerate the component with --container."
             }
           KOTLIN
         end
@@ -536,7 +580,10 @@ module KjuiTools
           when :int
             '0'
           when :float
-            '0.0'
+            # A Float literal: resolveFloat takes `default: Float`, and `0.0` is a
+            # Double — the wrapper did not compile (ticket
+            # kjui-dynamic-wrapper-float-default-is-a-double).
+            '0f'
           when :double
             '0.0'
           when :bool
