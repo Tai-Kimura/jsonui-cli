@@ -6,17 +6,21 @@
 # so "get a green and then tag" is not executable. Run it after `git tag -a`
 # and before `git push --atomic`.
 #
-# 🔻 THIS IS THE ONLY TAG GATE TODAY, AND IT WAS NOT MEANT TO BE. A second one
-# (the triage lane's verify_tag.sh, expectations derived from `prev-main`
-# instead of the working tree) was never in the repo: triage's record has its
-# last run at v1.8.94 (2026-09-16 01:34 JST), and on 2026-09-25 mdfind and
-# find return no copy of it on this machine (the same search finds this
-# file). What made the two independent was not their file paths but WHERE
-# EACH GOT ITS EXPECTED VALUES. Until a second gate is back — in the repo
-# this time — a green here is one source's word. That gate's RANGE check
-# compared counts only, so one deleted listing line plus a duplicated or
-# out-of-range one passed it: a replacement has to judge membership per
-# commit, as the listing check below does.
+# 🔻 THIS IS DELIBERATELY NOT THE ONLY TAG GATE. The second gate is
+# dev-guide/release/check-tag-from-prev.py: it derives its expected values
+# from the previous tag (its tree and first-parent history), git's own range
+# and the tag name, instead of from the branch and the working tree. What
+# makes the two independent is not their file paths but WHERE EACH GETS ITS
+# EXPECTED VALUES — merging them, or deleting one as a duplicate, collapses
+# two sources into one and the agreement of the survivors stops meaning
+# anything. If this file looks redundant, that is the point.
+#
+# ⚠️ The first second gate (the triage lane's verify_tag.sh) lived only in a
+# scratch directory: it last ran at v1.8.94 (2026-09-16 01:34 JST) and was
+# gone from every disk by 2026-09-25 while this header still said it agreed,
+# so v1.8.95 through v1.8.118 were tagged with this gate alone. Its RANGE
+# check compared counts only (one deleted listing line plus a duplicated or
+# out-of-range one passed it); the replacement judges membership per commit.
 #
 # ⚠️ WHAT WAS REMOVED AND WHY. An earlier version took the branch's tree OID as
 # an argument, "passed in, not re-derived here". It caught nothing: the caller
