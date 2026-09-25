@@ -31,17 +31,14 @@ module SjuiTools
 
         def generate
           @logger.info "Generating custom converter: #{@class_name}"
+          track_scaffold_files
           keep_children_declaration
-          warn_outside_attribute_types
 
           # Create converter file
           create_converter_file
 
           # Update mappings file
           update_mappings_file
-
-          # Generate attribute definition file
-          generate_attribute_definition_file
 
           # Create Swift file using separate generator (pass command for comment)
           swift_options = @options.merge(command: @command)
@@ -51,6 +48,17 @@ module SjuiTools
           # Generate adapter file if adapter_directory is configured (pass command for comment)
           adapter_generator = AdapterGenerator.new(@name, swift_options)
           adapter_generator.generate
+
+          # After the scaffold: it says "kept" when the run wrote none.
+          warn_outside_attribute_types
+
+          # The attribute definition, after the scaffold (as on kjui and
+          # rjui): a run that takes children but kept a leaf-form adapter or
+          # converter writes a leaf, and names them. Until 1.8.121 it was
+          # written between the mappings and the Swift file, before anything
+          # the run kept was known (ticket
+          # leaf-turned-container-keeps-its-leaf-scaffold-silently).
+          generate_attribute_definition_file
 
           @logger.success "Successfully generated converter: #{@class_name}"
           @logger.info "Converter file created at: views/extensions/#{@name}_converter.rb"

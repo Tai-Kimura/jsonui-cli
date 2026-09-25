@@ -310,7 +310,7 @@ module SjuiTools
           swift = JsonUIShared::AttributeTypes.swift_type(t)
           default = JsonUIShared::AttributeTypes.swift_default(t)
           fallback = default ? " ?? #{default}" : ''
-          if (model = forced_model(type, t))
+          if (model = forced_model(t))
             return "        let #{name}: #{model} = #{resolve} ?? #{model}.mock\n"
           end
           return "        let #{name}: #{swift} = #{resolve}\n" if t.kind == :outside
@@ -398,7 +398,7 @@ module SjuiTools
         # before 1.8.121.
         def generate_binding_extraction(name, type)
           t = JsonUIShared::AttributeTypes.parse(type)
-          model = forced_model(type, t)
+          model = forced_model(t)
           swift = model || JsonUIShared::AttributeTypes.swift_type(t)
           default = model ? "#{model}.mock" : JsonUIShared::AttributeTypes.swift_default(t)
           value_type = swift.chomp('?')
@@ -423,9 +423,11 @@ module SjuiTools
 
         # A model type outside the vocabulary marked `!!` ("not optional"): the
         # component declares it non-optional, so the adapter reads it as one and
-        # falls back to `.mock`, as the component's preview does.
-        def forced_model(type, t)
-          t.name if t.kind == :outside && type.to_s.strip.end_with?('!!')
+        # falls back to `.mock`, as the component's preview does. The mark is
+        # read by the shared table (Type#forced), as the component and the
+        # warning read it.
+        def forced_model(t)
+          t.name if t.kind == :outside && t.forced
         end
 
         def registration_template
