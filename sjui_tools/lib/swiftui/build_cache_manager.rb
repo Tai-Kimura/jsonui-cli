@@ -20,11 +20,12 @@ module SjuiTools
         @including_file = File.join(@cache_dir, "swiftui_including.json")
         @style_dependencies_file = File.join(@cache_dir, "swiftui_style_deps.json")
         @refused_file = File.join(@cache_dir, "swiftui_refused.json")
+        @inputs_file = File.join(@cache_dir, "swiftui_inputs.txt")
       end
 
       # Clean all cache files
       def clean_cache
-        [@last_updated_file, @including_file, @style_dependencies_file, @refused_file].each do |file|
+        [@last_updated_file, @including_file, @style_dependencies_file, @refused_file, @inputs_file].each do |file|
           if File.exist?(file)
             File.delete(file)
             Core::Logger.debug "Deleted cache file: #{File.basename(file)}"
@@ -212,8 +213,46 @@ module SjuiTools
         File.write(@refused_file, JSON.pretty_generate(keys.uniq.sort))
       end
 
+      # WHAT THE GENERATED CODE IS MADE FROM besides the layouts: this tool's
+      # own code — its converters and generators, and the project's
+      # extension components (their attribute definitions and converters
+      # live under lib/…/extensions) — and the project config. The cache
+      # used to read the layouts alone (theirs, their includes' and their
+      # styles' mtimes), so after `g converter Box --no-container`, a hand
+      # edit of a component's converter, or `jui sync_tool`, a build with
+      # the layouts untouched kept every generated view as it was until
+      # `--clean` (ticket build-cache-ignores-a-changed-component-definition-
+      # or-converter, measured 2026-09-26). When this digest differs from
+      # the last build's, every layout is converted: which layouts use which
+      # component is not tracked — a component or tool change is rare, and
+      # the price is one ordinary full build (the digest itself takes a few
+      # milliseconds: ~180 files).
+      def inputs_digest(config)
+        require 'digest'
+        lib = File.expand_path('..', __dir__) # sjui_tools/lib
+        digest = Digest::SHA256.new
+        Dir.glob(File.join(lib, '**', '*')).sort.each do |path|
+          next unless File.file?(path)
+
+          digest << path.delete_prefix(lib) << "\0" << File.binread(path) << "\0"
+        end
+        digest << JSON.generate(config || {})
+        digest.hexdigest
+      end
+
+      # True when the tool, a component or the config changed since the last
+      # build — or no digest was recorded (a build before 1.8.121, or --clean).
+      def inputs_changed?(digest)
+        !File.exist?(@inputs_file) || File.read(@inputs_file).strip != digest
+      end
+
+      def save_inputs(digest)
+        File.write(@inputs_file, digest)
+      end
+
       # Clear cache (force full rebuild)
       def clear_cache
+        FileUtils.rm_f(@inputs_file)
         FileUtils.rm_f(@last_updated_file)
         FileUtils.rm_f(@refused_file)
         FileUtils.rm_f(@including_file)

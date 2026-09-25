@@ -28,6 +28,7 @@ module KjuiTools
         @last_updated_file = File.join(@cache_dir, 'last_updated.json')
         @including_files_cache = File.join(@cache_dir, 'including_files.json')
         @style_dependencies_cache = File.join(@cache_dir, 'style_dependencies.json')
+        @inputs_file = File.join(@cache_dir, 'inputs.txt')
         
         # Create cache directory if it doesn't exist
         FileUtils.mkdir_p(@cache_dir) unless File.exist?(@cache_dir)
@@ -184,6 +185,43 @@ module KjuiTools
         File.write(@style_dependencies_cache, JSON.pretty_generate(style_dependencies))
       end
       
+      # WHAT THE GENERATED CODE IS MADE FROM besides the layouts: this tool's
+      # own code — its converters and generators, and the project's
+      # extension components (their attribute definitions and converters
+      # live under lib/…/extensions) — and the project config. The cache
+      # used to read the layouts alone (theirs, their includes' and their
+      # styles' mtimes), so after `g converter Box --no-container`, a hand
+      # edit of a component's converter, or `jui sync_tool`, a build with
+      # the layouts untouched kept every generated view as it was until
+      # `--clean` (ticket build-cache-ignores-a-changed-component-definition-
+      # or-converter, measured 2026-09-26). When this digest differs from
+      # the last build's, every layout is converted: which layouts use which
+      # component is not tracked — a component or tool change is rare, and
+      # the price is one ordinary full build (the digest itself takes a few
+      # milliseconds: ~120 files).
+      def inputs_digest(config)
+        require 'digest'
+        lib = File.expand_path('..', __dir__) # kjui_tools/lib
+        digest = Digest::SHA256.new
+        Dir.glob(File.join(lib, '**', '*')).sort.each do |path|
+          next unless File.file?(path)
+
+          digest << path.delete_prefix(lib) << "\0" << File.binread(path) << "\0"
+        end
+        digest << JSON.generate(config || {})
+        digest.hexdigest
+      end
+
+      # True when the tool, a component or the config changed since the last
+      # build — or no digest was recorded (a build before 1.8.121, or --clean).
+      def inputs_changed?(digest)
+        !File.exist?(@inputs_file) || File.read(@inputs_file).strip != digest
+      end
+
+      def save_inputs(digest)
+        File.write(@inputs_file, digest)
+      end
+
       def clean_cache
         FileUtils.rm_rf(@cache_dir)
         FileUtils.mkdir_p(@cache_dir)
