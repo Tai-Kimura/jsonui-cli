@@ -1311,6 +1311,10 @@ def to_json(report: CoverageReport) -> dict:
 #: next patch when announcing, at or below the tag once gating.
 VALIDATE_GATE_FROM: str | None = None
 
+from .gate_literal import GATE_WITHDRAWN, version_key  # noqa: E402  (re-exported)
+from .gate_literal import gate_is_on as _literal_is_on  # noqa: E402
+from .gate_literal import gate_state as _literal_state  # noqa: E402
+
 #: ee's text (design v4.17 §6.1 P3c — the notice names the baseline: without
 #: it "fails unless coverage exits 0" would no longer be true).
 VALIDATE_NOTICE = (
@@ -1319,45 +1323,16 @@ VALIDATE_NOTICE = (
     "once with `jsonui-test contracts baseline`; see the release note")
 
 
-def version_key(version: str) -> tuple:
-    """`1.8.120` -> (1, 8, 120): numeric, so 1.8.100 sorts after 1.8.99."""
-    out = []
-    for part in version.lstrip("v").split("."):
-        digits = "".join(ch for ch in part if ch.isdigit())
-        if not digits:
-            break
-        out.append(int(digits))
-    return tuple(out)
-
-
-#: The one literal besides a release number: the notice withdrawn by hand
-#: (design v4.18, the gate literals' transition table: "任意 → withdrawn …
-#: 門は入らない").
-GATE_WITHDRAWN = "withdrawn"
-#: A release number, all of it: `version_key` reads a part up to its digits and
-#: stops at the first part without one, so "withdrawn", "next" or "1.8" came
-#: out as a PREFIX that every running version is at or above — the gate went
-#: ON for the literal that says it never will (ee, 2026-09-25).
-_GATE_RELEASE = re.compile(r"^\d+\.\d+\.\d+$")
-
-
 def gate_state(gate_from: str | None = None) -> str:
-    """`undeclared`, `withdrawn`, `unreadable` or `release` — only the last
-    ever gates: a literal that is not a release number announces nothing, so
-    it cannot switch a gate on (U5); the tag gate is what turns it red."""
-    gate_from = VALIDATE_GATE_FROM if gate_from is None else gate_from
-    if not gate_from:
-        return "undeclared"
-    if gate_from == GATE_WITHDRAWN:
-        return "withdrawn"
-    return "release" if _GATE_RELEASE.match(gate_from) else "unreadable"
+    """`undeclared`, `withdrawn`, `unreadable` or `release` of
+    VALIDATE_GATE_FROM (or *gate_from*) — only `release` ever gates; see
+    `gate_literal`, the one reader of every `*_GATE_FROM`."""
+    return _literal_state(VALIDATE_GATE_FROM if gate_from is None else gate_from)
 
 
 def gate_is_on(version: str, gate_from: str | None = None) -> bool:
     """Does validate fail on coverage in this version?"""
-    gate_from = VALIDATE_GATE_FROM if gate_from is None else gate_from
-    return (gate_state(gate_from) == "release"
-            and version_key(version) >= version_key(gate_from))
+    return _literal_is_on(version, VALIDATE_GATE_FROM if gate_from is None else gate_from)
 
 
 def coverage_applicable(root: Path) -> tuple[bool, str]:

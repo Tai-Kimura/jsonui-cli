@@ -94,6 +94,9 @@ class LayoutFacts:
     unresolved_includes: list = field(default_factory=list)
     #: Cell layouts referenced from this layout (another scope, not bound).
     cells: int = 0
+    #: The cell layouts' names where written as a layout path (the string
+    #: forms: `cellClasses: ["dir/cell"]`, a section's `"cell": "dir/cell"`).
+    cell_layouts: set = field(default_factory=set)
 
 
 def _layout_file(spec: dict) -> str | None:
@@ -148,11 +151,17 @@ def _walk(node, facts: LayoutFacts) -> None:
         for key, value in node.items():
             if key in CELL_KEYS:
                 facts.cells += len(value) if isinstance(value, list) else 1
+                for cell in value if isinstance(value, list) else [value]:
+                    name = cell.get("className") if isinstance(cell, dict) else cell
+                    if isinstance(name, str) and name:
+                        facts.cell_layouts.add(name)
                 continue
             if key == "sections" and isinstance(value, list):
                 for section in value:
                     if isinstance(section, dict):
                         facts.cells += sum(1 for k in SECTION_CELL_KEYS if k in section)
+                        facts.cell_layouts |= {section[k] for k in SECTION_CELL_KEYS
+                                               if isinstance(section.get(k), str) and section[k]}
                 continue
             if key in ("child", "children"):
                 _walk(value, facts)
@@ -201,3 +210,37 @@ def layout_facts(spec: dict, platform: str | None, *, layouts_dir: Path,
         return facts
     facts.evaluated = True
     return facts
+
+
+def layout_ids_every_platform(name: str, *, layouts_dir: Path, styles_dir: Path):
+    """(ids, cell ids, unresolved includes) of layout *name* on EVERY platform.
+
+    The ids are the union of the unfiltered resolution and each platform's:
+    an id that only a platform override gives a node (`"platform": {"ios":
+    {"id": …}}`) exists on that platform, and the unfiltered tree never
+    merges an override. Cell ids — the cell layouts this one names, followed
+    down — are returned apart: another scope, which the caller may not count
+    as the screen's.
+    """
+    from .platform_resolver import VALID_PLATFORMS
+
+    def resolve(layout, platform):
+        return layout_facts({"metadata": {"layoutFile": layout}}, platform,
+                            layouts_dir=layouts_dir, styles_dir=styles_dir)
+
+    ids, unresolved, cells = set(), [], set()
+    for platform in (None, *VALID_PLATFORMS):
+        facts = resolve(name, platform)
+        ids |= facts.ids
+        unresolved += [u for u in facts.unresolved_includes if u not in unresolved]
+        cells |= {(c, platform) for c in facts.cell_layouts}
+    cell_ids, seen = set(), set()
+    while cells:
+        cell, platform = cells.pop()
+        if (cell, platform) in seen:
+            continue
+        seen.add((cell, platform))
+        facts = resolve(cell, platform)
+        cell_ids |= facts.ids
+        cells |= {(c, platform) for c in facts.cell_layouts}
+    return ids, cell_ids, unresolved

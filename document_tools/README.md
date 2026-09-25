@@ -50,6 +50,27 @@ jsonui-doc init component SearchBar -c input -d "Search Bar" -o docs/components
 jsonui-doc validate spec docs/specs/Login.spec.json
 ```
 
+**Element ids against the layout.** An id a `visibleElements` or a
+`displayLogic` effect names is checked against the spec's `layoutFile` (the
+parent's, for a sub-spec) — includes expanded with their prefixes, on every
+platform (an id only a platform override gives a node counts). Messages are
+ERROR, WARNING or INFO; INFO is printed apart (`Info (N) — reported, not
+counted`, then `Info: N` under the counts) and never changes the result or the
+warning count:
+
+| the id | reported as |
+|---|---|
+| on the layout | nothing |
+| in none of it | WARNING from the release `LAYOUT_ID_GATE_FROM` names; below it INFO, with one INFO line per spec announcing that release |
+| only in camelCase (`save_button` / `saveButton`) | INFO, naming the layout's spelling |
+| inside a cell layout the screen names (`cellClasses`, a section's `cell` / `header` / `footer`) | one INFO per spec: `cannot check: N element id(s) inside cells …` — a cell is another scope, not checked |
+| — the layout has an include that does not resolve | one INFO: `cannot check: element ids against … — an include does not resolve` |
+
+`LAYOUT_ID_GATE_FROM` is a literal like every `*_GATE_FROM`: `"withdrawn"`, or
+anything that is not a release number, never turns it into a WARNING. A spec
+without a `layoutFile` is checked against its `structure.components`, a
+WARNING as before.
+
 #### Validate Component Specification
 
 ```bash

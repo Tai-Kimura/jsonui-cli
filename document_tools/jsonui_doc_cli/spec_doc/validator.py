@@ -64,10 +64,10 @@ class SpecValidationMessage:
     """A validation message (error or warning)."""
     path: str
     message: str
-    level: str = "error"  # "error" or "warning"
+    level: str = "error"  # "error", "warning" or "info"
 
     def __str__(self) -> str:
-        prefix = "ERROR" if self.level == "error" else "WARNING"
+        prefix = {"error": "ERROR", "info": "INFO"}.get(self.level, "WARNING")
         return f"  [{prefix}] {self.path}: {self.message}"
 
 
@@ -78,6 +78,10 @@ class SpecValidationResult:
     spec_data: dict | None = None
     errors: list[SpecValidationMessage] = field(default_factory=list)
     warnings: list[SpecValidationMessage] = field(default_factory=list)
+    #: Reported, never counted: neither the result nor the warning count
+    #: reads them (design v4.20 — layout ids announced before they warn, and
+    #: what cannot be checked).
+    infos: list[SpecValidationMessage] = field(default_factory=list)
 
     @property
     def is_valid(self) -> bool:
@@ -90,6 +94,34 @@ class SpecValidationResult:
     @property
     def warning_count(self) -> int:
         return len(self.warnings)
+
+    @property
+    def info_count(self) -> int:
+        return len(self.infos)
+
+
+#: The release from which an element id the layout does not have is a
+#: WARNING (design v4.20, P2.5): below it, an INFO and one line announcing it
+#: — the specs with a layout were never checked before, and a face holding
+#: "0 warnings" as its bar would turn red with no notice (U5). A literal,
+#: read by `jsonui_test_cli.gate_literal` like every `*_GATE_FROM`:
+#: "withdrawn" or anything that is not a release number never gates.
+LAYOUT_ID_GATE_FROM: str | None = "1.8.120"
+
+#: ee's text (design v4.20).
+LAYOUT_ID_NOTICE = ("from jsonui-cli {version}, spec element ids not in the layout "
+                    "become WARNING")
+
+
+def _running_version() -> str:
+    from .. import __version__
+    return __version__
+
+
+def _camel(name: str) -> str:
+    """`email_form_view` and `emailFormView` -> `emailFormView`."""
+    head, *rest = name.split("_")
+    return head[:1].lower() + head[1:] + "".join(p[:1].upper() + p[1:] for p in rest)
 
 
 class SpecValidator:
@@ -3562,36 +3594,15 @@ class SpecValidator:
         """
         layout_file = (data.get("metadata", {}) or {}).get("layoutFile") \
             or self._parent_spec_layout_file()
-        if layout_file:
-            component_ids, where = self._layout_ids(layout_file, result)
-            if component_ids is None:
-                return
-        else:
-            # Collect all component IDs
-            component_ids = set()
-            structure = data.get("structure", {})
-            for comp in structure.get("components", []):
-                if isinstance(comp, dict) and "id" in comp:
-                    component_ids.add(comp["id"])
-            where = "components list"
-
-        # Check displayLogic element references
         state_mgmt = data.get("stateManagement", {})
+        refs = []
         for i, rule in enumerate(state_mgmt.get("displayLogic", [])):
             if not isinstance(rule, dict):
                 continue
             for j, effect in enumerate(rule.get("effects", [])):
-                if not isinstance(effect, dict):
-                    continue
-                element = effect.get("element", "")
-                if element and element not in component_ids:
-                    result.warnings.append(SpecValidationMessage(
-                        path=f"stateManagement.displayLogic[{i}].effects[{j}].element",
-                        message=f"Element '{element}' not found in {where}",
-                        level="warning"
-                    ))
-
-        # Check state visibleElements references
+                if isinstance(effect, dict) and effect.get("element", ""):
+                    refs.append((f"stateManagement.displayLogic[{i}].effects[{j}].element",
+                                 effect["element"]))
         for i, state in enumerate(state_mgmt.get("states", [])):
             if not isinstance(state, dict):
                 continue
@@ -3599,50 +3610,121 @@ class SpecValidator:
                 if not isinstance(val, dict):
                     continue
                 for element in val.get("visibleElements", []):
-                    if element not in component_ids:
-                        result.warnings.append(SpecValidationMessage(
-                            path=f"stateManagement.states[{i}].values[{j}].visibleElements",
-                            message=f"Element '{element}' not found in {where}",
-                            level="warning"
-                        ))
+                    refs.append((f"stateManagement.states[{i}].values[{j}].visibleElements",
+                                  element))
+
+        if layout_file:
+            checked = self._layout_ids(layout_file, result)
+            if checked is not None:
+                self._check_against_layout(refs, *checked, result)
+            return
+
+        # Collect all component IDs
+        component_ids = set()
+        structure = data.get("structure", {})
+        for comp in structure.get("components", []):
+            if isinstance(comp, dict) and "id" in comp:
+                component_ids.add(comp["id"])
+        for path, element in refs:
+            if element not in component_ids:
+                result.warnings.append(SpecValidationMessage(
+                    path=path, message=f"Element '{element}' not found in components list",
+                    level="warning"))
+
+    def _check_against_layout(self, refs, ids, cell_ids, name, result):
+        """Each id against the layout — design v4.20's levels:
+
+        - on the layout (any platform, includes expanded): nothing
+        - inside a cell layout it names: CANNOT CHECK (the cell is another
+          scope, which P2.5 does not bind) — one INFO counting them, always
+        - on the layout only in camelCase: an INFO of its own
+        - nowhere: WARNING from LAYOUT_ID_GATE_FROM on; below it an INFO,
+          and one INFO announcing the release
+        """
+        # Imported HERE and guarded, like `_validate_contract_declarations`: a
+        # failed import escaping `validate_file` lands in `jui generate`'s
+        # `except ImportError`, which folds the whole validation into one line.
+        try:
+            from jsonui_test_cli.gate_literal import gate_is_on, gate_state
+        except ImportError as exc:
+            unreadable = f"jsonui-test (jsonui_test_cli) is not importable ({exc})"
+            gate_is_on, gate_state = (lambda _v, _l: False), (lambda _l: "unreadable")
+        else:
+            unreadable = None
+
+        gating = gate_is_on(_running_version(), LAYOUT_ID_GATE_FROM)
+        where = f"the layout {name}.json (includes expanded, every platform)"
+        in_cells, missing = [], 0
+        for path, element in refs:
+            if element in ids:
+                continue
+            if element in cell_ids:
+                in_cells.append(element)
+                continue
+            camel = sorted(i for i in ids if i != element and _camel(i) == _camel(element))
+            if camel:
+                result.infos.append(SpecValidationMessage(
+                    path=path, level="info",
+                    message=(f"Element '{element}' not found in {where}; it has "
+                             f"'{camel[0]}' — the same name in camelCase")))
+                continue
+            missing += 1
+            message = SpecValidationMessage(
+                path=path, message=f"Element '{element}' not found in {where}",
+                level="warning" if gating else "info")
+            (result.warnings if gating else result.infos).append(message)
+        if in_cells:
+            result.infos.append(SpecValidationMessage(
+                path="stateManagement", level="info",
+                message=(f"cannot check: {len(in_cells)} element id(s) inside cells of "
+                         f"{name}.json ({', '.join(sorted(set(in_cells)))}) — ids in "
+                         "cell layouts are not checked")))
+        if missing and unreadable:
+            result.warnings.append(SpecValidationMessage(
+                path="stateManagement", level="warning",
+                message=(f"the level of {missing} element id(s) not in {name}.json cannot "
+                         f"be decided — LAYOUT_ID_GATE_FROM is read by {unreadable}; "
+                         "they are listed as INFO")))
+        if missing and not gating and gate_state(LAYOUT_ID_GATE_FROM) == "release":
+            result.infos.append(SpecValidationMessage(
+                path="stateManagement", level="info",
+                message=LAYOUT_ID_NOTICE.format(version=LAYOUT_ID_GATE_FROM)))
 
     def _layout_ids(self, layout_file: str, result: SpecValidationResult):
-        """(ids, where) of the layout `layout_file` names, or (None, None)
+        """(ids, cell ids, name) of the layout `layout_file` names, or None
         when there is nothing to check against — said, unless the missing
         file already is (`_check_layout_ref`)."""
         name = layout_file[:-5] if layout_file.endswith(".json") else layout_file
         roots = [r for r in self._declared_path_roots("layout")
                  if (r / f"{name}.json").is_file()]
         if not roots:
-            return None, None
-        refs = self._spec_names_elements()
-        if not refs:
-            return None, None
+            return None
+        if not self._spec_names_elements():
+            return None
         try:
             here = Path(__file__).resolve()
             jui_tools = here.parents[3] / "jui_tools"
             if jui_tools.is_dir() and str(jui_tools) not in sys.path:
                 sys.path.insert(0, str(jui_tools))
-            from jui_cli.core.layout_facts import layout_facts
+            from jui_cli.core.layout_facts import layout_ids_every_platform
         except ImportError as exc:
             result.warnings.append(SpecValidationMessage(
                 path="stateManagement",
                 message=(f"visibleElements / displayLogic element ids were not checked "
                          f"against {name}.json: jui_cli is not importable ({exc})"),
                 level="warning"))
-            return None, None
+            return None
         styles = self._declared_directory("styles_directory", "docs/screens/styles")
-        facts = layout_facts({"metadata": {"layoutFile": name}}, None,
-                             layouts_dir=roots[0], styles_dir=styles or roots[0])
-        if facts.unresolved_includes:
-            result.warnings.append(SpecValidationMessage(
-                path="stateManagement",
-                message=(f"visibleElements / displayLogic element ids were not checked "
-                         f"against {name}.json: an include does not resolve "
-                         f"({', '.join(facts.unresolved_includes)}), so its ids are unknown"),
-                level="warning"))
-            return None, None
-        return facts.ids, f"the layout {name}.json (includes expanded, every platform)"
+        ids, cell_ids, unresolved = layout_ids_every_platform(
+            name, layouts_dir=roots[0], styles_dir=styles or roots[0])
+        if unresolved:
+            result.infos.append(SpecValidationMessage(
+                path="stateManagement", level="info",
+                message=(f"cannot check: element ids against {name}.json — an include "
+                         f"does not resolve ({', '.join(unresolved)}), so its ids are "
+                         "unknown")))
+            return None
+        return ids, cell_ids, name
 
     def _spec_names_elements(self) -> bool:
         """Does this spec name any element a layout would have to hold?"""
