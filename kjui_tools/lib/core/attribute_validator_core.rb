@@ -422,65 +422,39 @@ module JsonUIShared
 
     # Map JSON type to definition key, in two layers:
     #
-    # 1. the cross-platform synonym table below (display spellings that
-    #    are not sections themselves: Text, Scroll, Checkbox, ...),
+    # 1. the cross-platform synonym table (display spellings that are not
+    #    sections themselves: Text, Scroll, Checkbox, ...), read from
+    #    type_synonyms.json beside attribute_definitions.json — the one
+    #    table, which jui_cli's alias_table.py and every renderer read too
+    #    (jui_tools/tests/test_type_synonyms_cross_language.py checks each
+    #    reader answers what the file says),
     # 2. a component-alias hop: sections that are `_alias_of` pointers
     #    (EditText/Input -> TextField, Check -> CheckBox, Toggle ->
-    #    Switch) resolve to their canonical section, driven by the SSoT
-    #    rather than by arms of this case.
+    #    Switch) resolve to their canonical section, driven by the SSoT.
     #
-    # The synonym table is one of four implementations of the same
-    # mapping — the shared Ruby core here (mirrored into {s,k,r}jui_tools)
-    # and the Python jui_cli/core/normalizer/alias_table.py _TYPE_SYNONYMS.
-    # jui_tools/tests/test_type_synonyms_cross_language.py holds the
-    # agreed canon and fails CI on any divergence: change both together
-    # with the canon table, never one alone. Types without a branch
-    # (Button, IconLabel, TabView, Embed, ...) resolve by the identity
-    # fallback to their own definition section.
+    # A spelling in neither (Button, IconLabel, TabView, Embed, ...)
+    # resolves by the identity fallback to its own definition section.
     def map_type_to_definition(type)
-      mapped = case type
-      when 'Label', 'Text'
-        'Label'
-      when 'TextView', 'MultiLineEditText', 'Textarea'
-        'TextView'
-      when 'Image', 'ImageView', 'Img', 'CircleImage', 'CircleImageView'
-        'Image'
-      when 'NetworkImage', 'NetworkImageView', 'AsyncImage'
-        'NetworkImage'
-      when 'SelectBox', 'Spinner', 'DatePicker', 'Select', 'Picker'
-        'SelectBox'
-      when 'CheckBox', 'Checkbox'
-        'CheckBox'
-      when 'Radio', 'RadioButton', 'RadioGroup'
-        'Radio'
-      when 'Segment', 'SegmentedControl', 'TabLayout', 'TabGroup'
-        'Segment'
-      when 'Slider', 'SeekBar', 'Range'
-        'Slider'
-      when 'Progress', 'ProgressBar'
-        'Progress'
-      when 'Indicator', 'ActivityIndicator', 'Loading'
-        'Indicator'
-      when 'View', 'LinearLayout', 'RelativeLayout', 'FrameLayout', 'HStack', 'VStack', 'ZStack',
-           'Div', 'Box', 'Container', 'Column', 'Row', 'ConstraintLayout'
-        'View'
-      when 'SafeAreaView'
-        'SafeAreaView'
-      when 'ScrollView', 'Scroll'
-        'ScrollView'
-      when 'Collection', 'CollectionView', 'RecyclerView', 'Table', 'TableView', 'List', 'Grid',
-           'LazyGrid', 'ListView', 'LazyColumn'
-        'Collection'
-      when 'GradientView', 'Gradient'
-        'GradientView'
-      when 'Blur', 'BlurView'
-        'Blur'
-      when 'Web', 'WebView', 'Iframe'
-        'Web'
-      else
-        type
+      entry = type_synonyms[type]
+      resolve_component_alias(entry ? entry['canonical'] : type)
+    end
+
+    # spelling -> { 'canonical' => section, 'render_as' => type (optional) }.
+    # Read once per validator. A missing or malformed file raises, naming
+    # it: a table that read as empty would validate every synonym spelling
+    # against common attributes only, and say nothing.
+    def type_synonyms
+      @type_synonyms ||= begin
+        path = @type_synonyms_path || File.join(File.dirname(__FILE__), 'type_synonyms.json')
+        raise "type_synonyms.json not found at #{path}" unless File.exist?(path)
+
+        entries = JSON.parse(File.read(path))['synonyms']
+        unless entries.is_a?(Hash) && entries.values.all? { |e| e.is_a?(Hash) && e['canonical'].is_a?(String) }
+          raise "#{path}: `synonyms` must map each spelling to an object with a `canonical` string"
+        end
+
+        entries
       end
-      resolve_component_alias(mapped)
     end
 
     # Follow a component-alias section (an `_alias_of` pointer such as
