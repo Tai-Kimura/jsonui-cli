@@ -828,11 +828,18 @@ module KjuiTools
           tap = JsonUIShared::TapAccessibility
           handler = [json_data['onclick'], json_data['onClick']].find { |value| tap.handler?(value) }
           enabled = enabled_expression(json_data)
-          # `canTap` is the tap gate specifically — UIKit's SJUIView has the
-          # property and uses it to decide whether the tap recogniser fires. Both
-          # gate the click, so both apply.
+          # `canTap` (attribute_definitions.json common.canTap, the Compose tap
+          # gate) decides whether there is a click at all, and `enabled` whether
+          # it is enabled. The two were one `clickable(enabled = enabled &&
+          # canTap)`, and Compose's clickable marks a node `disabled()` while
+          # it is not enabled: a view whose tap was merely gated — a Switch
+          # still switching under it — read as disabled (measured on an API 35
+          # emulator, AccessibilityNodeInfo.isEnabled), where iOS reads it as
+          # enabled. So `false` emits no click (and no Role.Button), and a
+          # binding attaches the click while it resolves true — what the iOS
+          # codegen and both dynamic runtimes do.
           can_tap = boolean_expression(json_data['canTap'])
-          tap_gate = [enabled, can_tap].compact
+          handler = nil if can_tap == 'false'
           if handler
             required_imports&.add(:clickable)
             view_id = json_data['id']
@@ -848,13 +855,14 @@ module KjuiTools
             # where the tappable is a control already or holds one — the same
             # decision the iOS codegen makes.
             args = []
-            args << "enabled = #{tap_gate.join(' && ')}" if tap_gate.any?
+            args << "enabled = #{enabled}" if enabled
             if %w[button combine].include?(json_data[JsonUIShared::TapAccessibility::SHAPE_KEY])
               required_imports&.add(:role)
               args << 'role = Role.Button'
             end
             gate = args.any? ? "(#{args.join(', ')})" : ''
-            modifiers << ".clickable#{gate} { #{handler_call} }"
+            clickable = "clickable#{gate} { #{handler_call} }"
+            modifiers << (can_tap ? ".then(if (#{can_tap}) Modifier.#{clickable} else Modifier)" : ".#{clickable}")
           end
           # `disabled()` follows `enabled` only: a view that is merely not
           # tappable is not "disabled" to a screen reader.
