@@ -55,12 +55,15 @@ module SjuiTools
             collection_folder_path = ensure_view_folder(camel_view_folders)
 
             # 2. Collection cellファイルの作成
+            cell_existed = File.exist?(File.join(collection_folder_path, "#{camel_cell_name}CollectionViewCell.swift"))
             cell_file_path = create_collection_cell(collection_folder_path, camel_cell_name)
 
             # 3. Xcodeプロジェクトに追加
             add_to_xcode_project(cell_file_path, camel_view_folders)
 
             # 4. JSONレイアウトファイルの作成 (snake_case folders)
+            json_existed = File.exist?(File.join(@layouts_path, *snake_layout_folders,
+                                                 "#{camel_cell_name.gsub(/([A-Z])/, '_\\1').downcase.sub(/^_/, '')}_cell.json"))
             json_file_path = create_cell_json_file(camel_cell_name, snake_layout_folders)
 
             # 5. JSONファイルをXcodeプロジェクトに追加 (snake_case folders)
@@ -69,10 +72,13 @@ module SjuiTools
             # 6. Bindingファイルの生成
             generate_binding_file(camel_cell_name)
 
-            puts "\nSuccessfully generated collection cell: #{camel_cell_name}"
-            puts "Files created:"
-            puts "  - #{cell_file_path}"
-            puts "  - #{json_file_path}"
+            # Each file as what happened to it — until 1.8.121 "Successfully
+            # generated" and "Files created:" listed both after a run that
+            # kept both (ticket kjui-g-view-reports-what-it-did-not-do).
+            puts(cell_existed && json_existed ? "\nCollection cell #{camel_cell_name}: both files exist and were kept" :
+                                               "\nGenerated collection cell: #{camel_cell_name}")
+            puts "  - #{cell_file_path} (#{cell_existed ? 'kept: it exists' : 'created'})"
+            puts "  - #{json_file_path} (#{json_existed ? 'kept: it exists' : 'created'})"
             puts "\nNext steps:"
             puts "  1. Edit #{json_file_path} to design your cell layout"
             puts "  2. Run 'sjui build' to generate binding files"
@@ -108,7 +114,7 @@ module SjuiTools
             file_path = File.join(collection_folder_path, "#{cell_name}CollectionViewCell.swift")
             
             if File.exist?(file_path)
-              puts "Warning: Collection cell file already exists: #{file_path}"
+              puts "Kept existing collection cell: #{file_path}"
               return file_path
             end
             
@@ -175,8 +181,10 @@ class #{cell_name}CollectionViewCell: BaseCollectionViewCell {
               # View/フォルダ名/Collection のグループ構造で追加
               folders = view_folder_names.is_a?(Array) ? view_folder_names : [view_folder_names]
               group_path = "View/#{folders.join('/')}/Collection"
-              @xcode_manager.add_file(file_path, group_path)
-              puts "Added collection cell to Xcode project"
+              # Said as add_file did it (until 1.8.121 "Added …" followed
+              # "File already in project").
+              result = @xcode_manager.add_file(file_path, group_path)
+              puts "Added collection cell to Xcode project" if result == :added
             rescue => e
               puts "Error adding file to Xcode project: #{e.message}"
               # ファイルを削除してロールバック
@@ -192,8 +200,8 @@ class #{cell_name}CollectionViewCell: BaseCollectionViewCell {
             begin
               folders = view_folder_names.is_a?(Array) ? view_folder_names : [view_folder_names]
               group_path = "Layouts/#{folders.join('/')}"
-              @xcode_manager.add_file(json_file_path, group_path)
-              puts "Added JSON layout to Xcode project"
+              result = @xcode_manager.add_file(json_file_path, group_path)
+              puts "Added JSON layout to Xcode project" if result == :added
             rescue => e
               puts "Error adding JSON to Xcode project: #{e.message}"
               # ファイルを削除してロールバック
@@ -213,7 +221,7 @@ class #{cell_name}CollectionViewCell: BaseCollectionViewCell {
             file_path = File.join(layouts_dir, "#{snake_name}_cell.json")
 
             if File.exist?(file_path)
-              puts "JSON layout file already exists: #{file_path}"
+              puts "Kept existing JSON layout: #{file_path}"
               return file_path
             end
 
@@ -280,7 +288,9 @@ class #{cell_name}CollectionViewCell: BaseCollectionViewCell {
               loader = JsonLoader.new(nil, @project_file_path)
               loader.start_analyze
               
-              puts "Successfully generated binding file"
+              # The loader says what it wrote, and names a file it could not
+              # (until 1.8.121 this line claimed success after such an error).
+              puts "Binding generation ran: its lines above say what it wrote"
             rescue => e
               puts "Warning: Could not generate binding file: #{e.message}"
               puts "You can run 'sjui build' manually to generate binding files"

@@ -40,12 +40,17 @@ module SjuiTools
           # Create directory if it doesn't exist
           FileUtils.mkdir_p(json_path)
 
-          # Create JSON file
+          # Create JSON file — or keep the one there, and say which (until
+          # 1.8.121 "Generated partial:" followed "File already exists" —
+          # ticket kjui-g-view-reports-what-it-did-not-do).
           json_file = File.join(json_path, "#{json_file_name}.json")
-          create_json_template(json_file, partial_name)
-
-          Core::Logger.info "Generated partial:"
-          Core::Logger.info "  JSON: #{json_file}"
+          if File.exist?(json_file)
+            Core::Logger.info "Partial #{@name}: kept the existing #{json_file}"
+          else
+            create_json_template(json_file, partial_name)
+            Core::Logger.info "Generated partial:"
+            Core::Logger.info "  JSON: #{json_file}"
+          end
           Core::Logger.info ""
           Core::Logger.info "To use this partial, include it in your layout JSON:"
           Core::Logger.info "  { \"include\": \"#{@name}\" }"

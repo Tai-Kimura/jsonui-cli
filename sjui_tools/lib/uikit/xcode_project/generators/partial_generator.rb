@@ -36,8 +36,9 @@ module SjuiTools
             puts "Debug: Original partial name: '#{partial_name}'"
             
             # 1. Partial JSONファイルの作成
+            existed = File.exist?(File.join(@layouts_path, "#{partial_name}.json"))
             json_file_path = create_partial_json(partial_name)
-            puts "Debug: Created file path: '#{json_file_path}'"
+            puts "Debug: partial file path: '#{json_file_path}'"
             
             # 2. Xcodeプロジェクトに追加
             add_to_xcode_project(json_file_path)
@@ -45,8 +46,15 @@ module SjuiTools
             # 3. Bindingファイルの生成
             generate_binding_file
             
-            puts "\nSuccessfully generated partial: #{partial_name}"
-            puts "File created: #{json_file_path}"
+            # Until 1.8.121 "Successfully generated partial" and "File
+            # created" followed "Partial JSON file already exists" (ticket
+            # kjui-g-view-reports-what-it-did-not-do).
+            if existed
+              puts "\nPartial #{partial_name}: kept the existing #{json_file_path}"
+            else
+              puts "\nGenerated partial: #{partial_name}"
+              puts "File created: #{json_file_path}"
+            end
             puts "\nTo use this partial, include it in your layout JSON:"
             puts '  { "include": "' + partial_name + '" }'
           end
@@ -156,7 +164,10 @@ module SjuiTools
               loader = JsonLoader.new(nil, @project_file_path)
               loader.start_analyze
               
-              puts "Successfully generated binding files"
+              # The loader says per file what it wrote, and names a file it
+              # could not — until 1.8.121 this line claimed success after
+              # such an error.
+              puts "Binding generation ran: its lines above say what it wrote"
             rescue => e
               puts "Warning: Could not generate binding files: #{e.message}"
               puts "You can run 'sjui build' manually to generate binding files"
