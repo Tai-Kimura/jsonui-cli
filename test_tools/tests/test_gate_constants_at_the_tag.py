@@ -248,3 +248,32 @@ def test_mutation_dropping_the_line_scan_lets_a_double_assignment_through():
                      "    if False:")
     assert vgv.collect_source("m.py", text)[1] != []
     assert mutant.collect_source("m.py", text)[1] == []
+
+
+@pytest.mark.parametrize("literal", ["next", "1.8", "1.8.l20", "v1.8.120", "1.8.120rc1"])
+def test_an_unreadable_literal_is_red_and_says_why(literal):
+    """Aligned with the gates themselves (validate's gate_state, P2e's
+    unmatched_gate): only x.y.z is a version. Read as a prefix, `1.8` gated."""
+    ok, why = vgv.judge("UNMATCHED_GATE_FROM", "1.8.119", literal, None)
+    assert not ok and "unreadable" in why, why
+
+
+def test_an_unreadable_previous_value_announced_nothing():
+    assert vgv.judge("UNMATCHED_GATE_FROM", "1.8.119", "1.8.119", "next")[0] is False
+    assert vgv.judge("UNMATCHED_GATE_FROM", "1.8.119", "1.8.120", "next")[0] is True
+
+
+def test_a_third_literal_in_document_tools_is_collected(tmp_path):
+    """LAYOUT_ID_GATE_FROM (design v4.20, P2.5) in the spec validator, in the
+    one-line form it will be written in: collected with the other two, and at
+    N it announces the next patch."""
+    root = _repo(tmp_path, {}, {
+        _VALIDATE_PATH: _module("VALIDATE_GATE_FROM", "1.8.120"),
+        _UNMATCHED_PATH: _module("UNMATCHED_GATE_FROM", None),
+        "document_tools/jsonui_doc_cli/spec_doc/validator.py":
+            '"""v"""\nimport re\n\nLAYOUT_ID_GATE_FROM: str | None = "1.8.120"\n'})
+    rc, lines = _run(root)
+    assert rc == 0, lines
+    assert lines[0].startswith("ok 3 gate constant(s) in cur: LAYOUT_ID_GATE_FROM,"), lines
+    assert any(l.startswith("  ok LAYOUT_ID_GATE_FROM (document_tools/jsonui_doc_cli/spec_doc/validator.py)")
+               and "announces 1.8.120" in l for l in lines), lines

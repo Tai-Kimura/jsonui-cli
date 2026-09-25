@@ -61,6 +61,8 @@ VALIDATE = "VALIDATE_GATE_FROM"
 CONTROL_PATH = "test_tools/jsonui_test_cli/contracts_coverage.py"
 
 _NAME = re.compile(r"^[A-Z][A-Z0-9_]*_GATE_FROM$")
+#: A gate version is three numbers and nothing else (the rule the gates read).
+_VERSION = re.compile(r"^\d+\.\d+\.\d+$")
 _LINE = re.compile(r"^([A-Z][A-Z0-9_]*_GATE_FROM)\s*(?::[^=\n]*)?=(?!=)", re.M)
 #: An assignment below module level (inside an `if`, a function): both readers
 #: above look at the top level only, so without this a gate literal written
@@ -105,7 +107,8 @@ def judge(name: str, tag_version: str, current, previous=ABSENT) -> tuple[bool, 
     Values are ABSENT, None (unset), WITHDRAWN, or a version string.
     """
     tag = tag_version.lstrip("v")
-    before = previous if isinstance(previous, str) and previous not in (ABSENT, WITHDRAWN) else None
+    # A previous value that is not a version (unreadable) announced nothing.
+    before = previous if isinstance(previous, str) and _VERSION.match(previous) else None
     if current == ABSENT:
         if before is None:
             return True, f"n/a — no {name} in this tree"
@@ -121,6 +124,9 @@ def judge(name: str, tag_version: str, current, previous=ABSENT) -> tuple[bool, 
             return True, "unset — nothing announced, no gate"
         return False, (f"unset, but the previous tag announced {before!r} — withdraw it with "
                        f"\"{WITHDRAWN}\" (unsetting makes an announcement vanish)")
+    if not _VERSION.match(current):
+        return False, (f"{current!r} is unreadable — a gate version is three numbers "
+                       f"(x.y.z) or \"{WITHDRAWN}\"; the gates read it as no gate")
     if before is not None and _key(current) < _key(before):
         return False, (f"{current} is earlier than the release the previous tag announced "
                        f"{before!r} — a gate brought forward")

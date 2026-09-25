@@ -1837,16 +1837,34 @@ def _running_version() -> str:
 GATE_WITHDRAWN = "withdrawn"
 
 
+#: A gate version is three numbers and nothing else — the rule validate's
+#: gate reads too. Anything else (`next`, `1.8`, `v1.8.120`, `1.8.120rc1`) is
+#: unreadable: no gate, said so, and the tag gate fails it. Read as a prefix,
+#: `1.8` compared below every 1.8.x and switched the gate on.
+_GATE_VERSION = re.compile(r"^\d+\.\d+\.\d+$")
+
+
 def unmatched_gate() -> tuple[bool, str | None]:
     """(red, gate): whether unmatched requests in the act window fail the
-    generated test, and the release that makes them fail (None when unset,
-    "withdrawn" when an announcement was withdrawn — never red)."""
+    generated test, and the release that makes them fail (None when unset or
+    unreadable, "withdrawn" when an announcement was withdrawn — never red)."""
     gate = UNMATCHED_GATE_FROM
     if not gate:
         return False, None
     if gate == GATE_WITHDRAWN:
         return False, GATE_WITHDRAWN
+    if not _GATE_VERSION.match(gate):
+        return False, None
     return _version_tuple(_running_version()) >= _version_tuple(gate), gate
+
+
+def unmatched_gate_note() -> str | None:
+    """The line `generate branch-tests` prints when the literal is unreadable."""
+    gate = UNMATCHED_GATE_FROM
+    if gate and gate != GATE_WITHDRAWN and not _GATE_VERSION.match(gate):
+        return (f"UNMATCHED_GATE_FROM {gate!r} is unreadable (a gate version is x.y.z, or "
+                "\"withdrawn\") — no gate, and the tag gate fails it")
+    return None
 
 
 def _rows_in_order(contract: dict, method_name: str, rows: list, platform: str,

@@ -1821,6 +1821,9 @@ def cmd_generate_branch_tests(args):
     print(app_rules.note())
     if app_rules.conditions_note():
         print(app_rules.conditions_note())
+    from .branch_tests import unmatched_gate_note
+    if unmatched_gate_note():
+        print(unmatched_gate_note())
     _print_branch_toolchain(len(reports))
     return 0
 

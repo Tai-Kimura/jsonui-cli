@@ -256,10 +256,21 @@ def test_the_gate_compares_versions_as_numbers(monkeypatch, gate, running, red_)
     assert bt.unmatched_gate() == (red_, gate)
 
 
-def test_an_unreadable_gate_stops_generation(monkeypatch):
-    monkeypatch.setattr(bt, "UNMATCHED_GATE_FROM", "next")
-    with pytest.raises(bt.BranchTestGenerationError, match="UNMATCHED_GATE_FROM"):
-        bt.unmatched_gate()
+@pytest.mark.parametrize("literal", ["next", "1.8", "1.8.l20", "v1.8.120", "1.8.120rc1"])
+def test_an_unreadable_gate_is_no_gate_and_says_so(monkeypatch, literal):
+    """Only x.y.z is a version (validate's gate reads the same rule). An
+    unreadable literal does not stop generation and does not gate — `1.8`
+    read as a prefix would have compared below every 1.8.x and gated."""
+    monkeypatch.setattr(bt, "UNMATCHED_GATE_FROM", literal)
+    monkeypatch.setattr(bt, "_running_version", lambda: "1.8.119")
+    assert bt.unmatched_gate() == (False, None)
+    assert "unreadable" in bt.unmatched_gate_note()
+
+
+def test_a_readable_gate_has_no_note(monkeypatch):
+    for literal in (None, "withdrawn", "1.8.120"):
+        monkeypatch.setattr(bt, "UNMATCHED_GATE_FROM", literal)
+        assert bt.unmatched_gate_note() is None
 
 
 def test_the_released_tool_announces_no_red_yet():
