@@ -128,6 +128,7 @@ module SjuiTools
 
             require_relative '../base_view_converter'
             require_relative '../responsive_helper'
+            require_relative '../../../core/attribute_types'
 
             module SjuiTools
               module SwiftUI
@@ -252,11 +253,13 @@ module SjuiTools
                         end
                       end
 
-                      # Helper method to format value based on type
+                      # A literal the layout gives a prop, written as the Swift the
+                      # component's declared type takes — by the shared attribute
+                      # type vocabulary (lib/core/attribute_types.rb), the table
+                      # the component itself was scaffolded from. nil when it
+                      # cannot be written; the caller then passes nothing and says so.
                       # @param is_binding_attr [Boolean] if true, use $data. (Binding), otherwise data. (read-only)
                       def format_value(value, type, is_binding_attr: false)
-                        return nil if value.nil?
-
                         # Check if it's a binding expression @{propertyName}
                         if value.is_a?(String) && value.start_with?('@{') && value.end_with?('}')
                           # Extract property name and return as binding or read-only
@@ -264,24 +267,18 @@ module SjuiTools
                           prefix = is_binding_attr ? "$data" : "data"
                           return "\#{prefix}.\#{property_name}"
                         end
+                        # Outside the vocabulary, kept from before it existed.
+                        return format_edge_insets_value(value) if type.to_s.downcase.delete('?') == 'edgeinsets'
 
-                        case type.downcase
-                        when 'string'
-                          '"\' + value.to_s + '"'
-                        when 'int', 'integer'
-                          value.to_s
-                        when 'double', 'float'
-                          value.to_s
-                        when 'bool', 'boolean'
-                          return nil if value.nil?
-                          value.to_s.downcase
-                        when 'color'
-                          format_color_value(value)
-                        when 'edgeinsets'
-                          format_edge_insets_value(value)
-                        else
-                          value.to_s
+                        JsonUIShared::AttributeTypes.swift_literal(type, value) do |canonical, literal|
+                          format_color_value(literal) if canonical == 'color' && literal.is_a?(String)
                         end
+                      end
+
+                      def unwritten(key, value, type)
+                        warn "[sjui] \#{component_name}.\#{key}: the layout's \#{value.inspect} is not a \#{type} " \\
+                             "literal this converter can write — the prop keeps its default. Give a \#{type} value, " \\
+                             "or bind it (@{…})."
                       end
 
                       def format_color_value(value)
@@ -360,7 +357,8 @@ module SjuiTools
               lines << '                params << "' + "#{actual_key}: #{data_prefix}." + '#{value}"'
               lines << "              end"
               lines << "            end"
-            elsif type.downcase == 'bool' || type.downcase == 'boolean'
+            else
+              # By key, not by value: a `false` the layout gives is a value too.
               lines << "            if @component.key?('#{actual_key}')"
               lines << "              value = @component['#{actual_key}']"
               lines << "              if value.is_a?(String) && value.start_with?('@{') && value.end_with?('}')"
@@ -370,20 +368,11 @@ module SjuiTools
               lines << "              else"
               lines << "                # Handle static value"
               lines << "                formatted_value = format_value(value, '#{type}')"
-              lines << '                params << "' + "#{actual_key}: " + '#{formatted_value}" unless formatted_value.nil?'
-              lines << "              end"
-              lines << "            end"
-            else
-              lines << "            if @component['#{actual_key}']"
-              lines << "              value = @component['#{actual_key}']"
-              lines << "              if value.is_a?(String) && value.start_with?('@{') && value.end_with?('}')"
-              lines << "                # Handle binding - use #{data_prefix}. (#{is_binding ? 'Binding' : 'read-only'})"
-              lines << "                property_name = value[2..-2]"
-              lines << '                params << "' + "#{actual_key}: #{data_prefix}." + '#{property_name}"'
-              lines << "              else"
-              lines << "                # Handle static value"
-              lines << "                formatted_value = format_value(value, '#{type}')"
-              lines << '                params << "' + "#{actual_key}: " + '#{formatted_value}" if formatted_value'
+              lines << "                if formatted_value"
+              lines << '                  params << "' + "#{actual_key}: " + '#{formatted_value}"'
+              lines << "                else"
+              lines << "                  unwritten('#{actual_key}', value, '#{type}')"
+              lines << "                end"
               lines << "              end"
               lines << "            end"
             end

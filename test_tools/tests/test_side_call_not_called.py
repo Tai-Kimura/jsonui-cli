@@ -353,6 +353,49 @@ def test_generation_from_a_stub_says_the_rules_were_not_read(tmp_path):
             "or declare the operation") in str(e.value)
 
 
+def _unread_by_generation(root: Path) -> str:
+    """What generation from *root* says about why the rules were not read."""
+    with pytest.raises(bt.BranchTestGenerationError) as e:
+        bt.generate_branch_tests("checkout", root, spec_path=str(root / SPEC),
+                                 mocks_dir=str(root / "tests/mocks"), platform="web",
+                                 config_platforms=["web"])
+    said = str(e.value)
+    start = said.index("apiOutcomeRules could not be read from here (") + len(
+        "apiOutcomeRules could not be read from here (")
+    return said[start:said.index(") — run from the app's config directory", start)]
+
+
+@pytest.mark.parametrize("files, why", [
+    # Declared, and the directory is not there: the key is present, so "no
+    # spec_directory" (what was said before) sends the reader to add it again.
+    ({"jui.config.json": {"spec_directory": "nowhere/specs"}},
+     'spec_directory "nowhere/specs" in {root}/jui.config.json names {root}/nowhere/specs, '
+     "which does not exist"),
+    ({"jui.config.json": {"spec_directory": "a-file"}, "a-file": "x"},
+     'spec_directory "a-file" in {root}/jui.config.json names {root}/a-file, which is not a directory'),
+    # A config that is not JSON is passed over, as the config loader does.
+    ({"jui.config.json": "{ not json"},
+     "{root}/jui.config.json is not readable JSON (JSONDecodeError)"),
+    ({"jui.config.json": "{ not json", "jsonui-test.config.json": {"spec_directory": "gone"}},
+     "{root}/jui.config.json is not readable JSON (JSONDecodeError); spec_directory \"gone\" in "
+     "{root}/jsonui-test.config.json names {root}/gone, which does not exist"),
+])
+def test_generation_names_why_the_rules_were_not_read(tmp_path, files, why):
+    _spec(tmp_path, then={"api.postLogout": "not-called"})
+    (tmp_path / "jui.config.json").unlink()
+    for name, content in files.items():
+        (tmp_path / name).write_text(content if isinstance(content, str) else json.dumps(content))
+    root = str(tmp_path.resolve())
+    assert _unread_by_generation(tmp_path).replace(str(tmp_path), root) == why.format(root=root)
+
+
+def test_generation_with_no_spec_directory_declared_still_says_so(tmp_path):
+    """The cause the old words were right about stays in them."""
+    _spec(tmp_path, then={"api.postLogout": "not-called"})
+    (tmp_path / "jui.config.json").write_text(json.dumps({"platforms": ["web"]}))
+    assert _unread_by_generation(tmp_path) == f"no spec_directory in {tmp_path / 'jui.config.json'}"
+
+
 def test_generation_that_read_the_rules_does_not_say_it_could_not(tmp_path):
     # The control: spec_directory declared, no app contracts spec — the rules
     # were read and are empty, so the error has no "could not be read".

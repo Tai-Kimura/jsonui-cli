@@ -173,6 +173,132 @@ module JsonUIShared
       end
     end
 
+    # ---- Literals (sjui / kjui converters) -----------------------------------
+    #
+    # The expression a converter writes for a literal the layout gives a prop
+    # of `type` — read by the same rules as the scaffold (aliases, `T?`, `[T]`),
+    # so the value matches the declared type. nil when this cannot be written:
+    # a callback, a data source, a type outside the vocabulary, or a value of
+    # the wrong kind; the converter then passes nothing, the prop keeps its
+    # default, and the converter says so. A JSON null is written only for a
+    # nullable type. `hook` (optional) answers for a scalar first — each
+    # converter's own colours and string resources — and nil falls back here.
+    #
+    # Until 1.8.121 each converter formatted literals from its own spellings:
+    # a `String?` or `text` literal went out unquoted, a Kotlin Float as a
+    # Double, a list or a map as Ruby's inspect. Ticket
+    # converter-literal-props-do-not-compile.
+
+    def swift_literal(type, value, &hook)
+      t = type.is_a?(Type) ? type : parse(type)
+      return t.nullable ? 'nil' : nil if value.nil?
+
+      case t.kind
+      when :list
+        return nil unless value.is_a?(Array)
+
+        items = value.map { |v| t.element.any? ? swift_any(v) : swift_literal(t.element, v, &hook) }
+        items.include?(nil) ? nil : "[#{items.join(', ')}]"
+      when :scalar
+        (hook && hook.call(t.canonical, value)) || swift_scalar(t.canonical, value)
+      end
+    end
+
+    def kotlin_literal(type, value, &hook)
+      t = type.is_a?(Type) ? type : parse(type)
+      return t.nullable ? 'null' : nil if value.nil?
+
+      case t.kind
+      when :list
+        return nil unless value.is_a?(Array)
+        return 'emptyList()' if value.empty?
+
+        items = value.map do |v|
+          t.element.vocabulary? && t.element.kind == :scalar ? kotlin_literal(t.element, v, &hook) : kotlin_any(v)
+        end
+        items.include?(nil) ? nil : "listOf(#{items.join(', ')})"
+      when :scalar
+        (hook && hook.call(t.canonical, value)) || kotlin_scalar(t.canonical, value)
+      end
+    end
+
+    def swift_scalar(canonical, value)
+      case canonical
+      when 'string' then value.is_a?(String) ? swift_string(value) : nil
+      when 'int', 'long' then (n = whole(value)) && n.to_s
+      when 'float', 'double', 'cgfloat' then value.is_a?(Numeric) ? value.to_s : nil
+      when 'bool' then [true, false].include?(value) ? value.to_s : nil
+      when 'map' then value.is_a?(Hash) ? swift_map(value) : nil
+      end
+    end
+
+    def kotlin_scalar(canonical, value)
+      case canonical
+      when 'string' then value.is_a?(String) ? kotlin_string(value) : nil
+      when 'int' then (n = whole(value)) && n.to_s
+      when 'long' then (n = whole(value)) && "#{n}L"
+      when 'float', 'cgfloat' then value.is_a?(Numeric) ? "#{value}f" : nil
+      when 'double' then value.is_a?(Numeric) ? value.to_f.to_s : nil
+      when 'bool' then [true, false].include?(value) ? value.to_s : nil
+      when 'map' then value.is_a?(Hash) ? kotlin_map(value) : nil
+      end
+    end
+
+    # An integer, or a float with no fraction; nil otherwise.
+    def whole(value)
+      return value if value.is_a?(Integer)
+
+      value.to_i if value.is_a?(Float) && value.finite? && value == value.floor
+    end
+
+    def swift_string(text)
+      escaped = text.gsub('\\') { '\\\\' }.gsub('"') { '\\"' }
+                    .gsub("\n") { '\\n' }.gsub("\r") { '\\r' }.gsub("\t") { '\\t' }
+      "\"#{escaped}\""
+    end
+
+    # `$` too: in Kotlin it opens a template.
+    def kotlin_string(text)
+      escaped = text.gsub('\\') { '\\\\' }.gsub('"') { '\\"' }.gsub('$') { '\\$' }
+                    .gsub("\n") { '\\n' }.gsub("\r") { '\\r' }.gsub("\t") { '\\t' }
+      "\"#{escaped}\""
+    end
+
+    # A value inside a map or a bare `Array`: JSON as the language's own
+    # literal, its collections typed so an empty or mixed one still compiles.
+    def swift_any(value)
+      case value
+      when nil then 'NSNull()'
+      when String then swift_string(value)
+      when true, false, Numeric then value.to_s
+      when Array then value.empty? ? '[Any]()' : "[#{value.map { |v| swift_any(v) }.join(', ')}] as [Any]"
+      when Hash then "#{swift_map(value)} as [String: Any]"
+      end
+    end
+
+    def swift_map(hash)
+      return '[:]' if hash.empty?
+
+      "[#{hash.map { |k, v| "#{swift_string(k.to_s)}: #{swift_any(v)}" }.join(', ')}]"
+    end
+
+    def kotlin_any(value)
+      case value
+      when nil then 'null'
+      when String then kotlin_string(value)
+      when true, false, Integer then value.to_s
+      when Float then value.to_s
+      when Array then value.empty? ? 'emptyList<Any?>()' : "listOf<Any?>(#{value.map { |v| kotlin_any(v) }.join(', ')})"
+      when Hash then kotlin_map(value)
+      end
+    end
+
+    def kotlin_map(hash)
+      return 'emptyMap<String, Any?>()' if hash.empty?
+
+      "mapOf<String, Any?>(#{hash.map { |k, v| "#{kotlin_string(k.to_s)} to #{kotlin_any(v)}" }.join(', ')})"
+    end
+
     # ---- TypeScript (rjui) -------------------------------------------------
 
     def ts_type(t)

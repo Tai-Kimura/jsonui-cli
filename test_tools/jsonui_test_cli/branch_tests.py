@@ -1463,11 +1463,34 @@ def find_app_contract_spec(project_root: Path) -> AppRules:
 
 def _rules_unread(project_root: Path) -> str:
     """Why `find_app_contract_spec` found no spec_directory to read rules in,
-    naming the config it read (the one `load_project_config` reads)."""
+    naming the config it read — by the walk `load_project_config` makes: the
+    first of the two names that exists AND parses; one that does not parse is
+    passed over, and said so here.
+
+    Each cause in its own words. It used to say "no spec_directory in
+    <config>" whenever a config existed: for a spec_directory that was
+    declared and named a directory that is not there, and for a config that
+    was not JSON, that sent the reader to add a key that was already there."""
+    passed_over: list[str] = []
     for name in ("jui.config.json", "jsonui-test.config.json"):
-        if (project_root / name).exists():
-            return f"no spec_directory in {project_root / name}"
-    return f"no jui.config.json in {project_root}"
+        path = project_root / name
+        if not path.exists():
+            continue
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                config = json.load(f)
+        except (OSError, json.JSONDecodeError) as e:
+            passed_over.append(f"{path} is not readable JSON ({e.__class__.__name__})")
+            continue
+        spec_dir = config.get("spec_directory") if isinstance(config, dict) else None
+        if not isinstance(spec_dir, str) or not spec_dir:
+            why = f"no spec_directory in {path}"
+        else:
+            resolved = (project_root / spec_dir).resolve()
+            why = (f"spec_directory {json.dumps(spec_dir)} in {path} names {resolved}, which "
+                   + ("is not a directory" if resolved.exists() else "does not exist"))
+        return "; ".join(passed_over + [why])
+    return "; ".join(passed_over) if passed_over else f"no jui.config.json in {project_root}"
 
 
 def _app_rules_for_generation(project_root: Path) -> AppRules:
