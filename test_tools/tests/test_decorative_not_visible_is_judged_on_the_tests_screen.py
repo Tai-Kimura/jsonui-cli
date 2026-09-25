@@ -264,14 +264,14 @@ def test_a_project_that_builds_no_ios_app_gets_no_info(tmp_path, monkeypatch, ca
         {"name": "c", "description": "d", "platform": ["ios", "web"], "steps": NOT_VISIBLE}]}, 1),
     (_screen_test([{"assert": "notVisible", "id": "headerLogoImage",
                     "when": {"platform": "android"}}]), 0),
-    (_screen_test([{"action": "tap", "id": "title",
-                    "when": {"platform": "web", "notVisible": "headerLogoImage"}}]), 0),
+    (_screen_test([{"assert": "notVisible", "id": "headerLogoImage",
+                    "when": {"platform": "web", "visible": "title"}}]), 0),
     (_screen_test([{"action": "repeat", "times": 2, "when": {"platform": "web"},
                     "steps": NOT_VISIBLE}]), 0),
     (_screen_test([{"assert": "notVisible", "id": "headerLogoImage",
                     "when": {"platform": "all"}}]), 1),
 ], ids=["test-web", "test-android-web", "test-all", "test-ios", "case-web", "case-ios-web",
-        "step-android", "condition-web", "around-web", "step-all"])
+        "step-android", "gated-with-a-condition", "around-web", "step-all"])
 def test_a_step_ios_never_runs_gets_no_info(tmp_path, monkeypatch, capsys, test, named):
     lines = _run(tmp_path, monkeypatch, capsys, _five(DECORATIVE), {"detail.test.json": test})
     assert len(lines) == named, lines
