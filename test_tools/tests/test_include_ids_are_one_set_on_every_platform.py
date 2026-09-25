@@ -18,6 +18,12 @@ read back in its own spelling:
 Every one must equal `expected`, count included (conservation: the ids read
 back are as many as the fixture names). The SwiftJsonUI / KotlinJsonUI
 dynamic expanders read the same file from their own tests.
+
+Web is also generated with the prefix OFF — the spelling every build before
+INCLUDE_ID_PREFIX_GATE_FROM emits — and the two renders are paired element by
+element: that is web's old spelling -> its new one, measured, and it must be
+`layout_facts`' `include_web` (what the validators name as "from 1.8.120,
+spelled …"), not a transcription of it.
 """
 from __future__ import annotations
 
@@ -68,10 +74,11 @@ require 'json'
 require 'fileutils'
 require 'react/react_generator'
 require 'cli/commands/build_command'
+prefix_on = ARGV[2] == 'web'
 JSON.parse(ARGV[0]).each do |root|
-  layouts, out = File.join(root, 'layouts'), File.join(root, 'web', 'gen')
-  cfg = { 'typescript' => true, 'use_tailwind' => true, '_include_id_prefix' => true,
-          'generated_directory' => out }
+  layouts, out = File.join(root, 'layouts'), File.join(root, ARGV[2], 'gen')
+  cfg = { 'typescript' => true, 'use_tailwind' => true, 'generated_directory' => out }
+  cfg['_include_id_prefix'] = true if prefix_on
   Dir.glob(File.join(layouts, '**', '*.json')).sort.each do |f|
     rel = f.sub(layouts + '/', '').sub(/\.json\z/, '')
     sub = File.dirname(rel) == '.' ? '' : File.dirname(rel)
@@ -81,6 +88,7 @@ JSON.parse(ARGV[0]).each do |root|
     FileUtils.mkdir_p(File.dirname(dest))
     File.write(dest, code)
   end
+  next unless prefix_on
   helper = RjuiTools::CLI::Commands::BuildCommand.allocate
   helper.instance_variable_set(:@config, cfg)
   helper.send(:emit_include_id_helper)
@@ -103,7 +111,7 @@ const render = (el: any): void => {{
   if (el == null || typeof el !== 'object') return;
   if (Array.isArray(el)) {{ el.forEach(render); return; }}
   if (typeof el.type === 'function') {{ render(el.type(el.props)); return; }}
-  if (el.props && typeof el.props.id === 'string') ids.push(el.props.id);
+  ids.push(el.props && typeof el.props.id === 'string' ? el.props.id : null);
   render(el.props && el.props.children);
 }};
 render(({component} as any)({{}}));
@@ -140,36 +148,39 @@ def roots(tmp_path_factory):
     return out
 
 
-def _ruby(tool: str, script: str, roots: dict) -> None:
+def _ruby(tool: str, script: str, roots: dict, *args: str) -> None:
     if shutil.which("ruby") is None:
         _missing("ruby", "install ruby")
     result = subprocess.run(
         ["ruby", "-I", str(REPO / tool / "lib"), "-e", script,
-         json.dumps([str(r) for r in roots.values()]), SCREEN],
+         json.dumps([str(r) for r in roots.values()]), SCREEN, *args],
         capture_output=True, text=True, env=ENV, cwd=str(REPO))
     assert result.returncode == 0, f"{tool}: {result.stderr[-2000:]}"
 
 
 @pytest.fixture(scope="module")
 def emitted(roots):
-    """{platform: {specimen: [ids read back]}} — each codegen runs once."""
+    """{platform: {specimen: [ids read back]}} — each codegen runs once;
+    `web_on` / `web_off` are every rendered element's id or None, in order."""
     _ruby("sjui_tools", SJUI, roots)
     _ruby("kjui_tools", KJUI, roots)
-    _ruby("rjui_tools", RJUI, roots)
-    out = {"sjui": {}, "kjui": {}, "rjui": {}}
+    _ruby("rjui_tools", RJUI, roots, "web")
+    _ruby("rjui_tools", RJUI, roots, "web_off")
+    out = {"sjui": {}, "kjui": {}, "rjui": {}, "web_on": {}, "web_off": {}}
     for name, root in roots.items():
         swift = (root / "screen.swift").read_text(encoding="utf-8")
         out["sjui"][name] = re.findall(r'\.accessibilityIdentifier\("([^"]*)"\)', swift)
         kotlin = next(root.glob("kjui_views/**/*GeneratedView.kt")).read_text(encoding="utf-8")
         out["kjui"][name] = re.findall(r'testTag\("([^"]*)"\)', kotlin)
-        out["rjui"][name] = _render_web(root)
+        out["web_on"][name] = _render_web(root / "web")
+        out["web_off"][name] = _render_web(root / "web_off")
+        out["rjui"][name] = [i for i in out["web_on"][name] if i is not None]
     return out
 
 
-def _render_web(root: Path) -> list:
+def _render_web(web: Path) -> list:
     if shutil.which("node") is None or not ESBUILD.exists():
         _missing("node / esbuild", "npm ci --prefix rjui_tools/spec/support")
-    web = root / "web"
     (web / "react_stub.js").write_text(REACT_STUB, encoding="utf-8")
     (web / "gen" / "StringManager.ts").write_text(STRING_MANAGER_STUB, encoding="utf-8")
     (web / "tsconfig.json").write_text(json.dumps({"compilerOptions": {
@@ -214,3 +225,21 @@ def test_codegen(emitted, platform, name):
     assert len(got) == len(expected), \
         f"{platform}: read back {len(got)} ids, the fixture names {len(expected)} ({name})"
     assert got == expected, f"{platform} disagrees on {name}"
+
+
+@pytest.mark.parametrize("name", SPECIMENS)
+def test_web_before_the_release_is_the_map_the_validators_name(emitted, roots, name):
+    from jui_cli.core.layout_facts import layout_ids_every_platform
+    off, on = emitted["web_off"][name], emitted["web_on"][name]
+    assert len(off) == len(on), f"{name}: {len(off)} elements rendered off, {len(on)} on"
+    layout = layout_ids_every_platform(Path(SCREEN).stem, layouts_dir=roots[name] / "layouts",
+                                       styles_dir=roots[name] / "layouts")
+    measured: dict = {}
+    for old, new in zip(off, on):
+        # The same rule on both sides: an old id the layout has is checked
+        # exactly, never looked up in the map.
+        if old is None or old == new or old in layout.ids:
+            continue
+        measured.setdefault(old, set()).update({new} if new is not None else set())
+    assert measured, f"{name}: no id changed spelling — the specimen measures nothing here"
+    assert layout.include_web == measured, name

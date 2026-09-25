@@ -113,10 +113,24 @@ class LayoutFacts:
     #: includes expanded (`duplicate_ids`).
     id_counts: Counter = field(default_factory=Counter)
     #: The spellings an id inside an include that HAS an id takes on some
-    #: platform but not in `ids`: the included layout's own id (web does not
-    #: flatten includes, so it keeps it) and `<include id>_<id>` (UIKit). The
-    #: prefixed camelCase spelling native uses is what `ids` holds.
+    #: platform but not in `ids`: web's before INCLUDE_ID_PREFIX_GATE_FROM
+    #: (the keys of `include_web`) and UIKit's (`include_uikit`, which U8
+    #: leaves as it is). The prefixed camelCase spelling native uses is what
+    #: `ids` holds.
     include_ids: set = field(default_factory=set)
+    #: UIKit's spelling (SJUIViewCreator): the include's id camel-cased is a
+    #: binding id, a nested one joined to it with `_`, and a node inside is
+    #: `<binding id>_<its id>` — `main_form` + `submit_btn` ->
+    #: `mainForm_submit_btn`.
+    include_uikit: set = field(default_factory=set)
+    #: Web's spelling before INCLUDE_ID_PREFIX_GATE_FROM -> the ids it is
+    #: spelled as from that release on (native's, in `ids`). Web did not
+    #: flatten an include: a node inside kept the partial's own id, and the
+    #: partial's root took the include's id — so an include id names the root
+    #: (its prefixed id), or nothing from the release on when the root has no id.
+    include_web: dict = field(default_factory=dict)
+    #: The resolved root's id (an include's partial root is spelled apart on web).
+    root_id: str | None = None
 
 
 def _layout_file(spec: dict) -> str | None:
@@ -146,20 +160,51 @@ def _includes(node, found: list) -> None:
             _includes(value, found)
 
 
-def _includes_with_an_id(node, found: list) -> None:
-    """(layout, include id) of every `include` that carries an `id`, depth
-    first — the ones whose ids are spelled differently per platform."""
+def _includes_and_ids(node, found: list) -> None:
+    """(layout, include id or None) of every `include`, depth first. One with
+    an id spells the ids inside it differently per platform; one without
+    passes on what is inside it as it is spelled there."""
     if isinstance(node, dict):
-        if isinstance(node.get("include"), str) and isinstance(node.get("id"), str) \
-                and node["id"]:
-            found.append((node["include"], node["id"]))
+        if isinstance(node.get("include"), str):
+            iid = node.get("id")
+            found.append((node["include"], iid if isinstance(iid, str) and iid else None))
         for key, value in node.items():
             if key in CELL_KEYS:
                 continue
-            _includes_with_an_id(value, found)
+            _includes_and_ids(value, found)
     elif isinstance(node, list):
         for value in node:
-            _includes_with_an_id(value, found)
+            _includes_and_ids(value, found)
+
+
+def _spell_inside(facts: LayoutFacts, inner: LayoutFacts, include_id: str | None) -> None:
+    """Add to *facts* how the ids of *inner* (a partial it includes, under
+    *include_id*) are spelled on the platforms `ids` does not speak for."""
+    web = facts.include_web
+    if include_id is None:
+        for old, now in inner.include_web.items():
+            web.setdefault(old, set()).update(now)
+        facts.include_uikit |= inner.include_uikit
+        return
+    from .normalizer.include_expander import _combine_with_prefix, _to_camel_case
+
+    head = _to_camel_case(include_id)
+    # An id inside under an include that has an id there was spelled on web
+    # as that include's old spelling, not as `inner.ids` holds it.
+    under: dict = {}
+    for old, now in inner.include_web.items():
+        web.setdefault(old, set()).update(_combine_with_prefix(head, n) for n in now)
+        for n in now:
+            under.setdefault(n, set()).add(old)
+    plain = {n for n in inner.ids if n not in under}
+    for n in plain - {inner.root_id}:
+        web.setdefault(n, set()).add(_combine_with_prefix(head, n))
+    web.setdefault(include_id, set()).update(
+        {_combine_with_prefix(head, inner.root_id)} if inner.root_id else set())
+    # UIKit camel-cases the include's id as native does (Swift's `capitalized`
+    # per `_` part is Ruby's `capitalize`), and joins with `_`.
+    facts.include_uikit |= ({f"{head}_{n}" for n in plain}
+                            | {f"{head}_{s}" for s in inner.include_uikit})
 
 
 def _unresolved_includes(tree, layouts_dir: Path) -> list:
@@ -244,16 +289,18 @@ def layout_facts(spec: dict, platform: str | None, *, layouts_dir: Path,
     resolved = normalize(tree, "L2", platform=platform, styles_dir=Path(styles_dir),
                          layouts_dir=Path(layouts_dir), source=str(facts.path)).tree
     _walk(resolved, facts)
+    if isinstance(resolved, dict) and isinstance(resolved.get("id"), str) and resolved["id"]:
+        facts.root_id = resolved["id"]
     found: list = []
-    _includes_with_an_id(tree, found)
-    for included, prefix in found:
+    _includes_and_ids(tree, found)
+    for included, include_id in found:
         if included in _seen or included == name:
             continue
         inner = layout_facts({"metadata": {"layoutFile": included}}, platform,
                              layouts_dir=layouts_dir, styles_dir=styles_dir,
                              _seen=_seen | {name})
-        spelled = inner.ids | inner.include_ids
-        facts.include_ids |= spelled | {f"{prefix}_{i}" for i in spelled}
+        _spell_inside(facts, inner, include_id)
+    facts.include_ids |= set(facts.include_web) | facts.include_uikit
     if facts.unresolved_includes:
         facts.reason = "unresolved include: " + ", ".join(facts.unresolved_includes)
         return facts
@@ -271,6 +318,7 @@ class Everywhere:
     include_ids: set
     types: dict
     unresolved: list
+    include_web: dict = field(default_factory=dict)
 
 
 def layout_ids_every_platform(name: str, *, layouts_dir: Path, styles_dir: Path) -> Everywhere:
@@ -283,11 +331,14 @@ def layout_ids_every_platform(name: str, *, layouts_dir: Path, styles_dir: Path)
                              layouts_dir=layouts_dir, styles_dir=styles_dir)
         out.ids |= facts.ids
         out.include_ids |= facts.include_ids
+        for old, now in facts.include_web.items():
+            out.include_web.setdefault(old, set()).update(now)
         out.types.update(facts.types)
         out.unresolved += [u for u in facts.unresolved_includes if u not in out.unresolved]
         out.cell_ids |= cell_ids_for(facts, platform, layouts_dir=layouts_dir,
                                      styles_dir=styles_dir)
     out.include_ids -= out.ids
+    out.include_web = {old: now for old, now in out.include_web.items() if old not in out.ids}
     return out
 
 
@@ -328,23 +379,64 @@ def element_candidates(element: str, ids, types=None) -> list:
     return same + typed + prefixed
 
 
-def classify_element(element: str, *, ids, cell_ids=(), include_ids=(), types=None):
-    """(kind, candidates) of an id a spec names — the ONE answer the spec
-    validator and the coverage data axis both give (design v4.20):
+def classify_element(element: str, *, ids, cell_ids=(), include_ids=(), types=None,
+                     include_web=None, include_exact: bool = False):
+    """(kind, candidates) of an id a spec or a test names — the ONE answer the
+    spec validator, the coverage data axis and `jsonui-test validate` give
+    (design v4.20, U8):
 
       on_layout         the layout has it, exactly
       in_cell           a cell layout it names has it — another scope, not checked
       include_spelling  it is how some platform spells an id inside an include
-                        with an id — cannot be checked against one resolution
+                        with an id — cannot be checked against one resolution;
+                        *candidates* are what web spells it as from
+                        INCLUDE_ID_PREFIX_GATE_FROM (from `include_web`; empty
+                        for UIKit / XML's `<include id>_<id>`, or when that
+                        include's root has no id)
       missing           none of these; *candidates* from `element_candidates`
+
+    *include_exact* is `include_id_prefix_state(...) == "on"`: web spells the
+    ids inside an include as native does, so web's old spelling is `missing`,
+    its new spelling first among the candidates. UIKit / XML's spelling is
+    still `include_spelling` (U8 (8)).
     """
     if element in ids:
         return "on_layout", []
     if element in cell_ids:
         return "in_cell", []
+    now = sorted((include_web or {}).get(element, ()))
+    if include_exact and include_web is not None and element in include_web:
+        return "missing", now + [c for c in element_candidates(element, ids, types)
+                                 if c not in now]
     if element in include_ids:
-        return "include_spelling", []
+        return "include_spelling", now
     return "missing", element_candidates(element, ids, types)
+
+
+def include_spelling_note(found, include_web, state: str) -> str:
+    """Why the ids `classify_element` answered `include_spelling` for cannot
+    be checked — the one wording the spec validator and `jsonui-test
+    validate` print. *found* is [(id, candidates)], *state*
+    `include_id_prefix_state`'s answer: a release is named only when it is
+    announced (`on` checks web's old spelling exactly; `off` names none)."""
+    web = sorted({(e, tuple(c)) for e, c in found if e in (include_web or {})})
+    other = sorted({e for e, _ in found if e not in (include_web or {})})
+    parts = []
+    if web:
+        text = ("web spells an id inside an include with an id as the included layout "
+                "has it (its root: the include's id), native prefixes it with the "
+                "include's")
+        if state == "announce":
+            text += (f"; from jsonui-cli {INCLUDE_ID_PREFIX_GATE_FROM} web spells it as "
+                     "native: " + ", ".join(
+                         f"'{e}' -> " + (" / ".join(f"'{n}'" for n in now) if now
+                                         else "no id (the partial's root has none)")
+                         for e, now in web))
+        parts.append(text)
+    if other:
+        parts.append("UIKit / XML spell it '<include id>_<id>' ("
+                     + ", ".join(other) + "), which is not checked")
+    return "; ".join(parts)
 
 
 def cell_ids_for(facts: LayoutFacts, platform: str | None, *, layouts_dir: Path,

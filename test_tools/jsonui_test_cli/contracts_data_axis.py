@@ -113,10 +113,12 @@ def _hashable(value) -> bool:
     return isinstance(value, (str, bool, int, float)) or value is None
 
 
-def screen_data(spec: dict, facts, rows: list, cell_ids=frozenset()) -> ScreenData:
+def screen_data(spec: dict, facts, rows: list, cell_ids=frozenset(),
+                include_exact: bool = False) -> ScreenData:
     """The data axis of one screen on one platform. *facts* is its
     `LayoutFacts` for the platform, *cell_ids* the ids of the cells it names;
-    *rows* the branches active there."""
+    *rows* the branches active there; *include_exact* whether web's old
+    spelling of an id inside an include is checked exactly (U8)."""
     from jui_cli.core.layout_facts import classify_element
 
     data = ScreenData(reason=facts.reason, cells=facts.cells,
@@ -142,7 +144,8 @@ def screen_data(spec: dict, facts, rows: list, cell_ids=frozenset()) -> ScreenDa
             for i in ids:
                 kind, candidates = classify_element(
                     i, ids=facts.ids, cell_ids=cell_ids, include_ids=facts.include_ids,
-                    types=facts.types)
+                    types=facts.types, include_web=facts.include_web,
+                    include_exact=include_exact)
                 if kind != "on_layout":
                     off.append({"id": i, "kind": kind, "candidates": candidates})
             data.visible_ids_not_in_layout += sum(1 for o in off if o["kind"] == "missing")

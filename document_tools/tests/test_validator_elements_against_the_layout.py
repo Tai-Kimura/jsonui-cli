@@ -107,33 +107,71 @@ def test_withdrawn_or_unreadable_never_warns_and_announces_nothing(tmp_path, at,
     assert not any("become WARNING" in m for *_, m in messages)
 
 
-@pytest.mark.parametrize("spelling", ["hint", "side_hint"])
-def test_an_include_ids_other_spellings_cannot_be_checked(tmp_path, at, spelling):
+WEB_NOTE = ("web spells an id inside an include with an id as the included layout has it "
+            "(its root: the include's id), native prefixes it with the include's")
+UIKIT_NOTE = "UIKit / XML spell it '<include id>_<id>' (side_hint), which is not checked"
+
+
+@pytest.mark.parametrize("spelling, now", [("hint", "'sideHint'"), ("side", "'sideBox'")])
+def test_web_s_spelling_cannot_be_checked_and_names_the_release_s(tmp_path, at, spelling, now):
     # `hint` inside the include `side` is `sideHint` on native (what the
-    # resolved layout holds), `side_hint` on UIKit, `hint` on web (it does not
-    # flatten includes). Against one resolution only the first can be told
-    # right; the others are CANNOT CHECK, not missing (ee, design v4.20).
+    # resolved layout holds) and `hint` on web, which does not flatten
+    # includes — and gives the partial's root (`box`) the include's id,
+    # `side`. Against one resolution neither can be told right: CANNOT CHECK,
+    # not missing (ee, design v4.20), naming what web spells it as from the
+    # release (U8).
     at("1.8.119")                      # below INCLUDE_ID_PREFIX_GATE_FROM
     spec = _face(tmp_path, visible=["summary", spelling])
     assert _messages(spec) == [(
         "info", "stateManagement",
-        f"cannot check: 1 element id(s) inside includes of detail.json ({spelling}) — an "
-        "include's ids are spelled differently per platform (web keeps the included "
-        "layout's id; native prefixes it with the include's)")]
+        f"cannot check: 1 element id(s) inside includes of detail.json ({spelling}) — "
+        f"{WEB_NOTE}; from jsonui-cli 1.8.120 web spells it as native: '{spelling}' -> {now}")]
+
+
+@pytest.mark.parametrize("version", ["1.8.119", "1.8.120", "1.8.121"])
+def test_uikit_s_spelling_cannot_be_checked_before_the_release_or_after(tmp_path, at, version):
+    # UIKit / XML are out of U8: `side_hint` stays CANNOT CHECK (U8 (8)).
+    at(version)
+    spec = _face(tmp_path, visible=["summary", "side_hint"])
+    assert _messages(spec) == [(
+        "info", "stateManagement",
+        f"cannot check: 1 element id(s) inside includes of detail.json (side_hint) — {UIKIT_NOTE}")]
+
+
+@pytest.mark.parametrize("spelling, kind", [("sidePanel_hint", "cannot check"),
+                                             ("side_panel_hint", "missing")])
+def test_uikit_camel_cases_the_include_id_before_it_joins(tmp_path, at, spelling, kind):
+    # UIKit (SwiftJsonUI SJUIViewCreator.swift: `convertBindingIdToCamelCase`
+    # on the include's id, then `"\(bindingId!)_\(id)"`): `side_panel` +
+    # `hint` is `sidePanel_hint`, not `side_panel_hint`. Transcribed from the
+    # Swift source, not run — UIKit has no host here (ee, review 4 (c)).
+    at("1.8.119")
+    _face(tmp_path, visible=["summary", spelling])
+    layout = tmp_path / "docs/screens/layouts/detail.json"
+    tree = json.loads(layout.read_text())
+    tree["child"][1]["id"] = "side_panel"
+    layout.write_text(json.dumps(tree), encoding="utf-8")
+    messages = _messages(tmp_path / "docs/screens/json/detail.spec.json")
+    if kind == "cannot check":
+        assert messages == [("info", "stateManagement", (
+            "cannot check: 1 element id(s) inside includes of detail.json (sidePanel_hint) — "
+            "UIKit / XML spell it '<include id>_<id>' (sidePanel_hint), which is not checked"))]
+    else:
+        assert [m for *_, m in messages if m.startswith("Element 'side_panel_hint'")], messages
 
 
 @pytest.mark.parametrize("version", ["1.8.120", "1.8.121"])     # 1.8.120: the equal point
-@pytest.mark.parametrize("spelling", ["hint", "side_hint"])
-def test_from_the_include_gate_an_include_ids_spelling_is_checked_exactly(tmp_path, at,
-                                                                         version, spelling):
-    # From INCLUDE_ID_PREFIX_GATE_FROM web spells it as native does (U8): the
-    # web and UIKit spellings are mismatches, and the candidates name native's.
+@pytest.mark.parametrize("spelling, now", [("hint", "sideHint"), ("side", "sideBox")])
+def test_from_the_include_gate_web_s_old_spelling_is_checked_exactly(tmp_path, at,
+                                                                     version, spelling, now):
+    # From INCLUDE_ID_PREFIX_GATE_FROM web spells it as native does (U8): web's
+    # old spelling is a mismatch, and the candidates name the new one first.
     at(version)
     spec = _face(tmp_path, visible=["summary", spelling])
     assert _element_warnings(spec) == [(
         "stateManagement.states[0].values[0].visibleElements",
         f"Element '{spelling}' not found in the layout detail.json (includes expanded, every "
-        "platform); the layout has 'sideHint' — the runtime id is the layout's spelling")]
+        f"platform); the layout has '{now}' — the runtime id is the layout's spelling")]
 
 
 def test_a_withdrawn_include_gate_never_checks_them_exactly(tmp_path, at, monkeypatch):
@@ -141,7 +179,10 @@ def test_a_withdrawn_include_gate_never_checks_them_exactly(tmp_path, at, monkey
     at("9.9.9")
     monkeypatch.setattr(layout_facts, "INCLUDE_ID_PREFIX_GATE_FROM", "withdrawn")
     spec = _face(tmp_path, visible=["summary", "hint"])
-    assert [lv for lv, *_ in _messages(spec)] == ["info"]
+    # Nothing is announced, so no release is named.
+    assert _messages(spec) == [(
+        "info", "stateManagement",
+        f"cannot check: 1 element id(s) inside includes of detail.json (hint) — {WEB_NOTE}")]
 
 
 def test_an_unresolved_include_says_it_cannot_check(tmp_path, at):
@@ -309,6 +350,42 @@ def test_the_coverage_data_axis_gives_the_same_answer(tmp_path, at):
     assert any("'nowhere' not found" in m and "the layout has" not in m for m in messages)
     assert any(m.startswith("cannot check: 1 element id(s) inside cells") and "cellTitle" in m
                for m in messages)
+
+
+@pytest.mark.parametrize("version, expected", [
+    ("1.8.119", {"hint": ("include_spelling", ["sideHint"]), "side": ("include_spelling", ["sideBox"]),
+                 "side_hint": ("include_spelling", [])}),
+    ("1.8.120", {"hint": ("missing", ["sideHint"]), "side": ("missing", ["sideBox"]),
+                 "side_hint": ("include_spelling", [])}),
+])
+def test_both_readers_switch_an_include_s_spelling_at_one_release(tmp_path, at, monkeypatch,
+                                                                  version, expected):
+    """The switch at INCLUDE_ID_PREFIX_GATE_FROM is `classify_element`'s, so
+    the data axis — through the call coverage makes, reading jsonui-test's
+    version — and the validator flip together (they did not: the validator
+    switched and the data axis kept every include spelling CANNOT CHECK)."""
+    import types
+    import jsonui_test_cli
+    from jsonui_test_cli import contracts_coverage
+    at(version)
+    monkeypatch.setattr(jsonui_test_cli, "__version__", version)
+    spec = _face(tmp_path, visible=["summary", "hint", "side", "side_hint"])
+    layouts = tmp_path / "docs/screens/layouts"
+    axis = contracts_coverage._screen_data(
+        json.loads(spec.read_text()), "ios", {},
+        types.SimpleNamespace(layouts_dir=layouts, styles_dir=layouts))
+    assert {o["id"]: (o["kind"], o["candidates"]) for o in axis.visible_ids_detail} == expected
+    messages = [m for *_, m in _messages(spec)]
+    for element, (kind, candidates) in expected.items():
+        missing = [m for m in messages if m.startswith(f"Element '{element}' not found")]
+        includes = [m for m in messages
+                    if (g := re.match(r"cannot check: \d+ element id\(s\) inside includes of "
+                                      r"\S+ \(([^)]*)\)", m))
+                    and element in g.group(1).split(", ")]
+        assert (bool(missing), bool(includes)) == (kind == "missing", kind != "missing"), \
+            (element, messages)
+        for c in candidates:
+            assert f"'{c}'" in (missing or includes)[0], (element, messages)
 
 
 class TestThePrintedReport:

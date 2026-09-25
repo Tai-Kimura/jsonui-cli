@@ -63,7 +63,8 @@ warning count:
 | on the layout, exactly | nothing |
 | not on it | WARNING from the release `LAYOUT_ID_GATE_FROM` names; below it INFO, with one INFO line per spec announcing that release |
 | inside a cell layout the screen names (`cellClasses`, a section's `cell` / `header` / `footer`) | one INFO per spec: `cannot check: N element id(s) inside cells …` — a cell is another scope, not checked |
-| an id inside an include with an `id`, spelled as web (`hint`) or UIKit (`side_hint`) spells it | one INFO per spec: `cannot check: N element id(s) inside includes …` — the resolved layout holds native's `sideHint`, and the spelling differs per platform |
+| an id inside an include with an `id`, spelled as web spells it before `INCLUDE_ID_PREFIX_GATE_FROM` (`hint`; the partial's root takes the include's id, `side`) | below that release, one INFO per spec: `cannot check: N element id(s) inside includes …`, naming what web spells each as from the release (`'hint' -> 'sideHint'`) — the resolved layout holds native's spelling; from the release web spells it as native does, so it is checked exactly (not on it, the new spelling first among the candidates) |
+| — spelled as UIKit / XML spell it (`side_hint`) | one INFO per spec, before that release and after it: `cannot check: … UIKit / XML spell it '<include id>_<id>'` — U8 leaves them as they are |
 | — the layout has an include that does not resolve | one INFO: `cannot check: element ids against … — an include does not resolve` |
 
 The match is exact: the runtime id is the layout's spelling on every

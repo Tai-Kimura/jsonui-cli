@@ -3637,17 +3637,20 @@ class SpecValidator:
           ids a person may have meant (`element_candidates`) — never counted
           as a match: the runtime id is the layout's spelling
         - inside a cell layout it names: CANNOT CHECK — one INFO, always
-        - spelled as an id inside an include is on web or UIKit: CANNOT CHECK
-          below INCLUDE_ID_PREFIX_GATE_FROM (the spelling differs per
-          platform); from it, web spells it as native does (design U8), so it
-          is checked exactly — a mismatch, with the native spelling among the
-          candidates
+        - spelled as an id inside an include is on web: CANNOT CHECK below
+          INCLUDE_ID_PREFIX_GATE_FROM (the spelling differs per platform),
+          naming the spelling web takes from that release; from it, web spells
+          it as native does (design U8), so it is checked exactly — a
+          mismatch, the native spelling first among the candidates.
+          `classify_element` makes the switch, so every reader agrees
+        - spelled as UIKit / XML spell it (`<include id>_<id>`): CANNOT CHECK,
+          before the release and after it (U8 (8))
         """
         from jui_cli.core.layout_facts import (
-            classify_element, element_candidates, include_id_prefix_state,
+            classify_element, include_id_prefix_state, include_spelling_note,
         )
 
-        include_exact = include_id_prefix_state(_running_version()) == "on"
+        include_state = include_id_prefix_state(_running_version())
 
         # shared/core/gate_versions, the one reader of every `*_GATE_FROM`.
         # None in a tool tree without it: then nothing becomes a WARNING — not
@@ -3659,18 +3662,16 @@ class SpecValidator:
         for path, element in refs:
             kind, candidates = classify_element(
                 element, ids=layout.ids, cell_ids=layout.cell_ids,
-                include_ids=layout.include_ids, types=layout.types)
+                include_ids=layout.include_ids, types=layout.types,
+                include_web=layout.include_web, include_exact=include_state == "on")
             if kind == "on_layout":
                 continue
             if kind == "in_cell":
                 in_cells.append(element)
                 continue
-            if kind == "include_spelling" and not include_exact:
-                in_includes.append(element)
-                continue
             if kind == "include_spelling":
-                kind, candidates = "missing", element_candidates(element, layout.ids,
-                                                                 layout.types)
+                in_includes.append((element, candidates))
+                continue
             missing += 1
             text = f"Element '{element}' not found in {where}"
             if candidates:
@@ -3689,9 +3690,9 @@ class SpecValidator:
             result.infos.append(SpecValidationMessage(
                 path="stateManagement", level="info",
                 message=(f"cannot check: {len(in_includes)} element id(s) inside includes "
-                         f"of {name}.json ({', '.join(sorted(set(in_includes)))}) — an "
-                         "include's ids are spelled differently per platform (web keeps "
-                         "the included layout's id; native prefixes it with the include's)")))
+                         f"of {name}.json ({', '.join(sorted({e for e, _ in in_includes}))}) "
+                         "— " + include_spelling_note(in_includes, layout.include_web,
+                                                      include_state))))
         if missing and gates is None:
             result.infos.append(SpecValidationMessage(
                 path="stateManagement", level="info",
