@@ -188,9 +188,21 @@ module SjuiTools
                             add_line ") {"
                           end
 
-                          # Process children
+                          # The children in one VStack, as the Dynamic adapter
+                          # passes them. Handed over bare, several children
+                          # reached a content slot drawn in a Group and every
+                          # modifier on the component — its accessibility
+                          # container and identifier included — was applied
+                          # to each child: measured (the codegen host, iOS
+                          # 26.5, 2026-09-25) the container's id found twice
+                          # with two children. Ticket
+                          # sjui-custom-container-takes-its-childrens-identifiers.
                           indent do
-                            process_children
+                            add_line "VStack(alignment: .leading, spacing: 0) {"
+                            indent do
+                              process_children
+                            end
+                            add_line "}"
                           end
 
                           add_line "}"
