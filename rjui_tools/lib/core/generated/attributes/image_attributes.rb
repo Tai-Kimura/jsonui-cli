@@ -9,7 +9,6 @@ require_relative 'common_attributes'
 module JsonUI
   module Generated
     # Typed attribute extraction for the `Image` component.
-    # Overrides the common definition of: `canTap`.
     module ImageAttributes
       # Declared-attribute rows — part of the public metadata
       # contract together with `rows` / `declared?` / `alias_map`
@@ -17,8 +16,6 @@ module JsonUI
       ATTRS = [
         # What screen readers say for the image (VoiceOver, TalkBack, web alt): a strings.json key or text, localized like `text`, or a binding. "" marks the image decorative (skipped). With no alt the image is decorative too, unless it operates a control (a tap handler on the image, or the only content of a tappable with no text): then it keeps the id / asset name each platform read before, and the build names it (INFO). Decorative is the default, so give every image that carries meaning (a logo, a photo, an icon that is the only content of a button) an alt.
         { name: 'alt', kind: :string, bindable: true, aliases: ['accessibilityLabel', 'contentDescription'].freeze }.freeze,
-        # Enable tap gesture independent of onClick.
-        { name: 'canTap', kind: :boolean }.freeze,
         # Content mode (binding supported). ScaleToFill is a declared synonym of fill (the stretch — see attribute_semantics.json#semantics.image); the normalizer folds it, fixtures are generated for the canonical spelling only.
         { name: 'contentMode', kind: :enum, bindable: true, values: ['fit', 'fill', 'center', 'top', 'bottom', 'left', 'right', 'AspectFill', 'AspectFit', 'Center', 'ScaleToFill', 'Top', 'Bottom', 'Left', 'Right'].freeze }.freeze,
         # Default image name. Declared from the implementation, which already read it: sjui image_converter.rb:36,42 (defaultImage || errorImage || loadingImage) (plan 51-E).

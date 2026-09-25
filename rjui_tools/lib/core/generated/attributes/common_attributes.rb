@@ -71,7 +71,7 @@ module JsonUI
         { name: 'bottomMargin', kind: :number, bindable: true }.freeze,
         # Bottom padding (alias for paddingBottom, binding supported)
         { name: 'bottomPadding', kind: :number, bindable: true }.freeze,
-        # Whether component is tappable (binding supported)
+        # SwiftUI / Compose: a gate on the tap — false (or a binding that resolves false) turns onClick / onclick off; absent, there is no gate and the handler alone makes the tap. UIKit: whether the view shows its pressed state (tapBackgroundColor, an image's highlight filter); the tap itself comes from onclick either way.
         { name: 'canTap', kind: :boolean, bindable: true }.freeze,
         # Center horizontally in parent (binding supported)
         { name: 'centerHorizontal', kind: :boolean, bindable: true }.freeze,

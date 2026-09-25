@@ -69,4 +69,22 @@ module ComposeStubUniverse
       #{views.map { |v| "fun #{v}() {}" }.join("\n")}
     KOTLIN
   end
+
+  # A modifier chain holding `.clickable(...)` (ModifierBuilder.build_clickable),
+  # for the tap-role spec: Modifier, Role and clickable with Compose's parameter
+  # names, and the data members the emitted handlers call.
+  def clickable(emitted)
+    handlers = emitted.scan(/data\.(\w+)\?\.invoke\(\)/).flatten.uniq
+    <<~KOTLIN
+      interface Modifier { companion object : Modifier }
+      class Role private constructor() { companion object { val Button = Role() } }
+      fun Modifier.clickable(
+          enabled: Boolean = true,
+          onClickLabel: String? = null,
+          role: Role? = null,
+          onClick: () -> Unit
+      ): Modifier = this
+      class Data(#{handlers.map { |h| "val #{h}: (() -> Unit)? = null" }.join(', ')})
+    KOTLIN
+  end
 end

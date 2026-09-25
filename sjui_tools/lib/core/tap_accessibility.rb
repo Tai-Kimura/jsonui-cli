@@ -65,9 +65,11 @@ module JsonUIShared
       INTERACTIVE_TYPES.include?(type) || !KNOWN_TYPES.include?(type)
     end
 
-    # A tap the codegen emits: a handler, and not statically disabled.
+    # A tap the codegen emits: a handler, not statically disabled, and not
+    # gated shut — `canTap: false` is the SwiftUI / Compose tap gate
+    # (attribute_definitions.json common.canTap), so the tap is not there.
     def tappable?(node)
-      node.is_a?(Hash) && node['enabled'] != false &&
+      node.is_a?(Hash) && node['enabled'] != false && node['canTap'] != false &&
         TAP_KEYS.any? { |key| present?(node[key]) }
     end
 

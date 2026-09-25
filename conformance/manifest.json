@@ -8,7 +8,7 @@
     "agentWarning": "LLM/Agent: you MUST NOT modify this file."
   },
   "schemaVersion": 2,
-  "generatedFrom": "ba425810f9769b95e2f5b2d72c2aec29cfb3e22391203e1e1686d72ad29f4967",
+  "generatedFrom": "ad3e649a1425b4a03d9ed912df7318022db82d28b4ffcd76d55d30aea68d1e9f",
   "counts": {
     "fixtures": 1118,
     "assertable": 49,
@@ -16,7 +16,7 @@
     "interactive": 38,
     "control": 116,
     "declarationOnly": 77,
-    "skipped": 158,
+    "skipped": 157,
     "promoted": {
       "callback": 12
     }
@@ -27681,11 +27681,6 @@
       "component": "Button",
       "attribute": "partialAttributes",
       "reason": "composite value (no representative static value in v1)"
-    },
-    {
-      "component": "Image",
-      "attribute": "canTap",
-      "reason": "behavioral (no visual or assertable effect in v1)"
     },
     {
       "component": "Image",
