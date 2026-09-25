@@ -446,12 +446,17 @@ def _negation_hidden() -> InteractiveSpec:
 
 _FIRE_BINDING = f"@{{{FIRE_HANDLER}}}"
 
-#: A page that fails at DNS: `.invalid` is reserved by RFC 2606 so it can
-#: never resolve — the host NetworkImage.errorImage already fails on (rules.py,
-#: INTERACTIVE_HOST_CONTRACT.md §5). A WKWebView / android WebView request does
-#: not pass through the hosts' URLProtocol / OkHttp interceptor, so here it is
-#: the resolver that fails it, still without a page ever leaving the machine.
-WEB_FAILING_URL = "https://conformance.invalid/"
+#: A page whose load fails with no network in the path: a file that does not
+#: exist. It was `https://conformance.invalid/` (RFC 2606, the host
+#: NetworkImage.errorImage fails on) — but a WKWebView / android WebView request
+#: does not pass through the hosts' URLProtocol / OkHttp interceptor, so the
+#: RUNNER's resolver decided when it failed: the SwiftJsonUI unit arm on that
+#: url passed on both CI legs once and waited 30 s for nothing on the Xcode
+#: 26.3 leg the next run. Measured before the switch, iOS 26.4 and 18.6: the
+#: file url reaches didFailProvisionalNavigation (NSURLErrorFileDoesNotExist)
+#: in 0.3–0.5 s, while a refused loopback port (`http://127.0.0.1:1/`) is not
+#: reported as a failure at all (didFinish).
+WEB_FAILING_URL = "file:///jsonui-conformance-missing.html"
 
 
 def _web_load_failed() -> InteractiveSpec:

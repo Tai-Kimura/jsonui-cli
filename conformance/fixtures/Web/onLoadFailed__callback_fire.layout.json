@@ -31,7 +31,7 @@
       "height": 200,
       "html": "<p>Sample</p>",
       "onLoadFailed": "@{conformanceFire}",
-      "url": "https://conformance.invalid/"
+      "url": "file:///jsonui-conformance-missing.html"
     },
     {
       "type": "Label",
