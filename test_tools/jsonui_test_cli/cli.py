@@ -1886,6 +1886,9 @@ def cmd_generate_branch_tests(args):
     print(app_rules.note())
     if app_rules.conditions_note():
         print(app_rules.conditions_note())
+    from .branch_tests import unmatched_gate_note
+    if unmatched_gate_note():
+        print(unmatched_gate_note())
     _print_branch_toolchain(len(reports))
     return 0
 
@@ -1968,6 +1971,7 @@ def _generate_one_branch_test(args, screen: str, app_rules=None):
             # config the run was pointed at: a platform outside
             # config ∩ metadata.platforms generates nothing for the screen.
             config_platforms=_project_platforms(None),
+            condition_controls=getattr(args, "condition_controls", False),
             app_rules=app_rules,
         )
     except BranchTestGenerationError as e:
@@ -2048,6 +2052,11 @@ def _print_branch_generation(report, show_siblings: bool = True) -> None:
           + (f"{also} more from alsoStatuses, " if also else "")
           + f"{report.note_branches} note-only listed as comments)")
     print(f"  {report.runtime_file}  (shared runtime)")
+    controls = getattr(report, "condition_controls", 0)
+    if controls:
+        # Only when asked for and there are any.
+        print(f"  condition controls: {controls} (each runs its row with every harness "
+              f"condition at its default; condition_without_effect is printed when it holds)")
     siblings = _sibling_branch_tests(report) if show_siblings else []
     if siblings:
         # The runtime is one file for the whole directory, so a release that
@@ -2080,6 +2089,11 @@ def _print_branch_generation(report, show_siblings: bool = True) -> None:
     print(f"  routes: {', '.join(report.routes) or '(none)'}"
           f"  (from dataFlow.repositories[].methods[].endpoint, "
           f"not from the contract's api references)")
+    if report.side_routes:
+        # Only when there are any, so an app without them prints what it did.
+        print(f"  side routes: {', '.join(report.side_routes)}  (apiOutcomeRules "
+              f"sideCalls this screen does not declare — served with the mock's "
+              f"default scenario, admitted only for the rule's statuses)")
 
 
 def cmd_generate_description(args):
@@ -3186,6 +3200,13 @@ def main():
     gen_branch_parser.add_argument(
         "--module",
         help="App module name for @testable import (required for ios)"
+    )
+    gen_branch_parser.add_argument(
+        "--condition-controls", action="store_true",
+        help="For each row that names a harness condition away from its default, "
+             "also emit a control that runs the row with every default and never "
+             "fails; it prints condition_without_effect when the row still holds "
+             "(the condition changes nothing the row asserts). Doubles those rows"
     )
 
     # Unit contracts: the spec declares the SET of hand-written cases; the

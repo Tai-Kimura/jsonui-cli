@@ -31,6 +31,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from . import branch_runtime_prose as prose
+from .swift_isolation import TEST_METHOD_ISOLATION, xctest_class_header
 
 
 class BranchTestGenerationError(Exception):
@@ -585,6 +586,11 @@ class Route:
     pattern: str
     scenarios: dict
     default_scenario: str
+    #: True for a SIDE route: an `apiOutcomeRules.sideCalls` operation the
+    #: screen does not declare, served app-wide with its mock's default
+    #: scenario (design v4.15, P2e(d)). Never a contracted endpoint of the
+    #: screen — `contracts coverage` does not count it.
+    side: bool = False
 
 
 @dataclass
@@ -612,6 +618,8 @@ class GenerationReport:
     platform_skipped: int = 0
     #: Generated tests that are `alsoStatuses` copies (not in declared_branches).
     also_statuses_rows: int = 0
+    #: P2e(b): condition controls emitted (only with `--condition-controls`).
+    condition_controls: int = 0
     #: True when the platform is outside the screen's effective platforms
     #: (`jui.config.json` platforms ∩ `metadata.platforms`).
     platform_excluded: bool = False
@@ -619,6 +627,8 @@ class GenerationReport:
     route_overlaps: list = field(default_factory=list)
     methods: list[str] = field(default_factory=list)
     routes: list[str] = field(default_factory=list)
+    #: The side routes among `routes` (P2e(d)); printed only when there are any.
+    side_routes: list[str] = field(default_factory=list)
     #: False when the screen declares contracts but none of its branches
     #: apply to this platform. Nothing is emitted and nothing is expected:
     #: a test file holding no assertion is the "column that did not run",
@@ -782,6 +792,21 @@ def _scenario_body(scenario: dict) -> str:
     if isinstance(body, str):
         return body
     return json.dumps(body, ensure_ascii=False)
+
+
+#: `mock serve` sleeps `min(delayMs, 30000)`; the runtimes cap it the same.
+DELAY_CAP_MS = 30000
+
+
+def _scenario_delay_ms(scenario: dict) -> int:
+    """A scenario's `delayMs` as the runtimes apply it: whole milliseconds,
+    0 when absent or not a positive number, at most DELAY_CAP_MS. The web
+    runtime reads the scenario itself (the routes carry it whole); the
+    mobile routes carry this, and only for a route that has one."""
+    value = scenario.get("delayMs") if isinstance(scenario, dict) else None
+    if isinstance(value, bool) or not isinstance(value, (int, float)) or value <= 0:
+        return 0
+    return int(min(value, DELAY_CAP_MS))
 
 
 def _scenario_content_type(scenario: dict) -> str:
@@ -1240,6 +1265,12 @@ class Row:
     #: declaration order — the row's `harness.<name>` or the default. Empty
     #: when the app declares none, and then no renderer emits a line of it.
     conditions: list = field(default_factory=list)
+    #: P2e(b) (`--condition-controls`): set on a CONTROL copy of a row that
+    #: names a harness condition away from its default — the original's
+    #: `[(name, value)]` for those conditions, while `conditions` carries the
+    #: defaults. The copy runs the same act and assertions without failing and
+    #: reports `condition_without_effect` when they all still hold.
+    control_of: list = field(default_factory=list)
 
 
 @dataclass
@@ -1449,6 +1480,60 @@ def side_call_ops(rule, mocks: list[MockFile], routes: list[Route]) -> set[str]:
     return ops
 
 
+def side_routes(rules, mocks: list[MockFile], routes: list[Route],
+                errors: list | None = None) -> list[Route]:
+    """The app's side calls this screen does not declare, as routes of their own.
+
+    A rule's `sideCalls` name operations the app's network layer makes
+    around ANY call — ApiClient's logout after a 401, say. Resolved the way
+    `side_call_ops` resolves them (operationId -> the one GENERATED mock
+    carrying it -> its method and path), an operation with no route on this
+    screen is served anyway, with its mock's default scenario, under its
+    operationId. Without this the call reaches the runtime as unmatched (a
+    599 no server returns), and admitting it would need every screen to
+    declare the app's logout (design v4.15, P2e(d)). Admission is unchanged:
+    `collect_bindings` still admits the op only in the tests whose served
+    statuses the rule names, so a call outside them is the ⊆ bound's red.
+
+    Anything that does not resolve adds nothing and raises nothing — the same
+    as `side_call_ops`, and `contracts coverage` reports it. An operationId
+    that is already the name of a different endpoint on this screen is a
+    binding error: two endpoints under one op would make every count on it
+    describe both.
+    """
+    from .mock.generate import route_key
+
+    declared = {route_key(r.method, r.path) for r in routes}
+    names = {r.op: r for r in routes}
+    added: dict[str, Route] = {}
+    for rule in rules:
+        for operation_id in rule.side_calls:
+            files = [m for m in mocks if m.operation_id == operation_id]
+            if len(files) != 1:
+                continue
+            mock = files[0]
+            identity = route_key(mock.method, mock.path)
+            if identity in declared:
+                continue            # the screen declares it: its own route serves it
+            if operation_id in added:
+                continue
+            if operation_id in names:
+                if errors is not None:
+                    errors.append(BindingError(
+                        None, None, operation_id, None,
+                        f"apiOutcomeRules sideCalls '{operation_id}' ({mock.method} "
+                        f"{mock.path}) is also this screen's name for "
+                        f"{names[operation_id].method} {names[operation_id].path} — "
+                        "rename the screen's repository method so one op names "
+                        "one endpoint"))
+                continue
+            added[operation_id] = Route(
+                op=operation_id, method=mock.method, path=mock.path,
+                pattern=path_to_pattern(mock.path), scenarios=mock.scenarios,
+                default_scenario=mock.active_scenario, side=True)
+    return list(added.values())
+
+
 def collect_bindings(
     spec: dict, methods_contracts: dict, mocks: list[MockFile],
     mocks_dir: Path | None, platform: str, rules=(), declarations=None,
@@ -1467,6 +1552,10 @@ def collect_bindings(
         declarations = parse_declarations(spec)
     errors: list[BindingError] = []
     routes = resolve_routes(spec, methods_contracts, mocks, mocks_dir, errors=errors)
+    extra = side_routes(rules, mocks, routes, errors)
+    if extra:
+        from .mock.generate import route_match_order
+        routes = sorted(routes + extra, key=lambda route: route_match_order(route.path))
     by_op = {route.op: route for route in routes}
     also_by_branch: dict[tuple, list] = {}
     for also in declarations.also_statuses:
@@ -1708,6 +1797,87 @@ UNEXPECTED_OPS_MESSAGE = (
     "with apiOutcomeRules")
 
 
+#: P2e(a) (design v4.14): a request in the act window that no declared route
+#: answered got the runtime's 599 — a response no server returns — so what the
+#: view model did next is made up (#28). From the release this literal names,
+#: every generated test fails on one; before it, the test prints a warning per
+#: request instead, and that warning is the notice. No default (the same rule
+#: as validate's coverage gate, v4.13): a version derived from the running one
+#: agrees with itself on every build and would never switch the red on. Set it
+#: when the release that announces the red is cut; unset, the warning promises
+#: no release.
+UNMATCHED_GATE_FROM: str | None = None
+
+UNMATCHED_MESSAGE = (
+    "requests in the act window reached no declared route — the runtime "
+    "answered them with a 599 no server returns, so what the view model did "
+    "next is made up. Declare the route and its scenarios (dataFlow + mock); "
+    "a call the app's network layer makes around every request is admitted "
+    "once, with apiOutcomeRules sideCalls")
+
+#: Only requests to the app's own API fail (design v4.19): another host is
+#: the info `unmatched_foreign`. A face that cannot tell the two apart counts
+#: the request as the app's, and the message says how to tell them apart.
+#: Android needs none: MockWebServer records only its own host:port.
+UNMATCHED_CLASSIFY = {
+    "web": (" If a host named here is not the app's API, export `apiOrigins` from the "
+            "harness (the app's API origins, e.g. [\"https://api.example.com\"]): "
+            "requests to other hosts then become the info unmatched_foreign"),
+    "ios": (" If a host named here is not the app's API, give the harness `apiOrigin` "
+            "(the app's API base URL): requests to other hosts then become the info "
+            "unmatched_foreign"),
+    "android": "",
+}
+
+
+def unmatched_message(platform: str) -> str:
+    return UNMATCHED_MESSAGE + "." + UNMATCHED_CLASSIFY.get(platform, "")
+
+
+def _running_version() -> str:
+    from . import __version__
+    return __version__
+
+
+def _gates():
+    """shared/core/gate_versions — how every `*_GATE_FROM` is read (a whole
+    release number gates; unset, "withdrawn" and anything unreadable never
+    do), shared with validate's coverage gate, the spec validator's layout ids
+    and the tag gate (design v4.21) — or None in a tool tree without it."""
+    from . import shared_core
+    return shared_core.load("gate_versions")
+
+
+def unmatched_gate() -> tuple[bool, str | None]:
+    """(red, gate): whether unmatched requests in the act window fail the
+    generated test, and the release that makes them fail (None when unset,
+    unreadable or not readable here, "withdrawn" when an announcement was
+    withdrawn — never red)."""
+    gates = _gates()
+    if gates is None:
+        return False, None
+    state = gates.gate_state(UNMATCHED_GATE_FROM)
+    if state == "withdrawn":
+        return False, gates.GATE_WITHDRAWN
+    if state != "release":
+        return False, None
+    return gates.gate_is_on(_running_version(), UNMATCHED_GATE_FROM), UNMATCHED_GATE_FROM
+
+
+def unmatched_gate_note() -> str | None:
+    """The line `generate branch-tests` prints when the literal gates nothing
+    it looks like it would: unreadable, or no reader in this tool tree."""
+    gates = _gates()
+    if gates is None:
+        return ("unmatched-request gate cannot be read — shared/core/gate_versions.py is not "
+                "in this tool tree, so this build announces no release and does not gate")
+    if gates.gate_state(UNMATCHED_GATE_FROM) == "unreadable":
+        return ("unmatched-request gate "
+                + gates.state_note("UNMATCHED_GATE_FROM", UNMATCHED_GATE_FROM)
+                + " — the tag gate fails it")
+    return None
+
+
 def _rows_in_order(contract: dict, method_name: str, rows: list, platform: str,
                    report: "GenerationReport"):
     """Yield ("row", row) and ("skipped", number, platforms) in branch order.
@@ -1731,7 +1901,9 @@ def _rows_in_order(contract: dict, method_name: str, rows: list, platform: str,
             continue
         report.declared_branches += 1
         for row in by_number.get(i + 1, []):
-            if row.also is not None:
+            if row.control_of:
+                report.condition_controls += 1
+            elif row.also is not None:
                 report.also_statuses_rows += 1
             yield ("row", row)
 
@@ -1741,7 +1913,39 @@ def _row_title(contract: dict, row: "Row") -> str:
     title = _branch_title(row.number, original)
     if row.also is not None:
         title += f" [+{row.also[0]} via {row.also[1]}]"
+    if row.control_of:
+        title += f" [control: {_control_label(row)}]"
     return title
+
+
+def _control_label(row: "Row") -> str:
+    """`session=absent instead of present` — the defaults a control runs with."""
+    defaults = dict(row.conditions)
+    return ", ".join(f"{name}={defaults[name]} instead of {value}"
+                     for name, value in row.control_of)
+
+
+def with_condition_controls(rows: list, conditions) -> list:
+    """P2e(b): each row naming a condition away from its default, followed by a
+    CONTROL copy arranged with every default. Rows naming none are unchanged."""
+    defaults = {c.name: c.default for c in (conditions or [])}
+    out: list = []
+    for row in rows:
+        out.append(row)
+        changed = [(name, value) for name, value in row.conditions
+                   if name in defaults and value != defaults[name]]
+        if not changed:
+            continue
+        control = copy.copy(row)
+        control.conditions = [(name, defaults.get(name, value)) for name, value in row.conditions]
+        control.control_of = changed
+        out.append(control)
+    return out
+
+
+#: What a control reports, on every face: the row still holds with the
+#: conditions at their defaults, so the condition does not change what it asserts.
+CONDITION_WITHOUT_EFFECT = "condition_without_effect"
 
 
 def render_test_file(
@@ -1753,6 +1957,7 @@ def render_test_file(
     methods_contracts = bc.get("methods") or {}
     report = GenerationReport(screen=screen)
     report.routes = [r.op for r in routes]
+    report.side_routes = [r.op for r in routes if r.side]
 
     route_specs = ",\n".join(
         "  { op: %s, method: %s, pattern: %s, scenario: %s,\n    scenarios: %s }"
@@ -1768,9 +1973,16 @@ def render_test_file(
     lines.append("// for VM construction, screenRoutes, and string resolution.")
     lines.append("import { describe, expect, it } from \"vitest\";")
     lines.append("import {")
-    lines.append("  installFetchMock, partialMismatches, resolveString, seedState, settle,\n  type RouteSpec,")
+    red, _gate = unmatched_gate()
+    lines.append("  apiOriginsOf, installFetchMock, partialMismatches, "
+                 + ("reportConditionWithoutEffect, " if any(r.control_of for r in rows) else "")
+                 + ("" if red else "reportUnmatched, ")
+                 + "reportUnmatchedForeign, resolveString, seedState, settle,\n  type RouteSpec,")
     lines.append("} from \"./jsonui-branch-runtime\";")
     lines.append(f"import {{ createHarness }} from \"{harness_import}\";")
+    # The harness may export `apiOrigins` (P2e(a), v4.19): the app's API
+    # origins, so a request to another host is told apart from the app's own.
+    lines.append(f"import * as harnessModule from \"{harness_import}\";")
     if any(row.conditions for row in rows):
         # Only when the app declares harnessConditions: an app that does not
         # gets the file byte for byte as before (red-check xxix).
@@ -1861,10 +2073,8 @@ def _render_branch(
     # constructor started ran during the settle that follows act — it
     # overwrote the arranged state and landed inside the window, in an order
     # that differed per platform.
-    if overrides:
-        out.append(f"    const rec = installFetchMock(ROUTES, {_ts(overrides)});")
-    else:
-        out.append("    const rec = installFetchMock(ROUTES);")
+    out.append(f"    const rec = installFetchMock(ROUTES, {_ts(overrides) if overrides else '{}'}, "
+               "apiOriginsOf(harnessModule));")
     out.append("    try {")
     # Harness conditions (design v4.11, P2d): after the mock is in, before the
     # harness is built — every declared condition, the row's value or its
@@ -1885,6 +2095,7 @@ def _render_branch(
     for fname in data_refs:
         out.append(f"      const ref_{fname} = h.readField({_ts(fname)});")
     call_args = ", ".join(args)
+    act_start = len(out)
     out.append(f"      await (h.vm as any).{method_name}({call_args});")
     out.append("      await settle();")
 
@@ -1902,6 +2113,12 @@ def _render_branch(
         f"      expect(rec.unexpectedOps({_ts(row.allowed_ops)}), "
         f"{_ts(UNEXPECTED_OPS_MESSAGE)}).toEqual([]);"
     )
+    red, gate = unmatched_gate()
+    if red:
+        out.append(f"      expect(rec.unmatchedCalls(), {_ts(unmatched_message('web'))}).toEqual([]);")
+    else:
+        out.append(f"      reportUnmatched(rec.unmatchedCalls(), {_ts(gate) if gate else 'null'});")
+    out.append("      reportUnmatchedForeign(rec.unmatchedForeign());")
 
     for key, value in then.items():
         if key == "api":
@@ -1939,6 +2156,13 @@ def _render_branch(
                     f"      expect(h.readField({_ts(fname)})).toEqual("
                     f"{_render_expected(value)});"
                 )
+    if row.control_of:
+        # P2e(b): the act and every assertion, run without failing the test.
+        body = ["  " + line for line in out[act_start:]]
+        out[act_start:] = (["      let holds = true;", "      try {"] + body
+                           + ["      } catch {", "        holds = false;", "      }",
+                              f"      reportConditionWithoutEffect(holds, "
+                              f"{_ts(_row_title(contract, row))}, {_ts(_control_label(row))});"])
     out.append("    } finally {")
     out.append("      rec.restore();")
     out.append("    }")
@@ -2014,6 +2238,10 @@ export interface RecordedCall {
   method: string;
   path: string;
   body: unknown;
+  /** The request's origin ("" for a relative URL). */
+  origin?: string;
+  /** A request to a host that is not the app's API (P2e(a), v4.19). */
+  foreign?: boolean;
 }
 
 export interface FetchRecorder {
@@ -2034,19 +2262,54 @@ export interface FetchRecorder {
   /** The declared ops called in the window that `allowed` does not name,
    * each once, sorted. Empty when every call was one the contract expects. */
   unexpectedOps(allowed: string[]): string[];
+  /** The requests in the window that no declared route answered (they got
+   * the 599) and that are the app's own — a relative URL, an origin in
+   * `apiOrigins`, or any absolute URL when none is declared — as
+   * "METHOD <origin>path", each once, sorted. */
+  unmatchedCalls(): string[];
+  /** The same for requests to another host (the info unmatched_foreign). */
+  unmatchedForeign(): string[];
   restore(): void;
+}
+
+/** The harness module's optional `apiOrigins` export, when it is a list of
+ * strings; null (none declared) otherwise. */
+export function apiOriginsOf(harnessModule: unknown): string[] | null {
+  const declared = (harnessModule as { apiOrigins?: unknown } | null)?.apiOrigins;
+  return Array.isArray(declared) && declared.every((o) => typeof o === "string")
+    ? declared
+    : null;
 }
 
 /** Stub globalThis.fetch: serve each route's (possibly overridden) named
  * scenario and record request bodies. Unmatched paths get an unmistakable
  * 599 so incidental un-declared calls surface instead of hanging. */
+/** Responses a scenario's `delayMs` is holding back. `settle` waits for
+ * every one of them: a row's `then` reads the state after they arrived. */
+const pendingDeliveries = new Set<Promise<void>>();
+
+/** `mock serve` sleeps `min(delayMs, 30000)`: the same cap here. */
+export const DELAY_CAP_MS = 30000;
+/** How long `settle` waits for delayed responses in all — one capped delay
+ * and a margin. A chain of delays past it fails the row by name rather than
+ * letting `then` read the state before they arrived. */
+export const SETTLE_DELAY_BUDGET_MS = DELAY_CAP_MS + 1000;
+
+/** The scenario's `delayMs` in ms — 0 when absent or not a positive number,
+ * at most DELAY_CAP_MS. */
+export function scenarioDelayMs(value: unknown): number {
+  return typeof value === "number" && value > 0 ? Math.min(value, DELAY_CAP_MS) : 0;
+}
+
 export function installFetchMock(
   routes: RouteSpec[],
-  scenarioOverrides: Record<string, string> = {}
+  scenarioOverrides: Record<string, string> = {},
+  apiOrigins: string[] | null = null
 ): FetchRecorder {
   const original = globalThis.fetch;
   const calls: RecordedCall[] = [];
   const compiled = routes.map((r) => ({ ...r, re: new RegExp(r.pattern) }));
+  const own = apiOrigins === null ? null : new Set(apiOrigins.map((o) => new URL(o).origin));
 
   globalThis.fetch = (async (input: unknown, init?: RequestInit) => {
     const url =
@@ -2056,6 +2319,12 @@ export function installFetchMock(
           ? input.toString()
           : (input as Request).url;
     const path = url.replace(/^https?:\\/\\/[^/]+/, "").split("?")[0];
+    // P2e(a), v4.19: a relative URL is the app's; an absolute one is when its
+    // origin is in `apiOrigins`, or — none declared — cannot be told apart and
+    // counts as the app's. Only the app's requests are matched against routes:
+    // another host's POST to the same path is not served a scenario.
+    const origin = /^https?:\\/\\//.test(url) ? new URL(url).origin : "";
+    const foreign = origin !== "" && own !== null && !own.has(origin);
     const method = (
       init?.method ??
       (typeof input === "object" && input !== null && "method" in (input as object)
@@ -2063,7 +2332,7 @@ export function installFetchMock(
         : "GET")
     ).toUpperCase();
 
-    for (const r of compiled) {
+    for (const r of foreign ? [] : compiled) {
       if (r.method === method && r.re.test(path)) {
         let body: unknown;
         if (init?.body !== undefined) {
@@ -2087,13 +2356,26 @@ export function installFetchMock(
         // status and headers are still faithful).
         const contentType =
           typeof sc.contentType === "string" ? sc.contentType : "application/json";
+        // `delayMs`: the whole response arrives that long after the request,
+        // as `mock serve` sends it (capped the same). Pending until then, so
+        // `settle` waits for it and the arrival order follows the delays.
+        const delay = scenarioDelayMs(sc.delayMs);
+        if (delay > 0) {
+          const delivered = new Promise<void>((resolve) => setTimeout(resolve, delay));
+          pendingDeliveries.add(delivered);
+          try {
+            await delivered;
+          } finally {
+            pendingDeliveries.delete(delivered);
+          }
+        }
         return new Response(
           sc.body === undefined ? null : JSON.stringify(sc.body),
           { status: sc.status, headers: { "Content-Type": contentType } }
         );
       }
     }
-    calls.push({ op: "(unmatched)", method, path, body: undefined });
+    calls.push({ op: "(unmatched)", method, path, body: undefined, origin, foreign });
     return new Response(
       JSON.stringify({
         error: { code: "unmocked_endpoint", message: `${method} ${path}` },
@@ -2143,6 +2425,18 @@ export function installFetchMock(
         .filter((op) => op !== "(unmatched)" && !ok.has(op));
       return [...new Set(extra)].sort();
     },
+    unmatchedCalls() {
+      const seen = windowed()
+        .filter((c) => c.op === "(unmatched)" && !c.foreign)
+        .map((c) => `${c.method} ${c.origin ?? ""}${c.path}`);
+      return [...new Set(seen)].sort();
+    },
+    unmatchedForeign() {
+      const seen = windowed()
+        .filter((c) => c.op === "(unmatched)" && c.foreign)
+        .map((c) => `${c.method} ${c.origin ?? ""}${c.path}`);
+      return [...new Set(seen)].sort();
+    },
     restore() {
       globalThis.fetch = original;
     },
@@ -2155,6 +2449,42 @@ export function installFetchMock(
  * the declared "null" outcome. */
 /** Membership comparison for an unordered collection: every expected element
  *  must match a distinct actual element, in any order. */
+/** P2e(b): a condition control ran the row with its conditions at their
+ * defaults; when every assertion still held, the condition does not change
+ * what the row asserts. Info, never a failure. */
+export function reportConditionWithoutEffect(holds: boolean, row: string, defaults: string): void {
+  if (!holds) return;
+  console.info(
+    `condition_without_effect: ${row} holds with ${defaults} too — ` +
+      "the condition does not change what the row asserts"
+  );
+}
+
+/** Before the release that fails a generated test on them (P2e(a)): one
+ * warning naming the requests in the act window no declared route answered.
+ * `gateFrom` is that release, or null when none is announced. */
+export function reportUnmatched(calls: string[], gateFrom: string | null): void {
+  if (calls.length === 0) return;
+  console.warn(
+    `jsonui-test branch test: ${calls.join(", ")} reached no declared route and ` +
+      "was answered 599, which no server returns — declare the route and its " +
+      "scenarios (dataFlow + mock); if a host named here is not the app's API, " +
+      "export apiOrigins from the harness" +
+      (gateFrom === "withdrawn"
+        ? "; the release announced to fail this test was withdrawn — it does not fail"
+        : gateFrom
+          ? `; from jsonui-cli ${gateFrom} this fails the test`
+          : "")
+  );
+}
+
+/** Requests in the act window to hosts that are not the app's API (P2e(a),
+ * v4.19): info, never a failure. */
+export function reportUnmatchedForeign(calls: string[]): void {
+  if (calls.length === 0) return;
+  console.info(`unmatched_foreign: ${calls.length} — ${calls.join(", ")}`);
+}
+
 export function setMismatches(
   actual: unknown[],
   expected: unknown[],
@@ -2227,11 +2557,31 @@ export function partialMismatches(
     : [`${label}: expected ${JSON.stringify(expected)}, got ${JSON.stringify(actual)}`];
 }
 
-/** Drain queued macrotasks so fire-and-forget promise chains that only
- * await already-resolved mock responses reach their terminal state. */
+/** Drain queued macrotasks so fire-and-forget promise chains reach their
+ * terminal state — and wait for every response a scenario's `delayMs` is
+ * holding back, draining again after each arrival (the view model may send
+ * a request of its own once one lands). Past SETTLE_DELAY_BUDGET_MS it
+ * throws, naming how long it waited: stopping quietly would let `then` read
+ * the state before the responses arrived. */
 export async function settle(turns = 10): Promise<void> {
-  for (let i = 0; i < turns; i += 1) {
-    await new Promise((resolve) => setTimeout(resolve, 0));
+  const started = Date.now();
+  for (;;) {
+    for (let i = 0; i < turns; i += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    }
+    if (pendingDeliveries.size === 0) return;
+    const waited = Date.now() - started;
+    if (waited >= SETTLE_DELAY_BUDGET_MS) {
+      throw new Error(
+        `settle: ${pendingDeliveries.size} delayed response(s) still pending after waiting ` +
+          `${waited} ms (budget ${SETTLE_DELAY_BUDGET_MS} ms: one delayMs of at most ` +
+          `${DELAY_CAP_MS} and a margin) — the row's then would read the state before they arrived`
+      );
+    }
+    await Promise.race([
+      Promise.all([...pendingDeliveries]),
+      new Promise<void>((resolve) => setTimeout(resolve, SETTLE_DELAY_BUDGET_MS - waited)),
+    ]);
   }
 }
 
@@ -2539,6 +2889,7 @@ def render_kotlin_test_file(
     methods_contracts = bc.get("methods") or {}
     report = GenerationReport(screen=screen)
     report.routes = [r.op for r in routes]
+    report.side_routes = [r.op for r in routes if r.side]
     pascal = _pascal(screen)
 
     route_lines = []
@@ -2548,10 +2899,16 @@ def render_kotlin_test_file(
             f"{_kt_str(_scenario_body(sc))}, {_kt_str(_scenario_content_type(sc))})"
             for name, sc in r.scenarios.items()
         )
+        delays = {name: _scenario_delay_ms(sc) for name, sc in r.scenarios.items()
+                  if _scenario_delay_ms(sc) > 0}
+        # Only a route with a `delayMs` names it: without one, the line is
+        # what it was (the parameter defaults to empty).
+        tail = (",\n    mapOf(" + ", ".join(f"{_kt_str(n)} to {d}L" for n, d in delays.items()) + ")"
+                if delays else "")
         route_lines.append(
             f"  RouteSpec({_kt_str(r.op)}, {_kt_str(r.method)}, "
             f"Regex({_kt_str(r.pattern)}), {_kt_str(r.default_scenario)},\n"
-            f"    mapOf({scen}))"
+            f"    mapOf({scen}){tail})"
         )
 
     lines: list[str] = []
@@ -2626,6 +2983,8 @@ def _render_kotlin_branch(
     name = f"{method_name} branch {number}"
     if row.also is not None:
         name += f" also {row.also[0]}"
+    if row.control_of:
+        name += " control"
 
     out: list[str] = []
     out.append("")
@@ -2660,6 +3019,7 @@ def _render_kotlin_branch(
     for fname in data_refs:
         out.append(f"      val ref_{fname} = h.readField({_kt_str(fname)})")
     call_args = ", ".join(args)
+    act_start = len(out)
     out.append(f"      h.invoke({_kt_str(method_name)}{', ' + call_args if call_args else ''})")
     out.append("      h.settle()")
 
@@ -2676,6 +3036,12 @@ def _render_kotlin_branch(
         f"      assertEquals({_kt_str(UNEXPECTED_OPS_MESSAGE)}, emptyList<String>(), "
         f"rec.unexpectedOps(setOf<String>({allowed})))"
     )
+    red, gate = unmatched_gate()
+    if red:
+        out.append(f"      assertEquals({_kt_str(unmatched_message('android'))}, emptyList<String>(), "
+                   "rec.unmatchedCalls())")
+    else:
+        out.append(f"      reportUnmatched(rec.unmatchedCalls(), {_kt_str(gate) if gate else 'null'})")
 
     for key, value in then.items():
         if key == "api":
@@ -2709,6 +3075,14 @@ def _render_kotlin_branch(
                     f"      assertFieldEquals({_kt_expected(value)}, "
                     f"h.readField({_kt_str(fname)}))"
                 )
+    if row.control_of:
+        # P2e(b): see the web emitter. An assertion throws, so a caught one
+        # means the row does not hold with the defaults.
+        body = ["  " + line for line in out[act_start:]]
+        out[act_start:] = (["      val holds = try {"] + body
+                           + ["        true", "      } catch (e: Throwable) {", "        false", "      }",
+                              f"      reportConditionWithoutEffect(holds, "
+                              f"{_kt_str(_row_title(contract, row))}, {_kt_str(_control_label(row))})"])
     out.append("    }")
     out.append("  }")
     return out
@@ -2745,6 +3119,7 @@ import okhttp3.mockwebserver.Dispatcher
 import okhttp3.mockwebserver.MockResponse
 import okhttp3.mockwebserver.MockWebServer
 import okhttp3.mockwebserver.RecordedRequest
+import java.util.concurrent.TimeUnit
 import java.lang.reflect.Field
 import java.lang.reflect.Modifier
 import kotlin.reflect.KClass
@@ -2763,7 +3138,26 @@ data class RouteSpec(
    * declared content type — the same shape the project's own mock
    * server serves. */
   val scenarios: Map<String, Triple<Int, String, String>>,
+  /** A scenario's `delayMs` (ms): its whole response arrives that long
+   * after the request, as `mock serve` sends it. Written only for a route
+   * that has one, so a screen without `delayMs` generates what it did. */
+  val delays: Map<String, Long> = emptyMap(),
 )
+
+/** Responses a scenario's `delayMs` is holding back: when each is due.
+ * `settle()` waits past the last one, so a row's `then` reads the state after
+ * they arrived. */
+object BranchDeliveries {
+  /** `mock serve` sleeps `min(delayMs, 30000)`: the same cap here. */
+  const val CAP_MS = 30000L
+  /** How long `settle()` waits for delayed responses in all — one capped
+   * delay and a margin. */
+  const val SETTLE_BUDGET_MS = CAP_MS + 1000L
+  private val due = mutableListOf<Long>()
+  @Synchronized fun schedule(delayMs: Long) { due.add(System.currentTimeMillis() + delayMs) }
+  @Synchronized fun pending(now: Long): Int = due.count { it > now }
+  @Synchronized fun lastDue(): Long = due.maxOrNull() ?: 0L
+}
 
 data class RecordedCall(val op: String, val method: String, val path: String, val body: String?)
 
@@ -2822,6 +3216,33 @@ class Recorder(routeOps: Set<String>? = null) {
    * each once, sorted. Empty when every call was one the contract expects. */
   fun unexpectedOps(allowed: Set<String>): List<String> =
     windowed().map { it.op }.filter { it != "(unmatched)" && it !in allowed }.distinct().sorted()
+
+  /** The requests in the window that no declared route answered (they got
+   * the 599), as "METHOD path", each once, sorted. */
+  fun unmatchedCalls(): List<String> =
+    windowed().filter { it.op == "(unmatched)" }.map { "${it.method} ${it.path}" }.distinct().sorted()
+}
+
+/** P2e(b): see the web runtime. Info, never a failure. */
+fun reportConditionWithoutEffect(holds: Boolean, row: String, defaults: String) {
+  if (!holds) return
+  println("condition_without_effect: $row holds with $defaults too — " +
+    "the condition does not change what the row asserts")
+}
+
+/** Before the release that fails a generated test on them (P2e(a)): one
+ * warning naming the requests in the act window no declared route answered.
+ * `gateFrom` is that release, or null when none is announced. */
+fun reportUnmatched(calls: List<String>, gateFrom: String?) {
+  if (calls.isEmpty()) return
+  System.err.println(
+    "jsonui-test branch test: ${calls.joinToString(", ")} reached no declared route and " +
+      "was answered 599, which no server returns — declare the route and its " +
+      "scenarios (dataFlow + mock)" +
+      (if (gateFrom == null) ""
+       else if (gateFrom == "withdrawn") "; the release announced to fail this test was withdrawn — it does not fail"
+       else "; from jsonui-cli $gateFrom this fails the test")
+  )
 }
 
 /** '@data.<field>' pre-act capture marker for partial matching / asserts. */
@@ -3026,10 +3447,18 @@ fun runBranchTest(
           val name = (scenarioOverrides[r.op] as? String) ?: r.defaultScenario
           val sc = r.scenarios[name]
             ?: error("branch-runtime: scenario '" + name + "' missing for op '" + r.op + "'")
-          return MockResponse()
+          val response = MockResponse()
             .setResponseCode(sc.first)
             .setHeader("Content-Type", sc.third)
             .setBody(sc.second)
+          val delay = (r.delays[name] ?: 0L).coerceIn(0L, BranchDeliveries.CAP_MS)
+          if (delay > 0L) {
+            // The whole response, headers included, waits: `mock serve`
+            // sleeps before it sends anything.
+            BranchDeliveries.schedule(delay)
+            response.setHeadersDelay(delay, TimeUnit.MILLISECONDS)
+          }
+          return response
         }
       }
       recorder.calls.add(RecordedCall("(unmatched)", method, path, null))
@@ -3058,12 +3487,34 @@ abstract class BaseBranchHarness(
   override fun settle() {
     // Real HTTP I/O (MockWebServer + OkHttp threads) completes off the test
     // dispatcher; the coroutine then resumes ON it. Interleave virtual-time
-    // draining with short real-time waits until the pipeline is quiet.
-    repeat(60) {
+    // draining with short real-time waits until the pipeline is quiet — and
+    // wait past every response a scenario's `delayMs` is holding back,
+    // draining again after they arrive (the view model may send a request of
+    // its own once one lands). Past the budget it fails by name, with how
+    // long it waited: stopping quietly would let `then` read the state
+    // before the responses arrived.
+    val started = System.currentTimeMillis()
+    while (true) {
+      repeat(60) {
+        dispatcher.scheduler.advanceUntilIdle()
+        Thread.sleep(5)
+      }
       dispatcher.scheduler.advanceUntilIdle()
-      Thread.sleep(5)
+      if (BranchDeliveries.pending(System.currentTimeMillis()) == 0) return
+      while (BranchDeliveries.pending(System.currentTimeMillis()) > 0) {
+        val waited = System.currentTimeMillis() - started
+        if (waited >= BranchDeliveries.SETTLE_BUDGET_MS) {
+          throw AssertionError(
+            "settle: " + BranchDeliveries.pending(System.currentTimeMillis()) +
+              " delayed response(s) still pending after waiting " + waited + " ms (budget " +
+              BranchDeliveries.SETTLE_BUDGET_MS + " ms: one delayMs of at most " +
+              BranchDeliveries.CAP_MS + " and a margin) — the row's then would read the " +
+              "state before they arrived")
+        }
+        dispatcher.scheduler.advanceUntilIdle()
+        Thread.sleep(5)
+      }
     }
-    dispatcher.scheduler.advanceUntilIdle()
   }
 
   private fun findField(target: Any, name: String): Field? {
@@ -3367,6 +3818,7 @@ def render_swift_test_file(
     methods_contracts = bc.get("methods") or {}
     report = GenerationReport(screen=screen)
     report.routes = [r.op for r in routes]
+    report.side_routes = [r.op for r in routes if r.side]
     pascal = _pascal(screen)
 
     route_lines = []
@@ -3377,10 +3829,16 @@ def render_swift_test_file(
             f"{_swift_str(_scenario_content_type(sc))})"
             for name, sc in r.scenarios.items()
         )
+        delays = {name: _scenario_delay_ms(sc) for name, sc in r.scenarios.items()
+                  if _scenario_delay_ms(sc) > 0}
+        # Only a route with a `delayMs` names it: without one, the line is
+        # what it was (the member defaults to empty).
+        tail = (",\n      delays: [" + ", ".join(f"{_swift_str(n)}: {d}" for n, d in delays.items()) + "]"
+                if delays else "")
         route_lines.append(
             f"    RouteSpec(op: {_swift_str(r.op)}, method: {_swift_str(r.method)},\n"
             f"      pattern: {_swift_str(r.pattern)}, defaultScenario: {_swift_str(r.default_scenario)},\n"
-            f"      scenarios: [{scen}])"
+            f"      scenarios: [{scen}]{tail})"
         )
 
     lines: list[str] = []
@@ -3389,37 +3847,23 @@ def render_swift_test_file(
     lines.append("import XCTest")
     lines.append(f"@testable import {module}")
     lines.append("")
-    # 🔻 `nonisolated`, AND `@MainActor` ON EACH TEST METHOD (see the emit
-    # below). A test target built with Swift 6 and
-    # `SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor` — which is what an app built
-    # @MainActor needs, or its tests cannot call the ViewModels synchronously —
-    # makes this class MainActor by default, and its IMPLICIT init overrides
-    # then disagree with XCTestCase's nonisolated ones:
-    #
-    #   error: main actor-isolated initializer 'init()' has different actor
-    #   isolation from nonisolated overridden declaration   (x3 per class)
-    #
-    # A consumer measured 58 such errors across 20 generated files and could
-    # not fix any of them — the files say DO NOT EDIT and the next generation
-    # would take the edit back. Their only way forward was to hold the whole
-    # test target at Swift 5.
-    #
-    # ⚠️ BOTH HALVES ARE LOAD-BEARING. Measured 2026-09-16 with swiftc 6.4
-    # (Xcode 27.0 RC), one file per shape, typechecked against the iOS
-    # simulator SDK:
-    #
-    #   shape                                sw5   sw6   sw6 + MainActor default
-    #   final class / func                    -     0     3  (the init overrides)
-    #   nonisolated class / func              -     0     3  (body: calls a
-    #                                                          MainActor runner
-    #                                                          from nonisolated)
-    #   final class / @MainActor func         -     0     3  (the init overrides)
-    #   nonisolated class / @MainActor func   -     0     0  ← this
-    #
-    # (`sw5` is identical for all four: one consumer-side error in the harness
-    # factory, which is hand-written and out of this file's reach.)
-    lines.append(f"nonisolated final class {pascal}BranchesTest: XCTestCase {{")
+    # 🔻 `nonisolated`, AND `@MainActor` ON EACH TEST METHOD — swift_isolation
+    # holds the declaration and the measured table, shared with unit-stubs.
+    # A consumer measured 58 errors across 20 generated files under
+    # `SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor` and could not fix any of
+    # them — the files say DO NOT EDIT and the next generation would take the
+    # edit back. Their only way forward was to hold the test target at Swift 5.
+    lines.append(xctest_class_header(f"{pascal}BranchesTest"))
     lines.append("")
+    if any(r.control_of for r in rows):
+        # P2e(b), only when there are condition controls (an app without them
+        # generates what it did): what an XCTAssert records while a control
+        # runs is counted, not reported — a control never fails.
+        lines.append("  private var controlIssues: Int? = nil")
+        lines.append("  override func record(_ issue: XCTIssue) {")
+        lines.append("    if let n = controlIssues { controlIssues = n + 1 } else { super.record(issue) }")
+        lines.append("  }")
+        lines.append("")
     lines.append("  private let routes: [RouteSpec] = [")
     lines.append(",\n".join(route_lines))
     lines.append("  ]")
@@ -3472,6 +3916,8 @@ def _render_swift_branch(
     name = f"test_{method_name}_branch_{number}"
     if row.also is not None:
         name += f"_also_{row.also[0]}"
+    if row.control_of:
+        name += "_control"
 
     out: list[str] = []
     out.append("")
@@ -3481,7 +3927,7 @@ def _render_swift_branch(
     # class is `nonisolated` (see the class emit), so without this the body
     # cannot reach it. Harmless on a Swift 5 target and on a target whose
     # default is nonisolated — a MainActor method may call either.
-    out.append(f"  @MainActor func {name}() {{")
+    out.append(f"  {TEST_METHOD_ISOLATION} func {name}() {{")
     out.append(
         f"    runBranchTest(routes: routes, overrides: {_swift(overrides) if overrides else '[:]'},"
     )
@@ -3506,6 +3952,7 @@ def _render_swift_branch(
     for fname in data_refs:
         out.append(f"      let ref_{fname} = h.readField({_swift_str(fname)})")
     call_args = ", ".join(args)
+    act_start = len(out)
     out.append(f"      h.invoke({_swift_str(method_name)}, args: [{call_args}])")
     out.append("      h.settle()")
 
@@ -3522,6 +3969,12 @@ def _render_swift_branch(
         f"      XCTAssertEqual(rec.unexpectedOps([{allowed}]), [], "
         f"{_swift_str(UNEXPECTED_OPS_MESSAGE)})"
     )
+    red, gate = unmatched_gate()
+    if red:
+        out.append(f"      XCTAssertEqual(rec.unmatchedCalls(), [], {_swift_str(unmatched_message('ios'))})")
+    else:
+        out.append(f"      reportUnmatched(rec.unmatchedCalls(), {_swift_str(gate) if gate else 'nil'})")
+    out.append("      reportUnmatchedForeign(rec.unmatchedForeign())")
 
     for key, value in then.items():
         if key == "api":
@@ -3555,6 +4008,15 @@ def _render_swift_branch(
                     f"      assertFieldEquals({_swift_expected(value)}, "
                     f"h.readField({_swift_str(fname)}))"
                 )
+    if row.control_of:
+        # P2e(b): XCTAssert* records rather than throws, so the class counts
+        # what is recorded while a control runs (see its `record` override).
+        body = out[act_start:]
+        out[act_start:] = (["      self.controlIssues = 0"] + body
+                           + ["      let holds = (self.controlIssues ?? 0) == 0",
+                              "      self.controlIssues = nil",
+                              f"      reportConditionWithoutEffect(holds, "
+                              f"{_swift_str(_row_title(contract, row))}, {_swift_str(_control_label(row))})"])
     out.append("    }")
     out.append("  }")
     return out
@@ -3577,6 +4039,29 @@ nonisolated struct RouteSpec {
   /// status, body (empty for a file-backed response) and the declared
   /// content type — the shape the project's own mock server serves.
   let scenarios: [String: (Int, String, String)]
+  /// A scenario's `delayMs` (ms): its whole response arrives that long after
+  /// the request, as `mock serve` sends it. Written only for a route that has
+  /// one, so a screen without `delayMs` generates what it did.
+  var delays: [String: Int] = [:]
+}
+
+/// Responses a scenario's `delayMs` is holding back. `settle()` waits for
+/// every one: a row's `then` reads the state after they arrived.
+nonisolated final class BranchDeliveries {
+  nonisolated(unsafe) static let shared = BranchDeliveries()
+  // Instance constants, not statics: a `static let` of a Sendable type is a
+  // warning with `nonisolated(unsafe)` and outside the rule the runtime's
+  // statics follow without it.
+  /// `mock serve` sleeps `min(delayMs, 30000)`: the same cap here.
+  let capMs = 30000
+  /// How long `settle()` waits for delayed responses in all — one capped
+  /// delay and a margin.
+  var settleBudgetMs: Int { capMs + 1000 }
+  private let lock = NSLock()
+  private var count = 0
+  func begin() { lock.lock(); count += 1; lock.unlock() }
+  func end() { lock.lock(); count -= 1; lock.unlock() }
+  var pending: Int { lock.lock(); defer { lock.unlock() }; return count }
 }
 
 // 🔻 `nonisolated` HERE TOO, AND FOR THE SAME REASON ONE LAYER DOWN. The
@@ -3596,6 +4081,30 @@ nonisolated struct RecordedCall {
   let method: String
   let path: String
   let body: Any?
+  /// The request's origin (scheme://host[:port]) when it had a URL.
+  var origin: String? = nil
+  /// A request to a host that is not the app's API (P2e(a), v4.19).
+  var foreign: Bool = false
+}
+
+/// P2e(a), v4.19: whose request this is. With no `apiOrigin` the two cannot
+/// be told apart, and the request counts as the app's (a red whose message
+/// says to set `apiOrigin`, rather than a gate that goes quiet).
+nonisolated enum BranchOrigin: Equatable { case own, foreign, undetermined }
+
+nonisolated func branchOriginString(_ url: URL?) -> String? {
+  guard let url = url, let scheme = url.scheme?.lowercased(), let host = url.host?.lowercased()
+  else { return nil }
+  var parts = URLComponents()
+  parts.scheme = scheme
+  parts.host = host
+  parts.port = url.port
+  return parts.string
+}
+
+nonisolated func branchOriginClass(_ url: URL?, _ apiOrigin: URL?) -> BranchOrigin {
+  guard let apiOrigin = apiOrigin, let origin = branchOriginString(url) else { return .undetermined }
+  return origin == branchOriginString(apiOrigin) ? .own : .foreign
 }
 
 nonisolated final class Recorder {
@@ -3671,6 +4180,48 @@ nonisolated final class Recorder {
   func unexpectedOps(_ allowed: Set<String>) -> [String] {
     Array(Set(windowed.map { $0.op }.filter { $0 != "(unmatched)" && !allowed.contains($0) })).sorted()
   }
+
+  /// The requests in the window that no declared route answered (they got
+  /// the 599) and that are the app's own (or cannot be told apart), as
+  /// "METHOD <origin>path", each once, sorted.
+  func unmatchedCalls() -> [String] {
+    Array(Set(windowed.filter { $0.op == "(unmatched)" && !$0.foreign }
+      .map { "\\($0.method) \\($0.origin ?? "")\\($0.path)" })).sorted()
+  }
+
+  /// The same for requests to another host (the info unmatched_foreign).
+  func unmatchedForeign() -> [String] {
+    Array(Set(windowed.filter { $0.op == "(unmatched)" && $0.foreign }
+      .map { "\\($0.method) \\($0.origin ?? "")\\($0.path)" })).sorted()
+  }
+}
+
+/// Requests in the act window to hosts that are not the app's API (P2e(a),
+/// v4.19): info, never a failure.
+nonisolated func reportUnmatchedForeign(_ calls: [String]) {
+  if calls.isEmpty { return }
+  print("unmatched_foreign: \\(calls.count) — \\(calls.joined(separator: ", "))")
+}
+
+/// P2e(b): see the web runtime. Info, never a failure.
+nonisolated func reportConditionWithoutEffect(_ holds: Bool, _ row: String, _ defaults: String) {
+  if !holds { return }
+  print("condition_without_effect: \\(row) holds with \\(defaults) too — "
+    + "the condition does not change what the row asserts")
+}
+
+/// Before the release that fails a generated test on them (P2e(a)): one
+/// warning naming the requests in the act window no declared route answered.
+/// `gateFrom` is that release, or nil when none is announced.
+nonisolated func reportUnmatched(_ calls: [String], _ gateFrom: String?) {
+  if calls.isEmpty { return }
+  print("jsonui-test branch test: \\(calls.joined(separator: ", ")) reached no declared route and "
+    + "was answered 599, which no server returns — declare the route and its "
+    + "scenarios (dataFlow + mock); if a host named here is not the app's API, "
+    + "give the harness apiOrigin"
+    + (gateFrom == "withdrawn"
+       ? "; the release announced to fail this test was withdrawn — it does not fail"
+       : gateFrom.map { "; from jsonui-cli \\($0) this fails the test" } ?? ""))
 }
 
 /// '@data.<field>' pre-act capture marker.
@@ -3688,6 +4239,14 @@ protocol BranchHarness {
 //<<resolve-string harness doc>>
   func resolveString(_ key: String) -> String
   func settle()
+  /// The app's API base URL (P2e(a), v4.19): a request to another host is the
+  /// info unmatched_foreign rather than a failure. nil (the default) cannot
+  /// tell hosts apart, so every unmatched request counts as the app's.
+  var apiOrigin: URL? { get }
+}
+
+extension BranchHarness {
+  var apiOrigin: URL? { nil }
 }
 
 // 🔻 `nonisolated`, AND `nonisolated(unsafe)` ON THE THREE STATICS. A test
@@ -3715,10 +4274,31 @@ nonisolated final class BranchURLProtocol: URLProtocol {
   nonisolated(unsafe) static var routes: [RouteSpec] = []
   nonisolated(unsafe) static var overrides: [String: String] = [:]
   nonisolated(unsafe) static var recorder: Recorder?
+  /// The harness's `apiOrigin` (P2e(a), v4.19); nil = cannot tell hosts apart.
+  nonisolated(unsafe) static var apiOrigin: URL?
 
   override class func canInit(with request: URLRequest) -> Bool { true }
   override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
-  override func stopLoading() {}
+  /// A delayed delivery (`delayMs`): the response it will send. Scheduled
+  /// with `perform(_:with:afterDelay:)` on the run loop of the thread that
+  /// called startLoading — the thread the client is to be called on — and
+  /// not with a Timer block, which is @Sendable and cannot capture `self`
+  /// without a warning in every Swift mode.
+  private var delayed: (Int, String, String)?
+  @objc private func deliverDelayed() {
+    guard let response = delayed else { return }
+    delayed = nil
+    respond(status: response.0, body: response.1, contentType: response.2)
+    BranchDeliveries.shared.end()
+  }
+  override func stopLoading() {
+    // Cancelled before it arrived: it is no longer pending.
+    guard delayed != nil else { return }
+    NSObject.cancelPreviousPerformRequests(
+      withTarget: self, selector: #selector(deliverDelayed), object: nil)
+    delayed = nil
+    BranchDeliveries.shared.end()
+  }
 
   private static func bodyData(of request: URLRequest) -> Data? {
     if let body = request.httpBody { return body }
@@ -3743,8 +4323,11 @@ nonisolated final class BranchURLProtocol: URLProtocol {
     let method = (request.httpMethod ?? "GET").uppercased()
     let raw = Self.bodyData(of: request)
     let body = raw.flatMap { try? JSONSerialization.jsonObject(with: $0) }
+    // Only the app's requests are matched against routes: another host's
+    // request to the same path is not served a scenario (v4.19).
+    let foreign = branchOriginClass(request.url, Self.apiOrigin) == .foreign
 
-    for route in Self.routes {
+    for route in (foreign ? [] : Self.routes) {
       guard route.method == method,
             let regex = try? NSRegularExpression(pattern: route.pattern),
             regex.firstMatch(in: path, range: NSRange(path.startIndex..., in: path)) != nil
@@ -3757,10 +4340,19 @@ nonisolated final class BranchURLProtocol: URLProtocol {
           userInfo: [NSLocalizedDescriptionKey: "scenario '\\(name)' missing for op '\\(route.op)'"]))
         return
       }
-      respond(status: scenario.0, body: scenario.1, contentType: scenario.2)
+      let delay = min(max(route.delays[name] ?? 0, 0), BranchDeliveries.shared.capMs)
+      if delay > 0 {
+        BranchDeliveries.shared.begin()
+        delayed = scenario
+        perform(#selector(deliverDelayed), with: nil, afterDelay: Double(delay) / 1000.0,
+                inModes: [.common])
+      } else {
+        respond(status: scenario.0, body: scenario.1, contentType: scenario.2)
+      }
       return
     }
-    Self.recorder?.record(RecordedCall(op: "(unmatched)", method: method, path: path, body: nil))
+    Self.recorder?.record(RecordedCall(op: "(unmatched)", method: method, path: path, body: nil,
+                                       origin: branchOriginString(request.url), foreign: foreign))
     respond(status: 599, body: "{\\"error\\":{\\"code\\":\\"unmocked_endpoint\\"}}",
             contentType: "application/json")
   }
@@ -3908,6 +4500,8 @@ func runBranchTest(
     BranchURLProtocol.recorder = nil
   }
   let harness = harnessFactory()
+  BranchURLProtocol.apiOrigin = harness.apiOrigin
+  defer { BranchURLProtocol.apiOrigin = nil }
   defer {
     // Deliberate retain-for-process-lifetime: deallocating @MainActor
     // types goes through the isolated-deinit back-deploy shim on pre-26
@@ -3985,6 +4579,9 @@ class BaseBranchHarness: BranchHarness {
   let vm: AnyObject
   init(vm: AnyObject) { self.vm = vm }
 
+  /// Override with the app's API base URL (see BranchHarness.apiOrigin).
+  var apiOrigin: URL? { nil }
+
   func readField(_ name: String) -> Any? {
     if let own = mirrorField(vm, name), !(own is NSNull) {
       // Direct VM member (plain var or @Published).
@@ -4017,9 +4614,29 @@ class BaseBranchHarness: BranchHarness {
   func settle() {
     // Task { @MainActor } continuations land on the main queue; URLProtocol
     // work completes on URLSession's queues. Drain the main run loop with
-    // short real-time slices until the pipeline is quiet.
-    for _ in 0..<80 {
-      RunLoop.main.run(until: Date().addingTimeInterval(0.005))
+    // short real-time slices until the pipeline is quiet — and wait for
+    // every response a scenario's `delayMs` is holding back, draining again
+    // after they arrive (the view model may send a request of its own once
+    // one lands). Past the budget it fails the test by name, with how long
+    // it waited: stopping quietly would let `then` read the state before the
+    // responses arrived.
+    let started = Date()
+    while true {
+      for _ in 0..<80 {
+        RunLoop.main.run(until: Date().addingTimeInterval(0.005))
+      }
+      if BranchDeliveries.shared.pending == 0 { return }
+      while BranchDeliveries.shared.pending > 0 {
+        let waited = Int(Date().timeIntervalSince(started) * 1000)
+        if waited >= BranchDeliveries.shared.settleBudgetMs {
+          XCTFail("settle: \\(BranchDeliveries.shared.pending) delayed response(s) still pending after "
+                  + "waiting \\(waited) ms (budget \\(BranchDeliveries.shared.settleBudgetMs) ms: one delayMs of "
+                  + "at most \\(BranchDeliveries.shared.capMs) and a margin) — the row's then would read the "
+                  + "state before they arrived")
+          return
+        }
+        RunLoop.main.run(until: Date().addingTimeInterval(0.005))
+      }
     }
   }
 }
@@ -4411,6 +5028,7 @@ def generate_branch_tests(
     check: bool = False,
     config_platforms: list | None = None,
     app_rules: "AppRules | None" = None,
+    condition_controls: bool = False,
 ) -> GenerationReport:
     """Generate (or, with ``check``, compare) one screen's branch tests.
 
@@ -4496,6 +5114,8 @@ def generate_branch_tests(
     routes, rows = bindings.routes, bindings.rows
     for row in rows:
         row.conditions = arranged_conditions(app_rules.conditions, row.branch.get("when"))
+    if condition_controls:
+        rows = with_condition_controls(rows, app_rules.conditions)
     overlaps = [describe_overlap(a, b) for a, b in bindings.overlaps]
 
     if platform == "android":

@@ -688,6 +688,56 @@ construction settle, writes the arranged state, and only then calls
 the mark, so what the constructor fetched is not read as the method's doing.
 A hand-written test that never calls `mark()` reads every call, as before.
 
+### A scenario's `delayMs`: the order responses arrive in
+
+A scenario's `delayMs` delays its whole response by that many milliseconds
+after the request (at most 30000) — what `mock serve` does, on all three
+faces of the generated tests. So a row whose `when` picks a delayed scenario
+for one of two parallel requests makes that one arrive last, and a view model
+whose outcome depends on the arrival order can be driven by rows. `settle()`
+waits for every delayed response before it returns, draining again after
+each arrival, so `then` reads the state after they landed; past 31000 ms
+(one capped delay and a margin) it fails the test by name, with how long it
+waited. A screen with no `delayMs` generates what it did.
+
+### Requests no route declares
+
+A request during act that matches no declared route is answered 599 by the
+runtime — a response no server returns — so whatever the view model did next
+is made up. `rec.unmatchedCalls()` lists those requests in the window as
+`METHOD path`. Until the release `UNMATCHED_GATE_FROM` names, every generated
+test prints one warning per test that has any (`… reached no declared route
+and was answered 599 …; from jsonui-cli <release> this fails the test`); from
+that release it fails the test and names them. Unset, the warning names no
+release. Clear one by declaring the route and its scenarios (a repositories /
+useCases `endpoint` and a mock); a call the app's network layer makes around
+every request is admitted once, with `apiOutcomeRules` (below).
+
+Only the app's own API counts. A request to another host — an analytics SDK,
+say — is the info `unmatched_foreign: N — METHOD origin/path`, never a
+failure, and routes answer only the app's requests (another host's POST to a
+declared path is not served). Tell the runtime which hosts are the app's: on
+web, export `apiOrigins` from the screen's harness module (`export const
+apiOrigins = ["https://api.example.com"]`; a relative URL is always the
+app's); on iOS, give the harness `apiOrigin` (override it on
+`BaseBranchHarness`, or declare it on your own `BranchHarness`). Undeclared,
+the hosts cannot be told apart and every unmatched request counts as the
+app's — the message says to declare them. Android needs nothing: MockWebServer
+only ever sees the app's own requests.
+
+### Side calls the screen does not declare
+
+A rule's `sideCalls` name operations the app's network layer makes around a
+call — ApiClient's logout after a 401, say. When the screen does not declare
+such an operation, the generated test serves it anyway, as a **side route**:
+under its operationId, with its mock's default scenario (`generate
+branch-tests` prints a `side routes:` line). It is admitted only in the tests
+whose served statuses the rule names — a call to it anywhere else is the
+bound's red — and it is not an endpoint of the screen: `contracts coverage`
+requires nothing of it. An operationId that is already the screen's name for a
+different endpoint stops generation. An app without `apiOutcomeRules`
+generates what it did.
+
 ### Harness conditions (`harnessConditions`)
 
 When a view model's calls depend on something outside it — a signed-in
@@ -719,6 +769,16 @@ declaration error in `generate branch-tests` and in `contracts coverage`
 (exit 1). Coverage counts such rows as ordinary rows and reports them as
 `condition_rows`. An app without `harnessConditions` gets none of this: its
 generated files are byte for byte what they were.
+
+Whether a condition changes anything is a question the rows do not answer: a
+row naming `harness.session: "present"` stays green if the session decides
+nothing it asserts. `generate branch-tests --condition-controls` adds, after
+each row that names a condition away from its default, a **control**
+(`[control: session=absent instead of present]`) that runs the same act and
+assertions with every condition at its default and never fails; when all of
+them still hold it prints `condition_without_effect: <row> …` (info, on the
+console — a JSON reporter does not show it). Off by default: it doubles those
+rows.
 
 ### `seedableState` on a view model built from `init` arguments
 

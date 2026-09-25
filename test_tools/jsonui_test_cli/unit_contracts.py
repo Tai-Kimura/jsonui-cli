@@ -37,6 +37,7 @@ import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from .swift_isolation import TEST_METHOD_ISOLATION, xctest_class_header
 from .branch_tests import (
     BranchTestGenerationError,
     _is_sub_spec_of_a_parent,
@@ -1191,7 +1192,16 @@ def _test_roots(project_root: Path, config: dict) -> dict[str, list[Path] | None
     is a configuration error.
     """
     roots: dict[str, list[Path] | None] = {}
-    for platform, entry in (config.get("platforms") or {}).items():
+    platforms = config.get("platforms") or {}
+    if isinstance(platforms, list):
+        # The test_tools readers (coverage, branch tests) accept a list of
+        # names. A list has no place for `unitTestsDir`, so every platform it
+        # names is undeclared; `check_unit_contracts` says the list is why,
+        # rather than "not declared".
+        return {str(p): None for p in platforms if isinstance(p, str) and p}
+    if not isinstance(platforms, dict):
+        return roots
+    for platform, entry in platforms.items():
         if not isinstance(entry, dict):
             continue
         unit_dir = entry.get("unitTestsDir")
@@ -1535,7 +1545,15 @@ def check_unit_contracts(
     for platform in sorted(set(report.declared) | set(project_platforms)):
         dirs = roots.get(platform)
         if dirs is None:
-            if report.declared.get(platform):
+            if report.declared.get(platform) and isinstance(config.get("platforms"), list):
+                report.unscannable[platform] = (
+                    f"jui.config.json writes `platforms` as a list, which has no "
+                    f"place for unitTestsDir, so the {len(report.declared[platform])} "
+                    f"case(s) declared for {platform} cannot be compared against "
+                    f"anything — write `platforms` as an object, the shape `jui init` "
+                    f"writes, and declare platforms.<platform>.unitTestsDir"
+                )
+            elif report.declared.get(platform):
                 report.unscannable[platform] = (
                     f"platforms.{platform}.unitTestsDir is not declared in "
                     f"jui.config.json, so the {len(report.declared[platform])} case(s) "
@@ -2020,7 +2038,10 @@ _STUB_ESCAPE = {
 
 
 _STUB_BODY = {
-    "ios": '    func ' + IOS_TEST_PREFIX + '{name}() throws {{\n        XCTFail("not implemented: {intent}")\n    }}',
+    # The attribute: a filled-in body calls the app, MainActor wherever the
+    # app builds @MainActor (swift_isolation).
+    "ios": '    ' + TEST_METHOD_ISOLATION + ' func ' + IOS_TEST_PREFIX
+           + '{name}() throws {{\n        XCTFail("not implemented: {intent}")\n    }}',
     "android": '    @Test\n    fun `{name}`() {{\n        fail("not implemented: {intent}")\n    }}',
     "web": "  it('{name}', () => {{\n    throw new Error('not implemented: {intent}');\n  }});",
 }
@@ -2031,7 +2052,12 @@ _STUB_BODY = {
 #: These come from config, and generation refuses without them rather than
 #: emitting a file that cannot build.
 _STUB_FILE = {
-    "ios": "import XCTest\n@testable import {module}\n\nfinal class {target}ContractTests: XCTestCase {{\n"
+    # The class line is written once, when the file is created (it is
+    # outside the markers), by swift_isolation — the declaration branch-tests
+    # writes, so a test target whose default isolation is MainActor compiles
+    # it as generated. Existing files keep the line they have: merge_stubs
+    # replaces only the marker region.
+    "ios": "import XCTest\n@testable import {module}\n\n{ios_class}\n"
            + STUB_BEGIN + "\n{body}\n" + STUB_END + "\n}}\n",
     "android": "package {package}\n\nimport org.junit.Test\nimport org.junit.Assert.fail\n\n"
                "class {target}ContractTest {{\n"
@@ -2086,7 +2112,8 @@ def stub_text(
         for c in cases
     )
     return template.format(
-        target=target or "Unit", body=body, module=module or "", package=package or ""
+        target=target or "Unit", body=body, module=module or "", package=package or "",
+        ios_class=xctest_class_header(f"{target or 'Unit'}ContractTests"),
     )
 
 
