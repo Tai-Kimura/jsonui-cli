@@ -959,7 +959,7 @@ module RjuiTools
       # Returns the bare TS expression (the helper's JSX braces stripped) or
       # nil.
       def string_default_expression(default_value, ts_type)
-        return nil unless ts_type == 'string'
+        return nil unless ['string', 'string | undefined'].include?(ts_type)
         return nil if default_value.nil?
 
         # The text the spelling means (StringLiterals.default_text) — the
@@ -981,20 +981,23 @@ module RjuiTools
           return collection_data_source_literal(value)
         end
 
+        # The text the layout's spelling means ('' / "…" / '…' / bare,
+        # StringLiterals.default_text), as a TS literal, for a String and a
+        # String? alike. Until 1.8.121 a quoted spelling passed through as
+        # written (`'it''s'` was not TS), a bare one was quoted unescaped,
+        # and a String? default was written as it stood, as code. A value
+        # that is not a String (a dictionary given to a String property)
+        # stays on the paths below, which write code that does not parse: a
+        # quoted Hash#to_s would build and show it. A dictionary written per
+        # platform no longer arrives here — the TypeConverter gives it this
+        # platform's value, or the String default "".
+        if json_class.to_s.chomp('?') == 'String' && value.is_a?(String)
+          return JsonUIShared::StringLiterals.ts(JsonUIShared::StringLiterals.default_text(value))
+        end
+
         case ts_type
         when 'string'
-          if json_class == 'String' && value.is_a?(String)
-            # The text the layout's spelling means ('' / "…" / '…' / bare,
-            # StringLiterals.default_text), as a TS literal. Until 1.8.121
-            # a quoted spelling passed through as written (`'it''s'` was
-            # not TS) and a bare one was quoted unescaped. A value that is
-            # not a String (a dictionary given to a String property) stays
-            # on the path below, which writes code that does not parse: a
-            # quoted Hash#to_s would build and show it. A dictionary written
-            # per platform no longer arrives here — the TypeConverter gives
-            # it this platform's value, or the String default "".
-            JsonUIShared::StringLiterals.ts(JsonUIShared::StringLiterals.default_text(value))
-          elsif value == "''"
+          if value == "''"
             '""'
           elsif value.is_a?(String) && (value.start_with?('"') || value.start_with?("'"))
             # Already quoted (e.g., from TypeConverter for Color/Image types)

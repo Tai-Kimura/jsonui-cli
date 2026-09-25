@@ -260,7 +260,7 @@ module SjuiTools
                   if data_with_default
                     if data_with_default.is_a?(Hash) && data_with_default.has_key?("defaultValue")
                       default_value = data_with_default["defaultValue"]
-                      if data_with_default["class"] == "String"
+                      if data_with_default["class"].to_s.chomp("?") == "String"
                         # Handle string default values
                         value_str = default_value.to_s
                         if value_str == "''" || value_str.empty?
@@ -521,7 +521,8 @@ module SjuiTools
                 content << "    #{modifier} #{data_name}: #{data["class"]}#{type_suffix}\n"
               end
             else
-              if data["class"] == "String"
+              # A String? default is text too (written as code until 1.8.121)
+              if data["class"].to_s.chomp("?") == "String"
                 # For string values, handle various quote patterns
                 value_str = data["defaultValue"].to_s
                 

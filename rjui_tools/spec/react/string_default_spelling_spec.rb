@@ -104,6 +104,35 @@ RSpec.describe 'a String defaultValue reads the same on every rjui path' do
     expect(generator.send(:format_default_value, "'/images/x'", 'string', 'Image')).to eq("'/images/x'")
   end
 
+  # A String? default reads as a String's, and none stays undefined
+  # (vectors['optionalStrings']). Until 1.8.121 a String? default was written
+  # as it stood, as code: `probe: Hello`.
+  it 'the data default of a String?: every row reads back as its text, or undefined (node)' do
+    unless system('which node > /dev/null 2>&1')
+      raise 'node is not on PATH in CI' if ENV['CI']
+
+      skip 'node is not on PATH: the round trip is UNMEASURED here'
+    end
+    rows = vectors['optionalStrings']
+    emitted = rows.map { |row| generator.send(:format_default_value, row['spelling'], 'string | undefined', 'String?') }
+    program = emitted.map do |e|
+      "{ const v = (#{e}); console.log(v === undefined ? 'nil' : JSON.stringify([...v].map((c) => c.codePointAt(0)))); }"
+    end.join("\n")
+    got = Dir.mktmpdir do |dir|
+      File.write(File.join(dir, 'main.mjs'), program)
+      out, err, status = Open3.capture3('node', File.join(dir, 'main.mjs'))
+      raise "does not parse:\n#{err}\n#{program}" unless status.success?
+
+      out.lines.map(&:strip)
+    end
+    aggregate_failures do
+      rows.each_with_index do |row, i|
+        want = row['text'].nil? ? 'nil' : row['text'].codepoints.to_s.delete(' ')
+        expect(got[i]).to eq(want), "#{row['name']}: #{row['spelling'].inspect} was written #{emitted[i]}"
+      end
+    end
+  end
+
   # A value written per platform ({ "swift": …, "kotlin": … }): the one
   # this platform gets, or — when the layout gives it none — the class's
   # vocabulary value and a WARNING naming the layout, the property and the

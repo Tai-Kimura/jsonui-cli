@@ -209,28 +209,6 @@ module SjuiTools
           params.map { |p| to_swift_type(p.strip, mode) }.join(', ')
         end
 
-        # Format a value for Swift code based on type
-        def format_value(value, swift_type)
-          return 'nil' if value.nil?
-
-          case swift_type
-          when 'String'
-            format_string_value(value)
-          when 'Int'
-            value.to_i.to_s
-          when 'Double', 'CGFloat'
-            value.to_f.to_s
-          when 'Float'
-            "#{value.to_f}"
-          when 'Bool'
-            value.to_s.downcase
-          when 'Color'
-            format_color_value(value)
-          else
-            value.to_s
-          end
-        end
-
         # A build warning from the shared core (a data default with no
         # value for this platform) goes where the tool's others go.
         def report_warning(message)
@@ -352,13 +330,6 @@ module SjuiTools
 
         private
 
-        def format_color_value(value)
-          if value.is_a?(String) && value.start_with?('#')
-            "Color(uiColor: UIColor.colorWithHexString(\"#{value}\") ?? .clear)"
-          else
-            value.to_s
-          end
-        end
       end
     end
   end
