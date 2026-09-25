@@ -82,20 +82,22 @@ RSpec.describe KjuiTools::Compose::Generators::KotlinComponentGenerator do
         expect(generator.send(:map_type_to_kotlin, 'color')).to eq('Color')
       end
 
-      it 'maps dp to Dp' do
-        expect(generator.send(:map_type_to_kotlin, 'dp')).to eq('Dp')
+      # Dp / Size / Alignment left the vocabulary in 1.8.121: their scaffold never
+      # compiled as a pair (the wrapper read them as text), and no face used
+      # them. Outside the vocabulary a type is `Any? = null`, which compiles,
+      # and `g converter` names it (ticket kjui-sjui-converter-attr-types-do-not-compile).
+      it 'maps a type outside the vocabulary — dp, size, alignment, an unknown name — to Any?' do
+        %w[dp size alignment unknown].each do |type|
+          expect(generator.send(:map_type_to_kotlin, type)).to eq('Any?'), type
+        end
       end
 
-      it 'maps size to Dp' do
-        expect(generator.send(:map_type_to_kotlin, 'size')).to eq('Dp')
-      end
-
-      it 'maps alignment to Alignment' do
-        expect(generator.send(:map_type_to_kotlin, 'alignment')).to eq('Alignment')
-      end
-
-      it 'maps unknown to Any' do
-        expect(generator.send(:map_type_to_kotlin, 'unknown')).to eq('Any')
+      it 'maps long, a callback, a nullable, a list and the data source to their Kotlin types' do
+        expect(generator.send(:map_type_to_kotlin, 'Long')).to eq('Long')
+        expect(generator.send(:map_type_to_kotlin, '(() -> Void)?')).to eq('(() -> Unit)?')
+        expect(generator.send(:map_type_to_kotlin, 'String?')).to eq('String?')
+        expect(generator.send(:map_type_to_kotlin, '[Int]')).to eq('List<Int>')
+        expect(generator.send(:map_type_to_kotlin, 'CollectionDataSource')).to eq('CollectionDataSource?')
       end
     end
 
@@ -124,16 +126,15 @@ RSpec.describe KjuiTools::Compose::Generators::KotlinComponentGenerator do
         expect(generator.send(:get_default_value, 'color')).to eq(' = Color.Unspecified')
       end
 
-      it 'returns 0.dp for dp' do
-        expect(generator.send(:get_default_value, 'dp')).to eq(' = 0.dp')
+      it 'returns null for a type outside the vocabulary' do
+        %w[dp alignment unknown].each do |type|
+          expect(generator.send(:get_default_value, type)).to eq(' = null'), type
+        end
       end
 
-      it 'returns Alignment.TopStart for alignment' do
-        expect(generator.send(:get_default_value, 'alignment')).to eq(' = Alignment.TopStart')
-      end
-
-      it 'returns null for unknown' do
-        expect(generator.send(:get_default_value, 'unknown')).to eq(' = null')
+      it 'returns 0L for long and null for a nullable' do
+        expect(generator.send(:get_default_value, 'Long')).to eq(' = 0L')
+        expect(generator.send(:get_default_value, 'Int?')).to eq(' = null')
       end
     end
 
@@ -161,17 +162,10 @@ RSpec.describe KjuiTools::Compose::Generators::KotlinComponentGenerator do
         expect(result).to include('import androidx.compose.ui.graphics.Color')
       end
 
-      it 'adds dp imports for dp type' do
-        generator_with_attrs = described_class.new('CustomCard', attributes: { 'size' => 'dp' })
+      it 'adds the data source import for CollectionDataSource' do
+        generator_with_attrs = described_class.new('CustomCard', attributes: { 'rows' => 'CollectionDataSource' })
         result = generator_with_attrs.send(:generate_kotlin_imports)
-        expect(result).to include('import androidx.compose.ui.unit.dp')
-        expect(result).to include('import androidx.compose.ui.unit.Dp')
-      end
-
-      it 'adds Alignment import for alignment type' do
-        generator_with_attrs = described_class.new('CustomCard', attributes: { 'align' => 'alignment' })
-        result = generator_with_attrs.send(:generate_kotlin_imports)
-        expect(result).to include('import androidx.compose.ui.Alignment')
+        expect(result).to include('import com.kotlinjsonui.data.CollectionDataSource')
       end
     end
 

@@ -3,6 +3,7 @@
 require 'fileutils'
 require 'json'
 require_relative 'attribute_validator_core'
+require_relative 'attribute_types'
 
 module JsonUIShared
   # Shared body of the three `<tool> g converter` scaffolders: the
@@ -227,6 +228,17 @@ module JsonUIShared
 
       File.write(mappings_file, spec[:initial_content])
       @logger.info "Created #{File.basename(mappings_file)} with initial mapping"
+    end
+
+    # Names every attribute whose type is outside the shared vocabulary
+    # (attribute_types.rb) and what it was scaffolded as — the same sentence
+    # on every tool. Not a refusal: faces declare their own model types
+    # (`[AppRow]`, `Date`), and refusing stopped `jui g converter --all` on
+    # three of them (measured 2026-09-26).
+    def warn_outside_attribute_types
+      JsonUIShared::AttributeTypes.outside(@options[:attributes]).each do |key, type|
+        @logger.warn JsonUIShared::AttributeTypes.outside_warning(key, type)
+      end
     end
 
     # Generate attribute definition file for validation. Rewritten on every

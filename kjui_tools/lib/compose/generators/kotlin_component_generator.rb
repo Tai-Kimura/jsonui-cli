@@ -6,6 +6,7 @@ require_relative '../../core/converter_generator_core'
 require_relative '../../core/config_manager'
 require_relative '../../core/project_finder'
 require_relative '../../core/generated_marker'
+require_relative '../../core/attribute_types'
 
 module KjuiTools
   module Compose
@@ -187,94 +188,37 @@ module KjuiTools
           template
         end
         
+        # Types come from the shared vocabulary (lib/core/attribute_types.rb),
+        # which the Dynamic wrapper reads too: until 1.8.121 this file kept its
+        # own list, and a Long, a callback, a `String?` or a data source became
+        # `v: Any = null`, which is not Kotlin that compiles (ticket
+        # kjui-sjui-converter-attr-types-do-not-compile).
         def generate_kotlin_imports
           return "" if !@options[:attributes] || @options[:attributes].empty?
-          
-          imports = []
-          @options[:attributes].each do |key, type|
-            case type.downcase
-            when 'color'
-              imports << "import androidx.compose.ui.graphics.Color"
-            when 'dp', 'size'
-              imports << "import androidx.compose.ui.unit.dp"
-              imports << "import androidx.compose.ui.unit.Dp"
-            when 'alignment'
-              imports << "import androidx.compose.ui.Alignment"
-            when 'text', 'string'
-              # No special import needed
-            when 'int', 'float', 'double'
-              # No special import needed
-            when 'boolean', 'bool'
-              # No special import needed
-            end
-          end
-          
-          imports.uniq.join("\n")
+
+          @options[:attributes].values
+                               .flat_map { |type| JsonUIShared::AttributeTypes.kotlin_imports(JsonUIShared::AttributeTypes.parse(type)) }
+                               .uniq.map { |i| "import #{i}" }.join("\n")
         end
-        
+
         def generate_kotlin_parameters
           return "" if !@options[:attributes] || @options[:attributes].empty?
-          
-          params = []
-          @options[:attributes].each do |key, type|
-            is_binding = key.start_with?('@')
-            actual_key = is_binding ? key[1..-1] : key
-            kotlin_type = map_type_to_kotlin(type)
-            
-            default_value = get_default_value(type)
-            params << "    #{actual_key}: #{kotlin_type}#{default_value},"
+
+          params = @options[:attributes].map do |key, type|
+            actual_key = key.start_with?('@') ? key[1..-1] : key
+            "    #{actual_key}: #{map_type_to_kotlin(type)}#{get_default_value(type)},"
           end
-          
           params.join("\n") + "\n"
         end
-        
-        
+
         def map_type_to_kotlin(type)
-          case type.downcase
-          when 'string', 'text'
-            'String'
-          when 'int', 'integer'
-            'Int'
-          when 'float'
-            'Float'
-          when 'double'
-            'Double'
-          when 'bool', 'boolean'
-            'Boolean'
-          when 'color'
-            'Color'
-          when 'dp', 'size'
-            'Dp'
-          when 'alignment'
-            'Alignment'
-          else
-            'Any'
-          end
+          JsonUIShared::AttributeTypes.kotlin_type(JsonUIShared::AttributeTypes.parse(type))
         end
-        
+
         def get_default_value(type)
-          case type.downcase
-          when 'string', 'text'
-            ' = ""'
-          when 'int', 'integer'
-            ' = 0'
-          when 'float'
-            ' = 0f'
-          when 'double'
-            ' = 0.0'
-          when 'bool', 'boolean'
-            ' = false'
-          when 'color'
-            ' = Color.Unspecified'
-          when 'dp', 'size'
-            ' = 0.dp'
-          when 'alignment'
-            ' = Alignment.TopStart'
-          else
-            ' = null'
-          end
+          " = #{JsonUIShared::AttributeTypes.kotlin_default(JsonUIShared::AttributeTypes.parse(type))}"
         end
-        
+
         def format_attributes_for_command
           return "" if !@options[:attributes] || @options[:attributes].empty?
           

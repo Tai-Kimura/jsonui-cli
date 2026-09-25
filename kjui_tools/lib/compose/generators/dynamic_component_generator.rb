@@ -5,6 +5,7 @@ require_relative '../../core/logger'
 require_relative '../../core/converter_generator_core'
 require_relative '../../core/config_manager'
 require_relative '../../core/project_finder'
+require_relative '../../core/attribute_types'
 
 module KjuiTools
   module Compose
@@ -286,32 +287,14 @@ module KjuiTools
         def generate_dynamic_imports(package_name)
           return "" if !@options[:attributes] || @options[:attributes].empty?
 
+          kinds = @options[:attributes].values.map { |type| normalize_type(type) }
           imports = Set.new
-
-          has_string_or_text = false
-          has_color = false
-          has_callback = false
-          has_collection_data_source = false
-
-          @options[:attributes].each do |key, type|
-            normalized = normalize_type(type)
-            case normalized
-            when :string, :text
-              has_string_or_text = true
-            when :color
-              has_color = true
-            when :callback
-              has_callback = true
-            when :collection_data_source
-              has_collection_data_source = true
-            end
+          imports << "import com.kotlinjsonui.dynamic.helpers.ResourceResolver" if kinds.include?(:string)
+          if kinds.include?(:color)
+            imports << "import com.kotlinjsonui.dynamic.helpers.ColorParser"
+            imports << "import androidx.compose.ui.graphics.Color"
           end
-
-          imports << "import com.kotlinjsonui.dynamic.helpers.ResourceResolver" if has_string_or_text
-          imports << "import com.kotlinjsonui.dynamic.helpers.ColorParser" if has_color
-          imports << "import androidx.compose.ui.graphics.Color" if has_color
-          imports << "import com.kotlinjsonui.data.CollectionDataSource" if has_collection_data_source
-
+          imports << "import com.kotlinjsonui.data.CollectionDataSource" if kinds.include?(:collection_data_source)
           imports.to_a.sort.join("\n")
         end
 
@@ -319,6 +302,9 @@ module KjuiTools
         # Parameter parsing generation (using library APIs)
         # -------------------------------------------------------------------
 
+        # One reader per attribute, chosen by the shared vocabulary
+        # (lib/core/attribute_types.rb) — the same table the composable's
+        # parameter types come from, so the two agree for every type.
         def generate_dynamic_parameter_parsing
           return "" if !@options[:attributes] || @options[:attributes].empty?
 
@@ -326,34 +312,25 @@ module KjuiTools
           lines << "        // Parse attributes from JSON with binding support"
 
           @options[:attributes].each do |key, type|
-            actual_key = key.start_with?('@') ? key[1..-1] : key
-            normalized = normalize_type(type)
-
-            case normalized
-            when :string, :text
-              lines << "        val #{actual_key} = ResourceResolver.resolveText(json, \"#{actual_key}\", data, context)"
-            when :int
-              default = get_default_value(normalized)
-              lines << "        val #{actual_key} = resolveInt(json, \"#{actual_key}\", data, #{default})"
-            when :float
-              default = get_default_value(normalized)
-              lines << "        val #{actual_key} = resolveFloat(json, \"#{actual_key}\", data, #{default})"
-            when :double
-              default = get_default_value(normalized)
-              lines << "        val #{actual_key} = resolveDouble(json, \"#{actual_key}\", data, #{default})"
-            when :bool
-              default = get_default_value(normalized)
-              lines << "        val #{actual_key} = resolveBool(json, \"#{actual_key}\", data, #{default})"
-            when :color
-              lines << "        val #{actual_key} = ColorParser.parseColorWithBinding(json, \"#{actual_key}\", data, context)"
-            when :callback
-              lines << "        val #{actual_key} = resolveCallback(json.get(\"#{actual_key}\")?.asString, data)"
-            when :collection_data_source
-              lines << "        val #{actual_key} = resolveCollectionDataSource(json, \"#{actual_key}\", data)"
-            else
-              # Unknown type: try to resolve as string
-              lines << "        val #{actual_key} = ResourceResolver.resolveText(json, \"#{actual_key}\", data, context)"
-            end
+            k = key.start_with?('@') ? key[1..-1] : key
+            t = JsonUIShared::AttributeTypes.parse(type)
+            read = case normalize_type(type)
+                   when :string then "ResourceResolver.resolveText(json, \"#{k}\", data, context)"
+                   when :int then "resolveInt(json, \"#{k}\", data, #{t.entry[:kotlin_default]})"
+                   when :long then "resolveLong(json, \"#{k}\", data, #{t.entry[:kotlin_default]})"
+                   when :float then "resolveFloat(json, \"#{k}\", data, #{t.entry[:kotlin_default]})"
+                   when :double then "resolveDouble(json, \"#{k}\", data, #{t.entry[:kotlin_default]})"
+                   when :bool then "resolveBool(json, \"#{k}\", data, #{t.entry[:kotlin_default]})"
+                   when :color then "ColorParser.parseColorWithBinding(json, \"#{k}\", data, context)"
+                   when :callback then "resolveCallback(json.get(\"#{k}\")?.asString, data)"
+                   when :collection_data_source then "resolveCollectionDataSource(json, \"#{k}\", data)"
+                   when :map then "resolveMap(json, \"#{k}\", data)"
+                   when :list
+                     element = JsonUIShared::AttributeTypes.kotlin_type(t)[/\AList<(.+)>\??\z/, 1]
+                     "resolveList<#{element}>(json, \"#{k}\", data)"
+                   else "resolveAny(json, \"#{k}\", data)"
+                   end
+            lines << "        val #{k} = #{read}"
           end
 
           lines << ""
@@ -367,24 +344,16 @@ module KjuiTools
         def generate_component_parameters
           return "" if !@options[:attributes] || @options[:attributes].empty?
 
-          lines = []
-          @options[:attributes].each do |key, type|
-            actual_key = key.start_with?('@') ? key[1..-1] : key
-            normalized = normalize_type(type)
-
-            case normalized
-            when :color
-              # Color is nullable from ColorParser, provide default or pass as-is
-              lines << "            #{actual_key} = #{actual_key} ?: Color.Unspecified,"
-            when :callback, :collection_data_source
-              # Nullable, pass directly
-              lines << "            #{actual_key} = #{actual_key},"
+          lines = @options[:attributes].map do |key, type|
+            k = key.start_with?('@') ? key[1..-1] : key
+            t = JsonUIShared::AttributeTypes.parse(type)
+            # ColorParser answers Color?; a Color parameter takes the default.
+            if normalize_type(type) == :color && !t.nullable
+              "            #{k} = #{k} ?: Color.Unspecified,"
             else
-              # Non-null types: already have defaults from parsing
-              lines << "            #{actual_key} = #{actual_key},"
+              "            #{k} = #{k},"
             end
           end
-
           lines.join("\n") + "\n"
         end
 
@@ -402,11 +371,15 @@ module KjuiTools
 
           methods = []
           methods << int_helper_method if needed.include?(:int)
+          methods << long_helper_method if needed.include?(:long)
           methods << float_helper_method if needed.include?(:float)
           methods << double_helper_method if needed.include?(:double)
           methods << bool_helper_method if needed.include?(:bool)
           methods << callback_helper_method if needed.include?(:callback)
           methods << collection_data_source_helper_method if needed.include?(:collection_data_source)
+          methods << list_helper_method if needed.include?(:list)
+          methods << map_helper_method if needed.include?(:map)
+          methods << any_helper_method if needed.include?(:outside)
 
           return "" if methods.empty?
           "\n" + methods.join("\n\n")
@@ -429,6 +402,65 @@ module KjuiTools
                     }
                 }
                 return default
+            }
+          KOTLIN
+        end
+
+        def long_helper_method
+          <<~KOTLIN.gsub(/^/, '    ')
+            private fun resolveLong(json: JsonObject, key: String, data: Map<String, Any>, default: Long = 0L): Long {
+                val element = json.get(key) ?: return default
+                if (element.isJsonPrimitive) {
+                    val prim = element.asJsonPrimitive
+                    if (prim.isNumber) return prim.asLong
+                    if (prim.isString) {
+                        val str = prim.asString
+                        if (ModifierBuilder.isBinding(str)) {
+                            val prop = ModifierBuilder.extractBindingProperty(str) ?: return default
+                            return (data[prop] as? Number)?.toLong() ?: default
+                        }
+                        return str.toLongOrNull() ?: default
+                    }
+                }
+                return default
+            }
+          KOTLIN
+        end
+
+        # A list comes from a binding (`@{rows}`); its elements are kept when
+        # they are the declared type.
+        def list_helper_method
+          <<~KOTLIN.gsub(/^/, '    ')
+            private inline fun <reified T> resolveList(json: JsonObject, key: String, data: Map<String, Any>): List<T> {
+                val raw = json.get(key)?.takeIf { it.isJsonPrimitive }?.asString ?: return emptyList()
+                if (!ModifierBuilder.isBinding(raw)) return emptyList()
+                val prop = ModifierBuilder.extractBindingProperty(raw) ?: return emptyList()
+                return (data[prop] as? List<*>)?.filterIsInstance<T>() ?: emptyList()
+            }
+          KOTLIN
+        end
+
+        # An Object / Hash comes from a binding (`@{options}`).
+        def map_helper_method
+          <<~KOTLIN.gsub(/^/, '    ')
+            private fun resolveMap(json: JsonObject, key: String, data: Map<String, Any>): Map<String, Any?> {
+                val raw = json.get(key)?.takeIf { it.isJsonPrimitive }?.asString ?: return emptyMap()
+                if (!ModifierBuilder.isBinding(raw)) return emptyMap()
+                val prop = ModifierBuilder.extractBindingProperty(raw) ?: return emptyMap()
+                return (data[prop] as? Map<*, *>)?.entries?.associate { it.key.toString() to it.value } ?: emptyMap()
+            }
+          KOTLIN
+        end
+
+        # A type outside the vocabulary: the bound value as it is, or the
+        # literal string.
+        def any_helper_method
+          <<~KOTLIN.gsub(/^/, '    ')
+            private fun resolveAny(json: JsonObject, key: String, data: Map<String, Any>): Any? {
+                val raw = json.get(key)?.takeIf { it.isJsonPrimitive }?.asString ?: return null
+                if (!ModifierBuilder.isBinding(raw)) return raw
+                val prop = ModifierBuilder.extractBindingProperty(raw) ?: return null
+                return data[prop]
             }
           KOTLIN
         end
@@ -524,75 +556,25 @@ module KjuiTools
         # Type normalization
         # -------------------------------------------------------------------
 
+        # The reader an attribute needs: the shared vocabulary's kind
+        # (lib/core/attribute_types.rb). CGFloat reads as a Float; a type
+        # outside the vocabulary reads as Any?.
         def normalize_type(type)
-          stripped = type.strip.downcase
-
-          # Check for callback patterns first (before stripping special chars)
-          # Matches: (() -> Void)?, (() -> Unit)?, Callback, Action, Event
-          # Also matches: ((String) -> Void)?, ((String, String) -> Void)? etc.
-          return :callback if stripped.match?(/^\(.*->.*\)\??$/)
-          return :callback if %w[callback action event].include?(stripped)
-
-          # Check for CollectionDataSource
-          return :collection_data_source if stripped.gsub(/[^a-z]/, '') == 'collectiondatasource'
-
-          # Simple types
-          normalized = stripped.gsub(/[^a-z]/, '')
-          case normalized
-          when 'string', 'text'
-            :string
-          when 'int', 'integer'
-            :int
-          when 'float'
-            :float
-          when 'double'
-            :double
-          when 'bool', 'boolean'
-            :bool
-          when 'color'
-            :color
+          t = JsonUIShared::AttributeTypes.parse(type.to_s)
+          case t.kind
+          when :callback then :callback
+          when :list then :list
+          when :outside then :outside
           else
-            :string
+            { 'string' => :string, 'int' => :int, 'long' => :long, 'float' => :float, 'cgfloat' => :float,
+              'double' => :double, 'bool' => :bool, 'color' => :color,
+              'collection_data_source' => :collection_data_source, 'map' => :map }.fetch(t.canonical)
           end
         end
 
-        def get_default_value(normalized_type)
-          # Accept either a symbol (:int) or a string ('int'); tests pass the raw
-          # attribute type string, the internal callers pass the normalize_type symbol.
-          if normalized_type.is_a?(Symbol)
-            sym = normalized_type
-          else
-            raw = normalized_type.to_s.strip.downcase.gsub(/[^a-z]/, '')
-            case raw
-            when 'string', 'text' then sym = :string
-            when 'int', 'integer' then sym = :int
-            when 'float' then sym = :float
-            when 'double' then sym = :double
-            when 'bool', 'boolean' then sym = :bool
-            when 'color' then sym = :color
-            else sym = :unknown
-            end
-          end
-
-          case sym
-          when :string, :text
-            '""'
-          when :int
-            '0'
-          when :float
-            # A Float literal: resolveFloat takes `default: Float`, and `0.0` is a
-            # Double — the wrapper did not compile (ticket
-            # kjui-dynamic-wrapper-float-default-is-a-double).
-            '0f'
-          when :double
-            '0.0'
-          when :bool
-            'false'
-          when :color
-            'Color.Unspecified'
-          else
-            'null'
-          end
+        # The value a missing attribute takes, from the shared vocabulary.
+        def get_default_value(type)
+          JsonUIShared::AttributeTypes.kotlin_default(JsonUIShared::AttributeTypes.parse(type.to_s))
         end
 
         # Returns the parser method name for a given raw attribute type.
