@@ -530,6 +530,120 @@ class TestVanished:
         assert report.baseline["web"]["vanished"] == 0
 
 
+def _row_on_401(then: dict, when: str = "error_401"):
+    def change(spec):
+        spec["branchContracts"]["methods"]["approve"]["branches"].append(
+            {"when": {"api.setApproval": when}, "then": then})
+    return change
+
+
+class TestUnderWhatCannotBeEvaluated:
+    """ee review 4 (a), 4f 11:24. A baselined entry under a screen or a row
+    the run holds but cannot evaluate is HIDDEN, not vanished: fixing the
+    spec or the row brings it back as it was, so "remove or re-key it by
+    hand" would have the user delete debt that is still there. What cannot
+    be evaluated fails the gate on its own (cannot be baselined), and the
+    command writes nothing while it does. Boundary: the same spec gone from
+    disk is vanished (TestVanished.test_the_spec_file_is_gone)."""
+
+    def _hidden_not_vanished(self, root, run, before, why, hidden):
+        rc, out = _validate(run, root)
+        summary = _summary(out)
+        assert rc == 1, out
+        assert why in summary, summary
+        assert "gone from the run" not in summary and "baselined but closed" not in summary, summary
+        report = cc.run_coverage(root)
+        assert (report.baseline["web"]["hidden"], report.baseline["web"]["vanished"]) == (hidden, 0)
+        rc, out = run(root, "contracts", "baseline")
+        assert "vanished" not in out, out
+        assert _baseline_file(root).read_bytes() == before
+
+    def _recorded(self, root, run):
+        rc, _ = run(root, "contracts", "baseline", "--initial")
+        assert rc == 0
+        return _baseline_file(root).read_bytes()
+
+    def test_an_unreadable_spec(self, tmp_path, run):
+        root = _with_other_screen(tmp_path)
+        before = self._recorded(root, run)
+        _spec_file(root).write_text("{ not json", encoding="utf-8")
+        self._hidden_not_vanished(root, run, before,
+                                  "web: screens not evaluated 1 (cannot be baselined)", 6)
+
+    def test_a_row_reading_a_response_path_the_body_lacks(self, tmp_path, run):
+        root = _project(tmp_path)
+        before = self._recorded(root, run)
+        _edit_spec(root, _row_on_401({"data.banner": "@response.nosuch"}))
+        self._hidden_not_vanished(root, run, before, "web: not evaluated 3 (cannot be baselined)", 3)
+
+    def test_a_row_that_does_not_bind(self, tmp_path, run):
+        # It names a scenario the mock does not have: every op it reaches is
+        # not evaluated for its method.
+        root = _project(tmp_path)
+        before = self._recorded(root, run)
+        _edit_spec(root, _row_on_401({"data.banner": "x"}, when="no_such_scenario"))
+        self._hidden_not_vanished(root, run, before, "web: not evaluated 3 (cannot be baselined)", 3)
+
+    def test_boundary_the_row_fixed_the_same_entries_are_matched(self, tmp_path, run):
+        # The row that answers 401 again: 401 closes (stale); the rest are as
+        # they were — nothing was lost while it was hidden.
+        root = _project(tmp_path)
+        before = self._recorded(root, run)
+        _edit_spec(root, _row_on_401({"data.banner": "login"}))
+        report = cc.run_coverage(root)
+        assert {k: report.baseline["web"][k] for k in ("stale", "hidden", "vanished", "new")} \
+            == {"stale": 1, "hidden": 0, "vanished": 0, "new": 0}
+
+
+def _declare_platforms(root: Path, platforms) -> None:
+    config_file = root / "jui.config.json"
+    config = json.loads(config_file.read_text())
+    config["platforms"] = platforms
+    config_file.write_text(json.dumps(config), encoding="utf-8")
+
+
+class TestAPlatformDroppedFromTheConfig:
+    """ee review 4 (b), 4f 11:24. The debt of a platform the config no longer
+    declares is VANISHED — red, and kept in the file: dropping a platform is
+    not a way out of it (the module docstring). Naming platforms with
+    `--platform` is a narrower run, not a drop: the others are not compared."""
+
+    def test_its_entries_vanish_and_the_gate_is_red(self, tmp_path, run):
+        root = _project(tmp_path)
+        rc, _ = run(root, "contracts", "baseline", "--initial")
+        assert rc == 0
+        before = _baseline_file(root).read_bytes()
+        _declare_platforms(root, ["ios"])
+        rc, out = _validate(run, root)
+        assert rc == 1, out
+        assert "web: 6 baselined but gone from the run (detail 6)" in _summary(out), _summary(out)
+        report = cc.run_coverage(root)
+        assert report.baseline["web"]["vanished"] == 6
+        # The coverage command says so too, in text and in JSON.
+        assert ("[platform=web] not declared in jui.config.json platforms · baselined 6 "
+                "(matched 0 · new 0 · stale 0 · vanished 6)") in "\n".join(cc.format_text(report))
+        undeclared = cc.to_json(report)["baseline"]["undeclared_platforms"]
+        assert list(undeclared) == ["web"] and undeclared["web"]["vanished"] == 6
+        assert len(undeclared["web"]["vanished_entries"]) == 6
+        rc, out = run(root, "contracts", "baseline")
+        assert rc == 0 and "vanished — not closed, kept; remove or re-key them by hand" in out, out
+        assert {cb.entry_key(e) for e in json.loads(before)["entries"]} \
+            <= {cb.entry_key(e) for e in cb.load(_baseline_file(root))}
+
+    def test_boundary_a_narrower_run_compares_only_what_it_names(self, tmp_path, run):
+        root = _project(tmp_path)
+        run(root, "contracts", "baseline", "--initial")
+        report = cc.run_coverage(root, platforms=["ios"])
+        assert "web" not in report.baseline
+        assert report.baseline["ios"]["vanished"] == 0
+
+    def test_control_both_still_declared_nothing_vanishes(self, tmp_path, run):
+        root = _project(tmp_path)
+        run(root, "contracts", "baseline", "--initial")
+        report = cc.run_coverage(root)
+        assert {p: report.baseline[p]["vanished"] for p in ("web", "ios")} == {"web": 0, "ios": 0}
+
+
 class TestTheGateLineNamesEveryCause:
     """ee, 2026-09-25: from the release the gate line is what validate prints
     about the gate, and it had not named vanished. Every cause the gate fails

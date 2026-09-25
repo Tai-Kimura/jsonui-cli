@@ -31,7 +31,11 @@ is closed over time.
   status, it has no scenario — is not closed, only unmeasured. It is neither
   matched nor stale, and the command keeps it. (Dropping it was the loss the
   "nothing written" guard exists for; these causes are baselinable, so the
-  guard did not see them.)
+  guard did not see them.) So is one under what the run holds but cannot
+  EVALUATE (ee review 4 (a)): a screen whose spec cannot be read, a status a
+  row reaches that does not bind or reads a `@response` path the body lacks.
+  Fixing the spec or the row brings it back as it was; those causes are
+  not baselinable, so they fail the gate on their own.
 - VANISHED (v4.22, ee; hole #41 generalised): a baselined entry whose unit is
   not in the run at all — the screen left the platform, the spec file is gone
   (a rename too), the method or the op is no longer declared, the status is
@@ -41,7 +45,8 @@ is closed over time.
   command drops it. A vanished one fails the gate and the command keeps it:
   removing or re-keying it is done by hand, where the diff shows it — the
   user's decision. Dropping an endpoint, a status or a platform is no longer
-  a way out of the debt.
+  a way out of the debt — a platform the config no longer declares included
+  (ee review 4 (b)): only `--platform` narrows the comparison.
   baselined = matched + stale + hidden + vanished.
 """
 from __future__ import annotations
@@ -69,13 +74,17 @@ def _status_of(key: tuple) -> str:
 
 
 def measured(report) -> dict:
-    """{(platform, spec): ScreenResult} of the screens the run evaluated."""
+    """{(platform, spec): ScreenResult} of the screens the run holds on each
+    platform — a screen it could not evaluate included (`not_evaluated_reason`):
+    what is under it is hidden, not gone."""
     return {(b.platform, s.spec): s for b in report.platforms for s in b.screens
-            if not s.platform_excluded and not s.not_evaluated_reason}
+            if not s.platform_excluded}
 
 
 def _closed(key: tuple, screen) -> bool:
     """Did the run measure *key*'s unit and find it answered by a decision?"""
+    # A screen that could not be evaluated never gets here: what is under it
+    # is hidden first (`_unevaluated`).
     if screen is None:
         return False
     if key[0] == "uncovered":
@@ -161,6 +170,19 @@ def dump(entries: list) -> str:
                       ensure_ascii=False, indent=2, sort_keys=True) + "\n"
 
 
+def _unevaluated(key: tuple, screen) -> bool:
+    """Is *key* under what the run holds but could not evaluate?"""
+    if screen is None:
+        return False
+    if screen.not_evaluated_reason:
+        return True
+    if key[0] != "uncovered":
+        return False
+    method, op, status = key[3] or None, key[4], key[5]
+    return ((method, op, status) in screen.unevaluated
+            or (method is None and any(u[1:] == (op, status) for u in screen.unevaluated)))
+
+
 def _gone_keys(base: set, now: set, units) -> tuple:
     """(hidden, vanished) among the baselined keys the run does not hold.
     Without *units* (no run to read), none vanish: everything not hidden is
@@ -168,6 +190,7 @@ def _gone_keys(base: set, now: set, units) -> tuple:
     hidden = _hidden_keys(base, now)
     if units is None:
         return hidden, set()
+    hidden |= {k for k in base - now - hidden if _unevaluated(k, units.get((k[1], k[2])))}
     vanished = {k for k in base - now - hidden if not _closed(k, units.get((k[1], k[2])))}
     return hidden, vanished
 

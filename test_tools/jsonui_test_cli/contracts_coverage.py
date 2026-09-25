@@ -365,6 +365,10 @@ class ScreenResult:
     answered_any: set = field(default_factory=set)
     measured_ops: set = field(default_factory=set)
     measured_statuses: set = field(default_factory=set)
+    #: (method, op, status) the run holds but could not evaluate — a row that
+    #: does not bind, or whose `@response` path the body lacks. A baselined
+    #: key under one is hidden, not vanished (ee review 4 (a)).
+    unevaluated: set = field(default_factory=set)
     notes: list = field(default_factory=list)
     http_endpoints: int = 0
     branches_active: int = 0
@@ -858,6 +862,7 @@ def evaluate_screen(name: str, spec: dict, platform: str, project: Project) -> S
                 elif (method, key) in not_evaluated_units or \
                         (method, key, status) in not_evaluated_statuses:
                     res.breakdown["not_evaluated"] += 1
+                    res.unevaluated.add((method, names_of.get(key, ["?"])[0], status))
                 else:
                     res.breakdown["uncovered"] += 1
                     left.append(status)
@@ -1081,6 +1086,9 @@ class CoverageReport:
     baseline: dict = field(default_factory=dict)
     #: Per platform {new, stale, hidden, vanished}: the entries themselves.
     baseline_items: dict = field(default_factory=dict)
+    #: Platforms the baseline records that the config no longer declares
+    #: (only when `--platform` does not narrow the run): all vanished.
+    undeclared_platforms: list = field(default_factory=list)
 
 
 def run_coverage(root: Path, platforms=None, screen: str | None = None) -> CoverageReport:
@@ -1126,11 +1134,15 @@ def run_coverage(root: Path, platforms=None, screen: str | None = None) -> Cover
         recorded = cb.load(path)
     except (ValueError, OSError) as e:
         raise CannotStart(f"the coverage baseline cannot be read ({e})")
-    # Only what this run measured is compared: a baseline entry for a platform
-    # or screen outside the run is neither matched nor stale here.
+    # Only what this run was asked about is compared: an entry for a platform
+    # `--platform` did not name, or a screen `--screen` did not, is neither
+    # matched nor stale here. A platform the config no longer declares is
+    # not narrowed away — its entries vanish (ee review 4 (b)): dropping a
+    # platform is no way out of its debt.
     if recorded is not None:
-        recorded = [e for e in recorded if e.get("platform") in chosen
+        recorded = [e for e in recorded if (not platforms or e.get("platform") in chosen)
                     and (screen is None or e.get("spec") == screen)]
+        report.undeclared_platforms = sorted({e.get("platform") for e in recorded} - set(chosen))
     report.entries = cb.current_entries(report)
     report.baseline_file = str(path)
     report.baseline_present = recorded is not None
@@ -1259,6 +1271,9 @@ def format_text(report: CoverageReport) -> list:
                 f"{FLOOR_LABELS[k]} {v}" for k, v in block.floor.items())
                 + " — not evaluated, so more may be uncovered")
         lines.append(f"[platform={p}] exit {block.exit} ({block.verdict})")
+    for p in report.undeclared_platforms:
+        lines.append(f"[platform={p}] not declared in jui.config.json platforms · "
+                     + baseline_phrase(report, p))
     if report.unknown_types:
         lines.append(f"info  {report.unknown_types} spec(s) of a type that is neither a "
                      "screen nor a known non-screen were not counted")
@@ -1311,7 +1326,11 @@ def to_json(report: CoverageReport) -> dict:
                              {"new": [], "stale": [], "hidden": [], "vanished": []}).items()}},
             "data_totals": data_axis.block_totals(active),
             "data_coarse": data_axis.coarse(active)})
-    return {"baseline": {"file": report.baseline_file, "present": report.baseline_present},
+    undeclared = {p: {**_baseline_counts(report, p),
+                      **{f"{k}_entries": list(v) for k, v in report.baseline_items.get(p, {}).items()}}
+                  for p in report.undeclared_platforms}
+    return {"baseline": {"file": report.baseline_file, "present": report.baseline_present,
+                         "undeclared_platforms": undeclared},
             "app": {"spec_file": report.app_file, "rules": report.rules,
                     "declaration_errors": list(report.app_errors),
                     "harness_conditions": report.conditions,
@@ -1468,6 +1487,8 @@ def validate_section(root: Path | None, version: str, *, skipped: bool = False,
     lines = [f"contracts coverage ({root / 'jui.config.json'})"]
     lines += [denominator_line(block) + " · " + baseline_phrase(report, block.platform)
               for block in report.platforms]
+    lines += [f"{p}: not declared in jui.config.json platforms · " + baseline_phrase(report, p)
+              for p in report.undeclared_platforms]
     for error in report.app_errors:
         lines.append(f"  declaration error  {error['file']}: "
                      f"{error['path'] + ': ' if error['path'] else ''}{error['message']}")
@@ -1497,6 +1518,11 @@ def validate_section(root: Path | None, version: str, *, skipped: bool = False,
                        f"({by_spec(items.get('vanished', []))})")
         for cause, n in unbaselinable(block).items():
             why.append(f"{block.platform}: {cause} {n} (cannot be baselined)")
+    for p in report.undeclared_platforms:
+        c = _baseline_counts(report, p)
+        if c["vanished"]:
+            why.append(f"{p}: {c['vanished']} baselined but gone from the run "
+                       f"({by_spec(report.baseline_items[p]['vanished'])})")
     lines.append(notice)
     return lines, {"exit": report.exit, "fails": bool(why), "why": why}
 
