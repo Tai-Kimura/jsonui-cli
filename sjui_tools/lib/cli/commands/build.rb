@@ -12,6 +12,7 @@ require_relative '../../core/normalization'
 require_relative '../../core/binding_validator'
 require_relative '../../core/layout_variant'
 require_relative '../../core/screen_index'
+require_relative '../../core/generated_orphans'
 
 module SjuiTools
   module CLI
@@ -667,6 +668,8 @@ module SjuiTools
             end
           end
 
+          prune_layout_orphans(source_path, config, layouts_dir, view_dir)
+
           # Save cache for next build
           cache_manager.save_cache(new_including_files, new_style_dependencies)
 
@@ -689,6 +692,31 @@ module SjuiTools
             )
           else
             Core::Logger.success "SwiftUI build completed!"
+          end
+        end
+
+        # A deleted layout's outputs, by the rule the three faces share
+        # (lib/core/generated_orphans.rb): the Data model and the
+        # GeneratedView carry @generated — the build rewrites the whole
+        # GeneratedView — and are deleted; a hand-written View and ViewModel
+        # of the same name are named, not deleted. The ViewModel directory is
+        # the one `sjui g view` scaffolds into.
+        def prune_layout_orphans(source_path, config, layouts_dir, view_dir)
+          orphans = JsonUIShared::GeneratedOrphans
+          viewmodel_dir = File.join(source_path, config['viewmodel_directory'] || 'ViewModel')
+          kinds = [
+            orphans::Kind.new(dir: SjuiTools::SwiftUI::DataModelUpdater.new.data_dir, owner: :generator,
+                              pattern: /\A(?<name>[A-Za-z0-9_]+)Data\.swift\z/),
+            orphans::Kind.new(dir: view_dir, owner: :generator,
+                              pattern: /\A(?<name>[A-Za-z0-9_]+)GeneratedView\.swift\z/),
+            orphans::Kind.new(dir: view_dir, owner: :user,
+                              pattern: /\A(?<name>[A-Za-z0-9_]+?)View\.swift\z/),
+            orphans::Kind.new(dir: viewmodel_dir, owner: :user,
+                              pattern: /\A(?<name>[A-Za-z0-9_]+)ViewModel\.swift\z/)
+          ]
+          result = orphans.sweep(layouts_dir: layouts_dir, kinds: kinds)
+          orphans.report_lines(result, base: source_path).each do |level, line|
+            level == :warn ? Core::Logger.warn(line) : Core::Logger.info(line)
           end
         end
 

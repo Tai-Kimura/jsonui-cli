@@ -9,6 +9,7 @@ require_relative '../../core/attribute_validator'
 require_relative '../../core/binding_validator'
 require_relative '../../core/normalization'
 require_relative '../../core/layout_variant'
+require_relative '../../core/generated_orphans'
 
 module KjuiTools
   module CLI
@@ -479,6 +480,8 @@ module KjuiTools
             json_files.map { |f| File.basename(f, '.json') }
           )
 
+          prune_layout_orphans(builder)
+
           # A per-file failure used to be logged and stepped over, and the
           # build still ended with "completed!". The layout keeps whatever the
           # scaffold left behind — `build_file` creates the placeholder view
@@ -595,6 +598,33 @@ module KjuiTools
 
             file.sub("#{source_path}/", '')
           end.compact
+        end
+
+        # A deleted layout's outputs, by the rule the three faces share
+        # (lib/core/generated_orphans.rb). The Data model carries @generated
+        # and is deleted. The GeneratedView (and a variant's) is not: the
+        # generator owns only its GENERATED_CODE block — it writes
+        # "DO NOT EDIT between GENERATED_CODE markers" and keeps the rest as
+        # the scaffold left it — so it is named instead, as are a hand-written
+        # View and ViewModel of the same name.
+        def prune_layout_orphans(builder)
+          require_relative '../../compose/data_model_updater'
+          orphans = JsonUIShared::GeneratedOrphans
+          kinds = [
+            orphans::Kind.new(dir: Compose::DataModelUpdater.new.data_dir, owner: :generator,
+                              pattern: /\A(?<name>[A-Za-z0-9_]+)Data\.kt\z/),
+            orphans::Kind.new(dir: builder.view_dir, owner: :block,
+                              pattern: /\A(?<name>[A-Za-z0-9_]+)GeneratedView\.kt\z/),
+            orphans::Kind.new(dir: builder.view_dir, owner: :user,
+                              pattern: /\A(?<name>[A-Za-z0-9_]+?)View\.kt\z/),
+            orphans::Kind.new(dir: builder.viewmodel_dir, owner: :user,
+                              pattern: /\A(?<name>[A-Za-z0-9_]+)ViewModel\.kt\z/)
+          ]
+          result = orphans.sweep(layouts_dir: builder.layouts_dir, kinds: kinds)
+          base = Core::ProjectFinder.get_full_source_path || Dir.pwd
+          orphans.report_lines(result, base: base).each do |level, line|
+            level == :warn ? Core::Logger.warn(line) : Core::Logger.info(line)
+          end
         end
 
         # Views whose GENERATED_CODE block still holds the scaffold

@@ -23,6 +23,10 @@ module SjuiTools
     class DataModelUpdater < ::JsonUIShared::DataModelUpdaterCore
       include Helpers::StringManagerHelper
 
+      # Where Data models are written; the build's orphan sweep reads it here
+      # rather than spelling it again.
+      attr_reader :data_dir
+
       def initialize(mode: nil)
         @config = Core::ConfigManager.load_config
         @source_path = Core::ProjectFinder.get_full_source_path || Dir.pwd

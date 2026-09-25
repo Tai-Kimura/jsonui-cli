@@ -75,6 +75,10 @@ module KjuiTools
       # this, for exactly this reason).
       attr_reader :failed_files
 
+      # Where layouts are read and GeneratedViews written; the build's orphan
+      # sweep reads them here rather than spelling them again.
+      attr_reader :layouts_dir, :view_dir
+
       def initialize
         @failed_files = []
         @config = Core::ConfigManager.load_config
@@ -85,6 +89,11 @@ module KjuiTools
         @package_name = @config['package_name'] || Core::ProjectFinder.get_package_name || 'com.example.app'
 
         FileUtils.mkdir_p(@view_dir) unless File.exist?(@view_dir)
+      end
+
+      def viewmodel_dir
+        source_directory = @config['source_directory'] || 'src/main'
+        File.join(@source_path, source_directory, @config['viewmodel_directory'] || 'kotlin/viewmodels')
       end
 
       # Screen identity: only screens carry a marker (cells and partials
@@ -231,7 +240,6 @@ module KjuiTools
 
           # Update ViewModel's updateData function
           source_directory = @config['source_directory'] || 'src/main'
-          viewmodel_dir = File.join(@source_path, source_directory, @config['viewmodel_directory'] || 'kotlin/viewmodels')
           viewmodel_file = File.join(viewmodel_dir, "#{pascal_case_name}ViewModel.kt")
 
           # If MainView / GeneratedView / ViewModel haven't been scaffolded yet
