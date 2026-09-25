@@ -36,7 +36,9 @@ module RjuiTools
           # Priority: srcName > src > url > defaultImage
           if attributes['srcName']
             if has_binding?(attributes['srcName'])
-              binding_prop = extract_binding_property(attributes['srcName'])
+              # attribute_expression: a name with text around the binding
+              # (`icon_@{state}`) is one expression too.
+              binding_prop = attribute_expression(attributes['srcName'])
               "`/images/${#{binding_prop}}`"
             else
               "/images/#{resolve_image_extension(attributes['srcName'])}"

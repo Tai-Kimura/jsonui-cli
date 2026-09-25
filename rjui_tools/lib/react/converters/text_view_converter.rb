@@ -337,7 +337,8 @@ module RjuiTools
               prop = extract_binding_property(handler)
               # If text binding is present, pass (previousValue, newValue) for (String, String) callbacks
               if attributes['text'] && has_binding?(attributes['text'])
-                text_prop = extract_binding_property(attributes['text'])
+                # The value the textarea shows (build_attributes' value=).
+                text_prop = attribute_expression(attributes['text'])
                 return " onChange={(e) => #{prop}?.(#{text_prop}, e.target.value)}"
               else
                 return " onChange={(e) => #{prop}?.(e.target.value)}"

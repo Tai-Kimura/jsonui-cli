@@ -105,7 +105,7 @@ module KjuiTools
       # normalized spelling).
       def finalize_data_property(data_item, event_bindings)
         # Normalize type using TypeConverter with mode
-        normalized = Core::TypeConverter.normalize_data_property(data_item, @mode)
+        normalized = Core::TypeConverter.normalize_data_property(data_item, @mode, source: @current_layout)
 
         # Check if this property is bound to an event and has Event type
         prop_name = normalized['name']

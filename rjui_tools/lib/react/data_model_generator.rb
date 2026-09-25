@@ -144,6 +144,8 @@ module RjuiTools
         # data-default lookup runs with no namespace context (the sjui
         # data face gained the same announcement in 1.6.3).
         announce_own_namespaces(json_file)
+        # The layout a warning about one of its data properties names.
+        @current_layout = json_file.to_s.sub(/\A#{Regexp.escape(@layouts_dir)}\/?/, '')
 
         json_content = File.read(json_file, encoding: 'UTF-8')
         json_data = JSON.parse(json_content)
@@ -510,7 +512,7 @@ module RjuiTools
               json_data['data'].each do |data_item|
                 if data_item.is_a?(Hash)
                   # Normalize type using TypeConverter (mode: react)
-                  normalized = Core::TypeConverter.normalize_data_property(data_item, 'react')
+                  normalized = Core::TypeConverter.normalize_data_property(data_item, 'react', source: @current_layout)
 
                   # Check if this property is bound to an event and has Event type
                   prop_name = normalized['name']
@@ -985,10 +987,12 @@ module RjuiTools
             # The text the layout's spelling means ('' / "…" / '…' / bare,
             # StringLiterals.default_text), as a TS literal. Until 1.8.121
             # a quoted spelling passed through as written (`'it''s'` was
-            # not TS) and a bare one was quoted unescaped. Not a String —
-            # a platform dict with no `typescript` key reaches here as the
-            # Hash — stays on the path below, which writes code that does
-            # not parse: a quoted Hash#to_s would build and show it.
+            # not TS) and a bare one was quoted unescaped. A value that is
+            # not a String (a dictionary given to a String property) stays
+            # on the path below, which writes code that does not parse: a
+            # quoted Hash#to_s would build and show it. A dictionary written
+            # per platform no longer arrives here — the TypeConverter gives
+            # it this platform's value, or the String default "".
             JsonUIShared::StringLiterals.ts(JsonUIShared::StringLiterals.default_text(value))
           elsif value == "''"
             '""'

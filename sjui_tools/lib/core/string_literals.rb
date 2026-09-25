@@ -86,20 +86,17 @@ module JsonUIShared
 
     # The text an author's String default means, before any language's
     # escaping — ONE reading of the layout's spellings for the three
-    # generators:
+    # generators and the dynamic runtimes (SwiftJsonUI / KotlinJsonUI
+    # DataDefaultValue), all measured against shared/core/
+    # string_default_vectors.json:
     #   anything  the text as written — the CANONICAL spelling: `jui g
-    #             project` writes a spec's uiVariables default this way, and
-    #             the dynamic runtimes (SwiftJsonUI / KotlinJsonUI
-    #             DynamicView) read only this one, taking the value as it
-    #             stands, quotes included
+    #             project` writes a spec's uiVariables default this way
     #   ''        empty
     #   "…"       a literal: its escapes are JSON's (`\"` `\\` `\n` `\t`
     #             `\uXXXX`), the ones Swift, Kotlin and TypeScript share;
-    #             when they do not parse as JSON, the text between the quotes
+    #             when they do not read as JSON, the text between the quotes
     #   '…'       the text between the quotes, as written
-    # The quoted spellings are read by these generators only (`jui g
-    # project` does not write them); in dynamic mode the same layout shows
-    # the quotes.
+    # `jui g project` does not write the quoted spellings.
     # Until 1.8.121 the three read `"Test"` three ways: Kotlin and TS as
     # `Test`, Swift as `""Test""` (not Swift) — then as `"Test"` with its
     # quotes; `'it''s'` became invalid TS, and a bare `Say "hi"` was written
@@ -113,15 +110,21 @@ module JsonUIShared
         # Only JSON's escapes, read two characters at a time (so `\\d` is
         # a backslash and a d): Ruby's parser takes an unknown one (`\d`)
         # and drops its backslash, which is not "as written".
-        escapes = text[1...-1].scan(/\\(u\h{4}|.)/m).flatten
-        return text[1...-1] unless escapes.all? { |e| e.length == 5 || '"\\/bfnrt'.include?(e) }
+        # A raw control character is not JSON either, and a lone surrogate
+        # (`\udc00`) decodes to bytes that are not UTF-8 on every json
+        # version measured (2.1.0 and 2.16.0) — as written, both.
+        inner = text[1...-1]
+        escapes = inner.scan(/\\(u\h{4}|.)/m).flatten
+        return inner unless escapes.all? { |e| e.length == 5 || '"\\/bfnrt'.include?(e) }
+        return inner if inner.match?(/[\x00-\x1f]/)
+
         begin
           decoded = JSON.parse("[#{text}]")
-          return decoded.first if decoded.length == 1 && decoded.first.is_a?(String)
+          return decoded.first if decoded.length == 1 && decoded.first.is_a?(String) && decoded.first.valid_encoding?
         rescue JSON::ParserError
           nil
         end
-        return text[1...-1]
+        return inner
       end
       return text[1...-1] if text.length >= 2 && text.start_with?("'") && text.end_with?("'")
 

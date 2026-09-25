@@ -4,6 +4,7 @@ require 'json'
 require_relative 'config_manager'
 require_relative 'project_finder'
 require_relative 'type_converter_core'
+require_relative 'logger'
 
 module SjuiTools
   module Core
@@ -228,6 +229,12 @@ module SjuiTools
           else
             value.to_s
           end
+        end
+
+        # A build warning from the shared core (a data default with no
+        # value for this platform) goes where the tool's others go.
+        def report_warning(message)
+          Core::Logger.warn(message)
         end
 
         # Convert defaultValue based on the type

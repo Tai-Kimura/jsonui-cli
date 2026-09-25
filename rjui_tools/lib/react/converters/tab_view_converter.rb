@@ -194,7 +194,7 @@ module RjuiTools
 
         def build_badge(badge)
           if has_binding?(badge)
-            binding_prop = extract_binding_property(badge)
+            binding_prop = attribute_expression(badge)
             "#{indent_str(10)}{#{binding_prop} && <span className=\"absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full w-4 h-4 flex items-center justify-center\">{#{binding_prop}}</span>}"
           elsif badge.is_a?(Integer) && badge > 0
             "#{indent_str(10)}<span className=\"absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full w-4 h-4 flex items-center justify-center\">#{badge}</span>"

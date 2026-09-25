@@ -3,6 +3,8 @@
 require 'json'
 require 'open3'
 require 'tmpdir'
+require 'core/type_converter'
+require 'core/string_literals'
 require_relative '../spec_helper'
 require 'react/data_model_generator'
 
@@ -13,8 +15,9 @@ require 'react/data_model_generator'
 #   "…"               JSON's escapes; when they do not parse, the text
 #                     between the quotes as written
 #   '…'               the text between the quotes as written
-# Each row's text is written out by hand, not computed by default_text; the
-# emitted expression is evaluated by node and must read back as it.
+# Each row (shared/core/string_default_vectors.json) is written by hand, not
+# computed by default_text; the emitted expression is evaluated by node and
+# must read back as it.
 #
 # Until 1.8.121 a quoted spelling passed through as written (`'it''s'` is
 # not TS) and a bare one was quoted without escaping (`"Say "hi""`); the
@@ -22,29 +25,16 @@ require 'react/data_model_generator'
 # codegen-string-literals-are-not-escaped-for-the-target-language,
 # remaining 1.
 RSpec.describe 'a String defaultValue reads the same on every rjui path' do
-  rows = [
-    ['bare', 'Hello', 'Hello'],
-    ['bare, every special character', %q{Say "hi" \ $x \(z) ${y} `b` it's}, %q{Say "hi" \ $x \(z) ${y} `b` it's}],
-    ['bare, a quote at one end only', '"lead', '"lead'],
-    ['bare, an apostrophe at one end only', "trail'", "trail'"],
-    ['bare, one quote', '"', '"'],
-    ["''", "''", ''],
-    ['"" (JSON\'s empty)', '""', ''],
-    ['"…"', '"Test"', 'Test'],
-    ['"…" with no escape', '"Pay $x ${y} `b` {c} it\'s"', "Pay $x ${y} `b` {c} it's"],
-    ['"…" with JSON\'s escapes', '"a\nb \"hi\" \\\\ \u00e9 \/ \t"', "a\nb \"hi\" \\ \u00e9 / \t"],
-    ['"…" with an escape JSON does not have', '"C:\new \(t)"', 'C:\new \(t)'],
-    ['"…" that is not JSON', '"a"b"', 'a"b'],
-    ["'…'", "'Single'", 'Single'],
-    ["'…' holding ''", "'it''s'", "it''s"],
-    ["'…' holding a backslash", "'a\\nb'", 'a\nb']
-  ]
+  # The table every reader is measured with — the three generators here,
+  # SwiftJsonUI and KotlinJsonUI's dynamic mode from their vendored copy.
+  vectors = JSON.parse(File.read(File.expand_path('../../../shared/core/string_default_vectors.json', __dir__)))
+  rows = vectors['spellings'].map { |row| row.values_at('name', 'spelling', 'text') }
 
-  # The spellings in the table are Ruby literals: check the two that are
-  # easy to misread before anything is measured with them.
-  it 'spells its own rows as intended' do
-    expect(rows[9][1].chars.first(4)).to eq(['"', 'a', '\\', 'n'])
-    expect(rows[10][1]).to eq('"C:' + '\\' + 'new ' + '\\' + '(t)"')
+  # The table's JSON spells the two easiest to misread as intended.
+  it 'reads its rows as intended' do
+    spelling = ->(name) { rows.find { |row| row[0] == name }[1] }
+    expect(spelling.("\"…\" with JSON's escapes").chars.first(4)).to eq(['"', 'a', '\\', 'n'])
+    expect(spelling.('"…" with an escape JSON does not have')).to eq('"C:' + '\\' + 'new ' + '\\' + '(t)"')
   end
 
   generator = RjuiTools::React::DataModelGenerator.allocate
@@ -112,5 +102,33 @@ RSpec.describe 'a String defaultValue reads the same on every rjui path' do
   it 'passes a Color or Image default through as TypeConverter wrote it' do
     expect(generator.send(:format_default_value, '"#FF0000"', 'string', 'Color')).to eq('"#FF0000"')
     expect(generator.send(:format_default_value, "'/images/x'", 'string', 'Image')).to eq("'/images/x'")
+  end
+
+  # A value written per platform ({ "swift": …, "kotlin": … }): the one
+  # this platform gets, or — when the layout gives it none — the class's
+  # vocabulary value and a WARNING naming the layout, the property and the
+  # platform (ruling 2026-09-26). Until 1.8.121 the Hash went on as the
+  # value, and rjui wrote `"{"swift"=>"eager", "kotlin"=>"lazy"}"`.
+  describe 'a defaultValue written per platform' do
+    converter = RjuiTools::Core::TypeConverter
+    vectors['platforms'].each do |row|
+      it "#{row['name']}: typescript gets #{row['expect']['typescript'].inspect}" do
+        allow(converter).to receive(:report_warning)
+        normalized = converter.normalize_data_property(
+          { 'name' => 'probe', 'class' => row['class'], 'defaultValue' => row['defaultValue'] },
+          'react', source: 'screens/probe.json'
+        )
+        value = normalized['defaultValue']
+        # A String value is read as its spelling says, as the writer reads it.
+        value = JsonUIShared::StringLiterals.default_text(value) if row['class'] == 'String' && value.is_a?(String)
+        expect(value).to eq(row['expect']['typescript'])
+        if row['warnFor'].include?('typescript')
+          expect(converter).to have_received(:report_warning)
+            .once.with(a_string_including("screens/probe.json: data 'probe'", 'but not typescript'))
+        else
+          expect(converter).not_to have_received(:report_warning)
+        end
+      end
+    end
   end
 end

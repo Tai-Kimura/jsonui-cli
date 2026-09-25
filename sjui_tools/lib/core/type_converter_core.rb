@@ -27,6 +27,8 @@ module JsonUIShared
   #                              on swift/kotlin, 'tsType' on react)
   #   convert_default_value(value, raw_class, mode)
   #                              the platform default-value emitter
+  #   report_warning(message)    where a build warning goes (the tool's
+  #                              Logger; stderr when a profile has none)
   #
   # Unified 2026-08-02 (W3-2, file 7). Divergences resolved toward the
   # correct side:
@@ -40,6 +42,19 @@ module JsonUIShared
   #     it reasons about JSON-side types, so it is platform-neutral and
   #     now available everywhere
   class TypeConverterCore
+    # The keys a per-platform value is written with.
+    PLATFORM_LANGUAGES = %w[swift kotlin typescript].freeze
+
+    # A class's value when the layout gives this platform none: the
+    # vocabulary `jui g project` writes a spec's types with
+    # (jui_cli/core/type_mapper.py) — "" / 0 / 0.0 / false / [] — and nil
+    # for an optional. [known, value]; a class outside the vocabulary has
+    # no such value.
+    VOCABULARY_DEFAULTS = {
+      'String' => '', 'Int' => 0, 'Integer' => 0, 'Double' => 0.0, 'Float' => 0.0, 'CGFloat' => 0.0,
+      'Bool' => false, 'Boolean' => false
+    }.freeze
+
     class << self
       attr_accessor :colors_data, :colors_file_path, :type_mapping
 
@@ -63,6 +78,10 @@ module JsonUIShared
 
       def convert_default_value(value, _raw_class, _mode = nil)
         value
+      end
+
+      def report_warning(message)
+        warn "[TypeConverter] Warning: #{message}"
       end
 
       # ------------------------------------------------------------------
@@ -413,8 +432,10 @@ module JsonUIShared
       # Convert data property from JSON format to normalized format
       # @param data_prop [Hash] the data property from JSON
       # @param mode [String, nil] the platform mode
+      # @param source [String, nil] the layout, given by the writer of the
+      #   Data model — the one caller that reports a platform-less default
       # @return [Hash] normalized data property with the platform type
-      def normalize_data_property(data_prop, mode = nil)
+      def normalize_data_property(data_prop, mode = nil, source: nil)
         return data_prop unless data_prop.is_a?(Hash)
 
         normalized = data_prop.dup
@@ -427,7 +448,9 @@ module JsonUIShared
         end
 
         # Extract platform-specific defaultValue and convert for special types
-        if normalized['defaultValue']
+        if platform_value_missing?(normalized['defaultValue'])
+          default_for_missing_platform(normalized, raw_class, source)
+        elsif normalized['defaultValue']
           raw_value = extract_platform_value(normalized['defaultValue'], mode)
           normalized['defaultValue'] = convert_default_value(raw_value, raw_class, mode)
         end
@@ -436,10 +459,54 @@ module JsonUIShared
       end
 
       # Convert array of data properties
-      def normalize_data_properties(data_props, mode = nil)
+      def normalize_data_properties(data_props, mode = nil, source: nil)
         return [] unless data_props.is_a?(Array)
 
-        data_props.map { |prop| normalize_data_property(prop, mode) }
+        data_props.map { |prop| normalize_data_property(prop, mode, source: source) }
+      end
+
+      # A value written per platform (`{ "swift": …, "kotlin": … }`) that
+      # gives this platform nothing. extract_platform_value hands such a
+      # Hash back as it is, and the Data model wrote it as the class's
+      # value: rjui wrote `"{"swift"=>"eager", "kotlin"=>"lazy"}"`, which
+      # is not TypeScript, for a String default with no `typescript` key.
+      def platform_value_missing?(value)
+        value.is_a?(Hash) && !value.empty? && !value.key?(self::LANGUAGE) &&
+          value.keys.all? { |key| PLATFORM_LANGUAGES.include?(key) }
+      end
+
+      # [known, value] — see VOCABULARY_DEFAULTS.
+      def vocabulary_default(raw_class)
+        type = raw_class.to_s.strip
+        return [true, nil] if type.end_with?('?')
+        return [true, VOCABULARY_DEFAULTS[type]] if VOCABULARY_DEFAULTS.key?(type)
+        return [true, []] if type.match?(/\AArray\(|\AList</) || (type.match?(/\A\[.*\]\z/) && !type.include?(':'))
+
+        [false, nil]
+      end
+
+      # Ruling (2026-09-26): the class's vocabulary value and a WARNING that
+      # names the layout, the property and the platform — the same answer on
+      # every face and in dynamic mode. "Not given on this platform" has a
+      # fixed meaning, so it does not stop the build.
+      def default_for_missing_platform(normalized, raw_class, source)
+        given = normalized['defaultValue'].keys
+        known, value = vocabulary_default(raw_class)
+        if known && !value.nil?
+          normalized['defaultValue'] = value
+        else
+          normalized.delete('defaultValue')
+        end
+        return if source.nil?
+
+        answer = if !known then "no default (#{raw_class} has no vocabulary value)"
+                 elsif value.nil? then 'nil'
+                 else "the #{raw_class} default #{value.inspect}"
+                 end
+        report_warning(
+          "#{source}: data '#{normalized['name']}' defaultValue is given for #{given.join(', ')} " \
+          "but not #{self::LANGUAGE} — #{self::LANGUAGE} gets #{answer}"
+        )
       end
 
       def format_string_value(value)

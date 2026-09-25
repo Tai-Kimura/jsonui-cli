@@ -10,6 +10,9 @@ require 'react/converters/network_image_converter'
 require 'react/converters/text_field_converter'
 require 'react/converters/text_view_converter'
 require 'react/converters/view_converter'
+require 'react/converters/web_converter'
+require 'react/converters/button_converter'
+require 'react/converters/tab_view_converter'
 
 # An attribute holding a binding is written as ONE JavaScript expression
 # (BaseConverter#attribute_expression). Until 1.8.121 these sites took
@@ -38,27 +41,48 @@ module BindingAttributeExpressionSpec
     ['a binding that is not an expression', '@{bad name}', '@{bad name}']
   ].freeze
 
-  # [site, element tag, attribute a binding lands in, attribute a literal
-  # lands in, emit]
+  # One row per site: the element, the attribute a binding lands in and
+  # the one a literal lands in, and what the element receives for a text
+  # (`/images/<text>` for an image name). `bound_only`: a literal takes
+  # another path there (an image name gets its extension resolved).
+  site = lambda do |name, tag, bound, literal, emit, expect: ->(t) { t }, alone: '{data.img}', bound_only: false,
+                    locate: nil|
+    { name: name, tag: tag, bound: bound, literal: literal, emit: emit, expect: expect, alone: alone,
+      bound_only: bound_only, locate: locate }
+  end
+  image_name = ->(t) { "/images/#{t}" }
   SITES = [
-    ['Image src', '<img', 'src', 'src', ->(v) { C::ImageConverter.new({ 'type' => 'Image', 'src' => v }, CONFIG.dup).convert }],
-    ['Image url', '<img', 'src', 'src', ->(v) { C::ImageConverter.new({ 'type' => 'Image', 'url' => v }, CONFIG.dup).convert }],
-    ['IconLabel icon', '<img', 'src', 'src',
-     ->(v) { C::IconLabelConverter.new({ 'type' => 'IconLabel', 'text' => 't', 'icon' => v }, CONFIG.dup).convert }],
-    ['NetworkImage src', '<NetworkImage', 'src', 'src',
-     ->(v) { C::NetworkImageConverter.new({ 'type' => 'NetworkImage', 'src' => v }, CONFIG.dup).convert }],
-    ['NetworkImage placeholder', '<NetworkImage', 'placeholder', 'placeholder',
-     lambda { |v|
-       C::NetworkImageConverter.new({ 'type' => 'NetworkImage', 'src' => 'a.png', 'placeholder' => v }, CONFIG.dup).convert
-     }],
-    ['TextField text', '<input', 'value', 'defaultValue',
-     ->(v) { C::TextFieldConverter.new({ 'type' => 'TextField', 'id' => 'f', 'text' => v }, CONFIG.dup).convert }],
-    ['TextField hint', '<input', 'placeholder', 'placeholder',
-     ->(v) { C::TextFieldConverter.new({ 'type' => 'TextField', 'id' => 'f', 'hint' => v }, CONFIG.dup).convert }],
-    ['TextView text', '<textarea', 'value', 'defaultValue',
-     ->(v) { C::TextViewConverter.new({ 'type' => 'TextView', 'id' => 'f', 'text' => v }, CONFIG.dup).convert }],
-    ['TextView hint', '<textarea', 'placeholder', 'placeholder',
-     ->(v) { C::TextViewConverter.new({ 'type' => 'TextView', 'id' => 'f', 'hint' => v }, CONFIG.dup).convert }]
+    site.('Image src', '<img', 'src', 'src', ->(v) { C::ImageConverter.new({ 'type' => 'Image', 'src' => v }, CONFIG.dup).convert }),
+    site.('Image url', '<img', 'src', 'src', ->(v) { C::ImageConverter.new({ 'type' => 'Image', 'url' => v }, CONFIG.dup).convert }),
+    site.('Image srcName', '<img', 'src', 'src',
+          ->(v) { C::ImageConverter.new({ 'type' => 'Image', 'srcName' => v }, CONFIG.dup).convert },
+          expect: image_name, alone: '{`/images/${data.img}`}', bound_only: true),
+    site.('IconLabel icon', '<img', 'src', 'src',
+          ->(v) { C::IconLabelConverter.new({ 'type' => 'IconLabel', 'text' => 't', 'icon' => v }, CONFIG.dup).convert }),
+    site.('Button image', '<img', 'src', 'src',
+          ->(v) { C::ButtonConverter.new({ 'type' => 'Button', 'text' => 't', 'image' => v }, CONFIG.dup).convert },
+          expect: image_name, alone: '{`/images/${data.img}`}', bound_only: true),
+    site.('NetworkImage src', '<NetworkImage', 'src', 'src',
+          ->(v) { C::NetworkImageConverter.new({ 'type' => 'NetworkImage', 'src' => v }, CONFIG.dup).convert }),
+    site.('NetworkImage placeholder', '<NetworkImage', 'placeholder', 'placeholder',
+          lambda { |v|
+            C::NetworkImageConverter.new({ 'type' => 'NetworkImage', 'src' => 'a.png', 'placeholder' => v }, CONFIG.dup).convert
+          }),
+    site.('Web url', '<iframe', 'src', 'src', ->(v) { C::WebConverter.new({ 'type' => 'Web', 'url' => v }, CONFIG.dup).convert }),
+    site.('Web html', '<iframe', 'srcDoc', 'srcDoc',
+          ->(v) { C::WebConverter.new({ 'type' => 'Web', 'html' => v }, CONFIG.dup).convert }),
+    site.('TextField text', '<input', 'value', 'defaultValue',
+          ->(v) { C::TextFieldConverter.new({ 'type' => 'TextField', 'id' => 'f', 'text' => v }, CONFIG.dup).convert }),
+    site.('TextField hint', '<input', 'placeholder', 'placeholder',
+          ->(v) { C::TextFieldConverter.new({ 'type' => 'TextField', 'id' => 'f', 'hint' => v }, CONFIG.dup).convert }),
+    site.('TextView text', '<textarea', 'value', 'defaultValue',
+          ->(v) { C::TextViewConverter.new({ 'type' => 'TextView', 'id' => 'f', 'text' => v }, CONFIG.dup).convert }),
+    site.('TextView hint', '<textarea', 'placeholder', 'placeholder',
+          ->(v) { C::TextViewConverter.new({ 'type' => 'TextView', 'id' => 'f', 'hint' => v }, CONFIG.dup).convert }),
+    # A JSX child, `{badge && <span …>{badge}</span>}`: its condition.
+    site.('TabView badge', nil, nil, nil,
+          ->(v) { C::TabViewConverter.new({ 'type' => 'TabView', 'tabs' => [{ 'title' => 'a', 'badge' => v }] }, CONFIG.dup).convert },
+          bound_only: true, locate: ->(emitted) { (m = emitted[/\{(.+?) && <span /, 1]) && "{#{m}}" })
   ].freeze
 
   NODE_PROGRAM = <<~JS
@@ -146,14 +170,15 @@ RSpec.describe 'an attribute holding a binding is one expression' do
 
   before(:context) do
     @unavailable = spec.unavailable_reason
-    @rows = spec::SITES.flat_map do |site, tag, bound_attr, literal_attr, emit|
-      spec::VALUES.map do |name, value, text|
-        emitted = emit.(value)
-        attr = value.include?('@{') ? bound_attr : literal_attr
-        { site: site, name: name, value: value, text: text, emitted: emitted,
-          source: spec.attribute_source(emitted, tag, attr) }
+    @rows = spec::SITES.flat_map do |site|
+      values = site[:bound_only] ? spec::VALUES.select { |_, value, _| value.include?('@{') } : spec::VALUES
+      values.map do |name, value, text|
+        emitted = site[:emit].(value)
+        attr = value.include?('@{') ? site[:bound] : site[:literal]
+        source = site[:locate] ? site[:locate].(emitted) : spec.attribute_source(emitted, site[:tag], attr)
+        { site: site[:name], name: name, value: value, text: site[:expect].(text), emitted: emitted, source: source }
       rescue StandardError => e
-        { site: site, name: name, value: value, text: text, error: "#{e.class}: #{e.message}" }
+        { site: site[:name], name: name, value: value, text: text, error: "#{e.class}: #{e.message}" }
       end
     end
     next if @unavailable
@@ -169,7 +194,8 @@ RSpec.describe 'an attribute holding a binding is one expression' do
     end
   end
 
-  spec::SITES.each do |site, *|
+  spec::SITES.each do |row|
+    site = row[:name]
     it "#{site}: every value reads back as the text (node)" do
       if @unavailable
         raise @unavailable if ENV['CI']
@@ -190,8 +216,20 @@ RSpec.describe 'an attribute holding a binding is one expression' do
 
     # A binding alone is written as it always was.
     it "#{site}: a binding alone comes out as it did" do
-      row = @rows.find { |r| r[:site] == site && r[:value] == '@{img}' }
-      expect(row[:source]).to eq('{data.img}')
+      measured = @rows.find { |r| r[:site] == site && r[:value] == '@{img}' }
+      expect(measured[:source]).to eq(row[:alone])
+    end
+  end
+
+  # The textarea hands its handler the value it shows as the previous one:
+  # the same expression as its value attribute.
+  it 'passes the value the TextView shows to onTextChange as the previous value' do
+    spec::VALUES.select { |_, value, _| value.include?('@{') }.each do |name, value, _|
+      emitted = spec::C::TextViewConverter.new(
+        { 'type' => 'TextView', 'id' => 'f', 'text' => value, 'onTextChange' => '@{changed}' }, spec::CONFIG.dup
+      ).convert
+      shown = spec.attribute_source(emitted, '<textarea', 'value')
+      expect(emitted).to include("onChange={(e) => data.changed?.(#{shown[1..-2]}, e.target.value)}"), name
     end
   end
 

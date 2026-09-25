@@ -128,7 +128,7 @@ module SjuiTools
         end
 
         # Normalize type using TypeConverter (mode: swiftui) after Event replacement
-        Core::TypeConverter.normalize_data_property(modified_item, 'swiftui')
+        Core::TypeConverter.normalize_data_property(modified_item, 'swiftui', source: @current_layout)
       end
 
       def data_file_extension
