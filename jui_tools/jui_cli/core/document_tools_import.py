@@ -13,9 +13,15 @@ The validator is found by the first of these that imports:
 2. the distribution this jui runs from — its root holds jui_tools/ and
    document_tools/ side by side (~/.jsonui-cli, or a jsonui-cli checkout).
    The root goes on sys.path so `document_tools.` resolves, and its
-   test_tools/ too when `jsonui_test_cli` is not importable (the validator
-   imports it). Before the pip name, so the validator is the release this jui
-   is, even with an older copy installed elsewhere;
+   test_tools/ goes FIRST: the validator imports `jsonui_test_cli`
+   (`gate_literal`, `contract_declarations`), and `install_jsonui_test.sh`
+   installs that package with a plain `pip install .` at whatever version it
+   was given — a copy the validator was not released with. Found first, that
+   copy decided the validator's answers: measured with this jui and a
+   jsonui-test one release older, every spec whose layout lacked an id got
+   "LAYOUT_ID_GATE_FROM … is not importable (No module named
+   'jsonui_test_cli.gate_literal')" in place of its verdict. Before the pip
+   name, so the validator and what it imports are the release this jui is;
 3. the pip name — `jsonui_doc_cli`, document_tools installed with `pip -e`.
 
 Routes 2 and 3 reach the same file in a checkout (the validator's own imports
@@ -23,7 +29,7 @@ are relative, so either package name works).
 """
 from __future__ import annotations
 
-import importlib.util
+import importlib
 import sys
 from pathlib import Path
 
@@ -53,7 +59,9 @@ def load_spec_validator() -> tuple[object | None, str]:
         if str(root) not in sys.path:
             sys.path.insert(0, str(root))
         test_tools = root / "test_tools"
-        if importlib.util.find_spec("jsonui_test_cli") is None and test_tools.is_dir():
+        if (test_tools / "jsonui_test_cli").is_dir():
+            if str(test_tools) in sys.path:
+                sys.path.remove(str(test_tools))
             sys.path.insert(0, str(test_tools))
         try:
             return _import(f"document_tools.{VALIDATOR}"), f"document_tools beside jui_tools in {root}"

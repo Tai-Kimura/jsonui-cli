@@ -68,6 +68,33 @@ def test_the_pip_name_reaches_the_same_validator(tmp_path):
     assert Path(got["FILE"]) == VALIDATOR_FILE and got["WHERE"] == "jsonui_doc_cli (pip)", got
 
 
+def _older_jsonui_test(tmp_path: Path) -> Path:
+    """A jsonui-test one release older, as `install_jsonui_test.sh` leaves it
+    (`pip install .`, not editable): a `jsonui_test_cli` with no gate_literal."""
+    pkg = tmp_path / "site" / "jsonui_test_cli"
+    pkg.mkdir(parents=True)
+    (pkg / "__init__.py").write_text("# an older jsonui-test: no gate_literal\n", encoding="utf-8")
+    return pkg.parent
+
+
+def test_control_an_older_jsonui_test_found_first_lacks_what_the_validator_imports(tmp_path):
+    run = _python([_older_jsonui_test(tmp_path), REPO / "test_tools"],
+                  "import jsonui_test_cli.gate_literal")
+    assert run.returncode != 0 and "No module named 'jsonui_test_cli.gate_literal'" in run.stderr, run.stderr
+
+
+def test_the_validator_imports_the_jsonui_test_it_was_released_with(tmp_path):
+    """The same site found first; the loader puts the distribution's
+    test_tools ahead of it, so what the validator imports is this release."""
+    run = _python([_older_jsonui_test(tmp_path), REPO / "jui_tools"], _LOAD + (
+        "import jsonui_test_cli.gate_literal as g\n"
+        "print('GATE', g.__file__)\n"))
+    assert run.returncode == 0, run.stderr
+    got = _fields(run.stdout)
+    assert "beside jui_tools" in got["WHERE"], got
+    assert Path(got["GATE"]) == REPO / "test_tools/jsonui_test_cli/gate_literal.py", got
+
+
 def _project(root: Path) -> Path:
     (root / "docs/screens/json").mkdir(parents=True)
     (root / "jui.config.json").write_text(json.dumps({
