@@ -145,6 +145,7 @@ module KjuiTools
             # frozen_string_literal: true
 
             require_relative '../../helpers/modifier_builder'
+            require_relative '../../../core/attribute_types'
 
             module KjuiTools
               module Compose
@@ -160,19 +161,24 @@ module KjuiTools
                         # Collect parameters
                         params = []
 
-                        # Helper method to format values
+                        # A literal the layout gives a prop, written as the Kotlin the
+                        # composable's declared type takes — by the shared attribute
+                        # type vocabulary (lib/core/attribute_types.rb), the table the
+                        # composable itself was scaffolded from. A string the project
+                        # declares as a resource stays stringResource(...); a colour
+                        # goes through ResourceResolver as before. nil when it cannot
+                        # be written: the prop is then passed nothing, and said so.
                         format_value = lambda do |value, type|
-                          case type.downcase
-                          when 'string', 'text'
-                            # Use ResourceResolver to process strings (checks for resources)
-                            Helpers::ResourceResolver.process_text(value, required_imports)
-                          when 'int', 'integer', 'float', 'double', 'bool', 'boolean'
-                            value.to_s
-                          when 'color'
-                            # Use ResourceResolver to process colors
-                            Helpers::ResourceResolver.process_color(value, required_imports)
-                          else
-                            value.to_s
+                          JsonUIShared::AttributeTypes.kotlin_literal(type, value) do |canonical, literal|
+                            next nil unless literal.is_a?(String)
+
+                            case canonical
+                            when 'string'
+                              resolved = Helpers::ResourceResolver.process_text(literal, required_imports)
+                              resolved if resolved.to_s.include?('stringResource')
+                            when 'color'
+                              Helpers::ResourceResolver.process_color(literal, required_imports)
+                            end
                           end
                         end
             #{generate_parameter_collection}
@@ -280,7 +286,8 @@ module KjuiTools
             is_binding = key.start_with?('@')
             actual_key = is_binding ? key[1..-1] : key
 
-            lines << "            if json_data['#{actual_key}']"
+            # By key, not by value: a `false` the layout gives is a value too.
+            lines << "            if json_data.key?('#{actual_key}')"
             lines << "              value = json_data['#{actual_key}']"
             lines << "              if value.is_a?(String) && value.match?(/@\\{([^}]+)\\}/)"
             lines << "                # Handle binding"
@@ -289,7 +296,13 @@ module KjuiTools
             lines << "              else"
             lines << "                # Handle static value"
             lines << "                formatted_value = format_value.call(value, '#{type}')"
-            lines << "                params << \"#{actual_key} = \#{formatted_value}\" if formatted_value"
+            lines << "                if formatted_value"
+            lines << "                  params << \"#{actual_key} = \#{formatted_value}\""
+            lines << "                else"
+            lines << "                  warn \"[kjui] #{@component_pascal_case}.#{actual_key}: the layout's \#{value.inspect} is not a #{type} \" \\"
+            lines << "                       \"literal this converter can write — the prop keeps its default. Give a #{type} value, \" \\"
+            lines << "                       \"or bind it (@{…}).\""
+            lines << "                end"
             lines << "              end"
             lines << "            end"
           end
