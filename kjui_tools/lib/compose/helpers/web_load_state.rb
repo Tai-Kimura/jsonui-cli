@@ -30,7 +30,10 @@ module KjuiTools
         def self.update_lines(json_data, reload_call)
           return [] unless declared?(json_data)
 
-          lines = ['val loadState = KjuiWebLoadState.of(webView)']
+          # KjuiWebLoadState is new in the library, so this output does not
+          # compile against an older one.
+          lines = ['// Requires KotlinJsonUI >= 2.41.0 (Web onLoadFailed / reloadToken)',
+                   'val loadState = KjuiWebLoadState.of(webView)']
           handler = json_data['onLoadFailed']
           if ModifierBuilder.is_binding?(handler)
             invocation = ModifierBuilder.get_event_handler_invocation(handler, json_data['id'], nil)

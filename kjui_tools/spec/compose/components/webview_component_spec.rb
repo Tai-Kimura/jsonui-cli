@@ -207,6 +207,7 @@ RSpec.describe KjuiTools::Compose::Components::WebviewComponent do
       # The body sits two levels in (8 spaces at depth 0).
       update = code[/update = \{ webView ->\n(.*?)\n    \},/m, 1].gsub(/^ {8}/, '')
       expect(update).to eq(<<~KOTLIN.chomp)
+            // Requires KotlinJsonUI >= 2.41.0 (Web onLoadFailed / reloadToken)
             val loadState = KjuiWebLoadState.of(webView)
             loadState.onLoadFailed = { data.failed?.invoke() }
             if (loadState.reloadTokenChanged(data.token)) {

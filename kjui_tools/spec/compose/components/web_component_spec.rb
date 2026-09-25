@@ -355,6 +355,7 @@ RSpec.describe KjuiTools::Compose::Components::WebComponent do
       # The body sits two levels in (8 spaces at depth 0).
       update = code[/update = \{ webView ->\n(.*?)\n    \},/m, 1].gsub(/^ {8}/, '')
       expect(update).to eq(<<~KOTLIN.chomp)
+            // Requires KotlinJsonUI >= 2.41.0 (Web onLoadFailed / reloadToken)
             val loadState = KjuiWebLoadState.of(webView)
             loadState.onLoadFailed = { data.onLoadFailed?.invoke() }
             if (loadState.reloadTokenChanged(data.reloadToken)) {
@@ -374,7 +375,7 @@ RSpec.describe KjuiTools::Compose::Components::WebComponent do
         { 'type' => 'Web', 'url' => 'https://a.test', 'reloadToken' => '@{token}' }, 0, Set.new
       )
       expect(code).to include("if (loadState.reloadTokenChanged(data.token)) {\n            webView.loadUrl(\"https://a.test\")")
-      expect(code).not_to include('onLoadFailed')
+      expect(code).not_to include('loadState.onLoadFailed')
     end
 
     it 'reloads the html when there is no url' do

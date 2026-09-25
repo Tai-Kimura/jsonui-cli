@@ -49,6 +49,11 @@ module SjuiTools
             args << "reloadToken: #{swift_string_or_binding(token)}"
           end
 
+          # `onLoadFailed:` / `reloadToken:` are new WebView parameters, so this
+          # output does not compile against an older library.
+          if args.any? { |a| a.start_with?('onLoadFailed:', 'reloadToken:') }
+            add_line '// Requires SwiftJsonUI >= 10.28.0 (Web onLoadFailed / reloadToken)'
+          end
           add_line "WebView(#{args.join(', ')})"
           
           # 共通のモディファイアを適用

@@ -138,8 +138,16 @@ RSpec.describe SjuiTools::SwiftUI::Views::WebConverter do
         'onLoadFailed' => '@{onLoadFailed}', 'reloadToken' => '@{reloadToken}'
       })
       expect(code).to eq(
+        "// Requires SwiftJsonUI >= 10.28.0 (Web onLoadFailed / reloadToken)\n" \
         'WebView(url: URL(string: data.pageUrl), onLoadFailed: { data.onLoadFailed?() }, reloadToken: data.reloadToken)'
       )
+    end
+
+    it 'names the library floor only when one of them is emitted' do
+      expect(generated({ 'type' => 'Web', 'url' => 'https://a.test', 'reloadToken' => '@{t}' }))
+        .to include('// Requires SwiftJsonUI >= 10.28.0')
+      expect(generated({ 'type' => 'Web', 'url' => 'https://a.test', 'allowsLinkPreview' => false }))
+        .not_to include('Requires')
     end
 
     it 'keeps them after the flags, in initializer order' do
