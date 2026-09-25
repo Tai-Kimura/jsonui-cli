@@ -240,4 +240,43 @@ RSpec.describe KjuiTools::Compose::Components::TabviewComponent do
       expect(result).to eq('        text')
     end
   end
+
+  # This file asserted the TabView emit's text 38 times and handed none of
+  # it to a compiler — the emitted-Kotlin gate did not count it (its old
+  # predicate read three assertion spellings, none of them this file's), and a badge that emitted
+  # unbalanced braces lived here unseen. One broad arm: the shapes this file
+  # covers — a bound selectedIndex, tint / unselected / bar colours, tab
+  # views, system icons (a distinct selected one included), resource icons
+  # with a selected drawable, and no labels — well-typed against the TabView
+  # stub universe (spec/support/compose_stub_universe.rb). Types against
+  # stubs only — not the Compose compiler's rules. Badges are
+  # tabview_badge_spec.rb's.
+  it 'emits Kotlin that compiles, for the shapes this file covers' do
+    bound = described_class.generate({
+      'type' => 'TabView', 'selectedIndex' => '@{tab}',
+      'tintColor' => '#FF0000', 'unselectedColor' => '#00FF00', 'tabBarBackground' => '#FFFFFF',
+      'tabs' => [
+        { 'title' => 'Home', 'icon' => 'house', 'view' => 'home' },
+        { 'title' => 'Me', 'icon' => 'person', 'selectedIcon' => 'person.fill', 'view' => 'profile' },
+        { 'title' => 'Res', 'icon' => 'ic_a', 'selectedIcon' => 'ic_b', 'iconType' => 'resource' }
+      ]
+    }, 1, required_imports)
+    local = described_class.generate({
+      'type' => 'TabView', 'showLabels' => false, 'selectedIndex' => 1,
+      'tabs' => [{ 'title' => 'One', 'icon' => 'star' }, { 'title' => 'Two', 'icon' => 'gear' }]
+    }, 1, required_imports)
+    expect(<<~KOTLIN).to compile_as_kotlin
+      #{ComposeStubUniverse.tabview(bound + local)}
+      class Data(val tab: Int = 0)
+      class ViewModel { fun updateData(values: Map<String, Any>) {} }
+
+      fun bound(data: Data, viewModel: ViewModel) {
+      #{bound}
+      }
+
+      fun local() {
+      #{local}
+      }
+    KOTLIN
+  end
 end

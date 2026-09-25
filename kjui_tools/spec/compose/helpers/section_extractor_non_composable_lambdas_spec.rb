@@ -43,6 +43,60 @@ RSpec.describe KjuiTools::Compose::Helpers::SectionExtractor do
     'webview_component.rb' => 'WebView'
   }.freeze
 
+  # The names a generated view file brings in through its imports, as types
+  # only (spec/support/kotlin_compiler.rb).
+  # `settings`, `loadUrl` and the clients exist only as WebView members, so a
+  # statement cut out of `WebView(context).apply { … }` is an unresolved
+  # reference, as it was in Gradle.
+  STUBS_FOR_A_GENERATED_VIEW = <<~KOTLIN
+    annotation class Composable
+    interface Modifier { companion object : Modifier }
+    fun Modifier.fillMaxSize(): Modifier = this
+    fun Modifier.fillMaxWidth(): Modifier = this
+    fun Modifier.fillMaxHeight(): Modifier = this
+    fun Modifier.testTag(tag: String): Modifier = this
+    class Dp
+    val Int.dp: Dp get() = Dp()
+    fun Modifier.requiredHeight(height: Dp): Modifier = this
+    class SemanticsPropertyReceiver { var testTagsAsResourceId: Boolean = false }
+    fun Modifier.semantics(properties: SemanticsPropertyReceiver.() -> Unit): Modifier = this
+    class Alignment { companion object { val Center = Alignment() } }
+    class Color { companion object { val Gray = Color() } }
+    interface BoxScope
+    interface ColumnScope
+    fun Box(modifier: Modifier = Modifier, contentAlignment: Alignment = Alignment.Center,
+            propagateMinConstraints: Boolean = false, content: BoxScope.() -> Unit = {}) {}
+    fun Column(modifier: Modifier = Modifier, content: ColumnScope.() -> Unit) {}
+    fun Text(text: String, color: Color = Color.Gray) {}
+    fun CircularProgressIndicator() {}
+    object android { object util { object Log { fun e(tag: String, msg: String): Int = 0 } } }
+    object DynamicModeManager { fun isActive(): Boolean = false }
+    fun SafeDynamicView(layoutName: String, modifier: Modifier = Modifier, data: Map<String, Any> = emptyMap(),
+                        fallback: () -> Unit = {}, onError: (Throwable) -> Unit = {}, onLoading: () -> Unit = {},
+                        content: (Any) -> Unit = {}) {}
+    fun DriveEmbedInitParams(viewModel: Any) {}
+    fun ScreenMarker(name: String) {}
+    enum class Visibility { Visible, Invisible, Gone }
+    fun VisibilityWrapper(visibility: Visibility, content: () -> Unit) {}
+    class Context
+    class WebSettings { var javaScriptEnabled: Boolean = false }
+    open class WebViewClient
+    class KjuiWebViewClient : WebViewClient()
+    open class WebChromeClient
+    class WebView(context: Context) {
+        val settings = WebSettings()
+        var tag: Any? = null
+        var webViewClient: WebViewClient? = null
+        var webChromeClient: WebChromeClient? = null
+        fun loadUrl(url: String) {}
+    }
+    fun <T> AndroidView(factory: (Context) -> T, modifier: Modifier = Modifier, update: (T) -> Unit = {}) {}
+    class ProbeData(val pageUrl: String = "", val pageVisibility: Visibility = Visibility.Visible) {
+        fun toMap(): Map<String, Any> = emptyMap()
+    }
+    class ProbeViewModel
+  KOTLIN
+
   it 'runs every converter that emits an AndroidView (a new one joins the matrix)' do
     components = File.expand_path('../../../lib/compose/components', __dir__)
     emitting = Dir.glob(File.join(components, '*.rb'))
@@ -131,6 +185,22 @@ RSpec.describe KjuiTools::Compose::Helpers::SectionExtractor do
           # section — so this is not the extractor switched off.
           expect(src).to match(/private fun Section\w+\(/)
         end
+      end
+    end
+
+    # The whole generated file, for the reported shape of each converter,
+    # compiled: this is where 1.8.119 put the factory's statements into
+    # @Composable sections ("Unresolved reference 'settings'") and `jui build`
+    # exited 0. The package and imports are dropped and the names they bring
+    # in are stubbed as types (STUBS_FOR_A_GENERATED_VIEW) — a green says
+    # "well-typed against these stubs", not "valid Compose".
+    ANDROID_VIEW_CONVERTERS.each_value do |type|
+      it "emits a #{type} screen whose whole file compiles" do
+        src, failed, = build(screen(type, id: true, visibility: true, nest: 0))
+        expect(failed).to be_empty
+        expect(src).to match(/private fun Section\w+\(/) # the cut happened
+        kotlin = src.lines.reject { |l| l.start_with?('package ', 'import ') }.join
+        expect(STUBS_FOR_A_GENERATED_VIEW + kotlin).to compile_as_kotlin
       end
     end
   end
