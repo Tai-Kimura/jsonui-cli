@@ -663,6 +663,52 @@ else
 fi
 rm -rf "$CISHAPE"
 
+# --- the python suites at the next stamp ------------------------------------
+# 🔻 THE STAMP IS A SWITCH. validate gates on contracts coverage from
+# VALIDATE_GATE_FROM, and the other *_GATE_FROM literals switch jui_tools /
+# document_tools behaviour the same way — by the running VERSION, not a flag.
+# So a suite green at this stamp can be red at the next, and nothing ran it
+# there before the stamp's own CI: raised to 1.8.121 on a copy, test_tools
+# went 16 red (2026-09-26). This leg runs the three python suites on a clone
+# whose stamp is raised to the next patch — WHEN that patch switches a gate on
+# that this stamp leaves off (4f's ruling (b)); the literals come from the tag
+# gate's own collector (next_stamp_plan.py), never a list here. Otherwise it
+# prints what it read and why it skipped. The clone borrows this checkout's
+# installed node toolchains, so its arms skip only where these do.
+say "== python suites at the next stamp (only when the next patch switches a *_GATE_FROM on)"
+say "   blind spot: a test that depends on the version by another road than a *_GATE_FROM literal (a fixture holding a version string, a comparison with __version__) is not looked for"
+plan=$(python3 "$C/dev-guide/release/next_stamp_plan.py" "$C" 2>&1); rc=$?
+printf '%s\n' "$plan" | sed 's/^/   /'
+next_version=$(printf '%s\n' "$plan" | sed -n 's/^NEXT //p')
+if [ "$rc" != 0 ] || printf '%s\n' "$plan" | grep -q '^PROBLEM'; then
+    bad "next-stamp plan: the gate literals could not be read cleanly (exit $rc; PROBLEM lines above)"
+elif ! printf '%s\n' "$plan" | grep -q '^CROSS'; then
+    say "   skipped: no gate literal at $next_version — every literal read above is on at this stamp too, or later"
+else
+    # The physical path: py_suite checks that each package resolves inside
+    # "$C", and python answers /private/var/… where mktemp says /var/….
+    STAMPED=$(cd "$(mktemp -d)" && pwd -P)
+    git clone -q --depth 1 --no-tags "file://$C" "$STAMPED/repo" 2>/dev/null
+    for nm in rjui_tools/spec/support/node_modules test_tools/tests/fixtures/vitest-pin/node_modules; do
+        [ -d "$C/$nm" ] && ln -s "$C/$nm" "$STAMPED/repo/$nm"
+    done
+    raised=$(python3 "$C/dev-guide/release/raise_stamp.py" "$STAMPED/repo" "$next_version" 2>&1); rc=$?
+    printf '%s\n' "$raised" | sed 's/^/   /'
+    if [ "$rc" != 0 ]; then
+        bad "next-stamp: raise_stamp.py exit $rc — the clone was not raised to $next_version"
+    else
+        git -C "$STAMPED/repo" -c user.name=run-suites -c user.email=run-suites@localhost \
+            commit -qam "stamp $next_version (run-suites: the suites at the next stamp)"
+        say "   clone at $(git -C "$STAMPED/repo" rev-parse --short HEAD), VERSION $(cat "$STAMPED/repo/VERSION")"
+        _checkout=$C; C="$STAMPED/repo"
+        py_suite test_tools jsonui_test_cli --ignore=tests/test_stub_name_tables_reach_a_compiler.py
+        py_suite document_tools jsonui_doc_cli
+        py_suite jui_tools jui_cli
+        C=$_checkout
+    fi
+    rm -rf "$STAMPED"
+fi
+
 # --- which python files changed only their prose ----------------------------
 # 🔻 "THIS RELEASE CHANGES NO CODE" IS THE CLAIM NOBODY CHECKS. Gates read
 # grammar and tests; a sentence in a notice is believed because reading the
