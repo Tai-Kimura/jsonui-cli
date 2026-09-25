@@ -1818,52 +1818,35 @@ def unmatched_message(platform: str) -> str:
     return UNMATCHED_MESSAGE + "." + UNMATCHED_CLASSIFY.get(platform, "")
 
 
-def _version_tuple(version: str) -> tuple:
-    try:
-        return tuple(int(part) for part in version.strip().split("."))
-    except ValueError:
-        raise BranchTestGenerationError(
-            f"UNMATCHED_GATE_FROM '{version}' is not a version of numbers "
-            "separated by dots") from None
-
-
 def _running_version() -> str:
     from . import __version__
     return __version__
 
 
-#: The literal that withdraws an announced gate (design v4.18): no gate, and
-#: the warning says the release that was to fail the test was withdrawn.
-GATE_WITHDRAWN = "withdrawn"
-
-
-#: A gate version is three numbers and nothing else — the rule validate's
-#: gate reads too. Anything else (`next`, `1.8`, `v1.8.120`, `1.8.120rc1`) is
-#: unreadable: no gate, said so, and the tag gate fails it. Read as a prefix,
-#: `1.8` compared below every 1.8.x and switched the gate on.
-_GATE_VERSION = re.compile(r"^\d+\.\d+\.\d+$")
+#: The literal that withdraws an announced gate (design v4.18). How a gate
+#: literal is read — a whole release number gates, "withdrawn" and anything
+#: unreadable never do — has ONE home, `gate_literal`, shared with validate's
+#: coverage gate and the spec validator's layout ids.
+from .gate_literal import GATE_WITHDRAWN, gate_is_on, gate_state  # noqa: E402
 
 
 def unmatched_gate() -> tuple[bool, str | None]:
     """(red, gate): whether unmatched requests in the act window fail the
     generated test, and the release that makes them fail (None when unset or
     unreadable, "withdrawn" when an announcement was withdrawn — never red)."""
-    gate = UNMATCHED_GATE_FROM
-    if not gate:
-        return False, None
-    if gate == GATE_WITHDRAWN:
+    state = gate_state(UNMATCHED_GATE_FROM)
+    if state == "withdrawn":
         return False, GATE_WITHDRAWN
-    if not _GATE_VERSION.match(gate):
+    if state != "release":
         return False, None
-    return _version_tuple(_running_version()) >= _version_tuple(gate), gate
+    return gate_is_on(_running_version(), UNMATCHED_GATE_FROM), UNMATCHED_GATE_FROM
 
 
 def unmatched_gate_note() -> str | None:
     """The line `generate branch-tests` prints when the literal is unreadable."""
-    gate = UNMATCHED_GATE_FROM
-    if gate and gate != GATE_WITHDRAWN and not _GATE_VERSION.match(gate):
-        return (f"UNMATCHED_GATE_FROM {gate!r} is unreadable (a gate version is x.y.z, or "
-                "\"withdrawn\") — no gate, and the tag gate fails it")
+    if gate_state(UNMATCHED_GATE_FROM) == "unreadable":
+        return (f"UNMATCHED_GATE_FROM {UNMATCHED_GATE_FROM!r} is unreadable (a gate version is "
+                "x.y.z, or \"withdrawn\") — no gate, and the tag gate fails it")
     return None
 
 

@@ -277,3 +277,16 @@ def test_a_third_literal_in_document_tools_is_collected(tmp_path):
     assert lines[0].startswith("ok 3 gate constant(s) in cur: LAYOUT_ID_GATE_FROM,"), lines
     assert any(l.startswith("  ok LAYOUT_ID_GATE_FROM (document_tools/jsonui_doc_cli/spec_doc/validator.py)")
                and "announces 1.8.120" in l for l in lines), lines
+
+
+@pytest.mark.parametrize("literal", [
+    None, "", "withdrawn", "1.8.120", "0.0.1", "10.20.300",
+    "next", "1.8", "1.8.l20", "v1.8.120", "1.8.120rc1", " 1.8.120", "1.8.120.1",
+])
+def test_the_tag_gate_reads_a_literal_the_way_the_gates_do(literal):
+    """The tag gate runs without the tree's test_tools on its path, so it keeps
+    its own reading of "is this a release number"; the gates read theirs from
+    jsonui_test_cli.gate_literal. Held equal here, so one cannot move alone."""
+    from jsonui_test_cli.gate_literal import gate_state
+    tag_gate_reads_release = bool(literal) and literal != vgv.WITHDRAWN and bool(vgv._VERSION.match(literal))
+    assert tag_gate_reads_release == (gate_state(literal) == "release"), literal
