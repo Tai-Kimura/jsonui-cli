@@ -280,7 +280,9 @@ def test_xxxvi_ios_message_names_apiorigin(monkeypatch, tmp_path):
                                       config_platforms=["ios"])
     text = report.test_file.read_text(encoding="utf-8")
     assert "XCTAssertEqual(rec.unmatchedCalls(), []," in text and "apiOrigin" in text
-    assert "reportUnmatchedForeign(rec.unmatchedForeign())" in text
+    # The row: screen, method and title; the title may hold escaped quotes.
+    assert re.search(r'reportUnmatchedForeign\(rec\.unmatchedForeign\(\), "feed\.load branch 1:(?:[^"\\]|\\.)*"\)',
+                     text), text
 
 
 # --------------------------------------------------------------- Android ---
