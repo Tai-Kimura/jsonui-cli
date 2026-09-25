@@ -109,6 +109,8 @@ RSpec.describe SjuiTools::CLI::Commands::Build do
         allow(cache_manager).to receive(:load_last_updated).and_return({})
         allow(cache_manager).to receive(:load_last_including_files).and_return({})
         allow(cache_manager).to receive(:load_style_dependencies).and_return({})
+        allow(cache_manager).to receive(:load_refused_layouts).and_return([])
+        allow(cache_manager).to receive(:save_refused_layouts)
 
         # Allow multiple info calls
         allow(SjuiTools::Core::Logger).to receive(:info)

@@ -152,14 +152,20 @@ module KjuiTools
         styles.to_a
       end
       
-      def save_cache(including_files, style_dependencies, layout_names = nil)
+      def save_cache(including_files, style_dependencies, layout_names = nil, not_built: [])
         # Update last_updated with current timestamps
         last_updated = {}
         
         # Every layout the build processed — not only the ones that happen to
         # have includes or styles. Keyed on those two maps alone, a plain
         # layout was never recorded and so was dirty on every run.
-        all_files = (including_files.keys + style_dependencies.keys + Array(layout_names)).uniq
+        #
+        # Except the ones it did not build (`not_built`: refused, or failed).
+        # Recorded, a refused layout counted as built from then on: the
+        # remedy the refusal names (regenerate the component) was followed by
+        # a build that skipped it as cached and generated nothing, exit 0
+        # (measured 2026-09-26). With no entry it is dirty until it builds.
+        all_files = (including_files.keys + style_dependencies.keys + Array(layout_names)).uniq - Array(not_built)
 
         all_files.each do |file_name|
           json_file = File.join(@layouts_dir, "#{file_name}.json")

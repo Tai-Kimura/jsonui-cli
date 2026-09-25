@@ -20,6 +20,14 @@ require 'fileutils'
 RSpec.describe 'the Compose build cache' do
   REPO_ROOT = File.expand_path('../../..', __dir__)
 
+  # A settled build: healthy and styled cached, sample converted again. From
+  # 1.8.121 a refused layout is never recorded — it is converted, and refused,
+  # again on every build (ticket build-caches-a-refused-layout-as-built) — so
+  # a settled run says "Updating 1 of 3 files", not "all cached".
+  def settled
+    'Updating 1 of 3 files'
+  end
+
   def project
     dir = Dir.mktmpdir('kjui_cache')
     File.write(File.join(dir, 'jui.config.json'), JSON.pretty_generate(
@@ -68,7 +76,7 @@ RSpec.describe 'the Compose build cache' do
     Open3.capture2e('ruby', File.join(dir, 'kjui_tools', 'bin', 'kjui'), 'build', *args, chdir: dir)
   end
 
-  # Build until the cache reports everything cached.
+  # Build until the cache skips every layout it may skip (`settled`).
   #
   # The number of builds it takes from a cold cache is NOT fixed: measured on
   # sjui, six back-to-back runs all reported work to do and the same untouched
@@ -84,11 +92,11 @@ RSpec.describe 'the Compose build cache' do
   def settle(dir)
     8.times do
       log, = kjui(dir)
-      return log if log =~ /all cached/
+      return log if log.include?(settled)
 
       sleep 1.1
     end
-    raise 'the cache never reported all-cached; this spec would assert nothing'
+    raise 'the cache never settled; this spec would assert nothing'
   end
 
   def cache(dir)
@@ -100,11 +108,11 @@ RSpec.describe 'the Compose build cache' do
     Dir.glob(File.join(dir, '**', '*GeneratedView.kt'))
   end
 
-  it 'records every layout on the first build' do
+  it 'records every layout it built on the first build — not the refused one' do
     dir = project
     kjui(dir)
 
-    expect(cache(dir).keys.sort).to eq(%w[healthy sample styled])
+    expect(cache(dir).keys.sort).to eq(%w[healthy styled])
   ensure
     FileUtils.rm_rf(dir) if dir
   end
@@ -117,7 +125,7 @@ RSpec.describe 'the Compose build cache' do
 
     log = settle(dir)
 
-    expect(log).to match(/all cached/), log
+    expect(log).to include(settled), log
     rewritten = before.reject { |p, t| File.mtime(p) == t }
     expect(rewritten).to be_empty, "codegen ran on a cached build: #{rewritten.keys.inspect}"
   ensure
@@ -141,14 +149,14 @@ RSpec.describe 'the Compose build cache' do
   end
 
   # Measurable on this face only now that the cache works at all: the
-  # all-cached run must still validate and still name a refused layout.
-  it 'still validates and still records a refused layout when everything is cached' do
+  # settled run must still validate and still name a refused layout.
+  it 'still validates and still records a refused layout when everything else is cached' do
     dir = project
     settle(dir)
 
     log, status = kjui(dir, '--strict')
 
-    expect(log).to match(/all cached/), log
+    expect(log).to include(settled), log
     expect(log).to match(/Binding variable/), log
     expect(log).to include('was not generated'), log
     expect(log).to include('did not complete'), log

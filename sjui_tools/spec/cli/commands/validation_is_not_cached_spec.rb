@@ -20,6 +20,10 @@ require 'fileutils'
 # $PATH, `sjui_tools` symlinked so its relative `lib/core/*` links resolve.
 RSpec.describe 'validation is not cached' do
   REPO_ROOT = File.expand_path('../../../..', __dir__)
+  # warned.json and healthy.json cached; sample.json, refused, converted again.
+  def settled
+    'Updating 1 of 3 files'
+  end
 
   def project
     dir = Dir.mktmpdir('cache_gate')
@@ -63,10 +67,12 @@ RSpec.describe 'validation is not cached' do
     Open3.capture2e('ruby', File.join(dir, 'sjui_tools', 'bin', 'sjui'), 'build', *args, chdir: dir)
   end
 
-  # Run until the cache reports everything cached, so the examples below are
-  # measuring the cached path and not merely a repeat build.
-  # Build until the cache reports everything cached, so the examples below
-  # measure the cached path rather than a plain repeat build.
+  # Build until the cache skips every layout it may skip, so the examples
+  # below measure the cached path rather than a plain repeat build. That is
+  # every layout but sample.json: from 1.8.121 a refused layout is never
+  # cached — it is converted, and refused, again on every build (ticket
+  # build-caches-a-refused-layout-as-built) — so a settled run says
+  # "Updating 1 of 3 files", not "all cached".
   #
   # The `sleep` is load-bearing: the stamp and the layout mtimes have
   # one-second granularity, and a build run inside the same second as the
@@ -76,11 +82,11 @@ RSpec.describe 'validation is not cached' do
   def settle(dir)
     8.times do
       log, = sjui(dir)
-      return log if log.include?('No files need updating (all cached)')
+      return log if log.include?(settled)
 
       sleep 1.1
     end
-    raise 'the cache never reported all-cached; this spec would assert nothing'
+    raise 'the cache never settled; this spec would assert nothing'
   end
 
   it 'reports findings on a cached run, and --strict still fails' do
@@ -88,7 +94,7 @@ RSpec.describe 'validation is not cached' do
     settle(dir)
 
     log, status = sjui(dir, '--strict')
-    expect(log).to include('No files need updating (all cached)'), log
+    expect(log).to include(settled), log
     expect(log).to match(/binding warning/), log
     expect(status.exitstatus).to eq(1), "cached --strict must fail like the first run\n#{log}"
   ensure
@@ -119,7 +125,7 @@ RSpec.describe 'validation is not cached' do
 
     sleep 1.1 # mtime granularity: a rewrite inside the same second is invisible
     log, = sjui(dir)
-    expect(log).to include('No files need updating (all cached)'), log
+    expect(log).to include(settled), log
 
     rewritten = before.reject { |p, t| File.mtime(p) == t }
     expect(rewritten).to be_empty, "codegen ran on a cached build: #{rewritten.keys.inspect}"
