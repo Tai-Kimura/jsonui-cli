@@ -67,8 +67,56 @@ RSpec.describe 'sjui tap accessibility emission' do
     expect(code).to include('data.open?()')
   end
 
+  # An empty or blank handler names no method (TapAccessibility.handler?): no
+  # tap, and the Swift compiles. They emitted `.onTapGesture { data.?() }` —
+  # not Swift (ticket kjui-empty-onclick-emits-invalid-kotlin, all three
+  # codegens). A blank element of an array is dropped from the calls; a blank
+  # onClick leaves the tap to onclick.
+  image = { 'type' => 'Image', 'id' => 'i', 'src' => 'icon' }
+  {
+    '"onClick": ""' => [{ 'onClick' => '' }, false],
+    '"onClick": "   "' => [{ 'onClick' => '   ' }, false],
+    '"onClick": "@{}"' => [{ 'onClick' => '@{}' }, false],
+    '"onclick": ""' => [{ 'onclick' => '' }, false],
+    '"onclick": "   "' => [{ 'onclick' => '   ' }, false],
+    '"onclick": []' => [{ 'onclick' => [] }, false],
+    '"onclick": ["", " "]' => [{ 'onclick' => ['', ' '] }, false],
+    '"onclick": ["", "onOpen"]' => [{ 'onclick' => ['', 'onOpen'] }, true],
+    '"onClick": "", "onclick": "onOpen"' => [{ 'onClick' => '', 'onclick' => 'onOpen' }, true]
+  }.each do |name, (handler, taps)|
+    it "#{name} #{taps ? 'taps onOpen once' : 'is no tap'}, and the emitted Swift compiles" do
+      layout = { 'type' => 'View', 'id' => 't', 'child' => [image.dup] }.merge(handler)
+      JsonUIShared::TapAccessibility.annotate!(layout)
+      code = SjuiTools::SwiftUI::ConverterFactory.new.create_converter(layout).convert
+      expect(code.scan('.onTapGesture').size).to eq(taps ? 1 : 0)
+      expect(code.scan(/data\.\w+\?\(\)/)).to eq(taps ? ['data.onOpen?()'] : [])
+      expect(compilable_view(code, data: ['var onOpen: (() -> Void)? = nil'])).to compile_as_swift
+    end
+  end
+
   vectors_path = File.expand_path('../../../../shared/core/tap_accessibility_vectors.json', __dir__)
   next unless File.exist?(vectors_path)
+
+  # A tap exactly where the rule reads a handler (TapAccessibility.handler?
+  # on either spelling), on every vector: a Button's tap is its action and a
+  # statically disabled view gets none, as register_click_lines says.
+  it 'emits a tap exactly where the rule reads a handler' do
+    checked = 0
+    JSON.parse(File.read(vectors_path))['cases'].each do |vector|
+      layout = JSON.parse(JSON.generate(vector['layout']))
+      want = 0
+      JsonUIShared::TapAccessibility.walk(layout) do |node|
+        next if node['type'] == 'Button' || node['enabled'] == false
+
+        checked += 1 if JsonUIShared::TapAccessibility::TAP_KEYS.any? { |key| node.key?(key) }
+        want += 1 if JsonUIShared::TapAccessibility::TAP_KEYS.any? { |key| JsonUIShared::TapAccessibility.handler?(node[key]) }
+      end
+      JsonUIShared::TapAccessibility.annotate!(layout)
+      code = SjuiTools::SwiftUI::ConverterFactory.new.create_converter(layout).convert
+      expect(code.scan('.onTapGesture').size).to eq(want), "#{vector['name']}:\n#{code}"
+    end
+    expect(checked).to be >= 12
+  end
 
   JSON.parse(File.read(vectors_path))['cases'].each do |vector|
     it vector['name'] do

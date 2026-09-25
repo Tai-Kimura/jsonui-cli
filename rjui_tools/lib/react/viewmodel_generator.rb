@@ -3,6 +3,7 @@
 require 'json'
 require 'fileutils'
 require 'set'
+require_relative '../core/tap_accessibility'
 require_relative '../core/config_manager'
 require_relative '../core/generated_marker'
 require_relative '../core/frameworks'
@@ -306,12 +307,8 @@ module RjuiTools
           # string|array declaration: the `is_a?(String)` guard silently
           # dropped the array face, so the JSX called handlers no stub was
           # generated for.
-          onclick = json_data['onclick']
-          if onclick.is_a?(String)
-            actions.add(onclick)
-          elsif onclick.is_a?(Array)
-            onclick.each { |a| actions.add(a) if a.is_a?(String) }
-          end
+          # An empty or blank name is no action (TapAccessibility.handler_values).
+          JsonUIShared::TapAccessibility.handler_values(json_data['onclick']).each { |a| actions.add(a) }
 
           child = json_data['child'] || json_data['children']
           if child

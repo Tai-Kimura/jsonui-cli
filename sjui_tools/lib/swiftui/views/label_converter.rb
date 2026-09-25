@@ -109,7 +109,7 @@ module SjuiTools
                     end
 
                     # Add onClick as closure (SwiftUI uses onClick, not onclick)
-                    if partial['onClick']
+                    if JsonUIShared::TapAccessibility.handler?(partial['onClick'])
                       method_name = extract_binding_property(partial['onClick'])
                       add_line "onClick: { data.#{method_name}?() },"
                     end

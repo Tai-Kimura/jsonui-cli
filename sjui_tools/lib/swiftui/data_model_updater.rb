@@ -8,6 +8,7 @@ require_relative '../core/project_finder'
 require_relative '../core/type_converter'
 require_relative '../core/generated_marker'
 require_relative '../core/data_model_updater_core'
+require_relative '../core/tap_accessibility'
 require_relative 'style_loader'
 require_relative 'include_expander'
 require_relative 'helpers/string_manager_helper'
@@ -73,9 +74,11 @@ module SjuiTools
         %w[onClick onValueChange onToggle onTextChange onChange onLongPress]
       end
 
-      # onClick carries the callback in binding format: @{functionName}
+      # onClick carries the callback in binding format: @{functionName}. An
+      # empty or blank one names no callback (TapAccessibility.handler?) — it
+      # declared `var : (() -> Void)? = nil`.
       def onclick_action_name(node)
-        return nil unless node['onClick'].is_a?(String)
+        return nil unless JsonUIShared::TapAccessibility.handler?(node['onClick']) && node['onClick'].is_a?(String)
         node['onClick'].gsub(/^@\{|\}$/, '')
       end
 

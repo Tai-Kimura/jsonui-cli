@@ -69,7 +69,7 @@ module RjuiTools
           end
 
           # Clickable
-          classes << 'cursor-pointer' if attributes['canTap'] || attributes['onClick'] || attributes['onclick']
+          classes << 'cursor-pointer' if attributes['canTap'] || tap_handler?(attributes['onClick'], attributes['onclick'])
 
           finalize_classes(classes)
         end

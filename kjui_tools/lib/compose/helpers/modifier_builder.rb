@@ -823,7 +823,10 @@ module KjuiTools
           modifiers.concat(build_long_pressable(json_data, required_imports))
           modifiers.concat(build_pannable(json_data, required_imports))
           modifiers.concat(build_pinchable(json_data, required_imports))
-          handler = json_data['onclick'] || json_data['onClick']
+          # A handler names a method (shared/core/tap_accessibility.rb
+          # `handler?`): `""`, `"   "`, `"@{}"`, `[]` and `[""]` are no tap.
+          tap = JsonUIShared::TapAccessibility
+          handler = [json_data['onclick'], json_data['onClick']].find { |value| tap.handler?(value) }
           enabled = enabled_expression(json_data)
           # `canTap` is the tap gate specifically — UIKit's SJUIView has the
           # property and uses it to decide whether the tap recogniser fires. Both
@@ -833,9 +836,9 @@ module KjuiTools
           if handler
             required_imports&.add(:clickable)
             view_id = json_data['id']
-            if json_data['onClick'] && is_binding?(json_data['onClick'])
+            if tap.handler?(json_data['onClick']) && is_binding?(json_data['onClick'])
               handler_call = get_event_handler_invocation(json_data['onClick'], view_id, nil)
-            elsif json_data['onClick']
+            elsif tap.handler?(json_data['onClick'])
               handler_call = get_event_handler_call(json_data['onClick'], is_camel_case: true)
             else
               handler_call = get_event_handler_call(json_data['onclick'], is_camel_case: false)
@@ -1433,8 +1436,12 @@ module KjuiTools
           # implements them (`build_selector_click_lines` — "a bare string, or
           # an array of them to call in order"). Both call sites embed this in
           # a Kotlin lambda body, so the calls are simply sequenced.
-          names = handler.is_a?(Array) ? handler : [handler]
-          names.compact.map { |name| single_event_handler_call(name.to_s) }.join('; ')
+          #
+          # A blank element names no method and is dropped
+          # (TapAccessibility.handler_values), so `["", "onOpen"]` calls onOpen
+          # only.
+          JsonUIShared::TapAccessibility.handler_values(handler)
+                                        .map { |name| single_event_handler_call(name) }.join('; ')
         end
 
         def self.single_event_handler_call(handler)

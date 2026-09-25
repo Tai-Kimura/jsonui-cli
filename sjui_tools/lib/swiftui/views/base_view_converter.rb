@@ -814,23 +814,26 @@ module SjuiTools
         # it builds its own modifiers and had kept only the binding onClick, so
         # the `onclick` fix above never reached a Label). camelCase wins when
         # both are present; a Button's tap is its action; a statically
-        # disabled view gets none.
+        # disabled view gets none. A handler names a method
+        # (TapAccessibility.handler?): `""`, `"   "`, `"@{}"`, `[]` and `[""]`
+        # are no tap — they emitted `data.?()`, which is not Swift.
         def register_click_lines
           return if @component['type'] == 'Button'
           return if @component['enabled'] == false
 
-          if @component['onClick']
+          tap = JsonUIShared::TapAccessibility
+          if tap.handler?(@component['onClick'])
             @modifier_bag.register(:on_click, build_on_click_lines(@component['onClick']))
-          elsif @component['onclick']
+          elsif tap.handler?(@component['onclick'])
             @modifier_bag.register(:on_click, build_selector_click_lines(@component['onclick']))
           end
         end
 
         # `onclick` values are method names, not bindings: a bare string, or an
-        # array of them to call in order.
+        # array of them to call in order. A blank element is not called.
         def build_selector_click_lines(value)
-          names = value.is_a?(Array) ? value : [value]
-          calls = names.map { |n| "    data.#{to_camel_case(n.to_s)}?()" }
+          names = JsonUIShared::TapAccessibility.handler_values(value)
+          calls = names.map { |n| "    data.#{to_camel_case(n)}?()" }
           [".onTapGesture {"] + calls + ["}"] + tap_accessibility_lines
         end
 

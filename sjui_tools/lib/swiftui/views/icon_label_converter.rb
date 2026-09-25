@@ -11,7 +11,8 @@ module SjuiTools
           iconOn = @component['icon_on']
           iconOff = @component['icon_off']
           iconPosition = @component['iconPosition'] || 'left'
-          onClick = @component['onClick']
+          # An empty or blank handler is no action (TapAccessibility.handler?).
+          onClick = @component['onClick'] if JsonUIShared::TapAccessibility.handler?(@component['onClick'])
 
           # IconLabelViewまたはIconLabelButtonを使用
           if onClick

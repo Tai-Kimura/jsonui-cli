@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require_relative '../view_binding_handler'
+require_relative '../../core/tap_accessibility'
 
 module SjuiTools
   module UIKit
@@ -76,7 +77,9 @@ module SjuiTools
             end
             # Handle onClick/onclick binding in partialAttributes
             onclick_key = pa.key?("onClick") ? "onClick" : (pa.key?("onclick") ? "onclick" : nil)
-            if onclick_key && pa[onclick_key].is_a?(String) && pa[onclick_key].start_with?("@{")
+            # "@{}" names no method (TapAccessibility.handler?): it emitted `handler: )`.
+            if onclick_key && pa[onclick_key].is_a?(String) && pa[onclick_key].start_with?("@{") &&
+               JsonUIShared::TapAccessibility.handler?(pa[onclick_key])
               t = pa[onclick_key].sub(/^@\{/, "").sub(/\}$/, "").gsub(/'/, "\"")
               # Set closure-based onclick handler using setPartialAttributeOnClick
               @binding_content << "        #{view_name}?.setPartialAttributeOnClick(at: #{pa_index}, handler: #{t})\n"

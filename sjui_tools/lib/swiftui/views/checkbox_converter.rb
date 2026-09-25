@@ -130,7 +130,9 @@ module SjuiTools
             # onValueChange callback (supports type-based invocation)
             # onValueChange (camelCase) -> binding format only (@{functionName})
             # Also support legacy onValueChanged and onClick for backward compatibility
-            handler_attr = @component['onValueChange'] || @component['onClick'] || @component['action'] || @component['onValueChanged']
+            # An empty or blank onClick is no handler (TapAccessibility.handler?).
+            on_click = @component['onClick'] if JsonUIShared::TapAccessibility.handler?(@component['onClick'])
+            handler_attr = @component['onValueChange'] || on_click || @component['action'] || @component['onValueChanged']
             if handler_attr && is_binding?(handler_attr)
               handler_call = get_event_handler_invocation(handler_attr, id, 'newValue')
               add_line "onValueChanged: { newValue in #{handler_call} }"

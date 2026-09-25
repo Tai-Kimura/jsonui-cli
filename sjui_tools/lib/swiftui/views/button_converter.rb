@@ -33,7 +33,8 @@ module SjuiTools
                  else
                    @component['text'] || "Button"
                  end
-          action = @component['onClick']
+          # An empty or blank handler is no action (TapAccessibility.handler?).
+          action = @component['onClick'] if JsonUIShared::TapAccessibility.handler?(@component['onClick'])
 
           # Use StateAwareButtonView for state-dependent styling
           # `image:` / `imageTint:` are new parameters, so generated output
@@ -117,7 +118,7 @@ module SjuiTools
 
                     # Add onClick as closure (SwiftUI uses onClick, not onclick)
                     # onClick (camelCase) -> binding format only (@{functionName})
-                    if partial['onClick'] && is_binding?(partial['onClick'])
+                    if JsonUIShared::TapAccessibility.handler?(partial['onClick']) && is_binding?(partial['onClick'])
                       # For partial click, no value to pass
                       handler_call = get_event_handler_invocation(partial['onClick'], @component['id'] || 'button', nil)
                       add_line "onClick: { #{handler_call} },"

@@ -4,6 +4,7 @@ require_relative '../../core/typed_attributes'
 # For the one judgment the validator and the generator must share: whether a
 # binding's content can be an expression at all.
 require_relative '../../core/attribute_validator_core'
+require_relative '../../core/tap_accessibility'
 require_relative '../tailwind_mapper'
 require_relative '../responsive_helper'
 require_relative '../helpers/string_manager_helper'
@@ -1763,9 +1764,11 @@ module RjuiTools
         # - onclick (lowercase) -> selector format only (string)
         # - { "action": "link", "url": "..." } -> opens URL in new tab
         def build_onclick_attr
-          # Check onClick (camelCase) first - binding format only
-          if attributes['onClick']
-            handler = attributes['onClick']
+          # Check onClick (camelCase) first - binding format only. A handler
+          # names a method (TapAccessibility.handler?): `""`, `"   "`, `"@{}"`
+          # are no handler and fall through — `"@{}"` emitted `onClick={data.}`.
+          handler = attributes['onClick']
+          if handler.is_a?(Hash) || JsonUIShared::TapAccessibility.handler?(handler)
             if handler.is_a?(Hash)
               # Action object: { "action": "link", "url": "..." }
               if handler['action'] == 'link' && handler['url']
@@ -1784,8 +1787,9 @@ module RjuiTools
             end
           end
 
-          # Check onclick (lowercase) - selector format only
-          if attributes['onclick']
+          # Check onclick (lowercase) - selector format only; `""`, `[]` and
+          # `[""]` are no handler.
+          if JsonUIShared::TapAccessibility.handler?(attributes['onclick'])
             expr = onclick_selector_expr(attributes['onclick'])
             return expr ? " onClick={#{expr}}" : " {/* ERROR: onclick requires selector format (string) */}"
           end
@@ -1798,12 +1802,14 @@ module RjuiTools
         # (attribute_definitions common.onclick); interpolating the array
         # directly produced `data.["a", "b"]`, which is not syntax. Multiple
         # selectors are called in declared order — the semantics the ios
-        # codegen (both selectors emitted) already exhibits.
+        # codegen (both selectors emitted) already exhibits. A blank element
+        # is not called (TapAccessibility.handler_values): it emitted `data.?.()`.
         def onclick_selector_expr(handler)
           if handler.is_a?(Array)
-            return nil if handler.empty? || handler.any? { |h| is_binding_format?(h) }
+            names = JsonUIShared::TapAccessibility.handler_values(handler)
+            return nil if names.empty? || names.any? { |h| is_binding_format?(h) }
 
-            calls = handler.map { |h| "data.#{h}?.();" }.join(' ')
+            calls = names.map { |h| "data.#{h}?.();" }.join(' ')
             "() => { #{calls} }"
           elsif is_binding_format?(handler)
             nil
@@ -1811,6 +1817,17 @@ module RjuiTools
             # Valid selector: functionName -> data.functionName
             "data.#{handler}"
           end
+        end
+
+        # Whether the element has a tap: a handler on either spelling
+        # (TapAccessibility.handler? — an empty or blank one is none), or an
+        # onClick action object. The pointer cursor follows it. The callers
+        # pass `attributes['onClick'], attributes['onclick']` as written, so
+        # the read stays in each converter's source (the consumed-attribute
+        # inventory scans for it).
+        def tap_handler?(on_click, onclick)
+          on_click.is_a?(Hash) ||
+            JsonUIShared::TapAccessibility.handler?(on_click) || JsonUIShared::TapAccessibility.handler?(onclick)
         end
 
         # Check if value is binding format (@{...})
@@ -2242,7 +2259,7 @@ module RjuiTools
             klass = build_partial_class(partial)
             parts << "className: '#{klass}'" unless klass.empty?
 
-            if partial['onclick']
+            if JsonUIShared::TapAccessibility.handler?(partial['onclick'])
               # Same contract as every other handler site: a handler is a
               # selector (string|array), not a binding. The error marker is
               # kept as an inline comment so it survives into the emitted

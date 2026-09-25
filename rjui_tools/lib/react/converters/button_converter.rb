@@ -281,7 +281,7 @@ module RjuiTools
           # exist. Ruled 2026-09-07.
           classes << 'underline' if partial['underline']
           classes << 'line-through' if partial['strikethrough']
-          classes << 'cursor-pointer' if partial['onclick']
+          classes << 'cursor-pointer' if JsonUIShared::TapAccessibility.handler?(partial['onclick'])
           classes.reject { |c| c.nil? || c.empty? }.join(' ')
         end
 

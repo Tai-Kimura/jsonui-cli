@@ -2,6 +2,7 @@
 # frozen_string_literal: true
 
 require 'json'
+require_relative 'tap_accessibility'
 
 module JsonUIShared
   # Validates JSON component attributes against the SSoT definitions
@@ -467,6 +468,10 @@ module JsonUIShared
       # Emit deprecation warning (alias usage or canonical deprecation)
       emit_deprecation(name, current_path, definition, component_type)
 
+      # A tap handler that names no method: reported once, as what it is,
+      # instead of as a type mismatch ("expects binding, got string").
+      return if check_tap_handler(name, value, current_path, component_type)
+
       # Check for invalid binding syntax
       check_invalid_binding_syntax(value, current_path, component_type)
       check_scalar_items(name, value, current_path, component_type)
@@ -758,6 +763,33 @@ module JsonUIShared
     end
 
     # Check for invalid binding syntax (starts with @{ but doesn't end with })
+    # An empty or blank tap handler (`onClick` / `onclick`, on a component or
+    # a partialAttributes range) names no method — shared/core/
+    # tap_accessibility.rb `handler?` — so no codegen emits a tap for it, and
+    # a blank element of an `onclick` array is not called. The codegens used
+    # to emit a call on the blank name, which did not compile; the author
+    # meant a tap, so it is said here. Returns true when the value names no
+    # method at all (the other checks have nothing left to say about it).
+    def check_tap_handler(name, value, path, component_type)
+      return false unless JsonUIShared::TapAccessibility::TAP_KEYS.include?(name)
+      return false unless value.is_a?(String) || value.is_a?(Array)
+
+      tap = JsonUIShared::TapAccessibility
+      unless tap.handler?(value)
+        add_warning("Attribute '#{path}' in '#{component_type}' names no handler (#{value.inspect}) — " \
+                    'no tap is generated for it. Name the method, or remove the attribute')
+        return true
+      end
+      if value.is_a?(Array)
+        blank = value.each_index.select { |i| value[i].is_a?(String) && !tap.names_a_method?(value[i]) }
+        unless blank.empty?
+          add_warning("Attribute '#{path}' in '#{component_type}' has a blank handler at " \
+                      "#{blank.map { |i| "[#{i}]" }.join(', ')} — it names no method and is not called")
+        end
+      end
+      false
+    end
+
     def check_invalid_binding_syntax(value, path, component_type)
       return unless value.is_a?(String)
       return unless value.start_with?('@{')

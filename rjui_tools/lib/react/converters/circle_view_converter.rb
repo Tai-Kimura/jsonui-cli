@@ -43,7 +43,7 @@ module RjuiTools
           classes << 'flex items-center justify-center' if json['child'] || json['children']
 
           # Cursor pointer for clickable items
-          classes << 'cursor-pointer' if attributes['onClick'] || attributes['onclick']
+          classes << 'cursor-pointer' if tap_handler?(attributes['onClick'], attributes['onclick'])
 
           finalize_classes(classes)
         end

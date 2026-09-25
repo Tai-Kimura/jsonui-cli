@@ -401,7 +401,7 @@ module RjuiTools
           end
 
           # Cursor pointer for clickable items
-          classes << 'cursor-pointer' if attributes['onClick'] || attributes['onclick']
+          classes << 'cursor-pointer' if tap_handler?(attributes['onClick'], attributes['onclick'])
 
           # Linkable text. The class is shared by both arms of the runtime
           # branch above, so a bound value decides it at runtime too.
@@ -704,7 +704,7 @@ module RjuiTools
           classes.concat(text_decoration_classes(underline: partial['underline'],
                                                  strikethrough: partial['strikethrough'],
                                                  element_level: false))
-          classes << 'cursor-pointer' if partial['onclick']
+          classes << 'cursor-pointer' if JsonUIShared::TapAccessibility.handler?(partial['onclick'])
           classes.reject { |c| c.nil? || c.empty? }.join(' ')
         end
 

@@ -848,10 +848,11 @@ module KjuiTools
             # Handle click events for partial attributes
             # onclick (lowercase) -> selector format (string only)
             # onClick (camelCase) -> binding format only (@{functionName})
-            if attr['onclick']
+            # An empty or blank handler is no handler (TapAccessibility.handler?).
+            if JsonUIShared::TapAccessibility.handler?(attr['onclick'])
               handler_call = Helpers::ModifierBuilder.get_event_handler_call(attr['onclick'], is_camel_case: false)
               code += "\n" + indent("onClick = { #{handler_call} }", depth + 3)
-            elsif attr['onClick']
+            elsif JsonUIShared::TapAccessibility.handler?(attr['onClick'])
               handler_call = Helpers::ModifierBuilder.get_event_handler_call(attr['onClick'], is_camel_case: true)
               code += "\n" + indent("onClick = { #{handler_call} }", depth + 3)
             else
