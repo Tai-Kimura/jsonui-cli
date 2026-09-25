@@ -100,6 +100,23 @@ RSpec.describe RjuiTools::React::Converters::ImageConverter do
         result = converter.convert
         expect(result).to include('alt="Accessible Image"')
       end
+
+      # The other declared alias of alt (the spelling kjui used to read).
+      it 'uses contentDescription as alt' do
+        converter = create_converter({ 'type' => 'Image', 'src' => '/image.png', 'contentDescription' => 'Described Image' })
+        expect(converter.convert).to include('alt="Described Image"')
+      end
+    end
+
+    # A bound alt is text, "" when the value is unset — decorative then, as
+    # an absent alt is (shared/core/image_accessibility.rb). It used to be
+    # pasted into the attribute as the characters `@{photoLabel}`.
+    context 'with a bound alt' do
+      it 'reads the value as text' do
+        result = create_converter({ 'type' => 'Image', 'src' => '/i.png', 'alt' => '@{photoLabel}' }).convert
+        expect(result).to include('alt={`${data.photoLabel ?? ""}`}')
+        expect(result).not_to include('@{photoLabel}')
+      end
     end
 
     # Regression: rjui-image-src-bare-name-string-key-collision — a src that

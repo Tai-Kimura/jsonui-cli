@@ -40,7 +40,9 @@ module JsonUIShared
   class StringManagerCore
     # Layout attributes whose String values are user-visible text
     # (mirrors the XML mapper / Compose components / SwiftUI converters).
-    STRING_PROPERTIES = %w[text hint placeholder label prompt].freeze
+    # `alt` is spoken rather than shown, and localized all the same: an
+    # image's screen-reader text (shared/core/image_accessibility.rb).
+    STRING_PROPERTIES = %w[text hint placeholder label prompt alt].freeze
 
     # Array attributes whose String items are user-visible text
     # (e.g. Segment items).

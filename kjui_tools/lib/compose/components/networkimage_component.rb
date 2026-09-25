@@ -3,6 +3,7 @@
 require_relative '../helpers/content_scale_helper'
 require_relative '../helpers/modifier_builder'
 require_relative '../helpers/resource_resolver'
+require_relative '../helpers/image_accessibility_helper'
 # The renderingMode -> ColorFilter mapping lives on the Image converter and is
 # called from here. The full suite happened to load it first, so the missing
 # require only showed up running this file alone.
@@ -43,11 +44,14 @@ module KjuiTools
           # Support 'hint' (primary), 'placeholder' and the legacy
           # 'loadingImage' spelling — all name the in-flight image.
           placeholder = json_data['hint'] || json_data['placeholder'] || json_data['loadingImage']
-          content_description = json_data['contentDescription'] || 'Image'
+          # The alt, or null when decorative (ImageAccessibilityHelper). The
+          # English "Image" is kept only for an image that operates a control
+          # and has no alt, which the build names.
+          content_description = Helpers::ImageAccessibilityHelper.content_description(json_data, 'Image', required_imports)
 
           code = indent("AsyncImage(", depth)
           code += "\n" + indent("model = #{image_model(json_data, url, required_imports)},", depth + 1)
-          code += "\n" + indent("contentDescription = \"#{content_description}\",", depth + 1)
+          code += "\n" + indent("contentDescription = #{content_description},", depth + 1)
 
           # Content scale (case-insensitive check). Shared vocabulary AND
           # shared default — see ContentScaleHelper. The two local quirks this

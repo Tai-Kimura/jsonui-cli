@@ -142,6 +142,28 @@ class VisibleAttrsTest(unittest.TestCase):
         self.assertEqual(vm["NetworkImage"], frozenset())
 
 
+class RealVocabularyTest(unittest.TestCase):
+    """The shipped declarations and vocabulary, not the synthetic ones above:
+    an image's `alt` is screen-reader copy and localized like `text`
+    (shared/core/image_accessibility.rb), so a literal alt is judged."""
+
+    def setUp(self):
+        shared = Path(__file__).resolve().parents[2] / "shared" / "core"
+        defs = json.loads((shared / "attribute_definitions.json").read_text(encoding="utf-8"))
+        vocab = load_string_props(shared / "string_manager_core.rb")
+        self.visible = visible_attrs_by_component(defs, vocab)
+
+    def test_image_alt_is_judged_on_both_image_components(self):
+        self.assertIn("alt", self.visible["Image"])
+        self.assertIn("alt", self.visible["NetworkImage"])
+
+    def test_an_image_name_still_is_not_copy(self):
+        # Control: the rule that keeps NetworkImage's placeholder image name
+        # out is the same one that now lets alt in.
+        self.assertNotIn("placeholder", self.visible["NetworkImage"])
+        self.assertNotIn("hint", self.visible["NetworkImage"])
+
+
 class LintableLiteralTest(unittest.TestCase):
     def test_judged(self):
         self.assertTrue(is_lintable_literal("Hello"))

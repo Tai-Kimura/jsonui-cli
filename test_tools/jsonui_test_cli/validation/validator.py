@@ -99,3 +99,6 @@ class TestValidator:
             import jsonui_test_cli
             from .element_ids import check_element_ids
             check_element_ids(data, path, result, jsonui_test_cli.__version__)
+            # notVisible on a decorative image cannot fail on iOS (INFO).
+            from .decorative_images import check_decorative_not_visible
+            check_decorative_not_visible(data, path, result)

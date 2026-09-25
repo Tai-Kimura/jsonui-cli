@@ -2,6 +2,7 @@
 
 require_relative '../helpers/modifier_builder'
 require_relative '../helpers/resource_resolver'
+require_relative '../helpers/image_accessibility_helper'
 
 module KjuiTools
   module Compose
@@ -27,8 +28,11 @@ module KjuiTools
             code += "\n" + indent("painter = painterResource(id = R.drawable.#{Helpers::ResourceResolver.drawable_name(resource_name)}),", depth + 1)
           end
           
-          content_description = json_data['contentDescription'] || 'Profile Image'
-          code += "\n" + indent("contentDescription = \"#{content_description}\",", depth + 1)
+          # The alt, or null when decorative (ImageAccessibilityHelper); the
+          # English "Profile Image" is kept only for an image that operates a
+          # control and has no alt, which the build names.
+          content_description = Helpers::ImageAccessibilityHelper.content_description(json_data, 'Profile Image', required_imports)
+          code += "\n" + indent("contentDescription = #{content_description},", depth + 1)
           
           # Content scale - typically Crop for circular images
           required_imports&.add(:content_scale)

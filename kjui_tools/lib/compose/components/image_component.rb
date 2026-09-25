@@ -3,6 +3,7 @@
 require_relative '../helpers/content_scale_helper'
 require_relative '../helpers/modifier_builder'
 require_relative '../helpers/resource_resolver'
+require_relative '../helpers/image_accessibility_helper'
 
 module KjuiTools
   module Compose
@@ -44,10 +45,13 @@ module KjuiTools
             code += "\n" + indent("painter = painterResource(id = R.drawable.#{Helpers::ResourceResolver.drawable_name(raw_src)}),", depth + 1)
           end
           
-          # Content description for accessibility
-          # Use 'id' (testId) as contentDescription if available, for UIAutomator compatibility
-          content_desc = json_data['contentDescription'] || json_data['id'] || ''
-          code += "\n" + indent("contentDescription = #{quote(content_desc)},", depth + 1)
+          # What TalkBack reads: the alt, or nothing for a decorative image
+          # (ImageAccessibilityHelper). Tests find the image by its testTag,
+          # below, so the id no longer doubles as spoken text — it stays only
+          # on an image that operates a control and has no alt, which the
+          # build names.
+          content_desc = Helpers::ImageAccessibilityHelper.content_description(json_data, json_data['id'] || '', required_imports)
+          code += "\n" + indent("contentDescription = #{content_desc},", depth + 1)
           
           # Build modifiers
           modifiers = []

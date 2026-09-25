@@ -311,3 +311,106 @@ RSpec.describe SjuiTools::SwiftUI::Views::ImageConverter do
     end
   end
 end
+
+# What VoiceOver reads for an image: its alt (localized like `text`, or a
+# binding), nothing for a decorative image, and — for an image that operates
+# a control and has no alt — the asset name, as before alt existed
+# (shared/core/image_accessibility.rb). The roles come from the vectors the
+# kjui codegen and both Dynamic runtimes also run.
+RSpec.describe 'sjui image accessibility from alt' do
+  require 'swiftui/views/network_image_converter'
+  require 'swiftui/json_to_swiftui_converter'
+  require 'core/image_accessibility'
+  require 'json'
+  require 'tmpdir'
+  require 'stringio'
+
+  rule = JsonUIShared::ImageAccessibility
+  vectors_path = File.expand_path('../../../../shared/core/image_accessibility_vectors.json', __dir__)
+
+  before(:all) { SjuiTools::SwiftUI::Views::BaseViewConverter.validation_enabled = false }
+  after(:all) { SjuiTools::SwiftUI::Views::BaseViewConverter.validation_enabled = true }
+
+  def emit(node)
+    klass = node['type'] == 'NetworkImage' ? SjuiTools::SwiftUI::Views::NetworkImageConverter : SjuiTools::SwiftUI::Views::ImageConverter
+    klass.new(node).convert
+  end
+
+  def images(node, out = [])
+    return out unless node.is_a?(Hash)
+
+    out << node if JsonUIShared::ImageAccessibility.image?(node)
+    JsonUIShared::ImageAccessibility.children(node).each { |c| images(c, out) }
+    out
+  end
+
+  if File.exist?(vectors_path)
+    JSON.parse(File.read(vectors_path))['cases'].each do |vector|
+      it "emits each role: #{vector['name']}" do
+        layout = JSON.parse(JSON.generate(vector['layout']))
+        rule.annotate!(layout, source_path: 'probe.json')
+        images(layout).each do |node|
+          swift = emit(node)
+          case vector['roles'][node['id']]
+          when 'decorative'
+            expect(swift).to include('.accessibilityHidden(true)'), node['id']
+            expect(swift).not_to include('.accessibilityLabel('), node['id']
+          when 'control'
+            expect(swift).not_to include('.accessibilityHidden('), node['id']
+            expect(swift).not_to include('.accessibilityLabel('), node['id']
+          when 'label'
+            alt = rule.alt(node)
+            if alt.start_with?('@{')
+              name = alt[2..-2]
+              expect(swift).to match(/\.accessibilityLabel\(Text\(\(.*data\.#{name}.*\)\)\)/), node['id']
+              expect(swift).to match(/\.accessibilityHidden\(\(.*data\.#{name}.*\)\.isEmpty\)/), node['id']
+            else
+              expect(swift).to include(".accessibilityLabel(Text(\"#{alt}\""), node['id']
+              expect(swift).not_to include('.accessibilityHidden('), node['id']
+            end
+          else raise "no role for #{node['id']}"
+          end
+        end
+      end
+    end
+  end
+
+  # The tappable around an image is only visible to the converter's entry,
+  # which writes each image's role after expanding includes (the path
+  # `jui build` takes). The same image, alone in a tappable and then beside
+  # a Label in it.
+  describe 'on the jui build path' do
+    let(:dir) { Dir.mktmpdir('sjui_image_role') }
+    after { FileUtils.rm_rf(dir) }
+
+    def build(children)
+      path = File.join(dir, 'probe.json')
+      File.write(path, JSON.generate('type' => 'View', 'child' => [
+        { 'type' => 'View', 'onClick' => '@{onMenu}', 'child' => children }
+      ]))
+      errors = StringIO.new
+      $stderr = errors
+      begin
+        swift = SjuiTools::SwiftUI::JsonToSwiftUIConverter.new.convert_json_to_view(path).first
+      ensure
+        $stderr = STDERR
+      end
+      [swift, errors.string]
+    end
+
+    let(:icon) { { 'type' => 'Image', 'id' => 'menu_icon', 'src' => 'menu' } }
+
+    it 'leaves the only image of a tappable readable, and names it' do
+      swift, printed = build([icon])
+      expect(swift).to include('Image("menu")')
+      expect(swift).not_to include('.accessibilityHidden(true)')
+      expect(printed).to include("[info] probe.json: Image 'menu_icon' operates a control and has no alt")
+    end
+
+    it 'hides the same image beside text, and says nothing' do
+      swift, printed = build([icon, { 'type' => 'Label', 'text' => 'Menu' }])
+      expect(swift).to include('.accessibilityHidden(true)')
+      expect(printed).not_to include('[info]')
+    end
+  end
+end

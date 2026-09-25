@@ -1,6 +1,7 @@
 #!/usr/bin/env ruby
 
 require_relative 'base_view_converter'
+require_relative 'image_accessibility_modifiers'
 
 module SjuiTools
   module SwiftUI
@@ -8,6 +9,8 @@ module SjuiTools
       # Generated code network image converter
       # Dynamic mode equivalent: Sources/SwiftJsonUI/Classes/SwiftUI/Dynamic/Converters/NetworkImageConverter.swift
       class NetworkImageConverter < BaseViewConverter
+        include ImageAccessibilityModifiers
+
         def convert
           # `url` is the canonical spelling; `source`/`src` are aliases
           # (kjui reads all three; the ios converter only read `src`).
@@ -87,6 +90,10 @@ module SjuiTools
             end
           end
           add_line ")"
+
+          # What VoiceOver reads for the image: its alt, nothing, or (an image
+          # operating a control with no alt) the asset name as before.
+          apply_image_accessibility
 
           # Apply all common modifiers (padding, frame, background, cornerRadius, border, margins, opacity, etc.)
           apply_modifiers

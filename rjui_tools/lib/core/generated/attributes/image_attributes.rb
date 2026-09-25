@@ -15,8 +15,8 @@ module JsonUI
       # contract together with `rows` / `declared?` / `alias_map`
       # (see the directory README).
       ATTRS = [
-        # Alt text for accessibility
-        { name: 'alt', kind: :string }.freeze,
+        # What screen readers say for the image (VoiceOver, TalkBack, web alt): a strings.json key or text, localized like `text`, or a binding. "" marks the image decorative (skipped). With no alt the image is decorative too, unless it operates a control (a tap handler on the image, or the only content of a tappable with no text): then it keeps the id / asset name each platform read before, and the build names it (INFO). Decorative is the default, so give every image that carries meaning (a logo, a photo, an icon that is the only content of a button) an alt.
+        { name: 'alt', kind: :string, bindable: true, aliases: ['accessibilityLabel', 'contentDescription'].freeze }.freeze,
         # Enable tap gesture independent of onClick.
         { name: 'canTap', kind: :boolean }.freeze,
         # Content mode (binding supported). ScaleToFill is a declared synonym of fill (the stretch — see attribute_semantics.json#semantics.image); the normalizer folds it, fixtures are generated for the canonical spelling only.

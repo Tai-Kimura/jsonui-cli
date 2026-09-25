@@ -137,7 +137,11 @@ module KjuiTools
 
           code = indent("Image(", depth) + "\n"
           code += indent("painter = #{painter},", depth + 1) + "\n"
-          code += indent("contentDescription = #{quote(json_data['contentDescription'] || '')},", depth + 1) + "\n"
+          # The label beside the icon names this control, so the icon itself
+          # is decorative (null — an empty string is still an unnamed image
+          # to TalkBack) unless the layout says otherwise.
+          icon_desc = json_data['contentDescription'] ? quote(json_data['contentDescription']) : 'null'
+          code += indent("contentDescription = #{icon_desc},", depth + 1) + "\n"
           code += indent("modifier = Modifier.#{icon_size_call(json_data['iconSize'])}", depth + 1)
           if (filter = icon_color_filter(json_data, condition, required_imports))
             required_imports&.add(:color_filter)

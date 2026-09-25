@@ -1,10 +1,10 @@
 {
   "type": "screen",
   "source": {
-    "layout": "fixtures/NetworkImage/alt__static.layout.json"
+    "layout": "fixtures/NetworkImage/alt__alias_contentDescription.layout.json"
   },
   "metadata": {
-    "name": "conformance NetworkImage.alt (static)",
+    "name": "conformance NetworkImage.alt (alias_contentDescription)",
     "description": "Conformance fixture for 'alt' on NetworkImage (section: NetworkImage, class: visual). Value under test: \"sample\".",
     "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
     "tags": [
@@ -15,7 +15,7 @@
   "platform": "all",
   "cases": [
     {
-      "name": "alt__static",
+      "name": "alt__alias_contentDescription",
       "description": "Conformance fixture for 'alt' on NetworkImage (section: NetworkImage, class: visual). Value under test: \"sample\".",
       "steps": [
         {
@@ -24,7 +24,7 @@
         },
         {
           "action": "screenshot",
-          "name": "NetworkImage_alt__static"
+          "name": "NetworkImage_alt__alias_contentDescription"
         }
       ]
     }
