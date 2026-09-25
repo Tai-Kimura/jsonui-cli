@@ -95,7 +95,12 @@ def built(tmp_path_factory):
 def test_android_the_delay_decides_the_order_and_settle_waits(built, slow, order, waits):
     got = _run(built, *slow)
     assert got.get("ORDER") == order, got
-    assert (int(got["WAITED"]) >= DELAY_MS) is waits, got
+    # Only the wait is timed: "returned at once" is an upper bound on wall
+    # time, which a loaded machine breaks (999 ms measured for the no-delay
+    # row during a release run). That settle's wait is load-bearing is the
+    # control below — without it the delayed response has not landed.
+    if waits:
+        assert int(got["WAITED"]) >= DELAY_MS, got
 
 
 def test_android_control_a_settle_that_does_not_wait_reads_before_the_arrival(tmp_path):

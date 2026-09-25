@@ -19,7 +19,7 @@ The probe on each face: a view model sends A, then B 50 ms later, and
 records the order the responses land in.
 
     scenario             order    settle
-    none                 a, b     returns at once
+    none                 a, b     (order only: no wall-time bound)
     A delayed            b, a     waits for A
     B delayed            a, b     waits for B
     A delayed, no wait   b        (control: settle's wait taken out — A has
@@ -91,7 +91,12 @@ def _run_web(tmp_path: Path, overrides: dict, runtime: str | None = None) -> dic
 def test_web_the_delay_decides_the_order_and_settle_waits(tmp_path, overrides, order, waits):
     got = _run_web(tmp_path, overrides)
     assert got.get("ORDER") == order, got
-    assert (int(got["WAITED"]) >= DELAY_MS) is waits, got
+    # Only the wait is timed: "returned at once" is an upper bound on wall
+    # time, which a loaded machine breaks (999 ms measured for the no-delay
+    # row during a release run). That settle's wait is load-bearing is the
+    # control below — without it the delayed response has not landed.
+    if waits:
+        assert int(got["WAITED"]) >= DELAY_MS, got
 
 
 def _web_without_the_wait(runtime: str) -> str:
@@ -233,7 +238,12 @@ def swift_binary(swift_runtime, tmp_path_factory) -> Path:
 def test_ios_the_delay_decides_the_order_and_settle_waits(swift_binary, slow, order, waits):
     got = _run_swift(swift_binary, *slow)
     assert got.get("ORDER") == order, got
-    assert (int(got["WAITED"]) >= DELAY_MS) is waits, got
+    # Only the wait is timed: "returned at once" is an upper bound on wall
+    # time, which a loaded machine breaks (999 ms measured for the no-delay
+    # row during a release run). That settle's wait is load-bearing is the
+    # control below — without it the delayed response has not landed.
+    if waits:
+        assert int(got["WAITED"]) >= DELAY_MS, got
     assert "XCTFail" not in got, got
 
 
