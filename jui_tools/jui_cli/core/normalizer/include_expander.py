@@ -93,19 +93,30 @@ class IncludeExpander:
 
 
 def _to_camel_case(s: str) -> str:
+    """An id's snake_case in camelCase, spelled as codegen spells it.
+
+    The generated screens are the ids that exist, so this is sjui/kjui's
+    `to_camel_case` (include_expander.rb): every part after the first is
+    Ruby's `capitalize` — first letter up, the REST DOWN. It kept the rest,
+    and an upper-case part split the toolchain: `verify_2FA_form` was
+    `verify2FAForm` here and in layout facts, `verify2faForm` in the
+    generated screen. The one snake->camel for ids in jui_tools
+    (layout_generator calls it); the answers are
+    shared/core/camel_case_vectors.json, which the Ruby specs hold too.
+    """
     if "_" not in s:
         return s
     parts = s.split("_")
-    return parts[0] + "".join(p[:1].upper() + p[1:] for p in parts[1:] if p)
+    return parts[0] + "".join(p.capitalize() for p in parts[1:])
 
 
 def _combine_with_prefix(prefix: str | None, name: str) -> str:
+    """`prefix` + `name` in camelCase; as codegen, the joined name's first
+    letter goes up only when it is a-z (`[a-z]`, Ruby's `sub(/^[a-z]/)`)."""
     if not prefix:
         return name
     camel_name = _to_camel_case(name)
-    if not camel_name:
-        return prefix
-    return prefix + camel_name[:1].upper() + camel_name[1:]
+    return prefix + re.sub(r"^[a-z]", lambda m: m.group(0).upper(), camel_name)
 
 
 def _derive_prefix(outer_prefix: str | None, include_id: str | None) -> str | None:
