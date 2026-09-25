@@ -259,6 +259,85 @@ RSpec.describe 'kjui codegen: the common stages reach every type it draws' do
     end
   end
 
+  # The stubs of the compile arm below live in the same file as the emit, so
+  # they cannot see a missing import — and imports come only from the keys a
+  # builder registers (ImportManager.update_imports). Each type is built on
+  # its own through build_file, as a project builds it, and every symbol the
+  # stages emit must be imported in its generated file: explicitly, or by
+  # the wildcard of its package (the import map names the package). One
+  # component's import cannot cover another's here. Measured: at 120b1f40
+  # the shadow's RoundedCornerShape was unimported on TextField, TextView and
+  # SelectBox (with and without cornerRadius on SelectBox).
+  describe 'the generated file of each type' do
+    let(:temp_dir) { Dir.mktmpdir('common_stages_imports') }
+    let(:layouts_dir) { File.join(temp_dir, 'src/main/assets/Layouts') }
+    let(:view_dir) { File.join(temp_dir, 'src/main/kotlin/com/example/app/views') }
+    let(:config) do
+      { 'source_directory' => 'src/main', 'layouts_directory' => 'assets/Layouts',
+        'view_directory' => 'kotlin/com/example/app/views', 'package_name' => 'com.example.app',
+        'project_path' => temp_dir }
+    end
+
+    before do
+      FileUtils.mkdir_p(layouts_dir)
+      FileUtils.mkdir_p(view_dir)
+      allow(KjuiTools::Core::ConfigManager).to receive(:load_config).and_return(config)
+      allow(KjuiTools::Core::ProjectFinder).to receive(:get_full_source_path).and_return(temp_dir)
+      allow(KjuiTools::Core::ProjectFinder).to receive(:get_package_name).and_return('com.example.app')
+      allow(Dir).to receive(:pwd).and_return(temp_dir)
+    end
+
+    after { FileUtils.rm_rf(temp_dir) }
+
+    it 'imports every symbol the stages emit' do
+      File.write(File.join(layouts_dir, 'missing.json'), JSON.generate('type' => 'View'))
+      every = stages.reject { |name, _| name == 'cornerRadius' }.values.reduce({}) { |acc, attrs| acc.merge(attrs) }
+      map = KjuiTools::Compose::Helpers::ImportManager.get_imports_map.values.flatten.map { |l| l.sub('import ', '') }
+      layout_pkg = 'androidx.compose.foundation.layout'
+      symbols = {
+        'RoundedCornerShape' => /\bRoundedCornerShape\(/, 'CircleShape' => /\bCircleShape\b/, 'RectangleShape' => /\bRectangleShape\b/,
+        'clip' => /\.clip\(/, 'dropShadow' => /\.dropShadow\(/, 'Shadow' => /\bShadow\(/, 'DpOffset' => /\bDpOffset\(/,
+        'border' => /\.border\(/, 'background' => /\.background\(/, 'clickable' => /\.clickable\b/,
+        'disabled' => /\bdisabled\(\)/, 'semantics' => /\.semantics \{/, 'absoluteOffset' => /\.absoluteOffset\(/,
+        'alpha' => /\.alpha\(/, 'pointerInput' => /\.pointerInput\(/, 'PointerEventPass' => /\bPointerEventPass\./,
+        'requiredWidth' => /\.requiredWidth\(/, 'requiredHeight' => /\.requiredHeight\(/
+      }
+      built = 0
+      missing = []
+      base.each do |type, extra|
+        [{}, { 'cornerRadius' => 6 }].each do |radius|
+          name = "imp_#{type.downcase}#{radius.empty? ? '' : '_rounded'}"
+          node = { 'type' => type }.merge(extra, every, radius)
+          File.write(File.join(layouts_dir, "#{name}.json"), JSON.generate(
+            'type' => 'View', 'child' => [node],
+            'data' => [{ 'name' => 'onTap', 'class' => '() -> Unit' }, { 'name' => 't', 'class' => 'String' }]
+          ))
+          expect { KjuiTools::Compose::ComposeBuilder.new.build_file(File.join(layouts_dir, "#{name}.json")) }
+            .to output(/./).to_stdout
+          file = Dir.glob(File.join(view_dir, '**', '*GeneratedView.kt'))
+                    .find { |f| File.basename(f).downcase == "#{name.delete('_')}generatedview.kt" }
+          expect(file).not_to be_nil, name
+          built += 1
+          source = File.read(file)
+          imports = source.scan(/^import (\S+)/).flatten
+          body = source.lines.reject { |l| l.start_with?('import ') }.join
+          symbols.each do |symbol, use|
+            next unless body.match?(use)
+
+            names = map.select { |l| l.end_with?(".#{symbol}") }
+            names << "#{layout_pkg}.#{symbol}" if symbol.start_with?('required')
+            imported = imports.any? do |i|
+              i.end_with?(".#{symbol}") || (i.end_with?('.*') && names.any? { |n| n.start_with?(i.chomp('*')) })
+            end
+            missing << "#{type}#{radius.empty? ? '' : ' (cornerRadius)'}: #{symbol}" unless imported
+          end
+        end
+      end
+      expect(built).to eq(base.size * 2)
+      expect(missing).to be_empty, "used and not imported:\n#{missing.join("\n")}"
+    end
+  end
+
   # The emits, whole, with every stage declared at once, type-check against
   # Compose's names and types (spec/support/compose_stub_universe.rb
   # `common_stages`). ⚠️ Against stubs: this says "well-typed Kotlin", not

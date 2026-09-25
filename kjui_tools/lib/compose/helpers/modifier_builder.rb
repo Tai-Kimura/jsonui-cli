@@ -593,7 +593,14 @@ module KjuiTools
 
             if shadow_args
               required_imports&.add(:drop_shadow)
+              # The shadow brings the import of the shape it names. The
+              # RoundedCornerShape one used to ride on an import something
+              # else in the chain happened to add (a background's clip, a
+              # `shape =` argument); TextField, TextView and SelectBox add
+              # none, so their shadow did not resolve in the generated file.
               required_imports&.add(:rectangle_shape) if shape == "RectangleShape"
+              required_imports&.add(:shape) if shape.start_with?('RoundedCornerShape')
+              required_imports&.add(:circle_shape) if shape == 'CircleShape'
               modifiers << ".dropShadow(shape = #{shape}, shadow = Shadow(#{shadow_args}))"
             end
           end
