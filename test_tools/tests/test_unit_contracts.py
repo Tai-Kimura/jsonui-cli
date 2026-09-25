@@ -1389,7 +1389,7 @@ class TestEveryExitHasTheSameShape:
 
     def test_the_missing_directory_exit_has_the_full_shape(self, tmp_path):
         assert uc._implemented_names(
-            tmp_path / "does-not-exist", "web") == (set(), [], set(), {}, 0)
+            tmp_path / "does-not-exist", "web") == (set(), [], set(), {}, 0, {})
 
     def test_a_platform_with_no_pattern_has_the_full_shape(self, tmp_path):
         # `web` is no longer here: it has no entry in _ALL_TESTS_PATTERNS but
@@ -1397,7 +1397,7 @@ class TestEveryExitHasTheSameShape:
         # scanner is needed to reach this exit at all.
         (tmp_path / "tests").mkdir()
         assert uc._implemented_names(
-            tmp_path / "tests", "flutter") == (set(), [], set(), {}, 0)
+            tmp_path / "tests", "flutter") == (set(), [], set(), {}, 0, {})
 
 
 class TestWebTitlesAreReadWhole:
