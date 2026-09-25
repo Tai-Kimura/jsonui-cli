@@ -137,7 +137,12 @@ def _web_without_the_wait(runtime: str) -> str:
 
 def test_web_control_a_settle_that_does_not_wait_reads_before_the_arrival(tmp_path):
     got = _run_web(tmp_path, {"a": "slow"}, _web_without_the_wait(bt.RUNTIME_TS), CONTROL_DELAY_MS)
-    assert got.get("ORDER") == "b", got
+    # The control's claim is that a settle without its wait reads before the
+    # DELAYED response lands — A's, CONTROL_DELAY_MS away, orders of
+    # magnitude past one drain slice. Whether B (no delay) has landed by then
+    # is the machine's speed, not the claim: `ORDER == "b"` read that and
+    # went red where B's round trip outran the probe's 50 ms gap.
+    assert "ORDER" in got and "a" not in got["ORDER"].split(","), got
 
 
 _WEB_CHAIN = '''import { installFetchMock, settle } from "./runtime.ts";
@@ -168,7 +173,10 @@ def test_web_past_the_budget_settle_fails_by_name(tmp_path):
                          cwd=tmp_path, capture_output=True, text=True, timeout=120)
     out = run.stdout.strip()
     assert out.startswith("THROWN settle: still busy after "), out
-    assert "1 request(s) in flight" in out, out
+    # How many links are in flight at the instant the budget runs out is the
+    # machine's timing — between an arrival and the next request it is 0.
+    # The claim is that settle fails by name, saying how many.
+    assert re.search(r"— \d+ request\(s\) in flight", out), out
     waited = int(re.search(r"still busy after (\d+) ms", out).group(1))
     assert waited >= 1100 and "budget 1100 ms" in out, out
 
@@ -296,7 +304,12 @@ def test_ios_control_a_settle_that_does_not_wait_reads_before_the_arrival(swift_
     binary = _build_swift(tmp_path / "nowait", _swift_without_the_wait(swift_runtime),
                           delay=CONTROL_DELAY_MS)
     got = _run_swift(binary, "a")
-    assert got.get("ORDER") == "b", got
+    # The control's claim is that a settle without its wait reads before the
+    # DELAYED response lands — A's, CONTROL_DELAY_MS away, orders of
+    # magnitude past one drain slice. Whether B (no delay) has landed by then
+    # is the machine's speed, not the claim: `ORDER == "b"` read that and
+    # went red where B's round trip outran the probe's 50 ms gap.
+    assert "ORDER" in got and "a" not in got["ORDER"].split(","), got
 
 
 _SWIFT_CHAIN = """import Foundation
@@ -330,7 +343,9 @@ def test_ios_past_the_budget_settle_fails_by_name(swift_runtime, tmp_path):
                           _SWIFT_CHAIN)
     run = subprocess.run([str(binary)], capture_output=True, text=True, timeout=300)
     fails = [l for l in run.stdout.splitlines() if l.startswith("XCTFail settle: ")]
-    assert len(fails) == 1 and "1 request(s) in flight" in fails[0], run.stdout
+    # The count in flight at the budget's instant is timing (0 between
+    # links); the claim is the named failure, saying how many.
+    assert len(fails) == 1 and re.search(r"— \d+ request\(s\) in flight", fails[0]), run.stdout
     waited = int(re.search(r"still busy after (\d+) ms", fails[0]).group(1))
     assert waited >= 1100 and "budget 1100 ms" in fails[0], fails
 
