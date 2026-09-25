@@ -51,6 +51,31 @@ RSpec.describe RjuiTools::React::Converters::SliderConverter do
       end
     end
 
+    # The other faces' sliders are continuous and start at the minimum when no
+    # value is declared (measured 2026-09-26: sjui codegen, SJUI Dynamic and KJUI
+    # Dynamic over -2 ... 1 start at -2; a move to 30% reads -1.013 / -1.102). A
+    # range input's own defaults are a step of 1 and the midpoint — a declared
+    # 0.2 over 0 .. 1 was drawn at 0 (rjui-slider-range-input-takes-the-browsers-
+    # defaults).
+    context 'with no step and no value' do
+      it 'moves continuously' do
+        result = create_converter({ 'class' => 'Slider', 'value' => 0.2 }).convert
+        expect(result).to include('step="any"')
+        expect(result).to include('defaultValue={0.2}')
+      end
+
+      it 'starts at the minimum' do
+        result = create_converter({ 'class' => 'Slider', 'minimum' => -2, 'maximum' => 1 }).convert
+        expect(result).to include('defaultValue={-2}')
+        expect(result).to include('step="any"')
+      end
+
+      it 'keeps a declared step' do
+        result = create_converter({ 'class' => 'Slider', 'step' => 5 }).convert
+        expect(result).not_to include('step="any"')
+      end
+    end
+
     context 'with value binding' do
       it 'generates value binding' do
         converter = create_converter({ 'class' => 'Slider', 'value' => '@{sliderValue}' })
