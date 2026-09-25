@@ -70,10 +70,16 @@ def _test(root: Path, steps, name="detail") -> Path:
 
 @pytest.fixture
 def at(monkeypatch):
-    """Validate as jsonui-cli *version*, LAYOUT_ID_GATE_FROM at *gate*."""
+    """Validate as jsonui-cli *version*, LAYOUT_ID_GATE_FROM and
+    INCLUDE_ID_PREFIX_GATE_FROM both at *gate* — synthetic, so an arm about
+    the switch does not move when the shipped literal is postponed (three
+    arms here did). The shipped literal is pinned in jui_tools."""
+    from jui_cli.core import layout_facts
+
     def go(version, gate="1.8.120"):
         monkeypatch.setattr(jsonui_test_cli, "__version__", version)
         monkeypatch.setattr(spec_validator, "LAYOUT_ID_GATE_FROM", gate)
+        monkeypatch.setattr(layout_facts, "INCLUDE_ID_PREFIX_GATE_FROM", gate)
     yield go
     element_ids.set_run_project()
 

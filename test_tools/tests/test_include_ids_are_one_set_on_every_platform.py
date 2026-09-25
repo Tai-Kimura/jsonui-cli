@@ -22,7 +22,7 @@ dynamic expanders read the same file from their own tests.
 Web is also generated with the prefix OFF — the spelling every build before
 INCLUDE_ID_PREFIX_GATE_FROM emits — and the two renders are paired element by
 element: that is web's old spelling -> its new one, measured, and it must be
-`layout_facts`' `include_web` (what the validators name as "from 1.8.120,
+`layout_facts`' `include_web` (what the validators name as "from <the gate>,
 spelled …"), not a transcription of it.
 """
 from __future__ import annotations

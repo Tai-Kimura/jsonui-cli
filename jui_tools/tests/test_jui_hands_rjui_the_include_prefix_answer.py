@@ -60,4 +60,4 @@ def test_the_shipped_literal_is_one_line_the_tag_gate_reads():
     # 1e's tag gate reads a module-level, column-0 literal in a tracked .py.
     src = Path(layout_facts.__file__).read_text(encoding="utf-8")
     lines = [l for l in src.splitlines() if l.startswith("INCLUDE_ID_PREFIX_GATE_FROM")]
-    assert lines == ['INCLUDE_ID_PREFIX_GATE_FROM: str | None = "1.8.120"']
+    assert lines == ['INCLUDE_ID_PREFIX_GATE_FROM: str | None = "1.8.121"']
