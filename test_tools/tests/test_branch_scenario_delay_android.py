@@ -125,7 +125,12 @@ def test_android_control_a_settle_that_does_not_wait_reads_before_the_arrival(tm
     quiet = "      if (BranchDeliveries.pending(now) == 0 && quietFor >= BranchDeliveries.QUIET_MS) return\n"
     assert runtime.count(quiet) == 1
     got = _run(_build(tmp_path / "nowait", runtime.replace(quiet, "      return\n"), CONTROL_DELAY_MS), "a")
-    assert got.get("ORDER") == "b", got
+    # The control's claim is that a settle without its wait reads before the
+    # DELAYED response lands — A's, CONTROL_DELAY_MS away, orders of
+    # magnitude past one drain slice. Whether B (no delay) has landed by then
+    # is the machine's speed, not the claim: `ORDER == "b"` read that and
+    # went red where B's round trip outran the probe's 50 ms gap.
+    assert "ORDER" in got and "a" not in got["ORDER"].split(","), got
 
 
 def test_android_past_the_budget_settle_fails_by_name(tmp_path):
@@ -137,6 +142,9 @@ def test_android_past_the_budget_settle_fails_by_name(tmp_path):
     got = _run(_build(tmp_path / "chain", runtime.replace(cap, "  const val CAP_MS = 100L\n")), "chain")
     thrown = got.get("THROWN", "")
     assert thrown.startswith("settle: still busy after "), got
-    assert "1 response(s) still due" in thrown, got
+    # How many responses are due at the budget's instant is timing (0
+    # between an arrival and the next request); the claim is the named
+    # failure, saying how many.
+    assert re.search(r"— \d+ response\(s\) still due", thrown), got
     waited = int(re.search(r"still busy after (\d+) ms", thrown).group(1))
     assert waited >= 1100 and "budget 1100 ms" in thrown, got
