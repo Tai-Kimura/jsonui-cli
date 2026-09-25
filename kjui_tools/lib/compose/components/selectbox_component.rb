@@ -307,7 +307,11 @@ module KjuiTools
           modifiers.concat(Helpers::ModifierBuilder.build_size(json_data, parent_type, required_imports))
           modifiers.concat(Helpers::ModifierBuilder.build_offset(json_data, required_imports))
           modifiers.concat(Helpers::ModifierBuilder.build_alpha(json_data, required_imports))
-          modifiers.concat(Helpers::ModifierBuilder.build_shadow(json_data, required_imports))
+          # Cast in the outline the SelectBox draws: its cornerRadius, which the
+          # library defaults to 8 (`cornerRadius: Int = 8`, KotlinJsonUI
+          # SelectBox.kt) — not a RectangleShape behind the rounded box.
+          shadow_outline = json_data['cornerRadius'] ? nil : 'RoundedCornerShape(8.dp)'
+          modifiers.concat(Helpers::ModifierBuilder.build_shadow(json_data, required_imports, shape: shadow_outline))
           modifiers.concat(Helpers::ModifierBuilder.build_clickable(json_data, required_imports))
           # padding is passed as contentPadding parameter, not modifier
           modifiers.concat(Helpers::ModifierBuilder.build_alignment(json_data, required_imports, parent_type))

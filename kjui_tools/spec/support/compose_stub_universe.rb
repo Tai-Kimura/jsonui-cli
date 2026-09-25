@@ -175,7 +175,7 @@ module ComposeStubUniverse
           object Button {
               val defaultTextColor = Color(); val defaultBackgroundColor = Color(); val defaultCornerRadius: Int = 8
           }
-          object TextField { val defaultTextColor = Color(); val defaultFontSize: Int = 16 }
+          object TextField { val defaultTextColor = Color(); val defaultFontSize: Int = 16; val defaultCornerRadius: Int = 8 }
           object Font { fun resolve(spec: FontSpec) = ResolvedFont(null, null, null, null) }
       }
       fun Button(onClick: () -> Unit, modifier: Modifier = Modifier, enabled: Boolean = true,

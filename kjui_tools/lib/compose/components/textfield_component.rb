@@ -137,6 +137,18 @@ module KjuiTools
           "resolved_textfield#{@counter}"
         end
 
+        # The outline CustomTextField draws: the declared cornerRadius (the
+        # builder's own reading), else the library's default —
+        # `shape ?: RoundedCornerShape(Configuration.TextField.defaultCornerRadius.dp)`
+        # (KotlinJsonUI CustomTextField.kt). A RectangleShape shadow sat
+        # square behind the rounded field.
+        def self.shadow_outline(json_data, required_imports)
+          return nil if json_data['cornerRadius']
+
+          required_imports&.add(:configuration)
+          'RoundedCornerShape(Configuration.TextField.defaultCornerRadius.dp)'
+        end
+
         def self.generate(json_data, depth, required_imports = nil, parent_type = nil)
           # TextField uses 'text' for value and supports both 'hint' and 'placeholder'
           # For TextField value, we need direct data binding (not string interpolation)
@@ -309,7 +321,8 @@ module KjuiTools
             end
             # Shadow after alpha, the View slot; declared on `common` and
             # dropped (kjui-dynamic-components-that-skip-the-common-modifiers).
-            box_modifiers.concat(Helpers::ModifierBuilder.build_shadow(json_data, required_imports))
+            # Cast in the outline the field draws (shadow_outline).
+            box_modifiers.concat(Helpers::ModifierBuilder.build_shadow(json_data, required_imports, shape: shadow_outline(json_data, required_imports)))
             box_modifiers.concat(Helpers::ModifierBuilder.build_weight(json_data, parent_type))
             box_modifiers.concat(Helpers::ModifierBuilder.build_clickable(json_data, required_imports))
             if box_modifiers.any?
@@ -370,7 +383,7 @@ module KjuiTools
               modifiers.concat(Helpers::ModifierBuilder.build_offset(json_data, required_imports))
               modifiers.concat(Helpers::ModifierBuilder.build_alpha(json_data, required_imports))
             end
-            modifiers.concat(Helpers::ModifierBuilder.build_shadow(json_data, required_imports))
+            modifiers.concat(Helpers::ModifierBuilder.build_shadow(json_data, required_imports, shape: shadow_outline(json_data, required_imports)))
             modifiers.concat(Helpers::ModifierBuilder.build_clickable(json_data, required_imports))
             if focus_prop
               required_imports&.add(:focus_changed)

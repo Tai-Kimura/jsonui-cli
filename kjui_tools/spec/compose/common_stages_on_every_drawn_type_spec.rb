@@ -175,6 +175,19 @@ RSpec.describe 'kjui codegen: the common stages reach every type it draws' do
     expect(inside.reject { |_, m, z| m < z }.map(&:first)).to be_empty
   end
 
+  # SafeAreaView's background and click cover the whole node: both before
+  # the system-bar padding (after it they would stop at the insets), as the
+  # dynamic component orders them — on both of its helpers.
+  it 'puts SafeAreaView background and click before the system-bar padding' do
+    [base['SafeAreaView'], variants['SafeAreaView with constraints'].reject { |k, _| k == 'type' }].each do |extra|
+      code = emit.call({ 'type' => 'SafeAreaView' }.merge(extra, stages['background'], stages['clickable']))
+      bars = code.index('Modifier.systemBarsPadding()')
+      expect(bars).not_to be_nil, code
+      expect(code.index('.background(Color(')).to be < bars
+      expect(code.index('.clickable')).to be < bars
+    end
+  end
+
   # A shadow inside a clip is cut away with it: the shadow sits outside every
   # clip of the chain (CircleImage's circle, and the corner clip).
   it 'puts every shadow outside the clips' do
@@ -187,16 +200,35 @@ RSpec.describe 'kjui codegen: the common stages reach every type it draws' do
     end
   end
 
-  # The outline of a shadow is the component's own where it is not the
-  # declared cornerRadius: CircleImage is clipped to a circle, and a Button
-  # without cornerRadius draws its default rounded shape.
-  it 'draws the shadow in the outline the component draws' do
-    circle = emit.call({ 'type' => 'CircleImage' }.merge(base['CircleImage'], stages['shadow']))
-    expect(circle).to include('.dropShadow(shape = CircleShape,')
-    button = emit.call({ 'type' => 'Button' }.merge(base['Button'], stages['shadow']))
-    expect(button).to include('.dropShadow(shape = RoundedCornerShape(Configuration.Button.defaultCornerRadius.dp),')
-    rounded = emit.call({ 'type' => 'Button' }.merge(base['Button'], stages['shadow'], 'cornerRadius' => 6))
-    expect(rounded).to include('.dropShadow(shape = RoundedCornerShape(6.dp),')
+  # The outline of a shadow is the shape the component draws, where that is
+  # not the node's own box: CircleImage is clipped to a circle; Button,
+  # TextField / TextView (CustomTextField) and SelectBox draw rounded corners
+  # of their own when no cornerRadius is declared — Button its `shape =`
+  # argument, CustomTextField `shape ?: RoundedCornerShape(Configuration
+  # .TextField.defaultCornerRadius.dp)`, SelectBox `cornerRadius: Int = 8`
+  # (KotlinJsonUI library). A RectangleShape shadow would sit square behind
+  # them. With cornerRadius declared, the drawn shape is the declared one.
+  outlines = {
+    'CircleImage' => %w[CircleShape CircleShape],
+    'Button' => ['RoundedCornerShape(Configuration.Button.defaultCornerRadius.dp)', 'RoundedCornerShape(6.dp)'],
+    'TextField' => ['RoundedCornerShape(Configuration.TextField.defaultCornerRadius.dp)', 'RoundedCornerShape(6.dp)'],
+    'TextView' => ['RoundedCornerShape(Configuration.TextField.defaultCornerRadius.dp)', 'RoundedCornerShape(6.dp)'],
+    'SelectBox' => ['RoundedCornerShape(8.dp)', 'RoundedCornerShape(6.dp)']
+  }
+  # Where the emit names the drawn shape itself, it is the same one.
+  drawn = {
+    'Button' => ['shape = RoundedCornerShape(Configuration.Button.defaultCornerRadius.dp)', 'shape = RoundedCornerShape(6.dp)'],
+    'TextField' => [nil, 'shape = RoundedCornerShape(6.dp)'], 'TextView' => [nil, 'shape = RoundedCornerShape(6.dp)'],
+    'SelectBox' => [nil, 'cornerRadius = 6,'], 'CircleImage' => ['.clip(CircleShape)', '.clip(CircleShape)']
+  }
+  outlines.each do |type, (plain, rounded)|
+    [[plain, {}, 0], [rounded, { 'cornerRadius' => 6 }, 1]].each do |shape, radius, i|
+      it "#{type} casts its shadow in #{shape}#{radius.empty? ? '' : ' (cornerRadius 6)'}" do
+        code = emit.call({ 'type' => type }.merge(base[type], stages['shadow'], radius))
+        expect(code).to include(".dropShadow(shape = #{shape}, ")
+        expect(code).to include(drawn[type][i]) if drawn[type][i]
+      end
+    end
   end
 
   # The components that emit the blocker ahead of their margins take the
