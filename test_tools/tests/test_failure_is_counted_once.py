@@ -142,6 +142,14 @@ class TestTheThreeLinesAgree:
         self._run(tmp_path, "mock", "generate")
         return tmp_path
 
+    # --no-coverage-check: these arms ask the mock gate, not contracts coverage.
+    # From jsonui-cli 1.8.121 (VALIDATE_GATE_FROM) coverage gates validate, and
+    # these fixtures declare a mock.swagger and no spec_directory: coverage
+    # cannot start and the run fails on that, at every release from the gate
+    # on. On a copy stamped 1.8.121, 49 validate runs in these eight files
+    # failed on coverage and 15 of their arms went red; below it, none
+    # (2026-09-26). The flag is how a user says coverage is not the run's
+    # subject; coverage's own arms are test_validate_coverage_section.
     def _run(self, cwd, *args):
         proc = subprocess.run(
             [sys.executable, "-m", "jsonui_test_cli.cli", *args],
@@ -177,7 +185,7 @@ class TestTheThreeLinesAgree:
         project = self._project(tmp_path)
         self._delete_a_declared_scenario(project)
 
-        rc, out = self._run(project, "validate", "tests/screens")
+        rc, out = self._run(project, "validate", "tests/screens", "--no-coverage-check")
 
         assert rc == 1
         assert "Result: FAILED" in out
@@ -190,7 +198,7 @@ class TestTheThreeLinesAgree:
         project = self._project(tmp_path)
         victim = self._delete_a_declared_scenario(project)
 
-        _, out = self._run(project, "validate", "tests/screens")
+        _, out = self._run(project, "validate", "tests/screens", "--no-coverage-check")
 
         body = out.split("Mock contract drift:")[1]
         assert victim in body
@@ -200,7 +208,7 @@ class TestTheThreeLinesAgree:
         the gate had started failing on everything."""
         project = self._project(tmp_path)
 
-        rc, out = self._run(project, "validate", "tests/screens")
+        rc, out = self._run(project, "validate", "tests/screens", "--no-coverage-check")
 
         assert rc == 0
         assert "Result: PASSED" in out

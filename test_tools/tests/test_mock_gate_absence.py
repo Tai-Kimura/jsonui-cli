@@ -91,9 +91,18 @@ class MockGateAbsenceTests(unittest.TestCase):
         p.write_text(json.dumps(SWAGGER), encoding="utf-8")
         return p
 
+    # --no-coverage-check: these arms ask the mock gate, not contracts coverage.
+    # From jsonui-cli 1.8.121 (VALIDATE_GATE_FROM) coverage gates validate, and
+    # these fixtures declare a mock.swagger and no spec_directory: coverage
+    # cannot start and the run fails on that, at every release from the gate
+    # on. On a copy stamped 1.8.121, 49 validate runs in these eight files
+    # failed on coverage and 15 of their arms went red; below it, none
+    # (2026-09-26). The flag is how a user says coverage is not the run's
+    # subject; coverage's own arms are test_validate_coverage_section.
     def validate(self):
         proc = subprocess.run(
-            [sys.executable, "-m", "jsonui_test_cli.cli", "validate", "tests"],
+            [sys.executable, "-m", "jsonui_test_cli.cli", "validate", "tests",
+             "--no-coverage-check"],
             cwd=self.root, capture_output=True, text=True,
             env={"PYTHONPATH": str(REPO_TOOL), "PATH": "/usr/bin:/bin"})
         return proc.returncode, proc.stdout + proc.stderr
@@ -314,7 +323,7 @@ class TestARebuildNamesWhatItPutBack:
         old = time.time() - 10_000
         os.utime(gen, (old, old))
 
-        out = self._run(root, "validate", "tests").stdout
+        out = self._run(root, "validate", "tests", "--no-coverage-check").stdout
         # WORDING CHANGED, and the change is a narrowing of a claim rather
         # than a weakening of this test. This branch has two causes that the
         # rebuild cannot tell apart: a scenario really was deleted (this
@@ -336,5 +345,5 @@ class TestARebuildNamesWhatItPutBack:
         # prints" are the same observation.
         root = self._project(tmp_path)
         self._run(root, "mock", "generate")
-        out = self._run(root, "validate", "tests").stdout
+        out = self._run(root, "validate", "tests", "--no-coverage-check").stdout
         assert "restored a scenario" not in out

@@ -325,13 +325,42 @@ class TestXxxiAtTheTag:
         assert _tag_check().verdict("1.8.117", "nothing\n") == (
             True, "n/a — no VALIDATE_GATE_FROM in this tree (it predates the section)")
 
+    # This tree's half only: the literal the tag gate reads is the constant
+    # Python binds, and at this tree's version it is a verdict the tag gate
+    # can pass — announcing below the constant, gating from it once a previous
+    # tag announced it. Whether the previous tag DID announce it is the tag
+    # gate's question, asked with that tag's tree (check-tag.sh passes it —
+    # test_check_tag_runs_it). Asked here with no previous tag, this arm went
+    # red the moment the stamp reached the constant (a copy stamped 1.8.121,
+    # 2026-09-26), though the tag it would be cut at passes.
     def test_this_tree_reads_as_what_the_constant_says(self):
+        check = _tag_check()
         src = (REPO / "test_tools/jsonui_test_cli/contracts_coverage.py").read_text(encoding="utf-8")
-        ok, why = _tag_check().verdict(__version__, src)
+        assert check.literal(src) == cc.VALIDATE_GATE_FROM
         if cc.VALIDATE_GATE_FROM is None:
+            ok, why = check.verdict(__version__, src)
             assert not ok and "unset" in why
-        else:
-            assert ok, why
+            return
+        gating = cc.gate_is_on(__version__)
+        ok, why = check.verdict(__version__, src, previous=src if gating else "")
+        assert ok, why
+        assert ("gates since" if gating else "announces") in why, why
+
+    @pytest.mark.parametrize("version, gating", [("1.8.120", False), ("1.8.121", True), ("1.8.122", True)])
+    def test_the_tool_and_the_tag_gate_agree_where_gating_starts(self, version, gating):
+        """The arm above at the stamps around a constant — below it, at it,
+        after it — so the release that raises the stamp is not the first to
+        run it: validate gates (gate_is_on) exactly where the tag gate reads
+        "gates since", and below that the tag gate reads "announces"."""
+        check = _tag_check()
+        src = self._src('"1.8.121"')
+        assert cc.gate_is_on(version, "1.8.121") is gating
+        ok, why = check.verdict(version, src, previous=src if gating else "")
+        assert ok and ("gates since" if gating else "announces") in why, why
+        # and gating with no announcing previous tag is the tag gate's red, not this tree's
+        if gating:
+            ok, why = check.verdict(version, src)
+            assert not ok and "had no section" in why, why
 
     def test_check_tag_runs_it(self):
         text = (REPO / "dev-guide/release/check-tag.sh").read_text(encoding="utf-8")
