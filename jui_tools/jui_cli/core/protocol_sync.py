@@ -321,9 +321,34 @@ def list_impl_narrowed_vars(impl_source: str, platform: str) -> dict[str, str]:
         r"(?:var|val|let)\s+(?P<name>\w+)",
         re.MULTILINE,
     )
+    return _narrowed_names(pattern, impl_source, narrowing)
+
+
+def list_impl_narrowed_methods(impl_source: str, platform: str) -> dict[str, str]:
+    """{name: modifier} for every ``func``/``fun`` in *impl_source* declared
+    ONLY with a modifier that narrows its reader on *platform* — the same
+    reading as :func:`list_impl_narrowed_vars`. `list_impl_method_names`
+    counts `private fun X` as implementing X, and Kotlin then got `private
+    override fun X`; Swift's `private func X` meets no requirement."""
+    import re
+    narrowing = NARROWING_MODIFIERS.get(platform, set())
+    pattern = re.compile(
+        r"^[ \t]*"
+        r"(?:@\w+(?:\([^)]*\))?\s+)*"
+        r"(?P<mods>(?:(?:" + _ACCESS_MODIFIER + r"|override|suspend|static|class|final|"
+        r"inline|operator|infix|tailrec|open|abstract|mutating|nonisolated)\s+)*)"
+        r"(?:func|fun)\s+(?:<[^>]+>\s+)?(?P<name>\w+)",
+        re.MULTILINE,
+    )
+    return _narrowed_names(pattern, impl_source, narrowing)
+
+
+def _narrowed_names(pattern, source: str, narrowing: set[str]) -> dict[str, str]:
+    """Names whose every declaration carries a narrowing modifier: one also
+    declared without one (an overload, a nested type's member) is left out."""
     narrowed: dict[str, str] = {}
     open_names: set[str] = set()
-    for m in pattern.finditer(impl_source):
+    for m in pattern.finditer(source):
         bare = [t for t in m.group("mods").split() if t in narrowing]
         if bare:
             narrowed.setdefault(m.group("name"), bare[0])

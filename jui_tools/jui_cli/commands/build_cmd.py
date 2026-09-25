@@ -38,6 +38,7 @@ from ..core.platform_resolver import PlatformResolver
 from ..core.protocol_sync import (
     collect_protocol_members,
     list_impl_method_names,
+    list_impl_narrowed_methods,
     list_impl_narrowed_vars,
     list_impl_var_names,
 )
@@ -2752,6 +2753,21 @@ def _sync_viewmodel_protocols(
                     f"declares '{missing}' but no matching var/val found in Impl. "
                     f"Add the property declaration or remove from spec."
                 )
+            # The same for a spec method: `private fun X` counted as present,
+            # then became `private override fun X`, which Kotlin refuses;
+            # Swift's `private func X` meets no requirement.
+            narrowed_methods = (list_impl_narrowed_methods(impl_source, platform)
+                                if impl_source is not None else {})
+            narrowed_spec_methods = {m.name for m in sync_result.methods
+                                     if m.name in narrowed_methods}
+            for name in sorted(narrowed_spec_methods):
+                fix = (f"write `override fun {name}(…)`" if platform == "android"
+                       else f"write `func {name}(…)` (internal, as the protocol is)")
+                errors.append(
+                    f"[{platform}] {impl_path}: dataFlow.viewModel.methods "
+                    f"declares '{name}' but the Impl declares it `{narrowed_methods[name]}` — a "
+                    f"protocol member cannot be narrowed; {fix}."
+                )
             # A spec var the Impl declares with a modifier that narrows its
             # reader counts as present (the scan accepts `private(set)`), but
             # it cannot satisfy the protocol: Kotlin refuses the
@@ -2825,7 +2841,8 @@ def _sync_viewmodel_protocols(
                             updated = ensure_kotlin_import(
                                 updated, proto_fqn_fn(spec.name),
                             )
-                        method_names = [m.name for m in sync_result.methods]
+                        method_names = [m.name for m in sync_result.methods
+                                        if m.name not in narrowed_spec_methods]
                         # `data` is hard-coded on the Protocol's first line
                         # (matching the Compose `StateFlow<XData>` convention)
                         # so the existing Impl declaration needs `override`
