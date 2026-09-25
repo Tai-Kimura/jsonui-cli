@@ -528,3 +528,42 @@ class TestVanished:
         assert [(e["op"], e["cause"]) for e in report.baseline_items["web"]["stale"]] == [
             ("getOther", "no mock")]
         assert report.baseline["web"]["vanished"] == 0
+
+
+class TestTheGateLineNamesEveryCause:
+    """ee, 2026-09-25: from the release the gate line is what validate prints
+    about the gate, and it had not named vanished. Every cause the gate fails
+    on is produced here by a real run, and the line must name each — so a
+    cause added to the gate and not to the line turns this red."""
+
+    NAMES = {  # the why's phrase -> how the gate line names it
+        "not in the baseline": "entries not in the baseline",
+        "baselined but closed": "baselined entries that are closed",
+        "baselined but gone from the run": "baselined entries gone from the run",
+        "cannot be baselined": "what cannot be baselined",
+    }
+
+    def _whys(self, root) -> list:
+        lines, gate = cc.validate_section(root, "9.9.9")
+        return gate["why"]
+
+    def test_each_cause_the_gate_fails_on_is_named_on_the_line(self, tmp_path, run, monkeypatch):
+        monkeypatch.setattr(cc, "VALIDATE_GATE_FROM", BELOW)      # the gate is on at 9.9.9
+        produced = set()
+        root = _project(tmp_path / "new")                                  # new
+        produced |= {p for w in self._whys(root) for p in self.NAMES if p in w}
+        root = _project(tmp_path / "stale")                                # stale
+        run(root, "contracts", "baseline", "--initial")
+        _spec_file(root).write_text(json.dumps(_closing_one()), encoding="utf-8")
+        produced |= {p for w in self._whys(root) for p in self.NAMES if p in w}
+        root = _project(tmp_path / "vanished")                             # vanished
+        run(root, "contracts", "baseline", "--initial")
+        _edit_openapi(root, lambda a: a["paths"]["/api/other"]["get"]["responses"].pop("500"))
+        produced |= {p for w in self._whys(root) for p in self.NAMES if p in w}
+        root = _project(tmp_path / "unbaselinable")                        # cannot be baselined
+        _with_declaration_error(root)
+        produced |= {p for w in self._whys(root) for p in self.NAMES if p in w}
+        assert produced == set(self.NAMES), produced
+        line = cc._gate_line("9.9.9")
+        for phrase in sorted(produced):
+            assert self.NAMES[phrase] in line, (phrase, line)

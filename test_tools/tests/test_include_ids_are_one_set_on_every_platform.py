@@ -34,7 +34,8 @@ REPO = Path(__file__).resolve().parents[2]
 FIXTURE = json.loads((REPO / "shared/core/include_ids_fixture.json").read_text(encoding="utf-8"))
 SPECIMENS = sorted(FIXTURE["specimens"])
 SCREEN = FIXTURE["screen"]
-ESBUILD = REPO / "rjui_tools/spec/support/node_modules/.bin/esbuild"
+ESBUILD = Path(os.environ.get("JSONUI_TEST_ESBUILD")
+               or REPO / "rjui_tools/spec/support/node_modules/.bin/esbuild")
 ENV = {**os.environ, "LC_ALL": "en_US.UTF-8", "LANG": "en_US.UTF-8"}
 
 SJUI = r"""
@@ -110,6 +111,17 @@ console.log(JSON.stringify(ids));
 """
 
 
+def _missing(what: str, install: str) -> None:
+    """A missing tool: in CI this FAILS — a gate that skips gates nothing, and
+    29 skips would sit in a green summary. Locally it skips, counted and
+    named, as the emitted-TypeScript arm does."""
+    if os.environ.get("CI"):
+        pytest.fail(f"{what} is not available and this is CI — the include-id agreement "
+                    f"would be unmeasured. {install}")
+    pytest.skip(f"{what} is not available — the include-id agreement is UNMEASURED here "
+                f"({install})")
+
+
 def _pascal(stem: str) -> str:
     return "".join(p.capitalize() for p in stem.split("_"))
 
@@ -130,7 +142,7 @@ def roots(tmp_path_factory):
 
 def _ruby(tool: str, script: str, roots: dict) -> None:
     if shutil.which("ruby") is None:
-        pytest.skip("ruby is not installed — the codegen side is UNMEASURED here")
+        _missing("ruby", "install ruby")
     result = subprocess.run(
         ["ruby", "-I", str(REPO / tool / "lib"), "-e", script,
          json.dumps([str(r) for r in roots.values()]), SCREEN],
@@ -156,8 +168,7 @@ def emitted(roots):
 
 def _render_web(root: Path) -> list:
     if shutil.which("node") is None or not ESBUILD.exists():
-        pytest.skip("node / esbuild not installed (npm ci --prefix rjui_tools/spec/support) — "
-                    "the web side is UNMEASURED here")
+        _missing("node / esbuild", "npm ci --prefix rjui_tools/spec/support")
     web = root / "web"
     (web / "react_stub.js").write_text(REACT_STUB, encoding="utf-8")
     (web / "gen" / "StringManager.ts").write_text(STRING_MANAGER_STUB, encoding="utf-8")

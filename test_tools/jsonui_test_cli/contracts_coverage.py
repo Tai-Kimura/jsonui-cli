@@ -1424,7 +1424,8 @@ def _gate_line(version: str) -> str:
     if gate_is_on(version):
         return (f"validate gates on contracts coverage (from jsonui-cli "
                 f"{VALIDATE_GATE_FROM}): it fails on entries not in the baseline, on "
-                "baselined entries that are closed, and on what cannot be baselined")
+                "baselined entries that are closed, on baselined entries gone from the "
+                "run, and on what cannot be baselined")
     state = gate_state()
     if state == "release":
         return VALIDATE_NOTICE.format(version=VALIDATE_GATE_FROM)
