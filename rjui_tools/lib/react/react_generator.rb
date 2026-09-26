@@ -6,6 +6,7 @@ require_relative '../core/generated_marker'
 require_relative '../core/frameworks'
 require_relative '../core/normalization'
 require_relative '../core/string_manager_core'
+require_relative '../core/layout_path'
 require_relative 'converters/base_converter'
 require_relative 'converters/view_converter'
 require_relative 'converters/label_converter'
@@ -200,6 +201,15 @@ module RjuiTools
         # BaseConverter#layout_normalized? to take the canonical-only
         # attribute lookup path for L1-normalized layouts.
         @config['_layout_normalized'] = Core::Normalization.canonicalized?(json)
+        # Each node's position, for the name its handlers are handed when the
+        # layout gives it no id (JsonUIShared::LayoutPath.view_id) — the rule
+        # the sjui and kjui codegen stamp too. An include is its own
+        # component here, so the nodes in it are stamped from that file's
+        # own root (spec/core/layout_path_spec.rb).
+        JsonUIShared::LayoutPath.stamp!(json) unless JsonUIShared::LayoutPath.stamped?(json)
+        # The classes the layout's data declares, for a handler whose
+        # arguments its declaration decides (SelectBox.onValueChange).
+        @config['_data_classes'] = declared_data_classes(json)
 
         jsx_content = convert_component(json)
 
@@ -1266,6 +1276,21 @@ module RjuiTools
         end
 
         false
+      end
+
+      # name => class, for every entry of every `data` list in the tree — the
+      # root's and a data-only child's alike.
+      def declared_data_classes(node, classes = {})
+        case node
+        when Hash
+          Array(node['data']).each do |entry|
+            classes[entry['name']] = entry['class'] if entry.is_a?(Hash) && entry['name'].is_a?(String)
+          end
+          node.each { |key, value| declared_data_classes(value, classes) unless key == 'data' }
+        when Array
+          node.each { |value| declared_data_classes(value, classes) }
+        end
+        classes
       end
 
       # Extract data from JSON - search for data-only elements in children (recursively)
