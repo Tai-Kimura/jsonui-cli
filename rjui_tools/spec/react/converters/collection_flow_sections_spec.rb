@@ -15,6 +15,13 @@ require_relative '../../support/typescript_compiler'
 #   sjui's FlowLayout per section in a VStack, kjui's FlowRow per section in a
 #   Column. Until jsonui-cli 1.9.0 every section went into the one wrap, so
 #   section 2 continued section 1's last line.
+# - A grid of two or more sections, or with a header or footer (round 9): a
+#   grid per section in a column of blocks — a section's cells start a row of
+#   their own, its header a full-width row above, its footer below — as sjui
+#   (a LazyVGrid per section) and kjui (full-span header items, a filler to
+#   end a part-filled row) draw it. Until jsonui-cli 1.9.0 one grid held
+#   every section: a header was one grid item beside the cells, and section 2
+#   continued section 1's last row.
 # - A section's header and footer (round 7): rows of their own, full width,
 #   the header above the section's wrap and the footer below — a Collection
 #   that declares one is the column of blocks too, with one section. Until
@@ -201,6 +208,59 @@ RSpec.describe 'rjui Collection: flow sections, and the rows and columns of a gr
     one = render(convert(FLOW_TWO_SECTIONS.merge('sections' => edges.first(1), 'lineSpacing' => 4)),
                  sections: EDGE_DATA, boxes: true)
     expect(one.values_at('H0', 'A0', 'F0')).to eq([[0, 0, 200, 10], [0, 14, 40, 20], [0, 62, 200, 10]]), one.inspect
+  end
+
+  GRID_TWO_SECTIONS = { 'columns' => 2, 'lineSpacing' => 4, 'columnSpacing' => 10,
+                        'sections' => [{ 'cell' => 'ACell' }, { 'cell' => 'BCell' }] }.freeze
+
+  describe 'grid sections' do
+    it 'two sections, or a header: a column of grids, the blocks spaced as the rows' do
+      [GRID_TWO_SECTIONS, GRID_TWO_SECTIONS.merge('sections' => [{ 'cell' => 'ACell', 'header' => 'HCell' }])].each do |shape|
+        jsx = convert(shape)
+        expect(root_classes(jsx)).to eq(%w[flex flex-col gap-y-[4px]]), jsx
+        expect(jsx.scan(/<div className="(grid [^"]*)">/).flatten.uniq).to eq(['grid grid-cols-2 gap-x-[10px] gap-y-[4px]']), jsx
+      end
+    end
+
+    it 'control: one section, no header or footer — the one grid as before' do
+      jsx = convert(GRID_TWO_SECTIONS.merge('sections' => [{ 'cell' => 'ACell' }]))
+      expect(root_classes(jsx)).to include('grid', 'grid-cols-2', 'gap-x-[10px]', 'gap-y-[4px]')
+      expect(jsx).not_to include('<div className="grid')
+    end
+
+    it "a section's own columns is its grid's" do
+      jsx = convert(GRID_TWO_SECTIONS.merge('sections' => [{ 'cell' => 'ACell' }, { 'cell' => 'BCell', 'columns' => 3 }]))
+      expect(jsx.scan(/<div className="grid (grid-cols-\d)/).flatten).to eq(%w[grid-cols-2 grid-cols-3])
+    end
+  end
+
+  it 'renders: each section a grid of its own rows, its header a full-width row above, its footer below' do
+    # 200 wide, two columns of (200 - 10) / 2 = 95; cells 40 x 20, edges 10 high.
+    edges = [{ 'cell' => 'ACell', 'header' => 'HCell', 'footer' => 'FCell' }, { 'cell' => 'BCell' }]
+    at = render(convert(GRID_TWO_SECTIONS.merge('sections' => edges)),
+                sections: '[{ header: { n: 0 }, cells: rows(5), footer: { n: 0 } }, { cells: rows(2) }]', boxes: true)
+    # H0 10, 4, A's rows at 14 / 38 / 62 (A4 alone), 4, F0 at 86, 4, B0 a row of its own at 100.
+    expect(at.values_at('H0', 'A0', 'A1', 'A4', 'F0', 'B0', 'B1')).to eq(
+      [[0, 0, 200, 10], [0, 14, 40, 20], [105, 14, 40, 20], [0, 62, 40, 20], [0, 86, 200, 10], [0, 100, 40, 20], [105, 100, 40, 20]]
+    ), at.inspect
+    # No header or footer: section B still starts a row, not beside A4.
+    plain = render(convert(GRID_TWO_SECTIONS), sections: '[{ cells: rows(5) }, { cells: rows(2) }]')
+    expect(plain.values_at('A4', 'B0', 'B1')).to eq([[0, 48], [0, 72], [105, 72]]), plain.inspect
+  end
+
+  it 'the grids type-check in the whole element, with a header, a footer and a bound column count' do
+    ambient = <<~TS
+      #{TypeScriptCompiler::AMBIENT}
+      declare const data: { cols: number; rows?: { sections?: { header?: Record<string, unknown>; footer?: Record<string, unknown>; cells?: { data: Record<string, unknown>[] } }[] } };
+      declare const ACell: (props: { key?: string | number; id?: string; data: unknown }) => JSX.Element;
+      declare const BCell: (props: { key?: string | number; id?: string; data: unknown }) => JSX.Element;
+      declare const HCell: (props: { data: unknown }) => JSX.Element;
+      declare const FCell: (props: { data: unknown }) => JSX.Element;
+    TS
+    edges = [{ 'cell' => 'ACell', 'header' => 'HCell', 'footer' => 'FCell' }, { 'cell' => 'BCell', 'columns' => 3 }]
+    [GRID_TWO_SECTIONS, GRID_TWO_SECTIONS.merge('sections' => edges), GRID_TWO_SECTIONS.merge('columns' => '@{cols}')].each do |shape|
+      expect(TypeScriptCompiler.component(convert(shape))).to compile_as_typescript.with_ambient(ambient)
+    end
   end
 
   it 'the two wraps type-check in the whole element, with the headers and footers' do

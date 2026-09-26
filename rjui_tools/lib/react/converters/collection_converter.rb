@@ -276,6 +276,13 @@ module RjuiTools
             # that IS a list (sjui parity: TableConverter takes the List path
             # only for the unsectioned single-column shape).
             classes.concat(list_style_classes)
+          elsif grid_per_section?
+            # A grid per section (grid_per_section?): a column of blocks —
+            # each section's header row, its grid, its footer row — spaced as
+            # the rows; each block's grid carries the columns and the gaps.
+            classes << 'flex flex-col'
+            row_gap = grid_row_gap
+            classes << "gap-y-[#{row_gap}px]" if row_gap
           else
             # Grid layout
             classes << 'grid'
@@ -380,6 +387,45 @@ module RjuiTools
 
         def grid_row_gap
           attributes['lineSpacing'] || attributes['itemSpacing'] || attributes['spacing']
+        end
+
+        # A grid per section (4f round 9): with two or more sections that
+        # draw cells, or a declared header or footer, each section is a grid
+        # of its own in a column of blocks — its header a full-width row above
+        # it, its footer below — so a section's cells start a row of their
+        # own and a header spans the row, as sjui (a LazyVGrid per section)
+        # and kjui (full-span header items, a filler to end a part-filled
+        # row) draw it. Until jsonui-cli 1.9.0 every section went into the one
+        # grid: a header was one grid item beside the cells and section 2
+        # continued section 1's last row.
+        def grid_per_section?
+          return false if flow_collection? || horizontal_collection?
+          return false unless extract_collection_binding(attributes['items'])
+
+          raw = attributes['columnCount'] || attributes['columns']
+          return false unless (raw.is_a?(String) && has_binding?(raw)) || (raw || 1).to_i != 1
+
+          sections = (attributes['sections'] || []).select { |section| section.is_a?(Hash) }
+          sections.count { |section| section['cell'] } > 1 || sections.any? { |section| section['header'] || section['footer'] }
+        end
+
+        # One section's grid: the section's own `columns`, else the
+        # Collection's (a bound count as the style it is on the one-grid
+        # route), and the grid gaps.
+        def grid_section_open(section, indent)
+          own = section['columns']
+          raw = attributes['columnCount'] || attributes['columns']
+          classes = ['grid']
+          style = ''
+          if own.is_a?(Numeric) && own.to_i.positive?
+            classes << "grid-cols-#{own.to_i}"
+          elsif raw.is_a?(String) && has_binding?(raw)
+            style = " style={{ gridTemplateColumns: `repeat(${#{extract_binding_property(raw)}}, minmax(0, 1fr))` }}"
+          else
+            classes << "grid-cols-#{raw || 1}"
+          end
+          classes.concat(grid_gap_classes)
+          "#{indent_str(indent)}<div className=\"#{classes.join(' ')}\"#{style}>"
         end
 
         # A flow per section (4f ruling, 2026-09-26): with two or more
@@ -487,18 +533,19 @@ module RjuiTools
             # header and footer reading `?.sections` off nothing
             # (`data={?.sections?.[0]?.header || {}}`, which is not JSX) and
             # one cell with no data.
-            if items_binding && flow_per_section?
-              # Each section: its header, a row of its own above the wrap;
-              # the wrap of its cells; its footer below (4f ruling
-              # 2026-09-26, round 7) — rows of the flex column, full width,
-              # spaced as the lines. Until jsonui-cli 1.9.0 the header and
-              # footer sat inside the wrap, items on the cells' line.
+            if items_binding && (flow_per_section? || grid_per_section?)
+              # Each section: its header, a row of its own above the block;
+              # the block of its cells — a wrap on the flow, a grid on the
+              # grid; its footer below (4f ruling 2026-09-26, round 7; the
+              # grid round 9) — rows of the flex column, full width, spaced
+              # as the lines. Until jsonui-cli 1.9.0 the header and footer
+              # sat inside the wrap / grid, items on the cells' line.
               wrap = (['flex flex-row flex-wrap content-start'] + grid_gap_classes).join(' ')
               sections.each_with_index do |section, section_index|
                 edge = section_edge_line(section, 'header', section_index, items_binding, indent)
                 content_lines << edge if edge
                 if section.is_a?(Hash) && section['cell']
-                  content_lines << "#{indent_str(indent)}<div className=\"#{wrap}\">"
+                  content_lines << (flow_per_section? ? "#{indent_str(indent)}<div className=\"#{wrap}\">" : grid_section_open(section, indent))
                   content_lines << generate_section_content(section, section_index, items_binding, indent + 2, edges: false)
                   content_lines << "#{indent_str(indent)}</div>"
                 end
