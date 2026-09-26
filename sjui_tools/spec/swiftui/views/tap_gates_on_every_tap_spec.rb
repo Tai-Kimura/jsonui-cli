@@ -109,11 +109,23 @@ RSpec.describe 'sjui canTap stops the tap handler and nothing else' do
         expect(!code.include?('data.onTap?()') || code.include?('.disabled(true)')).to be(true), code
       end
 
-      it 'a bound enabled disables it outside its tap' do
-        code = emit.call(type, 'enabled' => '@{on}')
-        disabled_at = code.rindex('.disabled(!((data.on ?? false)))')
-        expect(disabled_at).not_to be_nil, code
-        expect(disabled_at).to be > code.index('data.onTap?()'), code
+      if type == 'TabView'
+        # A TabView's `enabled` stops its tab items, not the tab view
+        # (tab_view_converter.rb, 4f's ruling, jsonui-cli 1.9.0): no
+        # `.disabled`, and its own tap is masked by the binding as a bound
+        # canTap masks one.
+        it 'a bound enabled masks its tap, and disables nothing' do
+          code = emit.call(type, 'enabled' => '@{on}')
+          expect(code).not_to include('.disabled('), code
+          expect(code).to include('including: (data.on ?? false) ? .all : .subviews)'), code
+        end
+      else
+        it 'a bound enabled disables it outside its tap' do
+          code = emit.call(type, 'enabled' => '@{on}')
+          disabled_at = code.rindex('.disabled(!((data.on ?? false)))')
+          expect(disabled_at).not_to be_nil, code
+          expect(disabled_at).to be > code.index('data.onTap?()'), code
+        end
       end
     end
   end

@@ -46,6 +46,8 @@ module SjuiTools
 
               # Add tabItem modifier
               indent do
+                items_enabled = tab_items_enabled_line
+                add_line items_enabled if items_enabled
                 add_line ".tabItem {"
                 indent do
                   # Build Label with icon
@@ -198,6 +200,73 @@ module SjuiTools
 
           apply_modifiers
           generated_code
+        end
+
+        private
+
+        # `enabled` stops the tab items, not the tab view (4f's ruling,
+        # jsonui-cli 1.9.0 — kjui's NavigationBarItem `enabled`, web's
+        # `<button disabled>` per tab): the tab view's control is its row of
+        # tabs, and what a tab shows is a layout of its own, which
+        # `userInteractionEnabled` stops. `.disabled` on the TabView (twice:
+        # the bag's and apply_outer_disabled's) disabled every control in the
+        # tab shown as well (measured, SwiftJsonUI ConformanceHost
+        # -tabEnabledProbe). SwiftUI has no modifier for a tab item's enabled
+        # state before iOS 18.4, so SwiftJsonUI's `.jsonuiTabItemsEnabled`
+        # sets the tab bar items' isEnabled, from each tab's content (only
+        # the one on screen reaches the tab bar). `userInteractionEnabled`
+        # stays register_hit_test_gate's.
+        def register_interaction_gates
+          @interaction_gates_registered = true
+          register_hit_test_gate
+        end
+
+        # The tab view's own tap and gestures follow `enabled`, as kjui's
+        # Scaffold gates them (gesture_gate) — `.disabled` stopped them with
+        # everything the tab showed. `enabled: false` attaches no tap
+        # (register_click_lines) and no gesture; a binding masks the tap as a
+        # bound canTap does and gates each gesture's call.
+        def tap_gate_condition
+          enabled = @component['enabled']
+          own = is_binding?(enabled) ? tap_gate_expr(enabled) : nil
+          [own, super].compact.join(' && ').then { |gate| gate.empty? ? nil : gate }
+        end
+
+        def apply_long_press_to_bag
+          own_gesture(:on_long_press) { super }
+        end
+
+        def apply_pan_to_bag
+          own_gesture(:on_pan) { super }
+        end
+
+        def apply_pinch_to_bag
+          own_gesture(:on_pinch) { super }
+        end
+
+        def own_gesture(slot)
+          enabled = @component['enabled']
+          return if enabled == false
+
+          yield
+          lines = @modifier_bag[slot]
+          return unless lines && is_binding?(enabled)
+
+          gate = tap_gate_expr(enabled)
+          @modifier_bag.register(slot, Array(lines).map do |line|
+            call = line.lstrip
+            call.start_with?('data.') ? "#{line[0...(line.length - call.length)]}if #{gate} { #{call} }" : line
+          end)
+        end
+
+        # `.jsonuiTabItemsEnabled(false)` for `enabled: false`, the binding
+        # for a bound one; nil when `enabled` does not disable.
+        def tab_items_enabled_line
+          enabled = @component['enabled']
+          return '.jsonuiTabItemsEnabled(false)' if enabled == false
+          return nil unless is_binding?(enabled)
+
+          ".jsonuiTabItemsEnabled(#{tap_gate_expr(enabled)})"
         end
       end
     end
