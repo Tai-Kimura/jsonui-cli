@@ -26,6 +26,15 @@ module KjuiTools
             # Remove file extension and convert to resource name
             resource_name = image_name.gsub('.png', '').gsub('.jpg', '').gsub('-', '_').downcase
             
+            # The names this emit uses are imported where it uses them: the
+            # local branch added none, so a screen whose only image was a
+            # local CircleImage did not compile — Image, painterResource and R
+            # unresolved (measured: the 35 Image conformance layouts drawn as
+            # CircleImage, compiled against Compose and KotlinJsonUI;
+            # jsonui-cli 1.9.0).
+            required_imports&.add(:image)
+            required_imports&.add(:painter_resource)
+            required_imports&.add(:r_class)
             code = indent("Image(", depth)
             code += "\n" + indent("painter = painterResource(id = R.drawable.#{Helpers::ResourceResolver.drawable_name(resource_name)}),", depth + 1)
           end
@@ -124,6 +133,8 @@ module KjuiTools
           
           # Error handling for network images
           if is_network && json_data['errorImage']
+            required_imports&.add(:painter_resource)
+            required_imports&.add(:r_class)
             code += ",\n" + indent("error = painterResource(R.drawable.#{Helpers::ResourceResolver.drawable_name(json_data['errorImage'])})", depth + 1)
           end
           
