@@ -24,6 +24,10 @@ RSpec.describe 'RjuiTools::Core::NodeKeys' do
       File.readlines(file, encoding: 'UTF-8').each_with_index.map do |line, i|
         next if line.lstrip.start_with?('#') || file.end_with?('node_keys.rb')
         next unless line.match?(/\b(?:#{NODE_NAMES.join('|')})\.keys\b/)
+        # The tap rule is a shared/core mirror, which cannot call this tool's
+        # NodeKeys: it subtracts its own WRITTEN_STAMPS, pinned below to hold
+        # every stamp NodeKeys leaves out.
+        next if file.end_with?('core/tap_accessibility.rb') && line.match?(/\.keys - WRITTEN_STAMPS\)/)
 
         "#{file.sub("#{LIB}/", '')}:#{i + 1}: #{line.strip}"
       end.compact
@@ -32,6 +36,11 @@ RSpec.describe 'RjuiTools::Core::NodeKeys' do
 
   it 'is the only way the tool reads a node\'s keys' do
     expect(raw_node_key_reads).to be_empty, raw_node_key_reads.join("\n")
+  end
+
+  it "the tap rule's written keys leave out every stamp NodeKeys leaves out" do
+    require 'core/tap_accessibility'
+    expect(JsonUIShared::TapAccessibility::WRITTEN_STAMPS).to include(*RjuiTools::Core::NodeKeys::STAMPS)
   end
 
   # The scan can see what it forbids: a line of the forbidden shape is found.
