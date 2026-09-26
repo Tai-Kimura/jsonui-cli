@@ -389,7 +389,9 @@ module RjuiTools
         def flow_per_section?
           return false unless flow_collection? && extract_collection_binding(attributes['items'])
 
-          (attributes['sections'] || []).count { |section| section.is_a?(Hash) && section['cell'] } > 1
+          sections = (attributes['sections'] || []).select { |section| section.is_a?(Hash) }
+          # A declared header or footer is a row of its own too (round 7).
+          sections.count { |section| section['cell'] } > 1 || sections.any? { |section| section['header'] || section['footer'] }
         end
 
         #: listStyle -> the chrome that draws it. Enumerated from the SSoT
@@ -484,11 +486,22 @@ module RjuiTools
             # (`data={?.sections?.[0]?.header || {}}`, which is not JSX) and
             # one cell with no data.
             if items_binding && flow_per_section?
+              # Each section: its header, a row of its own above the wrap;
+              # the wrap of its cells; its footer below (4f ruling
+              # 2026-09-26, round 7) — rows of the flex column, full width,
+              # spaced as the lines. Until jsonui-cli 1.9.0 the header and
+              # footer sat inside the wrap, items on the cells' line.
               wrap = (['flex flex-row flex-wrap content-start'] + grid_gap_classes).join(' ')
               sections.each_with_index do |section, section_index|
-                content_lines << "#{indent_str(indent)}<div className=\"#{wrap}\">"
-                content_lines << generate_section_content(section, section_index, items_binding, indent + 2)
-                content_lines << "#{indent_str(indent)}</div>"
+                edge = section_edge_line(section, 'header', section_index, items_binding, indent)
+                content_lines << edge if edge
+                if section.is_a?(Hash) && section['cell']
+                  content_lines << "#{indent_str(indent)}<div className=\"#{wrap}\">"
+                  content_lines << generate_section_content(section, section_index, items_binding, indent + 2, edges: false)
+                  content_lines << "#{indent_str(indent)}</div>"
+                end
+                edge = section_edge_line(section, 'footer', section_index, items_binding, indent)
+                content_lines << edge if edge
               end
             elsif items_binding
               sections.each_with_index do |section, section_index|
@@ -503,7 +516,17 @@ module RjuiTools
           content_lines.join("\n")
         end
 
-        def generate_section_content(section, section_index, items_binding, indent)
+        # A section's header or footer: its view with the section's data.
+        def section_edge_line(section, kind, section_index, items_binding, indent)
+          view = section.is_a?(Hash) && extract_view_name(section[kind])
+          return nil unless view
+
+          "#{indent_str(indent)}<#{view} data={#{items_binding}?.sections?.[#{section_index}]?.#{kind} || {}} />"
+        end
+
+        # `edges: false` leaves the header and footer to the caller (the
+        # flow, which draws them as rows around the section's wrap).
+        def generate_section_content(section, section_index, items_binding, indent, edges: true)
           lines = []
 
           header_view = extract_view_name(section['header'])
@@ -513,9 +536,7 @@ module RjuiTools
           auto_tracking = attributes['autoChangeTrackingId'] == true
 
           # Header
-          if header_view
-            lines << "#{indent_str(indent)}<#{header_view} data={#{items_binding}?.sections?.[#{section_index}]?.header || {}} />"
-          end
+          lines << section_edge_line(section, 'header', section_index, items_binding, indent) if header_view && edges
 
           # Cells with map
           if cell_view && items_binding
@@ -571,9 +592,7 @@ module RjuiTools
           end
 
           # Footer
-          if footer_view
-            lines << "#{indent_str(indent)}<#{footer_view} data={#{items_binding}?.sections?.[#{section_index}]?.footer || {}} />"
-          end
+          lines << section_edge_line(section, 'footer', section_index, items_binding, indent) if footer_view && edges
 
           lines.join("\n")
         end

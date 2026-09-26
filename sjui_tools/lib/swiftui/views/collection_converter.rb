@@ -981,6 +981,23 @@ module SjuiTools
           end
         end
 
+        # A flow section's declared header or footer (4f ruling 2026-09-26,
+        # round 7): its view with the section's header / footer data, a row of
+        # its own, full width, above / below the section's wrap — a sibling of
+        # the wrap in the section VStack, so it is spaced as the lines. Until
+        # jsonui-cli 1.9.0 a flow drew neither. Nothing when none is declared.
+        def add_flow_section_edge(section, kind)
+          name = section[kind] && extract_view_name(section[kind])
+          return unless name
+
+          add_line "if let #{kind}Data = section.#{kind}?.data {"
+          indent do
+            add_line "#{name}(data: #{kind}Data)"
+            add_modifier_line '.frame(maxWidth: .infinity, alignment: .leading)'
+          end
+          add_line '}'
+        end
+
         # A flow's three gaps (attribute_semantics.json -> collectionSpacing):
         # between cells on a line columnSpacing, else itemSpacing; between
         # lines lineSpacing (line_spacing_value), else itemSpacing; between
@@ -1025,7 +1042,7 @@ module SjuiTools
                 is_optional = is_property_optional?(property_name)
                 @component['sections'].each_with_index do |section, index|
                   cell_view_name = extract_view_name(section['cell']) if section['cell']
-                  next unless cell_view_name
+                  next unless cell_view_name || section['header'] || section['footer']
 
                   if is_optional
                     add_line "if let dataSource = data.#{property_name}, dataSource.sections.count > #{index} {"
@@ -1035,22 +1052,26 @@ module SjuiTools
                   indent do
                     data_ref = is_optional ? "dataSource" : "data.#{property_name}"
                     add_line "let section = #{data_ref}.sections[#{index}]"
-                    add_line "if let cellsData = section.cells?.data {"
-                    indent do
-                      add_line "FlowLayout(alignment: #{flow_alignment}, horizontalSpacing: #{h_spacing}, verticalSpacing: #{v_spacing}) {"
+                    add_flow_section_edge(section, 'header')
+                    if cell_view_name
+                      add_line "if let cellsData = section.cells?.data {"
                       indent do
-                        vars = open_cell_foreach('cellsData')
+                        add_line "FlowLayout(alignment: #{flow_alignment}, horizontalSpacing: #{h_spacing}, verticalSpacing: #{v_spacing}) {"
                         indent do
-                          add_line "#{cell_view_name}(data: #{vars[:data_var]}).equatable()"
-                          generate_cell_identity(vars[:index_var])
-                          apply_cell_frame
-                          apply_cell_item_identifier(vars[:index_var])
+                          vars = open_cell_foreach('cellsData')
+                          indent do
+                            add_line "#{cell_view_name}(data: #{vars[:data_var]}).equatable()"
+                            generate_cell_identity(vars[:index_var])
+                            apply_cell_frame
+                            apply_cell_item_identifier(vars[:index_var])
+                          end
+                          add_line "}"
                         end
                         add_line "}"
                       end
                       add_line "}"
                     end
-                    add_line "}"
+                    add_flow_section_edge(section, 'footer')
                   end
                   add_line "}"
                 end
@@ -1230,7 +1251,7 @@ module SjuiTools
 
               @component['sections'].each_with_index do |section, index|
                 cell_view_name = extract_view_name(section['cell']) if section['cell']
-                next unless cell_view_name
+                next unless cell_view_name || section['header'] || section['footer']
 
                 if is_optional
                   add_line "if let dataSource = data.#{property_name}, dataSource.sections.count > #{index} {"
@@ -1243,22 +1264,26 @@ module SjuiTools
                   else
                     add_line "let section = data.#{property_name}.sections[#{index}]"
                   end
-                  add_line "if let cellsData = section.cells?.data {"
-                  indent do
-                    add_line "FlowLayout(alignment: #{flow_alignment}, horizontalSpacing: #{h_spacing}, verticalSpacing: #{v_spacing}) {"
+                  add_flow_section_edge(section, 'header')
+                  if cell_view_name
+                    add_line "if let cellsData = section.cells?.data {"
                     indent do
-                      vars = open_cell_foreach('cellsData')
+                      add_line "FlowLayout(alignment: #{flow_alignment}, horizontalSpacing: #{h_spacing}, verticalSpacing: #{v_spacing}) {"
                       indent do
-                        add_line "#{cell_view_name}(data: #{vars[:data_var]}).equatable()"
-                        generate_cell_identity(vars[:index_var])
-                        apply_cell_frame
-                        apply_cell_item_identifier(vars[:index_var])
+                        vars = open_cell_foreach('cellsData')
+                        indent do
+                          add_line "#{cell_view_name}(data: #{vars[:data_var]}).equatable()"
+                          generate_cell_identity(vars[:index_var])
+                          apply_cell_frame
+                          apply_cell_item_identifier(vars[:index_var])
+                        end
+                        add_line "}"
                       end
                       add_line "}"
                     end
                     add_line "}"
                   end
-                  add_line "}"
+                  add_flow_section_edge(section, 'footer')
                 end
                 add_line "}"
               end

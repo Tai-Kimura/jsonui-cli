@@ -27,14 +27,18 @@ RSpec.describe 'kjui codegen: a flow per section' do
     KjuiTools::Compose::Components::CollectionComponent.generate(node, 1, Set.new, nil)
   end
 
-  def scaffold(class_name, letter)
+  # A header or footer (`edge: true`) also prints how it was placed: `~` when
+  # the view itself was handed fillMaxWidth (a fixed-width root then fills or
+  # centres itself in the row), `!` when it is not in a full-width row.
+  def scaffold(class_name, letter, edge: false)
     generator = KjuiTools::Compose::Generators::CellGenerator.allocate
     view = generator.send(:main_cell_content, class_name, nil, 'com.example')
     model = generator.send(:cell_viewmodel_content, class_name, 'x_cell', 'com.example')
     params = view[/fun #{class_name}View\((.*?)\)\s*\{/m, 1] or raise "no #{class_name}View in the scaffold"
     update = model[/fun updateData\((.*?)\)/, 1] or raise 'no updateData in the scaffold'
+    placed = edge ? ' + (if (modifier is Wide) "~" else "") + (if (Layout.fullRow) "" else "!")' : ''
     "class #{class_name}ViewModel { fun updateData(#{update}) {} }\n" \
-      "@Composable fun #{class_name}View(#{params.strip}) { Layout.draw(\"#{letter}\" + ((modifier as? Tagged)?.tag?.substringAfterLast('_') ?: \"\")) }\n"
+      "@Composable fun #{class_name}View(#{params.strip}) { Layout.draw(\"#{letter}\" + ((modifier as? Tagged)?.tag?.substringAfterLast('_') ?: \"\")#{placed}) }\n"
   end
 
   FLOW_SECTIONS_STUBS = <<~KOTLIN
@@ -42,7 +46,8 @@ RSpec.describe 'kjui codegen: a flow per section' do
     interface Modifier { companion object : Modifier }
     class Tagged(val tag: String) : Modifier
     fun Modifier.testTag(tag: String): Modifier = Tagged(tag)
-    fun Modifier.fillMaxWidth(): Modifier = this
+    class Wide(val inner: Modifier) : Modifier
+    fun Modifier.fillMaxWidth(): Modifier = Wide(this)
     fun Modifier.fillMaxSize(): Modifier = this
     class ScrollState
     fun rememberScrollState(): ScrollState = ScrollState()
@@ -66,6 +71,7 @@ RSpec.describe 'kjui codegen: a flow per section' do
     object Layout {
         val lines = mutableListOf<StringBuilder>()
         var region: StringBuilder? = null
+        var fullRow = false
         fun draw(cell: String) { (region ?: StringBuilder().also { lines += it }).append(cell) }
         fun dump(): String = lines.joinToString("|")
     }
@@ -75,6 +81,12 @@ RSpec.describe 'kjui codegen: a flow per section' do
         content()
         Layout.region = outer
     }
+    fun Box(modifier: Modifier = Modifier, content: () -> Unit) {
+        val outer = Layout.fullRow
+        Layout.fullRow = modifier is Wide
+        content()
+        Layout.fullRow = outer
+    }
     fun LaunchedEffect(key1: Any?, block: suspend kotlinx.coroutines.CoroutineScope.() -> Unit) {}
     inline fun <T> key(vararg keys: Any?, block: () -> T): T = block()
     inline fun <T> remember(key1: Any?, calculation: () -> T): T = calculation()
@@ -83,8 +95,9 @@ RSpec.describe 'kjui codegen: a flow per section' do
     } } } }
     inline fun <reified T : Any> viewModel(key: String? = null): T = T::class.java.getDeclaredConstructor().newInstance()
     class CollectionDataSource(val sections: List<CollectionDataSection> = emptyList())
-    class CollectionDataSection(val cells: CellData? = null) {
+    class CollectionDataSection(val cells: CellData? = null, val header: HeaderFooterData? = null, val footer: HeaderFooterData? = null) {
         class CellData(val viewName: String, val data: List<Map<String, Any>>)
+        class HeaderFooterData(val viewName: String, val data: Map<String, Any>)
     }
     class Data(val rows: CollectionDataSource? = null)
     fun cells(name: String, n: Int) = CollectionDataSection.CellData(name, List(n) { mapOf<String, Any>("id" to "$name$it") })
@@ -97,16 +110,24 @@ RSpec.describe 'kjui codegen: a flow per section' do
       'fixedHeight' => emit('height' => 200),
       'lazyNone' => emit('lazy' => 'none'),
       'tracked' => emit('cellIdProperty' => 'id', 'autoChangeTrackingId' => true),
-      'oneSection' => emit('sections' => [{ 'cell' => 'ACell' }])
+      'oneSection' => emit('sections' => [{ 'cell' => 'ACell' }]),
+      # Round 7: a section's declared header and footer are rows of their own.
+      'edges' => emit('sections' => [{ 'cell' => 'ACell', 'header' => 'HCell', 'footer' => 'FCell' }, { 'cell' => 'BCell' }]),
+      'edgesLazyNone' => emit('lazy' => 'none', 'sections' => [{ 'cell' => 'ACell', 'header' => 'HCell', 'footer' => 'FCell' }, { 'cell' => 'BCell' }]),
+      'edgesOneSection' => emit('sections' => [{ 'cell' => 'ACell', 'header' => 'HCell' }]),
+      'headerOnly' => emit('sections' => [{ 'header' => 'HCell' }, { 'cell' => 'BCell' }]),
+      'edgesTracked' => emit('cellIdProperty' => 'id', 'autoChangeTrackingId' => true,
+                             'sections' => [{ 'cell' => 'ACell', 'header' => 'HCell', 'footer' => 'FCell' }, { 'cell' => 'BCell' }])
     }
   end
 
   def program(functions)
     calls = functions.keys.map do |fn|
-      "    Layout.lines.clear(); #{fn}(Data(CollectionDataSource(listOf(CollectionDataSection(cells(\"A\", 3)), " \
+      "    Layout.lines.clear(); #{fn}(Data(CollectionDataSource(listOf(CollectionDataSection(cells(\"A\", 3), " \
+        "CollectionDataSection.HeaderFooterData(\"H\", emptyMap()), CollectionDataSection.HeaderFooterData(\"F\", emptyMap())), " \
         "CollectionDataSection(cells(\"B\", 2))))), Any()); println(\"#{fn} => \" + Layout.dump())"
     end
-    [FLOW_SECTIONS_STUBS, scaffold('ACell', 'A'), scaffold('BCell', 'B'),
+    [FLOW_SECTIONS_STUBS, scaffold('ACell', 'A'), scaffold('BCell', 'B'), scaffold('HCell', 'H', edge: true), scaffold('FCell', 'F', edge: true),
      functions.map { |fn, body| "@Composable fun #{fn}(data: Data, viewModel: Any) {\n#{body}\n}" }.join("\n\n"),
      "fun main() {\n#{calls.join("\n")}\n}"].join("\n")
   end
@@ -140,6 +161,12 @@ RSpec.describe 'kjui codegen: a flow per section' do
       expect(lines[route]).to eq('A0A1A2|B0B1'), lines.inspect
     end
     expect(lines['oneSection']).to eq('A0A1A2'), lines.inspect
+    # The header a line of its own above the section's region, the footer
+    # below (4f ruling 2026-09-26, round 7; the flow drew neither) — each in a
+    # full-width row, the view at its own size.
+    %w[edges edgesLazyNone edgesTracked].each { |route| expect(lines[route]).to eq('H|A0A1A2|F|B0B1'), lines.inspect }
+    expect(lines['edgesOneSection']).to eq('H|A0A1A2'), lines.inspect
+    expect(lines['headerOnly']).to eq('H|B0B1'), lines.inspect
   end
 
   it 'spaces the sections by the line spacing, and each region by the declared spacings' do

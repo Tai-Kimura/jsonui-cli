@@ -1429,8 +1429,14 @@ module KjuiTools
           # every section, so section 2 continued section 1's last row
           # (measured on 6bdb6aba, 2026-09-26). The node's own modifiers stay
           # on the outer container, a Column then.
+          # A section's declared header and footer (4f ruling 2026-09-26,
+          # round 7) are rows of their own, full width, above and below the
+          # section's wrap — so a Collection that declares one takes the
+          # Column too. Rows (header, wrap, footer) and section blocks are
+          # spaced as the lines. Until jsonui-cli 1.9.0 a flow drew neither.
           items_bound = json_data['items'].is_a?(String) && json_data['items'].match?(/@\{([^}]+)\}/)
-          per_section = items_bound && sections.count { |section| section['cell'] } > 1
+          per_section = items_bound && (sections.count { |section| section['cell'] } > 1 ||
+                                        sections.any? { |section| section['header'] || section['footer'] })
           container = per_section ? 'Column' : 'FlowRow'
           flow_arrangements = "horizontalArrangement = Arrangement.spacedBy(#{h_spacing}.dp), " \
                               "verticalArrangement = Arrangement.spacedBy(#{v_spacing}.dp)"
@@ -1474,11 +1480,13 @@ module KjuiTools
             sections.each do |section|
               cell_view_name = section['cell']
               required_imports&.add("cell:#{cell_view_name}") if cell_view_name
+              required_imports&.add("cell:#{section['header']}") if section['header']
+              required_imports&.add("cell:#{section['footer']}") if section['footer']
             end
 
             sections.each_with_index do |section, index|
               cell_view_name = section['cell']
-              next unless cell_view_name
+              next unless cell_view_name || section['header'] || section['footer']
 
               auto_tracking = json_data['autoChangeTrackingId'] == true
               use_val_if = auto_tracking && cell_id_property
@@ -1490,6 +1498,12 @@ module KjuiTools
               if use_val_if
                 code += "\n" + indent("val #{section_var} = #{sections_access(property_name)}.getOrNull(#{index})", depth + 1)
                 code += "\n" + indent("if (#{section_var} != null) {", depth + 1)
+                code += flow_section_edge(section, 'header', section_var, index, depth + 2)
+                unless cell_view_name
+                  code += flow_section_edge(section, 'footer', section_var, index, depth + 2)
+                  code += "\n" + indent("}", depth + 1)
+                  next
+                end
                 code += "\n" + indent("val #{cell_data_var} = #{section_var}.cells", depth + 2)
                 code += "\n" + indent("if (#{cell_data_var} != null) {", depth + 2)
                 required_imports&.add(:remember_state)
@@ -1498,6 +1512,12 @@ module KjuiTools
                 code += "\n" + indent("enrichedData#{index}.forEachIndexed { cellIndex, item ->", ld)
               else
                 code += "\n" + indent("#{sections_access(property_name)}.getOrNull(#{index})?.let { #{section_var} ->", depth + 1)
+                code += flow_section_edge(section, 'header', section_var, index, depth + 2)
+                unless cell_view_name
+                  code += flow_section_edge(section, 'footer', section_var, index, depth + 2)
+                  code += "\n" + indent("}", depth + 1)
+                  next
+                end
                 code += "\n" + indent("#{section_var}.cells?.let { #{cell_data_var} ->", depth + 2)
                 code += "\n" + indent("FlowRow(modifier = Modifier.fillMaxWidth(), #{flow_arrangements}) {", depth + 3) if per_section
                 code += "\n" + indent("#{cell_data_var}.data.forEachIndexed { cellIndex, item ->", ld)
@@ -1538,6 +1558,7 @@ module KjuiTools
               code += "\n" + indent("}", ld)
               code += "\n" + indent("}", depth + 3) if per_section
               code += "\n" + indent("}", depth + 2)
+              code += flow_section_edge(section, 'footer', section_var, index, depth + 2)
               code += "\n" + indent("}", depth + 1)
             end
           elsif sections.empty? && (names = class_list(json_data))
@@ -1547,6 +1568,27 @@ module KjuiTools
           code += "\n" + indent("}", depth)
           code += "\n" + indent("}", outer_depth) if depth > outer_depth
           code
+        end
+
+        # A flow section's header or footer: its view with its own ViewModel
+        # and the section's header / footer data, in a full-width row of its
+        # own in the section Column. The ROW is full width and the view keeps
+        # its own size at the row's start — as KotlinJsonUI Dynamic's flow
+        # (a fillMaxWidth Box around the view), sjui's (`.frame(maxWidth:
+        # .infinity, alignment: .leading)`) and rjui's (a flex-column row) —
+        # rather than the other routes' `modifier = Modifier.fillMaxWidth()`
+        # into the view, which a fixed-width root (`requiredWidth`) answers by
+        # centring itself in the row. Empty when the section declares none.
+        def self.flow_section_edge(section, kind, section_var, index, depth)
+          name = section[kind]
+          return '' unless name
+
+          edge_class = cell_class_name(name)
+          code = "\n" + indent("#{section_var}.#{kind}?.let { #{kind}Data ->", depth)
+          code += "\n" + indent("val #{kind}ViewModel: #{edge_class}ViewModel = viewModel(key = \"#{name}_#{kind}_#{index}_\${viewModel.hashCode()}\")", depth + 1)
+          code += "\n" + indent("LaunchedEffect(#{kind}Data.data) { #{kind}ViewModel.updateData(#{kind}Data.data) }", depth + 1)
+          code += "\n" + indent("Box(modifier = Modifier.fillMaxWidth()) { #{edge_class}View(viewModel = #{kind}ViewModel) }", depth + 1)
+          code + "\n" + indent("}", depth)
         end
 
         # Generate non-lazy Column-based collection for wrapContent height.
