@@ -382,7 +382,9 @@ def _sync_one_tool(
 
     # Propagate Ruby version pin to the platform root. rbenv walks up from
     # the user's CWD; standalone `rjui build` from <platform_root>/ otherwise
-    # falls through to the system Ruby, which lacks `filter_map` etc.
+    # falls through to the global Ruby — the system Ruby (2.6 on macOS) where
+    # none was set, which the tools refuse at their entry from jsonui-cli
+    # 1.9.0 (floor 3.2).
     source_ruby_version_file = source_tool_dir / ".ruby-version"
     if source_ruby_version_file.exists():
         want = source_ruby_version_file.read_text().strip()

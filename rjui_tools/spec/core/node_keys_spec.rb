@@ -19,7 +19,8 @@ RSpec.describe 'RjuiTools::Core::NodeKeys' do
   LIB = File.expand_path('../../lib', __dir__)
 
   def raw_node_key_reads
-    # `map { }.compact`, not `filter_map`: the suite runs on Ruby 2.6 too.
+    # `map { }.compact`, not `filter_map`: the suite ran on Ruby 2.6 too,
+    # until jsonui-cli 1.9.0 (the floor is 3.2 since).
     Dir.glob(File.join(LIB, '**', '*.rb')).sort.flat_map do |file|
       File.readlines(file, encoding: 'UTF-8').each_with_index.map do |line, i|
         next if line.lstrip.start_with?('#') || file.end_with?('node_keys.rb')

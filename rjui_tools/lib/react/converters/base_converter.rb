@@ -19,6 +19,7 @@ require_relative '../tailwind_mapper'
 require_relative '../responsive_helper'
 require_relative '../helpers/string_manager_helper'
 require_relative '../helpers/font_spec_helper'
+require_relative '../../core/enum_spelling'
 
 module RjuiTools
   module React
@@ -326,7 +327,7 @@ module RjuiTools
           # lookup, and no second copy of the vocabulary. `map_text_align`
           # matched on a `case` and silently returned '' for a binding.
           classes << TailwindMapper.map_text_align(
-            bound_enum_style('textAlign', attributes['textAlign'])
+            bound_enum_style('textAlign', attributes['textAlign']), enum_section
           )
 
           # Orientation (flex)
@@ -581,6 +582,8 @@ module RjuiTools
             @dynamic_styles['accentColor'] = color_style_expr(attributes['tintColor'])
           end
 
+          classes.concat(pressed_background_classes)
+
           # Append responsive Tailwind classes (breakpoint-prefixed overrides)
           if @responsive_result && !@responsive_result[:classes].empty?
             classes.concat(@responsive_result[:classes])
@@ -728,6 +731,12 @@ module RjuiTools
         # specs, or a defaulted root). Derived from the converter class
         # name: SliderConverter → 'Slider'. An explicit `type` always
         # wins (SwitchConverter also serves 'Toggle' nodes, etc.).
+        # The section an enum value is judged on: the node's type, as the
+        # validator judges it (`class` keyed nodes: the converter's own).
+        def enum_section
+          json['type'] || fallback_component_type || 'View'
+        end
+
         def fallback_component_type
           name = self.class.name.to_s.split('::').last
           return nil unless name&.end_with?('Converter')
@@ -1119,7 +1128,7 @@ module RjuiTools
 
         # The lowercased SIZE value this container declares, or nil.
         def distribution_size_value
-          key = attributes['distribution'].to_s.downcase
+          key = JsonUIShared::EnumSpelling.lowered(attributes['distribution'], 'View', 'distribution').to_s
           DISTRIBUTION_CHILD_CLASS.key?(key) ? key : nil
         end
 
@@ -1165,7 +1174,7 @@ module RjuiTools
 
         # The declared value, normalised. `regular` when absent.
         def effect_style_key(value = attributes['effectStyle'])
-          normalized = value.to_s.downcase.gsub(/\s+/, '')
+          normalized = JsonUIShared::EnumSpelling.lowered(value, enum_section, 'effectStyle').to_s.gsub(/\s+/, '')
           normalized.empty? ? 'regular' : normalized
         end
 
@@ -1184,7 +1193,7 @@ module RjuiTools
         # The Tailwind classes for a STATIC contentMode. `none` is the only fit
         # that also needs a position, which is why the two tables are separate.
         def content_mode_classes(value)
-          key = value.to_s.downcase
+          key = JsonUIShared::EnumSpelling.lowered(value, enum_section, 'contentMode').to_s
           fit = CONTENT_MODE_OBJECT_FIT.fetch(key, CONTENT_MODE_DEFAULT_FIT)
           position = CONTENT_MODE_OBJECT_POSITION[key]
           position ? "object-#{fit} object-#{position}" : "object-#{fit}"
@@ -1192,7 +1201,7 @@ module RjuiTools
 
         # The same value as the NetworkImageProps `contentMode` union wants.
         def content_mode_prop(value)
-          CONTENT_MODE_OBJECT_FIT.fetch(value.to_s.downcase, CONTENT_MODE_DEFAULT_FIT)
+          CONTENT_MODE_OBJECT_FIT.fetch(JsonUIShared::EnumSpelling.lowered(value, enum_section, 'contentMode').to_s, CONTENT_MODE_DEFAULT_FIT)
         end
 
         # Route a bound contentMode to object-fit / object-position. Returns
@@ -1202,14 +1211,26 @@ module RjuiTools
           expr = bound_value_expr(value)
           return false unless expr
 
-          key = "String(#{expr}).toLowerCase()"
+          key = "String(#{expr})"
           dynamic_styles['objectFit'] = css_assert(
-            "(#{js_object_literal(CONTENT_MODE_OBJECT_FIT)})[#{key}] ?? 'contain'", 'objectFit'
+            "(#{js_object_literal(declared_table(CONTENT_MODE_OBJECT_FIT, 'contentMode'))})[#{key}] ?? 'contain'", 'objectFit'
           )
           dynamic_styles['objectPosition'] = css_assert(
-            "(#{js_object_literal(CONTENT_MODE_OBJECT_POSITION)})[#{key}]", 'objectPosition'
+            "(#{js_object_literal(declared_table(CONTENT_MODE_OBJECT_POSITION, 'contentMode'))})[#{key}]", 'objectPosition'
           )
           true
+        end
+
+        # *map* (keyed lowercase) keyed by each spelling the SSoT declares for
+        # *attribute* on this node, as written — what a run-time lookup of a
+        # bound value matches: a value is its declared spelling, case and all
+        # (1.9.0). Without the definitions, *map* as it is.
+        def declared_table(map, attribute)
+          return map if JsonUIShared::EnumSpelling.definitions.empty?
+
+          JsonUIShared::EnumSpelling.declared(enum_section, attribute)
+                                    .map { |spelling| map.key?(spelling.downcase) ? [spelling, map[spelling.downcase]] : nil }
+                                    .compact.to_h
         end
 
         def js_object_literal(map)
@@ -1297,18 +1318,27 @@ module RjuiTools
         # what the Compose codegen does with `.clickable(enabled = …)`.
         # `userInteractionEnabled` is the stronger one and blocks the subtree.
         #
-        # `call` is the handler's call as its declaration asks
-        # (declared_tap_call); the element's handler takes the event only for
-        # a call that hands it on.
-        def can_tap_gated_click(call)
+        # canTap gates every spelling of the tap — the onClick binding, the
+        # onclick selectors, the link action, an Image's click (31's
+        # 16b85a09). `calls` are the tap's statements: each handler called as
+        # its declaration asks (declared_tap_call), or the link action's
+        # `window.open(…)`. The element's handler takes the event only for a
+        # call that hands it on. An array of selectors (`calls` an Array) is a
+        # block, one call or several.
+        def can_tap_gated_click(calls)
+          block = calls.is_a?(Array)
+          calls = Array(calls)
           value = attributes['canTap']
-          params = call.include?('?.(e)') ? '(e)' : '()'
-          return " onClick={#{params} => #{call}}" if value.nil? || value == true || value == 'true'
           return '' if value == false || value == 'false'
-          return " onClick={#{params} => #{call}}" unless has_binding?(value)
 
-          gate = extract_binding_property(value)
-          " onClick={#{params} => { if (#{gate}) #{call}; }}"
+          params = calls.any? { |c| c.include?('?.(e)') } ? '(e)' : '()'
+          statements = calls.map { |c| "#{c};" }.join(' ')
+          if value.is_a?(String) && has_binding?(value)
+            gate = extract_binding_property(value)
+            return " onClick={#{params} => { if (#{gate}) #{block && calls.size > 1 ? "{ #{statements} }" : statements} }}"
+          end
+
+          " onClick={#{params} => #{block ? "{ #{statements} }" : calls.first}}"
         end
 
         # A tap's handler, called as the layout's data declares its closure
@@ -1322,10 +1352,18 @@ module RjuiTools
         # bound canTap, TS2554 for a declared `() => void` — so a declared
         # `(String)` took the event where the viewId goes. `callee` is the
         # expression (`data.onTap`).
-        def declared_tap_call(callee)
+        #
+        # `sender`: the selector spelling `name:`, UIKit's sender mark — sjui
+        # calls `data.name?(self)` — whose sender on the web is the event the
+        # element hands it (31's 16b85a09). An element that hands no event
+        # (click_takes_event?) calls these with nothing.
+        def declared_tap_call(callee, sender: false)
+          event = click_takes_event? ? 'e' : ''
+          return "#{callee}?.(#{event})" if sender
+
           case self.class.declared_parameters(callee.sub(/\Adata\./, ''), config['_data_classes'] || {})
           when ['String'] then "#{callee}?.(#{view_id_expr})"
-          when ['Event'] then "#{callee}?.(e)"
+          when ['Event'] then "#{callee}?.(#{event})"
           else "#{callee}?.()"
           end
         end
@@ -1369,6 +1407,15 @@ module RjuiTools
           path = json[JsonUIShared::LayoutPath::KEY] || '0'
           stem = JsonUIShared::LayoutPath.view_id(json, '').chomp('_')
           "`#{JsonUIShared::StringLiterals.ts_template_body(stem)}_${jsonuiPath}#{path.sub(/\A0/, '')}`"
+        end
+
+        # Whether the element the click lands on hands its onClick an event:
+        # a DOM element does; a built-in component may declare
+        # `onClick?: () => void` (NetworkImage), where `(e) => …` is not
+        # assignable (31's 16b85a09) — there a call that would hand the event
+        # on hands nothing.
+        def click_takes_event?
+          true
         end
 
         # A control's declared onClick, called from the control's own
@@ -1589,60 +1636,10 @@ module RjuiTools
           extension_converters = config['_extension_converters'] || {}
           return extension_converters[type] if extension_converters[type]
 
-          require_relative 'view_converter'
-          require_relative 'label_converter'
-          require_relative 'button_converter'
-          require_relative 'image_converter'
-          require_relative 'text_field_converter'
-          require_relative 'text_view_converter'
-          require_relative 'scroll_view_converter'
-          require_relative 'collection_converter'
-          require_relative 'toggle_converter'
-          require_relative 'slider_converter'
-          require_relative 'segment_converter'
-          require_relative 'radio_converter'
-          require_relative 'progress_converter'
-          require_relative 'indicator_converter'
-          require_relative 'select_box_converter'
-          require_relative 'include_converter'
-          require_relative 'icon_label_converter'
-          require_relative 'gradient_view_converter'
-          require_relative 'blur_converter'
-          require_relative 'circle_view_converter'
-          require_relative 'web_converter'
-          require_relative 'switch_converter'
-          require_relative 'network_image_converter'
-          require_relative 'tab_view_converter'
-
-          {
-            'View' => ViewConverter,
-            'SafeAreaView' => ViewConverter,
-            'Label' => LabelConverter,
-            'Button' => ButtonConverter,
-            'Image' => ImageConverter,
-            'CircleImage' => ImageConverter,
-            'NetworkImage' => NetworkImageConverter,
-            'TextField' => TextFieldConverter,
-            'TextView' => TextViewConverter,
-            'ScrollView' => ScrollViewConverter,
-            'Collection' => CollectionConverter,
-            'Switch' => SwitchConverter,
-            'CheckBox' => ToggleConverter,
-            'Slider' => SliderConverter,
-            'Segment' => SegmentConverter,
-            'Radio' => RadioConverter,
-            'Progress' => ProgressConverter,
-            'Indicator' => IndicatorConverter,
-            'SelectBox' => SelectBoxConverter,
-            'Include' => IncludeConverter,
-            'IconLabel' => IconLabelConverter,
-            'GradientView' => GradientViewConverter,
-            'Blur' => BlurConverter,
-            'CircleView' => CircleViewConverter,
-            'Web' => WebConverter,
-            'TabView' => TabViewConverter,
-            'Embed' => EmbedConverter
-          }[type]
+          # The one table (converter_table.rb), which the root dispatch reads
+          # too; nil for a type nothing draws.
+          require_relative 'converter_table'
+          ConverterTable.table[type]
         end
 
         def indent_str(indent)
@@ -1993,6 +1990,26 @@ module RjuiTools
           jsx_attr_text('data-tag', tag)
         end
 
+        # tapBackground is the background while pressed, on every node with a
+        # tap (onClick) and on a Button (jsonui-cli 1.9.0): `active:bg-*` on a
+        # node build_onclick_attr gives a click. A Button draws its own
+        # (ButtonConverter, where highlightBackground is the same colour's
+        # older spelling). A node without a click is not pressed: nothing.
+        def pressed_background_classes
+          background = attributes['tapBackground']
+          return [] if background.nil? || json['type'] == 'Button' || !click_attached?
+
+          active = bound_state_color_class(background, custom_property: '--jui-tap-bg', prefix: 'active:bg') ||
+                   (background.is_a?(String) ? "active:#{TailwindMapper.map_color(background, 'bg')}" : nil)
+          active ? [active, 'transition-colors'] : []
+        end
+
+        # Whether build_onclick_attr gives this node a click.
+        def click_attached?
+          attr = build_onclick_attr
+          !attr.empty? && !attr.include?('ERROR')
+        end
+
         # Build onClick attribute
         # Rules:
         # - onClick (camelCase) -> binding format only (@{functionName})
@@ -2051,7 +2068,7 @@ module RjuiTools
               # Action object: { "action": "link", "url": "..." }
               if handler['action'] == 'link' && handler['url']
                 url = handler['url']
-                return " onClick={() => window.open(#{JsonUIShared::StringLiterals.ts_single(url)}, '_blank')}"
+                return can_tap_gated_click("window.open(#{JsonUIShared::StringLiterals.ts_single(url)}, '_blank')")
               else
                 return ''
               end
@@ -2070,37 +2087,57 @@ module RjuiTools
           end
 
           # Check onclick (lowercase) - selector format only; `""`, `[]` and
-          # `[""]` are no handler.
+          # `[""]` are no handler. `canTap` gates it as it gates onClick (the
+          # tap rule: every spelling of the tap) — this form, and the link
+          # action above, went out ungated, so `canTap: false` still tapped.
           if JsonUIShared::TapAccessibility.handler?(attributes['onclick'])
-            expr = onclick_selector_expr(attributes['onclick'])
-            return expr ? " onClick={#{expr}}" : " /* ERROR: onclick requires selector format (string) */"
+            calls = onclick_selector_calls(attributes['onclick'])
+            return " /* ERROR: onclick requires selector format (string) */" unless calls
+
+            return can_tap_gated_click(attributes['onclick'].is_a?(Array) ? calls : calls.first)
           end
 
           ''
         end
 
-        # The declared onclick as a JS expression, or nil for the
+        # The declared onclick as the tap's calls, or nil for the
         # not-a-selector error case. The declaration is string|array
         # (attribute_definitions common.onclick); interpolating the array
         # directly produced `data.["a", "b"]`, which is not syntax. Multiple
         # selectors are called in declared order — the semantics the ios
         # codegen (both selectors emitted) already exhibits. A blank element
         # is not called (TapAccessibility.handler_values): it emitted `data.?.()`.
-        def onclick_selector_expr(handler)
+        def onclick_selector_calls(handler)
           if handler.is_a?(Array)
             names = JsonUIShared::TapAccessibility.handler_values(handler)
             return nil if names.empty? || names.any? { |h| is_binding_format?(h) }
 
-            calls = names.map { |h| "#{declared_tap_call("data.#{h}")};" }
-            "#{calls.any? { |c| c.include?('?.(e)') } ? '(e)' : '()'} => { #{calls.join(' ')} }"
+            names.map { |h| selector_call(h) }
           elsif is_binding_format?(handler)
             nil
           else
-            # Valid selector: functionName -> data.functionName, called as the
-            # data declares it (declared_tap_call)
-            call = declared_tap_call("data.#{handler}")
-            "#{call.include?('?.(e)') ? '(e)' : '()'} => #{call}"
+            [selector_call(handler)]
           end
+        end
+
+        # One selector, called: a method of the data, as the data declares it
+        # (declared_tap_call); `name:` is UIKit's sender mark, handed the
+        # web's sender, the event — the colon emitted `data.name:`, which does
+        # not parse (31's 16b85a09).
+        def selector_call(name)
+          name = name.to_s
+          return declared_tap_call("data.#{name.chomp(':')}", sender: true) if name.end_with?(':')
+
+          declared_tap_call("data.#{name}")
+        end
+
+        # The selectors as one function (a Label range's onClick,
+        # build_partial_specs).
+        def onclick_selector_expr(handler)
+          calls = onclick_selector_calls(handler)
+          return nil unless calls
+
+          "#{calls.any? { |c| c.include?('?.(e)') } ? '(e)' : '()'} => { #{calls.map { |c| "#{c};" }.join(' ')} }"
         end
 
         # Whether the element has a tap: a handler on either spelling
@@ -2144,7 +2181,7 @@ module RjuiTools
         # the same ideas (inputMode / enterKeyHint). One copy so the two
         # converters cannot drift.
         def map_input_mode(input)
-          case input&.downcase
+          case JsonUIShared::EnumSpelling.lowered(input, 'TextField', 'input')
           when 'number', 'numberpad'
             'numeric'
           # `signedDecimal` collapses onto `decimal` here for the same reason

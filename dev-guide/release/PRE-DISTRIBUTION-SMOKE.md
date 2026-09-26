@@ -551,3 +551,4 @@ document_tools の suite は、`jsonui_test_cli` が `~/.jsonui-cli` の配布�
 `pipefail` で集計する。パスが checkout の外なら失敗として数える。
 ⚠️ jui_tools 側は `jsonui_test_cli` をパス指定 / PYTHONPATH つき subprocess で checkout に固定済み（triage 担当の実測）。
 ruby 3 面は `require_relative` 前提で、配布コピーに逃げる経路は**測っていない**（安全とも言っていない）。
+⚠️ jsonui-cli 1.9.0 から、Ruby スイートは下限の 3.2 系（既定 `RBENV_VERSION=3.2.2`）で走らせる。3.2.x 以外の ruby で回すと「ruby floor」の行が赤になる（3.3 で回すと、3.3 にしか無い API を見逃すため）。

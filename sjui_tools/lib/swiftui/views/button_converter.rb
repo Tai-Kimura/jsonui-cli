@@ -349,6 +349,9 @@ module SjuiTools
           apply_frame_constraints
           apply_frame_size
           apply_margins
+          # opacity / shadow / clipToBounds / offset / hidden, as apply_modifiers
+          # draws them for every other type.
+          apply_common_decorations
 
           # confirmationDialog / alert (iOS 15+)
           apply_confirmation_dialog_to_bag

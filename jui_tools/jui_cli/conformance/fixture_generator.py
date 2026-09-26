@@ -966,6 +966,25 @@ def generate_conformance(definitions_path: Path, out_dir: Path) -> GenerationSum
     )
     summary.assertable_count += sum(1 for e in overflow_entries if e["class"] == "assertable")
     summary.control_count += sum(1 for e in overflow_entries if e.get("isControl"))
+
+    # A flow Collection whose sections declare a header and a footer (round 7
+    # ruling: full-width rows around each section's wrap) — the corpus held
+    # no section header on any layout; see flow_section_edge_fixtures.
+    from .flow_section_edge_fixtures import build_flow_section_edge_fixtures
+
+    edge_files, edge_entries = build_flow_section_edge_fixtures(source_label)
+    for rel_path, payload in edge_files:
+        target = out_dir / rel_path
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(_dump_json(payload), encoding="utf-8")
+        summary.files_written += 1
+    fixture_entries.extend(edge_entries)
+    summary.fixture_count += len(edge_entries)
+    summary.visual_count += sum(
+        1 for e in edge_entries if e["class"] == "visual" and not e.get("isControl")
+    )
+    summary.assertable_count += sum(1 for e in edge_entries if e["class"] == "assertable")
+    summary.control_count += sum(1 for e in edge_entries if e.get("isControl"))
     summary.fixture_count += len(bounds_entries)
     summary.visual_count += sum(
         1 for e in bounds_entries if e["class"] == "visual" and not e.get("isControl")

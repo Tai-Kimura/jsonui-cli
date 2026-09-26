@@ -14,6 +14,12 @@ require 'swiftui/views/collection_converter'
 # shape (cellClasses, no `sections`) is one section — the first data section,
 # or the declared list — as on the other one-section routes; it drew no page.
 #
+# A later section's cells are counted from its pageStart in the ids its
+# ForEach gives them, not only in the tag (round 8): sibling ForEaches whose
+# ids repeat (`\.offset` from 0 in each) end a TabView at the first section's
+# last page — measured on the ConformanceHost codegen host with XCUITest
+# (PagingAddressProbeUITests), a pager of 2 + 3 cells stopped at page 1.
+#
 # One declared section keeps the text this converter always wrote (the
 # golden below is that emit, measured on deaead11 for the shape the faces'
 # three carousels have: one section, cellClasses naming the same cell,
@@ -48,7 +54,19 @@ RSpec.describe SjuiTools::SwiftUI::Views::CollectionConverter do
                else
                  0
                end
-      expect(tag).to eq(start ? 'pageStart + cellIndex' : 'cellIndex').or eq(start ? 'pageStart + cell.index' : 'cell.index')
+      expect(tag).to eq(start ? 'cell.index' : 'cellIndex').or eq('cell.index')
+      # The loop's index is the page: a later section's ForEach counts from
+      # its pageStart, in its ids as in the index it hands the cell.
+      if start
+        expect(body).to include("ForEach(cellsData.enumerated().map { IdentifiedCellItem(id: \"#{k}:\\($0.offset)\", " \
+                                'index: pageStart + $0.offset, data: $0.element) }) { cell in')
+          .or include('index: pageStart + index, data: data)')
+      else
+        expect(body).to include('ForEach(Array(cellsData.enumerated()), id: \\.offset) { cellIndex, cellData in').or include('index: index, data: data)')
+      end
+      # The item address counts as the tag does (round 7; it restarted per
+      # section until jsonui-cli 1.9.0) — as kjui's pager tag and rjui's id do.
+      expect(body).to include(".accessibilityIdentifier(\"pager_item_\\(#{tag})\")")
       (0...counts[k]).map { |i| offset + i }
     end
   end
@@ -132,7 +150,6 @@ RSpec.describe SjuiTools::SwiftUI::Views::CollectionConverter do
     expect(<<~SWIFT).to compile_as_swift
       #{EmittedSwift::COLLECTION_DATA_SOURCE_STUB}
       #{cell_view_stub('ACellView', 'BCellView', 'CCellView')}
-      struct IdentifiedCellItem: Identifiable { let id: String; let index: Int; let data: [String: Any] }
       struct ACellData { var title = ""; func toDictionary() -> [String: Any] { ["title": title] } }
       struct TestData { var rows: CollectionDataSource? = nil; var list: [ACellData] = []; var page: Int = 0 }
       struct EmittedHost: View {
@@ -168,8 +185,7 @@ RSpec.describe SjuiTools::SwiftUI::Views::CollectionConverter do
         import SwiftUI
         #{EmittedSwift::COLLECTION_DATA_SOURCE_STUB}
         #{cell_view_stub('ACellView', 'BCellView', 'CCellView')}
-        struct IdentifiedCellItem: Identifiable { let id: String; let index: Int; let data: [String: Any] }
-        struct ACellData { var title = ""; func toDictionary() -> [String: Any] { ["title": title] } }
+          struct ACellData { var title = ""; func toDictionary() -> [String: Any] { ["title": title] } }
         struct TestData { var rows: CollectionDataSource? = nil; var list: [ACellData] = []; var page: Int = 0 }
         struct EmittedHost: View {
             @State var data = TestData()

@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import copy
 import json
+import logging
 from pathlib import Path
 from typing import Any
 
@@ -44,6 +45,10 @@ class LayoutResolver:
             return None
         merged = self._style_merger.resolve(copy.deepcopy(raw))
         expanded = self._include_expander.expand(merged)
+        # What the merger would not apply, said once per layout served.
+        for warning in self._style_merger.warnings:
+            logging.getLogger("jui.hotload").warning("%s: %s", layout_name, warning)
+        self._style_merger.warnings.clear()
         filtered = filter_for_platform(expanded, platform)
         return filtered
 

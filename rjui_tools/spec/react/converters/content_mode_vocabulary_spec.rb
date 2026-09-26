@@ -92,10 +92,10 @@ RSpec.describe 'contentMode vocabulary' do
       end
     end
 
-    # The iOS/Android long forms are not in either declared enum, but layouts
-    # written against those runtimes carry them and both components used to
-    # accept a DIFFERENT subset.
-    it 'agrees on the tolerated iOS/Android long forms too' do
+    # The iOS/Android long forms are declared in neither enum: a value is its
+    # declared spelling (1.9.0), so both draw the declared default for them,
+    # as the validator names them — they agree by both declining.
+    it 'agrees on the iOS/Android long forms too: both draw the default' do
       %w[scaleAspectFit scaleAspectFill scaleToFill centerCrop fitCenter fitXY aspect_fit].each do |value|
         img = RjuiTools::React::Converters::ImageConverter.new(
           { 'type' => 'Image', 'src' => 'a.png', 'contentMode' => value }, config
@@ -103,18 +103,18 @@ RSpec.describe 'contentMode vocabulary' do
         net = RjuiTools::React::Converters::NetworkImageConverter.new(
           { 'type' => 'NetworkImage', 'src' => 'a.png', 'contentMode' => value }, config
         ).convert_node(2)[/object-[a-z]+/]
-        want = "object-#{EXPECTED_FIT.fetch(value.downcase)}"
+        want = "object-#{RjuiTools::React::Converters::BaseConverter::CONTENT_MODE_DEFAULT_FIT}"
         expect(img).to eq(want), "<img> #{value.inspect}"
         expect(net).to eq(want), "<NetworkImage> #{value.inspect}"
       end
     end
 
-    it 'is case-insensitive on both — the maps used to be case-sensitive' do
-      %w[AspectFill aspectfill ASPECTFILL].each do |value|
+    it 'takes the declared spelling only, case and all: AspectFill, not aspectfill or ASPECTFILL' do
+      { 'AspectFill' => 'object-cover', 'aspectfill' => 'object-contain', 'ASPECTFILL' => 'object-contain' }.each do |value, want|
         net = RjuiTools::React::Converters::NetworkImageConverter.new(
           { 'type' => 'NetworkImage', 'src' => 'a.png', 'contentMode' => value }, config
         ).convert_node(2)
-        expect(net).to include('object-cover'), value
+        expect(net).to include(want), value
         expect(net).not_to match(/object-[A-Za-z]*[A-Z]/), "#{value}: interpolated the raw value"
       end
     end

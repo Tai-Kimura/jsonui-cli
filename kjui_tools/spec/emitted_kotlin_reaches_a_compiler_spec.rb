@@ -158,7 +158,6 @@ RSpec.describe 'emitted Kotlin reaches a compiler' do
     'compose/helpers/resource_resolver_spec.rb' => "p4 — #{UNCONVERTED}",
     'compose/helpers/responsive_helper_spec.rb' => "p4 — #{UNCONVERTED}",
     'compose/helpers/shared_string_advice_spec.rb' => "p4 — #{UNCONVERTED}",
-    'compose/helpers/tint_helper_spec.rb' => "p3 — #{UNCONVERTED}",
     'compose/helpers/visibility_helper_spec.rb' => "p2 — #{UNCONVERTED}",
     'compose/regen_idempotency_spec.rb' => FILE_EFFECTS,
     'compose/unreferenced_generated_view_spec.rb' => "p1 — #{UNCONVERTED}",
@@ -169,8 +168,9 @@ RSpec.describe 'emitted Kotlin reaches a compiler' do
   let(:root) { File.expand_path(__dir__) }
 
   def emit_specs(root)
-    # `map { }.compact`, not `filter_map`: CI runs this suite on Ruby 2.6 as
-    # well (the consumer floor), where Array#filter_map does not exist —
+    # `map { }.compact`, not `filter_map`: CI ran this suite on Ruby 2.6 as
+    # well until jsonui-cli 1.9.0 (the consumer floor then; 3.2 since),
+    # where Array#filter_map does not exist —
     # 1.8.43's first candidate went red on exactly this line, on all three
     # faces, after six green suites on Ruby 3.2.
     Dir.glob(File.join(root, '**', '*_spec.rb')).sort.map do |path|

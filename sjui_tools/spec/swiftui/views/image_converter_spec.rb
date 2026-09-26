@@ -76,12 +76,12 @@ RSpec.describe SjuiTools::SwiftUI::Views::ImageConverter do
       end
     end
 
-    context 'with contentMode fill / scaleToFill' do
+    context 'with contentMode fill / ScaleToFill' do
       # fill = stretch (canonical image.fill = stretch,
       # shared/core/attribute_semantics.json): resizable WITHOUT an
       # aspectRatio modifier — SwiftUI has no stretch ContentMode member,
       # so absence of the modifier is the spelling.
-      %w[fill scaleToFill].each do |mode|
+      %w[fill ScaleToFill].each do |mode|
         it "emits resizable without aspectRatio for #{mode}" do
           converter = described_class.new(
             { 'type' => 'Image', 'src' => 'photo', 'contentMode' => mode }

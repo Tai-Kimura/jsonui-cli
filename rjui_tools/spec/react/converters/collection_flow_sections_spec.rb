@@ -15,6 +15,10 @@ require_relative '../../support/typescript_compiler'
 #   sjui's FlowLayout per section in a VStack, kjui's FlowRow per section in a
 #   Column. Until jsonui-cli 1.9.0 every section went into the one wrap, so
 #   section 2 continued section 1's last line.
+# - A section's header and footer (round 7): rows of their own, full width,
+#   the header above the section's wrap and the footer below — a Collection
+#   that declares one is the column of blocks too, with one section. Until
+#   jsonui-cli 1.9.0 they sat inside the wrap as items on the cells' line.
 # - Gaps (grid and flow): between rows lineSpacing, else itemSpacing; between
 #   columns columnSpacing, else itemSpacing. Until jsonui-cli 1.9.0 a
 #   columnSpacing with no lineSpacing wrote `gap-[x]`, spacing the rows by it
@@ -51,13 +55,24 @@ RSpec.describe 'rjui Collection: flow sections, and the rows and columns of a gr
       expect(jsx.index('BCell')).to be > jsx.index('</div>') # section 1 in the second wrap
     end
 
-    it 'one section, the legacy shape, or no items: the one wrap as before (the controls)' do
+    it 'one section or the legacy shape, no header or footer: the one wrap as before (the controls)' do
       [FLOW_TWO_SECTIONS.merge('sections' => [{ 'cell' => 'ACell' }]),
-       { 'layout' => 'flow', 'cellClasses' => ['ACell'] },
-       FLOW_TWO_SECTIONS.merge('sections' => [{ 'cell' => 'ACell' }, { 'header' => 'HCell' }])].each do |extra|
+       { 'layout' => 'flow', 'cellClasses' => ['ACell'] }].each do |extra|
         jsx = convert(extra.merge('lineSpacing' => 4))
         expect(root_classes(jsx)).to include('flex-row', 'flex-wrap', 'gap-y-[4px]')
         expect(wraps(jsx)).to eq([]), jsx
+      end
+    end
+
+    it 'a header or a footer, even with one section: rows of the column, outside the wrap' do
+      [[{ 'cell' => 'ACell', 'header' => 'HCell' }],
+       [{ 'cell' => 'ACell', 'footer' => 'FCell' }],
+       [{ 'cell' => 'ACell' }, { 'header' => 'HCell' }]].each do |sections|
+        jsx = convert(FLOW_TWO_SECTIONS.merge('sections' => sections, 'lineSpacing' => 4))
+        expect(root_classes(jsx)).to include('flex', 'flex-col', 'gap-y-[4px]')
+        expect(wraps(jsx).size).to eq(1), jsx
+        wrap = jsx[/<div className="flex flex-row flex-wrap[^"]*">.*?<\/div>/m]
+        expect(wrap).not_to match(/HCell|FCell/), jsx
       end
     end
   end
@@ -97,7 +112,11 @@ RSpec.describe 'rjui Collection: flow sections, and the rows and columns of a gr
 
   # { "A0" => [x, y], … } as Chromium laid the emitted JSX out: the Collection
   # 200 wide, each cell 40 × 20; section A six cells, section B two.
-  def render(jsx)
+  EDGE_DATA = '[{ header: { n: 0 }, cells: rows(6), footer: { n: 0 } }, { header: { n: 1 }, cells: rows(2) }]'
+
+  # `sections` is the data source's sections (JS); `boxes` reads each view's
+  # [x, y, width, height] instead of its [x, y].
+  def render(jsx, sections: '[{ cells: rows(6) }, { cells: rows(2) }]', boxes: false)
     esbuild = File.expand_path('../../support/node_modules/.bin/esbuild', __dir__)
     skip 'esbuild is not installed under spec/support' unless File.executable?(esbuild)
     skip 'no headless Chromium in the Playwright cache' unless chromium
@@ -125,8 +144,11 @@ RSpec.describe 'rjui Collection: flow sections, and the rows and columns of a gr
         }
         const cell = (letter) => ({ id }) => h('div', { id: letter + id.split('_').pop(), style: { width: '40px', height: '20px' } });
         const ACell = cell('A'), BCell = cell('B');
+        // A header or footer: no width of its own, 10 high, named by its data.
+        const edge = (letter) => ({ data }) => h('div', { id: letter + (data.n ?? ''), style: { height: '10px' } });
+        const HCell = edge('H'), FCell = edge('F');
         const rows = (n) => ({ data: Array.from({ length: n }, (_, i) => ({ i })) });
-        const data = { rows: { sections: [{ cells: rows(6) }, { cells: rows(2) }] } };
+        const data = { rows: { sections: #{sections} } };
         const root = (#{jsx.strip});
         root.style.width = '200px';
         document.body.append(root);
@@ -135,7 +157,8 @@ RSpec.describe 'rjui Collection: flow sections, and the rows and columns of a gr
         for (const el of root.querySelectorAll('[id]')) {
           if (el === root) continue;
           const b = el.getBoundingClientRect();
-          at[el.id] = [Math.round(b.left - origin.left), Math.round(b.top - origin.top)];
+          at[el.id] = [Math.round(b.left - origin.left), Math.round(b.top - origin.top)]
+            .concat(#{boxes} ? [Math.round(b.width), Math.round(b.height)] : []);
         }
         document.body.textContent = 'AT' + JSON.stringify(at);
       JSX
@@ -166,14 +189,33 @@ RSpec.describe 'rjui Collection: flow sections, and the rows and columns of a gr
     expect(grid.values_at('A0', 'A1', 'A2')).to eq([[0, 0], [105, 0], [0, 20]]), grid.inspect
   end
 
-  it 'the two wraps type-check in the whole element' do
-    jsx = convert(FLOW_TWO_SECTIONS.merge('lineSpacing' => 4, 'columnSpacing' => 10))
+  it 'renders: each header a full-width row above its section, the footer below, spaced as the lines' do
+    edges = [{ 'cell' => 'ACell', 'header' => 'HCell', 'footer' => 'FCell' }, { 'cell' => 'BCell', 'header' => 'HCell' }]
+    at = render(convert(FLOW_TWO_SECTIONS.merge('sections' => edges, 'lineSpacing' => 4, 'columnSpacing' => 10)),
+                sections: EDGE_DATA, boxes: true)
+    # H0 10 high, 4, section A's two lines (20 + 4 + 20), 4, F0, 4, H1, 4, B.
+    expect(at.values_at('H0', 'A0', 'A4', 'F0', 'H1', 'B0')).to eq(
+      [[0, 0, 200, 10], [0, 14, 40, 20], [0, 38, 40, 20], [0, 62, 200, 10], [0, 76, 200, 10], [0, 90, 40, 20]]
+    ), at.inspect
+    # One section with a header: the header its own row, the cells under it.
+    one = render(convert(FLOW_TWO_SECTIONS.merge('sections' => edges.first(1), 'lineSpacing' => 4)),
+                 sections: EDGE_DATA, boxes: true)
+    expect(one.values_at('H0', 'A0', 'F0')).to eq([[0, 0, 200, 10], [0, 14, 40, 20], [0, 62, 200, 10]]), one.inspect
+  end
+
+  it 'the two wraps type-check in the whole element, with the headers and footers' do
     ambient = <<~TS
       #{TypeScriptCompiler::AMBIENT}
-      declare const data: { rows?: { sections?: { cells?: { data: Record<string, unknown>[] } }[] } };
+      declare const data: { rows?: { sections?: { header?: Record<string, unknown>; footer?: Record<string, unknown>; cells?: { data: Record<string, unknown>[] } }[] } };
       declare const ACell: (props: { key?: string | number; id?: string; data: unknown }) => JSX.Element;
       declare const BCell: (props: { key?: string | number; id?: string; data: unknown }) => JSX.Element;
+      declare const HCell: (props: { data: unknown }) => JSX.Element;
+      declare const FCell: (props: { data: unknown }) => JSX.Element;
     TS
-    expect(TypeScriptCompiler.component(jsx)).to compile_as_typescript.with_ambient(ambient)
+    [FLOW_TWO_SECTIONS,
+     FLOW_TWO_SECTIONS.merge('sections' => [{ 'cell' => 'ACell', 'header' => 'HCell', 'footer' => 'FCell' }, { 'header' => 'HCell' }])].each do |shape|
+      jsx = convert(shape.merge('lineSpacing' => 4, 'columnSpacing' => 10))
+      expect(TypeScriptCompiler.component(jsx)).to compile_as_typescript.with_ambient(ambient)
+    end
   end
 end

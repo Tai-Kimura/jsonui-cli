@@ -43,10 +43,10 @@ RSpec.describe KjuiTools::Core::AttributeValidator do
     # The denominator is every attribute in the SSoT, so a new declaration
     # anywhere is checked without this file being touched.
     def self.every_declaration
-      # `map { }.compact`, not `filter_map`: this spec is also run under the
-      # consumer's ruby (2.6) to prove the lib loads there, and 2.6 has no
-      # filter_map. Found by exactly that run — the first thing the 2.6 arm
-      # caught was this file.
+      # `map { }.compact`, not `filter_map`: until jsonui-cli 1.9.0 this spec
+      # was also run under the consumer's ruby (2.6) to prove the lib loads
+      # there, and 2.6 has no filter_map. Found by exactly that run — the
+      # first thing the 2.6 arm caught was this file.
       DEFS.flat_map do |component, attrs|
         next [] unless attrs.is_a?(Hash)
         attrs.map do |name, entry|

@@ -410,11 +410,18 @@ RSpec.describe RjuiTools::React::Converters::TextViewConverter do
     end
 
     it 'maps keyboardType to inputMode' do
-      { 'EmailAddress' => 'email', 'NumberPad' => 'numeric', 'PhonePad' => 'tel',
-        'DecimalPad' => 'decimal', 'URL' => 'url' }.each do |declared, expected|
+      { 'emailAddress' => 'email', 'numberPad' => 'numeric', 'phonePad' => 'tel',
+        'decimalPad' => 'decimal', 'URL' => 'url' }.each do |declared, expected|
         result = create_converter({ 'type' => 'TextView', 'keyboardType' => declared }).convert
         expect(result).to include("inputMode=\"#{expected}\"")
       end
+    end
+
+    # A value is its declared spelling, case and all (1.9.0): 'EmailAddress'
+    # is declared in no case, so it maps to nothing, as the validator names it.
+    it 'maps no inputMode for a spelling declared in no case' do
+      result = create_converter({ 'type' => 'TextView', 'keyboardType' => 'EmailAddress' }).convert
+      expect(result).not_to include('inputMode=')
     end
 
     it 'styles the placeholder through the placeholder variant, not the field' do

@@ -86,29 +86,39 @@ class ValueAliasFoldingTests(unittest.TestCase):
         self.assertEqual(flow[1], "flow")  # canonical value
         self.assertEqual(set(flow[2]), {"flow", "Flow", "LeftAligned", "leftAligned"})
 
-    def test_enum_ci_cases_route_alias_spellings_to_canonical(self):
-        from jui_cli.generators.attr_codegen.swift_emitter import enum_ci_cases
+    def test_enum_exact_cases_route_alias_spellings_to_canonical_as_declared(self):
+        # A value is its declared spelling, case and all (4f's ruling,
+        # 1.9.0): every declared spelling routes to its case, and a spelling
+        # declared in neither case (``leftaligned``) is not accepted.
+        from jui_cli.generators.attr_codegen.swift_emitter import enum_exact_cases
 
-        table = dict(enum_ci_cases(self.VALUES, lambda v: v.upper(), self.ALIASES))
-        self.assertIn("leftaligned", table["FLOW"])
-        self.assertIn("flow", table["FLOW"])
+        table = dict(enum_exact_cases(self.VALUES, lambda v: v.upper(), self.ALIASES))
+        self.assertEqual(set(table["FLOW"]), {"flow", "Flow", "LeftAligned", "leftAligned"})
+        self.assertNotIn("leftaligned", [v for vs in table.values() for v in vs])
+        self.assertEqual(table["HORIZONTAL"], ["horizontal"])
 
     def test_kotlin_collection_layout_has_no_leftaligned_member(self):
         # Against the real SSoT: the generated Layout enum folds the alias
-        # spellings — LEFT_ALIGNED disappears as a member, the spelling is
-        # still accepted and routes to FLOW.
+        # spellings — LEFT_ALIGNED disappears as a member, every declared
+        # spelling is still accepted, as written, and routes to FLOW; one
+        # declared in no case (``leftaligned``) is not (4f's ruling, 1.9.0).
         model = load_model()
         emitted = EMITTERS["kotlin"].emit(model)
         content = emitted["CollectionAttributes.kt"]
         self.assertNotIn("LEFT_ALIGNED", content)
-        self.assertIn('"leftaligned" -> FLOW', content)
+        self.assertIn('"flow", "Flow", "LeftAligned", "leftAligned" -> FLOW', content)
+        self.assertNotIn('"leftaligned"', content)
+        self.assertIn('when (raw) {', content)
+        self.assertNotIn('.lowercase()) {', content)
 
     def test_swift_collection_layout_routes_leftaligned_to_flow(self):
         model = load_model()
         emitted = EMITTERS["swift"].emit(model)
         content = emitted["CollectionAttributes.swift"]
         self.assertNotIn("leftAligned = ", content)
-        self.assertIn('"leftaligned"', content)
+        self.assertIn('case "flow", "Flow", "LeftAligned", "leftAligned": return .known(Layout.flow)', content)
+        self.assertNotIn('"leftaligned"', content)
+        self.assertIn('public static let declaredSpellings: [String] = ["vertical", "horizontal", "flow", "Flow", "LeftAligned", "leftAligned"]', content)
 
 
 class DeterminismTests(unittest.TestCase):
@@ -227,11 +237,19 @@ handler = { 'action' => 'link', 'url' => 'https://example.com' }
 out = LabelAttributes.extract({ 'onClick' => handler })
 raise 'action object dropped' unless out['onClick'].value == handler
 
-# Lenient enums match case-insensitively without warning.
+# An enum value is its declared spelling (4f's ruling, 1.9.0): a declared
+# one passes without a warning; one differing in case only is unknown —
+# passed through raw and named, with the spelling it may mean.
 warnings.clear
 out = LabelAttributes.extract({ 'textAlign' => 'left' })
-raise 'ci enum failed' unless out['textAlign'].value == 'left'
-raise 'ci enum warned' unless warnings.empty?
+raise 'declared enum failed' unless out['textAlign'].value == 'left'
+raise 'declared enum warned' unless warnings.empty?
+out = LabelAttributes.extract({ 'textAlign' => 'LEFT' })
+raise 'case-only enum not passed through' unless out['textAlign'].value == 'LEFT'
+raise "case-only enum not named: #{warnings.inspect}" unless warnings.size == 1 && warnings.first.include?("unknown enum value 'LEFT' — did you mean '")
+warnings.clear
+LabelAttributes.extract({ 'textAlign' => 'sideways' })
+raise "unknown enum named with a suggestion: #{warnings.inspect}" unless warnings.size == 1 && !warnings.first.include?('did you mean')
 
 # canonical_only disables alias fallback (L1-normalized input).
 out = SliderAttributes.extract({ 'minimumValue' => 5 }, canonical_only: true)

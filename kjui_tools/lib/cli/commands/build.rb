@@ -91,7 +91,8 @@ module KjuiTools
         # invites the reader to think there is nothing to clean up.
         def structural_failure_headline(entries)
           # `map { }.compact`, not `filter_map`: the vendored tools run under
-          # whatever ruby the project has, and 2.6 has no filter_map.
+          # whatever ruby the project has, and until jsonui-cli 1.9.0 (floor
+          # 3.2 since) that could be 2.6, which has no filter_map.
           files = entries.map { |e| e[/\A\[([^\]]+)\]/, 1] }.compact.uniq
           "Build failed: #{entries.size} non-node child(ren) in #{files.size} layout(s). " \
             'Their generated views were already written and are empty — ' \
@@ -631,7 +632,9 @@ module KjuiTools
         def collect_collection_cells(node)
           case node
           when Hash
-            if node['type'].to_s.casecmp('Collection').zero?
+            # The spellings the converter factory draws as a Collection, as
+            # written (type names are case-sensitive, 1.9.0).
+            if %w[Table Collection].include?(node['type'])
               Array(node['sections']).each do |section|
                 next unless section.is_a?(Hash)
                 cell = section['cell']
@@ -669,8 +672,9 @@ module KjuiTools
           return [] unless Dir.exist?(view_dir)
 
           # `map { }.compact`, not `filter_map`: the vendored tools run under
-          # whatever ruby the project has, and 2.6 has no filter_map. Second
-          # time today in this file — the first is three methods up.
+          # whatever ruby the project has, and until jsonui-cli 1.9.0 that
+          # could be 2.6, which has no filter_map. Second time that day in
+          # this file — the first is three methods up.
           @collection_cells.uniq.map do |cell|
             # Same derivation CollectionComponent uses to name the call
             # it emits — reused rather than re-spelled, so the check

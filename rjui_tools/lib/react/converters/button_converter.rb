@@ -156,8 +156,10 @@ module RjuiTools
         #
         # A tinted icon is emitted as a masked box rather than an <img>: an
         # <img> cannot take the button's colour, so a `currentColor` SVG on a
-        # dark toolbar stays black. The mask + bg-current pair inherits
-        # `fontColor`, which is the class BaseConverter already emitted.
+        # dark toolbar stays black. The mask is painted with `tintColor` when
+        # declared — the icon's tint, as on iOS (imageTint) and Android
+        # (Icon tint), not the text colour (1.9.0) — else bg-current, which
+        # inherits `fontColor`, the class BaseConverter already emitted.
         def build_image_markup
           image = attributes['image']
           return '' if image.nil? || image.to_s.empty?
@@ -175,9 +177,12 @@ module RjuiTools
               "WebkitMaskRepeat: 'no-repeat'",
               "maskPosition: 'center'",
               "WebkitMaskPosition: 'center'",
-            ].join(', ')
-            %(<span aria-hidden="true" className="#{size} bg-current" ) +
-              %(style={{ #{styles} }} />)
+            ]
+            tint = attributes['tintColor']
+            styles << "backgroundColor: #{color_style_expr(tint)}" if tint
+            fill = tint ? '' : ' bg-current'
+            %(<span aria-hidden="true" className="#{size}#{fill}" ) +
+              %(style={{ #{styles.join(', ')} }} />)
           else
             %(<img src={`#{src}`}#{jsx_attr_text('alt', image_alt(image))} ) +
               %(className="#{size} object-contain" />)

@@ -128,11 +128,11 @@ RSpec.describe RjuiTools::React::Converters::TextFieldConverter do
       end
     end
 
-    context 'with tel input' do
+    context 'with phone input' do
       it 'sets type to tel' do
         converter = create_converter({
           'type' => 'TextField',
-          'input' => 'tel'
+          'input' => 'phone'
         })
         result = converter.convert
         expect(result).to include('type="tel"')
@@ -143,21 +143,23 @@ RSpec.describe RjuiTools::React::Converters::TextFieldConverter do
       it 'sets type to url' do
         converter = create_converter({
           'type' => 'TextField',
-          'input' => 'URL'
+          'input' => 'url'
         })
         result = converter.convert
         expect(result).to include('type="url"')
       end
     end
 
-    context 'with search input' do
-      it 'sets type to search' do
+    # TextField.input declares no search value (webSearch is TextView's
+    # keyboardType), so it is a text field, as the validator names it.
+    context 'with an input TextField does not declare' do
+      it 'stays a text field' do
         converter = create_converter({
           'type' => 'TextField',
           'input' => 'webSearch'
         })
         result = converter.convert
-        expect(result).to include('type="search"')
+        expect(result).to include('type="text"')
       end
     end
   end
@@ -498,10 +500,10 @@ RSpec.describe RjuiTools::React::Converters::TextFieldConverter do
       expect(result).to include('pattern={"a\"b"}')
     end
 
-    it 'maps the UIKit autocapitalization spellings to HTML values' do
+    it 'maps the declared autocapitalization spellings to HTML values' do
       {
-        'None' => 'off', 'Words' => 'words', 'Sentences' => 'sentences',
-        'AllCharacters' => 'characters'
+        'none' => 'off', 'words' => 'words', 'sentences' => 'sentences',
+        'allCharacters' => 'characters', 'characters' => 'characters'
       }.each do |declared, expected|
         result = create_converter({
           'type' => 'TextField', 'autocapitalizationType' => declared
@@ -511,7 +513,7 @@ RSpec.describe RjuiTools::React::Converters::TextFieldConverter do
     end
 
     it 'turns autocorrect and spellcheck off together' do
-      result = create_converter({ 'type' => 'TextField', 'autocorrectionType' => 'No' }).convert
+      result = create_converter({ 'type' => 'TextField', 'autocorrectionType' => 'no' }).convert
       expect(result).to include('autoCorrect="off"')
       expect(result).to include('spellCheck={false}')
     end

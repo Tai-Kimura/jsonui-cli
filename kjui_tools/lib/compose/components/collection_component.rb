@@ -5,6 +5,7 @@ require_relative '../helpers/modifier_builder'
 require_relative '../../core/normalization'
 require_relative '../../core/string_literals'
 require_relative '../../core/attribute_types'
+require_relative '../../core/enum_spelling'
 
 module KjuiTools
   module Compose
@@ -179,7 +180,7 @@ module KjuiTools
         # routes stay plain, mirroring the dynamic scope.
         def self.chrome_open(json_data, required_imports)
           style = json_data['listStyle'].to_s
-          return nil unless %w[grouped insetgrouped sidebar].include?(style.downcase)
+          return nil unless %w[grouped insetgrouped sidebar].include?(JsonUIShared::EnumSpelling.lowered(style, 'Collection', 'listStyle'))
 
           required_imports&.add(:collection_cell_chrome)
           hide = json_data['hideSeparator'] == true
@@ -236,6 +237,18 @@ module KjuiTools
             json_data = json_data.reject { |key, _| key == 'items' }
           end
 
+          # A section's header / cell / footer names its layout. A node written
+          # inline there is declared nowhere and drawn by no path (4f's ruling,
+          # 1.9.0; the validator names it — inline_layout?): it is set aside,
+          # where its Hash reached `.split` and the build stopped.
+          if json_data['sections'].is_a?(Array)
+            json_data = json_data.merge('sections' => json_data['sections'].map do |section|
+              next section unless section.is_a?(Hash)
+
+              section.reject { |key, value| %w[header cell footer].include?(key) && !value.is_a?(String) }
+            end)
+          end
+
           # Registered here, before the routing: `generate` forks into the
           # grid emitter and the CollectionStack emitter, and the inset can
           # come out of either. Registering inside one of them is how half a
@@ -258,7 +271,7 @@ module KjuiTools
           # 'leftAligned' is an alias spelling of flow (SSoT valueAliases,
           # 2026-08-03 unification) — dynamic folds it via the generated
           # enum, so the raw-reading codegen must accept it too.
-          is_flow = %w[flow leftaligned].include?(layout.to_s.downcase)
+          is_flow = %w[flow leftaligned].include?(JsonUIShared::EnumSpelling.lowered(layout, 'Collection', 'layout'))
 
           # lazy: "none" → emit Row/Column + forEachIndexed, no LazyColumn/LazyVerticalGrid
           # and no verticalScroll/horizontalScroll. Intended for Collections nested
@@ -433,7 +446,7 @@ module KjuiTools
           gravity = json_data['gravity']
           if is_horizontal
             # Horizontal scroll - vertical alignment
-            gravity_alignment = case gravity.to_s.downcase
+            gravity_alignment = case JsonUIShared::EnumSpelling.lowered(gravity, 'Collection', 'gravity')
             when 'center', 'centervertical'
               'Alignment.CenterStart'
             when 'bottom'
@@ -443,7 +456,7 @@ module KjuiTools
             end
           else
             # Vertical scroll - horizontal alignment
-            gravity_alignment = case gravity.to_s.downcase
+            gravity_alignment = case JsonUIShared::EnumSpelling.lowered(gravity, 'Collection', 'gravity')
             when 'center', 'centerhorizontal'
               'Alignment.TopCenter'
             when 'right'
@@ -570,7 +583,7 @@ module KjuiTools
           # background. Emitted after the declared background so the chrome
           # surface reads as the list's inner chrome; the per-cell wrap
           # handles populated lists.
-          chrome_style = json_data['listStyle'].to_s.downcase
+          chrome_style = JsonUIShared::EnumSpelling.lowered(json_data['listStyle'], 'Collection', 'listStyle').to_s
           if %w[grouped insetgrouped sidebar].include?(chrome_style)
             required_imports&.add(:shape)
             required_imports&.add(:material_theme)
@@ -718,10 +731,19 @@ module KjuiTools
         # A header / footer view: its own ViewModel, no item data.
         def self.class_list_edge_call(class_name, role, depth)
           code = "\n" + indent("val #{role}ViewModel: #{class_name}ViewModel = viewModel(key = \"#{class_name}_#{role}_\${viewModel.hashCode()}\")", depth)
-          code += "\n" + indent("#{class_name}View(", depth)
-          code += "\n" + indent("viewModel = #{role}ViewModel,", depth + 1)
-          code += "\n" + indent("modifier = Modifier.fillMaxWidth()", depth + 1)
-          code + "\n" + indent(")", depth)
+          code + "\n" + edge_view_call(class_name, "#{role}ViewModel", depth)
+        end
+
+        # A header or footer view in a row of its own: the ROW is full width
+        # and the view keeps its own size at the row's start — as KotlinJsonUI
+        # Dynamic draws it (the view in its row, no fill of its own), and sjui
+        # (`.frame(maxWidth: .infinity, alignment: .leading)`). Until
+        # jsonui-cli 1.9.0 the view itself was handed `Modifier.fillMaxWidth()`,
+        # and a fixed-width root (`requiredWidth`, modifier_builder) answers a
+        # fill constraint by centring itself in the row (4f ruling 2026-09-26,
+        # round 8; the flow's edges took this shape in round 7).
+        def self.edge_view_call(edge_class, view_model, depth)
+          indent("Box(modifier = Modifier.fillMaxWidth()) { #{edge_class}View(viewModel = #{view_model}) }", depth)
         end
 
         def self.register_class_list_imports(names, required_imports)
@@ -959,10 +981,7 @@ module KjuiTools
                   code += "\n" + indent("LaunchedEffect(headerData.data) {", depth + 4)
                   code += "\n" + indent("headerViewModel.updateData(headerData.data)", depth + 5)
                   code += "\n" + indent("}", depth + 4)
-                  code += "\n" + indent("#{header_class}View(", depth + 4)
-                  code += "\n" + indent("viewModel = headerViewModel,", depth + 5)
-                  code += "\n" + indent("modifier = Modifier.fillMaxWidth()", depth + 5)
-                  code += "\n" + indent(")", depth + 4)
+                  code += "\n" + edge_view_call(header_class, 'headerViewModel', depth + 4)
                   code += "\n" + indent("}", depth + 3)
                   code += "\n" + indent("gridLineFill = 0", depth + 3) if line_breaks
                   code += "\n" + indent("}", depth + 2)
@@ -1056,10 +1075,7 @@ module KjuiTools
                   code += "\n" + indent("LaunchedEffect(footerData.data) {", depth + 4)
                   code += "\n" + indent("footerViewModel.updateData(footerData.data)", depth + 5)
                   code += "\n" + indent("}", depth + 4)
-                  code += "\n" + indent("#{footer_class}View(", depth + 4)
-                  code += "\n" + indent("viewModel = footerViewModel,", depth + 5)
-                  code += "\n" + indent("modifier = Modifier.fillMaxWidth()", depth + 5)
-                  code += "\n" + indent(")", depth + 4)
+                  code += "\n" + edge_view_call(footer_class, 'footerViewModel', depth + 4)
                   code += "\n" + indent("}", depth + 3)
                   code += "\n" + indent("gridLineFill = 0", depth + 3) if line_breaks
                   code += "\n" + indent("}", depth + 2)
@@ -1429,8 +1445,14 @@ module KjuiTools
           # every section, so section 2 continued section 1's last row
           # (measured on 6bdb6aba, 2026-09-26). The node's own modifiers stay
           # on the outer container, a Column then.
+          # A section's declared header and footer (4f ruling 2026-09-26,
+          # round 7) are rows of their own, full width, above and below the
+          # section's wrap — so a Collection that declares one takes the
+          # Column too. Rows (header, wrap, footer) and section blocks are
+          # spaced as the lines. Until jsonui-cli 1.9.0 a flow drew neither.
           items_bound = json_data['items'].is_a?(String) && json_data['items'].match?(/@\{([^}]+)\}/)
-          per_section = items_bound && sections.count { |section| section['cell'] } > 1
+          per_section = items_bound && (sections.count { |section| section['cell'] } > 1 ||
+                                        sections.any? { |section| section['header'] || section['footer'] })
           container = per_section ? 'Column' : 'FlowRow'
           flow_arrangements = "horizontalArrangement = Arrangement.spacedBy(#{Helpers::BoundValue.dp(h_spacing)}), " \
                               "verticalArrangement = Arrangement.spacedBy(#{Helpers::BoundValue.dp(v_spacing)})"
@@ -1474,11 +1496,13 @@ module KjuiTools
             sections.each do |section|
               cell_view_name = section['cell']
               required_imports&.add("cell:#{cell_view_name}") if cell_view_name
+              required_imports&.add("cell:#{section['header']}") if section['header']
+              required_imports&.add("cell:#{section['footer']}") if section['footer']
             end
 
             sections.each_with_index do |section, index|
               cell_view_name = section['cell']
-              next unless cell_view_name
+              next unless cell_view_name || section['header'] || section['footer']
 
               auto_tracking = json_data['autoChangeTrackingId'] == true
               use_val_if = auto_tracking && cell_id_property
@@ -1490,6 +1514,12 @@ module KjuiTools
               if use_val_if
                 code += "\n" + indent("val #{section_var} = #{sections_access(property_name)}.getOrNull(#{index})", depth + 1)
                 code += "\n" + indent("if (#{section_var} != null) {", depth + 1)
+                code += flow_section_edge(section, 'header', section_var, index, depth + 2)
+                unless cell_view_name
+                  code += flow_section_edge(section, 'footer', section_var, index, depth + 2)
+                  code += "\n" + indent("}", depth + 1)
+                  next
+                end
                 code += "\n" + indent("val #{cell_data_var} = #{section_var}.cells", depth + 2)
                 code += "\n" + indent("if (#{cell_data_var} != null) {", depth + 2)
                 required_imports&.add(:remember_state)
@@ -1498,6 +1528,12 @@ module KjuiTools
                 code += "\n" + indent("enrichedData#{index}.forEachIndexed { cellIndex, item ->", ld)
               else
                 code += "\n" + indent("#{sections_access(property_name)}.getOrNull(#{index})?.let { #{section_var} ->", depth + 1)
+                code += flow_section_edge(section, 'header', section_var, index, depth + 2)
+                unless cell_view_name
+                  code += flow_section_edge(section, 'footer', section_var, index, depth + 2)
+                  code += "\n" + indent("}", depth + 1)
+                  next
+                end
                 code += "\n" + indent("#{section_var}.cells?.let { #{cell_data_var} ->", depth + 2)
                 code += "\n" + indent("FlowRow(modifier = Modifier.fillMaxWidth(), #{flow_arrangements}) {", depth + 3) if per_section
                 code += "\n" + indent("#{cell_data_var}.data.forEachIndexed { cellIndex, item ->", ld)
@@ -1538,6 +1574,7 @@ module KjuiTools
               code += "\n" + indent("}", ld)
               code += "\n" + indent("}", depth + 3) if per_section
               code += "\n" + indent("}", depth + 2)
+              code += flow_section_edge(section, 'footer', section_var, index, depth + 2)
               code += "\n" + indent("}", depth + 1)
             end
           elsif sections.empty? && (names = class_list(json_data))
@@ -1547,6 +1584,27 @@ module KjuiTools
           code += "\n" + indent("}", depth)
           code += "\n" + indent("}", outer_depth) if depth > outer_depth
           code
+        end
+
+        # A flow section's header or footer: its view with its own ViewModel
+        # and the section's header / footer data, in a full-width row of its
+        # own in the section Column. The ROW is full width and the view keeps
+        # its own size at the row's start — as KotlinJsonUI Dynamic's flow
+        # (a fillMaxWidth Box around the view), sjui's (`.frame(maxWidth:
+        # .infinity, alignment: .leading)`) and rjui's (a flex-column row) —
+        # rather than the other routes' `modifier = Modifier.fillMaxWidth()`
+        # into the view, which a fixed-width root (`requiredWidth`) answers by
+        # centring itself in the row. Empty when the section declares none.
+        def self.flow_section_edge(section, kind, section_var, index, depth)
+          name = section[kind]
+          return '' unless name
+
+          edge_class = cell_class_name(name)
+          code = "\n" + indent("#{section_var}.#{kind}?.let { #{kind}Data ->", depth)
+          code += "\n" + indent("val #{kind}ViewModel: #{edge_class}ViewModel = viewModel(key = \"#{name}_#{kind}_#{index}_\${viewModel.hashCode()}\")", depth + 1)
+          code += "\n" + indent("LaunchedEffect(#{kind}Data.data) { #{kind}ViewModel.updateData(#{kind}Data.data) }", depth + 1)
+          code += "\n" + edge_view_call(edge_class, "#{kind}ViewModel", depth + 1)
+          code + "\n" + indent("}", depth)
         end
 
         # Generate non-lazy Column-based collection for wrapContent height.
@@ -1629,7 +1687,7 @@ module KjuiTools
                 code += "\n" + indent("#{section_var}.header?.let { headerData ->", depth + 2)
                 code += "\n" + indent("val headerViewModel: #{header_class}ViewModel = viewModel(key = \"#{section['header']}_header_#{index}_\${viewModel.hashCode()}\")", depth + 3)
                 code += "\n" + indent("LaunchedEffect(headerData.data) { headerViewModel.updateData(headerData.data) }", depth + 3)
-                code += "\n" + indent("#{header_class}View(viewModel = headerViewModel, modifier = Modifier.fillMaxWidth())", depth + 3)
+                code += "\n" + edge_view_call(header_class, 'headerViewModel', depth + 3)
                 code += "\n" + indent("}", depth + 2)
               end
 
@@ -1696,7 +1754,7 @@ module KjuiTools
                 code += "\n" + indent("#{section_var}.footer?.let { footerData ->", depth + 2)
                 code += "\n" + indent("val footerViewModel: #{footer_class}ViewModel = viewModel(key = \"#{section['footer']}_footer_#{index}_\${viewModel.hashCode()}\")", depth + 3)
                 code += "\n" + indent("LaunchedEffect(footerData.data) { footerViewModel.updateData(footerData.data) }", depth + 3)
-                code += "\n" + indent("#{footer_class}View(viewModel = footerViewModel, modifier = Modifier.fillMaxWidth())", depth + 3)
+                code += "\n" + edge_view_call(footer_class, 'footerViewModel', depth + 3)
                 code += "\n" + indent("}", depth + 2)
               end
 
@@ -1908,7 +1966,7 @@ module KjuiTools
           # (Collection_hideSeparator/control listStyle-grouped, d=10, runs
           # 31202080745/31234163967). Emitted after the declared background —
           # the chrome is the list's inner surface.
-          chrome_style = json_data['listStyle'].to_s.downcase
+          chrome_style = JsonUIShared::EnumSpelling.lowered(json_data['listStyle'], 'Collection', 'listStyle').to_s
           if %w[grouped insetgrouped sidebar].include?(chrome_style)
             required_imports&.add(:shape)
             required_imports&.add(:material_theme)
@@ -2105,7 +2163,7 @@ module KjuiTools
               out += "\n" + indent("item {", depth + 2)
               out += "\n" + indent("val headerViewModel: #{header_class}ViewModel = viewModel(key = \"#{section['header']}_header_#{index}_\${viewModel.hashCode()}\")", depth + 3)
               out += "\n" + indent("LaunchedEffect(headerData.data) { headerViewModel.updateData(headerData.data) }", depth + 3)
-              out += "\n" + indent("#{header_class}View(viewModel = headerViewModel, modifier = Modifier.fillMaxWidth())", depth + 3)
+              out += "\n" + edge_view_call(header_class, 'headerViewModel', depth + 3)
               out += "\n" + indent("}", depth + 2)
               out += "\n" + indent("}", depth + 1)
             end
@@ -2179,7 +2237,7 @@ module KjuiTools
               out += "\n" + indent("item {", depth + 2)
               out += "\n" + indent("val footerViewModel: #{footer_class}ViewModel = viewModel(key = \"#{section['footer']}_footer_#{index}_\${viewModel.hashCode()}\")", depth + 3)
               out += "\n" + indent("LaunchedEffect(footerData.data) { footerViewModel.updateData(footerData.data) }", depth + 3)
-              out += "\n" + indent("#{footer_class}View(viewModel = footerViewModel, modifier = Modifier.fillMaxWidth())", depth + 3)
+              out += "\n" + edge_view_call(footer_class, 'footerViewModel', depth + 3)
               out += "\n" + indent("}", depth + 2)
               out += "\n" + indent("}", depth + 1)
             end
@@ -2218,7 +2276,7 @@ module KjuiTools
               out += "\n" + indent("section#{index}.header?.let { headerData ->", depth + 1)
               out += "\n" + indent("val headerViewModel: #{header_class}ViewModel = viewModel(key = \"#{section['header']}_header_#{index}_\${viewModel.hashCode()}\")", depth + 2)
               out += "\n" + indent("LaunchedEffect(headerData.data) { headerViewModel.updateData(headerData.data) }", depth + 2)
-              out += "\n" + indent("#{header_class}View(viewModel = headerViewModel, modifier = Modifier.fillMaxWidth())", depth + 2)
+              out += "\n" + edge_view_call(header_class, 'headerViewModel', depth + 2)
               out += "\n" + indent("}", depth + 1)
             end
 
@@ -2278,7 +2336,7 @@ module KjuiTools
               out += "\n" + indent("section#{index}.footer?.let { footerData ->", depth + 1)
               out += "\n" + indent("val footerViewModel: #{footer_class}ViewModel = viewModel(key = \"#{section['footer']}_footer_#{index}_\${viewModel.hashCode()}\")", depth + 2)
               out += "\n" + indent("LaunchedEffect(footerData.data) { footerViewModel.updateData(footerData.data) }", depth + 2)
-              out += "\n" + indent("#{footer_class}View(viewModel = footerViewModel, modifier = Modifier.fillMaxWidth())", depth + 2)
+              out += "\n" + edge_view_call(footer_class, 'footerViewModel', depth + 2)
               out += "\n" + indent("}", depth + 1)
             end
 

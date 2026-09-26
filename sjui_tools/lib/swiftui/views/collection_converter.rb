@@ -211,7 +211,7 @@ module SjuiTools
           # alias spelling of flow (SSoT valueAliases, 2026-08-03
           # unification) — dynamic folds it via the generated enum, so the
           # raw-reading codegen must accept it too.
-          is_flow = %w[flow leftaligned].include?(layout.to_s.downcase)
+          is_flow = %w[flow leftaligned].include?(JsonUIShared::EnumSpelling.lowered(layout, 'Collection', 'layout'))
 
           if !is_lazy
             generate_non_lazy(
@@ -383,7 +383,7 @@ module SjuiTools
                           lanes = horizontal_lanes(section)
                           open_horizontal_lanes(lanes)
                           maybe_indent(lanes) do
-                            vars = open_cell_foreach('cellsData')
+                            vars = open_cell_foreach('cellsData', section_index: index)
                             indent do
                               add_line "#{cell_view_name}(data: #{vars[:data_var]}).equatable()"
                               generate_cell_identity(vars[:index_var])
@@ -509,7 +509,7 @@ module SjuiTools
                         if cell_view_name
                           add_line "if let cellsData = section.cells?.data {"
                           indent do
-                            vars = open_cell_foreach('cellsData')
+                            vars = open_cell_foreach('cellsData', section_index: index)
                             indent do
                               add_line "#{cell_view_name}(data: #{vars[:data_var]}).equatable()"
                               generate_cell_identity(vars[:index_var])
@@ -773,7 +773,7 @@ module SjuiTools
         # ORTHOGONAL to `hideSeparator`: this picks the chrome, that hides the
         # separators, and neither overrides the other.
         def list_style_to_swiftui
-          LIST_STYLES[@component['listStyle'].to_s.downcase] || LIST_STYLES['plain']
+          LIST_STYLES[JsonUIShared::EnumSpelling.lowered(@component['listStyle'], 'Collection', 'listStyle')] || LIST_STYLES['plain']
         end
 
         # Non-lazy path: no ScrollView, no Lazy* containers. The Collection is
@@ -843,7 +843,7 @@ module SjuiTools
                     lanes = horizontal_lanes(section)
                     open_horizontal_lanes(lanes)
                     maybe_indent(lanes) do
-                      vars = open_cell_foreach('cellsData')
+                      vars = open_cell_foreach('cellsData', section_index: index)
                       indent do
                         add_line "#{cell_view_name}(data: #{vars[:data_var]}).equatable()"
                         generate_cell_identity(vars[:index_var])
@@ -928,7 +928,7 @@ module SjuiTools
                       if cell_view_name
                         add_line "if let cellsData = section.cells?.data {"
                         indent do
-                          vars = open_cell_foreach('cellsData')
+                          vars = open_cell_foreach('cellsData', section_index: index)
                           indent do
                             add_line "#{cell_view_name}(data: #{vars[:data_var]}).equatable()"
                             generate_cell_identity(vars[:index_var])
@@ -981,6 +981,23 @@ module SjuiTools
           end
         end
 
+        # A flow section's declared header or footer (4f ruling 2026-09-26,
+        # round 7): its view with the section's header / footer data, a row of
+        # its own, full width, above / below the section's wrap — a sibling of
+        # the wrap in the section VStack, so it is spaced as the lines. Until
+        # jsonui-cli 1.9.0 a flow drew neither. Nothing when none is declared.
+        def add_flow_section_edge(section, kind)
+          name = section[kind] && extract_view_name(section[kind])
+          return unless name
+
+          add_line "if let #{kind}Data = section.#{kind}?.data {"
+          indent do
+            add_line "#{name}(data: #{kind}Data)"
+            add_modifier_line '.frame(maxWidth: .infinity, alignment: .leading)'
+          end
+          add_line '}'
+        end
+
         # A flow's three gaps (attribute_semantics.json -> collectionSpacing):
         # between cells on a line columnSpacing, else itemSpacing; between
         # lines lineSpacing (line_spacing_value), else itemSpacing; between
@@ -1025,7 +1042,7 @@ module SjuiTools
                 is_optional = is_property_optional?(property_name)
                 @component['sections'].each_with_index do |section, index|
                   cell_view_name = extract_view_name(section['cell']) if section['cell']
-                  next unless cell_view_name
+                  next unless cell_view_name || section['header'] || section['footer']
 
                   if is_optional
                     add_line "if let dataSource = data.#{property_name}, dataSource.sections.count > #{index} {"
@@ -1035,22 +1052,26 @@ module SjuiTools
                   indent do
                     data_ref = is_optional ? "dataSource" : "data.#{property_name}"
                     add_line "let section = #{data_ref}.sections[#{index}]"
-                    add_line "if let cellsData = section.cells?.data {"
-                    indent do
-                      add_line "FlowLayout(alignment: #{flow_alignment}, horizontalSpacing: #{h_spacing}, verticalSpacing: #{v_spacing}) {"
+                    add_flow_section_edge(section, 'header')
+                    if cell_view_name
+                      add_line "if let cellsData = section.cells?.data {"
                       indent do
-                        vars = open_cell_foreach('cellsData')
+                        add_line "FlowLayout(alignment: #{flow_alignment}, horizontalSpacing: #{h_spacing}, verticalSpacing: #{v_spacing}) {"
                         indent do
-                          add_line "#{cell_view_name}(data: #{vars[:data_var]}).equatable()"
-                          generate_cell_identity(vars[:index_var])
-                          apply_cell_frame
-                          apply_cell_item_identifier(vars[:index_var])
+                          vars = open_cell_foreach('cellsData', section_index: index)
+                          indent do
+                            add_line "#{cell_view_name}(data: #{vars[:data_var]}).equatable()"
+                            generate_cell_identity(vars[:index_var])
+                            apply_cell_frame
+                            apply_cell_item_identifier(vars[:index_var])
+                          end
+                          add_line "}"
                         end
                         add_line "}"
                       end
                       add_line "}"
                     end
-                    add_line "}"
+                    add_flow_section_edge(section, 'footer')
                   end
                   add_line "}"
                 end
@@ -1136,9 +1157,9 @@ module SjuiTools
                   end
                   add_line "if let cellsData = section.cells?.data {"
                   indent do
-                    vars = open_cell_foreach('cellsData')
+                    vars = open_cell_foreach('cellsData', page_start: drawn.empty? ? nil : 'pageStart', section_index: index)
                     indent do
-                      add_paging_cell(cell_view_name, vars, spacing, drawn.empty? ? nil : 'pageStart')
+                      add_paging_cell(cell_view_name, vars, spacing)
                     end
                     add_line "}"
                   end
@@ -1152,7 +1173,7 @@ module SjuiTools
               indent do
                 vars = open_cell_foreach('cellsData')
                 indent do
-                  add_paging_cell(cell_view_name, vars, spacing, nil)
+                  add_paging_cell(cell_view_name, vars, spacing)
                 end
                 add_line "}"
               end
@@ -1181,9 +1202,11 @@ module SjuiTools
         end
 
         # One page: the cell, its identity, frame, spacing and address, and
-        # its tag — its place among all the pages (page_start + its index in
-        # the section; nil for the first drawn section, whose pages start at 0).
-        def add_paging_cell(cell_view_name, vars, spacing, page_start)
+        # its tag — its place among all the pages, which the loop's index
+        # already is (open_cell_foreach counts a later section's cells from
+        # its pageStart). The address counts as the tag does, as kjui's pager
+        # test tag and rjui's item id do (round 7).
+        def add_paging_cell(cell_view_name, vars, spacing)
           add_line "#{cell_view_name}(data: #{vars[:data_var]}).equatable()"
           generate_cell_identity(vars[:index_var])
           apply_cell_frame
@@ -1191,7 +1214,7 @@ module SjuiTools
             add_modifier_line ".padding(.horizontal, #{spacing / 2.0})"
           end
           apply_cell_item_identifier(vars[:index_var])
-          add_modifier_line page_start ? ".tag(#{page_start} + #{vars[:index_var]})" : ".tag(#{vars[:index_var]})"
+          add_modifier_line ".tag(#{vars[:index_var]})"
         end
 
         # The class-list shape's cell view (cellClasses[0], no `sections`),
@@ -1227,7 +1250,7 @@ module SjuiTools
 
               @component['sections'].each_with_index do |section, index|
                 cell_view_name = extract_view_name(section['cell']) if section['cell']
-                next unless cell_view_name
+                next unless cell_view_name || section['header'] || section['footer']
 
                 if is_optional
                   add_line "if let dataSource = data.#{property_name}, dataSource.sections.count > #{index} {"
@@ -1240,22 +1263,26 @@ module SjuiTools
                   else
                     add_line "let section = data.#{property_name}.sections[#{index}]"
                   end
-                  add_line "if let cellsData = section.cells?.data {"
-                  indent do
-                    add_line "FlowLayout(alignment: #{flow_alignment}, horizontalSpacing: #{h_spacing}, verticalSpacing: #{v_spacing}) {"
+                  add_flow_section_edge(section, 'header')
+                  if cell_view_name
+                    add_line "if let cellsData = section.cells?.data {"
                     indent do
-                      vars = open_cell_foreach('cellsData')
+                      add_line "FlowLayout(alignment: #{flow_alignment}, horizontalSpacing: #{h_spacing}, verticalSpacing: #{v_spacing}) {"
                       indent do
-                        add_line "#{cell_view_name}(data: #{vars[:data_var]}).equatable()"
-                        generate_cell_identity(vars[:index_var])
-                        apply_cell_frame
-                        apply_cell_item_identifier(vars[:index_var])
+                        vars = open_cell_foreach('cellsData', section_index: index)
+                        indent do
+                          add_line "#{cell_view_name}(data: #{vars[:data_var]}).equatable()"
+                          generate_cell_identity(vars[:index_var])
+                          apply_cell_frame
+                          apply_cell_item_identifier(vars[:index_var])
+                        end
+                        add_line "}"
                       end
                       add_line "}"
                     end
                     add_line "}"
                   end
-                  add_line "}"
+                  add_flow_section_edge(section, 'footer')
                 end
                 add_line "}"
               end
@@ -1488,7 +1515,23 @@ module SjuiTools
           add_line "// no 'items' data source declared — no cells emitted"
         end
 
-        def open_cell_foreach(data_source_expr)
+        # `section_index`: the section this loop draws, when it is one of a
+        # Collection's `sections`. Every section after the first gives its
+        # cells ids of their own — "<section>:<offset>" — through
+        # IdentifiedCellItem: sibling ForEaches whose ids
+        # repeat (`\.offset` from 0 in each) are one ForEach to a lazy stack
+        # and a TabView, which dropped a later section's cells at an offset an
+        # earlier section already had. Measured on the ConformanceHost codegen
+        # host (iOS 26.5, 4f round 8): a list of sections of 2 and 1 cells
+        # drew A0 A1 and not B0; a pager of 2 + 3 stopped at page 1. The index
+        # handed to the cell stays its place in its section (an address counts
+        # per section on every route but the pager), except that
+        # `page_start`, a pager's later section, adds the pages before it: a
+        # page's tag and address are its place among all the pages. With
+        # cellIdProperty the ids are the cells' own keys, as before: distinct
+        # unless two sections share a key (not changed here — every face
+        # Collection of two or more sections has cellIdProperty).
+        def open_cell_foreach(data_source_expr, page_start: nil, section_index: nil)
           cell_id_property = @component['cellIdProperty']
           auto_tracking = @component['autoChangeTrackingId'] == true
 
@@ -1504,15 +1547,22 @@ module SjuiTools
             end
           end
 
+          later = section_index.to_i.positive?
+          index_expr = page_start ? "#{page_start} + index" : 'index'
           if cell_id_property
             add_line "let items = #{source_expr}.enumerated().map { index, data in"
             indent do
               # Prefer the pre-enriched "cellId" when autoChangeTrackingId is on;
               # otherwise fall back to the user's primary key.
-              add_line "IdentifiedCellItem(id: (data[\"cellId\"] as? String) ?? (data[\"#{cell_id_property}\"] as? String) ?? \"\\(index)\", index: index, data: data)"
+              id = "(data[\"cellId\"] as? String) ?? (data[\"#{cell_id_property}\"] as? String) ?? \"\\(index)\""
+              add_line "IdentifiedCellItem(id: #{id}, index: #{index_expr}, data: data)"
             end
             add_line "}"
             add_line "ForEach(items) { cell in"
+            { data_var: 'cell.data', index_var: 'cell.index' }
+          elsif later
+            add_line "ForEach(#{source_expr}.enumerated().map { IdentifiedCellItem(id: \"#{section_index}:\\($0.offset)\", " \
+                     "index: #{page_start ? "#{page_start} + " : ''}$0.offset, data: $0.element) }) { cell in"
             { data_var: 'cell.data', index_var: 'cell.index' }
           else
             add_line "ForEach(Array(#{source_expr}.enumerated()), id: \\.offset) { cellIndex, cellData in"
@@ -1561,6 +1611,10 @@ module SjuiTools
           else
             return nil
           end
+          # A node written inline, with no className, names no layout: it is
+          # not drawn, and the validator says so (inline_layout?). It raised
+          # here, and the build stopped.
+          return nil unless class_name.is_a?(String) && !class_name.empty?
 
           # Strip directory path if present (e.g., "Chat/candidate_card" -> "candidate_card")
           class_name = File.basename(class_name) if class_name.include?('/')
@@ -1656,7 +1710,7 @@ module SjuiTools
                 maybe_indent(own_columns) do
                   add_line "if let cellsData = section.cells?.data {"
                   indent do
-                    vars = open_cell_foreach('cellsData')
+                    vars = open_cell_foreach('cellsData', section_index: index)
                     indent do
                       add_line "#{cell_view_name}(data: #{vars[:data_var]}).equatable()"
                       generate_cell_identity(vars[:index_var])
@@ -1980,7 +2034,7 @@ module SjuiTools
           return false if collection_lazy_mode == :none
 
           layout = @component['layout'] || @component['orientation'] || 'vertical'
-          return false unless %w[flow leftaligned].include?(layout.to_s.downcase)
+          return false unless %w[flow leftaligned].include?(JsonUIShared::EnumSpelling.lowered(layout, 'Collection', 'layout'))
 
           height = @component['height']
           height.nil? || height == 'wrapContent'

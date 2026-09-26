@@ -143,9 +143,16 @@ success "git found"
 
 if command -v ruby >/dev/null 2>&1; then
     RUBY_VERSION=$(ruby -v | grep -oE '[0-9]+\.[0-9]+' | head -1)
-    success "Ruby $RUBY_VERSION found"
+    # From jsonui-cli 1.9.0 the tools need Ruby 3.2 or later and stop below it
+    # with one line. This is the ruby of THIS shell; the tools run on the ruby
+    # of the directory they run in (a .ruby-version there), so it is a warning.
+    if echo "$RUBY_VERSION" | awk -F. '{ exit !($1 > 3 || ($1 == 3 && $2 >= 2)) }'; then
+        success "Ruby $RUBY_VERSION found"
+    else
+        warning "Ruby $RUBY_VERSION found here — sjui/kjui/rjui need Ruby 3.2 or later (jsonui-cli 1.9.0); give each project a .ruby-version naming one"
+    fi
 else
-    warning "Ruby not found. sjui/kjui/rjui tools require Ruby 2.7+"
+    warning "Ruby not found. sjui/kjui/rjui tools require Ruby 3.2 or later"
 fi
 
 if command -v python3 >/dev/null 2>&1; then

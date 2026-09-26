@@ -255,6 +255,17 @@ RSpec.describe SjuiTools::SwiftUI::Views::ViewConverter do
       end
     end
 
+    # The items are declared top / bottom / leading / trailing / vertical /
+    # all, as written (1.9.0): `left`, `right` and `horizontal`, accepted
+    # here before, select no edge — as on rjui and kjui.
+    context 'with safeAreaInsetPositions spelled beyond the declaration' do
+      it 'reserves only the declared edges' do
+        code = described_class.new('type' => 'View', 'safeAreaInsetPositions' => %w[top left right horizontal]).convert
+        expect(code).to include('.safeAreaPadding([.top])')
+        expect(described_class.new('type' => 'View', 'safeAreaInsetPositions' => %w[left]).convert).not_to include('safeAreaPadding')
+      end
+    end
+
     context 'with safeAreaInsetPositions on a SafeAreaView' do
       let(:component) do
         {

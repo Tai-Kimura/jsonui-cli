@@ -3,6 +3,10 @@
 require_relative '../../spec_helper'
 require 'react/converters/view_converter'
 require 'react/converters/select_box_converter'
+require 'react/react_generator'
+require 'json'
+require 'open3'
+require 'tmpdir'
 
 RSpec.describe RjuiTools::React::Converters::ViewConverter do
   let(:default_config) { { 'use_tailwind' => true } }
@@ -363,16 +367,24 @@ RSpec.describe RjuiTools::React::Converters::ViewConverter do
     it 'expands all and vertical' do
       all = styled('safeAreaInsetPositions' => ['all'])
       expect(all).to include('paddingTop').and include('paddingBottom')
-      expect(all).to include('paddingLeft').and include('paddingRight')
+      expect(all).to include('paddingInlineStart').and include('paddingInlineEnd')
       expect(styled('safeAreaInsetPositions' => ['vertical'])).to include('paddingBottom')
     end
 
-    # leading/trailing are logical names, but env() only exposes physical
-    # insets and this codebase is LTR throughout.
-    it 'maps leading and trailing to the physical sides' do
+    # leading / trailing are the start and end of the reading direction
+    # (jsonui-cli 1.9.0). env() only exposes physical insets, so the logical
+    # padding reads a custom property that a class sets per direction; the
+    # `rtl:` form swaps the side. The render arm below draws both directions.
+    it 'maps leading and trailing to the reading direction' do
       result = styled('safeAreaInsetPositions' => %w[leading trailing])
-      expect(result).to include("paddingLeft: 'env(safe-area-inset-left)'")
-      expect(result).to include("paddingRight: 'env(safe-area-inset-right)'")
+      expect(result).to include("paddingInlineStart: 'var(--jui-safe-start)'")
+      expect(result).to include("paddingInlineEnd: 'var(--jui-safe-end)'")
+      expect(result).to include('[--jui-safe-start:env(safe-area-inset-left)]')
+      expect(result).to include('rtl:[--jui-safe-start:env(safe-area-inset-right)]')
+      expect(result).to include('[--jui-safe-end:env(safe-area-inset-right)]')
+      expect(result).to include('rtl:[--jui-safe-end:env(safe-area-inset-left)]')
+      expect(result).not_to include('paddingLeft')
+      expect(result).not_to include('paddingRight')
     end
 
     # An inline style beats the Tailwind class outright, so emitting the inset
@@ -381,14 +393,120 @@ RSpec.describe RjuiTools::React::Converters::ViewConverter do
       expect(styled('safeAreaInsetPositions' => ['top'], 'paddings' => [8, 4, 8, 4]))
         .to include("paddingTop: 'calc(8px + env(safe-area-inset-top))'")
       expect(styled('safeAreaInsetPositions' => ['leading'], 'paddingStart' => 12))
-        .to include("paddingLeft: 'calc(12px + env(safe-area-inset-left))'")
+        .to include('[--jui-safe-start:calc(12px_+_env(safe-area-inset-left))]')
+        .and include('rtl:[--jui-safe-start:calc(12px_+_env(safe-area-inset-right))]')
       expect(styled('safeAreaInsetPositions' => ['top'], 'padding' => 6))
         .to include("paddingTop: 'calc(6px + env(safe-area-inset-top))'")
+    end
+
+    # A physical padding stays on its side: in RTL the start is the right
+    # side, so the right padding (not the left) is what the inset adds to.
+    it "folds the padding of the side the start is on in each direction" do
+      result = styled('safeAreaInsetPositions' => %w[leading trailing], 'paddings' => [0, 5, 0, 7])
+      expect(result).to include('[--jui-safe-start:calc(7px_+_env(safe-area-inset-left))]')
+      expect(result).to include('rtl:[--jui-safe-start:calc(5px_+_env(safe-area-inset-right))]')
+      expect(result).to include('[--jui-safe-end:calc(5px_+_env(safe-area-inset-right))]')
+      expect(result).to include('rtl:[--jui-safe-end:calc(7px_+_env(safe-area-inset-left))]')
     end
 
     it 'ignores an unknown edge and emits nothing when absent' do
       expect(styled('safeAreaInsetPositions' => ['sideways'])).not_to include('safe-area-inset')
       expect(styled({})).not_to include('safe-area-inset')
+    end
+
+    # Drawn: headless Chromium lays the emitted element out once under
+    # dir="ltr" and once under dir="rtl", and reads the computed padding of
+    # each physical side. A desktop browser's env(safe-area-inset-*) is 0, so
+    # the arm stands px in for it — left 11, right 22 — in the stylesheet and
+    # the inline style (the class names are left as emitted).
+    #
+    # The CSS for each class is what Tailwind v4 generates for it (compiled
+    # with tailwindcss 4.3.3 and 4.2.2 on 2026-09-26): `[--p:v]` sets the
+    # property; `rtl:` adds `:where(:dir(rtl), [dir="rtl"], [dir="rtl"] *)`,
+    # which has no specificity, and Tailwind puts variant rules after the
+    # plain ones — so the RTL value wins by order, as here.
+    describe 'drawn in both reading directions' do
+      STAND_IN = { 'left' => '11px', 'right' => '22px', 'top' => '33px', 'bottom' => '44px' }.freeze
+      TAILWIND_PLAIN = { 'shrink-0' => 'flex-shrink:0', 'ps-1' => 'padding-inline-start:0.25rem',
+                         'pe-1' => 'padding-inline-end:0.25rem' }.freeze
+
+      def chromium
+        Dir.glob(File.join(Dir.home, 'Library/Caches/ms-playwright/chromium_headless_shell-*/*/chrome-headless-shell')).max
+      end
+
+      def stand_in(text)
+        text.gsub(/env\(safe-area-inset-(\w+)\)/) { STAND_IN.fetch(Regexp.last_match(1)) }
+      end
+
+      def rule_for(klass)
+        escaped = klass.gsub(/[\[\]:()+,.]/) { |ch| "\\#{ch}" }
+        body = klass.sub(/\Artl:/, '')
+        decl = if body =~ /\A\[(--[\w-]+):(.+)\]\z/
+                 "#{Regexp.last_match(1)}: #{stand_in(Regexp.last_match(2).tr('_', ' '))}"
+               elsif body =~ /\A([wh])-\[(\d+)px\]\z/
+                 "#{Regexp.last_match(1) == 'w' ? 'width' : 'height'}: #{Regexp.last_match(2)}px"
+               else
+                 TAILWIND_PLAIN[body] or raise "no definition for #{klass}"
+               end
+        selector = klass.start_with?('rtl:') ? %(.#{escaped}:where(:dir(rtl), [dir="rtl"], [dir="rtl"] *)) : ".#{escaped}"
+        "#{selector} { #{decl} }"
+      end
+
+      # { "ltr" => [left, right], "rtl" => [left, right] } computed padding in px.
+      def paddings(jsx)
+        esbuild = File.expand_path('../../support/node_modules/.bin/esbuild', __dir__)
+        skip 'esbuild is not installed under spec/support' unless File.executable?(esbuild)
+        skip 'no headless Chromium in the Playwright cache' unless chromium
+
+        classes = jsx.scan(/className="([^"]*)"/).flatten.flat_map(&:split).uniq
+        plain, variant = classes.partition { |c| !c.start_with?('rtl:') }
+        css = (plain + variant).map { |c| rule_for(c) }.join("\n")
+        Dir.mktmpdir('rjui_safe_area_rtl') do |dir|
+          File.write(File.join(dir, 'app.jsx'), <<~JSX)
+            function h(tag, props, ...children) {
+              const el = document.createElement(tag);
+              for (const [k, v] of Object.entries(props || {})) {
+                if (k === 'className') el.className = v;
+                else if (k === 'style') for (const [p, x] of Object.entries(v)) el.style.setProperty(p.replace(/[A-Z]/g, (c) => '-' + c.toLowerCase()), x);
+                else el.setAttribute(k, v);
+              }
+              for (const c of children.flat(Infinity)) if (c != null && c !== false) el.append(c.nodeType ? c : String(c));
+              return el;
+            }
+            const out = {};
+            for (const dir of ['ltr', 'rtl']) {
+              const holder = document.createElement('div');
+              holder.setAttribute('dir', dir);
+              const el = (#{jsx.strip.gsub(/style=\{\{.*?\}\}/m) { |style| stand_in(style) }});
+              holder.append(el);
+              document.body.append(holder);
+              const cs = getComputedStyle(el);
+              out[dir] = [parseFloat(cs.paddingLeft), parseFloat(cs.paddingRight)];
+            }
+            document.body.textContent = 'PAD' + JSON.stringify(out);
+          JSX
+          out, status = Open3.capture2e(esbuild, File.join(dir, 'app.jsx'), '--jsx-factory=h', '--outfile=' + File.join(dir, 'app.js'))
+          raise "esbuild: #{out}" unless status.success?
+
+          File.write(File.join(dir, 'page.html'),
+                     "<html><head><style>body{margin:0} #{css}</style></head><body><script src=\"app.js\"></script></body></html>")
+          dom, = Open3.capture2e(chromium, '--headless', '--disable-gpu', '--allow-file-access-from-files', '--dump-dom',
+                                 "file://#{File.join(dir, 'page.html')}")
+          JSON.parse(dom[/PAD(\{.*?\})</m, 1] || raise("no layout in:\n#{dom}\ncss:\n#{css}"))
+        end
+      end
+
+      it 'puts leading on the left in LTR and on the right in RTL, with the start padding' do
+        pad = paddings(styled('safeAreaInsetPositions' => ['leading'], 'paddingStart' => 4))
+        expect(pad['ltr']).to eq([4 + 11, 0]), pad.inspect
+        expect(pad['rtl']).to eq([0, 4 + 22]), pad.inspect
+      end
+
+      it 'puts trailing on the right in LTR and on the left in RTL' do
+        pad = paddings(styled('safeAreaInsetPositions' => ['trailing']))
+        expect(pad['ltr']).to eq([0, 22]), pad.inspect
+        expect(pad['rtl']).to eq([11, 0]), pad.inspect
+      end
     end
   end
 end
@@ -666,5 +784,59 @@ RSpec.describe 'backlog closure group 2 (web)' do
       { 'type' => 'Segment', 'items' => %w[A B], 'valueChange' => 'on_tab_change' }, config
     ).convert
     expect(r).to include('data.onTabChange')
+  end
+end
+
+# tapBackground is the background while pressed, on every node with a click
+# (onClick) and on a Button (jsonui-cli 1.9.0) — BaseConverter
+# #pressed_background_classes. It was a View's alone, with a click or without
+# one, falling back to highlightBackground (on a View, the colour while
+# `highlighted` holds); a Label, an Image and the other clickable types drew
+# nothing.
+RSpec.describe RjuiTools::React::Converters::BaseConverter, 'tapBackground' do
+  let(:config) { { 'use_tailwind' => true } }
+
+  CLICKABLE = {
+    'View' => { 'child' => [] }, 'Label' => { 'text' => 'x' }, 'Image' => { 'srcName' => 'x' },
+    'NetworkImage' => { 'url' => 'https://e/x.png' }, 'IconLabel' => { 'text' => 'i' },
+    'CircleView' => {}, 'GradientView' => { 'items' => %w[#FFFFFF #000000] }, 'Blur' => {}
+  }.freeze
+
+  def classes_of(type, extra)
+    node = { 'type' => type }.merge(CLICKABLE.fetch(type)).merge(extra)
+    klass = RjuiTools::React::Converters::ViewConverter.new({ 'type' => 'View' }, config).send(:get_converter_class, type)
+    out = klass.new(node, config).convert(2)
+    [out[/className="([^"]*)"/, 1].to_s.split, out]
+  end
+
+  it 'is the pressed background of every type with a click' do
+    CLICKABLE.each_key do |type|
+      classes, out = classes_of(type, 'onClick' => '@{t}', 'tapBackground' => '#FF0000')
+      expect(classes).to include('active:bg-[#FF0000]', 'transition-colors'), "#{type}: #{out}"
+    end
+  end
+
+  it 'draws nothing on a node without a click' do
+    CLICKABLE.each_key do |type|
+      classes, out = classes_of(type, 'tapBackground' => '#FF0000')
+      expect(classes.grep(/\Aactive:/)).to be_empty, "#{type}: #{out}"
+    end
+    classes, = classes_of('View', 'onClick' => '@{t}', 'canTap' => false, 'tapBackground' => '#FF0000')
+    expect(classes.grep(/\Aactive:/)).to be_empty
+  end
+
+  # On a View, highlightBackground is the colour while `highlighted` holds —
+  # not the pressed one (a Button's highlightBackground is, ButtonConverter).
+  it "does not take a View's highlightBackground as the pressed colour" do
+    classes, = classes_of('View', 'onClick' => '@{t}', 'highlightBackground' => '#00FF00')
+    expect(classes.grep(/\Aactive:/)).to be_empty
+    _, out = classes_of('View', 'highlighted' => true, 'highlightBackground' => '#00FF00')
+    expect(out).to include('#00FF00')
+  end
+
+  it 'reads a bound tapBackground back through the custom property' do
+    classes, out = classes_of('Label', 'onClick' => '@{t}', 'tapBackground' => '@{tb}')
+    expect(classes).to include('active:bg-[var(--jui-tap-bg)]')
+    expect(out).to include("'--jui-tap-bg'")
   end
 end

@@ -2091,6 +2091,9 @@ BASE_ATTRS_BY_ATTRIBUTE: dict[str, dict[str, Any]] = {
     # family and were closed on the device side by `--paired`; this one closes
     # with a base attribute.) Handed over by lane B.
     "View.highlighted": {"highlightBackground": "#FF0000"},
+    # tapBackground on a View is drawn only on a View with a tap (ruling (a)),
+    # so the View host carries one (COMMON_EXTRA_HOSTS).
+    "View.tapBackground": {"onClick": "@{conformanceTap}"},
     # `direction` reverses the children of an ORIENTED container; with no
     # orientation the canonical answer is "no effect", so the fixture has to
     # supply one or it can never show anything. One orientation cannot serve
@@ -2475,6 +2478,11 @@ _FILL_CHILDREN = [
 ]
 
 CASE_BASE_ATTRS: dict[tuple[str, str, str], dict[str, Any]] = {
+    # The bound tapBackground on a View also gates its tap with a bound canTap:
+    # the press is held to the tap's gates (`.tracksPress(enabled: …)`, kjui's
+    # `isPressed && gate`), and that form has to compile too. Keyed on the View
+    # host alone, so the Button's fixtures do not change.
+    ("View", "tapBackground", "binding"): {"canTap": "@{conformanceTapGate}"},
     ("common", "distribution", "fill"): {"child": _FILL_CHILDREN},
     ("common", "distribution", "fillequally"): {"child": _FILL_CHILDREN},
     ("View", "distribution", "fill"): {"child": _FILL_CHILDREN},
@@ -2638,6 +2646,9 @@ BINDING_DATA_CLASSES: dict[str, str] = {
     # id, and the SSoT now says so in those words. `Int` is in the four-class
     # vocabulary that survives all three generators.
     "scrollTarget": "Int",
+    # The View host of tapBackground: its tap, and the tap's bound gate.
+    "conformanceTap": "() -> Void",
+    "conformanceTapGate": "Boolean",
 }
 
 
@@ -2760,9 +2771,14 @@ def binding_data_entries(
             continue
         seen.add(name)
         cls = BINDING_DATA_CLASSES.get(name, BINDING_DATA_DEFAULT_CLASS)
-        entries.append(
-            {"name": name, "class": cls, "defaultValue": _BINDING_DATA_DEFAULTS.get(cls, "")}
-        )
+        if "->" in cls:
+            # A handler has no default: it is supplied at runtime, and the
+            # codegens emit it as an optional callback member.
+            entries.append({"name": name, "class": cls})
+        else:
+            entries.append(
+                {"name": name, "class": cls, "defaultValue": _BINDING_DATA_DEFAULTS.get(cls, "")}
+            )
         handler_cls = BINDING_CHANGE_HANDLERS.get(name)
         if handler_cls is not None:
             handler = _change_handler_name(name)
@@ -2985,6 +3001,15 @@ COMMON_EXTRA_HOSTS: dict[str, tuple[str, ...]] = {
     "borderWidth": ("Label",),
     "borderColor": ("Label",),
     "borderStyle": ("Label",),
+    # The pressed background on a node with a tap (jsonui-cli 1.9.0, ruling
+    # (a)). The Button draws it in its own view; every other node with a tap
+    # draws it through a second implementation — a background slot the press
+    # replaces (sjui `.pressedBackground` + `.tracksPress`, kjui's watched
+    # press in `run { … }`, rjui `active:bg-*`). No face writes tapBackground
+    # outside a Button, so without this fixture no emission of that stage ever
+    # reached a real Swift or Kotlin compiler. A still capture cannot show a
+    # press: the fixture is there to be compiled and drawn at rest.
+    "tapBackground": ("View",),
 }
 
 

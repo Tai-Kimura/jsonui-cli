@@ -48,8 +48,9 @@ module SjuiTools
             # Convert relative paths to absolute
             files = files.map do |file|
               # Pathname#absolute?, not File.absolute_path? — the latter is
-              # 2.7+, and the vendored tools run under the consumer's ruby,
-              # which is 2.6 on the faces measured. Found by running this
+              # 2.7+, and until jsonui-cli 1.9.0 (floor 3.2 since) the vendored
+              # tools ran under the consumer's ruby, which was 2.6 on the
+              # faces measured. Found by running this
               # suite under 2.6: `sjui validate` raised NoMethodError there.
               if Pathname.new(file).absolute?
                 file

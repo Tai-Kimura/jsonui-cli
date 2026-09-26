@@ -1209,8 +1209,9 @@ def _run_converter_direct(
 ) -> int:
     """Run converter generation on each platform tool.
 
-    Uses ``tool_resolver.resolve_tool`` so project-local installations of
-    ``sjui`` / ``kjui`` / ``rjui`` work without the tools being on $PATH.
+    Uses ``tool_resolver.tool_command`` so project-local installations of
+    ``sjui`` / ``kjui`` / ``rjui`` work without the tools being on $PATH, on
+    the ruby their .ruby-version names.
     When ``skip_existing`` is true, ``JUI_SKIP_EXISTING=1`` is exported —
     the Ruby converter generators read that and bypass their interactive
     "Overwrite? (y/n)" prompt, leaving existing files in place.
@@ -1218,7 +1219,7 @@ def _run_converter_direct(
     import json
     import subprocess
 
-    from ..core.tool_resolver import build_tool_env, resolve_tool
+    from ..core.tool_resolver import tool_command
 
     extra_env = {"JUI_SKIP_EXISTING": "1"} if skip_existing else None
 
@@ -1256,9 +1257,7 @@ def _run_converter_direct(
             # reaches Ruby as binary (ASCII-8BIT).
             cmd += ["--attribute-descriptions", json.dumps(descriptions)]
 
-        resolved = resolve_tool(tool_name, root)
-        actual_cmd = [resolved] + cmd[1:]
-        env = build_tool_env(resolved, tool_name, extra=extra_env)
+        actual_cmd, env = tool_command(cmd, root, extra=extra_env)
 
         try:
             result = subprocess.run(actual_cmd, cwd=root, env=env)

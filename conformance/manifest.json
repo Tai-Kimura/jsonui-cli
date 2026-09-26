@@ -8,13 +8,13 @@
     "agentWarning": "LLM/Agent: you MUST NOT modify this file."
   },
   "schemaVersion": 2,
-  "generatedFrom": "460db1fdc82186d3457a2ba47ccb6b31b70edd0093034a7346b26e304b673780",
+  "generatedFrom": "4316005610d9fbc7ced4e0ce9d0e4cca93b732ab677b8dfa5b2e23cd8e43cf2b",
   "counts": {
-    "fixtures": 1120,
+    "fixtures": 1126,
     "assertable": 49,
-    "visual": 839,
+    "visual": 843,
     "interactive": 38,
-    "control": 116,
+    "control": 118,
     "declarationOnly": 77,
     "skipped": 157,
     "promoted": {
@@ -949,6 +949,54 @@
       "deprecated": null,
       "layout": "fixtures/common/tapBackground__binding.layout.json",
       "test": "fixtures/common/tapBackground__binding.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": null,
+      "control": null
+    },
+    {
+      "id": "common/tapBackground_on_View__static",
+      "component": "common",
+      "attribute": "tapBackground",
+      "case": "static",
+      "class": "visual",
+      "host": "View",
+      "writtenKey": "tapBackground",
+      "aliasOf": null,
+      "value": "#FF0000",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/common/tapBackground_on_View__static.layout.json",
+      "test": "fixtures/common/tapBackground_on_View__static.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": null,
+      "control": null
+    },
+    {
+      "id": "common/tapBackground_on_View__binding",
+      "component": "common",
+      "attribute": "tapBackground",
+      "case": "binding",
+      "class": "visual",
+      "host": "View",
+      "writtenKey": "tapBackground",
+      "aliasOf": null,
+      "value": "@{boundTapBackground}",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/common/tapBackground_on_View__binding.layout.json",
+      "test": "fixtures/common/tapBackground_on_View__binding.test.json",
       "state": null,
       "promotedFrom": null,
       "peerGroup": null,
@@ -27374,6 +27422,142 @@
       "promotedFrom": null,
       "peerGroup": null,
       "control": "__control/Collection__flow-overflow-none-wrapInScroll",
+      "companions": [
+        "fixtures/Collection/__cells/conformance_cell.layout.json",
+        "fixtures/Collection/__cells/conformance_cell_bare.layout.json",
+        "fixtures/Collection/__cells/conformance_cell_bare_single.layout.json"
+      ]
+    },
+    {
+      "id": "__control/Collection__flow-sections-cells-only",
+      "component": "__control",
+      "attribute": null,
+      "case": "Collection__flow-sections-cells-only",
+      "class": "visual",
+      "host": "Collection",
+      "writtenKey": null,
+      "aliasOf": null,
+      "value": null,
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/__control/Collection__flow-sections-cells-only.layout.json",
+      "test": "fixtures/__control/Collection__flow-sections-cells-only.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "control": null,
+      "isControl": true,
+      "companions": [
+        "fixtures/Collection/__cells/conformance_cell.layout.json",
+        "fixtures/Collection/__cells/conformance_cell_bare.layout.json",
+        "fixtures/Collection/__cells/conformance_cell_bare_single.layout.json"
+      ]
+    },
+    {
+      "id": "Collection/flowSections__headerFooter",
+      "component": "Collection",
+      "attribute": "sections",
+      "case": "flowSections__headerFooter",
+      "class": "visual",
+      "host": "Collection",
+      "writtenKey": "sections",
+      "aliasOf": null,
+      "value": [
+        {
+          "cell": "conformance_cell",
+          "header": "conformance_cell",
+          "footer": "conformance_cell"
+        },
+        {
+          "cell": "conformance_cell",
+          "header": "conformance_cell"
+        }
+      ],
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/Collection/flowSections__headerFooter.layout.json",
+      "test": "fixtures/Collection/flowSections__headerFooter.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": null,
+      "control": "__control/Collection__flow-sections-cells-only",
+      "companions": [
+        "fixtures/Collection/__cells/conformance_cell.layout.json",
+        "fixtures/Collection/__cells/conformance_cell_bare.layout.json",
+        "fixtures/Collection/__cells/conformance_cell_bare_single.layout.json"
+      ]
+    },
+    {
+      "id": "__control/Collection__sections-cells-only",
+      "component": "__control",
+      "attribute": null,
+      "case": "Collection__sections-cells-only",
+      "class": "visual",
+      "host": "Collection",
+      "writtenKey": null,
+      "aliasOf": null,
+      "value": null,
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/__control/Collection__sections-cells-only.layout.json",
+      "test": "fixtures/__control/Collection__sections-cells-only.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "control": null,
+      "isControl": true,
+      "companions": [
+        "fixtures/Collection/__cells/conformance_cell.layout.json",
+        "fixtures/Collection/__cells/conformance_cell_bare.layout.json",
+        "fixtures/Collection/__cells/conformance_cell_bare_single.layout.json"
+      ]
+    },
+    {
+      "id": "Collection/sections__headerFooter",
+      "component": "Collection",
+      "attribute": "sections",
+      "case": "sections__headerFooter",
+      "class": "visual",
+      "host": "Collection",
+      "writtenKey": "sections",
+      "aliasOf": null,
+      "value": [
+        {
+          "cell": "conformance_cell",
+          "header": "conformance_cell",
+          "footer": "conformance_cell"
+        },
+        {
+          "cell": "conformance_cell",
+          "header": "conformance_cell"
+        }
+      ],
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/Collection/sections__headerFooter.layout.json",
+      "test": "fixtures/Collection/sections__headerFooter.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": null,
+      "control": "__control/Collection__sections-cells-only",
       "companions": [
         "fixtures/Collection/__cells/conformance_cell.layout.json",
         "fixtures/Collection/__cells/conformance_cell_bare.layout.json",

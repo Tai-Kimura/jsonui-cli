@@ -56,9 +56,9 @@ RSpec.describe RjuiTools::React::Converters::NetworkImageConverter do
       end
     end
 
-    context 'with contentMode scaleAspectFill' do
+    context 'with contentMode AspectFill' do
       it 'maps to object-cover' do
-        converter = create_converter({ 'class' => 'NetworkImage', 'url' => 'https://example.com/image.jpg', 'contentMode' => 'scaleAspectFill' })
+        converter = create_converter({ 'class' => 'NetworkImage', 'url' => 'https://example.com/image.jpg', 'contentMode' => 'AspectFill' })
         result = converter.convert
         expect(result).to include('object-cover')
         expect(result).to include('contentMode="cover"')

@@ -8,6 +8,7 @@ require_relative '../helpers/binding_expression'
 require_relative '../helpers/resource_resolver'
 require_relative '../helpers/font_spec_helper'
 require_relative '../../core/string_literals'
+require_relative '../../core/enum_spelling'
 
 module KjuiTools
   module Compose
@@ -383,16 +384,23 @@ module KjuiTools
             code += "\n" + indent("shape = RoundedCornerShape(#{Helpers::BoundValue.dp(json_data['cornerRadius'])}),", depth + 1)
           end
 
+          # tintColor is the cursor's colour (the accent of the operable parts —
+          # 1.9.0): CustomTextField's cursorColor, as the TextField passes it.
+          if json_data['tintColor']
+            cursor_color = Helpers::ResourceResolver.process_color(json_data['tintColor'], required_imports)
+            code += "\n" + indent("cursorColor = #{cursor_color},", depth + 1)
+          end
+
           # Background colors
           if json_data['background']
             bg_color = Helpers::ResourceResolver.process_color(json_data['background'], required_imports)
             code += "\n" + indent("backgroundColor = #{bg_color},", depth + 1)
           end
 
-          if json_data['highlightBackground']
-            highlight_color = Helpers::ResourceResolver.process_color(json_data['highlightBackground'], required_imports)
-            code += "\n" + indent("highlightBackgroundColor = #{highlight_color},", depth + 1)
-          end
+          # highlightBackground is not the focused background (jsonui-cli
+          # 1.9.0): it is the colour while `highlighted` holds, which only a
+          # View declares. Read as the focus colour it had a meaning no other
+          # platform gave it (no layout on the consumer faces wrote it).
 
           # Border color for outlined text fields
           if json_data['borderColor']
@@ -418,7 +426,7 @@ module KjuiTools
           if json_data['lineBreakMode']
             # Note: For multi-line TextField, overflow is less relevant
             # but we include it for completeness
-            case json_data['lineBreakMode'].to_s.downcase
+            case JsonUIShared::EnumSpelling.lowered(json_data['lineBreakMode'], 'TextView', 'lineBreakMode')
             when 'clip'
               code += "\n" + indent("// lineBreakMode: clip", depth + 1)
             when 'tail', 'truncatetail'
@@ -441,7 +449,7 @@ module KjuiTools
           # TextStyle the font attrs already build, and reuses Label's
           # vocabulary rather than growing a fourth copy of it.
           tv_align = json_data['textAlign'] &&
-                     TextComponent.compose_text_align(json_data['textAlign'])
+                     TextComponent.compose_text_align(json_data['textAlign'], json_data['type'] || 'TextView')
           if tv_resolved_var || json_data['fontColor'] || tv_align
             required_imports&.add(:text_style)
             style_parts = []
@@ -473,7 +481,8 @@ module KjuiTools
               # same member names from the same table, so it is under the same
               # Compose version floor (TextFieldComponent.input_keyboard_table).
               input_type, TextFieldComponent.input_keyboard_table,
-              bound_default: 'KeyboardType.Text', lowercase: true
+              bound_default: 'KeyboardType.Text',
+              declared: ['TextView', json_data['keyboardType'] ? 'keyboardType' : 'input']
             )
             keyboard_options << "keyboardType = #{keyboard_type}" if keyboard_type
           end

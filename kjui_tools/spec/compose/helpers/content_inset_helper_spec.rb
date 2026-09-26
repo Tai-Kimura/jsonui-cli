@@ -33,8 +33,11 @@ RSpec.describe KjuiTools::Compose::Helpers::ContentInsetHelper do
       .to eq('WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal).asPaddingValues()')
   end
 
-  it 'accepts the declared spellings case-insensitively and ignores anything else' do
-    expect(described.safe_area_padding('ALWAYS')).not_to be_nil
+  # A value is its declared spelling, case and all (1.9.0): 'ALWAYS' is
+  # declared in no case, so it is ignored as anything undeclared is.
+  it 'accepts the declared spellings as written and ignores anything else' do
+    expect(described.safe_area_padding('always')).not_to be_nil
+    expect(described.safe_area_padding('ALWAYS')).to be_nil
     expect(described.safe_area_padding('sideways')).to be_nil
     expect(described.safe_area_padding(nil)).to be_nil
   end

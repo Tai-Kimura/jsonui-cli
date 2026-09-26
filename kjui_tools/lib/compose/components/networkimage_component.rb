@@ -60,9 +60,9 @@ module KjuiTools
           # the default at `fit` and the positional table at all five modes.
           if json_data['contentMode']
             required_imports&.add(:content_scale)
-            scale = Helpers::ContentScaleHelper.scale_expression(json_data['contentMode'])
+            scale = Helpers::ContentScaleHelper.scale_expression(json_data['contentMode'], section: json_data['type'])
             code += "\n" + indent("contentScale = #{scale},", depth + 1)
-            alignment = Helpers::ContentScaleHelper.alignment_expression(json_data['contentMode'])
+            alignment = Helpers::ContentScaleHelper.alignment_expression(json_data['contentMode'], section: json_data['type'])
             if alignment
               required_imports&.add(:alignment)
               code += "\n" + indent("alignment = #{alignment},", depth + 1)

@@ -69,9 +69,13 @@ class RunConverterDirectTest(unittest.TestCase):
             self.assertIsNotNone(captured["env"])
             self.assertEqual(captured["env"].get("JUI_SKIP_EXISTING"), "1")
 
-    def test_env_is_none_when_skip_existing_is_false_and_bare_tool(self):
-        # No local install + no extras → env=None so subprocess inherits
-        # the parent env unchanged.
+    @patch("jui_cli.core.tool_resolver.shutil.which", return_value=None)
+    def test_env_is_none_when_skip_existing_is_false_and_bare_tool(self, _which):
+        # No local install, nothing on PATH either, no extras → env=None so
+        # subprocess inherits the parent env unchanged. (From jsonui-cli
+        # 1.9.0 a bare name takes the pin of the tool PATH finds — the home
+        # install's — so "not on PATH" is part of the premise, not the
+        # machine's accident.)
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             config_mgr = _fixture_project(root)

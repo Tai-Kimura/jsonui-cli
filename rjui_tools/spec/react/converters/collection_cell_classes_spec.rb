@@ -160,7 +160,7 @@ RSpec.describe 'Collection cellClasses with items and no sections' do
 
     it 'control: with items, the section draws' do
       code = convert(sectioned.merge('items' => '@{rows}'))
-      expect(code).to include('<HeadCard data={data.rows?.sections?.[0]?.header || {}} />')
+      expect(code).to include('{data.rows?.sections?.[0]?.header && <HeadCard data={data.rows?.sections?.[0]?.header} />}')
       expect(code).to match(/<ItemCard key=/)
     end
 

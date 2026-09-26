@@ -2,6 +2,7 @@
 
 require 'core/bind_fold'
 require 'compose/components/selectbox_component'
+require 'compose/components/container_component'
 require 'compose/helpers/modifier_builder'
 require 'compose/helpers/resource_resolver'
 
@@ -623,5 +624,37 @@ RSpec.describe KjuiTools::Compose::Components::SelectBoxComponent do
       expect(result).to include('data.onSelectionChange?.invoke("countrySelect", newValue)')
       expect(result).not_to include('val index')
     end
+  end
+end
+
+# An enum value is its declared spelling, case and all (1.9.0): a spelling
+# declared in no case is drawn as no declared value is — the default — on
+# every path, as the validator names it. The two values the ruling names:
+# View.orientation declares `horizontal`, SelectBox.selectItemType `Date`.
+RSpec.describe 'kjui: an enum value is its declared spelling, case and all' do
+  let(:required_imports) { Set.new }
+
+  before do
+    allow(KjuiTools::Core::ConfigManager).to receive(:load_config).and_return({})
+    allow(KjuiTools::Core::ProjectFinder).to receive(:get_full_source_path).and_return('/tmp')
+    KjuiTools::Compose::Helpers::ResourceResolver.data_definitions = {}
+  end
+
+  def layout_of(orientation)
+    KjuiTools::Compose::Components::ContainerComponent.generate({ 'type' => 'View', 'orientation' => orientation }, 0, required_imports)[:layout_type]
+  end
+
+  def select_box(item_type)
+    KjuiTools::Compose::Components::SelectBoxComponent.generate({ 'type' => 'SelectBox', 'selectItemType' => item_type }, 0, required_imports)
+  end
+
+  it "orientation: 'horizontal' is a Row; 'Horizontal' is not" do
+    expect(layout_of('horizontal')).to eq('Row')
+    expect(layout_of('Horizontal')).not_to eq('Row')
+  end
+
+  it "selectItemType: 'Date' is a date picker; 'date' is not" do
+    expect(select_box('Date')).to include('DateSelectBox(')
+    expect(select_box('date')).not_to include('DateSelectBox(')
   end
 end

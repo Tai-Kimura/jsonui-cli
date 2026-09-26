@@ -3,6 +3,7 @@
 require_relative '../helpers/effect_style_helper'
 require_relative '../helpers/modifier_builder'
 require_relative '../helpers/resource_resolver'
+require_relative '../../core/enum_spelling'
 
 module KjuiTools
   module Compose
@@ -44,7 +45,7 @@ module KjuiTools
           # explicit background is declared, and `blurRadius` (default 10)
           # is a plain radius, NOT derived from the style — mirrors
           # DynamicBlurViewComponent (effectStyleColor + resolveFloat).
-          effect_style = json_data['effectStyle'].to_s.downcase
+          effect_style = JsonUIShared::EnumSpelling.lowered(json_data['effectStyle'], 'Blur', 'effectStyle').to_s
           blur_radius = json_data['blurRadius'] || 10
 
           bg_source = json_data['background'] || json_data['backgroundColor']
@@ -58,10 +59,15 @@ module KjuiTools
                       # sharing the table changes no Blur output.
                       Helpers::EffectStyleHelper.scrim(json_data['effectStyle'])
                     end
+          # A tapBackground on a Blur with a click replaces the scrim while
+          # pressed (ModifierBuilder.background_stage).
+          pressed = Helpers::ModifierBuilder.pressed_background(json_data, required_imports)
           if bg_expr
             opacity = json_data['opacity'] || json_data['alpha']
             bg_expr = "(#{bg_expr}).copy(alpha = #{opacity.to_f}f)" if opacity
-            modifiers << ".background(#{bg_expr})"
+            modifiers << Helpers::ModifierBuilder.background_stage(bg_expr, pressed, required_imports)
+          elsif pressed
+            modifiers << Helpers::ModifierBuilder.background_stage('Color.Transparent', pressed, required_imports)
           end
 
           # Real blur modifier (Compose 1.3+), after the scrim like the

@@ -8,6 +8,7 @@ logic, so it lives here.
 from __future__ import annotations
 
 import os
+import shutil
 from pathlib import Path
 from typing import Mapping
 
@@ -68,16 +69,24 @@ def build_tool_env(
     ``extra`` vars — callers pass ``env=None`` to ``subprocess.run`` so the
     child inherits the parent env unmodified.
 
-    When ``resolved`` is a project-local tool path and the tool directory
-    has a ``.ruby-version`` file, ``RBENV_VERSION`` is exported so the
-    local Ruby toolchain is used — but ONLY when that exact version is
-    actually installed under rbenv. ``extra`` is merged on top (e.g.
-    ``JUI_SKIP_EXISTING=1`` for non-interactive invocations).
+    When the tool directory has a ``.ruby-version`` file, ``RBENV_VERSION``
+    is exported so the local Ruby toolchain is used — but ONLY when that
+    exact version is actually installed under rbenv. ``extra`` is merged on
+    top (e.g. ``JUI_SKIP_EXISTING=1`` for non-interactive invocations).
+
+    The tool directory is the resolved project-local install's, or — for a
+    bare name — the one of the ``{tool}`` that PATH will run (the home
+    install, ~/.jsonui-cli/{tool}_tools/bin on the faces). Until jsonui-cli
+    1.9.0 a bare name got no pin at all, so `jui init`, which runs the tools
+    before it copies them into the project, ran them on whatever ruby the new
+    platform root resolved to — the system Ruby 2.6 on a Mac whose rbenv
+    global was never set, which the tools refuse from 1.9.0 (floor 3.2).
     """
     env_overrides: dict[str, str] = {}
 
-    if resolved != tool_name:
-        tool_dir = Path(resolved).resolve().parent.parent  # bin/{tool} -> {tool}_tools/
+    located = resolved if resolved != tool_name else shutil.which(tool_name)
+    if located:
+        tool_dir = Path(located).resolve().parent.parent  # bin/{tool} -> {tool}_tools/
         ruby_version_file = tool_dir / ".ruby-version"
         if ruby_version_file.exists():
             pinned = ruby_version_file.read_text().strip()
@@ -98,3 +107,22 @@ def build_tool_env(
     if not env_overrides:
         return None
     return {**os.environ, **env_overrides}
+
+
+def tool_command(
+    cmd: list[str],
+    cwd: Path,
+    *,
+    extra: Mapping[str, str] | None = None,
+) -> tuple[list[str], dict[str, str] | None]:
+    """The argv and env to start platform tool ``cmd[0]`` from ``cwd`` with.
+
+    EVERY place jui starts sjui / kjui / rjui goes through here, so every
+    start gets the same tool (resolve_tool) on the same ruby (build_tool_env).
+    `jui init` did not until jsonui-cli 1.9.0 — it ran the bare name with the
+    parent's env — and jui_tools' test_every_tool_launch_goes_through_
+    tool_command counts the launch sites so a new one cannot skip it.
+    """
+    tool_name = cmd[0]
+    resolved = resolve_tool(tool_name, cwd)
+    return [resolved] + list(cmd[1:]), build_tool_env(resolved, tool_name, extra=extra)

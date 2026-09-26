@@ -88,7 +88,7 @@ module RjuiTools
         # `loading` — the native lazy/eager fetch hint, passed through
         # unchanged when it is one of the two values the browser knows.
         def loading_attr
-          loading = attributes['loading'].to_s.downcase
+          loading = JsonUIShared::EnumSpelling.lowered(attributes['loading'], 'Image', 'loading').to_s
           return '' unless %w[lazy eager].include?(loading)
 
           " loading=\"#{loading}\""
@@ -147,38 +147,6 @@ module RjuiTools
           # the SPREAD sentinel and the `React.CSSProperties` assertion a
           # custom-property key needs are handled in ONE place.
           style_attr_for(@dynamic_styles)
-        end
-
-        # BaseConverter#build_onclick_attr adds the keyboard's button to it.
-        def click_attr
-          return '' unless attributes['canTap'] || attributes['onclick'] || attributes['onClick']
-
-          # An empty or blank handler is no handler (TapAccessibility.handler?).
-          onclick = [attributes['onclick'], attributes['onClick']].find { |v| JsonUIShared::TapAccessibility.handler?(v) }
-          return '' unless onclick
-
-          # The array face first: `end_with?` on an Array is a NoMethodError
-          # (the exact crash kjui's get_event_handler_call had), so the whole
-          # generation died on a declaration the SSoT allows.
-          if onclick.is_a?(Array)
-            expr = onclick_selector_expr(onclick)
-            return expr ? " onClick={#{expr}}" : ''
-          end
-
-          if onclick.end_with?(':')
-            # Selector format: "methodName:"
-            method_name = onclick.chomp(':')
-            " onClick={() => #{method_name}(this)}"
-          elsif has_binding?(onclick)
-            # Binding format: "@{functionName}", called as the data declares
-            # it (declared_tap_call) — it was handed the event.
-            call = declared_tap_call(extract_binding_property(onclick))
-            " onClick={#{call.include?('?.(e)') ? '(e)' : '()'} => #{call}}"
-          else
-            # A selector names a method of the data, as on every other
-            # element (onclick_selector_expr) — it was the bare name here.
-            " onClick={#{onclick_selector_expr(onclick)}}"
-          end
         end
       end
     end
