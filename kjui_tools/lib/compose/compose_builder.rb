@@ -20,6 +20,7 @@ require_relative '../core/string_literals'
 require_relative '../core/type_synonyms'
 require_relative 'style_loader'
 require_relative 'include_expander'
+require_relative 'interaction_stop_index'
 require_relative 'data_model_updater'
 require_relative 'helpers/import_manager'
 require_relative 'helpers/binding_expression'
@@ -142,6 +143,20 @@ module KjuiTools
         end
       end
 
+      # Screen ids (InteractionStopIndex) whose layouts are drawn in a
+      # composable of their own inside a node whose `userInteractionEnabled`
+      # is false or bound, in ANOTHER layout. Built over the whole tree.
+      def interaction_stoppable_ids
+        @interaction_stoppable_ids ||= InteractionStopIndex.build(@layouts_dir)
+      end
+
+      # Whether this layout's clicks read a stop handed down from another
+      # layout (LocalInteractionStopped), set per file for ModifierBuilder.
+      def begin_interaction_local(json_file)
+        id = JsonUIShared::ScreenIndex.screen_id_for_path(json_file)
+        Helpers::ModifierBuilder.reads_interaction_local = interaction_stoppable_ids.include?(id)
+      end
+
       # Canonical screen id for a layout, or nil when it is not a screen.
       # The bare ID is what travels: the `__screen_` prefix is the runtime
       # layer's business (the library's ScreenMarker forms the test tag), so
@@ -247,6 +262,7 @@ module KjuiTools
 
           annotate_image_roles(json_data, json_file)
           JsonUIShared::TapAccessibility.annotate!(json_data)
+          begin_interaction_local(json_file)
           # Each node's position, for the names a layout does not give
           # (shared/core/layout_path.rb) — on the same include-expanded tree.
           JsonUIShared::LayoutPath.stamp!(json_data)
@@ -388,7 +404,7 @@ module KjuiTools
           # path), so without this the `visibility: "@{...}"` binding on a
           # responsive Embed is silently dropped. Wrap the whole if/else
           # chain in one VisibilityWrapper, mirroring sjui's single wrapper.
-          return Helpers::VisibilityHelper.wrap_with_visibility(json_data, Helpers::TintHelper.wrap_with_tint(json_data, code, depth, @required_imports), depth, @required_imports, parent_type)
+          return provide_interaction_stop(json_data, Helpers::VisibilityHelper.wrap_with_visibility(json_data, Helpers::TintHelper.wrap_with_tint(json_data, code, depth, @required_imports), depth, @required_imports, parent_type), depth)
         end
 
         # Collection + responsive: same inline treatment as Embed. The
@@ -405,7 +421,7 @@ module KjuiTools
           # carrying `visibility: "@{...}"` (e.g. a grid/list display toggle)
           # would otherwise render unconditionally on Android while iOS
           # honors it. Wrap the inline if/else chain in one VisibilityWrapper.
-          return Helpers::VisibilityHelper.wrap_with_visibility(json_data, Helpers::TintHelper.wrap_with_tint(json_data, code, depth, @required_imports), depth, @required_imports, parent_type)
+          return provide_interaction_stop(json_data, Helpers::VisibilityHelper.wrap_with_visibility(json_data, Helpers::TintHelper.wrap_with_tint(json_data, code, depth, @required_imports), depth, @required_imports, parent_type), depth)
         end
 
         # Check for responsive component — delegate to responsive generation
@@ -444,7 +460,7 @@ module KjuiTools
           code = Helpers::VisibilityHelper.wrap_with_visibility(json_data, Helpers::TintHelper.wrap_with_tint(json_data, code, depth, @required_imports), depth, @required_imports, parent_type) if code.is_a?(String) && !code.empty?
         end
 
-        code
+        provide_interaction_stop(json_data, code, depth)
       end
 
       # A declared type, drawn: `component_type` is the canonical one.
@@ -522,6 +538,32 @@ module KjuiTools
           # a Spacer of its own (a fixed 8dp height) until 1.8.121.
           undeclared_component(component_type)
         end
+      end
+
+      # A node whose `userInteractionEnabled` is false or bound, holding a
+      # layout drawn in a composable of its own (a Collection's cells, an
+      # Embed's screen, a TabView tab's view — TapAccessibility.hands_stop_down?),
+      # provides the stop to what it composes: `true` for `false`, and for a
+      # binding the stop around it or the binding's `false`. The drawn
+      # layout's clicks read it (ModifierBuilder.reads_interaction_local).
+      # CompositionLocalProvider adds no layout node, and its content lambda
+      # has no receiver, so a weight / align on the node still resolves in
+      # the scope around it.
+      def provide_interaction_stop(json_data, code, depth)
+        return code unless code.is_a?(String) && !code.empty?
+        return code unless JsonUIShared::TapAccessibility.hands_stop_down?(json_data)
+
+        @required_imports&.add(:composition_local_provider)
+        @required_imports&.add(:local_interaction_stopped)
+        value = json_data['userInteractionEnabled']
+        provided = if value == false
+                     'true'
+                   else
+                     "LocalInteractionStopped.current || !#{Helpers::ModifierBuilder.conjunct(Helpers::ModifierBuilder.boolean_expression(value))}"
+                   end
+        Helpers::TintHelper.pad("CompositionLocalProvider(LocalInteractionStopped provides (#{provided})) {", depth) + "\n" +
+          Helpers::TintHelper.shift(code.rstrip, 1) + "\n" +
+          Helpers::TintHelper.pad('}', depth)
       end
 
       # Embed + responsive: emit an inline if/else chain that calls
@@ -1464,6 +1506,7 @@ module KjuiTools
 
         annotate_image_roles(json_data, variant_file)
         JsonUIShared::TapAccessibility.annotate!(json_data)
+        begin_interaction_local(variant_file)
         JsonUIShared::LayoutPath.stamp!(json_data)
 
         @required_imports = Set.new

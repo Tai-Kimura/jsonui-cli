@@ -73,10 +73,11 @@ module JsonUIShared
     # was a control (an INFO, and its id read out) while the tap rule said
     # it taps nothing. A bound `canTap` / `enabled` still operates: the gate
     # opens at run time. `stopped`: a node around it has
-    # `userInteractionEnabled: false`, so its tap is none (the tap rule's
-    # `shape`), as the node's own `false` makes it none.
+    # `userInteractionEnabled: false`, so its tap and its long press are none
+    # (the tap rule's `shape` / `long_press?`), as the node's own `false`
+    # makes them none.
     def tappable?(node, stopped = false)
-      (!stopped && TapAccessibility.tappable?(node)) || TapAccessibility.long_press?(node)
+      (!stopped && TapAccessibility.tappable?(node)) || TapAccessibility.long_press?(node, stopped)
     end
 
     def children(node)

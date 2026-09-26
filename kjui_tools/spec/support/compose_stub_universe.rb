@@ -277,6 +277,14 @@ module ComposeStubUniverse
           val current = SafeAreaConfig()
           infix fun provides(value: SafeAreaConfig) = ProvidedValue()
       }
+      // KotlinJsonUI's com.kotlinjsonui.core.LocalInteractionStopped: a node
+      // whose userInteractionEnabled is false or bound, holding a Collection,
+      // an Embed or a TabView tab, provides it (ComposeBuilder
+      // #provide_interaction_stop).
+      object LocalInteractionStopped {
+          val current = false
+          infix fun provides(value: Boolean) = ProvidedValue()
+      }
       fun CompositionLocalProvider(vararg values: ProvidedValue, content: () -> Unit) {}
       class MutableState<T>(var value: T)
       operator fun <T> MutableState<T>.getValue(thisRef: Any?, property: kotlin.reflect.KProperty<*>): T = value

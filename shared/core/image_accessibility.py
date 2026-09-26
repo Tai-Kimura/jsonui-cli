@@ -113,14 +113,16 @@ def is_tappable(node, stopped=False) -> bool:
     """Whether `node` operates something a screen-reader user can activate —
     a tap (a handler, `enabled` not false, `canTap` not false,
     `userInteractionEnabled` not false on it or on a node around it:
-    `stopped`) or a long press (a handler, `enabled` not false) — as the tap
-    rule judges it. It read the handler KEY before, so an empty, disabled or
-    shut tap made an image a control. A bound gate still operates: it opens
-    at run time."""
+    `stopped`) or a long press (a handler, `enabled` not false, and
+    `userInteractionEnabled` not false on it or around it, as for a tap) — as
+    the tap rule judges it. It read the handler KEY before, so an empty,
+    disabled or shut tap made an image a control. A bound gate still
+    operates: it opens at run time."""
     if not isinstance(node, dict) or node.get("enabled") is False:
         return False
-    if (not stopped and not stops(node) and node.get("canTap") is not False
-            and any(is_handler(node.get(key)) for key in TAP_KEYS)):
+    if stopped or stops(node):
+        return False
+    if node.get("canTap") is not False and any(is_handler(node.get(key)) for key in TAP_KEYS):
         return True
     return is_handler(node.get(LONG_PRESS_KEY))
 

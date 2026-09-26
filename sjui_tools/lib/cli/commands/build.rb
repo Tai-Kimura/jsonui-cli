@@ -569,6 +569,10 @@ module SjuiTools
           # the host scroll (the in-tree mark cannot see across files).
           converter.scrolling_cell_ids = SjuiTools::SwiftUI::ScrollingCellIndex.build(layouts_dir)
           converter.collection_cell_ids = SjuiTools::SwiftUI::CollectionCellIndex.build(layouts_dir)
+          # Which layouts a `userInteractionEnabled` stop in another layout can
+          # reach (a Collection's cell, an Embed's screen, a TabView tab's
+          # view): their views read the stop from the environment.
+          converter.interaction_stoppable_ids = SjuiTools::SwiftUI::InteractionStopIndex.build(layouts_dir)
           updater = SjuiTools::SwiftUI::ViewUpdater.new
 
           # Screen identity: only screens carry a marker (cells and partials

@@ -2214,6 +2214,7 @@ module RjuiTools
           return jsx if @visibility_applied
 
           @visibility_applied = true
+          jsx = apply_interaction_class(jsx)
           jsx = apply_hidden_binding(jsx)
 
           vis_info = build_visibility_info
@@ -2248,6 +2249,55 @@ module RjuiTools
 
           cond = add_viewmodel_data_prefix(binding_expr)
           inject_class_expression(jsx, "${#{cond} ? \"invisible\" : \"\"}")
+        end
+
+        # `userInteractionEnabled` stops the element and what is in it —
+        # `pointer-events: none` — literal or bound, on every type: the root
+        # tag of the converter's subtree gets it here, where every converter
+        # passes (convert_node), as the `hidden` binding does. Only View built
+        # the bound form into its own className (build_responsive_class_attr),
+        # and TabView not even `false`; the other converters build their own
+        # className and dropped `@{…}` (measured: 26 of the 27 types that have
+        # a converter). A root tag that carries it already is left as it is.
+        def apply_interaction_class(jsx)
+          value = attributes['userInteractionEnabled']
+          class_expr = if value == false
+                         'pointer-events-none'
+                       elsif value.is_a?(String) && has_binding?(value)
+                         interaction_class_expression
+                       end
+          return jsx unless class_expr
+
+          open_tag = root_open_tag_range(jsx)
+          return jsx unless open_tag
+          return jsx if jsx[open_tag].include?(class_expr)
+
+          append_root_class(jsx, open_tag, class_expr)
+        end
+
+        # The root tag's className with `class_expr` appended, whatever form
+        # it has: a template literal, a static string, another expression
+        # (`{cond ? "a" : "b"}`, a Label's highlight), or none at all.
+        def append_root_class(jsx, open_tag, class_expr)
+          head = jsx[open_tag]
+          patched = head.sub(/className=\{`([^`]*)`\}/) { "className={`#{$1} #{class_expr}`}" }
+          patched = head.sub(/className="([^"]*)"/) { "className={`#{$1} #{class_expr}`}" } if patched == head
+          if patched == head && (at = head.index('className={'))
+            inner_start = at + 'className={'.length
+            depth = 1
+            i = inner_start
+            while i < head.length && depth.positive?
+              depth += 1 if head[i] == '{'
+              depth -= 1 if head[i] == '}'
+              i += 1
+            end
+            inner = head[inner_start...(i - 1)]
+            patched = "#{head[0...at]}className={`${#{inner}} #{class_expr}`}#{head[i..]}"
+          end
+          if patched == head
+            patched = head.sub(/\A<([A-Za-z][\w.]*)/) { "<#{$1} className={`#{class_expr}`}" }
+          end
+          jsx[0...open_tag.first] + patched + jsx[(open_tag.last + 1)..]
         end
 
         # Inject invisible class into JSX when visibility === "invisible"

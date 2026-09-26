@@ -6,6 +6,7 @@ require 'set'
 require_relative 'converter_factory'
 require_relative 'scrolling_cell_index'
 require_relative 'collection_cell_index'
+require_relative 'interaction_stop_index'
 require_relative 'views/base_view_converter'
 require_relative 'views/responsive_helper'
 require_relative 'action_manager'
@@ -82,6 +83,7 @@ module SjuiTools
         Views::RadioConverter.group_seeds = Views::RadioConverter.scan_groups(json_data)
         mark_root_if_scrolling_cell(json_data, json_file_path)
         mark_root_if_collection_cell(json_data, json_file_path)
+        @reads_interaction_environment = begin_interaction_environment(json_file_path)
 
         # ファイル名からビュー名を生成
         base_name = File.basename(json_file_path, '.json')
@@ -134,6 +136,21 @@ module SjuiTools
       # Collection, not only a vertically scrolling one: the host wraps every
       # cell with `{collectionId}_item_{index}` regardless of direction.
       attr_accessor :collection_cell_ids
+
+      # Screen ids (InteractionStopIndex.build) whose layouts are drawn in a
+      # view of their own inside a node whose `userInteractionEnabled` is
+      # false or bound, in ANOTHER layout. Their view reads the stop from the
+      # environment. Set by `sjui build`; a single-file conversion has none.
+      attr_accessor :interaction_stoppable_ids
+
+      # Whether this layout's view reads a stop handed down from another
+      # layout, set per file for the converters that emit its taps.
+      def begin_interaction_environment(json_file_path)
+        ids = interaction_stoppable_ids
+        reads = ids && ids.include?(JsonUIShared::ScreenIndex.screen_id_for_path(json_file_path)) ? true : false
+        Views::BaseViewConverter.reads_interaction_environment = reads
+        reads
+      end
 
       # The project-wide half of the mark: a layout that is a cell / header /
       # footer of a vertically scrolling Collection is under a scrolling
@@ -220,6 +237,7 @@ module SjuiTools
         Views::RadioConverter.group_seeds = Views::RadioConverter.scan_groups(json_data)
         mark_root_if_scrolling_cell(json_data, json_file_path)
         mark_root_if_collection_cell(json_data, json_file_path)
+        @reads_interaction_environment = begin_interaction_environment(json_file_path)
 
         # Convert to SwiftUI code
         @state_variables = []
@@ -255,6 +273,7 @@ module SjuiTools
             @state_variables << decl
           end
         end
+        @state_variables << Views::BaseViewConverter::INTERACTION_ENVIRONMENT_DECLARATION if @reads_interaction_environment
 
         # Get root children info for potential body splitting
         root_children = nil
@@ -375,6 +394,7 @@ module SjuiTools
         if converter.respond_to?(:state_variables) && converter.state_variables
           @state_variables.concat(converter.state_variables)
         end
+        @state_variables << Views::BaseViewConverter::INTERACTION_ENVIRONMENT_DECLARATION if @reads_interaction_environment
 
         # Add state variables
         declarations, clashes = state_declarations(@state_variables)

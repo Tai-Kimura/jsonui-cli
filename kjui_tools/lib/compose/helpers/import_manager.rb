@@ -314,6 +314,7 @@ module KjuiTools
             # NOT measured, so 1.3.x may or may not work.
             hilt_viewmodel: "import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel",
             composition_local_provider: "import androidx.compose.runtime.CompositionLocalProvider",
+            local_interaction_stopped: "import com.kotlinjsonui.core.LocalInteractionStopped",
             # A group of single Radios written with a static selection keeps it in
             # the view's own map (RadioComponent / ComposeBuilder
             # #provide_radio_groups): the provider, its CompositionLocal and the
