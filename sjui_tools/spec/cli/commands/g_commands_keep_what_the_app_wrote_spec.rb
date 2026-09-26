@@ -6,6 +6,7 @@ require 'json'
 require 'fileutils'
 require 'digest'
 require 'pty'
+require 'rbconfig'
 
 # `sjui g view / partial / collection / adapter` (SwiftUI, and UIKit on a real
 # empty Xcode project) against the disk: each command runs on a new project,
@@ -89,7 +90,7 @@ RSpec.describe 'sjui g view / partial / collection / adapter keep the files the 
     FileUtils.mkdir_p(File.join(dir, 'P', 'Bindings'))
     script = "require 'xcodeproj'; pr = Xcodeproj::Project.new(ARGV[0]); pr.new_target(:application, 'P', :ios); " \
              "pr.main_group.new_group('P', 'P'); pr.save"
-    raise 'could not make an Xcode project' unless system('ruby', '-e', script, File.join(dir, 'P.xcodeproj'))
+    raise 'could not make an Xcode project' unless system(RbConfig.ruby, '-e', script, File.join(dir, 'P.xcodeproj'))
   end
 
   # md5 of every file the app could own: not the tool copy, its cache, the
@@ -113,7 +114,14 @@ RSpec.describe 'sjui g view / partial / collection / adapter keep the files the 
   # written), or [:terminal, typed] (a pseudo-terminal). Returns [output, rc],
   # rc :timeout when the run was killed after RUN_LIMIT_KEEP seconds.
   def self.run_g(dir, args, stdin:, env: {})
-    cmd = ['ruby', File.join(dir, 'sjui_tools', 'bin', 'sjui'), 'g', *args]
+    # RbConfig.ruby, not `ruby`: the sjui under test runs on the interpreter
+    # running this spec. `ruby` from PATH is rbenv's choice — RBENV_VERSION,
+    # else the .ruby-version above the child's cwd (a tmpdir: none), else the
+    # global — so the 2.6 leg ran the tool on 3.2.2 or on 2.6 depending on the
+    # shell it was launched from (measured 2026-09-26: with RBENV_VERSION set
+    # the children ran 3.2.2 and the 2.6-only failures vanished; unset, they
+    # ran 2.6 and failed on the 3.2.2 leg too).
+    cmd = [RbConfig.ruby, File.join(dir, 'sjui_tools', 'bin', 'sjui'), 'g', *args]
     out = +''
     rc = nil
     if stdin.is_a?(Array)
@@ -401,9 +409,24 @@ RSpec.describe 'sjui g view / partial / collection / adapter keep the files the 
         view = File.join(dir, 'P', 'View', 'Home', 'ItemCell', 'ItemCellGeneratedView.swift')
         hook = ->{ File.read(view)[/DynamicView\(jsonName: "([^"]*)"/, 1] }
         scaffolded = hook.call
-        built, = Open3.capture2e('ruby', File.join(dir, 'sjui_tools', 'bin', 'sjui'), 'build', chdir: dir, stdin_data: '')
+        built, = Open3.capture2e(RbConfig.ruby, File.join(dir, 'sjui_tools', 'bin', 'sjui'), 'build', chdir: dir, stdin_data: '')
         expect(File.read(view)).to include('Generator: sjui build'), built # the build rewrote it (the precondition)
         expect(scaffolded).to eq(hook.call)
+      end
+    end
+  end
+
+  # The tool under test runs on the ruby this spec runs on — the leg's — not
+  # on whichever `ruby` rbenv resolves for the child's cwd.
+  describe 'the sjui under test' do
+    it 'runs on the ruby running this spec, whatever RBENV_VERSION says' do
+      Dir.mktmpdir('sjui_g_ruby') do |dir|
+        self.class.make_project(dir, 'swiftui')
+        probe = File.join(dir, 'probe_ruby.rb')
+        File.write(probe, "$stderr.puts \"child ruby \#{RUBY_VERSION}\"\n")
+        env = { 'RUBYOPT' => "-r#{probe}", 'RBENV_VERSION' => (RUBY_VERSION.start_with?('2.') ? '3.2.2' : 'system') }
+        said, = self.class.run_g(dir, %w[binding ProbeBinding], stdin: '', env: env)
+        expect(said).to include("child ruby #{RUBY_VERSION}")
       end
     end
   end
