@@ -45,13 +45,23 @@ RSpec.describe SjuiTools::SwiftUI::Views::CollectionConverter do
       end
     end
 
-    it "with scrollTo, a later section's cell carries its key as .id; section 0 does not need one" do
+    # A key an earlier drawn section has is that section's to answer (4f
+    # ruling 2026-09-27, round 10: scrollTo names the FIRST cell, in section
+    # order, whose key it is): a later section's cell takes its key as .id
+    # only when no earlier section has it, else its own loop id. Until
+    # jsonui-cli 1.9.0 both answered the key and SwiftUI chose.
+    it "with scrollTo, a later section's cell carries its key as .id unless an earlier section has it; section 0 does not need one" do
       b = blocks(convert('cellIdProperty' => 'key', 'scrollTo' => '@{target}'))
-      key = '.id((cell.data["cellId"] as? String) ?? (cell.data["key"] as? String) ?? "\\(cell.index)")'
+      key = '((cell.data["cellId"] as? String) ?? (cell.data["key"] as? String) ?? "\\(cell.index)")'
       expect(b[0]).not_to include('.id(')
-      expect(b[2]).to include(key)
-      expect(b[3]).to include(key)
+      expect(b[0]).not_to include('earlierKeys')
+      expect(b[2]).to include(".id(earlierKeys.contains(#{key}) ? cell.id : #{key})")
+      expect(b[3]).to include(".id(earlierKeys.contains(#{key}) ? cell.id : #{key})")
+      # The earlier drawn sections: 0 before section 2 (1 draws no cell), 0 and 2 before 3.
+      expect(b[2]).to include('let earlierKeys = Set([0].map { dataSource.sections[$0] }')
+      expect(b[3]).to include('let earlierKeys = Set([0, 2].map { dataSource.sections[$0] }')
       expect(convert('cellIdProperty' => 'key')).not_to include('.id(')
+      expect(convert('cellIdProperty' => 'key')).not_to include('earlierKeys')
     end
   end
 

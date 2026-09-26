@@ -462,6 +462,18 @@ module SjuiTools
             generate_scroll_reader_open
             add_line "ScrollView(.vertical, showsIndicators: #{shows_indicators}) {"
             indent do
+            # The scroll's content is a column at the leading edge, its rows —
+            # a section's header, its grid, its footer, the next section —
+            # spaced as the grid's rows (collectionSpacing: lineSpacing, else
+            # itemSpacing, else 0), as the list routes and the other two
+            # tools space them (4f ruling 2026-09-27, round 10). Until
+            # jsonui-cli 1.9.0 they were the ScrollView's implicit stack:
+            # centred, the system's spacing between them. A lone grid (one
+            # section, no header or footer) is the one row the stack held
+            # full width either way, and is emitted as it was.
+            column = grid_rows_column?
+            add_line "VStack(alignment: .leading, spacing: #{line_spacing_value || @component['itemSpacing'] || 0}) {" if column
+            maybe_indent(column) do
               # Check if we have sections defined
               if @component['sections'] && !@component['sections'].empty?
                 # For sections, iterate through sections and render header/cells/footer
@@ -498,7 +510,7 @@ module SjuiTools
                         add_line "if let headerData = section.header?.data {"
                         indent do
                           add_line "#{header_view_name}(data: headerData)"
-                          apply_header_footer_padding
+                          apply_grid_edge_row
                         end
                         add_line "}"
                       end
@@ -533,7 +545,7 @@ module SjuiTools
                         add_line "if let footerData = section.footer?.data {"
                         indent do
                           add_line "#{footer_view_name}(data: footerData)"
-                          apply_header_footer_padding
+                          apply_grid_edge_row
                         end
                         add_line "}"
                       end
@@ -552,7 +564,7 @@ module SjuiTools
                 # Legacy behavior - header/footer from cellClasses
                 if header_class_name
                   add_line class_list_edge_call(header_class_name)
-                  apply_header_footer_padding
+                  apply_grid_edge_row
                 end
                 
                 add_line "LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: #{@component['columnSpacing'] || @component['itemSpacing'] || 0}), count: #{columns_info[:expr]}), alignment: #{get_grid_alignment}, spacing: #{line_spacing_value || @component['itemSpacing'] || 0}) {"
@@ -565,9 +577,11 @@ module SjuiTools
                 if footer_class_name
                   add_line ""
                   add_line class_list_edge_call(footer_class_name)
-                  apply_header_footer_padding
+                  apply_grid_edge_row
                 end
               end
+            end
+            add_line "}" if column
             end
             add_line "}"
             generate_default_scroll_anchor
@@ -1557,6 +1571,14 @@ module SjuiTools
           # its pageStart.
           section_start = later && !page_start && has_scroll_to? && !cell_id_property && earlier_cells_count(section_index)
           add_line "let sectionStart = #{section_start}" if section_start
+          # A key an earlier drawn section has is that section's to answer: a
+          # scrollTo names the FIRST cell, in section order, whose key it is
+          # (4f ruling 2026-09-27; the SSoT's Collection.scrollTo). A later
+          # section's cell takes its key as a scroll target only when no
+          # earlier section has it — two views answering one id left
+          # SwiftUI to choose (4f round 10).
+          earlier_keys = later && cell_id_property && has_scroll_to? && earlier_cell_keys(section_index)
+          add_line "let earlierKeys = #{earlier_keys}" if earlier_keys
           if cell_id_property
             add_line "let items = #{source_expr}.enumerated().map { index, data in"
             indent do
@@ -1574,7 +1596,11 @@ module SjuiTools
             # scrollTo names a cell by its key: a later section's cell takes its
             # key as an explicit `.id` too, since its ForEach id is prefixed.
             vars = { data_var: 'cell.data', index_var: 'cell.index' }
-            later ? vars.merge(scroll_id: cell_key_expr('cell.data', 'cell.index')) : vars
+            return vars unless later
+
+            key = cell_key_expr('cell.data', 'cell.index')
+            # A shared key: the cell's own loop id, "<section>:<key>".
+            vars.merge(scroll_id: earlier_keys ? "earlierKeys.contains(#{key = "(#{key})"}) ? cell.id : #{key}" : key)
           elsif later
             add_line "ForEach(#{source_expr}.enumerated().map { IdentifiedCellItem(id: \"#{section_index}:\\($0.offset)\", " \
                      "index: #{page_start ? "#{page_start} + " : ''}$0.offset, data: $0.element) }) { cell in"
@@ -1615,6 +1641,28 @@ module SjuiTools
                                                 .select { |section, _| section.is_a?(Hash) && section['cell'] }
                                                 .map { |_, j| "(#{data_ref}.sections[#{j}].cells?.data.count ?? 0)" }
           terms.empty? ? nil : terms.join(' + ')
+        end
+
+        # The keys of the drawn sections before `section_index`, as a Swift
+        # `Set<String>` expression — each cell's key as its own section's
+        # loop reads it (cell_key_expr; enriched first under
+        # autoChangeTrackingId) — or nil when none is before it. The data
+        # reference is earlier_cells_count's.
+        def earlier_cell_keys(section_index)
+          prop = extract_property_name(@component['items'])
+          return nil unless prop
+
+          earlier = (@component['sections'] || []).first(section_index).each_with_index
+                                                  .select { |section, _| section.is_a?(Hash) && section['cell'] }.map(&:last)
+          return nil if earlier.empty?
+
+          data_ref = is_property_optional?(prop) ? 'dataSource' : "data.#{prop}"
+          cells = '($0.cells?.data ?? [])'
+          if @component['autoChangeTrackingId'] == true
+            cells = "#{cells}.reconfigured(cellIdProperty: \"#{@component['cellIdProperty']}\", autoChangeTrackingId: true)"
+          end
+          "Set([#{earlier.join(', ')}].map { #{data_ref}.sections[$0] }.flatMap { #{cells}.enumerated().map { index, data in " \
+            "#{cell_key_expr('data', 'index')} } })"
         end
 
         # `scroll_id`: the cell's scroll target when it is not `index_var`
@@ -2017,6 +2065,26 @@ module SjuiTools
             add_modifier_line ".padding(EdgeInsets(top: #{top}, leading: #{left}, bottom: #{bottom}, trailing: #{right}))"
           end
           apply_inset_vertical
+        end
+
+        # The grid route's scroll holds more than one row: two or more
+        # sections, a section's header or footer, or the class-list shape's
+        # header or footer (grid_rows_column's caller).
+        def grid_rows_column?
+          sections = @component['sections']
+          if sections.is_a?(Array) && !sections.empty?
+            sections.size > 1 || sections.any? { |s| s.is_a?(Hash) && (s['header'] || s['footer']) }
+          else
+            !!(extract_view_name(@component['headerClasses']&.first) || extract_view_name(@component['footerClasses']&.first))
+          end
+        end
+
+        # A grid's header or footer is a full-width row, the view at its
+        # start (4f ruling 2026-09-27, round 10) — kjui's full-span item and
+        # the web's row of its own draw it so — inset as the grid is.
+        def apply_grid_edge_row
+          add_modifier_line ".frame(maxWidth: .infinity, alignment: .leading)"
+          apply_header_footer_padding
         end
 
         # Section headers/footers sit outside the LazyVGrid; follow the
