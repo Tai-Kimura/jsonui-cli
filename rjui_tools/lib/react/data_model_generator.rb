@@ -5,6 +5,7 @@ require 'fileutils'
 require 'set'
 require_relative '../core/tap_accessibility'
 require_relative '../core/binding_validator_core'
+require_relative '../core/node_keys'
 require_relative '../core/config_manager'
 require_relative '../core/type_converter'
 require_relative '../core/generated_marker'
@@ -522,7 +523,8 @@ module RjuiTools
           # Check for data section
           if json_data['data'] && json_data['data'].is_a?(Array)
             # Extract from root element OR data-only elements (no type, just data key)
-            should_extract = is_root || json_data.keys == ['data'] || (json_data.keys - ['data', 'type']).empty?
+            written = Core::NodeKeys.written(json_data)
+            should_extract = is_root || written == ['data'] || (written - ['data', 'type']).empty?
             if should_extract
               json_data['data'].each do |data_item|
                 if data_item.is_a?(Hash)

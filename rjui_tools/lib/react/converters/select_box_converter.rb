@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require_relative 'base_converter'
+require_relative '../../core/layout_path'
 
 module RjuiTools
   module React
@@ -556,8 +557,7 @@ module RjuiTools
           handler = attributes['onValueChange'] || attributes['onValueChanged'] || attributes['onChange']
           if handler
             if has_binding?(handler)
-              prop = extract_binding_property(handler)
-              return operation_attr('onChange', '(e)', "#{prop}?.(#{changed_value_expr})")
+              return operation_attr('onChange', '(e)', declared_handler_call(handler, changed_value_expr, selection_index_expr))
             else
               return operation_attr('onChange', '(e)', "#{handler}?.(#{changed_value_expr})")
             end
@@ -592,6 +592,71 @@ module RjuiTools
         # `e.target.value` on a multi-select is only the FIRST selected option,
         # which silently loses every other selection — the whole point of the
         # attribute. selectedOptions is the full set.
+        # The call to a declared onValueChange, as the class the layout's data
+        # declares it with says (attribute_definitions SelectBox.onValueChange,
+        # "the same on every platform"):
+        # - `(() -> Void)?` is called with nothing;
+        # - `(String, X)` with the viewId (JsonUIShared::LayoutPath.view_id:
+        #   the id, else `selectBox_<path>`) and the selection's new value —
+        #   the index where selectedIndex is bound, the item otherwise.
+        # web called every one with the value alone, so a declared
+        # `(String, String)` took the value where the viewId goes and a
+        # declared `()` took one it has no place for (TS2554 under strict,
+        # both). An undeclared handler (the build's binding warning asks for
+        # its declaration) and any other shape — a lone `(String)` among them,
+        # whose meaning is 4f's to rule — are called with the value as before.
+        def declared_handler_call(handler, value_expr, index_expr)
+          callee = extract_binding_property(handler)
+          klass = self.class.declared_class(handler, config['_data_classes'] || {})
+          if klass.match?(/\(\s*\)\s*->/)
+            "#{callee}?.()"
+          elsif klass.match?(VIEW_ID_CLASS)
+            "#{callee}?.(#{view_id_expr}, #{index_expr || value_expr})"
+          else
+            "#{callee}?.(#{value_expr})"
+          end
+        end
+
+        # A declared class whose first parameter is the viewId: `(String, X)`.
+        VIEW_ID_CLASS = /\(\s*\(?\s*String\s*,/.freeze
+
+        def self.declared_class(handler, data_classes)
+          name = handler.is_a?(String) && handler[/\A@\{\s*([^}]+?)\s*\}\z/, 1]
+          name ? data_classes[name].to_s : ''
+        end
+
+        # Whether this node hands its handler a viewId: a SelectBox whose
+        # onValueChange the data declares `(String, X)`. The one judgment
+        # the call above and IncludePaths (which layouts take `jsonuiPath`)
+        # both take.
+        def self.hands_view_id?(node, data_classes)
+          return false unless node.is_a?(Hash) && JsonUIShared::LayoutPath.drawn_type(node['type'].to_s) == 'SelectBox'
+
+          handler = node['onValueChange'] || node['onValueChanged'] || node['onChange']
+          declared_class(handler, data_classes).match?(VIEW_ID_CLASS)
+        end
+
+        # The viewId (JsonUIShared::LayoutPath.view_id): the id, else the
+        # drawn type and the node's position. In a layout that takes
+        # `jsonuiPath` (an included one, IncludePaths), the position above the
+        # layout's own root comes in at run time: `selectBox_${jsonuiPath}_1`.
+        def view_id_expr
+          return JsonUIShared::StringLiterals.ts(JsonUIShared::LayoutPath.view_id(json)) if attributes['id'] || !config['_path_prop']
+
+          path = json[JsonUIShared::LayoutPath::KEY] || '0'
+          stem = JsonUIShared::LayoutPath.view_id(json, '').chomp('_')
+          "`#{JsonUIShared::StringLiterals.ts_template_body(stem)}_${jsonuiPath}#{path.sub(/\A0/, '')}`"
+        end
+
+        # The new index where selectedIndex is what is bound (no selected
+        # item or value), for a handler declared to take it.
+        def selection_index_expr
+          index = attributes['selectedIndex']
+          return nil if selection_attr || !(index.is_a?(String) && has_binding?(index))
+
+          placeholder_row? ? 'e.target.selectedIndex - 1' : 'e.target.selectedIndex'
+        end
+
         def changed_value_expr
           multiple_select? ? 'Array.from(e.target.selectedOptions).map((o) => o.value)' : 'e.target.value'
         end
@@ -700,8 +765,7 @@ module RjuiTools
           # Custom handler takes priority
           handler = attributes['onValueChange'] || attributes['onChange']
           if handler && has_binding?(handler)
-            prop = extract_binding_property(handler)
-            return operation_attr('onChange', '(e)', "#{prop}?.(#{value_expr})")
+            return operation_attr('onChange', '(e)', declared_handler_call(handler, value_expr, nil))
           end
 
           # Auto-generate from selectedDate binding

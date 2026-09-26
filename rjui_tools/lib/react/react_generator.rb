@@ -6,6 +6,9 @@ require_relative '../core/generated_marker'
 require_relative '../core/frameworks'
 require_relative '../core/normalization'
 require_relative '../core/string_manager_core'
+require_relative '../core/layout_path'
+require_relative 'include_paths'
+require_relative '../core/node_keys'
 require_relative 'component_name'
 require_relative 'converters/base_converter'
 require_relative 'converters/view_converter'
@@ -201,6 +204,18 @@ module RjuiTools
         # BaseConverter#layout_normalized? to take the canonical-only
         # attribute lookup path for L1-normalized layouts.
         @config['_layout_normalized'] = Core::Normalization.canonicalized?(json)
+        # Each node's position, for the name its handlers are handed when the
+        # layout gives it no id (JsonUIShared::LayoutPath.view_id) — the rule
+        # the sjui and kjui codegen stamp too. An include is its own
+        # component here, so the nodes in it are stamped from that file's
+        # own root (spec/core/layout_path_spec.rb).
+        JsonUIShared::LayoutPath.stamp!(json) unless JsonUIShared::LayoutPath.stamped?(json)
+        # The classes the layout's data declares, for a handler whose
+        # arguments its declaration decides (SelectBox.onValueChange).
+        @config['_data_classes'] = IncludePaths.declared_data_classes(json)
+        # Whether this layout takes `jsonuiPath`, its root's path in the
+        # include-expanded tree (IncludePaths; `jui build` names them).
+        @config['_path_prop'] = Array(@config['_path_stems']).include?(stem)
 
         jsx_content = convert_component(json)
 
@@ -543,12 +558,15 @@ module RjuiTools
         include_prefix = @config['_include_id_prefix']
         uses_id_prefix = include_prefix && jsx_content.match?(/\bidPrefix\b/)
         props_interface = generate_data_props_interface(name, uses_data, data_type: data_name,
-                                                                    id_prefix: include_prefix)
+                                                                    id_prefix: include_prefix,
+                                                                    path: @config['_path_prop'])
         # `id` is destructured only when it was injected into the root —
         # the interface always accepts it (call sites can't know), but an
         # unused binding would trip noUnusedParameters setups.
         id_part = root_id_injected ? ', id' : ''
         id_part += ', idPrefix' if uses_id_prefix
+        # A screen (not included) has no path above its root: `0`.
+        id_part += ', jsonuiPath = "0"' if @config['_path_prop'] && jsx_content.match?(/\bjsonuiPath\b/)
         include_id_names = %w[jsonuiIncludeId jsonuiIncludePrefix].select { |f| jsx_content.include?("#{f}(") }
         include_id_import =
           if include_prefix && include_id_names.any?
@@ -601,13 +619,16 @@ module RjuiTools
       # data-passing includes provide a Partial that the component merges
       # over its createXxxData() defaults, and pages/cells pass the full
       # object (a full XxxData is assignable to Partial<XxxData>).
-      def generate_data_props_interface(name, uses_data = true, data_type: nil, id_prefix: false)
+      def generate_data_props_interface(name, uses_data = true, data_type: nil, id_prefix: false, path: false)
         data_name = data_type || name
         data_field = uses_data ? "data?: Partial<#{data_name}Data>;" : "data?: #{data_name}Data;"
         # `idPrefix`: the include prefix above this component (design U8) —
         # declared only when `jui build` turned it on, so an unchanged build
         # emits unchanged bytes.
         prefix_field = id_prefix ? "\n  idPrefix?: string;" : ''
+        # `jsonuiPath`: this layout's root's position in the include-expanded
+        # tree (IncludePaths) — declared only for a layout that takes it.
+        prefix_field += "\n  jsonuiPath?: string;" if path
         <<~TS
           interface #{name}Props {
             #{data_field}
@@ -1289,7 +1310,7 @@ module RjuiTools
         json['child'].each do |child|
           next unless child.is_a?(Hash)
           # Check if this child has only 'data' key (data-only element)
-          if child.keys == ['data'] && child['data'].is_a?(Array)
+          if data_only_element?(child)
             # Normalize types using TypeConverter (mode: react)
             return Core::TypeConverter.normalize_data_properties(child['data'], 'react')
           end
@@ -1302,9 +1323,11 @@ module RjuiTools
       end
 
       # Check if a child element is a data-only element (should not be rendered)
+      # Its keys are the ones the layout wrote (Core::NodeKeys): the generator's
+      # position stamp is not among them.
       def data_only_element?(child)
         return false unless child.is_a?(Hash)
-        child.keys == ['data'] && child['data'].is_a?(Array)
+        Core::NodeKeys.written(child) == ['data'] && child['data'].is_a?(Array)
       end
 
       # Extract props from 'data' attribute with type information
