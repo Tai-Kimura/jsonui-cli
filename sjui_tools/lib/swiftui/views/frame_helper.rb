@@ -1,5 +1,6 @@
 require_relative 'value_expression_helper'
 require_relative 'responsive_helper'
+require_relative '../../core/enum_spelling'
 
 module SjuiTools
   module SwiftUI

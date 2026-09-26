@@ -2,6 +2,7 @@
 
 require_relative 'value_expression_helper'
 require_relative 'attribute_vocabulary'
+require_relative '../../core/enum_spelling'
 
 module SjuiTools
   module SwiftUI
