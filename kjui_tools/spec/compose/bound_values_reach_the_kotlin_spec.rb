@@ -70,11 +70,14 @@ RSpec.describe 'kjui codegen: bound values reach the Kotlin' do
   # so.
   not_numbers = {
     'TextField' => %w[fieldId nextFocus nextFocusId onBeginEditing onBlur onEndEditing onFocus],
-    'TextView' => %w[hideOnFocused], 'Radio' => %w[group], 'SafeAreaView' => %w[edges safeAreaInsetPositions],
+    'TextView' => %w[hideOnFocused], 'Radio' => %w[group],
     'WebView' => %w[userAgent], 'Web' => %w[userAgent]
   }
   # (Collection's cellClasses / headerClasses / footerClasses left this list
-  # when the class-list reader on rel stopped raising on a string.)
+  # when the class-list reader on rel stopped raising on a string;
+  # SafeAreaView's edges / safeAreaInsetPositions when the words became what
+  # they reserve (SafeAreaEdges) — a binding is no declared word and reserves
+  # nothing, where it was written into the emitted edge list.)
 
   it 'no bound number reaches the Kotlin as the layout spelled it, nor raises' do
     expect(keys.size).to be > 200
