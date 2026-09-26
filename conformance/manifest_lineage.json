@@ -5,6 +5,11 @@
     "humanWarning": "Append-only. Each key is the sha256 a runner records as manifestHash; the value says which fixture tree and id set that manifest described. The gate uses it to tell a manifest that DRIFTED (prose in the SSoT) from one whose fixtures MOVED — only the second needs the pictures drawn again."
   },
   "manifests": {
+    "02692651a4edb74d9ffe17a771c5c89dfb5eca1e25c84c57e3509deda7214491": {
+      "version": 1,
+      "fixtures": "244f0d2aeb9e686af8e8bc15913b94b8909570f4297fbaed6191a97dec85f913",
+      "ids": "bebf1a7b18071ad4df795df4bb7e738a37bb52a4d44ba91014ee8b656efe542f"
+    },
     "0d22d6f56977392c80671fc996f0ece8739c2d6638102f8becb42f2a3b942164": {
       "version": 1,
       "fixtures": "a5ea58d7efe17b2bae4907b2ba667e1088d4a17611071fe2c97f38b71802744d",

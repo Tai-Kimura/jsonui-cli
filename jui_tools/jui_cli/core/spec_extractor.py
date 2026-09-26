@@ -158,6 +158,44 @@ class WrapperViewDef:
 
 
 @dataclass
+class CollectionSlotDef:
+    """A Collection's `cell`, `header` or `footer` entry, in either schema form.
+
+    - root: a ComponentDef (the cellNode form's full tree) or a component id
+      (both forms; the layoutNode form's tree is then `children` under it).
+    - children / overlay: the layoutNode form — component ids from
+      structure.components (or placeholders) arranged under a string root.
+    - layout_file: `layoutFile`, else the deprecated `layout`.
+    - generate: `generateCellLayout` — `jui g project` writes the slot's
+      Layout JSON only when it is true.
+    """
+    kind: str
+    root: ComponentDef | str | None = None
+    children: list = field(default_factory=list)
+    overlay: bool = False
+    layout_file: str = ""
+    generate: bool = False
+    ui_variables: list[UIVariableDef] = field(default_factory=list)
+    event_handlers: list[EventHandlerDef] = field(default_factory=list)
+
+    @property
+    def root_id(self) -> str:
+        if isinstance(self.root, ComponentDef):
+            return self.root.id
+        return self.root or ""
+
+
+@dataclass
+class EmbedDef:
+    """A structure.embeds[] entry: another screen hosted as a region."""
+    region_id: str
+    screen: str
+    params: dict | None = None
+    events: dict | None = None
+    navigation_mode: str | None = None
+
+
+@dataclass
 class CollectionDef:
     id: str
     cell_id_property: str = ""
@@ -175,6 +213,9 @@ class CollectionDef:
     lazy: bool | None = None
     cell_ui_variables: list[UIVariableDef] = field(default_factory=list)
     cell_event_handlers: list[EventHandlerDef] = field(default_factory=list)
+    # cell / header / footer as declared ("cell" first); the four `cell_*`
+    # fields above are the cell slot's, kept for their existing readers.
+    slots: dict[str, CollectionSlotDef] = field(default_factory=dict)
 
 
 @dataclass
@@ -208,6 +249,7 @@ class ScreenSpec:
     custom_components: list[dict] = field(default_factory=list)
     decorative_elements: list[DecorativeElementDef] = field(default_factory=list)
     wrapper_views: list[WrapperViewDef] = field(default_factory=list)
+    embeds: list[EmbedDef] = field(default_factory=list)
 
 
 
@@ -239,70 +281,114 @@ def _ui_variable_default(var: dict, where: str) -> Any:
     return var.get("defaultValue")
 
 
-def _parse_collection(coll_data: dict) -> CollectionDef:
-    """Parse one structure.collection / structure.collections[] entry."""
-    sections = []
-    cell = coll_data.get("cell")
-    cell_root_def = None
-    generate_cell_layout = False
-    cell_ui_variables: list[UIVariableDef] = []
-    cell_event_handlers: list[EventHandlerDef] = []
-    if cell:
-        root_val = cell.get("root")
-        if isinstance(root_val, dict):
-            # Full tree form: root is an object describing the cell view
-            sections.append({"cell": root_val.get("id", "")})
-            cell_root_def = _parse_component(root_val)
-            generate_cell_layout = bool(cell.get("generateCellLayout"))
-        else:
-            sections.append({"cell": root_val or ""})
+SLOT_KINDS = ("cell", "header", "footer")
 
-        # Cell-local typed data (new). Populates the generated cell Layout
-        # JSON's `data` section so the cell gets its own typed model
-        # instead of inheriting untyped values through the parent
-        # Collection's items binding.
-        for var in cell.get("uiVariables", []) or []:
-            cell_ui_variables.append(UIVariableDef(
+
+def _parse_slot(entry: dict, kind: str) -> CollectionSlotDef:
+    """One cell / header / footer entry (see CollectionSlotDef)."""
+    where = f"structure.collection.{kind}.uiVariables"
+    root_val = entry.get("root")
+    if isinstance(root_val, dict):
+        root: ComponentDef | str | None = _parse_component(root_val)
+    else:
+        root = root_val if isinstance(root_val, str) else None
+    children = entry.get("children")
+    layout_ref = entry.get("layoutFile") or entry.get("layout")
+    return CollectionSlotDef(
+        kind=kind,
+        root=root,
+        children=children if isinstance(children, list) else [],
+        overlay=bool(entry.get("overlay")),
+        layout_file=layout_ref.removesuffix(".json") if isinstance(layout_ref, str) else "",
+        generate=bool(entry.get("generateCellLayout")),
+        ui_variables=[
+            UIVariableDef(
                 name=var["name"],
                 type=var["type"],
-                default=_ui_variable_default(var, "structure.collection.cell.uiVariables"),
+                default=_ui_variable_default(var, where),
                 description=var.get("description", ""),
-            ))
-        for h in cell.get("eventHandlers", []) or []:
-            cell_event_handlers.append(EventHandlerDef(
-                name=h["name"],
-                description=h.get("description", ""),
-            ))
-    header = coll_data.get("header")
-    if header:
-        h_root = header.get("root")
-        if not sections:
-            sections.append({"cell": ""})
-        sections[0]["header"] = (
-            h_root.get("id", "") if isinstance(h_root, dict) else (h_root or "")
-        )
-    footer = coll_data.get("footer")
-    if footer:
-        f_root = footer.get("root")
-        if not sections:
-            sections.append({"cell": ""})
-        sections[0]["footer"] = (
-            f_root.get("id", "") if isinstance(f_root, dict) else (f_root or "")
-        )
+            )
+            for var in entry.get("uiVariables", []) or []
+        ],
+        event_handlers=[
+            EventHandlerDef(name=h["name"], description=h.get("description", ""))
+            for h in entry.get("eventHandlers", []) or []
+        ],
+    )
 
+
+def slot_layout_ref(collection_id: str, slot: CollectionSlotDef) -> str:
+    """The layout a Collection section names for this slot — the same file
+    `jui g project` writes for it: `layoutFile` (or the deprecated `layout`);
+    else, when the slot opts into generation, `<collection id>_<kind>`; else
+    the root id, as before.
+
+    Until jsonui-cli 1.9.0 a section named the root id whatever the slot declared, so
+    the pack's own example (root "item_cell_root", layoutFile
+    "item_list/item_cell") produced a section naming "item_cell_root": sjui
+    resolves that to ItemCellRootView and Dynamic mode loads
+    item_cell_root.json — neither is the cell. `jui build` reads the same
+    names to tell cell layouts from screens (_spec_cell_layout_stems).
+    """
+    if slot.layout_file:
+        return slot.layout_file
+    if slot.generate:
+        return f"{collection_id}_{slot.kind}"
+    return slot.root_id
+
+
+def _parse_collection(coll_data: dict) -> CollectionDef:
+    """Parse one structure.collection / structure.collections[] entry."""
+    coll_id = coll_data.get("id", "collection")
+    slots = {
+        kind: _parse_slot(coll_data[kind], kind)
+        for kind in SLOT_KINDS
+        if isinstance(coll_data.get(kind), dict) and coll_data.get(kind)
+    }
+    sections: list[dict] = []
+    if slots:
+        section: dict[str, str] = {"cell": slot_layout_ref(coll_id, slots["cell"]) if "cell" in slots else ""}
+        for kind in ("header", "footer"):
+            if kind in slots:
+                section[kind] = slot_layout_ref(coll_id, slots[kind])
+        sections.append(section)
+
+    cell = slots.get("cell")
+    cell_root_def = cell.root if cell and isinstance(cell.root, ComponentDef) else None
     return CollectionDef(
-        id=coll_data.get("id", "collection"),
+        id=coll_id,
         cell_id_property=coll_data.get("cellIdProperty", ""),
         auto_change_tracking_id=bool(coll_data.get("autoChangeTrackingId", False)),
         sections=sections,
         cell_root=cell_root_def,
-        generate_cell_layout=generate_cell_layout,
-        cell_ui_variables=cell_ui_variables,
-        cell_event_handlers=cell_event_handlers,
+        generate_cell_layout=bool(cell and cell.generate),
+        cell_ui_variables=cell.ui_variables if cell else [],
+        cell_event_handlers=cell.event_handlers if cell else [],
         # Declared by the spec schema, dropped until 1.8.121 (the generated
         # Collection was lazy whatever the spec said).
         lazy=coll_data.get("lazy") if isinstance(coll_data.get("lazy"), bool) else None,
+        slots=slots,
     )
+
+
+def _parse_embeds(raw: Any) -> list[EmbedDef]:
+    """structure.embeds[]: entries without a regionId and a screen are left to
+    the validator, which names them."""
+    out = []
+    for e in raw or []:
+        if not isinstance(e, dict):
+            continue
+        rid, screen = e.get("regionId"), e.get("screen")
+        if not (isinstance(rid, str) and rid and isinstance(screen, str) and screen):
+            continue
+        out.append(EmbedDef(
+            region_id=rid,
+            screen=screen,
+            params=e.get("params") if isinstance(e.get("params"), dict) else None,
+            events=e.get("events") if isinstance(e.get("events"), dict) else None,
+            navigation_mode=e.get("navigationMode") if isinstance(e.get("navigationMode"), str) else None,
+        ))
+    return out
 
 
 def extract_screen_spec(spec_data: dict, spec_path=None) -> ScreenSpec:
@@ -456,6 +542,7 @@ def extract_screen_spec(spec_data: dict, spec_path=None) -> ScreenSpec:
         custom_components=structure.get("customComponents", []),
         decorative_elements=decorative_elements,
         wrapper_views=wrapper_views,
+        embeds=_parse_embeds(structure.get("embeds")),
     )
 
 

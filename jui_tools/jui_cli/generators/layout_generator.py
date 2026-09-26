@@ -1,10 +1,11 @@
 """Generate Layout JSON skeleton from screen spec."""
 from __future__ import annotations
 
+import copy
 from typing import Any
 
 from ..core.normalizer.include_expander import _to_camel_case as _snake_to_camel
-from ..core.spec_extractor import ScreenSpec, UIVariableDef
+from ..core.spec_extractor import EmbedDef, ScreenSpec, UIVariableDef
 from ..core.type_mapper import TypeMapper
 
 
@@ -37,26 +38,26 @@ class LayoutGenerator:
         # Normal case
         layout: dict[str, Any] = {"data": data_section}
         root_overlay = bool((spec.layout_tree or {}).get("overlay"))
+        # structure.layout.root names the view that holds the layout's
+        # children — a structure.components entry, as the spec validator asks
+        # ("Root component ... not found in components list"). It is the
+        # container the generator puts them in: that component's type, style
+        # and bindings when it is declared, a View otherwise, with its id (the
+        # root View itself carries the id when there are no children). Until
+        # jsonui-cli 1.9.0 it was read by jsonui-doc and the validator only, and no
+        # generated layout carried it. Left off when the tree already uses the
+        # id — a layout's ids are unique.
+        root_id = self._layout_root_id(spec, children_tree)
 
         if spec.collection:
             # Collection-based layout
             layout["type"] = "View"
-            inner: dict[str, Any] = {
-                "type": "View",
-                "children": children_tree,
-            }
-            if not root_overlay:
-                inner["orientation"] = "vertical"
+            inner = self._root_container(spec, root_id, children_tree, root_overlay)
             layout["child"] = inner
         else:
             layout["type"] = "View"
             if children_tree:
-                inner_view: dict[str, Any] = {
-                    "type": "View",
-                    "children": children_tree,
-                }
-                if not root_overlay:
-                    inner_view["orientation"] = "vertical"
+                inner_view = self._root_container(spec, root_id, children_tree, root_overlay)
                 if root_overlay:
                     # Overlay screens skip the ScrollView wrapper so
                     # children can stack full-screen
@@ -66,8 +67,39 @@ class LayoutGenerator:
                         "type": "ScrollView",
                         "child": inner_view,
                     }
+            elif root_id:
+                layout["id"] = root_id
 
         return layout
+
+    def _root_container(self, spec: ScreenSpec, root_id: str | None,
+                        children_tree: list, overlay: bool) -> dict[str, Any]:
+        container: dict[str, Any] = {"type": "View"}
+        if root_id:
+            comp = self.component_map(spec).get(root_id)
+            if comp:
+                # Decoratives aimed at the root already reached the children
+                # (the unreached-parent fallback in _walk_layout_tree).
+                decorative, self._decorative_by_parent = self._decorative_by_parent, {}
+                try:
+                    container = self._component_to_node(comp, self._build_visibility_map(spec))
+                finally:
+                    self._decorative_by_parent = decorative
+            container["id"] = root_id
+        container["children"] = children_tree
+        if not overlay:
+            container.setdefault("orientation", "vertical")
+        else:
+            container.pop("orientation", None)
+        return container
+
+    def _layout_root_id(self, spec: ScreenSpec, children_tree: list) -> str | None:
+        root = (spec.layout_tree or {}).get("root")
+        if not isinstance(root, str) or not root:
+            return None
+        if root in self._collect_node_ids(children_tree):
+            return None
+        return root
 
     def _build_data_section(self, spec: ScreenSpec) -> list[dict[str, Any]]:
         """Build the data section from uiVariables, displayLogic, and collection.
@@ -132,9 +164,53 @@ class LayoutGenerator:
         return data
 
     def _build_children_tree(self, spec: ScreenSpec) -> list[dict[str, Any]]:
-        """Build the children tree from layout and components."""
-        children = []
+        """Build the children tree from layout and components.
 
+        structure.embeds[] become Embed nodes: where the layout tree names a
+        regionId, there; an embed the tree does not name is appended, so every
+        declared region is in the layout (the pack's implement agent: "one
+        per structure.embeds[].regionId"). A spec with no structure.layout
+        still gets its embeds and its Collection — until jsonui-cli 1.9.0 it got
+        neither, the Collection's items variable sitting in `data` with no
+        Collection to read it.
+        """
+        children = []
+        comp_map = self.component_map(spec)
+        embeds = {"nodes": {e.region_id: self._embed_node(e) for e in spec.embeds}, "placed": set()}
+
+        # Build visibility lookup (honours explicit variableName)
+        vis_map = self._build_visibility_map(spec)
+
+        layout = spec.layout_tree
+        if layout:
+            children.extend(self._walk_layout_tree(layout, comp_map, vis_map, embeds))
+
+        for rid, node in embeds["nodes"].items():
+            if rid not in embeds["placed"]:
+                children.append(copy.deepcopy(node))
+
+        # Add Collection if present
+        if spec.collection:
+            coll_node = self._build_collection_node(spec)
+            children.append(coll_node)
+
+        return children
+
+    @staticmethod
+    def _embed_node(e: EmbedDef) -> dict[str, Any]:
+        node: dict[str, Any] = {"type": "Embed", "id": e.region_id, "screen": e.screen}
+        if e.params is not None:
+            node["params"] = copy.deepcopy(e.params)
+        if e.events is not None:
+            node["events"] = copy.deepcopy(e.events)
+        if e.navigation_mode is not None:
+            node["navigationMode"] = e.navigation_mode
+        return node
+
+    def component_map(self, spec: ScreenSpec) -> dict[str, dict]:
+        """id -> component for structure.components (nested included) and
+        the decorative elements' components; also stashes where each
+        decorative group goes, for _component_to_node."""
         # Flatten components (including nested children) into a lookup map
         comp_map: dict[str, dict] = {}
         for c in spec.layout_components:
@@ -171,17 +247,15 @@ class LayoutGenerator:
 
         # Stash for use in _build_node
         self._decorative_by_parent = decorative_by_parent
+        self._decorative_root = decorative_root
+        return comp_map
 
-        # Build visibility lookup (honours explicit variableName)
-        vis_map = self._build_visibility_map(spec)
-
-        # Walk layout tree
-        layout = spec.layout_tree
-        if not layout:
-            return children
-
+    def _walk_layout_tree(self, layout: dict, comp_map: dict, vis_map: dict, embeds: dict) -> list:
+        children = []
+        decorative_by_parent = self._decorative_by_parent
+        decorative_root = self._decorative_root
         for child in layout.get("children", []):
-            node = self._build_node(child, comp_map, vis_map)
+            node = self._build_node(child, comp_map, vis_map, embeds)
             if node:
                 children.append(node)
 
@@ -203,11 +277,6 @@ class LayoutGenerator:
                 for sub in group["components"]:
                     if isinstance(sub, dict):
                         children.append(self._component_to_node(sub, vis_map))
-
-        # Add Collection if present
-        if spec.collection:
-            coll_node = self._build_collection_node(spec)
-            children.append(coll_node)
 
         return children
 
@@ -260,19 +329,33 @@ class LayoutGenerator:
                 )
         return vis_map
 
+    @staticmethod
+    def _take_embed(node_id: str, embeds: dict | None) -> dict[str, Any] | None:
+        if not embeds or node_id not in embeds["nodes"]:
+            return None
+        embeds["placed"].add(node_id)
+        return copy.deepcopy(embeds["nodes"][node_id])
+
     def _build_node(
-        self, child, comp_map: dict, vis_map: dict
+        self, child, comp_map: dict, vis_map: dict, embeds: dict | None = None
     ) -> dict[str, Any] | None:
-        """Recursively build a layout node."""
+        """Recursively build a layout node (an Embed where it names a regionId)."""
         if isinstance(child, str):
+            embed = self._take_embed(child, embeds)
+            if embed is not None:
+                return embed
             comp = comp_map.get(child)
             if not comp:
                 return {"type": "View", "id": child}
             return self._component_to_node(comp, vis_map)
         elif isinstance(child, dict):
             child_id = child.get("id", "")
-            comp = comp_map.get(child_id) if child_id else None
-            node = self._component_to_node(comp, vis_map) if comp else {"type": "View", "id": child_id}
+            embed = self._take_embed(child_id, embeds) if child_id else None
+            comp = comp_map.get(child_id) if child_id and embed is None else None
+            if embed is not None:
+                node = embed
+            else:
+                node = self._component_to_node(comp, vis_map) if comp else {"type": "View", "id": child_id}
 
             # Propagate overlay/zIndex hints from the layout tree
             overlay = bool(child.get("overlay"))
@@ -287,7 +370,7 @@ class LayoutGenerator:
             if nested:
                 sub_nodes = []
                 for sub in nested:
-                    sub_node = self._build_node(sub, comp_map, vis_map)
+                    sub_node = self._build_node(sub, comp_map, vis_map, embeds)
                     if sub_node:
                         sub_nodes.append(sub_node)
                 if sub_nodes:
@@ -323,6 +406,12 @@ class LayoutGenerator:
             for attr, var in binding.items():
                 if isinstance(var, str):
                     node[attr] = f"@{{{var}}}"
+
+        # The Layout JSON `platform` directive, as the component declares it
+        # (read by jsonui-doc only until jsonui-cli 1.9.0).
+        platform = comp.get("platform")
+        if isinstance(platform, (str, dict)) and platform:
+            node["platform"] = copy.deepcopy(platform)
 
         # Recurse into spec-defined children
         children = comp.get("children")

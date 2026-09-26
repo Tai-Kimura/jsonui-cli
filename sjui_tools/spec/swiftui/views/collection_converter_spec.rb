@@ -177,10 +177,14 @@ RSpec.describe SjuiTools::SwiftUI::Views::CollectionConverter do
           expect(code).to include('spacing: 8')
         end
 
-        it 'still prefers itemSpacing over lineSpacing' do
+        # The horizontal rule (4f ruling, 2026-09-26; jsonui-cli 1.9.0): along
+        # the scroll axis lineSpacing, else itemSpacing, else 0 — columnSpacing
+        # spaces the lanes (collection_horizontal_lanes_spec.rb). This preferred
+        # itemSpacing over lineSpacing.
+        it 'prefers lineSpacing over itemSpacing along the scroll axis' do
           converter = described_class.new(component.merge('itemSpacing' => 12, 'lineSpacing' => 8))
           code = converter.convert
-          expect(code).to include('spacing: 12')
+          expect(code).to include('spacing: 8')
         end
 
         # Regression: sjui-collection-undeclared-default-insets-and-spacing —
