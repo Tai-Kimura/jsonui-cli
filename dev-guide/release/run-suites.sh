@@ -256,10 +256,16 @@ rb_suite() {
   say "== $dir ($cmd, ruby $(cd "$C/$dir" && ruby -v 2>/dev/null | cut -d' ' -f2))"
   # Only rspec's own summary and failure header: the suites deliberately print
   # "Error: …" lines from the code under test, which are not failures.
-  (cd "$C/$dir" && eval "$cmd" 2>&1 | grep -E "^[0-9]+ examples, |^Failures:" | tail -3)
+  # The whole run goes to a log, so a red leg names its failing examples
+  # (`rspec ./spec/…` lines) and keeps the rest; a green one removes it.
+  local log; log=$(mktemp "${TMPDIR:-/tmp}/run-suites.$dir.XXXXXX")
+  (cd "$C/$dir" && eval "$cmd" >"$log" 2>&1)
   local rc=$?
+  grep -E "^[0-9]+ examples, |^Failures:" "$log" | tail -3
+  grep -E "^rspec \./" "$log" | head -10 | sed 's/^/   /'
   say "   exit=$rc"
-  [ "$rc" = 0 ] || bad "$dir: rspec exit $rc"
+  [ "$rc" = 0 ] || bad "$dir: rspec exit $rc (full log: $log)"
+  [ "$rc" = 0 ] && rm -f "$log"
 }
 rb_suite sjui_tools "rspec"                 # no Gemfile: plain rspec
 rb_suite kjui_tools "bundle exec rspec"
@@ -280,10 +286,14 @@ rb26_suite() {
   if ! "$RB26" -v 2>/dev/null | grep -q ' 2\.6\.' || [ ! -x "$RSPEC26" ]; then
     bad "$dir: ruby 2.6 leg NOT RUN (need $RB26 = 2.6.x and $RSPEC26)"; return
   fi
-  (cd "$C/$dir" && "$RB26" -S "$RSPEC26" "$@" 2>&1 | grep -E "^[0-9]+ examples, |^Failures:" | tail -3)
+  local log; log=$(mktemp "${TMPDIR:-/tmp}/run-suites.$dir-2.6.XXXXXX")
+  (cd "$C/$dir" && "$RB26" -S "$RSPEC26" "$@" >"$log" 2>&1)
   local rc=$?
+  grep -E "^[0-9]+ examples, |^Failures:" "$log" | tail -3
+  grep -E "^rspec \./" "$log" | head -10 | sed 's/^/   /'
   say "   exit=$rc"
-  [ "$rc" = 0 ] || bad "$dir: ruby 2.6 rspec exit $rc"
+  [ "$rc" = 0 ] || bad "$dir: ruby 2.6 rspec exit $rc (full log: $log)"
+  [ "$rc" = 0 ] && rm -f "$log"
 }
 rb26_suite sjui_tools --exclude-pattern 'spec/**/*{watch,file_watcher}*_spec.rb'
 rb26_suite kjui_tools --exclude-pattern 'spec/xml/**/*_spec.rb,spec/cli/commands/generate_xml_spec.rb'
