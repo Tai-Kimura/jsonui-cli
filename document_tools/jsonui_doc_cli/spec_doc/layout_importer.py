@@ -192,7 +192,7 @@ def _extracted_cell_for_ref(ref: str, layouts_dir: Path) -> dict | None:
 
 
 def _read_layout_by_ref(layouts_dir: Path, ref: str) -> dict | None:
-    """Resolve ``"bar_list/bar_cell"`` → ``{layouts_dir}/bar_list/bar_cell.json``.
+    """Resolve ``"item_list/item_cell"`` → ``{layouts_dir}/item_list/item_cell.json``.
 
     Accepts paths with or without the ``.json`` suffix. Returns ``None``
     when the file is missing or the JSON is malformed.

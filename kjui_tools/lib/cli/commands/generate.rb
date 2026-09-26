@@ -132,6 +132,7 @@ module KjuiTools
         end
 
         def generate_partial(args, mode)
+          options = parse_overwrite_options(args)
           name = args.shift
           
           if name.nil? || name.empty?
@@ -147,12 +148,13 @@ module KjuiTools
             generator.generate
           when 'compose'
             require_relative '../../compose/generators/partial_generator'
-            generator = KjuiTools::Compose::Generators::PartialGenerator.new(name)
+            generator = KjuiTools::Compose::Generators::PartialGenerator.new(name, options)
             generator.generate
           end
         end
 
         def generate_cell(args, mode)
+          options = parse_overwrite_options(args)
           name = args.shift
           
           if name.nil? || name.empty?
@@ -170,7 +172,7 @@ module KjuiTools
             exit 1
           when 'compose'
             require_relative '../../compose/generators/cell_generator'
-            generator = KjuiTools::Compose::Generators::CellGenerator.new(name)
+            generator = KjuiTools::Compose::Generators::CellGenerator.new(name, options)
             generator.generate
           else
             puts "Error: Unknown mode: #{mode}"
@@ -339,11 +341,31 @@ module KjuiTools
               options[:type] = 'fragment'
             end
             
-            opts.on('-f', '--force', 'Force overwrite existing files') do
+            # -f, --force: read by the Compose view generator since 1.8.121
+            # (before, parsed and ignored: the files were kept whatever it
+            # said). --skip-existing: "invalid option" until 1.8.121.
+            opts.on('-f', '--force', 'Overwrite existing scaffold files without asking') do
               options[:force] = true
+            end
+
+            opts.on('--skip-existing', 'Keep existing scaffold files without asking (non-interactive)') do
+              options[:skip_existing] = true
             end
           end.parse!(args)
           
+          options
+        end
+
+        # --force / --skip-existing, for the commands that take no other
+        # option (partial, collection, adapter). Until 1.8.121 these commands
+        # parsed nothing, so both flags were ignored: `g partial --force` and
+        # `g collection --force` kept the files, `g adapter --skip-existing`
+        # still asked.
+        def parse_overwrite_options(args)
+          options = {}
+          OptionParser.new do |opts|
+            JsonUIShared::ConverterGeneratorCore.declare_overwrite_options(opts, options)
+          end.parse!(args)
           options
         end
 
@@ -380,6 +402,7 @@ module KjuiTools
         end
 
         def generate_adapter(args, mode)
+          options = parse_overwrite_options(args)
           name = args.shift
 
           if name.nil? || name.empty?
@@ -398,7 +421,7 @@ module KjuiTools
           Core::ProjectFinder.setup_paths
 
           require_relative '../../compose/generators/view_adapter_generator'
-          generator = KjuiTools::Compose::Generators::ViewAdapterGenerator.new(name)
+          generator = KjuiTools::Compose::Generators::ViewAdapterGenerator.new(name, options)
           generator.generate
         end
 
@@ -425,7 +448,11 @@ module KjuiTools
           puts "  --activity             Generate as Activity (default)"
           puts "  --fragment             Generate as Fragment"
           puts "  --type TYPE            Specify type (activity/fragment)"
-          puts "  -f, --force            Force overwrite existing files"
+          puts
+          puts "Overwrite options (Compose mode: view, partial, collection, adapter, converter):"
+          puts "  An existing file is kept: on a terminal the command asks first; any other stdin is not read."
+          puts "  -f, --force            Overwrite existing scaffold files without asking"
+          puts "  --skip-existing        Keep existing scaffold files without asking"
           puts
           puts "Examples:"
           puts "  kjui g                     # Generate all (based on config mode)"

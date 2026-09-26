@@ -103,6 +103,11 @@ module KjuiTools
           end
 
           view_id = json_data['id'] || 'selectbox'
+          # The declared onClick is called from the selection, after it —
+          # the SelectBox's own operation, not an outer `.clickable`, whose
+          # action would replace the box's own open action for TalkBack
+          # (ModifierBuilder.operation_click_call).
+          click = Helpers::ModifierBuilder.operation_click_call(json_data)
           if json_data['onValueChange']
             # onValueChange (camelCase) -> binding format only (@{functionName})
             if Helpers::ModifierBuilder.is_binding?(json_data['onValueChange'])
@@ -136,9 +141,10 @@ module KjuiTools
                   code += "\n" + indent("viewModel.updateData(mapOf(\"#{Helpers::BindingExpression.path_only(binding_variable)}\" to newValue))", depth + 2)
                 end
                 code += "\n" + indent("#{handler_call}", depth + 2)
+                code += "\n" + indent(click, depth + 2) if click
                 code += "\n" + indent("},", depth + 1)
               else
-                code += "\n" + indent("onValueChange = { newValue -> #{seeded ? "#{seeded} = newValue; " : ''}#{handler_call} },", depth + 1)
+                code += "\n" + indent("onValueChange = #{Helpers::ModifierBuilder.with_operation_click("{ newValue -> #{seeded ? "#{seeded} = newValue; " : ''}#{handler_call} }", json_data)},", depth + 1)
               end
             else
               code += "\n" + indent("onValueChange = { // ERROR: #{json_data['onValueChange']} - camelCase events require binding format @{functionName} },", depth + 1)
@@ -146,9 +152,10 @@ module KjuiTools
           elsif binding_variable
             code += "\n" + indent("onValueChange = { newValue ->", depth + 1)
             code += "\n" + indent("viewModel.updateData(mapOf(\"#{Helpers::BindingExpression.path_only(binding_variable)}\" to newValue))", depth + 2)
+            code += "\n" + indent(click, depth + 2) if click
             code += "\n" + indent("},", depth + 1)
           else
-            code += "\n" + indent(seeded ? "onValueChange = { #{seeded} = it }," : "onValueChange = { },", depth + 1)
+            code += "\n" + indent("onValueChange = #{Helpers::ModifierBuilder.with_operation_click(seeded ? "{ #{seeded} = it }" : '{ }', json_data)},", depth + 1)
           end
           
           # For date picker, add date-specific parameters
@@ -320,7 +327,15 @@ module KjuiTools
           modifiers.concat(Helpers::ModifierBuilder.build_size(json_data, parent_type, required_imports))
           modifiers.concat(Helpers::ModifierBuilder.build_offset(json_data, required_imports))
           modifiers.concat(Helpers::ModifierBuilder.build_alpha(json_data, required_imports))
-          modifiers.concat(Helpers::ModifierBuilder.build_clickable(json_data, required_imports))
+          # Cast in the outline the SelectBox draws: its cornerRadius, which the
+          # library defaults to 8 (`cornerRadius: Int = 8`, KotlinJsonUI
+          # SelectBox.kt) — not a RectangleShape behind the rounded box.
+          shadow_outline = json_data['cornerRadius'] ? nil : 'RoundedCornerShape(8.dp)'
+          modifiers.concat(Helpers::ModifierBuilder.build_shadow(json_data, required_imports, shape: shadow_outline))
+          # The node's gestures and blocker; the click is in onValueChange
+          # above. The library applies `clickable(enabled = enabled)` to this
+          # same node, so `enabled` is on it.
+          modifiers.concat(Helpers::ModifierBuilder.build_control_clickable(json_data, required_imports, enabled_on_node: true))
           # padding is passed as contentPadding parameter, not modifier
           modifiers.concat(Helpers::ModifierBuilder.build_alignment(json_data, required_imports, parent_type))
           modifiers.concat(Helpers::ModifierBuilder.build_weight(json_data, parent_type))

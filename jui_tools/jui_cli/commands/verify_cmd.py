@@ -194,7 +194,8 @@ def cmd_verify(args: argparse.Namespace) -> int:
             layout_file=screen_spec.layout_file,
         )
         if not actual_path or not actual_path.exists():
-            missing_layouts.append(sf.stem)
+            missing_layouts.append(_missing_layout_line(
+                layouts_root, sf.stem, screen_spec.name, screen_spec.layout_file))
             continue
         with open(actual_path, "r", encoding="utf-8") as f:
             actual = json.load(f)
@@ -821,44 +822,61 @@ def _resolve_layouts_root(config: dict, platform: str, config_mgr) -> Path | Non
     return None
 
 
-# Alternate names used by some projects (parallel to the gap report logic)
-_NAME_MAP = {
-    "favoritelist": "favorite_list",
-    "itemslist": "bar_items_list",
-    "followinglist": "following_bar_list",
-    "itemlist": "bar_list",
-    "siteslist": "purchase_sites_list",
-    "itemdetail": "item_detail",
-    "itemdetail": "item_detail",
-    "forgotpassword": "forgot_password",
-    "resetpassword": "reset_password",
-}
+def _layout_candidates(
+    layouts_root: Path, spec_stem: str, screen_name: str,
+    layout_file: str = "",
+) -> list[Path]:
+    """The files a spec's layout may be, in the order they are tried.
+
+    ``layout_file`` is ``metadata.layoutFile``, the declaration: when set it is
+    the only candidate — a spec can live under
+    ``json/learn/installation.spec.json`` and point at
+    ``layouts/learn/installation.json``, and a declared file that is not there
+    is reported, not replaced by a guess. Without it, two derivations that need
+    no table: the spec's file name, and ``metadata.name`` in snake_case.
+
+    Until 1.8.121 a third candidate came from a table of one downstream app's
+    screen names (spec stem -> layout name), consulted in every project and
+    after a declared layoutFile that did not exist. Measured 2026-09-26 on the
+    faces that app has: no screen spec resolved only through it (97 screen
+    specs over three faces, each resolved by layoutFile or the two
+    derivations). Ticket verify-carries-a-consumer-specific-name-map.
+    """
+    if layout_file:
+        return [layouts_root / f"{layout_file}.json"]
+    name = spec_stem.replace(".spec", "")
+    candidates = [layouts_root / f"{name}.json"]
+    derived = layouts_root / f"{_camel_to_snake(screen_name)}.json"
+    if screen_name and derived not in candidates:
+        candidates.append(derived)
+    return candidates
 
 
 def _resolve_actual_layout(
     layouts_root: Path, spec_stem: str, screen_name: str,
     layout_file: str = "",
 ) -> Path | None:
-    """Find the Layout JSON that corresponds to a given spec.
-
-    ``layout_file`` is ``metadata.layoutFile`` from the spec. When set, it
-    takes priority — a spec can live under ``json/learn/installation.spec.json``
-    and point at ``layouts/learn/installation.json``, which the stem-only
-    candidates below would miss and report as "not found".
-    """
-    name = spec_stem.replace(".spec", "")
-    candidates: list[Path] = []
-    if layout_file:
-        candidates.append(layouts_root / f"{layout_file}.json")
-    candidates.extend([
-        layouts_root / f"{name}.json",
-        layouts_root / f"{_NAME_MAP.get(name, name)}.json",
-        layouts_root / f"{_camel_to_snake(screen_name)}.json",
-    ])
-    for c in candidates:
+    """The Layout JSON that corresponds to a spec (see _layout_candidates)."""
+    for c in _layout_candidates(layouts_root, spec_stem, screen_name, layout_file):
         if c.exists():
             return c
     return None
+
+
+def _missing_layout_line(layouts_root: Path, spec_stem: str, screen_name: str, layout_file: str) -> str:
+    """The line naming a screen spec with no layout, and what to do about it."""
+    tried = _layout_candidates(layouts_root, spec_stem, screen_name, layout_file)
+
+    def rel(p: Path) -> str:
+        try:
+            return str(p.relative_to(layouts_root))
+        except ValueError:
+            return str(p)
+    if layout_file:
+        return (f"{spec_stem}: metadata.layoutFile '{layout_file}' names {rel(tried[0])}, "
+                f"which is not in {layouts_root}")
+    return (f"{spec_stem}: no layout at {' or '.join(rel(p) for p in tried)} — declare it with "
+            f"metadata.layoutFile (its path under {layouts_root}, without .json)")
 
 
 def _camel_to_snake(name: str) -> str:

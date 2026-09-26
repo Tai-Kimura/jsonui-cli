@@ -5,6 +5,7 @@ require 'fileutils'
 require_relative '../../core/config_manager'
 require_relative '../../core/project_finder'
 require_relative '../../core/logger'
+require_relative '../../core/converter_generator_core'
 
 module SjuiTools
   module SwiftUI
@@ -64,36 +65,37 @@ module SjuiTools
           FileUtils.mkdir_p(viewmodel_path)
           FileUtils.mkdir_p(data_path)
           
-          # Each file is written only when it is not there (an existing one
-          # is the app's), and said as it went: created or kept.
+          # Each file through the one overwrite decision the generate commands
+          # share: one that is there is the app's — kept unless --force (or
+          # "y" at the prompt); a closed stdin and --skip-existing keep it.
+          # Each is said as it goes (Created / Overwrote / Kept / Skipped).
           json_file = File.join(json_path, "#{json_file_name}.json")
           main_swift_file = File.join(swift_path, "#{view_class_name}View.swift")
           generated_swift_file = File.join(swift_path, "#{view_class_name}GeneratedView.swift")
           data_file = File.join(data_path, "#{view_class_name}Data.swift")
           viewmodel_file = File.join(viewmodel_path, "#{view_class_name}ViewModel.swift")
-          files = [['JSON:          ', json_file], ['Main View:     ', main_swift_file],
-                   ['Generated View:', generated_swift_file], ['Data:          ', data_file],
-                   ['ViewModel:     ', viewmodel_file]]
-          existed = files.map { |_, path| File.exist?(path) }
+          core = JsonUIShared::ConverterGeneratorCore
+          record = core.scaffold_record
+          options = @options.merge(scaffold_files: record)
+          scaffold = lambda do |path, noun, &content|
+            core.write_scaffold(path, options, Core::Logger,
+                                noun: noun, label: noun, exists_label: noun.sub(/\A\w/, &:upcase), &content)
+          end
 
-          create_json_template(json_file, view_class_name)
-          create_main_view_template(main_swift_file, view_class_name, json_file_name, subdirectory)
-          create_generated_view_template(generated_swift_file, view_class_name, json_file_name, subdirectory)
-          create_data_template(data_file, view_class_name)
-          create_viewmodel_template(viewmodel_file, view_class_name, json_file_name, subdirectory)
+          scaffold.call(json_file, 'JSON layout') { json_template(view_class_name) }
+          scaffold.call(main_swift_file, 'view') { main_view_template(view_class_name) }
+          scaffold.call(generated_swift_file, 'generated view') do
+            generated_view_template(view_class_name, json_file_name, subdirectory)
+          end
+          scaffold.call(data_file, 'data file') { data_template(view_class_name) }
+          scaffold.call(viewmodel_file, 'ViewModel') { viewmodel_template(view_class_name, json_file_name, subdirectory) }
 
           # Update App.swift if --root option is specified
           app_updated = update_app_file(view_class_name) if @options[:root]
 
-          # Until 1.8.121 this said "Generated SwiftUI view:" and listed the
-          # five files whatever it had done — after a run that wrote none of
-          # them too (ticket kjui-g-view-reports-what-it-did-not-do).
-          created = existed.count(false)
-          Core::Logger.info(created.zero? ? "SwiftUI view #{view_class_name}: every file exists and was kept" :
-                                            "Generated SwiftUI view #{view_class_name}:")
-          files.zip(existed).each do |(label, path), was|
-            Core::Logger.info "  #{label} #{path} (#{was ? 'kept: it exists' : 'created'})"
-          end
+          # The counts, from the record (until 1.8.121 a list whatever the run
+          # had done — ticket kjui-g-view-reports-what-it-did-not-do).
+          core.report_scaffold_record("SwiftUI view #{view_class_name}", record, Core::Logger)
 
           if app_updated
             Core::Logger.info "  Updated App.swift to use #{view_class_name}View as root"
@@ -122,9 +124,7 @@ module SjuiTools
              .downcase
         end
 
-        def create_json_template(file_path, view_name)
-          return if File.exist?(file_path)
-
+        def json_template(view_name)
           template = {
             generatedBy: @command,
             type: "View",
@@ -155,8 +155,7 @@ module SjuiTools
             ]
           }
 
-          File.write(file_path, JSON.pretty_generate(template))
-          Core::Logger.debug "Created JSON template: #{file_path}"
+          JSON.pretty_generate(template)
         end
 
         def update_app_file(view_name)
@@ -200,10 +199,8 @@ module SjuiTools
           updated
         end
         
-        def create_main_view_template(file_path, view_name, json_name, subdirectory)
-          return if File.exist?(file_path)
-
-          template = <<~SWIFT
+        def main_view_template(view_name)
+          <<~SWIFT
             //
             //  #{view_name}View.swift
             //  Generated by: #{@command}
@@ -241,18 +238,13 @@ module SjuiTools
                 }
             }
           SWIFT
-
-          File.write(file_path, template)
-          Core::Logger.debug "Created Main View template: #{file_path}"
         end
-        
-        def create_generated_view_template(file_path, view_name, json_name, subdirectory)
-          return if File.exist?(file_path)
 
+        def generated_view_template(view_name, json_name, subdirectory)
           # Determine the JSON path reference for loading
           json_reference = subdirectory ? "#{subdirectory}/#{json_name}" : json_name
 
-          template = <<~SWIFT
+          <<~SWIFT
             //
             //  #{view_name}GeneratedView.swift
             //  Generated by: #{@command}
@@ -300,15 +292,10 @@ module SjuiTools
                 }
             }
           SWIFT
-
-          File.write(file_path, template)
-          Core::Logger.debug "Created Generated View template: #{file_path}"
         end
-        
-        def create_data_template(file_path, view_name)
-          return if File.exist?(file_path)
 
-          template = <<~SWIFT
+        def data_template(view_name)
+          <<~SWIFT
             //
             //  #{view_name}Data.swift
             //  Generated by: #{@command}
@@ -352,18 +339,13 @@ module SjuiTools
                 }
             }
           SWIFT
-
-          File.write(file_path, template)
-          Core::Logger.debug "Created Data template: #{file_path}"
         end
-        
-        def create_viewmodel_template(file_path, view_name, json_name, subdirectory)
-          return if File.exist?(file_path)
 
+        def viewmodel_template(view_name, json_name, subdirectory)
           # Determine the JSON path reference for loading
           json_reference = subdirectory ? "#{subdirectory}/#{json_name}" : json_name
 
-          template = <<~SWIFT
+          <<~SWIFT
             //
             //  #{view_name}ViewModel.swift
             //  Generated by: #{@command}
@@ -402,9 +384,6 @@ module SjuiTools
                 }
             }
           SWIFT
-          
-          File.write(file_path, template)
-          Core::Logger.debug "Created ViewModel template: #{file_path}"
         end
       end
     end

@@ -123,10 +123,14 @@ module KjuiTools
         # Build the modifier chain for the EmbedContainer call site. Mirrors
         # the order used by ContainerComponent so behavior is consistent with
         # `View` / other containers: testTag → margins → weight (if Row/Column
-        # parent) → size → padding. The full set is intentionally narrower
-        # than ContainerComponent — Embed does not need alignment, alpha,
-        # background, clickable, or the size-intrinsic adjustment (the embed
-        # content composable owns those concerns internally).
+        # parent) → size → offset → alpha → shadow → background → click →
+        # padding. Alpha, shadow, background (with its cornerRadius and border),
+        # onClick and enabled are declared on `common` and were left out here
+        # (kjui-dynamic-components-that-skip-the-common-modifiers, ruling (a):
+        # the SSoT declares them for every type). Still narrower than
+        # ContainerComponent: no alignment and no size-intrinsic adjustment.
+        # The blocker is emitted before the margins, so the click stage is the
+        # click and the disabled semantics, not build_clickable's blocker again.
         def self.build_embed_modifier(json_data, depth, required_imports, parent_type)
           modifiers = []
           modifiers.concat(Helpers::ModifierBuilder.build_test_tag(json_data, required_imports))
@@ -140,6 +144,13 @@ module KjuiTools
           end
           modifiers.concat(Helpers::ModifierBuilder.build_size(json_data, parent_type, required_imports))
           modifiers.concat(Helpers::ModifierBuilder.build_offset(json_data, required_imports))
+          modifiers.concat(Helpers::ModifierBuilder.build_alpha(json_data, required_imports))
+          modifiers.concat(Helpers::ModifierBuilder.build_shadow(json_data, required_imports))
+          modifiers.concat(Helpers::ModifierBuilder.build_background(json_data, required_imports))
+          modifiers.concat(Helpers::ModifierBuilder.build_click(json_data, required_imports))
+          modifiers.concat(Helpers::ModifierBuilder.build_disabled_semantics(
+            json_data, Helpers::ModifierBuilder.enabled_expression(json_data), required_imports
+          ))
           modifiers.concat(Helpers::ModifierBuilder.build_padding(json_data))
           return '' if modifiers.empty?
           Helpers::ModifierBuilder.format(modifiers, depth)

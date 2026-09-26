@@ -68,13 +68,17 @@ RSpec.describe 'kjui g converter: a prop the converter does not write' do
             name = "Unwritten#{kase.to_s.capitalize}#{i}"
             node = { 'type' => name }
             node['v'] = value_for(type, kase) unless kase == :absent
+            # What it printed through kjui's warning logger (not stubbed for
+            # this; stdout captured) — since 1.8.121's fourth round the line
+            # goes there, "⚠️  [kjui] …", not to stderr through a bare `warn`.
             said = StringIO.new
-            saved = $stderr
+            saved = $stdout
             call = begin
-              $stderr = said
+              allow(KjuiTools::Core::Logger).to receive(:warn).and_call_original
+              $stdout = said
               converter_for(name, 'v' => type).generate(node, 0, Set.new)
             ensure
-              $stderr = saved
+              $stdout = saved
             end
             composable = KjuiTools::Compose::Generators::KotlinComponentGenerator
                          .new(name, { is_container: false, attributes: { 'v' => type } }).send(:kotlin_template)

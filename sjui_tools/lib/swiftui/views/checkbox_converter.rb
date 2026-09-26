@@ -127,19 +127,17 @@ module SjuiTools
             end
 
             # onValueChange callback (supports type-based invocation)
-            # onValueChange (camelCase) -> binding format only (@{functionName})
-            # Also support legacy onValueChanged and onClick for backward compatibility
-            # An empty or blank onClick is no handler (TapAccessibility.handler?).
-            # canTap gates the onClick fallback, not the check
-            # (gated_handler_call).
-            on_click = @component['onClick'] if JsonUIShared::TapAccessibility.handler?(@component['onClick']) &&
-                                                @component['canTap'] != false
-            handler_attr = @component['onValueChange'] || on_click || @component['action'] || @component['onValueChanged']
-            if handler_attr && is_binding?(handler_attr)
-              handler_call = get_event_handler_invocation(handler_attr, id, 'newValue')
-              handler_call = gated_handler_call(handler_call) if @component['onValueChange'].nil? && on_click
-              add_line "onValueChanged: { newValue in #{handler_call} }"
-            end
+            # onValueChange (camelCase) -> binding format only (@{functionName});
+            # `action` and `onValueChanged` are its legacy spellings. Then the
+            # declared onClick, from the same check (operation_click_call —
+            # canTap gates it, not the check). onClick was onValueChange's
+            # fallback: a CheckBox with both called only onValueChange.
+            handler_attr = @component['onValueChange'] || @component['action'] || @component['onValueChanged']
+            calls = []
+            calls << get_event_handler_invocation(handler_attr, id, 'newValue') if handler_attr && is_binding?(handler_attr)
+            click = operation_click_call
+            calls << click if click
+            add_line "onValueChanged: { newValue in #{calls.join('; ')} }" if calls.any?
           end
           add_line ")"
 

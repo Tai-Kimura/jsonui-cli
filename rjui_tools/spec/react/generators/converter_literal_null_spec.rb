@@ -57,23 +57,25 @@ RSpec.describe 'rjui g converter: a JSON null the layout gives a prop' do
     @rows
   end
 
-  # [type, the call, the converter's own lines on stderr, the component, i]
-  # — only its `[rjui]` sentences: stderr also carries Ruby's warnings when
-  # the suite runs with them on.
+  # [type, the call, the converter's own lines, the component, i, those
+  # lines as printed] — the converter prints them through rjui's warning
+  # logger (stdout, "[WARN] "; the logger is not stubbed in before(:all)); the
+  # sentences are the lines' text after that prefix.
   def build_rows
     null_types.each_with_index.map do |type, i|
       name = "NullProbe#{i}"
       said = StringIO.new
-      saved = $stderr
+      saved = $stdout
       call = begin
-        $stderr = said
+        $stdout = said
         converter_for(name, type).new({ 'type' => name, 'v' => nil }, {}).convert(0)
       ensure
-        $stderr = saved
+        $stdout = saved
       end
       component = RjuiTools::React::Generators::ReactComponentGenerator
                   .new(name, { is_container: false, attributes: { 'v' => type } }, {}).send(:component_template)
-      [type, call, said.string.lines.grep(/\A\[rjui\] /).join, component, i]
+      printed = said.string.lines.grep(/\[rjui\] /)
+      [type, call, printed.map { |l| l.sub(/\A.*?(?=\[rjui\] )/, '') }.join, component, i, printed]
     end
   end
 
@@ -91,6 +93,21 @@ RSpec.describe 'rjui g converter: a JSON null the layout gives a prop' do
       end
     end
     expect(rows.count { |_, _, said, _, _| !said.empty? }).to be >= 15
+  end
+
+  # Until 1.8.121's fourth round the converter said it with a bare `warn`:
+  # stderr, no prefix, and a count of the build's warnings (jui build's own
+  # comment gives the count, jui_tools/jui_cli/commands/build_cmd.py) saw
+  # none of them.
+  it "prints each line through rjui's warning logger, with its prefix, where a warning count finds it" do
+    lines = rows.flat_map { |row| row[5] }
+    expect(lines.size).to be >= 15
+    aggregate_failures do
+      lines.each do |line|
+        expect(line).to start_with("\e[33m[WARN]\e[0m [rjui] NullProbe")
+        expect(line).to match(/warning \[|warning:|\[warn|⚠/i)
+      end
+    end
   end
 
   it 'type-checks each call against its component' do
