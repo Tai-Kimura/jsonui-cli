@@ -301,7 +301,7 @@ RSpec.describe KjuiTools::Compose::Components::ButtonComponent do
       expect(result).to include('data.onClick?.invoke("cancelButton")')
     end
 
-    it 'uses default button id when no id specified' do
+    it 'uses its position as the viewId when no id is specified (LayoutPath.view_id; it was the kind word)' do
       KjuiTools::Compose::Helpers::ResourceResolver.data_definitions = {
         'onClick' => { 'name' => 'onClick', 'class' => '((Event) -> Unit)?' }
       }
@@ -314,7 +314,7 @@ RSpec.describe KjuiTools::Compose::Components::ButtonComponent do
 
       result = described_class.generate(json_data, 0, required_imports)
 
-      expect(result).to include('data.onClick?.invoke("button")')
+      expect(result).to include('data.onClick?.invoke("button_0")')
     end
 
     it 'generates error comment for camelCase onClick without binding format' do

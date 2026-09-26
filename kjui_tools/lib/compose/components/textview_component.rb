@@ -126,12 +126,14 @@ module KjuiTools
           # TextFieldState-based API (Compose BOM 2026.03.00+)
           required_imports&.add(:text_field_state)
           required_imports&.add(:launched_effect)
-          state_var = "textFieldState_#{json_data['id'] || 'textview'}"
+          # Named by the node's id, else its position (view_id): the fixed
+          # `textview` gave two id-less TextViews in one scope the same `val`.
+          state_var = "textFieldState_#{Helpers::ModifierBuilder.view_id(json_data)}"
           code += indent("val #{state_var} = rememberTextFieldState(initialText = #{value})", depth) + "\n"
 
           if has_data_binding
             variable = extract_variable_name(json_data['text'])
-            view_id = json_data['id'] || 'textview'
+            view_id = Helpers::ModifierBuilder.view_id(json_data)
             # Sync external → state
             code += indent("LaunchedEffect(#{value}) { if (#{state_var}.text.toString() != #{value}) #{state_var}.edit { replace(0, length, #{value}) } }", depth) + "\n"
             # Sync state → external
@@ -146,7 +148,7 @@ module KjuiTools
               code += indent("LaunchedEffect(#{state_var}.text) { val newValue = #{state_var}.text.toString(); if (newValue != #{value}) viewModel.updateData(mapOf(\"#{variable}\" to newValue)) }", depth) + "\n"
             end
           elsif json_data['onTextChange']
-            view_id = json_data['id'] || 'textview'
+            view_id = Helpers::ModifierBuilder.view_id(json_data)
             if Helpers::ModifierBuilder.is_binding?(json_data['onTextChange'])
               handler_call = Helpers::ModifierBuilder.get_event_handler_invocation(json_data['onTextChange'], view_id, 'newValue')
               code += indent("LaunchedEffect(#{state_var}.text) { val newValue = #{state_var}.text.toString(); #{handler_call} }", depth) + "\n"

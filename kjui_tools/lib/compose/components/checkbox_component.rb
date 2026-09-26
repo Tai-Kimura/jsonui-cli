@@ -334,7 +334,7 @@ module KjuiTools
         # write, or the seeded state's (Helpers::StaticSeed, `seeded`) — then
         # onValueChange, then the declared onClick (with_operation_click).
         def self.checked_change_lambda(json_data, binding_variable, seeded: nil)
-          view_id = json_data['id'] || 'checkbox'
+          view_id = Helpers::ModifierBuilder.view_id(json_data)
           on_change = json_data['onValueChange']
           lambda = if on_change && !Helpers::ModifierBuilder.is_binding?(on_change)
                      Helpers::ModifierBuilder.error_lambda("ERROR: #{on_change} - camelCase events require binding format @{functionName}")

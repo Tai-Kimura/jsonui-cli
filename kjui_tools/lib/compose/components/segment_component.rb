@@ -211,7 +211,7 @@ module KjuiTools
               
               # Generate onClick handler
               # onValueChange (camelCase) -> binding format only (@{functionName})
-              view_id = json_data['id'] || 'segment'
+              view_id = Helpers::ModifierBuilder.view_id(json_data)
               if json_data['onValueChange']
                 if Helpers::ModifierBuilder.is_binding?(json_data['onValueChange'])
                   handler_call = Helpers::ModifierBuilder.get_event_handler_invocation(json_data['onValueChange'], view_id, index.to_s)
@@ -328,7 +328,7 @@ module KjuiTools
             
             # Generate onClick handler
             # onValueChange (camelCase) -> binding format only (@{functionName})
-            view_id = json_data['id'] || 'segment'
+            view_id = Helpers::ModifierBuilder.view_id(json_data)
             if json_data['onValueChange']
               if Helpers::ModifierBuilder.is_binding?(json_data['onValueChange'])
                 handler_call = Helpers::ModifierBuilder.get_event_handler_invocation(json_data['onValueChange'], view_id, 'index')

@@ -858,10 +858,10 @@ module KjuiTools
             # onClick (camelCase) -> binding format only (@{functionName})
             # An empty or blank handler is no handler (TapAccessibility.handler?).
             if JsonUIShared::TapAccessibility.handler?(attr['onclick'])
-              handler_call = Helpers::ModifierBuilder.get_event_handler_call(attr['onclick'], is_camel_case: false)
+              handler_call = Helpers::ModifierBuilder.get_event_handler_call(attr['onclick'], is_camel_case: false, view_id: Helpers::ModifierBuilder.view_id(json_data))
               code += "\n" + indent("onClick = { #{handler_call} }", depth + 3)
             elsif JsonUIShared::TapAccessibility.handler?(attr['onClick'])
-              handler_call = Helpers::ModifierBuilder.get_event_handler_call(attr['onClick'], is_camel_case: true)
+              handler_call = Helpers::ModifierBuilder.get_event_handler_call(attr['onClick'], is_camel_case: true, view_id: Helpers::ModifierBuilder.view_id(json_data))
               code += "\n" + indent("onClick = { #{handler_call} }", depth + 3)
             else
               code += "\n" + indent("onClick = null", depth + 3)

@@ -181,9 +181,9 @@ RSpec.describe 'kjui codegen: bound values reach the Kotlin' do
     bound = emit.call('type' => 'CheckBox', 'isOn' => '@{on}', 'onValueChange' => '@{changed}')
     seeded = emit.call('type' => 'CheckBox', 'onValueChange' => '@{changed}')
     labelled = emit.call('type' => 'CheckBox', 'isOn' => '@{on}', 'label' => 'L', 'onValueChange' => '@{changed}')
-    expect(bound).to include('{ newValue -> viewModel.updateData(mapOf("on" to newValue)); data.changed?.invoke("checkbox", newValue) }')
-    expect(labelled).to include('data.changed?.invoke("checkbox", newValue)')
-    expect(seeded).to include('{ seeded = it; data.changed?.invoke("checkbox", it) }')
+    expect(bound).to include('{ newValue -> viewModel.updateData(mapOf("on" to newValue)); data.changed?.invoke("checkBox_0", newValue) }')
+    expect(labelled).to include('data.changed?.invoke("checkBox_0", newValue)')
+    expect(seeded).to include('{ seeded = it; data.changed?.invoke("checkBox_0", it) }')
     functions = [bound, seeded, labelled].each_with_index.map { |c, i| "fun cb#{i}(data: Data, viewModel: ViewModel) {\n#{c}\n}" }.join("\n\n")
     expect(<<~KOTLIN).to compile_as_kotlin
       #{ComposeStubUniverse.common_stages(functions)}

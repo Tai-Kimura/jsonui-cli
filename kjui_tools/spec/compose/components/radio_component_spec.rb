@@ -306,7 +306,7 @@ RSpec.describe KjuiTools::Compose::Components::RadioComponent do
       expect(result).to include('data.onRadioChange?.invoke("genderRadio", "Male")')
     end
 
-    it 'uses default radio id when no id specified' do
+    it 'uses its position as the viewId when no id is specified (LayoutPath.view_id; it was the kind word)' do
       KjuiTools::Compose::Helpers::ResourceResolver.data_definitions = {
         'onRadioChange' => { 'name' => 'onRadioChange', 'class' => '((Event) -> Unit)?' }
       }
@@ -319,7 +319,7 @@ RSpec.describe KjuiTools::Compose::Components::RadioComponent do
 
       result = described_class.generate(json_data, 0, required_imports)
 
-      expect(result).to include('data.onRadioChange?.invoke("radio", "Yes")')
+      expect(result).to include('data.onRadioChange?.invoke("radio_0", "Yes")')
     end
   end
   describe 'icon appearance' do

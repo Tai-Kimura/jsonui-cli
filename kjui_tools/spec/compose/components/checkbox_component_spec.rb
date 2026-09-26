@@ -115,7 +115,7 @@ RSpec.describe KjuiTools::Compose::Components::CheckboxComponent do
       expect(result).to include('data.onCheck?.invoke("myCheckbox", newValue)')
     end
 
-    it 'uses default checkbox id when no id specified' do
+    it 'uses its position as the viewId when no id is specified (LayoutPath.view_id; it was the kind word)' do
       KjuiTools::Compose::Helpers::ResourceResolver.data_definitions = {
         'onCheck' => { 'name' => 'onCheck', 'class' => '((Event) -> Unit)?' }
       }
@@ -127,7 +127,7 @@ RSpec.describe KjuiTools::Compose::Components::CheckboxComponent do
 
       result = described_class.generate(json_data, 0, required_imports)
 
-      expect(result).to include('data.onCheck?.invoke("checkbox", it)')
+      expect(result).to include('data.onCheck?.invoke("checkBox_0", it)')
     end
   end
   # The custom-icon path called ResourceResolver.process_drawable, which does not

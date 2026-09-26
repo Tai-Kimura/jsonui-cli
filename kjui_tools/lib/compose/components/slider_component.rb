@@ -69,7 +69,7 @@ module KjuiTools
             binding_variable = $1
           end
           
-          view_id = json_data['id'] || 'slider'
+          view_id = Helpers::ModifierBuilder.view_id(json_data)
           on_value_change = Core::Normalization.attr_lookup(json_data, 'onValueChange', 'onValueChanged')
           if on_value_change
             # onValueChange (camelCase) -> binding format only (@{functionName})

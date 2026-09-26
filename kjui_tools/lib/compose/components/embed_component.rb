@@ -23,7 +23,11 @@ module KjuiTools
             return indent('// Embed: missing required `screen` attribute', depth)
           end
 
-          embed_id = json_data['id'] || 'embed'
+          # The embed slot's key (EmbedContainer: "unique identifier for this
+          # embed slot within the parent" — it keys the slot's ViewModelStore):
+          # the id, else the node's position (view_id). Every id-less Embed was
+          # `embed`, so two of them shared one slot's view models.
+          embed_id = Helpers::ModifierBuilder.view_id(json_data)
           navigation_mode = json_data['navigationMode'] || 'delegate'
           isolated = navigation_mode == 'isolated'
           nav_mode_kotlin = isolated ? 'EmbedNavigationMode.Isolated' : 'EmbedNavigationMode.Delegate'

@@ -61,7 +61,7 @@ module KjuiTools
                 code += "\n" + indent("    .fillMaxWidth()", depth + 2)
                 code += "\n" + indent("    .clickable#{row_enabled} {", depth + 2)
                 
-                view_id = json_data['id'] || 'radio'
+                view_id = Helpers::ModifierBuilder.view_id(json_data)
                 if json_data['bind'] && json_data['bind'].match(/@\{([^}]+)\}/)
                   variable = $1
                   if json_data['onValueChange'] && Helpers::ModifierBuilder.is_binding?(json_data['onValueChange'])
@@ -242,7 +242,7 @@ module KjuiTools
           # every build emitted different Kotlin, and two items could draw the
           # same number (kjui-radio-default-id-is-random). A node emitted on
           # its own, with no tree around it, is its own root.
-          id = json_data['id'] || "radio_#{json_data[JsonUIShared::LayoutPath::KEY] || '0'}"
+          id = Helpers::ModifierBuilder.view_id(json_data)
           id_literal = JsonUIShared::StringLiterals.kotlin(id)
           # `text`/`label` are `["string", "binding"]`. They used to be
           # interpolated straight into the Kotlin literal, so a bound label put

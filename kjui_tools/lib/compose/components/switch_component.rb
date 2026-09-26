@@ -251,7 +251,7 @@ module KjuiTools
         # onValueChange, then the declared onClick (with_operation_click).
         def self.checked_change_lambda(json_data, binding_variable, seeded: nil)
           handler = json_data['onValueChange'] || json_data['onToggle']
-          view_id = json_data['id'] || 'switch'
+          view_id = Helpers::ModifierBuilder.view_id(json_data)
           update = if binding_variable
                      "viewModel.updateData(mapOf(\"#{binding_variable}\" to newValue))"
                    elsif seeded

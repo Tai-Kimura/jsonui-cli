@@ -220,7 +220,7 @@ module KjuiTools
             # Sync external → state
             code += indent("LaunchedEffect(#{value}) { if (#{state_var}.text.toString() != #{value}) #{state_var}.edit { replace(0, length, #{value}) } }", depth) + "\n"
             # Sync state → external
-            view_id = json_data['id'] || 'textfield'
+            view_id = Helpers::ModifierBuilder.view_id(json_data)
             if json_data['onTextChange']
               if Helpers::ModifierBuilder.is_binding?(json_data['onTextChange'])
                 handler_call = Helpers::ModifierBuilder.get_event_handler_invocation(json_data['onTextChange'], view_id, 'newValue')
@@ -232,7 +232,7 @@ module KjuiTools
               code += indent("LaunchedEffect(#{state_var}.text) { val newValue = #{state_var}.text.toString(); if (newValue != #{value}) viewModel.updateData(mapOf(\"#{variable}\" to newValue)) }", depth) + "\n"
             end
           elsif json_data['onTextChange']
-            view_id = json_data['id'] || 'textfield'
+            view_id = Helpers::ModifierBuilder.view_id(json_data)
             if Helpers::ModifierBuilder.is_binding?(json_data['onTextChange'])
               handler_call = Helpers::ModifierBuilder.get_event_handler_invocation(json_data['onTextChange'], view_id, 'newValue')
               code += indent("LaunchedEffect(#{state_var}.text) { val newValue = #{state_var}.text.toString(); #{handler_call} }", depth) + "\n"
@@ -670,7 +670,7 @@ module KjuiTools
               # also matches every other no-value call site in this codegen.
               # Regression: kjui-textfield-onsubmit-helper-arity-mismatch.
               submit_call = Helpers::ModifierBuilder.is_binding?(on_submit) ?
-                Helpers::ModifierBuilder.get_event_handler_invocation(on_submit, json_data['id'] || 'textfield', nil) :
+                Helpers::ModifierBuilder.get_event_handler_invocation(on_submit, Helpers::ModifierBuilder.view_id(json_data), nil) :
                 "data.#{on_submit}?.invoke()"
               actions << "onDone = { #{submit_call} }" unless next_focus_id
               actions << "onGo = { #{submit_call} }"
