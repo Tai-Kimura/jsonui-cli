@@ -210,9 +210,11 @@ RSpec.describe SjuiTools::SwiftUI::Views::CollectionConverter do
           'sections' => [{ 'cell' => 'TagCell' }], 'items' => '@{tags}' }
       )
       expect(code).not_to include('ScrollView(')
-      expect(code).to include('VStack(spacing: 8) {')
+      # Undeclared gaps are 0 (attribute_semantics.json -> collectionSpacing;
+      # 8 until jsonui-cli 1.9.0).
+      expect(code).to include('VStack(spacing: 0) {')
       expect(code).to include('if let dataSource = data.tags, dataSource.sections.count > 0 {')
-      expect(code).to include('FlowLayout(alignment: .leading, horizontalSpacing: 8, verticalSpacing: 8) {')
+      expect(code).to include('FlowLayout(alignment: .leading, horizontalSpacing: 0, verticalSpacing: 0) {')
       expect(code).to include('TagCellView(data: cellData).equatable()')
       expect(code).to include('.accessibilityIdentifier("flw_item_\\(cellIndex)")')
     end
@@ -223,7 +225,7 @@ RSpec.describe SjuiTools::SwiftUI::Views::CollectionConverter do
           'cellClasses' => ['TagCell'], 'items' => '@{tags}' }
       )
       expect(code).to include('if let dataSource = data.tags, let cellsData = dataSource.sections.first?.cells?.data {')
-      expect(code).to include('FlowLayout(alignment: .leading, horizontalSpacing: 8, verticalSpacing: 8) {')
+      expect(code).to include('FlowLayout(alignment: .leading, horizontalSpacing: 0, verticalSpacing: 0) {')
       expect(code).to include('TagCellView(data: cellData)')
       expect(code).not_to include('.equatable()')
     end

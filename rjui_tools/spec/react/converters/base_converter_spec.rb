@@ -554,11 +554,21 @@ RSpec.describe RjuiTools::React::Converters::BaseConverter do
   end
 
   describe '#build_style_attr with CSS custom properties' do
-    it 'asserts React.CSSProperties when a custom property is present' do
-      converter = create_converter({ 'type' => 'View' })
+    it 'asserts React.CSSProperties when a custom property is present, in a TypeScript project' do
+      converter = create_converter({ 'type' => 'View' }, { 'use_tailwind' => true, 'typescript' => true })
       converter.instance_variable_set(:@dynamic_styles, { '--pv-color' => "'#FF0000'" })
       expect(converter.send(:build_style_attr))
         .to eq(" style={{ '--pv-color': '#FF0000' } as React.CSSProperties}")
+    end
+
+    # A JavaScript project's .jsx does not parse an `as` (jsonui-cli 1.9.0;
+    # spec/react/javascript_mode_output_parses_spec.rb).
+    it 'writes no assertion in a JavaScript project, typescript false or absent' do
+      [{ 'use_tailwind' => true, 'typescript' => false }, { 'use_tailwind' => true }].each do |config|
+        converter = create_converter({ 'type' => 'View' }, config)
+        converter.instance_variable_set(:@dynamic_styles, { '--pv-color' => "'#FF0000'" })
+        expect(converter.send(:build_style_attr)).to eq(" style={{ '--pv-color': '#FF0000' }}")
+      end
     end
 
     it 'leaves a plain style object uncast' do

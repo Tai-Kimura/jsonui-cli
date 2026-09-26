@@ -49,8 +49,12 @@ RSpec.describe RjuiTools::React::Converters::SelectBoxConverter do
       # value ("all items" idiom) stays a valid key/value instead of
       # collapsing to undefined
       # (rjui-selectbox-object-items-empty-value-key-warning).
+      # The cast is TypeScript's (a TypeScript project, declared); a config
+      # without `typescript` is a JavaScript one, as the file extension says
+      # (spec/react/javascript_mode_output_parses_spec.rb). Until jsonui-cli
+      # 1.9.0 this converter alone cast whenever the key was not false.
       it 'supports canonical string-array items via a widened typeof branch' do
-        converter = create_converter({ 'class' => 'SelectBox', 'items' => '@{sortOptions}' })
+        converter = create_converter({ 'class' => 'SelectBox', 'items' => '@{sortOptions}' }, { 'use_tailwind' => true, 'typescript' => true })
         result = converter.convert
         expect(result).to include('const opt = item as string | number | { value?: string | number; id?: string | number; text?: string; label?: string };')
         expect(result).to include("typeof opt === 'object' && opt !== null")
@@ -184,7 +188,8 @@ RSpec.describe RjuiTools::React::Converters::SelectBoxConverter do
     # the bound index resolves to the same value string the <option> rows emit.
     context 'with selectedIndex binding' do
       it 'emits a controlled value resolving dynamic items at the bound index' do
-        converter = create_converter({ 'class' => 'SelectBox', 'items' => '@{groupFilterOptions}', 'selectedIndex' => '@{groupFilterIndex}' })
+        converter = create_converter({ 'class' => 'SelectBox', 'items' => '@{groupFilterOptions}', 'selectedIndex' => '@{groupFilterIndex}' },
+                                     { 'use_tailwind' => true, 'typescript' => true })
         result = converter.convert
         expect(result).to include('value={(() => { const sel = data.groupFilterOptions?.[data.groupFilterIndex ?? -1]')
         expect(result).to include("typeof sel === 'object' ? String(sel.value ?? sel.id ?? '') : String(sel ?? '')")

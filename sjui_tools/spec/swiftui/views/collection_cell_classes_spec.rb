@@ -129,6 +129,35 @@ RSpec.describe 'Collection cellClasses with items and no sections' do
     end
   end
 
+  # cellClasses and no `items` (4f ruling 2026-09-26, round 5): no cell is
+  # drawn on every path (rjui drew one with no data until jsonui-cli 1.9.0),
+  # and the shared validator names the shape — this face's mirror of it.
+  describe 'cellClasses and no items' do
+    def no_items_warnings(component)
+      JsonUIShared::LayoutValidator.validate_layout(component, source_path: 'x.json')
+                                   .select { |w| w[:message].include?('items is not') }
+    end
+
+    it 'draws no cell' do
+      code = emit({ 'type' => 'Collection', 'id' => 'target', 'columns' => 1, 'cellClasses' => ['ItemCollectionViewCell'] })
+      expect(code).not_to include('ItemView(')
+    end
+
+    it 'the shared validator names it, as a warning' do
+      found = no_items_warnings({ 'type' => 'Collection', 'id' => 'target', 'cellClasses' => ['ItemCollectionViewCell'] })
+      expect(found.size).to eq(1)
+      expect(found.first[:level]).to eq(:warning)
+      expect(found.first[:message]).to include('Collection (id=target): cellClasses are declared but items is not, so no cell is drawn.')
+    end
+
+    it 'names nothing when items is bound, when the Collection declares sections, or without cellClasses' do
+      expect(no_items_warnings(base.merge('cellClasses' => ['ItemCollectionViewCell']))).to be_empty
+      expect(no_items_warnings({ 'type' => 'Collection', 'id' => 'target', 'cellClasses' => ['ItemCollectionViewCell'],
+                                 'sections' => [{ 'cell' => 'ItemCollectionViewCell' }] })).to be_empty
+      expect(no_items_warnings({ 'type' => 'Collection', 'id' => 'target' })).to be_empty
+    end
+  end
+
   describe 'the emitted Swift compiles', :swift_compile do
     it 'type-checks the single-cellClass cell loop' do
       code = emit(base.merge('cellClasses' => ['ItemCollectionViewCell']))

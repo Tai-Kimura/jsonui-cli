@@ -788,9 +788,21 @@ module RjuiTools
           # property key fails a strict consumer's tsc with TS2353 — and the
           # generated file cannot be hand-patched. Assert the type only when one
           # is present; an unconditional cast would silence real style errors.
-          cast = custom_property_styles? ? ' as React.CSSProperties' : ''
+          # TypeScript only (typescript?): in a .jsx file `as` does not parse.
+          cast = custom_property_styles? && typescript? ? ' as React.CSSProperties' : ''
 
           " style={{ #{style_pairs.join(', ')} }#{cast}}"
+        end
+
+        # The project writes TypeScript (.tsx). A type annotation or an `as`
+        # assertion in a JavaScript project's .jsx does not parse (jsonui-cli
+        # 1.9.0: every such emit reads this; until then four wrote them
+        # regardless — spec/react/javascript_mode_output_parses_spec.rb).
+        # Absent means JavaScript, the declared default and what the file
+        # extension is chosen by (build_command: `@config['typescript'] ?
+        # '.tsx' : '.jsx'`).
+        def typescript?
+          @config.is_a?(Hash) && @config['typescript'] ? true : false
         end
 
         def custom_property_styles?
@@ -990,6 +1002,8 @@ module RjuiTools
         # Only reachable from the bound paths — a static value is matched
         # against a literal vocabulary at codegen time and needs no assertion.
         def css_assert(expression, css_property)
+          return "(#{expression})" unless typescript?
+
           "(#{expression}) as React.CSSProperties['#{css_property}']"
         end
 
@@ -1234,7 +1248,7 @@ module RjuiTools
           return '' if pairs.nil? || pairs.empty?
 
           rendered = pairs.map { |key, value| format_dynamic_style_pair(key, value) }
-          cast = pairs.keys.any? { |key| key.to_s.start_with?('--') } ? ' as React.CSSProperties' : ''
+          cast = typescript? && pairs.keys.any? { |key| key.to_s.start_with?('--') } ? ' as React.CSSProperties' : ''
           " style={{ #{rendered.join(', ')} }#{cast}}"
         end
 
