@@ -6,8 +6,9 @@ require 'swiftui/views/collection_converter'
 # - With cellIdProperty, a section after the first gives its cells ids of
 #   their own — "<section>:" + the key. Keys two sections share were one id to
 #   the lazy stack / TabView the sections share, which dropped the later
-#   section's cell, as `\.offset` did before 9ef11908. A scrollTo names a cell
-#   by its key, so a later section's cell takes the key as its `.id`.
+#   section's cell, as `\.offset` did before 9ef11908. With scrollTo, a
+#   cell's loop id is its scroll target instead (4f round 13): its key, else
+#   its place — an IndexPath, which no String equals.
 # - Without it, a scrolled-to index is a cell's place among the drawn
 #   sections' cells: a later section's cells are `.id(sectionStart + index)`.
 #   They were `.id(index)`, so every section answered 0…, and scrollTo(n)
@@ -45,23 +46,69 @@ RSpec.describe SjuiTools::SwiftUI::Views::CollectionConverter do
       end
     end
 
-    # A key an earlier drawn section has is that section's to answer (4f
+    # With scrollTo a cell's loop id is its scroll target (4f round 13): its
+    # key — a later section's only when no earlier drawn section has it (4f
     # ruling 2026-09-27, round 10: scrollTo names the FIRST cell, in section
-    # order, whose key it is): a later section's cell takes its key as .id
-    # only when no earlier section has it, else its own loop id. Until
-    # jsonui-cli 1.9.0 both answered the key and SwiftUI chose.
-    it "with scrollTo, a later section's cell carries its key as .id unless an earlier section has it; section 0 does not need one" do
-      b = blocks(convert('cellIdProperty' => 'key', 'scrollTo' => '@{target}'))
-      key = '((cell.data["cellId"] as? String) ?? (cell.data["key"] as? String) ?? "\\(cell.index)")'
-      expect(b[0]).not_to include('.id(')
-      expect(b[0]).not_to include('earlierKeys')
-      expect(b[2]).to include(".id(earlierKeys.contains(#{key}) ? cell.id : #{key})")
-      expect(b[3]).to include(".id(earlierKeys.contains(#{key}) ? cell.id : #{key})")
-      # The earlier drawn sections: 0 before section 2 (1 draws no cell), 0 and 2 before 3.
-      expect(b[2]).to include('let earlierKeys = Set([0].map { dataSource.sections[$0] }')
-      expect(b[3]).to include('let earlierKeys = Set([0, 2].map { dataSource.sections[$0] }')
-      expect(convert('cellIdProperty' => 'key')).not_to include('.id(')
-      expect(convert('cellIdProperty' => 'key')).not_to include('earlierKeys')
+    # order, whose key it is) — else its place, an IndexPath: a cell with no
+    # key has no key, and no value a scrollTo sends (a String, an Int) equals
+    # an IndexPath. Until jsonui-cli 1.9.0 a cell with no key had the loop id
+    # "\(index)" ("<section>:\(index)" after section 0) and a later section's
+    # cell its key as `.id` inside loop ids "<section>:<key>": on the codegen
+    # host (iOS 26.5, ScrollRuleProbeUITests.testACellWithNoKeyAnswersNoKey)
+    # the String "3" reached section 0's fourth cell, which has no key, over
+    # the later section's cell keyed "3"; "1:7" the later section's eighth
+    # cell, which has no key; "1:y2" the later section's cell keyed "y2".
+    def keyed_scroll_routes
+      section_scroll_routes.merge('sectioned List' => { 'listStyle' => 'plain' }, 'horizontal' => { 'layout' => 'horizontal' },
+                                  'pager' => { 'layout' => 'horizontal', 'paging' => true })
+    end
+
+    own = '((cell.data["cellId"] as? String) ?? (cell.data["key"] as? String))'
+    first = "ForEach(items.map { cell in (target: #{own}.map { AnyHashable($0) } ?? AnyHashable(IndexPath(item: cell.index, section: 0)), " \
+            'cell: cell) }, id: \\.target) { item in'
+    later = lambda do |s|
+      "ForEach(items.map { cell in (target: #{own}.flatMap { earlierKeys.contains($0) ? nil : AnyHashable($0) } ?? " \
+        "AnyHashable(IndexPath(item: cell.index, section: #{s})), cell: cell) }, id: \\.target) { item in"
+    end
+
+    it "with scrollTo, on every route a cell's loop id is its key, else its place; a later section's key only when no earlier section has it" do
+      keyed_scroll_routes.each do |route, extra|
+        b = blocks(convert(extra.merge('cellIdProperty' => 'key', 'scrollTo' => '@{target}')))
+        expect(b[0]).to include(first), route
+        expect(b[2]).to include(later.call(2)), route
+        expect(b[3]).to include(later.call(3)), route
+        [0, 2, 3].each { |s| expect(b[s]).to include("{ item in\n#{' ' * (b[s][/^( *)ForEach\(items\.map/, 1].size + 4)}let cell = item.cell\n"), "#{route} #{s}" }
+        # The earlier drawn sections' keys: 0 before section 2 (1 draws no
+        # cell), 0 and 2 before 3 — keys only, a cell with no key adds none.
+        keys = '.flatMap { ($0.cells?.data ?? []).compactMap { (($0["cellId"] as? String) ?? ($0["key"] as? String)) } })'
+        expect(b[2]).to include("let earlierKeys = Set([0].map { dataSource.sections[$0] }#{keys}"), route
+        expect(b[3]).to include("let earlierKeys = Set([0, 2].map { dataSource.sections[$0] }#{keys}"), route
+      end
+    end
+
+    # The red arm of round 13: the String "3" against a section with no keys.
+    # Its cells' index reaches no scroll target — no loop over the
+    # IdentifiedCellItems' String ids (whose fallback is "\(index)"), no `.id`
+    # — and the one place an index is spelled into a String is that
+    # IdentifiedCellItem id, which is no longer the loop's identity.
+    it 'with scrollTo, a cell with no key answers no String: its index is spelled into no loop id and no .id' do
+      keyed_scroll_routes.each do |route, extra|
+        code = convert(extra.merge('cellIdProperty' => 'key', 'scrollTo' => '@{target}'))
+        expect(code).not_to include('ForEach(items) {'), route
+        expect(code).not_to include('.id('), route
+        spelled = code.lines.select { |l| l.include?('\\(index)') || l.include?('\\(cell.index)') }
+        expect(spelled.reject { |l| l.include?('IdentifiedCellItem(id: ') || l.include?('.accessibilityIdentifier(') }).to eq([]), route
+      end
+    end
+
+    it 'control: with no scrollTo, the loop ids are the IdentifiedCellItem ids as before, and there is no .id and no earlierKeys' do
+      keyed_scroll_routes.each do |route, extra|
+        code = convert(extra.merge('cellIdProperty' => 'key'))
+        expect(code).to include('ForEach(items) { cell in'), route
+        expect(code).not_to include('id: \\.target'), route
+        expect(code).not_to include('.id('), route
+        expect(code).not_to include('earlierKeys'), route
+      end
     end
   end
 
