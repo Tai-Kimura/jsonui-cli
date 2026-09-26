@@ -209,6 +209,9 @@ module JsonUIShared
       # Check that child/children actually hold nodes
       check_child_structure(merged_component, type)
 
+      # A text field's declared onClick is not called
+      check_text_field_click(merged_component, type)
+
       # Check for conflicting attributes
       check_spacing_gravity_conflict(merged_component, type)
 
@@ -442,65 +445,66 @@ module JsonUIShared
 
     # Map JSON type to definition key, in two layers:
     #
-    # 1. the cross-platform synonym table below (display spellings that
-    #    are not sections themselves: Text, Scroll, Checkbox, ...),
+    # 1. the cross-platform synonym table (display spellings that are not
+    #    sections themselves: Text, Scroll, Checkbox, ...), read from
+    #    type_synonyms.json beside attribute_definitions.json — the one
+    #    table, which jui_cli's alias_table.py and every renderer read too
+    #    (jui_tools/tests/test_type_synonyms_cross_language.py checks each
+    #    reader answers what the file says),
     # 2. a component-alias hop: sections that are `_alias_of` pointers
     #    (EditText/Input -> TextField, Check -> CheckBox, Toggle ->
-    #    Switch) resolve to their canonical section, driven by the SSoT
-    #    rather than by arms of this case.
+    #    Switch) resolve to their canonical section, driven by the SSoT.
     #
-    # The synonym table is one of four implementations of the same
-    # mapping — the shared Ruby core here (mirrored into {s,k,r}jui_tools)
-    # and the Python jui_cli/core/normalizer/alias_table.py _TYPE_SYNONYMS.
-    # jui_tools/tests/test_type_synonyms_cross_language.py holds the
-    # agreed canon and fails CI on any divergence: change both together
-    # with the canon table, never one alone. Types without a branch
-    # (Button, IconLabel, TabView, Embed, ...) resolve by the identity
-    # fallback to their own definition section.
+    # A spelling in neither (Button, IconLabel, TabView, Embed, ...)
+    # resolves by the identity fallback to its own definition section.
     def map_type_to_definition(type)
-      mapped = case type
-      when 'Label', 'Text'
-        'Label'
-      when 'TextView', 'MultiLineEditText', 'Textarea'
-        'TextView'
-      when 'Image', 'ImageView', 'Img', 'CircleImage', 'CircleImageView'
-        'Image'
-      when 'NetworkImage', 'NetworkImageView', 'AsyncImage'
-        'NetworkImage'
-      when 'SelectBox', 'Spinner', 'DatePicker', 'Select', 'Picker'
-        'SelectBox'
-      when 'CheckBox', 'Checkbox'
-        'CheckBox'
-      when 'Radio', 'RadioButton', 'RadioGroup'
-        'Radio'
-      when 'Segment', 'SegmentedControl', 'TabLayout', 'TabGroup'
-        'Segment'
-      when 'Slider', 'SeekBar', 'Range'
-        'Slider'
-      when 'Progress', 'ProgressBar'
-        'Progress'
-      when 'Indicator', 'ActivityIndicator', 'Loading'
-        'Indicator'
-      when 'View', 'LinearLayout', 'RelativeLayout', 'FrameLayout', 'HStack', 'VStack', 'ZStack',
-           'Div', 'Box', 'Container', 'Column', 'Row', 'ConstraintLayout'
-        'View'
-      when 'SafeAreaView'
-        'SafeAreaView'
-      when 'ScrollView', 'Scroll'
-        'ScrollView'
-      when 'Collection', 'CollectionView', 'RecyclerView', 'Table', 'TableView', 'List', 'Grid',
-           'LazyGrid', 'ListView', 'LazyColumn'
-        'Collection'
-      when 'GradientView', 'Gradient'
-        'GradientView'
-      when 'Blur', 'BlurView'
-        'Blur'
-      when 'Web', 'WebView', 'Iframe'
-        'Web'
-      else
-        type
+      entry = type_synonyms[type]
+      resolve_component_alias(entry ? entry['canonical'] : type)
+    end
+
+    # spelling -> { 'canonical' => section, 'render_as' => type (optional) }.
+    # Read once per validator. A malformed file raises, naming it: a table
+    # that read as empty would validate every synonym spelling against
+    # common attributes only, and say nothing.
+    #
+    # A missing file is what a plain copy of a tool leaves (the file is a link
+    # into shared/core, as attribute_definitions.json is), and it is met the
+    # way load_definitions meets that one: named where it is met, a
+    # validation stage that did not complete — in the ledger once, however
+    # many validators meet it — and the synonym spellings checked against
+    # the common attributes only. Until 1.8.121 it raised, and each tool
+    # carried the raise its own way: sjui stopped with exit 1 and kjui failed
+    # every layout with exit 1, neither with anything in the ledger; rjui put
+    # one "was not generated" entry per layout there (measured on d084cfb2,
+    # 2026-09-26).
+    def type_synonyms
+      @type_synonyms ||= begin
+        path = @type_synonyms_path || File.join(File.dirname(__FILE__), 'type_synonyms.json')
+        if File.exist?(path)
+          entries = JSON.parse(File.read(path))['synonyms']
+          unless entries.is_a?(Hash) && entries.values.all? { |e| e.is_a?(Hash) && e['canonical'].is_a?(String) }
+            raise "#{path}: `synonyms` must map each spelling to an object with a `canonical` string"
+          end
+
+          entries
+        else
+          missing_type_synonyms(path)
+        end
       end
-      resolve_component_alias(mapped)
+    end
+
+    # {} after naming the missing table (see type_synonyms).
+    def missing_type_synonyms(path)
+      puts "\e[31m[#{log_tag} Error] type_synonyms.json not found at #{path}\e[0m"
+      begin
+        require_relative 'stage_failures'
+        JsonUI::StageFailures.record_once(
+          'validation', "#{path} was not found; the type synonyms were checked against the common attributes only"
+        )
+      rescue LoadError
+        nil
+      end
+      {}
     end
 
     # Follow a component-alias section (an `_alias_of` pointer such as
@@ -755,6 +759,26 @@ module JsonUIShared
           actual == expected
         end
       end
+    end
+
+    # A text field — a section whose `text` the user writes, so its binding
+    # is two-way (read from the definitions, not a list of types: TextField
+    # and TextView, and every spelling that maps to them) — does not call a
+    # declared onClick: its own tap focuses it. The ruling for the five paths
+    # (ticket control-onclick-is-called-differently-on-every-path) leaves the
+    # handler uncalled on sjui, kjui and rjui alike, and this is the one
+    # sentence that tells the author, from the validator all three run.
+    def check_text_field_click(component, type)
+      handler = component['onClick']
+      tap = JsonUIShared::TapAccessibility
+      declared = handler.is_a?(Hash) || tap.handler?(handler) || tap.handler?(component['onclick'])
+      return unless declared
+
+      section = map_type_to_definition(type)
+      text = @definitions.dig(section, 'text')
+      return unless text.is_a?(Hash) && text['binding_direction'] == 'two-way'
+
+      add_warning("onClick on a #{section} is not called: a text field's tap focuses it")
     end
 
     def add_warning(message)

@@ -4,6 +4,8 @@ require 'json'
 require 'fileutils'
 require_relative '../../core/config_manager'
 require_relative '../../core/project_finder'
+require_relative '../../core/logger'
+require_relative '../../core/converter_generator_core'
 
 module KjuiTools
   module Compose
@@ -39,17 +41,17 @@ module KjuiTools
           # Create directory if it doesn't exist
           FileUtils.mkdir_p(json_path)
 
-          # Create JSON file — or keep the one there, and say which (until
-          # 1.8.121 "Generated partial:" followed "File already exists" —
-          # ticket kjui-g-view-reports-what-it-did-not-do).
+          # Through the one overwrite decision the generate commands share: an
+          # existing partial is kept unless --force (or "y" at the prompt).
+          # Until 1.8.121 --force / --skip-existing were not read here.
           json_file = File.join(json_path, "#{json_file_name}.json")
-          if File.exist?(json_file)
-            puts "Partial #{@name}: kept the existing #{json_file}"
-          else
-            create_json_template(json_file, partial_name)
-            puts "Generated partial:"
-            puts "  JSON: #{json_file}"
+          core = JsonUIShared::ConverterGeneratorCore
+          record = core.scaffold_record
+          core.write_scaffold(json_file, @options.merge(scaffold_files: record), Core::Logger,
+                              noun: 'partial layout', label: 'partial layout', exists_label: 'Partial layout') do
+            json_content(partial_name)
           end
+          core.report_scaffold_record("partial #{@name}", record, Core::Logger)
           puts ""
           puts "To use this partial, include it in your layout JSON:"
           puts "  { \"include\": \"#{@name}\" }"
@@ -66,12 +68,7 @@ module KjuiTools
              .downcase
         end
 
-        def create_json_template(file_path, partial_name)
-          if File.exist?(file_path)
-            puts "Warning: File already exists: #{file_path}"
-            return
-          end
-
+        def json_content(partial_name)
           template = {
             generatedBy: @command,
             partial: true,
@@ -91,8 +88,7 @@ module KjuiTools
             ]
           }
 
-          File.write(file_path, JSON.pretty_generate(template))
-          puts "Created JSON template: #{file_path}"
+          JSON.pretty_generate(template)
         end
       end
     end

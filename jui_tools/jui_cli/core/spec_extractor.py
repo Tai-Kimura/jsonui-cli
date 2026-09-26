@@ -170,6 +170,9 @@ class CollectionDef:
     paging: bool = False
     cell_root: ComponentDef | None = None
     generate_cell_layout: bool = False
+    # structure.collection.lazy: None = not declared (the Layout default,
+    # "lazy"); False = a plain stack with no scroll container ("none").
+    lazy: bool | None = None
     cell_ui_variables: list[UIVariableDef] = field(default_factory=list)
     cell_event_handlers: list[EventHandlerDef] = field(default_factory=list)
 
@@ -208,6 +211,34 @@ class ScreenSpec:
 
 
 
+def _ui_variable_default(var: dict, where: str) -> Any:
+    """A uiVariable's initial value: `default`, else `defaultValue`, else None.
+
+    Both spellings are read: `defaultValue` is the one the agents pack's
+    examples use and the key the Layout JSON `data` section writes; `default`
+    is the older one. When both are given, `default` wins — the precedence the
+    pack states for this field (and the one the cell path already had for a
+    truthy `default`) — and, when their values differ, the other is named: a
+    spec says one thing. Neither is in the spec schema (it declares name /
+    type / description / notes). Read by key, so false / 0 / "" are values.
+
+    Until 1.8.121 the screen path (stateManagement.uiVariables) read `default`
+    only: `"defaultValue": "gone"` reached the Layout JSON as the type's
+    default "" and nothing said so (`jui verify` compares data names only).
+    The cell path read `default or defaultValue`, which let a falsy `default`
+    fall through to `defaultValue`. Ticket
+    generate-commands-overwrite-edited-files-and-ignore-their-flags (round 4).
+    """
+    if "default" in var:
+        value = var["default"]
+        if "defaultValue" in var and var["defaultValue"] != value:
+            print(f"WARNING: {where} '{var.get('name', '?')}': both default "
+                  f"({json.dumps(value)}) and defaultValue ({json.dumps(var['defaultValue'])}) "
+                  f"are given; default is used")
+        return value
+    return var.get("defaultValue")
+
+
 def _parse_collection(coll_data: dict) -> CollectionDef:
     """Parse one structure.collection / structure.collections[] entry."""
     sections = []
@@ -234,7 +265,7 @@ def _parse_collection(coll_data: dict) -> CollectionDef:
             cell_ui_variables.append(UIVariableDef(
                 name=var["name"],
                 type=var["type"],
-                default=var.get("default") or var.get("defaultValue"),
+                default=_ui_variable_default(var, "structure.collection.cell.uiVariables"),
                 description=var.get("description", ""),
             ))
         for h in cell.get("eventHandlers", []) or []:
@@ -268,6 +299,9 @@ def _parse_collection(coll_data: dict) -> CollectionDef:
         generate_cell_layout=generate_cell_layout,
         cell_ui_variables=cell_ui_variables,
         cell_event_handlers=cell_event_handlers,
+        # Declared by the spec schema, dropped until 1.8.121 (the generated
+        # Collection was lazy whatever the spec said).
+        lazy=coll_data.get("lazy") if isinstance(coll_data.get("lazy"), bool) else None,
     )
 
 
@@ -317,7 +351,7 @@ def extract_screen_spec(spec_data: dict, spec_path=None) -> ScreenSpec:
         ui_variables.append(UIVariableDef(
             name=var["name"],
             type=var["type"],
-            default=var.get("default"),
+            default=_ui_variable_default(var, "stateManagement.uiVariables"),
             description=var.get("description", ""),
         ))
 

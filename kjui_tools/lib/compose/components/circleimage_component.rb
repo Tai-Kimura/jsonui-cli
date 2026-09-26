@@ -45,31 +45,62 @@ module KjuiTools
           # Add testTag and contentDescription for UI testing
           modifiers.concat(Helpers::ModifierBuilder.build_test_tag(json_data, required_imports))
 
-          # Size (use 'size' attribute or default to 48dp)
-          size = json_data['size'] || 48
-          modifiers << ".size(#{size}.dp)"
-          
+          # Margins are the outer spacing: before (outside) the size. They sat
+          # after the size and the circle clip, where they padded the inside of
+          # the 48dp circle instead of spacing it from its siblings
+          # (kjui-dynamic-components-that-skip-the-common-modifiers, measured
+          # as CG_ORDER CircleImage margins INSIDE on 24f7fad0).
+          modifiers.concat(Helpers::ModifierBuilder.build_margins(json_data))
+
+          # Size. The declared `width` / `height` (common) win and go through
+          # the one size builder; they were dropped here, so a declared size
+          # drew the 48dp default (kjui-dynamic-components-that-skip-the-
+          # common-modifiers). With neither declared, the `size` shorthand or
+          # the 48dp default stays as it was.
+          if json_data['width'] || json_data['height'] || json_data['frame']
+            modifiers.concat(Helpers::ModifierBuilder.build_size(json_data, parent_type, required_imports))
+          else
+            size = json_data['size'] || 48
+            modifiers << ".size(#{size}.dp)"
+          end
+
+          # offset → alpha: the View slots after the size and before the
+          # decoration, so the shadow, the circle, its border and background
+          # move and fade with the image. They sat after the background
+          # (kjui-dynamic-components-that-skip-the-common-modifiers, B2).
+          modifiers.concat(Helpers::ModifierBuilder.build_offset(json_data, required_imports))
+          modifiers.concat(Helpers::ModifierBuilder.build_alpha(json_data, required_imports))
+
           # Circular clip: CircleShape lives in foundation.shape (registered under
           # :circle_shape); :shape only brings RoundedCornerShape + clip helpers.
           required_imports&.add(:shape)
           required_imports&.add(:circle_shape)
+          # Shadow before the clip, or the clip cuts it away; its outline is
+          # the circle the image is clipped to.
+          modifiers.concat(Helpers::ModifierBuilder.build_shadow(json_data, required_imports, shape: 'CircleShape'))
           modifiers << ".clip(CircleShape)"
           
-          # Border for circle
-          if json_data['borderWidth'] && json_data['borderColor']
-            required_imports&.add(:border)
-            modifiers << ".border(#{json_data['borderWidth']}.dp, Helpers::ResourceResolver.process_color('#{json_data['borderColor']}', required_imports), CircleShape)"
-          end
+          # Border for circle, through the one border builder with the circle
+          # as its outline. The colour used to be written as Ruby text into
+          # the Kotlin — `.border(2.dp, Helpers::ResourceResolver
+          # .process_color('#FF0000', required_imports), CircleShape)` — which
+          # does not compile (kjui-codegen-writes-ruby-expressions-into-kotlin).
+          modifiers.concat(Helpers::ModifierBuilder.build_border(json_data, required_imports, shape: 'CircleShape'))
           
-          # Background (in case image doesn't load)
+          # cornerRadius as declared, inside the circle clip above — the circle
+          # stays outermost, so the result stays a circle (ruling on
+          # kjui-dynamic-components-that-skip-the-common-modifiers). Border
+          # first, as in build_background, so the clip does not cut it.
+          modifiers.concat(Helpers::ModifierBuilder.build_corner_clip(json_data, required_imports))
+
+          # Background (in case image doesn't load). The colour is resolved
+          # here; it was the Ruby call itself, written as Kotlin text
+          # (kjui-codegen-writes-ruby-expressions-into-kotlin).
           if json_data['background']
             required_imports&.add(:background)
-            modifiers << ".background(Helpers::ResourceResolver.process_color('#{json_data['background']}', required_imports))"
+            modifiers << ".background(#{Helpers::ResourceResolver.process_color(json_data['background'], required_imports)})"
           end
           
-          modifiers.concat(Helpers::ModifierBuilder.build_margins(json_data))
-          modifiers.concat(Helpers::ModifierBuilder.build_offset(json_data, required_imports))
-          modifiers.concat(Helpers::ModifierBuilder.build_alpha(json_data, required_imports))
           modifiers.concat(Helpers::ModifierBuilder.build_clickable(json_data, required_imports))
           modifiers.concat(Helpers::ModifierBuilder.build_padding(json_data))
           modifiers.concat(Helpers::ModifierBuilder.build_weight(json_data, parent_type))

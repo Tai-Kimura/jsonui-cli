@@ -5,13 +5,16 @@ require 'json'
 require 'erb'
 require_relative '../../core/config_manager'
 require_relative '../../core/project_finder'
+require_relative '../../core/logger'
+require_relative '../../core/converter_generator_core'
 
 module SjuiTools
   module SwiftUI
     module Generators
       class CollectionGenerator
-        def initialize(name)
+        def initialize(name, options = {})
           @name = name
+          @options = options
           @config = Core::ConfigManager.load_config
           @project_root = Core::ProjectFinder.project_dir || Dir.pwd
           @src_root = Core::ProjectFinder.get_full_source_path
@@ -38,26 +41,25 @@ module SjuiTools
           # Create directories
           create_directories
 
-          files = [['JSON:          ', json_path], ['Main View:     ', view_path],
-                   ['Generated View:', generated_view_path], ['Data:          ', data_path],
-                   ['ViewModel:     ', view_model_path]]
-          existed = files.map { |_, path| File.exist?(path) }
-
-          # Generate files
-          generate_json_layout
-          generate_view_file
-          generate_generated_view_file
-          generate_data_file
-          generate_view_model_file
-
-          # This generator writes every file, existing or not; each is said as
-          # what happened to it — until 1.8.121 an overwritten file read as
-          # generated like a new one (ticket
-          # kjui-g-view-reports-what-it-did-not-do).
-          puts "\nGenerated SwiftUI collection cell:"
-          files.zip(existed).each do |(label, path), was|
-            puts "  #{label} #{path} (#{was ? 'overwritten' : 'created'})"
-          end
+          # Each file through the one overwrite decision the generate commands
+          # share: an existing one is the app's, kept unless --force (or "y"
+          # at the prompt). Until 1.8.121 this generator wrote all five on
+          # every run — a ViewModel, a view and a layout the app had edited
+          # too, with a closed stdin and with --skip-existing (ticket
+          # generate-commands-overwrite-edited-files-and-ignore-their-flags).
+          core = JsonUIShared::ConverterGeneratorCore
+          record = core.scaffold_record
+          options = @options.merge(scaffold_files: record)
+          [[json_path, 'JSON layout', :json_layout_content], [view_path, 'view', :view_file_content],
+           [generated_view_path, 'generated view', :generated_view_file_content],
+           [data_path, 'data file', :data_file_content], [view_model_path, 'ViewModel', :view_model_file_content]]
+            .each do |path, noun, content|
+              core.write_scaffold(path, options, Core::Logger,
+                                  noun: noun, label: noun, exists_label: noun.sub(/\A\w/, &:upcase)) do
+                send(content)
+              end
+            end
+          core.report_scaffold_record("SwiftUI collection cell #{@pascal_name}", record, Core::Logger)
           puts "\nNext steps:"
           puts "  1. Edit the JSON layout in #{json_path}"
           puts "  2. Run 'sjui build' to generate the SwiftUI code"
@@ -72,7 +74,7 @@ module SjuiTools
           FileUtils.mkdir_p(view_model_dir)
         end
 
-        def generate_json_layout
+        def json_layout_content
           content = {
             type: "View",
             width: "matchParent",
@@ -112,11 +114,11 @@ module SjuiTools
             ]
           }
           
-          File.write(json_path, JSON.pretty_generate(content))
+          JSON.pretty_generate(content)
         end
 
-        def generate_view_file
-          content = <<~SWIFT
+        def view_file_content
+          <<~SWIFT
             import SwiftUI
             import SwiftJsonUI
             import Combine
@@ -162,12 +164,10 @@ module SjuiTools
                 }
             }
           SWIFT
-
-          File.write(view_path, content)
         end
 
-        def generate_generated_view_file
-          content = <<~SWIFT
+        def generated_view_file_content
+          <<~SWIFT
             import SwiftUI
             import SwiftJsonUI
             import Combine
@@ -202,12 +202,10 @@ module SjuiTools
                 }
             }
           SWIFT
-
-          File.write(generated_view_path, content)
         end
 
-        def generate_data_file
-          content = <<~SWIFT
+        def data_file_content
+          <<~SWIFT
             import Foundation
             import SwiftUI
             import SwiftJsonUI
@@ -241,12 +239,10 @@ module SjuiTools
                 }
             }
           SWIFT
-
-          File.write(data_path, content)
         end
 
-        def generate_view_model_file
-          content = <<~SWIFT
+        def view_model_file_content
+          <<~SWIFT
             import Foundation
             import Combine
             import SwiftJsonUI
@@ -266,33 +262,33 @@ module SjuiTools
                 }
             }
           SWIFT
-
-          File.write(view_model_path, content)
         end
 
-        # Path helpers
+        # Path helpers — under the directories the config names, as `g view`
+        # and `sjui build` use (until 1.8.121 View/, Layouts/, Data/ and
+        # ViewModel/ whatever the config said: with "layouts_directory":
+        # "Screens" the cell's layout landed where the build does not read —
+        # measured 2026-09-26, ticket
+        # generate-commands-overwrite-edited-files-and-ignore-their-flags).
+        def configured_dir(key, default)
+          value = @config[key]
+          value.is_a?(String) && !value.strip.empty? ? value : default
+        end
+
         def view_dir
-          @view_dir ||= if @view_folder_parts.any?
-                          File.join(@src_root, 'View', *@view_folder_parts, @pascal_name)
-                        else
-                          File.join(@src_root, 'View', @pascal_name)
-                        end
+          @view_dir ||= File.join(@src_root, configured_dir('view_directory', 'View'), *@view_folder_parts, @pascal_name)
         end
 
         def layouts_dir
-          @layouts_dir ||= if @layout_folder_parts.any?
-                             File.join(@src_root, 'Layouts', *@layout_folder_parts)
-                           else
-                             File.join(@src_root, 'Layouts')
-                           end
+          @layouts_dir ||= File.join(@src_root, configured_dir('layouts_directory', 'Layouts'), *@layout_folder_parts)
         end
 
         def data_dir
-          @data_dir ||= File.join(@src_root, 'Data')
+          @data_dir ||= File.join(@src_root, configured_dir('data_directory', 'Data'))
         end
 
         def view_model_dir
-          @view_model_dir ||= File.join(@src_root, 'ViewModel')
+          @view_model_dir ||= File.join(@src_root, configured_dir('viewmodel_directory', 'ViewModel'))
         end
 
         def json_path

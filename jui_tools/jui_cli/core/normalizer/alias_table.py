@@ -25,76 +25,12 @@ from typing import Any
 
 
 # Cross-platform type-spelling synonyms, applied AFTER the exact-match
-# check in definition_key_for. This table is one of four implementations
-# of the same mapping — see {s,k,r}jui_tools/lib/core/attribute_validator.rb
-# (map_type_to_definition) — and jui_tools/tests/
-# test_type_synonyms_cross_language.py holds the agreed canon and fails CI
-# on any divergence: change all four together, never one alone.
-# Deliberately absent: EditText / Input / Check / Toggle. Those spellings
-# are real sections in attribute_definitions.json shaped as `_alias_of`
-# pointers (B1); the exact-match check resolves them first and the
-# component-alias hop in definition_key_for follows the pointer to the
-# canonical section, so an entry here would be dead code.
-_TYPE_SYNONYMS = {
-    "Text": "Label",
-    "MultiLineEditText": "TextView",
-    "Textarea": "TextView",
-    "ImageView": "Image",
-    "Img": "Image",
-    "NetworkImageView": "NetworkImage",
-    # CircleImage is an IMAGE, not a NetworkImage. component_metadata.json
-    # says so under Image.platformSpecific.swift.circleImage ("type='CircleImage'
-    # adds .clipShape(Circle())"), and all three factories route it to the
-    # Image converter (sjui converter_factory.rb:163, kjui :70, rjui
-    # typed_attributes.rb:58). Only this table said NetworkImage, so a layout
-    # normalised by `jui build` became a URL loader while the same layout read
-    # directly stayed a local asset — the same file drawing two different
-    # things depending on the path it arrived by (plan 49-E, 2026-08-05).
-    "CircleImage": "Image",
-    "CircleImageView": "Image",
-    "AsyncImage": "NetworkImage",
-    "Spinner": "SelectBox",
-    "DatePicker": "SelectBox",
-    "Select": "SelectBox",
-    "Picker": "SelectBox",
-    "Checkbox": "CheckBox",
-    "RadioButton": "Radio",
-    "RadioGroup": "Radio",
-    "SegmentedControl": "Segment",
-    "TabLayout": "Segment",
-    "TabGroup": "Segment",
-    "SeekBar": "Slider",
-    "Range": "Slider",
-    "ProgressBar": "Progress",
-    "ActivityIndicator": "Indicator",
-    "Loading": "Indicator",
-    "LinearLayout": "View",
-    "RelativeLayout": "View",
-    "FrameLayout": "View",
-    "HStack": "View",
-    "VStack": "View",
-    "ZStack": "View",
-    "Div": "View",
-    "Box": "View",
-    "Container": "View",
-    "Column": "View",
-    "Row": "View",
-    "ConstraintLayout": "View",
-    "Scroll": "ScrollView",
-    "CollectionView": "Collection",
-    "RecyclerView": "Collection",
-    "Table": "Collection",
-    "TableView": "Collection",
-    "List": "Collection",
-    "Grid": "Collection",
-    "LazyGrid": "Collection",
-    "ListView": "Collection",
-    "LazyColumn": "Collection",
-    "Gradient": "GradientView",
-    "BlurView": "Blur",
-    "WebView": "Web",
-    "Iframe": "Web",
-}
+# check in definition_key_for, come from shared/core/type_synonyms.json —
+# the one table. The Ruby validator (shared/core/attribute_validator_core.rb,
+# mirrored into {s,k,r}jui_tools) and every renderer read the same file;
+# jui_tools/tests/test_type_synonyms_cross_language.py checks that each
+# reader answers what the file says. Loaded by load_type_synonyms() below.
+
 
 # The SSoT definitions file, in preference order: the shared/ tree of a
 # full jsonui-cli checkout, then the per-platform tool copies (project-local
@@ -123,6 +59,44 @@ class DeprecationInfo:
         return str(self.scope)
 
 
+# The type-synonym table sits next to the definitions file, in each place
+# the definitions are looked for.
+_TYPE_SYNONYMS_RELPATHS = tuple(p.with_name("type_synonyms.json") for p in _DEFINITIONS_RELPATHS)
+
+
+def default_type_synonyms_path() -> Path | None:
+    """Locate ``type_synonyms.json`` the way the definitions are located."""
+    for parent in Path(__file__).resolve().parents:
+        for relpath in _TYPE_SYNONYMS_RELPATHS:
+            candidate = parent / relpath
+            if candidate.exists():
+                return candidate
+    return None
+
+
+def load_type_synonyms(path: Path | str | None = None) -> dict[str, dict[str, str]]:
+    """The entries of ``type_synonyms.json``: spelling -> ``{"canonical":
+    section, "render_as"?: type}``.
+
+    Raises, naming the file, when it is missing or unreadable. A synonym
+    table that read as empty would validate every synonym spelling against
+    common attributes only, and say nothing."""
+    resolved = Path(path) if path else default_type_synonyms_path()
+    if resolved is None or not resolved.exists():
+        searched = ", ".join(str(p) for p in _TYPE_SYNONYMS_RELPATHS)
+        raise FileNotFoundError(
+            f"type_synonyms.json not found (at {resolved})" if resolved
+            else f"type_synonyms.json not found above {Path(__file__).resolve().parent} (looked for {searched})"
+        )
+    with open(resolved, "r", encoding="utf-8") as f:
+        entries = json.load(f).get("synonyms")
+    if not isinstance(entries, dict) or not all(
+        isinstance(e, dict) and isinstance(e.get("canonical"), str) for e in entries.values()
+    ):
+        raise ValueError(f"{resolved}: `synonyms` must map each spelling to an object with a `canonical` string")
+    return entries
+
+
 def default_definitions_path() -> Path | None:
     """Locate ``attribute_definitions.json`` relative to the installed
     tool tree: ``shared/core/`` in a full jsonui-cli checkout, or a
@@ -139,8 +113,13 @@ def default_definitions_path() -> Path | None:
 class AliasTable:
     """Per-component alias → canonical maps plus deprecation metadata."""
 
-    def __init__(self, definitions: dict[str, Any]):
+    def __init__(self, definitions: dict[str, Any], type_synonyms: dict[str, dict[str, str]] | None = None):
         self._definitions = definitions or {}
+        # spelling -> canonical section. No definitions, no sections to map
+        # to (a marker-only pass): the table is not needed then.
+        if type_synonyms is None:
+            type_synonyms = load_type_synonyms() if self._definitions else {}
+        self._type_synonyms = {k: e["canonical"] for k, e in type_synonyms.items()}
         self._common_aliases = self._alias_map_for_section("common")
         self._common_deprecated = self._deprecated_map_for_section("common")
         self._common_value_aliases = self._value_alias_map_for_section("common")
@@ -167,9 +146,13 @@ class AliasTable:
             return cls({})
         try:
             with open(resolved, "r", encoding="utf-8") as f:
-                return cls(json.load(f))
+                definitions = json.load(f)
         except (OSError, json.JSONDecodeError):
             return cls({})
+        # The synonyms beside these definitions, else the ones found the
+        # default way; missing both raises (load_type_synonyms).
+        beside = resolved.with_name("type_synonyms.json")
+        return cls(definitions, load_type_synonyms(beside if beside.exists() else None))
 
     def is_empty(self) -> bool:
         """True when no definitions were loaded (marker-only pass)."""
@@ -187,7 +170,7 @@ class AliasTable:
         if component_type in self._definitions:
             key: str | None = component_type
         else:
-            key = _TYPE_SYNONYMS.get(component_type)
+            key = self._type_synonyms.get(component_type)
         target = self.component_alias_target(key)
         return target if target is not None else key
 
@@ -258,6 +241,17 @@ class AliasTable:
             merged.update(self._deprecated_map_for_section(key))
         self._deprecated_cache[key] = merged
         return merged
+
+    def enum_for(self, component_type: str | None, attr: str) -> list[str]:
+        """The declared ``enum`` of *attr* on *component_type*'s section
+        (falling back to ``common``), or ``[]`` when it declares none."""
+        key = self.definition_key_for(component_type)
+        for section in ([key] if key and key != "common" else []) + ["common"]:
+            spec = self._section(section).get(attr)
+            if isinstance(spec, dict):
+                values = spec.get("enum")
+                return [v for v in values if isinstance(v, str)] if isinstance(values, list) else []
+        return []
 
     # ------------------------------------------------------------------
     # Internals

@@ -72,6 +72,7 @@ RSpec.describe SjuiTools::UIKit::XcodeProject::Generators::ConverterGenerator do
     before do
       # Stub user input for overwrite prompts
       allow($stdin).to receive(:gets).and_return("y\n")
+      allow($stdin).to receive(:tty?).and_return(true) # the answer is typed on a terminal
       # Stub logger to avoid output during tests
       allow(SjuiTools::Core::Logger).to receive(:info)
       allow(SjuiTools::Core::Logger).to receive(:success)
@@ -220,6 +221,7 @@ RSpec.describe SjuiTools::UIKit::XcodeProject::Generators::ConverterGenerator do
     it 'does not duplicate config entries when generated twice' do
       generator = described_class.new('MyCustomView')
       allow($stdin).to receive(:gets).and_return("y\n")
+      allow($stdin).to receive(:tty?).and_return(true) # the answer is typed on a terminal
       allow(SjuiTools::Core::Logger).to receive(:info)
       allow(SjuiTools::Core::Logger).to receive(:success)
       allow(SjuiTools::Core::Logger).to receive(:warn)

@@ -176,6 +176,30 @@ RSpec.describe RjuiTools::React::ReactGenerator do
     end
   end
 
+  describe '#generate_component_file JsonUISeeded (a static value seeds a control\'s state)' do
+    # A static Segment / TabView holds its state in the file's JsonUISeeded
+    # (BaseConverter#wrap_seeded; ticket
+    # static-valued-controls-do-not-change-on-a-users-tap). Read off the emitted
+    # JSX, like the imports below: a file that uses it gets it and useState, a
+    # file that does not gets neither.
+    let(:minimal_json) { { 'type' => 'View' } }
+
+    it 'declares JsonUISeeded and imports useState where the markup uses it' do
+      jsx = "      <JsonUISeeded seed={0}>{(seeded, setSeeded) => (\n        <button onClick={() => { setSeeded(1); }}>b</button>\n      )}</JsonUISeeded>"
+      result = generator.send(:generate_component_file, 'Seg', jsx, minimal_json)
+      expect(result).to include('const JsonUISeeded = <T,>({ seed, children }')
+      expect(result).to include('const [value, setValue] = useState(seed);')
+      expect(result).to match(/import React, \{[^}]*useState[^}]*\} from 'react';/)
+    end
+
+    it 'declares nothing where no control is seeded' do
+      jsx = '      <div>static content</div>'
+      result = generator.send(:generate_component_file, 'Plain', jsx, minimal_json)
+      expect(result).not_to include('JsonUISeeded')
+      expect(result).not_to include('useState')
+    end
+  end
+
   describe '#generate_component_file ColorManager import emission' do
     # Read off the emitted JSX for the same reason the Configuration import
     # is: the emitter's own output cannot drift from itself, whereas a second

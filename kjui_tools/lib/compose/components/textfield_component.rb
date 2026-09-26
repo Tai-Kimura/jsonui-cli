@@ -137,6 +137,18 @@ module KjuiTools
           "resolved_textfield#{@counter}"
         end
 
+        # The outline CustomTextField draws: the declared cornerRadius (the
+        # builder's own reading), else the library's default —
+        # `shape ?: RoundedCornerShape(Configuration.TextField.defaultCornerRadius.dp)`
+        # (KotlinJsonUI CustomTextField.kt). A RectangleShape shadow sat
+        # square behind the rounded field.
+        def self.shadow_outline(json_data, required_imports)
+          return nil if json_data['cornerRadius']
+
+          required_imports&.add(:configuration)
+          'RoundedCornerShape(Configuration.TextField.defaultCornerRadius.dp)'
+        end
+
         def self.generate(json_data, depth, required_imports = nil, parent_type = nil)
           # TextField uses 'text' for value and supports both 'hint' and 'placeholder'
           # For TextField value, we need direct data binding (not string interpolation)
@@ -307,8 +319,22 @@ module KjuiTools
               box_modifiers.concat(Helpers::ModifierBuilder.build_offset(json_data, required_imports))
               box_modifiers.concat(Helpers::ModifierBuilder.build_alpha(json_data, required_imports))
             end
+            # Shadow after alpha, the View slot; declared on `common` and
+            # dropped (kjui-dynamic-components-that-skip-the-common-modifiers).
+            # Cast in the outline the field draws (shadow_outline).
+            box_modifiers.concat(Helpers::ModifierBuilder.build_shadow(json_data, required_imports, shape: shadow_outline(json_data, required_imports)))
             box_modifiers.concat(Helpers::ModifierBuilder.build_weight(json_data, parent_type))
-            box_modifiers.concat(Helpers::ModifierBuilder.build_clickable(json_data, required_imports))
+            # A text field is a control whose own tap focuses it: an outer
+            # `.clickable` replaced that action for TalkBack (Compose applies a
+            # node's semantics innermost first; a later action wins), so a
+            # screen-reader user could not reach the field. iOS codegen
+            # attaches no tap to a text field and calls no onClick; the tap
+            # rule's shape for it is `none`. So the declared onClick is not
+            # called here (kjui-dynamic-components-that-skip-the-common-
+            # modifiers, item A); the gestures and the blocker stay.
+            # The Box carries the tag, the field inside it `enabled`: the Box
+            # takes `disabled()` for a UI test to read.
+            box_modifiers.concat(Helpers::ModifierBuilder.build_control_clickable(json_data, required_imports, enabled_on_node: false))
             if box_modifiers.any?
               code += "\n" + indent("boxModifier = Modifier", depth + 1)
               box_modifiers.each do |mod|
@@ -367,7 +393,17 @@ module KjuiTools
               modifiers.concat(Helpers::ModifierBuilder.build_offset(json_data, required_imports))
               modifiers.concat(Helpers::ModifierBuilder.build_alpha(json_data, required_imports))
             end
-            modifiers.concat(Helpers::ModifierBuilder.build_clickable(json_data, required_imports))
+            modifiers.concat(Helpers::ModifierBuilder.build_shadow(json_data, required_imports, shape: shadow_outline(json_data, required_imports)))
+            # A text field is a control whose own tap focuses it: an outer
+            # `.clickable` replaced that action for TalkBack (Compose applies a
+            # node's semantics innermost first; a later action wins), so a
+            # screen-reader user could not reach the field. iOS codegen
+            # attaches no tap to a text field and calls no onClick; the tap
+            # rule's shape for it is `none`. So the declared onClick is not
+            # called here (kjui-dynamic-components-that-skip-the-common-
+            # modifiers, item A); the gestures and the blocker stay.
+            # The modifier is the field's own node, which carries `enabled`.
+            modifiers.concat(Helpers::ModifierBuilder.build_control_clickable(json_data, required_imports, enabled_on_node: true))
             if focus_prop
               required_imports&.add(:focus_changed)
               modifiers << ".onFocusChanged { if (it.isFocused != data.#{focus_prop}) viewModel.updateData(mapOf(\"#{focus_prop}\" to it.isFocused)) }"
@@ -435,7 +471,9 @@ module KjuiTools
           # Shape with corner radius
           if json_data['cornerRadius']
             required_imports&.add(:shape)
-            code += "\n" + indent("shape = RoundedCornerShape(#{json_data['cornerRadius']}.dp),", depth + 1)
+            # A bound cornerRadius is an expression (BoundValue.dp); `@{r}` was
+            # written into the Kotlin as `RoundedCornerShape(@{r}.dp)` (B8).
+            code += "\n" + indent("shape = RoundedCornerShape(#{Helpers::BoundValue.dp(json_data['cornerRadius'])}),", depth + 1)
           end
 
           # Content padding - internal padding within the text field (not for SecureTextField)

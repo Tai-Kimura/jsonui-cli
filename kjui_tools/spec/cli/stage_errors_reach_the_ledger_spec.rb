@@ -173,13 +173,25 @@ RSpec.describe 'kjui build: a stage that printed an error is in the ledger' do
     expect_incomplete(log, exit_code, entries, 'styles', 'absent.json', 'was not found')
   end
 
-  it 'attribute_definitions.json missing (a copy that left its link dangling): in the ledger once' do
+  # A plain `cp -R` of the tool leaves every link into shared/core dangling:
+  # attribute_definitions.json and, since 753acb06, type_synonyms.json. Each
+  # is a validation stage that did not complete — named where it is met, in
+  # the ledger once however often it is met, and the build carries on without
+  # it (the exit is `jui build`'s, from the ledger). This build meets each
+  # file once even over two layouts (measured), so "once" is not what this
+  # arm tests; sjui's UIKit arm, which meets each more than once, is.
+  it 'a copy that left its links dangling: attribute_definitions.json and type_synonyms.json in the ledger, each once' do
     dir = project(dangling_definitions: true)
     layout(dir, 'home')
+    layout(dir, 'other')
     log, exit_code, entries = build(dir)
-    expect(log).to include('attribute_definitions.json not found')
-    expect(exit_code).to eq(0)
-    expect(entries.map { |e| e['stage'] }).to eq(['validation']), "#{entries.inspect}\n#{log}"
+    expect(log).to include('attribute_definitions.json not found').and include('type_synonyms.json not found')
+    expect(exit_code).to eq(0), log
+    expect(entries.map { |e| e['stage'] }).to eq(%w[validation validation]), "#{entries.inspect}\n#{log}"
+    messages = entries.map { |e| e['message'] }
+    expect(messages.count { |m| m.include?('attribute_definitions.json') }).to eq(1), messages.inspect
+    expect(messages.count { |m| m.include?('type_synonyms.json') }).to eq(1), messages.inspect
+    expect(log).to include('Build finished with 2 stage(s) incomplete — see above'), log
     expect(log).not_to include('Compose build completed!')
   end
 

@@ -1,7 +1,9 @@
 # frozen_string_literal: true
 
 require_relative '../spec_helper'
+require_relative '../support/typescript_compiler'
 require 'react/responsive_helper'
+require 'react/react_generator'
 
 RSpec.describe RjuiTools::React::ResponsiveHelper do
   describe '.build_responsive' do
@@ -471,5 +473,34 @@ RSpec.describe RjuiTools::React::ResponsiveHelper do
       }
       expect(described_class.needs_landscape_hook?(component)).to be true
     end
+  end
+
+  # The two pieces written as code — the hook's declaration in the component
+  # and the landscape classes as a template-literal expression in a
+  # className — in the file a build writes for a screen that has them,
+  # imports cut, under --strict. `useMediaQuery` is declared as
+  # templates/use_media_query.ts exports it.
+  it 'writes a screen that compiles with its landscape classes', :typescript_compile do
+    layout = {
+      'type' => 'View', 'id' => 'root', 'orientation' => 'vertical', 'spacing' => 8,
+      'responsive' => { 'landscape' => { 'orientation' => 'horizontal' }, 'regular-landscape' => { 'spacing' => 32 },
+                        'compact' => { 'padding' => 4 } },
+      'child' => [{ 'type' => 'Label', 'id' => 'title', 'text' => 'x',
+                    'responsive' => { 'landscape' => { 'fontSize' => 20 } } }]
+    }
+    screen = RjuiTools::React::ReactGenerator.new({ 'typescript' => true, 'use_tailwind' => true })
+                                             .generate('Home', layout, screen_id: 'home')
+    expect(screen).to include(described_class.landscape_hook_declaration)
+    expect(screen).to include('${isLandscape ? ')
+    template = File.read(File.expand_path('../../lib/react/templates/use_media_query.ts', __dir__))
+    signature = template[/^export function useMediaQuery\(([^)]*)\): (\w+)/]
+    expect(signature).to eq('export function useMediaQuery(query: string): boolean')
+    expect(screen.lines.reject { |l| l.start_with?('import ') }.join).to compile_as_typescript.with_ambient(<<~TS)
+      #{signature.sub('export function', 'declare function')};
+      interface HomeData {}
+      declare function createHomeData(): HomeData;
+      declare function useStringManager(): Record<string, string>;
+      declare function screenMarker(screenId: string): Record<string, string>;
+    TS
   end
 end

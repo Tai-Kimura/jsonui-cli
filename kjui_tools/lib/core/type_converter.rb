@@ -3,6 +3,7 @@
 require 'json'
 require_relative 'config_manager'
 require_relative 'type_converter_core'
+require_relative 'logger'
 
 module KjuiTools
   module Core
@@ -309,29 +310,10 @@ module KjuiTools
           params.map { |p| convert_single_type(p.strip, mode) }.join(', ')
         end
 
-        # Format a value for Kotlin code based on type
-        # @param value [Object] the value to format
-        # @param kotlin_type [String] the Kotlin type
-        # @return [String] the formatted value as Kotlin code
-        def format_value(value, kotlin_type)
-          return 'null' if value.nil?
-
-          case kotlin_type
-          when 'String'
-            format_string_value(value)
-          when 'Int'
-            value.to_i.to_s
-          when 'Double'
-            "#{value.to_f}"
-          when 'Float'
-            "#{value.to_f}f"
-          when 'Boolean'
-            value.to_s.downcase
-          when 'Color'
-            format_color_value(value)
-          else
-            value.to_s
-          end
+        # A build warning from the shared core (a data default with no
+        # value for this platform) goes where the tool's others go.
+        def report_warning(message)
+          Core::Logger.warn(message)
         end
 
         # Convert defaultValue based on the type
@@ -443,20 +425,6 @@ module KjuiTools
 
         private
 
-        def format_color_value(value)
-          if value.is_a?(String) && value.start_with?('#')
-            hex = value.sub('#', '')
-            if hex.length == 6
-              "Color(0xFF#{hex.upcase})"
-            elsif hex.length == 8
-              "Color(0x#{hex.upcase})"
-            else
-              "Color.Unspecified"
-            end
-          else
-            value.to_s
-          end
-        end
       end
     end
   end

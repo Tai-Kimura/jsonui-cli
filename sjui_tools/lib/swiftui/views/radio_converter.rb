@@ -25,6 +25,9 @@ module SjuiTools
           # inert on this platform in both its literal and its bound form.
           text = @component['label'] || @component['text'] || ""
 
+          # The declared onClick, called from a selection (operation_click_call).
+          click = operation_click_call
+
           # Check if this is a radio group with items
           if bound_items || items.any?
             # Get selection binding
@@ -71,6 +74,10 @@ module SjuiTools
                       handler_call = get_event_handler_invocation(@component['onValueChange'], id, item)
                       add_line handler_call
                     end
+                    # Then the declared onClick, from the same selection
+                    # (operation_click_call). It was called from nothing: the
+                    # tap around the group never fired over the item's own.
+                    add_line click if click
                   end
                   add_line "}"
                   add_line "Text(#{item})"
@@ -131,14 +138,10 @@ module SjuiTools
               indent do
                 add_line "#{state_var} = #{swift_string_literal(radio_value)}"
                 # onClick handler - called when radio is clicked
-                # onClick (camelCase) -> binding format only (@{functionName})
                 # canTap gates the call, not the selection
-                # (gated_handler_call).
-                if JsonUIShared::TapAccessibility.handler?(@component['onClick']) && is_binding?(@component['onClick']) &&
-                   @component['canTap'] != false
-                  handler_call = get_event_handler_invocation(@component['onClick'], id, nil)
-                  add_line gated_handler_call(handler_call)
-                end
+                # (operation_click_call — every handler, the legacy `onclick`
+                # too).
+                add_line click if click
               end
               add_line "}"
               

@@ -387,7 +387,7 @@ class FastApiNoiseClassTests(unittest.TestCase):
                         "reason": {"type": "string"},
                         "changes": {"type": "object", "properties": {
                             "name": {"type": "string"},
-                            "abv": {"type": "number"},
+                            "rating": {"type": "number"},
                             "age": {"type": "integer"}}}}}}}},
             "responses": {"200": {"description": "ok"}}}}}}
         impl = {"openapi": "3.1.0", "paths": {"/x": {"post": {

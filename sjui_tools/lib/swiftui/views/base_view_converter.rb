@@ -840,8 +840,9 @@ module SjuiTools
         # `.allowsHitTesting`, which the bag writes outside the view's own
         # gestures (MODIFIER_ORDER). The converters that build their own
         # modifiers and handle `enabled` themselves — Button, TextField,
-        # TextView, SelectBox — call this alone: they read neither flag, and
-        # a TextField read the binding only (ViewBindingHandler).
+        # TextView — call this alone: they read neither flag, and a TextField
+        # read the binding only (ViewBindingHandler). SelectBox builds its own
+        # too, but its view takes no `enabled`: it registers both gates.
         def register_hit_test_gate
           @interaction_gates_registered = true
           gates = []
@@ -892,6 +893,7 @@ module SjuiTools
           return if @component['type'] == 'Button'
           return if @component['enabled'] == false
           return if @component['canTap'] == false
+          return if operation_click_type?
 
           tap = JsonUIShared::TapAccessibility
           if tap.handler?(@component['onClick'])
@@ -927,6 +929,73 @@ module SjuiTools
 
           ".gesture(TapGesture().onEnded {\n#{indent_str}#{handler_call}\n#{indent_str[0...-4]}}, " \
             "including: #{tap_gate_expr(can_tap)} ? .all : .subviews)"
+        end
+
+        # Types whose declared onClick is not a tap on the view (ticket
+        # control-onclick-is-called-differently-on-every-path; 4f's ruling). A
+        # control — Switch / Toggle, CheckBox, Radio, Segment, Slider,
+        # SelectBox — calls it from its own operation, after its own update
+        # (operation_click_call); a text field does not call it at all, its
+        # tap focuses it. register_click_lines attaches no tap to them: around
+        # a control the tap either never fired (the control's own gesture
+        # wins) or fired beside the operation — a labelled Switch called it
+        # from a tap on its label, which flips nothing, and a Switch, a
+        # Segment, a Slider and a SelectBox never called it from their own
+        # operation (SwiftJsonUI ConformanceHost OnClickProbeUITests). The
+        # same types as kjui_tools' operation_click_call and SwiftJsonUI's
+        # DynamicEventHelper.operationClickTypes.
+        OPERATION_CLICK_TYPES = %w[switch toggle checkbox check radio segment slider selectbox
+                                   textfield edittext input textview].freeze
+
+        def operation_click_type?
+          OPERATION_CLICK_TYPES.include?(@component['type'].to_s.downcase)
+        end
+
+        # The declared onClick of a control, as the statement its operation
+        # runs after its own update (and after onValueChange), or nil: no
+        # handler, or `canTap: false`. A bound canTap gates the call
+        # (gated_handler_call); `enabled` is the operation's, so a disabled
+        # control neither operates nor calls. camelCase wins; every name of
+        # an `onclick` array is called, in order, as the tap called them.
+        def operation_click_call
+          return nil if @component['canTap'] == false
+
+          tap = JsonUIShared::TapAccessibility
+          calls = if tap.handler?(@component['onClick'])
+                    if is_binding?(@component['onClick'])
+                      [get_event_handler_invocation(@component['onClick'], @component['id'], nil)]
+                    else
+                      [get_event_handler_call(@component['onClick'])]
+                    end
+                  elsif tap.handler?(@component['onclick'])
+                    tap.handler_values(@component['onclick']).map { |n| "data.#{to_camel_case(n)}?()" }
+                  end
+          return nil if calls.nil? || calls.empty?
+
+          gated_handler_call(calls.join('; '))
+        end
+
+        # A control's binding that reports the user's operation after each of
+        # the control's own writes: `value_call` (onValueChange, on
+        # `newValue`) when the write changed the value, then `click`
+        # (operation_click_call). The view model's change never goes through
+        # the control's binding, so it reports nothing — 4f's ruling: the
+        # control's update, then onValueChange, then onClick, all from the
+        # user's operation, as kjui calls them. The bound controls observed
+        # the value with `.onChange(of:)` instead, which ran on the next update
+        # — after the click — and for the view model's writes too; the unbound
+        # ones observed `data.<state>`, a property the Data struct does not
+        # have, and did not compile. The binding itself when there is no call.
+        def operation_binding(binding_expr, click, value_call = nil)
+          return binding_expr if click.nil? && value_call.nil?
+
+          body = ["#{binding_expr}.wrappedValue = newValue"]
+          if value_call
+            body.unshift("let changed = newValue != #{binding_expr}.wrappedValue")
+            body << "if changed { #{value_call} }"
+          end
+          body << click if click
+          "SwiftUI.Binding(get: { #{binding_expr}.wrappedValue }, set: { newValue in #{body.join('; ')} })"
         end
 
         # A handler call that a component makes from its own operation — a

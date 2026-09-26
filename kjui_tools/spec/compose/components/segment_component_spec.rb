@@ -74,7 +74,11 @@ RSpec.describe KjuiTools::Compose::Components::SegmentComponent do
         'items' => ['A', 'B']
       }
       result = described_class.generate(json_data, 0, required_imports)
-      expect(result).to include('selectedTabIndex = 1')
+      # The static index seeds the segment's own state; a tap writes it.
+      expect(result).to include('var seeded by remember { mutableStateOf(1) }')
+      expect(result).to include('selectedTabIndex = seeded,')
+      expect(result).to include('seeded = 0')
+      expect(result).to include('seeded = 1')
     end
 
     it 'generates Segment with dynamic selectedIndex binding' do
@@ -103,7 +107,8 @@ RSpec.describe KjuiTools::Compose::Components::SegmentComponent do
         'items' => ['A', 'B']
       }
       result = described_class.generate(json_data, 0, required_imports)
-      expect(result).to include('selectedTabIndex = 0')
+      expect(result).to include('var seeded by remember { mutableStateOf(0) }')
+      expect(result).to include('selectedTabIndex = seeded,')
     end
 
     it 'generates Segment with enabled attribute' do

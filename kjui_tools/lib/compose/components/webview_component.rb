@@ -107,6 +107,11 @@ module KjuiTools
           modifiers.concat(Helpers::ModifierBuilder.build_size(json_data, parent_type, required_imports))
           modifiers.concat(Helpers::ModifierBuilder.build_offset(json_data, required_imports))
           modifiers.concat(Helpers::ModifierBuilder.build_alpha(json_data, required_imports))
+          # shadow → border: the View slots before the click. The background
+          # is the WebView's own (setBackgroundColor above), so the border
+          # comes alone (kjui-dynamic-components-that-skip-the-common-modifiers).
+          modifiers.concat(Helpers::ModifierBuilder.build_shadow(json_data, required_imports))
+          modifiers.concat(Helpers::ModifierBuilder.build_border(json_data, required_imports))
           modifiers.concat(Helpers::ModifierBuilder.build_clickable(json_data, required_imports))
           modifiers.concat(Helpers::ModifierBuilder.build_padding(json_data))
           modifiers.concat(Helpers::ModifierBuilder.build_alignment(json_data, required_imports, parent_type))
@@ -114,7 +119,9 @@ module KjuiTools
 
           if json_data['cornerRadius']
             required_imports&.add(:shape)
-            modifiers << ".clip(RoundedCornerShape(#{json_data['cornerRadius']}.dp))"
+            # A bound cornerRadius is an expression (BoundValue.dp); `@{r}` was
+            # written into the Kotlin as `RoundedCornerShape(@{r}.dp)` (B8).
+            modifiers << ".clip(RoundedCornerShape(#{Helpers::BoundValue.dp(json_data['cornerRadius'])}))"
           end
           
           # 🔻 THE ID LIVES ON A COMPOSE NODE, NOT ON THE AndroidView. A testTag

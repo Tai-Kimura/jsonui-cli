@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require_relative '../helpers/binding_expression'
+require_relative '../helpers/static_seed'
 require_relative '../helpers/bound_value'
 require_relative '../helpers/modifier_builder'
 require_relative '../helpers/resource_resolver'
@@ -63,6 +64,18 @@ module KjuiTools
             '""'
           end
           
+          # A static selection (a Kotlin string literal here — none is "") is the
+          # seed of the box's own state (Helpers::StaticSeed); a bound one is the
+          # view model's.
+          if selected.start_with?('"')
+            return Helpers::StaticSeed.wrap(selected, depth, required_imports) do |d, state|
+              generate_body(json_data, d, required_imports, parent_type, state, is_date_picker, state)
+            end
+          end
+          generate_body(json_data, depth, required_imports, parent_type, selected, is_date_picker, nil)
+        end
+
+        def self.generate_body(json_data, depth, required_imports, parent_type, selected, is_date_picker, seeded)
           # Use DateSelectBox for date type
           if is_date_picker
             required_imports&.add(:date_selectbox_component)
@@ -90,6 +103,11 @@ module KjuiTools
           end
 
           view_id = json_data['id'] || 'selectbox'
+          # The declared onClick is called from the selection, after it —
+          # the SelectBox's own operation, not an outer `.clickable`, whose
+          # action would replace the box's own open action for TalkBack
+          # (ModifierBuilder.operation_click_call).
+          click = Helpers::ModifierBuilder.operation_click_call(json_data)
           if json_data['onValueChange']
             # onValueChange (camelCase) -> binding format only (@{functionName})
             if Helpers::ModifierBuilder.is_binding?(json_data['onValueChange'])
@@ -123,9 +141,10 @@ module KjuiTools
                   code += "\n" + indent("viewModel.updateData(mapOf(\"#{Helpers::BindingExpression.path_only(binding_variable)}\" to newValue))", depth + 2)
                 end
                 code += "\n" + indent("#{handler_call}", depth + 2)
+                code += "\n" + indent(click, depth + 2) if click
                 code += "\n" + indent("},", depth + 1)
               else
-                code += "\n" + indent("onValueChange = { newValue -> #{handler_call} },", depth + 1)
+                code += "\n" + indent("onValueChange = #{Helpers::ModifierBuilder.with_operation_click("{ newValue -> #{seeded ? "#{seeded} = newValue; " : ''}#{handler_call} }", json_data)},", depth + 1)
               end
             else
               code += "\n" + indent("onValueChange = { // ERROR: #{json_data['onValueChange']} - camelCase events require binding format @{functionName} },", depth + 1)
@@ -133,9 +152,10 @@ module KjuiTools
           elsif binding_variable
             code += "\n" + indent("onValueChange = { newValue ->", depth + 1)
             code += "\n" + indent("viewModel.updateData(mapOf(\"#{Helpers::BindingExpression.path_only(binding_variable)}\" to newValue))", depth + 2)
+            code += "\n" + indent(click, depth + 2) if click
             code += "\n" + indent("},", depth + 1)
           else
-            code += "\n" + indent("onValueChange = { },", depth + 1)
+            code += "\n" + indent("onValueChange = #{Helpers::ModifierBuilder.with_operation_click(seeded ? "{ #{seeded} = it }" : '{ }', json_data)},", depth + 1)
           end
           
           # For date picker, add date-specific parameters
@@ -245,7 +265,10 @@ module KjuiTools
           end
           
           if json_data['cornerRadius']
-            code += "\n" + indent("cornerRadius = #{json_data['cornerRadius']},", depth + 1)
+            # SelectBox takes its radius as an Int; a bound one is an
+            # expression (BoundValue.int) — `@{r}` was written into the
+            # Kotlin as `cornerRadius = @{r}` (B8).
+            code += "\n" + indent("cornerRadius = #{Helpers::BoundValue.int(json_data['cornerRadius'])},", depth + 1)
           end
 
           # Font styling
@@ -307,7 +330,15 @@ module KjuiTools
           modifiers.concat(Helpers::ModifierBuilder.build_size(json_data, parent_type, required_imports))
           modifiers.concat(Helpers::ModifierBuilder.build_offset(json_data, required_imports))
           modifiers.concat(Helpers::ModifierBuilder.build_alpha(json_data, required_imports))
-          modifiers.concat(Helpers::ModifierBuilder.build_clickable(json_data, required_imports))
+          # Cast in the outline the SelectBox draws: its cornerRadius, which the
+          # library defaults to 8 (`cornerRadius: Int = 8`, KotlinJsonUI
+          # SelectBox.kt) — not a RectangleShape behind the rounded box.
+          shadow_outline = json_data['cornerRadius'] ? nil : 'RoundedCornerShape(8.dp)'
+          modifiers.concat(Helpers::ModifierBuilder.build_shadow(json_data, required_imports, shape: shadow_outline))
+          # The node's gestures and blocker; the click is in onValueChange
+          # above. The library applies `clickable(enabled = enabled)` to this
+          # same node, so `enabled` is on it.
+          modifiers.concat(Helpers::ModifierBuilder.build_control_clickable(json_data, required_imports, enabled_on_node: true))
           # padding is passed as contentPadding parameter, not modifier
           modifiers.concat(Helpers::ModifierBuilder.build_alignment(json_data, required_imports, parent_type))
           modifiers.concat(Helpers::ModifierBuilder.build_weight(json_data, parent_type))

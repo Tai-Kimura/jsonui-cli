@@ -39,9 +39,14 @@ RSpec.describe 'sjui canTap stops the tap handler and nothing else' do
   tap = JsonUIShared::TapAccessibility
 
   # Types the tap rule counts as a tap for which no tap gesture is emitted: a
-  # Button's tap is its action; the text inputs, SelectBox and Embed take no
-  # onClick. Pinned, so a type joining or leaving is seen.
-  no_gesture = %w[TextField EditText Input TextView Button SelectBox Embed]
+  # Button's tap is its action; a control calls its onClick from its own
+  # operation and a text field not at all (ticket
+  # control-onclick-is-called-differently-on-every-path —
+  # controls_call_onclick_from_their_operation_spec.rb holds their gates);
+  # Embed takes no onClick. A Radio keeps its own tap, the selection. Pinned,
+  # so a type joining or leaving is seen.
+  no_gesture = %w[TextField EditText Input TextView Button SelectBox Embed
+                  Switch Toggle CheckBox Check Checkbox Segment Slider]
 
   extra = {
     'Image' => { 'srcName' => 'x' }, 'CircleImage' => { 'srcName' => 'x' },

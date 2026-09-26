@@ -48,20 +48,50 @@ module KjuiTools
           if selected_binding && selected_binding.is_a?(String) && selected_binding.start_with?('@{')
             binding_prop = selected_binding.gsub(/@\{|\}/, '')
             state_expr = "data.#{binding_prop}"
-            setter_expr = "viewModel.updateData(mapOf(\"#{binding_prop}\" to it))"
+            select_tab = ->(index) { "viewModel.updateData(mapOf(\"#{binding_prop}\" to #{index}))" }
           else
             initial_index = selected_binding.is_a?(Numeric) ? selected_binding.to_i : selected_binding.to_s[/\A\d+\z/].to_i
             code += "\n" + indent("var #{state_var} by remember { mutableStateOf(#{initial_index}) }", depth)
             state_expr = state_var
-            setter_expr = "#{state_var} = it"
+            select_tab = ->(index) { "#{state_var} = #{index}" }
           end
+          # `enabled` is the tab bar's own items' parameter: a disabled TabView
+          # does not switch tabs (NavigationBarItem's `enabled`, which also
+          # marks each item disabled for TalkBack). Only the Scaffold's
+          # semantics read it, and a tab still switched
+          # (kjui-dynamic-components-that-skip-the-common-modifiers, B7).
+          tabs_enabled = Helpers::ModifierBuilder.enabled_expression(json_data)
 
           code += "\n\n" + indent("Scaffold(", depth)
-          # userInteractionEnabled stops the tab view and what is in it
-          # (ModifierBuilder.build_interaction_blocker). The Scaffold takes no
-          # other modifier here, so it gets one only when the flag is set.
-          blocker = Helpers::ModifierBuilder.build_interaction_blocker(json_data, required_imports)
-          code += Helpers::ModifierBuilder.format(blocker, depth) + ',' if blocker.any?
+          # The Scaffold carries the node's common stages in the View order:
+          # testTag → (blocker) → margins → size → offset → alpha → shadow →
+          # background → click → padding. Only the blocker used to reach it —
+          # every other stage was declared on `common` and dropped
+          # (kjui-dynamic-components-that-skip-the-common-modifiers). The
+          # blocker (userInteractionEnabled stops the tab view and what is in
+          # it) stays where it was, ahead of the margins, so the click stage is
+          # the click and the disabled semantics, not build_clickable's blocker
+          # again. With none of them declared the Scaffold takes no modifier.
+          modifiers = []
+          modifiers.concat(Helpers::ModifierBuilder.build_test_tag(json_data, required_imports))
+          modifiers.concat(Helpers::ModifierBuilder.build_interaction_blocker(json_data, required_imports))
+          modifiers.concat(Helpers::ModifierBuilder.build_margins(json_data))
+          modifiers.concat(Helpers::ModifierBuilder.build_size(json_data, parent_type, required_imports))
+          modifiers.concat(Helpers::ModifierBuilder.build_offset(json_data, required_imports))
+          modifiers.concat(Helpers::ModifierBuilder.build_alpha(json_data, required_imports))
+          modifiers.concat(Helpers::ModifierBuilder.build_shadow(json_data, required_imports))
+          modifiers.concat(Helpers::ModifierBuilder.build_background(json_data, required_imports))
+          # The node's own long press, pan and pinch, at the click slot and
+          # gated like it (gesture_gate: userInteractionEnabled and enabled) —
+          # declared on `common` and dropped here
+          # (kjui-dynamic-components-that-skip-the-common-modifiers, B6).
+          modifiers.concat(Helpers::ModifierBuilder.build_gestures(json_data, required_imports))
+          modifiers.concat(Helpers::ModifierBuilder.build_click(json_data, required_imports))
+          modifiers.concat(Helpers::ModifierBuilder.build_disabled_semantics(
+            json_data, Helpers::ModifierBuilder.enabled_expression(json_data), required_imports
+          ))
+          modifiers.concat(Helpers::ModifierBuilder.build_padding(json_data))
+          code += Helpers::ModifierBuilder.format(modifiers, depth) + ',' if modifiers.any?
           code += "\n" + indent("bottomBar = {", depth + 1)
 
           # NavigationBar
@@ -93,7 +123,12 @@ module KjuiTools
 
             code += "\n" + indent("NavigationBarItem(", depth + 3)
             code += "\n" + indent("selected = #{state_expr} == #{index},", depth + 4)
-            code += "\n" + indent("onClick = { #{setter_expr.gsub('it', index.to_s)} },", depth + 4)
+            # The tab's index is put in by the call, not by a text substitution:
+            # `gsub('it', index)` rewrote every "it" of the setter, so a bound
+            # name holding one — `editIndex` — wrote `"ed0Index"`, a key the
+            # data does not have, and the tab never switched.
+            code += "\n" + indent("onClick = { #{select_tab.call(index)} },", depth + 4)
+            code += "\n" + indent("enabled = #{tabs_enabled},", depth + 4) if tabs_enabled
 
             # The badge reaches a screen reader only through the item. Material3's
             # NavigationBarItem clears the icon slot's semantics — the badge with

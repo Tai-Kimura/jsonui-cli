@@ -23,6 +23,10 @@ require_relative '../../support/kotlin_compiler'
 # template. Ticket converter-literal-props-do-not-compile.
 RSpec.describe 'kjui g converter: a literal the layout gives a prop' do
   EXTENSIONS = File.expand_path('../../../lib/compose/components/extensions', __dir__)
+  # The count jui build's own comment gives for its output
+  # (jui_tools/jui_cli/commands/build_cmd.py): a line it does not match is a
+  # warning nobody counts.
+  WARNING_COUNT = /warning \[|warning:|\[warn|⚠/i.freeze
 
   before do
     %i[info debug warn success error].each { |m| allow(KjuiTools::Core::Logger).to receive(m) }
@@ -133,13 +137,16 @@ RSpec.describe 'kjui g converter: a literal the layout gives a prop' do
     it 'writes null only where Swift declares the prop optional, names every other, and compiles each call' do
       rows = null_types.each_with_index.map do |type, i|
         name = "NullProbe#{i}"
+        # What it printed through kjui's warning logger, prefix and all:
+        # the logger is not stubbed for this, and stdout is captured.
         said = StringIO.new
-        saved = $stderr
+        saved = $stdout
         call = begin
-          $stderr = said
+          allow(KjuiTools::Core::Logger).to receive(:warn).and_call_original
+          $stdout = said
           emitted(name, { 'v' => type }, { 'type' => name, 'v' => nil })
         ensure
-          $stderr = saved
+          $stdout = saved
         end
         scaffold = in_project do
           KjuiTools::Compose::Generators::KotlinComponentGenerator
@@ -155,6 +162,16 @@ RSpec.describe 'kjui g converter: a literal the layout gives a prop' do
 
           expect(call).not_to match(/^\s*v = /), "#{type}: #{call}"
           expect(said).to include("the layout's nil is not a #{type} literal"), "#{type}: #{said.inspect}"
+        end
+        # Printed through kjui's warning logger, with its prefix, where a
+        # warning count finds it. Until 1.8.121's fourth round the converter
+        # said it with a bare `warn`: stderr, no prefix, and a count of the
+        # build's warnings saw none of them.
+        lines = rows.flat_map { |_, _, said, _, _| said.lines }.grep(/\[kjui\] /)
+        expect(lines.size).to be >= 5
+        lines.each do |line|
+          expect(line).to start_with('⚠️  [kjui] NullProbe')
+          expect(line).to match(WARNING_COUNT)
         end
       end
       source = rows.map do |_, call, _, scaffold, i|

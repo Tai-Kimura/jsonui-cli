@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require_relative '../helpers/bound_value'
+require_relative '../helpers/static_seed'
 require_relative '../helpers/modifier_builder'
 require_relative '../helpers/resource_resolver'
 require_relative '../../core/normalization'
@@ -36,7 +37,20 @@ module KjuiTools
           # DEFAULT moves; a layout that declares its own bounds is untouched.
           min_value = Core::Normalization.attr_lookup(json_data, 'minimum', 'minimumValue', 'minValue') || json_data['min'] || 0
           max_value = Core::Normalization.attr_lookup(json_data, 'maximum', 'maximumValue', 'maxValue') || json_data['max'] || 1
-          
+
+          # A static value is the seed of the slider's own state
+          # (Helpers::StaticSeed); with no value the thumb starts at the
+          # minimum, as on the other faces. A bound value is the view model's.
+          unless value.start_with?('data.')
+            seed = json_data['value'].nil? ? Helpers::BoundValue.float(min_value, fallback: 0) : value
+            return Helpers::StaticSeed.wrap(seed, depth, required_imports) do |d, state|
+              generate_body(json_data, d, required_imports, parent_type, state, min_value, max_value, state)
+            end
+          end
+          generate_body(json_data, depth, required_imports, parent_type, value, min_value, max_value, nil)
+        end
+
+        def self.generate_body(json_data, depth, required_imports, parent_type, value, min_value, max_value, seeded)
           code = indent("Slider(", depth)
           code += "\n" + indent("value = #{value},", depth + 1)
           
@@ -62,7 +76,7 @@ module KjuiTools
               else
                 # Event handler only (implicit `it` parameter)
                 handler_call = Helpers::ModifierBuilder.get_event_handler_invocation(on_value_change, view_id, 'it')
-                code += "\n" + indent("onValueChange = { #{handler_call} },", depth + 1)
+                code += "\n" + indent("onValueChange = { #{seeded ? "#{seeded} = it; " : ''}#{handler_call} },", depth + 1)
               end
             else
               code += "\n" + indent("onValueChange = { // ERROR: #{on_value_change} - camelCase events require binding format @{functionName} },", depth + 1)
@@ -71,7 +85,14 @@ module KjuiTools
             # Update the bound variable only
             code += "\n" + indent("onValueChange = { newValue -> viewModel.updateData(mapOf(\"#{binding_variable}\" to newValue.toDouble())) },", depth + 1)
           else
-            code += "\n" + indent("onValueChange = { },", depth + 1)
+            code += "\n" + indent(seeded ? "onValueChange = { #{seeded} = it }," : "onValueChange = { },", depth + 1)
+          end
+          # The declared onClick is called when the value change finishes —
+          # the Slider's own operation, not an outer `.clickable`, whose
+          # action would replace the Slider's own for TalkBack
+          # (ModifierBuilder.operation_click_call).
+          if (click = Helpers::ModifierBuilder.operation_click_call(json_data))
+            code += "\n" + indent("onValueChangeFinished = { #{click} },", depth + 1)
           end
           
           # Value range
@@ -97,7 +118,11 @@ module KjuiTools
           modifiers.concat(Helpers::ModifierBuilder.build_size(json_data, parent_type, required_imports))
           modifiers.concat(Helpers::ModifierBuilder.build_offset(json_data, required_imports))
           modifiers.concat(Helpers::ModifierBuilder.build_alpha(json_data, required_imports))
-          modifiers.concat(Helpers::ModifierBuilder.build_clickable(json_data, required_imports))
+          modifiers.concat(Helpers::ModifierBuilder.build_shadow(json_data, required_imports))
+          modifiers.concat(Helpers::ModifierBuilder.build_background(json_data, required_imports))
+          # The node's gestures and blocker; the click is onValueChangeFinished
+          # above, and `enabled` is the Slider's own parameter on this node.
+          modifiers.concat(Helpers::ModifierBuilder.build_control_clickable(json_data, required_imports, enabled_on_node: true))
           modifiers.concat(Helpers::ModifierBuilder.build_padding(json_data))
           modifiers.concat(Helpers::ModifierBuilder.build_weight(json_data, parent_type))
 
@@ -135,7 +160,7 @@ module KjuiTools
             end
             
             if colors_params.any?
-              code += ",\n" + indent("colors = SliderDefaults.colors(", depth + 1)
+              code = Helpers::ModifierBuilder.join_argument(code, ",\n" + indent("colors = SliderDefaults.colors(", depth + 1))
               code += "\n" + colors_params.map { |param| indent(param, depth + 2) }.join(",\n")
               code += "\n" + indent(")", depth + 1)
             end
@@ -145,9 +170,9 @@ module KjuiTools
           if json_data.key?('enabled')
             if json_data['enabled'].is_a?(String) && json_data['enabled'].start_with?('@{')
               inner_expr = json_data['enabled'].match(/@\{([^}]+)\}/)[1]
-              code += ",\n" + indent("enabled = #{Helpers::BindingExpression.value_access(inner_expr, negatable: true)}", depth + 1)
+              code = Helpers::ModifierBuilder.join_argument(code, ",\n" + indent("enabled = #{Helpers::BindingExpression.value_access(inner_expr, negatable: true)}", depth + 1))
             else
-              code += ",\n" + indent("enabled = #{json_data['enabled']}", depth + 1)
+              code = Helpers::ModifierBuilder.join_argument(code, ",\n" + indent("enabled = #{json_data['enabled']}", depth + 1))
             end
           end
           

@@ -20,8 +20,8 @@ module JsonUI
         { name: 'color', kind: :string, bindable: true, aliases: ['tint'].freeze }.freeze,
         # Hide when stopped. Decides SPACE: `true` collapses the stopped indicator out of the layout, `false` keeps it drawn AND laid out. Full ruling in attribute_semantics.json -> indicatorStopped.
         { name: 'hidesWhenStopped', kind: :boolean }.freeze,
-        # Indicator style
-        { name: 'indicatorStyle', kind: :enum, values: ['medium', 'large'].freeze }.freeze,
+        # Indicator style: `small` / `medium` / `large` are the spinner's size (`medium` the platform's own) and `linear` a bar instead of a spinner. A declared width / height wins over the style's size. The legacy spellings `style` (naming one of these values) and `size` (a length) are folded by the layout normalizer, with a warning: `style` into this attribute, `size` into width and height.
+        { name: 'indicatorStyle', kind: :enum, values: ['small', 'medium', 'large', 'linear'].freeze }.freeze,
       ].freeze
 
       # Returns a Hash keyed by canonical attribute name.

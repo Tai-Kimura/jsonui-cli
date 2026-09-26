@@ -3,6 +3,7 @@
 require_relative '../helpers/binding_expression'
 require_relative '../helpers/modifier_builder'
 require_relative '../../core/string_literals'
+require_relative '../../core/binding_validator_core'
 
 # Generates Compose code for the `Embed` view type. Embeds another screen as
 # a region of the parent layout; the embedded screen owns its own ViewModel.
@@ -89,8 +90,20 @@ module KjuiTools
             code += "\n" + indent('eventBridge = { event ->', depth + 1)
             code += "\n" + indent('if (event is EmbeddedEvent.Named) {', depth + 2)
             code += "\n" + indent('when (event.name) {', depth + 3)
+            # Each event calls the parent ViewModel's method it names, with
+            # the payload — the method the consumer writes. A value that
+            # names no method (`@{name}`, the binding spelling, was written
+            # into code as it stood: `viewModel.@{name}(event.payload)`) is
+            # not called: the build names it
+            # (BindingValidatorCore.embed_event_handler_problem) and a
+            # comment keeps its place.
             events.each do |event_name, handler|
-              code += "\n" + indent("\"#{event_name}\" -> viewModel.#{handler}(event.payload)", depth + 4)
+              line = if JsonUIShared::BindingValidatorCore.embed_event_handler_problem(handler)
+                       "// ERROR: Embed event #{event_name.to_s.gsub(/[\r\n]/, ' ')} names no handler, and is not called"
+                     else
+                       "#{JsonUIShared::StringLiterals.kotlin(event_name.to_s)} -> viewModel.#{handler}(event.payload)"
+                     end
+              code += "\n" + indent(line, depth + 4)
             end
             code += "\n" + indent('}', depth + 3)
             code += "\n" + indent('}', depth + 2)
@@ -110,10 +123,14 @@ module KjuiTools
         # Build the modifier chain for the EmbedContainer call site. Mirrors
         # the order used by ContainerComponent so behavior is consistent with
         # `View` / other containers: testTag → margins → weight (if Row/Column
-        # parent) → size → padding. The full set is intentionally narrower
-        # than ContainerComponent — Embed does not need alignment, alpha,
-        # background, clickable, or the size-intrinsic adjustment (the embed
-        # content composable owns those concerns internally).
+        # parent) → size → offset → alpha → shadow → background → click →
+        # padding. Alpha, shadow, background (with its cornerRadius and border),
+        # onClick and enabled are declared on `common` and were left out here
+        # (kjui-dynamic-components-that-skip-the-common-modifiers, ruling (a):
+        # the SSoT declares them for every type). Still narrower than
+        # ContainerComponent: no alignment and no size-intrinsic adjustment.
+        # The blocker is emitted before the margins, so the click stage is the
+        # click and the disabled semantics, not build_clickable's blocker again.
         def self.build_embed_modifier(json_data, depth, required_imports, parent_type)
           modifiers = []
           modifiers.concat(Helpers::ModifierBuilder.build_test_tag(json_data, required_imports))
@@ -127,6 +144,18 @@ module KjuiTools
           end
           modifiers.concat(Helpers::ModifierBuilder.build_size(json_data, parent_type, required_imports))
           modifiers.concat(Helpers::ModifierBuilder.build_offset(json_data, required_imports))
+          modifiers.concat(Helpers::ModifierBuilder.build_alpha(json_data, required_imports))
+          modifiers.concat(Helpers::ModifierBuilder.build_shadow(json_data, required_imports))
+          modifiers.concat(Helpers::ModifierBuilder.build_background(json_data, required_imports))
+          # The node's own long press, pan and pinch, at the click slot and
+          # gated like it (gesture_gate: userInteractionEnabled and enabled) —
+          # declared on `common` and dropped here
+          # (kjui-dynamic-components-that-skip-the-common-modifiers, B6).
+          modifiers.concat(Helpers::ModifierBuilder.build_gestures(json_data, required_imports))
+          modifiers.concat(Helpers::ModifierBuilder.build_click(json_data, required_imports))
+          modifiers.concat(Helpers::ModifierBuilder.build_disabled_semantics(
+            json_data, Helpers::ModifierBuilder.enabled_expression(json_data), required_imports
+          ))
           modifiers.concat(Helpers::ModifierBuilder.build_padding(json_data))
           return '' if modifiers.empty?
           Helpers::ModifierBuilder.format(modifiers, depth)

@@ -4,6 +4,7 @@ require 'json'
 require 'open3'
 require 'tmpdir'
 require_relative '../spec_helper'
+require_relative '../support/typescript_compiler'
 require 'core/string_literals'
 require 'react/react_generator'
 require 'react/converters/network_image_converter'
@@ -308,5 +309,58 @@ RSpec.describe 'Author text in generated TS/TSX, path by path' do
       emitted = row[:emit].call(table::PLAIN)
       expect(table.locate(emitted, row[:at])).to eq(row[:plain])
     end
+  end
+
+  # Every path's emit with SPECIMEN in it, as a component returns it, under
+  # --strict. node reads each fragment back above; this is the whole element
+  # around it, against what it calls as the build declares it: the
+  # templates' own props (read from lib/react/templates), partialText and
+  # the date helpers as build_command writes them, the inputs' handlers by
+  # lib.dom. next/link's `Link` is the one declared here by hand (href and
+  # children). The font spec is a spread into a style object, so it goes
+  # into one.
+  it 'writes TSX that compiles for every path', :typescript_compile do
+    elements = table::PATHS.map do |row|
+      emitted = row[:emit].call(row[:text] || table::SPECIMEN)
+      emitted.lstrip.start_with?('...') ? "<span style={{ #{emitted.strip} }} />" : emitted
+    end
+    templates = TypeScriptCompiler
+    expect(TypeScriptCompiler.component(*elements)).to compile_as_typescript.with_ambient(<<~TS)
+      declare namespace React {
+        type CSSProperties = { [property: string]: string | number | undefined };
+        type ReactNode = unknown;
+        type ComponentType<P> = (props: P) => JSX.Element;
+      }
+      type PartialSpec = {
+        range: [number, number] | string; style?: React.CSSProperties; className?: string; onClick?: () => void;
+      };
+      declare function partialText(text: string, partials: PartialSpec[]): React.ReactNode;
+      declare function toIsoDateValue(value: string | null | undefined, pattern: string, inputType: string): string;
+      declare function formatDateValue(iso: string | null | undefined, pattern: string, inputType: string): string;
+      declare namespace JSX {
+        interface IntrinsicElements {
+          input: { [attr: string]: unknown; onChange?: (e: { target: HTMLInputElement }) => void;
+                   onClick?: (e: { currentTarget: HTMLInputElement }) => void };
+        }
+      }
+      #{templates.template_declarations('linkify_text.tsx', 'LinkifyTextProps')}
+      declare const LinkifyText: (props: LinkifyTextProps & { ref?: { current: HTMLSpanElement | null } }) => JSX.Element;
+      #{templates.template_declarations('network_image.tsx', 'NetworkImageProps')}
+      declare const NetworkImage: (props: NetworkImageProps) => JSX.Element;
+      #{templates.template_declarations('Configuration.ts', 'FontSpec')}
+      declare const Configuration: { Font: { resolve(spec: FontSpec): React.CSSProperties } };
+      #{templates.template_declarations('EmbedContainer.tsx', 'EmbedContainerProps', 'EmbedNavigationMode',
+                                        'EmbedScreenResolver', 'EmbeddedEvent', 'EmbedStackEntry')}
+      declare const EmbedContainer: (props: EmbedContainerProps) => JSX.Element;
+      declare const Other: (props: { data?: Record<string, unknown> }) => JSX.Element;
+      declare const Part: (props: { data?: Record<string, unknown> }) => JSX.Element;
+      declare const Link: (props: { href: string; children?: unknown }) => JSX.Element;
+      declare const JsonUISeeded: <T>(props: { seed: T; children: (value: T, set: (value: T) => void) => JSX.Element }) => JSX.Element;
+      declare const Circle: (props: { className?: string }) => JSX.Element;
+      declare const data: {
+        d?: string; x?: string; pick?: (value: string) => void; onDChange?: (value: string) => void;
+        selectedTabIndex?: number; setSelectedTabIndex?: (index: number) => void;
+      };
+    TS
   end
 end

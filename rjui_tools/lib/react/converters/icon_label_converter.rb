@@ -27,8 +27,13 @@ module RjuiTools
                           else 'flex-row' # left is default
                           end
 
-          icon_element = if icon_src.include?('{')
-            "<img className=\"#{icon_style}\" src={#{icon_src.gsub(/[{}]/, '')}} alt=\"\" />"
+          # get_icon_src returns the selected-state ternary already braced,
+          # or the attribute as written — a binding in it (`@{img}`) was
+          # emitted with its braces taken out, `src={@img}`.
+          icon_element = if icon_src.start_with?('{') && attributes['selected'] && has_binding?(attributes['selected'])
+            "<img className=\"#{icon_style}\" src=#{icon_src} alt=\"\" />"
+          elsif has_binding?(icon_src)
+            "<img className=\"#{icon_style}\" src={#{attribute_expression(icon_src)}} alt=\"\" />"
           else
             "<img className=\"#{icon_style}\"#{jsx_attr_text('src', icon_src)} alt=\"\" />"
           end
