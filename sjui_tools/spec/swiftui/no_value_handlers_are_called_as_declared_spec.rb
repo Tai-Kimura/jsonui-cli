@@ -70,6 +70,22 @@ RSpec.describe 'sjui: a handler that takes no value is called as its declaration
     end
   end
 
+  # onAppear / onDisappear: `x`, `@{x}` and `x:` are the one name `x` (4f's
+  # ruling, 1.9.0). `@{x}` wrote `data.@{x}?()`, which does not parse; `x:`
+  # handed `self`.
+  %w[onAppear onDisappear].each do |key|
+    { 'H' => 'the name', '@{H}' => 'a binding', 'H:' => 'the sender mark' }.each do |spelling, how|
+      it "#{key} as #{how} (#{spelling}): `(String)` is handed the viewId, `()` nothing" do
+        node = { 'type' => 'View', 'height' => 30, key => spelling }
+        expect(at_one(with(node, 'named'))).to include('data.named?("view_0_1")')
+        bare = at_one(with(node, 'bare'))
+        expect(bare).to include('data.bare?()')
+        expect(bare).not_to include('data.bare?(self)')
+        expect(bare).not_to include('@{')
+      end
+    end
+  end
+
   # As the binding spelling was; the onclick selector wrote `data.tapped:?()`,
   # which does not parse.
   it 'the selector spelling with a sender is handed `self`' do
@@ -84,10 +100,12 @@ RSpec.describe 'sjui: a handler that takes no value is called as its declaration
 
   # Every call above, type-checked over the declared handlers.
   it 'compiles: every call, over its declaration' do
-    calls = PORTS.values.flat_map do |node, _|
+    nodes = PORTS.values.map(&:first) +
+            %w[onAppear onDisappear].product(['@{H}', 'H:']).map { |key, spelling| { 'type' => 'View', 'height' => 30, key => spelling } }
+    calls = nodes.flat_map do |node|
       %w[named bare].flat_map { |h| at_one(with(node, h)).scan(/data\.(?:named|bare)\?\([^()\n]*\)/) }
     end
-    expect(calls.size).to be >= PORTS.size * 2
+    expect(calls.size).to be >= nodes.size * 2
     swift = <<~SWIFT
       #{EmittedSwift::LIBRARY_STUBS}
       struct TestData {
