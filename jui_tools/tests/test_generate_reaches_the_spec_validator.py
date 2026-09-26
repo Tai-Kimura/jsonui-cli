@@ -131,9 +131,15 @@ def test_generate_through_the_launcher_stops_on_an_invalid_spec(tmp_path):
 
 def test_control_a_jui_without_the_validator_says_what_it_tried(tmp_path):
     """jui_tools alone (no document_tools beside it, none installed by name):
-    the old WARNING, now naming every route it tried."""
+    the old WARNING, now naming every route it tried.
+
+    shared/ is copied beside it: without shared/core a `jui g project` stops
+    before it reaches the validator (from jsonui-cli 1.9.0 — until then it went on and
+    skipped every spec as a type it did not know, which is the only reason
+    this control passed in a tree that had no shared/)."""
     shutil.copytree(REPO / "jui_tools" / "jui_cli", tmp_path / "jui_tools" / "jui_cli")
     shutil.copytree(REPO / "jui_tools" / "bin", tmp_path / "jui_tools" / "bin")
+    shutil.copytree(REPO / "shared", tmp_path / "shared")
     run = _generate(tmp_path / "jui_tools/bin/jui", _project(tmp_path / "p"))
     out = run.stdout + run.stderr
     assert run.returncode == 0 and "WARNING: document_tools not available" in out, out

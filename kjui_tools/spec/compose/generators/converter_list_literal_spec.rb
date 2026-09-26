@@ -59,13 +59,17 @@ RSpec.describe 'kjui g converter: a list literal and the rule its items follow' 
         File.write('kjui.config.json', JSON.generate('package_name' => 'probe'))
         self.class.values.each_with_index.map do |(type, value), i|
           name = "ListLiteral#{i}"
+          # What it printed through kjui's warning logger (not stubbed for
+          # this; stdout captured) — from 1.8.121 the line goes there,
+          # "⚠️  [kjui] …", not to stderr through a bare `warn`.
           said = StringIO.new
-          saved = $stderr
+          saved = $stdout
           call = begin
-            $stderr = said
+            allow(KjuiTools::Core::Logger).to receive(:warn).and_call_original
+            $stdout = said
             converter_for(name, type).generate({ 'type' => name, 'v' => value }, 0, Set.new)
           ensure
-            $stderr = saved
+            $stdout = saved
           end
           composable = KjuiTools::Compose::Generators::KotlinComponentGenerator
                        .new(name, { is_container: false, attributes: { 'v' => type } }).send(:kotlin_template)

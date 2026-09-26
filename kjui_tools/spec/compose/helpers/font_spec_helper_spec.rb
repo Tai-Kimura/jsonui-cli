@@ -63,6 +63,14 @@ RSpec.describe KjuiTools::Compose::Helpers::FontSpecHelper do
       expect(mapping['bold']).to eq('FontWeight.Bold')
     end
 
+    it 'says so through the warning logger when no file resolves' do
+      described_class.weight_mapping_candidates = ['/nonexistent/font_weight_mapping.json']
+
+      expect { described_class.weight_mapping }.to output(
+        /\A⚠️  \[kjui\] font_weight_mapping\.json not found on any candidate path; using built-in fallback\.$/
+      ).to_stdout
+    end
+
     it 'falls back to the built-in table when the file has an empty weights map' do
       Dir.mktmpdir do |dir|
         path = File.join(dir, 'font_weight_mapping.json')
@@ -107,7 +115,10 @@ RSpec.describe KjuiTools::Compose::Helpers::FontSpecHelper do
     end
 
     it 'falls back to FontWeight.Normal with a warning for unknown values' do
-      expect { described_class.weight_literal_for('superduper') }.to output(/Unknown font weight/).to_stderr
+      # Through kjui's warning logger, so a warning count finds it (a bare
+      # `warn` on stderr until jsonui-cli 1.9.0).
+      expect { described_class.weight_literal_for('superduper') }
+        .to output(/\A⚠️  \[kjui\] Unknown font weight 'superduper', defaulting to FontWeight\.Normal$/).to_stdout
       expect(described_class.weight_literal_for('superduper')).to eq('FontWeight.Normal')
     end
   end
