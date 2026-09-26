@@ -45,10 +45,11 @@ RSpec.describe 'kjui userInteractionEnabled gates the click as canTap does' do
   node = ->(type, more = {}) { { 'type' => type, 'id' => 'n', 'onClick' => '@{onTap}' }.merge(extra[type] || {}).merge(more) }
   inside = ->(flag, child) { { 'type' => 'View', 'id' => 'p', 'userInteractionEnabled' => flag, 'child' => [child] } }
 
-  # Not drawn by kjui's generate_component (a TODO comment: CircleView, and the
-  # image aliases, which the build normalizes before it). Pinned, so a type
-  # that starts clicking joins the arms below.
-  not_clicking = %w[CircleView CircleImageView ImageView Img]
+  # Not drawn by kjui's generate_component (a TODO comment). Pinned, so a
+  # type that starts clicking joins the arms below. Empty from 1.9.0:
+  # CircleView is drawn, and the image spellings (CircleImageView, ImageView,
+  # Img) are drawn as the table says.
+  not_clicking = %w[]
   types = (tap::KNOWN_TYPES - tap::INTERACTIVE_TYPES).uniq - not_clicking
 
   it 'reads every type the rule gives a shape, and pins the ones that draw no click' do
