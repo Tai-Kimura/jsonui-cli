@@ -112,6 +112,12 @@ LAYOUT_ID_GATE_FROM: str | None = "1.8.121"
 LAYOUT_ID_NOTICE = ("from jsonui-cli {version}, spec element ids not in the layout "
                     "become WARNING")
 
+#: What an undeclared Collection / section key most likely meant.
+_UNREAD_COLLECTION_KEY_HINTS = {
+    "cells": "cellClasses is the list of cell layouts the tools read",
+    "headerData": "a header's data comes from the Collection's data source, not from the spec",
+}
+
 
 def _running_version() -> str:
     from .. import __version__
@@ -1021,6 +1027,32 @@ class SpecValidator:
                         child["children"], f"{path}[{i}].children", component_ids, result
                     )
 
+    def _check_undeclared_collection_keys(self, collection: dict, path: str,
+                                          result: SpecValidationResult) -> None:
+        """A key a Collection (or one of its sections) does not declare is
+        named, as a WARNING: no tool reads it, so what it asks for does not
+        happen. Measured 2026-09-26 on the faces: cells, parent, headerData
+        and five keys of their own name (section2, image_grid, ...), each
+        holding a cell's description."""
+        coll_def = SCREEN_SPEC_SCHEMA["$defs"]["collectionStructure"]["properties"]
+        section_keys = set(coll_def["sections"]["items"]["properties"])
+
+        def name(key, where):
+            hint = _UNREAD_COLLECTION_KEY_HINTS.get(key)
+            result.warnings.append(SpecValidationMessage(
+                path=f"{where}.{key}", level="warning",
+                message=(f"'{key}' is not a key {'a section' if '.sections[' in where else 'a Collection'} "
+                         "declares — no tool reads it" + (f" ({hint})" if hint else ""))))
+        for key in collection:
+            if key not in coll_def:
+                name(key, path)
+        sections = collection.get("sections")
+        for i, section in enumerate(sections if isinstance(sections, list) else []):
+            if isinstance(section, dict):
+                for key in section:
+                    if key not in section_keys:
+                        name(key, f"{path}.sections[{i}]")
+
     def _validate_collection(self, collection: dict, component_ids: set, result: SpecValidationResult, path: str = "structure.collection"):
         """Validate collection structure.
 
@@ -1034,6 +1066,7 @@ class SpecValidator:
         Layout JSON / runtime level.
         """
         self._validate_required_fields(collection, ["id"], path, result)
+        self._check_undeclared_collection_keys(collection, path, result)
 
         # Each entry names a cell Layout JSON. The shape check below only
         # asks that the array is non-empty, so a name that resolves to
