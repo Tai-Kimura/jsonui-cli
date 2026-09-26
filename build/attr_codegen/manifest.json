@@ -3,7 +3,7 @@
   "generatedBy": "jui generate attr-bindings --lang all",
   "source": {
     "file": "shared/core/attribute_definitions.json",
-    "sha256": "f8d5dc5ecb5c2750a56b2db769ed9402ba388acfb2fc0d5f9a852f6859714a8f"
+    "sha256": "ccd5b0eeae584e75011d71a2cdb168269311a015b22f0e88f8a6c416e0b19953"
   },
   "files": {
     "kotlin/AttrCodegenSupport.kt": "3f56c8021ab16a32d0ed4a38e7839c27a08237bd095c4469255c800d1600b165",
@@ -18,7 +18,7 @@
     "kotlin/EmbedAttributes.kt": "1430408ff28f779da4935ddb84da3385142f1674ccd4418c8ac27fab8030e11f",
     "kotlin/GradientViewAttributes.kt": "8b25786e3c676cc4c9ce7f76f778910f531322cf71e7168c81c7f2efc02d45d9",
     "kotlin/IconLabelAttributes.kt": "b570ae22d683479d983fe4921e4341e9bf74dc29e50fcfa1e45b0510bd152b98",
-    "kotlin/ImageAttributes.kt": "e53656c7093899cc13186f01ef531f2bf03fe4b32da74fe0be038e1f2b31926d",
+    "kotlin/ImageAttributes.kt": "f08f969b608bd4612930d487eeae429c186f8168857332da30d6ac400c4bfdca",
     "kotlin/IndicatorAttributes.kt": "6d33225efde17ea0c94e21bf2f0dfb4955ee8fad241ee35709c52e851c780dfb",
     "kotlin/InputAttributes.kt": "6cdc596fde3dc7c0ee1399ad3016e2cfee25917ce053a106b3f328400b564370",
     "kotlin/LabelAttributes.kt": "5db90947df302bc2030ff3806d1fd3ffe9a7a39e4f996bd818ed423a803a8899",
@@ -50,7 +50,7 @@
     "ruby/embed_attributes.rb": "39a9958d0d8a6e33a8d9a1d762322a9ec027e3d4934be85428b98bf79b477937",
     "ruby/gradient_view_attributes.rb": "7b2476482a65a38cb4a75b6afe6b3e029403ac12fdee4227793cc79be34414fa",
     "ruby/icon_label_attributes.rb": "133d5718c0221252d9de12a9bcad3661017d85e95850cb367744e2d001af03a1",
-    "ruby/image_attributes.rb": "6a8a799f24b604b4c84b0959b672f5961946845c1fac6a88c93faaea3b210aeb",
+    "ruby/image_attributes.rb": "2c787c4db730744102b068ab9ce036f4c3136bc604dbb03df8bed38473f718c9",
     "ruby/indicator_attributes.rb": "37f3e15e6ac649f05eeb87fce0ff39fa64ac7356fe6404116703c1fa1b254039",
     "ruby/input_attributes.rb": "1e3804bb6ed503e6091e29bb7ddb67c2a1fd27f316167c4822c4d3fb4975217f",
     "ruby/label_attributes.rb": "40f5c1d457d7dba3cc7cc22f7759b66a4605fc7402c5d86677aa40851142e6bc",
@@ -82,7 +82,7 @@
     "swift/EmbedAttributes.swift": "c3c1fda005dc75c85699c824c1ccd0bc592a4a06d9b9555d70ae0c79f9d6b0ca",
     "swift/GradientViewAttributes.swift": "219340a504807fbcda840a9f61f8da1987339550832be04e29ac6463a7079549",
     "swift/IconLabelAttributes.swift": "54f2d71e9a2856b51971a5c9ee7a24fd320befc69b1e99cbe812009ab0e2c158",
-    "swift/ImageAttributes.swift": "287e8582a9dcfd82244e7ecfec4a5cd932167d73570e48407b099455520d1a3b",
+    "swift/ImageAttributes.swift": "60063781b6db153f6964a2b95c4c75f28cae7034554f3b6bb6ce2988d9e233f6",
     "swift/IndicatorAttributes.swift": "bd03b77face3cfe98d3580f85593a6606bde326d779190bf25779228afcf56fc",
     "swift/InputAttributes.swift": "b56b0c7c229fbbe48928c5cd975e590011cb8944b9c35b41fb22887be8be0a6b",
     "swift/LabelAttributes.swift": "0ba0e8854c200d46912c42029dde2c74b2ae732b4d4a9dc88d298ed42d90f028",
