@@ -132,6 +132,38 @@ RSpec.describe 'Collection cellClasses with items and no sections' do
   # cellClasses and no `items` (4f ruling 2026-09-26, round 5): no cell is
   # drawn on every path (rjui drew one with no data until jsonui-cli 1.9.0),
   # and the shared validator names the shape — this face's mirror of it.
+  # `sections` and no `items`: nothing to draw them from — no header, cell or
+  # footer, on every route (4f ruling 2026-09-26, round 6; kjui and rjui draw
+  # nothing either). Until jsonui-cli 1.9.0 the sectioned grid drew each
+  # section's header and footer with no data around an empty grid.
+  describe 'sections and no items' do
+    SECTIONS_NO_ITEMS_ROUTES = {
+      'list' => {}, 'grid' => { 'columns' => 2 }, 'lazy:none' => { 'lazy' => 'none' },
+      'lazy:none grid' => { 'lazy' => 'none', 'columns' => 2 }, 'horizontal' => { 'layout' => 'horizontal' },
+      'flow' => { 'layout' => 'flow' }, 'paging' => { 'layout' => 'horizontal', 'paging' => true }
+    }.freeze
+
+    SECTIONS_NO_ITEMS_ROUTES.each do |route, extra|
+      it "#{route}: no header, cell or footer" do
+        code = emit({ 'type' => 'Collection', 'id' => 'target',
+                      'sections' => [{ 'cell' => 'RowCell', 'header' => 'HeadCell', 'footer' => 'FootCell' }] }.merge(extra))
+        expect(code).not_to match(/\b(RowCell|HeadCell|FootCell)View\(/), code
+      end
+    end
+
+    it 'control: with items, the grid draws the header, cells and footer' do
+      code = emit({ 'type' => 'Collection', 'id' => 'target', 'columns' => 2, 'items' => '@{rows}',
+                    'sections' => [{ 'cell' => 'RowCell', 'header' => 'HeadCell', 'footer' => 'FootCell' }] })
+      expect(code).to include('HeadCellView(data: headerData)').and include('RowCellView(data: cellData)').and include('FootCellView(data: footerData)')
+    end
+
+    it 'the empty grid type-checks', :swift_compile do
+      code = emit({ 'type' => 'Collection', 'id' => 'target', 'columns' => 2,
+                    'sections' => [{ 'cell' => 'RowCell', 'header' => 'HeadCell', 'footer' => 'FootCell' }] })
+      expect(compilable_view(code)).to compile_as_swift
+    end
+  end
+
   describe 'cellClasses and no items' do
     def no_items_warnings(component)
       JsonUIShared::LayoutValidator.validate_layout(component, source_path: 'x.json')

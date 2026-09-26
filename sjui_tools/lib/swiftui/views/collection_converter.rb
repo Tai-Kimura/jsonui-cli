@@ -540,23 +540,12 @@ module SjuiTools
                     end
                     add_line "}"
                   else
-                    # No property binding - use static rendering
-                    if header_view_name
-                      add_line "#{header_view_name}()"
-                      apply_header_footer_padding
-                    end
-
-                    add_line "LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: #{@component['columnSpacing'] || @component['itemSpacing'] || 0}), count: #{section_columns}), alignment: #{get_grid_alignment}, spacing: #{@component['lineSpacing'] || @component['itemSpacing'] || 0}) {"
-                    indent do
-                      add_line "// No items binding specified"
-                    end
-                    add_line "}"
-                    apply_grid_padding
-
-                    if footer_view_name
-                      add_line "#{footer_view_name}()"
-                      apply_header_footer_padding
-                    end
+                    # No `items`: nothing to draw the section from — no
+                    # header, cell or footer, as on every other route and
+                    # path (4f ruling 2026-09-26, round 6). Until jsonui-cli
+                    # 1.9.0 this drew the section's header and footer with no
+                    # data around an empty grid.
+                    add_line "// Section #{index + 1}: no items, nothing drawn"
                   end
                 end
               else
