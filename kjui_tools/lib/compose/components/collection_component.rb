@@ -718,10 +718,19 @@ module KjuiTools
         # A header / footer view: its own ViewModel, no item data.
         def self.class_list_edge_call(class_name, role, depth)
           code = "\n" + indent("val #{role}ViewModel: #{class_name}ViewModel = viewModel(key = \"#{class_name}_#{role}_\${viewModel.hashCode()}\")", depth)
-          code += "\n" + indent("#{class_name}View(", depth)
-          code += "\n" + indent("viewModel = #{role}ViewModel,", depth + 1)
-          code += "\n" + indent("modifier = Modifier.fillMaxWidth()", depth + 1)
-          code + "\n" + indent(")", depth)
+          code + "\n" + edge_view_call(class_name, "#{role}ViewModel", depth)
+        end
+
+        # A header or footer view in a row of its own: the ROW is full width
+        # and the view keeps its own size at the row's start — as KotlinJsonUI
+        # Dynamic draws it (the view in its row, no fill of its own), and sjui
+        # (`.frame(maxWidth: .infinity, alignment: .leading)`). Until
+        # jsonui-cli 1.9.0 the view itself was handed `Modifier.fillMaxWidth()`,
+        # and a fixed-width root (`requiredWidth`, modifier_builder) answers a
+        # fill constraint by centring itself in the row (4f ruling 2026-09-26,
+        # round 8; the flow's edges took this shape in round 7).
+        def self.edge_view_call(edge_class, view_model, depth)
+          indent("Box(modifier = Modifier.fillMaxWidth()) { #{edge_class}View(viewModel = #{view_model}) }", depth)
         end
 
         def self.register_class_list_imports(names, required_imports)
@@ -959,10 +968,7 @@ module KjuiTools
                   code += "\n" + indent("LaunchedEffect(headerData.data) {", depth + 4)
                   code += "\n" + indent("headerViewModel.updateData(headerData.data)", depth + 5)
                   code += "\n" + indent("}", depth + 4)
-                  code += "\n" + indent("#{header_class}View(", depth + 4)
-                  code += "\n" + indent("viewModel = headerViewModel,", depth + 5)
-                  code += "\n" + indent("modifier = Modifier.fillMaxWidth()", depth + 5)
-                  code += "\n" + indent(")", depth + 4)
+                  code += "\n" + edge_view_call(header_class, 'headerViewModel', depth + 4)
                   code += "\n" + indent("}", depth + 3)
                   code += "\n" + indent("gridLineFill = 0", depth + 3) if line_breaks
                   code += "\n" + indent("}", depth + 2)
@@ -1056,10 +1062,7 @@ module KjuiTools
                   code += "\n" + indent("LaunchedEffect(footerData.data) {", depth + 4)
                   code += "\n" + indent("footerViewModel.updateData(footerData.data)", depth + 5)
                   code += "\n" + indent("}", depth + 4)
-                  code += "\n" + indent("#{footer_class}View(", depth + 4)
-                  code += "\n" + indent("viewModel = footerViewModel,", depth + 5)
-                  code += "\n" + indent("modifier = Modifier.fillMaxWidth()", depth + 5)
-                  code += "\n" + indent(")", depth + 4)
+                  code += "\n" + edge_view_call(footer_class, 'footerViewModel', depth + 4)
                   code += "\n" + indent("}", depth + 3)
                   code += "\n" + indent("gridLineFill = 0", depth + 3) if line_breaks
                   code += "\n" + indent("}", depth + 2)
@@ -1587,7 +1590,7 @@ module KjuiTools
           code = "\n" + indent("#{section_var}.#{kind}?.let { #{kind}Data ->", depth)
           code += "\n" + indent("val #{kind}ViewModel: #{edge_class}ViewModel = viewModel(key = \"#{name}_#{kind}_#{index}_\${viewModel.hashCode()}\")", depth + 1)
           code += "\n" + indent("LaunchedEffect(#{kind}Data.data) { #{kind}ViewModel.updateData(#{kind}Data.data) }", depth + 1)
-          code += "\n" + indent("Box(modifier = Modifier.fillMaxWidth()) { #{edge_class}View(viewModel = #{kind}ViewModel) }", depth + 1)
+          code += "\n" + edge_view_call(edge_class, "#{kind}ViewModel", depth + 1)
           code + "\n" + indent("}", depth)
         end
 
@@ -1671,7 +1674,7 @@ module KjuiTools
                 code += "\n" + indent("#{section_var}.header?.let { headerData ->", depth + 2)
                 code += "\n" + indent("val headerViewModel: #{header_class}ViewModel = viewModel(key = \"#{section['header']}_header_#{index}_\${viewModel.hashCode()}\")", depth + 3)
                 code += "\n" + indent("LaunchedEffect(headerData.data) { headerViewModel.updateData(headerData.data) }", depth + 3)
-                code += "\n" + indent("#{header_class}View(viewModel = headerViewModel, modifier = Modifier.fillMaxWidth())", depth + 3)
+                code += "\n" + edge_view_call(header_class, 'headerViewModel', depth + 3)
                 code += "\n" + indent("}", depth + 2)
               end
 
@@ -1738,7 +1741,7 @@ module KjuiTools
                 code += "\n" + indent("#{section_var}.footer?.let { footerData ->", depth + 2)
                 code += "\n" + indent("val footerViewModel: #{footer_class}ViewModel = viewModel(key = \"#{section['footer']}_footer_#{index}_\${viewModel.hashCode()}\")", depth + 3)
                 code += "\n" + indent("LaunchedEffect(footerData.data) { footerViewModel.updateData(footerData.data) }", depth + 3)
-                code += "\n" + indent("#{footer_class}View(viewModel = footerViewModel, modifier = Modifier.fillMaxWidth())", depth + 3)
+                code += "\n" + edge_view_call(footer_class, 'footerViewModel', depth + 3)
                 code += "\n" + indent("}", depth + 2)
               end
 
@@ -2147,7 +2150,7 @@ module KjuiTools
               out += "\n" + indent("item {", depth + 2)
               out += "\n" + indent("val headerViewModel: #{header_class}ViewModel = viewModel(key = \"#{section['header']}_header_#{index}_\${viewModel.hashCode()}\")", depth + 3)
               out += "\n" + indent("LaunchedEffect(headerData.data) { headerViewModel.updateData(headerData.data) }", depth + 3)
-              out += "\n" + indent("#{header_class}View(viewModel = headerViewModel, modifier = Modifier.fillMaxWidth())", depth + 3)
+              out += "\n" + edge_view_call(header_class, 'headerViewModel', depth + 3)
               out += "\n" + indent("}", depth + 2)
               out += "\n" + indent("}", depth + 1)
             end
@@ -2221,7 +2224,7 @@ module KjuiTools
               out += "\n" + indent("item {", depth + 2)
               out += "\n" + indent("val footerViewModel: #{footer_class}ViewModel = viewModel(key = \"#{section['footer']}_footer_#{index}_\${viewModel.hashCode()}\")", depth + 3)
               out += "\n" + indent("LaunchedEffect(footerData.data) { footerViewModel.updateData(footerData.data) }", depth + 3)
-              out += "\n" + indent("#{footer_class}View(viewModel = footerViewModel, modifier = Modifier.fillMaxWidth())", depth + 3)
+              out += "\n" + edge_view_call(footer_class, 'footerViewModel', depth + 3)
               out += "\n" + indent("}", depth + 2)
               out += "\n" + indent("}", depth + 1)
             end
@@ -2260,7 +2263,7 @@ module KjuiTools
               out += "\n" + indent("section#{index}.header?.let { headerData ->", depth + 1)
               out += "\n" + indent("val headerViewModel: #{header_class}ViewModel = viewModel(key = \"#{section['header']}_header_#{index}_\${viewModel.hashCode()}\")", depth + 2)
               out += "\n" + indent("LaunchedEffect(headerData.data) { headerViewModel.updateData(headerData.data) }", depth + 2)
-              out += "\n" + indent("#{header_class}View(viewModel = headerViewModel, modifier = Modifier.fillMaxWidth())", depth + 2)
+              out += "\n" + edge_view_call(header_class, 'headerViewModel', depth + 2)
               out += "\n" + indent("}", depth + 1)
             end
 
@@ -2320,7 +2323,7 @@ module KjuiTools
               out += "\n" + indent("section#{index}.footer?.let { footerData ->", depth + 1)
               out += "\n" + indent("val footerViewModel: #{footer_class}ViewModel = viewModel(key = \"#{section['footer']}_footer_#{index}_\${viewModel.hashCode()}\")", depth + 2)
               out += "\n" + indent("LaunchedEffect(footerData.data) { footerViewModel.updateData(footerData.data) }", depth + 2)
-              out += "\n" + indent("#{footer_class}View(viewModel = footerViewModel, modifier = Modifier.fillMaxWidth())", depth + 2)
+              out += "\n" + edge_view_call(footer_class, 'footerViewModel', depth + 2)
               out += "\n" + indent("}", depth + 1)
             end
 
