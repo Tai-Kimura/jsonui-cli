@@ -405,7 +405,7 @@ RSpec.describe RjuiTools::React::Converters::BaseConverter do
           'onClick' => '@{onTap}'
         })
         attr = converter.send(:build_onclick_attr)
-        expect(attr).to eq(' onClick={data.onTap}')
+        expect(attr).to eq(' onClick={() => data.onTap?.()}')
       end
 
       it 'converts @{viewModel.onTap} to data.onTap' do
@@ -414,7 +414,7 @@ RSpec.describe RjuiTools::React::Converters::BaseConverter do
           'onClick' => '@{viewModel.onTap}'
         })
         attr = converter.send(:build_onclick_attr)
-        expect(attr).to eq(' onClick={data.onTap}')
+        expect(attr).to eq(' onClick={() => data.onTap?.()}')
       end
     end
 
@@ -425,7 +425,7 @@ RSpec.describe RjuiTools::React::Converters::BaseConverter do
           'onclick' => 'handleClick'
         })
         attr = converter.send(:build_onclick_attr)
-        expect(attr).to eq(' onClick={data.handleClick}')
+        expect(attr).to eq(' onClick={() => data.handleClick?.()}')
       end
     end
 

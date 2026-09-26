@@ -30,7 +30,7 @@ RSpec.describe 'onclick array face' do
     end
 
     it 'leaves the single-string face exactly as it was' do
-      expect(view('onclick' => 'confPush')).to include('onClick={data.confPush}')
+      expect(view('onclick' => 'confPush')).to include('onClick={() => data.confPush?.()}')
     end
 
     it 'still rejects a binding spelling, even inside the array' do

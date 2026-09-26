@@ -314,10 +314,12 @@ module RjuiTools
           # onClick
           attrs << build_onclick_attr
 
-          # onLongPress (using onContextMenu as fallback, or custom implementation)
+          # onLongPress (using onContextMenu as fallback, or custom
+          # implementation), its handler called as the data declares it
+          # (declared_tap_call) — it was handed the event whatever it took.
           if attributes['onLongPress']
             prop = resolve_handler_property(attributes['onLongPress'])
-            attrs << " onContextMenu={(e) => { e.preventDefault(); #{prop}?.(e); }}"
+            attrs << " onContextMenu={(e) => { e.preventDefault(); #{declared_tap_call(prop)}; }}"
           end
 
           # onPan — the bound value is a function (canonical contract shared

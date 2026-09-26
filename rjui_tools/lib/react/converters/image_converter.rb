@@ -170,11 +170,14 @@ module RjuiTools
             method_name = onclick.chomp(':')
             " onClick={() => #{method_name}(this)}"
           elsif has_binding?(onclick)
-            # Binding format: "@{functionName}"
-            handler = extract_binding_property(onclick)
-            " onClick={#{handler}}"
+            # Binding format: "@{functionName}", called as the data declares
+            # it (declared_tap_call) — it was handed the event.
+            call = declared_tap_call(extract_binding_property(onclick))
+            " onClick={#{call.include?('?.(e)') ? '(e)' : '()'} => #{call}}"
           else
-            " onClick={#{onclick}}"
+            # A selector names a method of the data, as on every other
+            # element (onclick_selector_expr) — it was the bare name here.
+            " onClick={#{onclick_selector_expr(onclick)}}"
           end
         end
       end
