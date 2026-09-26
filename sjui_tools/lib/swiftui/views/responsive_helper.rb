@@ -191,7 +191,11 @@ module SjuiTools
         # @param view_registry [ViewRegistry] view registry
         # @param binding_registry [BindingHandlerRegistry] binding registry
         # @return [String] Swift function code
-        def self.generate_leaf_function(func_name, component, converter_factory, indent_level, action_manager, view_registry, binding_registry)
+        # `state_variables`, when given, collects each branch's view-local
+        # state declarations — the branch converters are this function's
+        # own, so their state reached no parent and a stateful node (a
+        # Switch's IsOn) referred to a state nothing declared.
+        def self.generate_leaf_function(func_name, component, converter_factory, indent_level, action_manager, view_registry, binding_registry, state_variables = nil)
           branches = JsonUIShared::ResponsiveResolver.build_branches(component)
           lines = []
           lines << "    @ViewBuilder private func #{func_name}() -> some View {"
@@ -235,6 +239,9 @@ module SjuiTools
             converter = converter_factory.create_converter(branch_component, 3, action_manager, converter_factory, view_registry)
             if converter
               branch_code = converter.convert
+              if state_variables && converter.respond_to?(:state_variables) && converter.state_variables
+                state_variables.concat(converter.state_variables)
+              end
               branch_lines = branch_code.split("\n")
               branch_indent = condition || index > 0 ? "    " : ""
               branch_lines.each do |bl|

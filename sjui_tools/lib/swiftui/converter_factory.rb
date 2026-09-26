@@ -3,6 +3,7 @@
 require_relative 'views/label_converter'
 require_relative 'views/button_converter'
 require_relative 'views/view_converter'
+require_relative 'views/responsive_leaf_converter'
 require_relative 'views/textfield_converter'
 require_relative 'views/textview_converter'
 require_relative 'views/image_converter'
@@ -99,6 +100,23 @@ module SjuiTools
         end
       end
 
+      # The types whose converter draws `responsive` itself: a View /
+      # SafeAreaView with children (ViewConverter#convert_responsive_container),
+      # a Collection, an Embed.
+      def responsive_elsewhere?(component)
+        return false unless JsonUIShared::ResponsiveResolver.responsive?(component)
+
+        case component['type']
+        when 'View', 'SafeAreaView'
+          children = component['child'] || component['children']
+          !(children.is_a?(Array) ? children.any? : children.is_a?(Hash))
+        when 'Collection', 'Table', 'Embed'
+          false
+        else
+          true
+        end
+      end
+
       def create_converter(component, indent_level = 0, action_manager = nil, converter_factory = nil, view_registry = nil)
         # Skip data definition objects (metadata, not UI components)
         if component['data'] && !component['type']
@@ -140,6 +158,13 @@ module SjuiTools
             STDERR.puts "  Backtrace: #{e.backtrace.first(3).join("\n  ")}" if ENV['DEBUG']
             # Fall through to standard converters
           end
+        end
+
+        # A node whose converter does not draw its `responsive` overrides is
+        # drawn per size class (ResponsiveLeafConverter). Checked after an
+        # app's converter, which routes its own.
+        if responsive_elsewhere?(component)
+          return Views::ResponsiveLeafConverter.new(component, indent_level, action_manager, self, registry, @binding_registry)
         end
 
         case component_type
