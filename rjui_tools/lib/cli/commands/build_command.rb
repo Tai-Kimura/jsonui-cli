@@ -4,9 +4,11 @@ require 'json'
 require 'fileutils'
 require 'set'
 require_relative '../../core/config_manager'
+require_relative '../../core/node_keys'
 require_relative '../../core/frameworks'
 require_relative '../../core/generated_marker'
 require_relative '../../core/logger'
+require_relative '../../core/templates'
 require_relative '../../core/attribute_validator'
 require_relative '../../core/normalization'
 require_relative '../../core/binding_validator'
@@ -68,6 +70,7 @@ module RjuiTools
 
           # Emit the screen-marker helper (screen identity / test support)
           emit_screen_marker_helper
+          emit_interaction_stop_helper
           emit_partial_text_helper
 
           # Emit the Collection scroll-control helper (scrollTo /
@@ -133,6 +136,20 @@ module RjuiTools
 
           # Pass component paths to generator for import resolution
           @config['_component_paths'] = component_paths
+
+          # The layouts that take `jsonuiPath`, their root's position in the
+          # include-expanded tree (React::IncludePaths): an included layout
+          # holding a node that hands its handler a viewId without an id. The
+          # include graph is the whole set of layouts, so it is read here,
+          # before any of them is generated.
+          @config['_path_stems'] = React::IncludePaths.stems_taking_path(
+            json_files.each_with_object({}) do |json_file, trees|
+              trees[File.basename(json_file, '.json')] =
+                React::StyleLoader.load_and_merge(JSON.parse(File.read(json_file, encoding: 'UTF-8')))
+            rescue JSON::ParserError
+              next
+            end
+          ).to_a
 
           generator = React::ReactGenerator.new(@config)
 
@@ -452,8 +469,8 @@ module RjuiTools
           extensions_dir = @config['extensions_directory'] || 'src/components/extensions'
           FileUtils.mkdir_p(extensions_dir)
 
-          network_image_path = File.join(extensions_dir, 'NetworkImage.tsx')
-          template_path = File.join(File.dirname(__FILE__), '../../react/templates/network_image.tsx')
+          network_image_path = File.join(extensions_dir, Core::Templates.file_name('NetworkImage.tsx', @config))
+          template_path = Core::Templates.path('network_image.tsx', @config)
           if File.exist?(template_path)
             template = Core::Frameworks.apply_directive(File.read(template_path), Core::Frameworks.for(@config))
             if !File.exist?(network_image_path)
@@ -484,8 +501,8 @@ module RjuiTools
           extensions_dir = @config['extensions_directory'] || 'src/components/extensions'
           FileUtils.mkdir_p(extensions_dir)
 
-          target_path = File.join(extensions_dir, 'LinkifyText.tsx')
-          template_path = File.join(File.dirname(__FILE__), '../../react/templates/linkify_text.tsx')
+          target_path = File.join(extensions_dir, Core::Templates.file_name('LinkifyText.tsx', @config))
+          template_path = Core::Templates.path('linkify_text.tsx', @config)
           return unless File.exist?(template_path)
 
           template = Core::Frameworks.apply_directive(File.read(template_path), Core::Frameworks.for(@config))
@@ -510,10 +527,10 @@ module RjuiTools
           lib_dir = @config['lib_directory'] || 'src/lib/jsonui'
           FileUtils.mkdir_p(lib_dir)
 
-          target_path = File.join(lib_dir, 'Configuration.ts')
+          target_path = File.join(lib_dir, Core::Templates.file_name('Configuration.ts', @config))
           return if File.exist?(target_path)
 
-          template_path = File.join(File.dirname(__FILE__), '../../react/templates/Configuration.ts')
+          template_path = Core::Templates.path('Configuration.ts', @config)
           return unless File.exist?(template_path)
 
           File.write(target_path, File.read(template_path))
@@ -528,7 +545,7 @@ module RjuiTools
           return unless component.is_a?(Hash)
 
           # Skip style-only entries and data declarations
-          return if component.key?('style') && component.keys.size == 1
+          return if component.key?('style') && Core::NodeKeys.written(component).size == 1
           return if component.key?('data') && !component.key?('type')
 
           if component['type']
@@ -694,8 +711,8 @@ module RjuiTools
           hooks_dir = @config['hooks_directory'] || 'src/hooks'
           FileUtils.mkdir_p(hooks_dir)
 
-          target_path = File.join(hooks_dir, 'useColorMode.ts')
-          template_path = File.join(File.dirname(__FILE__), '../../react/templates/use_color_mode.ts')
+          target_path = File.join(hooks_dir, Core::Templates.file_name('useColorMode.ts', @config))
+          template_path = Core::Templates.path('use_color_mode.ts', @config)
           return unless File.exist?(template_path)
 
           template = Core::Frameworks.apply_directive(File.read(template_path), Core::Frameworks.for(@config))
@@ -1299,6 +1316,53 @@ module RjuiTools
 
             export function jsonuiIncludePrefix(outer#{opt}, includeId#{s})#{s} {
               return outer ? jsonuiIncludeId(outer, includeId) : jsonuiCamel(includeId);
+            }
+
+            #{marker_footer}
+          JS
+
+          File.write(path, content)
+          Core::Logger.info("Generated: #{path}")
+        end
+
+        # The helper a stopped element spreads (BaseConverter
+        # #apply_interaction_inert): `inert` in the form the running React
+        # takes — a boolean from React 19, a string before it — read from
+        # React.version at run time, so the generated components are the same
+        # under both. Measured in Chromium (18.3.1, 19.2.7): the spread stops
+        # the pointer, the keyboard and the accessibility tree; `inert={true}`
+        # does nothing under 18 and `inert=""` nothing under 19.
+        def emit_interaction_stop_helper
+          generated_dir = @config['generated_directory'] || 'src/generated'
+          FileUtils.mkdir_p(generated_dir)
+          is_ts = @config['typescript']
+          extension = is_ts ? 'ts' : 'js'
+          path = File.join(generated_dir, "interactionStop.#{extension}")
+          stop_type = is_ts ? ': boolean' : ''
+          ret_type = is_ts ? ': Record<string, unknown>' : ''
+
+          marker_header = Core::GeneratedMarker.comment_header(
+            source: "interactionStop (userInteractionEnabled helper)",
+            generator: "rjui build"
+          )
+          marker_footer = Core::GeneratedMarker.comment_footer
+
+          content = <<~JS
+            #{marker_header}
+            import React from 'react';
+
+            // userInteractionEnabled false, or a binding while it is false: the
+            // element and everything in it are inert — no pointer, no keyboard
+            // focus, and out of the accessibility tree. React 19 takes `inert`
+            // as a boolean and treats "" as false; React 18 writes an attribute
+            // it does not know only as a string and drops `true`.
+            const booleanInert = Number(React.version.split('.')[0]) >= 19;
+
+            export function jsonuiInert(stop#{stop_type})#{ret_type} {
+              if (!stop) {
+                return {};
+              }
+              return booleanInert ? { inert: true } : { inert: '' };
             }
 
             #{marker_footer}

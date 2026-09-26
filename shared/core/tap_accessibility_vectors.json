@@ -951,6 +951,36 @@
       }
     },
     {
+      "name": "a Label with links inside a node with userInteractionEnabled: false does not count: its links stop with it",
+      "layout": {
+        "type": "View",
+        "id": "t",
+        "onClick": "@{onOpen}",
+        "child": [
+          {
+            "type": "Label",
+            "id": "l",
+            "text": "x"
+          },
+          {
+            "type": "View",
+            "userInteractionEnabled": false,
+            "child": [
+              {
+                "type": "Label",
+                "id": "k",
+                "text": "see https://example.com",
+                "linkable": true
+              }
+            ]
+          }
+        ]
+      },
+      "shapes": {
+        "t": "combine"
+      }
+    },
+    {
       "name": "a bound userInteractionEnabled keeps the shape: the emitters gate the tap and its trait on the binding",
       "layout": {
         "type": "View",
@@ -1000,6 +1030,177 @@
         "v": null,
         "a": "button",
         "c": "combine"
+      }
+    },
+    {
+      "name": "a long press under userInteractionEnabled: false does not count",
+      "layout": {
+        "type": "View",
+        "id": "t",
+        "onClick": "@{onOpen}",
+        "child": [
+          {
+            "type": "Label",
+            "id": "l",
+            "text": "x"
+          },
+          {
+            "type": "Image",
+            "id": "h",
+            "src": "icon",
+            "onLongPress": "@{onHold}",
+            "userInteractionEnabled": false
+          }
+        ]
+      },
+      "shapes": {
+        "t": "combine",
+        "h": null
+      }
+    },
+    {
+      "name": "a long press inside a node with userInteractionEnabled: false does not count",
+      "layout": {
+        "type": "View",
+        "id": "t",
+        "onClick": "@{onOpen}",
+        "child": [
+          {
+            "type": "Label",
+            "id": "l",
+            "text": "x"
+          },
+          {
+            "type": "View",
+            "userInteractionEnabled": false,
+            "child": [
+              {
+                "type": "Image",
+                "id": "h",
+                "src": "icon",
+                "onLongPress": "@{onHold}"
+              }
+            ]
+          }
+        ]
+      },
+      "shapes": {
+        "t": "combine",
+        "h": null
+      }
+    },
+    {
+      "name": "a long press under a bound userInteractionEnabled still counts: the gate opens at run time",
+      "layout": {
+        "type": "View",
+        "id": "t",
+        "onClick": "@{onOpen}",
+        "child": [
+          {
+            "type": "Label",
+            "id": "l",
+            "text": "x"
+          },
+          {
+            "type": "Image",
+            "id": "h",
+            "src": "icon",
+            "onLongPress": "@{onHold}",
+            "userInteractionEnabled": "@{isActive}"
+          }
+        ]
+      },
+      "shapes": {
+        "t": "none",
+        "h": null
+      }
+    },
+    {
+      "name": "a Label with links and userInteractionEnabled: false does not count",
+      "layout": {
+        "type": "View",
+        "id": "t",
+        "onClick": "@{onOpen}",
+        "child": [
+          {
+            "type": "Label",
+            "id": "l",
+            "text": "x"
+          },
+          {
+            "type": "Label",
+            "id": "k",
+            "text": "see https://example.com",
+            "linkable": true,
+            "userInteractionEnabled": false
+          }
+        ]
+      },
+      "shapes": {
+        "t": "combine"
+      }
+    },
+    {
+      "name": "a Label with links inside a node with userInteractionEnabled: false does not count",
+      "layout": {
+        "type": "View",
+        "id": "t",
+        "onClick": "@{onOpen}",
+        "child": [
+          {
+            "type": "Label",
+            "id": "l",
+            "text": "x"
+          },
+          {
+            "type": "View",
+            "userInteractionEnabled": false,
+            "child": [
+              {
+                "type": "Label",
+                "id": "k",
+                "text": "Terms",
+                "partialAttributes": [
+                  {
+                    "range": [
+                      0,
+                      5
+                    ],
+                    "onclick": "openTerms"
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "shapes": {
+        "t": "combine"
+      }
+    },
+    {
+      "name": "a Label with links under a bound userInteractionEnabled still counts",
+      "layout": {
+        "type": "View",
+        "id": "t",
+        "onClick": "@{onOpen}",
+        "child": [
+          {
+            "type": "Label",
+            "id": "l",
+            "text": "x"
+          },
+          {
+            "type": "Label",
+            "id": "k",
+            "text": "see https://example.com",
+            "linkable": true,
+            "userInteractionEnabled": "@{isActive}"
+          }
+        ]
+      },
+      "shapes": {
+        "t": "none"
       }
     }
   ]

@@ -123,10 +123,12 @@ class AliasTable:
         self._common_aliases = self._alias_map_for_section("common")
         self._common_deprecated = self._deprecated_map_for_section("common")
         self._common_value_aliases = self._value_alias_map_for_section("common")
+        self._common_item_aliases = self._item_alias_map_for_section("common")
         # component key -> cached maps
         self._alias_cache: dict[str | None, dict[str, str]] = {}
         self._deprecated_cache: dict[str | None, dict[str, DeprecationInfo]] = {}
         self._value_alias_cache: dict[str | None, dict[str, dict[str, str]]] = {}
+        self._item_alias_cache: dict[str | None, dict[str, dict[str, str]]] = {}
 
     # ------------------------------------------------------------------
     # Construction
@@ -231,6 +233,23 @@ class AliasTable:
         self._value_alias_cache[key] = merged
         return merged
 
+    def item_aliases_for(self, component_type: str | None) -> dict[str, dict[str, str]]:
+        """``{attribute: {alias: canonical}}`` for the objects inside an
+        array attribute of *component_type* — declared as ``aliases`` on a
+        property of the attribute's ``items`` (a partialAttributes range's
+        ``onClick`` declares ``["onclick"]``). Same overlay rule as
+        :meth:`aliases_for`.
+        """
+        key = self.definition_key_for(component_type)
+        if key in self._item_alias_cache:
+            return self._item_alias_cache[key]
+        merged = {attr: dict(m) for attr, m in self._common_item_aliases.items()}
+        if key and key != "common":
+            for attr, m in self._item_alias_map_for_section(key).items():
+                merged.setdefault(attr, {}).update(m)
+        self._item_alias_cache[key] = merged
+        return merged
+
     def deprecated_for(self, component_type: str | None) -> dict[str, DeprecationInfo]:
         """``{attribute: DeprecationInfo}`` effective for *component_type*."""
         key = self.definition_key_for(component_type)
@@ -241,6 +260,40 @@ class AliasTable:
             merged.update(self._deprecated_map_for_section(key))
         self._deprecated_cache[key] = merged
         return merged
+
+    def bind_value_attributes(self, component_type: str | None, node: dict | None = None) -> list[str]:
+        """The attributes `bind` is an alternative spelling of on
+        *component_type*'s section (``common.bind.primaryValue``): the one a
+        lone `bind` is rewritten to first, then the other spellings of the
+        same value. ``[]`` for a section `bind` names no value of.
+
+        A section whose value depends on another attribute of the node gives
+        an object — ``by`` (that attribute), ``lists`` (a list per value),
+        ``whenAbsent`` (the value when *node* does not set it, or sets one
+        ``lists`` does not name): a SelectBox's by ``selectItemType``, so a
+        Date SelectBox's value is ``selectedDate``."""
+        key = self.definition_key_for(component_type)
+        spec = self._section("common").get("bind")
+        table = spec.get("primaryValue") if isinstance(spec, dict) else None
+        values = table.get(key) if isinstance(table, dict) and key else None
+        if isinstance(values, dict):
+            values = self.primary_value_list(values, node)
+        return [v for v in values if isinstance(v, str)] if isinstance(values, list) else []
+
+    @staticmethod
+    def primary_value_list(entry: dict, node: dict | None) -> list | None:
+        """The list a ``primaryValue`` object gives for *node*: ``lists[node[by]]``,
+        else ``lists[whenAbsent]``. The value is matched as written, as the
+        codegens compare ``selectItemType``."""
+        lists = entry.get("lists")
+        by = entry.get("by")
+        if not isinstance(lists, dict) or not isinstance(by, str):
+            return None
+        picked = node.get(by) if isinstance(node, dict) else None
+        if not isinstance(picked, str) or picked not in lists:
+            picked = entry.get("whenAbsent")
+        values = lists.get(picked)
+        return values if isinstance(values, list) else None
 
     def enum_for(self, component_type: str | None, attr: str) -> list[str]:
         """The declared ``enum`` of *attr* on *component_type*'s section
@@ -271,6 +324,27 @@ class AliasTable:
             for alias in aliases:
                 if isinstance(alias, str) and alias and alias != canonical:
                     out[alias] = canonical
+        return out
+
+    def _item_alias_map_for_section(self, key: str) -> dict[str, dict[str, str]]:
+        out: dict[str, dict[str, str]] = {}
+        for attr, spec in self._section(key).items():
+            if not isinstance(spec, dict):
+                continue
+            items = spec.get("items")
+            properties = items.get("properties") if isinstance(items, dict) else None
+            if not isinstance(properties, dict):
+                continue
+            table: dict[str, str] = {}
+            for canonical, prop in properties.items():
+                aliases = prop.get("aliases") if isinstance(prop, dict) else None
+                if not isinstance(aliases, list):
+                    continue
+                for alias in aliases:
+                    if isinstance(alias, str) and alias and alias != canonical:
+                        table[alias] = canonical
+            if table:
+                out[attr] = table
         return out
 
     def _value_alias_map_for_section(self, key: str) -> dict[str, dict[str, str]]:

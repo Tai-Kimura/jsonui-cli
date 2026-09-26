@@ -23,7 +23,11 @@ module KjuiTools
             return indent('// Embed: missing required `screen` attribute', depth)
           end
 
-          embed_id = json_data['id'] || 'embed'
+          # The embed slot's key (EmbedContainer: "unique identifier for this
+          # embed slot within the parent" — it keys the slot's ViewModelStore):
+          # the id, else the node's position (view_id). Every id-less Embed was
+          # `embed`, so two of them shared one slot's view models.
+          embed_id = Helpers::ModifierBuilder.view_id(json_data)
           navigation_mode = json_data['navigationMode'] || 'delegate'
           isolated = navigation_mode == 'isolated'
           nav_mode_kotlin = isolated ? 'EmbedNavigationMode.Isolated' : 'EmbedNavigationMode.Delegate'
@@ -48,7 +52,7 @@ module KjuiTools
           required_imports&.add(:embedded_event) unless events.empty?
           required_imports&.add(:embed_isolated_navigation) if isolated
 
-          code  = indent("// Embed: #{screen}", depth)
+          code  = indent("// Embed: #{Helpers::ModifierBuilder.comment_text(screen)}", depth)
           if isolated
             # Version-skew guard: the isolated call site references
             # EmbedIsolatedNavigation (new in 2.12.0), so building against an
@@ -72,7 +76,17 @@ module KjuiTools
           end
 
           code += "\n" + indent("embedId = \"#{embed_id}\",", depth + 1)
-          unless params.empty?
+          if params.is_a?(String)
+            # `params` is declared ["object", "binding"]: a bound map is passed
+            # as the data holds it. `each_with_index` on the layout's `@{p}`
+            # raised NoMethodError and took the build down.
+            inner = Helpers::BindingExpression.extract_inner(params)
+            if inner
+              path = Helpers::BindingExpression.path_only(inner)
+              access = Helpers::BindingExpression.property_nullable?(path) ? "(data.#{path} ?: emptyMap())" : "data.#{path}"
+              code += "\n" + indent("params = #{access},", depth + 1)
+            end
+          elsif !params.empty?
             code += "\n" + indent('params = mapOf(', depth + 1)
             params.each_with_index do |(key, value), idx|
               expr = render_param_value(value)
@@ -134,7 +148,7 @@ module KjuiTools
         def self.build_embed_modifier(json_data, depth, required_imports, parent_type)
           modifiers = []
           modifiers.concat(Helpers::ModifierBuilder.build_test_tag(json_data, required_imports))
-          # userInteractionEnabled / touchDisabledState stop this node and
+          # userInteractionEnabled stops this node and
           # what is in it (ModifierBuilder.build_interaction_blocker); this
           # component builds no clickable, which is where it came from.
           modifiers.concat(Helpers::ModifierBuilder.build_interaction_blocker(json_data, required_imports))

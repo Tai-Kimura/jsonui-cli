@@ -77,6 +77,19 @@ module JsonUIShared
       end
     end
 
+    # A layout data class that declares a list — `Array`, `[T]`, `Array(T)`,
+    # optionally `?` — read by this grammar; a dictionary spelling (`[K: V]`)
+    # is not one. The element type, or nil when the class is not a list; an
+    # untyped list's element answers `any?`. A class-list Collection (no
+    # `sections`) whose `items` binds such a property draws it as one section
+    # (Collection.items; 4f ruling, 2026-09-26).
+    def list_element(declared)
+      return nil unless declared.is_a?(String) && !declared.include?(':')
+
+      t = parse(declared)
+      t.kind == :list ? t.element : nil
+    end
+
     def parse(raw)
       text = raw.to_s.strip
       forced = text.end_with?('!!') # sjui's "not optional" mark; the type is what precedes it

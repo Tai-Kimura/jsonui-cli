@@ -112,25 +112,27 @@ RSpec.describe SjuiTools::SwiftUI::Views::CollectionConverter do
     end
   end
 
+  # No `items`: nothing drawn (4f ruling 2026-09-26, round 6). Until
+  # jsonui-cli 1.9.0 this pinned an empty grid with each section's header and
+  # footer drawn with no data around it.
   describe 'sections without an items binding' do
-    it 'emits an empty grid with the no-binding comment' do
+    it 'draws no section, only the container' do
       code = convert(
         { 'type' => 'Collection', 'id' => 'fb', 'columns' => 2,
           'cellWidth' => 100, 'cellHeight' => 50, 'sections' => [{ 'cell' => 'LegacyCell' }] }
       )
-      expect(code).to include('LazyVGrid(')
-      expect(code).to include('// No items binding specified')
+      expect(code).not_to include('LazyVGrid(')
+      expect(code).to include('// Section 1: no items, nothing drawn')
       expect(code).to include('.accessibilityIdentifier("fb")')
     end
 
-    it 'renders static header/footer views around the empty grid' do
+    it 'draws no header or footer' do
       code = convert(
         { 'type' => 'Collection', 'columns' => 2,
           'sections' => [{ 'cell' => 'XCell', 'header' => 'HeadView', 'footer' => 'FootView' }] }
       )
-      expect(code).to include("HeadView()\n")
-      expect(code).to include('// No items binding specified')
-      expect(code).to include("FootView()\n")
+      expect(code).not_to include('HeadView(')
+      expect(code).not_to include('FootView(')
     end
   end
 
@@ -210,9 +212,11 @@ RSpec.describe SjuiTools::SwiftUI::Views::CollectionConverter do
           'sections' => [{ 'cell' => 'TagCell' }], 'items' => '@{tags}' }
       )
       expect(code).not_to include('ScrollView(')
-      expect(code).to include('VStack(spacing: 8) {')
+      # Undeclared gaps are 0 (attribute_semantics.json -> collectionSpacing;
+      # 8 until jsonui-cli 1.9.0).
+      expect(code).to include('VStack(spacing: 0) {')
       expect(code).to include('if let dataSource = data.tags, dataSource.sections.count > 0 {')
-      expect(code).to include('FlowLayout(alignment: .leading, horizontalSpacing: 8, verticalSpacing: 8) {')
+      expect(code).to include('FlowLayout(alignment: .leading, horizontalSpacing: 0, verticalSpacing: 0) {')
       expect(code).to include('TagCellView(data: cellData).equatable()')
       expect(code).to include('.accessibilityIdentifier("flw_item_\\(cellIndex)")')
     end
@@ -223,7 +227,7 @@ RSpec.describe SjuiTools::SwiftUI::Views::CollectionConverter do
           'cellClasses' => ['TagCell'], 'items' => '@{tags}' }
       )
       expect(code).to include('if let dataSource = data.tags, let cellsData = dataSource.sections.first?.cells?.data {')
-      expect(code).to include('FlowLayout(alignment: .leading, horizontalSpacing: 8, verticalSpacing: 8) {')
+      expect(code).to include('FlowLayout(alignment: .leading, horizontalSpacing: 0, verticalSpacing: 0) {')
       expect(code).to include('TagCellView(data: cellData)')
       expect(code).not_to include('.equatable()')
     end

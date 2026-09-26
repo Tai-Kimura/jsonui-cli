@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require_relative '../../spec_helper'
+require 'json'
 require 'react/converters/switch_converter'
 require 'react/converters/toggle_converter'
 require 'react/converters/slider_converter'
@@ -12,16 +13,23 @@ require 'react/converters/text_field_converter'
 require 'react/converters/collection_converter'
 require 'react/data_model_generator'
 require 'react/converters/view_converter'
+require 'react/react_generator'
 
-# `bind` is the alternative spelling for a component's primary value binding.
-# It is honoured by eight Compose components and by the iOS checkbox/text-field
-# paths; web read it nowhere, so a layout written with `bind` rendered an
-# unbound control on the web and nothing said so.
+# `bind` is the alternative spelling for a component's primary value binding
+# (SSoT common.bind, primaryValue). The dispatch folds it into the attribute it
+# stands for on the node a built-in converter draws — its style merged —
+# (JsonUIShared::BindFold, in BaseConverter#create_converter_for_child and
+# ReactGenerator#convert_component); no converter reads `bind` itself. Each read
+# it last in its own chain (`with_bind_fallback`), so a literal `isOn: false`
+# beside `bind` drew the binding, and a TextField's bind was bound on web only.
 RSpec.describe 'bind as the primary value binding' do
   let(:config) { { 'use_tailwind' => true, 'typescript' => true } }
 
-  def convert(klass, json)
-    klass.new(json, config).convert(2)
+  # Through the dispatch: the node is a child, as every drawn node but the
+  # root is (create_converter_for_child).
+  def convert(_klass, json)
+    parent = { 'class' => 'View', 'id' => 'parent', 'child' => [json.merge('type' => json['class'])] }
+    RjuiTools::React::Converters::ViewConverter.new(parent, config).convert(2)
   end
 
   {
@@ -52,8 +60,7 @@ RSpec.describe 'bind as the primary value binding' do
     expect(result).not_to include('data.rows')
   end
 
-  # The component's own value attribute is the primary spelling; `bind` is only
-  # the fallback, so a layout that sets both keeps behaving as it did.
+  # The component's own value attribute wins; `bind` beside it is dropped.
   it 'yields to an explicit value attribute' do
     result = convert(
       RjuiTools::React::Converters::SwitchConverter,
@@ -63,14 +70,86 @@ RSpec.describe 'bind as the primary value binding' do
     expect(result).not_to include('data.ignored')
   end
 
-  # `isOn: false` is a value, not an absence — the chains treat it as falsy and
-  # always have, so the fallback must not start firing for it.
-  it 'keeps the existing truthiness of the value chains' do
+  # `isOn: false` is a value, not an absence: it is the Switch's value, and
+  # `bind` beside it is dropped. The chains read it as falsy and fell through
+  # to `bind`, so the binding was drawn.
+  it 'takes a static false as the value' do
     result = convert(
       RjuiTools::React::Converters::SwitchConverter,
       { 'class' => 'Switch', 'isOn' => false, 'bind' => '@{fallback}' }
     )
-    expect(result).to include('data.fallback')
+    expect(result).not_to include('data.fallback')
+  end
+
+  # The style cases of the shared table: the child's style merged
+  # (BaseConverter#apply_style), then folded.
+  it 'draws each style case as the table says' do
+    vectors = File.expand_path('../../../../shared/core/bind_fold_vectors.json', __dir__)
+    skip 'shared vectors not present in this layout' unless File.exist?(vectors)
+
+    require 'tmpdir'
+    date, switch = JSON.parse(File.read(vectors))['style_cases']
+    Dir.mktmpdir do |dir|
+      [date, switch].each { |c| c['styles'].each { |name, body| File.write(File.join(dir, "#{name}.json"), JSON.generate(body)) } }
+      draw = lambda do |c|
+        parent = { 'class' => 'View', 'id' => 'parent', 'child' => [c['node'].merge('id' => 'x')] }
+        RjuiTools::React::Converters::ViewConverter.new(parent, config.merge('styles_directory' => dir)).convert(2)
+      end
+      expect(draw.call(date)).to include('data.day')
+      on = draw.call(switch)
+      expect(on).not_to include('data.on')
+      expect(on).to include('defaultChecked')
+    end
+  end
+
+  # The root node is dispatched by ReactGenerator#convert_component, not the
+  # child path: it folds too.
+  it 'folds the root node at ReactGenerator#convert_component' do
+    generator = RjuiTools::React::ReactGenerator.allocate
+    generator.instance_variable_set(:@config, config)
+    generator.instance_variable_set(:@extension_converters, {})
+    root = generator.send(:convert_component, { 'type' => 'Switch', 'id' => 'r', 'bind' => '@{rootOn}' })
+    expect(root).to include('data.rootOn')
+    kept = generator.send(:convert_component, { 'type' => 'Switch', 'id' => 'r', 'isOn' => false, 'bind' => '@{rootOn}' })
+    expect(kept).not_to include('data.rootOn')
+  end
+
+  # An extension converter (the app's own component) gets its node as written.
+  it 'hands an extension converter its node with bind' do
+    seen = nil
+    extension = Class.new do
+      define_method(:initialize) { |json, _config| seen = json }
+      define_method(:convert) { |_indent = 0| '<Mine />' }
+      define_method(:convert_node) { |_indent = 0| '<Mine />' }
+    end
+    parent = { 'class' => 'View', 'id' => 'parent', 'child' => [{ 'type' => 'Switch', 'bind' => '@{b}' }] }
+    RjuiTools::React::Converters::ViewConverter.new(parent, config.merge('_extension_converters' => { 'Switch' => extension })).convert(2)
+    expect(seen).to include('bind' => '@{b}')
+    expect(seen).not_to have_key('isOn')
+  end
+
+  # No converter reads `bind`: the dispatch folds it (code only — a comment
+  # naming it does not count).
+  it 'is read by no converter' do
+    token = /\['bind'\]|\["bind"\]|with_bind_fallback\(/
+    hits = lambda do |text, name|
+      # map + compact, not filter_map: Ruby 2.6 (the consumer floor, a CI
+      # leg) has no filter_map
+      text.lines.each_with_index.map do |line, i|
+        next if line.strip.start_with?('#')
+
+        "#{name}:#{i + 1}" if line.sub(/#.*/, '') =~ token
+      end.compact
+    end
+    # the scan tells a read from a comment (both sides)
+    expect(hits.call("          value = attributes['bind']\n", 'read').size).to eq(1)
+    expect(hits.call("        # attributes['bind'] was read here\n", 'comment').size).to eq(0)
+
+    lib = File.expand_path('../../../lib/react', __dir__)
+    files = Dir.glob(File.join(lib, '**', '*.rb'))
+    expect(files.size).to be > 30
+    found = files.flat_map { |f| hits.call(File.read(f), f.delete_prefix("#{lib}/")) }
+    expect(found).to eq([])
   end
 
   it 'emits nothing extra when bind is absent' do

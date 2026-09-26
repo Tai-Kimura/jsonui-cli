@@ -816,7 +816,10 @@ RSpec.describe RjuiTools::React::Converters::LabelConverter do
       expect(result).not_to include('onClick={handleTap}')
     end
 
-    it 'emits ERROR comment for binding-format onclick (selector required, matching base contract)' do
+    # jsonui-cli 1.9.0: a range's `onclick` is `onClick`'s alias, and either
+    # holds a binding or a method name. A binding in `onclick` used to be an
+    # ERROR comment here (selector only); it is now the binding.
+    it 'emits the binding for binding-format onclick (the alias of onClick)' do
       converter = create_converter({
         'type' => 'Label',
         'text' => 'Tap here now',
@@ -825,8 +828,21 @@ RSpec.describe RjuiTools::React::Converters::LabelConverter do
         ]
       })
       result = converter.convert
-      expect(result).to include('ERROR: onclick requires selector format')
+      expect(result).to include('onClick: data.handleTap')
+      expect(result).not_to include('ERROR')
       expect(result).not_to include('onClick={@{handleTap}}')
+    end
+
+    it 'emits an ERROR comment for a handler that is neither a binding nor a name, in either spelling' do
+      %w[onClick onclick].each do |key|
+        result = create_converter({
+          'type' => 'Label',
+          'text' => 'Tap here now',
+          'partialAttributes' => [{ 'range' => [0, 3], key => '@{handleTap} now' }]
+        }).convert
+        expect(result).to include('ERROR: a range onClick is a binding'), key
+        expect(result).not_to include('onClick: data.'), key
+      end
     end
   end
   # highlightAttributes / highlightColor take over while `selected` is true.

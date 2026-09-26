@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require 'open3'
+require 'rbconfig'
 require 'tmpdir'
 require 'json'
 require 'fileutils'
@@ -56,7 +57,7 @@ RSpec.describe 'what sjui g view / partial / collection / adapter say they did, 
     # A real, empty Xcode project: UIKit mode adds its files to it.
     script = "require 'xcodeproj'; pr = Xcodeproj::Project.new(ARGV[0]); pr.new_target(:application, 'P', :ios); " \
              "pr.main_group.new_group('P', 'P'); pr.save"
-    raise 'could not make an Xcode project' unless system('ruby', '-e', script, File.join(dir, 'P.xcodeproj'))
+    raise 'could not make an Xcode project' unless system(RbConfig.ruby, '-e', script, File.join(dir, 'P.xcodeproj'))
 
     tool
   end
@@ -73,7 +74,7 @@ RSpec.describe 'what sjui g view / partial / collection / adapter say they did, 
     %w[new again].map do |run|
       before = snapshot(dir)
       sleep 0.01
-      said, = Open3.capture2e('ruby', File.join(tool, 'bin', 'sjui'), 'g', *args, chdir: dir, stdin_data: '')
+      said, = Open3.capture2e(RbConfig.ruby, File.join(tool, 'bin', 'sjui'), 'g', *args, chdir: dir, stdin_data: '')
       after = snapshot(dir)
       disk = after.to_h { |f, m| [f, !before.key?(f) ? :created : (before[f] == m ? :untouched : :rewritten)] }
       [run, said.gsub(/\e\[[0-9;]*m/, ''), disk, dir]

@@ -180,11 +180,18 @@ COMPONENT_SPEC_SCHEMA = {
                     "enum": [
                         "View", "ScrollView",
                         "Label", "TextField", "TextView",
-                        "Button", "Image", "Collection",
-                        "SelectBox", "CheckBox", "Switch", "Web",
-                        "Spacer", "Divider", "Indicator"
+                        "Button", "Image", "NetworkImage", "CircleView",
+                        "IconLabel", "Collection",
+                        "SelectBox", "CheckBox", "Switch", "Radio",
+                        "Segment", "Slider", "Progress", "Indicator",
+                        "Web", "Blur", "GradientView"
                     ],
-                    "description": "Component type"
+                    "description": (
+                        "Component type: a Layout JSON component by its "
+                        "canonical name — the screen spec's list without "
+                        "TabView and SafeAreaView (a screen's, not a "
+                        "component's)."
+                    )
                 },
                 "id": {
                     "type": "string",

@@ -64,7 +64,7 @@ module KjuiTools
           if declared_size
             modifiers.concat(Helpers::ModifierBuilder.build_size(json_data, parent_type, required_imports))
           elsif (style_size = STYLE_SIZES[style])
-            modifiers << ".size(#{style_size}.dp)"
+            modifiers << ".size(#{Helpers::BoundValue.dp(style_size)})"
           end
           modifiers.concat(Helpers::ModifierBuilder.build_offset(json_data, required_imports))
           modifiers.concat(Helpers::ModifierBuilder.build_alpha(json_data, required_imports))
@@ -94,15 +94,20 @@ module KjuiTools
             end
           end
 
-          # Track color for linear progress
+          # Track color for linear progress. The separator follows what came
+          # before: with neither modifiers nor a color the first argument is
+          # this one, and the `,` it always led with opened the call with
+          # `(,` — not Kotlin.
           if style == 'linear' && json_data['trackColor']
             trackcolor_resolved = Helpers::ResourceResolver.process_color(json_data['trackColor'], required_imports)
-            code += ",\n" + indent("trackColor = #{trackcolor_resolved}", actual_depth + 1)
+            code += (has_modifiers ? ",\n" : "\n") + indent("trackColor = #{trackcolor_resolved}", actual_depth + 1)
+            has_modifiers = true
           end
 
           # Stroke width for circular progress
           if style != 'linear' && json_data['strokeWidth']
-            code += ",\n" + indent("strokeWidth = #{json_data['strokeWidth']}.dp", actual_depth + 1)
+            code += (has_modifiers ? ",\n" : "\n") + indent("strokeWidth = #{Helpers::BoundValue.dp(json_data['strokeWidth'])}", actual_depth + 1)
+            has_modifiers = true
           end
           
           code += "\n" + indent(")", actual_depth)

@@ -12,7 +12,8 @@ require_relative '../../support/kotlin_compiler'
 # data's own sections (CollectionDataSource), every one of them on the
 # vertical routes and the first on the horizontal and flow routes; a header
 # is drawn before them and a footer after on the vertical routes only, with
-# or without items; paging draws nothing.
+# or without items; paging draws the first data section, a page per cell (4f
+# ruling 2026-09-26, round 6; it drew nothing).
 #
 # Until 1.8.121 (measured on 8e4ea3ea, 2026-09-26) only the lazy grid drew
 # this shape, as `data.rows?.get("<cellClass>")` through `<cellClass>View(data
@@ -44,7 +45,7 @@ RSpec.describe 'kjui codegen: the class-list Collection (cellClasses, items, no 
     'lazy:none, horizontal' => [{ 'lazy' => 'none', 'layout' => 'horizontal' }, :first, false],
     'wrapContent height, vertical' => [{ 'height' => 'wrapContent' }, :every, true],
     'wrapContent height, grid' => [{ 'height' => 'wrapContent', 'columns' => 2 }, :every, true],
-    'paging' => [{ 'layout' => 'horizontal', 'paging' => true }, :nothing, false]
+    'paging' => [{ 'layout' => 'horizontal', 'paging' => true }, :pages, false]
   }.freeze
 
   def emit(node, imports = Set.new)
@@ -127,7 +128,7 @@ RSpec.describe 'kjui codegen: the class-list Collection (cellClasses, items, no 
   end
 
   CLASS_LIST_ROUTES.each do |route, (attributes, source, edges)|
-    it "#{route}: cells from #{source == :every ? 'every data section' : source == :first ? 'the first data section' : 'nowhere'}, " \
+    it "#{route}: cells from #{{ every: 'every data section', first: 'the first data section', pages: 'the first data section, a page each' }.fetch(source, 'nowhere')}, " \
        "#{edges ? 'header before and footer after' : 'no header or footer'}" do
       imports = Set.new
       code = emit(CLASS_LIST_BASE.merge(attributes), imports)
@@ -137,6 +138,10 @@ RSpec.describe 'kjui codegen: the class-list Collection (cellClasses, items, no 
         expect([at[:every], at[:first], at[:cells]]).to eq([true, false, 1]), code
       when :first
         expect([at[:every], at[:first], at[:cells]]).to eq([false, true, 1]), code
+      when :pages
+        expect(code).to include('val pageSection0 = data.rows?.sections?.getOrNull(0)?.cells?.data.orEmpty()')
+        expect(at[:cells]).to eq(1), code
+        expect(code).to include('viewModel(key = "row_cell_page_${page}_')
       else
         expect(at[:cells]).to eq(0), code
       end
@@ -146,7 +151,7 @@ RSpec.describe 'kjui codegen: the class-list Collection (cellClasses, items, no 
       else
         expect([at[:header], at[:footer]]).to eq([nil, nil]), code
       end
-      if source != :nothing
+      if %i[every first].include?(source)
         # Each cell its own ViewModel: keyed by the data section as well as
         # the cell, or two sections' first cells would share one.
         expect(code).to include('viewModel(key = "RowCell_cell_${sectionIndex}_${cellIndex}_')

@@ -21,7 +21,11 @@ require 'react/converters/blur_converter'
 # These pins hold the two halves of the fix: the binding reaches a CSS property
 # (or a JSX expression), and the STATIC form is untouched.
 RSpec.describe 'bound value emitters' do
-  let(:config) { { 'use_tailwind' => true } }
+  # The assertions below are TypeScript's (a TypeScript project, declared). A
+  # JavaScript project writes none of them — a .jsx does not parse `as`
+  # (spec/react/javascript_mode_output_parses_spec.rb); until jsonui-cli 1.9.0
+  # they were written whatever the project was.
+  let(:config) { { 'use_tailwind' => true, 'typescript' => true } }
 
   def convert(node, klass)
     klass.new(node, config).convert_node(2)

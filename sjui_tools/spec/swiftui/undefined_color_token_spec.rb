@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require 'open3'
+require 'rbconfig'
 require 'tmpdir'
 require 'json'
 require 'fileutils'
@@ -138,7 +139,7 @@ RSpec.describe 'an undefined colour token' do
 
     it 'warns only for the name no mode defines' do
       dir = project
-      log, = Open3.capture2e('ruby', File.join(dir, 'sjui_tools', 'bin', 'sjui'), 'build', chdir: dir)
+      log, = Open3.capture2e(RbConfig.ruby, File.join(dir, 'sjui_tools', 'bin', 'sjui'), 'build', chdir: dir)
 
       generated = Dir.glob(File.join(dir, '**', '*GeneratedView.swift'))
       expect(generated).not_to be_empty, "build generated nothing, so this asserts nothing\n#{log}"

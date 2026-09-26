@@ -114,10 +114,11 @@ module SjuiTools
                       add_line "backgroundColor: #{bg_color},"
                     end
 
-                    # Add onClick as closure (SwiftUI uses onClick, not onclick)
-                    if JsonUIShared::TapAccessibility.handler?(partial['onClick'])
-                      method_name = extract_binding_property(partial['onClick'])
-                      add_line "onClick: { data.#{method_name}?() },"
+                    # The range's handler (TapAccessibility.range_handler): onClick,
+                    # the canonical binding, first, then onclick, its selector
+                    # alias — which this dropped.
+                    if (call = range_handler_call(partial))
+                      add_line "onClick: { #{call} },"
                     end
 
                     # Remove trailing comma from last item
@@ -284,6 +285,13 @@ module SjuiTools
               add_line "linkable: #{bound_linkable},"
             elsif @component['linkable'] == true || @component['linkable'] == 'true'
               add_line "linkable: true,"
+            end
+
+            # userInteractionEnabled stops the Label's links too — a range's
+            # onClick and a link `linkable` detects: `false` on it or on a node
+            # around it, and each binding gates them (links_enabled_condition).
+            if (links = links_enabled_condition)
+              add_line "linksEnabled: #{links},"
             end
 
             # highlightAttributes / highlightColor / selected. Emitted last
@@ -453,6 +461,26 @@ module SjuiTools
 
         # {text:, color:, size:} when the Label hint contract is satisfied
         # (hint/placeholder + hintAttributes both present).
+        # Whether the Label's links are operable, as a Swift Bool for
+        # PartialAttributedText's `linksEnabled`: nil (always; left out),
+        # 'false', or the bound userInteractionEnabled values of the nodes
+        # around it and its own, joined. The tap rule stops a node and
+        # everything in it, links included, and a binding gates them as it
+        # gates a tap (4f ruling, jsonui-cli 1.9.0). `.allowsHitTesting`
+        # stops a touch; a link is also an accessibility element of its own.
+        # canTap and enabled are the Label's own tap and state, not read here.
+        # Only a Label with links gets it (TapAccessibility.linked_text?).
+        def links_enabled_condition
+          tap = JsonUIShared::TapAccessibility
+          return nil unless tap.linked_text?(@component)
+          return 'false' if tap.stopped?(@component)
+
+          gates = tap.interaction_gates(@component)
+          return nil if gates.empty?
+
+          gates.uniq.map { |gate| tap_gate_expr(gate) }.join(' && ')
+        end
+
         def label_hint_config
           attrs = @component['hintAttributes']
           hint = @component['hint'] || @component['placeholder']

@@ -151,4 +151,83 @@ RSpec.describe 'kjui codegen: a flow per section' do
                      'verticalArrangement = Arrangement.spacedBy(6.dp))').size).to eq(2)
     expect(emit('sections' => [{ 'cell' => 'ACell' }])).to match(/\A\s*FlowRow\(/)
   end
+
+  # Each flow cell gets a ViewModel of its own. `viewModel(key = …)` returns
+  # the instance its ViewModelStore already holds for that key
+  # (ViewModelProvider.get(key, modelClass) — transcribed below as a map by
+  # key), and the flow key was `<cell>_flow_<cellIndex>`: two sections of the
+  # same cell class gave their first cells ONE ViewModel, so the later
+  # section's data overwrote the earlier's and both cells drew it (measured on
+  # the emit of 137468b2: `A:b0 A:b1 A:a2 | A:b0 A:b1`). The key carries the
+  # section, as the sectioned grid's `<cell>_cell_<section>_<cellIndex>` does.
+  # The two sections' rows share their ids (k0, k1…), so the cellIdProperty
+  # key (`<cell>_flow_<cellId>`) is at the position where a missing section
+  # collides too.
+  describe 'the ViewModel each flow cell draws' do
+    STORE_STUBS = <<~KOTLIN
+      object Store { val byKey = HashMap<String, Any>() }
+      inline fun <reified T : Any> viewModel(key: String? = null): T =
+          Store.byKey.getOrPut(key ?: T::class.java.name) { T::class.java.getDeclaredConstructor().newInstance() } as T
+      fun LaunchedEffect(key1: Any?, block: suspend kotlinx.coroutines.CoroutineScope.() -> Unit) {
+          kotlinx.coroutines.runBlocking { block() }
+      }
+      class ACellViewModel { var data: Map<String, Any> = emptyMap(); fun updateData(updates: Map<String, Any>) { data = updates } }
+      object Drawn { val cells = mutableListOf<Pair<String, ACellViewModel>>() }
+      @Composable fun ACellView(viewModel: ACellViewModel, modifier: Modifier = Modifier) { Drawn.cells += ((modifier as? Tagged)?.tag ?: "") to viewModel }
+    KOTLIN
+
+    def shared_program(code)
+      stubs = FLOW_SECTIONS_STUBS
+              .sub(/^inline fun <reified T : Any> viewModel.*\n/, '')
+              .sub(/^fun LaunchedEffect.*\n/, '')
+      <<~KOTLIN
+        #{stubs}
+        #{STORE_STUBS}
+        @Composable fun flow(data: Data, viewModel: Any) {
+        #{code}
+        }
+        fun main() {
+            flow(Data(CollectionDataSource(listOf(
+                CollectionDataSection(cells = CollectionDataSection.CellData("A", List(3) { mapOf<String, Any>("id" to "k$it", "v" to "a$it") })),
+                CollectionDataSection(cells = CollectionDataSection.CellData("A", List(2) { mapOf<String, Any>("id" to "k$it", "v" to "b$it") }))
+            ))), Any())
+            println("DRAWN " + Drawn.cells.joinToString(" ") { (tag, vm) -> tag.substringAfterLast('_') + ":" + vm.data["v"] })
+            println("DISTINCT " + Drawn.cells.map { System.identityHashCode(it.second) }.distinct().size)
+        }
+      KOTLIN
+    end
+
+    it 'two sections of the same cell class draw their own data, one ViewModel per cell, with and without cellIdProperty' do
+      skip "compile: #{KotlinCompiler.unavailable_reason}" if KotlinCompiler.unavailable_reason
+
+      [{}, { 'cellIdProperty' => 'id' }].each do |extra|
+        code = emit({ 'sections' => [{ 'cell' => 'ACell' }, { 'cell' => 'ACell' }] }.merge(extra))
+        out = Dir.mktmpdir('kjui_flow_vm') do |dir|
+          File.write(File.join(dir, 'Emitted.kt'), shared_program(code))
+          stdlib = KotlinCompiler.newest('org.jetbrains.kotlin', 'kotlin-stdlib')
+          coroutines = KotlinCompiler.newest('org.jetbrains.kotlinx', 'kotlinx-coroutines-core-jvm')
+          reflect = KotlinCompiler.newest('org.jetbrains.kotlin', 'kotlin-reflect')
+          annotations = KotlinCompiler.newest('org.jetbrains', 'annotations')
+          compiler_cp = [KotlinCompiler.compiler_jar, stdlib, reflect, coroutines, annotations,
+                         KotlinCompiler.newest('org.jetbrains.intellij.deps', 'trove4j')].compact.join(':')
+          built, = Open3.capture2e(KotlinCompiler.java_bin, '-cp', compiler_cp, 'org.jetbrains.kotlin.cli.jvm.K2JVMCompiler',
+                                   '-no-stdlib', '-cp', [stdlib, reflect, annotations, coroutines].join(':'),
+                                   '-d', File.join(dir, 'out'), File.join(dir, 'Emitted.kt'))
+          raise "did not compile:\n#{built}" if built.include?('error:')
+
+          ran, status = Open3.capture2e(KotlinCompiler.java_bin, '-cp', [File.join(dir, 'out'), stdlib, coroutines].join(':'), 'EmittedKt')
+          raise "did not run:\n#{ran}" unless status.success?
+
+          ran
+        end
+        expect(out[/DRAWN (.*)/, 1]).to eq('0:a0 1:a1 2:a2 0:b0 1:b1'), "#{extra}\n#{out}"
+        expect(out[/DISTINCT (\d+)/, 1]).to eq('5'), "#{extra}\n#{out}"
+      end
+    end
+
+    it 'keys each flow cell by its section, as the sectioned grid does' do
+      code = emit('sections' => [{ 'cell' => 'ACell' }, { 'cell' => 'ACell' }])
+      expect(code).to include('viewModel(key = "ACell_flow_0_${cellIndex}_').and include('viewModel(key = "ACell_flow_1_${cellIndex}_')
+    end
+  end
 end

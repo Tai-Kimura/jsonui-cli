@@ -34,6 +34,15 @@ export ANDROID_HOME=${ANDROID_HOME:-$HOME/Library/Android/sdk}
 fail=0
 say() { printf '%s\n' "$*"; }
 bad() { fail=$((fail+1)); say "!! $*"; }
+# A failed pytest leg that is captured into $out keeps what it printed. Its
+# FAILED line names a test, not why it failed, and the junit file is removed
+# right after: on 2026-09-26 the iOS branch runtime went red once under a load
+# of 40+ and passed 9/9 on the rerun, and nothing on record said why.
+keep_out() {  # $1: a name for the leg, $2: what the leg printed; prints the log path
+  local log; log=$(mktemp "${TMPDIR:-/tmp}/run-suites.$1.XXXXXX")
+  printf '%s\n' "$2" >"$log"
+  printf '%s' "$log"
+}
 
 say "== start $(date -u +%FT%TZ) / $(date +%H:%M:%S) local"
 # What the Ruby suites will actually read with, not what was exported: the
@@ -247,10 +256,16 @@ rb_suite() {
   say "== $dir ($cmd, ruby $(cd "$C/$dir" && ruby -v 2>/dev/null | cut -d' ' -f2))"
   # Only rspec's own summary and failure header: the suites deliberately print
   # "Error: …" lines from the code under test, which are not failures.
-  (cd "$C/$dir" && eval "$cmd" 2>&1 | grep -E "^[0-9]+ examples, |^Failures:" | tail -3)
+  # The whole run goes to a log, so a red leg names its failing examples
+  # (`rspec ./spec/…` lines) and keeps the rest; a green one removes it.
+  local log; log=$(mktemp "${TMPDIR:-/tmp}/run-suites.$dir.XXXXXX")
+  (cd "$C/$dir" && eval "$cmd" >"$log" 2>&1)
   local rc=$?
+  grep -E "^[0-9]+ examples, |^Failures:" "$log" | tail -3
+  grep -E "^rspec \./" "$log" | head -10 | sed 's/^/   /'
   say "   exit=$rc"
-  [ "$rc" = 0 ] || bad "$dir: rspec exit $rc"
+  [ "$rc" = 0 ] || bad "$dir: rspec exit $rc (full log: $log)"
+  [ "$rc" = 0 ] && rm -f "$log"
 }
 rb_suite sjui_tools "rspec"                 # no Gemfile: plain rspec
 rb_suite kjui_tools "bundle exec rspec"
@@ -405,7 +420,7 @@ if command -v swift >/dev/null 2>&1; then
   rc=$?
   say "   $(printf '%s' "$out" | grep -E 'Executed [0-9]+ test|signal|error:' | tail -1)"
   say "   exit=$rc"
-  [ "$rc" = 0 ] || bad "emitted runtime traps when executed: exit $rc"
+  [ "$rc" = 0 ] || bad "emitted runtime traps when executed: exit $rc (full log: $(keep_out emitted-runtime "$out"))"
 else
   say "   SKIPPED — no swift on PATH (this leg needs a toolchain, not a checkout)"
 fi
@@ -426,7 +441,7 @@ if command -v xcrun >/dev/null 2>&1; then
   say "   $(xcrun swiftc --version 2>&1 | head -1)"
   say "   $(python3 "$C/dev-guide/ci/executed-or-skipped.py" "$_x" 2>&1 | tail -1)"
   say "   exit=$rc"
-  [ "$rc" = 0 ] || bad "unit-stub isolation typecheck: exit $rc — $(printf '%s' "$out" | grep -E '^(FAILED|ERROR)' | head -3 | tr '\n' ' ')"
+  [ "$rc" = 0 ] || bad "unit-stub isolation typecheck: exit $rc — $(printf '%s' "$out" | grep -E '^(FAILED|ERROR)' | head -3 | tr '\n' ' ')(full log: $(keep_out unit-stub-ios "$out"))"
   rm -f "$_x"
 else
   bad "unit-stub isolation typecheck: no xcrun — this leg needs a toolchain, and a release gate does not skip it"
@@ -448,7 +463,7 @@ rc=$?
 say "   $(cd "$C/test_tools" && python3 -c 'from tests._android_runtime import PINNED; print(" ".join(a.split("/")[1] + ":" + v for a, v in PINNED))' 2>&1 | tail -1)"
 say "   $(python3 "$C/dev-guide/ci/executed-or-skipped.py" "$_x" 2>&1 | tail -1)"
 say "   exit=$rc"
-[ "$rc" = 0 ] || bad "branch runtime (Android): exit $rc — $(printf '%s' "$out" | grep -E '^(FAILED|ERROR)' | head -3 | tr '\n' ' ')"
+[ "$rc" = 0 ] || bad "branch runtime (Android): exit $rc — $(printf '%s' "$out" | grep -E '^(FAILED|ERROR)' | head -3 | tr '\n' ' ')(full log: $(keep_out branch-android "$out"))"
 rm -f "$_x"
 
 # The emitted iOS branch runtime RUN under XCTest on two simulator runtimes:
@@ -466,7 +481,7 @@ rc=$?
 say "   $(xcodebuild -version 2>&1 | head -1) — $(xcrun --sdk iphonesimulator --show-sdk-version 2>&1 | sed 's/^/SDK /')"
 say "   $(python3 "$C/dev-guide/ci/executed-or-skipped.py" "$_x" 2>&1 | tail -1)"
 say "   exit=$rc"
-[ "$rc" = 0 ] || bad "branch runtime (iOS): exit $rc — $(printf '%s' "$out" | grep -E '^(FAILED|ERROR)' | head -3 | tr '\n' ' ')"
+[ "$rc" = 0 ] || bad "branch runtime (iOS): exit $rc — $(printf '%s' "$out" | grep -E '^(FAILED|ERROR)' | head -3 | tr '\n' ' ')(full log: $(keep_out branch-ios "$out"))"
 rm -f "$_x"
 
 say "== misfiled tickets (a ticket under reports/ is invisible to the inbox scan)"

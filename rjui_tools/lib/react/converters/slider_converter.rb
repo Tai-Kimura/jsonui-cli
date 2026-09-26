@@ -105,7 +105,7 @@ module RjuiTools
         # With no value the thumb starts at the minimum, as on the other faces
         # — a range input with no value starts at the midpoint.
         def build_value_attr(min_value = 0)
-          value = with_bind_fallback(attributes['value'])
+          value = attributes['value']
 
           if value && has_binding?(value)
             prop = extract_binding_property(value)
@@ -141,7 +141,7 @@ module RjuiTools
 
           # Auto-generate onChange from value binding property
           # e.g., value: "@{sliderValue}" -> onChange={(e) => data.onSliderValueChange?.(Number(e.target.value))}
-          value = with_bind_fallback(attributes['value'])
+          value = attributes['value']
           if value && has_binding?(value)
             property_name = extract_raw_binding_property(value)
             handler_name = "on#{capitalize_first(property_name)}Change"

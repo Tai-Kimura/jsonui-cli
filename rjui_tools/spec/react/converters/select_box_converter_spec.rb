@@ -49,8 +49,12 @@ RSpec.describe RjuiTools::React::Converters::SelectBoxConverter do
       # value ("all items" idiom) stays a valid key/value instead of
       # collapsing to undefined
       # (rjui-selectbox-object-items-empty-value-key-warning).
+      # The cast is TypeScript's (a TypeScript project, declared); a config
+      # without `typescript` is a JavaScript one, as the file extension says
+      # (spec/react/javascript_mode_output_parses_spec.rb). Until jsonui-cli
+      # 1.9.0 this converter alone cast whenever the key was not false.
       it 'supports canonical string-array items via a widened typeof branch' do
-        converter = create_converter({ 'class' => 'SelectBox', 'items' => '@{sortOptions}' })
+        converter = create_converter({ 'class' => 'SelectBox', 'items' => '@{sortOptions}' }, { 'use_tailwind' => true, 'typescript' => true })
         result = converter.convert
         expect(result).to include('const opt = item as string | number | { value?: string | number; id?: string | number; text?: string; label?: string };')
         expect(result).to include("typeof opt === 'object' && opt !== null")
@@ -184,7 +188,8 @@ RSpec.describe RjuiTools::React::Converters::SelectBoxConverter do
     # the bound index resolves to the same value string the <option> rows emit.
     context 'with selectedIndex binding' do
       it 'emits a controlled value resolving dynamic items at the bound index' do
-        converter = create_converter({ 'class' => 'SelectBox', 'items' => '@{groupFilterOptions}', 'selectedIndex' => '@{groupFilterIndex}' })
+        converter = create_converter({ 'class' => 'SelectBox', 'items' => '@{groupFilterOptions}', 'selectedIndex' => '@{groupFilterIndex}' },
+                                     { 'use_tailwind' => true, 'typescript' => true })
         result = converter.convert
         expect(result).to include('value={(() => { const sel = data.groupFilterOptions?.[data.groupFilterIndex ?? -1]')
         expect(result).to include("typeof sel === 'object' ? String(sel.value ?? sel.id ?? '') : String(sel ?? '')")
@@ -613,6 +618,31 @@ RSpec.describe RjuiTools::React::Converters::SelectBoxConverter do
         result = picker('selectedDate' => '@{day}')
         expect(result).to include("value={data.day || ''}")
         expect(result).to include('data.onDayChange?.(e.target.value)')
+      end
+
+      # A Date SelectBox's value is its selectedDate alone (4f's ruling,
+      # jsonui-cli 1.9.0): selectedValue and the undeclared `value` were read
+      # after it, and not by sjui.
+      # selectItemType as written (the SSoT enum): "date" is a list box here as
+      # on every path — it was compared downcased and drew a date input on web
+      # only.
+      it 'is a date input for "Date" alone' do
+        expect(picker({})).to include('type="date"')
+        lower = create_converter({ 'class' => 'SelectBox', 'id' => 'when', 'selectItemType' => 'date', 'items' => %w[a b] }).convert
+        expect(lower).not_to include('type="date"')
+        expect(lower).to include('<select')
+      end
+
+      it 'reads its value from selectedDate alone' do
+        %w[selectedValue value].each do |other|
+          bound = picker(other => '@{other}')
+          expect(bound).not_to include('data.other'), other
+          expect(bound).not_to include('onOtherChange'), other
+          expect(picker(other => '2026-01-01')).not_to include('2026-01-01'), other
+        end
+        both = picker('selectedDate' => '@{day}', 'selectedValue' => '@{other}')
+        expect(both).to include("value={data.day || ''}")
+        expect(both).not_to include('data.other')
       end
     end
   end

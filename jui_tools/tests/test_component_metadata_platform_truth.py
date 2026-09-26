@@ -182,14 +182,18 @@ def rjui_supports(component: str, table: dict[str, str]) -> bool:
     return not (klass == "ViewConverter" and component != "View")
 
 
-_SWIFT_CASE = re.compile(r'^\s*case ((?:"[a-z0-9]+",\s*)*"[a-z0-9]+"):\s*$')
+# Either spelling of the arms: lowercased (`switch type.lowercased()`), or as
+# the SSoT writes the types — the dispatch matches type names as written
+# since 4f's ruling (jsonui-cli 1.9.0), and a lowercase-only pattern read an
+# as-written dispatch as no arm at all (ParserSanity's floor caught it).
+_SWIFT_CASE = re.compile(r'^\s*case ((?:"[A-Za-z0-9]+",\s*)*"[A-Za-z0-9]+"):\s*$')
 # Leaf arms call FooConverter.convert(...); container arms construct a
 # DynamicFooContainer(...) view directly.
 _SWIFT_CONVERT = re.compile(r"\w+Converter\.convert\(|Dynamic\w+Container\(")
 
 
 def swift_dynamic_types() -> set[str]:
-    """Lowercased ``case "a", "b":`` arms whose body calls a converter."""
+    """``case "a", "b":`` arms whose body calls a converter, as spelled."""
     lines = SWIFT_DYNAMIC_BUILDER.read_text(encoding="utf-8").splitlines()
     types: set[str] = set()
     for i, line in enumerate(lines):
@@ -198,23 +202,34 @@ def swift_dynamic_types() -> set[str]:
             continue
         lookahead = "".join(lines[i + 1 : i + 4])
         if _SWIFT_CONVERT.search(lookahead):
-            types.update(re.findall(r'"([a-z0-9]+)"', match.group(1)))
+            types.update(re.findall(r'"([A-Za-z0-9]+)"', match.group(1)))
     return types
 
 
 _KOTLIN_ARM = re.compile(
-    r'^\s*((?:"[a-z0-9]+"\s*,\s*)*"[a-z0-9]+")\s*->\s*Dynamic\w+Component\.create\('
+    r'^\s*((?:"[A-Za-z0-9]+"\s*,\s*)*"[A-Za-z0-9]+")\s*->\s*Dynamic\w+Component\.create\('
 )
 
 
 def kotlin_dynamic_types() -> set[str]:
-    """Lowercased ``"a", "b" -> DynamicXComponent.create(...)`` arms."""
+    """``"a", "b" -> DynamicXComponent.create(...)`` arms, as spelled."""
     types: set[str] = set()
     for line in KOTLIN_DYNAMIC_VIEW.read_text(encoding="utf-8").splitlines():
         match = _KOTLIN_ARM.match(line)
         if match:
-            types.update(re.findall(r'"([a-z0-9]+)"', match.group(1)))
+            types.update(re.findall(r'"([A-Za-z0-9]+)"', match.group(1)))
     return types
+
+
+def dispatches(types: set[str], name: str) -> bool:
+    """Whether a dispatch read by the extractors draws `name`: as written
+    when the arms are spelled as the SSoT spells the types (any capital
+    among them), else by its lowercase (a dispatch that lowercases the type
+    before matching). One rule per dispatch, not either spelling per name:
+    an as-written dispatch with a stray lowercase arm does not draw the
+    declared spelling."""
+    as_written = any(t != t.lower() for t in types)
+    return name in types if as_written else name.lower() in types
 
 
 def metadata_rows() -> dict[str, dict[str, bool]]:
@@ -229,6 +244,23 @@ def metadata_rows() -> dict[str, dict[str, bool]]:
 
 # ---------------------------------------------------------------------------
 # Tests
+
+
+class DispatchSpelling(unittest.TestCase):
+    """`dispatches`: one rule per dispatch, read off its arms."""
+
+    def test_a_lowercasing_dispatch_draws_any_case(self) -> None:
+        self.assertTrue(dispatches({"label", "switch"}, "Switch"))
+
+    def test_an_as_written_dispatch_draws_the_declared_spelling_only(self) -> None:
+        self.assertTrue(dispatches({"Label", "Switch"}, "Switch"))
+        self.assertFalse(dispatches({"Label", "switch"}, "Switch"))
+
+    def test_both_extractors_read_either_spelling(self) -> None:
+        self.assertTrue(_KOTLIN_ARM.match('            "Label" -> DynamicTextComponent.create(drawn, effectiveData)'))
+        self.assertTrue(_KOTLIN_ARM.match('            "label" -> DynamicTextComponent.create(drawn, effectiveData)'))
+        self.assertTrue(_SWIFT_CASE.match('            case "Label", "Text":'))
+        self.assertTrue(_SWIFT_CASE.match('            case "label", "text":'))
 
 
 class ParserSanity(unittest.TestCase):
@@ -259,8 +291,8 @@ class ParserSanity(unittest.TestCase):
     def test_swift_dynamic_extraction(self) -> None:
         types = swift_dynamic_types()
         self.assertGreater(len(types), 15, types)
-        self.assertIn("label", types)
-        self.assertIn("embed", types)
+        self.assertTrue(dispatches(types, "Label"), types)
+        self.assertTrue(dispatches(types, "Embed"), types)
 
     @unittest.skipUnless(
         KOTLIN_DYNAMIC_VIEW,
@@ -268,8 +300,8 @@ class ParserSanity(unittest.TestCase):
     def test_kotlin_dynamic_extraction(self) -> None:
         types = kotlin_dynamic_types()
         self.assertGreater(len(types), 15, types)
-        self.assertIn("label", types)
-        self.assertIn("embed", types)
+        self.assertTrue(dispatches(types, "Label"), types)
+        self.assertTrue(dispatches(types, "Embed"), types)
 
 
 class ComponentMetadataPlatformTruth(unittest.TestCase):
@@ -310,14 +342,14 @@ class ComponentMetadataPlatformTruth(unittest.TestCase):
         "SwiftJsonUI checkout not found beside this repo — set JSONUI_SWIFTJSONUI_PATH to open this arm")
     def test_swift_dynamic(self) -> None:
         types = swift_dynamic_types()
-        self._assert_facet("swift_dynamic", lambda name: name.lower() in types)
+        self._assert_facet("swift_dynamic", lambda name: dispatches(types, name))
 
     @unittest.skipUnless(
         KOTLIN_DYNAMIC_VIEW,
         "KotlinJsonUI checkout not found beside this repo — set JSONUI_KOTLINJSONUI_PATH to open this arm")
     def test_kotlin_dynamic(self) -> None:
         types = kotlin_dynamic_types()
-        self._assert_facet("kotlin_dynamic", lambda name: name.lower() in types)
+        self._assert_facet("kotlin_dynamic", lambda name: dispatches(types, name))
 
 
 if __name__ == "__main__":

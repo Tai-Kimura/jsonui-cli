@@ -1,12 +1,15 @@
 # frozen_string_literal: true
 
 require_relative '../../core/typed_attributes'
+require_relative '../../core/layout_path'
+require_relative '../../core/node_keys'
 # For the one judgment the validator and the generator must share: whether a
 # binding's content can be an expression at all.
 require_relative '../../core/attribute_validator_core'
 require_relative '../../core/tap_accessibility'
 # The one escaper for an author's text in the generated TS/TSX.
 require_relative '../../core/string_literals'
+require_relative '../../core/bind_fold'
 require_relative '../tailwind_mapper'
 require_relative '../responsive_helper'
 require_relative '../helpers/string_manager_helper'
@@ -410,7 +413,10 @@ module RjuiTools
             end
           end
 
-          # Disabled state
+          # Disabled state. This converter's className passes through here:
+          # a bound `enabled` gets the same classes behind its binding
+          # (apply_enabled_class).
+          @base_enabled_classes = true
           if attributes['enabled'] == false
             classes << 'opacity-50'
             classes << 'pointer-events-none'
@@ -785,9 +791,21 @@ module RjuiTools
           # property key fails a strict consumer's tsc with TS2353 — and the
           # generated file cannot be hand-patched. Assert the type only when one
           # is present; an unconditional cast would silence real style errors.
-          cast = custom_property_styles? ? ' as React.CSSProperties' : ''
+          # TypeScript only (typescript?): in a .jsx file `as` does not parse.
+          cast = custom_property_styles? && typescript? ? ' as React.CSSProperties' : ''
 
           " style={{ #{style_pairs.join(', ')} }#{cast}}"
+        end
+
+        # The project writes TypeScript (.tsx). A type annotation or an `as`
+        # assertion in a JavaScript project's .jsx does not parse (jsonui-cli
+        # 1.9.0: every such emit reads this; until then four wrote them
+        # regardless — spec/react/javascript_mode_output_parses_spec.rb).
+        # Absent means JavaScript, the declared default and what the file
+        # extension is chosen by (build_command: `@config['typescript'] ?
+        # '.tsx' : '.jsx'`).
+        def typescript?
+          @config.is_a?(Hash) && @config['typescript'] ? true : false
         end
 
         def custom_property_styles?
@@ -987,6 +1005,8 @@ module RjuiTools
         # Only reachable from the bound paths — a static value is matched
         # against a literal vocabulary at codegen time and needs no assertion.
         def css_assert(expression, css_property)
+          return "(#{expression})" unless typescript?
+
           "(#{expression}) as React.CSSProperties['#{css_property}']"
         end
 
@@ -1231,7 +1251,7 @@ module RjuiTools
           return '' if pairs.nil? || pairs.empty?
 
           rendered = pairs.map { |key, value| format_dynamic_style_pair(key, value) }
-          cast = pairs.keys.any? { |key| key.to_s.start_with?('--') } ? ' as React.CSSProperties' : ''
+          cast = typescript? && pairs.keys.any? { |key| key.to_s.start_with?('--') } ? ' as React.CSSProperties' : ''
           " style={{ #{rendered.join(', ')} }#{cast}}"
         end
 
@@ -1393,10 +1413,12 @@ module RjuiTools
         end
 
         # Check if a child element is a data-only element (should not be rendered)
-        # Data-only element: { "data": [...] } with only the data key
+        # Data-only element: { "data": [...] } with only the data key — of the
+        # keys the layout wrote (Core::NodeKeys; the generator's position
+        # stamp is not one).
         def data_only_element?(child)
           return false unless child.is_a?(Hash)
-          child.keys == ['data'] && child['data'].is_a?(Array)
+          Core::NodeKeys.written(child) == ['data'] && child['data'].is_a?(Array)
         end
 
         def create_converter_for_child(child)
@@ -1409,7 +1431,17 @@ module RjuiTools
           # Apply style if specified
           resolved_child = apply_style(child)
 
-          converter_class = get_converter_class(resolved_child['type'])
+          # `bind` folded into the attribute it stands for
+          # (JsonUIShared::BindFold) on the node a built-in converter draws —
+          # its style merged — after the app's extension converters were
+          # asked; an extension gets its node as written. The layout
+          # normalizer leaves a node with a style or responsive overrides to
+          # this fold.
+          type = resolved_child['type']
+          extension = (config['_extension_converters'] || {})[type]
+          resolved_child = JsonUIShared::BindFold.fold(resolved_child, type) unless extension
+
+          converter_class = get_converter_class(type)
           converter_class.new(resolved_child, config)
         end
 
@@ -1749,19 +1781,12 @@ module RjuiTools
           attrs
         end
 
-        # `bind` — the alternative spelling for a component's primary value
-        # binding. Declared on `common`, honoured by eight Compose components and
-        # by the iOS checkbox/text-field paths, and read nowhere on web until
-        # now. The component's own value attribute wins; this is the last
-        # fallback, so an explicit `isOn` / `value` / `items` still decides.
-        #
-        # Kept as one helper rather than added to each chain so the fallback
-        # cannot drift between components — and so the truthiness of the
-        # existing chains is preserved exactly (a literal `isOn: false` still
-        # falls through, as it always did).
-        def with_bind_fallback(value)
-          value || attributes['bind']
-        end
+        # `bind` is not read here: the node a converter gets has it folded into
+        # the attribute it stands for (JsonUIShared::BindFold, at the dispatch —
+        # create_converter_for_child / ReactGenerator#convert_component). The
+        # `with_bind_fallback` this replaced read it last in each chain, so a
+        # literal `isOn: false` beside `bind` drew the binding; the SSoT says the
+        # component's own value wins.
 
         # A single call stays an expression body so the common case emits exactly
         # what it always did; several calls need a block.
@@ -1874,7 +1899,50 @@ module RjuiTools
         # - onClick (camelCase) -> binding format only (@{functionName})
         # - onclick (lowercase) -> selector format only (string)
         # - { "action": "link", "url": "..." } -> opens URL in new tab
+        # The element's onClick, and — when the rule makes the tap a button
+        # (keyboard_tap_attrs) — its role, tab stop and keys.
         def build_onclick_attr
+          attr = click_attr
+          return attr if attr.empty? || attr.include?('ERROR')
+
+          attr + keyboard_tap_attrs
+        end
+
+        # A tap on an element that is not a control — the tap rule's `button`
+        # or `combine` shape (shared/core/tap_accessibility.rb; react_generator
+        # runs annotate!) — is a button to the keyboard and to a screen reader,
+        # as on iOS (the button trait) and Android (Role.Button): role="button",
+        # a stop in the tab order, and Enter / Space make the element's own
+        # click (`e.currentTarget.click()`, so canTap's gate and a link action
+        # hold). Before, a Label or a View with onClick was reached by neither
+        # Tab nor a screen reader's list of buttons (measured in Chromium,
+        # jsonui-cli 1.9.0). `none` — a control, an app component, a tap
+        # holding a control — is left as it is, as iOS and Android leave it; a
+        # tap inside a stop has no shape (annotate!), and inert takes it away.
+        # A bound canTap or enabled gates the role, the tab stop and the keys.
+        def keyboard_tap_attrs
+          return '' unless KEYBOARD_TAP_SHAPES.include?(json[JsonUIShared::TapAccessibility::SHAPE_KEY])
+
+          gate = keyboard_tap_gates.join(' && ')
+          keys = "e.key === 'Enter' || e.key === ' '"
+          press = "if (#{gate.empty? ? keys : "#{gate} && (#{keys})"}) { e.preventDefault(); e.currentTarget.click(); }"
+          on_key = " onKeyDown={(e) => { #{press} }}"
+          return %( role="button" tabIndex={0}#{on_key}) if gate.empty?
+
+          %( role={#{gate} ? 'button' : undefined} tabIndex={#{gate} ? 0 : undefined}#{on_key})
+        end
+
+        KEYBOARD_TAP_SHAPES = %w[button combine].freeze
+
+        # The bound gates of a tap the keyboard makes too: canTap (the tap's
+        # gate) and enabled (a bound `false` takes the pointer away with
+        # classes, apply_enabled_class — a key press would still click).
+        def keyboard_tap_gates
+          [attributes['canTap'], attributes['enabled']].select { |value| value.is_a?(String) && has_binding?(value) }
+                                                         .map { |value| "(#{extract_binding_property(value)})" }
+        end
+
+        def click_attr
           # Check onClick (camelCase) first - binding format only. A handler
           # names a method (TapAccessibility.handler?): `""`, `"   "`, `"@{}"`
           # are no handler and fall through — `"@{}"` emitted `onClick={data.}`.
@@ -2216,7 +2284,10 @@ module RjuiTools
           return jsx if @visibility_applied
 
           @visibility_applied = true
+          jsx = apply_interaction_class(jsx)
+          jsx = apply_enabled_class(jsx)
           jsx = apply_hidden_binding(jsx)
+          jsx = apply_interaction_inert(jsx)
 
           vis_info = build_visibility_info
           return jsx unless vis_info
@@ -2252,6 +2323,173 @@ module RjuiTools
           inject_class_expression(jsx, "${#{cond} ? \"invisible\" : \"\"}")
         end
 
+        # `userInteractionEnabled` stops the element and what is in it —
+        # `pointer-events: none` — literal or bound, on every type: the root
+        # tag of the converter's subtree gets it here, where every converter
+        # passes (convert_node), as the `hidden` binding does. Only View built
+        # the bound form into its own className (build_responsive_class_attr),
+        # and TabView not even `false`; the other converters build their own
+        # className and dropped `@{…}` (measured: 26 of the 27 types that have
+        # a converter). A root tag that carries it already is left as it is.
+        def apply_interaction_class(jsx)
+          value = attributes['userInteractionEnabled']
+          class_expr = if value == false
+                         'pointer-events-none'
+                       elsif value.is_a?(String) && has_binding?(value)
+                         interaction_class_expression
+                       end
+          return jsx unless class_expr
+
+          append_class_to_element(jsx, class_expr, 'userInteractionEnabled')
+        end
+
+        # userInteractionEnabled false, or a binding while it is false: the
+        # element and everything in it are inert — no pointer, no keyboard
+        # focus, and out of the accessibility tree, so a screen reader neither
+        # reads it as something to operate nor presses it. `pointer-events:
+        # none` (apply_interaction_class) stopped the pointer alone: measured
+        # in Chromium, a stopped button, checkbox, text field and link were
+        # reached by Tab and operated by Enter / Space / typing, and pressed
+        # from the accessibility tree (jsonui-cli 1.9.0). Nothing drawn
+        # changes.
+        #
+        # Written as a spread of the generated interactionStop helper
+        # (`{...jsonuiInert(stop)}`), which reads React's version at run time:
+        # React 19 takes `inert` as a boolean and treats "" as false, React 18
+        # writes only a string for an attribute it does not know and drops
+        # `true` — the spread stops all three ways under both (measured, 18.3.1
+        # and 19.2.7). Not a ref: the text fields carry a ref of their own, and
+        # a component takes no ref in React 18.
+        #
+        # On the first element of the page when it is an HTML element. A
+        # component (LinkifyText, NetworkImage, EmbedContainer, an app's own)
+        # declares no `inert`, so its markup is wrapped in a `display:
+        # contents` div that carries it: the div draws no box, and inert
+        # reaches everything under it (measured, both React versions).
+        def apply_interaction_inert(jsx)
+          value = attributes['userInteractionEnabled']
+          stop = if value == false
+                   'true'
+                 elsif value.is_a?(String) && has_binding?(value)
+                   "!(#{extract_binding_property(value)})"
+                 end
+          return jsx unless stop
+
+          # A markup with no element was named by apply_interaction_class.
+          open_tag = element_root_range(jsx)
+          return jsx unless open_tag
+
+          spread = "{...#{INERT_HELPER}(#{stop})}"
+          return jsx if jsx.include?(spread)
+
+          head = jsx[open_tag]
+          if head.match?(/\A<[a-z]/)
+            patched = head.sub(/\A<([a-z][\w-]*)/) { "<#{$1} #{spread}" }
+            return jsx[0...open_tag.first] + patched + jsx[(open_tag.last + 1)..]
+          end
+
+          pad = jsx[/\A[ \t]*/]
+          body = jsx.rstrip.lines.map { |line| line.strip.empty? ? line : "  #{line}" }.join
+          "#{pad}<div className=\"contents\" #{spread}>\n#{body}\n#{pad}</div>"
+        end
+
+        # The generated helper apply_interaction_inert spreads (build_command
+        # emit_interaction_stop_helper; react_generator imports it).
+        INERT_HELPER = 'jsonuiInert'
+
+        # `enabled` bound: the classes a literal `false` gives this converter's
+        # className (`opacity-50 pointer-events-none`, build_class_name), behind
+        # the binding — the tap does not happen while it is false. Only View
+        # built the bound form (build_responsive_class_attr); every other type
+        # whose className passes through build_class_name dropped it and kept
+        # its tap (measured: Label, Image, NetworkImage, IconLabel, Blur,
+        # CircleView, GradientView — a control's own `disabled={…}` stopped its
+        # operation). TabView's className does not pass through there: its tab
+        # buttons take `disabled` for `false` and for a binding
+        # (tab_disabled_attr), which stops it without the classes.
+        #
+        # A control that is stopped already — its operated element carries
+        # `disabled={…}` on the same binding (Button, a text field, a
+        # SelectBox, a Slider, a Switch …) — is left as it is: a browser runs
+        # no operation on a disabled control, and the classes would dim it a
+        # second time over its own disabled look.
+        def apply_enabled_class(jsx)
+          return jsx unless @base_enabled_classes
+
+          class_expr = enabled_class_expression
+          return jsx unless class_expr
+
+          gate = extract_binding_property(attributes['enabled'])
+          return jsx if jsx.match?(/(?<![-\w])disabled=\{!\(?#{Regexp.escape(gate)}\)?\}/)
+
+          append_class_to_element(jsx, class_expr, 'enabled')
+        end
+
+        # Tags that are not an element of the page: a converter's markup can
+        # start with one (the state holder a static-seeded control is wrapped
+        # in), and a className on it is no prop of it — the TSX does not
+        # compile (`{ seed, children }` declares none).
+        NON_ELEMENT_ROOTS = %w[JsonUISeeded].freeze
+
+        # The opening tag of the first element of the page in `jsx` — past a
+        # NON_ELEMENT_ROOTS wrapper — or nil when there is none.
+        def element_root_range(jsx)
+          offset = 0
+          loop do
+            range = root_open_tag_range(jsx[offset..])
+            return nil unless range
+
+            absolute = (range.first + offset)..(range.last + offset)
+            name = jsx[absolute][/\A<([A-Za-z][\w.]*)/, 1]
+            return absolute unless NON_ELEMENT_ROOTS.include?(name)
+
+            offset = absolute.last + 1
+          end
+        end
+
+        # `class_expr` appended to the className of the first element of the
+        # page (element_root_range), whatever form it has. A subtree with no
+        # element to carry it is named, not passed over: `what` says which
+        # attribute is not applied.
+        def append_class_to_element(jsx, class_expr, what)
+          open_tag = element_root_range(jsx)
+          unless open_tag
+            Core::Logger.warn(
+              "#{json['type']} '#{attributes['id'] || '(no id)'}': #{what} is not applied — " \
+              'its markup has no element to carry the class'
+            )
+            return jsx
+          end
+          return jsx if jsx[open_tag].include?(class_expr)
+
+          append_root_class(jsx, open_tag, class_expr)
+        end
+
+        # The root tag's className with `class_expr` appended, whatever form
+        # it has: a template literal, a static string, another expression
+        # (`{cond ? "a" : "b"}`, a Label's highlight), or none at all.
+        def append_root_class(jsx, open_tag, class_expr)
+          head = jsx[open_tag]
+          patched = head.sub(/className=\{`([^`]*)`\}/) { "className={`#{$1} #{class_expr}`}" }
+          patched = head.sub(/className="([^"]*)"/) { "className={`#{$1} #{class_expr}`}" } if patched == head
+          if patched == head && (at = head.index('className={'))
+            inner_start = at + 'className={'.length
+            depth = 1
+            i = inner_start
+            while i < head.length && depth.positive?
+              depth += 1 if head[i] == '{'
+              depth -= 1 if head[i] == '}'
+              i += 1
+            end
+            inner = head[inner_start...(i - 1)]
+            patched = "#{head[0...at]}className={`${#{inner}} #{class_expr}`}#{head[i..]}"
+          end
+          if patched == head
+            patched = head.sub(/\A<([A-Za-z][\w.]*)/) { "<#{$1} className={`#{class_expr}`}" }
+          end
+          jsx[0...open_tag.first] + patched + jsx[(open_tag.last + 1)..]
+        end
+
         # Inject invisible class into JSX when visibility === "invisible"
         def inject_invisible_class(jsx, condition)
           inject_class_expression(jsx, "${#{condition} === \"invisible\" ? \"invisible\" : \"\"}")
@@ -2269,24 +2507,14 @@ module RjuiTools
         # binding produces — the parent silently donated its invisible class
         # to that child and rendered fully visible
         # (rjui-parent-invisible-class-lands-on-a-descendant).
+        #
+        # It passed over a root tag whose className is an expression or absent,
+        # and a markup that starts with a state holder (JsonUISeeded), without
+        # a word: a bound `hidden` on a Segment, a TabView or an Embed drew the
+        # element anyway (measured). append_class_to_element takes every form,
+        # past the holder, and names a markup with no element to carry it.
         def inject_class_expression(jsx, class_expr)
-          open_tag = root_open_tag_range(jsx)
-          return jsx unless open_tag
-
-          head = jsx[open_tag]
-          # Template literal first, then static string — within this tag the
-          # two forms are mutually exclusive, so the order is not a priority.
-          patched = head.sub(/className=\{`([^`]*)`\}/) do
-            "className={`#{$1} #{class_expr}`}"
-          end
-          if patched == head
-            patched = head.sub(/className="([^"]*)"/) do
-              "className={`#{$1} #{class_expr}`}"
-            end
-          end
-          return jsx if patched == head
-
-          jsx[0...open_tag.first] + patched + jsx[(open_tag.last + 1)..]
+          append_class_to_element(jsx, class_expr, 'hidden / visibility')
         end
 
         # Range covering the first `<...>` opening tag, or nil when the
@@ -2385,19 +2613,22 @@ module RjuiTools
             klass = build_partial_class(partial)
             parts << "className: '#{klass}'" unless klass.empty?
 
-            if JsonUIShared::TapAccessibility.handler?(partial['onclick'])
-              # Same contract as every other handler site: a handler is a
-              # selector (string|array), not a binding. The error marker is
+            # The range's handler (TapAccessibility.range_handler): onClick
+            # first, then onclick, its alias — each holding a binding or a
+            # method name (jsonui-cli 1.9.0; the normalizer folds onclick into
+            # onClick, so a built layout carries onClick only).
+            kind, value = JsonUIShared::TapAccessibility.range_handler(partial)
+            if kind == :binding
+              parts << "onClick: #{extract_binding_property(value)}"
+            elsif kind == :selector
+              expr = onclick_selector_expr(value)
+              parts << (value.is_a?(Array) ? "onClick: #{expr}" : "onClick: #{add_viewmodel_data_prefix(value)}")
+            elsif JsonUIShared::TapAccessibility::TAP_KEYS.any? { |key| JsonUIShared::TapAccessibility.handler?(partial[key]) }
+              # A handler that is neither a binding nor a name (`"@{a} b"`):
               # kept as an inline comment so it survives into the emitted
-              # object literal instead of vanishing.
-              expr = onclick_selector_expr(partial['onclick'])
-              parts << if expr.nil?
-                         '/* ERROR: onclick requires selector format (string) */'
-                       elsif partial['onclick'].is_a?(Array)
-                         "onClick: #{expr}"
-                       else
-                         "onClick: #{add_viewmodel_data_prefix(partial['onclick'])}"
-                       end
+              # object literal instead of vanishing. Either spelling: the fold
+              # moves an onclick's value into onClick.
+              parts << '/* ERROR: a range onClick is a binding (@{name}) or a method name */'
             end
 
             "{ #{parts.join(', ')} }"

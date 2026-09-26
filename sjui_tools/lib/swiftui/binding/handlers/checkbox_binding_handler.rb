@@ -36,10 +36,8 @@ module SjuiTools
             return parse_binding(component['checked'])
           end
 
-          # Check for 'bind' property
-          if component['bind'] && is_binding?(component['bind'])
-            return parse_binding(component['bind'])
-          end
+          # `bind` is not read: it arrives folded into isOn
+          # (JsonUIShared::BindFold at ConverterFactory#create_converter).
 
           # Return a constant binding if not a binding expression
           state_value = component['isOn'] || component['checked'] || false

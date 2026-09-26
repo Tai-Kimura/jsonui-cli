@@ -44,6 +44,30 @@ RSpec.describe 'Collection cellClasses with items and no sections (Compose)' do
     end
   end
 
+  # cellClasses and no `items` (4f ruling 2026-09-26, round 5): no cell is
+  # drawn on every path (rjui drew one with no data until jsonui-cli 1.9.0),
+  # and the shared validator names the shape — this face's mirror of it.
+  describe 'cellClasses and no items: the shared validator' do
+    def no_items_warnings(component)
+      JsonUIShared::LayoutValidator.validate_layout(component, source_path: 'x.json')
+                                   .select { |w| w[:message].include?('items is not') }
+    end
+
+    it 'names it, as a warning' do
+      found = no_items_warnings({ 'type' => 'Collection', 'id' => 'target', 'cellClasses' => ['ItemCell'] })
+      expect(found.size).to eq(1)
+      expect(found.first[:level]).to eq(:warning)
+      expect(found.first[:message]).to include('Collection (id=target): cellClasses are declared but items is not, so no cell is drawn.')
+    end
+
+    it 'names nothing when items is bound, when the Collection declares sections, or without cellClasses' do
+      expect(no_items_warnings(base.merge('cellClasses' => ['ItemCell']))).to be_empty
+      expect(no_items_warnings({ 'type' => 'Collection', 'id' => 'target', 'cellClasses' => ['ItemCell'],
+                                 'sections' => [{ 'cell' => 'ItemCell' }] })).to be_empty
+      expect(no_items_warnings({ 'type' => 'Collection', 'id' => 'target' })).to be_empty
+    end
+  end
+
   describe 'several declared cellClasses' do
     def errors_for(component)
       JsonUIShared::LayoutValidator

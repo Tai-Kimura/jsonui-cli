@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require 'open3'
+require 'rbconfig'
 require 'tmpdir'
 require 'json'
 require 'fileutils'
@@ -64,7 +65,7 @@ RSpec.describe 'what kjui g view / partial / collection / adapter say they did, 
     %w[new again].map do |run|
       before = snapshot(dir)
       sleep 0.01
-      said, = Open3.capture2e('ruby', File.join(tool, 'bin', 'kjui'), 'g', *args, chdir: dir, stdin_data: '')
+      said, = Open3.capture2e(RbConfig.ruby, File.join(tool, 'bin', 'kjui'), 'g', *args, chdir: dir, stdin_data: '')
       after = snapshot(dir)
       disk = after.to_h { |f, m| [f, !before.key?(f) ? :created : (before[f] == m ? :untouched : :rewritten)] }
       [run, said.gsub(/\e\[[0-9;]*m/, ''), disk, dir]

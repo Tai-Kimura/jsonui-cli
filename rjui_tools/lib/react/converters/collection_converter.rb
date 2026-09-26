@@ -1,7 +1,9 @@
 # frozen_string_literal: true
 
 require_relative 'base_converter'
+require_relative '../../core/logger'
 require_relative '../component_name'
+require_relative '../../core/attribute_types'
 
 module RjuiTools
   module React
@@ -145,7 +147,8 @@ module RjuiTools
 
           id = scroll_control_id
           unless id
-            warn "[rjui] Collection: #{declared.join(', ')} #{declared.one? ? 'needs' : 'need'} " \
+            RjuiTools::Core::Logger.warn "[rjui] Collection: #{declared.join(', ')} " \
+                                         "#{declared.one? ? 'needs' : 'need'} " \
                  'a literal `id` on the collection to bind to; ignoring.'
             return ''
           end
@@ -225,26 +228,19 @@ module RjuiTools
             # Flow is checked before horizontal, like sjui/kjui route to
             # their flow generators first — the declared layout wins over
             # the horizontalScroll boolean.
-            classes << 'flex flex-row flex-wrap content-start'
+            # One wrap, or — with two or more sections (flow_per_section?) —
+            # a column of them, one per section, the blocks spaced as the
+            # lines. The gaps: grid_gap_classes.
+            classes << (flow_per_section? ? 'flex flex-col' : 'flex flex-row flex-wrap content-start')
             if is_lazy && attributes['scrollEnabled'] != false
               classes << 'overflow-y-auto'
               dynamic_styles['overflowY'] = "#{lazy_expr} === 'none' ? 'visible' : 'auto'" if lazy_expr
             end
-            # lineSpacing = gap between wrapped lines, itemSpacing = gap
-            # within a line (the grid branch's row/column mapping).
-            # `columnSpacing` is the SSoT's own name for the column gap and
-            # was read only in the horizontal branch — a flow or grid
-            # Collection ignored it, which is every Collection that declares
-            # `columns` (plan 34: pixel-identical to its control on web while
-            # both mobile platforms honoured it).
-            row_gap = attributes['lineSpacing']
-            col_gap = attributes['columnSpacing'] || attributes['itemSpacing'] || attributes['spacing']
-            if row_gap && col_gap
-              classes << "gap-x-[#{col_gap}px] gap-y-[#{row_gap}px]"
-            elsif row_gap
-              classes << "gap-y-[#{row_gap}px]"
-            elsif col_gap
-              classes << "gap-[#{col_gap}px]"
+            if flow_per_section?
+              row_gap = grid_row_gap
+              classes << "gap-y-[#{row_gap}px]" if row_gap
+            else
+              classes.concat(grid_gap_classes)
             end
           elsif is_horizontal
             # Horizontal scroll collection
@@ -293,16 +289,7 @@ module RjuiTools
             else
               classes << "grid-cols-#{columns}"
             end
-            # lineSpacing for row gap, columnSpacing/itemSpacing for column gap
-            row_gap = attributes['lineSpacing']
-            col_gap = attributes['columnSpacing'] || attributes['itemSpacing'] || attributes['spacing']
-            if row_gap && col_gap
-              classes << "gap-x-[#{col_gap}px] gap-y-[#{row_gap}px]"
-            elsif row_gap
-              classes << "gap-y-[#{row_gap}px]"
-            elsif col_gap
-              classes << "gap-[#{col_gap}px]"
-            end
+            classes.concat(grid_gap_classes)
           end
 
           # lazy vs eager, the rendering half. The scroll-container half above
@@ -370,6 +357,41 @@ module RjuiTools
 
 
           finalize_classes(classes)
+        end
+
+        # A grid's or a flow's gaps (attribute_semantics.json ->
+        # collectionSpacing): between rows lineSpacing, else itemSpacing;
+        # between columns columnSpacing, else itemSpacing; each else none (0).
+        # `columnSpacing` spaces only the columns. Until jsonui-cli 1.9.0 a
+        # columnSpacing with no lineSpacing wrote `gap-[x]`, which spaced the
+        # rows by it too, and itemSpacing did not reach the rows when a
+        # columnSpacing was declared. (`spacing` is the undeclared legacy
+        # spelling of itemSpacing this path has always read.)
+        def grid_gap_classes
+          line = attributes['lineSpacing']
+          column = attributes['columnSpacing']
+          both = attributes['itemSpacing'] || attributes['spacing']
+          return both ? ["gap-[#{both}px]"] : [] if line.nil? && column.nil?
+
+          row = line || both
+          col = column || both
+          [[col && "gap-x-[#{col}px]", row && "gap-y-[#{row}px]"].compact.join(' ')]
+        end
+
+        def grid_row_gap
+          attributes['lineSpacing'] || attributes['itemSpacing'] || attributes['spacing']
+        end
+
+        # A flow per section (4f ruling, 2026-09-26): with two or more
+        # sections that draw cells, each section wraps in a block of its own,
+        # one under the other — sjui's FlowLayout per section in a VStack,
+        # kjui's FlowRow per section in a Column (the same count decides it
+        # there). Until jsonui-cli 1.9.0 every section went into the one
+        # wrap, so section 2 continued section 1's last line.
+        def flow_per_section?
+          return false unless flow_collection? && extract_collection_binding(attributes['items'])
+
+          (attributes['sections'] || []).count { |section| section.is_a?(Hash) && section['cell'] } > 1
         end
 
         #: listStyle -> the chrome that draws it. Enumerated from the SSoT
@@ -457,9 +479,23 @@ module RjuiTools
           content_lines = []
 
           if sections.any?
-            # Section-based rendering
-            sections.each_with_index do |section, section_index|
-              content_lines << generate_section_content(section, section_index, items_binding, indent)
+            # Section-based rendering. No `items`: nothing to draw the
+            # sections from — no header, cell or footer, as sjui and kjui
+            # codegen draw. Until jsonui-cli 1.9.0 this wrote each section's
+            # header and footer reading `?.sections` off nothing
+            # (`data={?.sections?.[0]?.header || {}}`, which is not JSX) and
+            # one cell with no data.
+            if items_binding && flow_per_section?
+              wrap = (['flex flex-row flex-wrap content-start'] + grid_gap_classes).join(' ')
+              sections.each_with_index do |section, section_index|
+                content_lines << "#{indent_str(indent)}<div className=\"#{wrap}\">"
+                content_lines << generate_section_content(section, section_index, items_binding, indent + 2)
+                content_lines << "#{indent_str(indent)}</div>"
+              end
+            elsif items_binding
+              sections.each_with_index do |section, section_index|
+                content_lines << generate_section_content(section, section_index, items_binding, indent)
+              end
             end
           else
             # Legacy cellClasses-based rendering
@@ -533,10 +569,6 @@ module RjuiTools
               indent -= 2
               lines << "#{indent_str(indent)}</div>"
             end
-          elsif cell_view
-            # Placeholder for static content
-            lines << "#{indent_str(indent)}{/* Cells for section #{section_index} */}"
-            lines << "#{indent_str(indent)}<#{cell_view} />"
           end
 
           # Footer
@@ -559,6 +591,25 @@ module RjuiTools
           " id={`#{collection_id}_item_${#{index_var}}`}"
         end
 
+        # The class-list shape — `cellClasses` (with `headerClasses` /
+        # `footerClasses`), `items` and no `sections` — drawn as sjui codegen
+        # draws it (the route table kjui codegen and both Dynamic renderers
+        # follow, 4f ruling 2026-09-26), from the data's own sections:
+        #
+        #   vertical (list, grid, lazy:none)   every data section; header before, footer after
+        #   horizontal, flow, paging           the first data section; no header / footer
+        #
+        # (paging: a snap child per cell — 4f ruling 2026-09-26, round 6; it
+        # drew nothing until jsonui-cli 1.9.0)
+        #
+        # A header / footer is its view with no data. No `items`: no cell
+        # (the shared LayoutValidator names it) — until jsonui-cli 1.9.0 this
+        # path drew one cell with no data, on every route. Until jsonui-cli 1.9.0
+        # the cells mapped `items` itself as an array — `data.rows?.map(…)`,
+        # which a CollectionDataSource (the type every face gives a Collection's
+        # items) does not have: tsc TS2339 "Property 'map' does not exist on
+        # type 'CollectionDataSource'" (measured on 798f6e64, 2026-09-26) — and
+        # the header and footer were drawn on every route.
         def generate_legacy_content(indent)
           lines = []
 
@@ -571,51 +622,106 @@ module RjuiTools
           footer_view = extract_view_name(footer_classes.first) if footer_classes.any?
 
           items_binding = extract_collection_binding(attributes['items'])
+          # An items property declared as a list (`Array`, `[T]`) is one
+          # section — the cells mapped over it, as this path has always drawn
+          # it (4f ruling, 2026-09-26, Collection.items: a CollectionDataSource
+          # or an array). Its header, footer and cells are written as they
+          # were, on every route.
+          return legacy_array_content(indent, cell_view, header_view, footer_view, items_binding) if legacy_items_list_element
 
-          # Header — its view with no data, as sjui and kjui draw it. It was
-          # handed `<items>?.header`, a field no item source has: the items
-          # here are the cells' array, and CollectionDataSource keeps a header
-          # per section (tsc on a declared array: TS2339; measured on
-          # 46a54fc3, 2026-09-26). The footer likewise.
-          lines << "#{indent_str(indent)}<#{header_view} />" if header_view
+          first_only = flow_collection? || horizontal_collection?
+          edges = !first_only
 
-          # Cells placeholder
-          if cell_view
-            if items_binding
-              # Add type annotation for TypeScript
-              item_type = config['typescript'] ? ": #{cell_view}Data" : ''
+          lines << "#{indent_str(indent)}<#{header_view} />" if header_view && edges
+
+          if cell_view && items_binding
+            cast = config['typescript'] ? " as unknown as #{cell_view}Data" : ''
+            if first_only
               lanes = horizontal_lanes
               if lanes
                 lines << horizontal_lanes_open(lanes, indent)
                 indent += 2
               end
-              lines << "#{indent_str(indent)}{#{items_binding}?.map((item#{item_type}, index: number) => ("
-              # Same wrapper contract as the section path: the key rides the
-              # outermost element of the map.
-              if (cell_size = cell_size_style)
-                lines << "#{indent_str(indent + 2)}<div key={index} className=\"shrink-0 overflow-hidden\"#{cell_size}>"
-                lines << "#{indent_str(indent + 4)}<#{cell_view}#{cell_item_id_attr('index')} data={item} />"
-                lines << "#{indent_str(indent + 2)}</div>"
-              else
-                lines << "#{indent_str(indent + 2)}<#{cell_view} key={index}#{cell_item_id_attr('index')} data={item} />"
-              end
+              lines << "#{indent_str(indent)}{(#{items_binding}?.sections?.[0]?.cells?.data ?? []).map((cellData, cellIndex) => ("
+              lines.concat(legacy_cell_lines(cell_view, 'cellIndex', "cellData#{cast}", indent + 2))
               lines << "#{indent_str(indent)}))}"
               if lanes
                 indent -= 2
                 lines << "#{indent_str(indent)}</div>"
               end
             else
-              lines << "#{indent_str(indent)}{/* Add items prop to render cells */}"
-              lines << "#{indent_str(indent)}<#{cell_view} />"
+              lines << "#{indent_str(indent)}{(#{items_binding}?.sections ?? []).map((section, sectionIndex) =>"
+              lines << "#{indent_str(indent + 2)}(section.cells?.data ?? []).map((cellData, cellIndex) => ("
+              lines.concat(legacy_cell_lines(cell_view, '`${sectionIndex}_${cellIndex}`', "cellData#{cast}", indent + 4))
+              lines << "#{indent_str(indent + 2)}))"
+              lines << "#{indent_str(indent)})}"
+            end
+          elsif !cell_view
+            lines << "#{indent_str(indent)}{/* No cellClasses specified */}"
+          end
+
+          lines << "#{indent_str(indent)}<#{footer_view} />" if footer_view && edges
+
+          lines.join("\n")
+        end
+
+        # The element type of the list the class-list `items` binds (the
+        # layout's own `data` declaration, AttributeTypes.list_element), or
+        # nil — a CollectionDataSource, or no declaration (the canonical
+        # CollectionDataSource).
+        def legacy_items_list_element
+          items = attributes['items']
+          return nil unless items.is_a?(String) && (name = items[/\A@\{\s*([A-Za-z_]\w*)\s*\}\z/, 1])
+
+          JsonUIShared::AttributeTypes.list_element((config['_data_classes'] || {})[name])
+        end
+
+        # A class-list Collection whose items are a list: every item with
+        # cellClasses[0], the header before and the footer after — what this
+        # path wrote until jsonui-cli 1.9.0, kept as it was, except that the
+        # map's `index: number` is TypeScript's only (a .jsx file wrote it too,
+        # and it does not parse there).
+        def legacy_array_content(indent, cell_view, header_view, footer_view, items_binding)
+          lines = []
+          lines << "#{indent_str(indent)}<#{header_view} />" if header_view
+          if cell_view
+            item_type = typescript? ? ": #{cell_view}Data" : ''
+            index_type = typescript? ? ': number' : ''
+            lanes = horizontal_lanes
+            if lanes
+              lines << horizontal_lanes_open(lanes, indent)
+              indent += 2
+            end
+            lines << "#{indent_str(indent)}{#{items_binding}?.map((item#{item_type}, index#{index_type}) => ("
+            if (cell_size = cell_size_style)
+              lines << "#{indent_str(indent + 2)}<div key={index} className=\"shrink-0 overflow-hidden\"#{cell_size}>"
+              lines << "#{indent_str(indent + 4)}<#{cell_view}#{cell_item_id_attr('index')} data={item} />"
+              lines << "#{indent_str(indent + 2)}</div>"
+            else
+              lines << "#{indent_str(indent + 2)}<#{cell_view} key={index}#{cell_item_id_attr('index')} data={item} />"
+            end
+            lines << "#{indent_str(indent)}))}"
+            if lanes
+              indent -= 2
+              lines << "#{indent_str(indent)}</div>"
             end
           else
             lines << "#{indent_str(indent)}{/* No cellClasses specified */}"
           end
-
-          # Footer (see the header)
           lines << "#{indent_str(indent)}<#{footer_view} />" if footer_view
-
           lines.join("\n")
+        end
+
+        # One class-list cell; the key rides the outermost element of the map
+        # (the section path's wrapper contract).
+        def legacy_cell_lines(cell_view, key_expr, data_expr, indent)
+          if (cell_size = cell_size_style)
+            ["#{indent_str(indent)}<div key={#{key_expr}} className=\"shrink-0 overflow-hidden\"#{cell_size}>",
+             "#{indent_str(indent + 2)}<#{cell_view}#{cell_item_id_attr('cellIndex')} data={#{data_expr}} />",
+             "#{indent_str(indent)}</div>"]
+          else
+            ["#{indent_str(indent)}<#{cell_view} key={#{key_expr}}#{cell_item_id_attr('cellIndex')} data={#{data_expr}} />"]
+          end
         end
 
         # The component a class reference names — the same name the import

@@ -36,7 +36,7 @@ module JsonUI
         { name: 'minZoom', kind: :number }.freeze,
         # Rendering mode
         { name: 'renderingMode', kind: :enum, values: ['original', 'template'].freeze }.freeze,
-        # Image source name (can be data binding)
+        # Image source name (can be data binding). On web it is passed to `<img src>` as a path, since web has no asset catalog, so a bare image name belongs in srcName there (rjui warns).
         { name: 'src', kind: :string, bindable: true }.freeze,
         # Image source name (alias, can be data binding)
         { name: 'srcName', kind: :string, bindable: true }.freeze,

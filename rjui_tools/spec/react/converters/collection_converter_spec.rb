@@ -91,10 +91,16 @@ RSpec.describe RjuiTools::React::Converters::CollectionConverter do
     # pixel-identical to its control on web while both mobile platforms
     # honoured it.
     context 'with columnSpacing' do
-      it 'applies it as the column gap of a grid' do
+      # Between the columns only (attribute_semantics.json ->
+      # collectionSpacing): until jsonui-cli 1.9.0 this wrote `gap-[8px]`,
+      # which spaced the rows by it too.
+      it 'applies it as the column gap of a grid, and only there' do
         converter = create_converter({ 'class' => 'Collection', 'cellClasses' => ['ItemCell'],
                                        'columns' => 2, 'columnSpacing' => 8 })
-        expect(converter.convert).to include('gap-[8px]')
+        result = converter.convert
+        expect(result).to include('gap-x-[8px]')
+        expect(result).not_to include('gap-[8px]')
+        expect(result).not_to include('gap-y-')
       end
 
       it 'applies it as the in-line gap of a flow layout' do
@@ -103,22 +109,30 @@ RSpec.describe RjuiTools::React::Converters::CollectionConverter do
         expect(converter.convert).to include('gap-x-[8px] gap-y-[4px]')
       end
 
-      it 'is read ahead of the legacy itemSpacing spelling' do
+      # The columns take columnSpacing ahead of itemSpacing; the rows, with no
+      # lineSpacing, take itemSpacing (until jsonui-cli 1.9.0 they took the
+      # columnSpacing).
+      it 'is read ahead of the legacy itemSpacing spelling, which spaces the rows' do
         converter = create_converter({ 'class' => 'Collection', 'cellClasses' => ['ItemCell'],
                                        'columns' => 2, 'columnSpacing' => 8, 'itemSpacing' => 16 })
         result = converter.convert
-        expect(result).to include('gap-[8px]')
-        expect(result).not_to include('gap-[16px]')
+        expect(result).to include('gap-x-[8px] gap-y-[16px]')
+        expect(result).not_to include('gap-[8px]')
       end
     end
 
     context 'with items binding' do
-      it 'generates map rendering with TypeScript index type' do
+      # The cells come from the data's sections (a CollectionDataSource), as
+      # on sjui and kjui — this mapped `items` itself as an array until
+      # jsonui-cli 1.9.0 (collection_classes_and_page_change_spec.rb has the
+      # route table and the typed tsc arm).
+      it 'maps every data section, keyed by section and cell' do
         converter = create_converter({ 'class' => 'Collection', 'cellClasses' => ['ItemCell'], 'items' => '@{listItems}' })
         result = converter.convert
-        expect(result).to include('{data.listItems?.map((item, index: number) =>')
-        expect(result).to include('key={index}')
-        expect(result).to include('data={item}')
+        expect(result).to include('{(data.listItems?.sections ?? []).map((section, sectionIndex) =>')
+        expect(result).to include('(section.cells?.data ?? []).map((cellData, cellIndex) => (')
+        expect(result).to include('key={`${sectionIndex}_${cellIndex}`}')
+        expect(result).to include('data={cellData}')
       end
 
       # Regression: rjui-collection-cells-missing-item-index-id — kjui
@@ -128,7 +142,7 @@ RSpec.describe RjuiTools::React::Converters::CollectionConverter do
         converter = create_converter({ 'class' => 'Collection', 'id' => 'gallery_thumbnail_row',
                                        'cellClasses' => ['ItemCell'], 'items' => '@{listItems}' })
         result = converter.convert
-        expect(result).to include('key={index} id={`gallery_thumbnail_row_item_${index}`} data={item} />')
+        expect(result).to include('id={`gallery_thumbnail_row_item_${cellIndex}`} data={cellData} />')
       end
 
       it 'omits the item identifier when the collection has no literal id' do
@@ -201,7 +215,7 @@ RSpec.describe RjuiTools::React::Converters::CollectionConverter do
     context 'cell class name conversion' do
       context 'with CollectionViewCell suffix' do
         it 'keeps the PascalCase name the import uses' do
-          converter = create_converter({ 'class' => 'Collection', 'cellClasses' => ['ProductCollectionViewCell'] })
+          converter = create_converter({ 'class' => 'Collection', 'cellClasses' => ['ProductCollectionViewCell'], 'items' => '@{rows}' })
           result = converter.convert
           expect(result).to include('<ProductCollectionViewCell ')
           expect(result).not_to include('ProductView')
@@ -210,7 +224,7 @@ RSpec.describe RjuiTools::React::Converters::CollectionConverter do
 
       context 'with Cell suffix' do
         it 'keeps the PascalCase name the import uses' do
-          converter = create_converter({ 'class' => 'Collection', 'cellClasses' => ['ProductCell'] })
+          converter = create_converter({ 'class' => 'Collection', 'cellClasses' => ['ProductCell'], 'items' => '@{rows}' })
           result = converter.convert
           expect(result).to include('<ProductCell ')
           expect(result).not_to include('ProductCellView')
@@ -219,7 +233,7 @@ RSpec.describe RjuiTools::React::Converters::CollectionConverter do
 
       context 'with path-based reference' do
         it 'converts to PascalCase' do
-          converter = create_converter({ 'class' => 'Collection', 'cellClasses' => ['components/product_item'] })
+          converter = create_converter({ 'class' => 'Collection', 'cellClasses' => ['components/product_item'], 'items' => '@{rows}' })
           result = converter.convert
           expect(result).to include('ProductItem')
         end
@@ -351,7 +365,7 @@ RSpec.describe RjuiTools::React::Converters::CollectionConverter do
         converter = create_converter(
           { 'class' => 'Collection', 'scrollTo' => '@{scrollIndex}', 'cellClasses' => ['ItemCell'] }
         )
-        expect { converter.convert }.to output(/literal `id`/).to_stderr
+        expect { converter.convert }.to output(/\[WARN\].*\[rjui\] Collection: .*literal `id`/).to_stdout
       end
 
       # currentPage read-back: `data.on<Prop>Change` is the same write-back

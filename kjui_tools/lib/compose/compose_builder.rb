@@ -12,6 +12,7 @@ require_relative '../core/attribute_validator'
 require_relative '../core/layout_validator'
 require_relative '../core/image_accessibility'
 require_relative '../core/tap_accessibility'
+require_relative '../core/bind_fold'
 require_relative '../core/layout_path'
 require_relative '../core/normalization'
 require_relative '../core/layout_variant'
@@ -19,10 +20,12 @@ require_relative '../core/screen_index'
 require_relative '../core/string_literals'
 require_relative 'style_loader'
 require_relative 'include_expander'
+require_relative 'interaction_stop_index'
 require_relative 'data_model_updater'
 require_relative 'helpers/import_manager'
 require_relative 'helpers/binding_expression'
 require_relative 'helpers/modifier_builder'
+require_relative 'helpers/safe_area_edges'
 require_relative 'helpers/resource_resolver'
 require_relative 'helpers/visibility_helper'
 require_relative 'helpers/responsive_helper'
@@ -125,6 +128,20 @@ module KjuiTools
           index.report_lines.each { |line| Core::Logger.info line }
           index
         end
+      end
+
+      # Screen ids (InteractionStopIndex) whose layouts are drawn in a
+      # composable of their own inside a node whose `userInteractionEnabled`
+      # is false or bound, in ANOTHER layout. Built over the whole tree.
+      def interaction_stoppable_ids
+        @interaction_stoppable_ids ||= InteractionStopIndex.build(@layouts_dir)
+      end
+
+      # Whether this layout's clicks read a stop handed down from another
+      # layout (LocalInteractionStopped), set per file for ModifierBuilder.
+      def begin_interaction_local(json_file)
+        id = JsonUIShared::ScreenIndex.screen_id_for_path(json_file)
+        Helpers::ModifierBuilder.reads_interaction_local = interaction_stoppable_ids.include?(id)
       end
 
       # Canonical screen id for a layout, or nil when it is not a screen.
@@ -232,6 +249,7 @@ module KjuiTools
 
           annotate_image_roles(json_data, json_file)
           JsonUIShared::TapAccessibility.annotate!(json_data)
+          begin_interaction_local(json_file)
           # Each node's position, for the names a layout does not give
           # (shared/core/layout_path.rb) — on the same include-expanded tree.
           JsonUIShared::LayoutPath.stamp!(json_data)
@@ -373,7 +391,7 @@ module KjuiTools
           # path), so without this the `visibility: "@{...}"` binding on a
           # responsive Embed is silently dropped. Wrap the whole if/else
           # chain in one VisibilityWrapper, mirroring sjui's single wrapper.
-          return Helpers::VisibilityHelper.wrap_with_visibility(json_data, Helpers::TintHelper.wrap_with_tint(json_data, code, depth, @required_imports), depth, @required_imports, parent_type)
+          return provide_interaction_stop(json_data, Helpers::VisibilityHelper.wrap_with_visibility(json_data, Helpers::TintHelper.wrap_with_tint(json_data, code, depth, @required_imports), depth, @required_imports, parent_type), depth)
         end
 
         # Collection + responsive: same inline treatment as Embed. The
@@ -390,7 +408,7 @@ module KjuiTools
           # carrying `visibility: "@{...}"` (e.g. a grid/list display toggle)
           # would otherwise render unconditionally on Android while iOS
           # honors it. Wrap the inline if/else chain in one VisibilityWrapper.
-          return Helpers::VisibilityHelper.wrap_with_visibility(json_data, Helpers::TintHelper.wrap_with_tint(json_data, code, depth, @required_imports), depth, @required_imports, parent_type)
+          return provide_interaction_stop(json_data, Helpers::VisibilityHelper.wrap_with_visibility(json_data, Helpers::TintHelper.wrap_with_tint(json_data, code, depth, @required_imports), depth, @required_imports, parent_type), depth)
         end
 
         # Check for responsive component — delegate to responsive generation
@@ -405,6 +423,8 @@ module KjuiTools
         if json_data['include']
           raise "Include should have been expanded by IncludeExpander.process_includes. This is a bug."
         end
+
+        json_data = fold_bind(json_data, component_type)
 
         # Generate component based on type
         code = case component_type
@@ -491,7 +511,100 @@ module KjuiTools
           code = Helpers::VisibilityHelper.wrap_with_visibility(json_data, Helpers::TintHelper.wrap_with_tint(json_data, code, depth, @required_imports), depth, @required_imports, parent_type) if code.is_a?(String) && !code.empty?
         end
 
-        code
+        provide_interaction_stop(json_data, capture_interaction_stop(json_data, stop_held_control(json_data, code), depth), depth)
+      end
+
+      # A control a stop holds (TapAccessibility.control?, which annotate!
+      # marks): the pointer blocker kept a touch out and nothing else —
+      # TalkBack's click is not a touch, and it called the control's own
+      # operation (measured probe: A11yActivationInsideAStopProbe). Two
+      # changes, nothing drawn:
+      # - its root node reads `disabled()` while it is stopped: Compose's
+      #   accessibility delegate performs no action on a disabled node (click,
+      #   set text, set progress — performActionHelper, read in compose-ui
+      #   1.12.0), and TalkBack says so. `enabled = false` would grey it.
+      # - what it writes (`viewModel.updateData(…)`) is gated on the same stop
+      #   (ModifierBuilder.lambda_gate — in a layout a stop can reach, the stop
+      #   handed down too): a key press on a focused control, and the inner
+      #   node of a wrapped one (a Radio's item, a Segment's tab), write
+      #   nothing.
+      # `false` on it or around it shuts both; a binding gates both.
+      def stop_held_control(json_data, code)
+        return code unless code.is_a?(String) && JsonUIShared::TapAccessibility.control?(json_data)
+
+        gate = control_stop_gate(json_data)
+        return code unless gate
+
+        code = code.gsub('viewModel.updateData(', "if (#{gate}) viewModel.updateData(")
+        semantics = '.semantics { testTagsAsResourceId = true }'
+        at = code.index(semantics)
+        return code unless at
+
+        line_start = code.rindex("\n", at) || -1
+        pad = code[(line_start + 1)...at]
+        disabled = gate == 'false' ? '.semantics { disabled() }' : ".then(if (!(#{gate})) Modifier.semantics { disabled() } else Modifier)"
+        @required_imports&.add(:semantics_disabled)
+        code[0...(at + semantics.length)] + "\n#{pad}#{disabled}" + code[(at + semantics.length)..]
+      end
+
+      # The stop's gate for what a control operates, as one Kotlin condition:
+      # 'false' for `userInteractionEnabled: false` on it or around it, the
+      # bound flags joined, with the stop handed down in a layout one can
+      # reach (lambda_gate), or nil when nothing stops it. canTap is not in
+      # it: it gates the tap, not the control's value.
+      def control_stop_gate(json_data)
+        return 'false' if JsonUIShared::TapAccessibility.stopped?(json_data)
+
+        gates = JsonUIShared::TapAccessibility.interaction_gates(json_data)
+                                             .map { |g| Helpers::ModifierBuilder.boolean_expression(g) }.compact.uniq
+        return 'false' if gates.include?('false')
+
+        gate = gates.empty? ? nil : gates.map { |g| Helpers::ModifierBuilder.conjunct(g) }.join(' && ')
+        Helpers::ModifierBuilder.lambda_gate(gate)
+      end
+
+      # A leaf whose lambdas read the stop handed down (a control's operation
+      # call, a Button's onClick — ModifierBuilder.lambda_gate) is wrapped in
+      # `LocalInteractionStopped.current.let { jsonuiInteractionStopped -> … }`:
+      # the local is read in the composable's scope and the lambdas capture
+      # it. A leaf only — a node with children would capture the name around
+      # a child's own capture and shadow it. `let`'s lambda has no receiver,
+      # so a weight / align on the node still resolves in the scope around.
+      def capture_interaction_stop(json_data, code, depth)
+        return code unless Helpers::ModifierBuilder.reads_interaction_local
+        return code unless code.is_a?(String) && code.match?(/\b#{Helpers::ModifierBuilder::INTERACTION_CAPTURE}\b/)
+        return code unless JsonUIShared::TapAccessibility.children(json_data).empty?
+
+        @required_imports&.add(:local_interaction_stopped)
+        Helpers::TintHelper.pad("LocalInteractionStopped.current.let { #{Helpers::ModifierBuilder::INTERACTION_CAPTURE} ->", depth) + "\n" +
+          Helpers::TintHelper.shift(code.rstrip, 1) + "\n" +
+          Helpers::TintHelper.pad('}', depth)
+      end
+
+      # A node whose `userInteractionEnabled` is false or bound, holding a
+      # layout drawn in a composable of its own (a Collection's cells, an
+      # Embed's screen, a TabView tab's view — TapAccessibility.hands_stop_down?),
+      # provides the stop to what it composes: `true` for `false`, and for a
+      # binding the stop around it or the binding's `false`. The drawn
+      # layout's clicks read it (ModifierBuilder.reads_interaction_local).
+      # CompositionLocalProvider adds no layout node, and its content lambda
+      # has no receiver, so a weight / align on the node still resolves in
+      # the scope around it.
+      def provide_interaction_stop(json_data, code, depth)
+        return code unless code.is_a?(String) && !code.empty?
+        return code unless JsonUIShared::TapAccessibility.hands_stop_down?(json_data)
+
+        @required_imports&.add(:composition_local_provider)
+        @required_imports&.add(:local_interaction_stopped)
+        value = json_data['userInteractionEnabled']
+        provided = if value == false
+                     'true'
+                   else
+                     "LocalInteractionStopped.current || !#{Helpers::ModifierBuilder.conjunct(Helpers::ModifierBuilder.boolean_expression(value))}"
+                   end
+        Helpers::TintHelper.pad("CompositionLocalProvider(LocalInteractionStopped provides (#{provided})) {", depth) + "\n" +
+          Helpers::TintHelper.shift(code.rstrip, 1) + "\n" +
+          Helpers::TintHelper.pad('}', depth)
       end
 
       # Embed + responsive: emit an inline if/else chain that calls
@@ -681,6 +794,13 @@ module KjuiTools
       end
 
       # Generate a component without responsive handling (to avoid infinite recursion)
+      #
+      # A branch drawn here is a node's code for the branch's own attributes,
+      # so the stop is handed down from them (capture_interaction_stop,
+      # provide_interaction_stop) — a branch can set userInteractionEnabled
+      # of its own. Every other type goes through generate_component, which
+      # hands it down itself. user_interaction_enabled_reaches_drawn_views_spec
+      # counts these exits against the calls that hand the stop down.
       def generate_non_responsive_component(json_data, depth, parent_type, is_root: false)
         component_type = json_data['type'] || 'View'
 
@@ -696,10 +816,10 @@ module KjuiTools
           handle_container_result(result, depth, parent_type)
         else
           # Fall through to normal generation for other types (responsive already stripped)
-          generate_component(json_data, depth, parent_type, is_root: is_root)
+          return generate_component(json_data, depth, parent_type, is_root: is_root)
         end
 
-        code
+        provide_interaction_stop(json_data, capture_interaction_stop(json_data, stop_held_control(json_data, code), depth), depth)
       end
 
       def has_component_children?(json_data)
@@ -717,6 +837,30 @@ module KjuiTools
         when 'vertical' then 'Column'
         else 'Box'
         end
+      end
+
+      # `bind` folded into the attribute it stands for (JsonUIShared::BindFold)
+      # on the node a built-in component draws: its style is merged
+      # (StyleLoader, before the builder) and its responsive branch resolved
+      # (each branch, merged, reaches generate_component through
+      # generate_non_responsive_component, which draws no type the table
+      # names itself). An app's own component (component_mappings) is
+      # handed its node as written. The layout normalizer leaves a node with a
+      # style or responsive overrides to this fold: folded before the style
+      # merge, a layout `bind` beside a style's own value was drawn bound.
+      def fold_bind(json_data, component_type)
+        return json_data if app_component?(component_type)
+
+        JsonUIShared::BindFold.fold(json_data, component_type)
+      end
+
+      def app_component?(component_type)
+        mappings_file = File.join(File.dirname(__FILE__), 'components', 'extensions', 'component_mappings.rb')
+        return false unless File.exist?(mappings_file)
+
+        require_relative 'components/extensions/component_mappings'
+        defined?(Components::Extensions::COMPONENT_MAPPINGS) &&
+          Components::Extensions::COMPONENT_MAPPINGS.key?(component_type)
       end
 
       def check_custom_component(component_type, json_data, depth, parent_type)
@@ -755,7 +899,18 @@ module KjuiTools
           end
         end
 
-        "// TODO: Implement component type: #{component_type}"
+        # A type this tool draws nothing for: named in the build, in the
+        # validator's sentence (JsonUIShared::AttributeValidatorCore
+        # .unknown_component_type_message), and in the emitted comment where
+        # the node would be. It was a `// TODO: Implement component type`
+        # comment and nothing more.
+        sentence = unknown_type_validator.unknown_component_type_message(component_type)
+        Core::Logger.warn(sentence)
+        "// #{sentence}"
+      end
+
+      def unknown_type_validator
+        @unknown_type_validator ||= Core::AttributeValidator.new(:compose)
       end
 
       def handle_container_result(result, depth, parent_type = nil)
@@ -812,9 +967,9 @@ module KjuiTools
         # Add import for SafeAreaConfig
         @required_imports&.add(:safe_area_config)
 
-        # Parse edges - support both 'edges' and 'safeAreaInsetPositions' (alias)
-        edges_array = json_data['edges'] || json_data['safeAreaInsetPositions'] || ['all']
-        edges = edges_array.is_a?(Array) ? edges_array : [edges_array]
+        # The edges it reserves — `edges` is the alias spelling and wins; a
+        # SafeAreaView that names none reserves every edge (SafeAreaEdges)
+        edges = Helpers::SafeAreaEdges.edges(json_data['edges'] || json_data['safeAreaInsetPositions'] || ['all'])
 
         # Get children - support both 'child' and 'children'
         children = json_data['children'] || json_data['child'] || []
@@ -849,18 +1004,8 @@ module KjuiTools
                     else 'Box'
                     end
 
-        # Get parent SafeAreaConfig and filter edges
+        # The enclosing SafeAreaConfig (a TabView reserves its content's bottom)
         code = indent("val safeAreaConfig = LocalSafeAreaConfig.current", depth)
-        code += "\n" + indent("val edges = mutableListOf(#{edges.map { |e| "\"#{e}\"" }.join(', ')}).apply {", depth)
-        code += "\n" + indent("if (safeAreaConfig.ignoreBottom) {", depth + 1)
-        code += "\n" + indent("remove(\"bottom\")", depth + 2)
-        code += "\n" + indent("if (contains(\"all\")) { remove(\"all\"); addAll(listOf(\"top\", \"start\", \"end\")) }", depth + 2)
-        code += "\n" + indent("}", depth + 1)
-        code += "\n" + indent("if (safeAreaConfig.ignoreTop) {", depth + 1)
-        code += "\n" + indent("remove(\"top\")", depth + 2)
-        code += "\n" + indent("if (contains(\"all\")) { remove(\"all\"); addAll(listOf(\"bottom\", \"start\", \"end\")) }", depth + 2)
-        code += "\n" + indent("}", depth + 1)
-        code += "\n" + indent("}.distinct()", depth)
 
         code += "\n\n" + indent("#{container}(", depth)
 
@@ -904,11 +1049,9 @@ module KjuiTools
         modifiers.concat(size_modifiers)
         modifiers.concat(safe_area_decoration_stages(json_data))
 
-        # Apply safe area padding based on edges (after background)
-        # Use conditional modifiers based on runtime edges
-        modifiers << ".then(if (edges.contains(\"all\")) Modifier.systemBarsPadding() else Modifier)"
-        modifiers << ".then(if (!edges.contains(\"all\") && edges.contains(\"top\")) Modifier.statusBarsPadding() else Modifier)"
-        modifiers << ".then(if (!edges.contains(\"all\") && edges.contains(\"bottom\")) Modifier.navigationBarsPadding() else Modifier)"
+        # The safe area, after the background so the background reaches the
+        # screen edges; the edge an enclosing TabView reserves is left to it
+        modifiers.concat(Helpers::SafeAreaEdges.modifiers(edges, 'safeAreaConfig', @required_imports))
 
         # Check if keyboard padding should be applied
         ignore_keyboard = json_data['ignoreKeyboard'] == true
@@ -974,18 +1117,8 @@ module KjuiTools
       def generate_safe_area_view_with_constraints(json_data, children, edges, depth, is_root: false)
         @required_imports&.add(:constraint_layout)
 
-        # Get parent SafeAreaConfig and filter edges
+        # The enclosing SafeAreaConfig (a TabView reserves its content's bottom)
         code = indent("val safeAreaConfig = LocalSafeAreaConfig.current", depth)
-        code += "\n" + indent("val edges = mutableListOf(#{edges.map { |e| "\"#{e}\"" }.join(', ')}).apply {", depth)
-        code += "\n" + indent("if (safeAreaConfig.ignoreBottom) {", depth + 1)
-        code += "\n" + indent("remove(\"bottom\")", depth + 2)
-        code += "\n" + indent("if (contains(\"all\")) { remove(\"all\"); addAll(listOf(\"top\", \"start\", \"end\")) }", depth + 2)
-        code += "\n" + indent("}", depth + 1)
-        code += "\n" + indent("if (safeAreaConfig.ignoreTop) {", depth + 1)
-        code += "\n" + indent("remove(\"top\")", depth + 2)
-        code += "\n" + indent("if (contains(\"all\")) { remove(\"all\"); addAll(listOf(\"bottom\", \"start\", \"end\")) }", depth + 2)
-        code += "\n" + indent("}", depth + 1)
-        code += "\n" + indent("}.distinct()", depth)
 
         code += "\n\n" + indent("ConstraintLayout(", depth)
 
@@ -1009,10 +1142,9 @@ module KjuiTools
         modifiers.concat(size_modifiers)
         modifiers.concat(safe_area_decoration_stages(json_data))
 
-        # Apply safe area padding based on edges (after background)
-        modifiers << ".then(if (edges.contains(\"all\")) Modifier.systemBarsPadding() else Modifier)"
-        modifiers << ".then(if (!edges.contains(\"all\") && edges.contains(\"top\")) Modifier.statusBarsPadding() else Modifier)"
-        modifiers << ".then(if (!edges.contains(\"all\") && edges.contains(\"bottom\")) Modifier.navigationBarsPadding() else Modifier)"
+        # The safe area, after the background so the background reaches the
+        # screen edges; the edge an enclosing TabView reserves is left to it
+        modifiers.concat(Helpers::SafeAreaEdges.modifiers(edges, 'safeAreaConfig', @required_imports))
 
         # Check if keyboard padding should be applied
         ignore_keyboard = json_data['ignoreKeyboard'] == true
@@ -1418,6 +1550,7 @@ module KjuiTools
 
         annotate_image_roles(json_data, variant_file)
         JsonUIShared::TapAccessibility.annotate!(json_data)
+        begin_interaction_local(variant_file)
         JsonUIShared::LayoutPath.stamp!(json_data)
 
         @required_imports = Set.new

@@ -62,6 +62,29 @@ module SjuiTools
           @@layout_normalized
         end
 
+        # Per-file: this layout is drawn in a view of its own where a
+        # `userInteractionEnabled` stop can reach it from another layout
+        # (InteractionStopIndex) — a Collection's cell, an Embed's screen, a
+        # TabView tab's view. Its view reads the stop from the environment
+        # (INTERACTION_ENVIRONMENT_DECLARATION), and every tap in it is gated
+        # on it as on a bound flag (tap_gate_condition). Off for every other
+        # layout, which is emitted as it was.
+        @@reads_interaction_environment = false
+
+        def self.reads_interaction_environment=(value)
+          @@reads_interaction_environment = value ? true : false
+        end
+
+        def self.reads_interaction_environment?
+          @@reads_interaction_environment
+        end
+
+        # The property a view that reads the stop declares, and the name its
+        # taps' gates use (SwiftJsonUI's EnvironmentValues.jsonuiInteractionStopped).
+        INTERACTION_ENVIRONMENT_NAME = 'jsonuiInteractionStopped'
+        INTERACTION_ENVIRONMENT_DECLARATION =
+          "@Environment(\\.jsonuiInteractionStopped) private var #{INTERACTION_ENVIRONMENT_NAME}"
+
         attr_reader :state_variables, :modifier_bag
 
         # Injected onto every node under a scrolling container by
@@ -718,7 +741,7 @@ module SjuiTools
           # safeAreaInsetPositions
           apply_safe_area_insets_to_bag
 
-          # enabled, canTap, userInteractionEnabled, touchDisabledState
+          # enabled, canTap, userInteractionEnabled
           register_interaction_gates
 
           # tagプロパティの適用（TabViewなどで使用）
@@ -729,10 +752,6 @@ module SjuiTools
           # classNameプロパティ（SwiftUIではスタイル識別子として記録）
           if @component['className']
             add_line "// className: #{@component['className']}"
-          end
-
-          if @component['touchDisabledState']
-            add_line "// touchDisabledState applied"
           end
 
           # tintColor（アクセントカラー）
@@ -823,9 +842,11 @@ module SjuiTools
         # - `enabled` is `.disabled` (the literal, or the binding negated).
         #   SwiftUI's `.disabled` also covers interactive descendants, so it
         #   is the right modifier for a container.
-        # - `userInteractionEnabled` and `touchDisabledState` are
-        #   `.allowsHitTesting`: one modifier, their conditions joined — they
-        #   stop the whole view. The bound form was ViewBindingHandler's,
+        # - `userInteractionEnabled` is `.allowsHitTesting` — it stops the
+        #   whole view. (`touchDisabledState` is UIKit's hit-test mode, a mode
+        #   SwiftUI has no peer for; it was read here as "stop everything" for
+        #   any value, "none" too, until jsonui-cli 1.9.0, and the validator
+        #   names it now.) The bound form was ViewBindingHandler's,
         #   which only the converters that process bindings reach;
         #   `apply_binding_modifiers` leaves it to this method once it has run.
         # - `canTap` is not here: it gates the tap's handler, not the view
@@ -838,27 +859,70 @@ module SjuiTools
           register_hit_test_gate
         end
 
-        # `userInteractionEnabled` and `touchDisabledState`: one
-        # `.allowsHitTesting`, which the bag writes outside the view's own
-        # gestures (MODIFIER_ORDER). The converters that build their own
-        # modifiers and handle `enabled` themselves — Button, TextField,
-        # TextView — call this alone: they read neither flag, and a TextField
+        # `userInteractionEnabled`: one `.allowsHitTesting`, which the bag
+        # writes outside the view's own gestures (MODIFIER_ORDER). The
+        # converters that build their own modifiers and handle `enabled`
+        # themselves — Button, TextField, TextView — call this alone: they
+        # did not read the flag, and a TextField
         # read the binding only (ViewBindingHandler). SelectBox builds its own
         # too, but its view takes no `enabled`: it registers both gates.
         def register_hit_test_gate
           @interaction_gates_registered = true
           gates = []
-          gates << 'false' if @component['touchDisabledState']
           value = @component['userInteractionEnabled']
           if value == false
             gates << 'false'
           elsif is_binding?(value)
             gates << tap_gate_expr(value)
           end
-          return if gates.empty?
+          lines = []
+          unless gates.empty?
+            condition = gates.include?('false') ? 'false' : gates.join(' && ')
+            lines << ".allowsHitTesting(#{condition})"
+            hand_down = interaction_stop_line
+            lines << hand_down if hand_down
+          end
+          stopped_control = stopped_control_line
+          lines << stopped_control if stopped_control
+          return if lines.empty?
 
-          condition = gates.include?('false') ? 'false' : gates.join(' && ')
-          @modifier_bag.register(:allows_hit_testing, ".allowsHitTesting(#{condition})")
+          @modifier_bag.register(:allows_hit_testing, lines.size == 1 ? lines.first : lines)
+        end
+
+        # A control a stop holds (TapAccessibility.control?): the hit-test stop
+        # keeps a touch out, and VoiceOver's activation still called its
+        # default action — a Switch inside `userInteractionEnabled: false`
+        # switched (measured, SwiftJsonUI ConformanceHost
+        # -a11yActivationProbe, jsonui-cli 1.9.0). SwiftJsonUI's
+        # `.jsonuiStoppedControl(stopped)` replaces that action by nothing and
+        # reads the control as nothing to operate while it is stopped, and
+        # draws it as it is: `true` for the flag on it or around it, the
+        # bound flags' `false` for a binding, and — in a layout a stop can
+        # reach — the stop handed down, which the modifier reads from the
+        # environment itself. nil for a control no stop can reach.
+        def stopped_control_line
+          return nil unless JsonUIShared::TapAccessibility.control?(@component)
+          return '.jsonuiStoppedControl(true)' if JsonUIShared::TapAccessibility.stopped?(@component)
+
+          gates = JsonUIShared::TapAccessibility.interaction_gates(@component).map { |gate| tap_gate_expr(gate) }
+          return ".jsonuiStoppedControl(!(#{gates.join(' && ')}))" unless gates.empty?
+          return '.jsonuiStoppedControl()' if self.class.reads_interaction_environment?
+
+          nil
+        end
+
+        # A node whose `userInteractionEnabled` is false or bound, holding a
+        # layout drawn in a view of its own (TapAccessibility.hands_stop_down?),
+        # hands the stop down through the environment: `true` for `false`, and
+        # for a binding the stop around it or the binding's `false`. The drawn
+        # view's taps read it (reads_interaction_environment). nil otherwise.
+        def interaction_stop_line
+          return nil unless JsonUIShared::TapAccessibility.hands_stop_down?(@component)
+
+          value = @component['userInteractionEnabled']
+          return '.environment(\.jsonuiInteractionStopped, true)' if value == false
+
+          ".transformEnvironment(\\.jsonuiInteractionStopped) { $0 = $0 || !#{tap_gate_expr(value)} }"
         end
 
         # `.disabled` for an `enabled` value: the literal false, or the binding
@@ -949,9 +1013,13 @@ module SjuiTools
           gates = []
           gates << @component['canTap'] if is_binding?(@component['canTap'])
           gates.concat(JsonUIShared::TapAccessibility.interaction_gates(@component))
-          return nil if gates.empty?
+          conditions = gates.uniq.map { |gate| tap_gate_expr(gate) }
+          # A stop handed down from another layout (a Collection's cell, an
+          # Embed's screen): the environment says so.
+          conditions << "!#{INTERACTION_ENVIRONMENT_NAME}" if self.class.reads_interaction_environment?
+          return nil if conditions.empty?
 
-          gates.uniq.map { |gate| tap_gate_expr(gate) }.join(' && ')
+          conditions.join(' && ')
         end
 
         # Types whose declared onClick is not a tap on the view (ticket
@@ -1384,6 +1452,17 @@ module SjuiTools
         # Every one of these was called with no argument whatever it took: a
         # `((String) -> Void)?` handler did not compile, while a Button's and a
         # control's onClick were handed the viewId (get_event_handler_invocation).
+        # The call a partialAttributes range makes, or nil: its onClick binding
+        # (`data.x?()`), else each name of its onclick selector, as a
+        # selector tap calls them (no_value_call).
+        def range_handler_call(range)
+          kind, value = JsonUIShared::TapAccessibility.range_handler(range)
+          return nil unless kind
+          return "data.#{extract_binding_property(value)}?()" if kind == :binding
+
+          JsonUIShared::TapAccessibility.handler_values(value).map { |n| no_value_call(to_camel_case(n)) }.join('; ')
+        end
+
         def no_value_call(name)
           return "data.#{name.chomp(':')}?(self)" if name.end_with?(':')
 

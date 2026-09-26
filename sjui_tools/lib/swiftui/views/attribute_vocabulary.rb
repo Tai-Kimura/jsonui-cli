@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require 'json'
+require_relative '../../core/logger'
 
 module SjuiTools
   module SwiftUI
@@ -101,7 +102,8 @@ module SjuiTools
 
             literal = mapping[canonical_token(component, attribute, token).downcase]
             if literal.nil?
-              warn "[AttributeVocabulary] #{component}.#{attribute}: no swiftui mapping for the declared value '#{token}'"
+              SjuiTools::Core::Logger.warn "[AttributeVocabulary] #{component}.#{attribute}: " \
+                                           "no swiftui mapping for the declared value '#{token}'"
               next
             end
             table[key] = literal

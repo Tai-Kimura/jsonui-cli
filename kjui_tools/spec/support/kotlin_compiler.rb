@@ -102,6 +102,41 @@ module KotlinCompiler
       Result.new(errors.empty?, errors)
     end
   end
+
+  Run = Struct.new(:success, :errors, :output) do
+    def success?
+      success
+    end
+  end
+
+  # Compiles `source` (a file with a top-level `fun main()`) and runs it on
+  # the JVM: for an arm that asks what emitted code DOES — a gate that calls
+  # when it is open and not when it is shut — not only that it type-checks.
+  def run(source)
+    stdlib   = newest('org.jetbrains.kotlin', 'kotlin-stdlib')
+    reflect  = newest('org.jetbrains.kotlin', 'kotlin-reflect')
+    annots   = newest('org.jetbrains', 'annotations')
+    coroutin = newest('org.jetbrains.kotlinx', 'kotlinx-coroutines-core-jvm')
+    trove    = newest('org.jetbrains.intellij.deps', 'trove4j')
+    compiler_cp = [compiler_jar, stdlib, reflect, coroutin, annots, trove].compact.join(':')
+    target_cp   = [stdlib, reflect, annots, coroutin].compact.join(':')
+
+    Dir.mktmpdir('kjui_kotlin_run') do |dir|
+      file = File.join(dir, 'Emitted.kt')
+      File.write(file, source)
+      out_dir = File.join(dir, 'out')
+      out, err, = Open3.capture3(
+        java_bin, '-cp', compiler_cp,
+        'org.jetbrains.kotlin.cli.jvm.K2JVMCompiler',
+        '-no-stdlib', '-cp', target_cp, '-d', out_dir, file
+      )
+      errors = "#{out}\n#{err}".lines.select { |l| l.include?('error:') }.map(&:strip)
+      return Run.new(false, errors, '') unless errors.empty?
+
+      stdout, stderr, status = Open3.capture3(java_bin, '-cp', "#{out_dir}:#{target_cp}", 'EmittedKt')
+      Run.new(status.success?, status.success? ? [] : [stderr.strip], stdout)
+    end
+  end
 end
 
 RSpec::Matchers.define :compile_as_kotlin do |*libraries|
