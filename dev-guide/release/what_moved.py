@@ -86,8 +86,10 @@ SURFACES = [
     # its own line rather than widening the one above.
     ("conformance corpus + ledgers — the gate's own subject matter",
      r"^conformance/(fixtures/|codegen/|hosts/|[a-z_]+\.json$)"),
+    # install.sh (the clone-and-install script at the root) is the installer's
+    # other entry; unclassified until jsonui-cli 1.9.0 changed its Ruby floor.
     ("release procedure / installer — maintainer side only",
-     r"^(dev-guide|installer)/"),
+     r"^(dev-guide|installer)/|^install\.sh$"),
     # CI config is maintainer-side too, but it is worth its own line: a face
     # reading a notice needs to know a gate MOVED, not just that some
     # maintainer file did. v1.7.52 turned on submodule checkout, without
