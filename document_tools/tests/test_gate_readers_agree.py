@@ -20,6 +20,10 @@ goes through every reader this tree has, and they must agree:
                   no layout is a WARNING when LAYOUT_ID_GATE_FROM is on, else
                   INFO — plus the notice (test_tools; U8 (5)). It reads the
                   spec validator's literal, so it is patched there
+  initial values  `jui verify --fail-on-diff`: counts an initial value a spec
+                  declares that its layout does not carry when
+                  INITIAL_VALUE_GATE_FROM is on, and names the release before
+                  (jui_tools; jsonui-cli 1.9.0)
 
 The three `shared_core` loaders that find the module must stay one loader
 in three copies: a copy that diverged would be a second way to find it.
@@ -140,6 +144,14 @@ def _reader_include_prefix(literal, version, monkeypatch):
     return state == "on", state == "announce"
 
 
+def _reader_initial_values(literal, version, monkeypatch):
+    """`jui verify`'s count of initial values under --fail-on-diff."""
+    from jui_cli.commands import verify_cmd
+    monkeypatch.setattr(verify_cmd, "INITIAL_VALUE_GATE_FROM", literal)
+    state = verify_cmd.initial_value_gate_state(version)
+    return state == "on", state == "announce"
+
+
 def _reader_test_element_ids(literal, version, monkeypatch, tmp_path):
     """`jsonui-test validate` on one test naming an id no layout has."""
     import jsonui_test_cli
@@ -180,6 +192,8 @@ def test_every_reader_gives_the_tables_answer(literal, version, state, gates, an
                                                                      monkeypatch)),
         "test element ids": (state, *_reader_test_element_ids(literal, version, monkeypatch,
                                                                tmp_path)),
+        "initial values (jui verify)": (state, *_reader_initial_values(literal, version,
+                                                                      monkeypatch)),
     }
     assert answers == {name: (state, gates, announces) for name in answers}, answers
 

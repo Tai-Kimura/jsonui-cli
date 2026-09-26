@@ -311,6 +311,30 @@ class StringsTable:
             for section in own_sections
         )
 
+    def entry(self, text: str, own_sections: tuple[str, ...] = ()) -> tuple[str, str] | None:
+        """The (section, key) *text* names as a key, as the builders resolve
+        one: a full key `<section>_<key>` in any section (the first section
+        that spells it), else a bare key in one of the layout's own sections;
+        None when it names none. A text that is a strings VALUE is not a key
+        (`texts` answers for those)."""
+        for group, entries in self._groups.items():
+            prefix = f"{group}_"
+            if text.startswith(prefix) and text[len(prefix):] in entries:
+                return group, text[len(prefix):]
+        for section in own_sections:
+            if text in self._keys_by_section.get(section, ()):
+                return section, text
+        return None
+
+    def texts(self, section: str, key: str) -> frozenset[str]:
+        """The text(s) one entry holds: its string, or each language's."""
+        value = self._groups.get(section, {}).get(key)
+        if isinstance(value, str):
+            return frozenset((value,))
+        if isinstance(value, dict):
+            return frozenset(v for v in value.values() if isinstance(v, str))
+        return frozenset()
+
     def sections_declaring_bare(self, text: str) -> list[str]:
         """Every section that declares ``text`` as a bare key."""
         return sorted(
