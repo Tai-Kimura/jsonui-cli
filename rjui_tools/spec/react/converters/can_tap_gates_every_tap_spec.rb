@@ -48,28 +48,47 @@ RSpec.describe 'rjui: canTap gates every spelling of the tap' do
     end
   end
 
+  # Each handler is called as the layout's data declares it (4f's ruling,
+  # jsonui-cli 1.9.0 — tap_calls_as_declared_spec); none is declared here, so
+  # each is called with nothing, and the gated click takes no event.
   it 'taps while a bound canTap holds' do
     TAP_TYPES.each_key do |type|
       SPELLINGS.each do |name, spelling|
-        gated = type == 'NetworkImage' ? 'onClick={() => { if (data.gate) ' : 'onClick={(e) => { if (data.gate) '
-        expect(convert(type, spelling.merge('canTap' => '@{gate}'))).to include(gated), "#{type} #{name}"
+        expect(convert(type, spelling.merge('canTap' => '@{gate}'))).to include('onClick={() => { if (data.gate) '), "#{type} #{name}"
       end
     end
   end
 
   # An Image's selector is a method on the data, as on every other type. Its
-  # own build_onclick_attr wrote the name bare: `onClick={go}`.
-  it "calls an Image's selector on the data" do
-    expect(convert('Image', 'onclick' => 'go')).to include('onClick={data.go}')
+  # own build_onclick_attr wrote the name bare: `onClick={go}`. The selector
+  # is both gated and called as the data declares it: with nothing for `()`,
+  # with the viewId for `(String)`, and `name:` (the sender mark) with the
+  # event.
+  it "calls an Image's selector on the data, gated, as the data declares it" do
+    expect(convert('Image', 'onclick' => 'go')).to include('onClick={() => data.go?.()}')
+    expect(convert('Image', 'onclick' => 'go', 'canTap' => '@{gate}')).to include('onClick={() => { if (data.gate) data.go?.(); }}')
+    expect(convert('Image', 'onclick' => 'go', 'canTap' => false)).not_to include('onClick=')
+    expect(convert('Image', 'onclick' => 'go:', 'canTap' => '@{gate}')).to include('onClick={(e) => { if (data.gate) data.go?.(e); }}')
+    declared = config.merge('_data_classes' => { 'go' => '((String) -> Void)?' })
+    image = { 'type' => 'Image', 'id' => 'hero', 'srcName' => 'x', 'onclick' => 'go', 'canTap' => '@{gate}' }
+    expect(RjuiTools::React::Converters::ImageConverter.new(image, declared).convert(2))
+      .to include('onClick={() => { if (data.gate) data.go?.("hero"); }}')
+  end
+
+  # A call that hands the event on — the sender mark `name:`, a declared
+  # `(Event)` — hands nothing where the element hands none: NetworkImage's
+  # onClick is `() => void` (click_takes_event?).
+  it "hands NetworkImage's click no event, the sender mark's included" do
+    expect(convert('NetworkImage', 'onclick' => 'go:', 'canTap' => '@{gate}')).to include('onClick={() => { if (data.gate) data.go?.(); }}')
+    expect(convert('Image', 'onclick' => 'go:', 'canTap' => '@{gate}')).to include('onClick={(e) => { if (data.gate) data.go?.(e); }}')
   end
 
   # The gated shapes, as a component returns them, under --strict, against
   # NetworkImage's own props (its template's NetworkImageProps, whose onClick
-  # takes no event — the gated binding there did not compile before): a member
-  # path is called with the event where the element hands one, an arrow
-  # function (the selector array's, the link action's) in parentheses with none.
+  # takes no event — the gated binding there did not compile before): each
+  # call a statement under the gate, with the arguments its declaration asks.
   it 'writes TSX that compiles', :typescript_compile do
-    elements = TAP_TYPES.keys.product(SPELLINGS.values).map do |type, spelling|
+    elements = TAP_TYPES.keys.product(SPELLINGS.values + [{ 'onclick' => 'go:' }]).map do |type, spelling|
       convert(type, spelling.merge('canTap' => '@{gate}'))
     end
     expect(TypeScriptCompiler.component(*elements)).to compile_as_typescript.with_ambient(<<~TS)

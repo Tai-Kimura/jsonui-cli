@@ -28,7 +28,7 @@ RSpec.describe 'handler name spelling (web)' do
   end
 
   it 'onClick with the binding form calls the named handler' do
-    expect(button_line('onClick', '@{handleTap}')).to include('onClick={data.handleTap}')
+    expect(button_line('onClick', '@{handleTap}')).to include('onClick={() => data.handleTap?.()}')
   end
 
   it 'onClick with a bare name is not a call' do
@@ -38,7 +38,7 @@ RSpec.describe 'handler name spelling (web)' do
   end
 
   it 'lowercase onclick with a bare name calls the named handler (selector legacy)' do
-    expect(button_line('onclick', 'handleTap')).to include('onClick={data.handleTap}')
+    expect(button_line('onclick', 'handleTap')).to include('onClick={() => data.handleTap?.()}')
   end
 
   it 'lowercase onclick with the binding form is not a call' do

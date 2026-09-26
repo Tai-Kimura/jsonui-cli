@@ -49,14 +49,45 @@ RSpec.describe 'kjui a control a stop holds' do
   static_semantics = '.semantics { disabled() }'
   bound_semantics = '.then(if (!((data.u ?: false))) Modifier.semantics { disabled() } else Modifier)'
 
+  # The nodes inside a control a user operates on their own (a Radio's rows
+  # and RadioButtons, a Segment's Tabs, a CheckBox's Checkbox): each chain
+  # `.clickable` / `.toggleable` / `.selectable`, and each inner composable
+  # call with the disabled read it carries (its `modifier` argument, or the
+  # element right in front of the chain call) — [what, carries it].
+  inner_nodes = lambda do |code, element|
+    chains = code.scan(/^(.*?)\.(clickable|toggleable|selectable)\b/).map { |before, what| [what, before.end_with?(element)] }
+    # A call carrying the control's own tag is its root, not an inner node.
+    calls = code.scan(/\b(RadioButton|Checkbox|Tab)\((.*?)\n\s*\)/m).reject { |_, args| args.include?('testTagsAsResourceId') }.map do |what, args|
+      [what, args.include?("modifier = #{element.delete_prefix('.then(').delete_suffix(')').sub(/\A\.semantics/, 'Modifier.semantics')}")]
+    end
+    chains + calls
+  end
+  # The wrapped controls and the inner nodes each draws (the rest have none;
+  # a CheckBox without a label is its Checkbox, which is its root).
+  inner_counts = { 'Radio' => 4, 'Segment' => 2 }
+
   writers.each do |type, more|
     it "#{type}: inside false, every write is shut and the node reads disabled" do
       code, imports = emit.call(stopping.call(false, node.call(type, more)))
       writes = code.scan('viewModel.updateData(').size
       expect(writes).to be >= 1, code
       expect(code.scan('if (false) viewModel.updateData(').size).to eq(writes), code
-      expect(code.scan(static_semantics).size).to eq(1), code
+      expect(code.scan(static_semantics).size).to eq(1 + inner_counts.fetch(type, 0)), code
       expect(imports).to include(:semantics_disabled)
+    end
+
+    it "#{type}: inside false, every node inside it a user operates reads disabled too" do
+      code, = emit.call(stopping.call(false, node.call(type, more)))
+      nodes = inner_nodes.call(code, static_semantics)
+      expect(nodes.size).to eq(inner_counts.fetch(type, 0)), code
+      expect(nodes.reject { |_, carries| carries }).to eq([]), code
+    end
+
+    it "#{type}: inside a binding, every node inside it reads the binding" do
+      code, = emit.call(stopping.call('@{u}', node.call(type, more)))
+      nodes = inner_nodes.call(code, bound_semantics)
+      expect(nodes.size).to eq(inner_counts.fetch(type, 0)), code
+      expect(nodes.reject { |_, carries| carries }).to eq([]), code
     end
 
     it "#{type}: inside a binding, every write and the disabled read follow it" do
@@ -85,6 +116,37 @@ RSpec.describe 'kjui a control a stop holds' do
       expect(code).not_to include('jsonuiInteractionStopped')
       expect(code).not_to include('disabled()')
     end
+  end
+
+  it 'a CheckBox with a label: its Checkbox, a node of its own inside the row, reads disabled too' do
+    code, = emit.call(stopping.call(false, node.call('CheckBox', 'isOn' => '@{on}', 'text' => 'cb')))
+    expect(inner_nodes.call(code, static_semantics)).to eq([['Checkbox', true]]), code
+    code, = emit.call(stopping.call('@{u}', node.call('CheckBox', 'isOn' => '@{on}', 'text' => 'cb')))
+    expect(inner_nodes.call(code, bound_semantics)).to eq([['Checkbox', true]]), code
+  end
+
+  it 'a Radio of its own (a group member): its RadioButton reads disabled too' do
+    code, = emit.call(stopping.call(false, node.call('Radio', 'group' => 'g', 'text' => 'one', 'selectedValue' => '@{sel}')))
+    expect(inner_nodes.call(code, static_semantics)).to eq([['RadioButton', true]]), code
+  end
+
+  it "an inner composable's own modifier takes the read in front" do
+    code, = emit.call(stopping.call(false, node.call('Radio', 'group' => 'g', 'text' => 'one', 'iconSize' => 24, 'selectedValue' => '@{sel}')))
+    call = code[/RadioButton\(.*?\n\s*\)/m] or raise code
+    expect(call).to include('modifier = Modifier.semantics { disabled() }.size(24.dp)'), code
+    expect(call.scan('modifier =').size).to eq(1), code
+  end
+
+  # The rule asks the type a node is drawn as (TypeSynonyms.drawn_type, 4f's
+  # ruling, jsonui-cli 1.9.0): a Picker is drawn as a SelectBox — a control —
+  # and a TableView as a Collection, a container.
+  it 'a synonym spelling is the control or the container it is drawn as' do
+    code, = emit.call(stopping.call(false, node.call('Picker', 'items' => %w[a b], 'selectedIndex' => '@{idx}')))
+    expect(code.scan('viewModel.updateData(').size).to be >= 1
+    expect(code.scan('if (false) viewModel.updateData(').size).to eq(code.scan('viewModel.updateData(').size), code
+    expect(code).to include(static_semantics)
+    code, = emit.call(stopping.call(false, { 'type' => 'TableView', 'id' => 't' }))
+    expect(code).not_to include('disabled()')
   end
 
   it 'a Button inside false reads disabled (its onClick is shut already)' do

@@ -8,6 +8,9 @@ require_relative '../../core/node_keys'
 # binding's content can be an expression at all.
 require_relative '../../core/attribute_validator_core'
 require_relative '../../core/attribute_validator'
+# A handler's declared closure: how a tap calls it (declared_tap_call).
+require_relative '../../core/binding_validator_core'
+require_relative '../../core/type_converter'
 require_relative '../../core/tap_accessibility'
 # The one escaper for an author's text in the generated TS/TSX.
 require_relative '../../core/string_literals'
@@ -1314,27 +1317,103 @@ module RjuiTools
         # is what UIKit's SJUIView.canTap does (the recogniser checks it) and
         # what the Compose codegen does with `.clickable(enabled = …)`.
         # `userInteractionEnabled` is the stronger one and blocks the subtree.
-        def can_tap_gated_click(handler_expr)
+        #
+        # canTap gates every spelling of the tap — the onClick binding, the
+        # onclick selectors, the link action, an Image's click (31's
+        # 16b85a09). `calls` are the tap's statements: each handler called as
+        # its declaration asks (declared_tap_call), or the link action's
+        # `window.open(…)`. The element's handler takes the event only for a
+        # call that hands it on. An array of selectors (`calls` an Array) is a
+        # block, one call or several.
+        def can_tap_gated_click(calls)
+          block = calls.is_a?(Array)
+          calls = Array(calls)
           value = attributes['canTap']
-          return " onClick={#{handler_expr}}" if value.nil? || value == true || value == 'true'
           return '' if value == false || value == 'false'
-          return " onClick={#{handler_expr}}" unless has_binding?(value)
 
-          gate = extract_binding_property(value)
-          # A member path is a handler, called with the event; any other
-          # expression (the selector array's arrow function, the link
-          # action's) takes no argument and is called in parentheses —
-          # `() => { … }?.(e)` does not parse, and `(() => …)(e)` passes an
-          # argument it does not take (TS2554 under --strict).
-          event = click_takes_event?
-          call = handler_expr.match?(/\A[\w.]+\z/) ? "#{handler_expr}?.(#{event ? 'e' : ''})" : "(#{handler_expr})()"
-          " onClick={(#{event ? 'e' : ''}) => { if (#{gate}) #{call}; }}"
+          params = calls.any? { |c| c.include?('?.(e)') } ? '(e)' : '()'
+          statements = calls.map { |c| "#{c};" }.join(' ')
+          if value.is_a?(String) && has_binding?(value)
+            gate = extract_binding_property(value)
+            return " onClick={#{params} => { if (#{gate}) #{block && calls.size > 1 ? "{ #{statements} }" : statements} }}"
+          end
+
+          " onClick={#{params} => #{block ? "{ #{statements} }" : calls.first}}"
+        end
+
+        # A tap's handler, called as the layout's data declares its closure
+        # (4f's ruling on control-onclick-is-called-differently-on-every-path,
+        # jsonui-cli 1.9.0 — sjui's no_value_call, kjui's call as declared):
+        # `(String)` with the viewId (view_id_expr: the id, else the drawn type
+        # and the position), `(Event)` with the element's event (the React
+        # event the Data model types it as), and `()`, a handler the data does
+        # not declare, or any other shape with nothing. web handed every bound
+        # tap the event — `onClick={data.onTap}`, and `data.onTap?.(e)` under a
+        # bound canTap, TS2554 for a declared `() => void` — so a declared
+        # `(String)` took the event where the viewId goes. `callee` is the
+        # expression (`data.onTap`).
+        #
+        # `sender`: the selector spelling `name:`, UIKit's sender mark — sjui
+        # calls `data.name?(self)` — whose sender on the web is the event the
+        # element hands it (31's 16b85a09). An element that hands no event
+        # (click_takes_event?) calls these with nothing.
+        def declared_tap_call(callee, sender: false)
+          event = click_takes_event? ? 'e' : ''
+          return "#{callee}?.(#{event})" if sender
+
+          case self.class.declared_parameters(callee.sub(/\Adata\./, ''), config['_data_classes'] || {})
+          when ['String'] then "#{callee}?.(#{view_id_expr})"
+          when ['Event'] then "#{callee}?.(#{event})"
+          else "#{callee}?.()"
+          end
+        end
+
+        # The parameters of the closure the layout's data declares `name` as
+        # (the web class of a platform-keyed one) — [] when it declares none
+        # or no closure.
+        def self.declared_parameters(name, data_classes)
+          klass = data_classes[name]
+          klass = Core::TypeConverter.extract_platform_value(klass, 'react') if klass.is_a?(Hash)
+          JsonUIShared::BindingValidatorCore.closure_parameters(klass.is_a?(String) ? klass : nil) || []
+        end
+
+        # The names of the handlers a node's tap and long press call: a
+        # binding on onClick / onLongPress, the selectors of onclick.
+        def self.tap_handler_names(node)
+          names = []
+          %w[onClick onLongPress].each do |key|
+            name = node[key].is_a?(String) && node[key][/\A@\{\s*([A-Za-z_][A-Za-z0-9_]*)\s*\}\z/, 1]
+            names << name if name
+          end
+          selectors = node['onclick']
+          selectors = [selectors] if selectors.is_a?(String)
+          names.concat(Array(selectors).select { |s| s.is_a?(String) && s.match?(/\A[A-Za-z_][A-Za-z0-9_]*\z/) })
+        end
+
+        # Whether a node hands a tap's handler its viewId — a handler the data
+        # declares `(String)` (declared_tap_call). The judgment IncludePaths
+        # takes too (which layouts take `jsonuiPath`).
+        def self.tap_hands_view_id?(node, data_classes)
+          node.is_a?(Hash) && tap_handler_names(node).any? { |name| declared_parameters(name, data_classes) == ['String'] }
+        end
+
+        # The viewId (JsonUIShared::LayoutPath.view_id): the id, else the
+        # drawn type and the node's position. In a layout that takes
+        # `jsonuiPath` (an included one, IncludePaths), the position above the
+        # layout's own root comes in at run time: `selectBox_${jsonuiPath}_1`.
+        def view_id_expr
+          return JsonUIShared::StringLiterals.ts(JsonUIShared::LayoutPath.view_id(json)) if attributes['id'] || !config['_path_prop']
+
+          path = json[JsonUIShared::LayoutPath::KEY] || '0'
+          stem = JsonUIShared::LayoutPath.view_id(json, '').chomp('_')
+          "`#{JsonUIShared::StringLiterals.ts_template_body(stem)}_${jsonuiPath}#{path.sub(/\A0/, '')}`"
         end
 
         # Whether the element the click lands on hands its onClick an event:
         # a DOM element does; a built-in component may declare
         # `onClick?: () => void` (NetworkImage), where `(e) => …` is not
-        # assignable.
+        # assignable (31's 16b85a09) — there a call that would hand the event
+        # on hands nothing.
         def click_takes_event?
           true
         end
@@ -1377,7 +1456,7 @@ module RjuiTools
           if JsonUIShared::TapAccessibility.handler?(handler)
             return [] unless is_binding_format?(handler)
 
-            return ["#{add_viewmodel_data_prefix(handler.gsub(/@\{|\}/, ''))}?.();"]
+            return ["#{declared_operation_call(add_viewmodel_data_prefix(handler.gsub(/@\{|\}/, '')))};"]
           end
           selectors = attributes['onclick']
           return [] unless JsonUIShared::TapAccessibility.handler?(selectors)
@@ -1385,7 +1464,15 @@ module RjuiTools
           names = selectors.is_a?(Array) ? JsonUIShared::TapAccessibility.handler_values(selectors) : [selectors]
           return [] if names.any? { |name| is_binding_format?(name) }
 
-          names.map { |name| "data.#{name}?.();" }
+          names.map { |name| "#{declared_operation_call("data.#{name}")};" }
+        end
+
+        # A control's onClick from its operation, as declared
+        # (declared_tap_call): the operation's handler has no event to hand
+        # on, so a declared `(Event)` is called with nothing, as before.
+        def declared_operation_call(callee)
+          call = declared_tap_call(callee)
+          call.end_with?('?.(e)') ? "#{callee}?.()" : call
         end
 
         # One operation handler attribute: the control's own update (`own`, an
@@ -1981,14 +2068,15 @@ module RjuiTools
               # Action object: { "action": "link", "url": "..." }
               if handler['action'] == 'link' && handler['url']
                 url = handler['url']
-                return can_tap_gated_click("() => window.open(#{JsonUIShared::StringLiterals.ts_single(url)}, '_blank')")
+                return can_tap_gated_click("window.open(#{JsonUIShared::StringLiterals.ts_single(url)}, '_blank')")
               else
                 return ''
               end
             elsif is_binding_format?(handler)
-              # Valid binding: @{handleClick} -> viewModel.data.handleClick
+              # Valid binding: @{handleClick} -> data.handleClick, called as
+              # the data declares it (declared_tap_call)
               prop = handler.gsub(/@\{|\}/, '')
-              return can_tap_gated_click(add_viewmodel_data_prefix(prop))
+              return can_tap_gated_click(declared_tap_call(add_viewmodel_data_prefix(prop)))
             else
               # ERROR: onClick (camelCase) must use binding format. The marker
               # is a comment between the attributes: `{/* … */}` there is a
@@ -2003,36 +2091,53 @@ module RjuiTools
           # tap rule: every spelling of the tap) — this form, and the link
           # action above, went out ungated, so `canTap: false` still tapped.
           if JsonUIShared::TapAccessibility.handler?(attributes['onclick'])
-            expr = onclick_selector_expr(attributes['onclick'])
-            return expr ? can_tap_gated_click(expr) : " /* ERROR: onclick requires selector format (string) */"
+            calls = onclick_selector_calls(attributes['onclick'])
+            return " /* ERROR: onclick requires selector format (string) */" unless calls
+
+            return can_tap_gated_click(attributes['onclick'].is_a?(Array) ? calls : calls.first)
           end
 
           ''
         end
 
-        # The declared onclick as a JS expression, or nil for the
+        # The declared onclick as the tap's calls, or nil for the
         # not-a-selector error case. The declaration is string|array
         # (attribute_definitions common.onclick); interpolating the array
         # directly produced `data.["a", "b"]`, which is not syntax. Multiple
         # selectors are called in declared order — the semantics the ios
         # codegen (both selectors emitted) already exhibits. A blank element
         # is not called (TapAccessibility.handler_values): it emitted `data.?.()`.
-        def onclick_selector_expr(handler)
+        def onclick_selector_calls(handler)
           if handler.is_a?(Array)
             names = JsonUIShared::TapAccessibility.handler_values(handler)
             return nil if names.empty? || names.any? { |h| is_binding_format?(h) }
 
-            calls = names.map { |h| "data.#{h}?.();" }.join(' ')
-            "() => { #{calls} }"
+            names.map { |h| selector_call(h) }
           elsif is_binding_format?(handler)
             nil
           else
-            # Valid selector: functionName -> data.functionName. `name:` is
-            # UIKit's sender mark — sjui calls `data.name?(self)` — and the
-            # web's sender is the event the handler is handed; the colon
-            # emitted `data.name:`, which does not parse.
-            "data.#{handler.to_s.chomp(':')}"
+            [selector_call(handler)]
           end
+        end
+
+        # One selector, called: a method of the data, as the data declares it
+        # (declared_tap_call); `name:` is UIKit's sender mark, handed the
+        # web's sender, the event — the colon emitted `data.name:`, which does
+        # not parse (31's 16b85a09).
+        def selector_call(name)
+          name = name.to_s
+          return declared_tap_call("data.#{name.chomp(':')}", sender: true) if name.end_with?(':')
+
+          declared_tap_call("data.#{name}")
+        end
+
+        # The selectors as one function (a Label range's onClick,
+        # build_partial_specs).
+        def onclick_selector_expr(handler)
+          calls = onclick_selector_calls(handler)
+          return nil unless calls
+
+          "#{calls.any? { |c| c.include?('?.(e)') } ? '(e)' : '()'} => { #{calls.map { |c| "#{c};" }.join(' ')} }"
         end
 
         # Whether the element has a tap: a handler on either spelling

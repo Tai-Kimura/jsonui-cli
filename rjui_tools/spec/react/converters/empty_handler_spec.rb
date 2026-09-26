@@ -81,7 +81,7 @@ RSpec.describe 'rjui empty and blank tap handlers' do
     fallback = view('onClick' => '', 'onclick' => 'onOpen')
     ranged = label('onclick' => 'onOpen')
     expect(array).to include('onClick={() => { data.onOpen?.(); }}')
-    expect(fallback).to include('onClick={data.onOpen}')
+    expect(fallback).to include('onClick={() => data.onOpen?.()}')
     expect(ranged).to include('onClick: data.onOpen')
     [array, fallback, ranged].each { |code| expect(code).to include('cursor-pointer') }
     expect(tsx(array, fallback, ranged)).to compile_as_typescript.with_ambient(EMPTY_TAP_AMBIENT)

@@ -932,15 +932,27 @@ module SjuiTools
         # bound flags' `false` for a binding, and — in a layout a stop can
         # reach — the stop handed down, which the modifier reads from the
         # environment itself. nil for a control no stop can reach.
+        # `items: true` for a control whose items are elements of their own
+        # (stopped_items?).
         def stopped_control_line
           return nil unless JsonUIShared::TapAccessibility.control?(@component)
-          return '.jsonuiStoppedControl(true)' if JsonUIShared::TapAccessibility.stopped?(@component)
+
+          items = stopped_items? ? 'items: true' : nil
+          return ".jsonuiStoppedControl(#{['true', items].compact.join(', ')})" if JsonUIShared::TapAccessibility.stopped?(@component)
 
           gates = JsonUIShared::TapAccessibility.interaction_gates(@component).map { |gate| tap_gate_expr(gate) }
-          return ".jsonuiStoppedControl(!(#{gates.join(' && ')}))" unless gates.empty?
-          return '.jsonuiStoppedControl()' if self.class.reads_interaction_environment?
+          return ".jsonuiStoppedControl(#{["!(#{gates.join(' && ')})", items].compact.join(', ')})" unless gates.empty?
+          return ".jsonuiStoppedControl(#{items})" if self.class.reads_interaction_environment?
 
           nil
+        end
+
+        # Whether the control's items are accessibility elements of their own
+        # that the stopped control's treatment does not reach as modifiers on
+        # the control — SegmentConverter says yes (JsonUIStoppedControl
+        # `items`, SwiftJsonUI).
+        def stopped_items?
+          false
         end
 
         # A node whose `userInteractionEnabled` is false or bound, holding a

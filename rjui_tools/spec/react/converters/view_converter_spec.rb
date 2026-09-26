@@ -227,7 +227,7 @@ RSpec.describe RjuiTools::React::Converters::ViewConverter do
         'child' => []
       })
       attrs = converter.send(:build_event_attrs)
-      expect(attrs).to include('onContextMenu={(e) => { e.preventDefault(); data.handleLongPress?.(e); }}')
+      expect(attrs).to include('onContextMenu={(e) => { e.preventDefault(); data.handleLongPress?.(); }}')
     end
 
     it 'emits data-prefixed guarded handler for onLongPress selector format' do
@@ -237,7 +237,7 @@ RSpec.describe RjuiTools::React::Converters::ViewConverter do
         'child' => []
       })
       attrs = converter.send(:build_event_attrs)
-      expect(attrs).to include('data.handleLongPress?.(e)')
+      expect(attrs).to include('data.handleLongPress?.()')
     end
 
     # Canonical contract: the bound value is a FUNCTION, not an
@@ -610,12 +610,12 @@ RSpec.describe RjuiTools::React::Converters::ViewConverter, 'touch gating' do
 
     it 'gates the handler on a binding' do
       expect(view('canTap' => '@{isTappable}'))
-        .to include('onClick={(e) => { if (data.isTappable) data.tap?.(e); }}')
+        .to include('onClick={() => { if (data.isTappable) data.tap?.(); }}')
     end
 
     it 'leaves the handler alone for true or absent' do
-      expect(view('canTap' => true)).to include('onClick={data.tap}')
-      expect(view({})).to include('onClick={data.tap}')
+      expect(view('canTap' => true)).to include('onClick={() => data.tap?.()}')
+      expect(view({})).to include('onClick={() => data.tap?.()}')
     end
   end
 

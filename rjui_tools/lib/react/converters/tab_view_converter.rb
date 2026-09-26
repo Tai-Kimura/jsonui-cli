@@ -139,7 +139,7 @@ module RjuiTools
           <<~JSX.chomp
             #{indent_str(6)}<button#{tab_id_attr}
             #{indent_str(8)}className={`#{button_class}`}#{style_attr}
-            #{indent_str(8)}onClick={#{@seeded ? "() => { setSeeded(#{index}); #{on_change}?.(#{index}); }" : "() => #{on_change}?.(#{index})"}}#{disabled_attr}
+            #{indent_str(8)}onClick={#{@seeded ? "() => { setSeeded(#{index}); #{tab_change_call(on_change, index)}; }" : "() => #{tab_change_call(on_change, index)}"}}#{disabled_attr}
             #{indent_str(6)}>
             #{indent_str(8)}<div className="relative">
             #{icon_jsx}#{badge_jsx ? "\n#{badge_jsx}" : ''}
@@ -278,6 +278,26 @@ module RjuiTools
             # that passes no setter changed nothing.
             '(data.selectedTabIndex ?? seeded)'
           end
+        end
+
+        # The tab's call: the selection setter with the index, or a bound
+        # onValueChange as the layout's data declares it — `()` with nothing,
+        # `(String, X)` with the viewId first, anything else (and a handler
+        # the data does not declare, which the Data model types as taking
+        # the index) with the index. It was called with the index whatever
+        # it took (TS2554 against a declared `() => void`); sjui and kjui call
+        # it as declared too (get_event_handler_invocation).
+        def tab_change_call(on_change, index)
+          handler = attributes['onValueChange']
+          name = handler.is_a?(String) && has_binding?(handler) ? extract_raw_binding_property(handler).to_s.strip : nil
+          classes = config['_data_classes'] || {}
+          return "#{on_change}?.(#{index})" unless name && classes.key?(name)
+
+          params = self.class.declared_parameters(name, classes)
+          return "#{on_change}?.()" if params.empty?
+          return "#{on_change}?.(#{view_id_expr}, #{index})" if params.size == 2 && params.first == 'String'
+
+          "#{on_change}?.(#{index})"
         end
 
         def build_on_change

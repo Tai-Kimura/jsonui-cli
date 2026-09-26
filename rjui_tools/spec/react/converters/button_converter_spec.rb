@@ -90,7 +90,7 @@ RSpec.describe RjuiTools::React::Converters::ButtonConverter do
           'onclick' => 'handleSubmit'
         })
         result = converter.convert
-        expect(result).to include('onClick={data.handleSubmit}')
+        expect(result).to include('onClick={() => data.handleSubmit?.()}')
       end
     end
 

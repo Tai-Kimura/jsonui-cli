@@ -134,7 +134,7 @@ RSpec.describe RjuiTools::React::Converters::NetworkImageConverter do
       it 'adds onClick binding' do
         converter = create_converter({ 'class' => 'NetworkImage', 'url' => 'https://example.com/image.jpg', 'onClick' => '@{handleImageClick}' })
         result = converter.convert
-        expect(result).to include('onClick={data.handleImageClick}')
+        expect(result).to include('onClick={() => data.handleImageClick?.()}')
       end
     end
 

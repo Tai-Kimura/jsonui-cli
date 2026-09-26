@@ -319,7 +319,7 @@ RSpec.describe RjuiTools::React::Converters::ImageConverter do
           'onclick' => 'handleImageClick'
         })
         result = converter.convert
-        expect(result).to include('onClick={data.handleImageClick}')
+        expect(result).to include('onClick={() => data.handleImageClick?.()}')
       end
     end
 
@@ -334,7 +334,7 @@ RSpec.describe RjuiTools::React::Converters::ImageConverter do
           'onclick' => 'handleImageClick:'
         })
         result = converter.convert
-        expect(result).to include('onClick={data.handleImageClick}')
+        expect(result).to include('onClick={(e) => data.handleImageClick?.(e)}')
       end
     end
 
@@ -346,7 +346,7 @@ RSpec.describe RjuiTools::React::Converters::ImageConverter do
           'onclick' => 'handleImageClick'
         })
         result = converter.convert
-        expect(result).to include('onClick={data.handleImageClick}')
+        expect(result).to include('onClick={() => data.handleImageClick?.()}')
       end
     end
   end

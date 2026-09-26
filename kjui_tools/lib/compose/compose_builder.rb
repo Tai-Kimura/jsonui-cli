@@ -581,6 +581,9 @@ module KjuiTools
       #   handed down too): a key press on a focused control, and the inner
       #   node of a wrapped one (a Radio's item, a Segment's tab), write
       #   nothing.
+      # - the nodes inside it a user operates on their own read `disabled()`
+      #   too (stop_inner_nodes): a Radio's rows and RadioButtons, a
+      #   Segment's Tabs, a CheckBox's Checkbox.
       # `false` on it or around it shuts both; a binding gates both.
       def stop_held_control(json_data, code)
         return code unless code.is_a?(String) && JsonUIShared::TapAccessibility.control?(json_data)
@@ -597,7 +600,83 @@ module KjuiTools
         pad = code[(line_start + 1)...at]
         disabled = gate == 'false' ? '.semantics { disabled() }' : ".then(if (!(#{gate})) Modifier.semantics { disabled() } else Modifier)"
         @required_imports&.add(:semantics_disabled)
-        code[0...(at + semantics.length)] + "\n#{pad}#{disabled}" + code[(at + semantics.length)..]
+        code = code[0...(at + semantics.length)] + "\n#{pad}#{disabled}" + code[(at + semantics.length)..]
+        stop_inner_nodes(code, gate, disabled)
+      end
+
+      # The composables inside a control that are nodes of their own with a
+      # click action: a Radio's RadioButton, a CheckBox's Checkbox, a
+      # Segment's Tab. Each takes a `modifier`.
+      INNER_CONTROL_CALLS = %w[RadioButton Checkbox Tab].freeze
+
+      # The nodes inside a stopped control a user operates on their own — a
+      # Radio's rows (`.clickable`) and RadioButtons, a Segment's Tabs, a
+      # CheckBox's Checkbox — read `disabled()` as its root does. The root's
+      # `disabled()` is its node's alone: each of these is a node with its own
+      # click action, which TalkBack reached and read as enabled (4f's
+      # ruling, jsonui-cli 1.9.0: a stopped control does not say it is
+      # operable, down to its items). `chain` is the root's modifier element;
+      # a composable's own `modifier` takes it in front, or gets it.
+      def stop_inner_nodes(code, gate, chain)
+        code = code.gsub(/\.(clickable|toggleable|selectable)\b/) { "#{chain}.#{Regexp.last_match(1)}" }
+        argument = gate == 'false' ? 'Modifier.semantics { disabled() }' : "if (!(#{gate})) Modifier.semantics { disabled() } else Modifier"
+        out = +''
+        rest = code
+        while (m = /\b(#{INNER_CONTROL_CALLS.join('|')})\(/.match(rest))
+          open = m.end(0) - 1
+          close = closing_paren(rest, open)
+          break unless close
+
+          args = rest[(open + 1)...close]
+          # The control's root (a Checkbox without a label) has its read.
+          args = if args.include?('testTagsAsResourceId')
+                   args
+                 elsif (existing = /(\A|\n|,)(\s*)modifier = Modifier\b/.match(top_level_text(args)))
+                   at = existing.end(0)
+                   args[0...at] + chain + args[at..]
+                 else
+                   first = args[/\A\n([ \t]*)/, 1]
+                   first ? "\n#{first}modifier = #{argument},#{args}" : "modifier = #{argument}, #{args}"
+                 end
+          out << rest[0..open] << args << ')'
+          rest = rest[(close + 1)..]
+        end
+        out << rest
+      end
+
+      # The index of the `)` closing the `(` at `open`, past strings and
+      # nested brackets; nil when it does not close.
+      def closing_paren(text, open)
+        depth = 0
+        quote = nil
+        i = open
+        while i < text.length
+          c = text[i]
+          if quote
+            if c == '\\' then i += 1
+            elsif c == quote then quote = nil
+            end
+          elsif c == '"' || c == "'" then quote = c
+          elsif '([{'.include?(c) then depth += 1
+          elsif ')]}'.include?(c)
+            depth -= 1
+            return i if depth.zero?
+          end
+          i += 1
+        end
+        nil
+      end
+
+      # `args` with every nested bracket's content blanked (same length), so
+      # a match on it is a match at the call's own level.
+      def top_level_text(args)
+        depth = 0
+        args.chars.map do |c|
+          if '([{'.include?(c) then depth += 1; depth == 1 ? c : ' '
+          elsif ')]}'.include?(c) then depth -= 1; depth.zero? ? c : ' '
+          else depth.zero? ? c : (c == "\n" ? "\n" : ' ')
+          end
+        end.join
       end
 
       # The stop's gate for what a control operates, as one Kotlin condition:

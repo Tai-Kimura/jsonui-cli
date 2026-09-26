@@ -120,6 +120,50 @@ RSpec.describe KjuiTools::Compose::Components::TabviewComponent do
     end
   end
 
+  # onValueChange (onTabChange / onPageChanged its aliases), after each tab's
+  # selection is written, called as the data declares it: `(Int)` with the
+  # index, `(String, Int)` with the viewId first, `()` with nothing. Compose
+  # read no handler at all — the handler was never called.
+  describe 'the tab-change handler' do
+    after { KjuiTools::Compose::Helpers::ResourceResolver.data_definitions = {} }
+
+    classes = { 'onTab' => '((Int) -> Unit)?', 'onTabId' => '((String, Int) -> Unit)?', 'onTabNone' => '(() -> Unit)?' }
+    node = lambda do |handler_key, handler, selection = { 'selectedIndex' => '@{sel}' }|
+      { 'type' => 'TabView', 'id' => 'tv', 'tabs' => [{ 'title' => 'One' }, { 'title' => 'Two' }], handler_key => "@{#{handler}}" }.merge(selection)
+    end
+
+    it 'is called from each tab, after the selection, as the data declares it' do
+      KjuiTools::Compose::Helpers::ResourceResolver.data_definitions = classes.transform_values { |c| { 'class' => c } }
+      expect(described_class.generate(node.call('onValueChange', 'onTab'), 0, required_imports))
+        .to include('onClick = { viewModel.updateData(mapOf("sel" to 1)); data.onTab?.invoke(1) },')
+      expect(described_class.generate(node.call('onTabChange', 'onTabId'), 0, required_imports))
+        .to include('data.onTabId?.invoke("tv", 0) },')
+      expect(described_class.generate(node.call('onPageChanged', 'onTabNone', {}), 0, required_imports))
+        .to include('onClick = { selectedTab = 1; data.onTabNone?.invoke() },')
+    end
+
+    it 'emits Kotlin that compiles for each declared shape' do
+      KjuiTools::Compose::Helpers::ResourceResolver.data_definitions = classes.transform_values { |c| { 'class' => c } }
+      bodies = classes.keys.map.with_index do |handler, i|
+        # No id: the TabView stub universe draws no testTag (the viewId is
+        # then the node's position).
+        code = described_class.generate(node.call('onValueChange', handler, i.zero? ? {} : { 'selectedIndex' => '@{sel}' }).except('id'), 1, required_imports)
+        "fun emitted#{i}(data: Data, viewModel: ViewModel) {\n#{code}\n}"
+      end
+      expect(<<~KOTLIN).to compile_as_kotlin
+        #{ComposeStubUniverse.tabview(bodies.join("\n"))}
+        class ViewModel { fun updateData(values: Map<String, Any?>) {} }
+        data class Data(
+            val sel: Int = 0,
+            val onTab: ((Int) -> Unit)? = null,
+            val onTabId: ((String, Int) -> Unit)? = null,
+            val onTabNone: (() -> Unit)? = null
+        )
+        #{bodies.join("\n\n")}
+      KOTLIN
+    end
+  end
+
   # One broad arm: every badge shape, labelled and not, well-typed against
   # the TabView stub universe (spec/support/compose_stub_universe.rb). Types
   # against stubs only — not the Compose compiler's rules. Before the fix

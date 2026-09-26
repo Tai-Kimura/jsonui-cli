@@ -3,6 +3,7 @@
 require_relative '../../spec_helper'
 require 'react/converters/view_converter'
 require 'react/converters/label_converter'
+require 'react/converters/button_converter'
 
 RSpec.describe 'Responsive integration with converters' do
   let(:default_config) { { 'use_tailwind' => true } }
