@@ -52,10 +52,24 @@ RSpec.describe JsonUIShared::ImageAccessibility do
       skip 'shared/core not present in this layout' unless File.exist?(definitions_path)
     end
 
-    it 'counts as images exactly Image, its type aliases and NetworkImage' do
-      metadata = JSON.parse(File.read(metadata_path))
-      declared = ['Image', 'NetworkImage'] + metadata['Image']['aliases'] + metadata['NetworkImage']['aliases']
-      expect(described_class::IMAGE_TYPES.sort).to eq(declared.sort)
+    # An image is a node drawn as Image, CircleImage (a render_as target) or
+    # NetworkImage — read off the table and the declarations, so a spelling
+    # the table gains is counted without an edit here. Until 1.8.121 the
+    # list was component_metadata.json's `aliases` (no AsyncImage, no
+    # NetworkImageView).
+    it 'counts as an image exactly the spellings drawn as Image, CircleImage or NetworkImage' do
+      synonyms = JSON.parse(File.read(File.join(shared_core, 'type_synonyms.json')))['synonyms']
+      definitions = JSON.parse(File.read(definitions_path))
+      aliases = definitions.select { |_, v| v.is_a?(Hash) && v['_alias_of'].is_a?(String) }
+                           .transform_values { |v| v['_alias_of'] }
+      drawn = synonyms.transform_values { |e| e['render_as'] || e['canonical'] }.merge(aliases)
+      images = %w[Image CircleImage NetworkImage]
+      drawn.merge(images.to_h { |t| [t, t] }).merge('Label' => 'Label', 'View' => 'View').each do |spelling, target|
+        expect(described_class.image?({ 'type' => spelling })).to eq(images.include?(target)), spelling
+      end
+      expect(%w[AsyncImage NetworkImageView Img ImageView CircleImageView].map { |t| described_class.image?({ 'type' => t }) })
+        .to all(be(true))
+      expect(described_class::IMAGE_TYPES.sort).to eq(images.sort)
     end
 
     it 'reads alt under its canonical name and every declared alias, on both image components' do

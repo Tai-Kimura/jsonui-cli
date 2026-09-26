@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require 'set'
+require_relative 'type_synonyms'
 
 module JsonUIShared
   # Whether a screen reader is told a tappable is a button — one rule for the
@@ -46,7 +47,10 @@ module JsonUIShared
   # binding and are operable). INTERACTIVE_TYPES and KNOWN_TYPES below are
   # that declaration with its aliases, pinned to it by spec. A type the
   # declaration does not know (a custom component) counts as operable: a
-  # container that might hold a control is not flattened.
+  # container that might hold a control is not flattened. So a tap on an
+  # app's own component gets no role (shape `none`): JsonUI does not know
+  # what the component holds, and a role could hide a control inside it from
+  # a screen reader. The component carries its own role (4f's ruling, 1.9.0).
   module TapAccessibility
     module_function
 
@@ -111,8 +115,14 @@ module JsonUIShared
 
     INTERACTION_KEY = 'userInteractionEnabled'
 
+    # Asked of the type the node is drawn as (type_synonyms.rb): an HStack is
+    # a View, and a Textarea a TextView. Read as written, a synonym the lists
+    # do not hold counted as a custom component (operable), so the tappable
+    # around it was not flattened where the same layout spelled canonically
+    # was. An app's own spelling stays as written (TypeSynonyms.app_types).
     def interactive_type?(type)
-      INTERACTIVE_TYPES.include?(type) || !KNOWN_TYPES.include?(type)
+      drawn = JsonUIShared::TypeSynonyms.drawn_type(type)
+      INTERACTIVE_TYPES.include?(drawn) || !KNOWN_TYPES.include?(drawn)
     end
 
     # A tap the codegen emits: a handler, not statically disabled, and not
@@ -205,7 +215,7 @@ module JsonUIShared
     end
 
     def linked_text?(node)
-      return false unless TEXT_TYPES.include?(node['type'])
+      return false unless TEXT_TYPES.include?(JsonUIShared::TypeSynonyms.drawn_type(node['type']))
 
       linkable = node['linkable']
       return true if linkable == true || (linkable.is_a?(String) && linkable.start_with?('@{'))
@@ -283,26 +293,29 @@ module JsonUIShared
     # TabView tab's view. A stop around them reaches them at run time instead
     # — the stopping node hands it down (SwiftUI's environment, Compose's
     # CompositionLocal) and the drawn view's taps read it.
-    COLLECTION_TYPES = %w[collection table].freeze
     REFERENCE_KEYS = %w[cell header footer].freeze
     REFERENCE_LIST_KEYS = %w[cellClasses headerClasses footerClasses].freeze
 
-    # The names of the layouts `node` itself draws elsewhere.
+    # The names of the layouts `node` itself draws elsewhere. The type is the
+    # one the node is drawn as (type_synonyms.rb): a TableView, a List or a
+    # RecyclerView is drawn as a Collection and draws its cells elsewhere.
+    # Type names are case-sensitive, as the codegen dispatches them: a
+    # lowercase `collection` is drawn as nothing and draws nothing elsewhere.
     def drawn_elsewhere(node)
       return [] unless node.is_a?(Hash)
 
       refs = []
-      type = node['type'].to_s.downcase
-      if COLLECTION_TYPES.include?(type)
+      type = JsonUIShared::TypeSynonyms.drawn_type(node['type'].to_s)
+      if type == 'Collection'
         ([node] + Array(node['sections']).select { |s| s.is_a?(Hash) }).each do |holder|
           REFERENCE_KEYS.each { |key| refs << holder[key] }
         end
         REFERENCE_LIST_KEYS.each do |key|
           Array(node[key]).each { |item| refs << (item.is_a?(Hash) ? item['className'] : item) }
         end
-      elsif type == 'embed'
+      elsif type == 'Embed'
         refs << node['screen']
-      elsif type == 'tabview'
+      elsif type == 'TabView'
         Array(node['tabs']).each { |tab| refs << tab['view'] if tab.is_a?(Hash) }
       end
       refs.select { |r| r.is_a?(String) && !r.empty? && !r.start_with?('@{') }.uniq

@@ -9,6 +9,7 @@ require_relative '../../core/logger'
 require_relative '../../core/resources_manager'
 require_relative '../../core/plural_validator'
 require_relative '../../core/attribute_validator'
+require_relative '../../core/type_synonyms'
 require_relative '../../core/normalization'
 require_relative '../../core/binding_validator'
 require_relative '../../core/layout_variant'
@@ -24,6 +25,22 @@ module SjuiTools
 
           # Detect mode
           mode = options[:mode] || Core::ConfigManager.detect_mode
+
+          # The app's own converter spellings, before anything reads a layout:
+          # the validators and the data model classify a node by the type it
+          # is drawn as, and a registered spelling is drawn as written
+          # (shared/core/type_synonyms.rb, TypeSynonyms.app_types).
+          require_relative '../../swiftui/converter_factory'
+          JsonUIShared::TypeSynonyms.app_types = SwiftUI::ConverterFactory.custom_types
+
+          # What Debug (SwiftJsonUI Dynamic) draws for the app's own
+          # components, against what this build draws: named, not changed.
+          require_relative '../../swiftui/app_component_dynamic_check'
+          require_relative '../../swiftui/generators/adapter_generator'
+          SwiftUI::AppComponentDynamicCheck.warnings(
+            SwiftUI::Generators::AdapterGenerator.allocate.send(:get_adapter_directory),
+            mappings: SwiftUI::ConverterFactory.custom_types
+          ).each { |line| Core::Logger.warn line }
 
           # Store validation results
           @validation_warnings = []
@@ -292,7 +309,7 @@ module SjuiTools
                                          hierarchy: hierarchy)
 
           # Warn if Collection has items binding but no sections defined
-          if SwiftUI::DrawnTypes::COLLECTION.include?(json_data['type']) && json_data['items'] && (!json_data['sections'] || json_data['sections'].empty?)
+          if JsonUIShared::TypeSynonyms.section(json_data['type']) == 'Collection' && json_data['items'] && (!json_data['sections'] || json_data['sections'].empty?)
             loc = hierarchy || 'root'
             warnings << "⚠️  [#{loc}] Collection has 'items' binding but no 'sections' defined. In SwiftUI mode, collections with 'items' should define 'sections' for proper cell rendering."
           end
@@ -304,7 +321,7 @@ module SjuiTools
           end
 
           # Warn if ScrollView has multiple child views (should wrap in a single View container)
-          if SwiftUI::DrawnTypes::SCROLL_VIEW.include?(json_data['type'])
+          if SwiftUI::DrawnTypes.scroll_view?(json_data['type'])
             child_data = json_data['child'] || json_data['children'] || []
             child_data = [child_data] unless child_data.is_a?(Array)
             ui_children = child_data.select { |c| c.is_a?(Hash) && (c['type'] || c['include']) }
@@ -556,6 +573,7 @@ module SjuiTools
           end
 
           converter = SjuiTools::SwiftUI::JsonToSwiftUIConverter.new
+          converter.unknown_type_validator = validator if validator
           # Which layouts are cells / headers / footers of a vertically
           # scrolling Collection — decided over the WHOLE tree, like the
           # screen index below, so a wrapping flow inside such a cell lets

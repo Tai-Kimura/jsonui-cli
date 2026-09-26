@@ -4,6 +4,7 @@ require 'json'
 require 'fileutils'
 require 'set'
 require_relative 'layout_variant'
+require_relative 'type_synonyms'
 
 module JsonUIShared
   # Shared body of the sjui/kjui Data-model updaters: walks every layout
@@ -250,17 +251,20 @@ module JsonUIShared
       return bindings unless json_data.is_a?(Hash) || json_data.is_a?(Array)
 
       if json_data.is_a?(Hash)
-        component_type = json_data['type']
+        # The type the node is drawn as (a synonym or alias spelling maps to
+        # the handler types of what draws it — type_synonyms.rb)
+        component_type = JsonUIShared::TypeSynonyms.drawn_type(json_data['type'])
 
         event_binding_attrs.each do |attr|
           value = json_data[attr]
           next unless value.is_a?(String) && value.start_with?('@{') && value.end_with?('}')
 
           handler_name = value[2...-1]
-          # onToggle is an alias of onValueChange on Switch/Toggle.
-          # Normalize so type_mapping.json (keyed on onValueChange) resolves correctly.
+          # onToggle is an alias of onValueChange on Switch (Toggle is drawn
+          # as Switch). Normalize so type_mapping.json (keyed on
+          # onValueChange) resolves correctly.
           normalized_attr = attr
-          if attr == 'onToggle' && %w[Switch Toggle].include?(component_type)
+          if attr == 'onToggle' && component_type == 'Switch'
             normalized_attr = 'onValueChange'
           end
           bindings[handler_name] = {
@@ -304,7 +308,7 @@ module JsonUIShared
       return result unless json_data.is_a?(Hash) || json_data.is_a?(Array)
 
       if json_data.is_a?(Hash)
-        if json_data['type'] == 'Collection' && json_data['cellIdProperty'] && json_data['scrollTo']
+        if JsonUIShared::TypeSynonyms.drawn_type(json_data['type']) == 'Collection' && json_data['cellIdProperty'] && json_data['scrollTo']
           scroll_to = json_data['scrollTo']
           if scroll_to.is_a?(String) && scroll_to.start_with?('@{') && scroll_to.end_with?('}')
             prop_name = scroll_to[2...-1]
@@ -396,12 +400,13 @@ module JsonUIShared
           end
         end
 
-        # Auto-generate the <id>IsFocused property for TextField / TextView
-        # components (EditText / Input are aliases for TextField —
-        # attribute_definitions `_alias_of: TextField`): the platform
-        # TextField/TextView converters emit data.<id>IsFocused focus wiring
-        # for every component with an id, so the Data type must carry it.
-        if %w[TextField EditText Input TextView].include?(json_data['type']) && json_data['id']
+        # Auto-generate the <id>IsFocused property for a node drawn as a
+        # TextField / TextView — the aliases (EditText, Input) and the
+        # synonyms (Textarea, MultiLineEditText) included, by the type they
+        # are drawn as (type_synonyms.rb): the platform TextField/TextView
+        # converters emit data.<id>IsFocused focus wiring for every component
+        # with an id, so the Data type must carry it.
+        if %w[TextField TextView].include?(JsonUIShared::TypeSynonyms.drawn_type(json_data['type'])) && json_data['id']
           focus_prop_name = snake_to_camel(json_data['id']) + 'IsFocused'
           unless properties.any? { |p| p['name'] == focus_prop_name }
             properties << { 'name' => focus_prop_name, 'class' => boolean_class, 'defaultValue' => false }
@@ -415,7 +420,7 @@ module JsonUIShared
         # the generated view does not compile (caught by the codegen parity
         # host on the Radio fixtures, 2026-08-02). Group 'default' (or no
         # group) maps to selectedRadiogroup — the converter's spelling.
-        if json_data['type'] == 'Radio'
+        if JsonUIShared::TypeSynonyms.drawn_type(json_data['type']) == 'Radio'
           selected_value = json_data['selectedValue']
           unless selected_value.is_a?(String) && selected_value.start_with?('@{')
             group = (json_data['group'] || 'default').to_s

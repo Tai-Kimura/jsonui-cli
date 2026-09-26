@@ -359,11 +359,14 @@ RSpec.describe SjuiTools::SwiftUI::ConverterFactory do
     let(:converter) { SjuiTools::SwiftUI::DefaultConverter.new({ 'type' => 'CustomWidget' }) }
 
     # The unknown-type sentence (JsonUIShared::AttributeValidatorCore
-    # .unknown_component_type_message); it was "Unsupported component: <type>".
-    it 'generates the unknown-type sentence' do
+    # .unknown_component_type_message) in a comment, and nothing drawn; it
+    # was a red Text holding it, and before that "Unsupported component: <type>".
+    it 'writes the unknown-type sentence as a comment and draws nothing' do
       code = converter.convert
-      expect(code).to include(%(Text("Unknown component type 'CustomWidget'")))
-      expect(code).to include('.foregroundColor(.red)')
+      expect(code).to include("// Unknown component type 'CustomWidget'")
+      expect(code).to include('EmptyView()')
+      expect(code).not_to include('Text(')
+      expect(code).not_to include('.foregroundColor(.red)')
     end
   end
 end

@@ -15,6 +15,7 @@ require_relative 'style_loader'
 require_relative 'helpers/string_manager_helper'
 require_relative 'include_expander'
 require_relative '../core/attribute_validator'
+require_relative '../core/type_synonyms'
 require_relative '../core/layout_validator'
 require_relative '../core/image_accessibility'
 require_relative '../core/tap_accessibility'
@@ -31,6 +32,12 @@ module SjuiTools
         @converter_factory = ConverterFactory.new(@binding_registry)
         @action_manager = ActionManager.new
         @state_variables = []
+      end
+
+      # The build's validator, for the sentence a type drawn as nothing says
+      # (ConverterFactory#unknown_type_validator).
+      def unknown_type_validator=(validator)
+        @converter_factory.unknown_type_validator = validator
       end
 
       def convert_file(json_file_path, output_path = nil)
@@ -112,7 +119,6 @@ module SjuiTools
       # In-tree containers that scroll their content. A Collection is not
       # here: its cells are other layout files, not `child` nodes, so a
       # Collection never has in-tree descendants to mark.
-      SCROLLING_ANCESTOR_TYPES = DrawnTypes::SCROLL_VIEW
       SCROLLING_ANCESTOR_KEY = Views::BaseViewConverter::SCROLLING_ANCESTOR_KEY
       COLLECTION_CELL_ROOT_KEY = Views::BaseViewConverter::COLLECTION_CELL_ROOT_KEY
 
@@ -180,7 +186,7 @@ module SjuiTools
         # layout) is inside for everything below it.
         inside ||= component[SCROLLING_ANCESTOR_KEY] == true
         component[SCROLLING_ANCESTOR_KEY] = true if inside
-        inside ||= SCROLLING_ANCESTOR_TYPES.include?(component['type'])
+        inside ||= DrawnTypes.scroll_view?(component['type'])
         child_data = component['child'] || component['children']
         children = child_data.is_a?(Array) ? child_data : [child_data]
         children.each { |child| mark_scrolling_ancestors(child, inside) }
@@ -595,7 +601,7 @@ module SjuiTools
         end
 
         # Warn if Collection has items binding but no sections defined
-        if DrawnTypes::COLLECTION.include?(component['type']) && component['items'] && (!component['sections'] || component['sections'].empty?)
+        if JsonUIShared::TypeSynonyms.section(component['type']) == 'Collection' && component['items'] && (!component['sections'] || component['sections'].empty?)
           loc = hierarchy || 'root'
           puts "\e[33m⚠️  [SJUI Warning] [#{@current_validation_file} #{loc}] Collection has 'items' binding but no 'sections' defined. In SwiftUI mode, collections with 'items' should define 'sections' for proper cell rendering.\e[0m"
         end
@@ -610,7 +616,7 @@ module SjuiTools
         # declares `items`. Naming it here is what the old fallback owed:
         # silence produced a file that failed at build with an error pointing
         # at the generated line rather than at the layout.
-        if DrawnTypes::COLLECTION.include?(component['type']) &&
+        if DrawnTypes.collection?(component['type']) &&
            !component['items'] &&
            (!(component['sections'] || []).empty? || !(component['cellClasses'] || []).empty?)
           loc = hierarchy || 'root'

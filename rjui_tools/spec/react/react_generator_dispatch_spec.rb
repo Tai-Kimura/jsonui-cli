@@ -65,13 +65,15 @@ RSpec.describe RjuiTools::React::ReactGenerator do
 
   describe 'unknown types are no longer a silent degrade' do
     # In the one sentence every path says (JsonUIShared::AttributeValidatorCore
-    # .unknown_component_type_message); it was "… — rendering as a plain View
-    # (no converter registered)".
-    it 'warns once and still renders the plain-View fallback' do
+    # .unknown_component_type_message), and drawn as nothing: the sentence in
+    # a JSX comment. It was drawn as a plain View, and before that the warning
+    # said "… — rendering as a plain View (no converter registered)".
+    it 'warns once and draws nothing: the sentence in a JSX comment' do
       out = nil
       expect { out = root('type' => 'Mystery', 'id' => 'm') }
         .to output(/Unknown component type 'Mystery'\n\z/).to_stdout
-      expect(out).to include('<div id="m"')
+      expect(out).to include("{/* Unknown component type 'Mystery' */}")
+      expect(out).not_to include('<div id="m"')
     end
 
     it 'does not warn for the deliberate SafeAreaView → View mapping' do

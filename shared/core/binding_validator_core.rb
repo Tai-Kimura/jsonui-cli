@@ -3,6 +3,7 @@
 
 require 'json'
 require 'set'
+require_relative 'type_synonyms'
 
 module JsonUIShared
   # Validates binding expressions in JSON layouts. Shared body of the three
@@ -294,8 +295,14 @@ module JsonUIShared
       out
     end
 
+    # The section a spelling is validated against: a type synonym's
+    # `canonical` first (type_synonyms.rb — a Text is a Label, a Table a
+    # Collection), then the alias hop above. Read as written, a synonym had no
+    # table of its own here, so its bindings were checked as an unknown type's.
     def resolve_component_alias(component_type)
-      @component_alias_by_type[component_type] || component_type
+      entry = component_type.is_a?(String) && JsonUIShared::TypeSynonyms.entries[component_type]
+      section = entry ? entry['canonical'] : component_type
+      @component_alias_by_type[section] || section
     end
 
     # Per component type, the set of attribute names marked for platforms
@@ -478,7 +485,7 @@ module JsonUIShared
       collect_platform_used_properties(component, component_type)
 
       # Embed-specific structural rules (params tree grammar + navigationMode)
-      validate_embed_component(component) if component_type == 'Embed'
+      validate_embed_component(component) if resolve_component_alias(component_type) == 'Embed'
 
       # A date SelectBox whose onValueChange is declared to take an index
       # (date_pick_handler_problem).
@@ -490,7 +497,7 @@ module JsonUIShared
         next if key == 'bindingScript' # arbitrary platform code, not a binding
         # An Embed's events are handler names, not bindings; validate_embed_component
         # names any that is not one.
-        next if key == 'events' && component_type == 'Embed'
+        next if key == 'events' && resolve_component_alias(component_type) == 'Embed'
         next if incompatible_attr?(component_type, key)
 
         check_value_for_bindings(value, key, component_type)
@@ -665,7 +672,7 @@ module JsonUIShared
     end
 
     def embed_params_attr?(component_type, attribute_name)
-      component_type == 'Embed' && attribute_name.to_s.split(/[.\[]/).first == 'params'
+      resolve_component_alias(component_type) == 'Embed' && attribute_name.to_s.split(/[.\[]/).first == 'params'
     end
 
     def add_error(rule_id, message)

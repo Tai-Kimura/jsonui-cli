@@ -1,17 +1,28 @@
 # frozen_string_literal: true
 
+require_relative '../core/type_synonyms'
+
 module SjuiTools
   module SwiftUI
-    # The spellings the converter factory draws as a Collection and as a
-    # ScrollView, as written — a type name is its declared spelling, case and
-    # all (jsonui-cli 1.9.0). The passes that look for those nodes before
-    # anything is drawn (the build's warnings, the scrolling-ancestor stamp,
-    # the cell indexes) read the same sets, so a node the factory does not
-    # draw as one ("collection", "SCROLLVIEW") is not treated as one first.
-    # The other synonyms (List, Grid, …) are the normalizer's to rewrite.
+    # Whether a node is drawn as a Collection / a ScrollView — asked by the
+    # passes that look for those nodes before anything is drawn (the build's
+    # warnings, the scrolling-ancestor stamp, the cell indexes), so they agree
+    # with the converter factory. The factory draws a node by its type as
+    # written, resolved through the type synonyms and the declared alias
+    # sections (TypeSynonyms.canonicalize, then `when 'Collection'`), so a
+    # `List` or a `Table` is a Collection there and here, and a "collection"
+    # (another case) is neither (jsonui-cli 1.9.0: a type name is its
+    # declared spelling).
     module DrawnTypes
-      COLLECTION = %w[Collection Table].freeze
-      SCROLL_VIEW = %w[Scroll ScrollView].freeze
+      module_function
+
+      def collection?(type)
+        JsonUIShared::TypeSynonyms.section(type) == 'Collection'
+      end
+
+      def scroll_view?(type)
+        JsonUIShared::TypeSynonyms.section(type) == 'ScrollView'
+      end
     end
   end
 end

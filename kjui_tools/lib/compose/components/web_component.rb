@@ -56,6 +56,18 @@ module KjuiTools
             code += "\n" + indent("settings.displayZoomControls = false", depth + 3)
           end
 
+          # The clients are set before the first load, in the order
+          # webview_component.rb and KotlinJsonUI Dynamic use. WebView, Web's
+          # type synonym, is now drawn by this component, and the two orders
+          # were the one component's two answers.
+          # WebViewClient for handling navigation
+          code += "\n" + indent("webViewClient = KjuiWebViewClient()", depth + 3)
+
+          # WebChromeClient for JavaScript alerts
+          if json_data['javaScriptEnabled'] != false
+            code += "\n" + indent("webChromeClient = WebChromeClient()", depth + 3)
+          end
+
           # Background color (resolved outside factory as Int)
           if bg
             code += "\n" + indent("setBackgroundColor(webViewBgColor)", depth + 3)
@@ -73,14 +85,7 @@ module KjuiTools
             code += "\n" + indent("tag = #{url}", depth + 3) if url_is_bound
             code += "\n" + indent("loadUrl(#{url})", depth + 3)
           end
-          
-          # WebViewClient for handling navigation
-          code += "\n" + indent("webViewClient = KjuiWebViewClient()", depth + 3)
-          
-          # WebChromeClient for JavaScript alerts
-          if json_data['javaScriptEnabled'] != false
-            code += "\n" + indent("webChromeClient = WebChromeClient()", depth + 3)
-          end
+
           
           code += "\n" + indent("}", depth + 2)
           code += "\n" + indent("},", depth + 1)

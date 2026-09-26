@@ -36,14 +36,9 @@ module SjuiTools
         def register_default_handlers
           # Text components
           register_handler('Label', LabelBindingHandler)
-          register_handler('Text', LabelBindingHandler)
           
           # Input components
           register_handler('TextField', TextFieldBindingHandler)
-          # EditText / Input are aliases for TextField
-          # (attribute_definitions `_alias_of: TextField`)
-          register_handler('EditText', TextFieldBindingHandler)
-          register_handler('Input', TextFieldBindingHandler)
           register_handler('SecureField', TextFieldBindingHandler)
           register_handler('TextView', TextFieldBindingHandler)
           register_handler('TextEditor', TextFieldBindingHandler)
@@ -52,13 +47,10 @@ module SjuiTools
           register_handler('Button', ButtonBindingHandler)
           
           # Toggle/Switch
-          register_handler('Toggle', ToggleBindingHandler)
           register_handler('Switch', ToggleBindingHandler)
 
           # CheckBox
           register_handler('CheckBox', CheckboxBindingHandler)
-          register_handler('Check', CheckboxBindingHandler)
-          register_handler('Checkbox', CheckboxBindingHandler)
           
           # Image
           register_handler('Image', ImageBindingHandler)

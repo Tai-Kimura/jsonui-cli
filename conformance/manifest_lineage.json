@@ -5,6 +5,11 @@
     "humanWarning": "Append-only. Each key is the sha256 a runner records as manifestHash; the value says which fixture tree and id set that manifest described. The gate uses it to tell a manifest that DRIFTED (prose in the SSoT) from one whose fixtures MOVED — only the second needs the pictures drawn again."
   },
   "manifests": {
+    "00e4a2410c63013b4e9ec9783253d12afd46e0e73e25a6c5ec826dbce971f473": {
+      "version": 1,
+      "fixtures": "244f0d2aeb9e686af8e8bc15913b94b8909570f4297fbaed6191a97dec85f913",
+      "ids": "bebf1a7b18071ad4df795df4bb7e738a37bb52a4d44ba91014ee8b656efe542f"
+    },
     "02692651a4edb74d9ffe17a771c5c89dfb5eca1e25c84c57e3509deda7214491": {
       "version": 1,
       "fixtures": "244f0d2aeb9e686af8e8bc15913b94b8909570f4297fbaed6191a97dec85f913",
@@ -59,6 +64,11 @@
       "version": 1,
       "fixtures": "244f0d2aeb9e686af8e8bc15913b94b8909570f4297fbaed6191a97dec85f913",
       "ids": "bebf1a7b18071ad4df795df4bb7e738a37bb52a4d44ba91014ee8b656efe542f"
+    },
+    "1ec0be89ec969fa1cfb7f34e374cd51ee13fc264328505be267cf7b3ada16e39": {
+      "version": 1,
+      "fixtures": "b6d3d9df2f4b8b1563436b4084313cf3e418e196b189c0ad6714a27ab02843a3",
+      "ids": "e48b004cd844adb0a042648ccce92d3bbd6bd929374898bbeeb2af9ffacba665"
     },
     "2b23d2d0bcf4ac3fff8d9f5cfc7283e80a6729630602baf8a67c78d5c52aa093": {
       "version": 1,
@@ -170,10 +180,20 @@
       "fixtures": "244f0d2aeb9e686af8e8bc15913b94b8909570f4297fbaed6191a97dec85f913",
       "ids": "bebf1a7b18071ad4df795df4bb7e738a37bb52a4d44ba91014ee8b656efe542f"
     },
+    "9fd1a5102e08f9b0136e153ef814267eba605b5bbada0fb1f73fed7169408df8": {
+      "version": 1,
+      "fixtures": "244f0d2aeb9e686af8e8bc15913b94b8909570f4297fbaed6191a97dec85f913",
+      "ids": "bebf1a7b18071ad4df795df4bb7e738a37bb52a4d44ba91014ee8b656efe542f"
+    },
     "a488cdc7ea1d329c8966ebdefcc6d494a0961561f0de229dcda2ed47df689153": {
       "version": 1,
       "fixtures": "b6d3d9df2f4b8b1563436b4084313cf3e418e196b189c0ad6714a27ab02843a3",
       "ids": "e48b004cd844adb0a042648ccce92d3bbd6bd929374898bbeeb2af9ffacba665"
+    },
+    "a4b82df202a2e72943828eb7042a80c40d7646cd5ade7909fb29ef9cd3b63607": {
+      "version": 1,
+      "fixtures": "3b8c9e1c2828fa9f6b453b14e346efc4b35b94e3d0508971c91ed7acb111d502",
+      "ids": "0b2bc2228bcb2e9e4345ea3fe7e1ba9ef2eb1a2fe9b9358264e7aacf0466ad32"
     },
     "b0fe1651f4e291f69f03ecca451baa1ea4ad56844d3c6aa524c46cb577640251": {
       "version": 1,
@@ -210,10 +230,20 @@
       "fixtures": "3b8c9e1c2828fa9f6b453b14e346efc4b35b94e3d0508971c91ed7acb111d502",
       "ids": "0b2bc2228bcb2e9e4345ea3fe7e1ba9ef2eb1a2fe9b9358264e7aacf0466ad32"
     },
+    "e985d1f44eafd9ff11b5ed5f70364cd29893bbd4d3cb822ba6ee0f1c98b50d3f": {
+      "version": 1,
+      "fixtures": "244f0d2aeb9e686af8e8bc15913b94b8909570f4297fbaed6191a97dec85f913",
+      "ids": "bebf1a7b18071ad4df795df4bb7e738a37bb52a4d44ba91014ee8b656efe542f"
+    },
     "ec2a8a51d8082a79887d61371cd5e3b97bad84bf564172eaf9d967c14a1e543a": {
       "version": 1,
       "fixtures": "3b8c9e1c2828fa9f6b453b14e346efc4b35b94e3d0508971c91ed7acb111d502",
       "ids": "0b2bc2228bcb2e9e4345ea3fe7e1ba9ef2eb1a2fe9b9358264e7aacf0466ad32"
+    },
+    "ee5cd4f262671898a01335e4a7dfbcebc6e104ecd01fdd60e38c6cfd45b91900": {
+      "version": 1,
+      "fixtures": "244f0d2aeb9e686af8e8bc15913b94b8909570f4297fbaed6191a97dec85f913",
+      "ids": "bebf1a7b18071ad4df795df4bb7e738a37bb52a4d44ba91014ee8b656efe542f"
     },
     "f29e2a33fab0cdb3b9d0649391763a0b1d1627946c615befc947d08b3b35cc19": {
       "version": 1,

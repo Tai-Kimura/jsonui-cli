@@ -49,10 +49,12 @@ RSpec.describe 'kjui interaction gates' do
   # sentence in a comment (JsonUIShared::AttributeValidatorCore
   # .unknown_component_type_message; it was a `// TODO: Implement component
   # type` comment). Pinned, so a type that starts being drawn joins the arms
-  # below. The fallback's prefix is read from the constant, and one type is
-  # checked to reach it, so a reworded fallback cannot leave `drawn` holding
-  # every type (the TODO prefix this matched on went silent that way).
-  not_drawn = %w[CircleView EditText Input]
+  # below. CircleView, EditText and Input joined in 1.9.0 (CircleView drawn;
+  # the two aliases drawn as TextField). The fallback's prefix is read from
+  # the constant, and one type is checked to reach it, so a reworded fallback
+  # cannot leave `drawn` holding every type (the TODO prefix this matched on
+  # went silent that way).
+  not_drawn = %w[]
   fallback = "// #{format(JsonUIShared::AttributeValidatorCore::UNKNOWN_COMPONENT_TYPE, written: '')}".delete_suffix("'")
 
   it 'reads every type the declaration knows' do

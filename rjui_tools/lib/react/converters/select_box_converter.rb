@@ -630,7 +630,7 @@ module RjuiTools
         # the call above and IncludePaths (which layouts take `jsonuiPath`)
         # both take.
         def self.hands_view_id?(node, data_classes)
-          return false unless node.is_a?(Hash) && JsonUIShared::LayoutPath.drawn_type(node['type'].to_s) == 'SelectBox'
+          return false unless node.is_a?(Hash) && JsonUIShared::TypeSynonyms.drawn_type(node['type'].to_s) == 'SelectBox'
 
           handler = node['onValueChange'] || node['onValueChanged'] || node['onChange']
           declared_class(handler, data_classes).match?(VIEW_ID_CLASS)

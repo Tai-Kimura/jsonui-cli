@@ -108,6 +108,18 @@ RSpec.describe 'sjui: a node without an id is named by its position' do
       _code, _actions, declarations = convert(group.call({ 'value' => 'v1' }, { 'id' => 'two', 'checked' => true }))
       expect(declarations.grep(/selectedG\b/)).to eq(['@State private var selectedG: String = "two"'])
     end
+
+    # RadioButton and RadioGroup are drawn as Radio (type_synonyms.json), so
+    # they are Radios of the group. Read by the spelling, two RadioButtons
+    # were two nodes declaring one name (the layout stopped), and a checked
+    # RadioGroup did not seed its group.
+    it 'counts a node by the type it is drawn as: RadioButton and RadioGroup are Radios of the group' do
+      _code, _actions, declarations = convert(group.call({ 'type' => 'RadioButton' }, { 'type' => 'RadioButton', 'checked' => true }))
+      expect(declarations).not_to be_nil
+      expect(declarations.grep(/selectedG\b/)).to eq(['@State private var selectedG: String = "radio_0_1"'])
+      _code, _actions, declarations = convert(group.call({ 'type' => 'RadioGroup', 'checked' => true }, {}))
+      expect(declarations.grep(/selectedG\b/)).to eq(['@State private var selectedG: String = "radio_0_0"'])
+    end
   end
 
   describe 'a name two nodes declare stops the layout' do

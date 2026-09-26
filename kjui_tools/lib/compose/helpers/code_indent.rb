@@ -4,7 +4,7 @@ module KjuiTools
   module Compose
     module Helpers
       # Indentation for code a builder wraps around code it already emitted
-      # (compose_builder's capture_interaction_stop / provide_interaction_stop).
+      # (compose_builder's interaction-stop wraps and the Box it wraps a node in).
       # These lived in TintHelper, beside the LocalContentColor wrapper that
       # tintColor no longer uses (tintColor is the accent of the operable
       # parts, jsonui-cli 1.9.0).

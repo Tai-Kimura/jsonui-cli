@@ -9,25 +9,28 @@ RSpec.describe SjuiTools::SwiftUI::Binding::BindingHandlerRegistry do
     it 'registers default handlers' do
       # Text components
       expect(registry.get_handler('Label')).to be_a(SjuiTools::SwiftUI::Binding::LabelBindingHandler)
-      expect(registry.get_handler('Text')).to be_a(SjuiTools::SwiftUI::Binding::LabelBindingHandler)
+      # A synonym (Text) is not a key: the factory hands each converter its
+      # node as drawn (type_synonyms.json), so the registry is asked for Label.
+      expect(registry.get_handler('Text')).to be_a(SjuiTools::SwiftUI::Binding::ViewBindingHandler)
 
       # Input components
       expect(registry.get_handler('TextField')).to be_a(SjuiTools::SwiftUI::Binding::TextFieldBindingHandler)
       expect(registry.get_handler('SecureField')).to be_a(SjuiTools::SwiftUI::Binding::TextFieldBindingHandler)
       expect(registry.get_handler('TextView')).to be_a(SjuiTools::SwiftUI::Binding::TextFieldBindingHandler)
-      # EditText / Input are aliases for TextField (attribute_definitions `_alias_of: TextField`)
-      expect(registry.get_handler('EditText')).to be_a(SjuiTools::SwiftUI::Binding::TextFieldBindingHandler)
-      expect(registry.get_handler('Input')).to be_a(SjuiTools::SwiftUI::Binding::TextFieldBindingHandler)
+      # EditText / Input / Toggle / Check are declared alias sections
+      # (`_alias_of`), not keys: the factory hands each converter its node as
+      # drawn, with the canonical section's type.
+      %w[EditText Input Toggle Check].each do |alias_name|
+        expect(registry.get_handler(alias_name)).to be_a(SjuiTools::SwiftUI::Binding::ViewBindingHandler)
+      end
 
       # Button
       expect(registry.get_handler('Button')).to be_a(SjuiTools::SwiftUI::Binding::ButtonBindingHandler)
 
       # Toggle
-      expect(registry.get_handler('Toggle')).to be_a(SjuiTools::SwiftUI::Binding::ToggleBindingHandler)
       expect(registry.get_handler('Switch')).to be_a(SjuiTools::SwiftUI::Binding::ToggleBindingHandler)
 
       # CheckBox
-      expect(registry.get_handler('Check')).to be_a(SjuiTools::SwiftUI::Binding::CheckboxBindingHandler)
       expect(registry.get_handler('CheckBox')).to be_a(SjuiTools::SwiftUI::Binding::CheckboxBindingHandler)
 
       # Image

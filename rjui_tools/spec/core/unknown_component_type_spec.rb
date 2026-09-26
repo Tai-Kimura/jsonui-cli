@@ -7,21 +7,60 @@ require 'react/react_generator'
 
 # The one sentence for a type a tool cannot draw (JsonUIShared::
 # AttributeValidatorCore.unknown_component_type_message; kjui's
-# spec/core/unknown_component_type_spec.rb holds the rule): rjui says it where
-# it draws a plain View for the node. The rjui profile knows the types its
+# spec/core/unknown_component_type_spec.rb holds the rule): rjui says it, and
+# draws nothing for the node — the sentence in a JSX comment, at the root and
+# as a child (4f's ruling, jsonui-cli 1.9.0; it drew a plain View, and named
+# a child nowhere). A type the validator knows that no converter draws is
+# another sentence, drawn as a View. The rjui profile knows the types its
 # registry draws — the converter_mappings.rb the generator reads, the
 # project's first (Dir.pwd/rjui_tools/...), as the generator finds it.
 RSpec.describe 'rjui: unknown component type' do
-  it 'says the sentence where it draws a plain View, and the View type-checks' do
-    said = []
-    allow(RjuiTools::Core::Logger).to receive(:warn) { |message| said << message }
+  def generator
     generator = RjuiTools::React::ReactGenerator.allocate
     generator.instance_variable_set(:@config, { 'use_tailwind' => true })
     generator.instance_variable_set(:@extension_converters, {})
-    out = generator.send(:convert_component, { 'type' => 'switch', 'id' => 'x' })
-    expect(said).to include("Unknown component type 'switch' — did you mean 'Switch'? Type names are case-sensitive.")
-    expect(out).to include('<div id="x"')
-    expect("export const Emitted = (): JSX.Element => (\n#{out}\n);\n").to compile_as_typescript
+    generator
+  end
+
+  it 'says the sentence and draws nothing, at the root and as a child, and the JSX type-checks' do
+    said = []
+    allow(RjuiTools::Core::Logger).to receive(:warn) { |message| said << message }
+    sentence = "Unknown component type 'switch' — did you mean 'Switch'? Type names are case-sensitive."
+    kid = { 'type' => 'Label', 'id' => 'kid', 'text' => 'innerText' }
+    root = generator.send(:convert_component, { 'type' => 'switch', 'id' => 'x', 'child' => [kid] })
+    child = generator.send(:convert_component, { 'type' => 'View', 'id' => 'p', 'child' => [{ 'type' => 'switch', 'id' => 'x', 'child' => [kid] }] })
+    [root, child].each do |out|
+      expect(out).to include("{/* #{sentence} */}")
+      expect(out).not_to include('innerText') # not its children
+      expect(out).not_to include('<div id="x"')
+    end
+    expect(said.count(sentence)).to eq(2)
+    # the root as the component file holds it (a fragment around a bare {…}), the child in its parent
+    expect("export const Root = (): JSX.Element => (\n<>\n#{root}\n</>\n);\n" \
+           "export const Child = (): JSX.Element => (\n#{child}\n);\n").to compile_as_typescript
+  end
+
+  # A type the validator knows — here by the project's extension definitions
+  # — that no converter draws: its own sentence, and a View with its
+  # children in it, at the root and as a child, as sjui and kjui draw it.
+  it 'names a type the project declares but no converter draws in its own sentence, and draws it as a View' do
+    said = []
+    allow(RjuiTools::Core::Logger).to receive(:warn) { |message| said << message }
+    Dir.mktmpdir do |dir|
+      defs = File.join(dir, 'rjui_tools', 'lib', 'react', 'converters', 'extensions', 'attribute_definitions')
+      FileUtils.mkdir_p(defs)
+      File.write(File.join(defs, 'ProbeDeclared.json'), JSON.generate('ProbeDeclared' => { 'text' => { 'type' => 'string' } }))
+      Dir.chdir(dir) do
+        kid = { 'type' => 'Label', 'id' => 'kid', 'text' => 'innerText' }
+        root = generator.send(:convert_component, { 'type' => 'ProbeDeclared', 'id' => 'd', 'child' => [kid] })
+        child = generator.send(:convert_component, { 'type' => 'View', 'id' => 'p', 'child' => [{ 'type' => 'ProbeDeclared', 'id' => 'd', 'child' => [kid] }] })
+        [root, child].each do |out|
+          expect(out).to include('<div id="d"')
+          expect(out).to include('innerText')
+        end
+      end
+    end
+    expect(said).to eq(["'ProbeDeclared' is declared but has no web converter — drawn as a View"] * 2)
   end
 
   # A project's registered converter with no attribute definition file (a

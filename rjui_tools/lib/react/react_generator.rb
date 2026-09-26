@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require 'set'
+require_relative '../core/type_synonyms'
 require_relative '../core/type_converter'
 require_relative '../core/bind_fold'
 require_relative '../core/logger'
@@ -55,31 +56,18 @@ module RjuiTools
         'View' => Converters::ViewConverter,
         'SafeAreaView' => Converters::ViewConverter,
         'Label' => Converters::LabelConverter,
-        'Text' => Converters::LabelConverter,
         'Button' => Converters::ButtonConverter,
         'Image' => Converters::ImageConverter,
         'CircleImage' => Converters::ImageConverter,
         'NetworkImage' => Converters::ImageConverter,
         'TextField' => Converters::TextFieldConverter,
-        # EditText / Input are aliases for TextField (attribute_definitions
-        # `_alias_of: TextField`; kept for Android / HTML naming compatibility)
-        'EditText' => Converters::TextFieldConverter,
-        'Input' => Converters::TextFieldConverter,
         'TextView' => Converters::TextViewConverter,
-        'Scroll' => Converters::ScrollViewConverter,
         'ScrollView' => Converters::ScrollViewConverter,
         'Collection' => Converters::CollectionConverter,
-        'Table' => Converters::CollectionConverter,
         # Switch is the primary component name, uses SwitchConverter for iOS-style toggle
         'Switch' => Converters::SwitchConverter,
-        # Toggle is an alias for Switch (backward compatibility), also uses SwitchConverter
-        'Toggle' => Converters::SwitchConverter,
         # CheckBox is the primary component name, uses ToggleConverter for simple checkbox
         'CheckBox' => Converters::ToggleConverter,
-        # Check is an alias for CheckBox (backward compatibility), also uses ToggleConverter
-        'Check' => Converters::ToggleConverter,
-        # Legacy mapping kept for backward compatibility
-        'Checkbox' => Converters::ToggleConverter,
         'Slider' => Converters::SliderConverter,
         'Segment' => Converters::SegmentConverter,
         'Radio' => Converters::RadioConverter,
@@ -99,17 +87,40 @@ module RjuiTools
         'GradientView' => Converters::GradientViewConverter
       }.freeze
 
+      # The validator whose sentence a type drawn as nothing says: the build's
+      # own (BuildCommand hands it), else one made the first time such a type
+      # is met — one per build either way. A validator per node read the
+      # definitions again for each, and a copy that left its links dangling
+      # said "attribute_definitions.json not found" once per such node.
+      attr_writer :unknown_type_validator
+
+      def unknown_type_validator
+        @unknown_type_validator ||= Core::AttributeValidator.new(:react)
+      end
+
       def initialize(config)
         @config = config
         @framework = Core::Frameworks.for(config)
         @use_tailwind = config['use_tailwind'] != false
         @extension_converters = load_extension_converters
+        # a spelling the app registers is the app's, for what classifies a
+        # node by its drawn type too (TypeSynonyms.app_types)
+        JsonUIShared::TypeSynonyms.app_types = @extension_converters.keys
         # Store extension converters in config so child converters can access them
         @config['_extension_converters'] = @extension_converters
+        # The validator whose sentences name what no converter draws, for the
+        # child converters too (BaseConverter#type_validator): this build's.
+        @config['_type_validator'] = method(:unknown_type_validator)
         # Stash the component → attribute-definitions map so BaseConverter
         # can suppress Tailwind decoration mapping for keys that a custom
         # component has claimed as a semantic prop (e.g. CodeBlock#maxHeight).
         @config['_attribute_definitions'] = load_attribute_definitions
+      end
+
+      # The spellings this project registers converters of its own for: the
+      # keys of the extensions directory's converter_mappings.rb.
+      def self.extension_types
+        allocate.send(:load_extension_converters).keys
       end
 
       # Load custom converters from extensions directory
@@ -252,19 +263,39 @@ module RjuiTools
 
         type = json['type'] || 'View'
 
-        # First check extension converters, then built-in converters; a
-        # built-in draws the node with its `bind` folded (the child path,
-        # BaseConverter#create_converter_for_child, does the same)
-        json = JsonUIShared::BindFold.fold(json, type) unless @extension_converters[type]
-        converter_class = @extension_converters[type] || CONVERTERS[type]
+        # First check extension converters (with the spelling as written, and
+        # the node as written), then built-in converters. A type-synonym
+        # spelling (HStack, WebView, …) is drawn as its type, from
+        # shared/core/type_synonyms.json, and a declared alias section
+        # (EditText, Check, Toggle, …: `_alias_of`) as its canonical one; the
+        # map below holds canonical declared sections. A built-in draws the
+        # node with its `bind` folded (the child path,
+        # BaseConverter#create_converter_for_child, does the same).
+        converter_class = @extension_converters[type]
         unless converter_class
-          # sjui renders unknown types as a red "Unsupported component" Text
-          # and swift dynamic as an error box; silently degrading to a plain
-          # View here left react the only face that hid the failure.
-          # In the validator's sentence (JsonUIShared::AttributeValidatorCore
-          # .unknown_component_type_message), as kjui and sjui say it.
-          Core::Logger.warn(Core::AttributeValidator.new(:react).unknown_component_type_message(type.to_s)) if defined?(Core::Logger)
-          converter_class = Converters::ViewConverter
+          json = JsonUIShared::ComponentAliases.resolve(JsonUIShared::TypeSynonyms.canonicalize(json))
+          type = json['type'] || 'View'
+          json = JsonUIShared::BindFold.fold(json, type)
+          converter_class = CONVERTERS[type]
+        end
+        unless converter_class
+          # No converter draws it. A type the validator knows (an extension
+          # definition with no converter, say) is named in its own sentence
+          # and drawn as a View, its children in it; an unknown type is named
+          # in the validator's sentence (JsonUIShared::AttributeValidatorCore
+          # .unknown_component_type_message) and drawn as nothing — the
+          # sentence in a JSX comment where the node would be, as kjui and
+          # sjui draw it. It was drawn as a View (4f's ruling, jsonui-cli
+          # 1.9.0). The child path, BaseConverter#create_converter_for_child,
+          # follows the same rule.
+          if unknown_type_validator.known_component_type?(type.to_s)
+            Core::Logger.warn(Core::AttributeValidator.declared_without_drawer_message(type.to_s, 'web')) if defined?(Core::Logger)
+            converter_class = Converters::ViewConverter
+          else
+            sentence = unknown_type_validator.unknown_component_type_message(type.to_s)
+            Core::Logger.warn(sentence) if defined?(Core::Logger)
+            return Converters::UnknownTypeConverter.new(json, @config, sentence).convert_node(indent)
+          end
         end
 
         converter = converter_class.new(json, @config)
@@ -728,13 +759,25 @@ module RjuiTools
       # Containers holding at least one sibling-constrained child. MUST stay in
       # sync with ViewConverter#relative_positioned? and
       # #build_relative_position_ref_attr, which attach the ref this targets.
+      # The type a node is drawn as, which the passes below classify on so
+      # they agree with the converter that draws it (they walk the layout as
+      # written): the spelling itself when an app's converter is registered
+      # under it — that node is the app's — else its type-synonym target,
+      # then its alias section's canonical one (shared/core/type_synonyms.rb).
+      def drawn_type_of(json)
+        type = json['type']
+        return type if type && @extension_converters.key?(type)
+
+        JsonUIShared::TypeSynonyms.drawn_type(type)
+      end
+
       def extract_relative_containers(json, found = [])
         return found unless json.is_a?(Hash) || json.is_a?(Array)
 
         if json.is_a?(Hash)
           child = json['child'] || json['children']
           children = child.is_a?(Array) ? child : [child].compact
-          if %w[View SafeAreaView].include?(json['type'].to_s) || json['type'].nil?
+          if %w[View SafeAreaView].include?(drawn_type_of(json).to_s) || json['type'].nil?
             specs = children.map { |c| relative_constraint_for(c) }.compact
             found << { ref: relative_position_ref_name(specs.first['id']), specs: specs } if specs.any?
           end
@@ -768,7 +811,7 @@ module RjuiTools
 
       #: Types whose converter attaches the autoShrink ref. Text-bearing
       #: elements only — shrinking a container has no meaning.
-      AUTO_SHRINK_TYPES = %w[Label Text].freeze
+      AUTO_SHRINK_TYPES = %w[Label].freeze
 
       # Elements declaring autoShrink with a literal id — each gets a hoisted
       # ref + fit effect, matching the ref LabelConverter attaches. A literal
@@ -779,7 +822,7 @@ module RjuiTools
 
         if json.is_a?(Hash)
           id = json['id']
-          if AUTO_SHRINK_TYPES.include?(json['type'].to_s) && truthy_attr?(json['autoShrink']) &&
+          if AUTO_SHRINK_TYPES.include?(drawn_type_of(json).to_s) && truthy_attr?(json['autoShrink']) &&
              id.is_a?(String) && !id.empty? && !id.include?('@{')
             found << {
               ref: auto_shrink_ref_name(id),
@@ -863,7 +906,7 @@ module RjuiTools
 
       #: Scroll containers that are not Collections. They get the anchor effect
       #: only — MUST stay in sync with ScrollViewConverter#build_scroll_ref_attr.
-      SCROLL_CONTAINER_TYPES = %w[ScrollView Scroll].freeze
+      SCROLL_CONTAINER_TYPES = %w[ScrollView].freeze
 
       # Collections declaring scroll control (scrollTo / defaultScrollAnchor /
       # currentPage / onItemAppear). Each one gets a hoisted ref plus the
@@ -880,10 +923,11 @@ module RjuiTools
           # element, so it starts where the layout says without a second
           # implementation. The other three are Collection-only (they address
           # ITEMS; a ScrollView has none).
-          scrollable = json['type'] == 'Collection' ||
-                       (SCROLL_CONTAINER_TYPES.include?(json['type'].to_s) && json['defaultScrollAnchor'])
+          drawn = drawn_type_of(json)
+          scrollable = drawn == 'Collection' ||
+                       (SCROLL_CONTAINER_TYPES.include?(drawn.to_s) && json['defaultScrollAnchor'])
           if scrollable && id.is_a?(String) && !id.empty? && !id.include?('@{')
-            collection = json['type'] == 'Collection'
+            collection = drawn == 'Collection'
             scroll_to = collection ? json['scrollTo'] : nil
             default_anchor = json['defaultScrollAnchor']
             current_page = collection ? json['currentPage'] : nil
@@ -1017,10 +1061,10 @@ module RjuiTools
         return fields unless json.is_a?(Hash) || json.is_a?(Array)
 
         if json.is_a?(Hash)
-          type = json['type']
+          type = drawn_type_of(json)
           id = json['id']
           if id.is_a?(String) && !id.empty? && !id.include?('@{')
-            if %w[TextField EditText Input].include?(type)
+            if type == 'TextField'
               fields << { id: id, camel: snake_to_camel_id(id), element: 'input' }
             elsif type == 'TextView'
               fields << { id: id, camel: snake_to_camel_id(id), element: 'textarea' }
@@ -1100,7 +1144,7 @@ module RjuiTools
       # Skips iconType:"resource" — those render as <img> from public/icons.
       def collect_lucide_icons(json, icons = ::Set.new)
         if json.is_a?(Hash)
-          if json['type'] == 'TabView' && json['tabs'].is_a?(Array)
+          if drawn_type_of(json) == 'TabView' && json['tabs'].is_a?(Array)
             json['tabs'].each do |tab|
               next unless tab.is_a?(Hash)
               icon_type = tab['iconType'] || 'system'
@@ -1175,7 +1219,7 @@ module RjuiTools
         end
 
         # Check for Embed (screen reference)
-        if json['type'] == 'Embed' && json['screen'].is_a?(String)
+        if drawn_type_of(json) == 'Embed' && json['screen'].is_a?(String)
           parts = json['screen'].split('/')
           base_name = parts.last
           component_name = to_pascal_case(base_name)
@@ -1203,6 +1247,7 @@ module RjuiTools
         if type && @extension_converters.key?(type)
           components << type
         end
+        type = drawn_type_of(json)
 
         # Check for NetworkImage type (built-in but requires separate import)
         if type == 'NetworkImage'
@@ -1235,7 +1280,7 @@ module RjuiTools
 
       # Extract cell component types from Collection elements (for TypeScript imports)
       def extract_collection_cell_types(json, types = [])
-        type = json['type']
+        type = drawn_type_of(json)
 
         if type == 'Collection'
           # Modern sections format
@@ -1298,7 +1343,7 @@ module RjuiTools
 
       def uses_auto_cell_id?(json)
         return false unless json.is_a?(Hash)
-        return true if json['type'] == 'Collection' &&
+        return true if drawn_type_of(json) == 'Collection' &&
                        json['autoChangeTrackingId'] == true &&
                        json['cellIdProperty'] && !json['cellIdProperty'].to_s.empty?
 

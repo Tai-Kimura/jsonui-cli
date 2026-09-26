@@ -44,10 +44,6 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[2]
 METADATA = REPO_ROOT / "shared" / "core" / "component_metadata.json"
 SJUI_FACTORY = REPO_ROOT / "sjui_tools" / "lib" / "swiftui" / "converter_factory.rb"
-#: The factory's `when *DrawnTypes::NAME` reads its spellings from here
-#: (the passes that look for a Collection / ScrollView before drawing read
-#: the same sets).
-SJUI_DRAWN_TYPES = REPO_ROOT / "sjui_tools" / "lib" / "swiftui" / "drawn_types.rb"
 KJUI_BUILDER = REPO_ROOT / "kjui_tools" / "lib" / "compose" / "compose_builder.rb"
 RJUI_GENERATOR = REPO_ROOT / "rjui_tools" / "lib" / "react" / "react_generator.rb"
 
@@ -154,15 +150,7 @@ def sjui_codegen_types() -> set[str]:
             break
         if stripped.startswith("when "):
             types.update(re.findall(r"'([^']+)'", stripped))
-            for name in re.findall(r"\*DrawnTypes::(\w+)", stripped):
-                types.update(sjui_drawn_types()[name])
     return types
-
-
-def sjui_drawn_types() -> dict[str, list[str]]:
-    """``NAME = %w[A B].freeze`` in drawn_types.rb, by name."""
-    text = SJUI_DRAWN_TYPES.read_text(encoding="utf-8")
-    return {name: words.split() for name, words in re.findall(r"^\s*(\w+) = %w\[([^\]]*)\]", text, re.M)}
 
 
 def kjui_codegen_types() -> set[str]:
@@ -231,6 +219,28 @@ def kotlin_dynamic_types() -> set[str]:
         if match:
             types.update(re.findall(r'"([A-Za-z0-9]+)"', match.group(1)))
     return types
+
+
+DEFINITIONS = REPO_ROOT / "shared" / "core" / "attribute_definitions.json"
+
+#: Facets whose dispatch resolves a declared alias section (`_alias_of`:
+#: EditText / Input -> TextField, Check -> CheckBox, Toggle -> Switch) to
+#: its canonical section before it looks the type up, so an alias is drawn
+#: exactly when its canonical section is. The sjui SwiftUI factory, rjui,
+#: SwiftJsonUI Dynamic and kjui's codegen do (2026-09-26). KotlinJsonUI
+#: Dynamic joins when it does; until then its table is read as written.
+RESOLVES_ALIASES = {"swift_generated", "react", "swift_dynamic", "kotlin_generated"}
+
+
+def alias_targets() -> dict[str, str]:
+    """Declared alias sections -> their canonical section."""
+    with open(DEFINITIONS, encoding="utf-8") as f:
+        data = json.load(f)
+    return {
+        name: section["_alias_of"]
+        for name, section in data.items()
+        if isinstance(section, dict) and isinstance(section.get("_alias_of"), str)
+    }
 
 
 def dispatches(types: set[str], name: str) -> bool:
@@ -323,8 +333,9 @@ class ComponentMetadataPlatformTruth(unittest.TestCase):
 
     def _assert_facet(self, facet: str, supports) -> None:
         mismatches = []
+        aliases = alias_targets() if facet in RESOLVES_ALIASES else {}
         for name, declared in sorted(metadata_rows().items()):
-            actual = supports(name)
+            actual = supports(aliases.get(name, name))
             if bool(declared.get(facet)) != actual:
                 mismatches.append(
                     f"  {name}.{facet}: declared={bool(declared.get(facet))} "

@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-require_relative 'drawn_types'
+require_relative '../core/type_synonyms'
 require_relative 'views/label_converter'
 require_relative 'views/button_converter'
 require_relative 'views/view_converter'
@@ -44,10 +44,24 @@ module SjuiTools
       # Counter for generating unique responsive function names
       attr_reader :responsive_counter
 
+      # The validator whose sentence DefaultConverter says: the build's own
+      # when it validates, else one made the first time a type is drawn as
+      # nothing — one per build either way. A validator per node read the
+      # definitions again for each, and a copy that left its links dangling
+      # said "attribute_definitions.json not found" once per such node.
+      attr_writer :unknown_type_validator
+
+      def unknown_type_validator
+        @unknown_type_validator ||= SjuiTools::Core::AttributeValidator.new(:swiftui)
+      end
+
       def initialize(binding_registry = nil)
         @view_registry = ViewRegistry.new
         @binding_registry = binding_registry
         @custom_converters = load_custom_converters
+        # a spelling the app registers is the app's, for what classifies a
+        # node by its drawn type too (TypeSynonyms.app_types)
+        JsonUIShared::TypeSynonyms.app_types = @custom_converters.keys
         @data_properties = []
         @responsive_functions = []
         @responsive_counter = 0
@@ -72,6 +86,12 @@ module SjuiTools
       def reset_responsive
         @responsive_functions = []
         @responsive_counter = 0
+      end
+
+      # The spellings this project registers converters of its own for: the
+      # keys of views/extensions/converter_mappings.rb.
+      def self.custom_types
+        allocate.send(:load_custom_converters).keys
       end
 
       def load_custom_converters
@@ -164,12 +184,24 @@ module SjuiTools
           end
         end
 
+        # A type-synonym spelling (HStack, ProgressBar, WebView, …) is drawn
+        # as its type, from shared/core/type_synonyms.json — after the app's
+        # converters were asked, above, with the spelling as written. The
+        # cases below are canonical declared sections; a spelling that is
+        # neither draws the default. The node's converter gets the node as drawn, so what reads
+        # its type afterwards (the binding handlers) reads the drawn one.
+        component = JsonUIShared::TypeSynonyms.canonicalize(component)
+        # A declared alias section (EditText / Input -> TextField, Check ->
+        # CheckBox, Toggle -> Switch: `_alias_of` in attribute_definitions.json)
+        # is drawn as its canonical section.
+        component = JsonUIShared::ComponentAliases.resolve(component)
+        component_type = component['type']
         # `bind` folded into the attribute it stands for (JsonUIShared::BindFold)
         # on the node a built-in converter draws — its style merged
-        # (StyleLoader, before conversion) — after the app's own converters
-        # were asked; an app's converter gets its node as written. The layout
-        # normalizer leaves a node with a style or responsive overrides to
-        # this fold.
+        # (StyleLoader, before conversion), drawn as its type — after the
+        # app's own converters were asked; an app's converter gets its node as
+        # written. The layout normalizer leaves a node with a style or
+        # responsive overrides to this fold.
         component = JsonUIShared::BindFold.fold(component, component_type)
 
         # A node whose converter does not draw its `responsive` overrides is
@@ -181,7 +213,7 @@ module SjuiTools
         end
 
         case component_type
-        when 'Label', 'Text'
+        when 'Label'
           Views::LabelConverter.new(component, indent_level, action_manager, @binding_registry)
         when 'IconLabel'
           Views::IconLabelConverter.new(component, indent_level, action_manager, @binding_registry)
@@ -191,26 +223,23 @@ module SjuiTools
           Views::ViewConverter.new(component, indent_level, action_manager, self, registry, @binding_registry)
         when 'GradientView'
           Views::GradientViewConverter.new(component, indent_level, action_manager, self, registry, @binding_registry)
-        when 'Blur', 'BlurView'
+        when 'Blur'
           Views::BlurConverter.new(component, indent_level, action_manager, self, registry, @binding_registry)
-        # EditText / Input are aliases for TextField (attribute_definitions
-        # `_alias_of: TextField`; kept for Android / HTML naming compatibility)
-        when 'TextField', 'EditText', 'Input'
+        when 'TextField'
           Views::TextFieldConverter.new(component, indent_level, action_manager, @binding_registry)
+        # CircleImage / CircleImageView: Image synonyms drawn as CircleImage
+        # (`render_as`), which ImageConverter clips to a circle
         when 'Image', 'CircleImage'
           Views::ImageConverter.new(component, indent_level, action_manager, @binding_registry)
         when 'NetworkImage'
           Views::NetworkImageConverter.new(component, indent_level, action_manager, @binding_registry)
-        when *DrawnTypes::SCROLL_VIEW
+        when 'ScrollView'
           Views::ScrollViewConverter.new(component, indent_level, action_manager, self, registry, @binding_registry)
         when 'TextView'
           Views::TextViewConverter.new(component, indent_level, action_manager, @binding_registry)
-        # Switch/Toggle: Both component types supported for backward compatibility
-        # "Switch" is primary name, "Toggle" is alias (see attribute_definitions.json)
-        when 'Switch', 'Toggle'
+        when 'Switch'
           Views::ToggleConverter.new(component, indent_level, action_manager, @binding_registry)
-        # CheckBox is primary name, Check is alias (see attribute_definitions.json)
-        when 'CheckBox', 'Check', 'Checkbox'
+        when 'CheckBox'
           Views::CheckboxConverter.new(component, indent_level, action_manager, @binding_registry)
         when 'Radio'
           Views::RadioConverter.new(component, indent_level, action_manager, @binding_registry)
@@ -222,18 +251,11 @@ module SjuiTools
           Views::SliderConverter.new(component, indent_level, action_manager, @binding_registry)
         when 'Indicator'
           Views::IndicatorConverter.new(component, indent_level, action_manager, @binding_registry)
-        # `Table` is a Collection. The normalizer's synonym table, the shared
-        # validator's `map_type_to_definition`, rjui and kjui all resolve it
-        # that way; sjui was the only face routing it somewhere else, so a
-        # layout drew one thing on the normalised path and another on the
-        # direct one. `table_converter.rb` was a scaffold, not an
-        # implementation — with no binding it emitted ten literal
-        # `Text("Row \(index)")` rows (50 §4 / A2 ②).
-        when *DrawnTypes::COLLECTION
+        when 'Collection'
           Views::CollectionConverter.new(component, indent_level, action_manager, @binding_registry, @data_properties)
         when 'SelectBox'
           Views::SelectBoxConverter.new(component, indent_level, action_manager, @binding_registry)
-        when 'Web', 'WebView'
+        when 'Web'
           Views::WebConverter.new(component, indent_level, action_manager, @binding_registry)
         when 'DynamicComponent'
           Views::DynamicComponentConverter.new(component, indent_level, action_manager, @binding_registry)
@@ -245,8 +267,18 @@ module SjuiTools
         when 'Embed'
           Views::EmbedConverter.new(component, indent_level, action_manager, self, registry, @binding_registry)
         else
-          # デフォルトコンバーター
-          DefaultConverter.new(component, indent_level, action_manager, @binding_registry)
+          # No case draws it. A type the validator knows (an extension
+          # definition with no converter, say) is named in its own sentence
+          # and drawn as a View, its children in it; an unknown type is named
+          # and drawn as nothing (DefaultConverter). 4f's ruling, jsonui-cli 1.9.0.
+          type = component['type'].to_s
+          if unknown_type_validator.known_component_type?(type)
+            SjuiTools::Core::Logger.warn(SjuiTools::Core::AttributeValidator.declared_without_drawer_message(type, 'SwiftUI'))
+            Views::ViewConverter.new(component, indent_level, action_manager, self, registry, @binding_registry)
+          else
+            sentence = unknown_type_validator.unknown_component_type_message(type)
+            DefaultConverter.new(component, indent_level, action_manager, @binding_registry, sentence: sentence)
+          end
         end
       end
     end
@@ -308,19 +340,26 @@ module SjuiTools
       end
     end
 
-    # A type this tool draws nothing for: named in the build and on the
-    # placeholder in the validator's sentence
-    # (JsonUIShared::AttributeValidatorCore.unknown_component_type_message).
-    # The placeholder said "Unsupported component: <type>", in no other
-    # path's words.
+    # A type the validator does not know: named in the build in the
+    # validator's sentence (JsonUIShared::AttributeValidatorCore
+    # .unknown_component_type_message), and drawn as nothing — the sentence
+    # in a comment where the node would be, and an EmptyView, so what the
+    # parent puts after a child's code has a view to take. Not its children.
+    # It was a red Text holding the sentence (the words of a build on a
+    # release screen), and before that "Unsupported component: <type>";
+    # kjui and rjui draw nothing there too (4f's ruling, jsonui-cli 1.9.0).
+    # The factory hands it the sentence (ConverterFactory#unknown_type_validator).
     class DefaultConverter < Views::BaseViewConverter
-      def convert
-        sentence = SjuiTools::Core::AttributeValidator.new(:swiftui).unknown_component_type_message(@component['type'].to_s)
-        SjuiTools::Core::Logger.warn(sentence)
-        add_line "Text(#{sentence.to_json})"
-        add_modifier_line ".foregroundColor(.red)"
+      def initialize(component, indent_level = 0, action_manager = nil, binding_registry = nil, sentence: nil)
+        super(component, indent_level, action_manager, binding_registry)
+        @sentence = sentence
+      end
 
-        apply_modifiers
+      def convert
+        sentence = @sentence || SjuiTools::Core::AttributeValidator.new(:swiftui).unknown_component_type_message(@component['type'].to_s)
+        SjuiTools::Core::Logger.warn(sentence)
+        add_line "// #{sentence}"
+        add_line 'EmptyView()'
         generated_code
       end
     end

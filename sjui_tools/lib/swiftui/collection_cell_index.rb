@@ -67,7 +67,7 @@ module SjuiTools
       # ScrollingCellIndex's, so "this layout is a cell of X" keeps one
       # spelling across the two indexes.
       def self.collection?(node)
-        DrawnTypes::COLLECTION.include?(node['type'])
+        DrawnTypes.collection?(node['type'])
       end
     end
   end

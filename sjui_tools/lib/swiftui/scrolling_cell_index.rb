@@ -74,7 +74,7 @@ module SjuiTools
       end
 
       def self.vertically_scrolling_collection?(node)
-        return false unless DrawnTypes::COLLECTION.include?(node['type'])
+        return false unless DrawnTypes.collection?(node['type'])
         return false if node['lazy'] == 'none'
 
         !horizontal?(node)

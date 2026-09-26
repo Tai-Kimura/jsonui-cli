@@ -137,20 +137,20 @@ end
 
 # A type name is its declared spelling, case and all (jsonui-cli 1.9.0). The
 # passes that look for a Collection or a ScrollView before anything is drawn
-# read the spellings the converter factory draws (DrawnTypes), so a node the
-# factory does not draw as one ("collection") is not treated as one first —
-# and the factory's Table is.
+# ask what the converter factory draws a node as (DrawnTypes, over
+# TypeSynonyms), so a node the factory does not draw as one ("collection") is
+# not treated as one first — and a synonym it draws as one (Table, List) is.
 RSpec.describe 'sjui: the pre-passes read the spellings the factory draws' do
   require 'swiftui/collection_cell_index'
 
-  it 'a Collection is Collection or Table, as written' do
+  it 'a Collection is what the factory draws as one: Collection and its synonyms, as written' do
     index = SjuiTools::SwiftUI::ScrollingCellIndex
     cells = SjuiTools::SwiftUI::CollectionCellIndex
-    %w[Collection Table].each do |type|
+    %w[Collection Table List].each do |type|
       expect(index.vertically_scrolling_collection?('type' => type)).to be(true), type
       expect(cells.collection?('type' => type)).to be(true), type
     end
-    %w[collection COLLECTION List].each do |type|
+    %w[collection COLLECTION].each do |type|
       expect(index.vertically_scrolling_collection?('type' => type)).to be(false), type
       expect(cells.collection?('type' => type)).to be(false), type
     end
