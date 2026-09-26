@@ -1299,7 +1299,22 @@ module RjuiTools
           return " onClick={#{handler_expr}}" unless has_binding?(value)
 
           gate = extract_binding_property(value)
-          " onClick={(e) => { if (#{gate}) #{handler_expr}?.(e); }}"
+          # A member path is a handler, called with the event; any other
+          # expression (the selector array's arrow function, the link
+          # action's) takes no argument and is called in parentheses —
+          # `() => { … }?.(e)` does not parse, and `(() => …)(e)` passes an
+          # argument it does not take (TS2554 under --strict).
+          event = click_takes_event?
+          call = handler_expr.match?(/\A[\w.]+\z/) ? "#{handler_expr}?.(#{event ? 'e' : ''})" : "(#{handler_expr})()"
+          " onClick={(#{event ? 'e' : ''}) => { if (#{gate}) #{call}; }}"
+        end
+
+        # Whether the element the click lands on hands its onClick an event:
+        # a DOM element does; a built-in component may declare
+        # `onClick?: () => void` (NetworkImage), where `(e) => …` is not
+        # assignable.
+        def click_takes_event?
+          true
         end
 
         # A control's declared onClick, called from the control's own
@@ -1925,7 +1940,7 @@ module RjuiTools
               # Action object: { "action": "link", "url": "..." }
               if handler['action'] == 'link' && handler['url']
                 url = handler['url']
-                return " onClick={() => window.open(#{JsonUIShared::StringLiterals.ts_single(url)}, '_blank')}"
+                return can_tap_gated_click("() => window.open(#{JsonUIShared::StringLiterals.ts_single(url)}, '_blank')")
               else
                 return ''
               end
@@ -1943,10 +1958,12 @@ module RjuiTools
           end
 
           # Check onclick (lowercase) - selector format only; `""`, `[]` and
-          # `[""]` are no handler.
+          # `[""]` are no handler. `canTap` gates it as it gates onClick (the
+          # tap rule: every spelling of the tap) — this form, and the link
+          # action above, went out ungated, so `canTap: false` still tapped.
           if JsonUIShared::TapAccessibility.handler?(attributes['onclick'])
             expr = onclick_selector_expr(attributes['onclick'])
-            return expr ? " onClick={#{expr}}" : " /* ERROR: onclick requires selector format (string) */"
+            return expr ? can_tap_gated_click(expr) : " /* ERROR: onclick requires selector format (string) */"
           end
 
           ''
@@ -1969,8 +1986,11 @@ module RjuiTools
           elsif is_binding_format?(handler)
             nil
           else
-            # Valid selector: functionName -> data.functionName
-            "data.#{handler}"
+            # Valid selector: functionName -> data.functionName. `name:` is
+            # UIKit's sender mark — sjui calls `data.name?(self)` — and the
+            # web's sender is the event the handler is handed; the colon
+            # emitted `data.name:`, which does not parse.
+            "data.#{handler.to_s.chomp(':')}"
           end
         end
 

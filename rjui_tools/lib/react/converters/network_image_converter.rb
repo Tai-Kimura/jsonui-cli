@@ -35,6 +35,13 @@ module RjuiTools
 
         protected
 
+        # The NetworkImage template declares `onClick?: () => void`: a gated
+        # click is `() => { if (gate) … }`, not `(e) => …`, which that prop
+        # does not accept (BaseConverter#can_tap_gated_click).
+        def click_takes_event?
+          false
+        end
+
         def build_class_name
           classes = [super]
 
