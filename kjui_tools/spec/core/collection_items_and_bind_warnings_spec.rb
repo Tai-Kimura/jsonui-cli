@@ -39,4 +39,35 @@ RSpec.describe 'shared validator: Collection items and bind' do
     node = { 'type' => 'Switch', 'id' => 'toggle', 'width' => 100, 'height' => 40, 'bind' => '@{isOn}' }
     expect(validator.validate(node).grep(/'bind'/)).to eq([])
   end
+
+  # Ruling 2026-09-26: a flow Collection wraps by content width, and no face
+  # reads a column count there — its own or a section's. Named, so the
+  # declaration does not read as drawn.
+  describe 'columns on a flow Collection' do
+    def flow_said(extra)
+      node = { 'type' => 'Collection', 'id' => 'list', 'width' => 100, 'height' => 100, 'cellIdProperty' => 'id',
+               'items' => '@{rows}' }.merge(extra)
+      validator.validate(node).grep(/columns/)
+    end
+
+    it "names the Collection's columns and each section's, on every spelling of flow" do
+      %w[flow Flow leftAligned LeftAligned].each do |spelling|
+        expect(flow_said({ 'layout' => spelling, 'columns' => 2,
+                           'sections' => [{ 'cell' => 'ACell' }, { 'cell' => 'BCell', 'columns' => 3 }] })).to eq(
+          ['[id=list] columns has no effect on a flow Collection (it wraps by content width)',
+           '[id=list] sections[1].columns has no effect on a flow Collection (it wraps by content width)']
+        ), spelling
+      end
+      expect(flow_said({ 'orientation' => 'flow', 'columns' => 1 })).to eq(
+        ['[id=list] columns has no effect on a flow Collection (it wraps by content width)']
+      )
+    end
+
+    it 'says nothing where columns draws: a grid, a horizontal lane count, a flow turned horizontal (the controls)' do
+      expect(flow_said({ 'columns' => 2, 'sections' => [{ 'cell' => 'ACell', 'columns' => 3 }] })).to eq([])
+      expect(flow_said({ 'layout' => 'horizontal', 'columns' => 2 })).to eq([])
+      expect(flow_said({ 'layout' => 'flow', 'horizontalScroll' => true, 'columns' => 2 })).to eq([])
+      expect(flow_said({ 'layout' => 'flow', 'sections' => [{ 'cell' => 'ACell' }] })).to eq([])
+    end
+  end
 end

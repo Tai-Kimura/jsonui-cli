@@ -226,6 +226,12 @@ module JsonUIShared
         add_warning("'bind' is not a Collection's data source; use 'items' (e.g. \"items\": \"@{rows}\")")
       end
 
+      # `columns` on a flow Collection — its own or a section's: a flow wraps
+      # by content width, and every face ignores a column count there (sjui,
+      # kjui and rjui codegen, both Dynamic renderers; ruling 2026-09-26,
+      # ticket collection-attributes-declared-but-not-drawn-on-some-paths).
+      check_flow_columns(merged_component) if map_type_to_definition(type) == 'Collection'
+
       # Check Collection requires cellIdProperty in SwiftUI/Compose mode
       if type == 'Collection' && (@mode == :swiftui || @mode == :compose)
         unless merged_component.key?('cellIdProperty')
@@ -795,6 +801,23 @@ module JsonUIShared
       return unless text.is_a?(Hash) && text['binding_direction'] == 'two-way'
 
       add_warning("onClick on a #{section} is not called: a text field's tap focuses it")
+    end
+
+    # A flow Collection: `layout` (or `orientation`) flow or one of its alias
+    # spellings, not turned horizontal by `horizontalScroll: true` — the
+    # reading every codegen routes by.
+    def check_flow_columns(component)
+      layout = (component['layout'] || component['orientation']).to_s.downcase
+      return unless %w[flow leftaligned].include?(layout) && component['horizontalScroll'] != true
+
+      said = 'has no effect on a flow Collection (it wraps by content width)'
+      add_warning("columns #{said}") if component.key?('columns')
+      sections = component['sections']
+      return unless sections.is_a?(Array)
+
+      sections.each_with_index do |section, index|
+        add_warning("sections[#{index}].columns #{said}") if section.is_a?(Hash) && section.key?('columns')
+      end
     end
 
     def add_warning(message)
