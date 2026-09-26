@@ -248,28 +248,29 @@ module JsonUIShared
     # TabView tab's view. A stop around them reaches them at run time instead
     # — the stopping node hands it down (SwiftUI's environment, Compose's
     # CompositionLocal) and the drawn view's taps read it.
-    COLLECTION_TYPES = %w[collection table].freeze
     REFERENCE_KEYS = %w[cell header footer].freeze
     REFERENCE_LIST_KEYS = %w[cellClasses headerClasses footerClasses].freeze
 
     # The names of the layouts `node` itself draws elsewhere. The type is the
     # one the node is drawn as (type_synonyms.rb): a TableView, a List or a
     # RecyclerView is drawn as a Collection and draws its cells elsewhere.
+    # Type names are case-sensitive, as the codegen dispatches them: a
+    # lowercase `collection` is drawn as nothing and draws nothing elsewhere.
     def drawn_elsewhere(node)
       return [] unless node.is_a?(Hash)
 
       refs = []
-      type = JsonUIShared::TypeSynonyms.drawn_type(node['type'].to_s).downcase
-      if COLLECTION_TYPES.include?(type)
+      type = JsonUIShared::TypeSynonyms.drawn_type(node['type'].to_s)
+      if type == 'Collection'
         ([node] + Array(node['sections']).select { |s| s.is_a?(Hash) }).each do |holder|
           REFERENCE_KEYS.each { |key| refs << holder[key] }
         end
         REFERENCE_LIST_KEYS.each do |key|
           Array(node[key]).each { |item| refs << (item.is_a?(Hash) ? item['className'] : item) }
         end
-      elsif type == 'embed'
+      elsif type == 'Embed'
         refs << node['screen']
-      elsif type == 'tabview'
+      elsif type == 'TabView'
         Array(node['tabs']).each { |tab| refs << tab['view'] if tab.is_a?(Hash) }
       end
       refs.select { |r| r.is_a?(String) && !r.empty? && !r.start_with?('@{') }.uniq

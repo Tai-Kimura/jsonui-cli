@@ -85,6 +85,18 @@ RSpec.describe 'sjui userInteractionEnabled reaches what is drawn in a view of i
       expect(tap.drawn_elsewhere({ 'type' => 'TableView', 'cellClasses' => ['h'] })).to eq([])
     end
 
+    # Type names are case-sensitive, as the codegen dispatches them (4f's
+    # ruling, 1.9.0): a lowercase spelling of a declared type is drawn as
+    # nothing, so it draws nothing elsewhere. Round 2 of the tap rule read
+    # `collection`, `table`, `embed` and `tabview` too.
+    it 'reads the spelling as the codegen does: a lowercase one draws nothing elsewhere' do
+      node = { 'cellClasses' => ['h'], 'screen' => 's', 'tabs' => [{ 'view' => 'v' }] }
+      expect(tap.drawn_elsewhere(node.merge('type' => 'Collection'))).to eq(%w[h]) # (control)
+      %w[collection table embed tabview].each do |spelling|
+        expect(tap.drawn_elsewhere(node.merge('type' => spelling))).to eq([]), spelling
+      end
+    end
+
     it 'hands the stop down only where the flag is false or bound and something below draws elsewhere' do
       expect(tap.hands_stop_down?(stopping.call(false, collection))).to be(true)
       expect(tap.hands_stop_down?(stopping.call('@{u}', { 'type' => 'View', 'child' => [collection] }))).to be(true)
