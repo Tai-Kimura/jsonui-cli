@@ -2334,7 +2334,7 @@ module RjuiTools
           open_tag = element_root_range(jsx)
           unless open_tag
             Core::Logger.warn(
-              "#{json['type']} '#{json['id'] || '(no id)'}': #{what} is not applied — " \
+              "#{json['type']} '#{attributes['id'] || '(no id)'}': #{what} is not applied — " \
               'its markup has no element to carry the class'
             )
             return jsx
