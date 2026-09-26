@@ -70,6 +70,7 @@ module RjuiTools
 
           # Emit the screen-marker helper (screen identity / test support)
           emit_screen_marker_helper
+          emit_interaction_stop_helper
           emit_partial_text_helper
 
           # Emit the Collection scroll-control helper (scrollTo /
@@ -1315,6 +1316,53 @@ module RjuiTools
 
             export function jsonuiIncludePrefix(outer#{opt}, includeId#{s})#{s} {
               return outer ? jsonuiIncludeId(outer, includeId) : jsonuiCamel(includeId);
+            }
+
+            #{marker_footer}
+          JS
+
+          File.write(path, content)
+          Core::Logger.info("Generated: #{path}")
+        end
+
+        # The helper a stopped element spreads (BaseConverter
+        # #apply_interaction_inert): `inert` in the form the running React
+        # takes — a boolean from React 19, a string before it — read from
+        # React.version at run time, so the generated components are the same
+        # under both. Measured in Chromium (18.3.1, 19.2.7): the spread stops
+        # the pointer, the keyboard and the accessibility tree; `inert={true}`
+        # does nothing under 18 and `inert=""` nothing under 19.
+        def emit_interaction_stop_helper
+          generated_dir = @config['generated_directory'] || 'src/generated'
+          FileUtils.mkdir_p(generated_dir)
+          is_ts = @config['typescript']
+          extension = is_ts ? 'ts' : 'js'
+          path = File.join(generated_dir, "interactionStop.#{extension}")
+          stop_type = is_ts ? ': boolean' : ''
+          ret_type = is_ts ? ': Record<string, unknown>' : ''
+
+          marker_header = Core::GeneratedMarker.comment_header(
+            source: "interactionStop (userInteractionEnabled helper)",
+            generator: "rjui build"
+          )
+          marker_footer = Core::GeneratedMarker.comment_footer
+
+          content = <<~JS
+            #{marker_header}
+            import React from 'react';
+
+            // userInteractionEnabled false, or a binding while it is false: the
+            // element and everything in it are inert — no pointer, no keyboard
+            // focus, and out of the accessibility tree. React 19 takes `inert`
+            // as a boolean and treats "" as false; React 18 writes an attribute
+            // it does not know only as a string and drops `true`.
+            const booleanInert = Number(React.version.split('.')[0]) >= 19;
+
+            export function jsonuiInert(stop#{stop_type})#{ret_type} {
+              if (!stop) {
+                return {};
+              }
+              return booleanInert ? { inert: true } : { inert: '' };
             }
 
             #{marker_footer}

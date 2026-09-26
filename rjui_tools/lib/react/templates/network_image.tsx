@@ -40,6 +40,11 @@ interface NetworkImageProps {
   // that passes `jui build` can never fail tsc here
   // (rjui-network-image-onclick-not-forwarded).
   onClick?: () => void;
+  // A tap the tap rule makes a button (BaseConverter#keyboard_tap_attrs):
+  // its role, its tab stop and the keys that click it.
+  role?: string;
+  tabIndex?: number;
+  onKeyDown?: (e: React.KeyboardEvent<HTMLElement>) => void;
   style?: React.CSSProperties;
   'data-testid'?: string;
   'data-tag'?: string;
@@ -60,6 +65,9 @@ export const NetworkImage: React.FC<NetworkImageProps> = ({
   onLoad,
   onError,
   onClick,
+  role,
+  tabIndex,
+  onKeyDown,
   style,
   'data-testid': dataTestid,
   'data-tag': dataTag,
@@ -69,6 +77,9 @@ export const NetworkImage: React.FC<NetworkImageProps> = ({
   const rootProps = {
     id,
     onClick,
+    role,
+    tabIndex,
+    onKeyDown,
     style,
     'data-testid': dataTestid,
     'data-tag': dataTag,

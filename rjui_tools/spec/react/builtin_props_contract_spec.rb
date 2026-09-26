@@ -52,11 +52,48 @@ RSpec.describe 'built-in props contract' do
     };
   TS
 
+  # The attribute names of the component's opening tag, read attribute by
+  # attribute: a value is a string or a braced expression, which can hold `>`
+  # (an arrow function — the keys a tap takes, keyboard_tap_attrs).
   def emitted_attribute_names(jsx, component)
-    tag = jsx[/<#{component}\b(.*?)\/?>/m, 1]
-    raise "<#{component}> tag not found in emitted JSX" unless tag
+    start = jsx =~ /<#{component}\b/
+    raise "<#{component}> tag not found in emitted JSX" unless start
 
-    tag.scan(/\s([A-Za-z][\w-]*)=/).flatten.uniq
+    i = start + component.length + 1
+    names = []
+    loop do
+      i += 1 while jsx[i]&.match?(/\s/)
+      break if jsx[i].nil? || jsx[i] == '>' || jsx[i, 2] == '/>'
+
+      if jsx[i] == '{' # a spread
+        depth = 0
+        loop do
+          depth += 1 if jsx[i] == '{'
+          depth -= 1 if jsx[i] == '}'
+          i += 1
+          break if depth.zero?
+        end
+        next
+      end
+      name = jsx[i..][/\A[A-Za-z][\w-]*/] or raise "unreadable attribute at #{jsx[i, 40].inspect}"
+      names << name
+      i += name.length
+      next unless jsx[i] == '='
+
+      i += 1
+      if jsx[i] == '"'
+        i = jsx.index('"', i + 1) + 1
+      else
+        depth = 0
+        loop do
+          depth += 1 if jsx[i] == '{'
+          depth -= 1 if jsx[i] == '}'
+          i += 1
+          break if depth.zero?
+        end
+      end
+    end
+    names.uniq
   end
 
   describe 'NetworkImage' do
@@ -78,7 +115,10 @@ RSpec.describe 'built-in props contract' do
         'onClick' => '@{onImageTapped}',
         'cornerRadius' => '8',
         'testId' => 'hero-image',
-        'tag' => 'hero'
+        'tag' => 'hero',
+        # a tap the rule makes a button (annotate! writes it): role, tab
+        # stop and keys (keyboard_tap_attrs)
+        '_tapShape' => 'button'
       }
     end
 
@@ -90,7 +130,7 @@ RSpec.describe 'built-in props contract' do
     it 'pins the emit surface exactly (a new emit must extend this pin AND the props)' do
       expect(emitted_attribute_names(jsx, 'NetworkImage').sort).to eq(
         %w[alt className contentMode defaultImage data-tag data-testid errorImage id
-           loading onClick onError onLoad placeholder src].sort
+           loading onClick onError onKeyDown onLoad placeholder role src tabIndex].sort
       )
     end
 
@@ -129,7 +169,8 @@ RSpec.describe 'built-in props contract' do
         'onClick' => '@{onNotesTapped}',
         'autoShrink' => true, # rides the measurement ref on the root
         'testId' => 'notes-label',
-        'tag' => 'notes'
+        'tag' => 'notes',
+        '_tapShape' => 'button'
       }
     end
 
@@ -141,7 +182,7 @@ RSpec.describe 'built-in props contract' do
     it 'pins the emit surface exactly (a new emit must extend this pin AND the props)' do
       surface = emitted_attribute_names(jsx, 'LinkifyText') - REACT_MANAGED_ATTRS
       expect(surface.sort).to eq(
-        %w[className data-tag data-testid id onClick text].sort
+        %w[className data-tag data-testid id onClick onKeyDown role tabIndex text].sort
       )
     end
 
