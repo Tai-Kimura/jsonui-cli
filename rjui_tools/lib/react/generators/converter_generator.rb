@@ -231,7 +231,10 @@ module RjuiTools
         def generate_attribute_lines
           return ['            # No custom attributes'] if @options[:attributes].empty?
 
+          # A binding attribute (`@key`) is read from, and passed as, `key`
+          # (until 1.8.121 `json['@key']`, which no layout has).
           @options[:attributes].map do |key, _type|
+            key = key.delete_prefix('@')
             "            #{key}_value = json['#{key}']"
           end
         end
@@ -240,7 +243,8 @@ module RjuiTools
           return ['            # No custom props'] if @options[:attributes].empty?
 
           lines = []
-          @options[:attributes].each do |key, type|
+          @options[:attributes].each do |spelled, type|
+            key = spelled.delete_prefix('@')
             # Binding-aware, and by key, not by value: a `false` the layout
             # gives is a value too. A literal goes through the shared
             # vocabulary (format_literal); one of another kind is not

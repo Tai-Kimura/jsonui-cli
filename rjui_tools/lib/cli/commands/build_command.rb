@@ -102,6 +102,13 @@ module RjuiTools
 
           if json_files.empty?
             Core::Logger.warn('No JSON layout files found')
+            # Nothing to build is not a failure — but what the stages before
+            # this one could not do still is: it was recorded and then never
+            # written, so the ledger came back empty (measured on 0f7140a3:
+            # SwiftUI, colors.json unparseable, no layouts yet — exit 0, 0
+            # entries). Ticket uikit-build-reports-success-after-a-binding-error.
+            JsonUI::StageFailures.report!(Core::Logger)
+            JsonUI::StageFailures.conclude(Core::Logger, nil) if JsonUI::StageFailures.any?
             return
           end
 
@@ -334,14 +341,7 @@ module RjuiTools
           # is a legitimate outcome here, and stopping it would break the
           # window every consuming project builds in. What was missing is
           # that the last line stops claiming otherwise.
-          if JsonUI::StageFailures.any?
-            Core::Logger.error(
-              "Build finished with #{JsonUI::StageFailures.entries.size} " \
-              'stage(s) incomplete — see above'
-            )
-          else
-            Core::Logger.success('Build completed!')
-          end
+          JsonUI::StageFailures.conclude(Core::Logger, 'Build completed!')
         end
 
         def prune_orphan_components(expected_paths)
@@ -616,6 +616,11 @@ module RjuiTools
           data_generator.update_data_models
         rescue StandardError => e
           Core::Logger.error("Error generating data models: #{e.message}")
+          # The stage stops at the first layout it cannot read, so the ones
+          # after it have no Data model either. Until 1.8.121 this ERROR
+          # scrolled past "Build completed!" (ticket
+          # uikit-build-reports-success-after-a-binding-error).
+          JsonUI::StageFailures.record('data models', "the Data models were not generated: #{e.message}")
         end
 
         def generate_viewmodels
@@ -624,6 +629,7 @@ module RjuiTools
           viewmodel_generator.generate_viewmodels
         rescue StandardError => e
           Core::Logger.error("Error generating viewmodels: #{e.message}")
+          JsonUI::StageFailures.record('viewmodels', "the ViewModels were not generated: #{e.message}")
         end
 
         def generate_hooks
@@ -638,6 +644,7 @@ module RjuiTools
           hook_generator.generate_hooks
         rescue StandardError => e
           Core::Logger.error("Error generating hooks: #{e.message}")
+          JsonUI::StageFailures.record('hooks', "the ViewModel hooks were not generated: #{e.message}")
         end
 
         def update_color_manager(json_files, layouts_dir)

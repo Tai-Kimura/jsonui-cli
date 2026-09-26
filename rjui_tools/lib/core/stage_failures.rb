@@ -26,6 +26,15 @@ module JsonUI
         entries << { stage: stage.to_s, message: message.to_s }
       end
 
+      # For a failure met on every visit — a config file every load reads,
+      # a style every layout using it loads — which is one failure however
+      # often it is met.
+      def record_once(stage, message)
+        return if entries.any? { |e| e[:stage] == stage.to_s && e[:message] == message.to_s }
+
+        record(stage, message)
+      end
+
       def entries
         @entries ||= []
       end
@@ -36,6 +45,21 @@ module JsonUI
 
       def clear!
         @entries = []
+        @written = 0
+      end
+
+      # The closing line of a build: the success line only when nothing
+      # failed. One sentence for every face — the UIKit and Compose builds
+      # said they completed directly under the list of what had not until
+      # 1.8.121 (ticket uikit-build-reports-success-after-a-binding-error).
+      # The exit code is left alone, as above: `jui build` turns the ledger
+      # into the non-zero exit.
+      def conclude(logger, success_line)
+        if any?
+          logger.error("Build finished with #{entries.size} stage(s) incomplete — see above")
+        else
+          logger.success(success_line)
+        end
       end
 
       # Called at the end of a build. `logger` is the platform's own.
@@ -72,11 +96,21 @@ module JsonUI
           []
         end
         existing = [] unless existing.is_a?(Array)
-        added = entries.map do |e|
+        # Only what this process has not written yet: `sjui build --mode all`
+        # reports at the end of the UIKit stage and again at the end of the
+        # SwiftUI one, and until 1.8.121 the second report wrote the first
+        # one's entries again — one unparseable colors.json was two stages
+        # in `jui build`'s count.
+        written = @written || 0
+        written = 0 if written > entries.size
+        added = entries.drop(written).map do |e|
           { 'stage' => e[:stage], 'message' => e[:message] }
         end
+        return if added.empty?
+
         merged = existing + added
         File.write(path, JSON.generate(merged))
+        @written = entries.size
       rescue StandardError
         nil
       end

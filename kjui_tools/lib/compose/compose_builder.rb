@@ -439,10 +439,12 @@ module KjuiTools
           Components::TextViewComponent.generate(json_data, depth, @required_imports, parent_type)
         when 'IconLabel'
           Components::IconLabelComponent.generate(json_data, depth, @required_imports, parent_type)
-        when 'Collection'
+        # `Table` is a Collection — the type-synonym canon's reading, which
+        # sjui and rjui already draw. kjui drew it with TableComponent, whose
+        # `items` could not take an array (NoMethodError: `.match` on an
+        # Array, the build down) — ticket kjui-codegen-table-crashes-on-an-items-array.
+        when 'Collection', 'Table'
           Components::CollectionComponent.generate(json_data, depth, @required_imports, parent_type)
-        when 'Table'
-          Components::TableComponent.generate(json_data, depth, @required_imports, parent_type)
         when 'Web'
           Components::WebComponent.generate(json_data, depth, @required_imports, parent_type)
         when 'WebView'

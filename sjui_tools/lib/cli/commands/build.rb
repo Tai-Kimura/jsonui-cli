@@ -29,6 +29,15 @@ module SjuiTools
           @validation_errors = 0
           @binding_errors = []
 
+          # A Layouts directory that is not there is a named failure, before
+          # anything runs: the resource stage below writes
+          # <layouts>/Resources/strings.json and so CREATED the directory,
+          # and the UIKit build then reported success with nothing in it
+          # (measured on 0f7140a3, 2026-09-26: exit 0, "✓ Build completed
+          # successfully!"). rjui has always refused it this way. An empty
+          # directory is not this: that is a project with no layouts yet.
+          require_layouts_directory!
+
           # Process all JSON files for string extraction
           begin
             process_strings_extraction
@@ -64,6 +73,19 @@ module SjuiTools
         end
 
         private
+
+        def require_layouts_directory!
+          return unless Core::ProjectFinder.setup_paths # the project-file error comes later, as before
+
+          config = Core::ConfigManager.load_config
+          source_path = Core::ProjectFinder.get_full_source_path || Dir.pwd
+          layouts_dir = File.join(source_path, config['layouts_directory'] || 'Layouts')
+          return if Dir.exist?(layouts_dir)
+
+          Core::Logger.error "Layouts directory not found: #{layouts_dir}"
+          Core::Logger.error "Nothing was built. Check layouts_directory in sjui.config.json, or run 'sjui init'."
+          exit 1
+        end
 
         def parse_options(args)
           options = {}
@@ -202,6 +224,13 @@ module SjuiTools
             json_data = JSON.parse(File.read(json_file))
           rescue JSON::ParserError => e
             Core::Logger.error("Invalid JSON in #{json_file}: #{e.message}")
+            # Refused like a layout the checks refuse, so the next build
+            # converts it (and meets the same JSON) — until 1.8.121 it was
+            # an ERROR above "SwiftUI build completed!" (ticket
+            # uikit-build-reports-success-after-a-binding-error).
+            (@refused_layouts ||= []) << base_file
+            require_relative '../../core/stage_failures'
+            JsonUI::StageFailures.record('layout', "#{json_file} could not be read: #{e.message}")
             return
           end
 
@@ -452,6 +481,14 @@ module SjuiTools
 
           if json_files.empty?
             Core::Logger.warn "No JSON files found in #{layouts_dir}"
+            # Nothing to build is not a failure — but what the stages before
+            # this one could not do still is: it was recorded and then never
+            # written, so the ledger came back empty (measured on 0f7140a3:
+            # SwiftUI, colors.json unparseable, no layouts yet — exit 0, 0
+            # entries). Ticket uikit-build-reports-success-after-a-binding-error.
+            require_relative '../../core/stage_failures'
+            JsonUI::StageFailures.report!(Core::Logger)
+            JsonUI::StageFailures.conclude(Core::Logger, nil) if JsonUI::StageFailures.any?
             return
           end
 
@@ -779,14 +816,7 @@ module SjuiTools
           # The closing line does not say completed when it did not. The exit
           # code is left alone deliberately, as on the other faces: `jui build`
           # turns the ledger into the non-zero exit.
-          if JsonUI::StageFailures.any?
-            Core::Logger.error(
-              "Build finished with #{JsonUI::StageFailures.entries.size} " \
-              'stage(s) incomplete — see above'
-            )
-          else
-            Core::Logger.success "SwiftUI build completed!"
-          end
+          JsonUI::StageFailures.conclude(Core::Logger, 'SwiftUI build completed!')
         end
 
         # Where a layout's GeneratedView (and its variants') is written:
