@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require_relative '../helpers/modifier_builder'
+require_relative '../helpers/static_seed'
 require_relative '../helpers/resource_resolver'
 require_relative '../../core/attribute_validator_core'
 
@@ -41,6 +42,18 @@ module KjuiTools
             0  # Default to 0 as integer
           end
           
+          # A static index (or none) is the seed of the segment's own state
+          # (Helpers::StaticSeed): the body then reads it as it reads a bound
+          # index, and a tap writes it.
+          unless is_dynamic_index
+            return Helpers::StaticSeed.wrap(selected_index.to_s, depth, required_imports) do |d, state|
+              generate_body(json_data, d, required_imports, parent_type, state, true, state)
+            end
+          end
+          generate_body(json_data, depth, required_imports, parent_type, selected_index, is_dynamic_index, nil)
+        end
+
+        def self.generate_body(json_data, depth, required_imports, parent_type, selected_index, is_dynamic_index, seeded)
           # `items` only. `segments` was an undeclared alias -- absent from
           # attribute_definitions.json, read by no other face, and used by no
           # consumer layout (measured across six faces: 0). It is gone from the
@@ -138,6 +151,26 @@ module KjuiTools
           modifiers.concat(Helpers::ModifierBuilder.build_size(json_data, parent_type, required_imports))
           modifiers.concat(Helpers::ModifierBuilder.build_offset(json_data, required_imports))
           modifiers.concat(Helpers::ModifierBuilder.build_alpha(json_data, required_imports))
+          # shadow → border → corner clip: the View slots between alpha and
+          # padding. All three are declared on `common` and were dropped
+          # (kjui-dynamic-components-that-skip-the-common-modifiers). The
+          # background is the Segment's containerColor above, so the border and
+          # the clip come without it — the clip rounds that colour too, since
+          # the component draws it inside this chain. There is no click here:
+          # the declared onClick is called from each Tab's own selection
+          # (operation_click_call). The Segment carries the tag and each Tab
+          # the `enabled`, so the Segment takes `disabled()` for a UI test to
+          # read.
+          modifiers.concat(Helpers::ModifierBuilder.build_shadow(json_data, required_imports))
+          modifiers.concat(Helpers::ModifierBuilder.build_border_and_clip(json_data, required_imports))
+          # The node's own long press, pan and pinch, at the click slot and
+          # gated like it (gesture_gate: userInteractionEnabled and enabled) —
+          # declared on `common` and dropped here
+          # (kjui-dynamic-components-that-skip-the-common-modifiers, B6).
+          modifiers.concat(Helpers::ModifierBuilder.build_gestures(json_data, required_imports))
+          modifiers.concat(Helpers::ModifierBuilder.build_disabled_semantics(
+            json_data, Helpers::ModifierBuilder.enabled_expression(json_data), required_imports
+          ))
           modifiers.concat(Helpers::ModifierBuilder.build_padding(json_data))
           modifiers.concat(Helpers::ModifierBuilder.build_weight(json_data, parent_type))
 
@@ -164,6 +197,7 @@ module KjuiTools
               end
               
               code += "\n" + indent("onClick = {", depth + 2)
+              code += "\n" + indent("#{seeded} = #{index}", depth + 3) if seeded
               
               # Check if we have a binding variable
               has_binding = false
@@ -205,7 +239,12 @@ module KjuiTools
                 code += "\n" + indent("viewModel.updateData(mapOf(\"#{binding_variable}\" to #{index}))", depth + 3)
               else
                 # No action if selectedIndex is a static value with no binding
-                code += "\n" + indent("// Static selected index", depth + 3)
+                code += "\n" + indent("// Static selected index", depth + 3) unless seeded
+              end
+              # The declared onClick, from the tab's own selection, after it
+              # (ModifierBuilder.operation_click_call).
+              if (click = Helpers::ModifierBuilder.operation_click_call(json_data))
+                code += "\n" + indent(click, depth + 3)
               end
               
               code += "\n" + indent("},", depth + 2)
@@ -276,6 +315,7 @@ module KjuiTools
             end
             
             code += "\n" + indent("onClick = {", depth + 3)
+            code += "\n" + indent("#{seeded} = index", depth + 4) if seeded
             
             # Check if we have a binding variable
             has_binding = false
@@ -316,7 +356,7 @@ module KjuiTools
               code += "\n" + indent("viewModel.updateData(mapOf(\"#{binding_variable}\" to index))", depth + 4)
             else
               # No action if selectedIndex is a static value with no binding
-              code += "\n" + indent("// Static selected index", depth + 4)
+              code += "\n" + indent("// Static selected index", depth + 4) unless seeded
             end
             
             code += "\n" + indent("},", depth + 3)

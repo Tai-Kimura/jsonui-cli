@@ -184,6 +184,15 @@ module KjuiTools
         end
 
         def self.generate(json_data, depth, required_imports = nil, parent_type = nil)
+          # `items` is declared ["array", "binding"]; what these emitters draw
+          # from is the binding (the data's sections). An array names no data:
+          # it is set aside here, as the sjui and rjui Collections set it
+          # aside, where it used to reach `.match` and raise NoMethodError —
+          # the build down (ticket kjui-codegen-table-crashes-on-an-items-array).
+          unless json_data['items'].nil? || json_data['items'].is_a?(String)
+            json_data = json_data.reject { |key, _| key == 'items' }
+          end
+
           # Registered here, before the routing: `generate` forks into the
           # grid emitter and the CollectionStack emitter, and the inset can
           # come out of either. Registering inside one of them is how half a
@@ -431,6 +440,7 @@ module KjuiTools
           # 3. Alpha + Background (clip + background)
           modifiers.concat(Helpers::ModifierBuilder.build_offset(json_data, required_imports))
           modifiers.concat(Helpers::ModifierBuilder.build_alpha(json_data, required_imports))
+          modifiers.concat(Helpers::ModifierBuilder.build_shadow(json_data, required_imports))
           modifiers.concat(Helpers::ModifierBuilder.build_background(json_data, required_imports))
           modifiers.concat(Helpers::ModifierBuilder.build_clickable(json_data, required_imports))
           # 4. Padding last (inner spacing)
@@ -857,7 +867,13 @@ module KjuiTools
           modifiers.concat(Helpers::ModifierBuilder.build_size(json_data, parent_type, required_imports))
           modifiers.concat(Helpers::ModifierBuilder.build_offset(json_data, required_imports))
           modifiers.concat(Helpers::ModifierBuilder.build_alpha(json_data, required_imports))
+          modifiers.concat(Helpers::ModifierBuilder.build_shadow(json_data, required_imports))
           modifiers.concat(Helpers::ModifierBuilder.build_background(json_data, required_imports))
+          # The clickable stage — onClick, enabled, userInteractionEnabled and
+          # the node's gestures — which every other Collection emitter applies
+          # here, between the background and the padding; the pager applied
+          # none (kjui-dynamic-components-that-skip-the-common-modifiers, B1).
+          modifiers.concat(Helpers::ModifierBuilder.build_clickable(json_data, required_imports))
           modifiers.concat(Helpers::ModifierBuilder.build_padding(json_data))
           modifiers.concat(Helpers::ModifierBuilder.build_weight(json_data, parent_type))
 
@@ -1065,6 +1081,7 @@ module KjuiTools
           modifiers.concat(Helpers::ModifierBuilder.build_size(json_data, parent_type, required_imports))
           modifiers.concat(Helpers::ModifierBuilder.build_offset(json_data, required_imports))
           modifiers.concat(Helpers::ModifierBuilder.build_alpha(json_data, required_imports))
+          modifiers.concat(Helpers::ModifierBuilder.build_shadow(json_data, required_imports))
           modifiers.concat(Helpers::ModifierBuilder.build_background(json_data, required_imports))
           # A flow Collection with `lazy` in effect (default or "eager") scrolls
           # vertically inside its own bounds; `lazy: "none"` only wraps and the
@@ -1209,6 +1226,7 @@ module KjuiTools
           modifiers.concat(Helpers::ModifierBuilder.build_size(json_data, parent_type, required_imports))
           modifiers.concat(Helpers::ModifierBuilder.build_offset(json_data, required_imports))
           modifiers.concat(Helpers::ModifierBuilder.build_alpha(json_data, required_imports))
+          modifiers.concat(Helpers::ModifierBuilder.build_shadow(json_data, required_imports))
           modifiers.concat(Helpers::ModifierBuilder.build_background(json_data, required_imports))
           modifiers.concat(Helpers::ModifierBuilder.build_clickable(json_data, required_imports))
           modifiers.concat(Helpers::ModifierBuilder.build_padding(json_data))
@@ -1327,6 +1345,7 @@ module KjuiTools
           modifiers.concat(Helpers::ModifierBuilder.build_size(json_data, parent_type, required_imports))
           modifiers.concat(Helpers::ModifierBuilder.build_offset(json_data, required_imports))
           modifiers.concat(Helpers::ModifierBuilder.build_alpha(json_data, required_imports))
+          modifiers.concat(Helpers::ModifierBuilder.build_shadow(json_data, required_imports))
           modifiers.concat(Helpers::ModifierBuilder.build_background(json_data, required_imports))
           modifiers.concat(Helpers::ModifierBuilder.build_clickable(json_data, required_imports))
           modifiers.concat(Helpers::ModifierBuilder.build_padding(json_data))
@@ -1495,6 +1514,7 @@ module KjuiTools
           end
           modifiers.concat(Helpers::ModifierBuilder.build_offset(json_data, required_imports))
           modifiers.concat(Helpers::ModifierBuilder.build_alpha(json_data, required_imports))
+          modifiers.concat(Helpers::ModifierBuilder.build_shadow(json_data, required_imports))
           modifiers.concat(Helpers::ModifierBuilder.build_background(json_data, required_imports))
           # Container-level listStyle chrome, same recipe as the grid route:
           # the dynamic component paints it on every route, so the

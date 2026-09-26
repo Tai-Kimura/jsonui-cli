@@ -163,6 +163,9 @@ module JsonUIShared
     # -----------------------------------------------------------------------
 
     def process_json_file(json_file)
+      # The layout a warning about one of its data properties names
+      # (finalize_data_property passes it to the TypeConverter).
+      @current_layout = @layouts_dir ? json_file.sub(%r{\A#{Regexp.escape(@layouts_dir)}/?}, '') : json_file
       json_content = File.read(json_file)
       json_data = JSON.parse(json_content)
 

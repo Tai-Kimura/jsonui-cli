@@ -18,6 +18,13 @@ module KjuiTools
           modifiers.concat(Helpers::ModifierBuilder.build_size(json_data, parent_type, required_imports))
           modifiers.concat(Helpers::ModifierBuilder.build_offset(json_data, required_imports))
           modifiers.concat(Helpers::ModifierBuilder.build_alpha(json_data, required_imports))
+          # shadow → background (border + clip + background): the View slots
+          # before the click, as the dynamic component's buildModifier puts
+          # them ahead of its gradient. Shadow, the declared background colour
+          # and the border were dropped
+          # (kjui-dynamic-components-that-skip-the-common-modifiers).
+          modifiers.concat(Helpers::ModifierBuilder.build_shadow(json_data, required_imports))
+          modifiers.concat(Helpers::ModifierBuilder.build_background(json_data, required_imports))
           modifiers.concat(Helpers::ModifierBuilder.build_clickable(json_data, required_imports))
           modifiers.concat(Helpers::ModifierBuilder.build_padding(json_data))
 
@@ -89,7 +96,9 @@ module KjuiTools
           # Add corner radius if specified
           if json_data['cornerRadius']
             required_imports&.add(:shape)
-            modifiers << ".clip(RoundedCornerShape(#{json_data['cornerRadius']}.dp))"
+            # A bound cornerRadius is an expression (BoundValue.dp); `@{r}` was
+            # written into the Kotlin as `RoundedCornerShape(@{r}.dp)` (B8).
+            modifiers << ".clip(RoundedCornerShape(#{Helpers::BoundValue.dp(json_data['cornerRadius'])}))"
           end
           
           modifiers.concat(Helpers::ModifierBuilder.build_alignment(json_data, required_imports, parent_type))

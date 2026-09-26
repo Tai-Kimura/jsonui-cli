@@ -134,10 +134,11 @@ module SjuiTools
           # already declared).
 
           # onClick handler (canTap is optional, onClick alone is sufficient;
-          # `canTap: false` is no tap — register_click_lines, which replaces
-          # this line for every other gate, emits none for it)
+          # `canTap: false` and a stopped interaction are no tap —
+          # register_click_lines, which replaces this line for every other
+          # gate, emits none for them)
           if JsonUIShared::TapAccessibility.handler?(@component['onClick']) && is_binding?(@component['onClick']) &&
-             @component['canTap'] != false
+             !tap_shut?
             handler_call = get_event_handler_invocation(@component['onClick'], @component['id'] || 'image')
             on_click_lines = [
               ".contentShape(Rectangle())",

@@ -173,6 +173,12 @@ module KjuiTools
             json_data = JSON.parse(File.read(json_file))
           rescue JSON::ParserError => e
             Core::Logger.error("Invalid JSON in #{json_file}: #{e.message}")
+            # Refused like a layout the checks refuse, so the next build
+            # converts it — as sjui does with the same file (ticket
+            # uikit-build-reports-success-after-a-binding-error).
+            (@refused_layouts ||= []) << base_file
+            require_relative '../../core/stage_failures'
+            JsonUI::StageFailures.record('layout', "#{json_file} could not be read: #{e.message}")
             return
           end
 
@@ -304,6 +310,16 @@ module KjuiTools
           source_directory = config['source_directory'] || 'src/main'
           layouts_dir = File.join(source_path, source_directory, config['layouts_directory'] || 'assets/Layouts')
 
+          # A Layouts directory that is not there is a named failure, as on
+          # rjui and sjui — until 1.8.121 it was "No JSON files found" and
+          # exit 0, the answer an empty directory gets (ticket
+          # uikit-build-reports-success-after-a-binding-error).
+          unless Dir.exist?(layouts_dir)
+            Core::Logger.error "Layouts directory not found: #{layouts_dir}"
+            Core::Logger.error "Nothing was built. Check layouts_directory in kjui.config.json, or run 'kjui init'."
+            exit 1
+          end
+
           # Initialize cache manager
           # The cache manager is told the directories build.rb resolved; it
           # must not rebuild them from `source_path` (it used to, and with a
@@ -345,6 +361,14 @@ module KjuiTools
 
           if json_files.empty?
             Core::Logger.warn "No JSON files found in #{layouts_dir}"
+            # Nothing to build is not a failure — but what the stages before
+            # this one could not do still is: it was recorded and then never
+            # written, so the ledger came back empty (measured on 0f7140a3:
+            # SwiftUI, colors.json unparseable, no layouts yet — exit 0, 0
+            # entries). Ticket uikit-build-reports-success-after-a-binding-error.
+            require_relative '../../core/stage_failures'
+            JsonUI::StageFailures.report!(Core::Logger)
+            JsonUI::StageFailures.conclude(Core::Logger, nil) if JsonUI::StageFailures.any?
             return
           end
 
@@ -579,7 +603,10 @@ module KjuiTools
           require_relative '../../core/stage_failures'
           JsonUI::StageFailures.report!(Core::Logger)
 
-          Core::Logger.success "Compose build completed!"
+          # Until 1.8.121 "Compose build completed!" came directly under the
+          # list of stages that had not (ticket
+          # uikit-build-reports-success-after-a-binding-error).
+          JsonUI::StageFailures.conclude(Core::Logger, 'Compose build completed!')
         end
 
         # Cell views a Collection renders, by class name. Collected while the

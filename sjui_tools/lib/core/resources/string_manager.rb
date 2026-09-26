@@ -84,6 +84,11 @@ module SjuiTools
               Core::Logger.warn "Failed to parse #{json_file}: #{e.message}"
             rescue => e
               Core::Logger.warn "Error processing #{json_file}: #{e.message}"
+              # Its strings are not in this run's extraction: named at the
+              # end, as kjui names the same failure (ticket
+              # uikit-build-reports-success-after-a-binding-error).
+              require_relative '../stage_failures'
+              JsonUI::StageFailures.record('strings', "#{json_file}: its strings were not extracted (#{e.message})")
             end
           end
 

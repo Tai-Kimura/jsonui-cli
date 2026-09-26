@@ -541,26 +541,6 @@
       "note": ""
     },
     {
-      "fixture": "Slider/value__binding",
-      "platforms": {
-        "android": "active",
-        "ios": "active",
-        "web": "inert"
-      },
-      "reason": "Fixture shape: the control carries the same value (0.5) as a companion attribute, so the pair is identical BY CONSTRUCTION — the web renders are byte-identical (verified). The android/ios 'active' verdicts come from other control-shape differences, not from value discrimination.",
-      "note": ""
-    },
-    {
-      "fixture": "Slider/value__static",
-      "platforms": {
-        "android": "active",
-        "ios": "active",
-        "web": "inert"
-      },
-      "reason": "Fixture shape: same as value__binding — the control carries value 0.5 as a companion, the web pair is byte-identical by construction.",
-      "note": ""
-    },
-    {
       "fixture": "TabView/unselectedColor__binding",
       "platforms": {
         "android": "active",

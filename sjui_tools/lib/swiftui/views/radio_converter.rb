@@ -10,15 +10,26 @@ module SjuiTools
         include SjuiTools::SwiftUI::Helpers::FontHelper
         def convert
           id = @component['id'] || 'radio'
-          items = @component['items'] || []
+          # `items` is declared ["array", "binding"]: an array is the options,
+          # written out one by one; a binding is a list the data holds, drawn
+          # with ForEach — what KotlinJsonUI's dynamic renderer does with it.
+          # Until 1.8.121 a bound `items` raised NoMethodError (`any?` on a
+          # String) and took the build down (ticket
+          # kjui-codegen-table-crashes-on-an-items-array).
+          raw_items = @component['items']
+          bound_items = raw_items.is_a?(String) && is_binding?(raw_items) ? "data.#{extract_binding_property(raw_items)}" : nil
+          items = raw_items.is_a?(Array) ? raw_items : []
           # `label` is the specific declared row and wins over the `text`
           # alias — the same precedence CheckBox has taken since it was
           # written. Nothing here read `label` at all, so the attribute was
           # inert on this platform in both its literal and its bound form.
           text = @component['label'] || @component['text'] || ""
 
+          # The declared onClick, called from a selection (operation_click_call).
+          click = operation_click_call
+
           # Check if this is a radio group with items
-          if items.any?
+          if bound_items || items.any?
             # Get selection binding
             if @component['selectedValue'] && is_binding?(@component['selectedValue'])
               selection_binding = "data.#{extract_binding_property(@component['selectedValue'])}"
@@ -42,13 +53,13 @@ module SjuiTools
                 apply_font_modifiers(@component, self)
               end
 
-              items.each_with_index do |item, index|
+              option = lambda do |item|
                 add_line "HStack#{icon_text_spacing} {"
                 indent do
-                  add_radio_icon_lines("#{selection_binding} == #{swift_string_literal(item)}")
+                  add_radio_icon_lines("#{selection_binding} == #{item}")
                   add_modifier_line ".onTapGesture {"
                   indent do
-                    add_line "#{selection_binding} = #{swift_string_literal(item)}"
+                    add_line "#{selection_binding} = #{item}"
                     # onValueChange handler - called when radio selection changes
                     # onValueChange (camelCase) -> binding format only (@{functionName})
                     #
@@ -60,14 +71,25 @@ module SjuiTools
                     # same split as SelectBox
                     # (jui-selectbox-onvaluechange-argument-differs-between-sjui-and-kjui).
                     if @component['onValueChange'] && is_binding?(@component['onValueChange'])
-                      handler_call = get_event_handler_invocation(@component['onValueChange'], id, swift_string_literal(item))
+                      handler_call = get_event_handler_invocation(@component['onValueChange'], id, item)
                       add_line handler_call
                     end
+                    # Then the declared onClick, from the same selection
+                    # (operation_click_call). It was called from nothing: the
+                    # tap around the group never fired over the item's own.
+                    add_line click if click
                   end
                   add_line "}"
-                  add_line "Text(#{swift_string_literal(item)})"
+                  add_line "Text(#{item})"
                 end
                 add_line "}"
+              end
+              if bound_items
+                add_line "ForEach(#{bound_items}, id: \\.self) { item in"
+                indent { option.call('item') }
+                add_line "}"
+              else
+                items.each { |item| option.call(swift_string_literal(item)) }
               end
             end
             add_line "}"
@@ -116,14 +138,10 @@ module SjuiTools
               indent do
                 add_line "#{state_var} = #{swift_string_literal(radio_value)}"
                 # onClick handler - called when radio is clicked
-                # onClick (camelCase) -> binding format only (@{functionName})
-                # canTap gates the call, not the selection
-                # (gated_handler_call).
-                if JsonUIShared::TapAccessibility.handler?(@component['onClick']) && is_binding?(@component['onClick']) &&
-                   @component['canTap'] != false
-                  handler_call = get_event_handler_invocation(@component['onClick'], id, nil)
-                  add_line gated_handler_call(handler_call)
-                end
+                # canTap and userInteractionEnabled gate the call, not the
+                # selection (operation_click_call — every handler, the legacy
+                # `onclick` too).
+                add_line click if click
               end
               add_line "}"
               

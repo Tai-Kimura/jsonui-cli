@@ -20,6 +20,11 @@ module KjuiTools
           modifiers.concat(Helpers::ModifierBuilder.build_size(json_data, parent_type, required_imports))
           modifiers.concat(Helpers::ModifierBuilder.build_offset(json_data, required_imports))
           modifiers.concat(Helpers::ModifierBuilder.build_alpha(json_data, required_imports))
+          # shadow → border: the View slots before the click. The background
+          # is this component's own scrim below, so the border comes alone
+          # (kjui-dynamic-components-that-skip-the-common-modifiers).
+          modifiers.concat(Helpers::ModifierBuilder.build_shadow(json_data, required_imports))
+          modifiers.concat(Helpers::ModifierBuilder.build_border(json_data, required_imports))
           modifiers.concat(Helpers::ModifierBuilder.build_clickable(json_data, required_imports))
           modifiers.concat(Helpers::ModifierBuilder.build_padding(json_data))
 
@@ -27,7 +32,9 @@ module KjuiTools
           # dynamic chain clips first)
           if json_data['cornerRadius']
             required_imports&.add(:shape)
-            modifiers << ".clip(RoundedCornerShape(#{json_data['cornerRadius']}.dp))"
+            # A bound cornerRadius is an expression (BoundValue.dp); `@{r}` was
+            # written into the Kotlin as `RoundedCornerShape(@{r}.dp)` (B8).
+            modifiers << ".clip(RoundedCornerShape(#{Helpers::BoundValue.dp(json_data['cornerRadius'])}))"
           end
 
           # `effectStyle` (enum Light / Dark / ExtraLight) is expressed the

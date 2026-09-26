@@ -15,17 +15,30 @@ RSpec.describe KjuiTools::Compose::Components::SliderComponent do
   end
 
   describe '.generate' do
-    it 'generates basic Slider component' do
+    # A static value (or none — the minimum) is the seed of the slider's own
+    # state, which a change writes (ticket
+    # static-valued-controls-do-not-change-on-a-users-tap: it was emitted as
+    # `value = 0f, onValueChange = { }`, and a drag did nothing).
+    it 'generates basic Slider component, starting at the minimum' do
       json_data = { 'type' => 'Slider' }
       result = described_class.generate(json_data, 0, required_imports)
       expect(result).to include('Slider(')
-      expect(result).to include('value = 0f')
+      expect(result).to include('var seeded by remember { mutableStateOf(0f) }')
+      expect(result).to include('value = seeded,')
+    end
+
+    it 'starts a slider with no value at a declared minimum' do
+      json_data = { 'type' => 'Slider', 'minimum' => -2, 'maximum' => 1 }
+      result = described_class.generate(json_data, 0, required_imports)
+      expect(result).to include('mutableStateOf(-2f)')
     end
 
     it 'generates Slider with value' do
       json_data = { 'type' => 'Slider', 'value' => 50 }
       result = described_class.generate(json_data, 0, required_imports)
-      expect(result).to include('value = 50f')
+      expect(result).to include('var seeded by remember { mutableStateOf(50f) }')
+      expect(result).to include('value = seeded,')
+      expect(required_imports).to include(:remember_state)
     end
 
     it 'generates Slider with value data binding' do
@@ -49,10 +62,10 @@ RSpec.describe KjuiTools::Compose::Components::SliderComponent do
       expect(result).to include('data.handleSliderChange?.invoke()')
     end
 
-    it 'generates Slider with empty onValueChange when no handler' do
+    it 'writes its own state when the user moves it and there is no handler' do
       json_data = { 'type' => 'Slider' }
       result = described_class.generate(json_data, 0, required_imports)
-      expect(result).to include('onValueChange = { }')
+      expect(result).to include('onValueChange = { seeded = it }')
     end
 
     # The undeclared range was 0..100, invented here rather than declared

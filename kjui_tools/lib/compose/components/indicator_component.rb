@@ -7,9 +7,18 @@ module KjuiTools
   module Compose
     module Components
       class IndicatorComponent
+        # The spinner's size for each indicatorStyle that has one of its own;
+        # `medium` is CircularProgressIndicator's default and `linear` a bar.
+        STYLE_SIZES = { 'small' => 16, 'large' => 48 }.freeze
+
         def self.generate(json_data, depth, required_imports = nil, parent_type = nil)
-          # Indicator can be circular or linear based on style
-          style = json_data['style'] || 'medium'
+          # indicatorStyle (declared for Compose): small / medium / large are
+          # the spinner's size, linear a bar. The legacy spellings — `style`,
+          # which is the style-file key, and an undeclared `size` — are no
+          # longer read here: the layout normalizer folds them into
+          # indicatorStyle and width / height, with a warning
+          # (kjui-dynamic-components-that-skip-the-common-modifiers, C).
+          style = json_data['indicatorStyle'] || 'medium'
           is_animating = json_data['animating']
           
           # Check if animating is controlled by data binding
@@ -46,18 +55,22 @@ module KjuiTools
           # Add testTag and contentDescription for UI testing
           modifiers.concat(Helpers::ModifierBuilder.build_test_tag(json_data, required_imports))
 
-          # Size based on style
-          if style == 'large'
-            modifiers << ".size(48.dp)"
-          elsif style == 'small'
-            modifiers << ".size(16.dp)"
-          elsif json_data['size']
-            modifiers << ".size(#{json_data['size']}.dp)"
-          end
-          
+          # Size, in the size slot after the margins. The declared `width` /
+          # `height` (common) win and go through the one size builder; with
+          # neither, the style's size. The style's size sat before the
+          # margins, so they padded the inside of the 48dp spinner.
+          declared_size = json_data['width'] || json_data['height'] || json_data['frame']
           modifiers.concat(Helpers::ModifierBuilder.build_margins(json_data))
+          if declared_size
+            modifiers.concat(Helpers::ModifierBuilder.build_size(json_data, parent_type, required_imports))
+          elsif (style_size = STYLE_SIZES[style])
+            modifiers << ".size(#{style_size}.dp)"
+          end
           modifiers.concat(Helpers::ModifierBuilder.build_offset(json_data, required_imports))
           modifiers.concat(Helpers::ModifierBuilder.build_alpha(json_data, required_imports))
+          # shadow → background (border + clip + background): the View slots.
+          modifiers.concat(Helpers::ModifierBuilder.build_shadow(json_data, required_imports))
+          modifiers.concat(Helpers::ModifierBuilder.build_background(json_data, required_imports))
           modifiers.concat(Helpers::ModifierBuilder.build_clickable(json_data, required_imports))
           modifiers.concat(Helpers::ModifierBuilder.build_padding(json_data))
           modifiers.concat(Helpers::ModifierBuilder.build_alignment(json_data, required_imports, parent_type))

@@ -12,6 +12,7 @@ require_relative '../core/attribute_validator'
 require_relative '../core/layout_validator'
 require_relative '../core/image_accessibility'
 require_relative '../core/tap_accessibility'
+require_relative '../core/layout_path'
 require_relative '../core/normalization'
 require_relative '../core/layout_variant'
 require_relative '../core/screen_index'
@@ -231,6 +232,9 @@ module KjuiTools
 
           annotate_image_roles(json_data, json_file)
           JsonUIShared::TapAccessibility.annotate!(json_data)
+          # Each node's position, for the names a layout does not give
+          # (shared/core/layout_path.rb) — on the same include-expanded tree.
+          JsonUIShared::LayoutPath.stamp!(json_data)
 
           @required_imports = Set.new
           @included_views = Set.new
@@ -340,6 +344,11 @@ module KjuiTools
       def generate_component(json_data, depth = 0, parent_type = nil, is_root: false)
         return "" unless json_data.is_a?(Hash)
 
+        # A tree the build entry points did not stamp (a caller emitting a
+        # node directly) is stamped from the node it is reached at, so the
+        # position names stay a function of the tree.
+        JsonUIShared::LayoutPath.stamp!(json_data) unless JsonUIShared::LayoutPath.stamped?(json_data)
+
         # Skip data-spec / shared_data / variables entries that may appear
         # inline in a `child:` array (no `type` key, no `include`). Without
         # this, generate_component falls through to type=View → emits a
@@ -439,10 +448,12 @@ module KjuiTools
           Components::TextViewComponent.generate(json_data, depth, @required_imports, parent_type)
         when 'IconLabel'
           Components::IconLabelComponent.generate(json_data, depth, @required_imports, parent_type)
-        when 'Collection'
+        # `Table` is a Collection — the type-synonym canon's reading, which
+        # sjui and rjui already draw. kjui drew it with TableComponent, whose
+        # `items` could not take an array (NoMethodError: `.match` on an
+        # Array, the build down) — ticket kjui-codegen-table-crashes-on-an-items-array.
+        when 'Collection', 'Table'
           Components::CollectionComponent.generate(json_data, depth, @required_imports, parent_type)
-        when 'Table'
-          Components::TableComponent.generate(json_data, depth, @required_imports, parent_type)
         when 'Web'
           Components::WebComponent.generate(json_data, depth, @required_imports, parent_type)
         when 'WebView'
@@ -882,11 +893,16 @@ module KjuiTools
         # userInteractionEnabled stops the safe area and what is in it
         # (ModifierBuilder.build_interaction_blocker); it builds no clickable.
         modifiers.concat(Helpers::ModifierBuilder.build_interaction_blocker(json_data, @required_imports))
+        # Margins are the outer spacing: before (outside) the size. They were
+        # last in the chain — inside the size, the background and the system
+        # bar padding — where they padded the content instead of spacing the
+        # node from its siblings (kjui-dynamic-components-that-skip-the-common-
+        # modifiers, measured as CG_ORDER SafeAreaView margins INSIDE).
+        modifiers.concat(Helpers::ModifierBuilder.build_margins(json_data))
         size_modifiers = Helpers::ModifierBuilder.build_size(json_data, nil, @required_imports)
         size_modifiers << ".fillMaxWidth()" unless json_data['width']
         modifiers.concat(size_modifiers)
-        modifiers.concat(Helpers::ModifierBuilder.build_offset(json_data, @required_imports))
-        modifiers.concat(Helpers::ModifierBuilder.build_background(json_data, @required_imports))
+        modifiers.concat(safe_area_decoration_stages(json_data))
 
         # Apply safe area padding based on edges (after background)
         # Use conditional modifiers based on runtime edges
@@ -899,7 +915,6 @@ module KjuiTools
         modifiers << ".imePadding()" unless ignore_keyboard
 
         modifiers.concat(Helpers::ModifierBuilder.build_padding(json_data))
-        modifiers.concat(Helpers::ModifierBuilder.build_margins(json_data))
 
         # `is_root` flows from generate_component when SafeAreaView is the
         # *GeneratedView's root composable. ModifierBuilder.format then
@@ -916,6 +931,31 @@ module KjuiTools
 
         code += "\n" + indent("}", depth)
         code
+      end
+
+      # offset → alpha → shadow → background → click: the View slots after the
+      # size, shared by both SafeAreaView helpers. Alpha, shadow, onClick and
+      # enabled are declared on `common` and these inline helpers dropped them
+      # (kjui-dynamic-components-that-skip-the-common-modifiers — the same
+      # trap as the testTag / size repair above: kwargs threaded through
+      # components/ miss the helpers here). The blocker is emitted before the
+      # size, so the click stage is the click and the disabled semantics, not
+      # build_clickable's blocker again.
+      def safe_area_decoration_stages(json_data)
+        modifiers = []
+        modifiers.concat(Helpers::ModifierBuilder.build_offset(json_data, @required_imports))
+        modifiers.concat(Helpers::ModifierBuilder.build_alpha(json_data, @required_imports))
+        modifiers.concat(Helpers::ModifierBuilder.build_shadow(json_data, @required_imports))
+        modifiers.concat(Helpers::ModifierBuilder.build_background(json_data, @required_imports))
+        # The node's own long press, pan and pinch, at the click slot and
+        # gated like it (gesture_gate) — declared on `common` and dropped
+        # here (kjui-dynamic-components-that-skip-the-common-modifiers, B6).
+        modifiers.concat(Helpers::ModifierBuilder.build_gestures(json_data, @required_imports))
+        modifiers.concat(Helpers::ModifierBuilder.build_click(json_data, @required_imports))
+        modifiers.concat(Helpers::ModifierBuilder.build_disabled_semantics(
+          json_data, Helpers::ModifierBuilder.enabled_expression(json_data), @required_imports
+        ))
+        modifiers
       end
 
       def has_relative_positioning_in_children?(children)
@@ -957,12 +997,17 @@ module KjuiTools
         # userInteractionEnabled stops the safe area and what is in it
         # (ModifierBuilder.build_interaction_blocker); it builds no clickable.
         modifiers.concat(Helpers::ModifierBuilder.build_interaction_blocker(json_data, @required_imports))
+        # Margins are the outer spacing: before (outside) the size. They were
+        # last in the chain — inside the size, the background and the system
+        # bar padding — where they padded the content instead of spacing the
+        # node from its siblings (kjui-dynamic-components-that-skip-the-common-
+        # modifiers, measured as CG_ORDER SafeAreaView margins INSIDE).
+        modifiers.concat(Helpers::ModifierBuilder.build_margins(json_data))
         size_modifiers = Helpers::ModifierBuilder.build_size(json_data, nil, @required_imports)
         size_modifiers << ".fillMaxWidth()" unless json_data['width']
         size_modifiers << ".fillMaxHeight()" unless json_data['height']
         modifiers.concat(size_modifiers)
-        modifiers.concat(Helpers::ModifierBuilder.build_offset(json_data, @required_imports))
-        modifiers.concat(Helpers::ModifierBuilder.build_background(json_data, @required_imports))
+        modifiers.concat(safe_area_decoration_stages(json_data))
 
         # Apply safe area padding based on edges (after background)
         modifiers << ".then(if (edges.contains(\"all\")) Modifier.systemBarsPadding() else Modifier)"
@@ -974,7 +1019,6 @@ module KjuiTools
         modifiers << ".imePadding()" unless ignore_keyboard
 
         modifiers.concat(Helpers::ModifierBuilder.build_padding(json_data))
-        modifiers.concat(Helpers::ModifierBuilder.build_margins(json_data))
 
         # See `generate_safe_area_view` — `is_root` opens the chain from
         # caller's `modifier` so SafeAreaView roots wrapping a
@@ -1223,6 +1267,15 @@ module KjuiTools
             end
           end
 
+          # A group of single Radios the layout does not bind keeps its
+          # selection in this view's own map (RadioComponent); every section
+          # the extractor lifted runs inside the provider, so an item reads the
+          # same map wherever it landed.
+          if @required_imports.include?(:radio_group_selections)
+            static_content = provide_radio_groups(static_content)
+            @responsive_functions << RADIO_GROUP_SELECTIONS_DECLARATION
+          end
+
           # Variant-file dispatch: replace the static tree with a window
           # width `when` that selects the matching variant composable.
           # Whole-tree replacement — the same data/viewModel/modifier feed
@@ -1365,6 +1418,7 @@ module KjuiTools
 
         annotate_image_roles(json_data, variant_file)
         JsonUIShared::TapAccessibility.annotate!(json_data)
+        JsonUIShared::LayoutPath.stamp!(json_data)
 
         @required_imports = Set.new
         @included_views = Set.new
@@ -1625,6 +1679,23 @@ module KjuiTools
         else
           "value as? #{kotlin_type} ?: updated.#{name}"
         end
+      end
+
+      # The view's map of group name → chosen item, for the groups of single
+      # Radios its layout does not bind (unset until something is chosen, so
+      # each item's `checked` seeds it). File-private: every generated view
+      # file that needs it declares its own.
+      RADIO_GROUP_SELECTIONS_DECLARATION = <<~KOTLIN.chomp
+        // Each unbound group of single Radios in this view: group name -> the chosen item
+        // (absent until the user chooses — the checked item shows until then).
+        private val LocalRadioGroupSelections = compositionLocalOf<MutableMap<String, String>> { mutableStateMapOf() }
+      KOTLIN
+
+      def provide_radio_groups(static_content)
+        trailing = static_content.end_with?("\n") ? "\n" : ''
+        body = static_content.chomp.lines.map { |line| line.strip.empty? ? line : "    #{line}" }.join
+        "    CompositionLocalProvider(LocalRadioGroupSelections provides remember { mutableStateMapOf<String, String>() }) {\n" \
+          "#{body}\n    }#{trailing}"
       end
 
       def generate_mode_aware_content(layout_name, static_content, dynamic_content, depth, screen_id: nil)

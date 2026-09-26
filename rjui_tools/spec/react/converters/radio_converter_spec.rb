@@ -138,7 +138,10 @@ RSpec.describe RjuiTools::React::Converters::RadioConverter do
                                        'selectedValue' => 'sample' })
         result = converter.convert
 
-        expect(result).to include('checked={true}')
+        # A static selection is where the group starts, and the user changes it
+        # (static-valued-controls-do-not-change-on-a-users-tap): uncontrolled.
+        expect(result).to include(' defaultChecked')
+        expect(result).not_to include('readOnly')
         expect(result).not_to include('===')
       end
 
@@ -148,7 +151,8 @@ RSpec.describe RjuiTools::React::Converters::RadioConverter do
                                        'selectedValue' => 'other' })
         result = converter.convert
 
-        expect(result).to include('checked={false}')
+        expect(result).not_to include('defaultChecked')
+        expect(result).not_to include('checked={')
         expect(result).not_to include('===')
       end
 

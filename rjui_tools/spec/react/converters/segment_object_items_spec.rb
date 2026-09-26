@@ -26,6 +26,7 @@
 # actually reads — `<layouts_directory>/Resources/strings.json`, not the
 # per-language files — they are: `items: ["opt_a"]` emits `{$s.sampleOptA}`.)
 require_relative '../../spec_helper'
+require_relative '../../support/typescript_compiler'
 require 'react/converters/segment_converter'
 require 'core/attribute_validator'
 require 'core/layout_validator'
@@ -58,7 +59,9 @@ RSpec.describe RjuiTools::React::Converters::SegmentConverter do
 
     it 'never puts a Ruby Hash in the JSX' do
       jsx, = emit([{ 'label' => 'opt_a', 'value' => 'a' }])
-      expect(jsx).not_to include('=>')
+      # Hash#inspect writes `"label"=>"opt_a"`; the markup's own arrow
+      # functions (the seeded state's render prop) are not that.
+      expect(jsx).not_to include('"=>')
       expect(jsx).not_to include('"label"')
     end
 
@@ -211,6 +214,21 @@ RSpec.describe RjuiTools::React::Converters::SegmentConverter do
       # green above says nothing about the parser.
       old = '<button key={0}>{"label"=>"opt_a", "value"=>"a"}</button>'
       expect(parses?(old)).to be(false), 'the parser accepted the pre-fix output — it is not discriminating'
+    end
+
+    # Past the parser: tsc under --strict over what survives — the seeded
+    # segment's render prop (react_generator's JsonUISeeded, declared as the
+    # generated file declares it) and its buttons. Its control is the same
+    # pre-fix output, which must not compile either.
+    it 'type-checks what survives, and the old output does not', :typescript_compile do
+      emits = [[{ 'label' => 'opt_a', 'value' => 'a' }], %w[opt_a opt_b], [1, 2], ['a', { 'label' => 'b' }, 'c']]
+              .map { |items| emit(items).first }
+      ambient = <<~TS
+        declare const JsonUISeeded: <T>(props: { seed: T; children: (value: T, set: (value: T) => void) => JSX.Element }) => JSX.Element;
+      TS
+      expect(TypeScriptCompiler.component(*emits)).to compile_as_typescript.with_ambient(ambient)
+      old = '<button key={0}>{"label"=>"opt_a", "value"=>"a"}</button>'
+      expect(TypeScriptCompiler.component(old)).not_to compile_as_typescript.with_ambient(ambient)
     end
   end
 end

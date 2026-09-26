@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require 'compose/components/embed_component'
+require_relative '../../support/kotlin_compiler'
 
 RSpec.describe KjuiTools::Compose::Components::EmbedComponent do
   let(:required_imports) { Set.new }
@@ -123,6 +124,82 @@ RSpec.describe KjuiTools::Compose::Components::EmbedComponent do
         )
         expect(result).not_to include('eventBridge')
         expect(required_imports).not_to include(:embedded_event)
+      end
+
+      # `@{name}` is the binding spelling, and an event names its method as
+      # it is: it is not called, and a comment keeps its place. It was
+      # written into code as it stood — `viewModel.@{name}(event.payload)`
+      # (ticket rjui-embed-event-bridge-calls-an-undeclared-view-model).
+      it 'calls no value that names no handler, and writes nothing of it into code' do
+        result = described_class.generate(
+          { 'type' => 'Embed', 'id' => 'p', 'screen' => 'foo',
+            'events' => { 'onOrderUpdated' => 'handleOrderUpdated', 'onClose' => '@{closePane}', 'onOpen' => 'a b' } },
+          0,
+          required_imports
+        )
+        expect(result).to include('"onOrderUpdated" -> viewModel.handleOrderUpdated(event.payload)')
+        expect(result).to include('// ERROR: Embed event onClose names no handler, and is not called')
+        expect(result).to include('// ERROR: Embed event onOpen names no handler, and is not called')
+        expect(result).not_to include('@{')
+        expect(result).not_to include('closePane')
+      end
+
+      # The whole emit in the composable it is written into, under kotlinc:
+      # EmbedContainer, EmbedNavigationMode, EmbeddedEvent and EmbedScope as
+      # KotlinJsonUI declares them (com/kotlinjsonui/embed/EmbedContainer.kt,
+      # the delegate-mode overload, read 2026-09-26 at KotlinJsonUI
+      # e97aaa6), the Compose names it calls as types only, and a ViewModel
+      # holding the method a consumer writes for an event, `fun <name>(payload:
+      # Map<String, Any>)`. The file is in the emit's hiltViewModel package, so
+      # its fully qualified call resolves to the stub beside it. A value
+      # that names no handler leaves a comment; `viewModel.@{name}(…)` did
+      # not compile.
+      it 'writes a bridge that compiles against the ViewModel method it calls' do
+        emitted = described_class.generate(
+          { 'type' => 'Embed', 'id' => 'detailPane', 'screen' => 'order_detail',
+            'events' => { 'onOrderUpdated' => 'handleOrderUpdated', 'onClose' => '@{closePane}' } },
+          0,
+          required_imports
+        )
+        expect(<<~KOTLIN).to compile_as_kotlin
+          package androidx.hilt.lifecycle.viewmodel.compose
+
+          @Target(AnnotationTarget.FUNCTION, AnnotationTarget.TYPE)
+          annotation class Composable
+          interface Modifier { companion object : Modifier }
+          fun Modifier.testTag(tag: String): Modifier = this
+          class SemanticsPropertyReceiver
+          var SemanticsPropertyReceiver.testTagsAsResourceId: Boolean
+              get() = false
+              set(value) {}
+          fun Modifier.semantics(properties: SemanticsPropertyReceiver.() -> Unit): Modifier = this
+          interface ViewModelStoreOwner
+          enum class EmbedNavigationMode { Delegate, Isolated }
+          sealed class EmbeddedEvent {
+              data class Named(val name: String, val payload: Map<String, Any>) : EmbeddedEvent()
+          }
+          class EmbedScope(val embedId: String, val viewModelStoreOwner: ViewModelStoreOwner)
+          @Composable
+          fun EmbedContainer(
+              embedId: String,
+              params: Map<String, Any> = emptyMap(),
+              navigationMode: EmbedNavigationMode = EmbedNavigationMode.Delegate,
+              eventBridge: ((EmbeddedEvent) -> Unit)? = null,
+              modifier: Modifier = Modifier,
+              content: @Composable (EmbedScope) -> Unit
+          ) {}
+          fun <VM> hiltViewModel(viewModelStoreOwner: ViewModelStoreOwner, key: String? = null): VM = TODO()
+          class OrderDetailViewModel
+          @Composable
+          fun OrderDetailView(viewModel: OrderDetailViewModel) {}
+          class HomeViewModel {
+              fun handleOrderUpdated(payload: Map<String, Any>) {}
+          }
+          @Composable
+          fun HomeView(viewModel: HomeViewModel) {
+          #{emitted}
+          }
+        KOTLIN
       end
     end
 

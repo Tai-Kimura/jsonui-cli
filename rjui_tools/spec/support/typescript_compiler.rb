@@ -62,6 +62,25 @@ module TypeScriptCompiler
     declare const React: any;
   TS
 
+  # Emitted elements as the body of one component: a converter's fragment is
+  # checked where a generated file puts it, inside the JSX a component returns.
+  def component(*elements)
+    "export const Emitted = (): JSX.Element => (\n  <>\n#{elements.join("\n")}\n  </>\n);\n"
+  end
+
+  TEMPLATES_DIR = File.expand_path('../../lib/react/templates', __dir__)
+
+  # A built-in's own declarations, as written in lib/react/templates: each
+  # named interface or type alias, `export` dropped — so an arm type-checks
+  # an emit against the props the built-in declares, not a copy of them.
+  def template_declarations(template_file, *names)
+    source = File.read(File.join(TEMPLATES_DIR, template_file))
+    names.map do |name|
+      source[/^(?:export )?(?:interface #{name}\s*\{.*?\n\}|type #{name}\b[^\n]*;)/m] or
+        raise "#{name} not found in #{template_file}"
+    end.join("\n").gsub(/^export /, '')
+  end
+
   Result = Struct.new(:success, :errors) do
     def success?
       success

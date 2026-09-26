@@ -98,6 +98,10 @@ module KjuiTools
 
           unless resources
             Core::Logger.error "Invalid colors.xml structure at #{path}"
+            # Named at the end of the build (ticket
+            # uikit-build-reports-success-after-a-binding-error).
+            require_relative '../stage_failures'
+            JsonUI::StageFailures.record('colors', "#{path} has no root element; its colours were not updated")
             return
           end
 

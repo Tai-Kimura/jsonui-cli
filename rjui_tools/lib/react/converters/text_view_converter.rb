@@ -228,7 +228,11 @@ module RjuiTools
           placeholder = attributes['hint'] || attributes['placeholder']
           if placeholder
             resolved = convert_binding(placeholder)
-            if resolved != placeholder && resolved.include?('{')
+            if has_binding?(placeholder)
+              # One expression (attribute_expression): the JSX child form
+              # below loses the text around a binding.
+              attrs << " placeholder={#{attribute_expression(placeholder)}}"
+            elsif resolved != placeholder && resolved.include?('{')
               attrs << " placeholder={#{resolved.gsub(/^\{|\}$/, '')}}"
             elsif (string_resolved = convert_string_key(placeholder))
               # strings.json key -> StringManager, matching sjui's hint
@@ -247,8 +251,7 @@ module RjuiTools
           if attributes['text']
             if has_binding?(attributes['text'])
               # Binding present: use controlled component (value + onChange)
-              value = convert_binding(attributes['text'])
-              attrs << " value={#{value.gsub(/[{}]/, '')}}"
+              attrs << " value={#{attribute_expression(attributes['text'])}}"
             else
               # No binding: use uncontrolled component (defaultValue only)
               attrs << jsx_attr_text('defaultValue', attributes['text'])
@@ -334,7 +337,8 @@ module RjuiTools
               prop = extract_binding_property(handler)
               # If text binding is present, pass (previousValue, newValue) for (String, String) callbacks
               if attributes['text'] && has_binding?(attributes['text'])
-                text_prop = extract_binding_property(attributes['text'])
+                # The value the textarea shows (build_attributes' value=).
+                text_prop = attribute_expression(attributes['text'])
                 return " onChange={(e) => #{prop}?.(#{text_prop}, e.target.value)}"
               else
                 return " onChange={(e) => #{prop}?.(e.target.value)}"

@@ -128,7 +128,7 @@ module SjuiTools
         end
 
         # Normalize type using TypeConverter (mode: swiftui) after Event replacement
-        Core::TypeConverter.normalize_data_property(modified_item, 'swiftui')
+        Core::TypeConverter.normalize_data_property(modified_item, 'swiftui', source: @current_layout)
       end
 
       def data_file_extension
@@ -407,16 +407,21 @@ module SjuiTools
       end
 
       def format_default_value(value, json_class)
-        if json_class == 'String'
-          # Handle '' as empty string (common shorthand)
-          if value == "''" || value.to_s.empty?
+        if json_class.to_s.chomp('?') == 'String'
+          # The text the layout's spelling means ('' / "…" / '…' / bare,
+          # StringLiterals.default_text), for a String and a String? alike.
+          # Until 1.8.121 the spelling was wrapped in quotes as it stood, so
+          # `"Test"` became the value `"Test"` with its quotes — and a
+          # String? default was written as it stood, as code (`= Hello`).
+          text = JsonUIShared::StringLiterals.default_text(value)
+          if text.empty?
             '""'
           else
             # Use StringManager for localized strings. warnings: false —
             # a defaultValue is not declared display text (it can be
             # sentinel vocabulary like a DateSelectBox's "today"), so this
             # face resolves best-effort and never gates the build.
-            get_text_with_string_manager("\"#{value}\"", warnings: false)
+            get_text_with_string_manager("\"#{text}\"", warnings: false)
           end
         elsif value.is_a?(Hash) || value.is_a?(Array)
           # ANY declared dictionary/array default, not just the classes that

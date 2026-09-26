@@ -159,6 +159,9 @@ class Canonicalizer:
                     )
                 )
 
+        if self._table.definition_key_for(node_type) == "Indicator":
+            self._fold_indicator_legacy(rebuilt, node_type, warnings, source=source, label=label)
+
         # Recurse into child nodes (structure keys are never aliases).
         for child_key in _CHILD_KEYS:
             if child_key not in rebuilt:
@@ -189,6 +192,50 @@ class Canonicalizer:
             ]
 
         return rebuilt
+
+    def _fold_indicator_legacy(
+        self, node: dict, node_type: str | None, warnings: list[str], *, source: str, label: str
+    ) -> None:
+        """An Indicator's two legacy spellings, folded into what is declared.
+
+        ``style`` naming one of ``indicatorStyle``'s values (small / medium /
+        large / linear, read from the definition) is the indicator's style
+        written with the style-file key: the Compose tools read it as the
+        indicator's size and the style loaders looked for a style file of that
+        name. It becomes ``indicatorStyle``; a ``style`` naming anything else
+        is a style file and is left alone. ``size`` (a length, undeclared) is
+        the spinner's width and height. Each fold is a named warning
+        (``Indicator legacy spelling``); a declared attribute already present
+        wins and the legacy one is dropped, also with the warning.
+        (kjui-dynamic-components-that-skip-the-common-modifiers, C.)
+        """
+        tag = "Indicator legacy spelling"
+        styles = self._table.enum_for(node_type, "indicatorStyle")
+        style = node.get("style")
+        if isinstance(style, str) and style in styles:
+            if "indicatorStyle" in node:
+                warnings.append(self._fmt(source, label,
+                    f"{tag}: 'style: {style}' names an indicator style and 'indicatorStyle: "
+                    f"{node['indicatorStyle']}' is set — keeping indicatorStyle, dropping style"))
+            else:
+                node["indicatorStyle"] = style
+                warnings.append(self._fmt(source, label,
+                    f"{tag}: 'style: {style}' is the indicator's style, not a style file — "
+                    f"rewrote to 'indicatorStyle: {style}' (a style file named '{style}' is "
+                    f"not applied to an Indicator)"))
+            del node["style"]
+        if "size" in node:
+            size = node.pop("size")
+            if "width" in node or "height" in node or "frame" in node:
+                warnings.append(self._fmt(source, label,
+                    f"{tag}: 'size: {size}' and a declared width / height are both set — "
+                    f"keeping width / height, dropping size"))
+            else:
+                node["width"] = size
+                node["height"] = size
+                warnings.append(self._fmt(source, label,
+                    f"{tag}: 'size: {size}' is not declared on Indicator — rewrote to "
+                    f"'width: {size}, height: {size}'"))
 
     def _canonicalize_section(
         self, section: Any, warnings: list[str], *, source: str, path: str
