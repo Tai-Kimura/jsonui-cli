@@ -42,6 +42,18 @@ RSpec.describe 'sjui build: the app components Debug and release draw differentl
     expect(lines.join).not_to include("'FadeHeroView'") # on both sides, applying the modifiers (control)
   end
 
+  # A face registers its screens too (`sjui g adapter Home` → "home", drawn
+  # as a TabView tab's view): not a component, so not named.
+  it 'leaves out the screens the registration holds, and names a component beside them' do
+    adapter('HomeViewAdapter', 'home', applies: false)
+    adapter('ItemDetailViewAdapter', 'item_detail', applies: false)
+    adapter('ShimmerTextAdapter', 'ShimmerText')
+    registration('HomeViewAdapter', 'ItemDetailViewAdapter', 'ShimmerTextAdapter')
+    lines = said(%w[])
+    expect(lines).to eq(["'ShimmerText' has a Dynamic adapter registered but no converter draws it — release draws " \
+                         'no built-in of its own (an undeclared type, unless a built-in has that name)'])
+  end
+
   it 'reads the type from the adapter, not from its struct name' do
     adapter('BarProgressAdapter', 'ProgressBar')
     registration('BarProgressAdapter')

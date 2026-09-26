@@ -11,7 +11,8 @@ module SjuiTools
     # 1. A type the app's converters draw (views/extensions,
     #    converter_mappings.rb) that CustomComponentRegistration.swift does not
     #    register an adapter for: Debug draws the built-in its spelling names,
-    #    or nothing. And an adapter registered for a type no converter draws.
+    #    or nothing. And an adapter registered for a type no converter draws —
+    #    a component's, not a screen's (`sjui g adapter`, snake_case).
     # 2. An adapter whose source does not apply the standard modifiers
     #    (DynamicModifierHelper.applyStandardModifiers): Debug draws none of the
     #    node's common stages — its tap, onAppear, frame, background — which
@@ -45,7 +46,9 @@ module SjuiTools
             next
           end
           type = text && text.first[/componentType\s*:\s*String\s*\{\s*"([^"]+)"/, 1] || adapter.sub(/Adapter\z/, '')
-          registered[type] = text&.first
+          # A screen `sjui g adapter` registers (a TabView tab's view) is
+          # snake_case; a component type is not.
+          registered[type] = text&.first if type.match?(/\A[A-Z]/)
         end
         lines += (mappings - registered.keys).map do |type|
           "'#{type}' is drawn by the app in release but has no Dynamic adapter registered — Debug draws #{built_in(type)}"
