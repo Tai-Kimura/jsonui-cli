@@ -418,7 +418,7 @@ module RjuiTools
           # SelectBox — `selectedDate` (date-picker mode) and `selectedValue`.
           # Both reach the <input>/<select> value as a string.
           if component_type == 'SelectBox'
-            selected = json_data['selectedDate'] || json_data['selectedValue']
+            selected = json_data['selectedDate'] || json_data['selectedItem'] || json_data['selectedValue']
             if selected.is_a?(String) && selected.start_with?('@{') && selected.end_with?('}')
               bindings[selected[2...-1]] ||= { type: 'string', defaultValue: '""' }
             end

@@ -347,13 +347,22 @@ module RjuiTools
         # exists when there is a runtime condition to swap on, and
         # build_class_name has to know the same answer to decide whether the
         # hint colour needs a custom property.
+        # The list's selection, declared two-way under three spellings:
+        # `selectedItem` first (the other paths' precedence), then
+        # `selectedValue`, then the legacy `value`. Only `selectedValue` was
+        # read, so a bound selectedItem reached the page as nothing — no value,
+        # no onChange (ticket selectbox-selected-item-binding-is-read-once).
+        def selection_attr
+          attributes['selectedItem'] || attributes['selectedValue'] || attributes['value']
+        end
+
         def selected_value_bound?
-          value_binding = with_bind_fallback(attributes['selectedValue'] || attributes['value'])
+          value_binding = with_bind_fallback(selection_attr)
           !!(value_binding && has_binding?(value_binding))
         end
 
         def build_select_class_attr(class_name)
-          value_binding = with_bind_fallback(attributes['selectedValue'] || attributes['value'])
+          value_binding = with_bind_fallback(selection_attr)
 
           expressions = []
           if value_binding && has_binding?(value_binding)
@@ -485,7 +494,7 @@ module RjuiTools
         end
 
         def build_value_attr
-          value = with_bind_fallback(attributes['selectedValue'] || attributes['value'])
+          value = with_bind_fallback(selection_attr)
 
           if value && has_binding?(value)
             prop = extract_binding_property(value)
@@ -555,7 +564,7 @@ module RjuiTools
           end
 
           # Auto-generate onChange from value binding (two-way binding)
-          value_key = attributes['selectedValue'] || attributes['value']
+          value_key = selection_attr
           index_key = attributes['selectedIndex'] unless value_key
           value_key ||= index_key
           if value_key && has_binding?(value_key)

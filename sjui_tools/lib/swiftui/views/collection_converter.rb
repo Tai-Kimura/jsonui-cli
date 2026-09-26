@@ -1143,7 +1143,7 @@ module SjuiTools
           # onPageChanged are its definitions aliases (L0 fallback only).
           page_changed_handler = attr_with_alias('onValueChange', 'onValueChanged', 'onPageChanged')
           if page_changed_handler && is_binding?(page_changed_handler) && current_page_prop
-            handler_call = get_event_handler_invocation(page_changed_handler, @component['id'] || 'collection', 'newValue')
+            handler_call = get_event_handler_invocation(page_changed_handler, view_id, 'newValue')
             add_modifier_line ".onChange(of: data.#{current_page_prop}) { oldValue, newValue in"
             indent do
               add_line "guard oldValue != newValue else { return }"

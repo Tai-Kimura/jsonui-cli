@@ -18,7 +18,8 @@ module SjuiTools
                             "data.#{extract_binding_property(@component['progress'])}"
                           else
                             # Create @State variable name
-                            state_var = "#{id}Value"
+                            # No id: its position (position_name).
+                            state_var = "#{@component['id'] || position_name('progress')}Value"
                             # Add state variable to requirements
                             add_state_variable(state_var, "Double", progress.to_s)
                             state_var

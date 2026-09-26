@@ -130,7 +130,12 @@ module RjuiTools
           input_style = tint_color ? " style={{ accentColor: #{color_style_expr(tint_color)} }}" : ''
 
           state_attrs = build_state_attrs(selected_binding, on_change, radio_value)
-          state_attrs = checked_attr if state_attrs.empty?
+          # With no group selection the radio's own `checked` is its state,
+          # whatever handler it also has. It used to stand in only for an
+          # EMPTY state, so the handler an onValueChange writes, and from
+          # bae96913 the one a declared onClick writes, took its place: a radio
+          # declared checked started unchecked the moment it had either.
+          state_attrs = "#{checked_attr(operated: !state_attrs.empty?)}#{state_attrs}" unless selected_binding
 
           # Custom icon radio: hidden input + state-swapped images (the kjui/
           # sjui icon path — 33 cross-effect: web rendered the native circle
@@ -183,13 +188,14 @@ module RjuiTools
         # the effect check measured the generated input carrying no checked
         # state at all (the fixture rendered identically to its control).
         # Same shape as ToggleConverter: literal -> defaultChecked,
-        # binding -> controlled checked.
-        def checked_attr
+        # binding -> controlled checked, `readOnly` only where no handler
+        # (`operated`) answers the change.
+        def checked_attr(operated: false)
           checked = with_bind_fallback(attributes['checked'])
           return '' if checked.nil? || checked == false
 
           if has_binding?(checked)
-            " checked={#{extract_binding_property(checked)}} readOnly"
+            " checked={#{extract_binding_property(checked)}}#{operated ? '' : ' readOnly'}"
           else
             ' defaultChecked'
           end

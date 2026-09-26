@@ -36,7 +36,7 @@ module SjuiTools
           # (operation_binding); the click follows at the drag's end.
           # onValueChanged is the legacy spelling.
           handler = attr_with_alias('onValueChange', 'onValueChanged')
-          value_call = (get_event_handler_invocation(handler, @component['id'] || 'slider', 'newValue') if handler && is_binding?(handler))
+          value_call = (get_event_handler_invocation(handler, view_id, 'newValue') if handler && is_binding?(handler))
 
           # Check if value is a binding
           if @component['value'] && @component['value'].to_s.start_with?('@{') && @component['value'].to_s.end_with?('}')
@@ -46,8 +46,9 @@ module SjuiTools
             add_line "Slider(value: #{operation_binding(binding_var, nil, value_call)}, in: #{min_expr}...#{max_expr}#{editing_click})"
           else
             # Create @State variable name
-            state_var = "sliderValue#{@component['id'] || ''}"
-            state_var = state_var.gsub(/[^a-zA-Z0-9]/, '')
+            # No id: its position (position_name) — `sliderValue` alone was
+            # every id-less Slider's name.
+            state_var = @component['id'] ? "sliderValue#{@component['id']}".gsub(/[^a-zA-Z0-9]/, '') : "#{position_name('slider')}Value"
             
             # Add state variable to requirements
             add_state_variable(state_var, "Double", value_prop.to_s)

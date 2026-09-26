@@ -10,7 +10,9 @@ module SjuiTools
         include SjuiTools::SwiftUI::Helpers::StringManagerHelper
 
         def convert
-          id = @component['id'] || 'selectBox'
+          # The box's name — its handlers' viewId and SelectBoxView's id:
+          # the id, else its drawn type and position (view_id).
+          id = view_id
           prompt = @component['prompt'] || @component['hint'] || @component['placeholder']
           selectItemType = @component['selectItemType'] || 'Normal'
           items = @component['items'] || []
@@ -173,8 +175,9 @@ module SjuiTools
                     add_line "data.#{selected_date_prop} = newValue"
                   end
                   if has_handler
-                    handler_call = get_event_handler_invocation(@component['onValueChange'], id, 'newValue')
-                    add_line handler_call
+                    # The date's string; by the handler's declared parameters
+                    # (pick_invocation) — no index for a date.
+                    add_line pick_invocation(@component['onValueChange'], id, nil)
                   end
                   add_line click if click
                 end
@@ -222,7 +225,25 @@ module SjuiTools
                 # implementation" — SelectBoxView takes `selectedIndex: Int?`,
                 # and the index of a bound value is an expression over the
                 # item list rather than a number the generator can compute.
-                add_line "selectedIndex: #{items_expression(items)}.firstIndex(of: #{selected_expr}),"
+                items_expr = items_expression(items)
+                expression = SjuiTools::SwiftUI::Binding::BindingExpression
+                parsed = expression.parse(selected_declaration[2..-2])
+                prop = parsed.path
+                if parsed.default_kind == :none && !parsed.negated && expression.emittable_path?(prop)
+                  # A bound selectedItem / selectedValue is declared two-way: the
+                  # item's index, read through the items so the box follows the
+                  # data, and the picked item written back. As a one-time
+                  # `selectedIndex` it was neither (ticket
+                  # selectbox-selected-item-binding-is-read-once).
+                  # The read is the same expression the seed used (it knows the
+                  # property's optionality: `(data.x ?? "")` for a String?).
+                  add_line "selectedIndexBinding: SwiftUI.Binding(get: { #{items_expr}.firstIndex(of: #{selected_expr}) ?? -1 }, " \
+                           "set: { index in data.#{prop} = #{items_expr}.indices.contains(index) ? #{items_expr}[index] : \"\" }),"
+                else
+                  # A default (`?? …`) or a negation: a value to read, nothing
+                  # to write back to.
+                  add_line "selectedIndex: #{items_expr}.firstIndex(of: #{selected_expr}),"
+                end
               end
             end
 
@@ -252,9 +273,9 @@ module SjuiTools
             end
 
             # A normal picker reports the pick through the same closure, after
-            # SelectBoxView has written the selection: onValueChange, with the
-            # value of what is bound — the index for a bound selectedIndex, the
-            # item otherwise — then the declared onClick. Last, as the
+            # SelectBoxView has written the selection: onValueChange, with what
+            # its declared parameters ask for (pick_invocation) — then the
+            # declared onClick. Last, as the
             # parameter is. The bound selection was observed with
             # `.onChange(of:)` instead, which ran after the click and for the
             # view model's writes too, and an unbound one was reported by
@@ -264,7 +285,8 @@ module SjuiTools
               handler = @component['onValueChange']
               if handler && is_binding?(handler)
                 index_prop = extract_binding_property(@component['selectedIndex']) if is_binding?(@component['selectedIndex'])
-                calls << get_event_handler_invocation(handler, id, index_prop ? "data.#{index_prop}" : 'newValue')
+                index_expr = index_prop ? "data.#{index_prop}" : "(#{items_expression(items)}.firstIndex(of: newValue) ?? -1)"
+                calls << pick_invocation(handler, id, index_expr, index_bound: !index_prop.nil?)
               end
               calls << click if click
               if calls.any?
@@ -324,6 +346,39 @@ module SjuiTools
         end
 
         private
+
+        # onValueChange's call for a pick, by the parameters the data declares
+        # for it (4f's ruling on control-onclick-is-called-differently-on-every-
+        # path, 1.9.0): one String — the picked item (`newValue`, the item
+        # SelectBoxView reports), even with selectedIndex bound; one Int — the
+        # item's index; a String then an Int — the viewId and the index; two
+        # Strings — the viewId and the item; none — no argument. The index is
+        # the bound selectedIndex, else the item's place in `items`; a date has
+        # none. Any other declaration (an Event type, none at all) keeps the
+        # generic reading: the viewId where it takes one, and the index where
+        # selectedIndex is bound, else the item. It was the generic reading
+        # for every type, whose `(String` pattern also caught a lone String: a
+        # `((String) -> Void)?` handler was handed the viewId and the index —
+        # two arguments to a one-argument closure, which does not compile.
+        def pick_invocation(handler, id, index_expr, index_bound: false)
+          name = extract_binding_property(handler) || handler
+          klass = ColorHelper.data_definitions.dig(name, 'class').to_s
+          params = klass[/\(\s*([^()]*?)\s*\)\s*(?:throws\s*)?->/, 1]
+          params = params&.split(',')&.map(&:strip)
+          viewid = swift_string_literal(id.to_s)
+          case params
+          when ['String'] then "data.#{name}?(newValue)"
+          when ['Int'] then index_expr ? "data.#{name}?(#{index_expr})" : generic_pick(handler, id, index_expr, index_bound)
+          when %w[String Int] then index_expr ? "data.#{name}?(#{viewid}, #{index_expr})" : generic_pick(handler, id, index_expr, index_bound)
+          when %w[String String] then "data.#{name}?(#{viewid}, newValue)"
+          when [] then "data.#{name}?()"
+          else generic_pick(handler, id, index_expr, index_bound)
+          end
+        end
+
+        def generic_pick(handler, id, index_expr, index_bound)
+          get_event_handler_invocation(handler, id, index_bound ? index_expr : 'newValue')
+        end
 
         # The declared selection. `selectedItem` and `selectedValue` are the
         # same two-way selection under two spellings, and `selectedItem`

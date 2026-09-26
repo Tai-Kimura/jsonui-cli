@@ -12,6 +12,7 @@ require_relative 'modifier_bag'
 require_relative '../binding/binding_handler_registry'
 require_relative '../../core/attribute_validator'
 require_relative '../../core/tap_accessibility'
+require_relative '../../core/layout_path'
 require_relative '../../core/string_literals'
 require_relative '../helpers/string_manager_helper'
 
@@ -889,10 +890,15 @@ module SjuiTools
         # which only `enabled` / `userInteractionEnabled` are for. The
         # dynamic runtime attaches no tap while the gate is shut and leaves
         # the view as it is (DynamicEventHelper.applyOnClick).
+        #
+        # `userInteractionEnabled` gates the tap as canTap does (the tap rule,
+        # shared/core/tap_accessibility.rb): `false` on this node or on a node
+        # around it is no tap, and a binding on either gates it (tap_shut?,
+        # tap_gate_condition). The view's own stop stays `.allowsHitTesting`.
         def register_click_lines
           return if @component['type'] == 'Button'
           return if @component['enabled'] == false
-          return if @component['canTap'] == false
+          return if tap_shut?
           return if operation_click_type?
 
           tap = JsonUIShared::TapAccessibility
@@ -908,10 +914,10 @@ module SjuiTools
         def build_selector_click_lines(value)
           names = JsonUIShared::TapAccessibility.handler_values(value)
           calls = names.map { |n| "    data.#{to_camel_case(n)}?()" }
-          can_tap = @component['canTap']
-          if is_binding?(can_tap)
+          gate = tap_gate_condition
+          if gate
             return [".gesture(TapGesture().onEnded {"] + calls +
-                   ["}, including: #{tap_gate_expr(can_tap)} ? .all : .subviews)"] + tap_accessibility_lines
+                   ["}, including: #{gate} ? .all : .subviews)"] + tap_accessibility_lines
           end
           [".onTapGesture {"] + calls + ["}"] + tap_accessibility_lines
         end
@@ -922,13 +928,29 @@ module SjuiTools
         # own, a child's tap) as they are.
         def tap_gesture_line(handler_call)
           indent_str = "    " * (@indent_level + 1)
-          can_tap = @component['canTap']
-          unless is_binding?(can_tap)
-            return ".onTapGesture {\n#{indent_str}#{handler_call}\n#{indent_str[0...-4]}}"
-          end
+          gate = tap_gate_condition
+          return ".onTapGesture {\n#{indent_str}#{handler_call}\n#{indent_str[0...-4]}}" unless gate
 
           ".gesture(TapGesture().onEnded {\n#{indent_str}#{handler_call}\n#{indent_str[0...-4]}}, " \
-            "including: #{tap_gate_expr(can_tap)} ? .all : .subviews)"
+            "including: #{gate} ? .all : .subviews)"
+        end
+
+        # The tap is shut: `canTap: false`, or `userInteractionEnabled: false`
+        # on this node or on a node around it (TapAccessibility.stopped?).
+        def tap_shut?
+          @component['canTap'] == false || JsonUIShared::TapAccessibility.stopped?(@component)
+        end
+
+        # The bound gates of the tap as one Swift condition, or nil: a bound
+        # canTap, then each bound userInteractionEnabled — the nodes' around
+        # it, outermost first, then its own (TapAccessibility.interaction_gates).
+        def tap_gate_condition
+          gates = []
+          gates << @component['canTap'] if is_binding?(@component['canTap'])
+          gates.concat(JsonUIShared::TapAccessibility.interaction_gates(@component))
+          return nil if gates.empty?
+
+          gates.uniq.map { |gate| tap_gate_expr(gate) }.join(' && ')
         end
 
         # Types whose declared onClick is not a tap on the view (ticket
@@ -953,17 +975,19 @@ module SjuiTools
 
         # The declared onClick of a control, as the statement its operation
         # runs after its own update (and after onValueChange), or nil: no
-        # handler, or `canTap: false`. A bound canTap gates the call
-        # (gated_handler_call); `enabled` is the operation's, so a disabled
-        # control neither operates nor calls. camelCase wins; every name of
-        # an `onclick` array is called, in order, as the tap called them.
+        # handler, or `canTap: false`, or `userInteractionEnabled: false` on it
+        # or on a node around it (tap_shut?). A bound canTap or a bound
+        # userInteractionEnabled gates the call (gated_handler_call); `enabled`
+        # is the operation's, so a disabled control neither operates nor
+        # calls. camelCase wins; every name of an `onclick` array is called, in
+        # order, as the tap called them.
         def operation_click_call
-          return nil if @component['canTap'] == false
+          return nil if tap_shut?
 
           tap = JsonUIShared::TapAccessibility
           calls = if tap.handler?(@component['onClick'])
                     if is_binding?(@component['onClick'])
-                      [get_event_handler_invocation(@component['onClick'], @component['id'], nil)]
+                      [get_event_handler_invocation(@component['onClick'], view_id, nil)]
                     else
                       [get_event_handler_call(@component['onClick'])]
                     end
@@ -998,16 +1022,44 @@ module SjuiTools
           "SwiftUI.Binding(get: { #{binding_expr}.wrappedValue }, set: { newValue in #{body.join('; ')} })"
         end
 
-        # A handler call that a component makes from its own operation — a
-        # Radio's selection, a CheckBox's value change, an IconLabel's action —
-        # gated as the tap is: under a bound `canTap` it runs while the
-        # binding is true. (`canTap: false` makes no call; the caller leaves it
-        # out.) The component's own operation runs either way.
-        def gated_handler_call(call)
-          can_tap = @component['canTap']
-          return call unless is_binding?(can_tap)
+        # The name a node without an `id` is given where it needs one — its
+        # view-local state, a Radio's value: `<kind>_<path>`, the node's
+        # position in the layout (shared/core/layout_path.rb, stamped on the
+        # include-expanded, style-merged tree before conversion): the same on
+        # every build and unique within the view. The per-kind fixed name it
+        # replaces (`toggle`, `radio`, …) was the same for every id-less node
+        # of a kind, so two of them shared one state or did not compile
+        # (ticket sjui-codegen-state-declarations-collide-by-name). A node
+        # converted on its own, with no tree stamped around it, is its own
+        # root. The path is used as it is: the `_` between its numbers keeps
+        # two positions apart (camelCasing `0_1_11` and `0_11_1` gives `0111`
+        # for both).
+        def position_name(kind)
+          "#{kind}_#{@component[JsonUIShared::LayoutPath::KEY] || '0'}"
+        end
 
-          "if #{tap_gate_expr(can_tap)} { #{call} }"
+        # The viewId this node's handlers are handed: its id, else its drawn
+        # type and its position (JsonUIShared::LayoutPath.view_id —
+        # `switch_0_1`, `selectBox_0_3`), the name every path gives it (4f's
+        # ruling, 1.9.0). An id-less node's viewId was a per-kind word that
+        # differed per path — `toggle`, `selectBox`, `textEditor`, `button`,
+        # or `""` — the same for every node of the kind.
+        def view_id
+          JsonUIShared::LayoutPath.view_id(@component)
+        end
+
+        # A handler call that a component makes from its own operation — a
+        # Radio's selection, a CheckBox's value change, an IconLabel's or a
+        # Button's action — gated as the tap is: under a bound `canTap` or a
+        # bound userInteractionEnabled (tap_gate_condition) it runs while the
+        # binding is true. (`canTap: false` or a stopped interaction makes no
+        # call; the caller leaves it out, tap_shut?.) The component's own
+        # operation runs either way.
+        def gated_handler_call(call)
+          gate = tap_gate_condition
+          return call unless gate
+
+          "if #{gate} { #{call} }"
         end
 
         # What a screen reader is told about this tap
@@ -1045,15 +1097,16 @@ module SjuiTools
           end
         end
 
-        # `.isButton`, or — under a bound canTap — `.isButton` while the gate is
-        # open: the dynamic runtime attaches neither the tap nor its traits
-        # while the binding is false (DynamicEventHelper.applyOnClick), and a
-        # tap `.allowsHitTesting` has shut is not a button to VoiceOver either.
+        # `.isButton`, or — under a bound canTap or a bound userInteractionEnabled
+        # (tap_gate_condition) — `.isButton` while the gate is open: the dynamic
+        # runtime attaches neither the tap nor its traits while the binding is
+        # false (DynamicEventHelper.applyOnClick), and a tap `.allowsHitTesting`
+        # has shut is not a button to VoiceOver either.
         def button_trait_line
-          can_tap = @component['canTap']
-          return '.accessibilityAddTraits(.isButton)' unless is_binding?(can_tap)
+          gate = tap_gate_condition
+          return '.accessibilityAddTraits(.isButton)' unless gate
 
-          ".accessibilityAddTraits(#{tap_gate_expr(can_tap)} ? AccessibilityTraits.isButton : [])"
+          ".accessibilityAddTraits(#{gate} ? AccessibilityTraits.isButton : [])"
         end
 
         def combined_tap?
@@ -1089,7 +1142,7 @@ module SjuiTools
           return if handler.nil?
           return unless is_binding?(handler)
 
-          invocation = get_event_handler_invocation(handler, @component['id'], 'value.translation')
+          invocation = get_event_handler_invocation(handler, view_id, 'value.translation')
           @modifier_bag.register(:on_pan, [
             ".contentShape(Rectangle())",
             ".simultaneousGesture(",
@@ -1110,7 +1163,7 @@ module SjuiTools
           return if handler.nil?
           return unless is_binding?(handler)
 
-          invocation = get_event_handler_invocation(handler, @component['id'], 'value.magnification')
+          invocation = get_event_handler_invocation(handler, view_id, 'value.magnification')
           @modifier_bag.register(:on_pinch, [
             ".contentShape(Rectangle())",
             ".simultaneousGesture(",
