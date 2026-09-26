@@ -374,16 +374,23 @@ module KjuiTools
           # (Helpers::StaticSeed); a bound one is the view model's.
           unless selected_var.start_with?('data.')
             return Helpers::StaticSeed.wrap(selected_var, depth, required_imports) do |d, state|
-              radio_group_with_items_body(json_data, d, required_imports, state, state)
+              radio_group_with_items_body(json_data, d, required_imports, state, state,
+                                          options: options, bound_items: bound_items)
             end
           end
-          radio_group_with_items_body(json_data, depth, required_imports, selected_var, nil)
+          radio_group_with_items_body(json_data, depth, required_imports, selected_var, nil,
+                                      options: options, bound_items: bound_items)
         end
 
         # The group, reading `selected_var`; a tap writes `seeded` (the state a
-        # static selection seeded) or the bound value.
-        def self.radio_group_with_items_body(json_data, depth, required_imports, selected_var, seeded)
-          items = json_data['items']
+        # static selection seeded) or the bound value. `options` / `bound_items`
+        # are the items as the caller read them — an array written out one by
+        # one, or a bound list drawn with forEach. The body was extracted from
+        # the caller (static seeding) while the caller gained those two
+        # (the array / binding forms); the two merged without a conflict and
+        # every Radio with `items` raised NameError on `options`.
+        def self.radio_group_with_items_body(json_data, depth, required_imports, selected_var, seeded,
+                                             options:, bound_items:)
           selected_value = json_data['selectedValue']
           code = indent("Column(", depth)
           
