@@ -59,8 +59,14 @@ RSpec.describe 'rjui Collection: scrollTo names a cell' do
 
   # The scroll call of the effect the generator emits for `node`.
   def scroll_call(node)
-    generated(node)[/useEffect\(\(\) => \{ (scrollCollectionToCell\(.*\)); \}, \[data\.target\]\);/, 1] or
+    generated(node)[/useEffect\(\(\) => \{ .*?(scrollCollectionToCell\(.*\)); \}, \[data\.target\]\);/, 1] or
       raise "no scrollTo effect in\n#{generated(node)}"
+  end
+
+  # The lines the generator emits for `node`'s scroll control — its ref, and
+  # the scrollTo effect with what it needs — as the component body runs them.
+  def effect_lines(node)
+    generated(node).lines.grep(/\A  (const target\w* = useRef|useEffect\(\(\) => \{.*scrollCollectionToCell)/).join
   end
 
   def helper(typescript: false)
@@ -78,13 +84,18 @@ RSpec.describe 'rjui Collection: scrollTo names a cell' do
   end
 
   SCROLL_TO_CELL_CSS = {
-    'h-[100px]' => 'height:100px', 'shrink-0' => 'flex-shrink:0', 'flex' => 'display:flex',
-    'flex-col' => 'flex-direction:column', 'overflow-y-auto' => 'overflow-y:auto'
+    'h-[100px]' => 'height:100px', 'h-[40px]' => 'height:40px', 'shrink-0' => 'flex-shrink:0', 'flex' => 'display:flex',
+    'flex-col' => 'flex-direction:column', 'overflow-y-auto' => 'overflow-y:auto',
+    'grid' => 'display:grid', 'grid-cols-2' => 'grid-template-columns:repeat(2,minmax(0,1fr))'
   }.freeze
 
   # The name of the view at the list's top after each target in `targets`
-  # (each scroll run from the top), e.g. { 6 => "B1" }.
-  def top_after(node, targets)
+  # (each scroll run from the top), e.g. { 6 => "B1" }. With `renders:`, each
+  # target is instead one render of the component body in turn — the
+  # generator's ref and effect lines under a minimal useRef / useEffect (a
+  # ref kept across renders, an effect run when a dependency changed, the
+  # first render included) — and the view at the top is read after each.
+  def top_after(node, targets, renders: false)
     esbuild = File.expand_path('../support/node_modules/.bin/esbuild', __dir__)
     skip 'esbuild is not installed under spec/support' unless File.executable?(esbuild)
     skip 'no headless Chromium in the Playwright cache' unless chromium
@@ -117,19 +128,49 @@ RSpec.describe 'rjui Collection: scrollTo names a cell' do
         const HCell = ({ data }) => h('div', { 'data-name': 'H' + data.n, style: { height: '10px', flexShrink: '0' } });
         const FCell = ({ data }) => h('div', { 'data-name': 'F' + data.n, style: { height: '10px', flexShrink: '0' } });
         const out = {};
-        for (const target of #{targets.to_json}) {
-          const data = Object.assign(#{SCROLL_TO_CELL_DATA.strip}, { target });
-          const targetRef = { current: null };
-          const root = (#{jsx.strip});
-          root.style.width = '100px';
-          document.body.append(root);
-          targetRef.current = root;
-          #{call};
+        const topName = (root) => {
           const top = root.getBoundingClientRect().top;
           const first = Array.from(root.querySelectorAll('[data-name]'))
             .find((el) => Math.abs(el.getBoundingClientRect().top - top) < 1);
-          out[target] = first ? first.getAttribute('data-name') : null;
-          root.remove();
+          return first ? first.getAttribute('data-name') : null;
+        };
+        if (#{renders}) {
+          // One component, rendered once per target: hook slots kept across
+          // renders, effects run after the ref is attached.
+          const slots = []; let slot = 0; let pending = [];
+          const useRef = (v) => { const k = slot++; if (!(k in slots)) slots[k] = { current: v }; return slots[k]; };
+          const useEffect = (fn, deps) => {
+            const k = slot++; const before = slots[k];
+            if (!before || deps.some((d, j) => !Object.is(d, before[j]))) { slots[k] = deps; pending.push(fn); }
+          };
+          let root = null;
+          #{targets.to_json}.forEach((target, n) => {
+            const data = Object.assign(#{SCROLL_TO_CELL_DATA.strip}, { target });
+            slot = 0; pending = [];
+            #{renders ? effect_lines(node).gsub("
+", "
+            ") : ''}
+            if (!root) {
+              root = (#{jsx.strip});
+              root.style.width = '100px';
+              document.body.append(root);
+            }
+            targetRef.current = root;
+            pending.forEach((fn) => fn());
+            out[n + ':' + target] = topName(root);
+          });
+        } else {
+          for (const target of #{targets.to_json}) {
+            const data = Object.assign(#{SCROLL_TO_CELL_DATA.strip}, { target });
+            const targetRef = { current: null };
+            const root = (#{jsx.strip});
+            root.style.width = '100px';
+            document.body.append(root);
+            targetRef.current = root;
+            #{call};
+            out[target] = topName(root);
+            root.remove();
+          }
         }
         document.body.textContent = 'AT' + JSON.stringify(out);
       JSX
@@ -160,6 +201,40 @@ RSpec.describe 'rjui Collection: scrollTo names a cell' do
   it 'renders: a key two sections share lands on the first section\'s cell; a key of one on its own' do
     at = top_after(SCROLL_TO_CELL_NODE.merge('cellIdProperty' => 'key'), %w[k3 x2 k1 nothing])
     expect(at).to eq('k3' => 'A3', 'x2' => 'B2', 'k1' => 'A1', 'nothing' => 'H0')
+  end
+
+  # A grid is a scroll container of its own, as the list and the flow are
+  # (jsonui-cli 1.9.0). It had no overflow: a grid of a declared height drew
+  # its rows past its box, and a scrollTo — which scrolls the Collection's
+  # own box — moved nothing (every target read H0 at the top).
+  it 'renders: a grid of a declared height scrolls to the cell, row by row' do
+    # 40 high: the grid's 170 of content scrolls up to 130, past B2's row.
+    grid = SCROLL_TO_CELL_NODE.merge('columns' => 2, 'height' => 40)
+    # A grid per section: H0; A0 A1; A2 A3; A4; F0; H1; B0 B1; B2 B3 … — cell 5
+    # is B0 (its row B0 B1), cell 7 B2.
+    expect(top_after(grid, [0, 3, 5, 7])).to eq('0' => 'A0', '3' => 'A2', '5' => 'B0', '7' => 'B2')
+    one = grid.merge('sections' => [{ 'cell' => 'ACell' }])
+    expect(top_after(one, [0, 2])).to eq('0' => 'A0', '2' => 'A2')
+  end
+
+  it 'a grid is a scroll container unless lazy is none or scrolling is off; a bound lazy decides at run time' do
+    grid = SCROLL_TO_CELL_NODE.merge('columns' => 2)
+    one = grid.merge('sections' => [{ 'cell' => 'ACell' }])
+    [grid, one, one.merge('columns' => '@{columns}')].each do |node|
+      expect(converted(node)[/className="([^"]*)"/, 1].split).to include('overflow-y-auto')
+    end
+    expect(converted(one.merge('lazy' => 'none'))).not_to include('overflow-y-auto')
+    expect(converted(one.merge('scrollEnabled' => false))).not_to include('overflow-y-auto')
+    expect(converted(one.merge('lazy' => '@{mode}'))).to include("overflowY: data.mode === 'none' ? 'visible' : 'auto'")
+  end
+
+  # The request is a CHANGE of the value (the SSoT's Collection.scrollTo,
+  # jsonui-cli 1.9.0): the value the Collection is drawn with scrolls nowhere,
+  # nor does the same value sent again. Until 1.9.0 the effect scrolled on
+  # mount to whatever the value was (the first render read B1 at the top).
+  it 'renders: the value it is drawn with scrolls nowhere; a change scrolls; the same value again does not' do
+    at = top_after(SCROLL_TO_CELL_NODE, [6, 6, 3, 3, 6], renders: true)
+    expect(at).to eq('0:6' => 'H0', '1:6' => 'H0', '2:3' => 'A3', '3:3' => 'A3', '4:6' => 'B1')
   end
 
   it 'under autoChangeTrackingId the keys are the enriched cellIds' do

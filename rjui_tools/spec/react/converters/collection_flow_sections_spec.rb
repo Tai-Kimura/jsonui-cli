@@ -217,7 +217,8 @@ RSpec.describe 'rjui Collection: flow sections, and the rows and columns of a gr
     it 'two sections, or a header: a column of grids, the blocks spaced as the rows' do
       [GRID_TWO_SECTIONS, GRID_TWO_SECTIONS.merge('sections' => [{ 'cell' => 'ACell', 'header' => 'HCell' }])].each do |shape|
         jsx = convert(shape)
-        expect(root_classes(jsx)).to eq(%w[flex flex-col gap-y-[4px]]), jsx
+        # A scroll container of its own, as the list and the flow are (jsonui-cli 1.9.0).
+        expect(root_classes(jsx)).to eq(%w[flex flex-col overflow-y-auto gap-y-[4px]]), jsx
         expect(jsx.scan(/<div className="(grid [^"]*)">/).flatten.uniq).to eq(['grid grid-cols-2 gap-x-[10px] gap-y-[4px]']), jsx
       end
     end

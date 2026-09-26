@@ -19,3 +19,6 @@ screenshots/
 
 # userInteractionEnabled probe scratch (scripts/interaction_stop_probe.mjs)
 .interaction-stop-probe/
+
+# Collection scrollTo probe scratch (scripts/collection_scroll_probe.mjs)
+.collection-scroll-probe/

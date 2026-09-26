@@ -976,19 +976,28 @@ module RjuiTools
                    "#{scroll_anchor_expr(anchor)}, #{horizontal}); }, []);"
         end
 
-        # scrollTo: iOS receives a PassthroughSubject, so a repeat send
-        # re-scrolls; a React effect keys on a value, so re-scrolling to the
-        # same index needs the bound value to change. The value names a CELL
-        # (scrollCollectionToCell): a number its place among the drawn
-        # sections' cells, a string — with cellIdProperty — the first cell
-        # whose key it is, from the keys the effect reads off the data.
+        # scrollTo: the request is a CHANGE of the bound value (the SSoT's
+        # Collection.scrollTo, jsonui-cli 1.9.0) — the value the Collection is
+        # drawn with scrolls nowhere, and sending the same value again does
+        # not re-scroll. The value names a CELL (scrollCollectionToCell): a
+        # number its place among the drawn sections' cells, a string — with
+        # cellIdProperty — the first cell whose key it is, from the keys the
+        # effect reads off the data. The effect runs on mount too, so it
+        # compares with the value it last saw (a ref seeded with the first);
+        # until jsonui-cli 1.9.0 it scrolled on mount to whatever the value
+        # was. `Object.is`, and a ref rather than a "mounted" flag: React's
+        # StrictMode runs a mount effect twice, and the second would have
+        # scrolled.
         if scroll_to_binding?(collection)
           prop = binding_data_path(collection[:scroll_to])
+          seen = "#{camel}ScrollToSeen"
           anchor_expr = scroll_anchor_expr(collection[:scroll_anchor] || 'bottom')
           animated = scroll_animated_arg(collection[:scroll_animated])
           lists = collection_cell_key_lists(collection)
           keys = lists ? "collectionCellKeys(#{lists}, #{collection[:cell_id_property].to_json})" : 'null'
-          lines << "  useEffect(() => { scrollCollectionToCell(#{ref}.current, #{collection[:id].to_json}, #{prop}, " \
+          lines << "  const #{seen} = useRef(#{prop});"
+          lines << "  useEffect(() => { if (Object.is(#{seen}.current, #{prop})) return; #{seen}.current = #{prop}; " \
+                   "scrollCollectionToCell(#{ref}.current, #{collection[:id].to_json}, #{prop}, " \
                    "#{keys}, #{anchor_expr}, #{animated}, #{horizontal}); }, [#{prop}]);"
         end
 

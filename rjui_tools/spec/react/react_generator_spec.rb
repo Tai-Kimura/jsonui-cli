@@ -395,8 +395,13 @@ RSpec.describe RjuiTools::React::ReactGenerator, 'collection scroll declarations
   it 'passes the anchor and animation through to the scroll helper' do
     out = screen(base.merge('scrollTo' => '@{scrollIndex}', 'scrollAnchor' => 'top',
                             'scrollAnimated' => false))
+    # The effect scrolls on a CHANGE of the value only (jsonui-cli 1.9.0): it
+    # compares with the value it last saw, seeded with the one it is drawn with.
+    expect(out).to include('const itemListScrollToSeen = useRef(data.scrollIndex);')
     expect(out).to include(
-      'useEffect(() => { scrollCollectionToCell(itemListRef.current, "item_list", data.scrollIndex, null, ' \
+      'useEffect(() => { if (Object.is(itemListScrollToSeen.current, data.scrollIndex)) return; ' \
+      'itemListScrollToSeen.current = data.scrollIndex; ' \
+      'scrollCollectionToCell(itemListRef.current, "item_list", data.scrollIndex, null, ' \
       "'top', false, false); }, [data.scrollIndex]);"
     )
   end
