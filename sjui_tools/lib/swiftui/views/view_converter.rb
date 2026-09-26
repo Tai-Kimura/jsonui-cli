@@ -154,7 +154,12 @@ module SjuiTools
           if children.empty?
             # 子要素がない場合
             # backgroundが設定されている場合はRectangleを使用（dividerなど）
-            if @component['background']
+            if @component['background'] && !gradient_wins_over_background? && pressed_background_color
+              # The fill takes the pressed colour while the view is pressed
+              # (base_view_converter#pressed_background_color).
+              add_line "PressedFill(pressed: #{pressed_background_color}, base: #{get_swiftui_color(@component['background'])})"
+              @modifier_bag.register(:background, "")
+            elsif @component['background']
               add_line "Rectangle()"
               # A declared gradient fills the shape itself. Filling with the
               # background colour instead left the gradient behind an opaque

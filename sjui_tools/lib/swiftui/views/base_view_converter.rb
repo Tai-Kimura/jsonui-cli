@@ -689,22 +689,19 @@ module SjuiTools
             # Emitting both put `.background(colour)` immediately before
             # `.background(gradient)` in MODIFIER_ORDER, and SwiftUI lays the
             # later one further back — the declared gradient never showed.
-            @modifier_bag.register(:background, "")
+            # A pressed colour sits in front of the gradient.
+            @modifier_bag.register(:background, background_line(nil) || "")
           elsif @component['background'] && !@modifier_bag.key?(:background)
             bg_value = @component['background']
             if bg_value.is_a?(String) && bg_value.start_with?('@{')
               # Binding background - resolve here at the correct position (before margins)
               bg_expr = SwiftUI::Binding::BindingExpression.swift_value_expr(bg_value[2..-2])
-              @modifier_bag.register(:background, ".background(SwiftJsonUIConfiguration.shared.getColor(for: #{bg_expr}) ?? Color.clear)")
+              @modifier_bag.register(:background, background_line("SwiftJsonUIConfiguration.shared.getColor(for: #{bg_expr}) ?? Color.clear"))
             else
-              processed_bg = process_template_value(bg_value)
-              if processed_bg.is_a?(Hash) && processed_bg[:template_var]
-                @modifier_bag.register(:background, ".background(#{get_swiftui_color(bg_value)})")
-              else
-                color = get_swiftui_color(bg_value)
-                @modifier_bag.register(:background, ".background(#{color})")
-              end
+              @modifier_bag.register(:background, background_line(get_swiftui_color(bg_value)))
             end
+          elsif !@modifier_bag.key?(:background) && pressed_background_color
+            @modifier_bag.register(:background, background_line(nil))
           end
 
           # コーナー半径（背景の直後に適用）
@@ -924,17 +921,56 @@ module SjuiTools
         # around it is no tap, and a binding on either gates it (tap_shut?,
         # tap_gate_condition). The view's own stop stays `.allowsHitTesting`.
         def register_click_lines
-          return if @component['type'] == 'Button'
-          return if @component['enabled'] == false
-          return if tap_shut?
-          return if operation_click_type?
+          return unless tap_registered?
 
           tap = JsonUIShared::TapAccessibility
-          if tap.handler?(@component['onClick'])
-            @modifier_bag.register(:on_click, build_on_click_lines(@component['onClick']))
-          elsif tap.handler?(@component['onclick'])
-            @modifier_bag.register(:on_click, build_selector_click_lines(@component['onclick']))
+          lines = if tap.handler?(@component['onClick'])
+                    build_on_click_lines(@component['onClick'])
+                  else
+                    build_selector_click_lines(@component['onclick'])
+                  end
+          # The press, for the pressed colour the background slot draws
+          # (pressed_background_color). After the tap gesture, so the tap
+          # fires; a bound gate shuts it with the tap.
+          if pressed_background_color
+            gate = tap_gate_condition
+            lines += [gate ? ".tracksPress(enabled: #{gate})" : '.tracksPress()']
           end
+          @modifier_bag.register(:on_click, lines)
+        end
+
+        # Whether register_click_lines attaches a tap to this node.
+        def tap_registered?
+          return false if @component['type'] == 'Button'
+          return false if @component['enabled'] == false
+          return false if tap_shut?
+          return false if operation_click_type?
+
+          tap = JsonUIShared::TapAccessibility
+          tap.handler?(@component['onClick']) || tap.handler?(@component['onclick'])
+        end
+
+        # tapBackground is the background while pressed, on every node with a
+        # tap and on a Button (jsonui-cli 1.9.0). A Button draws it in
+        # StateAwareButtonView. On any other node with a tap it is this colour
+        # (a Swift Color expression), drawn by the background slot
+        # (background_line: `.pressedBackground`) while the press tracked
+        # after the tap (`.tracksPress`) holds; nil when the node has no tap.
+        # Both ask this, so a node that draws a pressed colour is exactly a
+        # node that tracks its press.
+        def pressed_background_color
+          return nil if @component['tapBackground'].nil? || !tap_registered?
+
+          get_swiftui_color(@component['tapBackground'])
+        end
+
+        # The background slot for `base` (a Swift Color expression, or nil for
+        # none): the pressed colour replaces it while the node is pressed.
+        def background_line(base)
+          pressed = pressed_background_color
+          return ".pressedBackground(#{pressed}#{base ? ", base: #{base}" : ''})" if pressed
+
+          base ? ".background(#{base})" : nil
         end
 
         # `onclick` values are method names, not bindings: a bare string, or an
@@ -1234,7 +1270,7 @@ module SjuiTools
           else_color = @component['background'] ? get_swiftui_color(@component['background']) : 'Color.clear'
           @modifier_bag.register(
             :background,
-            ".background(#{condition} ? #{get_swiftui_color(highlight_bg)} : #{else_color})"
+            background_line("#{condition} ? #{get_swiftui_color(highlight_bg)} : #{else_color}")
           )
         end
 

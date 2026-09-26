@@ -408,9 +408,12 @@ RSpec.describe 'bound-value emission (swiftui codegen)' do
       SjuiTools::SwiftUI::Views::ColorHelper.data_definitions = {
         'brand' => { 'class' => 'String', 'defaultValue' => '#FF0000' }
       }
-      %w[tintColor background tapBackground].each do |attribute|
-        code = convert_tree('type' => 'View', attribute => '@{brand}',
-                            'child' => [{ 'type' => 'Label', 'text' => 'a' }])
+      # tapBackground is the colour while a node with a tap is pressed
+      # (jsonui-cli 1.9.0): it is emitted on a View with a tap, and nowhere on
+      # one without (tap_background_is_the_pressed_background_spec).
+      { 'tintColor' => {}, 'background' => {}, 'tapBackground' => { 'onClick' => '@{go}' } }.each do |attribute, tap|
+        code = convert_tree({ 'type' => 'View', attribute => '@{brand}',
+                              'child' => [{ 'type' => 'Label', 'text' => 'a' }] }.merge(tap))
         expect_no_leak(code)
         expect(code).to include('getColor(for: data.brand)'),
                         "#{attribute} must resolve the colour, not hand a String to a Color slot"

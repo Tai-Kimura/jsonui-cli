@@ -399,10 +399,10 @@ module SjuiTools
 
           # Apply background and corner radius AFTER padding
           # This ensures the background includes the padding area
-          if @component['background']
-            color = get_swiftui_color(@component['background'])
-            @modifier_bag.register(:background, ".background(#{color})")
-          end
+          # A pressed colour (a Label with a tap and a tapBackground) replaces
+          # it while the Label is pressed (background_line).
+          line = background_line(@component['background'] ? get_swiftui_color(@component['background']) : nil)
+          @modifier_bag.register(:background, line) if line
 
           if @component['cornerRadius']
             @modifier_bag.register(:corner_radius, ".cornerRadius(#{@component['cornerRadius'].to_i})")
