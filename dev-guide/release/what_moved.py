@@ -86,6 +86,13 @@ SURFACES = [
     # its own line rather than widening the one above.
     ("conformance corpus + ledgers — the gate's own subject matter",
      r"^conformance/(fixtures/|codegen/|hosts/|[a-z_]+\.json$)"),
+    # The conformance documents beside them: the host contract and the
+    # results schema the SwiftJsonUI / KotlinJsonUI / web hosts implement,
+    # and the coverage / report pages the gate prints. No face reads them.
+    # Unclassified until 2026-09-26 (jsonui-cli 1.9.0), when the host
+    # contract's §4 data shape grew a section's header / footer data.
+    ("conformance documents — the hosts' contract and the gate's pages, maintainer side",
+     r"^conformance/[A-Za-z_]+\.md$"),
     ("release procedure / installer — maintainer side only",
      r"^(dev-guide|installer)/"),
     # CI config is maintainer-side too, but it is worth its own line: a face
