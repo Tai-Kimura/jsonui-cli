@@ -56,6 +56,7 @@ RSpec.describe 'rjui Label: a bound userInteractionEnabled' do
       type PartialSpec = { range: [number, number] | string; style?: Record<string, string | number>; className?: string; onClick?: () => void };
       declare function partialText(text: string, partials: PartialSpec[]): JSX.Element;
       declare const data: { u?: boolean; sel?: boolean; isLinkable?: boolean; onTap?: () => void; onTerms?: () => void };
+      declare function jsonuiInert(stop: boolean): Record<string, unknown>;
     TS
   end
 end

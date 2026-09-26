@@ -28,6 +28,9 @@ export const NetworkImage = ({
   onLoad,
   onError,
   onClick,
+  role,
+  tabIndex,
+  onKeyDown,
   style,
   "data-testid": dataTestid,
   "data-tag": dataTag
@@ -35,6 +38,9 @@ export const NetworkImage = ({
   const rootProps = {
     id,
     onClick,
+    role,
+    tabIndex,
+    onKeyDown,
     style,
     "data-testid": dataTestid,
     "data-tag": dataTag

@@ -52,6 +52,9 @@ export const LinkifyText = React.forwardRef(({
   className = "",
   style,
   onClick,
+  role,
+  tabIndex,
+  onKeyDown,
   "data-testid": dataTestid,
   "data-tag": dataTag
 }, ref) => (
@@ -63,6 +66,9 @@ export const LinkifyText = React.forwardRef(({
     className={`${className} whitespace-pre-line`}
     style={style}
     onClick={onClick}
+    role={role}
+    tabIndex={tabIndex}
+    onKeyDown={onKeyDown}
     data-testid={dataTestid}
     data-tag={dataTag}
     data-linkable="true"
