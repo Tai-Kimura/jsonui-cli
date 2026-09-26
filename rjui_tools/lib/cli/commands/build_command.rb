@@ -4,6 +4,7 @@ require 'json'
 require 'fileutils'
 require 'set'
 require_relative '../../core/config_manager'
+require_relative '../../core/node_keys'
 require_relative '../../core/frameworks'
 require_relative '../../core/generated_marker'
 require_relative '../../core/logger'
@@ -133,6 +134,20 @@ module RjuiTools
 
           # Pass component paths to generator for import resolution
           @config['_component_paths'] = component_paths
+
+          # The layouts that take `jsonuiPath`, their root's position in the
+          # include-expanded tree (React::IncludePaths): an included layout
+          # holding a node that hands its handler a viewId without an id. The
+          # include graph is the whole set of layouts, so it is read here,
+          # before any of them is generated.
+          @config['_path_stems'] = React::IncludePaths.stems_taking_path(
+            json_files.each_with_object({}) do |json_file, trees|
+              trees[File.basename(json_file, '.json')] =
+                React::StyleLoader.load_and_merge(JSON.parse(File.read(json_file, encoding: 'UTF-8')))
+            rescue JSON::ParserError
+              next
+            end
+          ).to_a
 
           generator = React::ReactGenerator.new(@config)
 
@@ -528,7 +543,7 @@ module RjuiTools
           return unless component.is_a?(Hash)
 
           # Skip style-only entries and data declarations
-          return if component.key?('style') && component.keys.size == 1
+          return if component.key?('style') && Core::NodeKeys.written(component).size == 1
           return if component.key?('data') && !component.key?('type')
 
           if component['type']

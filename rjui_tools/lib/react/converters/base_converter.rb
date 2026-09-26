@@ -1,6 +1,8 @@
 # frozen_string_literal: true
 
 require_relative '../../core/typed_attributes'
+require_relative '../../core/layout_path'
+require_relative '../../core/node_keys'
 # For the one judgment the validator and the generator must share: whether a
 # binding's content can be an expression at all.
 require_relative '../../core/attribute_validator_core'
@@ -1393,10 +1395,12 @@ module RjuiTools
         end
 
         # Check if a child element is a data-only element (should not be rendered)
-        # Data-only element: { "data": [...] } with only the data key
+        # Data-only element: { "data": [...] } with only the data key — of the
+        # keys the layout wrote (Core::NodeKeys; the generator's position
+        # stamp is not one).
         def data_only_element?(child)
           return false unless child.is_a?(Hash)
-          child.keys == ['data'] && child['data'].is_a?(Array)
+          Core::NodeKeys.written(child) == ['data'] && child['data'].is_a?(Array)
         end
 
         def create_converter_for_child(child)
