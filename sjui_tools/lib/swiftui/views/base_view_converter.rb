@@ -12,6 +12,8 @@ require_relative 'modifier_bag'
 require_relative '../binding/binding_handler_registry'
 require_relative '../../core/attribute_validator'
 require_relative '../../core/tap_accessibility'
+require_relative '../../core/layout_path'
+require_relative '../../core/binding_validator_core'
 require_relative '../../core/string_literals'
 require_relative '../helpers/string_manager_helper'
 
@@ -912,7 +914,7 @@ module SjuiTools
         # array of them to call in order. A blank element is not called.
         def build_selector_click_lines(value)
           names = JsonUIShared::TapAccessibility.handler_values(value)
-          calls = names.map { |n| "    data.#{to_camel_case(n)}?()" }
+          calls = names.map { |n| "    #{no_value_call(to_camel_case(n))}" }
           gate = tap_gate_condition
           if gate
             return [".gesture(TapGesture().onEnded {"] + calls +
@@ -986,12 +988,12 @@ module SjuiTools
           tap = JsonUIShared::TapAccessibility
           calls = if tap.handler?(@component['onClick'])
                     if is_binding?(@component['onClick'])
-                      [get_event_handler_invocation(@component['onClick'], @component['id'], nil)]
+                      [get_event_handler_invocation(@component['onClick'], view_id, nil)]
                     else
                       [get_event_handler_call(@component['onClick'])]
                     end
                   elsif tap.handler?(@component['onclick'])
-                    tap.handler_values(@component['onclick']).map { |n| "data.#{to_camel_case(n)}?()" }
+                    tap.handler_values(@component['onclick']).map { |n| no_value_call(to_camel_case(n)) }
                   end
           return nil if calls.nil? || calls.empty?
 
@@ -1019,6 +1021,32 @@ module SjuiTools
           end
           body << click if click
           "SwiftUI.Binding(get: { #{binding_expr}.wrappedValue }, set: { newValue in #{body.join('; ')} })"
+        end
+
+        # The name a node without an `id` is given where it needs one — its
+        # view-local state, a Radio's value: `<kind>_<path>`, the node's
+        # position in the layout (shared/core/layout_path.rb, stamped on the
+        # include-expanded, style-merged tree before conversion): the same on
+        # every build and unique within the view. The per-kind fixed name it
+        # replaces (`toggle`, `radio`, …) was the same for every id-less node
+        # of a kind, so two of them shared one state or did not compile
+        # (ticket sjui-codegen-state-declarations-collide-by-name). A node
+        # converted on its own, with no tree stamped around it, is its own
+        # root. The path is used as it is: the `_` between its numbers keeps
+        # two positions apart (camelCasing `0_1_11` and `0_11_1` gives `0111`
+        # for both).
+        def position_name(kind)
+          "#{kind}_#{@component[JsonUIShared::LayoutPath::KEY] || '0'}"
+        end
+
+        # The viewId this node's handlers are handed: its id, else its drawn
+        # type and its position (JsonUIShared::LayoutPath.view_id —
+        # `switch_0_1`, `selectBox_0_3`), the name every path gives it (4f's
+        # ruling, 1.9.0). An id-less node's viewId was a per-kind word that
+        # differed per path — `toggle`, `selectBox`, `textEditor`, `button`,
+        # or `""` — the same for every node of the kind.
+        def view_id
+          JsonUIShared::LayoutPath.view_id(@component)
         end
 
         # A handler call that a component makes from its own operation — a
@@ -1086,8 +1114,8 @@ module SjuiTools
           @component[JsonUIShared::TapAccessibility::SHAPE_KEY] == 'combine'
         end
 
-        # onLongPress — binding-only (`@{handler}`), applied by the SwiftUI
-        # Dynamic runtime (DynamicEventHelper) and by nothing in the codegen.
+        # onLongPress — binding-only (`@{handler}`), called as the data
+        # declares it (no_value_call).
         def apply_long_press_to_bag
           handler = @component['onLongPress']
           return if handler.nil?
@@ -1096,7 +1124,7 @@ module SjuiTools
           prop = extract_binding_property(handler)
           @modifier_bag.register(:on_long_press, [
             ".onLongPressGesture {",
-            "    data.#{prop}?()",
+            "    #{no_value_call(prop)}",
             "}"
           ])
         end
@@ -1115,7 +1143,7 @@ module SjuiTools
           return if handler.nil?
           return unless is_binding?(handler)
 
-          invocation = get_event_handler_invocation(handler, @component['id'], 'value.translation')
+          invocation = get_event_handler_invocation(handler, view_id, 'value.translation')
           @modifier_bag.register(:on_pan, [
             ".contentShape(Rectangle())",
             ".simultaneousGesture(",
@@ -1136,7 +1164,7 @@ module SjuiTools
           return if handler.nil?
           return unless is_binding?(handler)
 
-          invocation = get_event_handler_invocation(handler, @component['id'], 'value.magnification')
+          invocation = get_event_handler_invocation(handler, view_id, 'value.magnification')
           @modifier_bag.register(:on_pinch, [
             ".contentShape(Rectangle())",
             ".simultaneousGesture(",
@@ -1344,20 +1372,26 @@ module SjuiTools
         # SwiftUI uses onClick only (binding format: @{functionName})
         # If handler ends with ':', pass self as parameter
         def get_event_handler_call(handler)
-          if is_binding?(handler)
-            method_name = extract_binding_property(handler)
-            if method_name.end_with?(':')
-              "data.#{method_name.chomp(':')}?(self)"
-            else
-              "data.#{method_name}?()"
-            end
+          no_value_call(is_binding?(handler) ? extract_binding_property(handler) : handler)
+        end
+
+        # A handler that takes no value — a tap (onClick, the onclick
+        # selector), a long press, onAppear / onDisappear — called as the data
+        # declares it (4f's ruling on control-onclick-is-called-differently-
+        # on-every-path, 1.9.0): `(String)` with the viewId (view_id: the id,
+        # else the drawn type and the position), anything else with no
+        # argument; `name:`, the selector spelling with a sender, with `self`.
+        # Every one of these was called with no argument whatever it took: a
+        # `((String) -> Void)?` handler did not compile, while a Button's and a
+        # control's onClick were handed the viewId (get_event_handler_invocation).
+        def no_value_call(name)
+          return "data.#{name.chomp(':')}?(self)" if name.end_with?(':')
+
+          klass = ColorHelper.data_definitions.dig(name, 'class')
+          if JsonUIShared::BindingValidatorCore.closure_parameters(klass) == ['String']
+            "data.#{name}?(#{swift_string_literal(view_id)})"
           else
-            # Direct function name (non-binding)
-            if handler.end_with?(':')
-              "data.#{handler.chomp(':')}?(self)"
-            else
-              "data.#{handler}?()"
-            end
+            "data.#{name}?()"
           end
         end
 
@@ -1839,12 +1873,7 @@ module SjuiTools
         # Build lifecycle handler lines
         def build_lifecycle_handler_lines(modifier_name, handler)
           indent_str = "    " * (@indent_level + 1)
-          if handler.include?(':')
-            method_name = handler.gsub(':', '')
-            body = "data.#{method_name}?(self)"
-          else
-            body = "data.#{handler}?()"
-          end
+          body = handler.include?(':') ? "data.#{handler.gsub(':', '')}?(self)" : no_value_call(handler)
           ["#{modifier_name} {\n#{indent_str}#{body}\n#{indent_str[0...-4]}}"]
         end
 

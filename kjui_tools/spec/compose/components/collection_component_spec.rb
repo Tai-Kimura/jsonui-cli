@@ -195,14 +195,18 @@ RSpec.describe KjuiTools::Compose::Components::CollectionComponent do
         expect(result).to include('PrimaryCell')
       end
 
+      # No items, no cells: the cells come from the data's sections. This
+      # emitted `items(0) { … }` around a cell that read an undeclared
+      # `item` until 1.8.121 (collection_class_list_shape_spec.rb has the
+      # route table).
       it 'handles no items binding' do
         json_data = {
           'type' => 'Collection',
           'cellClasses' => ['ItemCell']
         }
         result = described_class.generate(json_data, 0, required_imports)
-        expect(result).to include('items(0)')
-        expect(result).to include('No items')
+        expect(result).not_to include('ItemCellView(')
+        expect(result).not_to include('items(')
       end
 
       it 'renders nothing for an undeclared collection (declaration-faithful)' do
@@ -228,7 +232,10 @@ RSpec.describe KjuiTools::Compose::Components::CollectionComponent do
         expect(result).to include('.height(100.dp)')
       end
 
-      it 'fills width for grid layouts' do
+      # A grid cell sits in its slot as a section's cell does: a Box that
+      # fills the slot and aligns the cell by gravity; the cell keeps its own
+      # size (the sections path's reason for not stretching it).
+      it 'fills the grid slot for grid layouts' do
         json_data = {
           'type' => 'Collection',
           'cellClasses' => ['ItemCell'],
@@ -236,7 +243,8 @@ RSpec.describe KjuiTools::Compose::Components::CollectionComponent do
           'columns' => 2
         }
         result = described_class.generate(json_data, 0, required_imports)
-        expect(result).to include('.fillMaxWidth()')
+        expect(result).to include('GridCells.Fixed(2)')
+        expect(result).to include("Box(\n").and include('modifier = Modifier.fillMaxSize(),')
       end
     end
 

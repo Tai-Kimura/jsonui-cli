@@ -130,7 +130,12 @@ module RjuiTools
           input_style = tint_color ? " style={{ accentColor: #{color_style_expr(tint_color)} }}" : ''
 
           state_attrs = build_state_attrs(selected_binding, on_change, radio_value)
-          state_attrs = checked_attr if state_attrs.empty?
+          # With no group selection the radio's own `checked` is its state,
+          # whatever handler it also has. It used to stand in only for an
+          # EMPTY state, so the handler an onValueChange writes, and from
+          # bae96913 the one a declared onClick writes, took its place: a radio
+          # declared checked started unchecked the moment it had either.
+          state_attrs = "#{checked_attr(operated: !state_attrs.empty?)}#{state_attrs}" unless selected_binding
 
           # Custom icon radio: hidden input + state-swapped images (the kjui/
           # sjui icon path — 33 cross-effect: web rendered the native circle
@@ -183,13 +188,14 @@ module RjuiTools
         # the effect check measured the generated input carrying no checked
         # state at all (the fixture rendered identically to its control).
         # Same shape as ToggleConverter: literal -> defaultChecked,
-        # binding -> controlled checked.
-        def checked_attr
+        # binding -> controlled checked, `readOnly` only where no handler
+        # (`operated`) answers the change.
+        def checked_attr(operated: false)
           checked = with_bind_fallback(attributes['checked'])
           return '' if checked.nil? || checked == false
 
           if has_binding?(checked)
-            " checked={#{extract_binding_property(checked)}} readOnly"
+            " checked={#{extract_binding_property(checked)}}#{operated ? '' : ' readOnly'}"
           else
             ' defaultChecked'
           end
@@ -245,15 +251,11 @@ module RjuiTools
         def build_state_attrs(selected_binding, on_change, value, expr: nil)
           value_literal = expr || JsonUIShared::StringLiterals.ts(value)
           if selected_binding
-            # A STATIC `selectedValue` puts a string literal on both sides of
-            # the comparison, and TypeScript narrows each to its own literal
-            # type — so `"Beta" === "Alpha"` is TS2367, "these types have no
-            # overlap". That is an error inside an @generated file, which no
-            # consumer can patch, and it fails the host typecheck.
-            #
-            # The converter knows the answer at codegen time, so it emits the
-            # answer instead of the comparison. Only the BOUND form still
-            # compares, and there the left side is a runtime value with no
+            # A STATIC `selectedValue` never reaches a comparison: with a
+            # literal on both sides TypeScript narrows each to its own literal
+            # type, so `"Beta" === "Alpha"` is TS2367 inside an @generated file
+            # no consumer can patch. It seeds instead (below). Only the BOUND
+            # form compares, and there the left side is a runtime value with no
             # literal type to narrow.
             static_selected = static_selected_value(selected_binding)
             if static_selected
@@ -273,15 +275,11 @@ module RjuiTools
                 end
               return "#{seed}#{operation_attr('onChange', '()', on_change && "#{on_change}?.(#{value_literal})")}"
             end
-            checked =
-              if static_selected && expr.nil?
-                # A string value compares as the literal it is written as; any
-                # other value (a JSON number) as it always has — escaping does
-                # not decide whether "1" and 1 are the same item.
-                " checked={#{static_selected == (value.is_a?(String) ? JsonUIShared::StringLiterals.ts_body(value) : value)}}"
-              else
-                " checked={#{selected_binding} === #{value_literal}}"
-              end
+            # A bound selection: the static one returned above. (The branch
+            # that answered a static selection here, `checked={true}` /
+            # `{false}`, was unreachable after that return — 6750135d — and
+            # is gone.)
+            checked = " checked={#{selected_binding} === #{value_literal}}"
             if on_change || operation_click_call
               "#{checked}#{operation_attr('onChange', '()', on_change && "#{on_change}?.(#{value_literal})")}"
             else

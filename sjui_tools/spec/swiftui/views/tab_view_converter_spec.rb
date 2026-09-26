@@ -147,9 +147,11 @@ RSpec.describe SjuiTools::SwiftUI::Views::TabViewConverter do
         code = converter.convert
 
         # A literal selectedTabIndex opens that tab: without a selection
-        # binding the TabView always opened tab 0.
-        expect(code).to include('TabView(selection: $tabViewSelection) {')
-        expect(converter.state_variables).to include('@State private var tabViewSelection: Int = 1')
+        # binding the TabView always opened tab 0. No id: the state is named by
+        # the node's position — converted on its own it is its own root, `0`
+        # (ticket sjui-codegen-state-declarations-collide-by-name).
+        expect(code).to include('TabView(selection: $tabView_0Selection) {')
+        expect(converter.state_variables).to include('@State private var tabView_0Selection: Int = 1')
       end
     end
   end

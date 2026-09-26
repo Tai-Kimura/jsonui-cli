@@ -193,20 +193,27 @@ RSpec.describe RjuiTools::React::Converters::CollectionConverter do
       end
     end
 
+    # The element is named as the import names it (React::ComponentName).
+    # Until 1.8.121 these two asserted UIKit-migration renames —
+    # ProductCollectionViewCell → ProductView, ProductCell → ProductCellView —
+    # which the import never made, so the file named a component it had not
+    # imported (collection_classes_and_page_change_spec.rb, tsc TS2304).
     context 'cell class name conversion' do
       context 'with CollectionViewCell suffix' do
-        it 'converts to View suffix' do
+        it 'keeps the PascalCase name the import uses' do
           converter = create_converter({ 'class' => 'Collection', 'cellClasses' => ['ProductCollectionViewCell'] })
           result = converter.convert
-          expect(result).to include('ProductView')
+          expect(result).to include('<ProductCollectionViewCell ')
+          expect(result).not_to include('ProductView')
         end
       end
 
       context 'with Cell suffix' do
-        it 'adds View suffix' do
+        it 'keeps the PascalCase name the import uses' do
           converter = create_converter({ 'class' => 'Collection', 'cellClasses' => ['ProductCell'] })
           result = converter.convert
-          expect(result).to include('ProductCellView')
+          expect(result).to include('<ProductCell ')
+          expect(result).not_to include('ProductCellView')
         end
       end
 

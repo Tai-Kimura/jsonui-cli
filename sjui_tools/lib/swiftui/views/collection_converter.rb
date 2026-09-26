@@ -87,6 +87,31 @@ module SjuiTools
           end
         end
 
+        # A section's own `columns` when it declares more than one, else nil.
+        # Declared (Collection.sections.items.properties.columns), so it is
+        # honoured where the Collection itself is one column too: the list,
+        # lazy and non-lazy single-column routes drew such a section one cell
+        # per row (measured on a22b5182, 2026-09-26).
+        def section_own_grid_columns(section)
+          columns = section['columns']
+          columns.is_a?(Numeric) && columns.to_i > 1 ? columns.to_i : nil
+        end
+
+        # A grid's spacing, one reading for every grid this converter draws
+        # (attribute_definitions.json Collection: columnSpacing "Spacing
+        # between columns", lineSpacing "Spacing between rows", itemSpacing
+        # "used for both grid spacing and list item spacing"): between cells
+        # columnSpacing, else itemSpacing; between rows lineSpacing, else
+        # itemSpacing. The non-lazy grid used columnSpacing between rows as
+        # well until 1.8.121.
+        def grid_cell_spacing
+          @component['columnSpacing'] || @component['itemSpacing'] || 0
+        end
+
+        def grid_row_spacing
+          @component['lineSpacing'] || @component['itemSpacing'] || 0
+        end
+
         def convert_non_responsive
           id = @component['id'] || 'collection'
           apply_scroll_container_attrs
@@ -817,8 +842,8 @@ module SjuiTools
         end
 
         def generate_non_lazy_grid(has_sections, cell_class_name, header_class_name, footer_class_name)
-          # Inter-column gap: columnSpacing first, kjui's order.
-          spacing = @component['columnSpacing'] || @component['itemSpacing'] || 0
+          # Between cells columnSpacing, between rows lineSpacing (grid_cell_spacing).
+          spacing = grid_cell_spacing
           grid_cols = "Array(repeating: GridItem(.flexible(), spacing: #{spacing}), count: #{columns_info[:expr]})"
 
           if has_sections
@@ -853,7 +878,7 @@ module SjuiTools
                       add_line "}"
                     end
 
-                    add_line "LazyVGrid(columns: #{section_grid_cols}, alignment: #{get_grid_alignment}, spacing: #{spacing}) {"
+                    add_line "LazyVGrid(columns: #{section_grid_cols}, alignment: #{get_grid_alignment}, spacing: #{grid_row_spacing}) {"
                     indent do
                       if cell_view_name
                         add_line "if let cellsData = section.cells?.data {"
@@ -887,18 +912,27 @@ module SjuiTools
             add_line "}"
             apply_insets_only
           else
-            if header_class_name
-              add_line "#{header_class_name}()"
+            # A header / footer sits in one VStack with the grid, as the
+            # single-column route's do and as SwiftJsonUI Dynamic draws it
+            # (91b932b). They were emitted as siblings of the grid, so the
+            # Collection was three views in its parent and its own modifiers
+            # (background, identifier, frame…) attached to the last of them,
+            # the footer (measured on aad4c8c4, 2026-09-26).
+            edges = header_class_name || footer_class_name
+            if edges
+              add_line "VStack(alignment: #{get_vstack_alignment_from_gravity(@component['gravity'])}, spacing: #{grid_row_spacing}) {"
             end
-            add_line "LazyVGrid(columns: #{grid_cols}, alignment: #{get_grid_alignment}, spacing: #{spacing}) {"
-            indent do
-              generate_collection_content(cell_class_name, id = @component['id'] || 'collection')
+            maybe_indent(edges) do
+              add_line "#{header_class_name}()" if header_class_name
+              add_line "LazyVGrid(columns: #{grid_cols}, alignment: #{get_grid_alignment}, spacing: #{grid_row_spacing}) {"
+              indent do
+                generate_collection_content(cell_class_name, id = @component['id'] || 'collection')
+              end
+              add_line "}"
+              apply_insets_only
+              add_line "#{footer_class_name}()" if footer_class_name
             end
-            add_line "}"
-            apply_insets_only
-            if footer_class_name
-              add_line "#{footer_class_name}()"
-            end
+            add_line "}" if edges
           end
         end
 
@@ -1044,7 +1078,7 @@ module SjuiTools
           # onPageChanged are its definitions aliases (L0 fallback only).
           page_changed_handler = attr_with_alias('onValueChange', 'onValueChanged', 'onPageChanged')
           if page_changed_handler && is_binding?(page_changed_handler) && current_page_prop
-            handler_call = get_event_handler_invocation(page_changed_handler, @component['id'] || 'collection', 'newValue')
+            handler_call = get_event_handler_invocation(page_changed_handler, view_id, 'newValue')
             add_modifier_line ".onChange(of: data.#{current_page_prop}) { oldValue, newValue in"
             indent do
               add_line "guard oldValue != newValue else { return }"
@@ -1504,21 +1538,29 @@ module SjuiTools
                 add_line "}"
               end
 
-              # Cells
+              # Cells — in a grid of the section's own columns when it
+              # declares more than one.
               if cell_view_name
-                add_line "if let cellsData = section.cells?.data {"
-                indent do
-                  vars = open_cell_foreach('cellsData')
+                own_columns = section_own_grid_columns(section)
+                if own_columns
+                  add_line "LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: #{grid_cell_spacing}), count: #{own_columns}), alignment: #{get_grid_alignment}, spacing: #{grid_row_spacing}) {"
+                end
+                maybe_indent(own_columns) do
+                  add_line "if let cellsData = section.cells?.data {"
                   indent do
-                    add_line "#{cell_view_name}(data: #{vars[:data_var]}).equatable()"
-                    generate_cell_identity(vars[:index_var])
-                    apply_cell_frame
-                    # Add accessibilityIdentifier for test automation (tapItem action)
-                    apply_cell_item_identifier(vars[:index_var])
+                    vars = open_cell_foreach('cellsData')
+                    indent do
+                      add_line "#{cell_view_name}(data: #{vars[:data_var]}).equatable()"
+                      generate_cell_identity(vars[:index_var])
+                      apply_cell_frame(grid: !own_columns.nil?)
+                      # Add accessibilityIdentifier for test automation (tapItem action)
+                      apply_cell_item_identifier(vars[:index_var])
+                    end
+                    add_line "}"
                   end
                   add_line "}"
                 end
-                add_line "}"
+                add_line "}" if own_columns
               end
 
               # Footer

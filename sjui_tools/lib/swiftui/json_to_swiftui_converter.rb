@@ -73,6 +73,12 @@ module SjuiTools
         return nil if refused_drawn_tree?(json_data, json_file_path)
         annotate_image_roles(json_data, json_file_path)
         JsonUIShared::TapAccessibility.annotate!(json_data)
+        # Each node's position, for the names a layout does not give
+        # (shared/core/layout_path.rb: an id-less node's state, a Radio's
+        # value) — on the include-expanded, style-merged tree, as kjui stamps
+        # it — and the selections the Radio groups share, from the whole tree.
+        JsonUIShared::LayoutPath.stamp!(json_data)
+        Views::RadioConverter.group_seeds = Views::RadioConverter.scan_groups(json_data)
         mark_root_if_scrolling_cell(json_data, json_file_path)
         mark_root_if_collection_cell(json_data, json_file_path)
 
@@ -205,6 +211,12 @@ module SjuiTools
         return nil if refused_drawn_tree?(json_data, json_file_path)
         annotate_image_roles(json_data, json_file_path)
         JsonUIShared::TapAccessibility.annotate!(json_data)
+        # Each node's position, for the names a layout does not give
+        # (shared/core/layout_path.rb: an id-less node's state, a Radio's
+        # value) — on the include-expanded, style-merged tree, as kjui stamps
+        # it — and the selections the Radio groups share, from the whole tree.
+        JsonUIShared::LayoutPath.stamp!(json_data)
+        Views::RadioConverter.group_seeds = Views::RadioConverter.scan_groups(json_data)
         mark_root_if_scrolling_cell(json_data, json_file_path)
         mark_root_if_collection_cell(json_data, json_file_path)
 
@@ -252,7 +264,10 @@ module SjuiTools
         # Collect responsive functions
         responsive_functions = @converter_factory.responsive_functions
 
-        [view_code, @onclick_actions.to_a, @state_variables.uniq, root_children, responsive_functions]
+        declarations, clashes = state_declarations(@state_variables)
+        return nil if refused_state_names?(clashes, json_file_path)
+
+        [view_code, @onclick_actions.to_a, declarations, root_children, responsive_functions]
       end
 
       # Extract data properties from JSON (similar to DataModelUpdater)
@@ -361,8 +376,11 @@ module SjuiTools
         end
 
         # Add state variables
-        if @state_variables.any?
-          @state_variables.uniq.each do |state_var|
+        declarations, clashes = state_declarations(@state_variables)
+        raise "#{view_name}: #{state_names_reason(clashes)}" if clashes.any?
+
+        if declarations.any?
+          declarations.each do |state_var|
             code += "    #{state_var}\n"
           end
           code += "    \n"
@@ -475,6 +493,62 @@ module SjuiTools
           JsonUI::StageFailures.record(
             'layout', "#{json_file_path} was not generated: #{blocking_layout_reason(shared_warnings)}"
           )
+        rescue LoadError
+          nil
+        end
+        true
+      end
+
+      # The view's declarations, each name once, and the names two nodes
+      # declared. The names are unique by construction — an id, or the node's
+      # position (BaseViewConverter#position_name) — so a name declared twice
+      # is two nodes that share an id, or two ids that read alike once
+      # camelCased (`a_b`, `aB`). It was `.uniq` over whole lines: the same
+      # line folded two nodes into one state, and two different lines were an
+      # "invalid redeclaration" (ticket
+      # sjui-codegen-state-declarations-collide-by-name). The one share is a
+      # group of single Radios' selection, which every Radio of the group
+      # declares with the group's seed (RadioConverter.scan_groups): declared
+      # once — unless two groups' names give it one variable. Lines that are
+      # not state (`@Environment …`) fold as before.
+      def state_declarations(lines)
+        seen = {}
+        clashes = []
+        groups = Views::RadioConverter.group_seeds
+        lines.each do |line|
+          name = line[/@(?:State|FocusState)\s+private\s+var\s+(\w+)/, 1]
+          key = name || line
+          unless seen.key?(key)
+            seen[key] = line
+            next
+          end
+          next if name.nil?
+
+          group = groups[name]
+          next if group && group[:groups].size == 1 && seen[key] == line
+
+          clashes << name unless clashes.include?(name)
+        end
+        [seen.values, clashes]
+      end
+
+      def state_names_reason(clashes)
+        "#{clashes.map { |n| "`#{n}`" }.join(', ')} #{clashes.size == 1 ? 'names' : 'name'} the view-local " \
+          'state of more than one node — two nodes share an id, or two ids (or Radio groups) read alike once ' \
+          'camelCased; give them distinct ids'
+      end
+
+      # A layout whose nodes' state names clash is not generated — a name is
+      # never folded into one state for two nodes — and the stage ledger
+      # names it, as a refused layout is named (refused_drawn_tree?).
+      def refused_state_names?(clashes, json_file_path)
+        return false if clashes.empty?
+
+        message = "#{json_file_path} was not generated: #{state_names_reason(clashes)}"
+        puts "\e[31m[SJUI Error] #{message}\e[0m"
+        begin
+          require_relative '../core/stage_failures'
+          JsonUI::StageFailures.record('layout', message)
         rescue LoadError
           nil
         end

@@ -35,7 +35,9 @@ module SjuiTools
                            # pointed at a property the Data model never grows
                            # and did not compile (codegen parity host,
                            # __control/Switch, 2026-08-02).
-                           state_var = "#{id}IsOn"
+                           # No id: its position (position_name) — `toggle`
+                           # was every id-less Switch's name.
+                           state_var = "#{@component['id'] || position_name('toggle')}IsOn"
                            add_state_variable(state_var, "Bool", @component['isOn'] || @component['checked'] || @component['value'] == true ? 'true' : 'false')
                            "$#{state_var}"
                          end
@@ -44,7 +46,7 @@ module SjuiTools
           # onValueChange (camelCase) -> binding format only (@{functionName})
           # onToggle is an alias of onValueChange (parity with kjui_tools).
           handler_attr = @component['onValueChange'] || @component['onToggle']
-          value_call = (get_event_handler_invocation(handler_attr, id, 'newValue') if handler_attr && is_binding?(handler_attr))
+          value_call = (get_event_handler_invocation(handler_attr, view_id, 'newValue') if handler_attr && is_binding?(handler_attr))
 
           # Toggle. The flip writes the value, then calls onValueChange, then
           # the declared onClick (operation_binding); no tap around the

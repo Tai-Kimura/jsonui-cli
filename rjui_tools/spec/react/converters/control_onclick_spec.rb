@@ -60,11 +60,14 @@ RSpec.describe 'a control calls its declared onClick from its own operation' do
         get: (target, key) => (key in target ? target[key] : record(String(key))),
       });
       // react_generator's JsonUISeeded: the seed as the state, and its setter.
-      const JsonUISeeded = ({ seed, children }) => children(seed, record('setSeeded'));
+      const seeds = [];
+      const JsonUISeeded = ({ seed, children }) => { seeds.push(seed); return children(seed, record('setSeeded')); };
+      // A lucide icon (a tab's default icon): an element like any other.
+      const Circle = (props) => ({ type: 'svg', props: props || {}, children: [] });
       try {
         const code = esbuild.transformSync(`<>${jsx}</>`, { loader: 'jsx', jsx: 'transform', jsxFactory: 'h', jsxFragment: '"frag"' })
           .code.trim().replace(/;$/, '');
-        const tree = new Function('h', 'data', 'JsonUISeeded', `return (${code});`)(h, data, JsonUISeeded);
+        const tree = new Function('h', 'data', 'JsonUISeeded', 'Circle', `return (${code});`)(h, data, JsonUISeeded, Circle);
         const all = [];
         const walk = (n) => { if (n && typeof n === 'object' && n.props) { all.push(n); n.children.forEach(walk); } };
         walk(tree);
@@ -72,13 +75,20 @@ RSpec.describe 'a control calls its declared onClick from its own operation' do
           checkbox: (n) => n.type === 'input' && n.props.type === 'checkbox',
           radio: (n) => n.type === 'input' && n.props.type === 'radio',
           tab: (n) => n.type === 'button',
+          tab2: (n) => n.type === 'button',
           range: (n) => n.type === 'input' && n.props.type === 'range',
           select: (n) => n.type === 'select',
           date: (n) => n.type === 'input' && n.props.type === 'date',
         }[operate];
-        const target = all.find(pick);
+        // `tab2`: a tab bar's second tab, so a switch is a change of tab.
+        const target = operate === 'tab2' ? all.filter(pick)[1] : all.find(pick);
         if (!target) return { error: `no ${operate} element` };
         const outerClicks = all.filter((n) => !pick(n) && typeof n.props.onClick === 'function').length;
+        // Where the element starts, before it is operated.
+        const initial = {};
+        ['defaultChecked', 'checked', 'defaultValue', 'value'].forEach((k) => {
+          if (k in target.props) initial[k] = target.props[k];
+        });
         if (!target.props.disabled) {
           const event = { target: { checked: true, value: operate === 'date' ? '2026-09-26' : '1', selectedIndex: 1 },
                           currentTarget: {} };
@@ -87,13 +97,13 @@ RSpec.describe 'a control calls its declared onClick from its own operation' do
             if (typeof target.props.ref === 'function') target.props.ref(el);
             target.props.onChange?.(event);
             el.onchange?.();
-          } else if (operate === 'tab') {
+          } else if (operate === 'tab' || operate === 'tab2') {
             target.props.onClick?.(event);
           } else {
             target.props.onChange?.(event);
           }
         }
-        return { calls, disabled: !!target.props.disabled, outerClicks };
+        return { calls, disabled: !!target.props.disabled, outerClicks, initial, seeds };
       } catch (e) {
         return { error: String(e.message).split('\\n')[0] };
       }
@@ -171,6 +181,109 @@ RSpec.describe 'a control calls its declared onClick from its own operation' do
       it 'calls onclick selectors in their order' do
         expect(result.(self, 'selectors on onclick')['calls'].last(2)).to eq(%w[first second])
       end
+    end
+  end
+
+  # A control starts where it is declared, whatever handlers it also has.
+  # From bae96913 a single Radio declared `checked` started unchecked once
+  # it had an onClick (the handler took the place of its `defaultChecked`),
+  # and with an onValueChange it already had; a regression the emit
+  # measurement of the agent pack found on 1.8.121. Every control, in a
+  # static and a bound form, is evaluated with no handler, an onClick and an
+  # onValueChange: the operated element's state before it is operated
+  # (defaultChecked / checked / defaultValue / value) and the seed a
+  # seeded control starts from must not move.
+  seeded = [
+    ['Switch', { 'isOn' => true }, 'checkbox'], ['Switch', { 'isOn' => '@{on}' }, 'checkbox'],
+    ['Toggle', { 'isOn' => true }, 'checkbox'], ['Toggle', { 'isOn' => '@{on}' }, 'checkbox'],
+    ['CheckBox', { 'checked' => true, 'label' => 'L' }, 'checkbox'], ['CheckBox', { 'checked' => '@{on}', 'label' => 'L' }, 'checkbox'],
+    ['Radio', { 'group' => 'g', 'text' => 'R', 'checked' => true }, 'radio'],
+    ['Radio', { 'group' => 'g', 'text' => 'R', 'checked' => '@{on}' }, 'radio'],
+    ['Radio', { 'items' => %w[a b], 'selectedValue' => 'a' }, 'radio'],
+    ['Radio', { 'items' => %w[a b], 'selectedValue' => '@{sel}' }, 'radio'],
+    ['Segment', { 'items' => %w[a b], 'selectedIndex' => 1 }, 'tab'],
+    ['Slider', { 'value' => 0.5 }, 'range'], ['Slider', { 'value' => '@{v}' }, 'range'],
+    ['SelectBox', { 'items' => %w[a b], 'selectedIndex' => 1 }, 'select'],
+    ['SelectBox', { 'selectItemType' => 'Date', 'selectedDate' => '2026-09-26' }, 'date'],
+    ['SelectBox', { 'selectItemType' => 'Date', 'selectedDate' => '@{d}' }, 'date']
+  ]
+  handlers = { 'no handler' => {}, 'an onClick' => { 'onClick' => '@{onTap}' }, 'an onValueChange' => { 'onValueChange' => '@{onPick}' } }
+
+  before(:context) do
+    next if @rows.nil?
+
+    @seeded_rows = seeded.flat_map do |type, attrs, operate|
+      handlers.map { |name, extra| { type: type, attrs: attrs, operate: operate, handler: name, jsx: emit.(type, attrs.merge(extra)) } }
+    end
+    run.(@seeded_rows.map { |r| { jsx: r[:jsx], operate: r[:operate] } }).each_with_index { |result, i| @seeded_rows[i][:result] = result }
+  end
+
+  def seeded_start(type, attrs, handler)
+    got = @seeded_rows.find { |r| r[:type] == type && r[:attrs] == attrs && r[:handler] == handler }[:result]
+    raise got['error'] if got['error']
+
+    [got['initial'], got['seeds']]
+  end
+
+  describe 'a control starts where it is declared, whatever handlers it has' do
+    seeded.each do |type, attrs, operate|
+      it "#{type} #{attrs.inspect}" do
+        starts = handlers.keys.map { |name| seeded_start(type, attrs, name) }
+        expect(starts.uniq.size).to eq(1), handlers.keys.zip(starts).inspect
+        # And the declared state is there to keep: a radio's `value` is its
+        # identity, not its state.
+        initial, seeds = starts.first
+        state = operate == 'radio' ? initial.reject { |k, _| k == 'value' } : initial
+        expect(state.empty? && seeds.empty?).to be(false), starts.first.inspect
+      end
+    end
+
+    # The single Radio's 2 x 2 (and the onValueChange it had lost it to
+    # before bae96913): declared checked starts checked, undeclared does not.
+    it 'a single Radio: checked or not, with a handler or not' do
+      radio = { 'group' => 'g', 'text' => 'R' }
+      [{}, { 'onClick' => '@{onTap}' }, { 'onValueChange' => '@{onPick}' }].each do |extra|
+        declared = run.([{ jsx: emit.('Radio', radio.merge('checked' => true).merge(extra)), operate: 'radio' }]).first
+        undeclared = run.([{ jsx: emit.('Radio', radio.merge(extra)), operate: 'radio' }]).first
+        expect(declared['initial']['defaultChecked']).to be(true), "#{extra.inspect}: #{declared.inspect}"
+        expect(undeclared['initial']).not_to include('defaultChecked', 'checked'), "#{extra.inspect}: #{undeclared.inspect}"
+      end
+    end
+  end
+
+  # A TabView with `enabled: false` switches no tab (the ruling for the five
+  # paths: `enabled: false` stops the operation). Until 1.8.121 web read no
+  # `enabled` on a TabView, and a click on a tab switched it. The second
+  # tab is operated: its button is disabled, and a browser sends no click to
+  # a disabled button, so neither the seeded state nor the selection handler
+  # is called. A bound `enabled` follows its value; an undeclared one is as
+  # it was.
+  describe 'a TabView with enabled: false' do
+    tab_view = ->(extra) { emit.('TabView', { 'tabs' => [{ 'title' => 'a' }, { 'title' => 'b' }] }.merge(extra)) }
+    enabled_cases = { 'enabled: false' => { 'enabled' => false }, 'a bound enabled, shut' => { 'enabled' => '@{gateShut}' },
+                      'a bound enabled, open' => { 'enabled' => '@{gateOpen}' }, 'no enabled' => {} }
+
+    it 'switches no tab, and follows a bound enabled' do
+      got = enabled_cases.transform_values { |extra| run.([{ jsx: tab_view.(extra), operate: 'tab2' }]).first }
+      expect(got['enabled: false']).to include('disabled' => true, 'calls' => [])
+      expect(got['a bound enabled, shut']).to include('disabled' => true, 'calls' => [])
+      expect(got['a bound enabled, open']['calls']).to eq(%w[setSeeded setSelectedTabIndex]), got.inspect
+      expect(got['no enabled']['calls']).to eq(%w[setSeeded setSelectedTabIndex]), got.inspect
+      expect(tab_view.({})).not_to include('disabled')
+    end
+
+    it 'writes TSX that compiles', :typescript_compile do
+      tsx = TypeScriptCompiler.component(tab_view.({ 'enabled' => false }), tab_view.({ 'enabled' => '@{gate}' }))
+      expect(tsx).to compile_as_typescript.with_ambient(<<~TS)
+        declare namespace JSX {
+          interface IntrinsicElements {
+            button: { [attr: string]: unknown; onClick?: () => void; disabled?: boolean };
+          }
+        }
+        declare function JsonUISeeded<T>(props: { seed: T; children: (value: T, set: (value: T) => void) => JSX.Element }): JSX.Element;
+        declare const Circle: (props: { className?: string }) => JSX.Element;
+        declare const data: { gate: boolean; selectedTabIndex?: number; setSelectedTabIndex?: (index: number) => void };
+      TS
     end
   end
 

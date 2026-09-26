@@ -134,7 +134,7 @@ module SjuiTools
             # fallback: a CheckBox with both called only onValueChange.
             handler_attr = @component['onValueChange'] || @component['action'] || @component['onValueChanged']
             calls = []
-            calls << get_event_handler_invocation(handler_attr, id, 'newValue') if handler_attr && is_binding?(handler_attr)
+            calls << get_event_handler_invocation(handler_attr, view_id, 'newValue') if handler_attr && is_binding?(handler_attr)
             click = operation_click_call
             calls << click if click
             add_line "onValueChanged: { newValue in #{calls.join('; ')} }" if calls.any?
@@ -170,8 +170,9 @@ module SjuiTools
             return "$data.#{extract_binding_property(@component['value'])}"
           end
 
-          # Create local state variable
-          state_var = "#{id}IsOn"
+          # Create local state variable — no id: its position (position_name);
+          # `checkbox` was every id-less CheckBox's name.
+          state_var = "#{@component['id'] || position_name('checkbox')}IsOn"
           initial_value = @component['isOn'] || @component['checked'] || @component['value'] == true || false
           add_state_variable(state_var, "Bool", initial_value.to_s)
           "$#{state_var}"
