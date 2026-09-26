@@ -571,6 +571,8 @@ module RjuiTools
             @dynamic_styles['accentColor'] = color_style_expr(attributes['tintColor'])
           end
 
+          classes.concat(pressed_background_classes)
+
           # Append responsive Tailwind classes (breakpoint-prefixed overrides)
           if @responsive_result && !@responsive_result[:classes].empty?
             classes.concat(@responsive_result[:classes])
@@ -1886,6 +1888,26 @@ module RjuiTools
           tag = attributes['tag']
           return '' unless tag
           jsx_attr_text('data-tag', tag)
+        end
+
+        # tapBackground is the background while pressed, on every node with a
+        # tap (onClick) and on a Button (jsonui-cli 1.9.0): `active:bg-*` on a
+        # node build_onclick_attr gives a click. A Button draws its own
+        # (ButtonConverter, where highlightBackground is the same colour's
+        # older spelling). A node without a click is not pressed: nothing.
+        def pressed_background_classes
+          background = attributes['tapBackground']
+          return [] if background.nil? || json['type'] == 'Button' || !click_attached?
+
+          active = bound_state_color_class(background, custom_property: '--jui-tap-bg', prefix: 'active:bg') ||
+                   (background.is_a?(String) ? "active:#{TailwindMapper.map_color(background, 'bg')}" : nil)
+          active ? [active, 'transition-colors'] : []
+        end
+
+        # Whether build_onclick_attr gives this node a click.
+        def click_attached?
+          attr = build_onclick_attr
+          !attr.empty? && !attr.include?('ERROR')
         end
 
         # Build onClick attribute

@@ -3,6 +3,7 @@
 require_relative '../../spec_helper'
 require 'react/converters/view_converter'
 require 'react/converters/select_box_converter'
+require 'react/react_generator'
 require 'json'
 require 'open3'
 require 'tmpdir'
@@ -783,5 +784,59 @@ RSpec.describe 'backlog closure group 2 (web)' do
       { 'type' => 'Segment', 'items' => %w[A B], 'valueChange' => 'on_tab_change' }, config
     ).convert
     expect(r).to include('data.onTabChange')
+  end
+end
+
+# tapBackground is the background while pressed, on every node with a click
+# (onClick) and on a Button (jsonui-cli 1.9.0) — BaseConverter
+# #pressed_background_classes. It was a View's alone, with a click or without
+# one, falling back to highlightBackground (on a View, the colour while
+# `highlighted` holds); a Label, an Image and the other clickable types drew
+# nothing.
+RSpec.describe RjuiTools::React::Converters::BaseConverter, 'tapBackground' do
+  let(:config) { { 'use_tailwind' => true } }
+
+  CLICKABLE = {
+    'View' => { 'child' => [] }, 'Label' => { 'text' => 'x' }, 'Image' => { 'srcName' => 'x' },
+    'NetworkImage' => { 'url' => 'https://e/x.png' }, 'IconLabel' => { 'text' => 'i' },
+    'CircleView' => {}, 'GradientView' => { 'items' => %w[#FFFFFF #000000] }, 'Blur' => {}
+  }.freeze
+
+  def classes_of(type, extra)
+    node = { 'type' => type }.merge(CLICKABLE.fetch(type)).merge(extra)
+    klass = RjuiTools::React::Converters::ViewConverter.new({ 'type' => 'View' }, config).send(:get_converter_class, type)
+    out = klass.new(node, config).convert(2)
+    [out[/className="([^"]*)"/, 1].to_s.split, out]
+  end
+
+  it 'is the pressed background of every type with a click' do
+    CLICKABLE.each_key do |type|
+      classes, out = classes_of(type, 'onClick' => '@{t}', 'tapBackground' => '#FF0000')
+      expect(classes).to include('active:bg-[#FF0000]', 'transition-colors'), "#{type}: #{out}"
+    end
+  end
+
+  it 'draws nothing on a node without a click' do
+    CLICKABLE.each_key do |type|
+      classes, out = classes_of(type, 'tapBackground' => '#FF0000')
+      expect(classes.grep(/\Aactive:/)).to be_empty, "#{type}: #{out}"
+    end
+    classes, = classes_of('View', 'onClick' => '@{t}', 'canTap' => false, 'tapBackground' => '#FF0000')
+    expect(classes.grep(/\Aactive:/)).to be_empty
+  end
+
+  # On a View, highlightBackground is the colour while `highlighted` holds —
+  # not the pressed one (a Button's highlightBackground is, ButtonConverter).
+  it "does not take a View's highlightBackground as the pressed colour" do
+    classes, = classes_of('View', 'onClick' => '@{t}', 'highlightBackground' => '#00FF00')
+    expect(classes.grep(/\Aactive:/)).to be_empty
+    _, out = classes_of('View', 'highlighted' => true, 'highlightBackground' => '#00FF00')
+    expect(out).to include('#00FF00')
+  end
+
+  it 'reads a bound tapBackground back through the custom property' do
+    classes, out = classes_of('Label', 'onClick' => '@{t}', 'tapBackground' => '@{tb}')
+    expect(classes).to include('active:bg-[var(--jui-tap-bg)]')
+    expect(out).to include("'--jui-tap-bg'")
   end
 end

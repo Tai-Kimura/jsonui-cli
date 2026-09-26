@@ -241,16 +241,11 @@ module RjuiTools
           # scrolling/pinch-zoom before the element's pan/pinch handlers see them.
           classes << 'touch-none' if attributes['onPan'] || attributes['onPinch']
 
-          # Highlight/Tap background effects (using hover/active states)
-          if attributes['tapBackground'] || attributes['highlightBackground']
-            tap_bg = attributes['tapBackground'] || attributes['highlightBackground']
-            bound_class = bound_state_color_class(tap_bg, custom_property: '--jui-tap-bg', prefix: 'active:bg')
-            if bound_class
-              classes << bound_class
-            elsif tap_bg.is_a?(String)
-              classes << "active:#{TailwindMapper.map_color(tap_bg, 'bg')}"
-            end
-          end
+          # tapBackground (the background while pressed) is BaseConverter's,
+          # for every node with a click (pressed_background_classes). This drew
+          # it on a View with no click too, and fell back to highlightBackground
+          # — on a View that is the colour while `highlighted` holds (below),
+          # not while pressed.
 
           # Highlighted state (initial highlight).
           #
@@ -265,9 +260,6 @@ module RjuiTools
             highlight_bg = attributes['highlightBackground'] || '#E5E7EB'
             dynamic_styles['backgroundColor'] = color_style_expr(highlight_bg)
           end
-
-          # Transition for smooth effects
-          classes << 'transition-colors' if attributes['tapBackground'] || attributes['highlightBackground']
 
           # The reading-direction half of leading / trailing safe area
           # (apply_safe_area_insets reads the custom properties these set).
