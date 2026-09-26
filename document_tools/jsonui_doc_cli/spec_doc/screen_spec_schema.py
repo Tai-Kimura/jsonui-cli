@@ -480,9 +480,9 @@ SCREEN_SPEC_SCHEMA = {
                     "description": (
                         "Layout JSON refs (layouts_directory-relative, no "
                         ".json) of the cells this Collection may use — the "
-                        "multi-cell form. Read by the spec validator and "
-                        "jsonui-doc; `jui g project` does not write it onto "
-                        "the generated Collection."
+                        "multi-cell form. Written onto the Collection "
+                        "`jui g project` generates (from jsonui-cli 1.9.0; "
+                        "read by the validator and jsonui-doc before)."
                     )
                 },
                 "sections": {
@@ -498,9 +498,10 @@ SCREEN_SPEC_SCHEMA = {
                     },
                     "description": (
                         "Section-based Collection: each section names its "
-                        "cell / header / footer layout. Read by the spec "
-                        "validator and jsonui-doc; `jui g project` does not "
-                        "write it onto the generated Collection."
+                        "cell / header / footer layout. Written onto the "
+                        "Collection `jui g project` generates, in place of "
+                        "the section it derives from cell / header / footer "
+                        "(from jsonui-cli 1.9.0)."
                     )
                 }
             }
