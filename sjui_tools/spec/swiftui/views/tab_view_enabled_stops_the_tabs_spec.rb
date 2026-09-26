@@ -77,6 +77,68 @@ RSpec.describe 'sjui a TabView\'s enabled stops its tabs' do
     expect(code).not_to include('if (data.on')
   end
 
+  # onValueChange (onTabChange / onPageChanged its aliases): called on the
+  # selection the tab view moves — the view model's binding, a literal
+  # selectedIndex's state, or state of its own when there is no
+  # selectedIndex — as the data declares the handler. It observed
+  # `selectedTab`, which nothing declares: every TabView with the handler
+  # failed to compile.
+  describe 'onValueChange' do
+    after { SjuiTools::SwiftUI::Views::ColorHelper.data_definitions = {} }
+
+    handler_classes = { 'onTab' => '((Int) -> Void)?', 'onTabId' => '((String, Int) -> Void)?', 'onTabNone' => '(() -> Void)?' }
+    selections = { 'bound' => { 'selectedIndex' => '@{sel}' }, 'literal' => { 'selectedIndex' => 1 }, 'none' => {} }
+
+    it 'observes the selection the tab view moves, and calls the handler as declared' do
+      SjuiTools::SwiftUI::Views::ColorHelper.data_definitions = handler_classes.transform_values { |c| { 'class' => c } }
+      expect(convert.call(tab_view.call('selectedIndex' => '@{sel}', 'onValueChange' => '@{onTab}')))
+        .to include(".onChange(of: data.sel) { _, newValue in\n        data.onTab?(newValue)")
+      literal = convert.call(tab_view.call('selectedIndex' => 1, 'onTabChange' => '@{onTabId}'))
+      expect(literal).to include('TabView(selection: $tvSelection) {')
+      expect(literal).to include('data.onTabId?("tv", newValue)')
+      none = convert.call(tab_view.call('onPageChanged' => '@{onTabNone}'))
+      expect(none).to include('TabView(selection: $tvSelection) {')
+      expect(none).to include(".onChange(of: tvSelection) { _, newValue in\n        data.onTabNone?()")
+      expect([literal, none].join).not_to include('selectedTab')
+    end
+
+    it 'compiles for each selection and each declared shape', :swift_compile do
+      skip("swiftc: #{SwiftCompiler.unavailable_reason}") if SwiftCompiler.unavailable_reason
+      SjuiTools::SwiftUI::Views::ColorHelper.data_definitions = handler_classes.transform_values { |c| { 'class' => c } }
+      views = selections.flat_map do |sel_name, selection|
+        handler_classes.keys.map do |handler|
+          converter = SjuiTools::SwiftUI::ConverterFactory.new.create_converter(
+            JsonUIShared::TapAccessibility.annotate!(JSON.parse(JSON.generate(tab_view.call(selection.merge('onValueChange' => "@{#{handler}}")))))
+          )
+          code = converter.convert.to_s
+          states = converter.state_variables.map { |line| "    #{line}" }.join("\n")
+          <<~SWIFT
+            struct Host_#{sel_name}_#{handler}: View {
+                @Binding var data: TestData
+            #{states}
+                var body: some View {
+            #{code.lines.map { |l| "        #{l}" }.join}
+                }
+            }
+          SWIFT
+        end
+      end
+      source = <<~SWIFT
+        #{EmittedSwift::LIBRARY_STUBS}
+        struct TeOneView: View { var body: some View { Text("1") } }
+        struct TeTwoView: View { var body: some View { Text("2") } }
+        struct TestData {
+            var sel: Int = 0
+            var onTab: ((Int) -> Void)? = nil
+            var onTabId: ((String, Int) -> Void)? = nil
+            var onTabNone: (() -> Void)? = nil
+        }
+        #{views.join("\n")}
+      SWIFT
+      expect(source).to compile_as_swift
+    end
+  end
+
   it 'a bound enabled compiles against the modifier the library declares', :swift_compile do
     skip("swiftc: #{SwiftCompiler.unavailable_reason}") if SwiftCompiler.unavailable_reason
     code = convert.call(tab_view.call({ 'enabled' => '@{on}' }.merge(gestures)))

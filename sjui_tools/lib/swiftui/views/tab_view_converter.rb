@@ -17,16 +17,22 @@ module SjuiTools
 
           # Build TabView with selection binding if provided
           selected_index = attr_with_alias('selectedIndex', 'selectedTabIndex')
+          # The tab-change handler (tab_change_line) observes the selection:
+          # without a selectedIndex the tab view holds one of its own.
+          handler = tab_change_handler
+          selection = nil
           if selected_index && is_binding?(selected_index)
             binding_prop = extract_binding_property(selected_index)
+            selection = "data.#{binding_prop}"
             add_line "TabView(selection: $data.#{binding_prop}) {"
-          elsif selected_index
+          elsif selected_index || handler
             # A literal selectedIndex seeds the initial tab (the dynamic
             # renderer and the UIKit runtime both honor it) — without a
             # selection binding TabView always opened the first tab.
             # No id: its position (position_name), not camelCased.
             state_name = @component['id'] ? "#{to_camel_case(@component['id'])}Selection" : "#{position_name('tabView')}Selection"
             @state_variables << "@State private var #{state_name}: Int = #{selected_index.to_i}"
+            selection = state_name
             add_line "TabView(selection: $#{state_name}) {"
           else
             add_line "TabView {"
@@ -185,17 +191,18 @@ module SjuiTools
             add_modifier_line "}"
           end
 
-          # Apply tab-change handler. onValueChange is the canonical
-          # name; onTabChange / onPageChanged are its definitions
-          # aliases (L0 fallback only).
-          handler = attr_with_alias('onValueChange', 'onTabChange', 'onPageChanged')
+          # The tab-change handler, on the selection the tab view moves (the
+          # view model's binding, or the tab view's own), called as the data
+          # declares it (get_event_handler_invocation: `(Int)` with the new
+          # index, `(String, Int)` with the viewId first, `()` with nothing).
+          # It observed `selectedTab`, a name nothing declares: a TabView with
+          # an onValueChange did not compile (spec
+          # tab_view_enabled_stops_the_tabs_spec, compile_as_swift). The
+          # Dynamic runtime calls it on the same change (TabViewWrapperView).
           if handler
-            if is_binding?(handler)
-              handler_prop = extract_binding_property(handler)
-              add_modifier_line ".onChange(of: selectedTab) { _, newValue in"
-              add_modifier_line "    data.#{handler_prop}?(newValue)"
-              add_modifier_line "}"
-            end
+            add_modifier_line ".onChange(of: #{selection}) { _, newValue in"
+            add_modifier_line "    #{get_event_handler_invocation(handler, view_id, 'newValue')}"
+            add_modifier_line "}"
           end
 
           apply_modifiers
@@ -257,6 +264,13 @@ module SjuiTools
             call = line.lstrip
             call.start_with?('data.') ? "#{line[0...(line.length - call.length)]}if #{gate} { #{call} }" : line
           end)
+        end
+
+        # onValueChange, the canonical name — onTabChange / onPageChanged are
+        # its definitions aliases (L0 fallback only) — when it is a binding.
+        def tab_change_handler
+          handler = attr_with_alias('onValueChange', 'onTabChange', 'onPageChanged')
+          handler if handler.is_a?(String) && is_binding?(handler)
         end
 
         # `.jsonuiTabItemsEnabled(false)` for `enabled: false`, the binding
