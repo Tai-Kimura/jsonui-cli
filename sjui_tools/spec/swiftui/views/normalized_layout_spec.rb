@@ -112,18 +112,20 @@ RSpec.describe 'L1-normalized layout consumption' do
       expect(code).not_to include('selection: $data.tab')
     end
 
+    # The handler is called as the data declares it (get_event_handler_invocation);
+    # undeclared here, it is called with nothing.
     it 'reads the onTabChange alias on L0 and skips it on L1' do
       json = { 'type' => 'TabView', 'tabs' => [], 'onTabChange' => '@{tabChanged}' }
-      expect(convert(json)).to include('data.tabChanged?(newValue)')
+      expect(convert(json)).to include('data.tabChanged?()')
       normalized!
-      expect(convert(json)).not_to include('data.tabChanged?(newValue)')
+      expect(convert(json)).not_to include('data.tabChanged?(')
     end
 
     it 'reads canonical onValueChange on both L0 and L1' do
       json = { 'type' => 'TabView', 'tabs' => [], 'onValueChange' => '@{tabChanged}' }
-      expect(convert(json)).to include('data.tabChanged?(newValue)')
+      expect(convert(json)).to include('data.tabChanged?()')
       normalized!
-      expect(convert(json)).to include('data.tabChanged?(newValue)')
+      expect(convert(json)).to include('data.tabChanged?()')
     end
   end
 
