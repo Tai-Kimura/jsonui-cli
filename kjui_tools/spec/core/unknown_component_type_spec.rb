@@ -3,6 +3,7 @@
 require 'core/attribute_validator'
 require 'compose/compose_builder'
 require 'tmpdir'
+require 'json'
 
 # A node whose type the tool cannot draw is named by its type, in one sentence
 # (4f's ruling, jsonui-cli 1.9.0): the shared validator (4 byte-identical
@@ -32,6 +33,18 @@ RSpec.describe 'unknown component type' do
     expect(core.unknown_component_type_message('switch', %w[Label Switch]))
       .to eq("Unknown component type 'switch' — did you mean 'Switch'? Type names are case-sensitive.")
     expect(core.unknown_component_type_message('Nope', %w[Label Switch])).to eq("Unknown component type 'Nope'")
+  end
+
+  # The shared table KotlinJsonUI's Dynamic constant is held to (a
+  # byte-identical copy in its test resources, compared by its CI).
+  it 'answers every case of shared/core/unknown_component_type_vectors.json' do
+    vectors = File.expand_path('../../../shared/core/unknown_component_type_vectors.json', __dir__)
+    skip 'shared vectors not present in this layout' unless File.exist?(vectors)
+
+    cases = JSON.parse(File.read(vectors))['cases']
+    expect(cases.size).to be >= 4
+    got = cases.map { |c| [c['name'], core.unknown_component_type_message(c['written'], c['known'])] }
+    expect(got).to eq(cases.map { |c| [c['name'], c['expect']] })
   end
 
   it 'names a type in another case with the declared one, and a type no path draws alone' do
