@@ -81,11 +81,13 @@ RSpec.describe 'sjui: bind folded at the dispatch' do
   it 'is read by no converter' do
     token = /\['bind'\]|\["bind"\]/
     hits = lambda do |text, name|
-      text.lines.each_with_index.filter_map do |line, i|
+      # map + compact, not filter_map: Ruby 2.6 (the consumer floor, a CI
+      # leg) has no filter_map
+      text.lines.each_with_index.map do |line, i|
         next if line.strip.start_with?('#')
 
         "#{name}:#{i + 1}" if line.sub(/#.*/, '') =~ token
-      end
+      end.compact
     end
     expect(hits.call("          if @component['bind'] && x\n", 'read').size).to eq(1)
     expect(hits.call("          # @component['bind'] was read here\n", 'comment').size).to eq(0)

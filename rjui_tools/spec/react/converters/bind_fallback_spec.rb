@@ -133,11 +133,13 @@ RSpec.describe 'bind as the primary value binding' do
   it 'is read by no converter' do
     token = /\['bind'\]|\["bind"\]|with_bind_fallback\(/
     hits = lambda do |text, name|
-      text.lines.each_with_index.filter_map do |line, i|
+      # map + compact, not filter_map: Ruby 2.6 (the consumer floor, a CI
+      # leg) has no filter_map
+      text.lines.each_with_index.map do |line, i|
         next if line.strip.start_with?('#')
 
         "#{name}:#{i + 1}" if line.sub(/#.*/, '') =~ token
-      end
+      end.compact
     end
     # the scan tells a read from a comment (both sides)
     expect(hits.call("          value = attributes['bind']\n", 'read').size).to eq(1)
