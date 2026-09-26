@@ -498,7 +498,10 @@ module JsonUIShared
         # An Embed's events are handler names, not bindings; validate_embed_component
         # names any that is not one.
         next if key == 'events' && resolve_component_alias(component_type) == 'Embed'
-        next if incompatible_attr?(component_type, key)
+        if incompatible_attr?(component_type, key)
+          note_uses_on_other_platforms(value, key)
+          next
+        end
 
         check_value_for_bindings(value, key, component_type)
         check_selector_declared(value, key, component_type)
@@ -537,6 +540,42 @@ module JsonUIShared
             end
           end
         end
+      end
+    end
+
+    # An attribute declared for other platforms or modes draws nothing here,
+    # so none of its checks run on this platform — but the data it names is
+    # the layout's all the same, and counted as used. Until jsonui-cli 1.9.0
+    # it was not: a shared layout binding Web.reloadToken / onLoadFailed
+    # (declared for swift and kotlin — an iframe reports neither) warned
+    # "defined but never used" on every web build, and the face had no way
+    # to satisfy both. The same held for any other platform- or mode-
+    # restricted attribute (View.onDrop on sjui / kjui, a UIKit-only one in
+    # SwiftUI mode). Every @{...} in the value counts, and a handler named
+    # without braces (`"onLongPress": "handleHold"`) as it does in
+    # check_selector_declared. Cell scopes are left alone, as
+    # check_undefined_variables leaves them.
+    def note_uses_on_other_platforms(value, attribute_name)
+      return if @cell_depth > 0
+
+      case value
+      when String
+        exprs = value.scan(/@\{([^}]*)\}/).flatten
+        if exprs.empty?
+          name = value.strip
+          if SELECTOR_ATTRS.include?(attribute_name.to_s.split('.').first) && @data_properties.include?(name)
+            @used_properties << name
+          end
+        end
+        exprs.each do |expr|
+          next if expr.start_with?('data.')
+
+          extract_variables(expr).each { |var| @used_properties << var if @data_properties.include?(var) }
+        end
+      when Hash
+        value.each_value { |v| note_uses_on_other_platforms(v, attribute_name) }
+      when Array
+        value.each { |v| note_uses_on_other_platforms(v, attribute_name) }
       end
     end
 
