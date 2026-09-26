@@ -20,7 +20,8 @@ RSpec.describe 'shared validator: bind beside the own value attribute' do
     said = cases.map do |c|
       validator = KjuiTools::Core::AttributeValidator.new(:compose)
       validator.validate(JSON.parse(JSON.generate(c['node'])))
-      [c['name'], validator.warnings.grep(/is ignored: 'bind: |'bind: .*' is ignored/).map { |w| w[/'bind: .*\z/] }]
+      # every sentence about `bind` (the "is ignored" one, and a Collection's)
+      [c['name'], validator.warnings.grep(/'bind/).map { |w| w[/'bind.*\z/] }]
     end
     expected = cases.map { |c| [c['name'], c['warning'] ? [c['warning']] : []] }
     expect(said).to eq(expected)
@@ -29,7 +30,9 @@ RSpec.describe 'shared validator: bind beside the own value attribute' do
   it 'follows the declaration (a section the table does not map says nothing)' do
     validator = KjuiTools::Core::AttributeValidator.new(:compose)
     table = validator.definitions.dig('common', 'bind', 'primaryValue')
-    expect(table.keys).to include('Switch', 'CheckBox', 'Slider', 'Segment', 'SelectBox', 'Progress', 'Collection')
+    expect(table.keys).to include('Switch', 'CheckBox', 'Slider', 'Segment', 'SelectBox', 'Progress')
+    # `bind` is not a Collection's data source (that is `items`)
+    expect(table.keys).not_to include('Collection')
     table.each do |section, values|
       values.each { |attr| expect(validator.definitions.dig(section, attr)).to be_a(Hash), "#{section}.#{attr}" }
     end

@@ -30,8 +30,11 @@ class BindFoldVectorsTest(unittest.TestCase):
             with self.subTest(case["name"]):
                 tree, warnings = self.canon.canonicalize(case["node"], add_marker=False)
                 self.assertEqual(tree, case["expect"])
-                folded = [w for w in warnings if "is ignored:" in w]
-                if case["warning"] is None:
+                # The normalizer says the "is ignored" sentences, where it folds;
+                # any other sentence (a Collection's bind) is the validator's,
+                # said on the layout the normalizer leaves it in.
+                folded = [w for w in warnings if "is ignored:" in w or "'bind" in w]
+                if case["warning"] is None or "is ignored:" not in case["warning"]:
                     self.assertEqual(folded, [])
                 else:
                     self.assertEqual(len(folded), 1)

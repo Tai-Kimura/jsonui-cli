@@ -967,9 +967,12 @@ RSpec.describe SjuiTools::Core::AttributeValidator do
         }
       end
 
-      it 'returns no warnings for all Switch attributes' do
+      # Every attribute is declared; the one warning is that `bind` beside the
+      # own value attribute is ignored (SSoT common.bind: the own attribute
+      # "takes precedence when both are set").
+      it 'warns only that bind is ignored, for all Switch attributes' do
         validator.validate(component)
-        expect(validator.warnings).to be_empty
+        expect(validator.warnings).to eq(["[Switch] 'bind: @{switchState}' is ignored: 'isOn: @{isOn}' is the Switch's value"])
       end
     end
 
@@ -986,9 +989,12 @@ RSpec.describe SjuiTools::Core::AttributeValidator do
         }
       end
 
-      it 'returns no warnings for Toggle with new attributes' do
+      # Every attribute is declared; the one warning is that `bind` beside the
+      # own value attribute is ignored (SSoT common.bind: the own attribute
+      # "takes precedence when both are set").
+      it 'warns only that bind is ignored, for Toggle with new attributes' do
         validator.validate(component)
-        expect(validator.warnings).to be_empty
+        expect(validator.warnings).to eq(["[Toggle] 'bind: @{toggleState}' is ignored: 'isOn: @{isOn}' is the Switch's value"])
       end
     end
 
@@ -1092,9 +1098,12 @@ RSpec.describe SjuiTools::Core::AttributeValidator do
         }
       end
 
-      it 'returns no warnings for all CheckBox attributes' do
+      # Every attribute is declared; the one warning is that `bind` beside the
+      # own value attribute is ignored (SSoT common.bind: the own attribute
+      # "takes precedence when both are set").
+      it 'warns only that bind is ignored, for all CheckBox attributes' do
         validator.validate(component)
-        expect(validator.warnings).to be_empty
+        expect(validator.warnings).to eq(["[CheckBox] 'bind: @{checkState}' is ignored: 'isOn: @{isAccepted}' is the CheckBox's value"])
       end
     end
 
@@ -1113,9 +1122,12 @@ RSpec.describe SjuiTools::Core::AttributeValidator do
         }
       end
 
-      it 'returns no warnings for Check with new attributes' do
+      # Every attribute is declared; the one warning is that `bind` beside the
+      # own value attribute is ignored (SSoT common.bind: the own attribute
+      # "takes precedence when both are set").
+      it 'warns only that bind is ignored, for Check with new attributes' do
         validator.validate(component)
-        expect(validator.warnings).to be_empty
+        expect(validator.warnings).to eq(["[Check] 'bind: @{checkState}' is ignored: 'checked: @{isChecked}' is the CheckBox's value"])
       end
     end
 

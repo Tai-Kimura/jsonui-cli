@@ -752,8 +752,7 @@
         "Slider": ["value"],
         "Segment": ["selectedIndex"],
         "SelectBox": ["selectedValue", "selectedItem", "selectedIndex", "selectedDate"],
-        "Progress": ["progress"],
-        "Collection": ["items"]
+        "Progress": ["progress"]
       }
     },
     "include": {
