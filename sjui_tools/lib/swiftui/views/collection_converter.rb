@@ -1746,15 +1746,29 @@ module SjuiTools
               add_line "IdentifiedCellItem(id: #{id}, index: #{index_expr}, data: data)"
             end
             add_line "}"
-            add_line "ForEach(items) { cell in"
-            # scrollTo names a cell by its key: a later section's cell takes its
-            # key as an explicit `.id` too, since its ForEach id is prefixed.
             vars = { data_var: 'cell.data', index_var: 'cell.index' }
-            return vars unless later
+            unless has_scroll_to?
+              add_line "ForEach(items) { cell in"
+              return vars
+            end
 
-            key = cell_key_expr('cell.data', 'cell.index')
-            # A shared key: the cell's own loop id, "<section>:<key>".
-            vars.merge(scroll_id: earlier_keys ? "earlierKeys.contains(#{key = "(#{key})"}) ? cell.id : #{key}" : key)
+            # With scrollTo, a cell's loop id is its scroll target: its key —
+            # unless an earlier drawn section has it (`earlierKeys`; the
+            # SSoT's Collection.scrollTo names the FIRST cell, in section
+            # order, whose key it is) — else its place, an IndexPath, which no
+            # value a scrollTo sends (a String, an Int) equals: a cell with no
+            # key has no key. Until jsonui-cli 1.9.0 the loop id of a cell
+            # with no key was "\(index)" ("<section>:\(index)" after the first
+            # section), so the String "3" reached the fourth cell of a
+            # section with no keys. The place counts the section too: the ids
+            # of the sections' sibling loops stay apart, as the "<section>:"
+            # prefix kept them (round 9).
+            own = cell_own_key_expr('cell.data')
+            key = earlier_keys ? "#{own}.flatMap { earlierKeys.contains($0) ? nil : AnyHashable($0) }" : "#{own}.map { AnyHashable($0) }"
+            place = "AnyHashable(IndexPath(item: cell.index, section: #{section_index.to_i}))"
+            add_line "ForEach(items.map { cell in (target: #{key} ?? #{place}, cell: cell) }, id: \\.target) { item in"
+            indent { add_line 'let cell = item.cell' }
+            vars
           elsif later
             add_line "ForEach(#{source_expr}.enumerated().map { IdentifiedCellItem(id: \"#{section_index}:\\($0.offset)\", " \
                      "index: #{page_start ? "#{page_start} + " : ''}$0.offset, data: $0.element) }) { cell in"
@@ -1776,10 +1790,17 @@ module SjuiTools
           "#{view_name}(data: [String: Any]())"
         end
 
-        # A cell's key as `data` holds it: the pre-enriched "cellId", else the
-        # cellIdProperty value, else its index.
+        # A cell's loop id as `data` holds it: the pre-enriched "cellId", else
+        # the cellIdProperty value, else its index — the loop's identity only:
+        # with scrollTo, a cell with no key answers no key (open_cell_foreach).
         def cell_key_expr(data_var, index_var)
           "(#{data_var}[\"cellId\"] as? String) ?? (#{data_var}[\"#{@component['cellIdProperty']}\"] as? String) ?? \"\\(#{index_var})\""
+        end
+
+        # A cell's key, a `String?`: the pre-enriched "cellId", else the
+        # cellIdProperty value; nil for a cell with neither.
+        def cell_own_key_expr(data_var)
+          "((#{data_var}[\"cellId\"] as? String) ?? (#{data_var}[\"#{@component['cellIdProperty']}\"] as? String))"
         end
 
         # The drawn sections before `section_index` (a declared cell), their
@@ -1799,9 +1820,10 @@ module SjuiTools
 
         # The keys of the drawn sections before `section_index`, as a Swift
         # `Set<String>` expression — each cell's key as its own section's
-        # loop reads it (cell_key_expr; enriched first under
-        # autoChangeTrackingId) — or nil when none is before it. The data
-        # reference is earlier_cells_count's.
+        # loop reads it (cell_own_key_expr; enriched first under
+        # autoChangeTrackingId), a cell with no key adding none — or nil when
+        # none is before it. The data reference is earlier_cells_count's.
+        # Until jsonui-cli 1.9.0 a cell with no key added "\(index)".
         def earlier_cell_keys(section_index)
           prop = extract_property_name(@component['items'])
           return nil unless prop
@@ -1815,8 +1837,7 @@ module SjuiTools
           if @component['autoChangeTrackingId'] == true
             cells = "#{cells}.reconfigured(cellIdProperty: \"#{@component['cellIdProperty']}\", autoChangeTrackingId: true)"
           end
-          "Set([#{earlier.join(', ')}].map { #{data_ref}.sections[$0] }.flatMap { #{cells}.enumerated().map { index, data in " \
-            "#{cell_key_expr('data', 'index')} } })"
+          "Set([#{earlier.join(', ')}].map { #{data_ref}.sections[$0] }.flatMap { #{cells}.compactMap { #{cell_own_key_expr('$0')} } })"
         end
 
         # The cellIds of the drawn sections before `section_index`, as a Swift
@@ -1852,16 +1873,12 @@ module SjuiTools
             key = "(#{data_var}[\"cellId\"] as? String)"
             own = earlier_ids ? "#{key}.flatMap { earlierKeys.contains($0) ? nil : AnyHashable($0) }" : "#{key}.map { AnyHashable($0) }"
             add_modifier_line ".id(#{own} ?? AnyHashable(#{scroll_id || index_var}))"
-          elsif has_scroll_to?
-            if @component['cellIdProperty']
-              # ForEach(Identifiable) identity is the key a scrollTo names; a
-              # later section's is prefixed, so its cell takes the key as `.id`.
-              add_modifier_line ".id(#{scroll_id})" if scroll_id
-            else
-              # Integer-based ID for scroll target only
-              add_modifier_line ".id(#{scroll_id || index_var})"
-            end
+          elsif has_scroll_to? && @component['cellIdProperty'].nil?
+            # Integer-based ID for scroll target only
+            add_modifier_line ".id(#{scroll_id || index_var})"
           end
+          # With cellIdProperty the loop id is the scroll target
+          # (open_cell_foreach): no `.id`.
 
           # onItemAppear: fire callback with index when cell appears
           on_item_appear = @component['onItemAppear']
