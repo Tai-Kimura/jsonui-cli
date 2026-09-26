@@ -40,6 +40,55 @@ module JsonUIShared
         entry ? (entry['render_as'] || entry['canonical']) : type
       end
 
+      # The spellings an app registers as components of its own. Each tool
+      # sets them from its registry (sjui's custom converters, kjui's
+      # COMPONENT_MAPPINGS, rjui's extension converters) before it reads a
+      # layout. A node spelled so is the app's, whatever the spelling: its
+      # converter is asked first, so it is drawn as written, and what
+      # classifies it must not read it as the synonym it also is.
+      def app_types=(types)
+        @app_types = Array(types).map(&:to_s).uniq.freeze
+      end
+
+      def app_types
+        @app_types || []
+      end
+
+      # The type a node spelled `type` is drawn as: an app's own spelling as
+      # written; else its synonym's target, then the canonical section of a
+      # declared alias (ComponentAliases). What classifies a node by its type
+      # (which data it needs, which imports, whether it takes focus) asks
+      # this, not the spelling as written, so it agrees with the converter
+      # that draws the node; a list of types to compare it with holds the
+      # drawn types only.
+      def drawn_type(type, path = DEFAULT_PATH)
+        return type unless type.is_a?(String)
+        return type if app_types.include?(type)
+
+        JsonUIShared::ComponentAliases.canonical(drawn_as(type, path))
+      end
+
+      # The declared section a node spelled `type` is validated against:
+      # its synonym's `canonical` (not `render_as` — CircleImage is drawn as
+      # CircleImage and validated as Image), then a declared alias's canonical
+      # section. What looks a type's attributes up asks this.
+      def section(type, path = DEFAULT_PATH)
+        return type unless type.is_a?(String)
+
+        entry = entries(path)[type]
+        JsonUIShared::ComponentAliases.canonical(entry ? entry['canonical'] : type)
+      end
+
+      # `node` as a converter factory is given it: an app's own spelling as
+      # written; else canonicalized (the synonym's type and the attributes it
+      # means), then its alias section resolved. A copy when anything
+      # changed; `node` itself otherwise.
+      def drawn(node, path = DEFAULT_PATH)
+        return node if node.is_a?(Hash) && app_types.include?(node['type'])
+
+        JsonUIShared::ComponentAliases.resolve(canonicalize(node, path))
+      end
+
       # The attributes the spelling `type` means ({} for most).
       def implied(type, path = DEFAULT_PATH)
         entry = entries(path)[type]
@@ -80,8 +129,11 @@ module JsonUIShared
 
       private
 
+      # Read as UTF-8 whatever the locale says (the table's text is UTF-8): a
+      # library reader, such as tap_accessibility.rb, may run where the
+      # entry point did not set the default encoding.
       def read(path)
-        entries = JSON.parse(File.read(path))['synonyms']
+        entries = JSON.parse(File.read(path, encoding: 'UTF-8'))['synonyms']
         unless entries.is_a?(Hash) && entries.values.all? { |e| e.is_a?(Hash) && e['canonical'].is_a?(String) }
           raise "#{path}: `synonyms` must map each spelling to an object with a `canonical` string"
         end
@@ -128,7 +180,7 @@ module JsonUIShared
       private
 
       def read(path)
-        definitions = JSON.parse(File.read(path))
+        definitions = JSON.parse(File.read(path, encoding: 'UTF-8'))
         definitions.each_with_object({}) do |(name, section), aliases|
           next unless section.is_a?(Hash) && section['_alias_of'].is_a?(String)
 

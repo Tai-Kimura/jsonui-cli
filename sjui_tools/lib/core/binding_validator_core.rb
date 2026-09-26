@@ -3,6 +3,7 @@
 
 require 'json'
 require 'set'
+require_relative 'type_synonyms'
 
 module JsonUIShared
   # Validates binding expressions in JSON layouts. Shared body of the three
@@ -294,8 +295,14 @@ module JsonUIShared
       out
     end
 
+    # The section a spelling is validated against: a type synonym's
+    # `canonical` first (type_synonyms.rb — a Text is a Label, a Table a
+    # Collection), then the alias hop above. Read as written, a synonym had no
+    # table of its own here, so its bindings were checked as an unknown type's.
     def resolve_component_alias(component_type)
-      @component_alias_by_type[component_type] || component_type
+      entry = component_type.is_a?(String) && JsonUIShared::TypeSynonyms.entries[component_type]
+      section = entry ? entry['canonical'] : component_type
+      @component_alias_by_type[section] || section
     end
 
     # Per component type, the set of attribute names marked for platforms
@@ -478,7 +485,7 @@ module JsonUIShared
       collect_platform_used_properties(component, component_type)
 
       # Embed-specific structural rules (params tree grammar + navigationMode)
-      validate_embed_component(component) if component_type == 'Embed'
+      validate_embed_component(component) if resolve_component_alias(component_type) == 'Embed'
 
       component.each do |key, value|
         next if key == 'type' || key == 'child' || key == 'children' || key == 'sections'

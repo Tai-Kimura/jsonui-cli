@@ -225,7 +225,7 @@ module JsonUIShared
       check_weight_dimension_conflict(merged_component, type, parent_orientation)
 
       # Check Collection requires cellIdProperty in SwiftUI/Compose mode
-      if type == 'Collection' && (@mode == :swiftui || @mode == :compose)
+      if map_type_to_definition(type) == 'Collection' && (@mode == :swiftui || @mode == :compose)
         unless merged_component.key?('cellIdProperty')
           add_warning("Collection should have 'cellIdProperty' for unique cell identity (e.g., \"cellIdProperty\": \"id\")")
         end

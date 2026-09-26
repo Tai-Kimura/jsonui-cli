@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require_relative 'type_synonyms'
+
 module JsonUIShared
   # Whether a screen reader is told a tappable is a button — one rule for the
   # sjui and kjui codegen (the Dynamic runtimes of both libraries implement
@@ -87,8 +89,14 @@ module JsonUIShared
 
     SHAPE_KEY = '_tapShape'
 
+    # Asked of the type the node is drawn as (type_synonyms.rb): an HStack is
+    # a View, and a Textarea a TextView. Read as written, a synonym the lists
+    # do not hold counted as a custom component (operable), so the tappable
+    # around it was not flattened where the same layout spelled canonically
+    # was. An app's own spelling stays as written (TypeSynonyms.app_types).
     def interactive_type?(type)
-      INTERACTIVE_TYPES.include?(type) || !KNOWN_TYPES.include?(type)
+      drawn = JsonUIShared::TypeSynonyms.drawn_type(type)
+      INTERACTIVE_TYPES.include?(drawn) || !KNOWN_TYPES.include?(drawn)
     end
 
     # A tap the codegen emits: a handler, not statically disabled, and not
@@ -115,7 +123,7 @@ module JsonUIShared
     end
 
     def linked_text?(node)
-      return false unless TEXT_TYPES.include?(node['type'])
+      return false unless TEXT_TYPES.include?(JsonUIShared::TypeSynonyms.drawn_type(node['type']))
 
       linkable = node['linkable']
       return true if linkable == true || (linkable.is_a?(String) && linkable.start_with?('@{'))

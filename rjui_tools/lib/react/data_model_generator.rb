@@ -4,6 +4,7 @@ require 'json'
 require 'fileutils'
 require 'set'
 require_relative '../core/tap_accessibility'
+require_relative '../core/type_synonyms'
 require_relative '../core/config_manager'
 require_relative '../core/type_converter'
 require_relative '../core/generated_marker'
@@ -187,7 +188,9 @@ module RjuiTools
         return bindings unless json_data.is_a?(Hash) || json_data.is_a?(Array)
 
         if json_data.is_a?(Hash)
-          component_type = json_data['type']
+          # The type the node is drawn as: a synonym or alias spelling
+          # needs the data its drawn type needs (shared/core/type_synonyms.rb)
+          component_type = JsonUIShared::TypeSynonyms.drawn_type(json_data['type'])
 
           # Event attributes to check
           event_attrs = %w[onClick onclick onValueChange onValueChanged onTextChange onChange onLongPress]
@@ -249,7 +252,7 @@ module RjuiTools
       def extract_text_field_bindings(json_data, bindings = Set.new)
         if json_data.is_a?(Hash)
           # Check for TextField type with text binding
-          if json_data['type'] == 'TextField' && json_data['text']
+          if JsonUIShared::TypeSynonyms.drawn_type(json_data['type']) == 'TextField' && json_data['text']
             text_value = json_data['text']
             # Check if it's a binding (@{propertyName})
             if text_value.is_a?(String) && text_value.start_with?('@{') && text_value.end_with?('}')
@@ -285,10 +288,12 @@ module RjuiTools
       # Returns hash with handler name => { type: value_type, binding: property_name }
       def extract_event_handler_bindings(json_data, handlers = {})
         if json_data.is_a?(Hash)
-          component_type = json_data['type']
+          # The type the node is drawn as: a synonym or alias spelling
+          # needs the data its drawn type needs (shared/core/type_synonyms.rb)
+          component_type = JsonUIShared::TypeSynonyms.drawn_type(json_data['type'])
 
           # Switch, Toggle, Slider, Radio, Segment - onValueChange with boolean/number/string
-          if %w[Switch Toggle].include?(component_type)
+          if component_type == 'Switch'
             extract_handler_binding(json_data, 'onValueChange', 'boolean', handlers)
           elsif component_type == 'Slider'
             extract_handler_binding(json_data, 'onValueChange', 'number', handlers)
@@ -348,10 +353,12 @@ module RjuiTools
 
       def extract_value_bindings(json_data, bindings = {})
         if json_data.is_a?(Hash)
-          component_type = json_data['type']
+          # The type the node is drawn as: a synonym or alias spelling
+          # needs the data its drawn type needs (shared/core/type_synonyms.rb)
+          component_type = JsonUIShared::TypeSynonyms.drawn_type(json_data['type'])
 
           # Switch, Toggle - isOn/checked/value binding (boolean)
-          if %w[Switch Toggle].include?(component_type)
+          if component_type == 'Switch'
             is_on = json_data['isOn'] || json_data['checked'] || json_data['value'] || json_data['bind']
             if is_on.is_a?(String) && is_on.start_with?('@{') && is_on.end_with?('}')
               property_name = is_on[2...-1]
@@ -360,7 +367,7 @@ module RjuiTools
           end
 
           # CheckBox, Check - isOn/checked binding (boolean)
-          if %w[CheckBox Check].include?(component_type)
+          if component_type == 'CheckBox'
             is_on = json_data['isOn'] || json_data['checked'] || json_data['bind']
             if is_on.is_a?(String) && is_on.start_with?('@{') && is_on.end_with?('}')
               property_name = is_on[2...-1]
@@ -460,7 +467,7 @@ module RjuiTools
           # component hoists a ref + effect). The paired optional
           # on<Camel>IsFocusedChange report-back handler is derived from this
           # binding by the value-binding handler loop in update_data_file.
-          if %w[TextField EditText Input TextView].include?(component_type)
+          if %w[TextField TextView].include?(component_type)
             field_id = json_data['id']
             if field_id.is_a?(String) && !field_id.empty? && !field_id.include?('@{')
               camel = snake_to_camel_id(field_id)
@@ -542,7 +549,7 @@ module RjuiTools
           end
 
           # Check for TabView tabs - generate data properties for each tab's view
-          if json_data['type'] == 'TabView' && json_data['tabs'].is_a?(Array)
+          if JsonUIShared::TypeSynonyms.drawn_type(json_data['type']) == 'TabView' && json_data['tabs'].is_a?(Array)
             # The tab state and its setter. The converter reads the state back
             # (`data.selectedTabIndex ?? 0`) when selectedIndex is not bound, so
             # declaring only the setter left the generated JSX referencing a

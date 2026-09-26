@@ -15,11 +15,52 @@ An image is one of three roles:
                tappable around it).
 
 Loaded through `jui_cli.core.shared_core.load("image_accessibility")`; it
-imports nothing of its own.
+imports only the standard library, and reads type_synonyms.json and
+attribute_definitions.json beside it (drawn_type).
 """
 
-#: Image, its type aliases (component_metadata.json) and NetworkImage.
-IMAGE_TYPES = frozenset({"Image", "CircleImage", "CircleImageView", "ImageView", "Img", "NetworkImage"})
+import json
+import os
+
+#: The types an image is drawn as. A node is an image when the type it is
+#: drawn as (drawn_type below) is one of them: Img, ImageView, AsyncImage,
+#: NetworkImageView, CircleImageView and every other spelling the table gives
+#: them. Until 1.8.121 this was a list of spellings from component_metadata
+#: .json's `aliases`, which named neither AsyncImage nor NetworkImageView.
+IMAGE_TYPES = frozenset({"Image", "CircleImage", "NetworkImage"})
+
+_HERE = os.path.dirname(os.path.abspath(__file__))
+_TABLES: dict = {}
+
+
+def _read_beside(name: str) -> dict:
+    if name not in _TABLES:
+        try:
+            with open(os.path.join(_HERE, name), encoding="utf-8") as handle:
+                _TABLES[name] = json.load(handle)
+        except OSError:
+            # A missing file reads as empty, as type_synonyms.rb reads it: the
+            # spelling is then its own drawn type.
+            _TABLES[name] = {}
+    return _TABLES[name]
+
+
+def drawn_type(type_name):
+    """The type a node spelled `type_name` is drawn as — type_synonyms.rb's
+    drawn_type: its type-synonym target (`render_as`, else `canonical`, from
+    type_synonyms.json beside this file), then the canonical section of a
+    declared alias (`_alias_of` in attribute_definitions.json), one hop."""
+    if not isinstance(type_name, str):
+        return type_name
+    entry = _read_beside("type_synonyms.json").get("synonyms", {}).get(type_name)
+    drawn = (entry.get("render_as") or entry.get("canonical")) if isinstance(entry, dict) else type_name
+    definitions = _read_beside("attribute_definitions.json")
+    section = definitions.get(drawn)
+    target = section.get("_alias_of") if isinstance(section, dict) else None
+    if isinstance(target, str) and isinstance(definitions.get(target), dict) \
+            and not isinstance(definitions[target].get("_alias_of"), str):
+        return target
+    return drawn
 
 #: The canonical spelling first, then the aliases declared on `alt`.
 ALT_KEYS = ("alt", "accessibilityLabel", "contentDescription")
@@ -36,7 +77,7 @@ TEXT_KEYS = ("text", "hint", "placeholder", "label", "prompt")
 
 
 def is_image(node) -> bool:
-    return isinstance(node, dict) and node.get("type") in IMAGE_TYPES
+    return isinstance(node, dict) and drawn_type(node.get("type")) in IMAGE_TYPES
 
 
 def alt(node):

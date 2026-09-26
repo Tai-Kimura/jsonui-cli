@@ -120,6 +120,16 @@
       "name": "a blank or disabled long press is no action",
       "layout": { "type": "View", "child": [ { "type": "Image", "id": "blank_hold", "src": "blank_hold", "onLongPress": "   " }, { "type": "Image", "id": "disabled_hold", "src": "disabled_hold", "onLongPress": "@{onHold}", "enabled": false } ] },
       "roles": { "blank_hold": "decorative", "disabled_hold": "decorative" }
+    },
+    {
+      "name": "an AsyncImage with no alt that operates a tap is a control: an AsyncImage is drawn as a NetworkImage (type_synonyms.json)",
+      "layout": { "type": "View", "child": [ { "type": "AsyncImage", "id": "async_tap", "url": "https://example.invalid/x.png", "onClick": "@{onOpen}" } ] },
+      "roles": { "async_tap": "control" }
+    },
+    {
+      "name": "a NetworkImageView with an alt is labelled: a NetworkImageView is drawn as a NetworkImage",
+      "layout": { "type": "View", "child": [ { "type": "NetworkImageView", "id": "labelled_view", "url": "https://example.invalid/x.png", "alt": "Logo" } ] },
+      "roles": { "labelled_view": "label" }
     }
   ]
 }

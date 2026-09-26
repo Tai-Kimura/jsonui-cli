@@ -226,7 +226,8 @@ RSpec.describe RjuiTools::React::DataModelGenerator do
 
       result = generator.send(:extract_event_bindings_for_type, json_data)
       expect(result['buttonTap']).to eq({ component: 'Button', attribute: 'onClick' })
-      expect(result['toggleChange']).to eq({ component: 'Toggle', attribute: 'onValueChange' })
+      # a Toggle is drawn as a Switch (`_alias_of`), and is typed as one
+      expect(result['toggleChange']).to eq({ component: 'Switch', attribute: 'onValueChange' })
     end
 
     it 'ignores non-binding values' do

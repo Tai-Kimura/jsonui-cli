@@ -537,6 +537,7 @@ RSpec.describe SjuiTools::SwiftUI::DataModelUpdater do
       expect(result['onAiSearchToggle']).to eq({ component: 'Switch', attribute: 'onValueChange' })
     end
 
+    # a Toggle is drawn as a Switch (`_alias_of`), and is typed as one
     it 'extracts event bindings from onToggle alias on Toggle (normalized to onValueChange)' do
       json_data = {
         'type' => 'Toggle',
@@ -544,7 +545,7 @@ RSpec.describe SjuiTools::SwiftUI::DataModelUpdater do
       }
 
       result = updater.send(:extract_event_bindings, json_data)
-      expect(result['onAiSearchToggle']).to eq({ component: 'Toggle', attribute: 'onValueChange' })
+      expect(result['onAiSearchToggle']).to eq({ component: 'Switch', attribute: 'onValueChange' })
     end
 
     it 'extracts event bindings from nested children' do
@@ -558,7 +559,7 @@ RSpec.describe SjuiTools::SwiftUI::DataModelUpdater do
 
       result = updater.send(:extract_event_bindings, json_data)
       expect(result['buttonTap']).to eq({ component: 'Button', attribute: 'onClick' })
-      expect(result['toggleChange']).to eq({ component: 'Toggle', attribute: 'onValueChange' })
+      expect(result['toggleChange']).to eq({ component: 'Switch', attribute: 'onValueChange' })
     end
 
     it 'ignores non-binding values' do

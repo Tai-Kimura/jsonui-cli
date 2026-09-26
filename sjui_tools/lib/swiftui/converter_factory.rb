@@ -44,6 +44,9 @@ module SjuiTools
         @view_registry = ViewRegistry.new
         @binding_registry = binding_registry
         @custom_converters = load_custom_converters
+        # a spelling the app registers is the app's, for what classifies a
+        # node by its drawn type too (TypeSynonyms.app_types)
+        JsonUIShared::TypeSynonyms.app_types = @custom_converters.keys
         @data_properties = []
         @responsive_functions = []
         @responsive_counter = 0
@@ -68,6 +71,12 @@ module SjuiTools
       def reset_responsive
         @responsive_functions = []
         @responsive_counter = 0
+      end
+
+      # The spellings this project registers converters of its own for: the
+      # keys of views/extensions/converter_mappings.rb.
+      def self.custom_types
+        allocate.send(:load_custom_converters).keys
       end
 
       def load_custom_converters

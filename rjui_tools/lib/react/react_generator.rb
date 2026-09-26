@@ -82,12 +82,21 @@ module RjuiTools
         @framework = Core::Frameworks.for(config)
         @use_tailwind = config['use_tailwind'] != false
         @extension_converters = load_extension_converters
+        # a spelling the app registers is the app's, for what classifies a
+        # node by its drawn type too (TypeSynonyms.app_types)
+        JsonUIShared::TypeSynonyms.app_types = @extension_converters.keys
         # Store extension converters in config so child converters can access them
         @config['_extension_converters'] = @extension_converters
         # Stash the component → attribute-definitions map so BaseConverter
         # can suppress Tailwind decoration mapping for keys that a custom
         # component has claimed as a semantic prop (e.g. CodeBlock#maxHeight).
         @config['_attribute_definitions'] = load_attribute_definitions
+      end
+
+      # The spellings this project registers converters of its own for: the
+      # keys of the extensions directory's converter_mappings.rb.
+      def self.extension_types
+        allocate.send(:load_extension_converters).keys
       end
 
       # Load custom converters from extensions directory
@@ -678,13 +687,25 @@ module RjuiTools
       # Containers holding at least one sibling-constrained child. MUST stay in
       # sync with ViewConverter#relative_positioned? and
       # #build_relative_position_ref_attr, which attach the ref this targets.
+      # The type a node is drawn as, which the passes below classify on so
+      # they agree with the converter that draws it (they walk the layout as
+      # written): the spelling itself when an app's converter is registered
+      # under it — that node is the app's — else its type-synonym target,
+      # then its alias section's canonical one (shared/core/type_synonyms.rb).
+      def drawn_type_of(json)
+        type = json['type']
+        return type if type && @extension_converters.key?(type)
+
+        JsonUIShared::TypeSynonyms.drawn_type(type)
+      end
+
       def extract_relative_containers(json, found = [])
         return found unless json.is_a?(Hash) || json.is_a?(Array)
 
         if json.is_a?(Hash)
           child = json['child'] || json['children']
           children = child.is_a?(Array) ? child : [child].compact
-          if %w[View SafeAreaView].include?(json['type'].to_s) || json['type'].nil?
+          if %w[View SafeAreaView].include?(drawn_type_of(json).to_s) || json['type'].nil?
             specs = children.map { |c| relative_constraint_for(c) }.compact
             found << { ref: relative_position_ref_name(specs.first['id']), specs: specs } if specs.any?
           end
@@ -718,7 +739,7 @@ module RjuiTools
 
       #: Types whose converter attaches the autoShrink ref. Text-bearing
       #: elements only — shrinking a container has no meaning.
-      AUTO_SHRINK_TYPES = %w[Label Text].freeze
+      AUTO_SHRINK_TYPES = %w[Label].freeze
 
       # Elements declaring autoShrink with a literal id — each gets a hoisted
       # ref + fit effect, matching the ref LabelConverter attaches. A literal
@@ -729,7 +750,7 @@ module RjuiTools
 
         if json.is_a?(Hash)
           id = json['id']
-          if AUTO_SHRINK_TYPES.include?(json['type'].to_s) && truthy_attr?(json['autoShrink']) &&
+          if AUTO_SHRINK_TYPES.include?(drawn_type_of(json).to_s) && truthy_attr?(json['autoShrink']) &&
              id.is_a?(String) && !id.empty? && !id.include?('@{')
             found << {
               ref: auto_shrink_ref_name(id),
@@ -813,7 +834,7 @@ module RjuiTools
 
       #: Scroll containers that are not Collections. They get the anchor effect
       #: only — MUST stay in sync with ScrollViewConverter#build_scroll_ref_attr.
-      SCROLL_CONTAINER_TYPES = %w[ScrollView Scroll].freeze
+      SCROLL_CONTAINER_TYPES = %w[ScrollView].freeze
 
       # Collections declaring scroll control (scrollTo / defaultScrollAnchor /
       # currentPage / onItemAppear). Each one gets a hoisted ref plus the
@@ -830,10 +851,11 @@ module RjuiTools
           # element, so it starts where the layout says without a second
           # implementation. The other three are Collection-only (they address
           # ITEMS; a ScrollView has none).
-          scrollable = json['type'] == 'Collection' ||
-                       (SCROLL_CONTAINER_TYPES.include?(json['type'].to_s) && json['defaultScrollAnchor'])
+          drawn = drawn_type_of(json)
+          scrollable = drawn == 'Collection' ||
+                       (SCROLL_CONTAINER_TYPES.include?(drawn.to_s) && json['defaultScrollAnchor'])
           if scrollable && id.is_a?(String) && !id.empty? && !id.include?('@{')
-            collection = json['type'] == 'Collection'
+            collection = drawn == 'Collection'
             scroll_to = collection ? json['scrollTo'] : nil
             default_anchor = json['defaultScrollAnchor']
             current_page = collection ? json['currentPage'] : nil
@@ -947,10 +969,10 @@ module RjuiTools
         return fields unless json.is_a?(Hash) || json.is_a?(Array)
 
         if json.is_a?(Hash)
-          type = json['type']
+          type = drawn_type_of(json)
           id = json['id']
           if id.is_a?(String) && !id.empty? && !id.include?('@{')
-            if %w[TextField EditText Input].include?(type)
+            if type == 'TextField'
               fields << { id: id, camel: snake_to_camel_id(id), element: 'input' }
             elsif type == 'TextView'
               fields << { id: id, camel: snake_to_camel_id(id), element: 'textarea' }
@@ -1030,7 +1052,7 @@ module RjuiTools
       # Skips iconType:"resource" — those render as <img> from public/icons.
       def collect_lucide_icons(json, icons = ::Set.new)
         if json.is_a?(Hash)
-          if json['type'] == 'TabView' && json['tabs'].is_a?(Array)
+          if drawn_type_of(json) == 'TabView' && json['tabs'].is_a?(Array)
             json['tabs'].each do |tab|
               next unless tab.is_a?(Hash)
               icon_type = tab['iconType'] || 'system'
@@ -1107,7 +1129,7 @@ module RjuiTools
         end
 
         # Check for Embed (screen reference)
-        if json['type'] == 'Embed' && json['screen'].is_a?(String)
+        if drawn_type_of(json) == 'Embed' && json['screen'].is_a?(String)
           parts = json['screen'].split('/')
           base_name = parts.last
           component_name = to_pascal_case(base_name)
@@ -1135,6 +1157,7 @@ module RjuiTools
         if type && @extension_converters.key?(type)
           components << type
         end
+        type = drawn_type_of(json)
 
         # Check for NetworkImage type (built-in but requires separate import)
         if type == 'NetworkImage'
@@ -1167,7 +1190,7 @@ module RjuiTools
 
       # Extract cell component types from Collection elements (for TypeScript imports)
       def extract_collection_cell_types(json, types = [])
-        type = json['type']
+        type = drawn_type_of(json)
 
         if type == 'Collection'
           # Modern sections format
@@ -1236,7 +1259,7 @@ module RjuiTools
 
       def uses_auto_cell_id?(json)
         return false unless json.is_a?(Hash)
-        return true if json['type'] == 'Collection' &&
+        return true if drawn_type_of(json) == 'Collection' &&
                        json['autoChangeTrackingId'] == true &&
                        json['cellIdProperty'] && !json['cellIdProperty'].to_s.empty?
 
