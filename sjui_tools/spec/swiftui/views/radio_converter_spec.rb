@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require 'swiftui/views/radio_converter'
+require 'swiftui/action_manager'
 
 RSpec.describe SjuiTools::SwiftUI::Views::RadioConverter do
   before(:all) do
@@ -296,6 +297,22 @@ RSpec.describe SjuiTools::SwiftUI::Views::RadioConverter do
           .to include('.renderingMode(.template)')
         expect(glyph({ 'icon' => 'off_img' })).not_to include('.renderingMode(.template)')
       end
+    end
+  end
+
+  # fontSize / fontColor are declared on Radio. A single radio's label read
+  # them; the options of an `items` group drew neither — SwiftUI's default
+  # font and colour on iOS, while web inherits them from the group.
+  describe 'the options of an items group take fontSize and fontColor' do
+    it 'draws each option label with the declared size and colour' do
+      code = described_class.new('type' => 'Radio', 'id' => 'r', 'items' => %w[a b],
+                                 'fontSize' => 18, 'fontColor' => '#FF0000').convert
+      %w[a b].each do |item|
+        label = code[/Text\("#{item}"\)\n(?:\s+\..*\n)*/]
+        expect(label).to include('size: CGFloat(18)').and include('getColor(for: "#FF0000")')
+      end
+      bare = described_class.new('type' => 'Radio', 'id' => 'r', 'items' => %w[a]).convert
+      expect(bare[/Text\("a"\)\n(?:\s+\..*\n)*/]).not_to include('foregroundColor')
     end
   end
 end

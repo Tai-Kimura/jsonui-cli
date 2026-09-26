@@ -533,14 +533,16 @@ module KjuiTools
             code += "\n" + indent("            }", depth)
             code += "\n" + indent("        )", depth)
             code += "\n" + indent("        Spacer(modifier = Modifier.width(#{radio_spacing_dp(json_data)}))", depth)
-            # Add text with black color
+            # The option's label: fontColor, and fontSize / font as the single
+            # radio's label reads them (label_font_args) — the options drew
+            # the colour only.
             if json_data['fontColor'] || json_data['textColor']
               text_color = json_data['fontColor'] || json_data['textColor']
               color_resolved = Helpers::ResourceResolver.process_color(text_color, required_imports)
-              code += "\n" + indent("        Text(#{item_text}, color = #{color_resolved})", depth)
+              code += "\n" + indent("        Text(#{item_text}, color = #{color_resolved}#{label_font_args(json_data, required_imports)})", depth)
             else
               # Default to black color
-              code += "\n" + indent("        Text(#{item_text}, color = Color.Black)", depth)
+              code += "\n" + indent("        Text(#{item_text}, color = Color.Black#{label_font_args(json_data, required_imports)})", depth)
             end
             code += "\n" + indent("    }", depth)
           end
