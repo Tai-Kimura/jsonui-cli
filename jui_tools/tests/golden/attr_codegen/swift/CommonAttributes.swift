@@ -10,6 +10,9 @@ public struct CommonAttributes {
         case visible = "visible"
         case invisible = "invisible"
         case gone = "gone"
+        /// Every spelling this attribute accepts, as declared (values and
+        /// valueAliases keys) — case-sensitive.
+        public static let declaredSpellings: [String] = ["visible", "invisible", "gone"]
     }
 
     /// Canonical attribute names declared for this component (public metadata contract).
@@ -71,14 +74,15 @@ public struct CommonAttributes {
     private static func parseVisibility(_ raw: Any?) -> AttrEnum<Visibility>? {
         guard let raw = raw, !(raw is NSNull) else { return nil }
         if let s = raw as? String {
-            switch s.lowercased() {
+            switch s {
             case "visible": return .known(Visibility.visible)
             case "invisible": return .known(Visibility.invisible)
             case "gone": return .known(Visibility.gone)
             default: break
             }
         }
-        AttrCodegenWarnings.emit("common.visibility: unknown enum value '\(raw)'")
+        let near = (raw as? String).flatMap { s in Visibility.declaredSpellings.first { $0.caseInsensitiveCompare(s) == .orderedSame } }
+        AttrCodegenWarnings.emit("common.visibility: unknown enum value '\(raw)'" + (near.map { " — did you mean '\($0)'?" } ?? ""))
         return .unknown(raw)
     }
 }

@@ -31,8 +31,9 @@ from .swift_emitter import (
     _pascal,
     _split_words,
     dimension_type_name,
+    declared_spellings,
     enum_cases,
-    enum_ci_cases,
+    enum_exact_cases,
 )
 
 PACKAGE = "com.kotlinjsonui.dynamic.generated"
@@ -390,7 +391,7 @@ def _metadata_decls(comp: Component, model: AttrModel) -> list[str]:
 
 
 def _enum_decl(attr: Attribute) -> list[str]:
-    """Kotlin enum with a case-insensitive `from(raw)` mapping.
+    """Kotlin enum with a `from(raw)` mapping by the declared spelling.
 
     Legacy value spellings that merge into one entry after identifier
     derivation (e.g. `"flow"` / `"Flow"`) all map to the same entry in
@@ -407,11 +408,15 @@ def _enum_decl(attr: Attribute) -> list[str]:
     lines += [
         "",
         "        companion object {",
-        "            /** Case-insensitive match against the declared values. */",
-        f"            fun from(raw: String): {type_name}? = when (raw.lowercase()) {{",
+        "            /** Every spelling this attribute accepts, as declared (values and valueAliases keys) — case-sensitive. */",
+        "            val declaredSpellings: List<String> = listOf("
+        + ", ".join(_kotlin_str(v) for v in declared_spellings(attr.enum_values, attr.value_alias_map)) + ")",
+        "",
+        "            /** The declared spelling, case and all (4f's ruling, 1.9.0). */",
+        f"            fun from(raw: String): {type_name}? = when (raw) {{",
     ]
-    for name, lowered in enum_ci_cases(attr.enum_values, _entry_name, attr.value_alias_map):
-        rendered = ", ".join(_kotlin_str(v) for v in lowered)
+    for name, spellings in enum_exact_cases(attr.enum_values, _entry_name, attr.value_alias_map):
+        rendered = ", ".join(_kotlin_str(v) for v in spellings)
         lines.append(f"                {rendered} -> {name}")
     lines += [
         "                else -> null",
@@ -423,8 +428,9 @@ def _enum_decl(attr: Attribute) -> list[str]:
 
 
 def _enum_parse_func(attr: Attribute) -> list[str]:
-    """Lenient enum parse: case-insensitive match; unknown values warn and
-    pass through as [AttrEnum.Unknown] (never dropped)."""
+    """Lenient enum parse: the declared spelling; unknown values warn — with
+    the declared spelling a value differs from in case only — and pass
+    through as [AttrEnum.Unknown] (never dropped)."""
     type_name = _pascal(attr.name)
     return [
         f"        private fun parse{type_name}(raw: Any?): AttrEnum<{type_name}>? {{",
@@ -432,7 +438,8 @@ def _enum_parse_func(attr: Attribute) -> list[str]:
         "            (raw as? String)?.let { s ->",
         f"                {type_name}.from(s)?.let {{ return AttrEnum.Known(it) }}",
         "            }",
-        f"            AttrWarnings.emit(\"{attr.context}: unknown enum value '$raw'\")",
+        f"            val near = (raw as? String)?.let {{ s -> {type_name}.declaredSpellings.firstOrNull {{ it.equals(s, ignoreCase = true) }} }}",
+        f"            AttrWarnings.emit(\"{attr.context}: unknown enum value '$raw'\" + (near?.let {{ \" — did you mean '$it'?\" }} ?: \"\"))",
         "            return AttrEnum.Unknown(raw)",
         "        }",
     ]

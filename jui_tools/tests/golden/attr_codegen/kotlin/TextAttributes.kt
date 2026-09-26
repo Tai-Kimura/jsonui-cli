@@ -35,11 +35,14 @@ data class TextAttributes(
         FLOW("Flow");
 
         companion object {
-            /** Case-insensitive match against the declared values. */
-            fun from(raw: String): TextTransform? = when (raw.lowercase()) {
+            /** Every spelling this attribute accepts, as declared (values and valueAliases keys) — case-sensitive. */
+            val declaredSpellings: List<String> = listOf("none", "wrap-reverse", "Flow", "flow")
+
+            /** The declared spelling, case and all (4f's ruling, 1.9.0). */
+            fun from(raw: String): TextTransform? = when (raw) {
                 "none" -> NONE
                 "wrap-reverse" -> WRAP_REVERSE
-                "flow" -> FLOW
+                "Flow", "flow" -> FLOW
                 else -> null
             }
         }
@@ -96,7 +99,8 @@ data class TextAttributes(
             (raw as? String)?.let { s ->
                 TextTransform.from(s)?.let { return AttrEnum.Known(it) }
             }
-            AttrWarnings.emit("Text.textTransform: unknown enum value '$raw'")
+            val near = (raw as? String)?.let { s -> TextTransform.declaredSpellings.firstOrNull { it.equals(s, ignoreCase = true) } }
+            AttrWarnings.emit("Text.textTransform: unknown enum value '$raw'" + (near?.let { " — did you mean '$it'?" } ?: ""))
             return AttrEnum.Unknown(raw)
         }
     }

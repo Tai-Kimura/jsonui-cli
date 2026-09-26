@@ -408,29 +408,38 @@ def enum_cases(
     return ordered
 
 
-def enum_ci_cases(
+def enum_exact_cases(
     values: tuple[str, ...],
     namer,
     value_aliases: dict[str, str] | None = None,
 ) -> list[tuple[str, list[str]]]:
-    """Case-insensitive match table: ``[(case_name, [lowered values])]``.
+    """Match table by the declared spelling: ``[(case_name, [spellings])]``.
 
-    Lenient enum matching switches on the lowercased raw value, so the
-    accepted spellings are lowercased and deduped globally (first-seen
-    case wins on a collision — definition order is stable, so this is
-    deterministic).
+    A value is its declared spelling, case and all (4f's ruling, 1.9.0 — as
+    type names are): the accepted spellings are the declared values and the
+    ``valueAliases`` keys, each once (first-seen case wins — definition order
+    is stable, so this is deterministic). The parse switched on the
+    lowercased raw value, so an undeclared case ("Horizontal" for
+    "horizontal") was taken on the Dynamic paths while sjui and kjui drew it
+    as unknown.
     """
     seen: set[str] = set()
     out: list[tuple[str, list[str]]] = []
     for case_name, _, accepted in enum_cases(values, namer, value_aliases):
-        lowered: list[str] = []
-        for value in accepted:
-            lv = value.lower()
-            if lv not in seen:
-                seen.add(lv)
-                lowered.append(lv)
-        if lowered:
-            out.append((case_name, lowered))
+        exact = [v for v in accepted if v not in seen]
+        seen.update(exact)
+        if exact:
+            out.append((case_name, exact))
+    return out
+
+
+def declared_spellings(values: tuple[str, ...], value_aliases: dict[str, str] | None = None) -> list[str]:
+    """Every spelling an enum attribute accepts, in declaration order."""
+    out: list[str] = []
+    for spellings in (list(values), list((value_aliases or {}).keys())):
+        for v in spellings:
+            if v not in out:
+                out.append(v)
     return out
 
 
@@ -439,22 +448,27 @@ def _enum_decl(attr: Attribute) -> list[str]:
     lines = [f"    public enum {type_name}: String {{"]
     for case_name, canonical, _ in enum_cases(attr.enum_values, _case_name, attr.value_alias_map):
         lines.append(f"        case {case_name} = {_swift_str(canonical)}")
+    spellings = ", ".join(_swift_str(v) for v in declared_spellings(attr.enum_values, attr.value_alias_map))
+    lines.append("        /// Every spelling this attribute accepts, as declared (values and")
+    lines.append("        /// valueAliases keys) — case-sensitive.")
+    lines.append(f"        public static let declaredSpellings: [String] = [{spellings}]")
     lines.append("    }")
     return lines
 
 
 def _enum_parse_func(attr: Attribute) -> list[str]:
-    """Lenient enum parse: case-insensitive match; unknown values warn and
-    pass through as `.unknown` (never dropped)."""
+    """Lenient enum parse: the declared spelling, case and all; unknown
+    values warn — with the declared spelling a value differs from in case
+    only — and pass through as `.unknown` (never dropped)."""
     type_name = _pascal(attr.name)
     lines = [
         f"    private static func parse{type_name}(_ raw: Any?) -> AttrEnum<{type_name}>? {{",
         "        guard let raw = raw, !(raw is NSNull) else { return nil }",
         "        if let s = raw as? String {",
-        "            switch s.lowercased() {",
+        "            switch s {",
     ]
-    for case_name, lowered in enum_ci_cases(attr.enum_values, _case_name, attr.value_alias_map):
-        rendered = ", ".join(_swift_str(v) for v in lowered)
+    for case_name, spellings in enum_exact_cases(attr.enum_values, _case_name, attr.value_alias_map):
+        rendered = ", ".join(_swift_str(v) for v in spellings)
         # Fully qualified (`TypeName.case`) — a bare `.none` in this
         # position is ambiguous with `Optional.none`.
         lines.append(
@@ -464,7 +478,8 @@ def _enum_parse_func(attr: Attribute) -> list[str]:
         "            default: break",
         "            }",
         "        }",
-        f"        AttrCodegenWarnings.emit(\"{attr.context}: unknown enum value '\\(raw)'\")",
+        f"        let near = (raw as? String).flatMap {{ s in {type_name}.declaredSpellings.first {{ $0.caseInsensitiveCompare(s) == .orderedSame }} }}",
+        f"        AttrCodegenWarnings.emit(\"{attr.context}: unknown enum value '\\(raw)'\" + (near.map {{ \" — did you mean '\\($0)'?\" }} ?? \"\"))",
         "        return .unknown(raw)",
         "    }",
     ]
