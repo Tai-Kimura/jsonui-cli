@@ -90,6 +90,21 @@ module JsonUIShared
         JsonUIShared::ComponentAliases.canonical(drawn_as(type, path))
       end
 
+      # The spelling `written` means when case is ignored, or nil. Type names
+      # are their SSoT spellings, case-sensitive (1.9.0): `switch` is no
+      # Switch, and what names an unknown type offers this one ("did you
+      # mean"). `known` is the types the caller draws; the table's synonyms,
+      # the declared alias sections and the app's types are added. nil when
+      # `written` is itself one of them, or none matches.
+      def case_only_match(written, known = [], path = DEFAULT_PATH)
+        return nil unless written.is_a?(String)
+
+        pool = known + app_types + entries(path).keys + JsonUIShared::ComponentAliases.table.keys
+        return nil if pool.include?(written)
+
+        pool.find { |spelling| spelling.casecmp?(written) }
+      end
+
       # The declared section a node spelled `type` is validated against:
       # its synonym's `canonical` (not `render_as` — CircleImage is drawn as
       # CircleImage and validated as Image), then a declared alias's canonical
