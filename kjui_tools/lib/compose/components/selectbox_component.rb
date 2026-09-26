@@ -26,7 +26,8 @@ module KjuiTools
           # selectedDate: the layout normalizer (on by default) folds it.
           selected = if is_date_picker
             date_value(json_data)
-          # A list box: selectedItem, selectedValue, selectedIndex, then bind
+          # A list box: selectedItem, selectedValue, selectedIndex (a lone
+          # `bind` arrives as selectedValue: JsonUIShared::BindFold at the dispatch)
           elsif json_data['selectedItem'] && json_data['selectedItem'].match(/@\{([^}]+)\}/)
             Helpers::BindingExpression.value_access($1)
           elsif json_data['selectedValue'] && json_data['selectedValue'].match(/@\{([^}]+)\}/)
@@ -45,8 +46,6 @@ module KjuiTools
             else
               "\"\""
             end
-          elsif json_data['bind'] && json_data['bind'].match(/@\{([^}]+)\}/)
-            Helpers::BindingExpression.value_access($1)
           elsif json_data['selectedIndex'].is_a?(Integer) && json_data['items'].is_a?(Array)
             # Static selectedIndex: display the addressed item, as dynamic
             # mode does. (An Integer here used to crash the converter —
@@ -103,7 +102,8 @@ module KjuiTools
           code += "\n" + indent("value = #{selected},", depth + 1)
           
           # Handle onValueChange callback
-          # A Date box: its selectedDate alone; a list box: selectedItem, selectedValue, selectedIndex, then bind
+          # A Date box: its selectedDate alone; a list box: selectedItem, selectedValue, selectedIndex
+          # (`bind` arrives folded into one of them: JsonUIShared::BindFold at the dispatch)
           binding_variable = nil
           is_index_binding = false
           if is_date_picker
@@ -116,8 +116,6 @@ module KjuiTools
           elsif json_data['selectedIndex'].is_a?(String) && json_data['selectedIndex'].match(/@\{([^}]+)\}/)
             binding_variable = $1
             is_index_binding = true
-          elsif json_data['bind'] && json_data['bind'].match(/@\{([^}]+)\}/)
-            binding_variable = $1
           end
 
           view_id = Helpers::ModifierBuilder.view_id(json_data)

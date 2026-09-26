@@ -12,15 +12,15 @@ module KjuiTools
           # `progress` is the canonical determinate value (0..1, declared in
           # attribute_definitions); `value` is the undeclared legacy spelling
           # (see shared/core/attribute_semantics.json → progressValue).
+          # A lone `bind` arrives as `progress` (JsonUIShared::BindFold at the
+          # dispatch); it was read here before `progress`, so a `bind` beside
+          # a bound `progress` drew the other value.
           literal = json_data['progress'] || json_data['value']
-          has_value = literal || json_data['bind']
+          has_value = literal
 
           if has_value
             # Determinate progress (LinearProgressIndicator)
-            value = if json_data['bind'] && json_data['bind'].match(/@\{([^}]+)\}/)
-              variable = $1
-              "data.#{variable}.toFloat()"
-            elsif literal && literal.to_s.match(/@\{([^}]+)\}/)
+            value = if literal && literal.to_s.match(/@\{([^}]+)\}/)
               variable = $1
               "data.#{variable}.toFloat()"
             elsif literal

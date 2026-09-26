@@ -7,11 +7,11 @@ module RjuiTools
     module Converters
       class SelectBoxConverter < BaseConverter
         def convert(indent = 2)
-          # Date picker mode: selectItemType == "Date"
-          select_item_type = attributes['selectItemType']
-          if select_item_type&.downcase == 'date'
-            return generate_date_picker(indent)
-          end
+          # Date picker mode: selectItemType "Date", as declared (the SSoT enum
+          # is ["Normal", "Date"]; every path compares it as written, and the
+          # validator names any other value). It was compared downcased here,
+          # so "date" drew a date input on web and a list on the codegens.
+          return generate_date_picker(indent) if date_picker?
 
           class_name = build_class_name
           style_attr = build_style_attr
@@ -236,7 +236,7 @@ module RjuiTools
         end
 
         def date_picker?
-          attributes['selectItemType'].to_s.downcase == 'date'
+          attributes['selectItemType'] == 'Date'
         end
 
         def apply_caret_attributes(classes)
@@ -357,12 +357,12 @@ module RjuiTools
         end
 
         def selected_value_bound?
-          value_binding = with_bind_fallback(selection_attr)
+          value_binding = selection_attr
           !!(value_binding && has_binding?(value_binding))
         end
 
         def build_select_class_attr(class_name)
-          value_binding = with_bind_fallback(selection_attr)
+          value_binding = selection_attr
 
           expressions = []
           if value_binding && has_binding?(value_binding)
@@ -494,7 +494,7 @@ module RjuiTools
         end
 
         def build_value_attr
-          value = with_bind_fallback(selection_attr)
+          value = selection_attr
 
           if value && has_binding?(value)
             prop = extract_binding_property(value)

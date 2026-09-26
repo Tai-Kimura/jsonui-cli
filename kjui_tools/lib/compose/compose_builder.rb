@@ -12,6 +12,7 @@ require_relative '../core/attribute_validator'
 require_relative '../core/layout_validator'
 require_relative '../core/image_accessibility'
 require_relative '../core/tap_accessibility'
+require_relative '../core/bind_fold'
 require_relative '../core/layout_path'
 require_relative '../core/normalization'
 require_relative '../core/layout_variant'
@@ -406,6 +407,8 @@ module KjuiTools
           raise "Include should have been expanded by IncludeExpander.process_includes. This is a bug."
         end
 
+        json_data = fold_bind(json_data, component_type)
+
         # Generate component based on type
         code = case component_type
         when 'ScrollView', 'Scroll'
@@ -717,6 +720,30 @@ module KjuiTools
         when 'vertical' then 'Column'
         else 'Box'
         end
+      end
+
+      # `bind` folded into the attribute it stands for (JsonUIShared::BindFold)
+      # on the node a built-in component draws: its style is merged
+      # (StyleLoader, before the builder) and its responsive branch resolved
+      # (each branch, merged, reaches generate_component through
+      # generate_non_responsive_component, which draws no type the table
+      # names itself). An app's own component (component_mappings) is
+      # handed its node as written. The layout normalizer leaves a node with a
+      # style or responsive overrides to this fold: folded before the style
+      # merge, a layout `bind` beside a style's own value was drawn bound.
+      def fold_bind(json_data, component_type)
+        return json_data if app_component?(component_type)
+
+        JsonUIShared::BindFold.fold(json_data, component_type)
+      end
+
+      def app_component?(component_type)
+        mappings_file = File.join(File.dirname(__FILE__), 'components', 'extensions', 'component_mappings.rb')
+        return false unless File.exist?(mappings_file)
+
+        require_relative 'components/extensions/component_mappings'
+        defined?(Components::Extensions::COMPONENT_MAPPINGS) &&
+          Components::Extensions::COMPONENT_MAPPINGS.key?(component_type)
       end
 
       def check_custom_component(component_type, json_data, depth, parent_type)

@@ -528,7 +528,8 @@ module SjuiTools
           max_length = @component['maxLength']
           return if max_length.nil?
 
-          raw = @component['text'] || @component['value'] || @component['bind']
+          # (a lone `bind` arrives as `text`: JsonUIShared::BindFold at the dispatch)
+          raw = @component['text'] || @component['value']
           return unless raw.is_a?(String) && is_binding?(raw)
 
           prop = extract_binding_property(raw)

@@ -25,8 +25,11 @@ module KjuiTools
           if json_data['group'] || json_data['text'] || json_data['label']
             return generate_radio_item(json_data, depth, required_imports, parent_type)
           end
-          # Radio uses 'bind' for selected value
-          selected = if json_data['bind'] && json_data['bind'].match(/@\{([^}]+)\}/)
+          # The group's selection: its `selectedValue` (SSoT common.bind
+          # primaryValue: Radio [selectedValue]; a lone `bind` arrives as it,
+          # JsonUIShared::BindFold at the dispatch). This path read `bind` —
+          # the items group and the single Radio read selectedValue.
+          selected = if json_data['selectedValue'].is_a?(String) && json_data['selectedValue'].match(/@\{([^}]+)\}/)
             variable = $1
             "data.#{variable}"
           else
@@ -62,7 +65,7 @@ module KjuiTools
                 code += "\n" + indent("    .clickable#{row_enabled} {", depth + 2)
                 
                 view_id = Helpers::ModifierBuilder.view_id(json_data)
-                if json_data['bind'] && json_data['bind'].match(/@\{([^}]+)\}/)
+                if json_data['selectedValue'].is_a?(String) && json_data['selectedValue'].match(/@\{([^}]+)\}/)
                   variable = $1
                   if json_data['onValueChange'] && Helpers::ModifierBuilder.is_binding?(json_data['onValueChange'])
                     handler_call = Helpers::ModifierBuilder.get_event_handler_invocation(json_data['onValueChange'], view_id, value_literal)
@@ -94,7 +97,7 @@ module KjuiTools
                 code += "\n" + indent("enabled = #{enabled},", depth + 3) if enabled
                 code += "\n" + indent("onClick = {", depth + 3)
                 
-                if json_data['bind'] && json_data['bind'].match(/@\{([^}]+)\}/)
+                if json_data['selectedValue'].is_a?(String) && json_data['selectedValue'].match(/@\{([^}]+)\}/)
                   variable = $1
                   if json_data['onValueChange'] && Helpers::ModifierBuilder.is_binding?(json_data['onValueChange'])
                     handler_call = Helpers::ModifierBuilder.get_event_handler_invocation(json_data['onValueChange'], view_id, value_literal)
@@ -161,7 +164,7 @@ module KjuiTools
               code += "\n" + indent("verticalAlignment = Alignment.CenterVertically,", depth + 3)
               code += "\n" + indent("modifier = Modifier.fillMaxWidth().clickable#{row_enabled} {", depth + 3)
               
-              if json_data['bind'] && json_data['bind'].match(/@\{([^}]+)\}/)
+              if json_data['selectedValue'].is_a?(String) && json_data['selectedValue'].match(/@\{([^}]+)\}/)
                 variable = $1
                 code += "\n" + indent("viewModel.updateData(mapOf(\"#{variable}\" to option))", depth + 4)
               end
@@ -176,7 +179,7 @@ module KjuiTools
               code += "\n" + indent("enabled = #{enabled},", depth + 4) if enabled
               code += "\n" + indent("onClick = {", depth + 4)
               
-              if json_data['bind'] && json_data['bind'].match(/@\{([^}]+)\}/)
+              if json_data['selectedValue'].is_a?(String) && json_data['selectedValue'].match(/@\{([^}]+)\}/)
                 variable = $1
                 code += "\n" + indent("viewModel.updateData(mapOf(\"#{variable}\" to option))", depth + 5)
               end

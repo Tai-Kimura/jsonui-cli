@@ -182,7 +182,7 @@ module RjuiTools
           # Value handling depends on binding presence. `bind` is the
           # alternative spelling iOS already accepts here
           # (textfield_converter.rb: text || value || bind).
-          text_value = with_bind_fallback(attributes['text'])
+          text_value = attributes['text']
           if text_value
             if has_binding?(text_value)
               # Binding present: use controlled component (value + onChange)

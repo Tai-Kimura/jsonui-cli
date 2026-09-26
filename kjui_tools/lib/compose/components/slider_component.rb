@@ -16,15 +16,10 @@ module KjuiTools
           # not compile on a nullable property (`(data.v?.toFloat() ?: 0f)`
           # does), and spliced a `?? default` in as it stood. A static value
           # is `<value>f` as before.
-          # The slider's own `value` is the value when it is set — bound or
-          # static — and `bind` only when it is not (SSoT common.bind: the
-          # component's own attribute "takes precedence when both are set"),
-          # as on Switch / CheckBox (ModifierBuilder.control_state).
-          bind_bound = json_data['value'].nil? && Helpers::BoundValue.bound?(json_data['bind'])
+          # The slider's `value` (a lone `bind` arrives as it:
+          # JsonUIShared::BindFold at the dispatch).
           value = if !json_data['value'].nil?
             Helpers::BoundValue.float(json_data['value'], fallback: 0)
-          elsif bind_bound
-            Helpers::BoundValue.float(json_data['bind'], fallback: 0)
           else
             '0f'
           end
@@ -60,12 +55,10 @@ module KjuiTools
           code += "\n" + indent("value = #{value},", depth + 1)
           
           # onValueChange handler
-          # The attribute written is the one shown: the own `value` when it is
-          # set (a static one writes the seeded state, not `bind`), else `bind`.
+          # The attribute written is the one shown: a bound `value` (a static
+          # one writes the seeded state).
           binding_variable = nil
           if json_data['value'] && json_data['value'].is_a?(String) && json_data['value'].match(/@\{([^}]+)\}/)
-            binding_variable = $1
-          elsif json_data['value'].nil? && json_data['bind'] && json_data['bind'].match(/@\{([^}]+)\}/)
             binding_variable = $1
           end
           

@@ -27,6 +27,7 @@ require_relative 'views/tab_view_converter'
 require_relative 'views/embed_converter'
 require_relative 'view_registry'
 
+require_relative '../core/bind_fold'
 module SjuiTools
   module SwiftUI
     class ConverterFactory
@@ -141,6 +142,14 @@ module SjuiTools
             # Fall through to standard converters
           end
         end
+
+        # `bind` folded into the attribute it stands for (JsonUIShared::BindFold)
+        # on the node a built-in converter draws — its style merged
+        # (StyleLoader, before conversion) — after the app's own converters
+        # were asked; an app's converter gets its node as written. The layout
+        # normalizer leaves a node with a style or responsive overrides to
+        # this fold.
+        component = JsonUIShared::BindFold.fold(component, component_type)
 
         case component_type
         when 'Label', 'Text'

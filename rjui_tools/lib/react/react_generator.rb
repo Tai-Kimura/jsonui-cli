@@ -2,6 +2,7 @@
 
 require 'set'
 require_relative '../core/type_converter'
+require_relative '../core/bind_fold'
 require_relative '../core/generated_marker'
 require_relative '../core/frameworks'
 require_relative '../core/normalization'
@@ -221,7 +222,10 @@ module RjuiTools
 
         type = json['type'] || 'View'
 
-        # First check extension converters, then built-in converters
+        # First check extension converters, then built-in converters; a
+        # built-in draws the node with its `bind` folded (the child path,
+        # BaseConverter#create_converter_for_child, does the same)
+        json = JsonUIShared::BindFold.fold(json, type) unless @extension_converters[type]
         converter_class = @extension_converters[type] || CONVERTERS[type]
         unless converter_class
           # sjui renders unknown types as a red "Unsupported component" Text

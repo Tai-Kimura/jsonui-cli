@@ -16,7 +16,7 @@ RSpec.describe 'shared validator: bind beside the own value attribute' do
     skip 'shared/core/bind_fold_vectors.json not present in this layout' unless File.exist?(vectors)
 
     cases = JSON.parse(File.read(vectors))['cases']
-    expect(cases.size).to be >= 15
+    expect(cases.size).to be >= 18
     said = cases.map do |c|
       validator = KjuiTools::Core::AttributeValidator.new(:compose)
       validator.validate(JSON.parse(JSON.generate(c['node'])))
@@ -28,6 +28,28 @@ RSpec.describe 'shared validator: bind beside the own value attribute' do
     expect(said).to eq(expected)
   end
 
+  # The fold every renderer applies on the node it draws (shared/core/bind_fold.rb,
+  # mirrored into each tool's lib/core): the table's cases, and the style cases
+  # — the node's style merged first (the node's own attributes win).
+  it 'folds every case, and every style case after the merge (JsonUIShared::BindFold)' do
+    skip 'shared/core/bind_fold_vectors.json not present in this layout' unless File.exist?(vectors)
+
+    require 'core/bind_fold'
+    table = JSON.parse(File.read(vectors))
+    expect(table['cases'].size).to be >= 18
+    got = table['cases'].map { |c| [c['name'], JsonUIShared::BindFold.fold(JSON.parse(JSON.generate(c['node'])))] }
+    expect(got).to eq(table['cases'].map { |c| [c['name'], c['expect']] })
+    expect(table['style_cases'].size).to be >= 2
+    drawn = table['style_cases'].map do |c|
+      node = JSON.parse(JSON.generate(c['node']))
+      merged = c['styles'].fetch(node['style']).merge(node).reject { |k, _| k == 'style' }
+      [c['name'], JsonUIShared::BindFold.fold(merged)]
+    end
+    expect(drawn).to eq(table['style_cases'].map { |c| [c['name'], c['drawn']] })
+    got_for = table['attributes_for_cases'].map { |c| [c['name'], JsonUIShared::BindFold.attributes_for(c['type'], c['node'])] }
+    expect(got_for).to eq(table['attributes_for_cases'].map { |c| [c['name'], c['expect']] })
+  end
+
   # The one function every reader of primaryValue answers the same (the
   # generated JsonUIBindPrimaryValue on Kotlin / Swift, the jui normalizer):
   # here, the shared validator's bind_value_attributes, on the section the
@@ -36,7 +58,7 @@ RSpec.describe 'shared validator: bind beside the own value attribute' do
     skip 'shared/core/bind_fold_vectors.json not present in this layout' unless File.exist?(vectors)
 
     cases = JSON.parse(File.read(vectors))['attributes_for_cases']
-    expect(cases.size).to be >= 7
+    expect(cases.size).to be >= 9
     validator = KjuiTools::Core::AttributeValidator.new(:compose)
     got = cases.map do |c|
       section = validator.send(:map_type_to_definition, c['type'])

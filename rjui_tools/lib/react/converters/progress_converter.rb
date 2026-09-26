@@ -88,7 +88,7 @@ module RjuiTools
         def build_value_attr
           # `progress` is canonical; `value` is the legacy spelling
           # (shared/core/attribute_semantics.json → progressValue).
-          value = with_bind_fallback(attributes['progress'] || attributes['value']) || 0
+          value = attributes['progress'] || attributes['value'] || 0
 
           if has_binding?(value)
             prop = extract_binding_property(value)

@@ -618,6 +618,16 @@ RSpec.describe RjuiTools::React::Converters::SelectBoxConverter do
       # A Date SelectBox's value is its selectedDate alone (4f's ruling,
       # jsonui-cli 1.9.0): selectedValue and the undeclared `value` were read
       # after it, and not by sjui.
+      # selectItemType as written (the SSoT enum): "date" is a list box here as
+      # on every path — it was compared downcased and drew a date input on web
+      # only.
+      it 'is a date input for "Date" alone' do
+        expect(picker({})).to include('type="date"')
+        lower = create_converter({ 'class' => 'SelectBox', 'id' => 'when', 'selectItemType' => 'date', 'items' => %w[a b] }).convert
+        expect(lower).not_to include('type="date"')
+        expect(lower).to include('<select')
+      end
+
       it 'reads its value from selectedDate alone' do
         %w[selectedValue value].each do |other|
           bound = picker(other => '@{other}')
