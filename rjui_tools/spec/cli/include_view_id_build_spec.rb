@@ -4,6 +4,7 @@ require 'open3'
 require 'tmpdir'
 require 'json'
 require 'fileutils'
+require 'rbconfig'
 require_relative '../spec_helper'
 require 'core/config_manager'
 require 'core/layout_path'
@@ -93,7 +94,10 @@ RSpec.describe 'the viewId of a node inside an include, through rjui build' do
     File.write(File.join(dir, 'rjui.config.json'), JSON.pretty_generate(config))
     FileUtils.mkdir_p(File.join(dir, 'src', 'Layouts'))
     layouts.each { |name, body| File.write(File.join(dir, 'src', 'Layouts', "#{name}.json"), JSON.generate(body)) }
-    log, status = Open3.capture2e('ruby', File.join(tool, 'bin', 'rjui'), 'build', chdir: dir)
+    # The ruby running this suite, not PATH's: rbenv resolves `ruby` by
+    # RBENV_VERSION and the cwd's .ruby-version, and a 2.6 leg ran its child
+    # tool on 3.2 (or the other way round).
+    log, status = Open3.capture2e(RbConfig.ruby, File.join(tool, 'bin', 'rjui'), 'build', chdir: dir)
     [dir, log, status]
   end
 
@@ -173,7 +177,7 @@ RSpec.describe 'the viewId of a node inside an include, through rjui build' do
       walk.call(tree)
       puts JSON.generate(ids)
     RUBY
-    out, err, status = Open3.capture3('ruby', '-I', File.join(IVI_REPO, "#{tool}_tools", 'lib'), '-e', script, layouts, screen)
+    out, err, status = Open3.capture3(RbConfig.ruby, '-I', File.join(IVI_REPO, "#{tool}_tools", 'lib'), '-e', script, layouts, screen)
     raise "#{tool} failed: #{err}" unless status.success?
 
     JSON.parse(out.lines.last)
