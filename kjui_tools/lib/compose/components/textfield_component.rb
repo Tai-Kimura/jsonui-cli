@@ -691,14 +691,14 @@ module KjuiTools
             # KeyboardType.Text (plan 49 lane C: TextField.contentType).
             keyboard_type = Helpers::BoundValue.enum(
               json_data['contentType'], CONTENT_TYPE_KEYBOARD,
-              bound_default: 'KeyboardType.Text', lowercase: true
+              bound_default: 'KeyboardType.Text', declared: %w[TextField contentType]
             )
             keyboard_options << "keyboardType = #{keyboard_type}" if keyboard_type
           elsif json_data['input']
             required_imports&.add(:keyboard_type)
             keyboard_type = Helpers::BoundValue.enum(
               json_data['input'], input_keyboard_table,
-              bound_default: 'KeyboardType.Text', lowercase: true
+              bound_default: 'KeyboardType.Text', declared: %w[TextField input]
             )
             keyboard_options << "keyboardType = #{keyboard_type}" if keyboard_type
           elsif json_data['inputType']

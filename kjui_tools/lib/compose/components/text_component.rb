@@ -390,9 +390,9 @@ module KjuiTools
 
           # Text alignment
           highlight_align = if highlight && highlight_condition
-                              compose_text_align(highlight[:text_align])
+                              compose_text_align(highlight[:text_align], json_data['type'])
                             end
-          base_align = compose_text_align(json_data['textAlign'])
+          base_align = compose_text_align(json_data['textAlign'], json_data['type'])
 
           if highlight_align && always_highlighted
             required_imports&.add(:text_align)
@@ -407,7 +407,7 @@ module KjuiTools
             )
           elsif json_data['textAlign']
             required_imports&.add(:text_align)
-            if (align = compose_text_align(json_data['textAlign']))
+            if (align = compose_text_align(json_data['textAlign'], json_data['type']))
               component_code += ",\n" + indent("textAlign = #{align}", depth + 1)
             end
           elsif json_data['centerHorizontal']
@@ -590,14 +590,16 @@ module KjuiTools
           'left' => 'TextAlign.Start'
         }.freeze
 
-        def self.compose_text_align(value)
+        # *section*: the node's type — Button declares Left / Center / Right
+        # only.
+        def self.compose_text_align(value, section = 'Label')
           return nil unless value.is_a?(String)
 
           # A static value outside the vocabulary still emits nothing; a bound
           # one needs an exhaustive `else` for the `when` to compile, and
           # `Unspecified` is Compose's own "no opinion" value.
           Helpers::BoundValue.enum(value, TEXT_ALIGN_MAPPING,
-                                   bound_default: 'TextAlign.Unspecified', lowercase: true)
+                                   bound_default: 'TextAlign.Unspecified', declared: [section || 'Label', 'textAlign'])
         end
 
         # `textShadow` is `{ color:, blur:, offset: [x, y] }` (a bare string is
@@ -715,7 +717,7 @@ module KjuiTools
 
           if json_data['textAlign']
             required_imports&.add(:text_align)
-            align = compose_text_align(json_data['textAlign'])
+            align = compose_text_align(json_data['textAlign'], json_data['type'])
             style_parts << "textAlign = #{align}" if align
           end
 
@@ -910,7 +912,7 @@ module KjuiTools
 
           if json_data['textAlign']
             required_imports&.add(:text_align)
-            align = compose_text_align(json_data['textAlign'])
+            align = compose_text_align(json_data['textAlign'], json_data['type'])
             style_parts << "textAlign = #{align}" if align
           end
 
@@ -1090,7 +1092,7 @@ module KjuiTools
 
           if json_data['textAlign']
             required_imports&.add(:text_align)
-            align = compose_text_align(json_data['textAlign'])
+            align = compose_text_align(json_data['textAlign'], json_data['type'])
             style_parts << "textAlign = #{align}" if align
           end
 

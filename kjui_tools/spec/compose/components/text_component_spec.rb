@@ -239,13 +239,13 @@ RSpec.describe KjuiTools::Compose::Components::TextComponent do
     end
 
     it 'generates text with line break mode' do
-      json_data = { 'type' => 'Text', 'text' => 'Test', 'lineBreakMode' => 'tail' }
+      json_data = { 'type' => 'Text', 'text' => 'Test', 'lineBreakMode' => 'Tail' }
       result = described_class.generate(json_data, 0, required_imports)
       expect(result).to include('overflow = TextOverflow.Ellipsis')
     end
 
     it 'generates text with clip line break mode' do
-      json_data = { 'type' => 'Text', 'text' => 'Test', 'lineBreakMode' => 'clip' }
+      json_data = { 'type' => 'Text', 'text' => 'Test', 'lineBreakMode' => 'Clip' }
       result = described_class.generate(json_data, 0, required_imports)
       expect(result).to include('overflow = TextOverflow.Clip')
     end
@@ -312,7 +312,7 @@ RSpec.describe KjuiTools::Compose::Components::TextComponent do
       it 'lineBreakMode: clip overrides the implicit Ellipsis from lines' do
         json_data = {
           'type' => 'Text', 'text' => 'Test',
-          'lines' => 2, 'lineBreakMode' => 'clip'
+          'lines' => 2, 'lineBreakMode' => 'Clip'
         }
         result = described_class.generate(json_data, 0, required_imports)
         expect(result.scan('overflow =').size).to eq(1)
@@ -323,7 +323,7 @@ RSpec.describe KjuiTools::Compose::Components::TextComponent do
       it 'lineBreakMode: word resolves to Ellipsis (still emitted once)' do
         json_data = {
           'type' => 'Text', 'text' => 'Test',
-          'lines' => 3, 'lineBreakMode' => 'word'
+          'lines' => 3, 'lineBreakMode' => 'Word'
         }
         result = described_class.generate(json_data, 0, required_imports)
         expect(result.scan('overflow =').size).to eq(1)
@@ -334,7 +334,7 @@ RSpec.describe KjuiTools::Compose::Components::TextComponent do
       it 'unmapped lineBreakMode (head) leaves the lines-default Ellipsis intact, once' do
         json_data = {
           'type' => 'Text', 'text' => 'Test',
-          'lines' => 1, 'lineBreakMode' => 'head'
+          'lines' => 1, 'lineBreakMode' => 'Head'
         }
         result = described_class.generate(json_data, 0, required_imports)
         # head/middle/char are silent-skip in the lineBreakMode case;
@@ -372,7 +372,7 @@ RSpec.describe KjuiTools::Compose::Components::TextComponent do
       it 'emits autoSize + single maxLines/overflow when autoShrink + lineBreakMode: clip combine (lineBreakMode wins)' do
         json_data = {
           'type' => 'Text', 'text' => 'Test', 'fontSize' => 14,
-          'autoShrink' => true, 'lineBreakMode' => 'clip'
+          'autoShrink' => true, 'lineBreakMode' => 'Clip'
         }
         result = described_class.generate(json_data, 0, required_imports)
         expect(result.scan('overflow =').size).to eq(1)
@@ -389,7 +389,7 @@ RSpec.describe KjuiTools::Compose::Components::TextComponent do
       end
 
       it 'lineBreakMode alone (no lines) emits only overflow, no maxLines' do
-        json_data = { 'type' => 'Text', 'text' => 'Test', 'lineBreakMode' => 'tail' }
+        json_data = { 'type' => 'Text', 'text' => 'Test', 'lineBreakMode' => 'Tail' }
         result = described_class.generate(json_data, 0, required_imports)
         expect(result).to include('overflow = TextOverflow.Ellipsis')
         expect(result).not_to include('maxLines =')
@@ -759,7 +759,7 @@ RSpec.describe KjuiTools::Compose::Components::TextComponent do
 
   describe 'word line break mode' do
     it 'generates text with word line break mode' do
-      json_data = { 'type' => 'Text', 'text' => 'Test', 'lineBreakMode' => 'word' }
+      json_data = { 'type' => 'Text', 'text' => 'Test', 'lineBreakMode' => 'Word' }
       result = described_class.generate(json_data, 0, required_imports)
       expect(result).to include('overflow = TextOverflow.Ellipsis')
     end

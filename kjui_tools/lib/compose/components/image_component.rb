@@ -110,10 +110,10 @@ module KjuiTools
           # default for Image — so naming it changes no picture.
           if json_data['contentMode']
             required_imports&.add(:content_scale)
-            if (scale = Helpers::ContentScaleHelper.scale_expression(json_data['contentMode']))
+            if (scale = Helpers::ContentScaleHelper.scale_expression(json_data['contentMode'], section: json_data['type']))
               code += ",\n" + indent("contentScale = #{scale}", depth + 1)
             end
-            if (alignment = Helpers::ContentScaleHelper.alignment_expression(json_data['contentMode']))
+            if (alignment = Helpers::ContentScaleHelper.alignment_expression(json_data['contentMode'], section: json_data['type']))
               required_imports&.add(:alignment)
               code += ",\n" + indent("alignment = #{alignment}", depth + 1)
             end

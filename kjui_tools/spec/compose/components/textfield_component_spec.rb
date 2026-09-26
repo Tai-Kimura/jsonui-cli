@@ -432,8 +432,16 @@ RSpec.describe KjuiTools::Compose::Components::TextFieldComponent do
       expect(result).to include('KeyboardType.Phone')
     end
 
-    it 'generates TextField with text keyboard type as default' do
+    # TextField.input declares no `text` (TextView.keyboardType does): a value
+    # is its declared spelling (1.9.0), so it sets no keyboard, as the
+    # validator names it.
+    it 'sets no keyboard type for an input TextField does not declare' do
       json_data = { 'type' => 'TextField', 'input' => 'text' }
+      expect(described_class.generate(json_data, 0, required_imports)).not_to include('keyboardType =')
+    end
+
+    it 'generates TextField with text keyboard type for alphabet' do
+      json_data = { 'type' => 'TextField', 'input' => 'alphabet' }
       result = described_class.generate(json_data, 0, required_imports)
       expect(result).to include('KeyboardType.Text')
     end

@@ -183,8 +183,9 @@ RSpec.describe 'bound-value emission (swiftui codegen)' do
 
       bound = convert(:TextFieldConverter, 'type' => 'TextField', 'contentType' => '@{ct}')
       expect_no_leak(bound)
-      expect(bound).to include('"newpassword": .newPassword')
-      expect(bound).not_to include('.lowercased()] ?? ')
+      # Keyed by each declared spelling, looked up as written (1.9.0).
+      expect(bound).to include('"newPassword": .newPassword')
+      expect(bound).not_to include('lowercased()')
     end
 
     it 'a bound font resolves weight-or-family the way a written one does' do
@@ -702,7 +703,7 @@ RSpec.describe 'bound-value emission (swiftui codegen)' do
       # `emailAddress` and `phone` are `valueAliases` in the SSoT: a written
       # declaration is rewritten at build time, a bound one is not, so the
       # emitted table has to know both spellings.
-      %w[email emailaddress telephonenumber tel phone].each do |token|
+      %w[email emailAddress telephoneNumber tel phone].each do |token|
         expect(code).to include("\"#{token}\":")
       end
     end

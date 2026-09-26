@@ -2,6 +2,7 @@
 
 require_relative '../../core/string_literals'
 require_relative 'binding_expression'
+require_relative '../../core/enum_spelling'
 # BindingExpression#property_nullable? calls ResourceResolver but does not
 # require it (the cycle resource_resolver -> binding_expression means it
 # cannot). Pulling it in here keeps every BoundValue caller safe regardless of
@@ -224,8 +225,21 @@ module KjuiTools
         # usable else the bound case returns nil rather than shipping a
         # non-compiling `when` — the binding is dropped, which is the canonical
         # unresolved-value behaviour and strictly better than a build failure.
-        def enum(value, mapping, default: nil, bound_default: nil, lowercase: false)
+        #
+        # *declared*: `[section, attribute]` of an SSoT enum. *mapping* (keyed
+        # lowercase) is then keyed by each spelling the SSoT declares, as
+        # written, and a value — written or bound — is looked up as it is: a
+        # value is its declared spelling, case and all (1.9.0). Without the
+        # definitions it reads as `lowercase:` did (EnumSpelling.lowered).
+        def enum(value, mapping, default: nil, bound_default: nil, lowercase: false, declared: nil)
           return nil if value.nil? || value == ''
+
+          if declared && !JsonUIShared::EnumSpelling.definitions.empty?
+            mapping = declared_mapping(mapping, *declared)
+            lowercase = false
+          elsif declared
+            lowercase = true
+          end
 
           unless bound?(value)
             key = value.to_s
@@ -272,6 +286,15 @@ module KjuiTools
           branches = mapping.map { |k, v| "#{BindingExpression.quote(k)} -> #{v}" }
           branches << "else -> #{else_arm}"
           "when (#{subject}) { #{branches.join('; ')} }"
+        end
+
+        # *mapping* (keyed lowercase) keyed by each spelling the SSoT declares
+        # for *attribute* on *section*, as written; a spelling the mapping has
+        # no entry for is left out, as it was.
+        def declared_mapping(mapping, section, attribute)
+          JsonUIShared::EnumSpelling.declared(section, attribute)
+                                    .map { |spelling| (literal = mapping[spelling.downcase]) && [spelling, literal] }
+                                    .compact.to_h
         end
 
         # Wrap a Modifier fragment in a runtime condition. `state` is a value

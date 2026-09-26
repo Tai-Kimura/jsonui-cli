@@ -102,9 +102,9 @@ module RjuiTools
           # moves into the emitted expression, asserted through the component's
           # own prop type rather than by restating the union.
           if (expr = bound_value_expr(content_mode))
-            lookup = js_object_literal(CONTENT_MODE_OBJECT_FIT)
+            lookup = js_object_literal(declared_table(CONTENT_MODE_OBJECT_FIT, 'contentMode'))
             cast = "React.ComponentProps<typeof NetworkImage>['contentMode']"
-            return " contentMode={((#{lookup})[String(#{expr}).toLowerCase()] ?? " \
+            return " contentMode={((#{lookup})[String(#{expr})] ?? " \
                    "'#{CONTENT_MODE_DEFAULT_FIT}') as #{cast}}"
           end
 

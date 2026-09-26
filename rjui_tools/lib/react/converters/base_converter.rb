@@ -1184,14 +1184,26 @@ module RjuiTools
           expr = bound_value_expr(value)
           return false unless expr
 
-          key = "String(#{expr}).toLowerCase()"
+          key = "String(#{expr})"
           dynamic_styles['objectFit'] = css_assert(
-            "(#{js_object_literal(CONTENT_MODE_OBJECT_FIT)})[#{key}] ?? 'contain'", 'objectFit'
+            "(#{js_object_literal(declared_table(CONTENT_MODE_OBJECT_FIT, 'contentMode'))})[#{key}] ?? 'contain'", 'objectFit'
           )
           dynamic_styles['objectPosition'] = css_assert(
-            "(#{js_object_literal(CONTENT_MODE_OBJECT_POSITION)})[#{key}]", 'objectPosition'
+            "(#{js_object_literal(declared_table(CONTENT_MODE_OBJECT_POSITION, 'contentMode'))})[#{key}]", 'objectPosition'
           )
           true
+        end
+
+        # *map* (keyed lowercase) keyed by each spelling the SSoT declares for
+        # *attribute* on this node, as written — what a run-time lookup of a
+        # bound value matches: a value is its declared spelling, case and all
+        # (1.9.0). Without the definitions, *map* as it is.
+        def declared_table(map, attribute)
+          return map if JsonUIShared::EnumSpelling.definitions.empty?
+
+          JsonUIShared::EnumSpelling.declared(enum_section, attribute)
+                                    .map { |spelling| map.key?(spelling.downcase) ? [spelling, map[spelling.downcase]] : nil }
+                                    .compact.to_h
         end
 
         def js_object_literal(map)

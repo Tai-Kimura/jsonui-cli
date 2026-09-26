@@ -626,14 +626,17 @@ RSpec.describe KjuiTools::Compose::Components::TextViewComponent, 'hintAttribute
       expect(emit('signedDecimal')).to include('keyboardType = KeyboardType.Text')
     end
 
-    it 'degrades the keyboardType spelling too, not just input' do
+    # TextView.keyboardType declares none of the four floored values (they
+    # are TextView.input's), so a floored spelling written there is declared
+    # in no case and sets no keyboard — under the floor or not (1.9.0).
+    it 'reads the floored values on input only: keyboardType declares none of them' do
       declare('1.11.2')
       expect(emit(nil)).not_to include('keyboardType =')
       declare('1.11.2')
       result = described_class.generate(
         { 'type' => 'TextView', 'keyboardType' => 'datetime' }, 0, Set.new
       )
-      expect(result).to include('keyboardType = KeyboardType.Text')
+      expect(result).not_to include('keyboardType =')
     end
   end
 end

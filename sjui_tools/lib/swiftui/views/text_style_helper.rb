@@ -120,7 +120,7 @@ module SjuiTools
         # leaves the lookup Optional: an unrecognised value at run time turns
         # the autofill hint off, which is what `.none` means statically.
         def bound_content_type(value)
-          bound_enum(value, vocabulary('contentType', CONTENT_TYPES),
+          bound_enum(value, declared_vocabulary('contentType', CONTENT_TYPES), exact: true,
                      default: nil, type: 'UITextContentType')
         end
 

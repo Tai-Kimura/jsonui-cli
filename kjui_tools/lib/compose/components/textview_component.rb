@@ -432,7 +432,7 @@ module KjuiTools
           # TextStyle the font attrs already build, and reuses Label's
           # vocabulary rather than growing a fourth copy of it.
           tv_align = json_data['textAlign'] &&
-                     TextComponent.compose_text_align(json_data['textAlign'])
+                     TextComponent.compose_text_align(json_data['textAlign'], json_data['type'] || 'TextView')
           if tv_resolved_var || json_data['fontColor'] || tv_align
             required_imports&.add(:text_style)
             style_parts = []
@@ -464,7 +464,8 @@ module KjuiTools
               # same member names from the same table, so it is under the same
               # Compose version floor (TextFieldComponent.input_keyboard_table).
               input_type, TextFieldComponent.input_keyboard_table,
-              bound_default: 'KeyboardType.Text', lowercase: true
+              bound_default: 'KeyboardType.Text',
+              declared: ['TextView', json_data['keyboardType'] ? 'keyboardType' : 'input']
             )
             keyboard_options << "keyboardType = #{keyboard_type}" if keyboard_type
           end

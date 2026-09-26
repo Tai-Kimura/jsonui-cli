@@ -412,7 +412,7 @@ module KjuiTools
           # spelling on either mobile platform (plan 49 lane C:
           # Button.textAlign). The vocabulary is the shared one Label uses.
           align = json_data['textAlign'] &&
-                  TextComponent.compose_text_align(json_data['textAlign'])
+                  TextComponent.compose_text_align(json_data['textAlign'], json_data['type'] || 'Button')
           required_imports&.add(:text_align) if align
           align_arg = align ? "\n" + indent("textAlign = #{align},", depth + 1) : ''
 

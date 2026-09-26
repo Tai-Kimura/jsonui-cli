@@ -202,8 +202,8 @@ module RjuiTools
           # omits, exactly like the static path's `if autocomplete`.
           content_type = attributes['contentType']
           if (content_type_expr = bound_value_expr(content_type))
-            lookup = js_object_literal(CONTENT_TYPE_AUTOCOMPLETE)
-            attrs << " autoComplete={(#{lookup})[String(#{content_type_expr}).toLowerCase()]}"
+            lookup = js_object_literal(declared_table(CONTENT_TYPE_AUTOCOMPLETE, 'contentType'))
+            attrs << " autoComplete={(#{lookup})[String(#{content_type_expr})]}"
           elsif content_type
             autocomplete = map_content_type(content_type)
             attrs << " autoComplete=\"#{autocomplete}\"" if autocomplete

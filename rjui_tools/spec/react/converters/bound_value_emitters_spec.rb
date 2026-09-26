@@ -144,7 +144,11 @@ RSpec.describe 'bound value emitters' do
                     RjuiTools::React::Converters::ImageConverter)
       expect(out).not_to include('@{')
       expect(out).to include("objectFit: (({ 'fit': 'contain'")
-      expect(out).to include('String(data.m).toLowerCase()')
+      # Keyed by each declared spelling and looked up as written (1.9.0):
+      # AspectFill is a key, a lowercased one is not.
+      expect(out).to include("'AspectFill': 'cover'").and include('[String(data.m)]')
+      expect(out).not_to include('toLowerCase()')
+      expect(out).not_to include("'aspectfill':")
     end
 
     # Most CSS properties are unions of string literals in React.CSSProperties,
