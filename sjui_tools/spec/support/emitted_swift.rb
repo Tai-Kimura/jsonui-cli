@@ -43,6 +43,16 @@ module EmittedSwift
     struct CollectionDataSource {
         var sections: [CollectionDataSection] = []
     }
+    // SwiftJsonUI/Classes/SwiftUI/IdentifiedCellItem.swift: the element a
+    // section's loop hands its cells when its ids are its own (cellIdProperty,
+    // or a section after the first).
+    struct IdentifiedCellItem: Identifiable, Equatable {
+        let id: String
+        let index: Int
+        let data: [String: Any]
+        init(id: String, index: Int, data: [String: Any]) { self.id = id; self.index = index; self.data = data }
+        static func == (lhs: IdentifiedCellItem, rhs: IdentifiedCellItem) -> Bool { lhs.id == rhs.id && lhs.index == rhs.index }
+    }
   SWIFT
 
   # `CollectionStackView`, the container the emitted collection code wraps

@@ -41,6 +41,7 @@ require_relative 'converters/circle_view_converter'
 require_relative 'converters/web_converter'
 require_relative 'converters/blur_converter'
 require_relative 'converters/gradient_view_converter'
+require_relative 'converters/converter_table'
 require_relative 'tailwind_mapper'
 require_relative 'responsive_helper'
 require_relative 'helpers/string_manager_helper'
@@ -51,40 +52,11 @@ module RjuiTools
     class ReactGenerator
       include Helpers::StringManagerHelper
 
-      CONVERTERS = {
-        'View' => Converters::ViewConverter,
-        'SafeAreaView' => Converters::ViewConverter,
-        'Label' => Converters::LabelConverter,
-        'Button' => Converters::ButtonConverter,
-        'Image' => Converters::ImageConverter,
-        'CircleImage' => Converters::ImageConverter,
-        'NetworkImage' => Converters::ImageConverter,
-        'TextField' => Converters::TextFieldConverter,
-        'TextView' => Converters::TextViewConverter,
-        'ScrollView' => Converters::ScrollViewConverter,
-        'Collection' => Converters::CollectionConverter,
-        # Switch is the primary component name, uses SwitchConverter for iOS-style toggle
-        'Switch' => Converters::SwitchConverter,
-        # CheckBox is the primary component name, uses ToggleConverter for simple checkbox
-        'CheckBox' => Converters::ToggleConverter,
-        'Slider' => Converters::SliderConverter,
-        'Segment' => Converters::SegmentConverter,
-        'Radio' => Converters::RadioConverter,
-        'Progress' => Converters::ProgressConverter,
-        'Indicator' => Converters::IndicatorConverter,
-        'SelectBox' => Converters::SelectBoxConverter,
-        'Include' => Converters::IncludeConverter,
-        'TabView' => Converters::TabViewConverter,
-        'Embed' => Converters::EmbedConverter,
-        # These five ship the same canonical names as BaseConverter's child
-        # dispatch map — the two tables must stay in step or a type renders
-        # differently at root vs nested position.
-        'IconLabel' => Converters::IconLabelConverter,
-        'CircleView' => Converters::CircleViewConverter,
-        'Web' => Converters::WebConverter,
-        'Blur' => Converters::BlurConverter,
-        'GradientView' => Converters::GradientViewConverter
-      }.freeze
+      # The one table, shared with the child dispatch (BaseConverter
+      # #get_converter_class): converters/converter_table.rb. This kept a
+      # second copy until jsonui-cli 1.9.0, and a root NetworkImage / Toggle
+      # rendered differently from a nested one.
+      CONVERTERS = Converters::ConverterTable.table
 
       # The validator whose sentence a type drawn as nothing says: the build's
       # own (BuildCommand hands it), else one made the first time such a type

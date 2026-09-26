@@ -1061,7 +1061,10 @@ module RjuiTools
       # CollectionDataSource defaultValue → constructor call. Shapes
       # (INTERACTIVE_HOST_CONTRACT.md §4): shorthand `[ {...} ]` (one section
       # holding these cell dicts) or explicit
-      # `{"sections" => [{"cell" => name?, "cells" => [...]}]}`. The generated
+      # `{"sections" => [{"cell" => name?, "cells" => [...], "header" => {...}?,
+      # "footer" => {...}?}]}` — a section's header / footer dict is its
+      # header / footer data (from jsonui-cli 1.9.0; until then dropped, and
+      # the header drew with `{}`). The generated
       # collection component reads `items?.sections?.[i]?.cells?.data`, which
       # a plain array literal never satisfies. Cell view names come from the
       # node's own `sections` declaration — the TS section shape carries none.
@@ -1079,7 +1082,9 @@ module RjuiTools
         section_literals = sections.map do |section|
           next nil unless section.is_a?(Hash)
           cells = section['cells'].is_a?(Array) ? section['cells'] : []
-          "{ cells: { data: #{to_js_literal(cells)} } }"
+          header = section['header'].is_a?(Hash) ? "header: #{to_js_literal(section['header'])}, " : ''
+          footer = section['footer'].is_a?(Hash) ? ", footer: #{to_js_literal(section['footer'])}" : ''
+          "{ #{header}cells: { data: #{to_js_literal(cells)} }#{footer} }"
         end.compact
 
         "new CollectionDataSource([#{section_literals.join(', ')}])"

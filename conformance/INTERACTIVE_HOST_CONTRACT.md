@@ -124,7 +124,14 @@ share is the **layout root `data` section**, so that is the contract:
 - **explicit** — `{"sections": [{"cell": <name?>, "cells": [ {...} ]}, ...]}`
   for multi-section fixtures. The renderer takes each section's cell view
   name from the Collection node's own `sections` declaration; a `cell` name
-  here is carried only for data-source fidelity.
+  here is carried only for data-source fidelity. A section may also carry
+  `"header": {...}` and `"footer": {...}` (jsonui-cli 1.9.0): that section's
+  header / footer data, its view named by the node's `sections` declaration
+  as for the cells. The renderers draw a declared header or footer only when
+  its section has data, so a fixture that declares one gives it data here.
+  Carried by the three codegen literals and both hosts' materializers from
+  jsonui-cli 1.9.0; until then only the cells were, and no fixture could
+  draw a section header on iOS or Android.
 - **nested** (2026-09-03) — a value inside a cell dictionary written in the
   explicit shape (`"items": {"sections": [...]}`) is itself a Collection's
   data: the iOS host materializes it into a nested `CollectionDataSource`, so

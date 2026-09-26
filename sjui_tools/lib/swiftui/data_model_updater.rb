@@ -509,9 +509,13 @@ module SjuiTools
       # CollectionDataSource defaultValue → Swift initializer literal.
       # Shapes (INTERACTIVE_HOST_CONTRACT.md §4): shorthand `[ {...} ]`
       # (one section holding these cell dicts) or explicit
-      # `{"sections" => [{"cell" => name?, "cells" => [ {...} ]}]}`.
-      # Cell dicts emit as [String: Any] literals with string/number/bool
-      # values only.
+      # `{"sections" => [{"cell" => name?, "cells" => [ {...} ],
+      # "header" => {...}?, "footer" => {...}?}]}`. Cell dicts emit as
+      # [String: Any] literals with string/number/bool values only; a
+      # section's header / footer dict is its header / footer data, the view
+      # named by the node's own `sections` declaration (from jsonui-cli 1.9.0;
+      # until then the header and footer were dropped, and a declared header
+      # drew nothing on the codegen paths).
       def collection_data_source_literal(value)
         sections =
           if value.is_a?(Array)
@@ -526,23 +530,31 @@ module SjuiTools
         section_literals = sections.map do |section|
           next nil unless section.is_a?(Hash)
           cells = section['cells'].is_a?(Array) ? section['cells'] : []
-          cell_dicts = cells.select { |c| c.is_a?(Hash) }.map do |cell|
-            pairs = cell.map do |k, v|
-              literal =
-                case v
-                when String then swift_string_literal(v)
-                when true, false, Numeric then v.to_s
-                end
-              literal && "#{swift_string_literal(k.to_s)}: #{literal}"
-            end.compact
-            pairs.empty? ? '[:]' : "[#{pairs.join(', ')}]"
-          end
+          cell_dicts = cells.select { |c| c.is_a?(Hash) }.map { |cell| swift_cell_dict_literal(cell) }
           view_name = section['cell'].is_a?(String) ? swift_string_literal(section['cell']) : '""'
-          "CollectionDataSection(cells: (viewName: #{view_name}, " \
-            "data: [#{cell_dicts.join(', ')}]))"
+          # The initializer's order: header, cells, footer.
+          arguments = []
+          arguments << "header: (viewName: \"\", data: #{swift_cell_dict_literal(section['header'])})" if section['header'].is_a?(Hash)
+          arguments << "cells: (viewName: #{view_name}, data: [#{cell_dicts.join(', ')}])"
+          arguments << "footer: (viewName: \"\", data: #{swift_cell_dict_literal(section['footer'])})" if section['footer'].is_a?(Hash)
+          "CollectionDataSection(#{arguments.join(', ')})"
         end.compact
 
         "CollectionDataSource(sections: [#{section_literals.join(', ')}])"
+      end
+
+      # One cell's (or a header's, a footer's) data: a [String: Any] literal of
+      # its string / number / bool values.
+      def swift_cell_dict_literal(cell)
+        pairs = cell.map do |k, v|
+          literal =
+            case v
+            when String then swift_string_literal(v)
+            when true, false, Numeric then v.to_s
+            end
+          literal && "#{swift_string_literal(k.to_s)}: #{literal}"
+        end.compact
+        pairs.empty? ? '[:]' : "[#{pairs.join(', ')}]"
       end
     end
   end

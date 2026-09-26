@@ -126,7 +126,13 @@ RSpec.describe 'type synonyms in the rjui converters' do
             RJUI_ALIAS_SECTIONS.to_a
     emitted = nodes.map { |spelling, target| emit({ 'type' => spelling, 'id' => 'n' }.merge(RJUI_SYNONYM_EXTRA.fetch(target))) }
     expect(emitted.size).to eq(RJUI_SYNONYM_TABLE.size + RJUI_ALIAS_SECTIONS.size)
+    # A root NetworkImage (a synonym's target too) is the NetworkImage
+    # built-in, as a nested one is: one converter table (45014517); it was a
+    # plain <img> at the root. Declared as the built-in declares its props.
     expect(TypeScriptCompiler.component(*emitted)).to compile_as_typescript.with_ambient(<<~TS)
+      declare namespace React { type CSSProperties = { [property: string]: string | number | undefined } }
+      #{TypeScriptCompiler.template_declarations('network_image.tsx', 'NetworkImageProps')}
+      declare const NetworkImage: (props: NetworkImageProps) => JSX.Element;
       declare const data: { onNIsFocusedChange?: (value: boolean) => void };
       declare const nRef: { current: HTMLInputElement | HTMLTextAreaElement | null };
       declare const JsonUISeeded: <T>(props: { seed: T; children: (value: T, set: (value: T) => void) => JSX.Element }) => JSX.Element;

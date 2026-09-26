@@ -553,8 +553,13 @@ module KjuiTools
       # CollectionDataSource defaultValue → Kotlin constructor literal.
       # Shapes (INTERACTIVE_HOST_CONTRACT.md §4): shorthand `[ {...} ]`
       # (one section holding these cell dicts) or explicit
-      # `{"sections": [{"cell": name?, "cells": [ {...} ]}]}`. Cell dicts
-      # emit as mapOf(...) with string/number/boolean values only.
+      # `{"sections": [{"cell": name?, "cells": [ {...} ], "header": {...}?,
+      # "footer": {...}?}]}`. Cell dicts emit as mapOf(...) with
+      # string/number/boolean values only; a section's header / footer dict
+      # is its header / footer data, the view named by the node's own
+      # `sections` declaration (from jsonui-cli 1.9.0; until then the header
+      # and footer were dropped, and a declared header drew nothing on the
+      # codegen paths).
       def collection_data_source_literal(value)
         sections =
           if value.is_a?(Array)
@@ -569,24 +574,35 @@ module KjuiTools
         section_literals = sections.map do |section|
           next nil unless section.is_a?(Hash)
           cells = section['cells'].is_a?(Array) ? section['cells'] : []
-          cell_maps = cells.select { |c| c.is_a?(Hash) }.map do |cell|
-            pairs = cell.map do |k, v|
-              literal =
-                case v
-                when String then kotlin_string_literal(v)
-                when true, false, Numeric then v.to_s
-                end
-              literal && "#{kotlin_string_literal(k.to_s)} to #{literal}"
-            end.compact
-            "mapOf(#{pairs.join(', ')})"
-          end
+          cell_maps = cells.select { |c| c.is_a?(Hash) }.map { |cell| kotlin_cell_map_literal(cell) }
           view_name = section['cell'].is_a?(String) ? kotlin_string_literal(section['cell']) : '""'
-          "com.kotlinjsonui.data.CollectionDataSection(cells = " \
-            "com.kotlinjsonui.data.CollectionDataSection.CellData(" \
-            "viewName = #{view_name}, data = listOf(#{cell_maps.join(', ')})))"
+          arguments = []
+          %w[header footer].each do |kind|
+            next unless section[kind].is_a?(Hash)
+
+            arguments << "#{kind} = com.kotlinjsonui.data.CollectionDataSection.HeaderFooterData(" \
+                         "viewName = \"\", data = #{kotlin_cell_map_literal(section[kind])})"
+          end
+          arguments.unshift("cells = com.kotlinjsonui.data.CollectionDataSection.CellData(" \
+                            "viewName = #{view_name}, data = listOf(#{cell_maps.join(', ')}))")
+          "com.kotlinjsonui.data.CollectionDataSection(#{arguments.join(', ')})"
         end.compact
 
         "com.kotlinjsonui.data.CollectionDataSource(sections = listOf(#{section_literals.join(', ')}))"
+      end
+
+      # One cell's (or a header's, a footer's) data: a mapOf(...) of its
+      # string / number / boolean values.
+      def kotlin_cell_map_literal(cell)
+        pairs = cell.map do |k, v|
+          literal =
+            case v
+            when String then kotlin_string_literal(v)
+            when true, false, Numeric then v.to_s
+            end
+          literal && "#{kotlin_string_literal(k.to_s)} to #{literal}"
+        end.compact
+        "mapOf(#{pairs.join(', ')})"
       end
     end
   end

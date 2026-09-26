@@ -391,7 +391,9 @@ module RjuiTools
         def flow_per_section?
           return false unless flow_collection? && extract_collection_binding(attributes['items'])
 
-          (attributes['sections'] || []).count { |section| section.is_a?(Hash) && section['cell'] } > 1
+          sections = (attributes['sections'] || []).select { |section| section.is_a?(Hash) }
+          # A declared header or footer is a row of its own too (round 7).
+          sections.count { |section| section['cell'] } > 1 || sections.any? { |section| section['header'] || section['footer'] }
         end
 
         #: listStyle -> the chrome that draws it. Enumerated from the SSoT
@@ -486,15 +488,34 @@ module RjuiTools
             # (`data={?.sections?.[0]?.header || {}}`, which is not JSX) and
             # one cell with no data.
             if items_binding && flow_per_section?
+              # Each section: its header, a row of its own above the wrap;
+              # the wrap of its cells; its footer below (4f ruling
+              # 2026-09-26, round 7) — rows of the flex column, full width,
+              # spaced as the lines. Until jsonui-cli 1.9.0 the header and
+              # footer sat inside the wrap, items on the cells' line.
               wrap = (['flex flex-row flex-wrap content-start'] + grid_gap_classes).join(' ')
               sections.each_with_index do |section, section_index|
-                content_lines << "#{indent_str(indent)}<div className=\"#{wrap}\">"
-                content_lines << generate_section_content(section, section_index, items_binding, indent + 2)
-                content_lines << "#{indent_str(indent)}</div>"
+                edge = section_edge_line(section, 'header', section_index, items_binding, indent)
+                content_lines << edge if edge
+                if section.is_a?(Hash) && section['cell']
+                  content_lines << "#{indent_str(indent)}<div className=\"#{wrap}\">"
+                  content_lines << generate_section_content(section, section_index, items_binding, indent + 2, edges: false)
+                  content_lines << "#{indent_str(indent)}</div>"
+                end
+                edge = section_edge_line(section, 'footer', section_index, items_binding, indent)
+                content_lines << edge if edge
               end
             elsif items_binding
+              # A pager's pages are its cells, every drawn section in order
+              # (4f ruling 2026-09-26, round 6) — a section's header and footer
+              # are not pages, as sjui's TabView, kjui's HorizontalPager and
+              # both Dynamic pagers draw. Until jsonui-cli 1.9.0 they were
+              # children of the snap container here, each a page of its own
+              # with no `_item_` address.
+              edges = !paging?
               sections.each_with_index do |section, section_index|
-                content_lines << generate_section_content(section, section_index, items_binding, indent)
+                content = generate_section_content(section, section_index, items_binding, indent, edges: edges)
+                content_lines << content unless content.empty?
               end
             end
           else
@@ -505,7 +526,23 @@ module RjuiTools
           content_lines.join("\n")
         end
 
-        def generate_section_content(section, section_index, items_binding, indent)
+        # A section's header or footer: its view with the section's data, and
+        # only when the section has that data — as sjui (`if let headerData =
+        # section.header?.data`), kjui (`section.header?.let`) and both Dynamic
+        # renderers draw it (4f ruling 2026-09-26, round 8). Until jsonui-cli
+        # 1.9.0 it was drawn with `{}` when the section had none, on every
+        # route.
+        def section_edge_line(section, kind, section_index, items_binding, indent)
+          view = section.is_a?(Hash) && extract_view_name(section[kind])
+          return nil unless view
+
+          edge = "#{items_binding}?.sections?.[#{section_index}]?.#{kind}"
+          "#{indent_str(indent)}{#{edge} && <#{view} data={#{edge}} />}"
+        end
+
+        # `edges: false` leaves the header and footer to the caller (the
+        # flow, which draws them as rows around the section's wrap).
+        def generate_section_content(section, section_index, items_binding, indent, edges: true)
           lines = []
 
           header_view = extract_view_name(section['header'])
@@ -515,14 +552,13 @@ module RjuiTools
           auto_tracking = attributes['autoChangeTrackingId'] == true
 
           # Header
-          if header_view
-            lines << "#{indent_str(indent)}<#{header_view} data={#{items_binding}?.sections?.[#{section_index}]?.header || {}} />"
-          end
+          lines << section_edge_line(section, 'header', section_index, items_binding, indent) if header_view && edges
 
           # Cells with map
           if cell_view && items_binding
             cell_cast = config['typescript'] ? " as unknown as #{cell_view}Data" : ''
             source_expr = "(#{items_binding}?.sections?.[#{section_index}]?.cells?.data ?? [])"
+            item_index = paging_item_index(section_index, items_binding)
             # Wrap the key in String(...) so the result always conforms to
             # React's Key type (string | number) even when cellData is typed
             # as a user-defined closed shape. Bracket-indexing cellId avoids
@@ -559,10 +595,10 @@ module RjuiTools
             # wrapper is a key React never sees.
             if (cell_size = cell_size_style)
               lines << "#{indent_str(indent + 2)}<div key={#{key_expr}} className=\"shrink-0 overflow-hidden\"#{cell_size}>"
-              lines << "#{indent_str(indent + 4)}<#{cell_view}#{cell_item_id_attr('cellIndex')} data={cellData#{cell_cast}} />"
+              lines << "#{indent_str(indent + 4)}<#{cell_view}#{cell_item_id_attr(item_index)} data={cellData#{cell_cast}} />"
               lines << "#{indent_str(indent + 2)}</div>"
             else
-              lines << "#{indent_str(indent + 2)}<#{cell_view} key={#{key_expr}}#{cell_item_id_attr('cellIndex')} data={cellData#{cell_cast}} />"
+              lines << "#{indent_str(indent + 2)}<#{cell_view} key={#{key_expr}}#{cell_item_id_attr(item_index)} data={cellData#{cell_cast}} />"
             end
             lines << "#{indent_str(indent)}))}"
             if lanes
@@ -572,11 +608,30 @@ module RjuiTools
           end
 
           # Footer
-          if footer_view
-            lines << "#{indent_str(indent)}<#{footer_view} data={#{items_binding}?.sections?.[#{section_index}]?.footer || {}} />"
-          end
+          lines << section_edge_line(section, 'footer', section_index, items_binding, indent) if footer_view && edges
 
           lines.join("\n")
+        end
+
+        # A paging Collection's item address counts across the sections — a
+        # page's place among all the pages, as sjui's page tag and kjui's
+        # pager index do (4f ruling 2026-09-26, round 7): the cells of the
+        # drawn sections before this one, then its own index. Until
+        # jsonui-cli 1.9.0 each section's items were `<id>_item_0…` again.
+        # Every other route, and a pager's first drawn section, keep
+        # `cellIndex`.
+        def paging_item_index(section_index, items_binding)
+          return 'cellIndex' unless paging?
+
+          before = (attributes['sections'] || []).first(section_index).each_with_index
+                                                 .select { |section, _| section.is_a?(Hash) && section['cell'] }
+                                                 .map { |_, index| "(#{items_binding}?.sections?.[#{index}]?.cells?.data?.length ?? 0)" }
+          before.empty? ? 'cellIndex' : "#{before.join(' + ')} + cellIndex"
+        end
+
+        # A horizontal paging Collection: a pager, one cell per page.
+        def paging?
+          horizontal_collection? && attributes['paging'] == true
         end
 
         # `{collectionId}_item_{index}` identifier for each cell (kjui
