@@ -3854,7 +3854,7 @@
         "none"
       ],
       "default": "lazy",
-      "description": "Outer container shape for the Collection (single-column section path uses CollectionStackView/CollectionStack). Accepts: 'lazy' (default) -> ScrollView+LazyVStack/LazyHStack on iOS, LazyColumn/LazyRow on Android, with virtualized cell rendering. 'eager' -> ScrollView+VStack/HStack on iOS, Column(verticalScroll)/Row(horizontalScroll) on Android — no virtualization, smooth scrolling for heavy cells (markdown / images / attributed text) that suffer from LazyVStack re-evaluation. 'none' -> VStack/HStack only, no scroll container, parent must already be scrollable (for layout:'flow' this is the only value that removes the Collection's own vertical scroll). Bindings (@{prop}) are resolved at runtime via the wrapper's mode parameter so toggles preserve view identity. Sticky headers and paging require 'lazy'."
+      "description": "Outer container shape for the Collection (single-column section path uses CollectionStackView/CollectionStack). Accepts: 'lazy' (default) -> ScrollView+LazyVStack/LazyHStack on iOS, LazyColumn/LazyRow on Android, with virtualized cell rendering. 'eager' -> ScrollView+VStack/HStack on iOS, Column(verticalScroll)/Row(horizontalScroll) on Android — no virtualization, smooth scrolling for heavy cells (markdown / images / attributed text) that suffer from LazyVStack re-evaluation. 'none' -> VStack/HStack only, no scroll container, parent must already be scrollable (for layout:'flow' this is the only value that removes the Collection's own vertical scroll). With no scroll container of its own, a 'none' Collection's scrollTo and defaultScrollAnchor move nothing, on every path - the parent owns the scrolling (declared 4f round 11, jsonui-cli 1.9.0; sjui, rjui and both Dynamic renderers already drew nothing for them). Bindings (@{prop}) are resolved at runtime via the wrapper's mode parameter so toggles preserve view identity. Sticky headers and paging require 'lazy'."
     },
     "columns": {
       "type": [
@@ -4031,7 +4031,7 @@
         "bottom"
       ],
       "default": "bottom",
-      "description": "Anchor point for the scrollTo target. Measured 2026-08-05: ios (sjui collection_converter.rb:1138), web (rjui build_command.rb:768) and the Compose GRID path (kjui collection_component.rb:313) all fall back to bottom, so bottom is the declared default. The Compose LIST path emits no anchor offset unless the attribute is explicitly declared, which lands the target at top - that is a divergence in that one path, not a second default."
+      "description": "Anchor point for the scrollTo target: where the target lands along the scroll axis. top - its leading edge at the viewport's leading edge; center - its middle at the viewport's middle; bottom (the default) - its trailing edge at the viewport's trailing edge. Drawn so by SwiftUI's ScrollViewReader (vertical), the web (scrollCollectionToCell) and, since jsonui-cli 1.9.0, both Compose paths (4f ruling 2026-09-27, round 11): kjui codegen offset the target by the viewport (bottom) or half of it (center), which put the target's top edge at the viewport's bottom edge or middle, and KotlinJsonUI Dynamic landed center and bottom at the top. A reverseLayout list (Compose) lands top and bottom on the edges they name on screen. Measured 2026-08-05: ios (sjui collection_converter.rb:1138), web (rjui build_command.rb:768) and the Compose GRID path all fall back to bottom, so bottom is the declared default."
     },
     "defaultScrollAnchor": {
       "type": "string",
@@ -4040,7 +4040,7 @@
         "center",
         "bottom"
       ],
-      "description": "Initial scroll position anchor (iOS 17+). Sets where the scroll view starts."
+      "description": "Initial scroll position anchor (iOS 17+). Sets where the scroll view starts. On Compose (kjui codegen and KotlinJsonUI Dynamic) it is applied once, when the list first has cells, by scrolling to the middle (center) or last (bottom) CELL counted as scrollTo counts them - across the drawn sections, headers, footers and grid fillers not counted (4f ruling 2026-09-27, round 11); until jsonui-cli 1.9.0 it counted the first data section only and scrolled to that lazy item index."
     },
     "scrollAnimated": {
       "type": "boolean",
