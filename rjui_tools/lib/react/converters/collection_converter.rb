@@ -504,8 +504,16 @@ module RjuiTools
                 content_lines << edge if edge
               end
             elsif items_binding
+              # A pager's pages are its cells, every drawn section in order
+              # (4f ruling 2026-09-26, round 6) — a section's header and footer
+              # are not pages, as sjui's TabView, kjui's HorizontalPager and
+              # both Dynamic pagers draw. Until jsonui-cli 1.9.0 they were
+              # children of the snap container here, each a page of its own
+              # with no `_item_` address.
+              edges = !paging?
               sections.each_with_index do |section, section_index|
-                content_lines << generate_section_content(section, section_index, items_binding, indent)
+                content = generate_section_content(section, section_index, items_binding, indent, edges: edges)
+                content_lines << content unless content.empty?
               end
             end
           else
@@ -605,12 +613,17 @@ module RjuiTools
         # Every other route, and a pager's first drawn section, keep
         # `cellIndex`.
         def paging_item_index(section_index, items_binding)
-          return 'cellIndex' unless horizontal_collection? && attributes['paging'] == true
+          return 'cellIndex' unless paging?
 
           before = (attributes['sections'] || []).first(section_index).each_with_index
                                                  .select { |section, _| section.is_a?(Hash) && section['cell'] }
                                                  .map { |_, index| "(#{items_binding}?.sections?.[#{index}]?.cells?.data?.length ?? 0)" }
           before.empty? ? 'cellIndex' : "#{before.join(' + ')} + cellIndex"
+        end
+
+        # A horizontal paging Collection: a pager, one cell per page.
+        def paging?
+          horizontal_collection? && attributes['paging'] == true
         end
 
         # `{collectionId}_item_{index}` identifier for each cell (kjui
