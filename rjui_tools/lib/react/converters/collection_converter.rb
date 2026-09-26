@@ -515,14 +515,12 @@ module RjuiTools
 
           items_binding = extract_collection_binding(attributes['items'])
 
-          # Header
-          if header_view
-            if items_binding
-              lines << "#{indent_str(indent)}<#{header_view} data={#{items_binding}?.header || {}} />"
-            else
-              lines << "#{indent_str(indent)}<#{header_view} />"
-            end
-          end
+          # Header — its view with no data, as sjui and kjui draw it. It was
+          # handed `<items>?.header`, a field no item source has: the items
+          # here are the cells' array, and CollectionDataSource keeps a header
+          # per section (tsc on a declared array: TS2339; measured on
+          # 46a54fc3, 2026-09-26). The footer likewise.
+          lines << "#{indent_str(indent)}<#{header_view} />" if header_view
 
           # Cells placeholder
           if cell_view
@@ -548,14 +546,8 @@ module RjuiTools
             lines << "#{indent_str(indent)}{/* No cellClasses specified */}"
           end
 
-          # Footer
-          if footer_view
-            if items_binding
-              lines << "#{indent_str(indent)}<#{footer_view} data={#{items_binding}?.footer || {}} />"
-            else
-              lines << "#{indent_str(indent)}<#{footer_view} />"
-            end
-          end
+          # Footer (see the header)
+          lines << "#{indent_str(indent)}<#{footer_view} />" if footer_view
 
           lines.join("\n")
         end

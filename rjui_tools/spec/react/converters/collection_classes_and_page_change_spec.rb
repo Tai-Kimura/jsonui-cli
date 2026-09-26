@@ -69,6 +69,27 @@ RSpec.describe 'rjui Collection: class-list names and the page-change callback' 
     expect(classes).to compile_as_typescript.with_ambient(ambient_for(classes))
   end
 
+  # The header and footer views take no data, as sjui and kjui draw them:
+  # they were handed `data.rows?.header` / `?.footer`, fields no item source
+  # has — the items here are the cells' array (tsc: TS2339 once the data model
+  # says so; measured on 46a54fc3, 2026-09-26).
+  it 'draws the header and footer views without data, around the cells, and type-checks with the rows typed' do
+    header = classes.index('<HeaderCell />')
+    cells = classes.index('<RowCell ')
+    footer = classes.index('<FooterCell />')
+    expect([header, cells, footer]).to all(be_a(Integer)), classes
+    expect(header).to be < cells
+    expect(cells).to be < footer
+    expect(classes).not_to match(/\.(header|footer) \|\|/)
+    typed = ambient_for(classes).sub(
+      /declare module '@\/generated\/data\/ProbeData' \{[^\n]*\}/,
+      "declare module '@/generated/data/ProbeData' { export type ProbeData = { rows?: Record<string, unknown>[] }; " \
+      'export const createProbeData: () => ProbeData; }'
+    )
+    expect(typed).to include('rows?: Record<string, unknown>[]')
+    expect(classes).to compile_as_typescript.with_ambient(typed)
+  end
+
   it 'calls the page-change callback with the page, once per page, and the file type-checks' do
     expect(pager).to include("import { currentCollectionPage } from '@/generated/collectionScroll';")
     expect(pager).to include('data.onPageChange?.(page)').and include('el.dataset.jsonuiPage !== String(page)')
