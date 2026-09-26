@@ -357,7 +357,10 @@ RSpec.describe KjuiTools::Compose::Components::CollectionComponent do
           expect(result).to include('spacing = 8.dp')
         end
 
-        it 'still prefers itemSpacing over lineSpacing in horizontal' do
+        # The horizontal rule (4f ruling, 2026-09-26; jsonui-cli 1.9.0): along
+        # the scroll axis lineSpacing, else itemSpacing — this preferred
+        # itemSpacing (collection_horizontal_spacing_spec.rb).
+        it 'prefers lineSpacing over itemSpacing in horizontal' do
           json_data = {
             'type' => 'Collection',
             'layout' => 'horizontal',
@@ -367,7 +370,7 @@ RSpec.describe KjuiTools::Compose::Components::CollectionComponent do
             'sections' => [{ 'cell' => 'ChipCell' }]
           }
           result = described_class.generate(json_data, 0, required_imports)
-          expect(result).to include('spacing = 12.dp')
+          expect(result).to include('spacing = 8.dp')
         end
 
         it 'vertical CollectionStack still uses lineSpacing first (no regression)' do
