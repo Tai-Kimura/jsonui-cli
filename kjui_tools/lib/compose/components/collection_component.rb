@@ -5,6 +5,7 @@ require_relative '../helpers/modifier_builder'
 require_relative '../../core/normalization'
 require_relative '../../core/string_literals'
 require_relative '../../core/attribute_types'
+require_relative '../../core/enum_spelling'
 
 module KjuiTools
   module Compose
@@ -179,7 +180,7 @@ module KjuiTools
         # routes stay plain, mirroring the dynamic scope.
         def self.chrome_open(json_data, required_imports)
           style = json_data['listStyle'].to_s
-          return nil unless %w[grouped insetgrouped sidebar].include?(style.downcase)
+          return nil unless %w[grouped insetgrouped sidebar].include?(JsonUIShared::EnumSpelling.lowered(style, 'Collection', 'listStyle'))
 
           required_imports&.add(:collection_cell_chrome)
           hide = json_data['hideSeparator'] == true
@@ -236,6 +237,18 @@ module KjuiTools
             json_data = json_data.reject { |key, _| key == 'items' }
           end
 
+          # A section's header / cell / footer names its layout. A node written
+          # inline there is declared nowhere and drawn by no path (4f's ruling,
+          # 1.9.0; the validator names it — inline_layout?): it is set aside,
+          # where its Hash reached `.split` and the build stopped.
+          if json_data['sections'].is_a?(Array)
+            json_data = json_data.merge('sections' => json_data['sections'].map do |section|
+              next section unless section.is_a?(Hash)
+
+              section.reject { |key, value| %w[header cell footer].include?(key) && !value.is_a?(String) }
+            end)
+          end
+
           # Registered here, before the routing: `generate` forks into the
           # grid emitter and the CollectionStack emitter, and the inset can
           # come out of either. Registering inside one of them is how half a
@@ -258,7 +271,7 @@ module KjuiTools
           # 'leftAligned' is an alias spelling of flow (SSoT valueAliases,
           # 2026-08-03 unification) — dynamic folds it via the generated
           # enum, so the raw-reading codegen must accept it too.
-          is_flow = %w[flow leftaligned].include?(layout.to_s.downcase)
+          is_flow = %w[flow leftaligned].include?(JsonUIShared::EnumSpelling.lowered(layout, 'Collection', 'layout'))
 
           # lazy: "none" → emit Row/Column + forEachIndexed, no LazyColumn/LazyVerticalGrid
           # and no verticalScroll/horizontalScroll. Intended for Collections nested
@@ -433,7 +446,7 @@ module KjuiTools
           gravity = json_data['gravity']
           if is_horizontal
             # Horizontal scroll - vertical alignment
-            gravity_alignment = case gravity.to_s.downcase
+            gravity_alignment = case JsonUIShared::EnumSpelling.lowered(gravity, 'Collection', 'gravity')
             when 'center', 'centervertical'
               'Alignment.CenterStart'
             when 'bottom'
@@ -443,7 +456,7 @@ module KjuiTools
             end
           else
             # Vertical scroll - horizontal alignment
-            gravity_alignment = case gravity.to_s.downcase
+            gravity_alignment = case JsonUIShared::EnumSpelling.lowered(gravity, 'Collection', 'gravity')
             when 'center', 'centerhorizontal'
               'Alignment.TopCenter'
             when 'right'
@@ -570,7 +583,7 @@ module KjuiTools
           # background. Emitted after the declared background so the chrome
           # surface reads as the list's inner chrome; the per-cell wrap
           # handles populated lists.
-          chrome_style = json_data['listStyle'].to_s.downcase
+          chrome_style = JsonUIShared::EnumSpelling.lowered(json_data['listStyle'], 'Collection', 'listStyle').to_s
           if %w[grouped insetgrouped sidebar].include?(chrome_style)
             required_imports&.add(:shape)
             required_imports&.add(:material_theme)
@@ -1908,7 +1921,7 @@ module KjuiTools
           # (Collection_hideSeparator/control listStyle-grouped, d=10, runs
           # 31202080745/31234163967). Emitted after the declared background —
           # the chrome is the list's inner surface.
-          chrome_style = json_data['listStyle'].to_s.downcase
+          chrome_style = JsonUIShared::EnumSpelling.lowered(json_data['listStyle'], 'Collection', 'listStyle').to_s
           if %w[grouped insetgrouped sidebar].include?(chrome_style)
             required_imports&.add(:shape)
             required_imports&.add(:material_theme)

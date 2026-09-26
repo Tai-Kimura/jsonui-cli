@@ -182,17 +182,17 @@ RSpec.describe RjuiTools::React::Converters::ImageConverter do
         converter = create_converter({
           'type' => 'Image',
           'src' => '/image.png',
-          'contentMode' => 'aspectFit'
+          'contentMode' => 'AspectFit'
         })
         classes = converter.send(:build_class_name)
         expect(classes).to include('object-contain')
       end
 
-      it 'maps aspectFill to object-cover' do
+      it 'maps AspectFill to object-cover' do
         converter = create_converter({
           'type' => 'Image',
           'src' => '/image.png',
-          'contentMode' => 'aspectFill'
+          'contentMode' => 'AspectFill'
         })
         classes = converter.send(:build_class_name)
         expect(classes).to include('object-cover')
@@ -209,11 +209,11 @@ RSpec.describe RjuiTools::React::Converters::ImageConverter do
         expect(classes).to include('object-center')
       end
 
-      it 'maps scaleToFill to object-fill' do
+      it 'maps ScaleToFill to object-fill' do
         converter = create_converter({
           'type' => 'Image',
           'src' => '/image.png',
-          'contentMode' => 'scaleToFill'
+          'contentMode' => 'ScaleToFill'
         })
         classes = converter.send(:build_class_name)
         expect(classes).to include('object-fill')
@@ -306,9 +306,12 @@ RSpec.describe RjuiTools::React::Converters::ImageConverter do
     end
   end
 
+  # The click is BaseConverter#build_onclick_attr's, as on every type (the
+  # Image's own replaced it and wrote the selector bare, `{handleImageClick}`,
+  # and read `canTap` on no spelling — can_tap_gates_every_tap_spec).
   describe '#build_onclick_attr' do
     context 'with onclick' do
-      it 'adds onClick attribute' do
+      it 'calls the selector on the data' do
         converter = create_converter({
           'type' => 'Image',
           'src' => '/image.png',
@@ -316,12 +319,14 @@ RSpec.describe RjuiTools::React::Converters::ImageConverter do
           'onclick' => 'handleImageClick'
         })
         result = converter.convert
-        expect(result).to include('onClick={handleImageClick}')
+        expect(result).to include('onClick={data.handleImageClick}')
       end
     end
 
+    # `name:` is UIKit's sender mark; the web's sender is the event the
+    # handler is handed. It was `() => handleImageClick(this)`.
     context 'with onclick using colon syntax' do
-      it 'converts to arrow function with this' do
+      it 'hands the handler the event' do
         converter = create_converter({
           'type' => 'Image',
           'src' => '/image.png',
@@ -329,19 +334,19 @@ RSpec.describe RjuiTools::React::Converters::ImageConverter do
           'onclick' => 'handleImageClick:'
         })
         result = converter.convert
-        expect(result).to include('onClick={() => handleImageClick(this)}')
+        expect(result).to include('onClick={data.handleImageClick}')
       end
     end
 
     context 'without canTap' do
-      it 'does not add onClick when canTap is false' do
+      it 'adds onClick (no canTap is no gate)' do
         converter = create_converter({
           'type' => 'Image',
           'src' => '/image.png',
           'onclick' => 'handleImageClick'
         })
         result = converter.convert
-        expect(result).to include('onClick={handleImageClick}')
+        expect(result).to include('onClick={data.handleImageClick}')
       end
     end
   end

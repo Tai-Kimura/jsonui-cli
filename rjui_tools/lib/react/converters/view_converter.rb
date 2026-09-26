@@ -41,13 +41,18 @@ module RjuiTools
           build_style_attr
         end
 
-        #: JsonUI edge -> the physical CSS side. `leading`/`trailing` are logical
-        #: names, but `env()` only exposes physical insets and this codebase is
-        #: LTR throughout (startMargin already becomes a left padding), so they
-        #: map straight to left/right.
-        SAFE_AREA_SIDES = {
-          'top' => 'Top', 'bottom' => 'Bottom',
-          'leading' => 'Left', 'trailing' => 'Right'
+        #: The physical edges. `leading` / `trailing` are the start and end of
+        #: the reading direction (jsonui-cli 1.9.0), not left and right.
+        SAFE_AREA_PHYSICAL = { 'top' => 'Top', 'bottom' => 'Bottom' }.freeze
+        SAFE_AREA_EDGES = %w[top bottom leading trailing].freeze
+
+        #: leading / trailing -> the logical padding, the custom property that
+        #: carries its value, and the physical inset `env()` has for it in each
+        #: reading direction. `env()` only exposes physical insets, so the
+        #: direction is chosen by a class: its `rtl:` form swaps the side.
+        SAFE_AREA_INLINE = {
+          'leading' => { style: 'paddingInlineStart', var: '--jui-safe-start', ltr: 'left', rtl: 'right' },
+          'trailing' => { style: 'paddingInlineEnd', var: '--jui-safe-end', ltr: 'right', rtl: 'left' }
         }.freeze
 
         # safeAreaInsetPositions — which edges reserve the safe area. On iOS the
@@ -59,18 +64,45 @@ module RjuiTools
         # than replaced: an inline style beats the Tailwind class outright, so
         # emitting the inset alone would silently delete the padding the layout
         # asked for.
+        #
+        # top / bottom are inline. leading / trailing are the inline-start /
+        # inline-end padding, whose value is a custom property set by a class
+        # per reading direction (safe_area_direction_classes): the inset of the
+        # physical side that is the start (or end) there, plus the author's own
+        # padding on that side.
         def apply_safe_area_insets
           edges = safe_area_edges
           return if edges.empty?
 
           @dynamic_styles ||= {}
           edges.each do |edge|
-            side = SAFE_AREA_SIDES[edge]
-            inset = "env(safe-area-inset-#{side.downcase})"
-            own = own_padding_px(edge)
-            @dynamic_styles["padding#{side}"] =
-              own.positive? ? "'calc(#{format_px(own)}px + #{inset})'" : "'#{inset}'"
+            if (inline = SAFE_AREA_INLINE[edge])
+              @dynamic_styles[inline[:style]] = "'var(#{inline[:var]})'"
+              next
+            end
+
+            side = SAFE_AREA_PHYSICAL[edge]
+            @dynamic_styles["padding#{side}"] = "'#{inset_with_own(own_padding_px(edge.to_sym, :ltr), edge)}'"
           end
+        end
+
+        # `[--jui-safe-start:…] rtl:[--jui-safe-start:…]` for each of leading /
+        # trailing that is reserved. Spaces are `_` inside a Tailwind arbitrary
+        # value.
+        def safe_area_direction_classes
+          (safe_area_edges & SAFE_AREA_INLINE.keys).flat_map do |edge|
+            inline = SAFE_AREA_INLINE[edge]
+            %i[ltr rtl].map do |dir|
+              side = inline[dir]
+              value = inset_with_own(own_padding_px(side.to_sym, dir), side).tr(' ', '_')
+              "#{dir == :rtl ? 'rtl:' : ''}[#{inline[:var]}:#{value}]"
+            end
+          end
+        end
+
+        def inset_with_own(own, side)
+          inset = "env(safe-area-inset-#{side})"
+          own.positive? ? "calc(#{format_px(own)}px + #{inset})" : inset
         end
 
         # 8.0px reads as a mistake; 8px does not.
@@ -83,31 +115,40 @@ module RjuiTools
           return [] if raw.nil?
 
           named = (raw.is_a?(Array) ? raw : [raw]).map { |e| e.to_s }
-          return SAFE_AREA_SIDES.keys if named.include?('all')
+          return SAFE_AREA_EDGES if named.include?('all')
 
           expanded = named.flat_map { |e| e == 'vertical' ? %w[top bottom] : [e] }
-          expanded.uniq.select { |e| SAFE_AREA_SIDES.key?(e) }
+          expanded.uniq.select { |e| SAFE_AREA_EDGES.include?(e) }
         end
 
-        # The padding this element already has on one edge, in px. Mirrors the
-        # attributes base_converter turns into padding classes.
-        def own_padding_px(edge)
-          index = { 'top' => 0, 'trailing' => 1, 'bottom' => 2, 'leading' => 3 }[edge]
-          per_edge = case edge
-                     when 'top' then attributes['topPadding'] || attributes['paddingTop']
-                     when 'bottom' then attributes['bottomPadding'] || attributes['paddingBottom']
-                     when 'leading' then attributes['paddingStart'] || attributes['leftPadding'] || attributes['paddingLeft']
-                     else attributes['paddingEnd'] || attributes['rightPadding'] || attributes['paddingRight']
+        # The padding this element already has on one PHYSICAL side (:top,
+        # :right, :bottom, :left) in reading direction `dir`, in px. Mirrors the
+        # attributes base_converter turns into padding classes; the logical
+        # spelling is read first, as before — paddingStart is the left side's in
+        # LTR and the right side's in RTL.
+        def own_padding_px(side, dir)
+          per_side = case side
+                     when :top then attributes['topPadding'] || attributes['paddingTop']
+                     when :bottom then attributes['bottomPadding'] || attributes['paddingBottom']
+                     when :left then attributes['leftPadding'] || attributes['paddingLeft']
+                     else attributes['rightPadding'] || attributes['paddingRight']
                      end
-          return per_edge.to_f if per_edge.is_a?(Numeric)
+          start_side = dir == :rtl ? :right : :left
+          logical = case side
+                    when start_side then attributes['paddingStart']
+                    when :left, :right then attributes['paddingEnd']
+                    end
+          per_side = logical || per_side
+          return per_side.to_f if per_side.is_a?(Numeric)
 
+          index = { top: 0, right: 1, bottom: 2, left: 3 }[side]
           all = attributes['padding'] || attributes['paddings']
           case all
           when Numeric then all.to_f
           when Array
             case all.length
             when 1 then all[0].to_f
-            when 2 then (%w[top bottom].include?(edge) ? all[0] : all[1]).to_f
+            when 2 then (%i[top bottom].include?(side) ? all[0] : all[1]).to_f
             when 4 then all[index].to_f
             else 0.0
             end
@@ -189,7 +230,7 @@ module RjuiTools
           # equalSpacing / equalCentering would compute; it says nothing about
           # size, so the size values still apply underneath it (the canon's
           # spacingWins clause).
-          distribution = attributes['distribution'].to_s.downcase
+          distribution = JsonUIShared::EnumSpelling.lowered(attributes['distribution'], 'View', 'distribution').to_s
           if (justify = DISTRIBUTION_JUSTIFY[distribution]) && !attributes['spacing']
             classes << justify
           end
@@ -200,16 +241,11 @@ module RjuiTools
           # scrolling/pinch-zoom before the element's pan/pinch handlers see them.
           classes << 'touch-none' if attributes['onPan'] || attributes['onPinch']
 
-          # Highlight/Tap background effects (using hover/active states)
-          if attributes['tapBackground'] || attributes['highlightBackground']
-            tap_bg = attributes['tapBackground'] || attributes['highlightBackground']
-            bound_class = bound_state_color_class(tap_bg, custom_property: '--jui-tap-bg', prefix: 'active:bg')
-            if bound_class
-              classes << bound_class
-            elsif tap_bg.is_a?(String)
-              classes << "active:#{TailwindMapper.map_color(tap_bg, 'bg')}"
-            end
-          end
+          # tapBackground (the background while pressed) is BaseConverter's,
+          # for every node with a click (pressed_background_classes). This drew
+          # it on a View with no click too, and fell back to highlightBackground
+          # — on a View that is the colour while `highlighted` holds (below),
+          # not while pressed.
 
           # Highlighted state (initial highlight).
           #
@@ -225,8 +261,9 @@ module RjuiTools
             dynamic_styles['backgroundColor'] = color_style_expr(highlight_bg)
           end
 
-          # Transition for smooth effects
-          classes << 'transition-colors' if attributes['tapBackground'] || attributes['highlightBackground']
+          # The reading-direction half of leading / trailing safe area
+          # (apply_safe_area_insets reads the custom properties these set).
+          classes.concat(safe_area_direction_classes)
 
           finalize_classes(classes)
         end

@@ -274,7 +274,7 @@ RSpec.describe KjuiTools::Compose::ComposeBuilder do
         'visibility' => '@{detailPaneVisibility}'
       }
       result = builder.send(:generate_component, json, 0, 'Row')
-      expect(result).to include('if (data.detailPaneVisibility.lowercase() != "gone")')
+      expect(result).to include('if (data.detailPaneVisibility != "gone")')
       expect(result).to include('VisibilityWrapper(')
     end
 

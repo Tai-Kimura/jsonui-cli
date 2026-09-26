@@ -2,6 +2,9 @@
 
 require 'swiftui/views/modifier_helper'
 require 'swiftui/views/modifier_bag'
+require 'swiftui/views/view_converter'
+require 'swiftui/view_registry'
+require 'swiftui/converter_factory'
 
 RSpec.describe SjuiTools::SwiftUI::Views::ModifierHelper do
   let(:helper_class) do
@@ -40,30 +43,6 @@ RSpec.describe SjuiTools::SwiftUI::Views::ModifierHelper do
 
       def add_line(line)
         @generated_lines << line
-      end
-
-      # Simulate the apply_safe_area_insets_to_bag from base_view_converter
-      def apply_safe_area_insets_to_bag
-        positions = @component['safeAreaInsetPositions']
-        return unless positions
-
-        if positions.is_a?(Array)
-          edges = []
-          edges << '.top' if positions.include?('top')
-          edges << '.bottom' if positions.include?('bottom')
-          edges << '.leading' if positions.include?('leading') || positions.include?('left')
-          edges << '.trailing' if positions.include?('trailing') || positions.include?('right')
-
-          if edges.any?
-            @modifier_bag.append(:safe_area_insets, ".ignoresSafeArea(.all, edges: [#{edges.join(', ')}])")
-          end
-        elsif positions == 'all'
-          @modifier_bag.append(:safe_area_insets, ".ignoresSafeArea()")
-        elsif positions == 'none'
-          # default safe area respected
-        else
-          add_line "// safeAreaInsetPositions: #{positions}"
-        end
       end
     end
   end
@@ -122,84 +101,38 @@ RSpec.describe SjuiTools::SwiftUI::Views::ModifierHelper do
     end
   end
 
+  # `apply_safe_area_insets` delegates to BaseViewConverter's
+  # apply_safe_area_insets_to_bag. These examples used to run a copy of an
+  # older implementation written into this spec's host (`.ignoresSafeArea`,
+  # `left` read as leading) — the defect base_view_converter.rb describes —
+  # so they stayed green whatever the method did. They run the real one.
   describe '#apply_safe_area_insets' do
-    let(:helper) { helper_class.new }
-
-    context 'with array of edges' do
-      it 'ignores top and bottom' do
-        helper.component = { 'safeAreaInsetPositions' => ['top', 'bottom'] }
-        helper.send(:apply_safe_area_insets)
-
-        expect(helper.generated_code.first).to include('.ignoresSafeArea(.all, edges:')
-        expect(helper.generated_code.first).to include('.top')
-        expect(helper.generated_code.first).to include('.bottom')
-      end
-
-      it 'handles left as leading' do
-        helper.component = { 'safeAreaInsetPositions' => ['left'] }
-        helper.send(:apply_safe_area_insets)
-
-        expect(helper.generated_code.first).to include('.leading')
-      end
-
-      it 'handles right as trailing' do
-        helper.component = { 'safeAreaInsetPositions' => ['right'] }
-        helper.send(:apply_safe_area_insets)
-
-        expect(helper.generated_code.first).to include('.trailing')
-      end
-
-      it 'handles leading and trailing directly' do
-        helper.component = { 'safeAreaInsetPositions' => ['leading', 'trailing'] }
-        helper.send(:apply_safe_area_insets)
-
-        expect(helper.generated_code.first).to include('.leading')
-        expect(helper.generated_code.first).to include('.trailing')
-      end
+    def lines_for(component)
+      converter = SjuiTools::SwiftUI::Views::ViewConverter.new({ 'type' => 'View' }.merge(component))
+      converter.send(:apply_safe_area_insets)
+      converter.instance_variable_get(:@modifier_bag).to_lines
     end
 
-    context 'with all edges' do
-      it 'ignores all safe area' do
-        helper.component = { 'safeAreaInsetPositions' => 'all' }
-        helper.send(:apply_safe_area_insets)
-
-        expect(helper.generated_code.first).to eq('.ignoresSafeArea()')
-      end
+    it 'reserves the safe area on the named edges' do
+      expect(lines_for('safeAreaInsetPositions' => %w[top bottom])).to eq(['.safeAreaPadding([.top, .bottom])'])
+      expect(lines_for('safeAreaInsetPositions' => %w[leading trailing])).to eq(['.safeAreaPadding([.leading, .trailing])'])
     end
 
-    context 'with none' do
-      it 'does not add modifier' do
-        helper.component = { 'safeAreaInsetPositions' => 'none' }
-        helper.send(:apply_safe_area_insets)
-
-        expect(helper.generated_code).to be_empty
-      end
+    it 'reserves every edge for all' do
+      expect(lines_for('safeAreaInsetPositions' => 'all')).to eq(['.safeAreaPadding(.all)'])
     end
 
-    context 'without safeAreaInsetPositions' do
-      it 'does not add modifier' do
-        helper.component = {}
-        helper.send(:apply_safe_area_insets)
-
-        expect(helper.generated_code).to be_empty
-      end
+    # The items are declared top / bottom / leading / trailing / vertical /
+    # all, as written (1.9.0).
+    it 'selects no edge for a spelling declared nowhere' do
+      expect(lines_for('safeAreaInsetPositions' => %w[left])).to eq([])
+      expect(lines_for('safeAreaInsetPositions' => %w[right horizontal])).to eq([])
     end
 
-    context 'with unknown value' do
-      it 'adds comment' do
-        helper.component = { 'safeAreaInsetPositions' => 'unknown' }
-        helper.send(:apply_safe_area_insets)
-
-        expect(helper.generated_code.first).to include('// safeAreaInsetPositions: unknown')
-      end
-    end
-
-    context 'with empty array' do
-      it 'does not add modifier' do
-        helper.component = { 'safeAreaInsetPositions' => [] }
-        helper.send(:apply_safe_area_insets)
-
-        expect(helper.generated_code).to be_empty
+    it 'adds nothing for none, an empty list, an unknown value or no declaration' do
+      [{ 'safeAreaInsetPositions' => 'none' }, { 'safeAreaInsetPositions' => [] },
+       { 'safeAreaInsetPositions' => 'unknown' }, {}].each do |component|
+        expect(lines_for(component)).to eq([]), component.inspect
       end
     end
   end

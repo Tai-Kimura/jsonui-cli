@@ -12,6 +12,36 @@ public struct LabelAttributes {
         case none = "none"
         case wrapReverse = "wrap-reverse"
         case flow = "Flow"
+        /// Every spelling this attribute accepts, as declared (values and
+        /// valueAliases keys) — case-sensitive.
+        public static let declaredSpellings: [String] = ["none", "wrap-reverse", "Flow", "flow"]
+    }
+
+    public enum InsetEdges {
+        /// The spellings each value of `insetEdges` is declared as — it holds
+        /// one or a list of them, so it has no enum type of its own —
+        /// case-sensitive.
+        public static let declaredSpellings: [String] = ["top", "bottom", "leading", "trailing"]
+    }
+
+    public enum Runs {
+        public enum TextAlign {
+            /// The spellings `runs.textAlign` is declared as — case-sensitive.
+            public static let declaredSpellings: [String] = ["Left", "Right"]
+        }
+        public enum Underline {
+            public enum LineStyle {
+                /// The spellings `runs.underline.lineStyle` is declared as — case-sensitive.
+                public static let declaredSpellings: [String] = ["Single", "None"]
+            }
+        }
+    }
+
+    public enum Underline {
+        public enum LineStyle {
+            /// The spellings `underline.lineStyle` is declared as — case-sensitive.
+            public static let declaredSpellings: [String] = ["Single", "Double", "None"]
+        }
     }
 
     /// Canonical attribute names declared for this component, including the shared `common` set (public metadata contract).
@@ -19,10 +49,13 @@ public struct LabelAttributes {
         "bind",
         "edgeInset",
         "highlightColor",
+        "insetEdges",
         "partialAttributes",
+        "runs",
         "shadow",
         "text",
         "textTransform",
+        "underline",
         "value",
     ])
 
@@ -51,8 +84,14 @@ public struct LabelAttributes {
     /// Highlight color - hex string or color name from colors.json [aliases: hilightColor]
     public let highlightColor: String?
 
+    /// A list of declared edges (item vocabulary).
+    public let insetEdges: [Any]?
+
     /// Partial text styling
     public let partialAttributes: [Any]?
+
+    /// A list of objects with enums inside (nested vocabulary through items).
+    public let runs: [Any]?
 
     /// Label-specific shadow override (object only)
     public let shadow: [String: Any]?
@@ -62,6 +101,9 @@ public struct LabelAttributes {
 
     /// Text transformation (legacy spellings kept for compat) [default: none]
     public let textTransform: AttrEnum<TextTransform>?
+
+    /// An object with an enum inside (nested vocabulary). [accepts: boolean | object]
+    public let underline: Any?
 
     /// Associated value
     public let value: Any?
@@ -73,24 +115,28 @@ public struct LabelAttributes {
         self.bind = AttrCoerce.bindingValue(AttrCoerce.lookup(json, "bind"))
         self.edgeInset = AttrCoerce.number(AttrCoerce.lookup(json, "edgeInset"))
         self.highlightColor = AttrCoerce.string(AttrCoerce.lookup(json, "highlightColor", ["hilightColor"], canonicalOnly: canonicalOnly))
+        self.insetEdges = AttrCoerce.array(AttrCoerce.lookup(json, "insetEdges"))
         self.partialAttributes = AttrCoerce.array(AttrCoerce.lookup(json, "partialAttributes"))
+        self.runs = AttrCoerce.array(AttrCoerce.lookup(json, "runs"))
         self.shadow = AttrCoerce.object(AttrCoerce.lookup(json, "shadow"))
         self.text = AttrCoerce.attrValue(AttrCoerce.lookup(json, "text"), AttrCoerce.string)
         self.textTransform = Self.parseTextTransform(AttrCoerce.lookup(json, "textTransform"))
+        self.underline = AttrCoerce.any(AttrCoerce.lookup(json, "underline"))
         self.value = AttrCoerce.any(AttrCoerce.lookup(json, "value"))
     }
 
     private static func parseTextTransform(_ raw: Any?) -> AttrEnum<TextTransform>? {
         guard let raw = raw, !(raw is NSNull) else { return nil }
         if let s = raw as? String {
-            switch s.lowercased() {
+            switch s {
             case "none": return .known(TextTransform.none)
             case "wrap-reverse": return .known(TextTransform.wrapReverse)
-            case "flow": return .known(TextTransform.flow)
+            case "Flow", "flow": return .known(TextTransform.flow)
             default: break
             }
         }
-        AttrCodegenWarnings.emit("Label.textTransform: unknown enum value '\(raw)'")
+        let near = (raw as? String).flatMap { s in TextTransform.declaredSpellings.first { $0.caseInsensitiveCompare(s) == .orderedSame } }
+        AttrCodegenWarnings.emit("Label.textTransform: unknown enum value '\(raw)'" + (near.map { " — did you mean '\($0)'?" } ?? ""))
         return .unknown(raw)
     }
 }

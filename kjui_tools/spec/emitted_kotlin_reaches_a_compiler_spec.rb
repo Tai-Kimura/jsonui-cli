@@ -158,7 +158,6 @@ RSpec.describe 'emitted Kotlin reaches a compiler' do
     'compose/helpers/resource_resolver_spec.rb' => "p4 — #{UNCONVERTED}",
     'compose/helpers/responsive_helper_spec.rb' => "p4 — #{UNCONVERTED}",
     'compose/helpers/shared_string_advice_spec.rb' => "p4 — #{UNCONVERTED}",
-    'compose/helpers/tint_helper_spec.rb' => "p3 — #{UNCONVERTED}",
     'compose/helpers/visibility_helper_spec.rb' => "p2 — #{UNCONVERTED}",
     'compose/regen_idempotency_spec.rb' => FILE_EFFECTS,
     'compose/unreferenced_generated_view_spec.rb' => "p1 — #{UNCONVERTED}",

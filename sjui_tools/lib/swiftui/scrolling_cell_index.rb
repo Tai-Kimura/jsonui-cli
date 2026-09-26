@@ -3,6 +3,8 @@
 require 'json'
 require 'set'
 require_relative '../core/screen_index'
+require_relative '../core/enum_spelling'
+require_relative 'drawn_types'
 
 module SjuiTools
   module SwiftUI
@@ -72,7 +74,7 @@ module SjuiTools
       end
 
       def self.vertically_scrolling_collection?(node)
-        return false unless node['type'].to_s.casecmp('collection').zero?
+        return false unless DrawnTypes::COLLECTION.include?(node['type'])
         return false if node['lazy'] == 'none'
 
         !horizontal?(node)
@@ -83,7 +85,7 @@ module SjuiTools
       def self.horizontal?(node)
         return true if node['horizontalScroll'] == true
 
-        %w[layout orientation].any? { |key| node[key].to_s.casecmp('horizontal').zero? }
+        %w[layout orientation].any? { |key| JsonUIShared::EnumSpelling.lowered(node[key], 'Collection', key) == 'horizontal' }
       end
 
       # Every layout this Collection instantiates: section-level cell /

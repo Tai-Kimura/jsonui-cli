@@ -14,6 +14,7 @@ require_relative '../tailwind_mapper'
 require_relative '../responsive_helper'
 require_relative '../helpers/string_manager_helper'
 require_relative '../helpers/font_spec_helper'
+require_relative '../../core/enum_spelling'
 
 module RjuiTools
   module React
@@ -321,7 +322,7 @@ module RjuiTools
           # lookup, and no second copy of the vocabulary. `map_text_align`
           # matched on a `case` and silently returned '' for a binding.
           classes << TailwindMapper.map_text_align(
-            bound_enum_style('textAlign', attributes['textAlign'])
+            bound_enum_style('textAlign', attributes['textAlign']), enum_section
           )
 
           # Orientation (flex)
@@ -576,6 +577,8 @@ module RjuiTools
             @dynamic_styles['accentColor'] = color_style_expr(attributes['tintColor'])
           end
 
+          classes.concat(pressed_background_classes)
+
           # Append responsive Tailwind classes (breakpoint-prefixed overrides)
           if @responsive_result && !@responsive_result[:classes].empty?
             classes.concat(@responsive_result[:classes])
@@ -723,6 +726,12 @@ module RjuiTools
         # specs, or a defaulted root). Derived from the converter class
         # name: SliderConverter → 'Slider'. An explicit `type` always
         # wins (SwitchConverter also serves 'Toggle' nodes, etc.).
+        # The section an enum value is judged on: the node's type, as the
+        # validator judges it (`class` keyed nodes: the converter's own).
+        def enum_section
+          json['type'] || fallback_component_type || 'View'
+        end
+
         def fallback_component_type
           name = self.class.name.to_s.split('::').last
           return nil unless name&.end_with?('Converter')
@@ -1114,7 +1123,7 @@ module RjuiTools
 
         # The lowercased SIZE value this container declares, or nil.
         def distribution_size_value
-          key = attributes['distribution'].to_s.downcase
+          key = JsonUIShared::EnumSpelling.lowered(attributes['distribution'], 'View', 'distribution').to_s
           DISTRIBUTION_CHILD_CLASS.key?(key) ? key : nil
         end
 
@@ -1160,7 +1169,7 @@ module RjuiTools
 
         # The declared value, normalised. `regular` when absent.
         def effect_style_key(value = attributes['effectStyle'])
-          normalized = value.to_s.downcase.gsub(/\s+/, '')
+          normalized = JsonUIShared::EnumSpelling.lowered(value, enum_section, 'effectStyle').to_s.gsub(/\s+/, '')
           normalized.empty? ? 'regular' : normalized
         end
 
@@ -1179,7 +1188,7 @@ module RjuiTools
         # The Tailwind classes for a STATIC contentMode. `none` is the only fit
         # that also needs a position, which is why the two tables are separate.
         def content_mode_classes(value)
-          key = value.to_s.downcase
+          key = JsonUIShared::EnumSpelling.lowered(value, enum_section, 'contentMode').to_s
           fit = CONTENT_MODE_OBJECT_FIT.fetch(key, CONTENT_MODE_DEFAULT_FIT)
           position = CONTENT_MODE_OBJECT_POSITION[key]
           position ? "object-#{fit} object-#{position}" : "object-#{fit}"
@@ -1187,7 +1196,7 @@ module RjuiTools
 
         # The same value as the NetworkImageProps `contentMode` union wants.
         def content_mode_prop(value)
-          CONTENT_MODE_OBJECT_FIT.fetch(value.to_s.downcase, CONTENT_MODE_DEFAULT_FIT)
+          CONTENT_MODE_OBJECT_FIT.fetch(JsonUIShared::EnumSpelling.lowered(value, enum_section, 'contentMode').to_s, CONTENT_MODE_DEFAULT_FIT)
         end
 
         # Route a bound contentMode to object-fit / object-position. Returns
@@ -1197,14 +1206,26 @@ module RjuiTools
           expr = bound_value_expr(value)
           return false unless expr
 
-          key = "String(#{expr}).toLowerCase()"
+          key = "String(#{expr})"
           dynamic_styles['objectFit'] = css_assert(
-            "(#{js_object_literal(CONTENT_MODE_OBJECT_FIT)})[#{key}] ?? 'contain'", 'objectFit'
+            "(#{js_object_literal(declared_table(CONTENT_MODE_OBJECT_FIT, 'contentMode'))})[#{key}] ?? 'contain'", 'objectFit'
           )
           dynamic_styles['objectPosition'] = css_assert(
-            "(#{js_object_literal(CONTENT_MODE_OBJECT_POSITION)})[#{key}]", 'objectPosition'
+            "(#{js_object_literal(declared_table(CONTENT_MODE_OBJECT_POSITION, 'contentMode'))})[#{key}]", 'objectPosition'
           )
           true
+        end
+
+        # *map* (keyed lowercase) keyed by each spelling the SSoT declares for
+        # *attribute* on this node, as written — what a run-time lookup of a
+        # bound value matches: a value is its declared spelling, case and all
+        # (1.9.0). Without the definitions, *map* as it is.
+        def declared_table(map, attribute)
+          return map if JsonUIShared::EnumSpelling.definitions.empty?
+
+          JsonUIShared::EnumSpelling.declared(enum_section, attribute)
+                                    .map { |spelling| map.key?(spelling.downcase) ? [spelling, map[spelling.downcase]] : nil }
+                                    .compact.to_h
         end
 
         def js_object_literal(map)
@@ -1298,7 +1319,22 @@ module RjuiTools
           return " onClick={#{handler_expr}}" unless has_binding?(value)
 
           gate = extract_binding_property(value)
-          " onClick={(e) => { if (#{gate}) #{handler_expr}?.(e); }}"
+          # A member path is a handler, called with the event; any other
+          # expression (the selector array's arrow function, the link
+          # action's) takes no argument and is called in parentheses —
+          # `() => { … }?.(e)` does not parse, and `(() => …)(e)` passes an
+          # argument it does not take (TS2554 under --strict).
+          event = click_takes_event?
+          call = handler_expr.match?(/\A[\w.]+\z/) ? "#{handler_expr}?.(#{event ? 'e' : ''})" : "(#{handler_expr})()"
+          " onClick={(#{event ? 'e' : ''}) => { if (#{gate}) #{call}; }}"
+        end
+
+        # Whether the element the click lands on hands its onClick an event:
+        # a DOM element does; a built-in component may declare
+        # `onClick?: () => void` (NetworkImage), where `(e) => …` is not
+        # assignable.
+        def click_takes_event?
+          true
         end
 
         # A control's declared onClick, called from the control's own
@@ -1894,6 +1930,26 @@ module RjuiTools
           jsx_attr_text('data-tag', tag)
         end
 
+        # tapBackground is the background while pressed, on every node with a
+        # tap (onClick) and on a Button (jsonui-cli 1.9.0): `active:bg-*` on a
+        # node build_onclick_attr gives a click. A Button draws its own
+        # (ButtonConverter, where highlightBackground is the same colour's
+        # older spelling). A node without a click is not pressed: nothing.
+        def pressed_background_classes
+          background = attributes['tapBackground']
+          return [] if background.nil? || json['type'] == 'Button' || !click_attached?
+
+          active = bound_state_color_class(background, custom_property: '--jui-tap-bg', prefix: 'active:bg') ||
+                   (background.is_a?(String) ? "active:#{TailwindMapper.map_color(background, 'bg')}" : nil)
+          active ? [active, 'transition-colors'] : []
+        end
+
+        # Whether build_onclick_attr gives this node a click.
+        def click_attached?
+          attr = build_onclick_attr
+          !attr.empty? && !attr.include?('ERROR')
+        end
+
         # Build onClick attribute
         # Rules:
         # - onClick (camelCase) -> binding format only (@{functionName})
@@ -1952,7 +2008,7 @@ module RjuiTools
               # Action object: { "action": "link", "url": "..." }
               if handler['action'] == 'link' && handler['url']
                 url = handler['url']
-                return " onClick={() => window.open(#{JsonUIShared::StringLiterals.ts_single(url)}, '_blank')}"
+                return can_tap_gated_click("() => window.open(#{JsonUIShared::StringLiterals.ts_single(url)}, '_blank')")
               else
                 return ''
               end
@@ -1970,10 +2026,12 @@ module RjuiTools
           end
 
           # Check onclick (lowercase) - selector format only; `""`, `[]` and
-          # `[""]` are no handler.
+          # `[""]` are no handler. `canTap` gates it as it gates onClick (the
+          # tap rule: every spelling of the tap) — this form, and the link
+          # action above, went out ungated, so `canTap: false` still tapped.
           if JsonUIShared::TapAccessibility.handler?(attributes['onclick'])
             expr = onclick_selector_expr(attributes['onclick'])
-            return expr ? " onClick={#{expr}}" : " /* ERROR: onclick requires selector format (string) */"
+            return expr ? can_tap_gated_click(expr) : " /* ERROR: onclick requires selector format (string) */"
           end
 
           ''
@@ -1996,8 +2054,11 @@ module RjuiTools
           elsif is_binding_format?(handler)
             nil
           else
-            # Valid selector: functionName -> data.functionName
-            "data.#{handler}"
+            # Valid selector: functionName -> data.functionName. `name:` is
+            # UIKit's sender mark — sjui calls `data.name?(self)` — and the
+            # web's sender is the event the handler is handed; the colon
+            # emitted `data.name:`, which does not parse.
+            "data.#{handler.to_s.chomp(':')}"
           end
         end
 
@@ -2042,7 +2103,7 @@ module RjuiTools
         # the same ideas (inputMode / enterKeyHint). One copy so the two
         # converters cannot drift.
         def map_input_mode(input)
-          case input&.downcase
+          case JsonUIShared::EnumSpelling.lowered(input, 'TextField', 'input')
           when 'number', 'numberpad'
             'numeric'
           # `signedDecimal` collapses onto `decimal` here for the same reason

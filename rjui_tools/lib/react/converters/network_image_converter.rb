@@ -35,6 +35,13 @@ module RjuiTools
 
         protected
 
+        # The NetworkImage template declares `onClick?: () => void`: a gated
+        # click is `() => { if (gate) … }`, not `(e) => …`, which that prop
+        # does not accept (BaseConverter#can_tap_gated_click).
+        def click_takes_event?
+          false
+        end
+
         def build_class_name
           classes = [super]
 
@@ -102,9 +109,9 @@ module RjuiTools
           # moves into the emitted expression, asserted through the component's
           # own prop type rather than by restating the union.
           if (expr = bound_value_expr(content_mode))
-            lookup = js_object_literal(CONTENT_MODE_OBJECT_FIT)
+            lookup = js_object_literal(declared_table(CONTENT_MODE_OBJECT_FIT, 'contentMode'))
             cast = typescript? ? " as React.ComponentProps<typeof NetworkImage>['contentMode']" : ''
-            return " contentMode={((#{lookup})[String(#{expr}).toLowerCase()] ?? " \
+            return " contentMode={((#{lookup})[String(#{expr})] ?? " \
                    "'#{CONTENT_MODE_DEFAULT_FIT}')#{cast}}"
           end
 
@@ -113,7 +120,7 @@ module RjuiTools
 
         # Native lazy/eager fetch hint, forwarded to the underlying <img>.
         def loading_attr
-          loading = attributes['loading'].to_s.downcase
+          loading = JsonUIShared::EnumSpelling.lowered(attributes['loading'], 'NetworkImage', 'loading').to_s
           return '' unless %w[lazy eager].include?(loading)
 
           " loading=\"#{loading}\""

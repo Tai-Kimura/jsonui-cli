@@ -321,6 +321,9 @@ module SjuiTools
 
           # Apply margins (external spacing)
           apply_margins
+          # opacity / shadow / clipToBounds / offset / hidden, as apply_modifiers
+          # draws them for every other type.
+          apply_common_decorations
 
           # Apply other modifiers
           alpha_value = attr_with_alias('opacity', 'alpha')

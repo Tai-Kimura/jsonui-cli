@@ -616,7 +616,9 @@ module KjuiTools
         def collect_collection_cells(node)
           case node
           when Hash
-            if node['type'].to_s.casecmp('Collection').zero?
+            # The spellings the converter factory draws as a Collection, as
+            # written (type names are case-sensitive, 1.9.0).
+            if %w[Table Collection].include?(node['type'])
               Array(node['sections']).each do |section|
                 next unless section.is_a?(Hash)
                 cell = section['cell']

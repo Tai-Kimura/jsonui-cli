@@ -1,6 +1,9 @@
 # frozen_string_literal: true
 
 require 'swiftui/converter_factory'
+require 'swiftui/views/view_converter'
+require 'swiftui/views/selectbox_converter'
+require 'swiftui/view_registry'
 require_relative '../../support/emitted_swift'
 
 # What a SelectBox's onValueChange is handed, by the parameters the data
@@ -138,5 +141,33 @@ RSpec.describe 'sjui SelectBox: onValueChange is handed what its declared parame
       }
     SWIFT
     expect(swift).to compile_as_swift.with_imports('SwiftUI')
+  end
+end
+
+# An enum value is its declared spelling, case and all (1.9.0): a spelling
+# declared in no case is drawn as no declared value is — the default — on
+# every path, as the validator names it. The two values the ruling names:
+# View.orientation declares `horizontal`, SelectBox.selectItemType `Date`.
+RSpec.describe 'sjui: an enum value is its declared spelling, case and all' do
+  before(:all) { SjuiTools::SwiftUI::Views::BaseViewConverter.validation_enabled = false }
+  after(:all) { SjuiTools::SwiftUI::Views::BaseViewConverter.validation_enabled = true }
+
+  def view(orientation)
+    kids = [{ 'type' => 'Label', 'text' => 'a' }, { 'type' => 'Label', 'text' => 'b' }]
+    SjuiTools::SwiftUI::Views::ViewConverter.new('type' => 'View', 'orientation' => orientation, 'child' => kids).convert
+  end
+
+  def select_box(item_type)
+    SjuiTools::SwiftUI::Views::SelectBoxConverter.new('type' => 'SelectBox', 'selectItemType' => item_type).convert
+  end
+
+  it "orientation: 'horizontal' lays the children out in a row; 'Horizontal' does not" do
+    expect(view('horizontal')).to include('HStack(')
+    expect(view('Horizontal')).not_to include('HStack(')
+  end
+
+  it "selectItemType: 'Date' is a date picker; 'date' is not" do
+    expect(select_box('Date')).to include('selectItemType: .date')
+    expect(select_box('date')).not_to include('selectItemType: .date')
   end
 end

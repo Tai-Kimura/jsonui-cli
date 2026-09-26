@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require_relative '../../core/responsive_resolver'
+require_relative '../binding/binding_expression'
 
 module SjuiTools
   module SwiftUI
@@ -57,6 +58,47 @@ module SjuiTools
         # Build the Swift condition expression for a size class key.
         # @param size_class [String] e.g. "regular", "landscape", "regular-landscape"
         # @return [String] Swift condition expression
+        # A value the PARENT draws for a child — the VisibilityWrapper
+        # argument, the ZStack offset — as one Swift expression over the
+        # conditions the child's own function branches on (the block answers
+        # it from one branch's merged attributes). The parent draws these
+        # outside the child's function, from the child's attributes, so an
+        # override that only reached the function was dropped: `visibility`
+        # on every type, the margins under a ZStack (ticket
+        # sjui-codegen-drops-a-leafs-responsive). One value when every
+        # branch agrees.
+        def self.per_size_class(component)
+          branches = JsonUIShared::ResponsiveResolver.build_branches(component)
+          values = branches.map { |b| [b[:size_class] && size_class_condition(b[:size_class]), yield(b[:attrs])] }
+          return values.last[1] if values.map(&:last).uniq.size == 1
+
+          default = values.find { |condition, _| condition.nil? }&.last || values.last[1]
+          values.reject { |condition, _| condition.nil? }.reverse.reduce(default) do |otherwise, (condition, value)|
+            "(#{condition} ? #{value} : #{otherwise})"
+          end
+        end
+
+        # True when a size class of *component* overrides any of *keys*.
+        def self.overrides_any?(component, keys)
+          responsive = component.is_a?(Hash) && component['responsive']
+          responsive.is_a?(Hash) && responsive.values.any? { |o| o.is_a?(Hash) && (o.keys & keys).any? }
+        end
+
+        # Whether the parent wraps *child* in a VisibilityWrapper: it declares
+        # `visibility`, or a size class overrides it.
+        def self.visibility_declared?(child)
+          child.is_a?(Hash) && (child['visibility'] || overrides_any?(child, %w[visibility]))
+        end
+
+        # The VisibilityWrapper argument (`String?`) for *child*, per size
+        # class when one overrides it.
+        def self.visibility_param(child)
+          param = ->(value) { SwiftUI::Binding::BindingExpression.swift_visibility_param(value) }
+          return param.(child['visibility']) unless overrides_any?(child, %w[visibility])
+
+          per_size_class(child) { |attrs| "(#{param.(attrs['visibility'] || 'visible')} as String?)" }
+        end
+
         def self.size_class_condition(size_class)
           parsed = JsonUIShared::ResponsiveResolver.parse_size_class(size_class)
           conditions = []
@@ -191,7 +233,11 @@ module SjuiTools
         # @param view_registry [ViewRegistry] view registry
         # @param binding_registry [BindingHandlerRegistry] binding registry
         # @return [String] Swift function code
-        def self.generate_leaf_function(func_name, component, converter_factory, indent_level, action_manager, view_registry, binding_registry)
+        # `state_variables`, when given, collects each branch's view-local
+        # state declarations — the branch converters are this function's
+        # own, so their state reached no parent and a stateful node (a
+        # Switch's IsOn) referred to a state nothing declared.
+        def self.generate_leaf_function(func_name, component, converter_factory, indent_level, action_manager, view_registry, binding_registry, state_variables = nil)
           branches = JsonUIShared::ResponsiveResolver.build_branches(component)
           lines = []
           lines << "    @ViewBuilder private func #{func_name}() -> some View {"
@@ -235,6 +281,9 @@ module SjuiTools
             converter = converter_factory.create_converter(branch_component, 3, action_manager, converter_factory, view_registry)
             if converter
               branch_code = converter.convert
+              if state_variables && converter.respond_to?(:state_variables) && converter.state_variables
+                state_variables.concat(converter.state_variables)
+              end
               branch_lines = branch_code.split("\n")
               branch_indent = condition || index > 0 ? "    " : ""
               branch_lines.each do |bl|

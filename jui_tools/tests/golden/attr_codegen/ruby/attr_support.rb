@@ -151,16 +151,19 @@ module JsonUI
         raw.is_a?(Array) ? raw : nil
       end
 
-      # Lenient enum matching: values match the declared set
-      # case-insensitively; unknown values (including non-strings) are
-      # reported through AttrWarnings and PASSED THROUGH raw — codegen
-      # consumers must never lose author input to a definitions gap.
-      # The raw value is Ruby's open-enum representation.
+      # Lenient enum matching: a value is its declared spelling, case and
+      # all (4f's ruling, 1.9.0 — it matched case-insensitively); unknown
+      # values (including non-strings) are reported through AttrWarnings —
+      # with the declared spelling one differs from in case only — and
+      # PASSED THROUGH raw: codegen consumers must never lose author input
+      # to a definitions gap. The raw value is Ruby's open-enum
+      # representation.
       def self.enum(raw, allowed, context)
-        return raw if raw.is_a?(String) && allowed.any? { |v| v.casecmp?(raw) }
+        return raw if raw.is_a?(String) && allowed.include?(raw)
 
         shown = raw.is_a?(String) ? raw : raw.inspect
-        AttrWarnings.emit("#{context}: unknown enum value '#{shown}'")
+        near = raw.is_a?(String) ? allowed.find { |v| v.casecmp?(raw) } : nil
+        AttrWarnings.emit("#{context}: unknown enum value '#{shown}'#{near ? " — did you mean '#{near}'?" : ''}")
         raw
       end
 

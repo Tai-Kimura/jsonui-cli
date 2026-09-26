@@ -52,12 +52,15 @@ RSpec.describe SjuiTools::SwiftUI::Views::IndicatorConverter do
         }
       end
 
-      it 'handles capitalized style' do
+      # indicatorStyle declares large, in lowercase: 'Large' is declared in
+      # no case — the normalizer leaves it as a style file's name — so it
+      # draws the default size (1.9.0).
+      it 'draws the default size for a spelling declared in no case' do
         converter = described_class.new(component)
         code = converter.convert
 
         expect(code).to include('.progressViewStyle(CircularProgressViewStyle())')
-        expect(code).to include('.scaleEffect(1.5)')
+        expect(code).not_to include('.scaleEffect(')
       end
     end
 

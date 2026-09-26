@@ -44,6 +44,10 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[2]
 METADATA = REPO_ROOT / "shared" / "core" / "component_metadata.json"
 SJUI_FACTORY = REPO_ROOT / "sjui_tools" / "lib" / "swiftui" / "converter_factory.rb"
+#: The factory's `when *DrawnTypes::NAME` reads its spellings from here
+#: (the passes that look for a Collection / ScrollView before drawing read
+#: the same sets).
+SJUI_DRAWN_TYPES = REPO_ROOT / "sjui_tools" / "lib" / "swiftui" / "drawn_types.rb"
 KJUI_BUILDER = REPO_ROOT / "kjui_tools" / "lib" / "compose" / "compose_builder.rb"
 RJUI_GENERATOR = REPO_ROOT / "rjui_tools" / "lib" / "react" / "react_generator.rb"
 
@@ -150,7 +154,15 @@ def sjui_codegen_types() -> set[str]:
             break
         if stripped.startswith("when "):
             types.update(re.findall(r"'([^']+)'", stripped))
+            for name in re.findall(r"\*DrawnTypes::(\w+)", stripped):
+                types.update(sjui_drawn_types()[name])
     return types
+
+
+def sjui_drawn_types() -> dict[str, list[str]]:
+    """``NAME = %w[A B].freeze`` in drawn_types.rb, by name."""
+    text = SJUI_DRAWN_TYPES.read_text(encoding="utf-8")
+    return {name: words.split() for name, words in re.findall(r"^\s*(\w+) = %w\[([^\]]*)\]", text, re.M)}
 
 
 def kjui_codegen_types() -> set[str]:

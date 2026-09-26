@@ -71,6 +71,19 @@ class Attribute:
     #: Collection.layout ``LeftAligned`` → ``flow``).
     value_aliases: tuple[tuple[str, str], ...] = ()
     dimension_keywords: tuple[str, ...] = ()
+    #: The declared spellings of the values an attribute HOLDS when it has no
+    #: enum type of its own: a ``string | array`` union with an ``enum``
+    #: (``gravity`` — one value or a list of them) or an ``array`` whose
+    #: ``items`` declare one (``safeAreaInsetPositions``). Emitters publish
+    #: them as ``<Name>.declaredSpellings`` beside the enums, so the
+    #: hand-written comparisons read the declaration, case and all.
+    element_spellings: tuple[str, ...] = ()
+    #: The enums INSIDE an object-typed attribute — its properties', and its
+    #: array items' properties' — as ``((path…), spellings)`` relative to the
+    #: attribute: ``underline`` → ``(("lineStyle",), …)``, ``partialAttributes``
+    #: → ``(("underline", "lineStyle"), …)``. Emitters publish them as nested
+    #: ``<Parent>.<Name>.declaredSpellings``, beside the enums.
+    nested_spellings: tuple[tuple[tuple[str, ...], tuple[str, ...]], ...] = ()
     raw_kinds: tuple[str, ...] = ()
     aliases: tuple[str, ...] = ()
     required: bool = False
@@ -277,6 +290,8 @@ def classify_attr(
     value_aliases = _resolve_value_aliases(entry, enum_values, f"{component}.{name}")
 
     return Attribute(
+        element_spellings=_resolve_element_spellings(entry, kind),
+        nested_spellings=_resolve_nested_spellings(entry),
         name=name,
         component=component,
         kind=kind,
@@ -293,6 +308,43 @@ def classify_attr(
         binding_direction=str(entry.get("binding_direction") or ""),
         description=_clean_text(entry.get("description")),
     )
+
+
+def _resolve_element_spellings(entry: dict, kind: AttrKind) -> tuple[str, ...]:
+    """The element vocabulary of an attribute with no enum type of its own."""
+    if kind not in (AttrKind.RAW, AttrKind.ARRAY):
+        return ()
+    values = entry.get("enum")
+    if not isinstance(values, list):
+        items = entry.get("items")
+        values = items.get("enum") if isinstance(items, dict) else None
+    if isinstance(values, list) and values and all(isinstance(v, str) for v in values):
+        return tuple(values)
+    return ()
+
+
+def _resolve_nested_spellings(entry: dict) -> tuple[tuple[tuple[str, ...], tuple[str, ...]], ...]:
+    """The enums declared inside an object-typed attribute, by property path."""
+    found: list[tuple[tuple[str, ...], tuple[str, ...]]] = []
+
+    def walk(node: Any, path: tuple[str, ...]) -> None:
+        if not isinstance(node, dict):
+            return
+        values = node.get("enum")
+        if path and isinstance(values, list) and values and all(isinstance(v, str) for v in values):
+            aliases = node.get("valueAliases") if isinstance(node.get("valueAliases"), dict) else {}
+            spellings = list(values) + [a for a in aliases if a not in values]
+            found.append((path, tuple(spellings)))
+        properties = node.get("properties")
+        if isinstance(properties, dict):
+            for name, child in properties.items():
+                walk(child, path + (name,))
+        items = node.get("items")
+        if isinstance(items, dict):
+            walk(items, path)
+
+    walk(entry, ())
+    return tuple(found)
 
 
 def _resolve_value_aliases(

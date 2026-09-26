@@ -22,14 +22,20 @@ module JsonUI
         { name: 'edgeInset', kind: :number }.freeze,
         # Highlight color - hex string or color name from colors.json
         { name: 'highlightColor', kind: :string, aliases: ['hilightColor'].freeze }.freeze,
+        # A list of declared edges (item vocabulary).
+        { name: 'insetEdges', kind: :array }.freeze,
         # Partial text styling
         { name: 'partialAttributes', kind: :array }.freeze,
+        # A list of objects with enums inside (nested vocabulary through items).
+        { name: 'runs', kind: :array }.freeze,
         # Label-specific shadow override (object only)
         { name: 'shadow', kind: :object }.freeze,
         # Text content (supports data binding)
         { name: 'text', kind: :string, bindable: true }.freeze,
         # Text transformation (legacy spellings kept for compat) [default: none]
         { name: 'textTransform', kind: :enum, values: ['none', 'wrap-reverse', 'Flow', 'flow'].freeze }.freeze,
+        # An object with an enum inside (nested vocabulary). [accepts: boolean | object]
+        { name: 'underline', kind: :raw }.freeze,
         # Associated value
         { name: 'value', kind: :any }.freeze,
       ].freeze

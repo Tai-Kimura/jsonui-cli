@@ -34,8 +34,11 @@ module SjuiTools
           # `CircularProgressViewStyle()`, so the attribute emitted one
           # constant whatever you wrote (`jui conformance codegen-effect` C2).
           #
-          # `style` keeps the shape reading: it is the separate spelling that
-          # carries linear/circular and is not the same attribute.
+          # `style` is not read here: it is the style file's name
+          # (common.style), applied by the style loader, and Progress declares
+          # no shape — a determinate ProgressView is a bar. Reading it as the
+          # shape drew any styled Progress (a style named anything but
+          # `linear`) as a spinner.
           #
           # `.scaleEffect`, not `.controlSize`. `controlSize` is the API a
           # size vocabulary reads like it wants, and the 3PF round-3 measure
@@ -53,12 +56,6 @@ module SjuiTools
           # PREFERRED_PRIMARY_CASE).
           scale = indicator_size_scale(@component['indicatorStyle'])
           add_modifier_line ".scaleEffect(#{scale})" if scale != 1.0
-
-          style = @component['style']
-          if style
-            swift_style = style.to_s.downcase == 'linear' ? 'LinearProgressViewStyle()' : 'CircularProgressViewStyle()'
-            add_modifier_line ".progressViewStyle(#{swift_style})"
-          end
 
           # progressTintColor — `color` and `tintColor` are the Indicator/UIKit
           # spellings of the same accent; the specific name wins.

@@ -380,7 +380,7 @@ module SjuiTools
             if parent_orientation == 'horizontal'
               # In horizontal stack with weight - fill width
               # Add alignment based on textAlign
-              frame_alignment = case @component['textAlign'].to_s.downcase
+              frame_alignment = case JsonUIShared::EnumSpelling.lowered(@component['textAlign'], 'Label', 'textAlign')
               when 'center'
                 '.center'
               when 'right', 'trailing'
@@ -407,10 +407,10 @@ module SjuiTools
 
           # Apply background and corner radius AFTER padding
           # This ensures the background includes the padding area
-          if @component['background']
-            color = get_swiftui_color(@component['background'])
-            @modifier_bag.register(:background, ".background(#{color})")
-          end
+          # A pressed colour (a Label with a tap and a tapBackground) replaces
+          # it while the Label is pressed (background_line).
+          line = background_line(@component['background'] ? get_swiftui_color(@component['background']) : nil)
+          @modifier_bag.register(:background, line) if line
 
           if @component['cornerRadius']
             @modifier_bag.register(:corner_radius, ".cornerRadius(#{@component['cornerRadius'].to_i})")
@@ -431,6 +431,9 @@ module SjuiTools
 
           # Apply margins (external spacing)
           apply_margins
+          # opacity / shadow / clipToBounds / offset / hidden, as apply_modifiers
+          # draws them for every other type.
+          apply_common_decorations
 
           # Opacity (alpha/opacity)
           alpha_value = attr_with_alias('opacity', 'alpha')
@@ -609,7 +612,7 @@ module SjuiTools
             fields << "lineHeightMultiple: #{attrs['lineHeightMultiple'].to_f}"
           end
           if attrs['textAlign']
-            alignment = text_alignment_to_swiftui(attrs['textAlign'])
+            alignment = text_alignment_to_swiftui(attrs['textAlign'], %w[highlightAttributes textAlign])
             fields << "textAlignment: #{alignment}" if alignment
           end
           fields

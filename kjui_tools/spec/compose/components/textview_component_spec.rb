@@ -89,10 +89,13 @@ RSpec.describe KjuiTools::Compose::Components::TextViewComponent do
       expect(result).to include('backgroundColor =')
     end
 
-    it 'generates TextField with highlightBackground' do
+    # highlightBackground is the colour while `highlighted` holds, which only a
+    # View declares (jsonui-cli 1.9.0) — not the focused background it was
+    # read as here.
+    it 'does not read highlightBackground as the focused background' do
       json_data = { 'type' => 'TextView', 'highlightBackground' => '#007AFF' }
       result = described_class.generate(json_data, 0, required_imports)
-      expect(result).to include('highlightBackgroundColor =')
+      expect(result).not_to include('highlightBackgroundColor')
     end
 
     it 'generates TextField with borderColor' do
@@ -626,14 +629,17 @@ RSpec.describe KjuiTools::Compose::Components::TextViewComponent, 'hintAttribute
       expect(emit('signedDecimal')).to include('keyboardType = KeyboardType.Text')
     end
 
-    it 'degrades the keyboardType spelling too, not just input' do
+    # TextView.keyboardType declares none of the four floored values (they
+    # are TextView.input's), so a floored spelling written there is declared
+    # in no case and sets no keyboard — under the floor or not (1.9.0).
+    it 'reads the floored values on input only: keyboardType declares none of them' do
       declare('1.11.2')
       expect(emit(nil)).not_to include('keyboardType =')
       declare('1.11.2')
       result = described_class.generate(
         { 'type' => 'TextView', 'keyboardType' => 'datetime' }, 0, Set.new
       )
-      expect(result).to include('keyboardType = KeyboardType.Text')
+      expect(result).not_to include('keyboardType =')
     end
   end
 end

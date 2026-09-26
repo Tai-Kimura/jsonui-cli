@@ -17,14 +17,20 @@ data class LabelAttributes(
     val edgeInset: Double? = null,
     /** Highlight color - hex string or color name from colors.json [aliases: hilightColor] */
     val highlightColor: String? = null,
+    /** A list of declared edges (item vocabulary). */
+    val insetEdges: List<Any?>? = null,
     /** Partial text styling */
     val partialAttributes: List<Any?>? = null,
+    /** A list of objects with enums inside (nested vocabulary through items). */
+    val runs: List<Any?>? = null,
     /** Label-specific shadow override (object only) */
     val shadow: Map<String, Any?>? = null,
     /** Text content (supports data binding) */
     val text: AttrValue<String>? = null,
     /** Text transformation (legacy spellings kept for compat) [default: none] */
     val textTransform: AttrEnum<TextTransform>? = null,
+    /** An object with an enum inside (nested vocabulary). [accepts: boolean | object] */
+    val underline: Any? = null,
     /** Associated value */
     val value: Any? = null,
 ) {
@@ -34,13 +40,41 @@ data class LabelAttributes(
         FLOW("Flow");
 
         companion object {
-            /** Case-insensitive match against the declared values. */
-            fun from(raw: String): TextTransform? = when (raw.lowercase()) {
+            /** Every spelling this attribute accepts, as declared (values and valueAliases keys) — case-sensitive. */
+            val declaredSpellings: List<String> = listOf("none", "wrap-reverse", "Flow", "flow")
+
+            /** The declared spelling, case and all (4f's ruling, 1.9.0). */
+            fun from(raw: String): TextTransform? = when (raw) {
                 "none" -> NONE
                 "wrap-reverse" -> WRAP_REVERSE
-                "flow" -> FLOW
+                "Flow", "flow" -> FLOW
                 else -> null
             }
+        }
+    }
+
+    object InsetEdges {
+        /** The spellings each value of `insetEdges` is declared as — it holds one or a list of them, so it has no enum type of its own — case-sensitive. */
+        val declaredSpellings: List<String> = listOf("top", "bottom", "leading", "trailing")
+    }
+
+    object Runs {
+        object TextAlign {
+            /** The spellings `runs.textAlign` is declared as — case-sensitive. */
+            val declaredSpellings: List<String> = listOf("Left", "Right")
+        }
+        object Underline {
+            object LineStyle {
+                /** The spellings `runs.underline.lineStyle` is declared as — case-sensitive. */
+                val declaredSpellings: List<String> = listOf("Single", "None")
+            }
+        }
+    }
+
+    object Underline {
+        object LineStyle {
+            /** The spellings `underline.lineStyle` is declared as — case-sensitive. */
+            val declaredSpellings: List<String> = listOf("Single", "Double", "None")
         }
     }
 
@@ -53,10 +87,13 @@ data class LabelAttributes(
             "bind",
             "edgeInset",
             "highlightColor",
+            "insetEdges",
             "partialAttributes",
+            "runs",
             "shadow",
             "text",
             "textTransform",
+            "underline",
             "value",
         )
 
@@ -83,10 +120,13 @@ data class LabelAttributes(
             bind = AttrCoerce.bindingValue(AttrCoerce.lookup(json, "bind")),
             edgeInset = AttrCoerce.number(AttrCoerce.lookup(json, "edgeInset")),
             highlightColor = AttrCoerce.string(AttrCoerce.lookup(json, "highlightColor", listOf("hilightColor"), canonicalOnly)),
+            insetEdges = AttrCoerce.array(AttrCoerce.lookup(json, "insetEdges")),
             partialAttributes = AttrCoerce.array(AttrCoerce.lookup(json, "partialAttributes")),
+            runs = AttrCoerce.array(AttrCoerce.lookup(json, "runs")),
             shadow = AttrCoerce.obj(AttrCoerce.lookup(json, "shadow")),
             text = AttrCoerce.attrValue(AttrCoerce.lookup(json, "text")) { AttrCoerce.string(it) },
             textTransform = parseTextTransform(AttrCoerce.lookup(json, "textTransform")),
+            underline = AttrCoerce.lookup(json, "underline"),
             value = AttrCoerce.lookup(json, "value"),
         )
 
@@ -95,7 +135,8 @@ data class LabelAttributes(
             (raw as? String)?.let { s ->
                 TextTransform.from(s)?.let { return AttrEnum.Known(it) }
             }
-            AttrWarnings.emit("Label.textTransform: unknown enum value '$raw'")
+            val near = (raw as? String)?.let { s -> TextTransform.declaredSpellings.firstOrNull { it.equals(s, ignoreCase = true) } }
+            AttrWarnings.emit("Label.textTransform: unknown enum value '$raw'" + (near?.let { " — did you mean '$it'?" } ?: ""))
             return AttrEnum.Unknown(raw)
         }
     }

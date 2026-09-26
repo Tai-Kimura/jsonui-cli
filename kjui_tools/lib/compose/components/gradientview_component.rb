@@ -2,6 +2,7 @@
 
 require_relative '../helpers/modifier_builder'
 require_relative '../helpers/resource_resolver'
+require_relative '../../core/enum_spelling'
 
 module KjuiTools
   module Compose
@@ -40,10 +41,10 @@ module KjuiTools
           colors = ['#000000', '#FFFFFF'] unless colors.is_a?(Array) && !colors.empty?
 
           # Direction: the DECLARED attr is `gradientDirection`
-          # (enum Vertical/Horizontal/Oblique — matched case-insensitively
-          # like sjui/rjui); 'orientation' and startPoint/endPoint stay as
+          # (enum Vertical/Horizontal/Oblique — as declared, case and all:
+          # JsonUIShared::EnumSpelling); 'orientation' and startPoint/endPoint stay as
           # legacy fallbacks.
-          gradient_type = case json_data['gradientDirection'].to_s.downcase
+          gradient_type = case JsonUIShared::EnumSpelling.lowered(json_data['gradientDirection'], 'GradientView', 'gradientDirection')
           when 'horizontal'
             'horizontalGradient'
           when 'oblique'

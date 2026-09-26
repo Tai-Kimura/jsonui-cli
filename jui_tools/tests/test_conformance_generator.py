@@ -662,6 +662,37 @@ class ConformanceGeneratorRealDefinitionsTest(unittest.TestCase):
                 self.assertIn("vars", fixture["state"], fixture["id"])
                 self.assertIn("handlers", fixture["state"], fixture["id"])
 
+    def test_tapbackground_is_also_drawn_on_a_view_with_a_tap(self):
+        """tapBackground's second host (rules.COMMON_EXTRA_HOSTS, ruling (a),
+        jsonui-cli 1.9.0): a View with a tap. Its binding case also gates the
+        tap with a bound canTap, and the handler and the gate are declared, so
+        the codegen hosts compile both forms of the pressed stage. The Button
+        host's fixtures do not change."""
+        common = self.out_dir / "fixtures" / "common"
+
+        def load(name):
+            return json.loads((common / f"{name}.layout.json").read_text(encoding="utf-8"))
+
+        def target(layout):
+            return next(c for c in layout["child"] if c.get("id") == rules.TARGET_ID)
+
+        static, bound = load("tapBackground_on_View__static"), load("tapBackground_on_View__binding")
+        self.assertEqual(target(static)["type"], "View")
+        self.assertEqual(target(static)["onClick"], "@{conformanceTap}")
+        self.assertNotIn("canTap", target(static))
+        self.assertEqual(target(bound)["canTap"], "@{conformanceTapGate}")
+        self.assertEqual(target(bound)["tapBackground"], "@{boundTapBackground}")
+        data = {e["name"]: e for e in bound["data"]}
+        # A handler is declared with no default; the codegens emit it as an
+        # optional callback member.
+        self.assertEqual(data["conformanceTap"], {"name": "conformanceTap", "class": "() -> Void"})
+        self.assertEqual(data["conformanceTapGate"]["class"], "Boolean")
+
+        button = target(load("tapBackground__binding"))
+        self.assertEqual(button["type"], "Button")
+        self.assertNotIn("canTap", button)
+        self.assertNotIn("onClick", button)
+
     def test_unique_ids_and_case_insensitive_paths(self):
         ids = [f["id"] for f in self.manifest["fixtures"]]
         self.assertEqual(len(ids), len(set(ids)))

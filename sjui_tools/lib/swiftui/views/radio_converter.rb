@@ -85,6 +85,13 @@ module SjuiTools
                   end
                   add_line "}"
                   add_line "Text(#{item})"
+                  # fontSize / fontColor are declared on Radio and read by the
+                  # single radio's label below; the options' labels drew
+                  # neither — SwiftUI's default font and colour.
+                  apply_font_modifiers(@component, self)
+                  if @component['fontColor']
+                    add_modifier_line ".foregroundColor(#{get_swiftui_color(@component['fontColor'])})"
+                  end
                 end
                 add_line "}"
               end

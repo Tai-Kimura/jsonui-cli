@@ -13,9 +13,11 @@ require_relative '../binding/binding_handler_registry'
 require_relative '../../core/attribute_validator'
 require_relative '../../core/tap_accessibility'
 require_relative '../../core/layout_path'
+require_relative '../../core/enum_spelling'
 require_relative '../../core/binding_validator_core'
 require_relative '../../core/string_literals'
 require_relative '../helpers/string_manager_helper'
+require_relative 'responsive_helper'
 
 module SjuiTools
   module SwiftUI
@@ -617,6 +619,71 @@ module SjuiTools
         end
 
         # 共通のモディファイア適用メソッド
+        # The decoration stages a node draws from its common attributes —
+        # opacity (alpha), shadow, clipToBounds, the post-layout offset and
+        # `hidden` — in one place. apply_modifiers calls it, and so do the
+        # converters that assemble their own chain (Button, Label, TextView,
+        # SelectBox): Button drew none of the five, and Label / TextView /
+        # SelectBox no shadow, clip or offset, while every other type and
+        # the other paths draw them. A stage the converter registered itself
+        # is kept (register_unless_exists).
+        def apply_common_decorations
+          # tintColor is the accent of the operable parts — a control's
+          # accent, a link's colour, the cursor (4f's ruling, 1.9.0) — never
+          # the text colour: SwiftUI's `.tint`. It was drawn only through
+          # apply_modifiers, so a Label's links, a TextView's cursor, a
+          # Button and a SelectBox never took it (a bound one on a Label did,
+          # through apply_binding_modifiers). A TextField's caret tint is its
+          # own and is kept.
+          if @component['tintColor']
+            @modifier_bag.register_unless_exists(:tint_color, ".tint(#{get_swiftui_color(@component['tintColor'])})")
+          end
+
+          alpha_value = attr_with_alias('opacity', 'alpha')
+          if alpha_value
+            if is_binding?(alpha_value)
+              @modifier_bag.register_unless_exists(:opacity, ".opacity(#{binding_data_expr(alpha_value)})")
+            else
+              @modifier_bag.register_unless_exists(:opacity, ".opacity(#{alpha_value})")
+            end
+          end
+
+          # 影
+          if @component['shadow']
+            shadow_code = build_shadow_modifier(@component['shadow'])
+            @modifier_bag.register_unless_exists(:shadow, shadow_code) if shadow_code
+          end
+
+          # クリップ
+          # A binding is truthy in Ruby, so this used to clip every
+          # declaration that used one regardless of the property's value. The
+          # bound form is ViewBindingHandler's now — SwiftJsonUI's
+          # `clipToBounds(_:)` takes the flag as a PARAMETER, so it resolves
+          # at render time instead of freezing at whatever the generator saw.
+          # A literal keeps emitting `.clipped()`: same view, same bytes.
+          if @component['clipToBounds'] == true || @component['clipToBounds'] == 'true'
+            @modifier_bag.register_unless_exists(:clip_to_bounds, ".clipped()")
+          end
+
+          # オフセット（offsetX, offsetY）
+          register_offset_modifier
+
+          # 表示/非表示 — hidden は visibility:"invisible" のブールショートハンド:
+          # レイアウトスペースは保持したまま描画とアクセシビリティのみ消す
+          # (.hidden() や条件付き削除でスペースを潰さない)
+          hidden_value = @component['hidden']
+          if hidden_value == true
+            @modifier_bag.register_unless_exists(:hidden, ".opacity(0).accessibilityHidden(true)")
+          elsif is_binding?(hidden_value)
+            # Binding: "@{isErrorHidden}" ->
+            #   .opacity(data.isErrorHidden ? 0 : 1).accessibilityHidden(data.isErrorHidden)
+            # Binding: "@{!isVisible}" ->
+            #   .opacity(!data.isVisible ? 0 : 1).accessibilityHidden(!data.isVisible)
+            hidden_expr = binding_data_expr(hidden_value)
+            @modifier_bag.register_unless_exists(:hidden, ".opacity(#{hidden_expr} ? 0 : 1).accessibilityHidden(#{hidden_expr})")
+          end
+        end
+
         def apply_modifiers(skip_padding: false, skip_insets: false)
           # アライメント処理を先に適用
           apply_center_alignment
@@ -645,22 +712,19 @@ module SjuiTools
             # Emitting both put `.background(colour)` immediately before
             # `.background(gradient)` in MODIFIER_ORDER, and SwiftUI lays the
             # later one further back — the declared gradient never showed.
-            @modifier_bag.register(:background, "")
+            # A pressed colour sits in front of the gradient.
+            @modifier_bag.register(:background, background_line(nil) || "")
           elsif @component['background'] && !@modifier_bag.key?(:background)
             bg_value = @component['background']
             if bg_value.is_a?(String) && bg_value.start_with?('@{')
               # Binding background - resolve here at the correct position (before margins)
               bg_expr = SwiftUI::Binding::BindingExpression.swift_value_expr(bg_value[2..-2])
-              @modifier_bag.register(:background, ".background(SwiftJsonUIConfiguration.shared.getColor(for: #{bg_expr}) ?? Color.clear)")
+              @modifier_bag.register(:background, background_line("SwiftJsonUIConfiguration.shared.getColor(for: #{bg_expr}) ?? Color.clear"))
             else
-              processed_bg = process_template_value(bg_value)
-              if processed_bg.is_a?(Hash) && processed_bg[:template_var]
-                @modifier_bag.register(:background, ".background(#{get_swiftui_color(bg_value)})")
-              else
-                color = get_swiftui_color(bg_value)
-                @modifier_bag.register(:background, ".background(#{color})")
-              end
+              @modifier_bag.register(:background, background_line(get_swiftui_color(bg_value)))
             end
+          elsif !@modifier_bag.key?(:background) && pressed_background_color
+            @modifier_bag.register(:background, background_line(nil))
           end
 
           # コーナー半径（背景の直後に適用）
@@ -677,15 +741,10 @@ module SjuiTools
           # マージン（外側のスペース - SwiftUIではpaddingで実装）
           apply_margins
 
-          # 透明度 (alphaとopacityの両方をサポート)
-          alpha_value = attr_with_alias('opacity', 'alpha')
-          if alpha_value
-            if is_binding?(alpha_value)
-              @modifier_bag.register(:opacity, ".opacity(#{binding_data_expr(alpha_value)})")
-            else
-              @modifier_bag.register(:opacity, ".opacity(#{alpha_value})")
-            end
-          end
+          # opacity / shadow / clipToBounds / offset / hidden — one home
+          # (apply_common_decorations), which the converters that assemble
+          # their own chain call too.
+          apply_common_decorations
 
           # Liquid Glass (iOS 26+). Emits ONE call to the library helper, never
           # an `if #available` here: an availability check in generated code
@@ -703,40 +762,6 @@ module SjuiTools
           # visibility属性はVisibilityWrapperで処理するので、ここでは何もしない
           # The actual wrapping happens in the parent view converter
 
-          # 影
-          if @component['shadow']
-            shadow_code = build_shadow_modifier(@component['shadow'])
-            @modifier_bag.register(:shadow, shadow_code) if shadow_code
-          end
-
-          # クリップ
-          # A binding is truthy in Ruby, so this used to clip every
-          # declaration that used one regardless of the property's value. The
-          # bound form is ViewBindingHandler's now — SwiftJsonUI's
-          # `clipToBounds(_:)` takes the flag as a PARAMETER, so it resolves
-          # at render time instead of freezing at whatever the generator saw.
-          # A literal keeps emitting `.clipped()`: same view, same bytes.
-          if @component['clipToBounds'] == true || @component['clipToBounds'] == 'true'
-            @modifier_bag.register(:clip_to_bounds, ".clipped()")
-          end
-
-          # オフセット（offsetX, offsetY）
-          register_offset_modifier
-
-          # 表示/非表示 — hidden は visibility:"invisible" のブールショートハンド:
-          # レイアウトスペースは保持したまま描画とアクセシビリティのみ消す
-          # (.hidden() や条件付き削除でスペースを潰さない)
-          hidden_value = @component['hidden']
-          if hidden_value == true
-            @modifier_bag.register(:hidden, ".opacity(0).accessibilityHidden(true)")
-          elsif is_binding?(hidden_value)
-            # Binding: "@{isErrorHidden}" ->
-            #   .opacity(data.isErrorHidden ? 0 : 1).accessibilityHidden(data.isErrorHidden)
-            # Binding: "@{!isVisible}" ->
-            #   .opacity(!data.isVisible ? 0 : 1).accessibilityHidden(!data.isVisible)
-            hidden_expr = binding_data_expr(hidden_value)
-            @modifier_bag.register(:hidden, ".opacity(#{hidden_expr} ? 0 : 1).accessibilityHidden(#{hidden_expr})")
-          end
 
           # safeAreaInsetPositions
           apply_safe_area_insets_to_bag
@@ -767,9 +792,8 @@ module SjuiTools
           # `get_swiftui_color` handles both spellings and both data types —
           # a String property is wrapped in `getColor(for:)`, a Color-typed
           # one passes through — so the branch goes away with the defect.
-          if @component['tintColor']
-            @modifier_bag.register(:tint_color, ".tint(#{get_swiftui_color(@component['tintColor'])})")
-          end
+          # tintColor: in apply_common_decorations, with the other stages every
+          # node draws.
 
           # バインディング関連プロパティ（コメントとして記録）
           if @component['bindingScript']
@@ -961,17 +985,56 @@ module SjuiTools
         # around it is no tap, and a binding on either gates it (tap_shut?,
         # tap_gate_condition). The view's own stop stays `.allowsHitTesting`.
         def register_click_lines
-          return if @component['type'] == 'Button'
-          return if @component['enabled'] == false
-          return if tap_shut?
-          return if operation_click_type?
+          return unless tap_registered?
 
           tap = JsonUIShared::TapAccessibility
-          if tap.handler?(@component['onClick'])
-            @modifier_bag.register(:on_click, build_on_click_lines(@component['onClick']))
-          elsif tap.handler?(@component['onclick'])
-            @modifier_bag.register(:on_click, build_selector_click_lines(@component['onclick']))
+          lines = if tap.handler?(@component['onClick'])
+                    build_on_click_lines(@component['onClick'])
+                  else
+                    build_selector_click_lines(@component['onclick'])
+                  end
+          # The press, for the pressed colour the background slot draws
+          # (pressed_background_color). After the tap gesture, so the tap
+          # fires; a bound gate shuts it with the tap.
+          if pressed_background_color
+            gate = tap_gate_condition
+            lines += [gate ? ".tracksPress(enabled: #{gate})" : '.tracksPress()']
           end
+          @modifier_bag.register(:on_click, lines)
+        end
+
+        # Whether register_click_lines attaches a tap to this node.
+        def tap_registered?
+          return false if @component['type'] == 'Button'
+          return false if @component['enabled'] == false
+          return false if tap_shut?
+          return false if operation_click_type?
+
+          tap = JsonUIShared::TapAccessibility
+          tap.handler?(@component['onClick']) || tap.handler?(@component['onclick'])
+        end
+
+        # tapBackground is the background while pressed, on every node with a
+        # tap and on a Button (jsonui-cli 1.9.0). A Button draws it in
+        # StateAwareButtonView. On any other node with a tap it is this colour
+        # (a Swift Color expression), drawn by the background slot
+        # (background_line: `.pressedBackground`) while the press tracked
+        # after the tap (`.tracksPress`) holds; nil when the node has no tap.
+        # Both ask this, so a node that draws a pressed colour is exactly a
+        # node that tracks its press.
+        def pressed_background_color
+          return nil if @component['tapBackground'].nil? || !tap_registered?
+
+          get_swiftui_color(@component['tapBackground'])
+        end
+
+        # The background slot for `base` (a Swift Color expression, or nil for
+        # none): the pressed colour replaces it while the node is pressed.
+        def background_line(base)
+          pressed = pressed_background_color
+          return ".pressedBackground(#{pressed}#{base ? ", base: #{base}" : ''})" if pressed
+
+          base ? ".background(#{base})" : nil
         end
 
         # `onclick` values are method names, not bindings: a bare string, or an
@@ -1275,7 +1338,7 @@ module SjuiTools
           else_color = @component['background'] ? get_swiftui_color(@component['background']) : 'Color.clear'
           @modifier_bag.register(
             :background,
-            ".background(#{condition} ? #{get_swiftui_color(highlight_bg)} : #{else_color})"
+            background_line("#{condition} ? #{get_swiftui_color(highlight_bg)} : #{else_color}")
           )
         end
 
@@ -1512,8 +1575,8 @@ module SjuiTools
           factory = @converter_factory || @factory
           registry = @view_registry || @registry
           return nil unless factory
-          if child.is_a?(Hash) && child['visibility']
-            visibility_param = SwiftUI::Binding::BindingExpression.swift_visibility_param(child['visibility'])
+          if ResponsiveHelper.visibility_declared?(child)
+            visibility_param = ResponsiveHelper.visibility_param(child)
             child_converter = factory.create_converter(child, @indent_level + 1, @action_manager, factory, registry)
             return nil unless child_converter
             add_line "VisibilityWrapper(#{visibility_param}) {"
@@ -1643,7 +1706,7 @@ module SjuiTools
         INDICATOR_SIZE_SCALES = { 'large' => 1.5, 'small' => 0.8 }.freeze
 
         def indicator_size_scale(style)
-          INDICATOR_SIZE_SCALES.fetch(style.to_s.downcase, 1.0)
+          INDICATOR_SIZE_SCALES.fetch(JsonUIShared::EnumSpelling.lowered(style, @component['type'], 'indicatorStyle').to_s, 1.0)
         end
 
         # The border overlay this component declares, or nil when it declares
@@ -1752,7 +1815,9 @@ module SjuiTools
               return true
             end
 
-            spelling = shape.to_s.downcase
+            # As written: glass.shape is declared capsule / circle / rect, case
+            # and all (1.9.0) — `Capsule` is a spelling declared in no case.
+            spelling = shape.to_s
             return true if vocabulary.include?(spelling)
 
             # `rounded(N)` is a FORM, not a spelling: it carries a number, so it cannot
@@ -1826,7 +1891,7 @@ module SjuiTools
             values = glass&.dig('properties', 'shape', 'enum')
             return nil unless values.is_a?(Array) && !values.empty?
 
-            values.map { |v| v.to_s.downcase }
+            values.map(&:to_s)
         end
 
         def self.find_glass_definition(node)
@@ -1897,7 +1962,7 @@ module SjuiTools
         # the two must not be merged, and are not — the TextField converter
         # never reaches this overlay.
         def stroke_style_argument(border_width, style)
-          case style.to_s.downcase
+          case JsonUIShared::EnumSpelling.lowered(style, 'common', 'borderStyle')
           when 'dashed'
             "style: StrokeStyle(lineWidth: #{border_width}, dash: [6, 3])"
           when 'dotted'
@@ -1995,18 +2060,19 @@ module SjuiTools
           @modifier_bag.append(:safe_area_insets, ".safeAreaPadding(#{edges})")
         end
 
-        #: Declared spelling -> `SwiftUI.Edge.Set` member. `left` / `right` /
-        #: `horizontal` are not in the declared enum but were accepted here
-        #: before, so they keep working rather than starting to warn.
+        #: Declared spelling -> `SwiftUI.Edge.Set` member, as written (the
+        #: items of safeAreaInsetPositions: top / bottom / leading / trailing /
+        #: vertical, and `all`). `left` / `right` / `horizontal` were accepted
+        #: here beyond the declaration; a value is its declared spelling
+        #: (1.9.0), so they select no edge now, as on rjui and kjui, and the
+        #: validator names them. Measured before they went (2026-09-26): no
+        #: node on the nine consumer faces declares safeAreaInsetPositions.
         SAFE_AREA_EDGES = {
           'top' => '.top',
           'bottom' => '.bottom',
           'leading' => '.leading',
-          'left' => '.leading',
           'trailing' => '.trailing',
-          'right' => '.trailing',
-          'vertical' => '.vertical',
-          'horizontal' => '.horizontal'
+          'vertical' => '.vertical'
         }.freeze
 
         # The `Edge.Set` argument for a declared position list, or nil when

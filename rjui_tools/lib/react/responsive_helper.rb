@@ -2,6 +2,7 @@
 
 require_relative '../core/responsive_resolver'
 require_relative 'tailwind_mapper'
+require_relative '../core/enum_spelling'
 
 module RjuiTools
   module React
@@ -47,7 +48,7 @@ module RjuiTools
       # Each entry: attribute_name => lambda(value, prefix) -> class string
       ATTRIBUTE_MAPPERS = {
         'orientation' => ->(v, prefix) {
-          case v&.downcase
+          case JsonUIShared::EnumSpelling.lowered(v, 'View', 'orientation')
           when 'horizontal' then "#{prefix}flex-row"
           when 'vertical' then "#{prefix}flex-col"
           end
@@ -118,8 +119,8 @@ module RjuiTools
           raw = TailwindMapper.map_flex_wrap(v)
           raw.empty? ? nil : "#{prefix}#{raw}"
         },
-        'textAlign' => ->(v, prefix) {
-          raw = TailwindMapper.map_text_align(v)
+        'textAlign' => ->(v, prefix, type) {
+          raw = TailwindMapper.map_text_align(v, type)
           raw.empty? ? nil : "#{prefix}#{raw}"
         }
       }.freeze
@@ -139,6 +140,12 @@ module RjuiTools
         # base (default) value of each attribute is emitted unprefixed by
         # the converters' normal attribute mapping. `stripped_keys` lists
         # the attribute keys that have responsive overrides (informational).
+        # A mapper that judges a value by the node's type (textAlign) takes it
+        # as a third argument.
+        def call_mapper(mapper, value, prefix, component)
+          mapper.arity == 3 ? mapper.call(value, prefix, component['type']) : mapper.call(value, prefix)
+        end
+
         def build_responsive(component)
           result = {
             classes: [],
@@ -173,7 +180,7 @@ module RjuiTools
                 mapper = ATTRIBUTE_MAPPERS[attr]
                 if mapper
                   # For landscape compound size classes, use width prefix inside the hook conditional
-                  cls = mapper.call(value, '')
+                  cls = call_mapper(mapper, value, '', component)
                   result[:landscape_styles][landscape_key] << cls if cls
                 end
               end
@@ -190,7 +197,7 @@ module RjuiTools
 
                 mapper = ATTRIBUTE_MAPPERS[attr]
                 if mapper
-                  cls = mapper.call(value, prefix)
+                  cls = call_mapper(mapper, value, prefix, component)
                   result[:classes] << cls if cls
                 end
               end

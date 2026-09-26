@@ -4,6 +4,7 @@ require_relative '../helpers/content_scale_helper'
 require_relative '../helpers/modifier_builder'
 require_relative '../helpers/resource_resolver'
 require_relative '../helpers/image_accessibility_helper'
+require_relative '../../core/enum_spelling'
 
 module KjuiTools
   module Compose
@@ -91,10 +92,10 @@ module KjuiTools
           # default for Image — so naming it changes no picture.
           if json_data['contentMode']
             required_imports&.add(:content_scale)
-            if (scale = Helpers::ContentScaleHelper.scale_expression(json_data['contentMode']))
+            if (scale = Helpers::ContentScaleHelper.scale_expression(json_data['contentMode'], section: json_data['type']))
               code += ",\n" + indent("contentScale = #{scale}", depth + 1)
             end
-            if (alignment = Helpers::ContentScaleHelper.alignment_expression(json_data['contentMode']))
+            if (alignment = Helpers::ContentScaleHelper.alignment_expression(json_data['contentMode'], section: json_data['type']))
               required_imports&.add(:alignment)
               code += ",\n" + indent("alignment = #{alignment}", depth + 1)
             end
@@ -114,7 +115,7 @@ module KjuiTools
         end
 
         def self.rendering_color_filter(json_data, required_imports)
-          mode = json_data['renderingMode'].to_s.downcase
+          mode = JsonUIShared::EnumSpelling.lowered(json_data['renderingMode'], 'Image', 'renderingMode').to_s
           tint = json_data['tintColor'] || json_data['iconColor']
 
           case mode

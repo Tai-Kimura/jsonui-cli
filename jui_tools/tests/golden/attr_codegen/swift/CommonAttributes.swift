@@ -10,10 +10,21 @@ public struct CommonAttributes {
         case visible = "visible"
         case invisible = "invisible"
         case gone = "gone"
+        /// Every spelling this attribute accepts, as declared (values and
+        /// valueAliases keys) — case-sensitive.
+        public static let declaredSpellings: [String] = ["visible", "invisible", "gone"]
+    }
+
+    public enum Gravity {
+        /// The spellings each value of `gravity` is declared as — it holds
+        /// one or a list of them, so it has no enum type of its own —
+        /// case-sensitive.
+        public static let declaredSpellings: [String] = ["top", "bottom", "left", "right", "center"]
     }
 
     /// Canonical attribute names declared for this component (public metadata contract).
     public static let declaredAttributes: Set<String> = [
+        "gravity",
         "hidden",
         "id",
         "onClick",
@@ -34,6 +45,9 @@ public struct CommonAttributes {
     public static func isDeclared(_ key: String) -> Bool {
         return declaredAttributes.contains(key) || aliasMap[key] != nil
     }
+
+    /// One value or a list of them (element vocabulary). [accepts: string | array]
+    public let gravity: Any?
 
     /// Hide view
     public let hidden: AttrValue<Bool>?
@@ -59,6 +73,7 @@ public struct CommonAttributes {
     /// Pass `canonicalOnly: true` for L1-normalized input —
     /// alias fallback is then disabled.
     public init(json: [String: Any], canonicalOnly: Bool = false) {
+        self.gravity = AttrCoerce.any(AttrCoerce.lookup(json, "gravity"))
         self.hidden = AttrCoerce.attrValue(AttrCoerce.lookup(json, "hidden"), AttrCoerce.boolean)
         self.id = AttrCoerce.string(AttrCoerce.lookup(json, "id"))
         self.onClick = AttrCoerce.bindingValue(AttrCoerce.lookup(json, "onClick"))
@@ -71,14 +86,15 @@ public struct CommonAttributes {
     private static func parseVisibility(_ raw: Any?) -> AttrEnum<Visibility>? {
         guard let raw = raw, !(raw is NSNull) else { return nil }
         if let s = raw as? String {
-            switch s.lowercased() {
+            switch s {
             case "visible": return .known(Visibility.visible)
             case "invisible": return .known(Visibility.invisible)
             case "gone": return .known(Visibility.gone)
             default: break
             }
         }
-        AttrCodegenWarnings.emit("common.visibility: unknown enum value '\(raw)'")
+        let near = (raw as? String).flatMap { s in Visibility.declaredSpellings.first { $0.caseInsensitiveCompare(s) == .orderedSame } }
+        AttrCodegenWarnings.emit("common.visibility: unknown enum value '\(raw)'" + (near.map { " — did you mean '\($0)'?" } ?? ""))
         return .unknown(raw)
     }
 }

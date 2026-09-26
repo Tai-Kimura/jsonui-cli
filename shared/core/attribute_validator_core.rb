@@ -3,6 +3,7 @@
 
 require 'json'
 require_relative 'tap_accessibility'
+require_relative 'enum_spelling'
 
 module JsonUIShared
   # Validates JSON component attributes against the SSoT definitions
@@ -242,6 +243,9 @@ module JsonUIShared
 
       # A value attribute of the other kind (a Date SelectBox's selectedValue)
       check_value_attribute_of_another_kind(merged_component, type)
+
+      # A style named inside a responsive override is not applied
+      check_responsive_override_style(merged_component)
 
       # Check for conflicting attributes
       check_spacing_gravity_conflict(merged_component, type)
@@ -656,6 +660,9 @@ module JsonUIShared
         # is tracked separately.
         if actual_type == 'array' && edge_inset_array?(name, value)
           # accepted
+        elsif inline_layout?(value) && expected_types == ['string']
+          add_warning(inline_layout_sentence(current_path))
+          return
         else
           add_warning("Attribute '#{current_path}' in '#{component_type}' expects #{format_expected_types(expected_types)}, got #{actual_type}")
           return # Don't validate nested properties if type is wrong
@@ -703,14 +710,23 @@ module JsonUIShared
         # For array values, check each element
         invalid_values = value.reject { |v| enum_values.include?(v) }
         unless invalid_values.empty?
-          add_warning("Attribute '#{path}' in '#{component_type}' has invalid value(s) '#{invalid_values.inspect}'. Valid values: #{enum_values.join(', ')}")
+          add_warning("Attribute '#{path}' in '#{component_type}' has invalid value(s) '#{invalid_values.inspect}'. Valid values: #{enum_values.join(', ')}#{near_miss(invalid_values, enum_values)}")
         end
       else
         # For single values
         unless enum_values.include?(value)
-          add_warning("Attribute '#{path}' in '#{component_type}' has invalid value '#{value}'. Valid values: #{enum_values.join(', ')}")
+          add_warning("Attribute '#{path}' in '#{component_type}' has invalid value '#{value}'. Valid values: #{enum_values.join(', ')}#{near_miss([value], enum_values)}")
         end
       end
+    end
+
+    # " — did you mean 'x'?" for a value that differs from a declared
+    # spelling only in case: a value is its declared spelling, case and all
+    # (1.9.0), and the near miss is named as the generated parsers name it.
+    def near_miss(values, enum_values)
+      near = values.map { |v| v.is_a?(String) && enum_values.find { |e| e.is_a?(String) && e.casecmp?(v) } }
+      near = near.select { |n| n }.uniq
+      near.empty? ? '' : " — did you mean #{near.map { |n| "'#{n}'" }.join(', ')}?"
     end
 
     # Format expected types for error messages
@@ -738,6 +754,8 @@ module JsonUIShared
       obj.each do |key, value|
         if properties.key?(key)
           validate_attribute(key, value, properties[key], component_type, path)
+        elsif %w[child children].include?(key) && inline_layout?(value)
+          add_warning(inline_layout_sentence("#{path}.#{key}"))
         else
           add_warning("Unknown property '#{path}.#{key}' in '#{component_type}'")
         end
@@ -763,7 +781,12 @@ module JsonUIShared
           actual_type = get_value_type(item)
           unless type_matches?(actual_type, expected_types, item, item_def)
             add_warning("#{item_path} in '#{component_type}' expects #{expected_types.join(' or ')}, got #{actual_type}")
+            next
           end
+          # An item vocabulary (safeAreaInsetPositions: top / bottom / leading
+          # / trailing / vertical / all) names an item declared in no case, as
+          # a top-level enum does (1.9.0): it reserves nothing and is named.
+          validate_enum_value(item, item_def['enum'], item_path, component_type) if item_def['enum'].is_a?(Array)
         end
       end
     end
@@ -940,8 +963,42 @@ module JsonUIShared
     # A flow Collection: `layout` (or `orientation`) flow or one of its alias
     # spellings, not turned horizontal by `horizontalScroll: true` — the
     # reading every codegen routes by.
+    # A `style` inside a responsive override (`responsive.<class>.style`): an
+    # override's attributes are its own, and no path applies a style named
+    # there — sjui / kjui codegen, rjui and both Dynamic runtimes did not; jui's
+    # normalizer did, so the hotloader drew what no build draws (4f's ruling,
+    # 1.9.0: named on every path, applied by none). The same sentence as the
+    # normalizer's StyleMerger and SwiftJsonUI Dynamic's ResponsiveResolver.
+    STYLE_IN_RESPONSIVE_OVERRIDE =
+      "'style' inside a responsive override is not applied — put the attributes in the override"
+
+    # A layout written inline where the declaration takes a layout's name —
+    # a tab's `child` (a tab names its layout with `view`), a section's
+    # header / cell / footer as a node — is declared nowhere, and no path
+    # draws it: sjui / kjui / rjui and both Dynamic runtimes read names (4f's
+    # ruling, 1.9.0). sjui's and kjui's builds raised on an inline cell; they
+    # go on without it now. It was "Unknown property" or "expects string".
+    def inline_layout?(value)
+      node = ->(v) { v.is_a?(Hash) && (v.key?('type') || v.key?('child') || v.key?('children')) }
+      node.call(value) || (value.is_a?(Array) && !value.empty? && value.all?(&node))
+    end
+
+    def inline_layout_sentence(path)
+      "'#{path}' is an inline layout, which is not declared and is not drawn — name a layout file instead"
+    end
+
+    def check_responsive_override_style(component)
+      responsive = component['responsive']
+      return unless responsive.is_a?(Hash)
+      return unless responsive.values.any? { |override| override.is_a?(Hash) && override.key?('style') }
+
+      add_warning(STYLE_IN_RESPONSIVE_OVERRIDE)
+    end
+
     def check_flow_columns(component)
-      layout = (component['layout'] || component['orientation']).to_s.downcase
+      # `orientation` is read as the layout when `layout` is absent, as the
+      # converters read it — so its value is judged by layout's spellings.
+      layout = JsonUIShared::EnumSpelling.lowered(component['layout'] || component['orientation'], 'Collection', 'layout')
       return unless %w[flow leftaligned].include?(layout) && component['horizontalScroll'] != true
 
       said = 'has no effect on a flow Collection (it wraps by content width)'
@@ -1227,7 +1284,7 @@ module JsonUIShared
       return unless component.key?('distribution') && component.key?('gravity')
 
       main_axis_values =
-        case component['orientation'].to_s.downcase
+        case JsonUIShared::EnumSpelling.lowered(component['orientation'], 'View', 'orientation')
         when 'horizontal' then %w[left right centerHorizontal]
         when 'vertical' then %w[top bottom centerVertical]
         else return # no linear axis — no main-axis conflict possible

@@ -121,7 +121,7 @@ module JsonUI
         { name: 'heightWeight', kind: :number, bindable: true }.freeze,
         # Whether the component is hidden: keeps its layout space but is not drawn and is hidden from accessibility (boolean shorthand for visibility:'invisible'; can be a data binding)
         { name: 'hidden', kind: :boolean, bindable: true }.freeze,
-        # Background color when highlighted - hex string or color name from colors.json (binding supported)
+        # Background color while `highlighted` is true (a View; drawn only with both declared). Not the pressed colour, which is tapBackground, and not a focused text field's background. On a Button it is the pressed colour (Button.highlightBackground). Hex string or color name from colors.json (binding supported)
         { name: 'highlightBackground', kind: :string, bindable: true }.freeze,
         # Horizontal content hugging
         { name: 'hugHorizontal', kind: :string }.freeze,
@@ -271,7 +271,7 @@ module JsonUI
         { name: 'style', kind: :string }.freeze,
         # View tag for identification (binding supported)
         { name: 'tag', kind: :number, bindable: true }.freeze,
-        # Background color when tapped - hex string or color name from colors.json (binding supported)
+        # Background color while pressed, on a node with a tap (onClick / onclick) and on a Button: it replaces the background until the press ends. On web a Button also shows it on hover (the web has hover; iOS and Android do not). A node without a tap draws nothing for it. Hex string or color name from colors.json (binding supported)
         { name: 'tapBackground', kind: :string, bindable: true }.freeze,
         # Test ID for testing (data-testid)
         { name: 'testId', kind: :string }.freeze,

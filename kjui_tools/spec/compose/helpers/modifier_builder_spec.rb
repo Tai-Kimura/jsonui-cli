@@ -1381,11 +1381,19 @@ RSpec.describe KjuiTools::Compose::Helpers::ModifierBuilder do
   end
 
   describe 'common.tapBackground / tintColor (was: unread on the shared path)' do
-    it 'accepts tapBackground as the pressed-background spelling' do
-      mods = described_class.build_background('background' => '#FFFFFF',
-                                              'highlighted' => true,
-                                              'tapBackground' => '#FF0000')
-      expect(mods.join).to include('parseColor("#FF0000")')
+    # tapBackground is the background while a node with a click is PRESSED
+    # (jsonui-cli 1.9.0) — not the colour `highlighted` swaps in, which this
+    # example used to pin (`tapBackground ?: highlightBackground`).
+    it 'draws tapBackground while a node with a click is pressed, not while it is highlighted' do
+      highlighted = described_class.build_background('background' => '#FFFFFF',
+                                                     'highlighted' => true,
+                                                     'tapBackground' => '#FF0000')
+      expect(highlighted.join).not_to include('parseColor("#FF0000")')
+      pressed = described_class.build_background('background' => '#FFFFFF',
+                                                 'onClick' => '@{onTap}',
+                                                 'tapBackground' => '#FF0000')
+      expect(pressed.join).to include('if (isPressed) Color(android.graphics.Color.parseColor("#FF0000")) ' \
+                                      'else Color(android.graphics.Color.parseColor("#FFFFFF"))')
     end
 
     # `tintColor` is an ACCENT colour, not a paint-over: sjui emits `.tint(...)`
