@@ -649,18 +649,21 @@ module RjuiTools
 
         # A class-list Collection whose items are a list: every item with
         # cellClasses[0], the header before and the footer after — what this
-        # path wrote until jsonui-cli 1.9.0, kept as it was.
+        # path wrote until jsonui-cli 1.9.0, kept as it was, except that the
+        # map's `index: number` is TypeScript's only (a .jsx file wrote it too,
+        # and it does not parse there).
         def legacy_array_content(indent, cell_view, header_view, footer_view, items_binding)
           lines = []
           lines << "#{indent_str(indent)}<#{header_view} />" if header_view
           if cell_view
-            item_type = config['typescript'] ? ": #{cell_view}Data" : ''
+            item_type = typescript? ? ": #{cell_view}Data" : ''
+            index_type = typescript? ? ': number' : ''
             lanes = horizontal_lanes
             if lanes
               lines << horizontal_lanes_open(lanes, indent)
               indent += 2
             end
-            lines << "#{indent_str(indent)}{#{items_binding}?.map((item#{item_type}, index: number) => ("
+            lines << "#{indent_str(indent)}{#{items_binding}?.map((item#{item_type}, index#{index_type}) => ("
             if (cell_size = cell_size_style)
               lines << "#{indent_str(indent + 2)}<div key={index} className=\"shrink-0 overflow-hidden\"#{cell_size}>"
               lines << "#{indent_str(indent + 4)}<#{cell_view}#{cell_item_id_attr('index')} data={item} />"

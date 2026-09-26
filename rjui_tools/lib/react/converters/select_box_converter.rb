@@ -447,7 +447,7 @@ module RjuiTools
           # typeof-narrowing would reduce the object branch to `never` and
           # every property access to TS2339.
           opt_cast =
-            if config['typescript'] != false
+            if typescript?
               ' as string | number | { value?: string | number; id?: string | number; text?: string; label?: string }'
             else
               ''
@@ -535,7 +535,7 @@ module RjuiTools
           if items.is_a?(String) && has_binding?(items)
             items_prop = extract_binding_property(items)
             sel_cast =
-              if config['typescript'] != false
+              if typescript?
                 ' as string | number | { value?: string | number; id?: string | number } | undefined'
               else
                 ''
