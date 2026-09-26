@@ -45,7 +45,7 @@ RSpec.describe KjuiTools::Compose::Generators::ViewGenerator do
   describe '#generate' do
     it 'creates JSON layout file' do
       generator = described_class.new('HomeView')
-      expect { generator.generate }.to output(/Generated Compose view/).to_stdout
+      expect { generator.generate }.to output(/Scaffolded Compose view/).to_stdout
 
       json_path = File.join(temp_dir, 'src/main/assets/Layouts/home_view.json')
       expect(File.exist?(json_path)).to be true
@@ -53,7 +53,7 @@ RSpec.describe KjuiTools::Compose::Generators::ViewGenerator do
 
     it 'creates main view file' do
       generator = described_class.new('HomeView')
-      expect { generator.generate }.to output(/Generated Compose view/).to_stdout
+      expect { generator.generate }.to output(/Scaffolded Compose view/).to_stdout
 
       view_path = File.join(temp_dir, 'src/main/kotlin/com/example/app/views/home_view/HomeViewView.kt')
       expect(File.exist?(view_path)).to be true
@@ -61,7 +61,7 @@ RSpec.describe KjuiTools::Compose::Generators::ViewGenerator do
 
     it 'creates generated view file' do
       generator = described_class.new('HomeView')
-      expect { generator.generate }.to output(/Generated Compose view/).to_stdout
+      expect { generator.generate }.to output(/Scaffolded Compose view/).to_stdout
 
       generated_path = File.join(temp_dir, 'src/main/kotlin/com/example/app/views/home_view/HomeViewGeneratedView.kt')
       expect(File.exist?(generated_path)).to be true
@@ -69,7 +69,7 @@ RSpec.describe KjuiTools::Compose::Generators::ViewGenerator do
 
     it 'creates data file' do
       generator = described_class.new('HomeView')
-      expect { generator.generate }.to output(/Generated Compose view/).to_stdout
+      expect { generator.generate }.to output(/Scaffolded Compose view/).to_stdout
 
       data_path = File.join(temp_dir, 'src/main/kotlin/com/example/app/data/HomeViewData.kt')
       expect(File.exist?(data_path)).to be true
@@ -77,7 +77,7 @@ RSpec.describe KjuiTools::Compose::Generators::ViewGenerator do
 
     it 'creates viewmodel file' do
       generator = described_class.new('HomeView')
-      expect { generator.generate }.to output(/Generated Compose view/).to_stdout
+      expect { generator.generate }.to output(/Scaffolded Compose view/).to_stdout
 
       viewmodel_path = File.join(temp_dir, 'src/main/kotlin/com/example/app/viewmodels/HomeViewViewModel.kt')
       expect(File.exist?(viewmodel_path)).to be true
@@ -85,7 +85,7 @@ RSpec.describe KjuiTools::Compose::Generators::ViewGenerator do
 
     it 'handles subdirectory paths' do
       generator = described_class.new('settings/ProfileView')
-      expect { generator.generate }.to output(/Generated Compose view/).to_stdout
+      expect { generator.generate }.to output(/Scaffolded Compose view/).to_stdout
 
       json_path = File.join(temp_dir, 'src/main/assets/Layouts/settings/profile_view.json')
       expect(File.exist?(json_path)).to be true
@@ -93,7 +93,7 @@ RSpec.describe KjuiTools::Compose::Generators::ViewGenerator do
 
     it 'converts PascalCase names to snake_case' do
       generator = described_class.new('MyAwesomeView')
-      expect { generator.generate }.to output(/Generated Compose view/).to_stdout
+      expect { generator.generate }.to output(/Scaffolded Compose view/).to_stdout
 
       json_path = File.join(temp_dir, 'src/main/assets/Layouts/my_awesome_view.json')
       expect(File.exist?(json_path)).to be true
@@ -104,8 +104,11 @@ RSpec.describe KjuiTools::Compose::Generators::ViewGenerator do
       FileUtils.mkdir_p(File.dirname(json_path))
       File.write(json_path, '{"type": "CustomContent"}')
 
+      # The existing file is the app's: the prompt is answered by a closed
+      # stdin ("n"), so the run never waits on the terminal it runs in.
+      allow($stdin).to receive(:gets).and_return(nil)
       generator = described_class.new('ExistingView')
-      expect { generator.generate }.to output(/Generated Compose view/).to_stdout
+      expect { generator.generate }.to output(/Scaffolded Compose view/).to_stdout
 
       content = File.read(json_path)
       expect(content).to include('CustomContent')
@@ -115,7 +118,7 @@ RSpec.describe KjuiTools::Compose::Generators::ViewGenerator do
   describe 'generated JSON content' do
     it 'includes SafeAreaView as root' do
       generator = described_class.new('TestView')
-      expect { generator.generate }.to output(/Generated Compose view/).to_stdout
+      expect { generator.generate }.to output(/Scaffolded Compose view/).to_stdout
 
       json_path = File.join(temp_dir, 'src/main/assets/Layouts/test_view.json')
       content = JSON.parse(File.read(json_path))
@@ -124,7 +127,7 @@ RSpec.describe KjuiTools::Compose::Generators::ViewGenerator do
 
     it 'includes data definition' do
       generator = described_class.new('TestView')
-      expect { generator.generate }.to output(/Generated Compose view/).to_stdout
+      expect { generator.generate }.to output(/Scaffolded Compose view/).to_stdout
 
       json_path = File.join(temp_dir, 'src/main/assets/Layouts/test_view.json')
       content = JSON.parse(File.read(json_path))
@@ -134,7 +137,7 @@ RSpec.describe KjuiTools::Compose::Generators::ViewGenerator do
 
     it 'includes button component' do
       generator = described_class.new('TestView')
-      expect { generator.generate }.to output(/Generated Compose view/).to_stdout
+      expect { generator.generate }.to output(/Scaffolded Compose view/).to_stdout
 
       json_path = File.join(temp_dir, 'src/main/assets/Layouts/test_view.json')
       content = JSON.parse(File.read(json_path))
@@ -146,7 +149,7 @@ RSpec.describe KjuiTools::Compose::Generators::ViewGenerator do
   describe 'generated Kotlin files' do
     it 'includes correct package in main view' do
       generator = described_class.new('TestView')
-      expect { generator.generate }.to output(/Generated Compose view/).to_stdout
+      expect { generator.generate }.to output(/Scaffolded Compose view/).to_stdout
 
       view_path = File.join(temp_dir, 'src/main/kotlin/com/example/app/views/test_view/TestViewView.kt')
       content = File.read(view_path)
@@ -155,7 +158,7 @@ RSpec.describe KjuiTools::Compose::Generators::ViewGenerator do
 
     it 'includes ViewModel import' do
       generator = described_class.new('TestView')
-      expect { generator.generate }.to output(/Generated Compose view/).to_stdout
+      expect { generator.generate }.to output(/Scaffolded Compose view/).to_stdout
 
       view_path = File.join(temp_dir, 'src/main/kotlin/com/example/app/views/test_view/TestViewView.kt')
       content = File.read(view_path)
@@ -164,7 +167,7 @@ RSpec.describe KjuiTools::Compose::Generators::ViewGenerator do
 
     it 'includes data class in data file' do
       generator = described_class.new('TestView')
-      expect { generator.generate }.to output(/Generated Compose view/).to_stdout
+      expect { generator.generate }.to output(/Scaffolded Compose view/).to_stdout
 
       data_path = File.join(temp_dir, 'src/main/kotlin/com/example/app/data/TestViewData.kt')
       content = File.read(data_path)
@@ -173,7 +176,7 @@ RSpec.describe KjuiTools::Compose::Generators::ViewGenerator do
 
     it 'includes StateFlow in viewmodel' do
       generator = described_class.new('TestView')
-      expect { generator.generate }.to output(/Generated Compose view/).to_stdout
+      expect { generator.generate }.to output(/Scaffolded Compose view/).to_stdout
 
       viewmodel_path = File.join(temp_dir, 'src/main/kotlin/com/example/app/viewmodels/TestViewViewModel.kt')
       content = File.read(viewmodel_path)

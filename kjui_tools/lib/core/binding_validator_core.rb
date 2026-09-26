@@ -484,6 +484,9 @@ module JsonUIShared
         next if key == 'type' || key == 'child' || key == 'children' || key == 'sections'
         next if key == 'data' || key == 'generatedBy' || key == 'include' || key == 'style' || key == 'shared_data'
         next if key == 'bindingScript' # arbitrary platform code, not a binding
+        # An Embed's events are handler names, not bindings; validate_embed_component
+        # names any that is not one.
+        next if key == 'events' && component_type == 'Embed'
         next if incompatible_attr?(component_type, key)
 
         check_value_for_bindings(value, key, component_type)
@@ -807,6 +810,7 @@ module JsonUIShared
     # - arrays are unsupported anywhere in params.
     # - keys must be camelCase at every level.
     # - navigationMode must be a known enum value ('delegate'/'isolated').
+    # - each events value names a handler (embed_event_handler_problem).
     def validate_embed_component(component)
       mode = component['navigationMode']
       if mode.is_a?(String) && !%w[delegate isolated].include?(mode)
@@ -815,6 +819,38 @@ module JsonUIShared
 
       params = component['params']
       validate_embed_params_node(params, 'params') if params.is_a?(Hash)
+
+      events = component['events']
+      return unless events.is_a?(Hash)
+
+      events.each do |event, handler|
+        problem = self.class.embed_event_handler_problem(handler)
+        @warnings << "#{build_context_prefix}Embed event '#{event}' is not called: #{problem}" if problem
+      end
+    end
+
+    # An Embed event names the handler it calls as it is: a method of the
+    # parent ViewModel (attribute_definitions Embed.events: "parent VM
+    # handler names"), which sjui and kjui call as `viewModel.<name>(payload)`
+    # and rjui — whose component has no ViewModel — as
+    # `data.<name>?.(payload)`. Anything else is not called, by any of the
+    # three, and this says why. `@{name}` is the binding spelling: the
+    # three codegens wrote it into code as it stood (`viewModel.@{name}(…)`,
+    # which does not parse) while the only word the build said was that
+    # 'name' was not in data (ticket
+    # rjui-embed-event-bridge-calls-an-undeclared-view-model). nil for a
+    # name.
+    EMBED_EVENT_HANDLER = /\A[A-Za-z_][A-Za-z0-9_]*\z/.freeze
+
+    def self.embed_event_handler_problem(handler)
+      return nil if handler.is_a?(String) && handler.match?(EMBED_EVENT_HANDLER)
+
+      named = handler.is_a?(String) && handler.strip[/\A@\{\s*([A-Za-z_][A-Za-z0-9_]*)\s*\}\z/, 1]
+      if named
+        "'#{handler}' is a binding; an event names a method of the parent ViewModel as it is: '#{named}'"
+      else
+        "#{handler.is_a?(String) ? "'#{handler}'" : handler.inspect} is not a method name"
+      end
     end
 
     def validate_embed_params_node(node, path)

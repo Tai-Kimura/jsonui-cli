@@ -1889,8 +1889,11 @@ module RjuiTools
               prop = handler.gsub(/@\{|\}/, '')
               return can_tap_gated_click(add_viewmodel_data_prefix(prop))
             else
-              # ERROR: onClick (camelCase) must use binding format
-              return " {/* ERROR: onClick requires binding format @{functionName} */}"
+              # ERROR: onClick (camelCase) must use binding format. The marker
+              # is a comment between the attributes: `{/* … */}` there is a
+              # spread with nothing in it, which no JSX parser accepts — the
+              # whole file failed to build around one misspelt handler.
+              return " /* ERROR: onClick requires binding format @{functionName} */"
             end
           end
 
@@ -1898,7 +1901,7 @@ module RjuiTools
           # `[""]` are no handler.
           if JsonUIShared::TapAccessibility.handler?(attributes['onclick'])
             expr = onclick_selector_expr(attributes['onclick'])
-            return expr ? " onClick={#{expr}}" : " {/* ERROR: onclick requires selector format (string) */}"
+            return expr ? " onClick={#{expr}}" : " /* ERROR: onclick requires selector format (string) */"
           end
 
           ''

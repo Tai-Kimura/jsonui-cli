@@ -5,14 +5,18 @@ require "json"
 require_relative '../../../core/pbxproj_manager'
 require_relative '../../../core/xcode_project_manager'
 require_relative '../../../core/project_finder'
+require_relative '../../../core/logger'
+require_relative '../../../core/converter_generator_core'
+require_relative 'scaffold_transaction'
 
 module SjuiTools
   module UIKit
     module XcodeProject
       module Generators
         class PartialGenerator < ::SjuiTools::Core::PbxprojManager
-          def initialize(project_file_path = nil)
+          def initialize(project_file_path = nil, options = {})
             super(project_file_path)
+            @options = options
 
             # Setup paths using ProjectFinder
             Core::ProjectFinder.setup_paths(@project_file_path)
@@ -35,52 +39,54 @@ module SjuiTools
             puts "Generating partial layout: #{partial_name}"
             puts "Debug: Original partial name: '#{partial_name}'"
             
-            # 1. Partial JSONファイルの作成
-            existed = File.exist?(File.join(@layouts_path, "#{partial_name}.json"))
-            json_file_path = create_partial_json(partial_name)
+            # 1. Partial JSONファイルの作成 — through the one overwrite
+            # decision the generate commands share (until 1.8.121 --force and
+            # --skip-existing were not read here).
+            # The transaction's record says what this run created: what a
+            # failed Xcode step deletes (until 1.8.121 this generator had no
+            # rollback: the new layout stayed, out of the project).
+            @txn = ScaffoldTransaction.new(@project_file_path)
+            record = @txn.record
+            json_file_path = create_partial_json(partial_name, record)
             puts "Debug: partial file path: '#{json_file_path}'"
             
-            # 2. Xcodeプロジェクトに追加
-            add_to_xcode_project(json_file_path)
+            # 2. Xcodeプロジェクトに追加 — a raise or a :failed answer rolls
+            # the run back and fails it.
+            begin
+              @txn.check!([[json_file_path, add_to_xcode_project(json_file_path)]])
+            rescue => e
+              puts "Error adding the partial to the Xcode project: #{e.message}"
+              @txn.roll_back
+              raise e
+            end
             
             # 3. Bindingファイルの生成
             generate_binding_file
             
-            # Until 1.8.121 "Successfully generated partial" and "File
-            # created" followed "Partial JSON file already exists" (ticket
-            # kjui-g-view-reports-what-it-did-not-do).
-            if existed
-              puts "\nPartial #{partial_name}: kept the existing #{json_file_path}"
-            else
-              puts "\nGenerated partial: #{partial_name}"
-              puts "File created: #{json_file_path}"
-            end
+            # The counts, from the record (until 1.8.121 "Successfully
+            # generated partial" and "File created" followed "Partial JSON
+            # file already exists" — ticket kjui-g-view-reports-what-it-did-not-do).
+            puts
+            JsonUIShared::ConverterGeneratorCore.report_scaffold_record("partial #{partial_name}", record, Core::Logger)
             puts "\nTo use this partial, include it in your layout JSON:"
             puts '  { "include": "' + partial_name + '" }'
           end
 
           private
 
-          def create_partial_json(partial_name)
+          def create_partial_json(partial_name, record)
             # Handle directory structure in partial name
             file_path = File.join(@layouts_path, "#{partial_name}.json")
             
             # Ensure parent directory exists
             parent_dir = File.dirname(file_path)
-            unless Dir.exist?(parent_dir)
-              FileUtils.mkdir_p(parent_dir)
-              puts "Created directory: #{parent_dir}"
-            end
+            puts "Created directory: #{parent_dir}" if @txn.mkdir_p(parent_dir)
             
-            if File.exist?(file_path)
-              puts "Warning: Partial JSON file already exists: #{file_path}"
-              return file_path
-            end
-            
-            content = generate_partial_json_content(partial_name)
-            File.write(file_path, content)
-            puts "Created partial JSON: #{file_path}"
-            
+            JsonUIShared::ConverterGeneratorCore.write_scaffold(
+              file_path, @options.merge(scaffold_files: record), Core::Logger,
+              noun: 'partial layout', label: 'partial layout', exists_label: 'Partial layout'
+            ) { generate_partial_json_content(partial_name) }
+
             file_path
           end
 

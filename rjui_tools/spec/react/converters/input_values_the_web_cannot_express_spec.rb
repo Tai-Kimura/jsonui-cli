@@ -30,6 +30,7 @@
 # the same misreading cannot come back as a silently empty table.
 
 require_relative '../../spec_helper'
+require_relative '../../support/typescript_compiler'
 require 'json'
 require 'react/converters/text_field_converter'
 require 'react/converters/text_view_converter'
@@ -233,5 +234,25 @@ RSpec.describe 'input values web cannot express natively' do
       description = ssot['TextField']['input']['description']
       expect(description).to include('signedDecimal').or include('degradation')
     end
+  end
+
+  # tsc over every landing, input and textarea. `inputMode` is typed with
+  # React's own union — @types/react's HTMLAttributes.inputMode, the same in
+  # 19.2.7 and 19.2.14 (read 2026-09-26). It is TRANSCRIBED, not React
+  # compiled; that is the web-conformance job's. An `inputMode="numbers"`
+  # fails here where a consumer's tsc would fail. React types `type` as
+  # `… | (string & {})`, which takes any string, so HTML_INPUT_TYPES above
+  # stays the check for that one.
+  it 'writes TSX that compiles, with inputMode as React types it', :typescript_compile do
+    elements = LANDING.keys.flat_map { |value| [field(value), area(value)] }
+    expect(TypeScriptCompiler.component(*elements)).to compile_as_typescript.with_ambient(<<~TS)
+      type ReactInputMode = "none" | "text" | "tel" | "url" | "email" | "numeric" | "decimal" | "search";
+      declare namespace JSX {
+        interface IntrinsicElements {
+          input: { [attr: string]: unknown; inputMode?: ReactInputMode };
+          textarea: { [attr: string]: unknown; inputMode?: ReactInputMode };
+        }
+      }
+    TS
   end
 end

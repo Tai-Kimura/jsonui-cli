@@ -151,7 +151,10 @@ RSpec.describe RjuiTools::React::Generators::ConverterGenerator do
     def generate_in(tmp, options, stdin: '')
       gen = RjuiTools::React::Generators::ReactComponentGenerator.new('Card', { attributes: {} }.merge(options), {})
       original_stdin = $stdin
+      # An answer is typed on a terminal: since 1.8.121 a stdin that is not a
+      # terminal is not read (an empty one stands for a closed pipe).
       $stdin = StringIO.new(stdin)
+      $stdin.define_singleton_method(:tty?) { true } unless stdin.empty?
       out = nil
       begin
         out = capture_stdout { gen.generate }

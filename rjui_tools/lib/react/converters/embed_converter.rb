@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require_relative 'base_converter'
+require_relative '../../core/binding_validator_core'
 
 # Generates React/Next.js code for the `Embed` view type. Embeds another
 # screen as a region of the parent layout; the embedded screen owns its own
@@ -70,10 +71,28 @@ module RjuiTools
           "\n        params={{ #{entries.join(', ')} }}"
         end
 
+        # Each event calls the handler it names on `data`, as every other
+        # handler here is called (onClick, onclick's selectors): a generated
+        # component has no ViewModel, only the data it is given. It called
+        # `viewModel.<name>`, which is what sjui and kjui call on the
+        # ViewModel their views hold — here a name nothing declares (TS2304,
+        # and a ReferenceError when the event fired in a JavaScript project;
+        # ticket rjui-embed-event-bridge-calls-an-undeclared-view-model). The
+        # data model declares each name, taking the event's payload, and the
+        # ViewModel base supplies it (#extract_event_handler_bindings in
+        # both). A value that is not a handler name is not called: the build
+        # names it (BindingValidatorCore.embed_event_handler_problem, the
+        # same judgment the two generators take), and a comment keeps its
+        # place — `viewModel.@{name}(…)` did not parse.
         def build_event_bridge_attr(events)
           return '' if events.nil? || events.empty?
+
           cases = events.map do |event_name, handler|
-            "if (event.type === '#{event_name}') viewModel.#{handler}(event.payload);"
+            if JsonUIShared::BindingValidatorCore.embed_event_handler_problem(handler)
+              "/* ERROR: Embed event #{event_name.to_s.gsub('*/', '* /').gsub(/[\r\n]/, ' ')} names no handler, and is not called */"
+            else
+              "if (event.type === #{JsonUIShared::StringLiterals.ts_single(event_name.to_s)}) data.#{handler}?.(event.payload ?? {});"
+            end
           end
           "\n        eventBridge={(event) => { #{cases.join(' ')} }}"
         end

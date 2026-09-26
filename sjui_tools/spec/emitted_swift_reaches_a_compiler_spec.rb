@@ -161,7 +161,6 @@ RSpec.describe 'emitted Swift reaches a compiler' do
     'swiftui/views/container_accessibility_spec.rb' => "p3 — #{UNCONVERTED}",
     'swiftui/views/disabled_outside_the_accessibility_element_spec.rb' => "p3 — #{UNCONVERTED}",
     'swiftui/views/dynamic_component_converter_spec.rb' => "p1 — #{UNCONVERTED}",
-    'swiftui/views/embed_converter_spec.rb' => "p1 — #{UNCONVERTED}",
     'swiftui/views/flow_wraps_under_a_scrolling_ancestor_spec.rb' => "p3 — #{UNCONVERTED}",
     'swiftui/views/frame_helper_spec.rb' => "p3 — #{UNCONVERTED}",
     'swiftui/views/gradient_view_converter_spec.rb' => "p1 — #{UNCONVERTED}",
@@ -333,6 +332,9 @@ RSpec.describe 'emitted Swift reaches a compiler' do
     # expect-result). 49 bounded a list drawn from the markers' population —
     # 60 specs where the loads-and-describes predicate counts 129. 69 entries
     # joined, each with its reason. From here it only goes down.
-    expect(ALLOWLIST.size).to be <= 117
+    #
+    # 116 on 2026-09-26: embed_converter_spec compiles its event bridge
+    # (ticket rjui-embed-event-bridge-calls-an-undeclared-view-model).
+    expect(ALLOWLIST.size).to be <= 116
   end
 end
