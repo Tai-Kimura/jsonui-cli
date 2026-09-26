@@ -597,7 +597,6 @@ def _cmd_generate_project(args: argparse.Namespace) -> int:
             layout_gen = LayoutGenerator(type_mapper)
             layout_json = layout_gen.generate(screen_spec)
             cell_gen = CellLayoutGenerator(layout_gen)
-            cell_entries = _extract_cell_entries(sf)
 
             layouts_dir = config_mgr.layouts_directory
             if screen_spec.layout_file:
@@ -642,26 +641,39 @@ def _cmd_generate_project(args: argparse.Namespace) -> int:
                 generated_files.append(layout_path)
                 print(f"  Created: {layout_path.relative_to(config_mgr.project_root)}")
 
-            # Generate cell Layout JSON when opted in — for every declared
-            # Collection (structure.collection + structure.collections[]).
-            for coll_def, coll_cell_entry in zip(screen_spec.collections, cell_entries):
-                if not cell_gen.should_generate(coll_def):
-                    continue
-                cell_json = cell_gen.generate(coll_def, screen_spec)
-                cell_path = cell_gen.resolve_output_path(
-                    coll_def,
-                    layouts_dir,
-                    coll_cell_entry,
-                )
-                if args.dry_run:
-                    print(f"  [DRY-RUN] Would create cell: {cell_path}")
-                else:
-                    cell_path.parent.mkdir(parents=True, exist_ok=True)
-                    with open(cell_path, "w", encoding="utf-8") as f:
-                        json.dump(cell_json, f, indent=2, ensure_ascii=False)
-                        f.write("\n")
-                    generated_files.append(cell_path)
-                    print(f"  Created cell: {cell_path.relative_to(layouts_dir)}")
+            # Generate the cell / header / footer Layout JSON each entry opts
+            # into — for every declared Collection (structure.collection +
+            # structure.collections[]). The same data-orphan guard as the
+            # screen layout: until jsonui-cli 1.9.0 a cell layout was overwritten with
+            # no look at what its data section held.
+            for coll_def in screen_spec.collections:
+                for slot in cell_gen.slots_to_generate(coll_def):
+                    cell_json = cell_gen.generate_slot(slot, screen_spec)
+                    cell_path = cell_gen.slot_output_path(coll_def, slot, layouts_dir)
+                    slot_orphans = _find_data_orphans(cell_path, cell_json) if cell_path.exists() else []
+                    if slot_orphans:
+                        rel = cell_path.relative_to(config_mgr.project_root)
+                        lines = [
+                            f"ERROR: {rel}: existing {slot.kind} Layout JSON has data "
+                            f"entries not declared in structure.collection.{slot.kind}.uiVariables:"
+                        ]
+                        for name, klass in slot_orphans:
+                            lines.append(f"  - data.{name} ({klass})")
+                        lines.append(
+                            f"  → add each to the {slot.kind}'s uiVariables, or delete the "
+                            "entry from the Layout JSON's data section to acknowledge the "
+                            "removal.")
+                        errors.append("\n".join(lines))
+                        skipped_files.append(cell_path)
+                    elif args.dry_run:
+                        print(f"  [DRY-RUN] Would create {slot.kind}: {cell_path}")
+                    else:
+                        cell_path.parent.mkdir(parents=True, exist_ok=True)
+                        with open(cell_path, "w", encoding="utf-8") as f:
+                            json.dump(cell_json, f, indent=2, ensure_ascii=False)
+                            f.write("\n")
+                        generated_files.append(cell_path)
+                        print(f"  Created {slot.kind}: {cell_path.relative_to(layouts_dir)}")
 
         # Extract subdir from metadata.layoutFile (e.g. "mypage/change_email_sheet" -> "mypage")
         vm_subdir = ""
@@ -865,8 +877,14 @@ def _find_data_orphans(
     to emit callbacks into Data but no longer do, so the next regen
     silently loses those entries unless the author migrated them to
     ``uiVariables``.
+
+    Both sides are read wherever they declare `data` (layout_data): until
+    jsonui-cli 1.9.0 only the root section was, so a layout keeping its data in a
+    child — the usual hand-written form — was overwritten with nothing
+    reported.
     """
     import json as _json
+    from ..core.layout_data import layout_data_entries
 
     try:
         with open(existing_layout_path, "r", encoding="utf-8") as f:
@@ -874,20 +892,13 @@ def _find_data_orphans(
     except (OSError, ValueError):
         return []
 
-    old_data = old.get("data") or []
-    new_data = new_layout_json.get("data") or []
-    if not isinstance(old_data, list) or not isinstance(new_data, list):
-        return []
-
-    new_names = {
-        entry.get("name") for entry in new_data if isinstance(entry, dict)
-    }
+    new_names = {entry["name"] for entry in layout_data_entries(new_layout_json)}
     orphans: list[tuple[str, str]] = []
-    for entry in old_data:
-        if not isinstance(entry, dict):
-            continue
-        name = entry.get("name")
-        if name and name not in new_names:
+    seen: set[str] = set()
+    for entry in layout_data_entries(old):
+        name = entry["name"]
+        if name and name not in new_names and name not in seen:
+            seen.add(name)
             orphans.append((name, entry.get("class", "?")))
     return orphans
 
@@ -897,29 +908,6 @@ def _to_snake_case(name: str) -> str:
     import re
     s = re.sub(r"([A-Z])", r"_\1", name).lower().lstrip("_")
     return s
-
-
-def _extract_cell_entries(spec_file: Path) -> list[dict | None]:
-    """Raw ``cell`` dicts for structure.collection + structure.collections[].
-
-    Used by the cell layout generator to resolve output paths (``layout``
-    field). The list is aligned with ``ScreenSpec.collections`` — both use
-    the same "non-empty dict" filter over the same slots.
-    """
-    import json as _json
-
-    try:
-        with open(spec_file, "r", encoding="utf-8") as f:
-            data = _json.load(f)
-    except (OSError, ValueError):
-        return []
-    structure = data.get("structure") or {}
-    entries: list[dict | None] = []
-    for coll in [structure.get("collection"), *(structure.get("collections") or [])]:
-        if isinstance(coll, dict) and coll:
-            cell = coll.get("cell")
-            entries.append(cell if isinstance(cell, dict) else None)
-    return entries
 
 
 def _cmd_generate_screen(args: argparse.Namespace) -> int:
