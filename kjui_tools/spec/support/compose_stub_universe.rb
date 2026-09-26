@@ -148,10 +148,27 @@ module ComposeStubUniverse
           onClick: () -> Unit
       ): Modifier = this
       enum class PointerEventPass { Initial, Main, Final }
-      class PointerInputChange { fun consume() {} }
+      class PointerInputChange { fun consume() {}; val pressed: Boolean = false }
       class PointerEvent(val changes: List<PointerInputChange>)
-      interface AwaitPointerEventScope { suspend fun awaitPointerEvent(pass: PointerEventPass = PointerEventPass.Main): PointerEvent }
+      fun PointerEvent.calculateZoom(): Float = 1f
+      interface ViewConfiguration { val longPressTimeoutMillis: Long }
+      interface AwaitPointerEventScope {
+          val viewConfiguration: ViewConfiguration
+          suspend fun awaitPointerEvent(pass: PointerEventPass = PointerEventPass.Main): PointerEvent
+          suspend fun <T> withTimeout(timeMillis: Long, block: suspend AwaitPointerEventScope.() -> T): T
+      }
+      class PointerEventTimeoutCancellationException : Exception()
+      suspend fun AwaitPointerEventScope.awaitFirstDown(requireUnconsumed: Boolean = true,
+                                                        pass: PointerEventPass = PointerEventPass.Main): PointerInputChange = PointerInputChange()
       interface PointerInputScope { suspend fun <R> awaitPointerEventScope(block: suspend AwaitPointerEventScope.() -> R): R }
+      suspend fun PointerInputScope.awaitEachGesture(block: suspend AwaitPointerEventScope.() -> Unit) {}
+      class Offset(val x: Float, val y: Float) {
+          operator fun plus(other: Offset): Offset = this
+          companion object { val Zero = Offset(0f, 0f) }
+      }
+      suspend fun PointerInputScope.detectDragGestures(onDragStart: (Offset) -> Unit = {}, onDragEnd: () -> Unit = {},
+                                                       onDragCancel: () -> Unit = {},
+                                                       onDrag: (change: PointerInputChange, dragAmount: Offset) -> Unit) {}
       fun Modifier.pointerInput(key1: Any?, block: suspend PointerInputScope.() -> Unit): Modifier = this
       class FocusState(val isFocused: Boolean)
       fun Modifier.onFocusChanged(onFocusChanged: (FocusState) -> Unit): Modifier = this
@@ -252,7 +269,7 @@ module ComposeStubUniverse
       fun Scaffold(modifier: Modifier = Modifier, bottomBar: () -> Unit = {}, content: (PaddingValues) -> Unit) {}
       fun NavigationBar(content: RowScope.() -> Unit) {}
       fun RowScope.NavigationBarItem(selected: Boolean, onClick: () -> Unit, icon: () -> Unit,
-                                     label: (() -> Unit)? = null,
+                                     enabled: Boolean = true, label: (() -> Unit)? = null,
                                      colors: NavigationBarItemColors = NavigationBarItemColors()) {}
       class ProvidedValue
       class SafeAreaConfig(val ignoreBottom: Boolean = false, val ignoreTop: Boolean = false)

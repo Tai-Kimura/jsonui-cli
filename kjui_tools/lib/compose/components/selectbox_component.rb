@@ -265,7 +265,10 @@ module KjuiTools
           end
           
           if json_data['cornerRadius']
-            code += "\n" + indent("cornerRadius = #{json_data['cornerRadius']},", depth + 1)
+            # SelectBox takes its radius as an Int; a bound one is an
+            # expression (BoundValue.int) — `@{r}` was written into the
+            # Kotlin as `cornerRadius = @{r}` (B8).
+            code += "\n" + indent("cornerRadius = #{Helpers::BoundValue.int(json_data['cornerRadius'])},", depth + 1)
           end
 
           # Font styling

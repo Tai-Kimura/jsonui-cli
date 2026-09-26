@@ -64,6 +64,13 @@ module KjuiTools
             modifiers << ".size(#{size}.dp)"
           end
 
+          # offset → alpha: the View slots after the size and before the
+          # decoration, so the shadow, the circle, its border and background
+          # move and fade with the image. They sat after the background
+          # (kjui-dynamic-components-that-skip-the-common-modifiers, B2).
+          modifiers.concat(Helpers::ModifierBuilder.build_offset(json_data, required_imports))
+          modifiers.concat(Helpers::ModifierBuilder.build_alpha(json_data, required_imports))
+
           # Circular clip: CircleShape lives in foundation.shape (registered under
           # :circle_shape); :shape only brings RoundedCornerShape + clip helpers.
           required_imports&.add(:shape)
@@ -94,8 +101,6 @@ module KjuiTools
             modifiers << ".background(#{Helpers::ResourceResolver.process_color(json_data['background'], required_imports)})"
           end
           
-          modifiers.concat(Helpers::ModifierBuilder.build_offset(json_data, required_imports))
-          modifiers.concat(Helpers::ModifierBuilder.build_alpha(json_data, required_imports))
           modifiers.concat(Helpers::ModifierBuilder.build_clickable(json_data, required_imports))
           modifiers.concat(Helpers::ModifierBuilder.build_padding(json_data))
           modifiers.concat(Helpers::ModifierBuilder.build_weight(json_data, parent_type))
