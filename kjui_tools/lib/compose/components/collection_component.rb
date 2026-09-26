@@ -133,11 +133,17 @@ module KjuiTools
         # so a literal false still animated on both paths (measured on
         # 8e4ea3ea, 2026-09-26; ticket
         # collection-attributes-declared-but-not-drawn-on-some-paths).
-        # Returns [:binding, prop] / [:jump, nil] / [:animate, nil].
+        #
+        # A binding reads as kjui's other boolean bindings (BoundValue.bool):
+        # a property declared without a default is `Boolean?`, and an unset
+        # value is false — `(data.x ?: false)`, as sjui's `(data.x ?? false)`
+        # and rjui's `=== true` read it. The bare `data.x` did not compile
+        # against `Boolean?` (measured on 6bdb6aba, 2026-09-26).
+        # Returns [:binding, Kotlin Boolean expression] / [:jump, nil] / [:animate, nil].
         def self.scroll_animated_mode(json_data)
           value = json_data['scrollAnimated']
-          if value.is_a?(String) && (match = value.match(/@\{([^}]+)\}/))
-            [:binding, match[1]]
+          if value.is_a?(String) && value.match?(/@\{([^}]+)\}/)
+            [:binding, Helpers::BoundValue.bool(value)]
           elsif value == false
             [:jump, nil]
           else
@@ -476,7 +482,7 @@ module KjuiTools
             required_imports&.add(:launched_effect)
             scroll_prop = $1
 
-            animated_mode, animated_prop = scroll_animated_mode(json_data)
+            animated_mode, animated_expr = scroll_animated_mode(json_data)
 
             scroll_code = indent("val gridState = rememberLazyGridState()", depth) + "\n" +
                           indent("// Programmatic scrolling", depth) + "\n" +
@@ -489,7 +495,7 @@ module KjuiTools
             scroll_code += anchor_decl
             if animated_mode == :binding
               scroll_code += indent("if (index >= 0) {", depth + 1) + "\n" +
-                             indent("if (data.#{animated_prop}) {", depth + 2) + "\n" +
+                             indent("if (#{animated_expr}) {", depth + 2) + "\n" +
                              indent("gridState.animateScrollToItem(index#{anchor_arg})", depth + 3) + "\n" +
                              indent("} else {", depth + 2) + "\n" +
                              indent("gridState.scrollToItem(index#{anchor_arg})", depth + 3) + "\n" +
@@ -1755,7 +1761,7 @@ module KjuiTools
 
           if has_scroll_to
             required_imports&.add(:lazy_grid_state)
-            animated_mode, animated_prop = scroll_animated_mode(json_data)
+            animated_mode, animated_expr = scroll_animated_mode(json_data)
 
             code += indent("val collectionStackState = androidx.compose.foundation.lazy.rememberLazyListState()", depth) + "\n"
             code += indent("LaunchedEffect(data.#{scroll_prop}) {", depth) + "\n"
@@ -1766,7 +1772,7 @@ module KjuiTools
             code += stack_anchor_decl
             if animated_mode == :binding
               code += indent("if (index >= 0) {", depth + 1) + "\n"
-              code += indent("if (data.#{animated_prop}) collectionStackState.animateScrollToItem(index#{stack_anchor_arg}) else collectionStackState.scrollToItem(index#{stack_anchor_arg})", depth + 2) + "\n"
+              code += indent("if (#{animated_expr}) collectionStackState.animateScrollToItem(index#{stack_anchor_arg}) else collectionStackState.scrollToItem(index#{stack_anchor_arg})", depth + 2) + "\n"
               code += indent("}", depth + 1) + "\n"
             elsif animated_mode == :jump
               code += indent("if (index >= 0) collectionStackState.scrollToItem(index#{stack_anchor_arg})", depth + 1) + "\n"

@@ -42,6 +42,8 @@ RSpec.describe 'kjui codegen: scrollAnimated' do
 
   SCROLL_ANIMATED_PATHS.each_key do |path|
     it "#{path}: absent and true animate, a literal false jumps, a binding chooses at run time" do
+      # A bound Bool declared with a default: a non-null Boolean.
+      allow(KjuiTools::Compose::Helpers::ResourceResolver).to receive(:has_default_value?).and_return(true)
       expect(calls(emit(path, :absent))).to eq(['animateScrollToItem'])
       expect(calls(emit(path, true))).to eq(['animateScrollToItem'])
       expect(calls(emit(path, false))).to eq(['scrollToItem'])
@@ -75,7 +77,26 @@ RSpec.describe 'kjui codegen: scrollAnimated' do
     class Data(val target: Int? = null, val animated: Boolean = true)
   KOTLIN
 
+  # A bound Bool declared without a default is `Boolean?` in the data model
+  # (DataModelUpdater), and `if (data.animated)` does not take one — Kotlin
+  # wants a Boolean. The binding reads as kjui's other boolean bindings do
+  # (BoundValue.bool): an unset value is false, as sjui's `(data.x ?? false)`
+  # and rjui's `=== true` read it. Measured on 6bdb6aba (2026-09-26): kotlinc
+  # "Condition type mismatch: inferred type is 'Boolean?', but 'Boolean' was
+  # expected" on both paths.
+  it 'a bound value declared without a default (Boolean?) compiles, and an unset one jumps' do
+    allow(KjuiTools::Compose::Helpers::ResourceResolver).to receive(:has_default_value?).and_return(false)
+    functions = SCROLL_ANIMATED_PATHS.keys.each_with_index.map do |path, index|
+      block = scroll_block(emit(path, '@{animated}'))
+      expect(block).to include('(data.animated ?: false)'), block
+      "@Composable fun nullable#{index}(data: NullableData) {\n#{block}}"
+    end
+    expect("#{SCROLL_ANIMATED_STUBS}\nclass NullableData(val target: Int? = null, val animated: Boolean? = null)\n" \
+           "#{functions.join("\n\n")}\n").to compile_as_kotlin
+  end
+
   it 'every scroll block compiles against the two calls both states have' do
+    allow(KjuiTools::Compose::Helpers::ResourceResolver).to receive(:has_default_value?).and_return(true)
     functions = SCROLL_ANIMATED_PATHS.keys.product([:absent, true, false, '@{animated}']).each_with_index.map do |(path, value), index|
       "// #{path}, scrollAnimated #{value.inspect}\n@Composable fun scroll#{index}(data: Data) {\n#{scroll_block(emit(path, value))}}"
     end
