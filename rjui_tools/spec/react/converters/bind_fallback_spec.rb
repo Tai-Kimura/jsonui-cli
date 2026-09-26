@@ -133,8 +133,8 @@ RSpec.describe 'bind as the primary value binding' do
   it 'is read by no converter' do
     token = /\['bind'\]|\["bind"\]|with_bind_fallback\(/
     hits = lambda do |text, name|
-      # map + compact, not filter_map: Ruby 2.6 (the consumer floor, a CI
-      # leg) has no filter_map
+      # map + compact, not filter_map: Ruby 2.6 (the consumer floor and a
+      # CI leg until jsonui-cli 1.9.0; 3.2 since) has no filter_map
       text.lines.each_with_index.map do |line, i|
         next if line.strip.start_with?('#')
 
