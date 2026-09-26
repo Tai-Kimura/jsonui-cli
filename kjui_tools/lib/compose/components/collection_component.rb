@@ -1122,9 +1122,21 @@ module KjuiTools
 
           code = ""
 
+          # One page per cell, every drawn section's cells in order (4f ruling
+          # 2026-09-26, round 6; what sjui, rjui and both Dynamic renderers
+          # draw). One declared section keeps the text this emitter always
+          # wrote. Until jsonui-cli 1.9.0 the pager read data section 0 only —
+          # its page count and its cells — so a second section drew nothing;
+          # and the class-list shape (cellClasses, no `sections`) drew no page.
+          sources = paging_sources(json_data, sections, item_binding)
+          sources.each { |cell, _| required_imports&.add("cell:#{cell}") }
+          one_section = sources.size == 1 && sections.any? && sources.first == [sections.first['cell'], 0]
+
           # Page count from data source
-          if item_binding && sections.any?
+          if one_section
             code += indent("val pageCount = #{sections_access(item_binding)}.firstOrNull()?.cells?.data?.size ?: 0", depth) + "\n"
+          elsif sources.any?
+            code += paging_source_lists(json_data, sources, item_binding, depth, required_imports)
           else
             code += indent("val pageCount = 0", depth) + "\n"
           end
@@ -1177,7 +1189,9 @@ module KjuiTools
           end
 
           # Render cell content
-          if item_binding && sections.any?
+          if !one_section && sources.any?
+            code += paging_cells(json_data, sources, depth + 1)
+          elsif one_section
             cell_view_name = sections.first['cell']
             if cell_view_name
               cell_class = cell_class_name(cell_view_name)
@@ -1210,6 +1224,66 @@ module KjuiTools
           end
 
           code += "\n" + indent("}", depth)
+          code
+        end
+
+        # The pager's sources: [cell, data section index] for each declared
+        # section that draws a cell, in order; the class-list shape is one —
+        # cellClasses[0] over data section 0, or [cell, :list] when the layout
+        # declares items a list (class_list_array_expr).
+        def self.paging_sources(json_data, sections, item_binding)
+          return [] unless item_binding
+
+          if sections.any?
+            sections.each_with_index.select { |section, _| section['cell'] }.map { |section, index| [section['cell'], index] }
+          elsif (cell = class_list(json_data)&.first)
+            [[cell, class_list_array_expr(json_data, cell) ? :list : 0]]
+          else
+            []
+          end
+        end
+
+        # One list per source (`pageSection<n>`, List<Map<String, Any>>) and
+        # their total, `pageCount`. autoChangeTrackingId enriches each list
+        # with cell ids, as the one-section pager does.
+        def self.paging_source_lists(json_data, sources, item_binding, depth, required_imports)
+          cell_id_prop = json_data['cellIdProperty']
+          auto_tracking = json_data['autoChangeTrackingId'] == true
+          code = ''
+          sources.each_with_index do |(cell, source), n|
+            list = source == :list ? class_list_array_expr(json_data, cell) : "#{sections_access(item_binding)}.getOrNull(#{source})?.cells?.data.orEmpty()"
+            if auto_tracking && cell_id_prop
+              required_imports&.add(:remember_state)
+              code += indent("val pageSource#{n} = #{list}", depth) + "\n"
+              code += indent("val pageSection#{n} = remember(pageSource#{n}) { com.kotlinjsonui.utils.CellIdGenerator.enrichCellIds(pageSource#{n}, \"#{cell_id_prop}\") }", depth) + "\n"
+            else
+              code += indent("val pageSection#{n} = #{list}", depth) + "\n"
+            end
+          end
+          code += indent("val pageCount = #{sources.each_index.map { |n| "pageSection#{n}.size" }.join(' + ')}", depth) + "\n"
+          code
+        end
+
+        # The page body: the source the page falls in, and its cell there. A
+        # page's index counts across all the sources, so `page` is the pager's
+        # own index and the item's test tag and ViewModel key are unique.
+        def self.paging_cells(json_data, sources, depth)
+          code = "\n" + indent("var pageStart = 0", depth)
+          sources.each_with_index do |(cell, _), n|
+            cell_class = cell_class_name(cell)
+            code += "\n" + indent("if (page >= pageStart && page < pageStart + pageSection#{n}.size) {", depth)
+            code += "\n" + indent("val item = pageSection#{n}[page - pageStart]", depth + 1)
+            code += "\n" + indent("val cellViewModel: #{cell_class}ViewModel = viewModel(key = \"#{cell}_page_\${page}_\${viewModel.hashCode()}\")", depth + 1)
+            code += "\n" + indent("LaunchedEffect(item) {", depth + 1)
+            code += "\n" + indent("cellViewModel.updateData(item)", depth + 2)
+            code += "\n" + indent("}", depth + 1)
+            code += "\n" + indent("#{cell_class}View(", depth + 1)
+            code += "\n" + indent("viewModel = cellViewModel,", depth + 2)
+            code += "\n" + cell_test_tag_modifier(json_data['id'], 'page', depth + 2, '.fillMaxSize()')
+            code += "\n" + indent(")", depth + 1)
+            code += "\n" + indent("}", depth)
+            code += "\n" + indent("pageStart += pageSection#{n}.size", depth) if n < sources.size - 1
+          end
           code
         end
 

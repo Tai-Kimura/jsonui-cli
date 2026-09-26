@@ -595,8 +595,10 @@ module RjuiTools
         # follow, 4f ruling 2026-09-26), from the data's own sections:
         #
         #   vertical (list, grid, lazy:none)   every data section; header before, footer after
-        #   horizontal, flow                   the first data section; no header / footer
-        #   horizontal paging                  nothing
+        #   horizontal, flow, paging           the first data section; no header / footer
+        #
+        # (paging: a snap child per cell — 4f ruling 2026-09-26, round 6; it
+        # drew nothing until jsonui-cli 1.9.0)
         #
         # A header / footer is its view with no data. No `items`: no cell
         # (the shared LayoutValidator names it) — until jsonui-cli 1.9.0 this
@@ -625,13 +627,12 @@ module RjuiTools
           # were, on every route.
           return legacy_array_content(indent, cell_view, header_view, footer_view, items_binding) if legacy_items_list_element
 
-          paging = horizontal_collection? && attributes['paging'] == true
           first_only = flow_collection? || horizontal_collection?
-          edges = !paging && !first_only
+          edges = !first_only
 
           lines << "#{indent_str(indent)}<#{header_view} />" if header_view && edges
 
-          if cell_view && items_binding && !paging
+          if cell_view && items_binding
             cast = config['typescript'] ? " as unknown as #{cell_view}Data" : ''
             if first_only
               lanes = horizontal_lanes

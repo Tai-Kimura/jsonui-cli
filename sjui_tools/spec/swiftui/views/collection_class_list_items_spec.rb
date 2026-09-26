@@ -7,8 +7,9 @@ require 'swiftui/views/collection_converter'
 # 2026-09-26). A class-list Collection (cellClasses, no `sections`) whose items
 # property the layout DECLARES a list — `Array`, `[T]` — is one section: every
 # element with cellClasses[0], on the routes a one-section data source draws
-# (List, grid, lazy:none, horizontal, flow; paging reads declared sections
-# only). Any other declaration, or none, is the canonical CollectionDataSource,
+# (List, grid, lazy:none, horizontal, flow, and paging — a page per element
+# since 4f's round-6 ruling, 2026-09-26; it drew none). Any other
+# declaration, or none, is the canonical CollectionDataSource,
 # emitted as before. Until jsonui-cli 1.9.0 every class-list route read
 # `.sections`, which a list does not have.
 #
@@ -41,14 +42,10 @@ RSpec.describe SjuiTools::SwiftUI::Views::CollectionConverter do
 
   CLASS_LIST_ITEMS_DECLARATIONS.each do |declared, (property, source, _swift)|
     CLASS_LIST_ITEMS_ROUTES.each do |route, extra|
-      it "items #{declared}, #{route}: #{route == 'paging' ? 'nothing' : 'one ForEach over the list'}, no `.sections`" do
+      it "items #{declared}, #{route}: one ForEach over the list, no `.sections`" do
         code = convert(extra, property)
-        if route == 'paging'
-          expect(code).not_to include('RowCellView(')
-        else
-          expect(code.scan('RowCellView(').size).to eq(1), code
-          expect(code).to include("if let cellsData = #{source} {")
-        end
+        expect(code.scan('RowCellView(').size).to eq(1), code
+        expect(code).to include("if let cellsData = #{source} {")
         expect(code).not_to include('.sections')
       end
     end

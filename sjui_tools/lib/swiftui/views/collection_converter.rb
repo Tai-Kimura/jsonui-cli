@@ -1105,8 +1105,19 @@ module SjuiTools
             add_line "TabView {"
           end
 
+          # One page per cell, every drawn section's cells in order (4f
+          # ruling 2026-09-26, round 6: what SwiftJsonUI Dynamic, rjui and
+          # KotlinJsonUI Dynamic draw). A page's tag is its place among ALL
+          # the pages, so a bound currentPage names one page: a section's
+          # tags start where the drawn sections before it end (pageStart).
+          # Until jsonui-cli 1.9.0 each section counted from 0, so under
+          # TabView(selection:) section 2's pages repeated section 1's tags.
+          # The class-list shape (cellClasses, no `sections`) is one section,
+          # as on the other one-section routes: the first data section, or
+          # the declared list; it drew no page until jsonui-cli 1.9.0.
           indent do
             if @component['sections'] && !@component['sections'].empty? && property_name
+              drawn = []
               @component['sections'].each_with_index do |section, index|
                 cell_view_name = extract_view_name(section['cell']) if section['cell']
                 next unless cell_view_name && property_name
@@ -1120,25 +1131,33 @@ module SjuiTools
                 indent do
                   data_ref = is_optional ? "dataSource" : "data.#{property_name}"
                   add_line "let section = #{data_ref}.sections[#{index}]"
+                  unless drawn.empty?
+                    counts = drawn.map { |j| "(#{data_ref}.sections[#{j}].cells?.data.count ?? 0)" }
+                    add_line "let pageStart = #{counts.join(' + ')}"
+                  end
                   add_line "if let cellsData = section.cells?.data {"
                   indent do
                     vars = open_cell_foreach('cellsData')
                     indent do
-                      add_line "#{cell_view_name}(data: #{vars[:data_var]}).equatable()"
-                      generate_cell_identity(vars[:index_var])
-                      apply_cell_frame
-                      if spacing > 0
-                        add_modifier_line ".padding(.horizontal, #{spacing / 2.0})"
-                      end
-                      apply_cell_item_identifier(vars[:index_var])
-                      add_modifier_line ".tag(#{vars[:index_var]})"
+                      add_paging_cell(cell_view_name, vars, spacing, drawn.empty? ? nil : 'pageStart')
                     end
                     add_line "}"
                   end
                   add_line "}"
                 end
                 add_line "}"
+                drawn << index
               end
+            elsif (cell_view_name = legacy_paging_cell) && property_name
+              add_line "if let #{legacy_first_cells_binding(property_name, is_property_optional?(property_name))} {"
+              indent do
+                vars = open_cell_foreach('cellsData')
+                indent do
+                  add_paging_cell(cell_view_name, vars, spacing, nil)
+                end
+                add_line "}"
+              end
+              add_line "}"
             end
           end
           add_line "}"
@@ -1160,6 +1179,29 @@ module SjuiTools
 
           # Apply common modifiers
           apply_modifiers
+        end
+
+        # One page: the cell, its identity, frame, spacing and address, and
+        # its tag — its place among all the pages (page_start + its index in
+        # the section; nil for the first drawn section, whose pages start at 0).
+        def add_paging_cell(cell_view_name, vars, spacing, page_start)
+          add_line "#{cell_view_name}(data: #{vars[:data_var]}).equatable()"
+          generate_cell_identity(vars[:index_var])
+          apply_cell_frame
+          if spacing > 0
+            add_modifier_line ".padding(.horizontal, #{spacing / 2.0})"
+          end
+          apply_cell_item_identifier(vars[:index_var])
+          add_modifier_line page_start ? ".tag(#{page_start} + #{vars[:index_var]})" : ".tag(#{vars[:index_var]})"
+        end
+
+        # The class-list shape's cell view (cellClasses[0], no `sections`),
+        # or nil.
+        def legacy_paging_cell
+          return nil if @component['sections'].is_a?(Array) && !@component['sections'].empty?
+
+          first = (@component['cellClasses'] || []).first
+          first && extract_view_name(first)
         end
 
         # Generate flow layout using FlowLayout (iOS 16+)

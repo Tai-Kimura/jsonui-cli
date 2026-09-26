@@ -104,14 +104,15 @@ RSpec.describe 'rjui Collection: class-list names and the page-change callback' 
     'list' => [{}, :every, true], 'grid' => [{ 'columns' => 2 }, :every, true],
     'lazy:none' => [{ 'lazy' => 'none' }, :every, true],
     'horizontal' => [{ 'layout' => 'horizontal' }, :first, false], 'flow' => [{ 'layout' => 'flow' }, :first, false],
-    'paging' => [{ 'layout' => 'horizontal', 'paging' => true }, :nothing, false]
+    'paging' => [{ 'layout' => 'horizontal', 'paging' => true }, :first, false]
   }.freeze
 
   # The class-list shape draws from the data's sections, as sjui codegen does
   # (kjui codegen and both Dynamic renderers follow the same table): every
-  # data section on the vertical routes, the first on horizontal and flow,
-  # nothing on paging; the header and footer, with no data, on the vertical
-  # routes only. The cells mapped `items` itself — `data.rows?.map` — which
+  # data section on the vertical routes, the first on horizontal, flow and
+  # paging (a snap child per cell; paging drew nothing until jsonui-cli 1.9.0 —
+  # 4f ruling 2026-09-26, round 6); the header and footer, with no data, on
+  # the vertical routes only. The cells mapped `items` itself — `data.rows?.map` — which
   # a CollectionDataSource does not have (tsc TS2339, measured on 798f6e64,
   # 2026-09-26); the header and footer were drawn on every route. The file
   # type-checks with the rows typed as the data model types them.
@@ -196,10 +197,20 @@ RSpec.describe 'rjui Collection: class-list names and the page-change callback' 
     expect(js).not_to match(/: number\b| as unknown as /)
   end
 
+  # The pages are the first data section's cells (a snap child each; the
+  # class-list pager drew none until jsonui-cli 1.9.0), so the model is typed
+  # as the data model types it: the pages a CollectionDataSource, the
+  # callback taking the page.
   it 'calls the page-change callback with the page, once per page, and the file type-checks' do
     expect(pager).to include("import { currentCollectionPage } from '@/generated/collectionScroll';")
     expect(pager).to include('data.onPageChange?.(page)').and include('el.dataset.jsonuiPage !== String(page)')
-    expect(pager).to compile_as_typescript.with_ambient(ambient_for(pager))
+    expect(pager.scan('<PageCell ').size).to eq(1)
+    typed = typed_ambient(pager).sub(
+      "{ rows?: import('@/generated/data/CollectionDataSource').CollectionDataSource }",
+      "{ pages?: import('@/generated/data/CollectionDataSource').CollectionDataSource; onPageChange?: (page: number) => void }"
+    )
+    expect(typed).to include('onPageChange?: (page: number) => void }')
+    expect(pager).to compile_as_typescript.with_ambient(typed)
   end
 
   it "declares the callback in the screen's Data model, taking the page index (the alias spelling too)" do

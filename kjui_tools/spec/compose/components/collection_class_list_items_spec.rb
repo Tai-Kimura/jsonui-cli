@@ -8,7 +8,7 @@ require_relative '../../support/kotlin_compiler'
 # 2026-09-26). A class-list Collection (cellClasses, no `sections`) whose items
 # property the layout DECLARES a list — `Array`, `[T]` — is one section: every
 # element with cellClasses[0], on the routes a one-section data source draws
-# (paging reads declared sections only). Any other declaration, or none, is the
+# (paging too — a page per element since 4f's round-6 ruling, 2026-09-26). Any other declaration, or none, is the
 # canonical CollectionDataSource, emitted as before. Until jsonui-cli 1.9.0
 # every class-list route read `.sections`, which a List does not have.
 #
@@ -44,11 +44,12 @@ RSpec.describe 'kjui codegen: a class-list Collection whose items are a declared
 
   CLASS_LIST_ITEMS_DECLARATIONS.each do |declared, (definition, list, _kotlin)|
     CLASS_LIST_ITEMS_ROUTES.each do |route, extra|
-      it "items #{declared}, #{route}: #{route == 'paging' ? 'nothing' : 'the declared list, one section'}, no `.sections`" do
+      it "items #{declared}, #{route}: the declared list, one section, no `.sections`" do
         allow(KjuiTools::Core::Logger).to receive(:warn)
         code = emit(extra, definition)
         if route == 'paging'
-          expect(code).not_to include('RowCellView(')
+          expect(code.scan('RowCellView(').size).to eq(1), code
+          expect(code).to include("val pageSection0 = #{list}")
         else
           expect(code.scan('RowCellView(').size).to eq(1), code
           expect(code).to include(list)
