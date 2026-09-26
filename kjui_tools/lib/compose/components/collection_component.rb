@@ -779,6 +779,23 @@ module KjuiTools
           if items_property && items_property.match(/@\{([^}]+)\}/)
             property_name = $1
 
+            # A grid per section: each section's cells start a row of their
+            # own, as sjui codegen and SwiftJsonUI Dynamic draw them. One
+            # LazyVerticalGrid holds every section here, so without a break
+            # section 2 continued section 1's last row unless a header item
+            # sat between (measured on d084cfb2, 2026-09-26). The builder
+            # counts how much of the current row the cells laid out so far
+            # fill, in grid units; before a section's cells, a row left part
+            # filled is closed by an empty item spanning what it has left
+            # (`maxCurrentLineSpan`) — no row is added when it is full.
+            # Full-span header / footer items close a row themselves.
+            line_breaks = sections.count { |s| s['cell'] } > 1
+            if line_breaks
+              required_imports&.add(:grid_item_span)
+              grid_units = columns_binding ? "(#{columns_info[:expr]}).coerceAtLeast(1)" : grid_columns.to_s
+              code += "\n" + indent("var gridLineFill = 0", depth + 1)
+            end
+
             # When reverseLayout is true, reverse section order so that
             # JSON definition order matches iOS display (iOS cannot reverse layout)
             reverse_layout = json_data['reverseLayout'] == true
@@ -839,6 +856,7 @@ module KjuiTools
                   code += "\n" + indent("modifier = Modifier.fillMaxWidth()", depth + 5)
                   code += "\n" + indent(")", depth + 4)
                   code += "\n" + indent("}", depth + 3)
+                  code += "\n" + indent("gridLineFill = 0", depth + 3) if line_breaks
                   code += "\n" + indent("}", depth + 2)
                 end
 
@@ -858,6 +876,12 @@ module KjuiTools
                   data_access = "#{cell_data_var}.data"
                 end
 
+                if line_breaks
+                  code += "\n" + indent("if (gridLineFill != 0) {", depth + 3)
+                  code += "\n" + indent("item(span = { GridItemSpan(maxCurrentLineSpan) }) {}", depth + 4)
+                  code += "\n" + indent("gridLineFill = 0", depth + 4)
+                  code += "\n" + indent("}", depth + 3)
+                end
                 if key_expr && item_span > 1
                   code += "\n" + indent("items(#{data_access}.size, #{key_expr}, span = { GridItemSpan(#{item_span}) }) { cellIndex ->", depth + 3)
                 elsif key_expr
@@ -908,6 +932,9 @@ module KjuiTools
                 end
                 code += "\n" + indent("}", depth + 4)
                 code += "\n" + indent("}", depth + 3)
+                if line_breaks
+                  code += "\n" + indent("gridLineFill = (gridLineFill + #{data_access}.size * #{item_span}) % #{grid_units}", depth + 3)
+                end
                 code += "\n" + indent("}", depth + 2)
                 
                 # Generate footer if present
@@ -926,6 +953,7 @@ module KjuiTools
                   code += "\n" + indent("modifier = Modifier.fillMaxWidth()", depth + 5)
                   code += "\n" + indent(")", depth + 4)
                   code += "\n" + indent("}", depth + 3)
+                  code += "\n" + indent("gridLineFill = 0", depth + 3) if line_breaks
                   code += "\n" + indent("}", depth + 2)
                 end
                 
@@ -1308,11 +1336,23 @@ module KjuiTools
         # Generate non-lazy Column-based collection for wrapContent height.
         # Used when a vertical Collection has height: "wrapContent" to avoid
         # Compose crash from nesting LazyVerticalGrid inside another Lazy container.
+        # The row width of a section on the composable (non-lazy) route: the
+        # section's own `columns`, else the Collection's — a Kotlin expression
+        # when that is more than 1 (or a binding), nil for one cell per row.
+        def self.non_lazy_section_columns(json_data, section)
+          own = section['columns']
+          return own > 1 ? own.to_s : nil if own.is_a?(Integer)
+
+          info = columns_emit_info(json_data)
+          return "(#{info[:expr]}).coerceAtLeast(1)" if info[:is_binding]
+
+          info[:literal] > 1 ? info[:literal].to_s : nil
+        end
+
         def self.generate_non_lazy(json_data, sections, depth, required_imports, parent_type)
           required_imports&.add(:launched_effect)
 
           items_property = json_data['items']
-          default_columns = json_data['columns'] || 1
 
           # Build modifiers
           modifiers = []
@@ -1387,25 +1427,50 @@ module KjuiTools
                 code += "\n" + indent("#{section_var}.cells?.let { #{cell_data_var} ->", depth + 2)
                 data_access = "#{cell_data_var}.data"
               end
-              code += "\n" + indent("#{data_access}.forEachIndexed { cellIndex, _ ->", depth + 3)
-              code += "\n" + indent("val currentCellData = #{data_access}[cellIndex]", depth + 4)
-              if cell_id_prop
-                code += "\n" + indent("val cellId = (currentCellData[\"cellId\"] as? String) ?: (currentCellData[\"#{cell_id_prop}\"] as? String) ?: \"$cellIndex\"", depth + 4)
-                code += "\n" + indent("val cellViewModel: #{cell_class}ViewModel = viewModel(key = \"#{cell_view_name}_cell_#{index}_\${cellId}_\${viewModel.hashCode()}\")", depth + 4)
-              else
-                code += "\n" + indent("val cellViewModel: #{cell_class}ViewModel = viewModel(key = \"#{cell_view_name}_cell_#{index}_\${cellIndex}_\${viewModel.hashCode()}\")", depth + 4)
+              # The cell, with `cellIndex` in scope, at depth `d`.
+              cell = lambda do |d|
+                out = "\n" + indent("val currentCellData = #{data_access}[cellIndex]", d)
+                if cell_id_prop
+                  out += "\n" + indent("val cellId = (currentCellData[\"cellId\"] as? String) ?: (currentCellData[\"#{cell_id_prop}\"] as? String) ?: \"$cellIndex\"", d)
+                  out += "\n" + indent("val cellViewModel: #{cell_class}ViewModel = viewModel(key = \"#{cell_view_name}_cell_#{index}_\${cellId}_\${viewModel.hashCode()}\")", d)
+                else
+                  out += "\n" + indent("val cellViewModel: #{cell_class}ViewModel = viewModel(key = \"#{cell_view_name}_cell_#{index}_\${cellIndex}_\${viewModel.hashCode()}\")", d)
+                end
+                out += "\n" + indent("LaunchedEffect(currentCellData) { cellViewModel.updateData(currentCellData) }", d)
+                out += "\n" + indent("#{cell_class}View(", d)
+                out += "\n" + indent("viewModel = cellViewModel,", d + 1)
+                # No fillMaxWidth: the cell view defines its own size (dynamic
+                # honors the declared width; a full-width cell declares
+                # matchParent itself). Stretching here was the parity deviation
+                # measured across every android Collection fixture.
+                out += "\n" + cell_test_tag_modifier(json_data['id'], 'cellIndex', d + 1)
+                out + "\n" + indent(")", d)
               end
-              code += "\n" + indent("LaunchedEffect(currentCellData) { cellViewModel.updateData(currentCellData) }", depth + 4)
-              code += "\n" + indent("#{cell_class}View(", depth + 4)
-              code += "\n" + indent("viewModel = cellViewModel,", depth + 5)
-              collection_id = json_data['id']
-              # No fillMaxWidth: the cell view defines its own size (dynamic
-              # honors the declared width; a full-width cell declares
-              # matchParent itself). Stretching here was the parity deviation
-              # measured across every android Collection fixture.
-              code += "\n" + cell_test_tag_modifier(collection_id, 'cellIndex', depth + 5)
-              code += "\n" + indent(")", depth + 4)
-              code += "\n" + indent("}", depth + 3)
+              # A grid per section: a section of more than one column (its own
+              # `columns`, else the Collection's) is laid out in rows of that
+              # many, as sjui codegen and SwiftJsonUI Dynamic draw it. This
+              # drew one cell per row (measured on d084cfb2, 2026-09-26).
+              per_row = non_lazy_section_columns(json_data, section)
+              if per_row
+                spacing = json_data['columnSpacing'] || json_data['itemSpacing']
+                required_imports&.add(:arrangement) if spacing
+                row_args = spacing ? "modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(#{spacing}.dp)" : 'modifier = Modifier.fillMaxWidth()'
+                code += "\n" + indent("#{data_access}.chunked(#{per_row}).forEachIndexed { rowIndex, rowCells ->", depth + 3)
+                code += "\n" + indent("Row(#{row_args}) {", depth + 4)
+                code += "\n" + indent("rowCells.indices.forEach { columnIndex ->", depth + 5)
+                code += "\n" + indent("val cellIndex = rowIndex * #{per_row} + columnIndex", depth + 6)
+                code += "\n" + indent("Box(modifier = Modifier.weight(1f)) {", depth + 6)
+                code += cell.call(depth + 7)
+                code += "\n" + indent("}", depth + 6)
+                code += "\n" + indent("}", depth + 5)
+                code += "\n" + indent("repeat(#{per_row} - rowCells.size) { Spacer(modifier = Modifier.weight(1f)) }", depth + 5)
+                code += "\n" + indent("}", depth + 4)
+                code += "\n" + indent("}", depth + 3)
+              else
+                code += "\n" + indent("#{data_access}.forEachIndexed { cellIndex, _ ->", depth + 3)
+                code += cell.call(depth + 4)
+                code += "\n" + indent("}", depth + 3)
+              end
               code += "\n" + indent("}", depth + 2)
 
               # Footer

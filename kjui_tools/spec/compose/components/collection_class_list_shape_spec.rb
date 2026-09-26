@@ -28,13 +28,13 @@ require_relative '../../support/kotlin_compiler'
 # transcription, not a compile against the library). Stubs for the Compose
 # names: a green says "well-typed against these stubs", not "valid Compose".
 RSpec.describe 'kjui codegen: the class-list Collection (cellClasses, items, no sections)' do
-  BASE = {
+  CLASS_LIST_BASE = {
     'type' => 'Collection', 'id' => 'list', 'items' => '@{rows}',
     'cellClasses' => ['row_cell'], 'headerClasses' => ['HeadCell'], 'footerClasses' => ['FootCell']
   }.freeze
 
   # route => [attributes, where the cells come from, header / footer drawn]
-  ROUTES = {
+  CLASS_LIST_ROUTES = {
     'lazy, vertical, 1 column' => [{}, :every, true],
     'lazy, grid' => [{ 'columns' => 2 }, :every, true],
     'lazy, horizontal' => [{ 'layout' => 'horizontal' }, :first, false],
@@ -66,7 +66,7 @@ RSpec.describe 'kjui codegen: the class-list Collection (cellClasses, items, no 
     end
   end
 
-  STUBS = <<~KOTLIN
+  CLASS_LIST_STUBS = <<~KOTLIN
     annotation class Composable
     interface Modifier { companion object : Modifier }
     fun Modifier.testTag(tag: String): Modifier = this
@@ -130,11 +130,11 @@ RSpec.describe 'kjui codegen: the class-list Collection (cellClasses, items, no 
     }
   end
 
-  ROUTES.each do |route, (attributes, source, edges)|
+  CLASS_LIST_ROUTES.each do |route, (attributes, source, edges)|
     it "#{route}: cells from #{source == :every ? 'every data section' : source == :first ? 'the first data section' : 'nowhere'}, " \
        "#{edges ? 'header before and footer after' : 'no header or footer'}" do
       imports = Set.new
-      code = emit(BASE.merge(attributes), imports)
+      code = emit(CLASS_LIST_BASE.merge(attributes), imports)
       at = placement(code)
       case source
       when :every
@@ -169,8 +169,8 @@ RSpec.describe 'kjui codegen: the class-list Collection (cellClasses, items, no 
   end
 
   it 'a header and a footer with no items are still drawn, and no cell is' do
-    ROUTES.each do |route, (attributes, _source, edges)|
-      code = emit(BASE.merge(attributes).reject { |k, _| k == 'items' })
+    CLASS_LIST_ROUTES.each do |route, (attributes, _source, edges)|
+      code = emit(CLASS_LIST_BASE.merge(attributes).reject { |k, _| k == 'items' })
       at = placement(code)
       expect([at[:cells], !at[:header].nil?, !at[:footer].nil?]).to eq([0, edges, edges]), "#{route}\n#{code}"
       expect(code).not_to match(/items\(0\)|\bitem\]|= item\b/), route
@@ -179,17 +179,17 @@ RSpec.describe 'kjui codegen: the class-list Collection (cellClasses, items, no 
 
   it 'every route compiles against the cell scaffold and CollectionDataSource, nullable or not' do
     functions = []
-    ROUTES.each_with_index do |(route, (attributes, _source, _edges)), index|
-      functions << "// #{route}\n@Composable fun route#{index}(data: NullableData, viewModel: Any) {\n#{emit(BASE.merge(attributes))}\n}"
+    CLASS_LIST_ROUTES.each_with_index do |(route, (attributes, _source, _edges)), index|
+      functions << "// #{route}\n@Composable fun route#{index}(data: NullableData, viewModel: Any) {\n#{emit(CLASS_LIST_BASE.merge(attributes))}\n}"
       functions << "// #{route}, no items\n@Composable fun route#{index}NoItems(data: NullableData, viewModel: Any) {\n" \
-                   "#{emit(BASE.merge(attributes).reject { |k, _| k == 'items' })}\n}"
+                   "#{emit(CLASS_LIST_BASE.merge(attributes).reject { |k, _| k == 'items' })}\n}"
     end
     allow(KjuiTools::Compose::Helpers::ResourceResolver).to receive(:generated_property_nullable?).and_return(false)
-    ROUTES.each_with_index do |(route, (attributes, _source, _edges)), index|
+    CLASS_LIST_ROUTES.each_with_index do |(route, (attributes, _source, _edges)), index|
       functions << "// #{route}, a non-null property\n@Composable fun route#{index}Plain(data: PlainData, viewModel: Any) {\n" \
-                   "#{emit(BASE.merge(attributes))}\n}"
+                   "#{emit(CLASS_LIST_BASE.merge(attributes))}\n}"
     end
-    source = "#{STUBS}\n#{scaffold('RowCell')}#{scaffold('HeadCell')}#{scaffold('FootCell')}\n#{functions.join("\n\n")}\n"
+    source = "#{CLASS_LIST_STUBS}\n#{scaffold('RowCell')}#{scaffold('HeadCell')}#{scaffold('FootCell')}\n#{functions.join("\n\n")}\n"
     expect(source).to compile_as_kotlin
   end
 end
