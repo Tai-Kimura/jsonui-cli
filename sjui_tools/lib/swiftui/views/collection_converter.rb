@@ -991,15 +991,31 @@ module SjuiTools
           end
         end
 
+        # A flow's three gaps (attribute_semantics.json -> collectionSpacing):
+        # between cells on a line columnSpacing, else itemSpacing; between
+        # lines lineSpacing, else itemSpacing; between the section blocks as
+        # between lines (sectionSpacing is lineSpacing's alias). 0 when none
+        # is declared, a declared 0 included. Until jsonui-cli 1.9.0 each
+        # undeclared gap was 8, and the section blocks did not fall back to
+        # itemSpacing.
+        def collection_flow_spacing
+          line = @component['lineSpacing'] || @component['itemSpacing'] || 0
+          {
+            cells: @component['columnSpacing'] || @component['itemSpacing'] || 0,
+            lines: line,
+            sections: @component['sectionSpacing'] || line
+          }
+        end
+
         def generate_non_lazy_flow(has_sections)
-          # kjui's chain order on the declared attrs: inter-item prefers
-          # columnSpacing, inter-line prefers lineSpacing, itemSpacing is the
-          # uniform fallback for both axes. The flow default 8 is symmetric
-          # with kjui (unlike the grid paths' removed 10) and stays.
-          h_spacing = @component['columnSpacing'] || @component['itemSpacing'] || 8
-          v_spacing = @component['lineSpacing'] || @component['itemSpacing'] || 8
+          # The spacing rule and its undeclared default (0, flow included):
+          # attribute_semantics.json -> collectionSpacing. Cells on a line
+          # columnSpacing, lines lineSpacing, itemSpacing the fallback for
+          # both. Until jsonui-cli 1.9.0 the undeclared default here was 8.
+          h_spacing = collection_flow_spacing[:cells]
+          v_spacing = collection_flow_spacing[:lines]
           flow_alignment = get_flow_alignment
-          section_spacing = @component['sectionSpacing'] || @component['lineSpacing'] || 8
+          section_spacing = collection_flow_spacing[:sections]
 
           add_line "VStack(spacing: #{section_spacing}) {"
           indent do
@@ -1147,16 +1163,16 @@ module SjuiTools
 
         # Generate flow layout using FlowLayout (iOS 16+)
         def generate_flow_layout(has_sections)
-          # kjui's chain order on the declared attrs: inter-item prefers
-          # columnSpacing, inter-line prefers lineSpacing, itemSpacing is the
-          # uniform fallback for both axes. The flow default 8 is symmetric
-          # with kjui (unlike the grid paths' removed 10) and stays.
-          h_spacing = @component['columnSpacing'] || @component['itemSpacing'] || 8
-          v_spacing = @component['lineSpacing'] || @component['itemSpacing'] || 8
+          # The spacing rule and its undeclared default (0, flow included):
+          # attribute_semantics.json -> collectionSpacing. Cells on a line
+          # columnSpacing, lines lineSpacing, itemSpacing the fallback for
+          # both. Until jsonui-cli 1.9.0 the undeclared default here was 8.
+          h_spacing = collection_flow_spacing[:cells]
+          v_spacing = collection_flow_spacing[:lines]
           flow_alignment = get_flow_alignment
 
           shows_indicators = @component['showsVerticalScrollIndicator'] != false
-          section_spacing = @component['sectionSpacing'] || @component['lineSpacing'] || 8
+          section_spacing = collection_flow_spacing[:sections]
           add_line "ScrollView(.vertical, showsIndicators: #{shows_indicators}) {"
           indent do
             add_line "VStack(spacing: #{section_spacing}) {"

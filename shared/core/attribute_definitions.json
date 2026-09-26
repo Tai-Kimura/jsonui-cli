@@ -3846,15 +3846,15 @@
     },
     "columnSpacing": {
       "type": "number",
-      "description": "Spacing between columns"
+      "description": "Spacing between columns (on a horizontal Collection, between lanes). Undeclared: itemSpacing, else 0 on every route, flow included (attribute_semantics.json -> collectionSpacing)."
     },
     "itemSpacing": {
       "type": "number",
-      "description": "Spacing between items (used for both grid spacing and list item spacing)"
+      "description": "Spacing between items (used for both grid spacing and list item spacing): the fallback for lineSpacing and columnSpacing. Undeclared: 0 on every route, flow included (attribute_semantics.json -> collectionSpacing)."
     },
     "lineSpacing": {
       "type": "number",
-      "description": "Spacing between rows. `sectionSpacing` folds here (sjui collection_converter.rb:799,960 read `sectionSpacing || lineSpacing || 8`).",
+      "description": "Spacing between rows (on a horizontal Collection, along the scroll axis); `sectionSpacing` folds here. Undeclared: itemSpacing, else 0 on every route, flow included (attribute_semantics.json -> collectionSpacing).",
       "aliases": [
         "sectionSpacing"
       ]
