@@ -911,18 +911,27 @@ module SjuiTools
             add_line "}"
             apply_insets_only
           else
-            if header_class_name
-              add_line "#{header_class_name}()"
+            # A header / footer sits in one VStack with the grid, as the
+            # single-column route's do and as SwiftJsonUI Dynamic draws it
+            # (91b932b). They were emitted as siblings of the grid, so the
+            # Collection was three views in its parent and its own modifiers
+            # (background, identifier, frame…) attached to the last of them,
+            # the footer (measured on aad4c8c4, 2026-09-26).
+            edges = header_class_name || footer_class_name
+            if edges
+              add_line "VStack(alignment: #{get_vstack_alignment_from_gravity(@component['gravity'])}, spacing: #{grid_row_spacing}) {"
             end
-            add_line "LazyVGrid(columns: #{grid_cols}, alignment: #{get_grid_alignment}, spacing: #{grid_row_spacing}) {"
-            indent do
-              generate_collection_content(cell_class_name, id = @component['id'] || 'collection')
+            maybe_indent(edges) do
+              add_line "#{header_class_name}()" if header_class_name
+              add_line "LazyVGrid(columns: #{grid_cols}, alignment: #{get_grid_alignment}, spacing: #{grid_row_spacing}) {"
+              indent do
+                generate_collection_content(cell_class_name, id = @component['id'] || 'collection')
+              end
+              add_line "}"
+              apply_insets_only
+              add_line "#{footer_class_name}()" if footer_class_name
             end
-            add_line "}"
-            apply_insets_only
-            if footer_class_name
-              add_line "#{footer_class_name}()"
-            end
+            add_line "}" if edges
           end
         end
 

@@ -269,15 +269,19 @@ RSpec.describe SjuiTools::SwiftUI::Views::CollectionConverter do
       expect(code).to include('BCellView(data: cellData).equatable()')
     end
 
-    it 'grid with legacy header/footer classes: bare views around the LazyVGrid' do
+    # These were bare siblings of the LazyVGrid until 1.8.121, so the
+    # Collection's modifiers attached to the footer
+    # (collection_non_lazy_grid_edges_spec.rb).
+    it 'grid with legacy header/footer classes: header, LazyVGrid and footer in one VStack' do
       code = convert(
         { 'type' => 'Collection', 'lazy' => 'none', 'columns' => 2,
           'cellClasses' => ['GCell'], 'headerClasses' => ['GH'],
           'footerClasses' => ['GF'], 'items' => '@{rows}' }
       )
-      expect(code).to include("GHView()\n")
+      expect(code).to start_with('VStack(')
+      expect(code).to include("{\n    GHView()\n")
       expect(code).to include('LazyVGrid(')
-      expect(code).to include("}\nGFView()")
+      expect(code).to include("}\n    GFView()\n}")
       expect(code).not_to include('ScrollView(')
     end
   end
