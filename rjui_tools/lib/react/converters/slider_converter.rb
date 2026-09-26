@@ -30,7 +30,7 @@ module RjuiTools
             max_value = attributes['range'][1]
           end
 
-          value_attr = build_value_attr
+          value_attr = build_value_attr(min_value)
           on_change = build_on_change
           disabled_attr = build_disabled_attr
 
@@ -41,7 +41,11 @@ module RjuiTools
           # broke the consumer's build outright, and no validator said a word.
           min_expr = jsx_value_expr(min_value)
           max_expr = jsx_value_expr(max_value)
-          step_attr = step_value ? " step={#{jsx_value_expr(step_value)}}" : ''
+          # With no step declared the thumb moves continuously, as on the other
+          # faces: a range input's own default is a step of 1, which left the
+          # declared 0 .. 1 range two positions — a static 0.2 was drawn at 0
+          # (rjui-slider-range-input-takes-the-browsers-defaults).
+          step_attr = step_value ? " step={#{jsx_value_expr(step_value)}}" : ' step="any"'
 
           jsx = <<~JSX.chomp
             #{indent_str(indent)}<input#{id_attr} type="range" className="#{class_name}" min={#{min_expr}} max={#{max_expr}}#{step_attr}#{value_attr}#{on_change}#{disabled_attr}#{base_style_attr}#{testid_attr}#{tag_attr} />
@@ -97,7 +101,9 @@ module RjuiTools
           finalize_classes(classes)
         end
 
-        def build_value_attr
+        # With no value the thumb starts at the minimum, as on the other faces
+        # — a range input with no value starts at the midpoint.
+        def build_value_attr(min_value = 0)
           value = with_bind_fallback(attributes['value'])
 
           if value && has_binding?(value)
@@ -106,7 +112,7 @@ module RjuiTools
           elsif value
             " defaultValue={#{value}}"
           else
-            ''
+            " defaultValue={#{jsx_value_expr(min_value)}}"
           end
         end
 

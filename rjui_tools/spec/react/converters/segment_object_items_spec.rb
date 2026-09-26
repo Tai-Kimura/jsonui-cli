@@ -58,7 +58,9 @@ RSpec.describe RjuiTools::React::Converters::SegmentConverter do
 
     it 'never puts a Ruby Hash in the JSX' do
       jsx, = emit([{ 'label' => 'opt_a', 'value' => 'a' }])
-      expect(jsx).not_to include('=>')
+      # Hash#inspect writes `"label"=>"opt_a"`; the markup's own arrow
+      # functions (the seeded state's render prop) are not that.
+      expect(jsx).not_to include('"=>')
       expect(jsx).not_to include('"label"')
     end
 

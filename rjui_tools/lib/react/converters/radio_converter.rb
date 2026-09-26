@@ -256,6 +256,15 @@ module RjuiTools
             # compares, and there the left side is a runtime value with no
             # literal type to narrow.
             static_selected = static_selected_value(selected_binding)
+            if static_selected
+              # A static selection is where the group starts, and the user
+              # changes it (ticket static-valued-controls-do-not-change-on-a-
+              # users-tap): an uncontrolled `defaultChecked` on the item it
+              # names — `checked` + readOnly held the group still.
+              chosen = static_selected == (value.is_a?(String) ? JsonUIShared::StringLiterals.ts_body(value) : value)
+              seed = chosen ? ' defaultChecked' : ''
+              return on_change ? "#{seed} onChange={() => #{on_change}?.(#{value_literal})}" : seed
+            end
             checked =
               if static_selected && expr.nil?
                 # A string value compares as the literal it is written as; any

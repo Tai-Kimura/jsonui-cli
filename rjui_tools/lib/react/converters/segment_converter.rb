@@ -21,13 +21,21 @@ module RjuiTools
           selected_binding = build_selected_binding
           on_change = build_on_change
           disabled_attr = build_disabled_attr
+          # A static index (or none) seeds the segment's own state (wrap_seeded):
+          # the buttons read `seeded` and a tap writes it.
+          raw_selected = with_bind_fallback(attributes['selectedIndex'] || attributes['selectedTabIndex'])
+          seeded = !(raw_selected && has_binding?(raw_selected))
 
           items_jsx = items.each_with_index.map do |item, index|
-            button_class = build_button_class(index)
+            button_class = build_button_class(index, seeded: seeded)
             button_disabled = attributes['enabled'] == false ? ' disabled' : ''
             # Data closure props are always optional (type_converter makes all
             # function types `| undefined`), so the call must be optional-chained.
-            on_click_attr = on_change ? " onClick={() => #{on_change}?.(#{index})}" : ''
+            on_click_attr = if seeded
+                              " onClick={() => { setSeeded(#{index});#{on_change ? " #{on_change}?.(#{index});" : ''} }}"
+                            else
+                              on_change ? " onClick={() => #{on_change}?.(#{index})}" : ''
+                            end
             # Item labels go through the same string resolution as Label.text
             # (string key -> binding -> literal), matching sjui's per-item
             # get_text_with_string_manager. The TEXT is taken first: an entry
@@ -45,6 +53,7 @@ module RjuiTools
             #{items_jsx}
             #{indent_str(indent)}</div>
           JSX
+          jsx = wrap_seeded(jsx, indent, (raw_selected || 0).to_i) if seeded
 
           wrap_with_visibility(jsx, indent)
         end
@@ -144,7 +153,7 @@ module RjuiTools
           kept
         end
 
-        def build_button_class(index)
+        def build_button_class(index, seeded: false)
           selected_index = with_bind_fallback(attributes['selectedIndex'] || attributes['selectedTabIndex']) || 0
 
           # Build font size class
@@ -181,7 +190,9 @@ module RjuiTools
           base_classes = "flex-1 px-4 #{padding_class} #{font_size_class} font-medium rounded-md transition-colors cursor-pointer"
           disabled_class = attributes['enabled'] == false ? ' cursor-not-allowed' : ''
 
-          if has_binding?(selected_index)
+          if seeded
+            "#{base_classes}#{disabled_class} ${seeded === #{index} ? '#{selected_bg} #{selected_text} shadow' : '#{unselected_text}'}"
+          elsif has_binding?(selected_index)
             prop = extract_binding_property(selected_index)
             "#{base_classes}#{disabled_class} ${#{prop} === #{index} ? '#{selected_bg} #{selected_text} shadow' : '#{unselected_text}'}"
           else

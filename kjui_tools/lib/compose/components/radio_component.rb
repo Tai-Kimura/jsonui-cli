@@ -2,6 +2,7 @@
 
 require_relative '../helpers/modifier_builder'
 require_relative '../helpers/binding_expression'
+require_relative '../helpers/static_seed'
 require_relative '../helpers/bound_value'
 require_relative '../helpers/font_spec_helper'
 require_relative '../helpers/resource_resolver'
@@ -210,7 +211,25 @@ module KjuiTools
           # the authority on this item's selected state; the group variable is
           # the fallback for the (usual) case where it is not.
           selected_expr = radio_selected_expr(json_data, selected_var, id)
-          
+          on_select = "viewModel.updateData(mapOf(\"#{selected_var}\" to #{id_literal}))"
+
+          # A group the layout does not bind — no `selectedValue` on the item —
+          # keeps its selection in the view's own map, seeded by the checked
+          # item while nothing is chosen (ticket
+          # static-valued-controls-do-not-change-on-a-users-tap: the generated
+          # updateData had no branch for `selected<Group>`, so a tap did
+          # nothing). The map spans every item of the group, whichever section
+          # an item lands in (ComposeBuilder#provide_radio_groups).
+          local_group = !json_data.key?('selectedValue')
+          if local_group
+            required_imports&.add(:radio_group_selections)
+            group_literal = JsonUIShared::StringLiterals.kotlin(group)
+            token = Helpers::BoundValue.text(json_data['value'] || id)
+            selected_expr = radio_selected_expr(json_data, selected_var, id,
+                                                chosen: "radioGroups[#{group_literal}]")
+            on_select = "radioGroups[#{group_literal}] = #{token}"
+          end
+
           code = indent("Row(", depth)
           code += "\n" + indent("    verticalAlignment = Alignment.CenterVertically,", depth)
           
@@ -226,7 +245,8 @@ module KjuiTools
           end
           
           code += "\n" + indent(") {", depth)
-          
+          code += "\n" + indent("    val radioGroups = LocalRadioGroupSelections.current", depth) if local_group
+
           # Handle custom icons or default components
           # If icon is "circle" or selectedIcon is "checkmark.circle.fill", use default RadioButton
           if (json_data['icon'] == 'circle' || !json_data['icon']) && 
@@ -234,7 +254,7 @@ module KjuiTools
             # Use default RadioButton for standard radio appearance
             code += "\n" + indent("    RadioButton(", depth)
             code += "\n" + indent("        selected = #{selected_expr},", depth)
-            code += "\n" + indent("        onClick = { viewModel.updateData(mapOf(\"#{selected_var}\" to #{id_literal})) }", depth)
+            code += "\n" + indent("        onClick = { #{on_select} }", depth)
             icon_appearance_args(json_data, required_imports, :radio).each do |arg|
               code += ",\n" + indent("        #{arg}", depth)
             end
@@ -245,7 +265,7 @@ module KjuiTools
             required_imports&.add(:checkbox)
             code += "\n" + indent("    Checkbox(", depth)
             code += "\n" + indent("        checked = #{selected_expr},", depth)
-            code += "\n" + indent("        onCheckedChange = { viewModel.updateData(mapOf(\"#{selected_var}\" to #{id_literal})) }", depth)
+            code += "\n" + indent("        onCheckedChange = { #{on_select} }", depth)
             icon_appearance_args(json_data, required_imports, :checkbox).each do |arg|
               code += ",\n" + indent("        #{arg}", depth)
             end
@@ -260,7 +280,7 @@ module KjuiTools
             
             code += "\n" + indent("    val isSelected = #{selected_expr}", depth)
             code += "\n" + indent("    IconButton(", depth)
-            code += "\n" + indent("        onClick = { viewModel.updateData(mapOf(\"#{selected_var}\" to #{id_literal})) }", depth)
+            code += "\n" + indent("        onClick = { #{on_select} }", depth)
             code += "\n" + indent("    ) {", depth)
             code += "\n" + indent("        Icon(", depth)
             code += "\n" + indent("            imageVector = if (isSelected) #{selected_icon} else #{icon},", depth)
@@ -288,7 +308,7 @@ module KjuiTools
             # Default RadioButton
             code += "\n" + indent("    RadioButton(", depth)
             code += "\n" + indent("        selected = #{selected_expr},", depth)
-            code += "\n" + indent("        onClick = { viewModel.updateData(mapOf(\"#{selected_var}\" to #{id_literal})) }", depth)
+            code += "\n" + indent("        onClick = { #{on_select} }", depth)
             icon_appearance_args(json_data, required_imports, :radio).each do |arg|
               code += ",\n" + indent("        #{arg}", depth)
             end
@@ -349,7 +369,22 @@ module KjuiTools
           else
             '""'
           end
-          
+
+          # A static selection (or none) is the seed of the group's own state
+          # (Helpers::StaticSeed); a bound one is the view model's.
+          unless selected_var.start_with?('data.')
+            return Helpers::StaticSeed.wrap(selected_var, depth, required_imports) do |d, state|
+              radio_group_with_items_body(json_data, d, required_imports, state, state)
+            end
+          end
+          radio_group_with_items_body(json_data, depth, required_imports, selected_var, nil)
+        end
+
+        # The group, reading `selected_var`; a tap writes `seeded` (the state a
+        # static selection seeded) or the bound value.
+        def self.radio_group_with_items_body(json_data, depth, required_imports, selected_var, seeded)
+          items = json_data['items']
+          selected_value = json_data['selectedValue']
           code = indent("Column(", depth)
           
           # Build modifiers
@@ -387,7 +422,9 @@ module KjuiTools
             code += "\n" + indent("            .fillMaxWidth()", depth)
             code += "\n" + indent("            .clickable {", depth)
             
-            if selected_value && selected_value.match(/@\{([^}]+)\}/)
+            if seeded
+              code += "\n" + indent("                #{seeded} = #{item_literal}", depth)
+            elsif selected_value && selected_value.match(/@\{([^}]+)\}/)
               variable = $1
               code += "\n" + indent("                viewModel.updateData(mapOf(\"#{variable}\" to #{item_literal}))", depth)
             end
@@ -398,7 +435,9 @@ module KjuiTools
             code += "\n" + indent("            selected = #{selected_var} == #{item_literal},", depth)
             code += "\n" + indent("            onClick = {", depth)
             
-            if selected_value && selected_value.match(/@\{([^}]+)\}/)
+            if seeded
+              code += "\n" + indent("                #{seeded} = #{item_literal}", depth)
+            elsif selected_value && selected_value.match(/@\{([^}]+)\}/)
               variable = $1
               code += "\n" + indent("                viewModel.updateData(mapOf(\"#{variable}\" to #{item_literal}))", depth)
             end
@@ -519,7 +558,10 @@ module KjuiTools
         # This item's selected state. A declared `checked` wins; otherwise the
         # group's selection variable decides, which is what every branch used
         # to hard-code.
-        def self.radio_selected_expr(json_data, selected_var, id)
+        # `chosen` is where the group's choice is read: the Data property by
+        # default, the view's own map for a group the layout does not bind
+        # (nil there until something is chosen).
+        def self.radio_selected_expr(json_data, selected_var, id, chosen: nil)
           # Precedence: `selectedValue` > group > `checked`.
           #
           # `value` is this item's identity — the token the selection is
@@ -564,7 +606,7 @@ module KjuiTools
             return "data.#{Helpers::ModifierBuilder.extract_binding_property(selected_value)} == #{token}"
           end
 
-          group_test = "data.#{selected_var} == #{token}"
+          group_test = "#{chosen || "data.#{selected_var}"} == #{token}"
           return group_test unless json_data.key?('checked')
 
           seed = case Helpers::BoundValue.bool(json_data['checked'])
@@ -575,7 +617,7 @@ module KjuiTools
           # A seed that is statically off adds nothing to the group state.
           return group_test if seed == 'false'
 
-          unset = "data.#{selected_var}.isEmpty()"
+          unset = chosen ? "#{chosen} == null" : "data.#{selected_var}.isEmpty()"
           return "#{group_test} || #{unset}" if seed == 'true'
 
           "#{group_test} || (#{seed} && #{unset})"

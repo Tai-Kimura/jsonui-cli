@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require_relative '../helpers/modifier_builder'
+require_relative '../helpers/static_seed'
 require_relative '../helpers/resource_resolver'
 require_relative '../../core/attribute_validator_core'
 
@@ -41,6 +42,18 @@ module KjuiTools
             0  # Default to 0 as integer
           end
           
+          # A static index (or none) is the seed of the segment's own state
+          # (Helpers::StaticSeed): the body then reads it as it reads a bound
+          # index, and a tap writes it.
+          unless is_dynamic_index
+            return Helpers::StaticSeed.wrap(selected_index.to_s, depth, required_imports) do |d, state|
+              generate_body(json_data, d, required_imports, parent_type, state, true, state)
+            end
+          end
+          generate_body(json_data, depth, required_imports, parent_type, selected_index, is_dynamic_index, nil)
+        end
+
+        def self.generate_body(json_data, depth, required_imports, parent_type, selected_index, is_dynamic_index, seeded)
           # `items` only. `segments` was an undeclared alias -- absent from
           # attribute_definitions.json, read by no other face, and used by no
           # consumer layout (measured across six faces: 0). It is gone from the
@@ -164,6 +177,7 @@ module KjuiTools
               end
               
               code += "\n" + indent("onClick = {", depth + 2)
+              code += "\n" + indent("#{seeded} = #{index}", depth + 3) if seeded
               
               # Check if we have a binding variable
               has_binding = false
@@ -205,7 +219,7 @@ module KjuiTools
                 code += "\n" + indent("viewModel.updateData(mapOf(\"#{binding_variable}\" to #{index}))", depth + 3)
               else
                 # No action if selectedIndex is a static value with no binding
-                code += "\n" + indent("// Static selected index", depth + 3)
+                code += "\n" + indent("// Static selected index", depth + 3) unless seeded
               end
               
               code += "\n" + indent("},", depth + 2)
@@ -276,6 +290,7 @@ module KjuiTools
             end
             
             code += "\n" + indent("onClick = {", depth + 3)
+            code += "\n" + indent("#{seeded} = index", depth + 4) if seeded
             
             # Check if we have a binding variable
             has_binding = false
@@ -316,7 +331,7 @@ module KjuiTools
               code += "\n" + indent("viewModel.updateData(mapOf(\"#{binding_variable}\" to index))", depth + 4)
             else
               # No action if selectedIndex is a static value with no binding
-              code += "\n" + indent("// Static selected index", depth + 4)
+              code += "\n" + indent("// Static selected index", depth + 4) unless seeded
             end
             
             code += "\n" + indent("},", depth + 3)
