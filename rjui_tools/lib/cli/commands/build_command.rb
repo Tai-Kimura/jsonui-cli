@@ -556,7 +556,9 @@ module RjuiTools
         # (and taken out of the sweep), and nothing is written beside it (two
         # copies would answer one import).
         def replace_embed_container(pairs)
-          pairs.filter_map do |old, current|
+          # `map { }.compact`, not `filter_map` (Ruby 2.7): spec/react/
+          # ruby_baseline_spec holds lib to 2.6.
+          pairs.map do |old, current|
             next unless File.basename(old, File.extname(old)) == 'EmbedContainer'
 
             text = File.read(old)
@@ -571,7 +573,7 @@ module RjuiTools
                        "it does not carry `rjui init`'s mark (the user's)"
                      end
             [old, current, reason]
-          end
+          end.compact
         end
 
         def name_other_language_viewmodels(stale_exts, language)
