@@ -7,6 +7,7 @@ require_relative '../core/tap_accessibility'
 require_relative '../core/bind_fold'
 require_relative '../core/logger'
 require_relative '../core/binding_validator_core'
+require_relative '../core/data_item_platform'
 require_relative '../core/type_synonyms'
 require_relative '../core/node_keys'
 require_relative '../core/config_manager'
@@ -547,6 +548,11 @@ module RjuiTools
             should_extract = is_root || written == ['data'] || (written - ['data', 'type']).empty?
             if should_extract
               json_data['data'].each do |data_item|
+                # Another platform's item is not this Data type's (read as
+                # `jui build` reads it; until jsonui-cli 1.9.0 rjui did not
+                # read a data item's platform at all).
+                next unless JsonUIShared::DataItemPlatform.applies?(data_item, 'react')
+
                 if data_item.is_a?(Hash)
                   # Normalize type using TypeConverter (mode: react)
                   normalized = Core::TypeConverter.normalize_data_property(data_item, 'react', source: @current_layout)

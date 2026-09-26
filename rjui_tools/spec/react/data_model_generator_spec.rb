@@ -363,6 +363,31 @@ end
 #
 # The conformance fixture corpus does NOT exercise these spellings (adding them
 # moved zero generated files), so these pins are the only thing guarding them.
+# A data item's platform, read as `jui build` reads it (DataItemPlatform:
+# comma-separated tokens, without case). Until jsonui-cli 1.9.0 rjui did not
+# read the key: another platform's item was in the web's Data type and its
+# ViewModel's declared handlers.
+RSpec.describe RjuiTools::React::DataModelGenerator, 'a data item\'s platform' do
+  it 'takes into the Data type an item any web token names, alone or among others, and not another platform\'s' do
+    json = { 'type' => 'View',
+             'data' => [{ 'name' => 'everywhere', 'class' => 'String' },
+               { 'name' => 'mine', 'class' => 'String', 'platform' => 'web' },
+               { 'name' => 'shared', 'class' => 'String', 'platform' => 'swift, TypeScript' },
+               { 'name' => 'theirs', 'class' => 'String', 'platform' => 'swift' }] }
+    names = described_class.new.send(:extract_data_properties, json).map { |p| p['name'] }
+    expect(names).to match_array(%w[everywhere mine shared])
+  end
+
+  it 'takes into the ViewModel\'s declared handlers only this platform\'s' do
+    require 'react/viewmodel_generator'
+    json = { 'type' => 'View',
+             'data' => [{ 'name' => 'ownTap', 'class' => '(() -> Void)?', 'platform' => 'react' },
+                        { 'name' => 'otherTap', 'class' => '(() -> Void)?', 'platform' => 'swift' }] }
+    handlers = RjuiTools::React::ViewModelGenerator.allocate.send(:extract_data_section_handlers, json)
+    expect(handlers.to_a).to eq(['ownTap'])
+  end
+end
+
 RSpec.describe RjuiTools::React::DataModelGenerator, 'canonical selection bindings' do
   let(:generator) { described_class.new }
 
