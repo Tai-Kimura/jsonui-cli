@@ -231,8 +231,14 @@ module SjuiTools
           end
 
           if is_flow
-            # Flow layout - items wrap naturally based on content size
+            # Flow layout - items wrap naturally based on content size. Its
+            # cells carry their scroll ids already (open_cell_foreach,
+            # generate_cell_identity); the reader around the ScrollView is
+            # what makes a scrollTo reach them. Until jsonui-cli 1.9.0 the
+            # flow had none, and a scrollTo drew nothing on this route.
+            generate_scroll_reader_open
             generate_flow_layout(has_sections)
+            generate_scroll_reader_close
           elsif columns == 1 && !is_horizontal && has_sections && @component['listStyle']
             # Sectioned vertical collection WITH list chrome: `listStyle` is
             # what opts a collection into list-ness (the web face words the

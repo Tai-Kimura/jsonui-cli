@@ -92,6 +92,26 @@ RSpec.describe SjuiTools::SwiftUI::Views::CollectionConverter do
     end
   end
 
+  # The ids are only half: a scrollTo reaches them through the ScrollViewReader
+  # around the route's scroll container, and the value's change is what
+  # scrolls (`.onChange(of:)` — the value it is drawn with scrolls nowhere).
+  # The flow had the ids and no reader until jsonui-cli 1.9.0, so a scrollTo
+  # drew nothing there. `lazy: none` has no scroll container of its own.
+  it 'on every lazy route the value reaches the cells: a ScrollViewReader, and its change scrolls' do
+    routes = section_scroll_routes.reject { |route, _| route.include?('lazy:none') }
+                                  .merge('sectioned List' => { 'listStyle' => 'plain' }, 'horizontal' => { 'layout' => 'horizontal' })
+    routes.each do |route, extra|
+      [['@{target}', {}, 'index'], ['@{key}', { 'cellIdProperty' => 'key' }, 'cellId']].each do |value, more, name|
+        code = convert(extra.merge(more).merge('scrollTo' => value))
+        expect(code).to include('ScrollViewReader { scrollProxy in'), "#{route} #{name}"
+        expect(code).to include(".onChange(of: data.#{value[2..-2]}) { _, #{name} in"), "#{route} #{name}"
+        expect(code).to include("scrollProxy.scrollTo(#{name}, anchor: .bottom)"), "#{route} #{name}"
+        expect(code).not_to include('initial:'), "#{route} #{name}"
+      end
+    end
+    expect(convert('lazy' => 'none', 'scrollTo' => '@{target}')).not_to include('ScrollViewReader')
+  end
+
   it 'type-checks on every route, with and without cellIdProperty', :swift_compile do
     stubs = EmittedSwift::COLLECTION_DATA_SOURCE_STUB + EmittedSwift::COLLECTION_STACK_VIEW_STUB +
             cell_view_stub('ACellView', 'BCellView', 'CCellView', 'HCellView') +
