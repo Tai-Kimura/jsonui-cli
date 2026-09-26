@@ -240,7 +240,7 @@ RSpec.describe KjuiTools::Compose::Components::RadioComponent do
         'type' => 'Radio',
         'id' => 'genderRadio',
         'options' => ['Male', 'Female'],
-        'bind' => '@{gender}',
+        'selectedValue' => '@{gender}', # the options group's selection (a lone bind arrives as it: BindFold)
         'onValueChange' => '@{onRadioChange}'
       }
 
@@ -259,7 +259,7 @@ RSpec.describe KjuiTools::Compose::Components::RadioComponent do
         'type' => 'Radio',
         'id' => 'genderRadio',
         'options' => ['Male', 'Female'],
-        'bind' => '@{gender}',
+        'selectedValue' => '@{gender}', # the options group's selection (a lone bind arrives as it: BindFold)
         'onValueChange' => '@{onRadioChange}'
       }
 
@@ -296,7 +296,7 @@ RSpec.describe KjuiTools::Compose::Components::RadioComponent do
         'type' => 'Radio',
         'id' => 'genderRadio',
         'options' => ['Male', 'Female'],
-        'bind' => '@{gender}',
+        'selectedValue' => '@{gender}', # the options group's selection (a lone bind arrives as it: BindFold)
         'onValueChange' => '@{onRadioChange}'
       }
 

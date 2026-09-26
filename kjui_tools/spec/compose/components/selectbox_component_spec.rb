@@ -1,5 +1,6 @@
 # frozen_string_literal: true
 
+require 'core/bind_fold'
 require 'compose/components/selectbox_component'
 require 'compose/helpers/modifier_builder'
 require 'compose/helpers/resource_resolver'
@@ -85,11 +86,13 @@ RSpec.describe KjuiTools::Compose::Components::SelectBoxComponent do
       end
 
       it 'generates SelectBox with bind attribute' do
-        json_data = {
+      # `bind` reaches the component folded (JsonUIShared::BindFold at the
+      # dispatch, ComposeBuilder#generate_component); the component reads no bind.
+        json_data = JsonUIShared::BindFold.fold({
           'type' => 'SelectBox',
           'bind' => '@{choice}',
           'options' => ['A', 'B']
-        }
+        })
         result = described_class.generate(json_data, 0, required_imports)
         expect(result).to include('value = data.choice')
       end

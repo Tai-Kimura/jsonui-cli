@@ -171,8 +171,10 @@ RSpec.describe 'author text reaches generated Kotlin through the one escaper' do
   def self.radio(json)
     KjuiTools::Compose::Components::RadioComponent.generate({ 'type' => 'Radio', 'id' => 'target' }.merge(json), 0, Set.new)
   end
-  path('Radio options value — written to the binding', around: 'mapOf("sel" to %s))') { |t| radio('options' => [t], 'bind' => '@{sel}') }
-  path('Radio options value — compared for selected', around: '== %s),') { |t| radio('options' => [t], 'bind' => '@{sel}') }
+  # the options group is bound through its selectedValue (a lone `bind`
+  # arrives as it: JsonUIShared::BindFold at the dispatch)
+  path('Radio options value — written to the binding', around: 'mapOf("sel" to %s))') { |t| radio('options' => [t], 'selectedValue' => '@{sel}') }
+  path('Radio options value — compared for selected', around: '== %s),') { |t| radio('options' => [t], 'selectedValue' => '@{sel}') }
   path('Radio options value — the onValueChange argument', around: 'invoke("target", %s)') do |t|
     radio('options' => [t], 'onValueChange' => '@{onPick}')
   end
