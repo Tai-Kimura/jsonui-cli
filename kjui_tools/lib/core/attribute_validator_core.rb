@@ -463,43 +463,59 @@ module JsonUIShared
     end
 
     # spelling -> { 'canonical' => section, 'render_as' => type (optional) }.
-    # Read once per validator. A malformed file raises, naming it: a table
-    # that read as empty would validate every synonym spelling against
-    # common attributes only, and say nothing.
+    # Read once per validator.
     #
-    # A missing file is what a plain copy of a tool leaves (the file is a link
-    # into shared/core, as attribute_definitions.json is), and it is met the
-    # way load_definitions meets that one: named where it is met, a
-    # validation stage that did not complete — in the ledger once, however
-    # many validators meet it — and the synonym spellings checked against
-    # the common attributes only. Until 1.8.121 it raised, and each tool
-    # carried the raise its own way: sjui stopped with exit 1 and kjui failed
-    # every layout with exit 1, neither with anything in the ledger; rjui put
-    # one "was not generated" entry per layout there (measured on d084cfb2,
-    # 2026-09-26).
+    # A table that cannot be used — missing (what a plain copy of a tool
+    # leaves: the file is a link into shared/core, as
+    # attribute_definitions.json is), not JSON, or not the declared shape — is
+    # met the way load_definitions meets a missing definitions file: named
+    # where it is met, a validation stage that did not complete — in the
+    # ledger once, however many validators meet it — and the synonym
+    # spellings checked against the common attributes only. An empty table
+    # read in silence would do that and say nothing; this says it.
+    #
+    # Until 1.8.121 each case raised, and each tool carried the raise its own
+    # way (measured on 46a54fc3, 2026-09-26, two layouts): a missing file —
+    # sjui exit 1, kjui every layout failed with exit 1, rjui one entry per
+    # layout; a file that is not JSON — sjui (SwiftUI) "build completed!" with
+    # nothing said, kjui "Failed to parse home.json: unexpected end of input"
+    # (the layout blamed, exit 1, no ledger), rjui one entry per layout, and
+    # none of them named type_synonyms.json; the wrong shape — sjui
+    # "WARNING: Failed to parse home.json: …" and "build completed!", kjui
+    # exit 1 with no ledger.
     def type_synonyms
-      @type_synonyms ||= begin
-        path = @type_synonyms_path || File.join(File.dirname(__FILE__), 'type_synonyms.json')
-        if File.exist?(path)
-          entries = JSON.parse(File.read(path))['synonyms']
-          unless entries.is_a?(Hash) && entries.values.all? { |e| e.is_a?(Hash) && e['canonical'].is_a?(String) }
-            raise "#{path}: `synonyms` must map each spelling to an object with a `canonical` string"
-          end
-
-          entries
-        else
-          missing_type_synonyms(path)
-        end
-      end
+      @type_synonyms ||= read_type_synonyms(
+        @type_synonyms_path || File.join(File.dirname(__FILE__), 'type_synonyms.json')
+      )
     end
 
-    # {} after naming the missing table (see type_synonyms).
-    def missing_type_synonyms(path)
-      puts "\e[31m[#{log_tag} Error] type_synonyms.json not found at #{path}\e[0m"
+    def read_type_synonyms(path)
+      unless File.exist?(path)
+        return unusable_type_synonyms("type_synonyms.json not found at #{path}", "#{path} was not found")
+      end
+
+      begin
+        parsed = JSON.parse(File.read(path))
+      rescue JSON::ParserError => e
+        reason = e.message.lines.first.to_s.strip
+        return unusable_type_synonyms("#{path} does not parse: #{reason}", "#{path} does not parse (#{reason})")
+      end
+      entries = parsed.is_a?(Hash) ? parsed['synonyms'] : nil
+      unless entries.is_a?(Hash) && entries.values.all? { |e| e.is_a?(Hash) && e['canonical'].is_a?(String) }
+        shape = '`synonyms` must map each spelling to an object with a `canonical` string'
+        return unusable_type_synonyms("#{path}: #{shape}", "#{path} is not the declared shape (#{shape})")
+      end
+
+      entries
+    end
+
+    # {} after naming the unusable table (see type_synonyms).
+    def unusable_type_synonyms(said, entry)
+      puts "\e[31m[#{log_tag} Error] #{said}\e[0m"
       begin
         require_relative 'stage_failures'
         JsonUI::StageFailures.record_once(
-          'validation', "#{path} was not found; the type synonyms were checked against the common attributes only"
+          'validation', "#{entry}; the type synonyms were checked against the common attributes only"
         )
       rescue LoadError
         nil

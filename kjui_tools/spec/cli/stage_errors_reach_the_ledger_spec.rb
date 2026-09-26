@@ -23,11 +23,19 @@ RSpec.describe 'kjui build: a stage that printed an error is in the ledger' do
   KJUI_ROOT = File.expand_path('../..', __dir__)
   SRC = 'app/src/main'
 
-  def project(dangling_definitions: false)
+  def project(dangling_definitions: false, synonyms: nil)
     dir = Dir.mktmpdir('kjui_stage')
     if dangling_definitions
       FileUtils.mkdir_p(File.join(dir, 'kjui_tools'))
       %w[bin lib].each { |d| system('cp', '-R', File.join(KJUI_ROOT, d), File.join(dir, 'kjui_tools')) || raise(d) }
+    elsif synonyms
+      # The tool copied with its links followed, and type_synonyms.json
+      # replaced by `synonyms` — that one table unusable and nothing else.
+      FileUtils.mkdir_p(File.join(dir, 'kjui_tools'))
+      %w[bin lib].each { |d| system('cp', '-RL', File.join(KJUI_ROOT, d), File.join(dir, 'kjui_tools')) || raise(d) }
+      table = File.join(dir, 'kjui_tools', 'lib', 'core', 'type_synonyms.json')
+      File.delete(table)
+      File.write(table, synonyms)
     else
       FileUtils.ln_s(KJUI_ROOT, File.join(dir, 'kjui_tools'))
     end
@@ -193,6 +201,29 @@ RSpec.describe 'kjui build: a stage that printed an error is in the ledger' do
     expect(messages.count { |m| m.include?('type_synonyms.json') }).to eq(1), messages.inspect
     expect(log).to include('Build finished with 2 stage(s) incomplete — see above'), log
     expect(log).not_to include('Compose build completed!')
+  end
+
+  # A type_synonyms.json that is there but cannot be used — not JSON, or not
+  # the declared shape — is the same stage failure as a missing one: named,
+  # in the ledger once over two layouts, the build carrying on without it.
+  # Until 1.8.121 it raised: the tools said nothing, blamed the layout, or
+  # failed every layout (attribute_validator_core.rb#type_synonyms).
+  {
+    'not JSON' => ['{ "synonyms": ', 'does not parse'],
+    'not the declared shape' => ['{ "synonyms": { "Table": "Collection" } }', 'is not the declared shape']
+  }.each do |form, (content, says)|
+    it "a type_synonyms.json that is #{form}: named, in the ledger once" do
+      dir = project(synonyms: content)
+      layout(dir, 'home')
+      layout(dir, 'other')
+      log, exit_code, entries = build(dir)
+      expect(exit_code).to eq(0), log
+      expect(entries.map { |e| e['stage'] }).to eq(['validation']), "#{entries.inspect}\n#{log}"
+      expect(entries.first['message']).to include('type_synonyms.json').and include(says)
+      expect(log).to match(/Error\] \S*type_synonyms\.json/), log
+      expect(log).to include('Build finished with 1 stage(s) incomplete — see above'), log
+      expect(log).not_to include('Compose build completed!')
+    end
   end
 
   describe 'stages no real input reached here' do
