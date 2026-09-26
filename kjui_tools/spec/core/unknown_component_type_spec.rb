@@ -114,4 +114,43 @@ RSpec.describe 'unknown component type' do
     # a comment where the node would be: the enclosing function still compiles
     expect("fun screen() {\n#{code}\n}\n").to compile_as_kotlin
   end
+
+  # Nothing is drawn for it as a child either: not the node, not its children.
+  it 'draws nothing for an unknown type as a child, its children neither' do
+    allow(KjuiTools::Core::ConfigManager).to receive(:load_config).and_return({})
+    builder = KjuiTools::Compose::ComposeBuilder.new
+    builder.instance_variable_set(:@responsive_counter, 0)
+    builder.instance_variable_set(:@responsive_functions, [])
+    said = []
+    allow(KjuiTools::Core::Logger).to receive(:warn) { |message| said << message }
+    kid = { 'type' => 'Label', 'id' => 'kid', 'text' => 'innerText' }
+    code = builder.send(:generate_component, { 'type' => 'View', 'id' => 'p', 'child' => [{ 'type' => 'Spacer', 'id' => 's', 'child' => [kid] }] }, 0).to_s
+    expect(code).to include("// Unknown component type 'Spacer'")
+    expect(code).not_to include('innerText')
+    expect(said).to eq(["Unknown component type 'Spacer'"])
+  end
+
+  # A type the validator knows — here by the project's extension definitions
+  # — that no case draws: its own sentence, and a View with its children in
+  # it, as sjui and rjui draw it (4f's ruling, jsonui-cli 1.9.0).
+  it 'names a type the project declares but no component draws in its own sentence, and draws it as a View' do
+    allow(KjuiTools::Core::ConfigManager).to receive(:load_config).and_return({})
+    said = []
+    allow(KjuiTools::Core::Logger).to receive(:warn) { |message| said << message }
+    Dir.mktmpdir do |dir|
+      defs = File.join(dir, 'kjui_tools', 'lib', 'compose', 'components', 'extensions', 'attribute_definitions')
+      FileUtils.mkdir_p(defs)
+      File.write(File.join(defs, 'ProbeDeclared.json'), JSON.generate('ProbeDeclared' => { 'text' => { 'type' => 'string' } }))
+      Dir.chdir(dir) do
+        builder = KjuiTools::Compose::ComposeBuilder.new
+        builder.instance_variable_set(:@responsive_counter, 0)
+        builder.instance_variable_set(:@responsive_functions, [])
+        kid = { 'type' => 'Label', 'id' => 'kid', 'text' => 'innerText' }
+        code = builder.send(:generate_component, { 'type' => 'ProbeDeclared', 'id' => 'd', 'child' => [kid] }, 0).to_s
+        expect(code).to include('innerText')
+        expect(code).not_to include('// Unknown component type')
+      end
+    end
+    expect(said).to eq(["'ProbeDeclared' is declared but has no Compose converter — drawn as a View"])
+  end
 end

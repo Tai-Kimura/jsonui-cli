@@ -39,10 +39,13 @@ RSpec.describe 'a control calls its declared onClick from its own operation' do
     ['SelectBox', { 'selectItemType' => 'Date', 'selectedDate' => '@{d}' }, 'date']
   ]
 
+  # Through a View's child dispatch, as a layout draws it: that resolves a
+  # declared alias section (Toggle is `_alias_of` Switch) before it looks the
+  # converter up, and the lookup holds canonical sections only.
   emit = lambda do |type, attrs|
     node = { 'type' => type, 'id' => 'c' }.merge(attrs)
     view = RjuiTools::React::Converters::ViewConverter.new({ 'type' => 'View' }, CONTROL_CONFIG.dup)
-    view.send(:get_converter_class, type).new(node, CONTROL_CONFIG.dup).convert
+    view.send(:create_converter_for_child, node).convert
   end
 
   node_program = <<~JS

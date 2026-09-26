@@ -29,8 +29,13 @@ module JsonUIShared
   module ImageAccessibility
     module_function
 
-    # Image and its type aliases (component_metadata.json) plus NetworkImage.
-    IMAGE_TYPES = %w[Image CircleImage CircleImageView ImageView Img NetworkImage].freeze
+    # The types an image is drawn as. A node is an image when the type it is
+    # drawn as (type_synonyms.rb) is one of them: Img, ImageView, AsyncImage,
+    # NetworkImageView, CircleImageView and every other spelling the table
+    # gives them. Until 1.8.121 this was a list of spellings, taken from
+    # component_metadata.json's `aliases`, which named neither AsyncImage nor
+    # NetworkImageView: an image spelled so got no role and no INFO.
+    IMAGE_TYPES = %w[Image CircleImage NetworkImage].freeze
 
     # The canonical spelling first; the aliases are declared on `alt` in
     # attribute_definitions.json. A layout that `jui build` normalized
@@ -46,7 +51,7 @@ module JsonUIShared
     ROLE_KEY = '_imageRole'
 
     def image?(node)
-      node.is_a?(Hash) && IMAGE_TYPES.include?(node['type'])
+      node.is_a?(Hash) && IMAGE_TYPES.include?(JsonUIShared::TypeSynonyms.drawn_type(node['type']))
     end
 
     # The image's alt as written, or nil when it declares none. Spelled out

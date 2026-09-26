@@ -308,13 +308,15 @@ module SjuiTools
         # literally `checked` (or `isOn`) Radio — its `value`, else its id,
         # else its position — else "". Two groups whose names give one
         # variable (`a_b`, `aB`) are one variable: `variable_groups` lists the
-        # group names per variable, so the view can refuse it.
+        # group names per variable, so the view can refuse it. A Radio is a
+        # node drawn as one (type_synonyms.rb): RadioButton and RadioGroup
+        # are Radios, and their groups are shared as a Radio's are.
         def self.scan_groups(tree)
           seeds = {}
           walk = lambda do |node|
             return unless node.is_a?(Hash)
 
-            if node['type'] == 'Radio' && !node.key?('items')
+            if JsonUIShared::TypeSynonyms.drawn_type(node['type'].to_s) == 'Radio' && !node.key?('items')
               group = node['group'] || 'defaultGroup'
               var = "selected#{group.to_s.split('_').map(&:capitalize).join}"
               entry = (seeds[var] ||= { groups: [], seed: nil, selected: nil, checked: nil })

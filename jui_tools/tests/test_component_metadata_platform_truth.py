@@ -225,6 +225,28 @@ def kotlin_dynamic_types() -> set[str]:
     return types
 
 
+DEFINITIONS = REPO_ROOT / "shared" / "core" / "attribute_definitions.json"
+
+#: Facets whose dispatch resolves a declared alias section (`_alias_of`:
+#: EditText / Input -> TextField, Check -> CheckBox, Toggle -> Switch) to
+#: its canonical section before it looks the type up, so an alias is drawn
+#: exactly when its canonical section is. The sjui SwiftUI factory, rjui,
+#: SwiftJsonUI Dynamic and kjui's codegen do (2026-09-26). KotlinJsonUI
+#: Dynamic joins when it does; until then its table is read as written.
+RESOLVES_ALIASES = {"swift_generated", "react", "swift_dynamic", "kotlin_generated"}
+
+
+def alias_targets() -> dict[str, str]:
+    """Declared alias sections -> their canonical section."""
+    with open(DEFINITIONS, encoding="utf-8") as f:
+        data = json.load(f)
+    return {
+        name: section["_alias_of"]
+        for name, section in data.items()
+        if isinstance(section, dict) and isinstance(section.get("_alias_of"), str)
+    }
+
+
 def dispatches(types: set[str], name: str) -> bool:
     """Whether a dispatch read by the extractors draws `name`: as written
     when the arms are spelled as the SSoT spells the types (any capital
@@ -315,8 +337,9 @@ class ComponentMetadataPlatformTruth(unittest.TestCase):
 
     def _assert_facet(self, facet: str, supports) -> None:
         mismatches = []
+        aliases = alias_targets() if facet in RESOLVES_ALIASES else {}
         for name, declared in sorted(metadata_rows().items()):
-            actual = supports(name)
+            actual = supports(aliases.get(name, name))
             if bool(declared.get(facet)) != actual:
                 mismatches.append(
                     f"  {name}.{facet}: declared={bool(declared.get(facet))} "

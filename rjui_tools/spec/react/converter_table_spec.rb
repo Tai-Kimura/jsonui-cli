@@ -73,7 +73,12 @@ RSpec.describe 'rjui: one converter table, root and child' do
   # What the table's converters now draw at the root type-checks — the
   # NetworkImage against the built-in's own props (lib/react/templates).
   it 'the root NetworkImage and Toggle type-check' do
-    jsx = PROBES.map { |type, (node, _, _)| table.fetch(type).new(node, config.dup).convert }
+    # Drawn as both callers draw a node: its type canonicalized first (Toggle
+    # is Switch), then the table.
+    jsx = PROBES.map do |_, (node, _, _)|
+      drawn = JsonUIShared::ComponentAliases.resolve(JsonUIShared::TypeSynonyms.canonicalize(node))
+      table.fetch(drawn['type']).new(drawn, config.dup).convert
+    end
     expect(TypeScriptCompiler.component(*jsx)).to compile_as_typescript.with_ambient(<<~TS)
       declare namespace React { type CSSProperties = { [property: string]: string | number | undefined } }
       declare const data: { photoUrl?: string; on: boolean; onOnChange?: (value: boolean) => void };

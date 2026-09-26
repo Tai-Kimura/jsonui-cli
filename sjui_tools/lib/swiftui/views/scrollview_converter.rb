@@ -1,6 +1,7 @@
 #!/usr/bin/env ruby
 
 require_relative 'base_view_converter'
+require_relative '../../core/type_synonyms'
 
 module SjuiTools
   module SwiftUI
@@ -48,10 +49,13 @@ module SjuiTools
           orientation = @component['orientation']
           horizontal_scroll = @component['horizontalScroll']
           
-          # 子要素が1つでViewの場合、その orientation を確認
-          if children.length == 1 && children.first['type'] == 'View'
-            child_orientation = children.first['orientation']
-            orientation ||= child_orientation
+          # 子要素が1つでViewの場合、その orientation を確認 — the child as it
+          # is drawn (type_synonyms.rb): an HStack / Row is a View with
+          # orientation horizontal, and scrolls this ScrollView sideways as
+          # that View does
+          if children.length == 1 && children.first.is_a?(Hash)
+            drawn_child = JsonUIShared::TypeSynonyms.drawn(children.first)
+            orientation ||= drawn_child['orientation'] if drawn_child['type'] == 'View'
           end
           
           # スクロール軸の設定

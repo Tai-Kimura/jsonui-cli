@@ -39,7 +39,7 @@ RSpec.describe 'kjui codegen: the common stages reach every type it draws' do
     'Collection' => { 'items' => [] }, 'WebView' => { 'url' => 'about:blank' }, 'Web' => { 'url' => 'about:blank' },
     'TabView' => { 'tabs' => [{ 'title' => 'a' }, { 'title' => 'b' }] }, 'Embed' => { 'screen' => 'missing' },
     'GradientView' => { 'gradient' => ['#FF0000', '#0000FF'] }, 'Blur' => {}, 'IconLabel' => { 'text' => 't' },
-    'TextView' => { 'text' => '@{t}' }
+    'TextView' => { 'text' => '@{t}' }, 'CircleView' => {}
   }
 
   stages = {
@@ -56,6 +56,9 @@ RSpec.describe 'kjui codegen: the common stages reach every type it draws' do
   # that carries the tag, where that is a wrapper); a container's is the
   # clickable's `enabled` and `disabled()`.
   enabled_markers = { 'Radio' => [/\benabled = false[,)\n]/, '.semantics { disabled() }'] }
+  # A type that draws a stage in a shape of its own: CircleView's border is
+  # a circle, as KotlinJsonUI Dynamic draws it.
+  own_markers = { 'CircleView' => { 'border' => ['.border(2.dp, Color(android.graphics.Color.parseColor("#FF0000")), CircleShape)'] } }
 
   blocker = 'awaitPointerEvent(PointerEventPass.Initial).changes.forEach { it.consume() }'
   # Each stage's own modifier with the stage's own values. Every one must
@@ -152,7 +155,8 @@ RSpec.describe 'kjui codegen: the common stages reach every type it draws' do
         expect(size_at.call(with)).not_to be_nil, "#{label}: no size\n#{with}"
         expect(margin_at).to be < size_at.call(with), "#{label}: the margins sit inside the size\n#{with}"
       end
-      stage_markers = stage == 'enabled' ? enabled_markers.fetch(node['type'], markers['enabled']) : markers[stage]
+      stage_markers = own_markers.dig(node['type'], stage) ||
+                      (stage == 'enabled' ? enabled_markers.fetch(node['type'], markers['enabled']) : markers[stage])
       stage_markers.each do |marker|
         expect(count.call(with, marker)).to be > count.call(ref, marker),
                                             "#{label} #{stage}: #{marker.inspect} occurs " \
@@ -168,6 +172,30 @@ RSpec.describe 'kjui codegen: the common stages reach every type it draws' do
 
   variants.each do |label, node|
     range[node['type']].each { |stage| cell_arm.call(label, node, stage) }
+  end
+
+  # CircleView, which the codegen draws from 1.8.121 (it emitted a TODO
+  # before): every stage, as a type with no measured range of its own.
+  stages.each_key { |stage| cell_arm.call('CircleView', { 'type' => 'CircleView' }, stage) }
+
+  # ... in the order KotlinJsonUI Dynamic applies them
+  # (DynamicCircleViewComponent): testTag → margins → size → offset → alpha →
+  # shadow(circle) → clip(circle) → clip(cornerRadius) → border(circle) →
+  # background → clickable → padding. Judged by position in one emission
+  # that carries every stage.
+  it 'draws CircleView stages in the order KotlinJsonUI Dynamic applies them' do
+    every = stages.reject { |name, _| %w[enabled userInteraction].include?(name) }.values.reduce({}) { |acc, attrs| acc.merge(attrs) }
+    code = emit.call({ 'type' => 'CircleView' }.merge(every))
+    order = [
+      ['testTag', '.testTag("n")'], ['margins', markers['margins'].first], ['size', '.requiredWidth(111.dp)'],
+      ['offset', markers['offset'].first], ['alpha', markers['alpha'].first], ['shadow', '.dropShadow(shape = CircleShape'],
+      ['clip(circle)', '.clip(CircleShape)'], ['clip(cornerRadius)', markers['cornerRadius'].first],
+      ['border(circle)', '.border(2.dp, Color(android.graphics.Color.parseColor("#FF0000")), CircleShape)'],
+      ['background', markers['background'].first], ['clickable', '.clickable'], ['padding', markers['padding'].first]
+    ]
+    positions = order.map { |name, marker| [name, code.index(marker)] }
+    expect(positions.select { |_, at| at.nil? }.map(&:first)).to eq([]), code
+    expect(positions.sort_by(&:last).map(&:first)).to eq(order.map(&:first)), code
   end
 
   # Margins are the outer spacing on every type that draws both: before the

@@ -3,6 +3,7 @@
 
 require 'json'
 require_relative 'tap_accessibility'
+require_relative 'type_synonyms'
 
 module JsonUIShared
   # Validates JSON component attributes against the SSoT definitions
@@ -115,6 +116,20 @@ module JsonUIShared
       # that the codegen has no component for reaches the codegen's fallback)
       canonical = known_types.find { |known| known != written && known.casecmp?(written) }
       canonical ? message + format(UNKNOWN_COMPONENT_TYPE_HINT, canonical: canonical) : message
+    end
+
+    # A type the validator knows (known_component_types: declared in the SSoT
+    # or the project's extension definitions, a type synonym, registered by
+    # the app) that a tool has no drawer for is not unknown: the codegen
+    # names it in this sentence and draws it as a View, its children in it
+    # (4f's ruling, jsonui-cli 1.9.0). An unknown type is named in the one
+    # above and drawn as nothing.
+    DECLARED_WITHOUT_DRAWER = "'%<written>s' is declared but has no %<platform>s converter — drawn as a View"
+
+    # The sentence for a known `written` the `platform` codegen (SwiftUI,
+    # Compose, web) has no drawer for.
+    def self.declared_without_drawer_message(written, platform)
+      format(DECLARED_WITHOUT_DRAWER, written: written, platform: platform)
     end
 
     # The project's extension definitions alone, read the way a validator in
@@ -246,6 +261,11 @@ module JsonUIShared
       # Check for conflicting attributes
       check_spacing_gravity_conflict(merged_component, type)
 
+      # A synonym spelling whose node sets an attribute the spelling means
+      # otherwise (an HStack with orientation vertical): the node's value is
+      # drawn, and the author is told
+      JsonUIShared::TypeSynonyms.disagreements(merged_component, type_synonyms_path).each { |m| add_warning(m) }
+
       # Check for weight + dimension conflict
       check_weight_dimension_conflict(merged_component, type, parent_orientation)
 
@@ -264,7 +284,7 @@ module JsonUIShared
       check_flow_columns(merged_component) if map_type_to_definition(type) == 'Collection'
 
       # Check Collection requires cellIdProperty in SwiftUI/Compose mode
-      if type == 'Collection' && (@mode == :swiftui || @mode == :compose)
+      if map_type_to_definition(type) == 'Collection' && (@mode == :swiftui || @mode == :compose)
         unless merged_component.key?('cellIdProperty')
           add_warning("Collection should have 'cellIdProperty' for unique cell identity (e.g., \"cellIdProperty\": \"id\")")
         end
@@ -318,6 +338,12 @@ module JsonUIShared
     # the codegen says the validator's sentence where it draws nothing.
     def unknown_component_type_message(written)
       self.class.unknown_component_type_message(written, known_component_types)
+    end
+
+    # Whether the validator knows `written` as a type (known_component_types):
+    # what a codegen asks before it names a type it has no drawer for.
+    def known_component_type?(written)
+      known_component_types.include?(written)
     end
 
     private
@@ -491,7 +517,8 @@ module JsonUIShared
     # 1. the cross-platform synonym table (display spellings that are not
     #    sections themselves: Text, Scroll, Checkbox, ...), read from
     #    type_synonyms.json beside attribute_definitions.json — the one
-    #    table, which jui_cli's alias_table.py and every renderer read too
+    #    table, which jui_cli's alias_table.py reads too and the renderers
+    #    are to draw synonyms from
     #    (jui_tools/tests/test_type_synonyms_cross_language.py checks each
     #    reader answers what the file says),
     # 2. a component-alias hop: sections that are `_alias_of` pointers
@@ -505,8 +532,12 @@ module JsonUIShared
       resolve_component_alias(entry ? entry['canonical'] : type)
     end
 
-    # spelling -> { 'canonical' => section, 'render_as' => type (optional) }.
-    # Read once per validator.
+    # spelling -> { 'canonical' => section, 'render_as' => type (optional) },
+    # read once per validator through JsonUIShared::TypeSynonyms.load
+    # (type_synonyms.rb beside this file, the one parser of the table), which
+    # also says why a table cannot be used. `@type_synonyms_path` points a
+    # validator at another copy of the table (the cross-language test's swap
+    # arm).
     #
     # A table that cannot be used — missing (what a plain copy of a tool
     # leaves: the file is a link into shared/core, as
@@ -527,32 +558,18 @@ module JsonUIShared
     # "WARNING: Failed to parse home.json: …" and "build completed!", kjui
     # exit 1 with no ledger.
     def type_synonyms
-      @type_synonyms ||= read_type_synonyms(
-        @type_synonyms_path || File.join(File.dirname(__FILE__), 'type_synonyms.json')
-      )
+      @type_synonyms ||= begin
+        entries, problem = JsonUIShared::TypeSynonyms.load(type_synonyms_path)
+        problem ? unusable_type_synonyms(*problem) : entries
+      end
     end
 
-    def read_type_synonyms(path)
-      unless File.exist?(path)
-        return unusable_type_synonyms("type_synonyms.json not found at #{path}", "#{path} was not found")
-      end
-
-      begin
-        parsed = JSON.parse(File.read(path))
-      rescue JSON::ParserError => e
-        reason = e.message.lines.first.to_s.strip
-        return unusable_type_synonyms("#{path} does not parse: #{reason}", "#{path} does not parse (#{reason})")
-      end
-      entries = parsed.is_a?(Hash) ? parsed['synonyms'] : nil
-      unless entries.is_a?(Hash) && entries.values.all? { |e| e.is_a?(Hash) && e['canonical'].is_a?(String) }
-        shape = '`synonyms` must map each spelling to an object with a `canonical` string'
-        return unusable_type_synonyms("#{path}: #{shape}", "#{path} is not the declared shape (#{shape})")
-      end
-
-      entries
+    def type_synonyms_path
+      @type_synonyms_path || JsonUIShared::TypeSynonyms::DEFAULT_PATH
     end
 
-    # {} after naming the unusable table (see type_synonyms).
+    # {} after naming the unusable table (see type_synonyms): `said` where it
+    # is met, `entry` in the ledger (TypeSynonyms.load gives both).
     def unusable_type_synonyms(said, entry)
       puts "\e[31m[#{log_tag} Error] #{said}\e[0m"
       begin

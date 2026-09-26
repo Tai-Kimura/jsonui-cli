@@ -46,6 +46,12 @@ module RjuiTools
         def execute
           Core::Logger.info('Building React components from JSON layouts...')
 
+          # The app's own converter spellings, before anything reads a layout:
+          # the validators and the data model classify a node by the type it
+          # is drawn as, and a registered spelling is drawn as written
+          # (shared/core/type_synonyms.rb, TypeSynonyms.app_types).
+          JsonUIShared::TypeSynonyms.app_types = React::ReactGenerator.extension_types
+
           layouts_dir = @config['layouts_directory']
 
           unless Dir.exist?(layouts_dir)
@@ -152,6 +158,7 @@ module RjuiTools
           ).to_a
 
           generator = React::ReactGenerator.new(@config)
+          generator.unknown_type_validator = @validator
 
           # Screen identity: only screens carry a marker (cells and partials
           # render inside a host and would each grow a false one). Built once
@@ -688,8 +695,11 @@ module RjuiTools
           # Get this component's orientation for children validation
           # View default orientation is 'vertical' (matches sjui/kjui behavior)
           # If not specified, use default for View types, otherwise inherit from parent
-          current_orientation = component['orientation'] ||
-            (component['type'] == 'View' ? 'vertical' : parent_orientation)
+          # (the node as drawn: an HStack is a View with orientation
+          # horizontal, and its children are laid out so — type_synonyms.rb)
+          drawn = JsonUIShared::TypeSynonyms.drawn(component)
+          current_orientation = drawn['orientation'] ||
+            (drawn['type'] == 'View' ? 'vertical' : parent_orientation)
 
           # Validate children recursively
           if component['child']

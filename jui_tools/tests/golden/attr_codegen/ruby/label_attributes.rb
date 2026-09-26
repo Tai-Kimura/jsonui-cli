@@ -9,7 +9,7 @@ require_relative 'common_attributes'
 module JsonUI
   module Generated
     # Typed attribute extraction for the `Label` component.
-    # Overrides the common definition of: `shadow`.
+    # Overrides the common definition of: `bind`, `shadow`.
     module LabelAttributes
       # Declared-attribute rows — part of the public metadata
       # contract together with `rows` / `declared?` / `alias_map`

@@ -7,6 +7,7 @@ require_relative '../../core/generated_marker'
 require_relative '../../core/converter_generator_core'
 require_relative 'kotlin_component_generator'
 require_relative 'dynamic_component_generator'
+require_relative 'dynamic_registry_types'
 
 module KjuiTools
   module Compose
@@ -19,6 +20,12 @@ module KjuiTools
       # shared core; this class owns the Compose scaffold template, the
       # Kotlin/Dynamic sub-generators and the DynamicComponentInitializer
       # pair.
+      #
+      # The converter it scaffolds applies neither the tap, long press, pan
+      # and pinch nor the alpha: kjui applies those around the component
+      # (ComposeBuilder#app_component_stages). A converter that applies one
+      # itself — calls the node's handler by its data name, or writes
+      # `.alpha(` — keeps it, and kjui does not apply it a second time.
       class ConverterGenerator < ::JsonUIShared::ConverterGeneratorCore
         def initialize(name, options = {})
           @name = name
@@ -206,6 +213,13 @@ module KjuiTools
                         # a list here because converting this template to
                         # delegation changes what every generated converter
                         # emits, and that belongs in its own release.
+                        #
+                        # The tap, long press, pan and pinch, and the alpha, are
+                        # not in this list: kjui applies them around the component
+                        # (ComposeBuilder#app_component_stages), as around a
+                        # built-in one. If this converter applies one itself —
+                        # calls the node's handler (`data.<name>`) or writes
+                        # `.alpha(` — kjui does not apply that one again.
                         modifiers = []
                         modifiers.concat(Helpers::ModifierBuilder.build_test_tag(json_data, required_imports))
                         modifiers.concat(Helpers::ModifierBuilder.build_size(json_data, nil, required_imports))
@@ -332,10 +346,17 @@ module KjuiTools
 
           debug_file = File.join(debug_dir, 'DynamicComponentInitializer.kt')
 
-          # Only create if it doesn't exist yet
+          # Only create if it doesn't exist yet; one written before 1.9.0 gets
+          # the line that hands the registry's types to KotlinJsonUI.
           if !File.exist?(debug_file)
             File.write(debug_file, generate_debug_initializer_content(package_name))
             @logger.info "Created DynamicComponentInitializer (debug): #{debug_file}"
+          else
+            updated, changed = DynamicRegistryTypes.initializer(File.read(debug_file, encoding: 'UTF-8'))
+            if changed
+              File.write(debug_file, updated)
+              @logger.info "Updated DynamicComponentInitializer (debug): #{debug_file} sets Configuration.customComponentTypes"
+            end
           end
 
           # Create release version
@@ -376,6 +397,8 @@ module KjuiTools
                * This is only available in debug builds where DynamicComponentRegistry exists
                */
               fun initialize() {
+                  // Requires KotlinJsonUI >= 2.42.0 (Configuration.customComponentTypes)
+                  #{DynamicRegistryTypes::ASSIGNMENT}
                   Configuration.customComponentHandler = { type, json, data ->
                       DynamicComponentRegistry.createCustomComponent(type, json, data)
                   }

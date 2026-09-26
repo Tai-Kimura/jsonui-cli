@@ -14,8 +14,11 @@ module RjuiTools
       # NetworkImageConverter (NetworkImage is its own component) and
       # SwitchConverter for Toggle — the SSoT declares Toggle `_alias_of:
       # Switch` (attribute_definitions.json), and the other faces draw it as
-      # a switch. Extension converters are looked up before it, by each
-      # caller, as before.
+      # a switch. Its keys are the canonical names only: both callers
+      # canonicalize a node's type first (JsonUIShared::TypeSynonyms,
+      # ComponentAliases — rel/v1.8.121's canon), so Toggle reaches it as
+      # Switch. Extension converters are looked up before it, by each
+      # caller; a type it does not hold is the caller's to name.
       module ConverterTable
         module_function
 
@@ -28,28 +31,18 @@ module RjuiTools
               'View' => ViewConverter,
               'SafeAreaView' => ViewConverter,
               'Label' => LabelConverter,
-              'Text' => LabelConverter,
               'Button' => ButtonConverter,
               'Image' => ImageConverter,
               'CircleImage' => ImageConverter,
               'NetworkImage' => NetworkImageConverter,
               'TextField' => TextFieldConverter,
-              # EditText / Input are aliases for TextField (attribute_definitions
-              # `_alias_of: TextField`; kept for Android / HTML naming compatibility)
-              'EditText' => TextFieldConverter,
-              'Input' => TextFieldConverter,
               'TextView' => TextViewConverter,
-              'Scroll' => ScrollViewConverter,
               'ScrollView' => ScrollViewConverter,
               'Collection' => CollectionConverter,
-              'Table' => CollectionConverter,
+              # Switch is the primary component name, drawn as an iOS-style
+              # switch; CheckBox the simple checkbox.
               'Switch' => SwitchConverter,
-              # Toggle is `_alias_of: Switch` in the SSoT.
-              'Toggle' => SwitchConverter,
-              # CheckBox and its alias spellings are the simple checkbox.
               'CheckBox' => ToggleConverter,
-              'Check' => ToggleConverter,
-              'Checkbox' => ToggleConverter,
               'Slider' => SliderConverter,
               'Segment' => SegmentConverter,
               'Radio' => RadioConverter,
