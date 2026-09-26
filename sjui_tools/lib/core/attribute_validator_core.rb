@@ -729,7 +729,12 @@ module JsonUIShared
           actual_type = get_value_type(item)
           unless type_matches?(actual_type, expected_types, item, item_def)
             add_warning("#{item_path} in '#{component_type}' expects #{expected_types.join(' or ')}, got #{actual_type}")
+            next
           end
+          # An item vocabulary (safeAreaInsetPositions: top / bottom / leading
+          # / trailing / vertical / all) names an item declared in no case, as
+          # a top-level enum does (1.9.0): it reserves nothing and is named.
+          validate_enum_value(item, item_def['enum'], item_path, component_type) if item_def['enum'].is_a?(Array)
         end
       end
     end
