@@ -72,23 +72,23 @@ RSpec.describe 'rjui Collection: paging item ids count across the sections' do
     end
   end
 
-  SECTIONS = [{ 'cell' => 'ACell', 'footer' => 'FCell' }, { 'header' => 'HCell' }, { 'cell' => 'BCell', 'header' => 'HCell' },
+  PAGING_IDS_SECTIONS = [{ 'cell' => 'ACell', 'footer' => 'FCell' }, { 'header' => 'HCell' }, { 'cell' => 'BCell', 'header' => 'HCell' },
               { 'cell' => 'CCell' }].freeze
 
   it 'two sections: 0 … n-1 across them' do
-    expect(ids(convert('sections' => SECTIONS.values_at(0, 2)), [2, 3])).to eq((0..4).map { |i| "pager_item_#{i}" })
+    expect(ids(convert('sections' => PAGING_IDS_SECTIONS.values_at(0, 2)), [2, 3])).to eq((0..4).map { |i| "pager_item_#{i}" })
   end
 
   it 'a section that draws no cell adds no page and no id' do
-    expect(ids(convert('sections' => SECTIONS), [2, 5, 3, 1])).to eq((0..5).map { |i| "pager_item_#{i}" })
+    expect(ids(convert('sections' => PAGING_IDS_SECTIONS), [2, 5, 3, 1])).to eq((0..5).map { |i| "pager_item_#{i}" })
   end
 
   it "a section's header and footer are not pages: every page is a cell with its address" do
-    expect(pages(convert('sections' => SECTIONS), [2, 5, 3, 1])).to eq((0..5).map { |i| "pager_item_#{i}" })
+    expect(pages(convert('sections' => PAGING_IDS_SECTIONS), [2, 5, 3, 1])).to eq((0..5).map { |i| "pager_item_#{i}" })
   end
 
   it 'control: a horizontal list draws the headers and footers among its children' do
-    list = convert('paging' => false, 'sections' => SECTIONS)
+    list = convert('paging' => false, 'sections' => PAGING_IDS_SECTIONS)
     expect(pages(list, [2, 5, 3, 1])).to eq(%w[pager_item_0 pager_item_1 (no\ id) (no\ id) (no\ id) pager_item_0 pager_item_1
                                                 pager_item_2 pager_item_0])
   end
@@ -97,7 +97,7 @@ RSpec.describe 'rjui Collection: paging item ids count across the sections' do
   # pagers are horizontal), so the web draws it as one too, whatever it snaps.
   it 'control: a list keeps each section counting from 0 (only a pager is one run of pages)' do
     [false, true].each do |paging|
-      list = convert('layout' => 'vertical', 'paging' => paging, 'sections' => SECTIONS.values_at(0, 2))
+      list = convert('layout' => 'vertical', 'paging' => paging, 'sections' => PAGING_IDS_SECTIONS.values_at(0, 2))
       expect(ids(list, [2, 3])).to eq(%w[pager_item_0 pager_item_1 pager_item_0 pager_item_1 pager_item_2]), paging.to_s
       expect(pages(list, [2, 3]).count('(no id)')).to eq(2), paging.to_s # A's footer, B's header
     end
@@ -116,7 +116,7 @@ RSpec.describe 'rjui Collection: paging item ids count across the sections' do
       declare const FCell: (props: { data: unknown }) => JSX.Element;
     TS
     jsx = RjuiTools::React::Converters::CollectionConverter.new(
-      { 'type' => 'Collection', 'id' => 'pager', 'layout' => 'horizontal', 'paging' => true, 'items' => '@{rows}', 'sections' => SECTIONS },
+      { 'type' => 'Collection', 'id' => 'pager', 'layout' => 'horizontal', 'paging' => true, 'items' => '@{rows}', 'sections' => PAGING_IDS_SECTIONS },
       { 'use_tailwind' => true, 'typescript' => true }
     ).convert
     expect(TypeScriptCompiler.component(jsx)).to compile_as_typescript.with_ambient(ambient)

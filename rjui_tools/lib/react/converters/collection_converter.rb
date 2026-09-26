@@ -526,12 +526,18 @@ module RjuiTools
           content_lines.join("\n")
         end
 
-        # A section's header or footer: its view with the section's data.
+        # A section's header or footer: its view with the section's data, and
+        # only when the section has that data — as sjui (`if let headerData =
+        # section.header?.data`), kjui (`section.header?.let`) and both Dynamic
+        # renderers draw it (4f ruling 2026-09-26, round 8). Until jsonui-cli
+        # 1.9.0 it was drawn with `{}` when the section had none, on every
+        # route.
         def section_edge_line(section, kind, section_index, items_binding, indent)
           view = section.is_a?(Hash) && extract_view_name(section[kind])
           return nil unless view
 
-          "#{indent_str(indent)}<#{view} data={#{items_binding}?.sections?.[#{section_index}]?.#{kind} || {}} />"
+          edge = "#{items_binding}?.sections?.[#{section_index}]?.#{kind}"
+          "#{indent_str(indent)}{#{edge} && <#{view} data={#{edge}} />}"
         end
 
         # `edges: false` leaves the header and footer to the caller (the
