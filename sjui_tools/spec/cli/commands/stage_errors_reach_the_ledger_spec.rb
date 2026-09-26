@@ -28,9 +28,20 @@ RSpec.describe 'sjui build: a stage that printed an error is in the ledger' do
   # The tool is linked, not copied (lib/core/attribute_definitions.json is a
   # relative link into shared/core) — except where the arm is that file
   # missing, where the copy without -L is the input.
-  def project(mode, dangling_definitions: false, source_group: true)
+  def project(mode, dangling_definitions: false, plain_copy: false, source_group: true)
     dir = Dir.mktmpdir('sjui_stage')
     if dangling_definitions
+      # The tool copied with its links followed, then attribute_definitions.json
+      # put back as the link a plain copy leaves dangling — that one file
+      # missing and nothing else. A plain `cp -R` now leaves
+      # type_synonyms.json dangling too, and the build stops on that first
+      # (the example after the definitions one).
+      FileUtils.mkdir_p(File.join(dir, 'sjui_tools'))
+      %w[bin lib].each { |d| system('cp', '-RL', File.join(REPO_STAGES, 'sjui_tools', d), File.join(dir, 'sjui_tools')) || raise(d) }
+      definitions = File.join(dir, 'sjui_tools', 'lib', 'core', 'attribute_definitions.json')
+      File.delete(definitions)
+      File.symlink('../../../shared/core/attribute_definitions.json', definitions)
+    elsif plain_copy
       FileUtils.mkdir_p(File.join(dir, 'sjui_tools'))
       %w[bin lib].each { |d| system('cp', '-R', File.join(REPO_STAGES, 'sjui_tools', d), File.join(dir, 'sjui_tools')) || raise(d) }
     else
@@ -166,6 +177,18 @@ RSpec.describe 'sjui build: a stage that printed an error is in the ledger' do
         expect(Dir.exist?(File.join(dir, NAME, 'Layouts'))).to be(false), mode
         expect(log).not_to match(/completed successfully!|SwiftUI build completed!/)
       end
+    end
+
+    # A plain copy leaves type_synonyms.json dangling as well (753acb06 reads
+    # it; the validator raises, naming the file). Whatever the build then does,
+    # it names the file and does not end in its success line.
+    it 'a copy that left every link dangling: names type_synonyms.json, and does not claim success' do
+      dir = project('uikit', plain_copy: true)
+      layout(dir, 'home')
+      log, exit_code, entries = build(dir)
+      expect(log).to include('type_synonyms.json')
+      expect(exit_code != 0 || entries.any?).to be(true), log
+      expect(log).not_to match(/completed successfully!|SwiftUI build completed!/)
     end
 
     it 'under --mode all, one failure is one entry in the ledger (the UIKit and the SwiftUI stages each report)' do

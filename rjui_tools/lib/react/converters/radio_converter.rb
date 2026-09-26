@@ -261,8 +261,16 @@ module RjuiTools
               # changes it (ticket static-valued-controls-do-not-change-on-a-
               # users-tap): an uncontrolled `defaultChecked` on the item it
               # names — `checked` + readOnly held the group still.
-              chosen = static_selected == (value.is_a?(String) ? JsonUIShared::StringLiterals.ts_body(value) : value)
-              seed = chosen ? ' defaultChecked' : ''
+              # A bound list's option is a runtime value, so its seed compares
+              # at run time — there is no literal to answer with here, and
+              # leaving it out started the group with nothing chosen.
+              seed =
+                if expr
+                  " defaultChecked={#{selected_binding} === #{expr}}"
+                else
+                  chosen = static_selected == (value.is_a?(String) ? JsonUIShared::StringLiterals.ts_body(value) : value)
+                  chosen ? ' defaultChecked' : ''
+                end
               return on_change ? "#{seed} onChange={() => #{on_change}?.(#{value_literal})}" : seed
             end
             checked =

@@ -23,9 +23,20 @@ RSpec.describe 'kjui build: a stage that printed an error is in the ledger' do
   KJUI_ROOT = File.expand_path('../..', __dir__)
   SRC = 'app/src/main'
 
-  def project(dangling_definitions: false)
+  def project(dangling_definitions: false, plain_copy: false)
     dir = Dir.mktmpdir('kjui_stage')
     if dangling_definitions
+      # The tool copied with its links followed, then attribute_definitions.json
+      # put back as the link a plain copy leaves dangling — that one file
+      # missing and nothing else. A plain `cp -R` now leaves
+      # type_synonyms.json dangling too, and the build stops on that first
+      # (the example after the definitions one).
+      FileUtils.mkdir_p(File.join(dir, 'kjui_tools'))
+      %w[bin lib].each { |d| system('cp', '-RL', File.join(KJUI_ROOT, d), File.join(dir, 'kjui_tools')) || raise(d) }
+      definitions = File.join(dir, 'kjui_tools', 'lib', 'core', 'attribute_definitions.json')
+      File.delete(definitions)
+      File.symlink('../../../shared/core/attribute_definitions.json', definitions)
+    elsif plain_copy
       FileUtils.mkdir_p(File.join(dir, 'kjui_tools'))
       %w[bin lib].each { |d| system('cp', '-R', File.join(KJUI_ROOT, d), File.join(dir, 'kjui_tools')) || raise(d) }
     else
@@ -175,6 +186,18 @@ RSpec.describe 'kjui build: a stage that printed an error is in the ledger' do
     expect(exit_code).to eq(0)
     expect(entries.map { |e| e['stage'] }).to eq(['validation']), "#{entries.inspect}\n#{log}"
     expect(log).not_to include('Compose build completed!')
+  end
+
+  # A plain copy leaves type_synonyms.json dangling as well (753acb06 reads
+  # it; the validator raises, naming the file). Whatever the build then does,
+  # it names the file and does not end in its success line.
+  it 'a copy that left every link dangling: names type_synonyms.json, and does not claim success' do
+    dir = project(plain_copy: true)
+    layout(dir, 'home')
+    log, exit_code, entries = build(dir)
+    expect(log).to include('type_synonyms.json')
+    expect(exit_code != 0 || entries.any?).to be(true), log
+    expect(log).not_to match(/Compose build completed!/)
   end
 
   describe 'stages no real input reached here' do
