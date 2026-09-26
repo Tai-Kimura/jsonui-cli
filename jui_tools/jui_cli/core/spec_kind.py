@@ -19,6 +19,8 @@ what they skipped, so nothing is silently reclassified.
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from . import shared_core
 
 
@@ -27,3 +29,24 @@ def describes_a_screen(spec_type):
     if core is None:
         return None
     return core.describes_a_screen(spec_type)
+
+
+def missing_table_error(command: str) -> str | None:
+    """The ERROR a command that reads specs prints, and exits 1 on, in a tool
+    tree whose shared/core has no spec type table; None when it has one.
+
+    Every type is unknown without the table, so such a command can only skip
+    every spec. Skipping per spec — "has type 'screen_spec', which is neither
+    a screen nor a known non-screen type" — named the wrong cause and exited
+    0: `jui verify` printed "no screens found — nothing to verify" with an
+    ERROR list of layouts "with no spec", `jui g project` generated nothing,
+    and `jui build` stopped on an AttributeError (measured 2026-09-26 on a
+    jui_tools copied without its sibling shared/).
+    """
+    if shared_core.load("spec_types") is not None:
+        return None
+    tools = Path(__file__).resolve().parents[2]
+    return (f"ERROR: `{command}` cannot read specs: shared/core/spec_types.py is not in "
+            f"this tool tree (no shared/core above {tools}). Without it no spec's type is "
+            f"known and every spec would be skipped. Reinstall jsonui-cli — a complete "
+            f"tree has shared/ beside jui_tools/.")
