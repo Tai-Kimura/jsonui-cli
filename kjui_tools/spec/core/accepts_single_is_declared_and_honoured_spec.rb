@@ -19,10 +19,13 @@ require 'core/attribute_validator'
 # Only an object is wrapped. Wrapping a scalar would move the complaint about
 # `"child": "notalist"` from `'child'` to `'child[0]'` — an index the author
 # never wrote.
-RSpec.describe KjuiTools::Core::AttributeValidator do
+module AcceptsSingleIsDeclaredAndHonouredSpec
   DEFS = JSON.parse(
     File.read(File.expand_path('../../lib/core/attribute_definitions.json', __dir__))
   ).freeze
+end
+
+RSpec.describe KjuiTools::Core::AttributeValidator do
 
   def warnings_for(component)
     described_class.new(:compose).validate(component)
@@ -47,7 +50,7 @@ RSpec.describe KjuiTools::Core::AttributeValidator do
       # was also run under the consumer's ruby (2.6) to prove the lib loads
       # there, and 2.6 has no filter_map. Found by exactly that run — the
       # first thing the 2.6 arm caught was this file.
-      DEFS.flat_map do |component, attrs|
+      AcceptsSingleIsDeclaredAndHonouredSpec::DEFS.flat_map do |component, attrs|
         next [] unless attrs.is_a?(Hash)
         attrs.map do |name, entry|
           [component, name, entry] if entry.is_a?(Hash) && entry.key?('acceptsSingle')

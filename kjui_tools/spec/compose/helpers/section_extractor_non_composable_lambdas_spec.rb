@@ -161,7 +161,7 @@ RSpec.describe KjuiTools::Compose::Helpers::SectionExtractor do
     # id + visibility is the reported layout; the others reach the same
     # depth through nesting instead (measured on 1.8.119: every one of them
     # put 5 section calls in the factory).
-    SHAPES = [
+    shapes = [
       { id: true, visibility: true, nest: 0 },
       { id: true, visibility: false, nest: 1 },
       { id: false, visibility: true, nest: 1 },
@@ -170,7 +170,7 @@ RSpec.describe KjuiTools::Compose::Helpers::SectionExtractor do
     ].freeze
 
     ANDROID_VIEW_CONVERTERS.each_value do |type|
-      SHAPES.each do |shape|
+      shapes.each do |shape|
         it "keeps the #{type} factory whole (#{shape.map { |k, v| "#{k}=#{v}" }.join(', ')})" do
           src, failed, = build(screen(type, **shape))
           expect(failed).to be_empty

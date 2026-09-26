@@ -44,7 +44,7 @@ RSpec.describe 'kjui codegen: each declared shape of `items`' do
     KjuiTools::Compose::ComposeBuilder.new.send(:generate_component, JSON.parse(JSON.generate(node)), 1).to_s
   end
 
-  SHAPES = { 'an array' => %w[a b], 'an empty array' => [], 'a binding' => '@{rows}', 'absent' => :absent }.freeze
+  shapes = { 'an array' => %w[a b], 'an empty array' => [], 'a binding' => '@{rows}', 'absent' => :absent }.freeze
 
   def with_items(node, items)
     items == :absent ? node : node.merge('items' => items)
@@ -66,7 +66,7 @@ RSpec.describe 'kjui codegen: each declared shape of `items`' do
 
   it 'draws a Table as the Collection it is, on every route and whatever shape its items take' do
     aggregate_failures do
-      ROUTES.product(SHAPES.to_a).each do |route, (label, items)|
+      ROUTES.product(shapes.to_a).each do |route, (label, items)|
         base = { 'id' => 'list', 'width' => 'matchParent', 'height' => 200 }.merge(route)
         collection = emit(with_items(base.merge('type' => 'Collection'), items))
         table = emit(with_items(base.merge('type' => 'Table'), items))

@@ -20,13 +20,16 @@ require 'compose/helpers/modifier_builder'
 # extend this file. And the property is phrased so it needs no knowledge of
 # which combinations are legal: IF an arm emits a cell, that cell carries an
 # address.
-RSpec.describe KjuiTools::Compose::Components::CollectionComponent do
+module CollectionCellsAreAddressableSpec
   DEFS = JSON.parse(
     File.read(File.expand_path('../../../lib/core/attribute_definitions.json', __dir__))
   ).freeze
+end
+
+RSpec.describe KjuiTools::Compose::Components::CollectionComponent do
 
   def self.declared(attr)
-    (DEFS.dig('Collection', attr, 'enum') || []).uniq
+    (CollectionCellsAreAddressableSpec::DEFS.dig('Collection', attr, 'enum') || []).uniq
   end
 
   # Canonical spellings only — the alias spellings route to the same arm and

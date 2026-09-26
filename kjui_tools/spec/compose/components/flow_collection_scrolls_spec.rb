@@ -24,10 +24,10 @@ require 'compose/helpers/modifier_builder'
 # `lazy` values come from attribute_definitions.json rather than a list here,
 # so a value added to the SSoT is covered without anyone extending this file.
 RSpec.describe KjuiTools::Compose::Components::CollectionComponent do
-  DEFS = JSON.parse(
+  defs = JSON.parse(
     File.read(File.expand_path('../../../lib/core/attribute_definitions.json', __dir__))
-  ).freeze
-  LAZY_VALUES = ((DEFS.dig('Collection', 'lazy', 'enum') || []) + [nil]).uniq.freeze
+  )
+  LAZY_VALUES = ((defs.dig('Collection', 'lazy', 'enum') || []) + [nil]).uniq.freeze
   SCROLL = '.verticalScroll(rememberScrollState())'
   BOX = 'BoxWithConstraints('
   GUARD = 'if (constraints.hasBoundedHeight)'

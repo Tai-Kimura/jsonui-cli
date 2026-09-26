@@ -90,7 +90,7 @@ RSpec.describe 'an undefined colour token' do
   # from disk — the path resolution, the themed schema and the mode union are
   # all unexercised there. This one runs the real build.
   describe 'reading the real colors.json' do
-    REPO_ROOT = File.expand_path('../../..', __dir__)
+    let(:repo_root) { File.expand_path('../../..', __dir__) }
 
     def project
       dir = Dir.mktmpdir('color_token')
@@ -133,7 +133,7 @@ RSpec.describe 'an undefined colour token' do
             'text' => 'ng', 'fontColor' => 'alert_crimson' }
         ]
       ))
-      FileUtils.ln_s(File.join(REPO_ROOT, 'sjui_tools'), File.join(dir, 'sjui_tools'))
+      FileUtils.ln_s(File.join(repo_root, 'sjui_tools'), File.join(dir, 'sjui_tools'))
       dir
     end
 

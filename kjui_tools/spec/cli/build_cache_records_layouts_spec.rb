@@ -19,7 +19,7 @@ require 'fileutils'
 # Everything resolves from this checkout: no installed CLI, `kjui_tools`
 # symlinked so its relative `lib/core/*` links still point at `shared/core`.
 RSpec.describe 'the Compose build cache' do
-  REPO_ROOT = File.expand_path('../../..', __dir__)
+  let(:repo_root) { File.expand_path('../../..', __dir__) }
 
   # A settled build: healthy and styled cached, sample converted again. From
   # 1.8.121 a refused layout is never recorded — it is converted, and refused,
@@ -69,7 +69,7 @@ RSpec.describe 'the Compose build cache' do
       'type' => 'View', 'id' => 'root', 'width' => 'matchParent',
       'height' => 'matchParent', 'child' => []
     ))
-    FileUtils.ln_s(File.join(REPO_ROOT, 'kjui_tools'), File.join(dir, 'kjui_tools'))
+    FileUtils.ln_s(File.join(repo_root, 'kjui_tools'), File.join(dir, 'kjui_tools'))
     dir
   end
 

@@ -18,7 +18,7 @@ require 'fileutils'
 # What must NOT change is the defined name: it emits `colorResource(R.color.x)`
 # and always did. The population this fix is for is "names in no palette".
 RSpec.describe 'an undefined colour token on Compose' do
-  REPO_ROOT = File.expand_path('../../..', __dir__)
+  let(:repo_root) { File.expand_path('../../..', __dir__) }
 
   # `Color.Unspecified` and `Color(android.graphics.Color.parseColor(...))`
   # need the SAME import — `androidx.compose.ui.graphics.Color` — because the
@@ -64,7 +64,7 @@ RSpec.describe 'an undefined colour token on Compose' do
       'type' => 'View', 'id' => 'root', 'width' => 'matchParent', 'height' => 'matchParent',
       'child' => [label('e', 'alert_crimson')]
     ))
-    FileUtils.ln_s(File.join(REPO_ROOT, 'kjui_tools'), File.join(dir, 'kjui_tools'))
+    FileUtils.ln_s(File.join(repo_root, 'kjui_tools'), File.join(dir, 'kjui_tools'))
     dir
   end
 

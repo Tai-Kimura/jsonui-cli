@@ -20,7 +20,7 @@ require 'fileutils'
 # Everything is resolved from this checkout: no installed CLI, no `jui` on
 # $PATH, `sjui_tools` symlinked so its relative `lib/core/*` links resolve.
 RSpec.describe 'validation is not cached' do
-  REPO_ROOT = File.expand_path('../../../..', __dir__)
+  let(:repo_root) { File.expand_path('../../../..', __dir__) }
   # warned.json and healthy.json cached; sample.json, refused, converted again.
   def settled
     'Updating 1 of 3 files'
@@ -60,7 +60,7 @@ RSpec.describe 'validation is not cached' do
       'type' => 'View', 'id' => 'root', 'width' => 'matchParent',
       'height' => 'matchParent', 'child' => []
     ))
-    FileUtils.ln_s(File.join(REPO_ROOT, 'sjui_tools'), File.join(dir, 'sjui_tools'))
+    FileUtils.ln_s(File.join(repo_root, 'sjui_tools'), File.join(dir, 'sjui_tools'))
     dir
   end
 
