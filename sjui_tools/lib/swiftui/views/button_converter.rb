@@ -123,7 +123,7 @@ module SjuiTools
                     # onClick (camelCase) -> binding format only (@{functionName})
                     if JsonUIShared::TapAccessibility.handler?(partial['onClick']) && is_binding?(partial['onClick'])
                       # For partial click, no value to pass
-                      handler_call = get_event_handler_invocation(partial['onClick'], @component['id'] || 'button', nil)
+                      handler_call = get_event_handler_invocation(partial['onClick'], view_id, nil)
                       add_line "onClick: { #{handler_call} },"
                     end
 
@@ -148,8 +148,7 @@ module SjuiTools
             # it here as canTap does, on the button and from a node around it
             # (tap_shut?, gated_handler_call).
             if action && is_binding?(action) && !tap_shut?
-              id = @component['id'] || 'button'
-              handler_call = gated_handler_call(get_event_handler_invocation(action, id, nil))
+              handler_call = gated_handler_call(get_event_handler_invocation(action, view_id, nil))
               add_line "action: { #{handler_call} },"
             else
               add_line "action: { },"

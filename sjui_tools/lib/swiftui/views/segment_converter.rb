@@ -56,9 +56,9 @@ module SjuiTools
           # without one, `valueChange` (value_change_call).
           on_value_change = @component['onValueChange']
           value_call = if on_value_change && is_binding?(on_value_change)
-                         get_event_handler_invocation(on_value_change, id, 'newValue')
+                         get_event_handler_invocation(on_value_change, view_id, 'newValue')
                        else
-                         value_change_call(id)
+                         value_change_call(view_id)
                        end
 
           # Picker（SwiftUIのSegmented Control）. The user's choice writes the

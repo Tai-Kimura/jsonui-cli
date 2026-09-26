@@ -213,7 +213,7 @@ module SjuiTools
             # Get the binding variable name from text_binding
             binding_var = text_binding.gsub('$', '').gsub('.constant(', '').gsub(')', '')
             if text_binding.start_with?('$')
-              handler_call = get_event_handler_invocation(@component['onTextChange'], id, 'newValue')
+              handler_call = get_event_handler_invocation(@component['onTextChange'], view_id, 'newValue')
               indent_str = "    " * (@indent_level + 1)
               # Guard: only call callback when value actually changed (prevent feedback loop)
               @modifier_bag.append(:on_text_change, ".onChange(of: #{binding_var}) { oldValue, newValue in\n#{indent_str}guard oldValue != newValue else { return }\n#{indent_str}#{handler_call}\n#{indent_str[0...-4]}}")
@@ -297,7 +297,6 @@ module SjuiTools
           end
           if @component['onSubmit']
             on_submit = @component['onSubmit']
-            view_id = @component['id'] || 'textfield'
             on_submit_body << if is_binding?(on_submit)
                                 get_event_handler_invocation(on_submit, view_id)
                               else

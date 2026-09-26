@@ -987,7 +987,7 @@ module SjuiTools
           tap = JsonUIShared::TapAccessibility
           calls = if tap.handler?(@component['onClick'])
                     if is_binding?(@component['onClick'])
-                      [get_event_handler_invocation(@component['onClick'], @component['id'], nil)]
+                      [get_event_handler_invocation(@component['onClick'], view_id, nil)]
                     else
                       [get_event_handler_call(@component['onClick'])]
                     end
@@ -1036,6 +1036,16 @@ module SjuiTools
         # for both).
         def position_name(kind)
           "#{kind}_#{@component[JsonUIShared::LayoutPath::KEY] || '0'}"
+        end
+
+        # The viewId this node's handlers are handed: its id, else its drawn
+        # type and its position (JsonUIShared::LayoutPath.view_id —
+        # `switch_0_1`, `selectBox_0_3`), the name every path gives it (4f's
+        # ruling, 1.9.0). An id-less node's viewId was a per-kind word that
+        # differed per path — `toggle`, `selectBox`, `textEditor`, `button`,
+        # or `""` — the same for every node of the kind.
+        def view_id
+          JsonUIShared::LayoutPath.view_id(@component)
         end
 
         # A handler call that a component makes from its own operation — a
@@ -1132,7 +1142,7 @@ module SjuiTools
           return if handler.nil?
           return unless is_binding?(handler)
 
-          invocation = get_event_handler_invocation(handler, @component['id'], 'value.translation')
+          invocation = get_event_handler_invocation(handler, view_id, 'value.translation')
           @modifier_bag.register(:on_pan, [
             ".contentShape(Rectangle())",
             ".simultaneousGesture(",
@@ -1153,7 +1163,7 @@ module SjuiTools
           return if handler.nil?
           return unless is_binding?(handler)
 
-          invocation = get_event_handler_invocation(handler, @component['id'], 'value.magnification')
+          invocation = get_event_handler_invocation(handler, view_id, 'value.magnification')
           @modifier_bag.register(:on_pinch, [
             ".contentShape(Rectangle())",
             ".simultaneousGesture(",

@@ -139,7 +139,7 @@ module SjuiTools
           # gate, emits none for them)
           if JsonUIShared::TapAccessibility.handler?(@component['onClick']) && is_binding?(@component['onClick']) &&
              !tap_shut?
-            handler_call = get_event_handler_invocation(@component['onClick'], @component['id'] || 'image')
+            handler_call = get_event_handler_invocation(@component['onClick'], view_id)
             on_click_lines = [
               ".contentShape(Rectangle())",
               build_on_tap_gesture(handler_call)
