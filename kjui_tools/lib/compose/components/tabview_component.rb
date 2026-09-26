@@ -55,6 +55,17 @@ module KjuiTools
             state_expr = state_var
             select_tab = ->(index) { "#{state_var} = #{index}" }
           end
+          # onValueChange (onTabChange / onPageChanged its aliases), after the
+          # tab's selection is written, called as the data declares it
+          # (ModifierBuilder.get_event_handler_invocation: `(Int)` with the
+          # index, `(String, Int)` with the viewId first, `()` with nothing) —
+          # the user's tab choice, as web's tab button calls it. Compose read
+          # no handler at all: a TabView's onValueChange was never called.
+          handler = Core::Normalization.attr_lookup(json_data, 'onValueChange', 'onTabChange', 'onPageChanged')
+          tab_change = if handler.is_a?(String) && Helpers::ModifierBuilder.is_binding?(handler)
+                         view_id = Helpers::ModifierBuilder.view_id(json_data)
+                         ->(index) { Helpers::ModifierBuilder.get_event_handler_invocation(handler, view_id, index.to_s) }
+                       end
           # `enabled` is the tab bar's own items' parameter: a disabled TabView
           # does not switch tabs (NavigationBarItem's `enabled`, which also
           # marks each item disabled for TalkBack). Only the Scaffold's
@@ -127,7 +138,7 @@ module KjuiTools
             # `gsub('it', index)` rewrote every "it" of the setter, so a bound
             # name holding one — `editIndex` — wrote `"ed0Index"`, a key the
             # data does not have, and the tab never switched.
-            code += "\n" + indent("onClick = { #{select_tab.call(index)} },", depth + 4)
+            code += "\n" + indent("onClick = { #{[select_tab.call(index), tab_change&.call(index)].compact.join('; ')} },", depth + 4)
             code += "\n" + indent("enabled = #{tabs_enabled},", depth + 4) if tabs_enabled
 
             # The badge reaches a screen reader only through the item. Material3's
