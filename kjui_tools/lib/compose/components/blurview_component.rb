@@ -32,7 +32,9 @@ module KjuiTools
           # dynamic chain clips first)
           if json_data['cornerRadius']
             required_imports&.add(:shape)
-            modifiers << ".clip(RoundedCornerShape(#{json_data['cornerRadius']}.dp))"
+            # A bound cornerRadius is an expression (BoundValue.dp); `@{r}` was
+            # written into the Kotlin as `RoundedCornerShape(@{r}.dp)` (B8).
+            modifiers << ".clip(RoundedCornerShape(#{Helpers::BoundValue.dp(json_data['cornerRadius'])}))"
           end
 
           # `effectStyle` (enum Light / Dark / ExtraLight) is expressed the

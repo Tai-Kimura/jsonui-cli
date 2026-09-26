@@ -13,7 +13,8 @@
     ]
   },
   "platform": [
-    "ios"
+    "ios",
+    "android"
   ],
   "cases": [
     {

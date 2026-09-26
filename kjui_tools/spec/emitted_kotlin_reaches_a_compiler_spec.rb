@@ -135,7 +135,6 @@ RSpec.describe 'emitted Kotlin reaches a compiler' do
     'compose/components/text_component_spec.rb' => "p2 — #{UNCONVERTED}",
     'compose/components/textfield_component_spec.rb' => "p2 — #{UNCONVERTED}",
     'compose/components/textview_component_spec.rb' => "p2 — #{UNCONVERTED}",
-    'compose/components/toggle_component_spec.rb' => "p3 — #{UNCONVERTED}",
     'compose/components/web_component_spec.rb' => "p1 — #{UNCONVERTED}",
     'compose/compose_builder_screen_marker_spec.rb' => "p1 — #{UNCONVERTED}",
     'compose/compose_builder_spec.rb' => "p1 — #{UNCONVERTED}",

@@ -163,6 +163,11 @@ module KjuiTools
           # read.
           modifiers.concat(Helpers::ModifierBuilder.build_shadow(json_data, required_imports))
           modifiers.concat(Helpers::ModifierBuilder.build_border_and_clip(json_data, required_imports))
+          # The node's own long press, pan and pinch, at the click slot and
+          # gated like it (gesture_gate: userInteractionEnabled and enabled) —
+          # declared on `common` and dropped here
+          # (kjui-dynamic-components-that-skip-the-common-modifiers, B6).
+          modifiers.concat(Helpers::ModifierBuilder.build_gestures(json_data, required_imports))
           modifiers.concat(Helpers::ModifierBuilder.build_disabled_semantics(
             json_data, Helpers::ModifierBuilder.enabled_expression(json_data), required_imports
           ))

@@ -211,12 +211,18 @@ module KjuiTools
         def self.subcompose_node?(node)
           return false unless node.is_a?(Hash)
 
+          # The spellings the dispatch routes (ComposeBuilder#generate_component):
+          # a type answers as the component that draws it.
           case node['type']
-          when 'Scroll', 'Table'
-            # ScrollView always emits LazyRow/LazyColumn; Table emits
-            # LazyColumn unconditionally.
+          when 'ScrollView', 'Scroll'
+            # ScrollView always emits LazyRow/LazyColumn. Only `Scroll` was
+            # listed, so a ScrollView spelled canonically read as eager and
+            # its parent asked it for IntrinsicSize.Min — the shape that throws
+            # "Asking for intrinsic measurements of SubcomposeLayout layouts".
             return true
-          when 'Collection'
+          when 'Collection', 'Table'
+            # A Table is drawn by CollectionComponent, so it answers as the
+            # Collection does (it was always Lazy here, whatever it drew).
             # Collection emits a non-Lazy fallback when `lazy: "none"` or when
             # vertical + `height: wrapContent`. Flow layout uses FlowRow
             # (non-Lazy). Paging horizontal uses HorizontalPager which IS
@@ -228,7 +234,9 @@ module KjuiTools
             return true
           end
 
-          subcompose_descendant?(node['child'])
+          # `child` then `children`, as every other walk of the tree reads them
+          # (JsonUIShared::LayoutPath.children); only `child` was scanned.
+          subcompose_descendant?(%w[child children].flat_map { |key| node[key].is_a?(Hash) ? [node[key]] : Array(node[key]) })
         end
 
         def self.child_dimension(child, axis)

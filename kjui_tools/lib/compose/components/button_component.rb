@@ -132,8 +132,10 @@ module KjuiTools
           # onLongPress: Button's own inner .clickable consumes the down event
           # in the Main pass, so the detector must watch the Initial pass
           # (see ModifierBuilder.build_long_pressable). combinedClickable on
-          # this modifier would race the inner clickable the same way.
-          modifiers.concat(Helpers::ModifierBuilder.build_long_pressable(json_data, required_imports))
+          # this modifier would race the inner clickable the same way. Pan and
+          # pinch, declared on `common` with it, were dropped
+          # (kjui-dynamic-components-that-skip-the-common-modifiers, B6).
+          modifiers.concat(Helpers::ModifierBuilder.build_gestures(json_data, required_imports))
 
           # Format modifiers only if there are modifiers
           if modifiers.any?
@@ -144,8 +146,10 @@ module KjuiTools
           # Add shape with cornerRadius (always set to match dynamic defaults)
           required_imports&.add(:shape)
           required_imports&.add(:configuration)
-          corner_radius = json_data['cornerRadius'] || 'Configuration.Button.defaultCornerRadius'
-          code += ",\n" + indent("shape = RoundedCornerShape(#{corner_radius}.dp)", depth + 1)
+          # A bound cornerRadius is an expression (BoundValue.dp); `@{r}` was
+          # written into the Kotlin as `RoundedCornerShape(@{r}.dp)` (B8).
+          corner_radius = Helpers::BoundValue.dp(json_data['cornerRadius']) || 'Configuration.Button.defaultCornerRadius.dp'
+          code += ",\n" + indent("shape = RoundedCornerShape(#{corner_radius})", depth + 1)
           
           # Add contentPadding for internal padding
           # Support both 'padding' (number), 'paddings' (array), and individual padding attributes

@@ -869,6 +869,11 @@ module KjuiTools
           modifiers.concat(Helpers::ModifierBuilder.build_alpha(json_data, required_imports))
           modifiers.concat(Helpers::ModifierBuilder.build_shadow(json_data, required_imports))
           modifiers.concat(Helpers::ModifierBuilder.build_background(json_data, required_imports))
+          # The clickable stage — onClick, enabled, userInteractionEnabled and
+          # the node's gestures — which every other Collection emitter applies
+          # here, between the background and the padding; the pager applied
+          # none (kjui-dynamic-components-that-skip-the-common-modifiers, B1).
+          modifiers.concat(Helpers::ModifierBuilder.build_clickable(json_data, required_imports))
           modifiers.concat(Helpers::ModifierBuilder.build_padding(json_data))
           modifiers.concat(Helpers::ModifierBuilder.build_weight(json_data, parent_type))
 
