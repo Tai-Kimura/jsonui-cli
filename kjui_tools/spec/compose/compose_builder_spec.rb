@@ -853,10 +853,12 @@ RSpec.describe KjuiTools::Compose::ComposeBuilder do
         builder.instance_variable_set(:@custom_components, Set.new)
       end
 
-      it 'generates Box with systemBarsPadding' do
+      it 'generates Box reserving every edge of the system bars' do
         result = builder.send(:generate_safe_area_view, {}, 0)
         expect(result).to include('Box(')
-        expect(result).to include('.systemBarsPadding()')
+        expect(result).to include('Modifier.windowInsetsPadding(WindowInsets.systemBars.only(WindowInsetsSides.Top))')
+        expect(result).to include('Modifier.windowInsetsPadding(WindowInsets.systemBars.only(WindowInsetsSides.Bottom))')
+        expect(result).to include('.windowInsetsPadding(WindowInsets.systemBars.only(WindowInsetsSides.Start + WindowInsetsSides.End))')
       end
 
       it 'generates with child components' do

@@ -76,10 +76,13 @@ module KjuiTools
             # `Dp.Infinity` — the unresolved value of a bound maxWidth/maxHeight
             # (a 0.dp cap would annihilate the view). Plan 49 lane C.
             dp_infinity: "import androidx.compose.ui.unit.Dp",
-            # `safeAreaInsetPositions` on a plain node (plan 49 lane C).
-            safe_area_padding: ["import androidx.compose.foundation.layout.systemBarsPadding",
-                                "import androidx.compose.foundation.layout.statusBarsPadding",
-                                "import androidx.compose.foundation.layout.navigationBarsPadding"],
+            # `safeAreaInsetPositions`: the system bars' inset on the named
+            # sides (SafeAreaEdges).
+            safe_area_sides: ["import androidx.compose.foundation.layout.WindowInsets",
+                              "import androidx.compose.foundation.layout.WindowInsetsSides",
+                              "import androidx.compose.foundation.layout.only",
+                              "import androidx.compose.foundation.layout.systemBars",
+                              "import androidx.compose.foundation.layout.windowInsetsPadding"],
             shadow_style: ["import androidx.compose.ui.text.TextStyle",
                            "import androidx.compose.ui.graphics.Shadow",
                            "import androidx.compose.ui.geometry.Offset"],

@@ -4,6 +4,7 @@ require_relative 'effect_style_helper'
 require_relative 'binding_expression'
 require_relative 'bound_value'
 require_relative 'resource_resolver'
+require_relative 'safe_area_edges'
 require_relative '../../core/layout_path'
 require_relative '../../core/normalization'
 require_relative '../../core/tap_accessibility'
@@ -666,20 +667,13 @@ module KjuiTools
           # View as well as SafeAreaView on purpose — sjui runs
           # `apply_safe_area_insets_to_bag` for every component and rjui emits
           # `env(safe-area-inset-*)` padding from `safe_area_edges`, while
-          # kjui read the spelling only inside the SafeAreaView builder
-          # (compose_builder.rb:722). Same edge vocabulary and the same
-          # Compose primitives that builder uses, so the two agree.
-          edges = json_data['safeAreaInsetPositions']
-          if edges && json_data['type'] != 'SafeAreaView'
-            edges = [edges] unless edges.is_a?(Array)
-            edges = edges.map(&:to_s)
-            required_imports&.add(:safe_area_padding)
-            if edges.include?('all')
-              modifiers << '.systemBarsPadding()'
-            else
-              modifiers << '.statusBarsPadding()' if edges.include?('top') || edges.include?('vertical')
-              modifiers << '.navigationBarsPadding()' if edges.include?('bottom') || edges.include?('vertical')
-            end
+          # kjui read the spelling only inside the SafeAreaView builder. The
+          # words mean what they mean there (SafeAreaEdges).
+          positions = json_data['safeAreaInsetPositions']
+          if positions && json_data['type'] != 'SafeAreaView'
+            modifiers.concat(SafeAreaEdges.modifiers(
+              SafeAreaEdges.edges(positions), 'LocalSafeAreaConfig.current', required_imports
+            ))
           end
 
           # `effectStyle` is declared on `common`, not just on Blur, and only
