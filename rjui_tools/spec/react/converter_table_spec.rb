@@ -4,6 +4,7 @@ require 'json'
 require 'stringio'
 require 'tmpdir'
 require_relative '../spec_helper'
+require_relative '../support/typescript_compiler'
 require 'core/config_manager'
 require 'react/react_generator'
 
@@ -53,17 +54,34 @@ RSpec.describe 'rjui: one converter table, root and child' do
     $stderr = STDERR
   end
 
-  {
+  PROBES = {
     'NetworkImage' => [{ 'type' => 'NetworkImage', 'id' => 'photo', 'width' => 140, 'height' => 80, 'url' => '@{photoUrl}',
                          'defaultImage' => 'placeholder', 'errorImage' => 'broken', 'contentMode' => 'fill' },
                        { 'name' => 'photoUrl', 'class' => 'String' }, '<NetworkImage '],
     'Toggle' => [{ 'type' => 'Toggle', 'id' => 'sw', 'isOn' => '@{on}' }, { 'name' => 'on', 'class' => 'Bool' }, 'w-[51px] h-[31px]']
-  }.each do |type, (node, datum, drawn)|
+  }.freeze
+
+  PROBES.each do |type, (node, datum, drawn)|
     it "a #{type} at the root is drawn as the same node nested" do
       root = element(node.merge('data' => [datum]), 'RootProbe')
       nested = element({ 'type' => 'View', 'id' => 'root', 'data' => [datum], 'child' => [node] }, 'NestedProbe')
       expect(root).to eq(nested)
       expect(root).to include(drawn)
     end
+  end
+
+  # What the table's converters now draw at the root type-checks — the
+  # NetworkImage against the built-in's own props (lib/react/templates).
+  it 'the root NetworkImage and Toggle type-check' do
+    jsx = PROBES.map { |type, (node, _, _)| table.fetch(type).new(node, config.dup).convert }
+    expect(TypeScriptCompiler.component(*jsx)).to compile_as_typescript.with_ambient(<<~TS)
+      declare namespace React { type CSSProperties = { [property: string]: string | number | undefined } }
+      declare const data: { photoUrl?: string; on: boolean; onOnChange?: (value: boolean) => void };
+      // React types an <input>'s onChange event; the minimal ambient types no
+      // element, so this one is declared (the part the switch reads).
+      declare namespace JSX { interface IntrinsicElements { input: { onChange?: (e: { target: { checked: boolean } }) => void; [attr: string]: unknown } } }
+      #{TypeScriptCompiler.template_declarations('network_image.tsx', 'NetworkImageProps')}
+      declare const NetworkImage: (props: NetworkImageProps) => JSX.Element;
+    TS
   end
 end
