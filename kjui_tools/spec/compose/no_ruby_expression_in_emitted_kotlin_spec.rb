@@ -26,7 +26,8 @@ RSpec.describe 'kjui codegen writes no Ruby expression into the Kotlin it emits'
   # String-literal content (Ripper's tstring_content — the text outside any
   # `#{}`) that holds a Ruby-only token, as "file:line: text".
   hits_in = lambda do |source, name|
-    # `map { }.compact`, not `filter_map`: CI runs this suite on Ruby 2.6.
+    # `map { }.compact`, not `filter_map`: CI ran this suite on Ruby 2.6
+    # until jsonui-cli 1.9.0 (the floor is 3.2 since).
     Ripper.lex(source).map do |(line, _col), type, text, _state|
       "#{name}:#{line}: #{text.strip}" if type == :on_tstring_content && text.match?(ruby_only)
     end.compact

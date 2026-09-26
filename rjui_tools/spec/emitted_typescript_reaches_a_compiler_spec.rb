@@ -141,8 +141,9 @@ RSpec.describe 'emitted TypeScript reaches a compiler' do
   let(:root) { File.expand_path(__dir__) }
 
   def emit_specs(root)
-    # `map { }.compact`, not `filter_map`: CI runs this suite on Ruby 2.6 as
-    # well (the consumer floor), where Array#filter_map does not exist —
+    # `map { }.compact`, not `filter_map`: CI ran this suite on Ruby 2.6 as
+    # well until jsonui-cli 1.9.0 (the consumer floor then; 3.2 since),
+    # where Array#filter_map does not exist —
     # 1.8.43's first candidate went red on exactly this line, on all three
     # faces, after six green suites on Ruby 3.2.
     Dir.glob(File.join(root, '**', '*_spec.rb')).sort.map do |path|

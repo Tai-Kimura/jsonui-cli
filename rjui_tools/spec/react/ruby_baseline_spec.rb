@@ -20,6 +20,13 @@ require_relative '../spec_helper'
 #
 # The warning existed and nobody re-read it. This is that warning in a form that
 # cannot be un-read (lane C's finding, plan 49).
+#
+# ⚠️ FROM jsonui-cli 1.9.0 THE FLOOR IS RUBY 3.2, not 2.6 (ruling 2026-09-26):
+# bin/rjui stops below 3.2 with one line, so these four methods are on the
+# floor now and nothing here protects a consumer any more. The list is kept as
+# it was — the ruling lets the 2.6-era spellings stay — and says so, rather than
+# being read as a 2.6 contract that still binds. Whether to drop it, or to
+# re-base it on what is newer than 3.2 (CI runs 3.3, the floor 3.2), is open.
 RSpec.describe 'Ruby baseline for the consumer interpreter' do
   lib_root = File.expand_path('../../lib', __dir__)
 
@@ -51,7 +58,7 @@ RSpec.describe 'Ruby baseline for the consumer interpreter' do
       end
 
       expect(offenders).to be_empty, lambda {
-        "`#{method}` is Ruby #{since}+ and rjui may run on the consumer's 2.6:\n  " +
+        "`#{method}` is Ruby #{since}+, outside the 2.6-era list this spec keeps (the floor is 3.2 from jsonui-cli 1.9.0):\n  " +
           offenders.join("\n  ") + "\n\nWrite it as `#{replacement}` instead."
       }
     end

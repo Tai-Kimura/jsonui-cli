@@ -794,8 +794,9 @@ module KjuiTools
             # AndroidView factory of a Web with an id and a visibility
             # binding sat past the depth budget, and `WebView(context).apply
             # {` read as a container).
-            # NOTE: kjui runs under the host's system Ruby (2.6) in consumer
-            # projects — Enumerable#filter_map (2.7+) is unavailable there,
+            # NOTE: until jsonui-cli 1.9.0 kjui ran under the host's system
+            # Ruby (2.6) in consumer projects — Enumerable#filter_map (2.7+)
+            # is unavailable there (the floor is 3.2 from 1.9.0),
             # and a NoMethodError here is swallowed by the per-file rescue as
             # a "Failed to process" that silently leaves the PREVIOUS
             # generated file on disk. map+compact only.
