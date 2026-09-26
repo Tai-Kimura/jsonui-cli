@@ -82,7 +82,7 @@ RSpec.describe RjuiTools::React::Converters::CircleViewConverter do
       it 'adds onClick and cursor-pointer' do
         converter = create_converter({ 'class' => 'CircleView', 'onClick' => '@{handleCircleClick}' })
         result = converter.convert
-        expect(result).to include('onClick={data.handleCircleClick}')
+        expect(result).to include('onClick={() => data.handleCircleClick?.()}')
         expect(result).to include('cursor-pointer')
       end
     end

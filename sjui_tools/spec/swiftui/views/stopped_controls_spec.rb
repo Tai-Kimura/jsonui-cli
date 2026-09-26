@@ -58,15 +58,47 @@ RSpec.describe 'sjui a control a stop holds' do
     expect(bound['child'][0][JsonUIShared::TapAccessibility::GATES_KEY]).to eq(['@{u}'])
   end
 
+  # A Segment's segments are UIKit's elements, which the modifier's
+  # treatment of the control does not reach: it is told so (`items: true`,
+  # SwiftJsonUI reads the control as disabled instead — measured,
+  # ConformanceHost -a11yActivationProbe -wrappers). No other control.
+  items = ->(type) { type == 'Segment' ? ', items: true' : '' }
+
   controls.each_key do |type|
     it "#{type}: inside false, with false of its own, inside a binding, reached by a stop handed down — and nothing beside no stop" do
-      expect(convert.call(stopping.call(false, node.call(type))).scan('.jsonuiStoppedControl(true)').size).to eq(1)
-      expect(convert.call(node.call(type).merge('userInteractionEnabled' => false)).scan('.jsonuiStoppedControl(true)').size).to eq(1)
-      expect(convert.call(stopping.call('@{u}', node.call(type)))).to include('.jsonuiStoppedControl(!((data.u ?? false)))')
-      expect(convert.call(node.call(type), reads: true)).to include('.jsonuiStoppedControl()')
+      expect(convert.call(stopping.call(false, node.call(type))).scan(".jsonuiStoppedControl(true#{items.call(type)})").size).to eq(1)
+      expect(convert.call(node.call(type).merge('userInteractionEnabled' => false)).scan(".jsonuiStoppedControl(true#{items.call(type)})").size).to eq(1)
+      expect(convert.call(stopping.call('@{u}', node.call(type)))).to include(".jsonuiStoppedControl(!((data.u ?? false))#{items.call(type)})")
+      expect(convert.call(node.call(type), reads: true)).to include(".jsonuiStoppedControl(#{items.call(type).delete_prefix(', ')})")
       expect(convert.call(node.call(type))).not_to include('jsonuiStoppedControl')
       expect(convert.call(node.call(type).merge('userInteractionEnabled' => true))).not_to include('jsonuiStoppedControl')
     end
+  end
+
+  # The rule asks the type a node is drawn as (TypeSynonyms.drawn_type, 4f's
+  # ruling, jsonui-cli 1.9.0): a Picker is drawn as a SelectBox and a
+  # SegmentedControl as a Segment — controls, as the Dynamic runtime already
+  # read them — and a TableView or a List as a Collection, a container. An
+  # app's own spelling is drawn as written, and is no control.
+  it 'a synonym spelling is the control or the container it is drawn as; an app\'s own spelling is neither' do
+    picker = { 'type' => 'Picker', 'id' => 'p', 'items' => %w[a b], 'selectedIndex' => '@{idx}' }
+    expect(convert.call(stopping.call(false, picker)).scan('.jsonuiStoppedControl(true)').size).to eq(1)
+    segmented = { 'type' => 'SegmentedControl', 'id' => 'g', 'items' => %w[a b], 'selectedIndex' => '@{idx}' }
+    expect(convert.call(stopping.call(false, segmented))).to include('.jsonuiStoppedControl(true, items: true)')
+    tree = JsonUIShared::TapAccessibility.annotate!(JSON.parse(JSON.generate(stopping.call(false, { 'type' => 'View', 'child' => [
+      { 'type' => 'TableView', 'id' => 't' }, { 'type' => 'List', 'id' => 'l' }, picker
+    ] }))))
+    marked = []
+    JsonUIShared::TapAccessibility.walk(tree) { |n, _| marked << n['type'] if n[JsonUIShared::TapAccessibility::STOPPED_KEY] }
+    expect(marked).to eq(['Picker'])
+    # An app registering `Toggle` or `Table` draws them as written; the rule
+    # lists those spellings as written too, and they are still no control.
+    JsonUIShared::TypeSynonyms.app_types = %w[Picker Toggle Table]
+    expect(JsonUIShared::TapAccessibility.control?(picker)).to be(false)
+    expect(JsonUIShared::TapAccessibility.control?({ 'type' => 'Toggle' })).to be(false)
+    expect(JsonUIShared::TapAccessibility.control?({ 'type' => 'Table' })).to be(false)
+  ensure
+    JsonUIShared::TypeSynonyms.app_types = []
   end
 
   it 'not on what is not a control: a Label, a View, a container' do
@@ -83,8 +115,26 @@ RSpec.describe 'sjui a control a stop holds' do
     # The data is @State here: the Switch binds `$data.on`.
     source = <<~SWIFT
       #{EmittedSwift::LIBRARY_STUBS}
-      extension View { func jsonuiStoppedControl(_ stopped: Bool = false) -> some View { self } }
+      extension View { func jsonuiStoppedControl(_ stopped: Bool = false, items: Bool = false) -> some View { self } }
       struct TestData { var u: Bool? = false; var on: Bool = false }
+      struct EmittedHost: View {
+          @State var data = TestData()
+          var body: some View {
+      #{code.lines.map { |l| "        #{l}" }.join}
+          }
+      }
+    SWIFT
+    expect(source).to compile_as_swift
+  end
+
+  it 'a Segment inside a bound stop compiles with the items the library declares', :swift_compile do
+    skip("swiftc: #{SwiftCompiler.unavailable_reason}") if SwiftCompiler.unavailable_reason
+    code = convert.call(stopping.call('@{u}', node.call('Segment')))
+    # The data is @State here: the Segment binds `$data.idx`.
+    source = <<~SWIFT
+      #{EmittedSwift::LIBRARY_STUBS}
+      extension View { func jsonuiStoppedControl(_ stopped: Bool = false, items: Bool = false) -> some View { self } }
+      struct TestData { var u: Bool? = false; var idx: Int = 0 }
       struct EmittedHost: View {
           @State var data = TestData()
           var body: some View {

@@ -49,6 +49,22 @@ RSpec.describe JsonUIShared::TapAccessibility do
       expect(shapes).to include(nil)
     end
 
+    # Which nodes are controls (`controls`): the rule's answer for each case,
+    # the app's own spellings registered as the case says; the two Dynamic
+    # runtimes run the same cases (TapAccessibility.isControl).
+    it 'answers the controls table, its container list included' do
+      expect(vectors.dig('controls', 'stop_container_types')).to eq(described_class::STOP_CONTAINER_TYPES.sort)
+      cases = vectors.dig('controls', 'cases')
+      expect(cases.map { |c| c['control'] }.uniq).to contain_exactly(false, true)
+      got = cases.map do |c|
+        JsonUIShared::TypeSynonyms.app_types = c['app_types'] || []
+        [c['type'], c['app_types'], described_class.control?({ 'type' => c['type'] })]
+      end
+      expect(got).to eq(cases.map { |c| [c['type'], c['app_types'], c['control']] })
+    ensure
+      JsonUIShared::TypeSynonyms.app_types = []
+    end
+
     vectors['cases'].each do |vector|
       it vector['name'] do
         tree = JSON.parse(JSON.generate(vector['layout']))

@@ -636,18 +636,6 @@ module RjuiTools
           declared_class(handler, data_classes).match?(VIEW_ID_CLASS)
         end
 
-        # The viewId (JsonUIShared::LayoutPath.view_id): the id, else the
-        # drawn type and the node's position. In a layout that takes
-        # `jsonuiPath` (an included one, IncludePaths), the position above the
-        # layout's own root comes in at run time: `selectBox_${jsonuiPath}_1`.
-        def view_id_expr
-          return JsonUIShared::StringLiterals.ts(JsonUIShared::LayoutPath.view_id(json)) if attributes['id'] || !config['_path_prop']
-
-          path = json[JsonUIShared::LayoutPath::KEY] || '0'
-          stem = JsonUIShared::LayoutPath.view_id(json, '').chomp('_')
-          "`#{JsonUIShared::StringLiterals.ts_template_body(stem)}_${jsonuiPath}#{path.sub(/\A0/, '')}`"
-        end
-
         # The new index where selectedIndex is what is bound (no selected
         # item or value), for a handler declared to take it.
         def selection_index_expr

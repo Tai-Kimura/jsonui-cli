@@ -16,7 +16,9 @@ module RjuiTools
     # Only a layout that needs it takes it, so a layout whose includes hand
     # no viewId comes out as it did: one that someone includes and that holds
     # a node handing a viewId without an id (SelectBoxConverter
-    # .hands_view_id?), itself or in a layout it includes.
+    # .hands_view_id?, BaseConverter.tap_hands_view_id? — a tap whose
+    # handler the data declares `(String)`), itself or in a layout it
+    # includes.
     module IncludePaths
       module_function
 
@@ -48,7 +50,10 @@ module RjuiTools
 
       def view_id_without_id?(tree)
         classes = declared_data_classes(tree)
-        nodes(tree).any? { |node| node['id'].nil? && Converters::SelectBoxConverter.hands_view_id?(node, classes) }
+        nodes(tree).any? do |node|
+          node['id'].nil? &&
+            (Converters::SelectBoxConverter.hands_view_id?(node, classes) || Converters::BaseConverter.tap_hands_view_id?(node, classes))
+        end
       end
 
       # name => class, for every entry of every `data` list in the tree — the
