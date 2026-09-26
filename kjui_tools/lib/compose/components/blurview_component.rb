@@ -59,10 +59,15 @@ module KjuiTools
                       # sharing the table changes no Blur output.
                       Helpers::EffectStyleHelper.scrim(json_data['effectStyle'])
                     end
+          # A tapBackground on a Blur with a click replaces the scrim while
+          # pressed (ModifierBuilder.background_stage).
+          pressed = Helpers::ModifierBuilder.pressed_background(json_data, required_imports)
           if bg_expr
             opacity = json_data['opacity'] || json_data['alpha']
             bg_expr = "(#{bg_expr}).copy(alpha = #{opacity.to_f}f)" if opacity
-            modifiers << ".background(#{bg_expr})"
+            modifiers << Helpers::ModifierBuilder.background_stage(bg_expr, pressed, required_imports)
+          elsif pressed
+            modifiers << Helpers::ModifierBuilder.background_stage('Color.Transparent', pressed, required_imports)
           end
 
           # Real blur modifier (Compose 1.3+), after the scrim like the

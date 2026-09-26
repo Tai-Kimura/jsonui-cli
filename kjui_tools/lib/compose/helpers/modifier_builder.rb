@@ -617,18 +617,63 @@ module KjuiTools
           modifiers
         end
         
+        #: The types whose declared onClick is not a tap on the node — a
+        #: control calls it from its own operation, a text field never — and a
+        #: Button, which draws its own pressed background (ButtonComponent,
+        #: `tapBackground ?: highlightBackground`). The set sjui's
+        #: OPERATION_CLICK_TYPES names, and Button.
+        NO_PRESSED_BACKGROUND_TYPES = %w[button switch toggle checkbox check radio segment slider selectbox
+                                         textfield edittext input textview].freeze
+
+        # tapBackground is the background while pressed, on every node with a
+        # tap and on a Button (jsonui-cli 1.9.0). On a node with a click
+        # (click_call) the background slot draws it: `[colour, condition]` —
+        # the condition the click's own gates and `enabled` make, nil when
+        # there is none — or nil for a node without a click.
+        def self.pressed_background(json_data, required_imports)
+          colour = json_data['tapBackground']
+          return nil if colour.nil? || NO_PRESSED_BACKGROUND_TYPES.include?(json_data['type'].to_s.downcase)
+          return nil if json_data['enabled'] == false
+
+          call, gate = click_call(json_data)
+          return nil unless call
+
+          gates = [gate, enabled_expression(json_data)].compact
+          [ResourceResolver.process_color(colour, required_imports), gates.empty? ? nil : gates.map { |g| conjunct(g) }.join(' && ')]
+        end
+
+        # The background slot: `.background(base)`, or on a node with a pressed
+        # colour, `base` at rest and the pressed colour while a pointer is down
+        # on the node. The press is watched, not taken — nothing is consumed,
+        # so the click and a scroll around the node see every event as before —
+        # and it ends when the pointer lifts or a scroll takes it
+        # (waitForUpOrCancellation).
+        def self.background_stage(base, pressed, required_imports)
+          return ".background(#{base})" unless pressed
+
+          colour, condition = pressed
+          required_imports&.add(:background)
+          required_imports&.add(:pressed_background)
+          held = condition ? "isPressed && #{condition}" : 'isPressed'
+          ".then(run { var isPressed by remember { mutableStateOf(false) }; " \
+            "Modifier.pointerInput(Unit) { awaitEachGesture { awaitFirstDown(requireUnconsumed = false); " \
+            "isPressed = true; waitForUpOrCancellation(); isPressed = false } }" \
+            ".background(if (#{held}) #{colour} else #{base}) })"
+        end
+
         def self.build_background(json_data, required_imports = nil)
           modifiers = []
           
-          # highlighted — UIKit's pressed/selected appearance flag: when set
-          # (literal true, or a bool binding) the background swaps to
+          # highlighted — the View's highlighted appearance: when set (literal
+          # true, or a bool binding) the background swaps to
           # highlightBackground, matching sjui's apply_highlighted_to_bag.
           #
-          # `tapBackground` is the declared cross-platform spelling of the same
-          # colour and no Compose path read it (plan 49 lane C:
-          # common.tapBackground, C0 unread + C1 dropped). sjui and rjui both
-          # accept `tapBackground || highlightBackground`; so does this now.
-          highlight_bg = json_data['tapBackground'] || json_data['highlightBackground']
+          # tapBackground is not this colour (jsonui-cli 1.9.0): it is the
+          # background while PRESSED, on a node with a click
+          # (pressed_background). Reading `tapBackground || highlightBackground`
+          # here painted the pressed colour whenever `highlighted` held.
+          highlight_bg = json_data['highlightBackground']
+          pressed = pressed_background(json_data, required_imports)
           highlight_cond = case json_data['highlighted']
                            when true, 'true' then 'true'
                            when String
@@ -649,7 +694,7 @@ module KjuiTools
             
             # border before clip to prevent border being clipped
             modifiers.concat(build_border_and_clip(json_data, required_imports))
-            modifiers << ".background(#{background_color})"
+            modifiers << background_stage(background_color, pressed, required_imports)
           elsif highlight_cond && highlight_bg
             # No base background: the highlight IS the background when the
             # flag holds (transparent otherwise, which is what no-background
@@ -657,9 +702,10 @@ module KjuiTools
             required_imports&.add(:background)
             hl = ResourceResolver.process_color(highlight_bg, required_imports)
             expr = highlight_cond == 'true' ? hl : "if (#{highlight_cond}) #{hl} else Color.Transparent"
-            modifiers << ".background(#{expr})"
+            modifiers << background_stage(expr, pressed, required_imports)
           else
             modifiers.concat(build_border_and_clip(json_data, required_imports))
+            modifiers << background_stage('Color.Transparent', pressed, required_imports) if pressed
           end
 
           # `safeAreaInsetPositions` on a PLAIN node. The SSoT declares it on

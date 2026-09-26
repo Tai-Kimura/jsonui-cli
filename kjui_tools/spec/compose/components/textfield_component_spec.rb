@@ -77,10 +77,13 @@ RSpec.describe KjuiTools::Compose::Components::TextFieldComponent do
       expect(result).to include('backgroundColor')
     end
 
-    it 'generates TextField with highlightBackground' do
+    # highlightBackground is the colour while `highlighted` holds, which only a
+    # View declares (jsonui-cli 1.9.0) — not the focused background it was
+    # read as here.
+    it 'does not read highlightBackground as the focused background' do
       json_data = { 'type' => 'TextField', 'highlightBackground' => '#E0E0E0' }
       result = described_class.generate(json_data, 0, required_imports)
-      expect(result).to include('highlightBackgroundColor')
+      expect(result).not_to include('highlightBackgroundColor')
     end
 
     it 'generates TextField with borderColor' do

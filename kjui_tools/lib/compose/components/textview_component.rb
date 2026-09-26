@@ -387,10 +387,10 @@ module KjuiTools
             code += "\n" + indent("backgroundColor = #{bg_color},", depth + 1)
           end
 
-          if json_data['highlightBackground']
-            highlight_color = Helpers::ResourceResolver.process_color(json_data['highlightBackground'], required_imports)
-            code += "\n" + indent("highlightBackgroundColor = #{highlight_color},", depth + 1)
-          end
+          # highlightBackground is not the focused background (jsonui-cli
+          # 1.9.0): it is the colour while `highlighted` holds, which only a
+          # View declares. Read as the focus colour it had a meaning no other
+          # platform gave it (no layout on the consumer faces wrote it).
 
           # Border color for outlined text fields
           if json_data['borderColor']

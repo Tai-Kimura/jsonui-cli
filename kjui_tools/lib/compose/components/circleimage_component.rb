@@ -110,9 +110,15 @@ module KjuiTools
           # Background (in case image doesn't load). The colour is resolved
           # here; it was the Ruby call itself, written as Kotlin text
           # (kjui-codegen-writes-ruby-expressions-into-kotlin).
+          # A tapBackground on a CircleImage with a click replaces it while
+          # pressed (ModifierBuilder.background_stage).
+          pressed = Helpers::ModifierBuilder.pressed_background(json_data, required_imports)
           if json_data['background']
             required_imports&.add(:background)
-            modifiers << ".background(#{Helpers::ResourceResolver.process_color(json_data['background'], required_imports)})"
+            base = Helpers::ResourceResolver.process_color(json_data['background'], required_imports)
+            modifiers << Helpers::ModifierBuilder.background_stage(base, pressed, required_imports)
+          elsif pressed
+            modifiers << Helpers::ModifierBuilder.background_stage('Color.Transparent', pressed, required_imports)
           end
           
           modifiers.concat(Helpers::ModifierBuilder.build_clickable(json_data, required_imports))
