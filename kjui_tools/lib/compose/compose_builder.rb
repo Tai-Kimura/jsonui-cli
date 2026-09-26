@@ -7,6 +7,7 @@ require_relative '../core/config_manager'
 require_relative '../core/project_finder'
 require_relative '../core/logger'
 require_relative '../core/type_converter'
+require_relative '../core/data_item_platform'
 require_relative '../core/attribute_validator'
 require_relative '../core/layout_validator'
 require_relative '../core/image_accessibility'
@@ -1953,7 +1954,7 @@ module KjuiTools
               json_data['data'].each do |data_item|
                 if data_item.is_a?(Hash) && data_item['name']
                   # Platform/mode filter: skip if not matching
-                  next if data_item['platform'] && data_item['platform'] != 'kotlin'
+                  next unless JsonUIShared::DataItemPlatform.applies?(data_item, 'kotlin')
                   next if data_item['mode'] && !['compose', 'xml'].include?(data_item['mode'])
                   unless properties.any? { |p| p['name'] == data_item['name'] }
                     # Normalize platform-specific class/defaultValue

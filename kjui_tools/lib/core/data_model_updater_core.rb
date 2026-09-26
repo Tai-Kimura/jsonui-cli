@@ -5,6 +5,7 @@ require 'fileutils'
 require 'set'
 require_relative 'layout_variant'
 require_relative 'type_synonyms'
+require_relative 'data_item_platform'
 
 module JsonUIShared
   # Shared body of the sjui/kjui Data-model updaters: walks every layout
@@ -361,10 +362,11 @@ module JsonUIShared
             json_data['data'].each do |data_item|
               next unless data_item.is_a?(Hash) && data_item['name']
 
-              # Platform/mode filter: skip if not matching
-              if data_item['platform']
-                next unless data_item['platform'] == data_platform_filter
-              end
+              # Platform/mode filter: skip if not matching. The platform is
+              # read as `jui build` reads it (DataItemPlatform: any of the
+              # platform's tokens, comma-separated) — until jsonui-cli 1.9.0
+              # only a value equal to data_platform_filter was this tool's.
+              next unless JsonUIShared::DataItemPlatform.applies?(data_item, data_platform_filter)
               if data_item['mode']
                 next unless data_item['mode'] == data_mode_filter
               end
