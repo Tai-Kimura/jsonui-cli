@@ -605,6 +605,17 @@ module SjuiTools
         # the other paths draw them. A stage the converter registered itself
         # is kept (register_unless_exists).
         def apply_common_decorations
+          # tintColor is the accent of the operable parts — a control's
+          # accent, a link's colour, the cursor (4f's ruling, 1.9.0) — never
+          # the text colour: SwiftUI's `.tint`. It was drawn only through
+          # apply_modifiers, so a Label's links, a TextView's cursor, a
+          # Button and a SelectBox never took it (a bound one on a Label did,
+          # through apply_binding_modifiers). A TextField's caret tint is its
+          # own and is kept.
+          if @component['tintColor']
+            @modifier_bag.register_unless_exists(:tint_color, ".tint(#{get_swiftui_color(@component['tintColor'])})")
+          end
+
           alpha_value = attr_with_alias('opacity', 'alpha')
           if alpha_value
             if is_binding?(alpha_value)
@@ -765,9 +776,8 @@ module SjuiTools
           # `get_swiftui_color` handles both spellings and both data types —
           # a String property is wrapped in `getColor(for:)`, a Color-typed
           # one passes through — so the branch goes away with the defect.
-          if @component['tintColor']
-            @modifier_bag.register(:tint_color, ".tint(#{get_swiftui_color(@component['tintColor'])})")
-          end
+          # tintColor: in apply_common_decorations, with the other stages every
+          # node draws.
 
           # バインディング関連プロパティ（コメントとして記録）
           if @component['bindingScript']

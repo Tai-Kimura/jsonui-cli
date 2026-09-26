@@ -117,10 +117,11 @@ module RjuiTools
 
           # Hint/placeholder color is now handled via Tailwind class in build_class_name
 
-          # Caret (cursor) color
-          if attributes['caretAttributes'] && attributes['caretAttributes']['fontColor']
-            @dynamic_styles['caretColor'] = color_style_expr(attributes['caretAttributes']['fontColor'])
-          end
+          # Caret (cursor) color: tintColor — the accent of the operable parts,
+          # the cursor among them (1.9.0), as sjui (.tint) and kjui
+          # (cursorColor) read it — else caretAttributes.fontColor.
+          caret = attributes['tintColor'] || (attributes['caretAttributes'] && attributes['caretAttributes']['fontColor'])
+          @dynamic_styles['caretColor'] = color_style_expr(caret) if caret
 
           # Text padding left
           if attributes['textPaddingLeft']

@@ -149,6 +149,10 @@ module RjuiTools
             @dynamic_styles['borderRadius'] = "'#{attributes['cornerRadius']}px'"
           end
 
+          # tintColor is the cursor's colour here (the accent of the operable
+          # parts — 1.9.0), as on iOS (.tint) and on the TextField.
+          @dynamic_styles['caretColor'] = color_style_expr(attributes['tintColor']) if attributes['tintColor']
+
           # lineBreakMode — same truncation mapping as Label (a textarea shows
           # its own scrollbar rather than truncating, so this only matters for
           # the read-only/one-line styling cases, but the declared attribute

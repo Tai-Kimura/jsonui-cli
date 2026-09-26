@@ -143,6 +143,7 @@ RSpec.describe 'Converter consumed-attribute coverage' do
       textAlign
       textShadow
       textTransform
+      tintColor
       underline
     ],
     'network_image_converter.rb' => %w[
@@ -256,6 +257,7 @@ RSpec.describe 'Converter consumed-attribute coverage' do
       shadow
       text
       textPaddingLeft
+      tintColor
     ],
     'text_view_converter.rb' => %w[
       autoFocus
@@ -301,6 +303,7 @@ RSpec.describe 'Converter consumed-attribute coverage' do
       scrollEnabled
       selectable
       text
+      tintColor
     ],
     'toggle_converter.rb' => %w[checked enabled icon isOn label onTintColor onValueChange selectedIcon spacing src text tint tintColor value],
     'view_converter.rb' => %w[bottomPadding centerHorizontal centerInParent centerVertical distribution draggable flexWrap height highlightBackground highlighted leftPadding onClick onDragEnter onDragLeave onDragOver onDragStart onDrop onLongPress onPan onPinch onclick orientation padding paddingBottom paddingEnd paddingLeft paddingRight paddingStart paddingTop paddings rightPadding safeAreaInsetPositions spacing tapBackground topPadding],

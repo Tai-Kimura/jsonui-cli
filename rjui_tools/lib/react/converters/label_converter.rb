@@ -718,7 +718,14 @@ module RjuiTools
         # sanitization and newline preservation live in the template so both
         # shapes share one implementation and cannot drift.
         def render_linkable_text(indent, id_attr, class_attr, style_attr, onclick_attr, testid_attr, tag_attr)
-          "#{indent_str(indent)}<LinkifyText#{id_attr}#{class_attr}#{style_attr}#{onclick_attr}#{testid_attr}#{tag_attr}#{linkify_text_prop} />"
+          "#{indent_str(indent)}<LinkifyText#{id_attr}#{class_attr}#{style_attr}#{onclick_attr}#{testid_attr}#{tag_attr}#{linkify_text_prop}#{link_color_prop} />"
+        end
+
+        # tintColor is the links' colour (the accent of the operable parts —
+        # 1.9.0), as `.tint` colours them on iOS.
+        def link_color_prop
+          tint = attributes['tintColor']
+          tint ? " linkColor={#{color_style_expr(tint)}}" : ''
         end
 
         # The text prop for LinkifyText: strings.json key, bound expression

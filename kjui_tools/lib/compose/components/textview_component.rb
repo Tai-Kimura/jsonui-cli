@@ -374,6 +374,13 @@ module KjuiTools
             code += "\n" + indent("shape = RoundedCornerShape(#{Helpers::BoundValue.dp(json_data['cornerRadius'])}),", depth + 1)
           end
 
+          # tintColor is the cursor's colour (the accent of the operable parts —
+          # 1.9.0): CustomTextField's cursorColor, as the TextField passes it.
+          if json_data['tintColor']
+            cursor_color = Helpers::ResourceResolver.process_color(json_data['tintColor'], required_imports)
+            code += "\n" + indent("cursorColor = #{cursor_color},", depth + 1)
+          end
+
           # Background colors
           if json_data['background']
             bg_color = Helpers::ResourceResolver.process_color(json_data['background'], required_imports)
