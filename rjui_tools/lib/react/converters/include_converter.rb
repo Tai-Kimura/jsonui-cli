@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require_relative 'base_converter'
+require_relative '../../core/layout_path'
 
 module RjuiTools
   module React
@@ -30,7 +31,7 @@ module RjuiTools
           # every built-in converter (they reference the PARENT's data).
           data_prop = build_data_prop(merged_data)
 
-          id_attr = include_id_attr
+          id_attr = include_id_attr + include_path_attr(base_name)
 
           if data_prop.empty?
             "#{indent_str(indent)}<#{component_name}#{id_attr} />"
@@ -40,6 +41,20 @@ module RjuiTools
         end
 
         private
+
+        # `jsonuiPath` for a layout that takes it (IncludePaths): this include
+        # node's position in the expanded tree — `"0_3"`, or, where this
+        # layout takes it too, its own root's path and the rest.
+        def include_path_attr(stem)
+          return '' unless Array(@config['_path_stems']).include?(stem)
+
+          path = json[JsonUIShared::LayoutPath::KEY] || '0'
+          if @config['_path_prop']
+            " jsonuiPath={`${jsonuiPath}#{path.sub(/\A0/, '')}`}"
+          else
+            " jsonuiPath=\"#{path}\""
+          end
+        end
 
         # Design U8, when `jui build` turned the prefix on: the include's id is
         # not an element of its own — it is the prefix of the ids inside

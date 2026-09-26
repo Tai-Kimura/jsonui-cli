@@ -36,7 +36,7 @@ module KjuiTools
                    'val loadState = KjuiWebLoadState.of(webView)']
           handler = json_data['onLoadFailed']
           if ModifierBuilder.is_binding?(handler)
-            invocation = ModifierBuilder.get_event_handler_invocation(handler, json_data['id'], nil)
+            invocation = ModifierBuilder.get_event_handler_invocation(handler, ModifierBuilder.view_id(json_data), nil)
             lines << "loadState.onLoadFailed = { #{invocation} }"
           end
           token = json_data['reloadToken']

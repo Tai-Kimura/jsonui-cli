@@ -261,10 +261,12 @@ RSpec.describe SjuiTools::SwiftUI::Views::CollectionConverter do
         expect(code).to include('verticalSpacing: 14')
       end
 
-      it 'keeps the symmetric default 8 when nothing is declared' do
+      # attribute_semantics.json -> collectionSpacing (4f ruling 2026-09-26):
+      # 0, flow included. This kept a symmetric 8 until jsonui-cli 1.9.0.
+      it 'draws 0 when nothing is declared' do
         code = described_class.new(flow_component).convert
-        expect(code).to include('horizontalSpacing: 8')
-        expect(code).to include('verticalSpacing: 8')
+        expect(code).to include('horizontalSpacing: 0')
+        expect(code).to include('verticalSpacing: 0')
       end
 
       # 2026-08-03 unification (SSoT valueAliases): LeftAligned IS flow —

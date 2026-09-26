@@ -1,5 +1,6 @@
 # frozen_string_literal: true
 
+require 'core/bind_fold'
 require 'compose/components/segment_component'
 require 'compose/helpers/modifier_builder'
 require 'compose/helpers/resource_resolver'
@@ -92,11 +93,13 @@ RSpec.describe KjuiTools::Compose::Components::SegmentComponent do
     end
 
     it 'generates Segment with bind attribute' do
-      json_data = {
+    # `bind` reaches the component folded (JsonUIShared::BindFold at the
+    # dispatch, ComposeBuilder#generate_component); the component reads no bind.
+      json_data = JsonUIShared::BindFold.fold({
         'type' => 'Segment',
         'bind' => '@{tabIndex}',
         'items' => ['A', 'B']
-      }
+      })
       result = described_class.generate(json_data, 0, required_imports)
       expect(result).to include('selectedTabIndex = data.tabIndex')
     end
@@ -128,7 +131,7 @@ RSpec.describe KjuiTools::Compose::Components::SegmentComponent do
         'items' => ['A', 'B']
       }
       result = described_class.generate(json_data, 0, required_imports)
-      expect(result).to include('enabled = data.isEnabled')
+      expect(result).to include('enabled = (data.isEnabled ?: false)')
     end
 
     it 'generates Segment with backgroundColor' do
@@ -342,7 +345,7 @@ RSpec.describe KjuiTools::Compose::Components::SegmentComponent do
       expect(result).to include('data.onTabChange?.invoke("tabSegment", 0)')
     end
 
-    it 'uses default segment id when no id specified' do
+    it 'uses its position as the viewId when no id is specified (LayoutPath.view_id; it was the kind word)' do
       KjuiTools::Compose::Helpers::ResourceResolver.data_definitions = {
         'onTabChange' => { 'name' => 'onTabChange', 'class' => '((Event) -> Unit)?' }
       }
@@ -355,7 +358,7 @@ RSpec.describe KjuiTools::Compose::Components::SegmentComponent do
 
       result = described_class.generate(json_data, 0, required_imports)
 
-      expect(result).to include('data.onTabChange?.invoke("segment", 0)')
+      expect(result).to include('data.onTabChange?.invoke("segment_0", 0)')
     end
 
     # fontColor is the unselected label and selectedFontColor the selected one,

@@ -217,7 +217,7 @@ RSpec.describe 'kjui codegen: the common stages reach every type it draws' do
   it 'puts SafeAreaView background and click before the system-bar padding' do
     [base['SafeAreaView'], variants['SafeAreaView with constraints'].reject { |k, _| k == 'type' }].each do |extra|
       code = emit.call({ 'type' => 'SafeAreaView' }.merge(extra, stages['background'], stages['clickable']))
-      bars = code.index('Modifier.systemBarsPadding()')
+      bars = code.index('windowInsetsPadding(WindowInsets.systemBars')
       expect(bars).not_to be_nil, code
       expect(code.index('.background(Color(')).to be < bars
       expect(code.index('.clickable')).to be < bars

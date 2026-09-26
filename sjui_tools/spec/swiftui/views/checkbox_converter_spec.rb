@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require 'swiftui/views/checkbox_converter'
+require 'core/bind_fold'
 
 RSpec.describe SjuiTools::SwiftUI::Views::CheckboxConverter do
   before(:all) do
@@ -13,6 +14,23 @@ RSpec.describe SjuiTools::SwiftUI::Views::CheckboxConverter do
 
   def generated(component)
     described_class.new(component, 0, nil).convert
+  end
+
+  # `bind` is an alternative spelling of the CheckBox's own state attribute,
+  # which "takes precedence when both are set" (SSoT common.bind). The
+  # dispatch folds it (ConverterFactory#create_converter, JsonUIShared::BindFold):
+  # a static isOn / checked beside it is the value; `bind` alone arrives as
+  # isOn. The converter itself reads no `bind`.
+  describe 'bind beside the own state' do
+    it 'takes the static isOn and not the binding' do
+      code = generated(JsonUIShared::BindFold.fold({ 'type' => 'CheckBox', 'isOn' => true, 'bind' => '@{on}' }))
+      expect(code).not_to include('$data.on')
+    end
+
+    it 'takes a lone bind, folded to isOn' do
+      expect(generated(JsonUIShared::BindFold.fold({ 'type' => 'CheckBox', 'bind' => '@{on}' }))).to include('$data.on')
+      expect(generated({ 'type' => 'CheckBox', 'bind' => '@{on}' })).not_to include('$data.on')
+    end
   end
 
   describe 'iconColor' do

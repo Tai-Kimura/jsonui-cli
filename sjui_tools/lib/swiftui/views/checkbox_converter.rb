@@ -160,10 +160,10 @@ module SjuiTools
             return "$data.#{extract_binding_property(@component['checked'])}"
           end
 
-          # Check for bind attribute
-          if @component['bind'] && is_binding?(@component['bind'])
-            return "$data.#{extract_binding_property(@component['bind'])}"
-          end
+          # `bind` is not read: ConverterFactory#create_converter folds it
+          # into isOn when neither isOn nor checked is set, and drops it beside
+          # either (JsonUIShared::BindFold; SSoT common.bind, the own value
+          # attribute "takes precedence when both are set").
 
           # `value` is the cross-platform alias of the on/off state.
           if @component['value'] && is_binding?(@component['value'])

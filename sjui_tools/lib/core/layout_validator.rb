@@ -52,6 +52,22 @@ module JsonUIShared
         }
       end
 
+      # cellClasses and no `items`: no cell is drawn. The class-list cells come
+      # from `items` on every path, and with none there is nothing to draw
+      # them from — sjui and kjui codegen and both Dynamic renderers draw no
+      # cell, and rjui does too from jsonui-cli 1.9.0 (it drew one cell with
+      # no data). The header and footer are still drawn on the vertical
+      # routes. 4f ruling, 2026-09-26: draw nothing, and say so here.
+      if cell_classes.any? && sections.empty? && component['items'].nil?
+        component_id = component['id'] ? " (id=#{component['id']})" : ''
+        warnings << {
+          level: :warning,
+          message: "Collection#{component_id}: cellClasses are declared but items is not, " \
+                   'so no cell is drawn. Fix: bind items ("items": "@{rows}"), or remove cellClasses.',
+          location: source_path
+        }
+      end
+
       warnings
     end
 

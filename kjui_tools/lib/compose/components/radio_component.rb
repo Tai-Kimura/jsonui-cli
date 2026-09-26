@@ -25,8 +25,11 @@ module KjuiTools
           if json_data['group'] || json_data['text'] || json_data['label']
             return generate_radio_item(json_data, depth, required_imports, parent_type)
           end
-          # Radio uses 'bind' for selected value
-          selected = if json_data['bind'] && json_data['bind'].match(/@\{([^}]+)\}/)
+          # The group's selection: its `selectedValue` (SSoT common.bind
+          # primaryValue: Radio [selectedValue]; a lone `bind` arrives as it,
+          # JsonUIShared::BindFold at the dispatch). This path read `bind` —
+          # the items group and the single Radio read selectedValue.
+          selected = if json_data['selectedValue'].is_a?(String) && json_data['selectedValue'].match(/@\{([^}]+)\}/)
             variable = $1
             "data.#{variable}"
           else
@@ -61,8 +64,8 @@ module KjuiTools
                 code += "\n" + indent("    .fillMaxWidth()", depth + 2)
                 code += "\n" + indent("    .clickable#{row_enabled} {", depth + 2)
                 
-                view_id = json_data['id'] || 'radio'
-                if json_data['bind'] && json_data['bind'].match(/@\{([^}]+)\}/)
+                view_id = Helpers::ModifierBuilder.view_id(json_data)
+                if json_data['selectedValue'].is_a?(String) && json_data['selectedValue'].match(/@\{([^}]+)\}/)
                   variable = $1
                   if json_data['onValueChange'] && Helpers::ModifierBuilder.is_binding?(json_data['onValueChange'])
                     handler_call = Helpers::ModifierBuilder.get_event_handler_invocation(json_data['onValueChange'], view_id, value_literal)
@@ -77,7 +80,7 @@ module KjuiTools
                     handler_call = Helpers::ModifierBuilder.get_event_handler_invocation(json_data['onValueChange'], view_id, value_literal)
                     code += "\n" + indent("        #{handler_call}", depth + 2)
                   else
-                    code += "\n" + indent("        // ERROR: #{json_data['onValueChange']} - camelCase events require binding format @{functionName}", depth + 2)
+                    code += "\n" + indent("        // ERROR: #{Helpers::ModifierBuilder.comment_text(json_data['onValueChange'])} - camelCase events require binding format @{functionName}", depth + 2)
                   end
                 end
                 
@@ -94,7 +97,7 @@ module KjuiTools
                 code += "\n" + indent("enabled = #{enabled},", depth + 3) if enabled
                 code += "\n" + indent("onClick = {", depth + 3)
                 
-                if json_data['bind'] && json_data['bind'].match(/@\{([^}]+)\}/)
+                if json_data['selectedValue'].is_a?(String) && json_data['selectedValue'].match(/@\{([^}]+)\}/)
                   variable = $1
                   if json_data['onValueChange'] && Helpers::ModifierBuilder.is_binding?(json_data['onValueChange'])
                     handler_call = Helpers::ModifierBuilder.get_event_handler_invocation(json_data['onValueChange'], view_id, value_literal)
@@ -109,7 +112,7 @@ module KjuiTools
                     handler_call = Helpers::ModifierBuilder.get_event_handler_invocation(json_data['onValueChange'], view_id, value_literal)
                     code += "\n" + indent("#{handler_call}", depth + 4)
                   else
-                    code += "\n" + indent("// ERROR: #{json_data['onValueChange']} - camelCase events require binding format @{functionName}", depth + 4)
+                    code += "\n" + indent("// ERROR: #{Helpers::ModifierBuilder.comment_text(json_data['onValueChange'])} - camelCase events require binding format @{functionName}", depth + 4)
                   end
                 end
 
@@ -161,7 +164,7 @@ module KjuiTools
               code += "\n" + indent("verticalAlignment = Alignment.CenterVertically,", depth + 3)
               code += "\n" + indent("modifier = Modifier.fillMaxWidth().clickable#{row_enabled} {", depth + 3)
               
-              if json_data['bind'] && json_data['bind'].match(/@\{([^}]+)\}/)
+              if json_data['selectedValue'].is_a?(String) && json_data['selectedValue'].match(/@\{([^}]+)\}/)
                 variable = $1
                 code += "\n" + indent("viewModel.updateData(mapOf(\"#{variable}\" to option))", depth + 4)
               end
@@ -176,7 +179,7 @@ module KjuiTools
               code += "\n" + indent("enabled = #{enabled},", depth + 4) if enabled
               code += "\n" + indent("onClick = {", depth + 4)
               
-              if json_data['bind'] && json_data['bind'].match(/@\{([^}]+)\}/)
+              if json_data['selectedValue'].is_a?(String) && json_data['selectedValue'].match(/@\{([^}]+)\}/)
                 variable = $1
                 code += "\n" + indent("viewModel.updateData(mapOf(\"#{variable}\" to option))", depth + 5)
               end
@@ -213,7 +216,7 @@ module KjuiTools
         def self.stage_modifiers(json_data, parent_type, required_imports)
           modifiers = []
           modifiers.concat(Helpers::ModifierBuilder.build_test_tag(json_data, required_imports))
-          # userInteractionEnabled / touchDisabledState stop this node and
+          # userInteractionEnabled stops this node and
           # what is in it (ModifierBuilder.build_interaction_blocker).
           modifiers.concat(Helpers::ModifierBuilder.build_interaction_blocker(json_data, required_imports))
           modifiers.concat(Helpers::ModifierBuilder.build_margins(json_data))
@@ -242,7 +245,7 @@ module KjuiTools
           # every build emitted different Kotlin, and two items could draw the
           # same number (kjui-radio-default-id-is-random). A node emitted on
           # its own, with no tree around it, is its own root.
-          id = json_data['id'] || "radio_#{json_data[JsonUIShared::LayoutPath::KEY] || '0'}"
+          id = Helpers::ModifierBuilder.view_id(json_data)
           id_literal = JsonUIShared::StringLiterals.kotlin(id)
           # `text`/`label` are `["string", "binding"]`. They used to be
           # interpolated straight into the Kotlin literal, so a bound label put

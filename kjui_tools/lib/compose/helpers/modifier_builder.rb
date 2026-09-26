@@ -4,6 +4,8 @@ require_relative 'effect_style_helper'
 require_relative 'binding_expression'
 require_relative 'bound_value'
 require_relative 'resource_resolver'
+require_relative 'safe_area_edges'
+require_relative '../../core/layout_path'
 require_relative '../../core/normalization'
 require_relative '../../core/tap_accessibility'
 require_relative '../../core/string_literals'
@@ -665,20 +667,13 @@ module KjuiTools
           # View as well as SafeAreaView on purpose — sjui runs
           # `apply_safe_area_insets_to_bag` for every component and rjui emits
           # `env(safe-area-inset-*)` padding from `safe_area_edges`, while
-          # kjui read the spelling only inside the SafeAreaView builder
-          # (compose_builder.rb:722). Same edge vocabulary and the same
-          # Compose primitives that builder uses, so the two agree.
-          edges = json_data['safeAreaInsetPositions']
-          if edges && json_data['type'] != 'SafeAreaView'
-            edges = [edges] unless edges.is_a?(Array)
-            edges = edges.map(&:to_s)
-            required_imports&.add(:safe_area_padding)
-            if edges.include?('all')
-              modifiers << '.systemBarsPadding()'
-            else
-              modifiers << '.statusBarsPadding()' if edges.include?('top') || edges.include?('vertical')
-              modifiers << '.navigationBarsPadding()' if edges.include?('bottom') || edges.include?('vertical')
-            end
+          # kjui read the spelling only inside the SafeAreaView builder. The
+          # words mean what they mean there (SafeAreaEdges).
+          positions = json_data['safeAreaInsetPositions']
+          if positions && json_data['type'] != 'SafeAreaView'
+            modifiers.concat(SafeAreaEdges.modifiers(
+              SafeAreaEdges.edges(positions), 'LocalSafeAreaConfig.current', required_imports
+            ))
           end
 
           # `effectStyle` is declared on `common`, not just on Blur, and only
@@ -894,13 +889,13 @@ module KjuiTools
           can_tap = tap_gate(json_data)
           return nil if handler.nil? || can_tap == 'false'
 
-          view_id = json_data['id']
+          view_id = view_id(json_data)
           call = if tap.handler?(json_data['onClick']) && is_binding?(json_data['onClick'])
                    get_event_handler_invocation(json_data['onClick'], view_id, nil)
                  elsif tap.handler?(json_data['onClick'])
-                   get_event_handler_call(json_data['onClick'], is_camel_case: true)
+                   get_event_handler_call(json_data['onClick'], is_camel_case: true, view_id: view_id)
                  else
-                   get_event_handler_call(json_data['onclick'], is_camel_case: false)
+                   get_event_handler_call(json_data['onclick'], is_camel_case: false, view_id: view_id)
                  end
           [call, can_tap]
         end
@@ -923,7 +918,27 @@ module KjuiTools
           call, gate = click_call(json_data)
           return nil unless call
 
+          gate = lambda_gate(gate)
           gate ? "if (#{gate}) { #{call} }" : call
+        end
+
+        # The name a lambda of a layout a stop can reach reads the handed-down
+        # stop by (INTERACTION_CAPTURE): a CompositionLocal is read in the
+        # composable's scope, not in the lambda a control or a Button calls
+        # its onClick from, so the leaf node's code is wrapped in
+        # `LocalInteractionStopped.current.let { jsonuiInteractionStopped -> … }`
+        # (ComposeBuilder#capture_interaction_stop) and the lambda gates on it.
+        INTERACTION_CAPTURE = 'jsonuiInteractionStopped'
+
+        # A gate for a call made inside a lambda — a control's operation, a
+        # Button's onClick: `gate` (tap_gate's), and in a layout a stop can
+        # reach (reads_interaction_local) the stop handed down, captured.
+        def self.lambda_gate(gate)
+          return gate unless reads_interaction_local
+          return 'false' if gate == 'false'
+
+          handed_down = "!#{INTERACTION_CAPTURE}"
+          gate ? "#{conjunct(gate)} && #{handed_down}" : handed_down
         end
 
         # Append an argument that opens with its own `,\n` to a call being
@@ -945,6 +960,49 @@ module KjuiTools
         # no call, and for an `// ERROR` lambda (its comment runs to the end of
         # the line). An empty lambda takes the call on `it`, so no unused
         # parameter is named.
+        # Text for a comment the emit writes: one line, and no `*/` that would
+        # close a block comment early. The layout's own spelling goes in here
+        # (a handler name that is not a binding), so a newline in it would
+        # end a `//` comment and put the rest in code position.
+        def self.comment_text(text)
+          text.to_s.gsub(/[\r\n]+/, ' ').gsub('*/', '* /')
+        end
+
+        # A handler lambda that calls nothing and says why — in a BLOCK
+        # comment. The line comment it was (`{ // ERROR: … }`) ran to the end
+        # of the line and swallowed the lambda's closing brace and the
+        # argument's comma, so the file did not compile at all.
+        def self.error_lambda(message)
+          "{ /* #{comment_text(message)} */ }"
+        end
+
+        # A two-state control's value and its binding: `[checked, variable]`.
+        # Its state attributes are read in their order (Switch: isOn, value,
+        # checked; CheckBox: isOn, checked, value). The control's own state
+        # attribute is the value — bound, or static (the seed of its own
+        # state) — and `bind` is the value only when there is none: SSoT
+        # common.bind, "an alternative spelling to each component's own value
+        # attribute, which takes precedence when both are set". The shown
+        # value and the written one come from the same attribute. It showed a
+        # static isOn (seeded, never written) while the operation wrote `bind`,
+        # so the control never moved; and a CheckBox bound through `value`
+        # showed the binding and wrote nothing.
+        #
+        # `states` are the state attributes' VALUES, in order, read by the
+        # caller with literal keys — the attribute coverage scan counts
+        # literal reads (`json_data['isOn']`), not keys passed by name.
+        def self.control_state(json_data, states)
+          bound = ->(v) { v.is_a?(String) && v =~ /@\{([^}]+)\}/ ? Regexp.last_match(1) : nil }
+          state = states.compact.first
+          if (var = bound.call(state))
+            ["data.#{var}", var]
+          elsif !state.nil?
+            [state.to_s, nil]
+          else
+            ['false', nil]
+          end
+        end
+
         def self.with_operation_click(lambda_text, json_data)
           call = operation_click_call(json_data)
           return lambda_text if call.nil? || lambda_text.include?('ERROR')
@@ -1044,6 +1102,29 @@ module KjuiTools
           gates = [boolean_expression(json_data['canTap'])]
           gates.concat(JsonUIShared::TapAccessibility.interaction_gates(json_data).map { |g| boolean_expression(g) })
           gates = gates.compact.uniq
+          return nil if gates.empty?
+          return 'false' if gates.include?('false')
+          return gates.first if gates.size == 1
+
+          gates.map { |g| conjunct(g) }.join(' && ')
+        end
+
+        # Whether a Label's links — its tappable ranges and the links
+        # `linkable` detects — are operable, as a Kotlin Boolean for
+        # PartialAttributesText's `linksEnabled`: nil (always; the argument is
+        # left out), 'false', or the bound userInteractionEnabled values of
+        # the nodes around it and its own, joined. `userInteractionEnabled`
+        # stops a node and everything in it, links included, and a binding
+        # gates them as it gates a tap (the tap rule; 4f ruling, jsonui-cli
+        # 1.9.0). The pointer blocker stopped a touch on a link, but each link
+        # is a semantics node of its own whose action TalkBack's double tap
+        # still called (measured, API 35 emulator). canTap and enabled are the
+        # node's own tap and state, not its links'; they are not read here.
+        def self.links_enabled_expression(json_data)
+          tap = JsonUIShared::TapAccessibility
+          return 'false' if tap.stopped?(json_data)
+
+          gates = tap.interaction_gates(json_data).map { |g| boolean_expression(g) }.compact.uniq
           return nil if gates.empty?
           return 'false' if gates.include?('false')
           return gates.first if gates.size == 1
@@ -1215,11 +1296,11 @@ module KjuiTools
           return [] if interaction == 'false'
 
           required_imports&.add(:long_press_gesture)
-          view_id = json_data['id']
+          view_id = view_id(json_data)
           handler_call = if is_binding?(handler)
                            get_event_handler_invocation(handler, view_id, nil)
                          else
-                           get_event_handler_call(handler, is_camel_case: true)
+                           get_event_handler_call(handler, is_camel_case: true, view_id: view_id)
                          end
 
           gesture = <<~KOTLIN.rstrip
@@ -1271,7 +1352,7 @@ module KjuiTools
           return [] if interaction == 'false'
 
           required_imports&.add(:pan_gesture)
-          handler_call = get_event_handler_invocation(handler, json_data['id'], 'total')
+          handler_call = get_event_handler_invocation(handler, view_id(json_data), 'total')
           handler_call = "if (#{interaction}) #{handler_call}" if interaction
 
           gesture = <<~KOTLIN.rstrip
@@ -1310,7 +1391,7 @@ module KjuiTools
           return [] if interaction == 'false'
 
           required_imports&.add(:pinch_gesture)
-          handler_call = get_event_handler_invocation(handler, json_data['id'], 'scale')
+          handler_call = get_event_handler_invocation(handler, view_id(json_data), 'scale')
           handler_call = "if (#{interaction}) #{handler_call}" if interaction
 
           gesture = <<~KOTLIN.rstrip
@@ -1652,7 +1733,9 @@ module KjuiTools
 
             result[:before] += indent("// onAppear lifecycle event", depth)
             result[:before] += "\n" + indent("LaunchedEffect(Unit) {", depth)
-            result[:before] += "\n" + indent("data.#{property}?.invoke()", depth + 1)
+            # As its closure is declared: `()` with nothing, `(String)` with the
+            # viewId (it was always `invoke()`).
+            result[:before] += "\n" + indent(get_event_handler_invocation(property, view_id(json_data), nil), depth + 1)
             result[:before] += "\n" + indent("}", depth)
             result[:before] += "\n"
           end
@@ -1668,7 +1751,7 @@ module KjuiTools
             result[:before] += indent("// onDisappear lifecycle event", depth)
             result[:before] += "\n" + indent("DisposableEffect(Unit) {", depth)
             result[:before] += "\n" + indent("onDispose {", depth + 1)
-            result[:before] += "\n" + indent("data.#{property}?.invoke()", depth + 2)
+            result[:before] += "\n" + indent(get_event_handler_invocation(property, view_id(json_data), nil), depth + 2)
             result[:before] += "\n" + indent("}", depth + 1)
             result[:before] += "\n" + indent("}", depth)
             result[:before] += "\n"
@@ -1684,7 +1767,12 @@ module KjuiTools
 
         # Convert event handler to method call
         # onClick -> binding format only: @{functionName} -> data.functionName?.invoke()
-        def self.get_event_handler_call(handler, is_camel_case: false)
+        #
+        # With `view_id:` each name is called as its closure is declared
+        # (get_event_handler_invocation: `()` with nothing, `(String)` with
+        # the viewId); it was always `invoke()`, so a handler declared
+        # `(String)` on this path did not compile.
+        def self.get_event_handler_call(handler, is_camel_case: false, view_id: nil)
           # `onclick` is declared `["string", "array"]`, and the array names
           # several handlers to call in the order written. This called
           # `match?` straight on the value, so an array did not produce wrong
@@ -1699,8 +1787,9 @@ module KjuiTools
           # A blank element names no method and is dropped
           # (TapAccessibility.handler_values), so `["", "onOpen"]` calls onOpen
           # only.
-          JsonUIShared::TapAccessibility.handler_values(handler)
-                                        .map { |name| single_event_handler_call(name) }.join('; ')
+          JsonUIShared::TapAccessibility.handler_values(handler).map do |name|
+            view_id ? get_event_handler_invocation(name, view_id, nil) : single_event_handler_call(name)
+          end.join('; ')
         end
 
         def self.single_event_handler_call(handler)
@@ -1720,6 +1809,16 @@ module KjuiTools
         #   - If data section has `() -> Unit`: returns "data.onToggle?.invoke()"
         #   - If data section has `(Event) -> Unit` or `(String, Boolean) -> Unit`:
         #     returns "data.onToggle?.invoke(\"viewId\", it)"
+        # The viewId a handler is passed: the node's id, else its drawn type
+        # with the first letter lowercased and its position in the layout —
+        # JsonUIShared::LayoutPath.view_id (switch_0_1, selectBox_0_3; the
+        # Radio item's `radio_<path>` is the same form). It was a kind word
+        # (`switch`, `selectbox`, …) or nothing, so two id-less controls
+        # handed their handlers the same viewId.
+        def self.view_id(json_data)
+          JsonUIShared::LayoutPath.view_id(json_data)
+        end
+
         def self.get_event_handler_invocation(handler, view_id, value_expr)
           method_name = extract_binding_property(handler) || handler
 
@@ -1782,11 +1881,11 @@ module KjuiTools
             # `??` and nullability. BoundValue is the canonical Dp emitter.
             BoundValue.dp(value)
           elsif value.is_a?(Numeric) && value > 0
-            "#{value}.dp"
+            "#{BoundValue.dp(value)}"
           elsif value.is_a?(String)
             # Try to parse as number
             num = value.to_i
-            num > 0 ? "#{num}.dp" : nil
+            num > 0 ? "#{BoundValue.dp(num)}" : nil
           else
             nil
           end

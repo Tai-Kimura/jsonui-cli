@@ -10,10 +10,10 @@ require 'core/layout_validator'
 # With `items` and no `sections`, a single cellClass renders every item;
 # several cellClasses need `sections[].cell` to assign them."
 #
-# The web face already did the first half — `generate_legacy_content` takes
-# `cell_classes.first` and maps it over the items binding, the same meaning
-# kjui gives it. iOS was the outlier (it emitted a debug placeholder) and has
-# been brought here rather than the reverse.
+# The web face takes `cell_classes.first` for every item. It mapped it over
+# `items` as an array until jsonui-cli 1.9.0; the items are a
+# CollectionDataSource, and the cells now come from its sections, as on sjui
+# and kjui (collection_classes_and_page_change_spec.rb has the route table).
 #
 # What this file pins on the web side is that the behaviour is DECLARED, not
 # incidental: the emit stays, and the several-cellClasses case is refused by
@@ -35,9 +35,9 @@ RSpec.describe 'Collection cellClasses with items and no sections' do
       expect(result).to include('<ItemCard')
     end
 
-    it 'maps it over the items binding' do
+    it "maps it over the items' data sections" do
       result = convert(base.merge('cellClasses' => ['ItemCard']))
-      expect(result).to match(/\?\.map\(\(item/)
+      expect(result).to include('(data.rows?.sections ?? []).map((section, sectionIndex) =>')
     end
   end
 
@@ -71,6 +71,110 @@ RSpec.describe 'Collection cellClasses with items and no sections' do
     end
   end
 
+  # cellClasses and no `items` (4f ruling 2026-09-26, round 5): no cell is
+  # drawn — the class-list cells come from `items` on every path, and sjui,
+  # kjui and both Dynamic renderers draw none. Until jsonui-cli 1.9.0 this
+  # path drew one cell with no data (`<ItemCard />`) on every route, paging
+  # included. The header and footer stay where the vertical routes draw
+  # them. The shared validator names the shape.
+  describe 'cellClasses and no items' do
+    CELL_CLASSES_NO_ITEMS_ROUTES = {
+      'list' => [{}, true], 'grid' => [{ 'columns' => 2 }, true], 'lazy:none' => [{ 'lazy' => 'none' }, true],
+      'horizontal' => [{ 'layout' => 'horizontal' }, false], 'flow' => [{ 'layout' => 'flow' }, false],
+      'paging' => [{ 'layout' => 'horizontal', 'paging' => true }, false]
+    }.freeze
+
+    let(:bare) do
+      { 'type' => 'Collection', 'id' => 'target', 'cellClasses' => ['ItemCard'],
+        'headerClasses' => ['HeadCard'], 'footerClasses' => ['FootCard'] }
+    end
+
+    CELL_CLASSES_NO_ITEMS_ROUTES.each do |route, (extra, edges)|
+      it "#{route}: no cell#{edges ? '; the header and footer' : ', no header or footer'}" do
+        code = convert(bare.merge(extra))
+        expect(code).not_to match(/<ItemCard\b/)
+        expect(code).not_to include('Add items prop')
+        expect(code.scan(/<HeadCard \/>/).size).to eq(edges ? 1 : 0), code
+        expect(code.scan(/<FootCard \/>/).size).to eq(edges ? 1 : 0), code
+      end
+    end
+
+    def no_items_warnings(component)
+      JsonUIShared::LayoutValidator.validate_layout(component, source_path: 'x.json')
+                                   .select { |w| w[:message].include?('items is not') }
+    end
+
+    it 'the shared validator names it, as a warning' do
+      found = no_items_warnings(bare)
+      expect(found.size).to eq(1)
+      expect(found.first[:level]).to eq(:warning)
+      expect(found.first[:message]).to include('Collection (id=target): cellClasses are declared but items is not, so no cell is drawn.')
+      expect(JsonUIShared::LayoutValidator.blocking?(found)).to be(false)
+    end
+
+    it 'names nothing when items is bound, when the Collection declares sections, or without cellClasses' do
+      expect(no_items_warnings(bare.merge('items' => '@{rows}'))).to be_empty
+      expect(no_items_warnings(bare.merge('sections' => [{ 'cell' => 'ItemCard' }]))).to be_empty
+      expect(no_items_warnings({ 'type' => 'Collection', 'id' => 'target' })).to be_empty
+    end
+
+    it 'names it in a nested Collection too (the layout walk)' do
+      layout = { 'type' => 'View', 'child' => [bare] }
+      expect(no_items_warnings(layout).size).to eq(1)
+    end
+
+    describe 'the emit type-checks', :typescript_compile do
+      it 'on a vertical route: the header and footer, no cell' do
+        code = convert(bare)
+        ambient = <<~TS
+          declare const HeadCard: () => JSX.Element;
+          declare const FootCard: () => JSX.Element;
+        TS
+        expect(<<~TSX).to compile_as_typescript.with_ambient(ambient)
+          export const Emitted = (): JSX.Element => (
+          #{code}
+          );
+        TSX
+      end
+    end
+  end
+
+  # `sections` and no `items`: nothing to draw them from — no header, cell or
+  # footer, as sjui and kjui codegen draw. Until jsonui-cli 1.9.0 each
+  # section's header and footer read `?.sections` off nothing — `data={?.
+  # sections?.[0]?.header || {}}`, which does not parse — around one cell with
+  # no data, on every route.
+  describe 'sections and no items' do
+    let(:sectioned) do
+      { 'type' => 'Collection', 'id' => 'target',
+        'sections' => [{ 'cell' => 'ItemCard', 'header' => 'HeadCard', 'footer' => 'FootCard' }] }
+    end
+
+    CELL_CLASSES_NO_ITEMS_ROUTES.each do |route, (extra, _edges)|
+      it "#{route}: no header, cell or footer" do
+        code = convert(sectioned.merge(extra))
+        expect(code).not_to match(/<(ItemCard|HeadCard|FootCard)\b/)
+        expect(code).not_to include('{?.')
+      end
+    end
+
+    it 'control: with items, the section draws' do
+      code = convert(sectioned.merge('items' => '@{rows}'))
+      expect(code).to include('<HeadCard data={data.rows?.sections?.[0]?.header || {}} />')
+      expect(code).to match(/<ItemCard key=/)
+    end
+
+    describe 'the emit type-checks', :typescript_compile do
+      it 'on the list route' do
+        expect(<<~TSX).to compile_as_typescript.with_ambient('')
+          export const Emitted = (): JSX.Element => (
+          #{convert(sectioned)}
+          );
+        TSX
+      end
+    end
+  end
+
   # ⚠️ Every example above asserts emitted TEXT, and until this arm existed
   # nothing in the rjui suite handed emitted TypeScript to a compiler at all.
   # `compile-emitted-kotlin.sh` said "`tsc --noEmit` ... run in the suite";
@@ -91,9 +195,9 @@ RSpec.describe 'Collection cellClasses with items and no sections' do
       ambient = <<~TS
         interface ItemCardData { readonly title?: string }
         declare const ItemCard: (props: {
-          key?: number; id?: string; data: ItemCardData
+          key?: string | number; id?: string; data: ItemCardData
         }) => JSX.Element;
-        declare const data: { rows?: ItemCardData[] };
+        declare const data: { rows?: { sections: { cells?: { data: unknown[] } }[] } };
       TS
 
       expect(<<~TSX).to compile_as_typescript.with_ambient(ambient)

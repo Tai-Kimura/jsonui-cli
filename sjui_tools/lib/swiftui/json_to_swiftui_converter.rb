@@ -34,6 +34,12 @@ module SjuiTools
         @state_variables = []
       end
 
+      # The build's validator, for the sentence a type drawn as nothing says
+      # (ConverterFactory#unknown_type_validator).
+      def unknown_type_validator=(validator)
+        @converter_factory.unknown_type_validator = validator
+      end
+
       def convert_file(json_file_path, output_path = nil)
         unless File.exist?(json_file_path)
           raise "JSON file not found: #{json_file_path}"

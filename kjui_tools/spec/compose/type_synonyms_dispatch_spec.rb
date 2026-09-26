@@ -71,7 +71,7 @@ RSpec.describe 'kjui codegen: the type-synonym dispatch' do
     it 'follows the table: without its entry, a spelling is an undeclared type' do
       table = JsonUIShared::TypeSynonyms.entries.reject { |spelling, _| spelling == 'TableView' }
       allow(JsonUIShared::TypeSynonyms).to receive(:entries).and_return(table)
-      expect(emit({ 'type' => 'TableView', 'id' => 'n', 'items' => [] })).to include('// TODO: Implement component type: TableView')
+      expect(emit({ 'type' => 'TableView', 'id' => 'n', 'items' => [] })).to include("// Unknown component type 'TableView'")
     end
   end
 
@@ -97,6 +97,6 @@ RSpec.describe 'kjui codegen: the type-synonym dispatch' do
   end
 
   it 'draws neither declared nor synonym types as undeclared: Spacer (it drew a fixed 8dp Spacer until 1.9.0)' do
-    expect(emit({ 'type' => 'Spacer', 'height' => 8 })).to include('// TODO: Implement component type: Spacer')
+    expect(emit({ 'type' => 'Spacer', 'height' => 8 })).to include("// Unknown component type 'Spacer'")
   end
 end

@@ -2,6 +2,7 @@
 
 require 'json'
 require 'open3'
+require 'rbconfig'
 require 'tmpdir'
 require 'fileutils'
 
@@ -90,7 +91,7 @@ RSpec.describe 'rjui build: a synonym or alias spelling builds what its canonica
     # a hand-written ViewModel, so the hook and the ViewModel base are built
     File.write(File.join(dir, 'src/viewmodels/ProbeViewModel.ts'), "export class ProbeViewModel {}\n")
     log, status = Open3.capture2e({ 'JUI_STAGE_FAILURES' => File.join(dir, 'ledger.json') },
-                                  'ruby', File.join(dir, 'rjui_tools/bin/rjui'), 'build', chdir: dir)
+                                  RbConfig.ruby, File.join(dir, 'rjui_tools/bin/rjui'), 'build', chdir: dir)
     files = Dir.glob(File.join(dir, '**/*'), File::FNM_DOTMATCH).reject do |f|
       File.directory?(f) || f.include?('/rjui_tools/') || f.include?('/Layouts/') || f.end_with?('ledger.json') ||
         f == File.join(dir, 'src/viewmodels/ProbeViewModel.ts') ||

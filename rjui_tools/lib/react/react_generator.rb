@@ -3,10 +3,18 @@
 require 'set'
 require_relative '../core/type_synonyms'
 require_relative '../core/type_converter'
+require_relative '../core/bind_fold'
+require_relative '../core/logger'
+require_relative '../core/attribute_validator'
 require_relative '../core/generated_marker'
 require_relative '../core/frameworks'
 require_relative '../core/normalization'
+require_relative '../core/tap_accessibility'
+require 'json'
 require_relative '../core/string_manager_core'
+require_relative '../core/layout_path'
+require_relative 'include_paths'
+require_relative '../core/node_keys'
 require_relative 'component_name'
 require_relative 'converters/base_converter'
 require_relative 'converters/view_converter'
@@ -77,6 +85,17 @@ module RjuiTools
         'Blur' => Converters::BlurConverter,
         'GradientView' => Converters::GradientViewConverter
       }.freeze
+
+      # The validator whose sentence a type drawn as nothing says: the build's
+      # own (BuildCommand hands it), else one made the first time such a type
+      # is met — one per build either way. A validator per node read the
+      # definitions again for each, and a copy that left its links dangling
+      # said "attribute_definitions.json not found" once per such node.
+      attr_writer :unknown_type_validator
+
+      def unknown_type_validator
+        @unknown_type_validator ||= Core::AttributeValidator.new(:react)
+      end
 
       def initialize(config)
         @config = config
@@ -198,6 +217,28 @@ module RjuiTools
         # BaseConverter#layout_normalized? to take the canonical-only
         # attribute lookup path for L1-normalized layouts.
         @config['_layout_normalized'] = Core::Normalization.canonicalized?(json)
+        # Each node's position, for the name its handlers are handed when the
+        # layout gives it no id (JsonUIShared::LayoutPath.view_id) — the rule
+        # the sjui and kjui codegen stamp too. An include is its own
+        # component here, so the nodes in it are stamped from that file's
+        # own root (spec/core/layout_path_spec.rb).
+        JsonUIShared::LayoutPath.stamp!(json) unless JsonUIShared::LayoutPath.stamped?(json)
+        # The classes the layout's data declares, for a handler whose
+        # arguments its declaration decides (SelectBox.onValueChange).
+        @config['_data_classes'] = IncludePaths.declared_data_classes(json)
+        # Whether this layout takes `jsonuiPath`, its root's path in the
+        # include-expanded tree (IncludePaths; `jui build` names them).
+        @config['_path_prop'] = Array(@config['_path_stems']).include?(stem)
+
+        # The layout's declared data classes, raw (`name => class`): the
+        # class-list Collection reads its `items` by what the property
+        # declares (CollectionConverter#legacy_items_list_element).
+        @config['_data_classes'] = declared_data_classes(json)
+
+        # The tap rule's shape of every tap (shared/core/tap_accessibility.rb),
+        # which the converters read for the keyboard's button
+        # (BaseConverter#keyboard_tap_attrs) — on a copy, after validation.
+        json = JsonUIShared::TapAccessibility.annotate!(JSON.parse(JSON.generate(json)))
 
         jsx_content = convert_component(json)
 
@@ -218,23 +259,28 @@ module RjuiTools
 
         type = json['type'] || 'View'
 
-        # First check extension converters (with the spelling as written),
-        # then built-in converters. A type-synonym spelling (HStack,
-        # WebView, …) is drawn as its type, from
+        # First check extension converters (with the spelling as written, and
+        # the node as written), then built-in converters. A type-synonym
+        # spelling (HStack, WebView, …) is drawn as its type, from
         # shared/core/type_synonyms.json, and a declared alias section
         # (EditText, Check, Toggle, …: `_alias_of`) as its canonical one; the
-        # map below holds canonical declared sections.
+        # map below holds canonical declared sections. A built-in draws the
+        # node with its `bind` folded (the child path,
+        # BaseConverter#create_converter_for_child, does the same).
         converter_class = @extension_converters[type]
         unless converter_class
           json = JsonUIShared::ComponentAliases.resolve(JsonUIShared::TypeSynonyms.canonicalize(json))
           type = json['type'] || 'View'
+          json = JsonUIShared::BindFold.fold(json, type)
           converter_class = CONVERTERS[type]
         end
         unless converter_class
           # sjui renders unknown types as a red "Unsupported component" Text
           # and swift dynamic as an error box; silently degrading to a plain
           # View here left react the only face that hid the failure.
-          Core::Logger.warn("Unknown component type '#{type}' — rendering as a plain View (no converter registered)") if defined?(Core::Logger)
+          # In the validator's sentence (JsonUIShared::AttributeValidatorCore
+          # .unknown_component_type_message), as kjui and sjui say it.
+          Core::Logger.warn(unknown_type_validator.unknown_component_type_message(type.to_s)) if defined?(Core::Logger)
           converter_class = Converters::ViewConverter
         end
 
@@ -332,6 +378,11 @@ module RjuiTools
         auto_shrink_import = needs_auto_shrink ?
           "\nimport { applyAutoShrink } from '@/generated/autoShrink';" : ''
         screen_marker_import = screen_id ? "\nimport { screenMarker } from '@/generated/screenMarker';" : ''
+        # userInteractionEnabled false or bound: the stopped element's inert
+        # (BaseConverter#apply_interaction_inert, build_command
+        # emit_interaction_stop_helper).
+        interaction_stop_import = jsx_content.include?("#{Converters::BaseConverter::INERT_HELPER}(") ?
+          "\nimport { #{Converters::BaseConverter::INERT_HELPER} } from '@/generated/interactionStop';" : ''
 
         # partialAttributes are applied at runtime against the resolved
         # string (a pattern range or a localized text cannot be resolved
@@ -550,12 +601,15 @@ module RjuiTools
         include_prefix = @config['_include_id_prefix']
         uses_id_prefix = include_prefix && jsx_content.match?(/\bidPrefix\b/)
         props_interface = generate_data_props_interface(name, uses_data, data_type: data_name,
-                                                                    id_prefix: include_prefix)
+                                                                    id_prefix: include_prefix,
+                                                                    path: @config['_path_prop'])
         # `id` is destructured only when it was injected into the root —
         # the interface always accepts it (call sites can't know), but an
         # unused binding would trip noUnusedParameters setups.
         id_part = root_id_injected ? ', id' : ''
         id_part += ', idPrefix' if uses_id_prefix
+        # A screen (not included) has no path above its root: `0`.
+        id_part += ', jsonuiPath = "0"' if @config['_path_prop'] && jsx_content.match?(/\bjsonuiPath\b/)
         include_id_names = %w[jsonuiIncludeId jsonuiIncludePrefix].select { |f| jsx_content.include?("#{f}(") }
         include_id_import =
           if include_prefix && include_id_names.any?
@@ -588,7 +642,7 @@ module RjuiTools
 
         <<~JSX
           #{use_client}#{marker_header}
-          #{react_import}#{media_query_import}#{link_import}#{string_manager_import}#{cell_id_import}#{collection_scroll_import}#{relative_position_import}#{auto_shrink_import}#{date_format_import}#{screen_marker_import}#{partial_text_import}#{include_id_import}#{configuration_import}#{color_manager_import}#{lucide_import}#{data_import}#{extension_imports}#{component_imports}#{variant_component_imports}
+          #{react_import}#{media_query_import}#{link_import}#{string_manager_import}#{cell_id_import}#{collection_scroll_import}#{relative_position_import}#{auto_shrink_import}#{date_format_import}#{screen_marker_import}#{interaction_stop_import}#{partial_text_import}#{include_id_import}#{configuration_import}#{color_manager_import}#{lucide_import}#{data_import}#{extension_imports}#{component_imports}#{variant_component_imports}
 
           #{props_interface if @config['typescript']}#{seeded_helper(@config['typescript']) if uses_seeded}
           export const #{name} = (#{props_sig}) => {#{data_merge_declaration}#{state_declarations}#{focus_declarations}#{collection_scroll_declarations}#{relative_position_declarations}#{auto_shrink_declarations}#{landscape_declaration}#{string_manager_declaration}#{variant_dispatch_declaration}
@@ -608,13 +662,16 @@ module RjuiTools
       # data-passing includes provide a Partial that the component merges
       # over its createXxxData() defaults, and pages/cells pass the full
       # object (a full XxxData is assignable to Partial<XxxData>).
-      def generate_data_props_interface(name, uses_data = true, data_type: nil, id_prefix: false)
+      def generate_data_props_interface(name, uses_data = true, data_type: nil, id_prefix: false, path: false)
         data_name = data_type || name
         data_field = uses_data ? "data?: Partial<#{data_name}Data>;" : "data?: #{data_name}Data;"
         # `idPrefix`: the include prefix above this component (design U8) —
         # declared only when `jui build` turned it on, so an unchanged build
         # emits unchanged bytes.
         prefix_field = id_prefix ? "\n  idPrefix?: string;" : ''
+        # `jsonuiPath`: this layout's root's position in the include-expanded
+        # tree (IncludePaths) — declared only for a layout that takes it.
+        prefix_field += "\n  jsonuiPath?: string;" if path
         <<~TS
           interface #{name}Props {
             #{data_field}
@@ -1302,6 +1359,20 @@ module RjuiTools
         false
       end
 
+      # Every `data` declaration in this layout's own tree, raw: name => class.
+      def declared_data_classes(json, found = {})
+        case json
+        when Hash
+          if json['data'].is_a?(Array)
+            json['data'].each { |d| found[d['name']] ||= d['class'] if d.is_a?(Hash) && d['name'].is_a?(String) }
+          end
+          json.each_value { |v| declared_data_classes(v, found) if v.is_a?(Hash) || v.is_a?(Array) }
+        when Array
+          json.each { |v| declared_data_classes(v, found) }
+        end
+        found
+      end
+
       # Extract data from JSON - search for data-only elements in children (recursively)
       # A data-only element is { "data": [...] } with only the data key
       def extract_data_from_json(json)
@@ -1310,7 +1381,7 @@ module RjuiTools
         json['child'].each do |child|
           next unless child.is_a?(Hash)
           # Check if this child has only 'data' key (data-only element)
-          if child.keys == ['data'] && child['data'].is_a?(Array)
+          if data_only_element?(child)
             # Normalize types using TypeConverter (mode: react)
             return Core::TypeConverter.normalize_data_properties(child['data'], 'react')
           end
@@ -1323,9 +1394,11 @@ module RjuiTools
       end
 
       # Check if a child element is a data-only element (should not be rendered)
+      # Its keys are the ones the layout wrote (Core::NodeKeys): the generator's
+      # position stamp is not among them.
       def data_only_element?(child)
         return false unless child.is_a?(Hash)
-        child.keys == ['data'] && child['data'].is_a?(Array)
+        Core::NodeKeys.written(child) == ['data'] && child['data'].is_a?(Array)
       end
 
       # Extract props from 'data' attribute with type information

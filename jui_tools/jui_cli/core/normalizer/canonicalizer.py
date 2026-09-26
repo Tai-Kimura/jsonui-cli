@@ -19,6 +19,7 @@ The transform is idempotent: ``canonicalize(canonicalize(x)) == canonicalize(x)`
 from __future__ import annotations
 
 import copy
+import json
 from typing import Any
 
 from .alias_table import AliasTable
@@ -93,6 +94,7 @@ class Canonicalizer:
         alias_map = self._table.aliases_for(node_type)
         deprecated_map = self._table.deprecated_for(node_type)
         value_alias_map = self._table.value_aliases_for(node_type)
+        item_alias_map = self._table.item_aliases_for(node_type)
         label = self._node_label(node, node_type, path)
 
         rebuilt: dict[str, Any] = {}
@@ -148,6 +150,19 @@ class Canonicalizer:
                 )
                 rebuilt[target] = canonical_value
 
+            # Declared aliases of the properties of an array attribute's
+            # objects (`aliases` on `items.properties.X`): a partialAttributes
+            # range's `onclick` → `onClick`. Same rule as a node's own:
+            # canonical wins when both are set, with a warning.
+            item_aliases = item_alias_map.get(target)
+            if item_aliases and isinstance(rebuilt[target], list):
+                rebuilt[target] = [
+                    self._canonicalize_item(
+                        item, item_aliases, warnings, source=source, label=f"{label}.{target}[{i}]"
+                    )
+                    for i, item in enumerate(rebuilt[target])
+                ]
+
             dep = deprecated_map.get(target)
             if dep is not None:
                 note = f" — {dep.note}" if dep.note else ""
@@ -158,6 +173,8 @@ class Canonicalizer:
                         f"'{target}' is deprecated ({dep.scope_label()}){note}",
                     )
                 )
+
+        self._fold_bind(rebuilt, node_type, warnings, source=source, label=label)
 
         if self._table.definition_key_for(node_type) == "Indicator":
             self._fold_indicator_legacy(rebuilt, node_type, warnings, source=source, label=label)
@@ -192,6 +209,67 @@ class Canonicalizer:
             ]
 
         return rebuilt
+
+    def _fold_bind(
+        self, node: dict, node_type: str | None, warnings: list[str], *, source: str, label: str
+    ) -> None:
+        """`bind`, an alternative spelling of the component's own value
+        attribute (SSoT common.bind, ``primaryValue``), which "takes precedence
+        when both are set". A lone `bind` becomes the first of the section's
+        value attributes, silently, as any alias spelling does. Beside any of
+        them, `bind` is dropped and named — the converters disagreed on which
+        one was the value (rjui and sjui's Switch the own attribute, sjui's
+        CheckBox the binding, kjui showed one and wrote the other).
+        """
+        if "bind" not in node:
+            return
+        # The fold is on the node a renderer draws: after its style is merged
+        # and its responsive branch resolved (shared/core/bind_fold.rb). A
+        # node naming a style or carrying responsive overrides is not drawn
+        # as written — a style may give it its own value (then `bind` is
+        # ignored) or a `bind` — so it is left for the renderer's fold. Folded
+        # here, a layout `bind` beside a style's `isOn: true` became
+        # `isOn: @{…}` and the style's value lost (measured on the kjui, sjui
+        # and rjui codegen: the binding won on a normalized layout, the
+        # style's value on the layout as written).
+        if "style" in node or "responsive" in node:
+            return
+        values = self._table.bind_value_attributes(node_type, node)
+        if not values:
+            return
+        own = next((key for key in values if key in node), None)
+        bind = node.pop("bind")
+        if own is None:
+            node[values[0]] = bind
+            return
+        section = self._table.definition_key_for(node_type) or node_type
+        warnings.append(self._fmt(source, label,
+            f"'bind: {bind}' is ignored: '{own}: {json.dumps(node[own]) if not isinstance(node[own], str) else node[own]}' "
+            f"is the {section}'s value"))
+
+    def _canonicalize_item(
+        self, item: Any, aliases: dict[str, str], warnings: list[str], *, source: str, label: str
+    ) -> Any:
+        """One object of an array attribute, its alias keys rewritten."""
+        if not isinstance(item, dict):
+            return item
+        out: dict[str, Any] = {}
+        for key, value in item.items():
+            canonical = aliases.get(key)
+            if canonical is None:
+                out[key] = value
+            elif canonical in item or canonical in out:
+                warnings.append(
+                    self._fmt(
+                        source,
+                        label,
+                        f"'{key}' is an alias of '{canonical}' and both are "
+                        f"set — keeping '{canonical}', dropping '{key}'",
+                    )
+                )
+            else:
+                out[canonical] = value
+        return out
 
     def _fold_indicator_legacy(
         self, node: dict, node_type: str | None, warnings: list[str], *, source: str, label: str

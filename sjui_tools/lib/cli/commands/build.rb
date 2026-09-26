@@ -572,6 +572,7 @@ module SjuiTools
           end
 
           converter = SjuiTools::SwiftUI::JsonToSwiftUIConverter.new
+          converter.unknown_type_validator = validator if validator
           # Which layouts are cells / headers / footers of a vertically
           # scrolling Collection — decided over the WHOLE tree, like the
           # screen index below, so a wrapping flow inside such a cell lets

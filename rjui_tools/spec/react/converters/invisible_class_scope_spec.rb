@@ -91,10 +91,13 @@ RSpec.describe 'invisible-class injection scope' do
       expect(out).to include('<Bar className="z" />')
     end
 
-    it 'leaves the subtree alone when the root tag has no className' do
+    # A root tag with no className gets one: until jsonui-cli 1.9.0 the class
+    # was passed over without a word there, and a bound `hidden` drew the
+    # element (measured on an Embed). The subtree is left alone as before.
+    it 'puts the class on a root tag with no className, and leaves the subtree alone' do
       jsx = %(  <MainMenu id="m" />\n  <Other className="z" />)
       out = converter.send(:inject_class_expression, jsx, '${x}')
-      expect(out).to eq(jsx)
+      expect(out).to eq(%(  <MainMenu className={`${x}`} id="m" />\n  <Other className="z" />))
     end
   end
 end

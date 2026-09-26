@@ -23,12 +23,20 @@ module RjuiTools
           disabled_attr = build_disabled_attr
           # A static index (or none) seeds the segment's own state (wrap_seeded):
           # the buttons read `seeded` and a tap writes it.
-          raw_selected = with_bind_fallback(attributes['selectedIndex'] || attributes['selectedTabIndex'])
+          raw_selected = attributes['selectedIndex'] || attributes['selectedTabIndex']
           seeded = !(raw_selected && has_binding?(raw_selected))
 
           items_jsx = items.each_with_index.map do |item, index|
             button_class = build_button_class(index, seeded: seeded)
-            button_disabled = attributes['enabled'] == false ? ' disabled' : ''
+            # A bound `enabled` disables the tabs behind its binding, as `false`
+            # does: it only dimmed the segment, and a tap still switched it.
+            button_disabled = if attributes['enabled'] == false
+                                ' disabled'
+                              elsif has_binding?(attributes['enabled'])
+                                " disabled={!#{extract_binding_property(attributes['enabled'])}}"
+                              else
+                                ''
+                              end
             # Data closure props are always optional (type_converter makes all
             # function types `| undefined`), so the call must be optional-chained.
             # The tab change is the operation a declared onClick follows
@@ -157,7 +165,7 @@ module RjuiTools
         end
 
         def build_button_class(index, seeded: false)
-          selected_index = with_bind_fallback(attributes['selectedIndex'] || attributes['selectedTabIndex']) || 0
+          selected_index = attributes['selectedIndex'] || attributes['selectedTabIndex'] || 0
 
           # Build font size class
           font_size_class = if attributes['fontSize']
@@ -212,7 +220,7 @@ module RjuiTools
         end
 
         def build_selected_binding
-          selected = with_bind_fallback(attributes['selectedIndex'] || attributes['selectedTabIndex'])
+          selected = attributes['selectedIndex'] || attributes['selectedTabIndex']
 
           if selected && has_binding?(selected)
             extract_binding_property(selected)
@@ -234,7 +242,7 @@ module RjuiTools
             add_viewmodel_data_prefix(to_camel_case(attributes['valueChange']))
           else
             # Generate setter from the raw binding name (without viewModel.data. prefix)
-            selected = with_bind_fallback(attributes['selectedIndex'] || attributes['selectedTabIndex'])
+            selected = attributes['selectedIndex'] || attributes['selectedTabIndex']
             return nil unless selected && has_binding?(selected)
 
             raw_binding = extract_raw_binding_property(selected)

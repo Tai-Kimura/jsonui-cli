@@ -26,7 +26,7 @@ module JsonUI
         { name: 'cellWidth', kind: :number }.freeze,
         # Number of columns for CSS grid
         { name: 'columnCount', kind: :number }.freeze,
-        # Spacing between columns
+        # Spacing between columns (on a horizontal Collection, between lanes). Undeclared: itemSpacing, else 0 on every route, flow included (attribute_semantics.json -> collectionSpacing).
         { name: 'columnSpacing', kind: :number }.freeze,
         # Number of columns. Literal int -> static GridCells.Fixed(N) / Array(repeating: ..., count: N). Binding @{prop} -> runtime-resolved data.prop; the Collection always renders on the multi-column grid path (LazyVerticalGrid / LazyHorizontalGrid on Android, LazyVGrid / LazyHGrid on iOS) even when the binding resolves to 1, so the grid layout stays stable across runtime column changes.
         { name: 'columns', kind: :number, bindable: true }.freeze,
@@ -54,11 +54,11 @@ module JsonUI
         { name: 'insetVertical', kind: :number }.freeze,
         # Content insets [accepts: array | string]
         { name: 'insets', kind: :raw }.freeze,
-        # Spacing between items (used for both grid spacing and list item spacing)
+        # Spacing between items (used for both grid spacing and list item spacing): the fallback for lineSpacing and columnSpacing. Undeclared: 0 on every route, flow included (attribute_semantics.json -> collectionSpacing).
         { name: 'itemSpacing', kind: :number }.freeze,
         # Item sizing weight
         { name: 'itemWeight', kind: :number }.freeze,
-        # Data source binding (@{…}). A binding only: the array form was declared and drawn by no platform (codegen or Dynamic) and used by no face, so it was taken out on 2026-09-26; a literal array is named by the validator.
+        # Data source binding (@{…}). A binding only: the array form was declared and drawn by no platform (codegen or Dynamic) and used by no face, so it was taken out on 2026-09-26; a literal array is named by the validator. The bound value is a CollectionDataSource or an array; an array is one section, every element drawn with cellClasses[0] (a Collection without `sections`; the layout's data declaration decides on the codegen paths, the value's shape on the Dynamic ones).
         { name: 'items', kind: :binding }.freeze,
         # Enable keyboard avoidance
         { name: 'keyboardAvoidance', kind: :boolean }.freeze,
@@ -66,7 +66,7 @@ module JsonUI
         { name: 'layout', kind: :enum, values: ['vertical', 'horizontal', 'flow', 'Flow', 'LeftAligned', 'leftAligned'].freeze }.freeze,
         # Outer container shape for the Collection (single-column section path uses CollectionStackView/CollectionStack). Accepts: 'lazy' (default) -> ScrollView+LazyVStack/LazyHStack on iOS, LazyColumn/LazyRow on Android, with virtualized cell rendering. 'eager' -> ScrollView+VStack/HStack on iOS, Column(verticalScroll)/Row(horizontalScroll) on Android — no virtualization, smooth scrolling for heavy cells (markdown / images / attributed text) that suffer from LazyVStack re-evaluation. 'none' -> VStack/HStack only, no scroll container, parent must already be scrollable (for layout:'flow' this is the only value that removes the Collection's own vertical scroll). Bindings (@{prop}) are resolved at runtime via the wrapper's mode parameter so toggles preserve view identity. Sticky headers and paging require 'lazy'. [default: lazy]
         { name: 'lazy', kind: :enum, bindable: true, values: ['lazy', 'eager', 'none'].freeze }.freeze,
-        # Spacing between rows. `sectionSpacing` folds here (sjui collection_converter.rb:799,960 read `sectionSpacing || lineSpacing || 8`).
+        # Spacing between rows (on a horizontal Collection, along the scroll axis); `sectionSpacing` folds here. Undeclared: itemSpacing, else 0 on every route, flow included (attribute_semantics.json -> collectionSpacing).
         { name: 'lineSpacing', kind: :number, aliases: ['sectionSpacing'].freeze }.freeze,
         # Which list chrome the collection is drawn with: plain (the default), grouped, insetGrouped or sidebar; an unrecognised value falls back to plain. ORTHOGONAL to hideSeparator — that one hides the separators, this one picks the chrome, and neither overrides the other. Full ruling in attribute_semantics.json -> collectionSeparators. [default: plain]
         { name: 'listStyle', kind: :enum, values: ['plain', 'grouped', 'insetGrouped', 'sidebar'].freeze }.freeze,

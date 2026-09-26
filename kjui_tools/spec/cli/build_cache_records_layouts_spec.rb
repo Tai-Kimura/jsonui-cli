@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require 'open3'
+require 'rbconfig'
 require 'tmpdir'
 require 'json'
 require 'fileutils'
@@ -73,7 +74,7 @@ RSpec.describe 'the Compose build cache' do
   end
 
   def kjui(dir, *args)
-    Open3.capture2e('ruby', File.join(dir, 'kjui_tools', 'bin', 'kjui'), 'build', *args, chdir: dir)
+    Open3.capture2e(RbConfig.ruby, File.join(dir, 'kjui_tools', 'bin', 'kjui'), 'build', *args, chdir: dir)
   end
 
   # Build until the cache skips every layout it may skip (`settled`).

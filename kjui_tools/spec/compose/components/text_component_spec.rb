@@ -442,6 +442,27 @@ RSpec.describe KjuiTools::Compose::Components::TextComponent do
     # 🚨 A shipped screen crashed on a real device (2026-09-08): NPE inside
     # VisibilityWrapper, from `)!!` on a `fromJsonRange` that returned null.
     # The generator asserted non-null for something only runtime data decides.
+    # The Label's own fontSize, fontColor and textAlign style the whole text.
+    # Moved here from the examples of build_text_style, which only the deleted
+    # generate_with_partial_attributes called (jsonui-cli 1.9.0); this is the
+    # path `.generate` takes. Its "no style parts" example did not move: this
+    # path always writes a style (the resolved font).
+    it "styles the whole text with the Label's fontSize, fontColor and textAlign" do
+      json_data = {
+        'type' => 'Text', 'text' => 'Hello World',
+        'fontSize' => 16, 'fontColor' => '#FF0000', 'textAlign' => 'center',
+        'partialAttributes' => [{ 'range' => [0, 5], 'fontColor' => '#00FF00' }]
+      }
+      result = described_class.generate(json_data, 0, required_imports)
+      expect(result).to include('PartialAttributesText(')
+      style = result[/^\s*style = LocalTextStyle\.current\.copy\((.*)\)$/, 1]
+      expect(style).to include('color = Color(android.graphics.Color.parseColor("#FF0000"))')
+      expect(result).to match(/FontSpec\([^)]*size = 16\.sp/m)
+      expect(style).to match(/fontSize = \(resolved_\w+\.size \?: LocalTextStyle\.current\.fontSize\)/)
+      expect(style).to include('textAlign = TextAlign.Center')
+      expect(required_imports).to include(:text_align)
+    end
+
     it 'never asserts non-null on fromJsonRange' do
       json_data = {
         'type' => 'Text',
@@ -835,32 +856,6 @@ RSpec.describe KjuiTools::Compose::Components::TextComponent do
       it 'preserves empty lines' do
         result = described_class.send(:indent, "line1\n\nline2", 1)
         expect(result).to eq("    line1\n\n    line2")
-      end
-    end
-
-    describe '.build_text_style' do
-      it 'returns nil when no style parts' do
-        result = described_class.send(:build_text_style, { 'type' => 'Text' }, 0, Set.new)
-        expect(result).to be_nil
-      end
-
-      it 'builds style with fontSize' do
-        imports = Set.new
-        result = described_class.send(:build_text_style, { 'fontSize' => 16 }, 0, imports)
-        expect(result).to include('fontSize = 16.sp')
-      end
-
-      it 'builds style with fontColor' do
-        imports = Set.new
-        result = described_class.send(:build_text_style, { 'fontColor' => '#FF0000' }, 0, imports)
-        expect(result).to include('color =')
-      end
-
-      it 'builds style with textAlign' do
-        imports = Set.new
-        result = described_class.send(:build_text_style, { 'textAlign' => 'center' }, 0, imports)
-        expect(result).to include('textAlign = TextAlign.Center')
-        expect(imports).to include(:text_align)
       end
     end
 

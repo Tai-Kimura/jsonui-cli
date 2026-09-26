@@ -1,5 +1,6 @@
 # frozen_string_literal: true
 
+require 'core/bind_fold'
 require 'compose/components/selectbox_component'
 require 'compose/helpers/modifier_builder'
 require 'compose/helpers/resource_resolver'
@@ -85,11 +86,13 @@ RSpec.describe KjuiTools::Compose::Components::SelectBoxComponent do
       end
 
       it 'generates SelectBox with bind attribute' do
-        json_data = {
+      # `bind` reaches the component folded (JsonUIShared::BindFold at the
+      # dispatch, ComposeBuilder#generate_component); the component reads no bind.
+        json_data = JsonUIShared::BindFold.fold({
           'type' => 'SelectBox',
           'bind' => '@{choice}',
           'options' => ['A', 'B']
-        }
+        })
         result = described_class.generate(json_data, 0, required_imports)
         expect(result).to include('value = data.choice')
       end
@@ -340,6 +343,31 @@ RSpec.describe KjuiTools::Compose::Components::SelectBoxComponent do
     end
 
     context 'DateSelectBox' do
+      # A Date SelectBox's value is its selectedDate alone (4f's ruling,
+      # jsonui-cli 1.9.0; SSoT common.bind primaryValue, by selectItemType):
+      # it fell back to selectedItem / selectedValue / selectedIndex / bind,
+      # which sjui never read.
+      it 'reads and writes its value from selectedDate alone' do
+        %w[selectedItem selectedValue selectedIndex bind].each do |other|
+          result = described_class.generate({ 'type' => 'SelectBox', 'selectItemType' => 'Date', other => '@{other}' }, 0, required_imports)
+          expect(result).not_to include('data.other'), other
+          expect(result).not_to include('"other" to'), other
+          expect(result).to include('value = '), other
+        end
+        %w[selectedItem selectedValue].each do |other|
+          result = described_class.generate({ 'type' => 'SelectBox', 'selectItemType' => 'Date', other => '2026-01-01' }, 0, required_imports)
+          expect(result).not_to include('"2026-01-01"'), other
+        end
+        both = described_class.generate(
+          { 'type' => 'SelectBox', 'selectItemType' => 'Date', 'selectedDate' => '@{day}', 'selectedItem' => '@{other}' }, 0, required_imports
+        )
+        expect(both).to include('value = data.day,')
+        expect(both).to include('viewModel.updateData(mapOf("day" to newValue))')
+        expect(both).not_to include('data.other')
+        static = described_class.generate({ 'type' => 'SelectBox', 'selectItemType' => 'Date', 'selectedDate' => '2026-01-01' }, 0, required_imports)
+        expect(static).to include('"2026-01-01"')
+      end
+
       it 'generates DateSelectBox for date type' do
         json_data = {
           'type' => 'SelectBox',
@@ -517,7 +545,7 @@ RSpec.describe KjuiTools::Compose::Components::SelectBoxComponent do
       expect(result).to include('data.onSelectionChange?.invoke("countrySelect", newValue)')
     end
 
-    it 'uses default selectbox id when no id specified' do
+    it 'uses its position as the viewId when no id is specified (LayoutPath.view_id; it was the kind word)' do
       KjuiTools::Compose::Helpers::ResourceResolver.data_definitions = {
         'onSelectionChange' => { 'name' => 'onSelectionChange', 'class' => '((Event) -> Unit)?' }
       }
@@ -530,7 +558,7 @@ RSpec.describe KjuiTools::Compose::Components::SelectBoxComponent do
 
       result = described_class.generate(json_data, 0, required_imports)
 
-      expect(result).to include('data.onSelectionChange?.invoke("selectbox", newValue)')
+      expect(result).to include('data.onSelectionChange?.invoke("selectBox_0", newValue)')
     end
 
     # The payload is the new value of the SELECTION BINDING, as on sjui

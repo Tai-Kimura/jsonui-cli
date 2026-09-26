@@ -244,12 +244,32 @@ module RjuiTools
           Core::Logger.info('Run "rjui build" to generate the React component')
         end
 
+        # The project writes TypeScript (`typescript` true), else JavaScript —
+        # as `rjui build` names its components (.tsx / .jsx). Until jsonui-cli
+        # 1.9.0 the page and the ViewModel scaffolds were TypeScript whatever
+        # the project was, and `rjui build` then followed the ViewModel's .ts
+        # into its generated ViewModel base and hook.
+        def typescript?
+          @config['typescript'] ? true : false
+        end
+
         def generate_page_file(view_name, kebab_path, with_viewmodel, options)
           # kebab_path can be nested like "learn/components/view"
           path_parts = kebab_path.split('/')
           page_dir = File.join('src', 'app', *path_parts)
-          page_path = File.join(page_dir, 'page.tsx')
-          scaffold(page_path, options, 'page') { page_content(view_name, with_viewmodel) }
+          page_path = File.join(page_dir, typescript? ? 'page.tsx' : 'page.jsx')
+          scaffold(page_path, options, 'page') do
+            content = page_content(view_name, with_viewmodel)
+            typescript? ? content : javascript_page(content, view_name)
+          end
+        end
+
+        # The page for a JavaScript project: the TypeScript page without its
+        # types — the type arguments, and the Data type from the import.
+        def javascript_page(content, view_name)
+          content.sub("useState<#{view_name}Data>(", 'useState(')
+                 .sub("useRef<#{view_name}ViewModel | null>(null)", 'useRef(null)')
+                 .sub("import { #{view_name}Data, create#{view_name}Data } from", "import { create#{view_name}Data } from")
         end
 
         def page_content(view_name, with_viewmodel)
@@ -296,8 +316,27 @@ module RjuiTools
         end
 
         def generate_viewmodel_file(view_name, options)
-          viewmodel_path = File.join('src', 'viewmodels', "#{view_name}ViewModel.ts")
-          scaffold(viewmodel_path, options, 'ViewModel') { viewmodel_content(view_name) }
+          viewmodel_path = File.join('src', 'viewmodels', "#{view_name}ViewModel#{typescript? ? '.ts' : '.js'}")
+          scaffold(viewmodel_path, options, 'ViewModel') { typescript? ? viewmodel_content(view_name) : javascript_viewmodel(view_name) }
+        end
+
+        # The ViewModel for a JavaScript project: the same class, untyped.
+        def javascript_viewmodel(view_name)
+          <<~JS
+            // ViewModel for #{view_name}
+            // This file is NOT auto-generated after initial creation - safe to edit
+
+            import { #{view_name}ViewModelBase } from "@/generated/viewmodels/#{view_name}ViewModelBase";
+
+            export class #{view_name}ViewModel extends #{view_name}ViewModelBase {
+              constructor(router, getData, setData) {
+                super(router, getData, setData);
+                this.initializeEventHandlers();
+              }
+
+              // Override methods or add custom logic here
+            }
+          JS
         end
 
         def viewmodel_content(view_name)
@@ -327,8 +366,8 @@ module RjuiTools
         end
 
         def generate_component_viewmodel_file(view_name, options)
-          viewmodel_path = File.join('src', 'viewmodels', "#{view_name}ViewModel.ts")
-          scaffold(viewmodel_path, options, 'ViewModel') { component_viewmodel_content(view_name) }
+          viewmodel_path = File.join('src', 'viewmodels', "#{view_name}ViewModel#{typescript? ? '.ts' : '.js'}")
+          scaffold(viewmodel_path, options, 'ViewModel') { typescript? ? component_viewmodel_content(view_name) : javascript_viewmodel(view_name) }
         end
 
         def component_viewmodel_content(view_name)

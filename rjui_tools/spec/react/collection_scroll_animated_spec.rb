@@ -76,7 +76,7 @@ RSpec.describe 'rjui Collection: scrollAnimated' do
       #{TypeScriptCompiler::AMBIENT.sub('declare const React: any;', '')}
       declare module 'react' { const React: any; export default React; export function useRef<T>(v: T): { current: T }; export const useEffect: any; }
       declare module '@/generated/data/ProbeData' {
-        export type ProbeData = { rows?: Record<string, unknown>[]; target?: number; animated?: boolean };
+        export type ProbeData = { rows?: { sections: { cells?: { data: unknown[] } }[] }; target?: number; animated?: boolean };
         export const createProbeData: () => ProbeData;
       }
       declare module '@/generated/data/RowCellData' { export type RowCellData = Record<string, unknown>; }

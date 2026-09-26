@@ -382,7 +382,7 @@ module SjuiTools
             @modifier_bag.register(:hidden, ".opacity(#{hidden_expr} ? 0 : 1).accessibilityHidden(#{hidden_expr})")
           end
 
-          # userInteractionEnabled / touchDisabledState (the binding, too:
+          # userInteractionEnabled (the binding, too:
           # apply_binding_modifiers leaves it to this once it has run)
           register_hit_test_gate
 
@@ -528,7 +528,8 @@ module SjuiTools
           max_length = @component['maxLength']
           return if max_length.nil?
 
-          raw = @component['text'] || @component['value'] || @component['bind']
+          # (a lone `bind` arrives as `text`: JsonUIShared::BindFold at the dispatch)
+          raw = @component['text'] || @component['value']
           return unless raw.is_a?(String) && is_binding?(raw)
 
           prop = extract_binding_property(raw)

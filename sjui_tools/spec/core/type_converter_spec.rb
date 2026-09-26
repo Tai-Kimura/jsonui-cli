@@ -589,19 +589,19 @@ RSpec.describe SjuiTools::Core::TypeConverter do
 
       it 'does not warn for existing color' do
         expect { described_class.convert_color_default_value('white', 'swiftui') }
-          .not_to output.to_stderr
+          .not_to output.to_stdout
       end
 
       it 'warns for non-existing color' do
         expect { described_class.convert_color_default_value('nonexistent_color', 'swiftui') }
-          .to output(/Warning: Color 'nonexistent_color' is not defined in colors.json/).to_stderr
+          .to output(/^WARNING: Color 'nonexistent_color' is not defined in colors\.json$/).to_stdout
       end
 
       it 'still generates correct code even for non-existing color' do
         result = nil
         expect {
           result = described_class.convert_color_default_value('nonexistent_color', 'swiftui')
-        }.to output.to_stderr
+        }.to output.to_stdout
 
         expect(result).to eq('ColorManager.swiftui.nonexistentColor ?? .clear')
       end

@@ -152,3 +152,62 @@ def test_a_data_orphan_in_a_child_data_section_is_reported(project):
         {"data": [{"name": "handWritten", "class": "String"}]}, {"type": "Label", "id": "title"}]})
     said = _verify()[1]
     assert "data.handWritten (String)" in said, said
+
+
+# ---- a strings key stands for its text --------------------------------------
+
+def _strings(project: Path, table: dict) -> None:
+    _write(project / "layouts/Resources/strings.json", table)
+
+
+@pytest.mark.parametrize("table,spec_value,layout_value", [
+    ({"home": {"title": "Hello"}}, "Hello", "home_title"),
+    ({"home": {"title": "Hello"}}, "title", "home_title"),
+    ({"home": {"title": {"en": "Hello", "ja": "こんにちは"}}}, "こんにちは", "home_title"),
+    ({"home": {"title": "Hello"}}, "home_title", "Hello"),
+], ids=["a full key and its text", "the bare key and the full key of one entry", "a language's text",
+        "the spec holds the key"])
+def test_a_strings_key_and_its_text_agree(project, table, spec_value, layout_value):
+    _strings(project, table)
+    _external(project, [_var("v", "String", defaultValue=spec_value)],
+              {"data": [{"name": "v", "class": "String", "defaultValue": layout_value}]})
+    assert "initial value(s)" not in _verify()[1]
+
+
+def test_a_key_that_stands_for_another_text_is_named_with_it(project):
+    _strings(project, {"home": {"title": "Hello"}})
+    _external(project, [_var("v", "String", defaultValue="Bye")],
+              {"data": [{"name": "v", "class": "String", "defaultValue": "home_title"}]})
+    assert "'v' is \"Bye\" — layouts/home.json has \"home_title\" (strings: \"Hello\")" in _verify()[1]
+
+
+def test_a_bare_key_of_a_section_the_layout_does_not_own_is_not_a_key(project):
+    _strings(project, {"other": {"title": "Hello"}})
+    _external(project, [_var("v", "String", defaultValue="Hello")],
+              {"data": [{"name": "v", "class": "String", "defaultValue": "title"}]})
+    assert "has \"title\"" in _verify()[1]
+
+
+# ---- the release --fail-on-diff counts them from ----------------------------
+
+def test_the_count_starts_in_a_named_release():
+    from jui_cli.commands import verify_cmd
+    assert verify_cmd.INITIAL_VALUE_GATE_FROM == "1.9.1"
+    assert verify_cmd.initial_value_gate_state(version="1.9.0") == "announce"
+    assert verify_cmd.initial_value_gate_state(version="1.9.1") == "on"
+    assert verify_cmd.initial_value_gate_state(version="1.9.0", literal="withdrawn") == "off"
+
+
+def test_the_line_names_the_release_and_the_gate_counts_from_it(project, monkeypatch):
+    from jui_cli.commands import verify_cmd
+    _external(project, [_var("v", "Int", defaultValue=0)],
+              {"data": [{"name": "v", "class": "Int", "defaultValue": 1}]})
+    rc, said = _verify(fail_on_diff=True)
+    assert rc == 0 and "from jsonui-cli 1.9.1 `--fail-on-diff` counts these" in said, said
+    monkeypatch.setattr(verify_cmd, "INITIAL_VALUE_GATE_FROM", "0.0.1")
+    rc, said = _verify(fail_on_diff=True)
+    assert rc == 1 and "(counted by `--fail-on-diff`)" in said, said
+    monkeypatch.setattr(verify_cmd, "INITIAL_VALUE_GATE_FROM", "withdrawn")
+    rc, said = _verify(fail_on_diff=True)
+    assert rc == 0 and "`--fail-on-diff` does not count these" in said, said
+

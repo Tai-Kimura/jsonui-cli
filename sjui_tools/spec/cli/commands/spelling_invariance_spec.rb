@@ -2,6 +2,7 @@
 
 require 'json'
 require 'open3'
+require 'rbconfig'
 require 'tmpdir'
 require 'fileutils'
 
@@ -96,7 +97,7 @@ RSpec.describe 'sjui build: a synonym or alias spelling builds what its canonica
     %w[Layouts Styles View Bindings].each { |d| FileUtils.mkdir_p(File.join(dir, 'Probe', d)) }
     File.write(File.join(dir, 'Probe/Layouts/probe.json'), JSON.pretty_generate(layout))
     log, status = Open3.capture2e({ 'JUI_STAGE_FAILURES' => File.join(dir, 'ledger.json') },
-                                  'ruby', File.join(dir, 'sjui_tools/bin/sjui'), 'build', chdir: dir)
+                                  RbConfig.ruby, File.join(dir, 'sjui_tools/bin/sjui'), 'build', chdir: dir)
     files = Dir.glob(File.join(dir, '**/*'), File::FNM_DOTMATCH).reject do |f|
       File.directory?(f) || f.include?('/sjui_tools/') || f.include?('/Layouts/') || f.end_with?('ledger.json') ||
         f.include?('/.jsonui') || f.include?('cache')

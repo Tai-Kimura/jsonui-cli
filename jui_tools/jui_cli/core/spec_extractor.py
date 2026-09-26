@@ -216,6 +216,11 @@ class CollectionDef:
     # cell / header / footer as declared ("cell" first); the four `cell_*`
     # fields above are the cell slot's, kept for their existing readers.
     slots: dict[str, CollectionSlotDef] = field(default_factory=dict)
+    # structure.collection.cellClasses: the Layout refs of the cells the
+    # Collection may use (the multi-cell form), written onto the Collection.
+    cell_classes: list[str] = field(default_factory=list)
+    # structure.collection.insets: the Layout Collection's insets, as given.
+    insets: Any = None
 
 
 @dataclass
@@ -346,12 +351,27 @@ def _parse_collection(coll_data: dict) -> CollectionDef:
         if isinstance(coll_data.get(kind), dict) and coll_data.get(kind)
     }
     sections: list[dict] = []
-    if slots:
+    declared_sections = coll_data.get("sections")
+    if isinstance(declared_sections, list) and declared_sections:
+        # The section-based form, as the spec writes it: each section's cell
+        # / header / footer layout (and columns). Until jsonui-cli 1.9.0 it
+        # was read by the validator and jsonui-doc only, and the Collection
+        # g project wrote named the cell entry's root instead.
+        for entry in declared_sections:
+            if not isinstance(entry, dict):
+                continue
+            section = {k: entry[k] for k in ("cell", "header", "footer")
+                       if isinstance(entry.get(k), str) and entry[k]}
+            if isinstance(entry.get("columns"), (int, float)) and not isinstance(entry.get("columns"), bool):
+                section["columns"] = entry["columns"]
+            sections.append(section)
+    elif slots:
         section: dict[str, str] = {"cell": slot_layout_ref(coll_id, slots["cell"]) if "cell" in slots else ""}
         for kind in ("header", "footer"):
             if kind in slots:
                 section[kind] = slot_layout_ref(coll_id, slots[kind])
         sections.append(section)
+    cell_classes = coll_data.get("cellClasses")
 
     cell = slots.get("cell")
     cell_root_def = cell.root if cell and isinstance(cell.root, ComponentDef) else None
@@ -368,6 +388,9 @@ def _parse_collection(coll_data: dict) -> CollectionDef:
         # Collection was lazy whatever the spec said).
         lazy=coll_data.get("lazy") if isinstance(coll_data.get("lazy"), bool) else None,
         slots=slots,
+        cell_classes=[c for c in cell_classes if isinstance(c, str) and c]
+        if isinstance(cell_classes, list) else [],
+        insets=coll_data.get("insets") if isinstance(coll_data.get("insets"), (list, str)) else None,
     )
 
 

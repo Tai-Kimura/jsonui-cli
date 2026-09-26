@@ -4,6 +4,8 @@ require_relative 'base_view_converter'
 require_relative 'responsive_helper'
 require_relative '../../core/responsive_resolver'
 require_relative '../../core/string_literals'
+require_relative '../../core/logger'
+require_relative '../../core/attribute_types'
 
 module SjuiTools
   module SwiftUI
@@ -108,7 +110,7 @@ module SjuiTools
         end
 
         def grid_row_spacing
-          @component['lineSpacing'] || @component['itemSpacing'] || 0
+          line_spacing_value || @component['itemSpacing'] || 0
         end
 
         # A horizontal Collection (4f ruling, 2026-09-26, the rule SwiftJsonUI
@@ -137,7 +139,7 @@ module SjuiTools
         # columnSpacing, else itemSpacing, else 0. The single-lane stack read
         # itemSpacing, then columnSpacing, then lineSpacing.
         def horizontal_scroll_spacing
-          @component['lineSpacing'] || @component['sectionSpacing'] || @component['itemSpacing'] || 0
+          line_spacing_value || @component['itemSpacing'] || 0
         end
 
         def horizontal_lane_spacing
@@ -421,11 +423,7 @@ module SjuiTools
                     property_name = extract_property_name(@component['items'])
                     if property_name
                       is_optional = is_property_optional?(property_name)
-                      if is_optional
-                        add_line "if let dataSource = data.#{property_name}, let cellsData = dataSource.sections.first?.cells?.data {"
-                      else
-                        add_line "if let cellsData = data.#{property_name}.sections.first?.cells?.data {"
-                      end
+                      add_line "if let #{legacy_first_cells_binding(property_name, is_optional)} {"
                       indent do
                         lanes = horizontal_lanes
                         open_horizontal_lanes(lanes)
@@ -506,7 +504,7 @@ module SjuiTools
                       end
 
                       # Grid for cells
-                      add_line "LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: #{@component['columnSpacing'] || @component['itemSpacing'] || 0}), count: #{section_columns}), alignment: #{get_grid_alignment}, spacing: #{@component['lineSpacing'] || @component['itemSpacing'] || 0}) {"
+                      add_line "LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: #{@component['columnSpacing'] || @component['itemSpacing'] || 0}), count: #{section_columns}), alignment: #{get_grid_alignment}, spacing: #{line_spacing_value || @component['itemSpacing'] || 0}) {"
                       indent do
                         if cell_view_name
                           add_line "if let cellsData = section.cells?.data {"
@@ -542,23 +540,12 @@ module SjuiTools
                     end
                     add_line "}"
                   else
-                    # No property binding - use static rendering
-                    if header_view_name
-                      add_line "#{header_view_name}()"
-                      apply_header_footer_padding
-                    end
-
-                    add_line "LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: #{@component['columnSpacing'] || @component['itemSpacing'] || 0}), count: #{section_columns}), alignment: #{get_grid_alignment}, spacing: #{@component['lineSpacing'] || @component['itemSpacing'] || 0}) {"
-                    indent do
-                      add_line "// No items binding specified"
-                    end
-                    add_line "}"
-                    apply_grid_padding
-
-                    if footer_view_name
-                      add_line "#{footer_view_name}()"
-                      apply_header_footer_padding
-                    end
+                    # No `items`: nothing to draw the section from — no
+                    # header, cell or footer, as on every other route and
+                    # path (4f ruling 2026-09-26, round 6). Until jsonui-cli
+                    # 1.9.0 this drew the section's header and footer with no
+                    # data around an empty grid.
+                    add_line "// Section #{index + 1}: no items, nothing drawn"
                   end
                 end
               else
@@ -568,7 +555,7 @@ module SjuiTools
                   apply_header_footer_padding
                 end
                 
-                add_line "LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: #{@component['columnSpacing'] || @component['itemSpacing'] || 0}), count: #{columns_info[:expr]}), alignment: #{get_grid_alignment}, spacing: #{@component['lineSpacing'] || @component['itemSpacing'] || 0}) {"
+                add_line "LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: #{@component['columnSpacing'] || @component['itemSpacing'] || 0}), count: #{columns_info[:expr]}), alignment: #{get_grid_alignment}, spacing: #{line_spacing_value || @component['itemSpacing'] || 0}) {"
                 indent do
                   generate_collection_content(cell_class_name, id)
                 end
@@ -801,7 +788,7 @@ module SjuiTools
           elsif is_horizontal
             generate_non_lazy_horizontal(has_sections, cell_class_name)
           elsif has_sections && columns == 1
-            line_spacing = @component['lineSpacing'] || @component['itemSpacing'] || 0
+            line_spacing = line_spacing_value || @component['itemSpacing'] || 0
             vstack_alignment = get_vstack_alignment_from_gravity(@component['gravity'])
             add_line "VStack(alignment: #{vstack_alignment}, spacing: #{line_spacing}) {"
             indent do
@@ -811,7 +798,7 @@ module SjuiTools
             apply_insets_only
           elsif columns == 1 && !has_sections
             # Legacy single column without sections — plain VStack with ForEach
-            line_spacing = @component['lineSpacing'] || @component['itemSpacing'] || 0
+            line_spacing = line_spacing_value || @component['itemSpacing'] || 0
             vstack_alignment = get_vstack_alignment_from_gravity(@component['gravity'])
             add_line "VStack(alignment: #{vstack_alignment}, spacing: #{line_spacing}) {"
             indent do
@@ -875,11 +862,7 @@ module SjuiTools
               property_name = extract_property_name(@component['items'])
               if property_name
                 is_optional = is_property_optional?(property_name)
-                if is_optional
-                  add_line "if let dataSource = data.#{property_name}, let cellsData = dataSource.sections.first?.cells?.data {"
-                else
-                  add_line "if let cellsData = data.#{property_name}.sections.first?.cells?.data {"
-                end
+                add_line "if let #{legacy_first_cells_binding(property_name, is_optional)} {"
                 indent do
                   lanes = horizontal_lanes
                   open_horizontal_lanes(lanes)
@@ -910,7 +893,7 @@ module SjuiTools
 
           if has_sections
             property_name = extract_property_name(@component['items'])
-            section_spacing = @component['lineSpacing'] || @component['itemSpacing'] || 0
+            section_spacing = line_spacing_value || @component['itemSpacing'] || 0
             vstack_alignment = get_vstack_alignment_from_gravity(@component['gravity'])
             add_line "VStack(alignment: #{vstack_alignment}, spacing: #{section_spacing}) {"
             indent do
@@ -998,15 +981,41 @@ module SjuiTools
           end
         end
 
+        # A flow's three gaps (attribute_semantics.json -> collectionSpacing):
+        # between cells on a line columnSpacing, else itemSpacing; between
+        # lines lineSpacing (line_spacing_value), else itemSpacing; between
+        # the section blocks as between lines. 0 when none is declared, a
+        # declared 0 included. Until jsonui-cli 1.9.0 each undeclared gap was
+        # 8, and the section blocks did not fall back to itemSpacing.
+        def collection_flow_spacing
+          line = line_spacing_value || @component['itemSpacing'] || 0
+          {
+            cells: @component['columnSpacing'] || @component['itemSpacing'] || 0,
+            lines: line,
+            sections: line
+          }
+        end
+
+        # lineSpacing as declared: `sectionSpacing` is its alias (SSoT
+        # `aliases`), read when lineSpacing is absent — an unnormalised layout
+        # may spell it either way. With both, the canonical lineSpacing wins
+        # (4f ruling 2026-09-26, round 6), as SwiftJsonUI Dynamic's typed
+        # attribute reads it. Until jsonui-cli 1.9.0 the flow's section
+        # blocks took sectionSpacing over lineSpacing, and the vertical and
+        # grid routes did not read the alias at all.
+        def line_spacing_value
+          @component.key?('lineSpacing') ? @component['lineSpacing'] : @component['sectionSpacing']
+        end
+
         def generate_non_lazy_flow(has_sections)
-          # kjui's chain order on the declared attrs: inter-item prefers
-          # columnSpacing, inter-line prefers lineSpacing, itemSpacing is the
-          # uniform fallback for both axes. The flow default 8 is symmetric
-          # with kjui (unlike the grid paths' removed 10) and stays.
-          h_spacing = @component['columnSpacing'] || @component['itemSpacing'] || 8
-          v_spacing = @component['lineSpacing'] || @component['itemSpacing'] || 8
+          # The spacing rule and its undeclared default (0, flow included):
+          # attribute_semantics.json -> collectionSpacing. Cells on a line
+          # columnSpacing, lines lineSpacing, itemSpacing the fallback for
+          # both. Until jsonui-cli 1.9.0 the undeclared default here was 8.
+          h_spacing = collection_flow_spacing[:cells]
+          v_spacing = collection_flow_spacing[:lines]
           flow_alignment = get_flow_alignment
-          section_spacing = @component['sectionSpacing'] || @component['lineSpacing'] || 8
+          section_spacing = collection_flow_spacing[:sections]
 
           add_line "VStack(spacing: #{section_spacing}) {"
           indent do
@@ -1051,11 +1060,7 @@ module SjuiTools
               property_name = extract_property_name(@component['items'])
               if cell_class_name && property_name
                 is_optional = is_property_optional?(property_name)
-                if is_optional
-                  add_line "if let dataSource = data.#{property_name}, let cellsData = dataSource.sections.first?.cells?.data {"
-                else
-                  add_line "if let cellsData = data.#{property_name}.sections.first?.cells?.data {"
-                end
+                add_line "if let #{legacy_first_cells_binding(property_name, is_optional)} {"
                 indent do
                   add_line "FlowLayout(alignment: #{flow_alignment}, horizontalSpacing: #{h_spacing}, verticalSpacing: #{v_spacing}) {"
                   indent do
@@ -1099,8 +1104,19 @@ module SjuiTools
             add_line "TabView {"
           end
 
+          # One page per cell, every drawn section's cells in order (4f
+          # ruling 2026-09-26, round 6: what SwiftJsonUI Dynamic, rjui and
+          # KotlinJsonUI Dynamic draw). A page's tag is its place among ALL
+          # the pages, so a bound currentPage names one page: a section's
+          # tags start where the drawn sections before it end (pageStart).
+          # Until jsonui-cli 1.9.0 each section counted from 0, so under
+          # TabView(selection:) section 2's pages repeated section 1's tags.
+          # The class-list shape (cellClasses, no `sections`) is one section,
+          # as on the other one-section routes: the first data section, or
+          # the declared list; it drew no page until jsonui-cli 1.9.0.
           indent do
             if @component['sections'] && !@component['sections'].empty? && property_name
+              drawn = []
               @component['sections'].each_with_index do |section, index|
                 cell_view_name = extract_view_name(section['cell']) if section['cell']
                 next unless cell_view_name && property_name
@@ -1114,25 +1130,33 @@ module SjuiTools
                 indent do
                   data_ref = is_optional ? "dataSource" : "data.#{property_name}"
                   add_line "let section = #{data_ref}.sections[#{index}]"
+                  unless drawn.empty?
+                    counts = drawn.map { |j| "(#{data_ref}.sections[#{j}].cells?.data.count ?? 0)" }
+                    add_line "let pageStart = #{counts.join(' + ')}"
+                  end
                   add_line "if let cellsData = section.cells?.data {"
                   indent do
                     vars = open_cell_foreach('cellsData')
                     indent do
-                      add_line "#{cell_view_name}(data: #{vars[:data_var]}).equatable()"
-                      generate_cell_identity(vars[:index_var])
-                      apply_cell_frame
-                      if spacing > 0
-                        add_modifier_line ".padding(.horizontal, #{spacing / 2.0})"
-                      end
-                      apply_cell_item_identifier(vars[:index_var])
-                      add_modifier_line ".tag(#{vars[:index_var]})"
+                      add_paging_cell(cell_view_name, vars, spacing, drawn.empty? ? nil : 'pageStart')
                     end
                     add_line "}"
                   end
                   add_line "}"
                 end
                 add_line "}"
+                drawn << index
               end
+            elsif (cell_view_name = legacy_paging_cell) && property_name
+              add_line "if let #{legacy_first_cells_binding(property_name, is_property_optional?(property_name))} {"
+              indent do
+                vars = open_cell_foreach('cellsData')
+                indent do
+                  add_paging_cell(cell_view_name, vars, spacing, nil)
+                end
+                add_line "}"
+              end
+              add_line "}"
             end
           end
           add_line "}"
@@ -1156,18 +1180,41 @@ module SjuiTools
           apply_modifiers
         end
 
+        # One page: the cell, its identity, frame, spacing and address, and
+        # its tag — its place among all the pages (page_start + its index in
+        # the section; nil for the first drawn section, whose pages start at 0).
+        def add_paging_cell(cell_view_name, vars, spacing, page_start)
+          add_line "#{cell_view_name}(data: #{vars[:data_var]}).equatable()"
+          generate_cell_identity(vars[:index_var])
+          apply_cell_frame
+          if spacing > 0
+            add_modifier_line ".padding(.horizontal, #{spacing / 2.0})"
+          end
+          apply_cell_item_identifier(vars[:index_var])
+          add_modifier_line page_start ? ".tag(#{page_start} + #{vars[:index_var]})" : ".tag(#{vars[:index_var]})"
+        end
+
+        # The class-list shape's cell view (cellClasses[0], no `sections`),
+        # or nil.
+        def legacy_paging_cell
+          return nil if @component['sections'].is_a?(Array) && !@component['sections'].empty?
+
+          first = (@component['cellClasses'] || []).first
+          first && extract_view_name(first)
+        end
+
         # Generate flow layout using FlowLayout (iOS 16+)
         def generate_flow_layout(has_sections)
-          # kjui's chain order on the declared attrs: inter-item prefers
-          # columnSpacing, inter-line prefers lineSpacing, itemSpacing is the
-          # uniform fallback for both axes. The flow default 8 is symmetric
-          # with kjui (unlike the grid paths' removed 10) and stays.
-          h_spacing = @component['columnSpacing'] || @component['itemSpacing'] || 8
-          v_spacing = @component['lineSpacing'] || @component['itemSpacing'] || 8
+          # The spacing rule and its undeclared default (0, flow included):
+          # attribute_semantics.json -> collectionSpacing. Cells on a line
+          # columnSpacing, lines lineSpacing, itemSpacing the fallback for
+          # both. Until jsonui-cli 1.9.0 the undeclared default here was 8.
+          h_spacing = collection_flow_spacing[:cells]
+          v_spacing = collection_flow_spacing[:lines]
           flow_alignment = get_flow_alignment
 
           shows_indicators = @component['showsVerticalScrollIndicator'] != false
-          section_spacing = @component['sectionSpacing'] || @component['lineSpacing'] || 8
+          section_spacing = collection_flow_spacing[:sections]
           add_line "ScrollView(.vertical, showsIndicators: #{shows_indicators}) {"
           indent do
             add_line "VStack(spacing: #{section_spacing}) {"
@@ -1218,11 +1265,7 @@ module SjuiTools
               property_name = extract_property_name(@component['items'])
               if cell_class_name && property_name
                 is_optional = is_property_optional?(property_name)
-                if is_optional
-                  add_line "if let dataSource = data.#{property_name}, let cellsData = dataSource.sections.first?.cells?.data {"
-                else
-                  add_line "if let cellsData = data.#{property_name}.sections.first?.cells?.data {"
-                end
+                add_line "if let #{legacy_first_cells_binding(property_name, is_optional)} {"
                 indent do
                   add_line "FlowLayout(alignment: #{flow_alignment}, horizontalSpacing: #{h_spacing}, verticalSpacing: #{v_spacing}) {"
                   indent do
@@ -1456,7 +1499,7 @@ module SjuiTools
           else
             source_expr = data_source_expr
             if auto_tracking && cell_id_property.nil?
-              warn "[sjui] Collection at #{@component['id'] || '(unnamed)'}: " \
+              SjuiTools::Core::Logger.warn "[sjui] Collection at #{@component['id'] || '(unnamed)'}: " \
                    'autoChangeTrackingId is true but cellIdProperty is not set; ignoring.'
             end
           end
@@ -1722,6 +1765,57 @@ module SjuiTools
           add_line "}"
         end
 
+        # Collection.items is a CollectionDataSource or an array (4f ruling,
+        # 2026-09-26). A class-list Collection (no `sections`) whose items
+        # property the layout DECLARES a list — `Array`, `[T]`
+        # (AttributeTypes.list_element) — is one section: every element with
+        # cellClasses[0], on the routes a one-section data source draws. Any
+        # other declaration, or none, is the canonical CollectionDataSource.
+        # Until jsonui-cli 1.9.0 every class-list route read `.sections`, which
+        # an array does not have (swiftc: "value of type '[Any]' has no member
+        # 'sections'").
+        def legacy_items_list_element(property_name)
+          return nil unless property_name && @data_properties.is_a?(Array)
+
+          prop = @data_properties.find { |p| p.is_a?(Hash) && p['name'] == property_name }
+          JsonUIShared::AttributeTypes.list_element(prop && prop['class'])
+        end
+
+        # The cells of a class-list Collection as a `[[String: Any]]?` —
+        # what the cell view's model reads (`init(data: Any)`, setData reads a
+        # dictionary). A list of the cell's own Data (`[<Cell>Data]`) becomes
+        # its dictionaries; an untyped list (`Array` = [Any]) is read element
+        # by element as dictionaries. A list of any other type is named: its
+        # elements are no dictionary, so its cells draw with no data.
+        def legacy_array_cells_expr(property_name, is_optional)
+          element = legacy_items_list_element(property_name)
+          cell_view = extract_view_name((@component['cellClasses'] || []).first)
+          own_data = cell_view && cell_view.sub(/View\z/, 'Data')
+          if element.any? || element.name != own_data
+            unless element.any?
+              SjuiTools::Core::Logger.warn "[sjui] Collection at #{@component['id'] || '(unnamed)'}: items '#{property_name}' is a list of " \
+                                           "#{element.name}; a cell reads its own #{own_data || 'Data'} or a dictionary, so its cells draw with no data."
+            end
+            conversion = 'compactMap({ $0 as? [String: Any] })'
+          else
+            conversion = 'map({ $0.toDictionary() })'
+          end
+          is_optional ? "data.#{property_name}?.#{conversion}" : "Optional(data.#{property_name}.#{conversion})"
+        end
+
+        # The `if let` binding of `cellsData` for a one-section route
+        # (horizontal, flow): the first data section's cells, or the declared
+        # list's.
+        def legacy_first_cells_binding(property_name, is_optional)
+          return "cellsData = #{legacy_array_cells_expr(property_name, is_optional)}" if legacy_items_list_element(property_name)
+
+          if is_optional
+            "dataSource = data.#{property_name}, let cellsData = dataSource.sections.first?.cells?.data"
+          else
+            "cellsData = data.#{property_name}.sections.first?.cells?.data"
+          end
+        end
+
         # `items` is declared ["array", "binding"]; the data source is the
         # binding. An array names no data and is set aside, as kjui and rjui
         # set it aside — until 1.8.121 it reached `start_with?` and raised
@@ -1742,7 +1836,10 @@ module SjuiTools
           # Check if items property is specified (e.g., "@{items}")
           property_name = extract_property_name(@component['items'])
           
-          if property_name
+          if property_name && legacy_items_list_element(property_name)
+            # A declared list: one section (legacy_items_list_element).
+            generate_legacy_array_cells(property_name)
+          elsif property_name
             # Use section-based rendering
             generate_collection_content_sections(property_name)
           else
@@ -1751,6 +1848,29 @@ module SjuiTools
           end
         end
         
+        # Every cell of a declared list, with the single declared cellClass —
+        # the every-section routes' (List, grid, lazy:none) one section.
+        def generate_legacy_array_cells(property_name)
+          cell_view = single_declared_cell_view
+          unless cell_view
+            add_line "// No single cellClass — nothing rendered (several need sections[].cell)"
+            return
+          end
+
+          add_line "if let #{legacy_first_cells_binding(property_name, is_property_optional?(property_name))} {"
+          indent do
+            vars = open_cell_foreach('cellsData')
+            indent do
+              add_line "#{cell_view}(data: #{vars[:data_var]})"
+              generate_cell_identity(vars[:index_var])
+              apply_cell_frame(grid: columns_is_multi?)
+              apply_cell_item_identifier(vars[:index_var])
+            end
+            add_line "}"
+          end
+          add_line "}"
+        end
+
         def generate_collection_content_legacy(cell_class_name, id)
           if cell_class_name
             # Extract the original class name from the cell classes
@@ -1980,7 +2100,7 @@ module SjuiTools
         def collection_stack_view_params(axis:)
           if axis == :vertical
             shows_indicators = @component['showsVerticalScrollIndicator'] != false
-            line_spacing = @component['lineSpacing'] || @component['itemSpacing'] || 0
+            line_spacing = line_spacing_value || @component['itemSpacing'] || 0
             alignment_param = "horizontalAlignment: #{get_vstack_alignment_from_gravity(@component['gravity'])}"
           else
             shows_indicators = @component['showsHorizontalScrollIndicator'] != false

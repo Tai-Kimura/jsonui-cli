@@ -82,7 +82,7 @@ module KjuiTools
           # Handle click events
           # onclick (lowercase) -> selector format (string only)
           # onClick (camelCase) -> binding format only (@{functionName})
-          view_id = json_data['id'] || 'button'
+          view_id = Helpers::ModifierBuilder.view_id(json_data)
           # A handler names a method (TapAccessibility.handler?): an empty or
           # blank one is no handler, and the Button gets `onClick = { }`.
           tap = JsonUIShared::TapAccessibility
@@ -93,7 +93,9 @@ module KjuiTools
           # with it, on the button or on a node around it (tap_gate): its
           # pointer blocker stops a touch, not TalkBack's double tap, which
           # calls onClick.
-          can_tap = Helpers::ModifierBuilder.tap_gate(json_data)
+          # In a layout a stop can reach, the stop handed down too, captured
+          # in the composable's scope (ModifierBuilder.lambda_gate).
+          can_tap = Helpers::ModifierBuilder.lambda_gate(Helpers::ModifierBuilder.tap_gate(json_data))
           on_click = lambda do |call|
             next 'onClick = { }' if can_tap == 'false'
 
@@ -101,7 +103,7 @@ module KjuiTools
           end
           if tap.handler?(json_data['onclick'])
             # Lowercase onclick - legacy selector format
-            handler_call = Helpers::ModifierBuilder.get_event_handler_call(json_data['onclick'], is_camel_case: false)
+            handler_call = Helpers::ModifierBuilder.get_event_handler_call(json_data['onclick'], is_camel_case: false, view_id: view_id)
             code += "\n" + indent(on_click.call(handler_call), depth + 1)
           elsif tap.handler?(json_data['onClick'])
             # camelCase onClick - binding format only (@{functionName})
@@ -109,7 +111,7 @@ module KjuiTools
               handler_call = Helpers::ModifierBuilder.get_event_handler_invocation(json_data['onClick'], view_id, nil)
               code += "\n" + indent(on_click.call(handler_call), depth + 1)
             else
-              code += "\n" + indent("onClick = { // ERROR: #{json_data['onClick']} - camelCase events require binding format @{functionName} }", depth + 1)
+              code += "\n" + indent("onClick = #{Helpers::ModifierBuilder.error_lambda("ERROR: #{json_data['onClick']} - camelCase events require binding format @{functionName}")}", depth + 1)
             end
           else
             code += "\n" + indent("onClick = { }", depth + 1)
@@ -118,7 +120,7 @@ module KjuiTools
           # Build modifiers (only margins, size, and weight, not padding)
           modifiers = []
           modifiers.concat(Helpers::ModifierBuilder.build_test_tag(json_data, required_imports))
-          # userInteractionEnabled / touchDisabledState stop this node and
+          # userInteractionEnabled stops this node and
           # what is in it (ModifierBuilder.build_interaction_blocker); this
           # component builds no clickable, which is where it came from.
           modifiers.concat(Helpers::ModifierBuilder.build_interaction_blocker(json_data, required_imports))
@@ -172,26 +174,26 @@ module KjuiTools
                 case padding_data.length
                 when 1
                   # One value: all sides
-                  padding_values << "#{padding_data[0]}.dp"
+                  padding_values << "#{Helpers::BoundValue.dp(padding_data[0])}"
                 when 2
                   # Two values: [vertical, horizontal]
-                  padding_values << "vertical = #{padding_data[0]}.dp"
-                  padding_values << "horizontal = #{padding_data[1]}.dp"
+                  padding_values << "vertical = #{Helpers::BoundValue.dp(padding_data[0])}"
+                  padding_values << "horizontal = #{Helpers::BoundValue.dp(padding_data[1])}"
                 when 3
                   # Three values: [top, horizontal, bottom]
-                  padding_values << "top = #{padding_data[0]}.dp"
-                  padding_values << "horizontal = #{padding_data[1]}.dp"
-                  padding_values << "bottom = #{padding_data[2]}.dp"
+                  padding_values << "top = #{Helpers::BoundValue.dp(padding_data[0])}"
+                  padding_values << "horizontal = #{Helpers::BoundValue.dp(padding_data[1])}"
+                  padding_values << "bottom = #{Helpers::BoundValue.dp(padding_data[2])}"
                 when 4
                   # Four values: [top, right, bottom, left] (iOS UIEdgeInsets convention)
-                  padding_values << "top = #{padding_data[0]}.dp"
-                  padding_values << "end = #{padding_data[1]}.dp"
-                  padding_values << "bottom = #{padding_data[2]}.dp"
-                  padding_values << "start = #{padding_data[3]}.dp"
+                  padding_values << "top = #{Helpers::BoundValue.dp(padding_data[0])}"
+                  padding_values << "end = #{Helpers::BoundValue.dp(padding_data[1])}"
+                  padding_values << "bottom = #{Helpers::BoundValue.dp(padding_data[2])}"
+                  padding_values << "start = #{Helpers::BoundValue.dp(padding_data[3])}"
                 end
               else
                 # Single number: all sides
-                padding_values << "#{padding_data}.dp"
+                padding_values << "#{Helpers::BoundValue.dp(padding_data)}"
               end
             else
               # Handle individual padding attributes
@@ -202,17 +204,17 @@ module KjuiTools
               
               if top_padding == bottom_padding && start_padding == end_padding && top_padding == start_padding
                 # All same, use single value
-                padding_values << "#{top_padding}.dp" if top_padding > 0
+                padding_values << "#{Helpers::BoundValue.dp(top_padding)}" if Helpers::BoundValue.positive_or_bound?(top_padding)
               elsif top_padding == bottom_padding && start_padding == end_padding
                 # Different horizontal and vertical
-                padding_values << "horizontal = #{start_padding}.dp" if start_padding > 0
-                padding_values << "vertical = #{top_padding}.dp" if top_padding > 0
+                padding_values << "horizontal = #{Helpers::BoundValue.dp(start_padding)}" if Helpers::BoundValue.positive_or_bound?(start_padding)
+                padding_values << "vertical = #{Helpers::BoundValue.dp(top_padding)}" if Helpers::BoundValue.positive_or_bound?(top_padding)
               else
                 # All different, need to specify each
-                padding_values << "start = #{start_padding}.dp" if start_padding > 0
-                padding_values << "top = #{top_padding}.dp" if top_padding > 0
-                padding_values << "end = #{end_padding}.dp" if end_padding > 0
-                padding_values << "bottom = #{bottom_padding}.dp" if bottom_padding > 0
+                padding_values << "start = #{Helpers::BoundValue.dp(start_padding)}" if Helpers::BoundValue.positive_or_bound?(start_padding)
+                padding_values << "top = #{Helpers::BoundValue.dp(top_padding)}" if Helpers::BoundValue.positive_or_bound?(top_padding)
+                padding_values << "end = #{Helpers::BoundValue.dp(end_padding)}" if Helpers::BoundValue.positive_or_bound?(end_padding)
+                padding_values << "bottom = #{Helpers::BoundValue.dp(bottom_padding)}" if Helpers::BoundValue.positive_or_bound?(bottom_padding)
               end
             end
             
@@ -295,22 +297,16 @@ module KjuiTools
             required_imports&.add(:border_stroke)
             border_color = Helpers::ResourceResolver.process_color(json_data['borderColor'], required_imports)
             border_width = json_data['borderWidth'] || 1
-            code += ",\n" + indent("border = BorderStroke(#{border_width}.dp, #{border_color})", depth + 1)
+            code += ",\n" + indent("border = BorderStroke(#{Helpers::BoundValue.dp(border_width)}, #{border_color})", depth + 1)
           end
 
           # Handle enabled attribute
           if json_data.key?('enabled')
-            if json_data['enabled'].is_a?(String) && json_data['enabled'].start_with?('@{')
-              # `data.#{$1}` spliced the inner expression in verbatim, so
-              # `@{on ?? true}` emitted `data.on ?? true` — not Kotlin. No
-              # validator rule covers it: only `binding_direction: "two-way"`
-              # attributes are checked for a complex expression, and `enabled`
-              # is not one (plan 49 lane C).
-              inner = json_data['enabled'][2..-2]
-              code += ",\n" + indent("enabled = #{Helpers::BindingExpression.value_access(inner, negatable: true)}", depth + 1)
-            else
-              code += ",\n" + indent("enabled = #{json_data['enabled']}", depth + 1)
-            end
+            # `enabled` as every other stage reads it (enabled_expression): a
+            # nullable binding is `(data.on ?: false)` — the bare `data.on` it
+            # was did not type-check against the Boolean parameter.
+            enabled = Helpers::ModifierBuilder.enabled_expression(json_data) || 'true'
+            code += ",\n" + indent("enabled = #{enabled}", depth + 1)
           end
           
           code += "\n" + indent(") {", depth)

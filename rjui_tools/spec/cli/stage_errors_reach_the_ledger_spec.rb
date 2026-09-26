@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require 'open3'
+require 'rbconfig'
 require 'tmpdir'
 require 'json'
 require 'fileutils'
@@ -50,7 +51,7 @@ RSpec.describe 'rjui build: a stage that printed an error is in the ledger' do
 
   def build(dir)
     ledger = File.join(dir, 'ledger.json')
-    log, status = Open3.capture2e({ 'JUI_STAGE_FAILURES' => ledger }, 'ruby', File.join(dir, 'rjui_tools', 'bin', 'rjui'), 'build', chdir: dir)
+    log, status = Open3.capture2e({ 'JUI_STAGE_FAILURES' => ledger }, RbConfig.ruby, File.join(dir, 'rjui_tools', 'bin', 'rjui'), 'build', chdir: dir)
     [log.gsub(/\e\[[0-9;]*m/, ''), status.exitstatus, File.exist?(ledger) ? JSON.parse(File.read(ledger)) : []]
   end
 
@@ -161,6 +162,27 @@ RSpec.describe 'rjui build: a stage that printed an error is in the ledger' do
     expect(messages.count { |m| m.include?('type_synonyms.json') }).to eq(1), messages.inspect
     expect(log).to include('Build finished with 2 stage(s) incomplete — see above'), log
     expect(log).not_to include('Build completed!')
+  end
+
+  # The same copy, with a type drawn as nothing at the root of each of two
+  # layouts: HStack and EditText, whose tables (type_synonyms.json, the
+  # definitions' alias sections) are the links that dangle. Each is named in
+  # the validator's sentence, and that sentence's validator is the build's
+  # own (ReactGenerator#unknown_type_validator), so the build says
+  # attribute_definitions.json is not found once. A validator per such node
+  # said it once more for each: 3 times here (measured on the per-node form).
+  it 'a copy that left its links dangling, drawing types as nothing: attribute_definitions.json said not found once' do
+    dir = project(dangling_definitions: true)
+    { 'home' => 'HStack', 'other' => 'EditText' }.each do |name, type|
+      File.write(File.join(dir, 'src/Layouts', "#{name}.json"), JSON.pretty_generate(
+        'type' => type, 'id' => 'root', 'width' => 'matchParent', 'height' => 'wrapContent'
+      ))
+    end
+    log, exit_code, entries = build(dir)
+    expect(log).to include("Unknown component type 'HStack'").and include("Unknown component type 'EditText'")
+    expect(log.scan('attribute_definitions.json not found').size).to eq(1), log
+    expect(exit_code).to eq(0), log
+    expect(entries.count { |e| e['message'].include?('attribute_definitions.json') }).to eq(1), entries.inspect
   end
 
   # A type_synonyms.json that is there but cannot be used — not JSON, or not

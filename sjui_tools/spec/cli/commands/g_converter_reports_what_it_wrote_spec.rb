@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require 'open3'
+require 'rbconfig'
 require 'pty'
 require 'tmpdir'
 require 'json'
@@ -60,7 +61,7 @@ RSpec.describe 'what sjui g converter says it wrote, against the disk' do
   end
 
   def sjui(dir, tool, flags, stdin)
-    cmd = ['ruby', File.join(tool, 'bin', 'sjui'), 'g', 'converter', 'Probe', '--attributes', 'title:String', *flags]
+    cmd = [RbConfig.ruby, File.join(tool, 'bin', 'sjui'), 'g', 'converter', 'Probe', '--attributes', 'title:String', *flags]
     said, status = stdin.empty? ? Open3.capture2e(*cmd, chdir: dir, stdin_data: stdin) : on_terminal(cmd, dir, stdin)
     raise "sjui g converter failed:\n#{said}" unless status.success?
 

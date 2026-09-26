@@ -73,7 +73,15 @@ def test_a_collection_declares_cell_classes_and_sections_like_the_layouts():
     coll = _props("collectionStructure")
     layout_sections = _attribute_definitions()["Collection"]["sections"]["items"]["properties"]
     assert coll["cellClasses"]["items"] == {"type": "string"}
-    assert set(coll["sections"]["items"]["properties"]) == set(layout_sections)
+    # A section holds the Layout's keys, plus three the faces write for the
+    # reader (jsonui-cli 1.9.0) — documentation only, so nothing reads them.
+    spec_sections = coll["sections"]["items"]["properties"]
+    assert set(layout_sections) <= set(spec_sections)
+    for key in set(spec_sections) - set(layout_sections):
+        assert "Documentation only" in spec_sections[key]["description"], key
+    assert set(spec_sections) - set(layout_sections) == {"index", "description", "notes"}
+    # insets: the Layout Collection's, written onto it by jui g project.
+    assert coll["insets"]["type"] == _attribute_definitions()["Collection"]["insets"]["type"]
     # `cell` is one of three ways to name the cells (the validator's rule).
     assert DEFS["collectionStructure"]["required"] == ["id"]
 

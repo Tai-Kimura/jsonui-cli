@@ -33,7 +33,9 @@ rjui_tools/lib/
     ├── style_loader.rb / helpers/（string_manager, lucide_icon, font_spec）
     ├── generators/converter_generator.rb  カスタムコンバータ scaffold（rjui g converter）
     └── templates/                ホストへ emit するランタイム片: Configuration.ts,
-                                  EmbedContainer.tsx, network_image.tsx, use_color_mode.ts, use_media_query.ts
+                                  EmbedContainer.tsx, linkify_text.tsx, network_image.tsx, use_color_mode.ts, use_media_query.ts
+                                  js/ は JavaScript project 用の双子（型を除いたもの。手で編集せず
+                                  spec/support/js_templates.rb で再生成、spec/react/js_templates_spec.rb が差分を検出）
 ```
 
 ビルドフロー（`build_command.rb`）: StringManager 更新（strings.json + Strings/{lang}.json →

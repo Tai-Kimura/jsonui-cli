@@ -103,9 +103,9 @@ module RjuiTools
           # own prop type rather than by restating the union.
           if (expr = bound_value_expr(content_mode))
             lookup = js_object_literal(CONTENT_MODE_OBJECT_FIT)
-            cast = "React.ComponentProps<typeof NetworkImage>['contentMode']"
+            cast = typescript? ? " as React.ComponentProps<typeof NetworkImage>['contentMode']" : ''
             return " contentMode={((#{lookup})[String(#{expr}).toLowerCase()] ?? " \
-                   "'#{CONTENT_MODE_DEFAULT_FIT}') as #{cast}}"
+                   "'#{CONTENT_MODE_DEFAULT_FIT}')#{cast}}"
           end
 
           " contentMode=\"#{content_mode_prop(content_mode)}\""

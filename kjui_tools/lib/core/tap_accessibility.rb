@@ -135,6 +135,22 @@ module JsonUIShared
         !stops?(node) && TAP_KEYS.any? { |key| handler?(node[key]) }
     end
 
+    # A control: a declared interactive type that is operated where it is —
+    # its value, its selection, its text, its action — not a container
+    # (STOP_CONTAINER_TYPES). A stop takes its operation without a tap on it:
+    # a hit-test stop keeps a touch out, and a screen reader's activation, a
+    # keyboard, an accessibility service's click still reach it (measured:
+    # VoiceOver switched a Switch inside `userInteractionEnabled: false`,
+    # jsonui-cli 1.9.0). So annotate! marks it as it marks a tap, and the
+    # codegen stops its operation and its reading as a control.
+    def control?(node)
+      node.is_a?(Hash) && INTERACTIVE_TYPES.include?(node['type']) && !STOP_CONTAINER_TYPES.include?(node['type'])
+    end
+
+    # The interactive types that hold the operated things rather than being
+    # one: a stop on them reaches what they hold.
+    STOP_CONTAINER_TYPES = %w[TabView ScrollView Collection Table TableView RecyclerView Web Embed].freeze
+
     # `userInteractionEnabled: false`: the node and everything in it take no
     # interaction.
     def stops?(node)
@@ -177,6 +193,27 @@ module JsonUIShared
       !value.nil? && !(value.respond_to?(:empty?) && value.empty?)
     end
 
+    # A partialAttributes range's handler, as [:binding, value] or
+    # [:selector, value], or nil. `onClick` is the canonical spelling and
+    # `onclick` its alias (attribute_definitions.json, the range's `onClick`
+    # `aliases`): the normalizer folds `onclick` into `onClick`, so onClick
+    # holds either a binding or — folded — a method name, a selector. A raw
+    # layout's `onclick` is read too, onClick first (4f ruling, jsonui-cli
+    # 1.9.0; the Dynamic runtimes read the same).
+    def range_handler(range)
+      return nil unless range.is_a?(Hash)
+
+      %w[onClick onclick].each do |key|
+        value = range[key]
+        next unless handler?(value)
+
+        names = handler_values(value)
+        return [:binding, value] if value.is_a?(String) && value.match?(/\A@\{.*\}\z/m)
+        return [:selector, value] if names.none? { |v| v.start_with?('@{') }
+      end
+      nil
+    end
+
     def linked_text?(node)
       return false unless TEXT_TYPES.include?(JsonUIShared::TypeSynonyms.drawn_type(node['type']))
 
@@ -201,11 +238,13 @@ module JsonUIShared
     end
 
     # A node a user can operate on its own, inside a tappable. `stopped`: a
-    # node around it has `userInteractionEnabled: false`, so its own tap and
-    # long press are none (its type still says whether it is a control).
+    # node around it has `userInteractionEnabled: false`, so its own tap, its
+    # long press and its links are none — the flag on the node itself too, for
+    # the links: a stopped Label's link spans do not open (the Linkable Label
+    # ticket). Its type still says whether it is a control.
     def operable?(node, stopped = false)
       interactive_type?(node['type']) || (!stopped && tappable?(node)) || long_press?(node, stopped) ||
-        linked_text?(node)
+        (!stopped && !stops?(node) && linked_text?(node))
     end
 
     # Something inside `node` (not itself) a user can operate on its own.
@@ -232,13 +271,16 @@ module JsonUIShared
     GESTURE_KEYS = %w[onLongPress onPan onPinch].freeze
 
     # Writes SHAPE_KEY on every tappable of an include-expanded tree, and on
-    # every node with a tap or a gesture inside a node that stops or gates
-    # interaction, STOPPED_KEY / GATES_KEY.
+    # every node with a tap or a gesture, and every control, inside a node
+    # that stops or gates interaction, STOPPED_KEY / GATES_KEY — on a Label
+    # with links of its own too (linked_text?): its links are taps the flag
+    # stops, a range's handler and a link `linkable` detects alike, and the
+    # Label may have no onClick for the keys to ride on (4f ruling, jsonui-cli 1.9.0).
     def annotate!(root)
       walk(root) do |node, stopped, gates|
         value = shape(node, stopped)
         node[SHAPE_KEY] = value if value
-        next unless (TAP_KEYS + GESTURE_KEYS).any? { |key| handler?(node[key]) }
+        next unless (TAP_KEYS + GESTURE_KEYS).any? { |key| handler?(node[key]) } || linked_text?(node) || control?(node)
 
         node[STOPPED_KEY] = true if stopped
         node[GATES_KEY] = gates unless gates.empty?

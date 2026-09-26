@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require 'open3'
+require 'rbconfig'
 require 'tmpdir'
 require 'json'
 require 'fileutils'
@@ -50,7 +51,7 @@ RSpec.describe 'a refused layout, through kjui build and the build cache' do
   end
 
   def kjui(*args)
-    Open3.capture2e('ruby', File.join(@dir, 'kjui_tools', 'bin', 'kjui'), *args, chdir: @dir)
+    Open3.capture2e(RbConfig.ruby, File.join(@dir, 'kjui_tools', 'bin', 'kjui'), *args, chdir: @dir)
   end
 
   def build

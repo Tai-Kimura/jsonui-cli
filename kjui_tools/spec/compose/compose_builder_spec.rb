@@ -660,13 +660,15 @@ RSpec.describe KjuiTools::Compose::ComposeBuilder do
       # its own until 1.9.0)
       it 'generates Spacer as an undeclared type' do
         result = builder.send(:generate_component, { 'type' => 'Spacer', 'height' => 16 })
-        expect(result).to include('// TODO: Implement component type: Spacer')
+        expect(result).to include("// Unknown component type 'Spacer'")
         expect(result).not_to include('16.dp')
       end
 
-      it 'generates TODO for unknown component' do
+      # the unknown-type sentence (JsonUIShared::AttributeValidatorCore
+      # .unknown_component_type_message); it was a `// TODO: Implement component type` comment
+      it 'names an unknown component in a comment' do
         result = builder.send(:generate_component, { 'type' => 'UnknownWidget' })
-        expect(result).to include('TODO')
+        expect(result).to include("// Unknown component type 'UnknownWidget'")
       end
 
       it 'generates View as container' do
@@ -849,10 +851,12 @@ RSpec.describe KjuiTools::Compose::ComposeBuilder do
         builder.instance_variable_set(:@custom_components, Set.new)
       end
 
-      it 'generates Box with systemBarsPadding' do
+      it 'generates Box reserving every edge of the system bars' do
         result = builder.send(:generate_safe_area_view, {}, 0)
         expect(result).to include('Box(')
-        expect(result).to include('.systemBarsPadding()')
+        expect(result).to include('Modifier.windowInsetsPadding(WindowInsets.systemBars.only(WindowInsetsSides.Top))')
+        expect(result).to include('Modifier.windowInsetsPadding(WindowInsets.systemBars.only(WindowInsetsSides.Bottom))')
+        expect(result).to include('.windowInsetsPadding(WindowInsets.systemBars.only(WindowInsetsSides.Start + WindowInsetsSides.End))')
       end
 
       it 'generates with child components' do

@@ -64,7 +64,7 @@ module KjuiTools
           code += ",\n" unless modifiers.empty?
           code += "\n" if modifiers.empty?
           arrangement = vertical ? 'verticalArrangement' : 'horizontalArrangement'
-          code += indent("#{arrangement} = Arrangement.spacedBy(#{spacing}.dp),", depth + 1) + "\n"
+          code += indent("#{arrangement} = Arrangement.spacedBy(#{Helpers::BoundValue.dp(spacing)}),", depth + 1) + "\n"
           cross = vertical ? 'horizontalAlignment = Alignment.CenterHorizontally' :
                              'verticalAlignment = Alignment.CenterVertically'
           code += indent(cross, depth + 1) + "\n"
@@ -87,7 +87,7 @@ module KjuiTools
         # square glyph and must stay that way.
         def self.icon_size_call(value)
           if value.is_a?(Array) && value.length >= 2
-            return "size(width = #{value[0]}.dp, height = #{value[1]}.dp)"
+            return "size(width = #{Helpers::BoundValue.dp(value[0])}, height = #{Helpers::BoundValue.dp(value[1])})"
           end
 
           # A one-element array still means "both edges", the same as a number.

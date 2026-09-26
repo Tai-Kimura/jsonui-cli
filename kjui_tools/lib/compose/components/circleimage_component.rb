@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require_relative '../helpers/content_scale_helper'
+require_relative 'image_component'
 require_relative '../helpers/modifier_builder'
 require_relative '../helpers/resource_resolver'
 require_relative '../helpers/image_accessibility_helper'
@@ -26,8 +27,19 @@ module KjuiTools
             # Remove file extension and convert to resource name
             resource_name = image_name.gsub('.png', '').gsub('.jpg', '').gsub('-', '_').downcase
             
+            # The names this emit uses are imported where it uses them: the
+            # local branch added none, so a screen whose only image was a
+            # local CircleImage did not compile — Image, painterResource and R
+            # unresolved (measured: the 35 Image conformance layouts drawn as
+            # CircleImage, compiled against Compose and KotlinJsonUI;
+            # jsonui-cli 1.9.0).
+            required_imports&.add(:image)
             code = indent("Image(", depth)
-            code += "\n" + indent("painter = painterResource(id = R.drawable.#{Helpers::ResourceResolver.drawable_name(resource_name)}),", depth + 1)
+            # A bound source is the drawable's name held in data, looked up at
+            # run time as Image looks it up (ImageComponent.painter_argument);
+            # it was frozen into a drawable name (`R.drawable.img___avatar_`).
+            source = Helpers::ModifierBuilder.is_binding?(image_name) ? image_name : resource_name
+            code += ImageComponent.painter_argument(json_data, source, depth, required_imports)
           end
           
           # The alt, or null when decorative (ImageAccessibilityHelper); the
@@ -75,7 +87,7 @@ module KjuiTools
             modifiers.concat(Helpers::ModifierBuilder.build_size(json_data, parent_type, required_imports))
           else
             size = json_data['size'] || 48
-            modifiers << ".size(#{size}.dp)"
+            modifiers << ".size(#{Helpers::BoundValue.dp(size)})"
           end
 
           # offset → alpha: the View slots after the size and before the
@@ -124,6 +136,8 @@ module KjuiTools
           
           # Error handling for network images
           if is_network && json_data['errorImage']
+            required_imports&.add(:painter_resource)
+            required_imports&.add(:r_class)
             code += ",\n" + indent("error = painterResource(R.drawable.#{Helpers::ResourceResolver.drawable_name(json_data['errorImage'])})", depth + 1)
           end
           
