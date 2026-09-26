@@ -200,7 +200,17 @@ module RjuiTools
         def build_badge(badge)
           if has_binding?(badge)
             binding_prop = attribute_expression(badge)
-            "#{indent_str(10)}{#{binding_prop} && <span className=\"absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full w-4 h-4 flex items-center justify-center\">{#{binding_prop}}</span>}"
+            span = "<span className=\"absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full w-4 h-4 flex items-center justify-center\">{#{binding_prop}}</span>"
+            # Text around a binding (a template literal), or a binding that is
+            # not one (a string), always has text: that badge is always drawn,
+            # and a condition on it is one TypeScript rejects as always truthy.
+            return "#{indent_str(10)}#{span}" if binding_prop.start_with?('`', '"')
+
+            # A binding alone draws the badge while it has a value. Anything
+            # but a plain path is parenthesised: `data.n ?? 'D' && <span>`
+            # mixes `??` with `&&`, which JavaScript refuses to parse.
+            condition = binding_prop.match?(/\A[\w$]+(?:\??\.[\w$]+)*\z/) ? binding_prop : "(#{binding_prop})"
+            "#{indent_str(10)}{#{condition} && #{span}}"
           elsif badge.is_a?(Integer) && badge > 0
             "#{indent_str(10)}<span className=\"absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full w-4 h-4 flex items-center justify-center\">#{badge}</span>"
           elsif badge.is_a?(String) && !badge.empty?
