@@ -5,6 +5,7 @@ require 'tmpdir'
 require 'compose/generators/dynamic_registry_types'
 require 'compose/generators/dynamic_component_generator'
 require 'compose/generators/converter_generator'
+require 'compose/generators/view_adapter_generator'
 require_relative '../../support/kotlin_compiler'
 
 # The generated DynamicComponentRegistry lists the types it draws
@@ -14,7 +15,8 @@ require_relative '../../support/kotlin_compiler'
 # app's own ProgressBar is `progressBar_<path>` there as in release.
 #
 # A registry and an initializer written before 1.9.0 have neither. `g
-# converter` adds them when it runs, by adding lines only, and says so.
+# converter` and `g view` add them when they run, by adding lines only,
+# and say so.
 RSpec.describe 'kjui g converter: the registry lists its types for Configuration.customComponentTypes' do
   types = KjuiTools::Compose::Generators::DynamicRegistryTypes
 
@@ -158,6 +160,17 @@ RSpec.describe 'kjui g converter: the registry lists its types for Configuration
       once = File.read(@initializer)
       generator.send(:create_dynamic_initializers)
       expect(File.read(@initializer)).to eq(once)
+    end
+
+    it 'lists a view adapter g view registers with the rest, and gives the initializer the line' do
+      generator = KjuiTools::Compose::Generators::ViewAdapterGenerator.new('Home')
+      allow(KjuiTools::Core::ProjectFinder).to receive(:get_package_name).and_return('com.example.app')
+      generator.generate
+      expect(listed.call(File.read(@registry))).to eq(%w[FadeHeroView ProgressBar home])
+      expect(File.read(@initializer)).to include(types::ASSIGNMENT)
+      generator.generate
+      expect(listed.call(File.read(@registry))).to eq(%w[FadeHeroView ProgressBar home])
+      expect(File.read(@initializer).scan(types::ASSIGNMENT).size).to eq(1)
     end
 
     # What the two files hold after the run compiles: the list inside the
