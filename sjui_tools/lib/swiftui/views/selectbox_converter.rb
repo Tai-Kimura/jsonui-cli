@@ -15,6 +15,13 @@ module SjuiTools
           selectItemType = @component['selectItemType'] || 'Normal'
           items = @component['items'] || []
 
+          # The declared onClick, called from the user's pick — after the
+          # selection is written and onValueChange — through the closure
+          # SelectBoxView calls for a pick and nothing else
+          # (operation_click_call); no tap around the box, whose own tap opens
+          # the picker. It was called from nothing.
+          click = operation_click_call
+
           # SelectBoxViewを使用
           add_line "SelectBoxView("
           indent do
@@ -159,7 +166,7 @@ module SjuiTools
                                    end
               has_handler = @component['onValueChange'] && is_binding?(@component['onValueChange'])
 
-              if selected_date_prop || has_handler
+              if selected_date_prop || has_handler || click
                 add_line "onValueChange: { newValue in"
                 indent do
                   if selected_date_prop
@@ -169,6 +176,7 @@ module SjuiTools
                     handler_call = get_event_handler_invocation(@component['onValueChange'], id, 'newValue')
                     add_line handler_call
                   end
+                  add_line click if click
                 end
                 add_line "},"
               end
@@ -242,6 +250,14 @@ module SjuiTools
               right = @component['paddingRight'] || 0
               add_line "padding: EdgeInsets(top: #{top}, leading: #{left}, bottom: #{bottom}, trailing: #{right})"
             end
+
+            # A normal picker reports the pick through the same closure; the
+            # bound selection is observed below (.onChange), so the closure
+            # carries the onClick alone. Last, as the parameter is.
+            if click && selectItemType != 'Date'
+              @generated_code[-1] = "#{@generated_code[-1]}," unless @generated_code[-1].rstrip.end_with?(',', '(')
+              add_line "onValueChange: { _ in #{click} }"
+            end
           end
           add_line ")"
 
@@ -303,8 +319,11 @@ module SjuiTools
             @modifier_bag.register(:hidden, ".opacity(#{hidden_expr} ? 0 : 1).accessibilityHidden(#{hidden_expr})")
           end
 
-          # userInteractionEnabled / touchDisabledState
-          register_hit_test_gate
+          # enabled (`.disabled`, outermost), userInteractionEnabled and
+          # touchDisabledState. Only the last two were registered: SelectBoxView
+          # takes no `enabled`, so `enabled: false` still opened the picker and
+          # took a pick (SwiftJsonUI ConformanceHost OnClickProbeUITests).
+          register_interaction_gates
 
           generated_code
         end

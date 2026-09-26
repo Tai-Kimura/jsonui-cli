@@ -26,12 +26,18 @@ module SjuiTools
           min_expr = bound_number(min_value, cast: 'Double') || min_value
           max_expr = bound_number(max_value, cast: 'Double') || max_value
 
+          # The declared onClick, called when the user's change of the value
+          # finishes — the end of a drag, as kjui's onValueChangeFinished
+          # (operation_click_call); no tap around the slider.
+          click = operation_click_call
+          editing_click = click ? ", onEditingChanged: { editing in if !editing { #{click} } }" : ''
+
           # Check if value is a binding
           if @component['value'] && @component['value'].to_s.start_with?('@{') && @component['value'].to_s.end_with?('}')
             # Use binding from data model (two-way position: parsed path only)
             property_name = SwiftUI::Binding::BindingExpression.parse(@component['value'][2..-2]).path
             binding_var = "$data.#{property_name}"
-            add_line "Slider(value: #{binding_var}, in: #{min_expr}...#{max_expr})"
+            add_line "Slider(value: #{binding_var}, in: #{min_expr}...#{max_expr}#{editing_click})"
           else
             # Create @State variable name
             state_var = "sliderValue#{@component['id'] || ''}"
@@ -41,7 +47,7 @@ module SjuiTools
             add_state_variable(state_var, "Double", value_prop.to_s)
             
             # Slider
-            add_line "Slider(value: $#{state_var}, in: #{min_expr}...#{max_expr})"
+            add_line "Slider(value: $#{state_var}, in: #{min_expr}...#{max_expr}#{editing_click})"
           end
           
           # Tint. `progressTintColor` is the specific spelling for the FILLED
