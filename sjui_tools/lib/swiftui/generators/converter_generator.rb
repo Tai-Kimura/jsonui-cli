@@ -137,6 +137,7 @@ module SjuiTools
             require_relative '../base_view_converter'
             require_relative '../responsive_helper'
             require_relative '../../../core/attribute_types'
+            require_relative '../../../core/logger'
 
             module SjuiTools
               module SwiftUI
@@ -285,13 +286,16 @@ module SjuiTools
 
                       # What becomes of a prop this converter does not
                       # write, in the sentence the three tools share
-                      # (lib/core/attribute_types.rb).
+                      # (lib/core/attribute_types.rb), through sjui's
+                      # warning logger ("WARNING: …", as every other sjui
+                      # warning — a bare `warn` carried no marker a warning
+                      # count could find).
                       def unwritten(key, value, type)
-                        warn JsonUIShared::AttributeTypes.unwritten_warning('sjui', component_name, key, value, type)
+                        SjuiTools::Core::Logger.warn JsonUIShared::AttributeTypes.unwritten_warning('sjui', component_name, key, value, type)
                       end
 
                       def absent(key, type)
-                        warn JsonUIShared::AttributeTypes.absent_warning('sjui', component_name, key, type)
+                        SjuiTools::Core::Logger.warn JsonUIShared::AttributeTypes.absent_warning('sjui', component_name, key, type)
                       end
 
                       def format_color_value(value)

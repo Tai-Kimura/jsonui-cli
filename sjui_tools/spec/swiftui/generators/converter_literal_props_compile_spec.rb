@@ -25,6 +25,11 @@ RSpec.describe 'sjui g converter: a literal the layout gives a prop' do
 
   STRING = 'Say "hi" \\ $x \\(y)'
 
+  # The count jui build's own comment gives for its output
+  # (jui_tools/jui_cli/commands/build_cmd.py): a line it does not match is a
+  # warning nobody counts.
+  WARNING_COUNT = /warning \[|warning:|\[warn|⚠/i.freeze
+
   # canonical type => the literal a layout gives it
   LITERALS = {
     'string' => STRING, 'int' => 3, 'long' => 5, 'float' => 1.5, 'double' => 2.25, 'cgfloat' => 1.5,
@@ -106,13 +111,16 @@ RSpec.describe 'sjui g converter: a literal the layout gives a prop' do
     def null_rows
       null_types.each_with_index.map do |type, i|
         name = "NullProbe#{i}"
+        # What it printed through sjui's warning logger, prefix and all:
+        # the logger is not stubbed for this, and stdout is captured.
         said = StringIO.new
-        saved = $stderr
+        saved = $stdout
         call = begin
-          $stderr = said
+          allow(SjuiTools::Core::Logger).to receive(:warn).and_call_original
+          $stdout = said
           emitted(name, { 'v' => type }, { 'type' => name, 'v' => nil })
         ensure
-          $stderr = saved
+          $stdout = saved
         end
         scaffold = SjuiTools::SwiftUI::Generators::SwiftComponentGenerator
                    .new(name, is_container: false, attributes: { 'v' => type }, command: 'spec').send(:swift_template)
@@ -137,6 +145,19 @@ RSpec.describe 'sjui g converter: a literal the layout gives a prop' do
       # TypeScript; here it is held to what Swift declares.
       expect(rows.map { |type, declared, *| [type, declared.end_with?('?')] })
         .to eq(rows.map { |type, *| [type, JsonUIShared::AttributeTypes.takes_null?(type)] })
+    end
+
+    # Until 1.8.121's fourth round the converter said it with a bare `warn`:
+    # stderr, no prefix, and a count of the build's warnings saw none of them.
+    it "prints each line through sjui's warning logger, with its prefix, where a warning count finds it" do
+      lines = null_rows.flat_map { |_, _, _, said, _| said.lines }.grep(/\[sjui\] /)
+      expect(lines.size).to be >= 5
+      aggregate_failures do
+        lines.each do |line|
+          expect(line).to start_with('WARNING: [sjui] NullProbe')
+          expect(line).to match(WARNING_COUNT)
+        end
+      end
     end
 
     it 'writes a nil that swiftc takes, wherever it writes one' do
