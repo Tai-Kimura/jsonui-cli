@@ -212,6 +212,9 @@ module JsonUIShared
       # A text field's declared onClick is not called
       check_text_field_click(merged_component, type)
 
+      # `bind` beside the component's own value attribute
+      check_bind_beside_own_value(merged_component, type)
+
       # Check for conflicting attributes
       check_spacing_gravity_conflict(merged_component, type)
 
@@ -759,6 +762,28 @@ module JsonUIShared
       return unless text.is_a?(Hash) && text['binding_direction'] == 'two-way'
 
       add_warning("onClick on a #{section} is not called: a text field's tap focuses it")
+    end
+
+    # `bind` is an alternative spelling of the component's own value
+    # attribute, "which takes precedence when both are set" (SSoT
+    # common.bind; `primaryValue` lists, per section, the attributes that are
+    # that value). The layout normalizer drops such a `bind` with this same
+    # sentence; this is it for a layout the normalizer did not fold
+    # (normalizeLayouts false, a tool run on its own).
+    def check_bind_beside_own_value(component, type)
+      return unless component.key?('bind')
+
+      section = map_type_to_definition(type)
+      table = @definitions.dig('common', 'bind', 'primaryValue')
+      values = table.is_a?(Hash) ? table[section] : nil
+      return unless values.is_a?(Array)
+
+      own = values.find { |key| component.key?(key) }
+      return unless own
+
+      value = component[own]
+      shown = value.is_a?(String) ? value : JSON.generate(value)
+      add_warning("'bind: #{component['bind']}' is ignored: '#{own}: #{shown}' is the #{section}'s value")
     end
 
     def add_warning(message)
