@@ -247,9 +247,27 @@ module JsonUIShared
         (!stopped && !stops?(node) && linked_text?(node))
     end
 
+    # The children a node draws: a data-only element — `data` the only key the
+    # layout wrote (a position stamp or the rule's own marks are not keys it
+    # wrote; WRITTEN_STAMPS) — declares the data and draws nothing, so the
+    # shapes do not count it. It was read as a child of unknown type — a
+    # control — and a Label with onClick whose only child declared its data
+    # was no button (4f's ruling, jsonui-cli 1.9.0).
+    def drawn_children(node)
+      children(node).reject { |c| data_only?(c) }
+    end
+
+    def data_only?(node)
+      node.is_a?(Hash) && (node.keys - WRITTEN_STAMPS) == ['data']
+    end
+
+    # The keys the tools write on a layout node that the layout did not: the
+    # position stamp (JsonUIShared::LayoutPath::KEY) and this rule's own marks.
+    WRITTEN_STAMPS = ['_layoutPath', SHAPE_KEY, STOPPED_KEY, GATES_KEY].freeze
+
     # Something inside `node` (not itself) a user can operate on its own.
     def holds_a_control?(node, stopped = false)
-      children(node).any? do |c|
+      drawn_children(node).any? do |c|
         inner = stopped || stops?(c)
         operable?(c, inner) || holds_a_control?(c, inner)
       end
@@ -260,7 +278,7 @@ module JsonUIShared
     def shape(node, stopped = false)
       return nil if stopped || !tappable?(node)
       return 'none' if interactive_type?(node['type'])
-      return 'button' if children(node).empty?
+      return 'button' if drawn_children(node).empty?
       return 'none' if holds_a_control?(node)
 
       'combine'
