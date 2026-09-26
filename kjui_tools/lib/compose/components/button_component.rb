@@ -93,7 +93,9 @@ module KjuiTools
           # with it, on the button or on a node around it (tap_gate): its
           # pointer blocker stops a touch, not TalkBack's double tap, which
           # calls onClick.
-          can_tap = Helpers::ModifierBuilder.tap_gate(json_data)
+          # In a layout a stop can reach, the stop handed down too, captured
+          # in the composable's scope (ModifierBuilder.lambda_gate).
+          can_tap = Helpers::ModifierBuilder.lambda_gate(Helpers::ModifierBuilder.tap_gate(json_data))
           on_click = lambda do |call|
             next 'onClick = { }' if can_tap == 'false'
 
@@ -118,7 +120,7 @@ module KjuiTools
           # Build modifiers (only margins, size, and weight, not padding)
           modifiers = []
           modifiers.concat(Helpers::ModifierBuilder.build_test_tag(json_data, required_imports))
-          # userInteractionEnabled / touchDisabledState stop this node and
+          # userInteractionEnabled stops this node and
           # what is in it (ModifierBuilder.build_interaction_blocker); this
           # component builds no clickable, which is where it came from.
           modifiers.concat(Helpers::ModifierBuilder.build_interaction_blocker(json_data, required_imports))

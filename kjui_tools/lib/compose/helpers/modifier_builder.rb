@@ -923,7 +923,27 @@ module KjuiTools
           call, gate = click_call(json_data)
           return nil unless call
 
+          gate = lambda_gate(gate)
           gate ? "if (#{gate}) { #{call} }" : call
+        end
+
+        # The name a lambda of a layout a stop can reach reads the handed-down
+        # stop by (INTERACTION_CAPTURE): a CompositionLocal is read in the
+        # composable's scope, not in the lambda a control or a Button calls
+        # its onClick from, so the leaf node's code is wrapped in
+        # `LocalInteractionStopped.current.let { jsonuiInteractionStopped -> … }`
+        # (ComposeBuilder#capture_interaction_stop) and the lambda gates on it.
+        INTERACTION_CAPTURE = 'jsonuiInteractionStopped'
+
+        # A gate for a call made inside a lambda — a control's operation, a
+        # Button's onClick: `gate` (tap_gate's), and in a layout a stop can
+        # reach (reads_interaction_local) the stop handed down, captured.
+        def self.lambda_gate(gate)
+          return gate unless reads_interaction_local
+          return 'false' if gate == 'false'
+
+          handed_down = "!#{INTERACTION_CAPTURE}"
+          gate ? "#{conjunct(gate)} && #{handed_down}" : handed_down
         end
 
         # Append an argument that opens with its own `,\n` to a call being

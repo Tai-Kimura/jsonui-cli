@@ -40,7 +40,7 @@ module SjuiTools
           :on_long_press,       # onLongPressGesture
           :on_pan,              # contentShape + simultaneousGesture(DragGesture)
           :on_pinch,            # contentShape + simultaneousGesture(MagnifyGesture)
-          # allowsHitTesting (userInteractionEnabled, touchDisabledState)
+          # allowsHitTesting (userInteractionEnabled)
           # stops the whole view, so it wraps the view's own gestures: a
           # gesture attached outside it is not stopped. It sat before
           # :on_click, and a View with `userInteractionEnabled: false` and an

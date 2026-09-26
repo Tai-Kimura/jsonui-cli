@@ -374,18 +374,18 @@ RSpec.describe SjuiTools::SwiftUI::Views::BaseViewConverter do
       end
     end
 
+    # touchDisabledState is UIKit's hit-test mode (none / onlyMe /
+    # viewsWithoutTouchEnabled / viewsWithoutInList): SwiftUI has no peer and
+    # does not read it. It was `.allowsHitTesting(false)` for any value —
+    # "none" too, and `onlyMe`, which keeps the subviews tappable on UIKit —
+    # until jsonui-cli 1.9.0; the validator names it now.
     context 'with touchDisabledState' do
-      let(:component) do
-        {
-          'type' => 'View',
-          'touchDisabledState' => true
-        }
-      end
-
-      it 'adds allowsHitTesting false' do
-        converter = test_converter.new(component)
-        code = converter.convert
-        expect(code).to include('.allowsHitTesting(false)')
+      %w[none onlyMe viewsWithoutTouchEnabled viewsWithoutInList].each do |mode|
+        it "#{mode}: stops nothing" do
+          code = test_converter.new({ 'type' => 'View', 'touchDisabledState' => mode }).convert
+          expect(code).not_to include('allowsHitTesting')
+          expect(code).not_to include('touchDisabledState')
+        end
       end
     end
 

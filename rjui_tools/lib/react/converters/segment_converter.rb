@@ -28,7 +28,15 @@ module RjuiTools
 
           items_jsx = items.each_with_index.map do |item, index|
             button_class = build_button_class(index, seeded: seeded)
-            button_disabled = attributes['enabled'] == false ? ' disabled' : ''
+            # A bound `enabled` disables the tabs behind its binding, as `false`
+            # does: it only dimmed the segment, and a tap still switched it.
+            button_disabled = if attributes['enabled'] == false
+                                ' disabled'
+                              elsif has_binding?(attributes['enabled'])
+                                " disabled={!#{extract_binding_property(attributes['enabled'])}}"
+                              else
+                                ''
+                              end
             # Data closure props are always optional (type_converter makes all
             # function types `| undefined`), so the call must be optional-chained.
             # The tab change is the operation a declared onClick follows

@@ -283,8 +283,8 @@ module JsonUI
         { name: 'topMargin', kind: :number, bindable: true }.freeze,
         # Top padding (alias for paddingTop, binding supported)
         { name: 'topPadding', kind: :number, bindable: true }.freeze,
-        # Touch disable mode
-        { name: 'touchDisabledState', kind: :string }.freeze,
+        # The hit-test mode of SJUIView (UIKit). none — as usual; onlyMe — the view itself lets a touch through to what is behind it, its subviews still take theirs; viewsWithoutTouchEnabled — only subviews with isUserInteractionEnabled take a touch; viewsWithoutInList — only the subviews whose id is in touchEnabledViewIds do. SwiftUI, Compose and web do not read it: to stop a view and everything in it, use userInteractionEnabled: false.
+        { name: 'touchDisabledState', kind: :enum, values: ['none', 'onlyMe', 'viewsWithoutTouchEnabled', 'viewsWithoutInList'].freeze }.freeze,
         # IDs of enabled views
         { name: 'touchEnabledViewIds', kind: :array }.freeze,
         # Component type [required]

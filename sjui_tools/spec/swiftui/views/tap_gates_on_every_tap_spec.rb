@@ -181,10 +181,12 @@ RSpec.describe 'sjui canTap stops the tap handler and nothing else' do
     end
   end
 
-  it 'joins the view-wide gates on one view into one condition' do
-    code = emit.call('Label', 'userInteractionEnabled' => '@{u}', 'touchDisabledState' => true)
+  # touchDisabledState is UIKit's hit-test mode and no gate here (it was
+  # joined into this one as "false" until jsonui-cli 1.9.0).
+  it 'emits one gate for the flag, and none for touchDisabledState' do
+    code = emit.call('Label', 'userInteractionEnabled' => '@{u}', 'touchDisabledState' => 'onlyMe')
     expect(code.scan('.allowsHitTesting(').size).to eq(1)
-    expect(code).to include('.allowsHitTesting(false)')
+    expect(code).to include('.allowsHitTesting((data.u ?? false))')
     code = emit.call('View', 'userInteractionEnabled' => '@{u}')
     expect(code.scan('.allowsHitTesting(').size).to eq(1)
     expect(code).to include('.allowsHitTesting((data.u ?? false))')

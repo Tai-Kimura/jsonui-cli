@@ -507,7 +507,25 @@ module KjuiTools
           code = Helpers::VisibilityHelper.wrap_with_visibility(json_data, Helpers::TintHelper.wrap_with_tint(json_data, code, depth, @required_imports), depth, @required_imports, parent_type) if code.is_a?(String) && !code.empty?
         end
 
-        provide_interaction_stop(json_data, code, depth)
+        provide_interaction_stop(json_data, capture_interaction_stop(json_data, code, depth), depth)
+      end
+
+      # A leaf whose lambdas read the stop handed down (a control's operation
+      # call, a Button's onClick — ModifierBuilder.lambda_gate) is wrapped in
+      # `LocalInteractionStopped.current.let { jsonuiInteractionStopped -> … }`:
+      # the local is read in the composable's scope and the lambdas capture
+      # it. A leaf only — a node with children would capture the name around
+      # a child's own capture and shadow it. `let`'s lambda has no receiver,
+      # so a weight / align on the node still resolves in the scope around.
+      def capture_interaction_stop(json_data, code, depth)
+        return code unless Helpers::ModifierBuilder.reads_interaction_local
+        return code unless code.is_a?(String) && code.match?(/\b#{Helpers::ModifierBuilder::INTERACTION_CAPTURE}\b/)
+        return code unless JsonUIShared::TapAccessibility.children(json_data).empty?
+
+        @required_imports&.add(:local_interaction_stopped)
+        Helpers::TintHelper.pad("LocalInteractionStopped.current.let { #{Helpers::ModifierBuilder::INTERACTION_CAPTURE} ->", depth) + "\n" +
+          Helpers::TintHelper.shift(code.rstrip, 1) + "\n" +
+          Helpers::TintHelper.pad('}', depth)
       end
 
       # A node whose `userInteractionEnabled` is false or bound, holding a
@@ -723,6 +741,13 @@ module KjuiTools
       end
 
       # Generate a component without responsive handling (to avoid infinite recursion)
+      #
+      # A branch drawn here is a node's code for the branch's own attributes,
+      # so the stop is handed down from them (capture_interaction_stop,
+      # provide_interaction_stop) — a branch can set userInteractionEnabled
+      # of its own. Every other type goes through generate_component, which
+      # hands it down itself. user_interaction_enabled_reaches_drawn_views_spec
+      # counts these exits against the calls that hand the stop down.
       def generate_non_responsive_component(json_data, depth, parent_type, is_root: false)
         component_type = json_data['type'] || 'View'
 
@@ -738,10 +763,10 @@ module KjuiTools
           handle_container_result(result, depth, parent_type)
         else
           # Fall through to normal generation for other types (responsive already stripped)
-          generate_component(json_data, depth, parent_type, is_root: is_root)
+          return generate_component(json_data, depth, parent_type, is_root: is_root)
         end
 
-        code
+        provide_interaction_stop(json_data, capture_interaction_stop(json_data, code, depth), depth)
       end
 
       def has_component_children?(json_data)
