@@ -10,11 +10,11 @@
   "schemaVersion": 2,
   "generatedFrom": "cf6f12f4628550e324e5da5c525e0b01f3984fb5fa72891c355adedd669f84c6",
   "counts": {
-    "fixtures": 1122,
+    "fixtures": 1124,
     "assertable": 49,
-    "visual": 840,
+    "visual": 841,
     "interactive": 38,
-    "control": 117,
+    "control": 118,
     "declarationOnly": 77,
     "skipped": 157,
     "promoted": {
@@ -27442,6 +27442,74 @@
       "promotedFrom": null,
       "peerGroup": null,
       "control": "__control/Collection__flow-sections-cells-only",
+      "companions": [
+        "fixtures/Collection/__cells/conformance_cell.layout.json",
+        "fixtures/Collection/__cells/conformance_cell_bare.layout.json",
+        "fixtures/Collection/__cells/conformance_cell_bare_single.layout.json"
+      ]
+    },
+    {
+      "id": "__control/Collection__sections-cells-only",
+      "component": "__control",
+      "attribute": null,
+      "case": "Collection__sections-cells-only",
+      "class": "visual",
+      "host": "Collection",
+      "writtenKey": null,
+      "aliasOf": null,
+      "value": null,
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/__control/Collection__sections-cells-only.layout.json",
+      "test": "fixtures/__control/Collection__sections-cells-only.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "control": null,
+      "isControl": true,
+      "companions": [
+        "fixtures/Collection/__cells/conformance_cell.layout.json",
+        "fixtures/Collection/__cells/conformance_cell_bare.layout.json",
+        "fixtures/Collection/__cells/conformance_cell_bare_single.layout.json"
+      ]
+    },
+    {
+      "id": "Collection/sections__headerFooter",
+      "component": "Collection",
+      "attribute": "sections",
+      "case": "sections__headerFooter",
+      "class": "visual",
+      "host": "Collection",
+      "writtenKey": "sections",
+      "aliasOf": null,
+      "value": [
+        {
+          "cell": "conformance_cell",
+          "header": "conformance_cell",
+          "footer": "conformance_cell"
+        },
+        {
+          "cell": "conformance_cell",
+          "header": "conformance_cell"
+        }
+      ],
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/Collection/sections__headerFooter.layout.json",
+      "test": "fixtures/Collection/sections__headerFooter.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": null,
+      "control": "__control/Collection__sections-cells-only",
       "companions": [
         "fixtures/Collection/__cells/conformance_cell.layout.json",
         "fixtures/Collection/__cells/conformance_cell_bare.layout.json",

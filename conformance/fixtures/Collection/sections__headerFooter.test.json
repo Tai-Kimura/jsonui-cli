@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/Collection/sections__headerFooter.layout.json"
+  },
+  "metadata": {
+    "name": "conformance sections__headerFooter",
+    "description": "A vertical list Collection of two sections: the first declares a header, two cells and a footer, the second a header and one cell. Each header and footer is a row of its own, the 60-wide view at the row's start — not stretched across the row and not centred in it. A platform that draws no section header or footer renders this like its control.",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "Collection"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "sections__headerFooter",
+      "description": "A vertical list Collection of two sections: the first declares a header, two cells and a footer, the second a header and one cell. Each header and footer is a row of its own, the 60-wide view at the row's start — not stretched across the row and not centred in it. A platform that draws no section header or footer renders this like its control.",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "Collection_sections__headerFooter"
+        }
+      ]
+    }
+  ]
+}

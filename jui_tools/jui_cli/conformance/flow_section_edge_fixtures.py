@@ -1,4 +1,4 @@
-"""A flow Collection whose sections declare a header and a footer.
+"""Collections whose sections declare a header and a footer: a flow and a list.
 
 Ruling (4f, 2026-09-26, round 7): a section's declared header and footer are
 drawn on a flow too, as full-width rows of their own — the header above the
@@ -23,6 +23,15 @@ control: the same box and the same data with the two sections declaring
 cells only — the flow's section blocks without their edges. A platform that
 ignores a flow section's header and footer renders the fixture like its
 control, and the control-diff verdict names it.
+
+The list pair (round 8, 4f 2026-09-26): the same edges on a vertical list,
+where kjui codegen handed each header / footer view `Modifier.fillMaxWidth()`
+and a fixed-width view centred itself in its row, while every other path
+draws it at the row's start. The corpus held no section header on a list or
+a grid. Section 0 holds two cells and section 1 one, so the eight rows of
+the flow's data would not fit — the list lays one cell to a row: header, A0,
+A1, footer, header, B0, 168 of the 200. Its control is the list with cells
+only.
 """
 from __future__ import annotations
 
@@ -36,6 +45,8 @@ _PLATFORMS = ["ios", "android", "web"]
 
 CASE = "flowSections__headerFooter"
 CONTROL_STEM = "Collection__flow-sections-cells-only"
+LIST_CASE = "sections__headerFooter"
+LIST_CONTROL_STEM = "Collection__sections-cells-only"
 
 _CELL = "conformance_cell"
 
@@ -65,36 +76,55 @@ _ITEMS = {
 }
 
 
+#: The list's data: one cell to a row, so fewer cells than the flow's.
+_LIST_ITEMS = {
+    "sections": [
+        {
+            "cell": _CELL,
+            "header": {"title": "Header 0"},
+            "cells": [{"title": "A0"}, {"title": "A1"}],
+            "footer": {"title": "Footer 0"},
+        },
+        {
+            "cell": _CELL,
+            "header": {"title": "Header 1"},
+            "cells": [{"title": "B0"}],
+        },
+    ]
+}
+
+
 def _marker(source_label: str) -> dict:
     return json_marker(source=source_label, generator=GENERATOR_NAME)
 
 
-def _layout(source_label: str, sections: list[dict]) -> dict:
+def _layout(source_label: str, sections: list[dict], flow: bool = True) -> dict:
+    target = {
+        "type": "Collection",
+        "id": "target",
+        # The flow: two 60-wide cells to a line; its rows (28 each: header,
+        # two lines, footer, header, one line) come to 168 of the 200. The
+        # list: one cell to a row; header, A0, A1, footer, header, B0, 168.
+        "width": 150,
+        "height": 200,
+        "background": "#DDDDDD",
+        "sections": [dict(s) for s in sections],
+        "items": "@{items}",
+    }
+    if flow:
+        target["layout"] = "flow"
     return {
         "_generated": _marker(source_label),
         "type": "View",
         "id": "root",
         "width": "matchParent",
         "height": "matchParent",
-        "child": [
-            {
-                "type": "Collection",
-                "id": "target",
-                # Two 60-wide cells to a line; the rows (28 each: header, two
-                # lines, footer, header, one line) come to 168 of the 200.
-                "width": 150,
-                "height": 200,
-                "background": "#DDDDDD",
-                "sections": [dict(s) for s in sections],
-                "items": "@{items}",
-                "layout": "flow",
-            }
-        ],
+        "child": [target],
         "data": [
             {
                 "name": "items",
                 "class": "CollectionDataSource",
-                "defaultValue": _ITEMS,
+                "defaultValue": _ITEMS if flow else _LIST_ITEMS,
             }
         ],
     }
@@ -127,26 +157,48 @@ def _test(name: str, description: str, layout_rel: str) -> dict:
 def build_flow_section_edge_fixtures(
     source_label: str,
 ) -> tuple[list[tuple[str, dict]], list[dict]]:
-    """``(files, manifest entries)`` for the flow section header / footer pair."""
+    """``(files, manifest entries)`` for the flow and the list section header / footer pairs."""
+    files: list[tuple[str, dict]] = []
+    entries: list[dict] = []
+    for case, stem, flow, description, control_description in (
+        (CASE, CONTROL_STEM, True,
+         "A flow Collection of two sections: the first declares a header, three cells and a "
+         "footer, the second a header and two cells. Each header is a full-width row above its "
+         "section's wrap and the footer a row below it, the 60-wide view at the row's start — "
+         "not an item on the cells' line. A platform that draws no flow section header or "
+         "footer renders this like its control.",
+         "Control for the flow section header / footer fixture: the same flow Collection "
+         "and the same data, its two sections declaring cells only."),
+        (LIST_CASE, LIST_CONTROL_STEM, False,
+         "A vertical list Collection of two sections: the first declares a header, two cells and "
+         "a footer, the second a header and one cell. Each header and footer is a row of its own, "
+         "the 60-wide view at the row's start — not stretched across the row and not centred in "
+         "it. A platform that draws no section header or footer renders this like its control.",
+         "Control for the list section header / footer fixture: the same list Collection and "
+         "the same data, its two sections declaring cells only."),
+    ):
+        pair_files, pair_entries = _pair(source_label, case, stem, flow, description, control_description)
+        files.extend(pair_files)
+        entries.extend(pair_entries)
+    return files, entries
+
+
+def _pair(source_label: str, case: str, stem: str, flow: bool, description: str,
+          control_description: str) -> tuple[list[tuple[str, dict]], list[dict]]:
     files: list[tuple[str, dict]] = []
     entries: list[dict] = []
     companions = list(rules.BASE_COMPANIONS["Collection"])
 
-    control_id = f"__control/{CONTROL_STEM}"
-    control_layout = f"fixtures/__control/{CONTROL_STEM}.layout.json"
-    control_test = f"fixtures/__control/{CONTROL_STEM}.test.json"
-    files.append((control_layout, _layout(source_label, _CONTROL_SECTIONS)))
-    files.append((control_test, _test(
-        CONTROL_STEM,
-        "Control for the flow section header / footer fixture: the same flow Collection "
-        "and the same data, its two sections declaring cells only.",
-        control_layout,
-    )))
+    control_id = f"__control/{stem}"
+    control_layout = f"fixtures/__control/{stem}.layout.json"
+    control_test = f"fixtures/__control/{stem}.test.json"
+    files.append((control_layout, _layout(source_label, _CONTROL_SECTIONS, flow)))
+    files.append((control_test, _test(stem, control_description, control_layout)))
     entries.append({
         "id": control_id,
         "component": "__control",
         "attribute": None,
-        "case": CONTROL_STEM,
+        "case": stem,
         "class": rules.CLASS_VISUAL,
         "host": "Collection",
         "writtenKey": None,
@@ -164,22 +216,15 @@ def build_flow_section_edge_fixtures(
         "companions": list(companions),
     })
 
-    layout_rel = f"fixtures/Collection/{CASE}.layout.json"
-    test_rel = f"fixtures/Collection/{CASE}.test.json"
-    description = (
-        "A flow Collection of two sections: the first declares a header, three cells and a "
-        "footer, the second a header and two cells. Each header is a full-width row above its "
-        "section's wrap and the footer a row below it, the 60-wide view at the row's start — "
-        "not an item on the cells' line. A platform that draws no flow section header or "
-        "footer renders this like its control."
-    )
-    files.append((layout_rel, _layout(source_label, _SECTIONS)))
-    files.append((test_rel, _test(CASE, description, layout_rel)))
+    layout_rel = f"fixtures/Collection/{case}.layout.json"
+    test_rel = f"fixtures/Collection/{case}.test.json"
+    files.append((layout_rel, _layout(source_label, _SECTIONS, flow)))
+    files.append((test_rel, _test(case, description, layout_rel)))
     entries.append({
-        "id": f"Collection/{CASE}",
+        "id": f"Collection/{case}",
         "component": "Collection",
         "attribute": "sections",
-        "case": CASE,
+        "case": case,
         "class": rules.CLASS_VISUAL,
         "host": "Collection",
         "writtenKey": "sections",
