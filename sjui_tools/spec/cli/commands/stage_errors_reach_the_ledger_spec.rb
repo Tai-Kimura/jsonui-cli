@@ -176,7 +176,10 @@ RSpec.describe 'sjui build: a stage that printed an error is in the ledger' do
       layout(dir, 'home', 'style' => 'broken')
       File.write(File.join(dir, NAME, 'Styles', 'broken.json'), '{ "fontSize": ')
       log, exit_code, entries = build(dir)
-      expect(log).to match(%r{Error parsing style file '[^']*/Styles/broken\.json': unexpected end of input})
+      # The parser's own words follow the file: they are the json gem's, and
+      # differ by Ruby (2.6's json: "767: unexpected token at …"; 3.2's:
+      # "unexpected end of input") — the leg runs the tool on its own ruby.
+      expect(log).to match(%r{Error parsing style file '[^']*/Styles/broken\.json': \S})
       expect_incomplete(log, exit_code, entries, 'styles', 'broken.json', 'drawn without it')
       expect(Dir.glob(File.join(dir, '**', 'HomeBinding.swift'))).not_to be_empty # the layout was still built
     end
