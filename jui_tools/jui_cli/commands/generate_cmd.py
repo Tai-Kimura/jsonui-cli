@@ -410,6 +410,12 @@ def _cmd_generate_project(args: argparse.Namespace) -> int:
         print("ERROR: jui.config.json not found. Run 'jui init' first.")
         return 1
 
+    from ..core.spec_kind import missing_table_error
+    missing = missing_table_error("jui g project")
+    if missing:
+        print(missing)
+        return 1
+
     config = config_mgr.load()
     spec_dir = config_mgr.spec_directory
 

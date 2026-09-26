@@ -260,6 +260,12 @@ def cmd_build(args: argparse.Namespace) -> int:
         print("ERROR: jui.config.json not found. Run 'jui init' first.")
         return 1
 
+    from ..core.spec_kind import missing_table_error
+    missing = missing_table_error("jui build")
+    if missing:
+        print(missing)
+        return 1
+
     config = config_mgr.load()
     platforms = config.get("platforms", {})
     clean = ["--clean"] if args.clean else []
