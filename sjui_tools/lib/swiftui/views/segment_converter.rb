@@ -49,8 +49,10 @@ module SjuiTools
                                "$#{state_var}"
                              end
           
-          # Picker（SwiftUIのSegmented Control）
-          add_line "Picker(\"\", selection: #{selection_binding}) {"
+          # Picker（SwiftUIのSegmented Control）. The declared onClick is called
+          # from the user's choice of a segment, after the selection is
+          # written (operation_binding); no tap around it.
+          add_line "Picker(\"\", selection: #{operation_binding(selection_binding, operation_click_call)}) {"
           indent do
             items.each_with_index do |item, index|
               # Unescaped: the helper escapes what it writes back
