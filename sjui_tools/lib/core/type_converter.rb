@@ -4,6 +4,7 @@ require 'json'
 require_relative 'config_manager'
 require_relative 'project_finder'
 require_relative 'type_converter_core'
+require_relative 'enum_spelling'
 require_relative 'logger'
 
 module SjuiTools
@@ -264,7 +265,7 @@ module SjuiTools
             "\"#{value}\""
           else
             # UIKit uses SJUIView.Visibility enum
-            case value.downcase
+            case JsonUIShared::EnumSpelling.lowered(value, 'common', 'visibility')
             when 'visible'
               '.visible'
             when 'gone'

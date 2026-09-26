@@ -92,7 +92,7 @@ module SjuiTools
         end
 
         def indicator_style_to_swiftui(style)
-          case style.to_s.downcase
+          case JsonUIShared::EnumSpelling.lowered(style, 'Indicator', 'indicatorStyle')
           when 'linear'
             'LinearProgressViewStyle()'
           else

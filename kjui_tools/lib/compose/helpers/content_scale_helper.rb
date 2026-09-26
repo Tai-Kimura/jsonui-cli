@@ -59,18 +59,21 @@ module KjuiTools
         # Kotlin `ContentScale` expression. An unknown value resolves to the
         # declared default rather than to whatever each caller happened to do
         # — Image emitted nothing and NetworkImage `Fit`, for the same input.
-        def scale_expression(value, default: DEFAULT_SCALE)
+        #
+        # *section*: the node's type — NetworkImage declares fewer modes than
+        # Image.
+        def scale_expression(value, default: DEFAULT_SCALE, section: 'Image')
           BoundValue.enum(value, SCALE_MAPPING,
                           default: default,
                           bound_default: default || DEFAULT_SCALE,
-                          lowercase: true)
+                          declared: [section || 'Image', 'contentMode'])
         end
 
         # Kotlin `Alignment` expression for the positional modes, or nil. The
         # table is the canonical five; `center` was missing from one caller.
-        def alignment_expression(value)
+        def alignment_expression(value, section: 'Image')
           BoundValue.enum(value, ALIGNMENT_MAPPING,
-                          bound_default: 'Alignment.Center', lowercase: true)
+                          bound_default: 'Alignment.Center', declared: [section || 'Image', 'contentMode'])
         end
       end
     end

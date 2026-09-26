@@ -21,22 +21,14 @@ RSpec.describe KjuiTools::Compose::Components::ProgressComponent do
         expect(result).to include('LinearProgressIndicator(')
       end
 
-      it 'generates circular progress with style circular' do
-        json_data = { 'type' => 'Progress', 'style' => 'circular' }
-        result = described_class.generate(json_data, 0, required_imports)
-        expect(result).to include('CircularProgressIndicator(')
-      end
-
-      it 'generates circular progress with style large' do
-        json_data = { 'type' => 'Progress', 'style' => 'large' }
-        result = described_class.generate(json_data, 0, required_imports)
-        expect(result).to include('CircularProgressIndicator(')
-      end
-
-      it 'generates linear progress with style linear' do
-        json_data = { 'type' => 'Progress', 'style' => 'linear' }
-        result = described_class.generate(json_data, 0, required_imports)
-        expect(result).to include('LinearProgressIndicator(')
+      # `style` is the style file's name (common.style), not a shape:
+      # Progress declares none, so whatever the style is called it is a bar.
+      it 'draws a bar whatever style file the node names' do
+        %w[circular large linear bar_primary].each do |style|
+          result = described_class.generate({ 'type' => 'Progress', 'style' => style }, 0, required_imports)
+          expect(result).to include('LinearProgressIndicator('), style
+          expect(result).not_to include('CircularProgressIndicator('), style
+        end
       end
     end
 

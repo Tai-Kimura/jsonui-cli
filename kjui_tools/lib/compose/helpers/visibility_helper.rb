@@ -157,7 +157,7 @@ module KjuiTools
           # NOT conditionally drop the composable: the weighted space stays allocated
           # and VisibilityWrapper draws it invisible.
           if has_weight_in_scope && visibility_info[:visibility_binding]
-            gone_guard = indent("if (#{visibility_info[:visibility_binding]}.lowercase() != \"gone\") {", depth)
+            gone_guard = indent("if (#{visibility_info[:visibility_binding]} != \"gone\") {", depth)
             gone_guard += "\n" + wrapper_code
             gone_guard += "\n" + indent("}", depth)
             wrapper_code = gone_guard

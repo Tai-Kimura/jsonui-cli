@@ -56,10 +56,10 @@ module KjuiTools
           # is emitted and Compose's own default (Fit) draws, as for Image.
           if json_data['contentMode']
             required_imports&.add(:content_scale)
-            if (scale = Helpers::ContentScaleHelper.scale_expression(json_data['contentMode']))
+            if (scale = Helpers::ContentScaleHelper.scale_expression(json_data['contentMode'], section: json_data['type']))
               code += "\n" + indent("contentScale = #{scale},", depth + 1)
             end
-            if (alignment = Helpers::ContentScaleHelper.alignment_expression(json_data['contentMode']))
+            if (alignment = Helpers::ContentScaleHelper.alignment_expression(json_data['contentMode'], section: json_data['type']))
               required_imports&.add(:alignment)
               code += "\n" + indent("alignment = #{alignment},", depth + 1)
             end
@@ -122,9 +122,15 @@ module KjuiTools
           # Background (in case image doesn't load). The colour is resolved
           # here; it was the Ruby call itself, written as Kotlin text
           # (kjui-codegen-writes-ruby-expressions-into-kotlin).
+          # A tapBackground on a CircleImage with a click replaces it while
+          # pressed (ModifierBuilder.background_stage).
+          pressed = Helpers::ModifierBuilder.pressed_background(json_data, required_imports)
           if json_data['background']
             required_imports&.add(:background)
-            modifiers << ".background(#{Helpers::ResourceResolver.process_color(json_data['background'], required_imports)})"
+            base = Helpers::ResourceResolver.process_color(json_data['background'], required_imports)
+            modifiers << Helpers::ModifierBuilder.background_stage(base, pressed, required_imports)
+          elsif pressed
+            modifiers << Helpers::ModifierBuilder.background_stage('Color.Transparent', pressed, required_imports)
           end
           
           modifiers.concat(Helpers::ModifierBuilder.build_clickable(json_data, required_imports))

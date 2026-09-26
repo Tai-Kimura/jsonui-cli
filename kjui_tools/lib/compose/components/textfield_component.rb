@@ -5,6 +5,7 @@ require_relative '../helpers/binding_expression'
 require_relative '../helpers/resource_resolver'
 require_relative '../helpers/font_spec_helper'
 require_relative '../../core/config_manager'
+require_relative '../../core/enum_spelling'
 
 module KjuiTools
   module Compose
@@ -164,9 +165,9 @@ module KjuiTools
           placeholder_text = json_data['hint'] || json_data['placeholder'] || ''
           placeholder = placeholder_text.empty? ? '""' : Helpers::ResourceResolver.process_text(placeholder_text, required_imports)
           is_secure = json_data['secure'] == true ||
-                      json_data['input']&.downcase == 'password' ||
-                      json_data['contentType']&.downcase == 'password' ||
-                      json_data['contentType']&.downcase == 'newpassword'
+                      JsonUIShared::EnumSpelling.lowered(json_data['input'], 'TextField', 'input') == 'password' ||
+                      JsonUIShared::EnumSpelling.lowered(json_data['contentType'], 'TextField', 'contentType') == 'password' ||
+                      JsonUIShared::EnumSpelling.lowered(json_data['contentType'], 'TextField', 'contentType') == 'newpassword'
 
           # Detect hidden TextField (fontColor: "transparent" means invisible field, e.g. 2FA auto-fill)
           is_hidden = json_data['fontColor']&.downcase == 'transparent'
@@ -536,10 +537,10 @@ module KjuiTools
             code += "\n" + indent("backgroundColor = #{bg_color},", depth + 1)
           end
 
-          if json_data['highlightBackground']
-            highlight_bg_color = Helpers::ResourceResolver.process_color(json_data['highlightBackground'], required_imports)
-            code += "\n" + indent("highlightBackgroundColor = #{highlight_bg_color},", depth + 1)
-          end
+          # highlightBackground is not the focused background (jsonui-cli
+          # 1.9.0): it is the colour while `highlighted` holds, which only a
+          # View declares. Read as the focus colour it had a meaning no other
+          # platform gave it (no layout on the consumer faces wrote it).
 
           # Border color for outlined text fields
           if json_data['borderColor']
@@ -549,7 +550,7 @@ module KjuiTools
 
           # Border style handling
           if json_data['borderStyle']
-            case json_data['borderStyle'].downcase
+            case JsonUIShared::EnumSpelling.lowered(json_data['borderStyle'], 'TextField', 'borderStyle')
             when 'none'
               code += "\n" + indent("isOutlined = false,", depth + 1)
             when 'line', 'bezel', 'roundedrect'
@@ -604,7 +605,7 @@ module KjuiTools
 
           if json_data['textAlign']
             required_imports&.add(:text_align)
-            case json_data['textAlign'].downcase
+            case JsonUIShared::EnumSpelling.lowered(json_data['textAlign'], 'TextField', 'textAlign')
             when 'center'
               style_parts << "textAlign = TextAlign.Center"
             when 'right'
@@ -697,14 +698,14 @@ module KjuiTools
             # KeyboardType.Text (plan 49 lane C: TextField.contentType).
             keyboard_type = Helpers::BoundValue.enum(
               json_data['contentType'], CONTENT_TYPE_KEYBOARD,
-              bound_default: 'KeyboardType.Text', lowercase: true
+              bound_default: 'KeyboardType.Text', declared: %w[TextField contentType]
             )
             keyboard_options << "keyboardType = #{keyboard_type}" if keyboard_type
           elsif json_data['input']
             required_imports&.add(:keyboard_type)
             keyboard_type = Helpers::BoundValue.enum(
               json_data['input'], input_keyboard_table,
-              bound_default: 'KeyboardType.Text', lowercase: true
+              bound_default: 'KeyboardType.Text', declared: %w[TextField input]
             )
             keyboard_options << "keyboardType = #{keyboard_type}" if keyboard_type
           elsif json_data['inputType']
@@ -715,7 +716,7 @@ module KjuiTools
             # covering the XML mapper's own vocabulary plus the raw
             # `android:inputType` names it passes through untouched.
             required_imports&.add(:keyboard_type)
-            keyboard_type = case json_data['inputType'].to_s.downcase
+            keyboard_type = case JsonUIShared::EnumSpelling.lowered(json_data['inputType'], 'TextField', 'inputType')
             when 'email', 'textemailaddress'
               'KeyboardType.Email'
             when 'password', 'textpassword'
@@ -758,7 +759,7 @@ module KjuiTools
           # Auto-capitalization type
           if json_data['autocapitalizationType']
             required_imports&.add(:keyboard_capitalization)
-            capitalization = case json_data['autocapitalizationType'].downcase
+            capitalization = case JsonUIShared::EnumSpelling.lowered(json_data['autocapitalizationType'], 'TextField', 'autocapitalizationType')
             when 'none'
               'KeyboardCapitalization.None'
             when 'words'
@@ -779,7 +780,7 @@ module KjuiTools
             # Folding it in with `yes` made those two spellings produce
             # identical output — measured as presence-only (plan 49 lane C:
             # TextField.autocorrectionType C2).
-            auto_correct = case json_data['autocorrectionType'].downcase
+            auto_correct = case JsonUIShared::EnumSpelling.lowered(json_data['autocorrectionType'], 'TextField', 'autocorrectionType')
             when 'no', 'false', 'off'
               'false'
             when 'yes', 'true', 'on'

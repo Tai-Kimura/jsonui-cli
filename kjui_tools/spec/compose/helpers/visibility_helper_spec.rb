@@ -107,7 +107,7 @@ RSpec.describe KjuiTools::Compose::Helpers::VisibilityHelper do
         # The wrapper owns the single weight...
         expect(result).to include('modifier = Modifier.weight(1f)')
         # ...and the gone-guard wraps the weighted child.
-        expect(result).to include('if (data.contentVisibility.lowercase() != "gone")')
+        expect(result).to include('if (data.contentVisibility != "gone")')
 
         # Exactly ONE `.weight(` survives — the wrapper's hoisted one. Both
         # branch weights are stripped (else they'd sit in the content lambda

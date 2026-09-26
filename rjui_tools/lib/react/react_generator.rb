@@ -46,6 +46,7 @@ require_relative 'tailwind_mapper'
 require_relative 'responsive_helper'
 require_relative 'helpers/string_manager_helper'
 require_relative 'helpers/lucide_icon_helper'
+require_relative '../core/enum_spelling'
 
 module RjuiTools
   module React
@@ -913,7 +914,7 @@ module RjuiTools
               layout = json['orientation'] || json['layout'] || json['scrollDirection'] || 'vertical'
               found << {
                 camel: snake_to_camel_id(id),
-                horizontal: layout.to_s.downcase == 'horizontal' || !!json['horizontalScroll'],
+                horizontal: JsonUIShared::EnumSpelling.lowered(layout, 'Collection', 'layout') == 'horizontal' || !!json['horizontalScroll'],
                 items: json['items'],
                 scroll_to: scroll_to,
                 scroll_anchor: json['scrollAnchor'],

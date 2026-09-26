@@ -15,6 +15,8 @@ module JsonUI
       ATTRS = [
         # Two-way binding for the component's primary value (mini fixture of common.bind.primaryValue).
         { name: 'bind', kind: :binding }.freeze,
+        # One value or a list of them (element vocabulary). [accepts: string | array]
+        { name: 'gravity', kind: :raw }.freeze,
         # Hide view
         { name: 'hidden', kind: :boolean, bindable: true }.freeze,
         # Unique identifier for the component

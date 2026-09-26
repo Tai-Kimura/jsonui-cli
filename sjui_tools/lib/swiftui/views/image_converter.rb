@@ -52,11 +52,11 @@ module SjuiTools
           # renderingMode — template tints via .foregroundColor/tint,
           # original suppresses tinting (same mapping the Compose side ships).
           if @component['renderingMode']
-            mode = @component['renderingMode'].to_s.downcase == 'template' ? '.template' : '.original'
+            mode = JsonUIShared::EnumSpelling.lowered(@component['renderingMode'], 'Image', 'renderingMode') == 'template' ? '.template' : '.original'
             @modifier_bag.append(:component_specific, ".renderingMode(#{mode})")
           end
 
-          mode_raw = @component['contentMode'].to_s.downcase
+          mode_raw = JsonUIShared::EnumSpelling.lowered(@component['contentMode'], 'Image', 'contentMode').to_s
           positional_alignment = {
             'center' => '.center', 'top' => '.top', 'bottom' => '.bottom',
             'left' => '.leading', 'right' => '.trailing'
@@ -181,10 +181,10 @@ module SjuiTools
         private
 
         def map_content_mode(mode)
-          case mode
-          when 'AspectFill', 'aspectFill'
+          case JsonUIShared::EnumSpelling.lowered(mode, 'Image', 'contentMode')
+          when 'aspectfill'
             '.fill'
-          when 'AspectFit', 'aspectFit'
+          when 'aspectfit'
             '.fit'
           when 'center'
             '.fit'  # SwiftUIには直接的なcenterモードがないため

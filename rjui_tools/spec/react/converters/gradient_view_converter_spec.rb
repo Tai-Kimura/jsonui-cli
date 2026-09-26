@@ -32,7 +32,7 @@ RSpec.describe RjuiTools::React::Converters::GradientViewConverter do
 
     context 'with horizontal direction' do
       it 'uses to right direction' do
-        converter = create_converter({ 'class' => 'GradientView', 'gradient' => ['#FF0000', '#0000FF'], 'gradientDirection' => 'horizontal' })
+        converter = create_converter({ 'class' => 'GradientView', 'gradient' => ['#FF0000', '#0000FF'], 'gradientDirection' => 'Horizontal' })
         result = converter.convert
         expect(result).to include('to right')
       end
@@ -40,7 +40,7 @@ RSpec.describe RjuiTools::React::Converters::GradientViewConverter do
 
     context 'with oblique direction' do
       it 'uses 45deg angle' do
-        converter = create_converter({ 'class' => 'GradientView', 'gradient' => ['#FF0000', '#0000FF'], 'gradientDirection' => 'oblique' })
+        converter = create_converter({ 'class' => 'GradientView', 'gradient' => ['#FF0000', '#0000FF'], 'gradientDirection' => 'Oblique' })
         result = converter.convert
         expect(result).to include('45deg')
       end

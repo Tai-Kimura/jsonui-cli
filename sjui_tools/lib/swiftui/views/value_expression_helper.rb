@@ -154,7 +154,10 @@ module SjuiTools
         # "did this name a member of the vocabulary at all?").
         # Returns nil when the map is empty — a caller with nothing to map
         # has nothing to emit.
-        def bound_enum(value, map, default:, type:)
+        # *exact*: *map* is keyed by the declared spellings themselves
+        # (declared_vocabulary) and the bound value is looked up as it is — a
+        # value is its declared spelling, case and all (4f's ruling, 1.9.0).
+        def bound_enum(value, map, default:, type:, exact: false)
           return nil unless bound_value?(value)
           return nil if map.nil? || map.empty?
 
@@ -163,9 +166,9 @@ module SjuiTools
 
           pairs = map.each_with_index.map do |(key, swift), index|
             literal = index.zero? ? "#{type}#{swift}" : swift
-            "#{JsonUIShared::StringLiterals.swift(key.to_s.downcase)}: #{literal}"
+            "#{JsonUIShared::StringLiterals.swift(exact ? key.to_s : key.to_s.downcase)}: #{literal}"
           end
-          lookup = "[#{pairs.join(', ')}][(#{expr}).lowercased()]"
+          lookup = exact ? "[#{pairs.join(', ')}][(#{expr})]" : "[#{pairs.join(', ')}][(#{expr}).lowercased()]"
           default.nil? ? "(#{lookup})" : "(#{lookup} ?? #{default})"
         end
       end

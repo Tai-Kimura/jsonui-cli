@@ -154,7 +154,12 @@ module SjuiTools
           if children.empty?
             # 子要素がない場合
             # backgroundが設定されている場合はRectangleを使用（dividerなど）
-            if @component['background']
+            if @component['background'] && !gradient_wins_over_background? && pressed_background_color
+              # The fill takes the pressed colour while the view is pressed
+              # (base_view_converter#pressed_background_color).
+              add_line "PressedFill(pressed: #{pressed_background_color}, base: #{get_swiftui_color(@component['background'])})"
+              @modifier_bag.register(:background, "")
+            elsif @component['background']
               add_line "Rectangle()"
               # A declared gradient fills the shape itself. Filling with the
               # background colour instead left the gradient behind an opaque
@@ -188,7 +193,7 @@ module SjuiTools
             # it used to share with `equalSpacing` (the GAP half). Both values
             # emitting one between-children Spacer made them the same picture.
             # F's dynamic half is SwiftJsonUI 4801af7, `implicitWeight`.
-            fills_equally = @component['distribution'].to_s.downcase == 'fillequally'
+            fills_equally = JsonUIShared::EnumSpelling.lowered(@component['distribution'], 'View', 'distribution') == 'fillequally'
             has_weights = fills_equally || children.any? { |child|
               weight_expression(child['weight'] || child['widthWeight'] || child['heightWeight']).first
             }
@@ -336,7 +341,7 @@ module SjuiTools
                     # Capture full child code including VisibilityWrapper if needed
                     before_count = @generated_code.size
 
-                    has_visibility = child['visibility']
+                    has_visibility = ResponsiveHelper.visibility_declared?(child)
                     # If visibility wrapper is needed, child content goes 1 level deeper
                     child_indent = has_visibility ? @indent_level + 3 : @indent_level + 2
 
@@ -347,7 +352,7 @@ module SjuiTools
                     if has_visibility
                       # Wrap with VisibilityWrapper (canonical expression
                       # parsing shared with view_binding_handler#parse_binding)
-                      visibility_param = SwiftUI::Binding::BindingExpression.swift_visibility_param(child['visibility'])
+                      visibility_param = ResponsiveHelper.visibility_param(child)
                       wrapper_indent = "    " * (@indent_level + 2)
                       @generated_code << "#{wrapper_indent}VisibilityWrapper(#{visibility_param}) {"
                       child_code.split("\n").each { |line| @generated_code << line }
@@ -546,7 +551,7 @@ module SjuiTools
         # bottom of the size topic's explicit > bounds > fill order, so only
         # an undeclared axis grows.
         def apply_distribution_fill(child, distribution, orientation)
-          return unless distribution.to_s.downcase == 'fill'
+          return unless JsonUIShared::EnumSpelling.lowered(distribution, 'View', 'distribution') == 'fill'
           return unless orientation == 'horizontal' || orientation == 'vertical'
 
           axis = orientation == 'horizontal' ? 'width' : 'height'

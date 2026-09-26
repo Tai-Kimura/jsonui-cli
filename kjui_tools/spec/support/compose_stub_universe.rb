@@ -167,6 +167,7 @@ module ComposeStubUniverse
                                                         pass: PointerEventPass = PointerEventPass.Main): PointerInputChange = PointerInputChange()
       interface PointerInputScope { suspend fun <R> awaitPointerEventScope(block: suspend AwaitPointerEventScope.() -> R): R }
       suspend fun PointerInputScope.awaitEachGesture(block: suspend AwaitPointerEventScope.() -> Unit) {}
+      suspend fun AwaitPointerEventScope.waitForUpOrCancellation(pass: PointerEventPass = PointerEventPass.Main): PointerInputChange? = null
       class Offset(val x: Float, val y: Float) {
           operator fun plus(other: Offset): Offset = this
           companion object { val Zero = Offset(0f, 0f) }

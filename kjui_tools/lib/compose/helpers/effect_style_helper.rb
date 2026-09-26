@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require_relative 'bound_value'
+require_relative '../../core/enum_spelling'
 
 module KjuiTools
   module Compose
@@ -63,23 +64,25 @@ module KjuiTools
           'dark' => 12
         }.freeze
 
-        def key_for(value)
-          k = value.to_s.strip.downcase
+        # *type*: the node's — a Blur declares Light / Dark / ExtraLight only,
+        # any other node common's materials.
+        def key_for(value, type = 'Blur')
+          k = JsonUIShared::EnumSpelling.lowered(value.to_s.strip, type || 'View', 'effectStyle').to_s
           SCRIM.key?(k) ? k : DEFAULT
         end
 
         # Scrim expression for a declared material, or nil when absent.
-        def scrim(value)
+        def scrim(value, type = 'Blur')
           return nil if value.nil? || value.to_s.strip.empty?
 
-          SCRIM[key_for(value)]
+          SCRIM[key_for(value, type)]
         end
 
         # Blur radius in dp for a declared material, or nil when absent.
-        def blur_dp(value)
+        def blur_dp(value, type = 'Blur')
           return nil if value.nil? || value.to_s.strip.empty?
 
-          BLUR_DP[key_for(value)]
+          BLUR_DP[key_for(value, type)]
         end
       end
     end
