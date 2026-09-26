@@ -285,7 +285,8 @@ RSpec.describe 'kjui codegen: onAppear / onDisappear at every exit' do
     methods = source.split(/^      def /).drop(1).to_h { |m| [m[/\A[a-z_?.]+/], m] }
     wrapping = methods.select { |_, body| body.include?('wrap_with_visibility(') }
     expect(wrapping.keys.sort).to eq(%w[generate_component generate_non_responsive_component handle_container_result])
-    expect(source.scan('wrap_with_visibility(').size).to eq(5)
+    # every wrap in the file is in one of them (none in a method this missed)
+    expect(wrapping.values.sum { |body| body.scan('wrap_with_visibility(').size }).to eq(source.scan('wrap_with_visibility(').size)
     wrapping.each do |name, body|
       expect(body).to match(/lifecycle_at_leaf\(|build_lifecycle_effects\(/), name
     end

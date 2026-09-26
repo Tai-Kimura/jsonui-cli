@@ -470,16 +470,20 @@ module KjuiTools
 
         # Wrap with VisibilityWrapper for all components
         # Container types already handle this in handle_container_result, so skip them.
-        # `Embed` and `TabView` are NOT containers there (their generate
-        # returns a plain String, not a Hash), so handle_container_result
-        # falls through without wrapping — they are not in the skip list, so
-        # this fallback path applies and `visibility: "@{...}"` gates them.
-        # TabView was in it, and a TabView's visibility drew nothing.
-        unless %w[View ScrollView GradientView CircleView Blur].include?(component_type)
-          # TabView's tintColor is its own row (the selected tab's colour),
-          # not common's handed down — it was never wrapped in the tint
-          tinted = component_type == 'TabView' ? code : Helpers::TintHelper.wrap_with_tint(json_data, code, depth, @required_imports)
-          code = Helpers::VisibilityHelper.wrap_with_visibility(json_data, tinted, depth, @required_imports, parent_type) if code.is_a?(String) && !code.empty?
+        # `Embed` is NOT actually a container (EmbedComponent.generate returns a
+        # plain String, not a Hash) so handle_container_result falls through
+        # without wrapping — exclude it from the skip list so this fallback
+        # path applies and `visibility: "@{...}"` on an Embed node actually
+        # gates rendering.
+        unless %w[View ScrollView GradientView CircleView Blur TabView].include?(component_type)
+          code = Helpers::VisibilityHelper.wrap_with_visibility(json_data, Helpers::TintHelper.wrap_with_tint(json_data, code, depth, @required_imports), depth, @required_imports, parent_type) if code.is_a?(String) && !code.empty?
+        end
+        # TabView is on that list as a container, but its generate returns a
+        # plain String, as Embed's does, so nothing wrapped it and a TabView's
+        # visibility drew nothing. Its visibility only: its tintColor is its
+        # own row (the selected tab's colour), not one handed down.
+        if component_type == 'TabView' && code.is_a?(String) && !code.empty?
+          code = Helpers::VisibilityHelper.wrap_with_visibility(json_data, code, depth, @required_imports, parent_type)
         end
 
         provide_interaction_stop(json_data, capture_interaction_stop(json_data, stop_held_control(json_data, code), depth), depth)
@@ -880,7 +884,7 @@ module KjuiTools
         # (a responsive Button's or Image's `visibility` drew nothing). The
         # View's are in its container result.
         unless code.is_a?(ContainerContent)
-          code = Helpers::VisibilityHelper.wrap_with_visibility(json_data, Helpers::TintHelper.wrap_with_tint(json_data, lifecycle_at_leaf(json_data, code, depth), depth, @required_imports), depth, @required_imports, parent_type)
+          code = Helpers::VisibilityHelper.wrap_with_visibility(json_data, lifecycle_at_leaf(json_data, code, depth), depth, @required_imports, parent_type)
         end
 
         provide_interaction_stop(json_data, capture_interaction_stop(json_data, stop_held_control(json_data, code), depth), depth)
