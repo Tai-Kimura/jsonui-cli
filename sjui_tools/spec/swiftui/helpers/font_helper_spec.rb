@@ -52,7 +52,7 @@ RSpec.describe SjuiTools::SwiftUI::Helpers::FontHelper do
       expect {
         result = described_class.font_weight_to_swiftui('extra-extra-bold')
         expect(result).to eq('.regular')
-      }.to output(/unknown font weight 'extra-extra-bold'/).to_stderr
+      }.to output(/^WARNING: \[FontHelper\] unknown font weight 'extra-extra-bold', falling back to 'regular'$/).to_stdout
     end
   end
 
@@ -175,7 +175,7 @@ RSpec.describe SjuiTools::SwiftUI::Helpers::FontHelper do
       it 'warns and emits .regular as the weight' do
         expect {
           described_class.apply_font_modifiers(component, mock_converter)
-        }.to output(/unknown font weight 'extra-extra-bold'/).to_stderr
+        }.to output(/^WARNING: \[FontHelper\] unknown font weight 'extra-extra-bold'/).to_stdout
 
         expect(mock_converter.modifiers).to eq([
           '.font(SwiftJsonUIConfiguration.shared.resolveFont(' \

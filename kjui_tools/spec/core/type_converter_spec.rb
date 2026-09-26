@@ -613,4 +613,24 @@ RSpec.describe KjuiTools::Core::TypeConverter do
       expect(described_class.get_default_value('UnknownType')).to eq('null')
     end
   end
+
+  describe '.load_project_type_map' do
+    around do |example|
+      saved = described_class.project_type_map
+      described_class.project_type_map = nil
+      Dir.mktmpdir do |dir|
+        Dir.chdir(dir) { example.run }
+      end
+    ensure
+      described_class.project_type_map = saved
+    end
+
+    it 'names a .jsonui-type-map.json it cannot parse through the warning logger, and reads no types' do
+      File.write('.jsonui-type-map.json', '{ not json')
+      expect { described_class.load_project_type_map }.to output(
+        /\A⚠️  \[TypeConverter\] Failed to parse \.jsonui-type-map\.json: /
+      ).to_stdout
+      expect(described_class.project_type_map).to eq('types' => {})
+    end
+  end
 end

@@ -65,17 +65,33 @@ SCREEN_SPEC_SCHEMA = {
                 },
                 "author": {
                     "type": "string",
-                    "description": "Author name"
+                    "description": "Author name. Documentation only: no generator or check reads it."
                 },
                 "createdAt": {
                     "type": "string",
                     "format": "date",
-                    "description": "Creation date (YYYY-MM-DD)"
+                    "description": (
+                        "Creation date (YYYY-MM-DD). Documentation only: no "
+                        "generator reads it; the validator checks its format."
+                    )
                 },
                 "updatedAt": {
                     "type": "string",
                     "format": "date",
-                    "description": "Last update date (YYYY-MM-DD)"
+                    "description": (
+                        "Last update date (YYYY-MM-DD). Documentation only: no "
+                        "generator reads it; the validator checks its format."
+                    )
+                },
+                "group": {
+                    "oneOf": [
+                        {"type": "string"},
+                        {"type": "array", "items": {"type": "string"}}
+                    ],
+                    "description": (
+                        "The group(s) this screen is drawn in on the flow "
+                        "diagram (`jsonui-doc generate mermaid`)."
+                    )
                 },
                 "layoutFile": {
                     "type": "string",
@@ -133,6 +149,14 @@ SCREEN_SPEC_SCHEMA = {
                         {"type": "null"}
                     ]
                 },
+                "collections": {
+                    "type": "array",
+                    "items": {"$ref": "#/$defs/collectionStructure"},
+                    "description": (
+                        "More Collections on one screen, each read as "
+                        "`collection` is (after it, when both are given)."
+                    )
+                },
                 "tabView": {
                     "oneOf": [
                         {"$ref": "#/$defs/tabViewStructure"},
@@ -150,7 +174,7 @@ SCREEN_SPEC_SCHEMA = {
                 },
                 "notes": {
                     "type": "string",
-                    "description": "Notes about the overall structure"
+                    "description": "Notes about the overall structure. Documentation only: no generator or check reads it."
                 }
             }
         },
@@ -217,7 +241,7 @@ SCREEN_SPEC_SCHEMA = {
                 },
                 "description": {
                     "type": "string",
-                    "description": "Brief description of how this component is used"
+                    "description": "Brief description of how this component is used. Documentation only: no generator or check reads it."
                 }
             }
         },
@@ -277,9 +301,21 @@ SCREEN_SPEC_SCHEMA = {
                         "component in the Layout JSON."
                     )
                 },
+                "platform": {
+                    "oneOf": [
+                        {"type": "string"},
+                        {"type": "object"}
+                    ],
+                    "description": (
+                        "The Layout JSON `platform` directive for this "
+                        "component's node — 'ios' / 'android' / 'web', comma-"
+                        "separated, or a per-platform attribute map. Written "
+                        "onto the generated node."
+                    )
+                },
                 "notes": {
                     "type": "string",
-                    "description": "Additional notes"
+                    "description": "Additional notes. Documentation only: no generator or check reads it."
                 }
             }
         },
@@ -394,7 +430,12 @@ SCREEN_SPEC_SCHEMA = {
         },
         "collectionStructure": {
             "type": "object",
-            "required": ["id", "cell"],
+            "required": ["id"],
+            "description": (
+                "One Collection. Its cells are named by `cell`, by "
+                "`cellClasses`, or by `sections[].cell` — one of them is "
+                "required (the spec validator checks it)."
+            ),
             "properties": {
                 "id": {
                     "type": "string",
@@ -414,31 +455,88 @@ SCREEN_SPEC_SCHEMA = {
                     )
                 },
                 "header": {
-                    "oneOf": [
+                    "anyOf": [
                         {"$ref": "#/$defs/layoutNode"},
                         {"$ref": "#/$defs/cellNode"},
                         {"type": "null"}
                     ]
                 },
                 "cell": {
-                    "oneOf": [
+                    "anyOf": [
                         {"$ref": "#/$defs/layoutNode"},
                         {"$ref": "#/$defs/cellNode"}
                     ]
                 },
                 "footer": {
-                    "oneOf": [
+                    "anyOf": [
                         {"$ref": "#/$defs/layoutNode"},
                         {"$ref": "#/$defs/cellNode"},
                         {"type": "null"}
                     ]
+                },
+                "cellClasses": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": (
+                        "Layout JSON refs (layouts_directory-relative, no "
+                        ".json) of the cells this Collection may use — the "
+                        "multi-cell form. Read by the spec validator and "
+                        "jsonui-doc; `jui g project` does not write it onto "
+                        "the generated Collection."
+                    )
+                },
+                "sections": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "cell": {"type": "string", "description": "Cell layout ref"},
+                            "header": {"type": ["string", "null"], "description": "Header layout ref"},
+                            "footer": {"type": ["string", "null"], "description": "Footer layout ref"},
+                            "columns": {"type": "number", "description": "Section columns"}
+                        }
+                    },
+                    "description": (
+                        "Section-based Collection: each section names its "
+                        "cell / header / footer layout. Read by the spec "
+                        "validator and jsonui-doc; `jui g project` does not "
+                        "write it onto the generated Collection."
+                    )
                 }
             }
         },
         "cellNode": {
             "type": "object",
             "required": ["root"],
+            "description": (
+                "A Collection's cell, header or footer. With "
+                "generateCellLayout: true, `jui g project` writes its Layout "
+                "JSON (layoutFile, else <collection id>_<cell|header|footer>) "
+                "and the Collection's section names that file; without it the "
+                "layout is authored elsewhere and the fields describe it."
+            ),
             "properties": {
+                "children": {
+                    "type": "array",
+                    "items": {
+                        "oneOf": [
+                            {"$ref": "#/$defs/layoutChild"},
+                            {"type": "string"}
+                        ]
+                    },
+                    "description": (
+                        "The layoutNode form's tree under a string root: "
+                        "component ids from structure.components (a View of "
+                        "that id when there is none), or layoutChild objects."
+                    )
+                },
+                "overlay": {
+                    "type": "boolean",
+                    "description": (
+                        "With children: stacked (ZStack-style) instead of "
+                        "vertical."
+                    )
+                },
                 "viewName": {
                     "type": "string",
                     "description": "Cell SwiftUI/Compose view class name"
@@ -538,6 +636,24 @@ SCREEN_SPEC_SCHEMA = {
                 "layoutFile": {
                     "type": "string",
                     "description": "Layout file name"
+                },
+                "view": {
+                    "type": "string",
+                    "description": "Older name of layoutFile, read when layoutFile is absent.",
+                    "deprecated": True
+                },
+                "icon": {
+                    "type": "string",
+                    "description": "Tab icon name (SF Symbol for iOS, drawable for Android) — the Layout's TabView tabs[].icon"
+                },
+                "selectedIcon": {
+                    "type": "string",
+                    "description": "Icon when the tab is selected (defaults to icon)"
+                },
+                "iconType": {
+                    "type": "string",
+                    "enum": ["system", "resource", "lucide"],
+                    "description": "Icon source type — the Layout's tabs[].iconType"
                 }
             }
         },
@@ -546,7 +662,7 @@ SCREEN_SPEC_SCHEMA = {
             "properties": {
                 "diagram": {
                     "type": "string",
-                    "description": "Mermaid diagram code"
+                    "description": "Mermaid diagram code. Documentation only: no generator or check reads it."
                 },
                 "viewModel": {"$ref": "#/$defs/viewModel"},
                 "repositories": {
@@ -563,7 +679,7 @@ SCREEN_SPEC_SCHEMA = {
                 },
                 "notes": {
                     "type": "string",
-                    "description": "Notes about data flow"
+                    "description": "Notes about data flow. Documentation only: no generator or check reads it."
                 }
             }
         },
@@ -675,6 +791,10 @@ SCREEN_SPEC_SCHEMA = {
                     "type": "string",
                     "description": "Repository class name"
                 },
+                "description": {
+                    "type": "string",
+                    "description": "Repository description (jui g project records it in .jui_cache.json; no generated source file carries it)"
+                },
                 "methods": {
                     "type": "array",
                     "items": {
@@ -769,13 +889,41 @@ SCREEN_SPEC_SCHEMA = {
                         "how a rename in the API document stops a stale "
                         "'we already handled that' from outliving the thing it "
                         "was about. Only meaningful on hand-written params — a "
-                        "'@canonical' method follows the canon by construction."
+                        "'@canonical' method follows the canon by construction. "
+                        "Read on dataFlow.repositories / useCases methods; on "
+                        "dataFlow.viewModel.methods no tool reads it."
                     ),
                     "properties": {
                         "renamed": {
                             "type": "object",
                             "additionalProperties": {"type": "string"},
                             "description": "canonical parameter name -> the name this spec uses"
+                        },
+                        "omitted": {
+                            "type": "array",
+                            "items": {"type": "string"},
+                            "description": (
+                                "Canonical arguments this method deliberately "
+                                "does not take (constants the caller never chooses)"
+                            )
+                        },
+                        "wrapped": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "array", "items": {"type": "string"}
+                            },
+                            "description": (
+                                "spec argument -> the canonical arguments it "
+                                "stands in for (a request object)"
+                            )
+                        },
+                        "added": {
+                            "type": "array",
+                            "items": {"type": "string"},
+                            "description": (
+                                "Written arguments the operation does not "
+                                "declare (multipart bodies)"
+                            )
                         },
                         "reason": {"type": "string", "minLength": 1}
                     },
@@ -831,15 +979,15 @@ SCREEN_SPEC_SCHEMA = {
                 },
                 "request": {
                     "type": "object",
-                    "description": "Request body structure"
+                    "description": "Request body structure. Documentation only: no generator or check reads it."
                 },
                 "response": {
                     "type": "object",
-                    "description": "Response body structure"
+                    "description": "Response body structure. Documentation only: no generator or check reads it."
                 },
                 "notes": {
                     "type": "string",
-                    "description": "Notes about this endpoint"
+                    "description": "Notes about this endpoint. Documentation only: no generator or check reads it."
                 }
             }
         },
@@ -864,7 +1012,7 @@ SCREEN_SPEC_SCHEMA = {
                 },
                 "notes": {
                     "type": "string",
-                    "description": "Notes about state management"
+                    "description": "Notes about state management. Documentation only: no generator or check reads it."
                 }
             }
         },
@@ -883,7 +1031,7 @@ SCREEN_SPEC_SCHEMA = {
                 },
                 "notes": {
                     "type": "string",
-                    "description": "Notes about this state"
+                    "description": "Notes about this state. Documentation only: no generator or check reads it."
                 }
             }
         },
@@ -897,7 +1045,7 @@ SCREEN_SPEC_SCHEMA = {
                 },
                 "description": {
                     "type": "string",
-                    "description": "Description of this state"
+                    "description": "Description of this state. Documentation only: no generator or check reads it."
                 },
                 "visibleElements": {
                     "type": "array",
@@ -923,9 +1071,22 @@ SCREEN_SPEC_SCHEMA = {
                     "type": "string",
                     "description": "Description of the variable"
                 },
+                "defaultValue": {
+                    "description": (
+                        "Initial value — the Layout JSON data entry's "
+                        "defaultValue. `jui g project` writes it; `jui verify` "
+                        "compares it with the layout's."
+                    )
+                },
+                "default": {
+                    "description": (
+                        "Older spelling of defaultValue. When both are given, "
+                        "default is used (and a differing defaultValue is named)."
+                    )
+                },
                 "notes": {
                     "type": "string",
-                    "description": "Additional notes"
+                    "description": "Additional notes. Documentation only: no generator or check reads it."
                 }
             }
         },
@@ -949,7 +1110,7 @@ SCREEN_SPEC_SCHEMA = {
                 },
                 "notes": {
                     "type": "string",
-                    "description": "Additional notes"
+                    "description": "Additional notes. Documentation only: no generator or check reads it."
                 }
             }
         },
@@ -967,7 +1128,7 @@ SCREEN_SPEC_SCHEMA = {
                 },
                 "notes": {
                     "type": "string",
-                    "description": "Additional notes"
+                    "description": "Additional notes. Documentation only: no generator or check reads it."
                 }
             }
         },
@@ -1277,7 +1438,7 @@ SCREEN_SPEC_SCHEMA = {
             "properties": {
                 "condition": {
                     "type": "string",
-                    "description": "Transition condition"
+                    "description": "Transition condition. Documentation only: no generator or check reads it."
                 },
                 "destination": {
                     "type": "string",
@@ -1285,7 +1446,7 @@ SCREEN_SPEC_SCHEMA = {
                 },
                 "notes": {
                     "type": "string",
-                    "description": "Additional notes"
+                    "description": "Additional notes. Documentation only: no generator or check reads it."
                 }
             }
         },

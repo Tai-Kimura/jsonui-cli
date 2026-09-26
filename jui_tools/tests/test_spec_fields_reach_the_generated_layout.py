@@ -14,13 +14,20 @@
    the Layout's `"lazy": "none"`; until 1.8.121 it was dropped.
 3. Every field the spec schema declares for the sections extract_screen_spec
    reads is either read by `jui g project` or named below with the reason it
-   is not — measured by running a spec synthesized from the schema, with every
-   dict recording the keys asked of it, through the extractor and the Layout
-   JSON generators. A field added to the schema and read by nothing, or a
-   reader removed, turns this red.
+   is not, and who reads it instead — measured by running a spec synthesized
+   from the schema, with every dict recording the keys asked of it, through
+   the extractor and the Layout JSON generators (every Collection entry opted
+   into generation). A field added to the schema and read by nothing, or a
+   reader removed, turns this red; so does a field this table calls
+   documentation that the schema does not (4).
+4. Round 5: the layout facts the audit found dropped are written — Embed
+   nodes, the layout root, the cell / header / footer trees — and the fields
+   the tools read without the schema declaring them are declared (both are
+   armed in test_g_project_writes_the_layout_facts_a_spec_declares.py and
+   document_tools' test_schema_declares_what_the_tools_read.py).
 
 Ticket generate-commands-overwrite-edited-files-and-ignore-their-flags,
-round 4 (from the pack lane's audit).
+rounds 4 and 5 (from the pack lane's audit).
 """
 from __future__ import annotations
 
@@ -136,33 +143,51 @@ def test_a_lazy_collection_writes_no_lazy_key(lazy):
 # --------------------------------------------------------------------------
 
 # A pattern over the field's path (arrays and nested `children` collapsed),
-# and why `jui g project` does not read it. Each pattern must still match a
-# field it does not read — a stale line is red too.
+# and why `jui g project` does not read it — who does, measured 2026-09-26 by
+# running the Python tools' spec commands on a spec synthesized the same way,
+# with every key asked recorded per command. Each pattern must still match a
+# field it does not read — a stale line is red too. A reason that starts with
+# "documentation" must be what the schema says of the field: its description
+# carries "Documentation only".
+DOC_ONLY = "Documentation only"
 NOT_READ = [
-    (r"(^|\.)notes$|^dataFlow\.diagram$|^metadata\.(author|createdAt|updatedAt)$",
-     "documentation: jsonui-doc renders it"),
-    (r"^stateManagement\.states(\.|$)", "documentation: jsonui-doc renders the state table"),
-    (r"^dataFlow\.apiEndpoints\.", "documentation / jui verify; generation reads the methods"),
-    (r"^transitions\.", "documentation; navigation code is the navigation agents' job"),
-    (r"^structure\.customComponents\.", "documentation / validation (the converters are scaffolded by g converter)"),
-    (r"\.methods\.(endpoint|canonicalDivergence)(\.|$)",
-     "read by the canon (resolve_canonical_marks, with the spec's path) and by jsonui-doc / jsonui-test"),
-    (r"^metadata\.platforms$", "REPORTED: read by jsonui-test only; g project writes every platform's files"),
-    (r"^structure\.embeds(\.|$)", "REPORTED: read by jui build's isolated-embed gate; g project writes no Embed node"),
-    (r"^structure\.layout\.root$", "REPORTED: the root component ID is not written to the generated root View"),
-    (r"^structure\.collection\.cell\.(children|overlay)(\.|$)",
-     "REPORTED: the layoutNode form of a cell — only its root is read"),
-    (r"^structure\.collection\.cell\.(dataKeys|viewName)$",
-     "REPORTED: dataKeys is legacy (the schema prefers uiVariables); viewName is not used"),
-    (r"^structure\.collection\.cell\.layout$", "read as layoutFile's deprecated fallback (after an `or`)"),
-    (r"^structure\.collection\.(header|footer)\.",
-     "REPORTED: a header / footer given as a cellNode or a component tree — only its root's id is used"),
+    (r"(^|\.)notes$", "documentation: jsonui-doc renders most (not a displayLogic rule's, a cell's "
+                        "uiVariables' / eventHandlers', or a decorative component's)"),
+    (r"^dataFlow\.diagram$|^metadata\.author$|^dataFlow\.apiEndpoints\.(request|response)$"
+     r"|^stateManagement\.states\.values\.description$|^structure\.customComponents\.description$"
+     r"|^transitions\.condition$", "documentation: jsonui-doc renders it"),
+    (r"^metadata\.(createdAt|updatedAt)$", "documentation: jsonui-doc renders it; the validator checks the date"),
+    (r"^metadata\.group$", "read by jsonui-doc generate mermaid (the flow diagram's groups)"),
+    (r"^metadata\.platforms$", "read by jsonui-test (branch-tests, contracts coverage); g project writes "
+                               "every platform's files"),
+    (r"^stateManagement\.states(\.name|\.values(\.value|\.visibleElements)?)?$",
+     "read by jsonui-doc (the state table) and jsonui-test contracts coverage (visibleElements)"),
+    (r"^dataFlow\.apiEndpoints\.(method|path)$", "read by jsonui-test (contracts coverage, branch-tests) "
+                                                 "and jsonui-doc"),
+    (r"^dataFlow\.(repositories|useCases)\.methods\.(endpoint|canonicalDivergence)(\.|$)",
+     "read by the canon (resolve_canonical_marks — `jui g project` passes the spec's path, this audit "
+     "does not) and by jsonui-doc / jsonui-test"),
+    (r"^dataFlow\.viewModel\.methods\.(endpoint|canonicalDivergence)(\.|$)",
+     "read on repositories / useCases methods only; on a ViewModel method no tool reads it (the schema "
+     "says so)"),
+    (r"^structure\.customComponents\.(name|specFile)$",
+     "read by jsonui-doc, the validator and jsonui-test unit-stubs; the converters are scaffolded by "
+     "g converter"),
+    (r"^transitions\.destination$", "read by jsonui-doc (and its flow diagram)"),
+    (r"^structure\.collections?\.(cellClasses|sections)(\.|$)",
+     "REPORTED: read by the validator and jsonui-doc; g project does not write them onto the Collection"),
+    (r"^structure\.collections?\.(cell|header|footer)\.dataKeys$",
+     "legacy binding list (the schema prefers uiVariables): read by jsonui-doc only"),
+    (r"^structure\.collections?\.(cell|header|footer)\.viewName$",
+     "the view class: read by jsonui-doc; a section names the layout, and each platform derives the "
+     "class from it"),
 ]
-# The spelling the pack teaches for a uiVariable's initial value: not in the
-# schema, read all the same.
-MUST_READ_UNDECLARED = [
+# A uiVariable's initial value, in both spellings, on both paths.
+MUST_READ = [
     "stateManagement.uiVariables.defaultValue",
+    "stateManagement.uiVariables.default",
     "structure.collection.cell.uiVariables.defaultValue",
+    "structure.collection.cell.uiVariables.default",
 ]
 
 
@@ -202,9 +227,11 @@ def _track(value, path, seen):
     return value
 
 
-def _audit() -> tuple[set[str], set[str]]:
+def _audit() -> tuple[set[str], set[str], dict[str, dict]]:
+    """(declared fields not read, keys read, each declared field's schema)."""
     schema = _load_schema()
     defs = schema["$defs"]
+    nodes: dict[str, dict] = {}
 
     def resolve(node):
         while "$ref" in node:
@@ -226,6 +253,7 @@ def _audit() -> tuple[set[str], set[str]]:
             for key, sub in (obj.get("properties") or {}).items():
                 p = f"{path}.{key}" if path else key
                 declared.add(p)
+                nodes.setdefault(p, sub)
                 if depth > 4 and key == "children":
                     continue
                 out[key] = sample(sub, p, declared, variant, depth + 1)
@@ -243,8 +271,15 @@ def _audit() -> tuple[set[str], set[str]]:
             return True
         if t in ("integer", "number"):
             return 1
-        return {"name": "probeName", "type": "String", "id": "probe_id", "root": "probe_root",
-                "layoutFile": "probe/probe_file"}.get(path.split(".")[-1], "x")
+        leaf = path.split(".")[-1]
+        if leaf == "id":
+            # One id per place: the generator looks components up by id, and
+            # one shared id let the last registered (a decorative element's)
+            # stand for every component — structure.components never reached
+            # the node builder.
+            return "probe_" + re.sub(r"[^a-z0-9]+", "_", path.lower())
+        return {"name": "probeName", "type": "String", "root": "probe_root",
+                "layoutFile": "probe/probe_file"}.get(leaf, "x")
 
     sections = ["metadata", "structure", "dataFlow", "stateManagement", "transitions"]
     declared: set[str] = set()
@@ -258,7 +293,24 @@ def _audit() -> tuple[set[str], set[str]]:
                 spec[section] = sample(schema["properties"][section], section, declared, variant)
             if not with_tab:
                 spec["structure"].pop("tabView", None)
-            for holder in (spec["stateManagement"], spec["structure"]["collection"].get("cell", {})):
+            # The trees name a structure.components entry, so the node builder
+            # renders a declared component, not only placeholders.
+            component_id = spec["structure"]["components"][0]["id"]
+            spec["structure"]["layout"]["children"].append(component_id)
+            colls = [spec["structure"]["collection"], *spec["structure"].get("collections", [])]
+            for coll in colls:
+                for kind in ("cell", "header", "footer"):
+                    entry = coll.get(kind)
+                    if not isinstance(entry, dict):
+                        continue
+                    if isinstance(entry.get("children"), list):
+                        entry["children"].append(component_id)
+                    # Every cell / header / footer opts in, as an entry must
+                    # for `jui g project` to write its Layout JSON (one that
+                    # does not is a layout authored elsewhere, and its tree is
+                    # read by jsonui-doc only).
+                    entry["generateCellLayout"] = True
+            for holder in (spec["stateManagement"], colls[0].get("cell", {})):
                 for var in holder.get("uiVariables", []):
                     var["defaultValue"] = "gone"
             tracked = _track(spec, "", seen)
@@ -266,30 +318,51 @@ def _audit() -> tuple[set[str], set[str]]:
             lg = LayoutGenerator(TypeMapper())
             lg.generate(s)
             cg = CellLayoutGenerator(lg)
-            raw = tracked["structure"].get("collection")
-            for coll in s.collections[:1]:
-                if cg.should_generate(coll):
-                    cg.generate(coll, s)
-                    cell = raw.get("cell") if isinstance(raw, dict) else None
-                    cg.resolve_output_path(coll, Path("/tmp/Layouts"), cell if isinstance(cell, dict) else None)
+            for c in s.collections:
+                for slot in cg.slots_to_generate(c):
+                    cg.generate_slot(slot, s)
+                    cg.slot_output_path(c, slot, Path("/tmp/Layouts"))
 
     def norm(p):
         return re.sub(r"(\.children)+", ".children", p)
 
     declared = {norm(p) for p in declared if p not in sections}
     seen = {norm(p) for p in seen}
-    return declared - seen, seen
+    return declared - seen, seen, {norm(p): n for p, n in nodes.items()}
 
 
 @pytest.mark.skipif(not SCHEMA_FILE.is_file(), reason="document_tools (the spec schema) is not beside jui_tools")
 def test_every_declared_spec_field_is_read_by_g_project_or_named_with_its_reason():
-    unread, seen = _audit()
+    unread, seen, nodes = _audit()
     unnamed = sorted(p for p in unread if not any(re.search(pat, p) for pat, _ in NOT_READ))
     stale = [why for pat, why in NOT_READ if not any(re.search(pat, p) for p in unread)]
-    missing = [p for p in MUST_READ_UNDECLARED if p not in seen]
+    missing = [p for p in MUST_READ if p not in seen or p not in nodes]
     assert not unnamed, f"declared, read by nothing, and not named here: {unnamed}"
     assert not stale, f"named here but now read (drop the line): {stale}"
-    assert not missing, f"the taught spelling is not read: {missing}"
+    assert not missing, f"an initial value's spelling is not declared and read: {missing}"
     # The measurement is alive: it saw the reads it is about.
     assert {"stateManagement.uiVariables.name", "structure.collection.lazy",
-            "structure.collection.cell.uiVariables.defaultValue"} <= seen
+            "structure.collection.cell.uiVariables.defaultValue", "structure.embeds.regionId",
+            "structure.layout.root", "structure.collection.header.children.zIndex",
+            "structure.components.platform"} <= seen
+
+
+@pytest.mark.skipif(not SCHEMA_FILE.is_file(), reason="document_tools (the spec schema) is not beside jui_tools")
+def test_a_field_named_documentation_here_is_documentation_only_in_the_schema():
+    """The reason given here and the schema's word for the field are one
+    statement: a field this table calls documentation says so where authors
+    read it, and a field the schema calls documentation is not read here."""
+    unread, seen, nodes = _audit()
+    doc_patterns = [pat for pat, why in NOT_READ if why.startswith("documentation")]
+    here = {p for p in unread if any(re.search(pat, p) for pat in doc_patterns)}
+
+    def says_doc(p):
+        node = nodes[p]
+        while "$ref" in node:
+            node = _load_schema()["$defs"][node["$ref"].split("/")[-1]]
+        return DOC_ONLY in (node.get("description") or "")
+    assert here, "the documentation reasons match nothing"
+    unsaid = sorted(p for p in here if not says_doc(p))
+    assert not unsaid, f"called documentation here, not in the schema: {unsaid}"
+    read_anyway = sorted(p for p in seen if p in nodes and says_doc(p))
+    assert not read_anyway, f"the schema says documentation only, g project reads it: {read_anyway}"
