@@ -153,6 +153,7 @@ def cmd_verify(args: argparse.Namespace) -> int:
     missing_layouts: list[str] = []
     skipped_external: list[str] = []
     data_orphans: list[tuple[str, list[tuple[str, str]]]] = []
+    initial_values: list[str] = []
     unregistered_types: "OrderedDict[str, list[str]]" = OrderedDict()
     for sf in spec_files:
         if sf.resolve() in sub_spec_paths:
@@ -178,6 +179,16 @@ def cmd_verify(args: argparse.Namespace) -> int:
             merge_result = merger.merge_from_file(sf)
             spec_data = merge_result.spec
         screen_spec = extract_screen_spec(spec_data, sf)
+        actual_path = _resolve_actual_layout(
+            layouts_root, sf.stem, screen_spec.name,
+            layout_file=screen_spec.layout_file,
+        )
+
+        # The initial values the spec declares, against the layout's —
+        # every screen spec with a layout on disk, an externally authored
+        # one too: its data section is still the spec's to declare.
+        initial_values.extend(_initial_value_findings(
+            sf, screen_spec, actual_path, Path(layouts_root), config_mgr.project_root))
 
         # Skip specs whose layout is authored externally (layoutFile mode
         # with no components). Generating would produce an empty stub,
@@ -189,10 +200,6 @@ def cmd_verify(args: argparse.Namespace) -> int:
             continue
 
         generated = layout_gen.generate(screen_spec)
-        actual_path = _resolve_actual_layout(
-            layouts_root, sf.stem, screen_spec.name,
-            layout_file=screen_spec.layout_file,
-        )
         if not actual_path or not actual_path.exists():
             missing_layouts.append(_missing_layout_line(
                 layouts_root, sf.stem, screen_spec.name, screen_spec.layout_file))
@@ -302,6 +309,20 @@ def cmd_verify(args: argparse.Namespace) -> int:
             "  → add each missing entry to stateManagement.uiVariables "
             "(or remove it from the Layout JSON's data section) so "
             "regeneration is idempotent."
+        )
+
+    if initial_values:
+        print(
+            f"\n**WARNING: {len(initial_values)} initial value(s) a spec declares that "
+            f"its layout does not carry** (reported only — `--fail-on-diff` does not "
+            f"count these):"
+        )
+        for line in initial_values:
+            print(f"- {line}")
+        print(
+            "  → make the two agree. `jui g project` writes the data section from "
+            "the spec, so the spec is where the value is declared; correct "
+            "whichever side is wrong."
         )
 
     for line in _coverage_lines(coverage, require_coverage):
@@ -504,6 +525,7 @@ def _coverage_lines(coverage, require_coverage) -> list[str]:
 # The one wrapper every `jui` command reads — see core/spec_kind.py for why
 # there is exactly one.
 from ..core.spec_kind import describes_a_screen as _describes_a_screen  # noqa: E402
+from ..core.layout_data import initial_value_key, layout_data_entries  # noqa: E402
 
 
 @dataclass
@@ -787,24 +809,84 @@ def _collect_custom_type_refs(spec):
 def _diff_data_section(
     generated: dict, actual: dict,
 ) -> list[tuple[str, str]]:
-    """Return ``(name, class)`` tuples present in *actual*'s ``data[]``
-    but missing from the spec-driven *generated* ``data[]``.
+    """Return ``(name, class)`` tuples present in *actual*'s data entries
+    but missing from the spec-driven *generated* ones.
+
+    Both sides are read wherever they declare `data` (core/layout_data): until
+    jsonui-cli 1.9.0 only a root `data` section was, so a layout keeping its data in a
+    child — the form hand-written layouts use — reported nothing.
     """
-    gen_data = generated.get("data") or []
-    act_data = actual.get("data") or []
-    if not isinstance(gen_data, list) or not isinstance(act_data, list):
-        return []
-    gen_names = {
-        e.get("name") for e in gen_data if isinstance(e, dict)
-    }
+    gen_names = {e["name"] for e in layout_data_entries(generated)}
     orphans: list[tuple[str, str]] = []
-    for e in act_data:
-        if not isinstance(e, dict):
-            continue
-        name = e.get("name")
-        if name and name not in gen_names:
+    seen: set[str] = set()
+    for e in layout_data_entries(actual):
+        name = e["name"]
+        if name and name not in gen_names and name not in seen:
+            seen.add(name)
             orphans.append((name, e.get("class", "?")))
     return orphans
+
+
+def _initial_value_findings(spec_file: Path, screen_spec, layout_path, layouts_root: Path,
+                            project_root: Path) -> list[str]:
+    """One line per initial value a spec declares that its layout does not
+    carry: the variable, both values, both files.
+
+    Read: stateManagement.uiVariables against the screen's layout, and each
+    Collection cell / header / footer's uiVariables against its layout (the
+    file its section names, when the entry names or generates one). A value
+    is declared when `default` / `defaultValue` gives one that is not null
+    (null is the type's default — what `jui g project` writes for it). Two
+    spellings of one value agree (layout_data.initial_value_key). A layout
+    entry that gives no defaultValue, or no entry of that name, does not carry
+    the value either.
+
+    Until jsonui-cli 1.9.0 nothing compared them: `_diff_data_section` reads names, in
+    one direction, and a value the spec declared and the layout dropped went
+    unreported.
+    """
+    from ..core.spec_extractor import slot_layout_ref
+
+    def rel(path: Path) -> str:
+        try:
+            return str(Path(path).resolve().relative_to(Path(project_root).resolve()))
+        except ValueError:
+            return str(path)
+
+    targets = [("stateManagement.uiVariables", screen_spec.ui_variables, layout_path)]
+    for coll in screen_spec.collections:
+        for slot in coll.slots.values():
+            if slot.ui_variables and (slot.layout_file or slot.generate):
+                targets.append((f"structure.collection.{slot.kind}.uiVariables", slot.ui_variables,
+                                layouts_root / f"{slot_layout_ref(coll.id, slot)}.json"))
+
+    out: list[str] = []
+    for where, variables, path in targets:
+        declared = [v for v in variables if v.default is not None]
+        if not declared or path is None or not Path(path).exists():
+            continue
+        try:
+            layout = json.loads(Path(path).read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            continue
+        entries: dict[str, list[dict]] = {}
+        for e in layout_data_entries(layout):
+            entries.setdefault(e["name"], []).append(e)
+        for var in declared:
+            head = (f"{rel(spec_file)}: {where} '{var.name}' is "
+                    f"{json.dumps(var.default, ensure_ascii=False)} — {rel(path)}")
+            found = entries.get(var.name, [])
+            if not found:
+                out.append(f"{head} declares no data entry '{var.name}'")
+                continue
+            for e in found:
+                klass = e.get("class") or var.type
+                on = f" (platform {e['platform']})" if isinstance(e.get("platform"), str) else ""
+                if "defaultValue" not in e:
+                    out.append(f"{head} gives it no defaultValue{on}")
+                elif initial_value_key(e["defaultValue"], klass) != initial_value_key(var.default, klass):
+                    out.append(f"{head} has {json.dumps(e['defaultValue'], ensure_ascii=False)}{on}")
+    return out
 
 
 def _resolve_layouts_root(config: dict, platform: str, config_mgr) -> Path | None:
