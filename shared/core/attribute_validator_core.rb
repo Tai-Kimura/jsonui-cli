@@ -3,6 +3,7 @@
 
 require 'json'
 require_relative 'tap_accessibility'
+require_relative 'type_synonyms'
 
 module JsonUIShared
   # Validates JSON component attributes against the SSoT definitions
@@ -214,6 +215,11 @@ module JsonUIShared
 
       # Check for conflicting attributes
       check_spacing_gravity_conflict(merged_component, type)
+
+      # A synonym spelling whose node sets an attribute the spelling means
+      # otherwise (an HStack with orientation vertical): the node's value is
+      # drawn, and the author is told
+      JsonUIShared::TypeSynonyms.disagreements(merged_component, type_synonyms_path).each { |m| add_warning(m) }
 
       # Check for weight + dimension conflict
       check_weight_dimension_conflict(merged_component, type, parent_orientation)
@@ -454,10 +460,13 @@ module JsonUIShared
       resolve_component_alias(entry ? entry['canonical'] : type)
     end
 
-    # spelling -> { 'canonical' => section, 'render_as' => type (optional) }.
-    # Read once per validator. A malformed file raises, naming it: a table
-    # that read as empty would validate every synonym spelling against
-    # common attributes only, and say nothing.
+    # spelling -> { 'canonical' => section, 'render_as' => type (optional) },
+    # read through JsonUIShared::TypeSynonyms (type_synonyms.rb beside this
+    # file), once per validator. `@type_synonyms_path` points a validator at
+    # another copy of the table (the cross-language test's swap arm). A
+    # malformed file raises there, naming it: a table that read as empty
+    # would validate every synonym spelling against common attributes only,
+    # and say nothing.
     #
     # A missing file is what a plain copy of a tool leaves (the file is a link
     # into shared/core, as attribute_definitions.json is), and it is met the
@@ -471,18 +480,13 @@ module JsonUIShared
     # 2026-09-26).
     def type_synonyms
       @type_synonyms ||= begin
-        path = @type_synonyms_path || File.join(File.dirname(__FILE__), 'type_synonyms.json')
-        if File.exist?(path)
-          entries = JSON.parse(File.read(path))['synonyms']
-          unless entries.is_a?(Hash) && entries.values.all? { |e| e.is_a?(Hash) && e['canonical'].is_a?(String) }
-            raise "#{path}: `synonyms` must map each spelling to an object with a `canonical` string"
-          end
-
-          entries
-        else
-          missing_type_synonyms(path)
-        end
+        path = type_synonyms_path
+        File.exist?(path) ? JsonUIShared::TypeSynonyms.entries(path) : missing_type_synonyms(path)
       end
+    end
+
+    def type_synonyms_path
+      @type_synonyms_path || JsonUIShared::TypeSynonyms::DEFAULT_PATH
     end
 
     # {} after naming the missing table (see type_synonyms).

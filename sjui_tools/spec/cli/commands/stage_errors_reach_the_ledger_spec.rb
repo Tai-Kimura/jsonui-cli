@@ -197,6 +197,36 @@ RSpec.describe 'sjui build: a stage that printed an error is in the ledger' do
   end
 
   describe 'SwiftUI' do
+    # The same copy, built in SwiftUI mode: its converters read the synonym
+    # table and the definitions' alias sections too (JsonUIShared::TypeSynonyms
+    # and ComponentAliases). A missing file reads as empty there, and only the
+    # validator names it, so the ledger holds the same two entries. The
+    # layouts hold a synonym spelling (HStack) and an alias (EditText): both
+    # are drawn as undeclared types, and each layout is still generated. The
+    # UIKit arm above cannot see the converters: they are this mode's.
+    it 'a copy that left its links dangling: the same two entries, and every layout generated' do
+      dir = project('swiftui', dangling_definitions: true)
+      %w[home other].each do |name|
+        File.write(File.join(dir, NAME, 'Layouts', "#{name}.json"), JSON.pretty_generate(
+          'type' => 'View', 'id' => 'root', 'width' => 'matchParent', 'height' => 'matchParent', 'orientation' => 'vertical',
+          'child' => [{ 'type' => 'HStack', 'id' => 'row', 'child' => [{ 'type' => 'Label', 'id' => 'title', 'text' => 'Hello' }] },
+                      { 'type' => 'EditText', 'id' => 'field', 'text' => 'x' }]
+        ))
+      end
+      log, exit_code, entries = build(dir)
+      # measured: this mode meets each file once
+      expect(log.scan('attribute_definitions.json not found').size).to eq(1), log
+      expect(log.scan('type_synonyms.json not found').size).to eq(1), log
+      expect(exit_code).to eq(0), log
+      expect(entries.map { |e| e['stage'] }).to eq(%w[validation validation]), "#{entries.inspect}\n#{log}"
+      messages = entries.map { |e| e['message'] }
+      expect(messages.count { |m| m.include?('attribute_definitions.json') }).to eq(1), messages.inspect
+      expect(messages.count { |m| m.include?('type_synonyms.json') }).to eq(1), messages.inspect
+      expect(Dir.glob(File.join(dir, NAME, 'View', '**', '*GeneratedView.swift')).map { |f| File.basename(f) }.sort)
+        .to eq(%w[HomeGeneratedView.swift OtherGeneratedView.swift]), log
+      expect(log).to include('Build finished with 2 stage(s) incomplete — see above'), log
+    end
+
     it 'a cached layout that no longer parses: refused, in the ledger' do
       dir = project('swiftui')
       layout(dir, 'home')

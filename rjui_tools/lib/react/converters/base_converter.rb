@@ -1,5 +1,6 @@
 # frozen_string_literal: true
 
+require_relative '../../core/type_synonyms'
 require_relative '../../core/typed_attributes'
 # For the one judgment the validator and the generator must share: whether a
 # binding's content can be an expression at all.
@@ -1409,8 +1410,15 @@ module RjuiTools
           # Apply style if specified
           resolved_child = apply_style(child)
 
-          converter_class = get_converter_class(resolved_child['type'])
-          converter_class.new(resolved_child, config)
+          # An extension converter takes the spelling as written; anything
+          # else is drawn as its type-synonym target (the same rule as
+          # ReactGenerator#convert_component).
+          extension = (config['_extension_converters'] || {})[resolved_child['type']]
+          return extension.new(resolved_child, config) if extension
+
+          drawn = JsonUIShared::TypeSynonyms.canonicalize(resolved_child)
+          converter_class = get_converter_class(drawn['type'])
+          converter_class.new(drawn, config)
         end
 
         def apply_style(child)
@@ -1473,7 +1481,6 @@ module RjuiTools
             'View' => ViewConverter,
             'SafeAreaView' => ViewConverter,
             'Label' => LabelConverter,
-            'Text' => LabelConverter,
             'Button' => ButtonConverter,
             'Image' => ImageConverter,
             'CircleImage' => ImageConverter,
@@ -1484,15 +1491,12 @@ module RjuiTools
             'EditText' => TextFieldConverter,
             'Input' => TextFieldConverter,
             'TextView' => TextViewConverter,
-            'Scroll' => ScrollViewConverter,
             'ScrollView' => ScrollViewConverter,
             'Collection' => CollectionConverter,
-            'Table' => CollectionConverter,
             'Switch' => SwitchConverter,
             'Toggle' => ToggleConverter,
             'CheckBox' => ToggleConverter,
             'Check' => ToggleConverter,
-            'Checkbox' => ToggleConverter,
             'Slider' => SliderConverter,
             'Segment' => SegmentConverter,
             'Radio' => RadioConverter,

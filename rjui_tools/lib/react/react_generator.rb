@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require 'set'
+require_relative '../core/type_synonyms'
 require_relative '../core/type_converter'
 require_relative '../core/generated_marker'
 require_relative '../core/frameworks'
@@ -45,7 +46,6 @@ module RjuiTools
         'View' => Converters::ViewConverter,
         'SafeAreaView' => Converters::ViewConverter,
         'Label' => Converters::LabelConverter,
-        'Text' => Converters::LabelConverter,
         'Button' => Converters::ButtonConverter,
         'Image' => Converters::ImageConverter,
         'CircleImage' => Converters::ImageConverter,
@@ -56,10 +56,8 @@ module RjuiTools
         'EditText' => Converters::TextFieldConverter,
         'Input' => Converters::TextFieldConverter,
         'TextView' => Converters::TextViewConverter,
-        'Scroll' => Converters::ScrollViewConverter,
         'ScrollView' => Converters::ScrollViewConverter,
         'Collection' => Converters::CollectionConverter,
-        'Table' => Converters::CollectionConverter,
         # Switch is the primary component name, uses SwitchConverter for iOS-style toggle
         'Switch' => Converters::SwitchConverter,
         # Toggle is an alias for Switch (backward compatibility), also uses SwitchConverter
@@ -68,8 +66,6 @@ module RjuiTools
         'CheckBox' => Converters::ToggleConverter,
         # Check is an alias for CheckBox (backward compatibility), also uses ToggleConverter
         'Check' => Converters::ToggleConverter,
-        # Legacy mapping kept for backward compatibility
-        'Checkbox' => Converters::ToggleConverter,
         'Slider' => Converters::SliderConverter,
         'Segment' => Converters::SegmentConverter,
         'Radio' => Converters::RadioConverter,
@@ -220,8 +216,17 @@ module RjuiTools
 
         type = json['type'] || 'View'
 
-        # First check extension converters, then built-in converters
-        converter_class = @extension_converters[type] || CONVERTERS[type]
+        # First check extension converters (with the spelling as written),
+        # then built-in converters. A type-synonym spelling (HStack,
+        # WebView, …) is drawn as its type, from
+        # shared/core/type_synonyms.json; the map below holds declared types
+        # (and the `_alias_of` sections EditText / Input / Check / Toggle).
+        converter_class = @extension_converters[type]
+        unless converter_class
+          json = JsonUIShared::TypeSynonyms.canonicalize(json)
+          type = json['type'] || 'View'
+          converter_class = CONVERTERS[type]
+        end
         unless converter_class
           # sjui renders unknown types as a red "Unsupported component" Text
           # and swift dynamic as an error box; silently degrading to a plain

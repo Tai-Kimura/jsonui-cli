@@ -9,7 +9,9 @@ RSpec.describe SjuiTools::SwiftUI::Binding::BindingHandlerRegistry do
     it 'registers default handlers' do
       # Text components
       expect(registry.get_handler('Label')).to be_a(SjuiTools::SwiftUI::Binding::LabelBindingHandler)
-      expect(registry.get_handler('Text')).to be_a(SjuiTools::SwiftUI::Binding::LabelBindingHandler)
+      # A synonym (Text) is not a key: the factory hands each converter its
+      # node as drawn (type_synonyms.json), so the registry is asked for Label.
+      expect(registry.get_handler('Text')).to be_a(SjuiTools::SwiftUI::Binding::ViewBindingHandler)
 
       # Input components
       expect(registry.get_handler('TextField')).to be_a(SjuiTools::SwiftUI::Binding::TextFieldBindingHandler)

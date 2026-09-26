@@ -77,7 +77,7 @@ module SjuiTools
 
             # For labels and text components, add alignment based on textAlign and gravity
             if frame_params.any?
-              if @component['type'] == 'Label' || @component['type'] == 'Text'
+              if @component['type'] == 'Label'
                 frame_params << "alignment: #{label_frame_alignment}"
               else
                 # Non-Label inner frame alignment is `gravity`-driven, NOT
@@ -194,7 +194,7 @@ module SjuiTools
               # Check if either dimension is .infinity
               if width_value == '.infinity' && height_value == '.infinity'
                 # For labels and text components, add alignment to honor textAlign and gravity
-                if @component['type'] == 'Label' || @component['type'] == 'Text'
+                if @component['type'] == 'Label'
                   frame_alignment = label_frame_alignment(both_infinity: true)
                   @modifier_bag.append(:frame_size, ".frame(maxWidth: #{width_param}, maxHeight: #{height_param}, alignment: #{frame_alignment})")
                 else
@@ -208,7 +208,7 @@ module SjuiTools
               elsif width_value == '.infinity'
                 # Split into two frame calls for maxWidth with fixed height
                 # For labels and text components, add alignment to honor textAlign and gravity
-                if @component['type'] == 'Label' || @component['type'] == 'Text'
+                if @component['type'] == 'Label'
                   frame_alignment = label_frame_alignment
                   @modifier_bag.append(:frame_size, ".frame(maxWidth: #{width_param}, alignment: #{frame_alignment})")
                 else
@@ -235,7 +235,7 @@ module SjuiTools
             elsif width_value
               if width_value == '.infinity'
                 # For labels and text components, add alignment to honor textAlign and gravity
-                if @component['type'] == 'Label' || @component['type'] == 'Text'
+                if @component['type'] == 'Label'
                   frame_alignment = label_frame_alignment
                   @modifier_bag.append(:frame_size, ".frame(maxWidth: #{width_param}, alignment: #{frame_alignment})")
                 else
@@ -248,7 +248,7 @@ module SjuiTools
                 end
               else
                 # For labels, add alignment to honor textAlign and gravity
-                if (@component['type'] == 'Label' || @component['type'] == 'Text') && (@component['textAlign'] || @component['gravity'])
+                if @component['type'] == 'Label' && (@component['textAlign'] || @component['gravity'])
                   frame_alignment = label_frame_alignment
                   @modifier_bag.append(:frame_size, ".frame(width: #{width_param}, alignment: #{frame_alignment})")
                 else

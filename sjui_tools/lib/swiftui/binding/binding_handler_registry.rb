@@ -36,7 +36,6 @@ module SjuiTools
         def register_default_handlers
           # Text components
           register_handler('Label', LabelBindingHandler)
-          register_handler('Text', LabelBindingHandler)
           
           # Input components
           register_handler('TextField', TextFieldBindingHandler)
@@ -58,7 +57,6 @@ module SjuiTools
           # CheckBox
           register_handler('CheckBox', CheckboxBindingHandler)
           register_handler('Check', CheckboxBindingHandler)
-          register_handler('Checkbox', CheckboxBindingHandler)
           
           # Image
           register_handler('Image', ImageBindingHandler)

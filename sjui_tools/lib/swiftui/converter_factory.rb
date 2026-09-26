@@ -1,5 +1,6 @@
 # frozen_string_literal: true
 
+require_relative '../core/type_synonyms'
 require_relative 'views/label_converter'
 require_relative 'views/button_converter'
 require_relative 'views/view_converter'
@@ -142,8 +143,18 @@ module SjuiTools
           end
         end
 
+        # A type-synonym spelling (HStack, ProgressBar, WebView, …) is drawn
+        # as its type, from shared/core/type_synonyms.json — after the app's
+        # converters were asked, above, with the spelling as written. The
+        # cases below are declared types (and the `_alias_of` sections
+        # EditText / Input / Check / Toggle); a spelling in neither draws the
+        # default. The node's converter gets the node as drawn, so what reads
+        # its type afterwards (the binding handlers) reads the drawn one.
+        component = JsonUIShared::TypeSynonyms.canonicalize(component)
+        component_type = component['type']
+
         case component_type
-        when 'Label', 'Text'
+        when 'Label'
           Views::LabelConverter.new(component, indent_level, action_manager, @binding_registry)
         when 'IconLabel'
           Views::IconLabelConverter.new(component, indent_level, action_manager, @binding_registry)
@@ -153,17 +164,19 @@ module SjuiTools
           Views::ViewConverter.new(component, indent_level, action_manager, self, registry, @binding_registry)
         when 'GradientView'
           Views::GradientViewConverter.new(component, indent_level, action_manager, self, registry, @binding_registry)
-        when 'Blur', 'BlurView'
+        when 'Blur'
           Views::BlurConverter.new(component, indent_level, action_manager, self, registry, @binding_registry)
         # EditText / Input are aliases for TextField (attribute_definitions
         # `_alias_of: TextField`; kept for Android / HTML naming compatibility)
         when 'TextField', 'EditText', 'Input'
           Views::TextFieldConverter.new(component, indent_level, action_manager, @binding_registry)
+        # CircleImage / CircleImageView: Image synonyms drawn as CircleImage
+        # (`render_as`), which ImageConverter clips to a circle
         when 'Image', 'CircleImage'
           Views::ImageConverter.new(component, indent_level, action_manager, @binding_registry)
         when 'NetworkImage'
           Views::NetworkImageConverter.new(component, indent_level, action_manager, @binding_registry)
-        when 'Scroll', 'ScrollView'
+        when 'ScrollView'
           Views::ScrollViewConverter.new(component, indent_level, action_manager, self, registry, @binding_registry)
         when 'TextView'
           Views::TextViewConverter.new(component, indent_level, action_manager, @binding_registry)
@@ -172,7 +185,7 @@ module SjuiTools
         when 'Switch', 'Toggle'
           Views::ToggleConverter.new(component, indent_level, action_manager, @binding_registry)
         # CheckBox is primary name, Check is alias (see attribute_definitions.json)
-        when 'CheckBox', 'Check', 'Checkbox'
+        when 'CheckBox', 'Check'
           Views::CheckboxConverter.new(component, indent_level, action_manager, @binding_registry)
         when 'Radio'
           Views::RadioConverter.new(component, indent_level, action_manager, @binding_registry)
@@ -184,18 +197,11 @@ module SjuiTools
           Views::SliderConverter.new(component, indent_level, action_manager, @binding_registry)
         when 'Indicator'
           Views::IndicatorConverter.new(component, indent_level, action_manager, @binding_registry)
-        # `Table` is a Collection. The normalizer's synonym table, the shared
-        # validator's `map_type_to_definition`, rjui and kjui all resolve it
-        # that way; sjui was the only face routing it somewhere else, so a
-        # layout drew one thing on the normalised path and another on the
-        # direct one. `table_converter.rb` was a scaffold, not an
-        # implementation — with no binding it emitted ten literal
-        # `Text("Row \(index)")` rows (50 §4 / A2 ②).
-        when 'Table', 'Collection'
+        when 'Collection'
           Views::CollectionConverter.new(component, indent_level, action_manager, @binding_registry, @data_properties)
         when 'SelectBox'
           Views::SelectBoxConverter.new(component, indent_level, action_manager, @binding_registry)
-        when 'Web', 'WebView'
+        when 'Web'
           Views::WebConverter.new(component, indent_level, action_manager, @binding_registry)
         when 'DynamicComponent'
           Views::DynamicComponentConverter.new(component, indent_level, action_manager, @binding_registry)
