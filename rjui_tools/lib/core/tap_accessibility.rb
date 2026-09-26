@@ -25,6 +25,19 @@ module JsonUIShared
   #             container into the control inside it (XCUITest elementType,
   #             2026-09-25). That is the silence this rule chooses.
   #
+  # `userInteractionEnabled` (attribute_definitions.json common) stops the
+  # node and everything in it — its own tap and gestures, and every
+  # descendant's (the runtimes' hit testing / pointer blocker). The rule reads
+  # it as it reads `canTap: false`, and further: `false` makes the node AND
+  # every node inside it no tap — no shape, and the emitters attach no tap
+  # there (a tap nothing can reach was still announced as a button, the
+  # image-alt INFO included). A binding keeps the shape: the emitters gate
+  # the tap and its trait on it, on the node and on every tap inside it, the
+  # form they use for a bound canTap. annotate! writes both on each tap
+  # inside (STOPPED_KEY, GATES_KEY); the node's own flag the emitters read
+  # from the node. A control's own operation is not the rule's: a Switch
+  # inside still counts as a control, its type says so.
+  #
   # Which types are operable is DECLARED, per type, as `interactive` in
   # shared/core/component_metadata.json — every type states it; absence is
   # not read as "not interactive" (Button, Radio and Web declare no two-way
@@ -87,16 +100,54 @@ module JsonUIShared
 
     SHAPE_KEY = '_tapShape'
 
+    # On a tap inside a node with `userInteractionEnabled: false`: true.
+    STOPPED_KEY = '_tapStopped'
+
+    # On a tap inside nodes with a bound `userInteractionEnabled`: their
+    # bindings, outermost first — the gates its tap and trait follow.
+    GATES_KEY = '_tapGates'
+
+    INTERACTION_KEY = 'userInteractionEnabled'
+
     def interactive_type?(type)
       INTERACTIVE_TYPES.include?(type) || !KNOWN_TYPES.include?(type)
     end
 
     # A tap the codegen emits: a handler, not statically disabled, and not
     # gated shut — `canTap: false` is the SwiftUI / Compose tap gate
-    # (attribute_definitions.json common.canTap), so the tap is not there.
+    # (attribute_definitions.json common.canTap), so the tap is not there, and
+    # `userInteractionEnabled: false` stops the node. Of the node alone: a
+    # node inside one that stops is no tap either (`shape`'s `stopped`).
     def tappable?(node)
       node.is_a?(Hash) && node['enabled'] != false && node['canTap'] != false &&
-        TAP_KEYS.any? { |key| handler?(node[key]) }
+        !stops?(node) && TAP_KEYS.any? { |key| handler?(node[key]) }
+    end
+
+    # `userInteractionEnabled: false`: the node and everything in it take no
+    # interaction.
+    def stops?(node)
+      node.is_a?(Hash) && node[INTERACTION_KEY] == false
+    end
+
+    # A bound `userInteractionEnabled` (`@{…}`), or nil.
+    def interaction_binding(node)
+      value = node.is_a?(Hash) ? node[INTERACTION_KEY] : nil
+      value.is_a?(String) && value.start_with?('@{') && value.end_with?('}') ? value : nil
+    end
+
+    # Whether the tap of `node` is stopped: by its own `userInteractionEnabled:
+    # false`, or by a node around it (STOPPED_KEY, which annotate! writes).
+    def stopped?(node)
+      stops?(node) || (node.is_a?(Hash) && node[STOPPED_KEY] == true)
+    end
+
+    # The bound `userInteractionEnabled` values that gate the tap of `node`:
+    # those of the nodes around it (GATES_KEY), then its own — each once.
+    def interaction_gates(node)
+      return [] unless node.is_a?(Hash)
+
+      around = node[GATES_KEY].is_a?(Array) ? node[GATES_KEY] : []
+      (around + [interaction_binding(node)].compact).uniq
     end
 
     def children(node)
@@ -133,19 +184,26 @@ module JsonUIShared
       node.is_a?(Hash) && node['enabled'] != false && handler?(node[LONG_PRESS_KEY])
     end
 
-    # A node a user can operate on its own, inside a tappable.
-    def operable?(node)
-      interactive_type?(node['type']) || tappable?(node) || long_press?(node) || linked_text?(node)
+    # A node a user can operate on its own, inside a tappable. `stopped`: a
+    # node around it has `userInteractionEnabled: false`, so its own tap is
+    # none (its type still says whether it is a control).
+    def operable?(node, stopped = false)
+      interactive_type?(node['type']) || (!stopped && tappable?(node)) || long_press?(node) ||
+        linked_text?(node)
     end
 
     # Something inside `node` (not itself) a user can operate on its own.
-    def holds_a_control?(node)
-      children(node).any? { |c| operable?(c) || holds_a_control?(c) }
+    def holds_a_control?(node, stopped = false)
+      children(node).any? do |c|
+        inner = stopped || stops?(c)
+        operable?(c, inner) || holds_a_control?(c, inner)
+      end
     end
 
-    # The shape of one node, or nil when it is not a tappable.
-    def shape(node)
-      return nil unless tappable?(node)
+    # The shape of one node, or nil when it is not a tappable. `stopped`: a
+    # node around it has `userInteractionEnabled: false`.
+    def shape(node, stopped = false)
+      return nil if stopped || !tappable?(node)
       return 'none' if interactive_type?(node['type'])
       return 'button' if children(node).empty?
       return 'none' if holds_a_control?(node)
@@ -153,20 +211,32 @@ module JsonUIShared
       'combine'
     end
 
-    # Writes SHAPE_KEY on every tappable of an include-expanded tree.
+    # Writes SHAPE_KEY on every tappable of an include-expanded tree, and on
+    # every tap inside a node that stops or gates interaction, STOPPED_KEY /
+    # GATES_KEY.
     def annotate!(root)
-      walk(root) do |node|
-        value = shape(node)
+      walk(root) do |node, stopped, gates|
+        value = shape(node, stopped)
         node[SHAPE_KEY] = value if value
+        next unless TAP_KEYS.any? { |key| handler?(node[key]) }
+
+        node[STOPPED_KEY] = true if stopped
+        node[GATES_KEY] = gates unless gates.empty?
       end
       root
     end
 
-    def walk(node, &block)
+    # Yields each node with what the nodes around it (not itself) say:
+    # whether one has `userInteractionEnabled: false`, and the bound values,
+    # outermost first.
+    def walk(node, stopped = false, gates = [], &block)
       return unless node.is_a?(Hash)
 
-      yield node
-      children(node).each { |c| walk(c, &block) }
+      yield node, stopped, gates
+      inner_stopped = stopped || stops?(node)
+      own = interaction_binding(node)
+      inner_gates = own && !gates.include?(own) ? gates + [own] : gates
+      children(node).each { |c| walk(c, inner_stopped, inner_gates, &block) }
     end
   end
 end
