@@ -1917,18 +1917,19 @@ module SjuiTools
           @modifier_bag.append(:safe_area_insets, ".safeAreaPadding(#{edges})")
         end
 
-        #: Declared spelling -> `SwiftUI.Edge.Set` member. `left` / `right` /
-        #: `horizontal` are not in the declared enum but were accepted here
-        #: before, so they keep working rather than starting to warn.
+        #: Declared spelling -> `SwiftUI.Edge.Set` member, as written (the
+        #: items of safeAreaInsetPositions: top / bottom / leading / trailing /
+        #: vertical, and `all`). `left` / `right` / `horizontal` were accepted
+        #: here beyond the declaration; a value is its declared spelling
+        #: (1.9.0), so they select no edge now, as on rjui and kjui, and the
+        #: validator names them. Measured before they went (2026-09-26): no
+        #: node on the nine consumer faces declares safeAreaInsetPositions.
         SAFE_AREA_EDGES = {
           'top' => '.top',
           'bottom' => '.bottom',
           'leading' => '.leading',
-          'left' => '.leading',
           'trailing' => '.trailing',
-          'right' => '.trailing',
-          'vertical' => '.vertical',
-          'horizontal' => '.horizontal'
+          'vertical' => '.vertical'
         }.freeze
 
         # The `Edge.Set` argument for a declared position list, or nil when
