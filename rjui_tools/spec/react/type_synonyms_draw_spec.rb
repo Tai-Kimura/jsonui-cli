@@ -3,6 +3,7 @@
 require 'json'
 require_relative '../../lib/react/react_generator'
 require_relative '../../lib/core/type_synonyms'
+require_relative '../support/typescript_compiler'
 
 # An app's converter registered under a synonym's name (HStack), standing in
 # for one in the app's extensions directory.
@@ -112,6 +113,24 @@ RSpec.describe 'type synonyms in the rjui converters' do
       expect(emit(as_alias)).to eq(emit(as_canonical))
       expect(emit_as_child(as_alias)).to eq(emit_as_child(as_canonical))
     end
+  end
+
+  # What the table and the alias sections draw is TypeScript that compiles
+  # under --strict: every spelling once, in one component. The examples
+  # above compare a spelling's emission with its drawn type's; this one puts
+  # the emissions in front of a compiler. What the screen file and its data
+  # model declare around the markup (the seeded-state helper, the text
+  # inputs' ref, their focus handler) is declared as they write it.
+  it 'compiles what every spelling and alias section emits' do
+    nodes = RJUI_SYNONYM_TABLE.map { |spelling, entry| [spelling, entry['render_as'] || entry['canonical']] } +
+            RJUI_ALIAS_SECTIONS.to_a
+    emitted = nodes.map { |spelling, target| emit({ 'type' => spelling, 'id' => 'n' }.merge(RJUI_SYNONYM_EXTRA.fetch(target))) }
+    expect(emitted.size).to eq(RJUI_SYNONYM_TABLE.size + RJUI_ALIAS_SECTIONS.size)
+    expect(TypeScriptCompiler.component(*emitted)).to compile_as_typescript.with_ambient(<<~TS)
+      declare const data: { onNIsFocusedChange?: (value: boolean) => void };
+      declare const nRef: { current: HTMLInputElement | HTMLTextAreaElement | null };
+      declare const JsonUISeeded: <T>(props: { seed: T; children: (value: T, set: (value: T) => void) => JSX.Element }) => JSX.Element;
+    TS
   end
 
   it "draws a node's own orientation, not the one its spelling means" do
