@@ -450,6 +450,19 @@ module KjuiTools
           component_type = json_data['type'] || 'View'
           json_data = fold_bind(json_data, component_type)
           code = draw_declared_component(component_type, json_data, depth, parent_type, is_root)
+          # No case draws it: a type the validator knows (an extension
+          # definition with no component, say) is named in its own sentence
+          # and drawn as a View, its children in it; an unknown type is named
+          # and drawn as nothing (4f's ruling, jsonui-cli 1.9.0).
+          if code.nil?
+            if unknown_type_validator.known_component_type?(component_type)
+              Core::Logger.warn(Core::AttributeValidator.declared_without_drawer_message(component_type, 'Compose'))
+              component_type = 'View'
+              code = draw_declared_component(component_type, json_data, depth, parent_type, is_root)
+            else
+              code = undeclared_component(component_type)
+            end
+          end
         end
 
         # Wrap with VisibilityWrapper for all components
@@ -536,10 +549,11 @@ module KjuiTools
           result = Components::EmbedComponent.generate(json_data, depth, @required_imports, parent_type)
           handle_container_result(result, depth, parent_type)
         else
-          # Neither declared nor a synonym (Spacer, Divider, Triangle, …):
-          # drawn as an undeclared type, as sjui and rjui draw it. kjui drew
-          # a Spacer of its own (a fixed 8dp height) until 1.8.121.
-          undeclared_component(component_type)
+          # No case: nil, and generate_component names it (Spacer, Divider,
+          # Triangle, … are neither declared nor a synonym: undeclared, as
+          # sjui and rjui name them). kjui drew a Spacer of its own (a fixed
+          # 8dp height) until 1.8.121.
+          nil
         end
       end
 

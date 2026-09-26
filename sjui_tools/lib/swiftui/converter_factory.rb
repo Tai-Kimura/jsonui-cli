@@ -241,9 +241,18 @@ module SjuiTools
         when 'Embed'
           Views::EmbedConverter.new(component, indent_level, action_manager, self, registry, @binding_registry)
         else
-          # デフォルトコンバーター
-          sentence = unknown_type_validator.unknown_component_type_message(component['type'].to_s)
-          DefaultConverter.new(component, indent_level, action_manager, @binding_registry, sentence: sentence)
+          # No case draws it. A type the validator knows (an extension
+          # definition with no converter, say) is named in its own sentence
+          # and drawn as a View, its children in it; an unknown type is named
+          # and drawn as nothing (DefaultConverter). 4f's ruling, jsonui-cli 1.9.0.
+          type = component['type'].to_s
+          if unknown_type_validator.known_component_type?(type)
+            SjuiTools::Core::Logger.warn(SjuiTools::Core::AttributeValidator.declared_without_drawer_message(type, 'SwiftUI'))
+            Views::ViewConverter.new(component, indent_level, action_manager, self, registry, @binding_registry)
+          else
+            sentence = unknown_type_validator.unknown_component_type_message(type)
+            DefaultConverter.new(component, indent_level, action_manager, @binding_registry, sentence: sentence)
+          end
         end
       end
     end
@@ -305,11 +314,14 @@ module SjuiTools
       end
     end
 
-    # A type this tool draws nothing for: named in the build and on the
-    # placeholder in the validator's sentence
-    # (JsonUIShared::AttributeValidatorCore.unknown_component_type_message).
-    # The placeholder said "Unsupported component: <type>", in no other
-    # path's words.
+    # A type the validator does not know: named in the build in the
+    # validator's sentence (JsonUIShared::AttributeValidatorCore
+    # .unknown_component_type_message), and drawn as nothing — the sentence
+    # in a comment where the node would be, and an EmptyView, so what the
+    # parent puts after a child's code has a view to take. Not its children.
+    # It was a red Text holding the sentence (the words of a build on a
+    # release screen), and before that "Unsupported component: <type>";
+    # kjui and rjui draw nothing there too (4f's ruling, jsonui-cli 1.9.0).
     # The factory hands it the sentence (ConverterFactory#unknown_type_validator).
     class DefaultConverter < Views::BaseViewConverter
       def initialize(component, indent_level = 0, action_manager = nil, binding_registry = nil, sentence: nil)
@@ -320,10 +332,8 @@ module SjuiTools
       def convert
         sentence = @sentence || SjuiTools::Core::AttributeValidator.new(:swiftui).unknown_component_type_message(@component['type'].to_s)
         SjuiTools::Core::Logger.warn(sentence)
-        add_line "Text(#{sentence.to_json})"
-        add_modifier_line ".foregroundColor(.red)"
-
-        apply_modifiers
+        add_line "// #{sentence}"
+        add_line 'EmptyView()'
         generated_code
       end
     end

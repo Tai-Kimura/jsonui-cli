@@ -68,9 +68,17 @@ RSpec.describe 'kjui codegen: the type-synonym dispatch' do
       end
     end
 
+    # Without the entry for both of its readers — the dispatch (entries) and
+    # the validator that names what it cannot draw (load, the one parser):
+    # with the validator still knowing TableView, it is declared and drawn
+    # as a View instead.
     it 'follows the table: without its entry, a spelling is an undeclared type' do
       table = JsonUIShared::TypeSynonyms.entries.reject { |spelling, _| spelling == 'TableView' }
       allow(JsonUIShared::TypeSynonyms).to receive(:entries).and_return(table)
+      allow(JsonUIShared::TypeSynonyms).to receive(:load).and_wrap_original do |original, *args|
+        entries, problem = original.call(*args)
+        [entries.reject { |spelling, _| spelling == 'TableView' }, problem]
+      end
       expect(emit({ 'type' => 'TableView', 'id' => 'n', 'items' => [] })).to include("// Unknown component type 'TableView'")
     end
   end

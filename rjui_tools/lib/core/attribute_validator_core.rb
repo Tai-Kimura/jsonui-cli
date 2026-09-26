@@ -118,6 +118,20 @@ module JsonUIShared
       canonical ? message + format(UNKNOWN_COMPONENT_TYPE_HINT, canonical: canonical) : message
     end
 
+    # A type the validator knows (known_component_types: declared in the SSoT
+    # or the project's extension definitions, a type synonym, registered by
+    # the app) that a tool has no drawer for is not unknown: the codegen
+    # names it in this sentence and draws it as a View, its children in it
+    # (4f's ruling, jsonui-cli 1.9.0). An unknown type is named in the one
+    # above and drawn as nothing.
+    DECLARED_WITHOUT_DRAWER = "'%<written>s' is declared but has no %<platform>s converter — drawn as a View"
+
+    # The sentence for a known `written` the `platform` codegen (SwiftUI,
+    # Compose, web) has no drawer for.
+    def self.declared_without_drawer_message(written, platform)
+      format(DECLARED_WITHOUT_DRAWER, written: written, platform: platform)
+    end
+
     # The project's extension definitions alone, read the way a validator in
     # `mode` reads them (the paths are the platform profile's). For the
     # shared LayoutValidator, which knows the SSoT but not the project.
@@ -324,6 +338,12 @@ module JsonUIShared
     # the codegen says the validator's sentence where it draws nothing.
     def unknown_component_type_message(written)
       self.class.unknown_component_type_message(written, known_component_types)
+    end
+
+    # Whether the validator knows `written` as a type (known_component_types):
+    # what a codegen asks before it names a type it has no drawer for.
+    def known_component_type?(written)
+      known_component_types.include?(written)
     end
 
     private

@@ -7,6 +7,7 @@ require_relative '../../core/node_keys'
 # For the one judgment the validator and the generator must share: whether a
 # binding's content can be an expression at all.
 require_relative '../../core/attribute_validator_core'
+require_relative '../../core/attribute_validator'
 require_relative '../../core/tap_accessibility'
 # The one escaper for an author's text in the generated TS/TSX.
 require_relative '../../core/string_literals'
@@ -1443,8 +1444,33 @@ module RjuiTools
 
           drawn = JsonUIShared::ComponentAliases.resolve(JsonUIShared::TypeSynonyms.canonicalize(resolved_child))
           drawn = JsonUIShared::BindFold.fold(drawn, drawn['type'])
-          converter_class = get_converter_class(drawn['type'])
-          converter_class.new(drawn, config)
+          converter_class = built_in_converter_class(drawn['type'])
+          return converter_class.new(drawn, config) if converter_class
+
+          # No converter draws it — the rule ReactGenerator#convert_component
+          # follows for the root: a type the validator knows (an extension
+          # definition with no converter, say) is named in its own sentence
+          # and drawn as a View, its children in it; an unknown type is named
+          # and drawn as nothing (UnknownTypeConverter). It was drawn as a
+          # View here and named nowhere (4f's ruling, jsonui-cli 1.9.0).
+          type = drawn['type'].to_s
+          if type_validator.known_component_type?(type)
+            RjuiTools::Core::Logger.warn(RjuiTools::Core::AttributeValidator.declared_without_drawer_message(type, 'web'))
+            require_relative 'view_converter'
+            return ViewConverter.new(drawn, config)
+          end
+          sentence = type_validator.unknown_component_type_message(type)
+          RjuiTools::Core::Logger.warn(sentence)
+          UnknownTypeConverter.new(drawn, config, sentence)
+        end
+
+        # The validator of this build (ReactGenerator#unknown_type_validator,
+        # handed down in the config), else one of this converter's own.
+        def type_validator
+          handed = config['_type_validator']
+          return handed.call if handed.respond_to?(:call)
+
+          @type_validator ||= RjuiTools::Core::AttributeValidator.new(:react)
         end
 
         def apply_style(child)
@@ -1478,6 +1504,11 @@ module RjuiTools
         end
 
         def get_converter_class(type)
+          built_in_converter_class(type) || ViewConverter
+        end
+
+        # The converter an extension or a built-in has for `type`, else nil.
+        def built_in_converter_class(type)
           # First check extension converters
           extension_converters = config['_extension_converters'] || {}
           return extension_converters[type] if extension_converters[type]
@@ -1535,7 +1566,7 @@ module RjuiTools
             'Web' => WebConverter,
             'TabView' => TabViewConverter,
             'Embed' => EmbedConverter
-          }[type] || ViewConverter
+          }[type]
         end
 
         def indent_str(indent)
@@ -2657,6 +2688,25 @@ module RjuiTools
           end
         end
 
+      end
+
+      # A type the validator does not know, drawn as nothing: the sentence in
+      # a JSX comment where the node would be — not the node, not its
+      # children, and no visibility wrap (a comment is no element to gate).
+      # kjui and sjui draw nothing there too (4f's ruling, jsonui-cli 1.9.0).
+      class UnknownTypeConverter < BaseConverter
+        def initialize(json, config, sentence)
+          super(json, config)
+          @sentence = sentence
+        end
+
+        def convert(indent = 2)
+          "#{' ' * indent}{/* #{@sentence.gsub('*/', '* /')} */}"
+        end
+
+        def convert_node(indent = 2)
+          convert(indent)
+        end
       end
     end
   end

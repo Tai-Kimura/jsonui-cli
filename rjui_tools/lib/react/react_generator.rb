@@ -107,6 +107,9 @@ module RjuiTools
         JsonUIShared::TypeSynonyms.app_types = @extension_converters.keys
         # Store extension converters in config so child converters can access them
         @config['_extension_converters'] = @extension_converters
+        # The validator whose sentences name what no converter draws, for the
+        # child converters too (BaseConverter#type_validator): this build's.
+        @config['_type_validator'] = method(:unknown_type_validator)
         # Stash the component → attribute-definitions map so BaseConverter
         # can suppress Tailwind decoration mapping for keys that a custom
         # component has claimed as a semantic prop (e.g. CodeBlock#maxHeight).
@@ -275,13 +278,23 @@ module RjuiTools
           converter_class = CONVERTERS[type]
         end
         unless converter_class
-          # sjui renders unknown types as a red "Unsupported component" Text
-          # and swift dynamic as an error box; silently degrading to a plain
-          # View here left react the only face that hid the failure.
-          # In the validator's sentence (JsonUIShared::AttributeValidatorCore
-          # .unknown_component_type_message), as kjui and sjui say it.
-          Core::Logger.warn(unknown_type_validator.unknown_component_type_message(type.to_s)) if defined?(Core::Logger)
-          converter_class = Converters::ViewConverter
+          # No converter draws it. A type the validator knows (an extension
+          # definition with no converter, say) is named in its own sentence
+          # and drawn as a View, its children in it; an unknown type is named
+          # in the validator's sentence (JsonUIShared::AttributeValidatorCore
+          # .unknown_component_type_message) and drawn as nothing — the
+          # sentence in a JSX comment where the node would be, as kjui and
+          # sjui draw it. It was drawn as a View (4f's ruling, jsonui-cli
+          # 1.9.0). The child path, BaseConverter#create_converter_for_child,
+          # follows the same rule.
+          if unknown_type_validator.known_component_type?(type.to_s)
+            Core::Logger.warn(Core::AttributeValidator.declared_without_drawer_message(type.to_s, 'web')) if defined?(Core::Logger)
+            converter_class = Converters::ViewConverter
+          else
+            sentence = unknown_type_validator.unknown_component_type_message(type.to_s)
+            Core::Logger.warn(sentence) if defined?(Core::Logger)
+            return Converters::UnknownTypeConverter.new(json, @config, sentence).convert_node(indent)
+          end
         end
 
         converter = converter_class.new(json, @config)
