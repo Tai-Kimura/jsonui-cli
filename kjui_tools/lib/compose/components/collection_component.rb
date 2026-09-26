@@ -601,9 +601,13 @@ module KjuiTools
         #
         # [cell, header, footer] as declared (the first of each; several
         # cells are the validator's to refuse), or nil when none is.
+        #
+        # Each attribute is read by name: `jui conformance coverage` finds
+        # a face's reads by the `json_data['<attribute>']` text, and a read
+        # through a key variable reads as none.
         def self.class_list(json_data)
-          names = %w[cellClasses headerClasses footerClasses].map do |key|
-            first = json_data[key].is_a?(Array) ? json_data[key].first : nil
+          names = [json_data['cellClasses'], json_data['headerClasses'], json_data['footerClasses']].map do |declared|
+            first = declared.is_a?(Array) ? declared.first : nil
             first = first['className'] if first.is_a?(Hash)
             first.is_a?(String) && !first.empty? ? first : nil
           end
