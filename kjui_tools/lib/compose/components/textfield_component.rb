@@ -471,7 +471,9 @@ module KjuiTools
           # Shape with corner radius
           if json_data['cornerRadius']
             required_imports&.add(:shape)
-            code += "\n" + indent("shape = RoundedCornerShape(#{json_data['cornerRadius']}.dp),", depth + 1)
+            # A bound cornerRadius is an expression (BoundValue.dp); `@{r}` was
+            # written into the Kotlin as `RoundedCornerShape(@{r}.dp)` (B8).
+            code += "\n" + indent("shape = RoundedCornerShape(#{Helpers::BoundValue.dp(json_data['cornerRadius'])}),", depth + 1)
           end
 
           # Content padding - internal padding within the text field (not for SecureTextField)

@@ -119,7 +119,6 @@ RSpec.describe 'emitted Kotlin reaches a compiler' do
     'compose/components/collection_component_spec.rb' => "p1 — #{UNCONVERTED}",
     'compose/components/constraintlayout_component_spec.rb' => "p2 — #{UNCONVERTED}",
     'compose/components/container_component_spec.rb' => "p1 — #{UNCONVERTED}",
-    'compose/components/embed_component_spec.rb' => "p2 — #{UNCONVERTED}",
     'compose/components/flow_collection_scrolls_spec.rb' => "p1 — #{UNCONVERTED}",
     'compose/components/gradientview_component_spec.rb' => "p3 — #{UNCONVERTED}",
     'compose/components/handler_name_spelling_spec.rb' => "p2 — #{UNCONVERTED}",
@@ -136,7 +135,6 @@ RSpec.describe 'emitted Kotlin reaches a compiler' do
     'compose/components/text_component_spec.rb' => "p2 — #{UNCONVERTED}",
     'compose/components/textfield_component_spec.rb' => "p2 — #{UNCONVERTED}",
     'compose/components/textview_component_spec.rb' => "p2 — #{UNCONVERTED}",
-    'compose/components/toggle_component_spec.rb' => "p3 — #{UNCONVERTED}",
     'compose/components/web_component_spec.rb' => "p1 — #{UNCONVERTED}",
     'compose/compose_builder_screen_marker_spec.rb' => "p1 — #{UNCONVERTED}",
     'compose/compose_builder_spec.rb' => "p1 — #{UNCONVERTED}",
@@ -256,6 +254,10 @@ RSpec.describe 'emitted Kotlin reaches a compiler' do
   # others got a compile arm instead (tabview_component_spec.rb and the two
   # section_extractor specs). From here it only goes down.
   it 'never grows' do
-    expect(ALLOWLIST_KT.size).to be <= 62
+    # 59 on 2026-09-26: embed_component_spec compiles its event bridge
+    # (ticket rjui-embed-event-bridge-calls-an-undeclared-view-model), and
+    # the number is the list's own again — 62 had held two entries of slack
+    # since f410c98e and 80ca7703 took entries out and left it where it was.
+    expect(ALLOWLIST_KT.size).to be <= 59
   end
 end

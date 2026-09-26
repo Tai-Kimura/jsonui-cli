@@ -29,6 +29,29 @@ RSpec.describe SjuiTools::SwiftUI::Views::SelectBoxConverter do
       end
     end
 
+    # A bound selectedItem / selectedValue is declared two-way: the box follows the data
+    # and the pick is written back (ticket selectbox-selected-item-binding-is-read-once —
+    # a one-time `selectedIndex: items.firstIndex(of:)` was neither, measured on a
+    # simulator).
+    context 'with a bound selectedItem or selectedValue' do
+      %w[selectedItem selectedValue].each do |spelling|
+        it "reads and writes the data through the items (#{spelling})" do
+          code = described_class.new({ 'type' => 'SelectBox', 'id' => 's', 'items' => %w[pp qq], spelling => '@{choice}' }).convert
+          # The read is the seed's optional-aware expression (no data definition here:
+          # `?? ""`); the write goes to the property.
+          expect(code).to include('selectedIndexBinding: SwiftUI.Binding(get: { ["pp", "qq"].firstIndex(of: (data.choice ?? "")) ?? -1 }, ')
+          expect(code).to include('set: { index in data.choice = ["pp", "qq"].indices.contains(index) ? ["pp", "qq"][index] : "" })')
+          expect(code).not_to include('selectedIndex: ["pp", "qq"].firstIndex(of:')
+        end
+      end
+
+      it 'keeps the one-time seed for an expression it cannot write to' do
+        code = described_class.new({ 'type' => 'SelectBox', 'id' => 's', 'items' => %w[pp qq], 'selectedItem' => '@{a ?? "pp"}' }).convert
+        expect(code).to include('selectedIndex: ["pp", "qq"].firstIndex(of:')
+        expect(code).not_to include('selectedIndexBinding: SwiftUI.Binding(get:')
+      end
+    end
+
     context 'with prompt' do
       let(:component) do
         {
@@ -442,10 +465,13 @@ RSpec.describe SjuiTools::SwiftUI::Views::SelectBoxConverter do
         }
       end
 
-      it 'observes the index binding and hands its new Int value to the handler' do
+      # From the pick — SelectBoxView writes the index first — and not an
+      # `.onChange(of:)` on the index, which ran after the click and for the
+      # view model's writes too.
+      it 'hands the index binding its new Int value to the handler from the pick' do
         code = described_class.new(component).convert
-        expect(code).to include('.onChange(of: data.countryIndex) { _, newValue in')
-        expect(code).to include('data.onSelectionChange?(newValue)')
+        expect(code).to include('onValueChange: { newValue in data.onSelectionChange?(data.countryIndex) }')
+        expect(code).not_to include('.onChange(of:')
       end
 
       it 'passes viewId + index to a (String, Int) -> Void handler' do
@@ -453,7 +479,7 @@ RSpec.describe SjuiTools::SwiftUI::Views::SelectBoxConverter do
           'onSelectionChange' => { 'name' => 'onSelectionChange', 'class' => '((String, Int) -> Void)?' }
         }
         code = described_class.new(component).convert
-        expect(code).to include('data.onSelectionChange?("countrySelect", newValue)')
+        expect(code).to include('data.onSelectionChange?("countrySelect", data.countryIndex)')
       end
     end
   end

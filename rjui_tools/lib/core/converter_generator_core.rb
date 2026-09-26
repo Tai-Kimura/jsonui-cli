@@ -60,8 +60,10 @@ module JsonUIShared
     # `jui g converter --skip-existing` exports) and `--force` stopped at the
     # converter: a re-scaffold still waited on stdin for each existing
     # component and adapter, and with stdin closed `gets` returned nil and
-    # `nil.chomp` raised (reported 2026-09-24). Here stdin EOF is "n" — the
-    # safe side, since those files are the ones people maintain by hand.
+    # `nil.chomp` raised (reported 2026-09-24). Here an existing file is kept
+    # unless a person on a terminal answers "y" — the safe side, since those
+    # files are the ones people maintain by hand; stdin that is not a terminal
+    # is not read at all (see overwrite_decision).
     #
     # `noun` / `exists_label` name the file in the two log lines, so the
     # converter's lines read as they always have.
@@ -95,6 +97,19 @@ module JsonUIShared
       end
       return true if options[:force]
 
+      # Asked only on a terminal. Anything else — a closed stdin, /dev/null,
+      # or a pipe that is open and never written (an MCP server's child, an
+      # agent's shell) — keeps the file without reading stdin. Until 1.8.121
+      # the prompt read whatever stdin was: on an open pipe `gets` waited for
+      # a line that never came, and the caller hung until its own timeout
+      # (`jui g converter` under the MCP server; after 1.8.121's first round,
+      # `g view / partial / collection` too — ticket
+      # generate-commands-overwrite-edited-files-and-ignore-their-flags).
+      unless interactive_stdin?
+        logger.info "Kept existing #{noun}: #{file_path} (stdin is not a terminal; --force replaces it)"
+        return false
+      end
+
       logger.warn "#{exists_label || noun.capitalize} already exists: #{file_path}"
       print "Overwrite? (y/n): "
       answer = $stdin.gets
@@ -105,6 +120,14 @@ module JsonUIShared
       false
     end
     private_class_method :overwrite_decision
+
+    # Whether a person can answer the prompt: stdin is a terminal.
+    def self.interactive_stdin?
+      $stdin.respond_to?(:tty?) && $stdin.tty?
+    rescue IOError
+      false
+    end
+    private_class_method :interactive_stdin?
 
     # Writes one scaffold file through the overwrite decision above, and says
     # what it did with the path it wrote: "Created" when there was no file,
@@ -122,6 +145,67 @@ module JsonUIShared
       File.write(file_path, yield)
       logger.info "#{existed ? 'Overwrote' : 'Created'} #{label}: #{file_path}"
       true
+    end
+
+    # ---- the same decision for every other generate command ----
+    #
+    # `g view / partial / collection / adapter / component` (sjui SwiftUI and
+    # UIKit, kjui, rjui) write their scaffold files through write_scaffold too:
+    # a file that is there is the app's, and is replaced only with --force (or
+    # "y" at the prompt, which is shown only on a terminal); --skip-existing,
+    # JUI_SKIP_EXISTING, "n" and a stdin that is not a terminal keep it. Until 1.8.121 each command decided for itself: sjui
+    # SwiftUI `g collection` and UIKit `g view` rewrote a ViewModel / a
+    # ViewController / a layout the app had edited on every run, and the flags
+    # were ignored, refused ("invalid option") or a stack trace, command by
+    # command (ticket generate-commands-overwrite-edited-files-and-ignore-their-flags).
+    # Each run starts a record with scaffold_record and passes it in the
+    # options as :scaffold_files, as a `g converter` run does.
+    def self.scaffold_record
+      { written: [], kept: [], overwritten: [] }
+    end
+
+    # The two flags every generate command of the three tools declares, with
+    # this one meaning (an OptionParser `opts`, the command's options Hash).
+    def self.declare_overwrite_options(opts, options)
+      opts.on('--force', 'Overwrite existing scaffold files without asking') do
+        options[:force] = true
+      end
+      opts.on('--skip-existing', 'Keep existing scaffold files without asking (non-interactive)') do
+        options[:skip_existing] = true
+      end
+    end
+
+    # What the run did to `path`, from the record: :created, :overwritten,
+    # :kept, or nil when it did not decide on the file.
+    def self.scaffold_state(record, path)
+      return :kept if record[:kept].include?(path)
+      return :overwritten if (record[:overwritten] || []).include?(path)
+
+      record[:written].include?(path) ? :created : nil
+    end
+
+    # The files this run created — written, and not there before it. The only
+    # files a rollback may delete: until 1.8.121 sjui UIKit `g view` / `g
+    # collection` deleted every file they listed when the Xcode step raised,
+    # a ViewModel they had kept too.
+    def self.created_scaffold_files(record)
+      record[:written] - (record[:overwritten] || [])
+    end
+
+    # The run's last line, from the record: how many of the files it scaffolds
+    # it created, overwrote and kept (report_scaffold says it for `g
+    # converter`).
+    def self.report_scaffold_record(name, record, logger)
+      overwritten = record[:overwritten] || []
+      created = record[:written] - overwritten
+      kept = record[:kept]
+      counts = "#{created.size} created, #{overwritten.size} overwritten, #{kept.size} kept"
+      if record[:written].empty? && !kept.empty?
+        logger.info "#{name}: every scaffold file already existed and was kept (#{counts}); " \
+                    '--force overwrites them'
+      else
+        logger.success "Scaffolded #{name}: #{counts}"
+      end
     end
 
     # `--attribute-descriptions '<json>'`: {attribute name => description},
@@ -354,7 +438,7 @@ module JsonUIShared
     # Called first by each profile's `generate`: from here on may_write?
     # records every scaffold file this run writes and every one it keeps.
     def track_scaffold_files
-      @options[:scaffold_files] = { written: [], kept: [], overwritten: [] }
+      @options[:scaffold_files] = self.class.scaffold_record
     end
 
     # The run's last line, from the record may_write? keeps: how many of the
@@ -368,16 +452,7 @@ module JsonUIShared
       record = @options[:scaffold_files]
       return unless record.is_a?(Hash)
 
-      overwritten = record[:overwritten] || []
-      created = record[:written] - overwritten
-      kept = record[:kept]
-      counts = "#{created.size} created, #{overwritten.size} overwritten, #{kept.size} kept"
-      if record[:written].empty? && !kept.empty?
-        @logger.info "#{@name}: every scaffold file already existed and was kept (#{counts}); " \
-                     '--force overwrites them'
-      else
-        @logger.success "Scaffolded #{@name}: #{counts}"
-      end
+      self.class.report_scaffold_record(@name, record, @logger)
     end
 
     # What a kept file says when it is in the leaf form: the code

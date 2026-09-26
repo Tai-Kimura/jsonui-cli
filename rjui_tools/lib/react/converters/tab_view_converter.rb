@@ -119,6 +119,8 @@ module RjuiTools
 
           # Build button classes
           button_class = build_tab_button_class(index, selected_binding)
+          disabled_attr = tab_disabled_attr
+          button_class += ' disabled:opacity-50 disabled:cursor-not-allowed' unless disabled_attr.empty?
 
           # Build button style for dynamic colors
           button_style = build_tab_button_style(index, selected_binding)
@@ -137,13 +139,32 @@ module RjuiTools
           <<~JSX.chomp
             #{indent_str(6)}<button#{tab_id_attr}
             #{indent_str(8)}className={`#{button_class}`}#{style_attr}
-            #{indent_str(8)}onClick={#{@seeded ? "() => { setSeeded(#{index}); #{on_change}?.(#{index}); }" : "() => #{on_change}?.(#{index})"}}
+            #{indent_str(8)}onClick={#{@seeded ? "() => { setSeeded(#{index}); #{on_change}?.(#{index}); }" : "() => #{on_change}?.(#{index})"}}#{disabled_attr}
             #{indent_str(6)}>
             #{indent_str(8)}<div className="relative">
             #{icon_jsx}#{badge_jsx ? "\n#{badge_jsx}" : ''}
             #{indent_str(8)}</div>#{label_jsx}
             #{indent_str(6)}</button>
           JSX
+        end
+
+        # `enabled` (common: boolean or binding). false leaves the tabs where
+        # they are: each tab's button is disabled, and a browser sends no
+        # click to a disabled button, so neither the selection nor its
+        # handler moves — `enabled: false` stops the operation, the rule the
+        # five paths share (ticket control-onclick-is-called-differently-on-
+        # every-path). Until 1.8.121 web read no `enabled` on a TabView and
+        # its tabs switched regardless. A TabView that does not declare it
+        # comes out as it did.
+        def tab_disabled_attr
+          enabled = attributes['enabled']
+          if enabled.is_a?(String) && has_binding?(enabled)
+            " disabled={!#{extract_binding_property(enabled)}}"
+          elsif enabled == false
+            ' disabled'
+          else
+            ''
+          end
         end
 
         def build_tab_button_class(index, selected_binding)
@@ -200,7 +221,17 @@ module RjuiTools
         def build_badge(badge)
           if has_binding?(badge)
             binding_prop = attribute_expression(badge)
-            "#{indent_str(10)}{#{binding_prop} && <span className=\"absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full w-4 h-4 flex items-center justify-center\">{#{binding_prop}}</span>}"
+            span = "<span className=\"absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full w-4 h-4 flex items-center justify-center\">{#{binding_prop}}</span>"
+            # Text around a binding (a template literal), or a binding that is
+            # not one (a string), always has text: that badge is always drawn,
+            # and a condition on it is one TypeScript rejects as always truthy.
+            return "#{indent_str(10)}#{span}" if binding_prop.start_with?('`', '"')
+
+            # A binding alone draws the badge while it has a value. Anything
+            # but a plain path is parenthesised: `data.n ?? 'D' && <span>`
+            # mixes `??` with `&&`, which JavaScript refuses to parse.
+            condition = binding_prop.match?(/\A[\w$]+(?:\??\.[\w$]+)*\z/) ? binding_prop : "(#{binding_prop})"
+            "#{indent_str(10)}{#{condition} && #{span}}"
           elsif badge.is_a?(Integer) && badge > 0
             "#{indent_str(10)}<span className=\"absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full w-4 h-4 flex items-center justify-center\">#{badge}</span>"
           elsif badge.is_a?(String) && !badge.empty?

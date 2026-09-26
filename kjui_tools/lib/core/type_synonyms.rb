@@ -19,19 +19,41 @@ module JsonUIShared
     META_KEYS = %w[canonical render_as].freeze
 
     class << self
-      # spelling -> entry, read once per path. A malformed file raises,
-      # naming it: a table that read as empty would draw every synonym as an
-      # unknown type and validate it against common only, and say nothing.
-      #
-      # A missing file reads as empty. It is what a plain copy of a tool
-      # leaves (the file is a link into shared/core), and the validator names
-      # it and records the validation stage incomplete, once
-      # (attribute_validator_core.rb#type_synonyms); a converter then draws a
-      # synonym spelling as an undeclared type. Raising here instead stopped
-      # the build before the ledger was written.
+      # spelling -> entry, read once per path. A table that cannot be used —
+      # missing (what a plain copy of a tool leaves: the file is a link into
+      # shared/core), not JSON, or not the declared shape — reads as empty:
+      # the validator names it and records the validation stage incomplete,
+      # once (attribute_validator_core.rb#type_synonyms, from `load`), and a
+      # converter then draws a synonym spelling as an undeclared type. No
+      # tool raises on it: raising stopped the build before the ledger was
+      # written.
       def entries(path = DEFAULT_PATH)
         @entries ||= {}
-        @entries[path] ||= File.exist?(path) ? read(path) : {}
+        @entries[path] ||= load(path).first
+      end
+
+      # [entries, problem] for the table at `path` — the one parser of it.
+      # `problem` is nil, or [said, entry] when the table cannot be used:
+      # what the validator prints where it meets the table, and the ledger
+      # entry it records. Read as UTF-8 whatever the locale says (the table's
+      # text is UTF-8): a library reader, such as tap_accessibility.rb, may
+      # run where the entry point did not set the default encoding.
+      def load(path = DEFAULT_PATH)
+        return [{}, ["type_synonyms.json not found at #{path}", "#{path} was not found"]] unless File.exist?(path)
+
+        begin
+          parsed = JSON.parse(File.read(path, encoding: 'UTF-8'))
+        rescue JSON::ParserError => e
+          reason = e.message.lines.first.to_s.strip
+          return [{}, ["#{path} does not parse: #{reason}", "#{path} does not parse (#{reason})"]]
+        end
+        entries = parsed.is_a?(Hash) ? parsed['synonyms'] : nil
+        unless entries.is_a?(Hash) && entries.values.all? { |e| e.is_a?(Hash) && e['canonical'].is_a?(String) }
+          shape = '`synonyms` must map each spelling to an object with a `canonical` string'
+          return [{}, ["#{path}: #{shape}", "#{path} is not the declared shape (#{shape})"]]
+        end
+
+        [entries, nil]
       end
 
       # The type `type` is drawn as: its synonym's target, or itself.
@@ -127,19 +149,6 @@ module JsonUIShared
         end.compact
       end
 
-      private
-
-      # Read as UTF-8 whatever the locale says (the table's text is UTF-8): a
-      # library reader, such as tap_accessibility.rb, may run where the
-      # entry point did not set the default encoding.
-      def read(path)
-        entries = JSON.parse(File.read(path, encoding: 'UTF-8'))['synonyms']
-        unless entries.is_a?(Hash) && entries.values.all? { |e| e.is_a?(Hash) && e['canonical'].is_a?(String) }
-          raise "#{path}: `synonyms` must map each spelling to an object with a `canonical` string"
-        end
-
-        entries
-      end
     end
   end
 

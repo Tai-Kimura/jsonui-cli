@@ -7,6 +7,7 @@ require_relative '../core/generated_marker'
 require_relative '../core/frameworks'
 require_relative '../core/normalization'
 require_relative '../core/string_manager_core'
+require_relative 'component_name'
 require_relative 'converters/base_converter'
 require_relative 'converters/view_converter'
 require_relative 'converters/label_converter'
@@ -860,7 +861,13 @@ module RjuiTools
             default_anchor = json['defaultScrollAnchor']
             current_page = collection ? json['currentPage'] : nil
             on_item_appear = collection ? json['onItemAppear'] : nil
-            if scroll_to || default_anchor || current_page || on_item_appear
+            # The page-change callback: a paging Collection's, as on sjui and
+            # kjui (both emit it in their paging path only). The raw node here,
+            # so the definitions' alias spellings are looked up too.
+            page_change = if collection && json['paging'] == true
+                            json['onValueChange'] || json['onValueChanged'] || json['onPageChanged']
+                          end
+            if scroll_to || default_anchor || current_page || on_item_appear || page_change
               layout = json['orientation'] || json['layout'] || json['scrollDirection'] || 'vertical'
               found << {
                 camel: snake_to_camel_id(id),
@@ -871,7 +878,8 @@ module RjuiTools
                 scroll_animated: json['scrollAnimated'],
                 default_anchor: default_anchor,
                 current_page: current_page,
-                on_item_appear: on_item_appear
+                on_item_appear: on_item_appear,
+                page_change: page_change
               }
             end
           end
@@ -896,7 +904,7 @@ module RjuiTools
         names = []
         names << 'scrollCollectionToItem' if collections.any? { |c| c[:scroll_to] || c[:current_page] }
         names << 'applyCollectionDefaultAnchor' if collections.any? { |c| c[:default_anchor] }
-        names << 'currentCollectionPage' if collections.any? { |c| c[:current_page] }
+        names << 'currentCollectionPage' if collections.any? { |c| c[:current_page] || c[:page_change] }
         names << 'observeCollectionItems' if collections.any? { |c| c[:on_item_appear] }
         return '' if names.empty?
 
@@ -923,7 +931,7 @@ module RjuiTools
         if (target = collection[:scroll_to]) && binding_expression?(target)
           prop = binding_data_path(target)
           anchor_expr = scroll_anchor_expr(collection[:scroll_anchor] || 'bottom')
-          animated = collection[:scroll_animated] == false ? 'false' : 'true'
+          animated = scroll_animated_arg(collection[:scroll_animated])
           lines << "  useEffect(() => { scrollCollectionToItem(#{ref}.current, #{prop}, " \
                    "#{anchor_expr}, #{animated}, #{horizontal}); }, [#{prop}]);"
         end
@@ -950,6 +958,19 @@ module RjuiTools
 
       def scroll_anchor_expr(anchor)
         %w[top center bottom].include?(anchor.to_s) ? "'#{anchor}'" : "'bottom'"
+      end
+
+      # `scrollAnimated` as scrollCollectionToItem's `animated`: a literal
+      # false jumps, absent or true animates (the declared default), and a
+      # binding decides at run time — true only when the bound value is true,
+      # the reading sjui (`(data.x ?? false)`) and kjui (`(data.x ?: false)`)
+      # give an unset bound value. Until 1.8.121 a binding was read as `true`
+      # (measured on 46a54fc3, 2026-09-26; ticket
+      # collection-attributes-declared-but-not-drawn-on-some-paths).
+      def scroll_animated_arg(value)
+        return "(#{binding_data_path(value)}) === true" if binding_expression?(value)
+
+        value == false ? 'false' : 'true'
       end
 
       def binding_expression?(value)
@@ -1094,8 +1115,7 @@ module RjuiTools
             class_name = class_ref.is_a?(Hash) ? class_ref['className'] : class_ref
             next unless class_name.is_a?(String)
             parts = class_name.split('/')
-            base_name = parts.last
-            component_name = to_pascal_case(base_name)
+            component_name = ComponentName.for_reference(class_name)
             subdir = parts.length > 1 ? parts[0...-1].join('/') : nil
             components[component_name] ||= subdir
           end
@@ -1109,8 +1129,7 @@ module RjuiTools
             class_name = section[key]
             next unless class_name.is_a?(String)
             parts = class_name.split('/')
-            base_name = parts.last
-            component_name = to_pascal_case(base_name)
+            component_name = ComponentName.for_reference(class_name)
             subdir = parts.length > 1 ? parts[0...-1].join('/') : nil
             components[component_name] ||= subdir
           end
@@ -1195,20 +1214,14 @@ module RjuiTools
         if type == 'Collection'
           # Modern sections format
           json['sections']&.each do |section|
-            if section['cell']
-              cell_name = section['cell'].split('/').last
-              cell_type = cell_name.match?(/^[A-Z]/) && !cell_name.include?('_') ? cell_name : cell_name.split('_').map(&:capitalize).join
-              types << cell_type
-            end
+            cell_type = ComponentName.for_reference(section['cell'])
+            types << cell_type if cell_type
           end
 
           # Legacy cellClasses format
           json['cellClasses']&.each do |cell_class|
-            cell_name = cell_class.is_a?(Hash) ? cell_class['className'] : cell_class
-            next unless cell_name.is_a?(String)
-            cell_name = cell_name.split('/').last
-            cell_type = cell_name.match?(/^[A-Z]/) && !cell_name.include?('_') ? cell_name : cell_name.split('_').map(&:capitalize).join
-            types << cell_type
+            cell_type = ComponentName.for_reference(cell_class)
+            types << cell_type if cell_type
           end
         end
 

@@ -4,6 +4,8 @@ require 'json'
 require 'fileutils'
 require_relative '../../core/config_manager'
 require_relative '../../core/project_finder'
+require_relative '../../core/logger'
+require_relative '../../core/converter_generator_core'
 
 module KjuiTools
   module Compose
@@ -62,37 +64,43 @@ module KjuiTools
           FileUtils.mkdir_p(viewmodel_path)
           FileUtils.mkdir_p(data_path)
           
-          # Each file is written only when it is not there (an existing one
-          # is the app's), and said as it went: created or kept.
+          # Each file through the one overwrite decision the generate
+          # commands share: an existing one is the app's — kept unless
+          # --force (or "y" at the prompt); a closed stdin and --skip-existing
+          # keep it. Each is said as it is decided. Until 1.8.121 --force was
+          # parsed and not read, and --skip-existing was "invalid option"
+          # (ticket generate-commands-overwrite-edited-files-and-ignore-their-flags).
           json_file = File.join(json_path, "#{json_file_name}.json")
           main_kotlin_file = File.join(swift_path, "#{view_class_name}View.kt")
           generated_kotlin_file = File.join(swift_path, "#{view_class_name}GeneratedView.kt")
           data_file = File.join(data_path, "#{view_class_name}Data.kt")
           viewmodel_file = File.join(viewmodel_path, "#{view_class_name}ViewModel.kt")
-          files = [['JSON:          ', json_file], ['Main View:     ', main_kotlin_file],
-                   ['Generated View:', generated_kotlin_file], ['Data:          ', data_file],
-                   ['ViewModel:     ', viewmodel_file]]
-          existed = files.map { |_, path| File.exist?(path) }
+          core = JsonUIShared::ConverterGeneratorCore
+          record = core.scaffold_record
+          options = @options.merge(scaffold_files: record)
+          scaffold = lambda do |path, noun, &content|
+            core.write_scaffold(path, options, Core::Logger,
+                                noun: noun, label: noun, exists_label: noun.sub(/\A\w/, &:upcase), &content)
+          end
 
-          create_json_template(json_file, view_class_name)
-          create_main_view_template(main_kotlin_file, view_class_name, json_file_name, subdirectory, package_name)
-          create_generated_view_template(generated_kotlin_file, view_class_name, json_file_name, subdirectory, package_name)
-          create_data_template(data_file, view_class_name, package_name)
-          create_viewmodel_template(viewmodel_file, view_class_name, json_file_name, subdirectory, package_name)
+          scaffold.call(json_file, 'JSON layout') { json_content(view_class_name) }
+          scaffold.call(main_kotlin_file, 'view') do
+            main_view_content(view_class_name, json_file_name, subdirectory, package_name)
+          end
+          scaffold.call(generated_kotlin_file, 'generated view') do
+            generated_view_content(view_class_name, json_file_name, subdirectory, package_name)
+          end
+          scaffold.call(data_file, 'data file') { data_content(view_class_name, package_name) }
+          scaffold.call(viewmodel_file, 'ViewModel') do
+            viewmodel_content(view_class_name, json_file_name, subdirectory, package_name)
+          end
 
           # Update MainActivity if --root option is specified
           activity_updated = update_main_activity(view_class_name, package_name) if @options[:root]
 
-          # Until 1.8.121 this said "Generated Compose view:" and listed the
-          # five files whatever it had done — after a run that wrote none of
-          # them, and after --force, which this generator does not read (ticket
-          # kjui-g-view-reports-what-it-did-not-do).
-          created = existed.count(false)
-          puts(created.zero? ? "Compose view #{view_class_name}: every file exists and was kept" :
-                               "Generated Compose view #{view_class_name}:")
-          files.zip(existed).each do |(label, path), was|
-            puts "  #{label} #{path} (#{was ? 'kept: it exists' : 'created'})"
-          end
+          # The counts, from the record (until 1.8.121 a list whatever the run
+          # had done — ticket kjui-g-view-reports-what-it-did-not-do).
+          core.report_scaffold_record("Compose view #{view_class_name}", record, Core::Logger)
 
           if activity_updated
             puts "  Updated MainActivity to use #{view_class_name}View as root"
@@ -176,9 +184,17 @@ module KjuiTools
              .downcase
         end
 
+        # The create_* methods below are `kjui build`'s: they write a file only
+        # when it is missing, without asking (ensure_kotlin_files_exist). `g
+        # view` decides through the shared overwrite decision instead.
         def create_json_template(file_path, view_name)
           return if File.exist?(file_path)
-          
+
+          File.write(file_path, json_content(view_name))
+          puts "Created JSON template: #{file_path}"
+        end
+
+        def json_content(view_name)
           template = {
             type: "SafeAreaView",
             background: "#FFFFFF",
@@ -224,13 +240,17 @@ module KjuiTools
             ]
           }
           
-          File.write(file_path, JSON.pretty_generate(template))
-          puts "Created JSON template: #{file_path}"
+          JSON.pretty_generate(template)
         end
 
         def create_main_view_template(file_path, view_name, json_name, subdirectory, package_name)
           return if File.exist?(file_path)
 
+          File.write(file_path, main_view_content(view_name, json_name, subdirectory, package_name))
+          puts "Created Main View template: #{file_path}"
+        end
+
+        def main_view_content(view_name, json_name, subdirectory, package_name)
           package_parts = package_name.split('.')
           # Each view has its own package (e.g., com.example.views.home_view)
           # Must use snake_case for subdirectory in package names
@@ -258,14 +278,17 @@ module KjuiTools
                 #{view_name}GeneratedView(data = data, viewModel = viewModel, modifier = modifier)
             }
           KOTLIN
-          
-          File.write(file_path, template)
-          puts "Created Main View template: #{file_path}"
+          template
         end
-        
+
         def create_generated_view_template(file_path, view_name, json_name, subdirectory, package_name)
           return if File.exist?(file_path)
 
+          File.write(file_path, generated_view_content(view_name, json_name, subdirectory, package_name))
+          puts "Created Generated View template: #{file_path}"
+        end
+
+        def generated_view_content(view_name, json_name, subdirectory, package_name)
           snake_subdir_path = subdirectory&.split('/')&.map { |p| to_snake_case(p) }&.join('/')
           json_reference = snake_subdir_path ? "#{snake_subdir_path}/#{json_name}" : json_name
           # Each view has its own package (using snake_case for folder)
@@ -334,14 +357,17 @@ module KjuiTools
                 // >>> GENERATED_CODE_END
             }
           KOTLIN
-          
-          File.write(file_path, template)
-          puts "Created Generated View template: #{file_path}"
+          template
         end
-        
+
         def create_data_template(file_path, view_name, package_name)
           return if File.exist?(file_path)
-          
+
+          File.write(file_path, data_content(view_name, package_name))
+          puts "Created Data template: #{file_path}"
+        end
+
+        def data_content(view_name, package_name)
           data_package = "#{package_name}.data"
           
           template = <<~KOTLIN
@@ -369,14 +395,17 @@ module KjuiTools
                 }
             }
           KOTLIN
-          
-          File.write(file_path, template)
-          puts "Created Data template: #{file_path}"
+          template
         end
-        
+
         def create_viewmodel_template(file_path, view_name, json_name, subdirectory, package_name)
           return if File.exist?(file_path)
 
+          File.write(file_path, viewmodel_content(view_name, json_name, subdirectory, package_name))
+          puts "Created ViewModel template: #{file_path}"
+        end
+
+        def viewmodel_content(view_name, json_name, subdirectory, package_name)
           snake_subdir_path = subdirectory&.split('/')&.map { |p| to_snake_case(p) }&.join('/')
           json_reference = snake_subdir_path ? "#{snake_subdir_path}/#{json_name}" : json_name
           viewmodel_package = "#{package_name}.viewmodels"
@@ -433,9 +462,7 @@ module KjuiTools
                 }
             }
           KOTLIN
-
-          File.write(file_path, template)
-          puts "Created ViewModel template: #{file_path}"
+          template
         end
         
         def update_main_activity(view_name, package_name)

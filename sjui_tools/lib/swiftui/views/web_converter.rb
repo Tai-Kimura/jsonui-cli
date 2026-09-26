@@ -42,7 +42,7 @@ module SjuiTools
           # rule onLongPress follows.
           handler = @component['onLoadFailed']
           if handler && is_binding?(handler)
-            args << "onLoadFailed: { #{get_event_handler_invocation(handler, @component['id'])} }"
+            args << "onLoadFailed: { #{get_event_handler_invocation(handler, view_id)} }"
           end
           token = @component['reloadToken']
           if token && is_binding?(token)

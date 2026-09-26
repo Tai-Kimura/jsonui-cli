@@ -3,6 +3,7 @@
 require_relative '../helpers/binding_expression'
 require_relative '../helpers/modifier_builder'
 require_relative '../../core/string_literals'
+require_relative '../../core/binding_validator_core'
 
 # Generates Compose code for the `Embed` view type. Embeds another screen as
 # a region of the parent layout; the embedded screen owns its own ViewModel.
@@ -89,8 +90,20 @@ module KjuiTools
             code += "\n" + indent('eventBridge = { event ->', depth + 1)
             code += "\n" + indent('if (event is EmbeddedEvent.Named) {', depth + 2)
             code += "\n" + indent('when (event.name) {', depth + 3)
+            # Each event calls the parent ViewModel's method it names, with
+            # the payload — the method the consumer writes. A value that
+            # names no method (`@{name}`, the binding spelling, was written
+            # into code as it stood: `viewModel.@{name}(event.payload)`) is
+            # not called: the build names it
+            # (BindingValidatorCore.embed_event_handler_problem) and a
+            # comment keeps its place.
             events.each do |event_name, handler|
-              code += "\n" + indent("\"#{event_name}\" -> viewModel.#{handler}(event.payload)", depth + 4)
+              line = if JsonUIShared::BindingValidatorCore.embed_event_handler_problem(handler)
+                       "// ERROR: Embed event #{event_name.to_s.gsub(/[\r\n]/, ' ')} names no handler, and is not called"
+                     else
+                       "#{JsonUIShared::StringLiterals.kotlin(event_name.to_s)} -> viewModel.#{handler}(event.payload)"
+                     end
+              code += "\n" + indent(line, depth + 4)
             end
             code += "\n" + indent('}', depth + 3)
             code += "\n" + indent('}', depth + 2)
@@ -134,6 +147,11 @@ module KjuiTools
           modifiers.concat(Helpers::ModifierBuilder.build_alpha(json_data, required_imports))
           modifiers.concat(Helpers::ModifierBuilder.build_shadow(json_data, required_imports))
           modifiers.concat(Helpers::ModifierBuilder.build_background(json_data, required_imports))
+          # The node's own long press, pan and pinch, at the click slot and
+          # gated like it (gesture_gate: userInteractionEnabled and enabled) —
+          # declared on `common` and dropped here
+          # (kjui-dynamic-components-that-skip-the-common-modifiers, B6).
+          modifiers.concat(Helpers::ModifierBuilder.build_gestures(json_data, required_imports))
           modifiers.concat(Helpers::ModifierBuilder.build_click(json_data, required_imports))
           modifiers.concat(Helpers::ModifierBuilder.build_disabled_semantics(
             json_data, Helpers::ModifierBuilder.enabled_expression(json_data), required_imports

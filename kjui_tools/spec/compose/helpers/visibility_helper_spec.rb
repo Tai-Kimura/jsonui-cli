@@ -85,14 +85,14 @@ RSpec.describe KjuiTools::Compose::Helpers::VisibilityHelper do
           if (with(LocalDensity.current) { LocalWindowInfo.current.containerSize.width.toDp().value.toInt() } >= 840) {
               LazyVerticalGrid(
                   modifier = Modifier
-                      .testTag("bar_list_collection")
+                      .testTag("item_list_collection")
                       .weight(1f),
               ) {
               }
           } else {
               CollectionStack(
                   modifier = Modifier
-                      .testTag("bar_list_collection")
+                      .testTag("item_list_collection")
                       .weight(1f),
               ) {
               }

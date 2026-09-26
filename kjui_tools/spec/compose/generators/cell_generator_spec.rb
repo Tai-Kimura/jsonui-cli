@@ -45,7 +45,7 @@ RSpec.describe KjuiTools::Compose::Generators::CellGenerator do
   describe '#generate' do
     it 'creates JSON layout file' do
       generator = described_class.new('ProductCell')
-      expect { generator.generate }.to output(/Generated Collection Cell/).to_stdout
+      expect { generator.generate }.to output(/Scaffolded collection cell/).to_stdout
 
       json_path = File.join(temp_dir, 'src/main/assets/Layouts/product_cell.json')
       expect(File.exist?(json_path)).to be true
@@ -53,7 +53,7 @@ RSpec.describe KjuiTools::Compose::Generators::CellGenerator do
 
     it 'creates main view file' do
       generator = described_class.new('ProductCell')
-      expect { generator.generate }.to output(/Generated Collection Cell/).to_stdout
+      expect { generator.generate }.to output(/Scaffolded collection cell/).to_stdout
 
       view_path = File.join(temp_dir, 'src/main/kotlin/com/example/app/views/product_cell/ProductCellView.kt')
       expect(File.exist?(view_path)).to be true
@@ -61,7 +61,7 @@ RSpec.describe KjuiTools::Compose::Generators::CellGenerator do
 
     it 'creates generated view file' do
       generator = described_class.new('ProductCell')
-      expect { generator.generate }.to output(/Generated Collection Cell/).to_stdout
+      expect { generator.generate }.to output(/Scaffolded collection cell/).to_stdout
 
       generated_path = File.join(temp_dir, 'src/main/kotlin/com/example/app/views/product_cell/ProductCellGeneratedView.kt')
       expect(File.exist?(generated_path)).to be true
@@ -69,7 +69,7 @@ RSpec.describe KjuiTools::Compose::Generators::CellGenerator do
 
     it 'creates data file' do
       generator = described_class.new('ProductCell')
-      expect { generator.generate }.to output(/Generated Collection Cell/).to_stdout
+      expect { generator.generate }.to output(/Scaffolded collection cell/).to_stdout
 
       data_path = File.join(temp_dir, 'src/main/kotlin/com/example/app/data/ProductCellData.kt')
       expect(File.exist?(data_path)).to be true
@@ -77,7 +77,7 @@ RSpec.describe KjuiTools::Compose::Generators::CellGenerator do
 
     it 'creates viewmodel file' do
       generator = described_class.new('ProductCell')
-      expect { generator.generate }.to output(/Generated Collection Cell/).to_stdout
+      expect { generator.generate }.to output(/Scaffolded collection cell/).to_stdout
 
       viewmodel_path = File.join(temp_dir, 'src/main/kotlin/com/example/app/viewmodels/ProductCellViewModel.kt')
       expect(File.exist?(viewmodel_path)).to be true
@@ -85,7 +85,7 @@ RSpec.describe KjuiTools::Compose::Generators::CellGenerator do
 
     it 'handles subdirectory paths' do
       generator = described_class.new('products/ItemCell')
-      expect { generator.generate }.to output(/Generated Collection Cell/).to_stdout
+      expect { generator.generate }.to output(/Scaffolded collection cell/).to_stdout
 
       json_path = File.join(temp_dir, 'src/main/assets/Layouts/products/item_cell.json')
       expect(File.exist?(json_path)).to be true
@@ -93,33 +93,35 @@ RSpec.describe KjuiTools::Compose::Generators::CellGenerator do
 
     it 'converts PascalCase subdirectory to snake_case for JSON path' do
       generator = described_class.new('MyProducts/ProductCell')
-      expect { generator.generate }.to output(/Generated Collection Cell/).to_stdout
+      expect { generator.generate }.to output(/Scaffolded collection cell/).to_stdout
 
       # JSON uses snake_case path
       json_path = File.join(temp_dir, 'src/main/assets/Layouts/my_products/product_cell.json')
       expect(File.exist?(json_path)).to be true
 
-      # View keeps original casing for package
-      view_path = File.join(temp_dir, 'src/main/kotlin/com/example/app/views/MyProducts/product_cell/ProductCellView.kt')
+      # The view folder is snake_case too: `kjui build` looks for the cell's
+      # Kotlin files under the layout's own (snake_case) subdirectory, and
+      # until 1.8.121 did not find them under views/MyProducts/.
+      view_path = File.join(temp_dir, 'src/main/kotlin/com/example/app/views/my_products/product_cell/ProductCellView.kt')
       expect(File.exist?(view_path)).to be true
     end
 
     it 'handles deeply nested paths with snake_case JSON directory' do
       generator = described_class.new('Home/Footer/ItemCell')
-      expect { generator.generate }.to output(/Generated Collection Cell/).to_stdout
+      expect { generator.generate }.to output(/Scaffolded collection cell/).to_stdout
 
       # JSON uses snake_case nested path
       json_path = File.join(temp_dir, 'src/main/assets/Layouts/home/footer/item_cell.json')
       expect(File.exist?(json_path)).to be true
 
-      # View uses original casing
-      view_path = File.join(temp_dir, 'src/main/kotlin/com/example/app/views/Home/Footer/item_cell/ItemCellView.kt')
+      # View folder follows the layout's snake_case path (as `kjui build`)
+      view_path = File.join(temp_dir, 'src/main/kotlin/com/example/app/views/home/footer/item_cell/ItemCellView.kt')
       expect(File.exist?(view_path)).to be true
     end
 
     it 'converts PascalCase names to snake_case for files' do
       generator = described_class.new('MyAwesomeCell')
-      expect { generator.generate }.to output(/Generated Collection Cell/).to_stdout
+      expect { generator.generate }.to output(/Scaffolded collection cell/).to_stdout
 
       json_path = File.join(temp_dir, 'src/main/assets/Layouts/my_awesome_cell.json')
       expect(File.exist?(json_path)).to be true
@@ -130,8 +132,11 @@ RSpec.describe KjuiTools::Compose::Generators::CellGenerator do
       FileUtils.mkdir_p(File.dirname(json_path))
       File.write(json_path, '{"type": "CustomCell"}')
 
+      # The existing file is the app's: the prompt is answered by a closed
+      # stdin ("n"), so the run never waits on the terminal it runs in.
+      allow($stdin).to receive(:gets).and_return(nil)
       generator = described_class.new('ExistingCell')
-      expect { generator.generate }.to output(/Generated Collection Cell/).to_stdout
+      expect { generator.generate }.to output(/Scaffolded collection cell/).to_stdout
 
       content = File.read(json_path)
       expect(content).to include('CustomCell')
@@ -141,7 +146,7 @@ RSpec.describe KjuiTools::Compose::Generators::CellGenerator do
   describe 'generated JSON content' do
     it 'includes View as root with horizontal orientation' do
       generator = described_class.new('TestCell')
-      expect { generator.generate }.to output(/Generated Collection Cell/).to_stdout
+      expect { generator.generate }.to output(/Scaffolded collection cell/).to_stdout
 
       json_path = File.join(temp_dir, 'src/main/assets/Layouts/test_cell.json')
       content = JSON.parse(File.read(json_path))
@@ -151,7 +156,7 @@ RSpec.describe KjuiTools::Compose::Generators::CellGenerator do
 
     it 'includes child components' do
       generator = described_class.new('TestCell')
-      expect { generator.generate }.to output(/Generated Collection Cell/).to_stdout
+      expect { generator.generate }.to output(/Scaffolded collection cell/).to_stdout
 
       json_path = File.join(temp_dir, 'src/main/assets/Layouts/test_cell.json')
       content = JSON.parse(File.read(json_path))
@@ -163,7 +168,7 @@ RSpec.describe KjuiTools::Compose::Generators::CellGenerator do
     # the old '@{item.title}' / '@{item.value}' prefix is non-canonical.
     it 'scaffolds flat item-field bindings without the item. prefix' do
       generator = described_class.new('TestCell')
-      expect { generator.generate }.to output(/Generated Collection Cell/).to_stdout
+      expect { generator.generate }.to output(/Scaffolded collection cell/).to_stdout
 
       json_path = File.join(temp_dir, 'src/main/assets/Layouts/test_cell.json')
       raw = File.read(json_path)
@@ -176,7 +181,7 @@ RSpec.describe KjuiTools::Compose::Generators::CellGenerator do
   describe 'generated Kotlin files' do
     it 'includes correct package in main view' do
       generator = described_class.new('TestCell')
-      expect { generator.generate }.to output(/Generated Collection Cell/).to_stdout
+      expect { generator.generate }.to output(/Scaffolded collection cell/).to_stdout
 
       view_path = File.join(temp_dir, 'src/main/kotlin/com/example/app/views/test_cell/TestCellView.kt')
       content = File.read(view_path)
@@ -185,7 +190,7 @@ RSpec.describe KjuiTools::Compose::Generators::CellGenerator do
 
     it 'includes item parameter in cell data' do
       generator = described_class.new('TestCell')
-      expect { generator.generate }.to output(/Generated Collection Cell/).to_stdout
+      expect { generator.generate }.to output(/Scaffolded collection cell/).to_stdout
 
       data_path = File.join(temp_dir, 'src/main/kotlin/com/example/app/data/TestCellData.kt')
       content = File.read(data_path)

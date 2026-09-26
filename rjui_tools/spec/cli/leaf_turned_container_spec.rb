@@ -4,6 +4,7 @@ require 'open3'
 require 'tmpdir'
 require 'json'
 require 'fileutils'
+require 'pty'
 
 # A leaf (`rjui g converter <Name> --no-container`) turned back into a
 # container — `--container`, which `jui g converter --from` passes for a
@@ -56,9 +57,33 @@ RSpec.describe 'a leaf turned back into a container, through rjui g converter an
     layouts = File.join(@dir, 'src', 'Layouts')
     FileUtils.mkdir_p(layouts)
 
+    # An answer is typed on a pseudo-terminal, then end-of-file: since
+    # 1.8.121 the prompt is shown only on a terminal, and a "y" on a pipe is
+    # not an answer (a stdin that is not a terminal is not read).
     rjui = lambda do |component, args, stdin|
-      said, status = Open3.capture2e('ruby', File.join(tool, 'bin', 'rjui'), 'g', 'converter', component,
-                                     '--attributes', 'title:String', *args, chdir: @dir, stdin_data: stdin)
+      cmd = ['ruby', File.join(tool, 'bin', 'rjui'), 'g', 'converter', component, '--attributes', 'title:String', *args]
+      if stdin.empty?
+        said, status = Open3.capture2e(*cmd, chdir: @dir, stdin_data: stdin)
+      else
+        said = +''
+        status = nil
+        PTY.spawn(*cmd, chdir: @dir) do |r, w, pid|
+          w.write(stdin + "\x04" * 4)
+          begin
+            loop do
+              unless IO.select([r], nil, nil, 60)
+                Process.kill('KILL', pid) # waiting on a prompt it was not answered
+                break
+              end
+              said << r.readpartial(4096)
+            end
+          rescue EOFError, Errno::EIO
+            nil
+          end
+          _, status = Process.wait2(pid)
+        end
+        said = said.force_encoding(Encoding::UTF_8).delete("\r")
+      end
       [said.gsub(/\e\[[0-9;]*m/, ''), status]
     end
     @first = {}

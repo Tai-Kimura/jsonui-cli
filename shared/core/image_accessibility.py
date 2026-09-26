@@ -103,15 +103,24 @@ def is_handler(value) -> bool:
     return any(names_a_method(v) for v in values)
 
 
-def is_tappable(node) -> bool:
+def stops(node) -> bool:
+    """`userInteractionEnabled: false`: the node and everything in it take no
+    interaction (the tap rule's `stops?`)."""
+    return isinstance(node, dict) and node.get("userInteractionEnabled") is False
+
+
+def is_tappable(node, stopped=False) -> bool:
     """Whether `node` operates something a screen-reader user can activate —
-    a tap (a handler, `enabled` not false, `canTap` not false) or a long press
-    (a handler, `enabled` not false) — as the tap rule judges it. It read the
-    handler KEY before, so an empty, disabled or shut tap made an image a
-    control. A bound gate still operates: it opens at run time."""
+    a tap (a handler, `enabled` not false, `canTap` not false,
+    `userInteractionEnabled` not false on it or on a node around it:
+    `stopped`) or a long press (a handler, `enabled` not false) — as the tap
+    rule judges it. It read the handler KEY before, so an empty, disabled or
+    shut tap made an image a control. A bound gate still operates: it opens
+    at run time."""
     if not isinstance(node, dict) or node.get("enabled") is False:
         return False
-    if node.get("canTap") is not False and any(is_handler(node.get(key)) for key in TAP_KEYS):
+    if (not stopped and not stops(node) and node.get("canTap") is not False
+            and any(is_handler(node.get(key)) for key in TAP_KEYS)):
         return True
     return is_handler(node.get(LONG_PRESS_KEY))
 
@@ -144,12 +153,13 @@ def names_something(node) -> bool:
     return any(names_something(c) for c in children(node))
 
 
-def role(node, nearest_tappable=None) -> str:
-    """The role of one image, given the nearest tappable around it (None when none)."""
+def role(node, nearest_tappable=None, stopped=False) -> str:
+    """The role of one image, given the nearest tappable around it (None when
+    none), and whether a node around it has `userInteractionEnabled: false`."""
     value = alt(node)
     if value is not None:
         return "decorative" if (value if isinstance(value, str) else str(value)) == "" else "label"
-    if is_tappable(node):
+    if is_tappable(node, stopped):
         return "control"
     if nearest_tappable is not None and not names_something(nearest_tappable):
         return "control"
@@ -160,14 +170,16 @@ def roles(root) -> list:
     """(image node, role) for every image of a layout tree, in document order."""
     out: list = []
 
-    def walk(node, nearest):
+    # A node inside one with `userInteractionEnabled: false` is no tappable
+    # for the images in it; a tappable around that node still is.
+    def walk(node, nearest, stopped):
         if not isinstance(node, dict):
             return
         if is_image(node):
-            out.append((node, role(node, nearest)))
-        inner = node if is_tappable(node) else nearest
+            out.append((node, role(node, nearest, stopped)))
+        inner = node if is_tappable(node, stopped) else nearest
         for c in children(node):
-            walk(c, inner)
+            walk(c, inner, stopped or stops(node))
 
-    walk(root, None)
+    walk(root, None, False)
     return out

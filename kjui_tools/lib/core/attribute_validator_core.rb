@@ -224,6 +224,20 @@ module JsonUIShared
       # Check for weight + dimension conflict
       check_weight_dimension_conflict(merged_component, type, parent_orientation)
 
+      # `bind` on a Collection (a Table is one): not its data source. rjui read
+      # it as the items when `items` was absent and no other path did, so a
+      # Collection bound that way drew on web only (ticket
+      # collection-attributes-declared-but-not-drawn-on-some-paths).
+      if map_type_to_definition(type) == 'Collection' && merged_component.key?('bind')
+        add_warning("'bind' is not a Collection's data source; use 'items' (e.g. \"items\": \"@{rows}\")")
+      end
+
+      # `columns` on a flow Collection — its own or a section's: a flow wraps
+      # by content width, and every face ignores a column count there (sjui,
+      # kjui and rjui codegen, both Dynamic renderers; ruling 2026-09-26,
+      # ticket collection-attributes-declared-but-not-drawn-on-some-paths).
+      check_flow_columns(merged_component) if map_type_to_definition(type) == 'Collection'
+
       # Check Collection requires cellIdProperty in SwiftUI/Compose mode
       if map_type_to_definition(type) == 'Collection' && (@mode == :swiftui || @mode == :compose)
         unless merged_component.key?('cellIdProperty')
@@ -462,27 +476,34 @@ module JsonUIShared
     end
 
     # spelling -> { 'canonical' => section, 'render_as' => type (optional) },
-    # read through JsonUIShared::TypeSynonyms (type_synonyms.rb beside this
-    # file), once per validator. `@type_synonyms_path` points a validator at
-    # another copy of the table (the cross-language test's swap arm). A
-    # malformed file raises there, naming it: a table that read as empty
-    # would validate every synonym spelling against common attributes only,
-    # and say nothing.
+    # read once per validator through JsonUIShared::TypeSynonyms.load
+    # (type_synonyms.rb beside this file, the one parser of the table), which
+    # also says why a table cannot be used. `@type_synonyms_path` points a
+    # validator at another copy of the table (the cross-language test's swap
+    # arm).
     #
-    # A missing file is what a plain copy of a tool leaves (the file is a link
-    # into shared/core, as attribute_definitions.json is), and it is met the
-    # way load_definitions meets that one: named where it is met, a
-    # validation stage that did not complete — in the ledger once, however
-    # many validators meet it — and the synonym spellings checked against
-    # the common attributes only. Until 1.8.121 it raised, and each tool
-    # carried the raise its own way: sjui stopped with exit 1 and kjui failed
-    # every layout with exit 1, neither with anything in the ledger; rjui put
-    # one "was not generated" entry per layout there (measured on d084cfb2,
-    # 2026-09-26).
+    # A table that cannot be used — missing (what a plain copy of a tool
+    # leaves: the file is a link into shared/core, as
+    # attribute_definitions.json is), not JSON, or not the declared shape — is
+    # met the way load_definitions meets a missing definitions file: named
+    # where it is met, a validation stage that did not complete — in the
+    # ledger once, however many validators meet it — and the synonym
+    # spellings checked against the common attributes only. An empty table
+    # read in silence would do that and say nothing; this says it.
+    #
+    # Until 1.8.121 each case raised, and each tool carried the raise its own
+    # way (measured on 46a54fc3, 2026-09-26, two layouts): a missing file —
+    # sjui exit 1, kjui every layout failed with exit 1, rjui one entry per
+    # layout; a file that is not JSON — sjui (SwiftUI) "build completed!" with
+    # nothing said, kjui "Failed to parse home.json: unexpected end of input"
+    # (the layout blamed, exit 1, no ledger), rjui one entry per layout, and
+    # none of them named type_synonyms.json; the wrong shape — sjui
+    # "WARNING: Failed to parse home.json: …" and "build completed!", kjui
+    # exit 1 with no ledger.
     def type_synonyms
       @type_synonyms ||= begin
-        path = type_synonyms_path
-        File.exist?(path) ? JsonUIShared::TypeSynonyms.entries(path) : missing_type_synonyms(path)
+        entries, problem = JsonUIShared::TypeSynonyms.load(type_synonyms_path)
+        problem ? unusable_type_synonyms(*problem) : entries
       end
     end
 
@@ -490,13 +511,14 @@ module JsonUIShared
       @type_synonyms_path || JsonUIShared::TypeSynonyms::DEFAULT_PATH
     end
 
-    # {} after naming the missing table (see type_synonyms).
-    def missing_type_synonyms(path)
-      puts "\e[31m[#{log_tag} Error] type_synonyms.json not found at #{path}\e[0m"
+    # {} after naming the unusable table (see type_synonyms): `said` where it
+    # is met, `entry` in the ledger (TypeSynonyms.load gives both).
+    def unusable_type_synonyms(said, entry)
+      puts "\e[31m[#{log_tag} Error] #{said}\e[0m"
       begin
         require_relative 'stage_failures'
         JsonUI::StageFailures.record_once(
-          'validation', "#{path} was not found; the type synonyms were checked against the common attributes only"
+          'validation', "#{entry}; the type synonyms were checked against the common attributes only"
         )
       rescue LoadError
         nil
@@ -573,6 +595,18 @@ module JsonUIShared
       # Check type
       expected_types = Array(definition['type'])
       actual_type = get_value_type(value)
+
+      # An attribute declared as a binding only, given a literal array /
+      # number / boolean / object: named for what it is — nothing draws a
+      # literal there. `Collection.items` lost its array form on 2026-09-26
+      # (declared, drawn by no platform, used by no face); this is the
+      # sentence a layout still writing one gets (ticket
+      # collection-attributes-declared-but-not-drawn-on-some-paths).
+      if expected_types == ['binding'] && actual_type != 'string'
+        add_warning("Attribute '#{current_path}' in '#{component_type}' takes a binding (\"@{…}\"), got a literal #{actual_type}: " \
+                    'no platform draws a literal here — bind it')
+        return
+      end
 
       unless type_matches?(actual_type, expected_types, value, definition)
         # Edge-inset style attributes (padding / margin) also accept
@@ -764,6 +798,23 @@ module JsonUIShared
       return unless text.is_a?(Hash) && text['binding_direction'] == 'two-way'
 
       add_warning("onClick on a #{section} is not called: a text field's tap focuses it")
+    end
+
+    # A flow Collection: `layout` (or `orientation`) flow or one of its alias
+    # spellings, not turned horizontal by `horizontalScroll: true` — the
+    # reading every codegen routes by.
+    def check_flow_columns(component)
+      layout = (component['layout'] || component['orientation']).to_s.downcase
+      return unless %w[flow leftaligned].include?(layout) && component['horizontalScroll'] != true
+
+      said = 'has no effect on a flow Collection (it wraps by content width)'
+      add_warning("columns #{said}") if component.key?('columns')
+      sections = component['sections']
+      return unless sections.is_a?(Array)
+
+      sections.each_with_index do |section, index|
+        add_warning("sections[#{index}].columns #{said}") if section.is_a?(Hash) && section.key?('columns')
+      end
     end
 
     def add_warning(message)

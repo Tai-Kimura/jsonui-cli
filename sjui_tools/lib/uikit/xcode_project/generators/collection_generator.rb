@@ -4,15 +4,19 @@ require "fileutils"
 require_relative '../../../core/xcode_project_manager'
 require_relative '../../../core/project_finder'
 require_relative '../../../core/pbxproj_manager'
+require_relative '../../../core/logger'
+require_relative '../../../core/converter_generator_core'
+require_relative 'scaffold_transaction'
 
 module SjuiTools
   module UIKit
     module XcodeProject
       module Generators
         class CollectionGenerator < ::SjuiTools::Core::PbxprojManager
-          def initialize(project_file_path = nil)
+          def initialize(project_file_path = nil, options = {})
             super(project_file_path)
-            
+            @options = options
+
             # Setup paths using ProjectFinder
             Core::ProjectFinder.setup_paths(@project_file_path)
             
@@ -51,19 +55,27 @@ module SjuiTools
 
             puts "Generating collection cell: #{camel_cell_name} in #{camel_view_folders.join('/')}"
 
+            # Both files through the one overwrite decision the generate
+            # commands share (until 1.8.121 --force and --skip-existing were
+            # not read here). The transaction's record also says what this run
+            # created: what a failed Xcode step deletes — both files, not only
+            # the one whose step failed (until 1.8.121 a failure adding the
+            # layout left the cell this run had created, and its entry in the
+            # project), with the folders the run made and project.pbxproj put
+            # back as it was.
+            @txn = ScaffoldTransaction.new(@project_file_path)
+            @record = @txn.record
+
             # 1. Viewフォルダ/Collectionフォルダの確認/作成
             collection_folder_path = ensure_view_folder(camel_view_folders)
 
             # 2. Collection cellファイルの作成
-            cell_existed = File.exist?(File.join(collection_folder_path, "#{camel_cell_name}CollectionViewCell.swift"))
             cell_file_path = create_collection_cell(collection_folder_path, camel_cell_name)
 
             # 3. Xcodeプロジェクトに追加
             add_to_xcode_project(cell_file_path, camel_view_folders)
 
             # 4. JSONレイアウトファイルの作成 (snake_case folders)
-            json_existed = File.exist?(File.join(@layouts_path, *snake_layout_folders,
-                                                 "#{camel_cell_name.gsub(/([A-Z])/, '_\\1').downcase.sub(/^_/, '')}_cell.json"))
             json_file_path = create_cell_json_file(camel_cell_name, snake_layout_folders)
 
             # 5. JSONファイルをXcodeプロジェクトに追加 (snake_case folders)
@@ -72,13 +84,12 @@ module SjuiTools
             # 6. Bindingファイルの生成
             generate_binding_file(camel_cell_name)
 
-            # Each file as what happened to it — until 1.8.121 "Successfully
-            # generated" and "Files created:" listed both after a run that
-            # kept both (ticket kjui-g-view-reports-what-it-did-not-do).
-            puts(cell_existed && json_existed ? "\nCollection cell #{camel_cell_name}: both files exist and were kept" :
-                                               "\nGenerated collection cell: #{camel_cell_name}")
-            puts "  - #{cell_file_path} (#{cell_existed ? 'kept: it exists' : 'created'})"
-            puts "  - #{json_file_path} (#{json_existed ? 'kept: it exists' : 'created'})"
+            # The counts, from the record — each file has been said as it was
+            # decided (until 1.8.121 "Successfully generated" and "Files
+            # created:" after a run that kept both — ticket
+            # kjui-g-view-reports-what-it-did-not-do).
+            puts
+            JsonUIShared::ConverterGeneratorCore.report_scaffold_record("collection cell #{camel_cell_name}", @record, Core::Logger)
             puts "\nNext steps:"
             puts "  1. Edit #{json_file_path} to design your cell layout"
             puts "  2. Run 'sjui build' to generate binding files"
@@ -94,35 +105,27 @@ module SjuiTools
             # Create nested view folders
             folder_path = File.join(@view_path, *folders)
 
-            unless Dir.exist?(folder_path)
-              FileUtils.mkdir_p(folder_path)
-              puts "Created view folder: #{folder_path}"
-            end
+            puts "Created view folder: #{folder_path}" if @txn.mkdir_p(folder_path)
 
             # Create Collection subfolder
             collection_folder_path = File.join(folder_path, "Collection")
 
-            unless Dir.exist?(collection_folder_path)
-              FileUtils.mkdir_p(collection_folder_path)
-              puts "Created collection folder: #{collection_folder_path}"
-            end
+            puts "Created collection folder: #{collection_folder_path}" if @txn.mkdir_p(collection_folder_path)
 
             collection_folder_path  # Return the Collection folder path
           end
 
           def create_collection_cell(collection_folder_path, cell_name)
             file_path = File.join(collection_folder_path, "#{cell_name}CollectionViewCell.swift")
-            
-            if File.exist?(file_path)
-              puts "Kept existing collection cell: #{file_path}"
-              return file_path
-            end
-            
-            content = generate_collection_cell_content(cell_name)
-            File.write(file_path, content)
-            puts "Created collection cell: #{file_path}"
-            
+            scaffold(file_path, 'collection cell') { generate_collection_cell_content(cell_name) }
             file_path
+          end
+
+          def scaffold(file_path, noun, &content)
+            JsonUIShared::ConverterGeneratorCore.write_scaffold(
+              file_path, @options.merge(scaffold_files: @record), Core::Logger,
+              noun: noun, label: noun, exists_label: noun.sub(/\A\w/, &:upcase), &content
+            )
           end
 
           def generate_collection_cell_content(cell_name)
@@ -184,14 +187,11 @@ class #{cell_name}CollectionViewCell: BaseCollectionViewCell {
               # Said as add_file did it (until 1.8.121 "Added …" followed
               # "File already in project").
               result = @xcode_manager.add_file(file_path, group_path)
+              @txn.check!([[file_path, result]])
               puts "Added collection cell to Xcode project" if result == :added
             rescue => e
               puts "Error adding file to Xcode project: #{e.message}"
-              # ファイルを削除してロールバック
-              if File.exist?(file_path)
-                File.delete(file_path)
-                puts "Deleted: #{file_path}"
-              end
+              @txn.roll_back
               raise e
             end
           end
@@ -201,14 +201,11 @@ class #{cell_name}CollectionViewCell: BaseCollectionViewCell {
               folders = view_folder_names.is_a?(Array) ? view_folder_names : [view_folder_names]
               group_path = "Layouts/#{folders.join('/')}"
               result = @xcode_manager.add_file(json_file_path, group_path)
+              @txn.check!([[json_file_path, result]])
               puts "Added JSON layout to Xcode project" if result == :added
             rescue => e
               puts "Error adding JSON to Xcode project: #{e.message}"
-              # ファイルを削除してロールバック
-              if File.exist?(json_file_path)
-                File.delete(json_file_path)
-                puts "Deleted: #{json_file_path}"
-              end
+              @txn.roll_back
               raise e
             end
           end
@@ -217,17 +214,9 @@ class #{cell_name}CollectionViewCell: BaseCollectionViewCell {
             snake_name = cell_name.gsub(/([A-Z])/, '_\1').downcase.sub(/^_/, '')
             folders = view_folder_names.is_a?(Array) ? view_folder_names : [view_folder_names]
             layouts_dir = File.join(@layouts_path, *folders)
-            FileUtils.mkdir_p(layouts_dir) unless Dir.exist?(layouts_dir)
+            @txn.mkdir_p(layouts_dir)
             file_path = File.join(layouts_dir, "#{snake_name}_cell.json")
-
-            if File.exist?(file_path)
-              puts "Kept existing JSON layout: #{file_path}"
-              return file_path
-            end
-
-            content = generate_cell_json_content(cell_name)
-            File.write(file_path, content)
-            puts "Created JSON layout: #{file_path}"
+            scaffold(file_path, 'JSON layout') { generate_cell_json_content(cell_name) }
             file_path
           end
 

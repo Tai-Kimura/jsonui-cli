@@ -220,8 +220,11 @@ module KjuiTools
               textfield_modifiers.concat(Helpers::ModifierBuilder.build_size(size_source, parent_type, required_imports))
             end
 
-            # Height for multi-line
-            if json_data['flexible']
+            # Height for multi-line — where the size builder above did not
+            # already take it (TextViewComponent.height_taken_by_size?).
+            if height_taken_by_size?(json_data)
+              # the declared height is in the size stage
+            elsif json_data['flexible']
               # flexible: height adjusts to content within min/max bounds
               min_h = json_data['minHeight'] || json_data['height'] || 24
               if json_data['maxHeight']
@@ -245,7 +248,10 @@ module KjuiTools
             textfield_modifiers.concat(Helpers::ModifierBuilder.build_offset(json_data, required_imports))
             textfield_modifiers.concat(Helpers::ModifierBuilder.build_alpha(json_data, required_imports))
             textfield_modifiers.concat(Helpers::ModifierBuilder.build_shadow(json_data, required_imports, shape: TextFieldComponent.shadow_outline(json_data, required_imports)))
-            textfield_modifiers.concat(Helpers::ModifierBuilder.build_control_clickable(json_data, required_imports, enabled_on_node: true))
+            # No clickable stage here: the Box around the field carries it
+            # (its gestures and blocker, box_modifiers above). The field
+            # carried a second copy — two long-press detectors, two blockers
+            # (kjui-dynamic-components-that-skip-the-common-modifiers, B3).
             textfield_modifiers.concat(Helpers::ModifierBuilder.build_padding(json_data))
             if focus_prop
               required_imports&.add(:focus_changed)
@@ -274,8 +280,11 @@ module KjuiTools
               modifiers.concat(Helpers::ModifierBuilder.build_size(size_source, parent_type, required_imports))
             end
 
-            # Height for multi-line
-            if json_data['flexible']
+            # Height for multi-line — where the size builder above did not
+            # already take it (height_taken_by_size?).
+            if height_taken_by_size?(json_data)
+              # the declared height is in the size stage
+            elsif json_data['flexible']
               min_h = json_data['minHeight'] || json_data['height'] || 24
               if json_data['maxHeight']
                 modifiers << ".heightIn(min = #{min_h}.dp, max = #{json_data['maxHeight']}.dp)"
@@ -359,7 +368,9 @@ module KjuiTools
           # Shape with corner radius
           if json_data['cornerRadius']
             required_imports&.add(:shape)
-            code += "\n" + indent("shape = RoundedCornerShape(#{json_data['cornerRadius']}.dp),", depth + 1)
+            # A bound cornerRadius is an expression (BoundValue.dp); `@{r}` was
+            # written into the Kotlin as `RoundedCornerShape(@{r}.dp)` (B8).
+            code += "\n" + indent("shape = RoundedCornerShape(#{Helpers::BoundValue.dp(json_data['cornerRadius'])}),", depth + 1)
           end
 
           # Background colors
@@ -563,6 +574,16 @@ module KjuiTools
         # A Kotlin string literal — the one escaper (`$` included).
         def self.quote(text)
           JsonUIShared::StringLiterals.kotlin(text)
+        end
+
+        # The size builder takes the declared height when it runs — a declared
+        # width (not matchParent) sends the node through it — unless the
+        # height is flexible (stripped from what it reads). Then the fixed
+        # `.height(N)` below it was the same height again: `.requiredHeight(120.dp)
+        # .height(120.dp)` (kjui-dynamic-components-that-skip-the-common-modifiers, B3).
+        def self.height_taken_by_size?(json_data)
+          width = json_data['width']
+          width && width != 'matchParent' && !json_data['flexible'] && !json_data['height'].nil?
         end
 
         def self.indent(text, level)

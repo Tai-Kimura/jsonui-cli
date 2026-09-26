@@ -28,11 +28,19 @@ RSpec.describe 'sjui build: a stage that printed an error is in the ledger' do
   # The tool is linked, not copied (lib/core/attribute_definitions.json is a
   # relative link into shared/core) — except where the arm is that file
   # missing, where the copy without -L is the input.
-  def project(mode, dangling_definitions: false, source_group: true)
+  def project(mode, dangling_definitions: false, source_group: true, synonyms: nil)
     dir = Dir.mktmpdir('sjui_stage')
     if dangling_definitions
       FileUtils.mkdir_p(File.join(dir, 'sjui_tools'))
       %w[bin lib].each { |d| system('cp', '-R', File.join(REPO_STAGES, 'sjui_tools', d), File.join(dir, 'sjui_tools')) || raise(d) }
+    elsif synonyms
+      # The tool copied with its links followed, and type_synonyms.json
+      # replaced by `synonyms` — that one table unusable and nothing else.
+      FileUtils.mkdir_p(File.join(dir, 'sjui_tools'))
+      %w[bin lib].each { |d| system('cp', '-RL', File.join(File.join(REPO_STAGES, 'sjui_tools'), d), File.join(dir, 'sjui_tools')) || raise(d) }
+      table = File.join(dir, 'sjui_tools', 'lib', 'core', 'type_synonyms.json')
+      File.delete(table)
+      File.write(table, synonyms)
     else
       FileUtils.ln_s(File.join(REPO_STAGES, 'sjui_tools'), File.join(dir, 'sjui_tools'))
     end
@@ -172,6 +180,14 @@ RSpec.describe 'sjui build: a stage that printed an error is in the ledger' do
       expect(Dir.glob(File.join(dir, '**', 'HomeBinding.swift'))).not_to be_empty # the layout was still built
     end
 
+    it 'a style that is not there: in the ledger, as on SwiftUI' do
+      dir = project('uikit')
+      layout(dir, 'home', 'style' => 'absent')
+      log, exit_code, entries = build(dir)
+      expect(log).to include('Style file not found:')
+      expect_incomplete(log, exit_code, entries, 'styles', 'absent.json', 'was not found')
+    end
+
     it 'a Layouts directory that is not there: a named failure, and not created' do
       %w[uikit swiftui].each do |mode|
         dir = project(mode)
@@ -181,6 +197,29 @@ RSpec.describe 'sjui build: a stage that printed an error is in the ledger' do
         expect(log).to include("Layouts directory not found: #{File.join(File.realpath(dir), NAME, 'Layouts')}")
         expect(Dir.exist?(File.join(dir, NAME, 'Layouts'))).to be(false), mode
         expect(log).not_to match(/completed successfully!|SwiftUI build completed!/)
+      end
+    end
+
+    # A type_synonyms.json that is there but cannot be used — not JSON, or not
+    # the declared shape — is the same stage failure as a missing one: named,
+    # in the ledger once over two layouts, the build carrying on without it.
+    # Until 1.8.121 it raised: the tools said nothing, blamed the layout, or
+    # failed every layout (attribute_validator_core.rb#type_synonyms).
+    {
+      'not JSON' => ['{ "synonyms": ', 'does not parse'],
+      'not the declared shape' => ['{ "synonyms": { "Table": "Collection" } }', 'is not the declared shape']
+    }.each do |form, (content, says)|
+      it "a type_synonyms.json that is #{form}: named, in the ledger once" do
+        dir = project('swiftui', synonyms: content)
+        layout(dir, 'home')
+        layout(dir, 'other')
+        log, exit_code, entries = build(dir)
+        expect(exit_code).to eq(0), log
+        expect(entries.map { |e| e['stage'] }).to eq(['validation']), "#{entries.inspect}\n#{log}"
+        expect(entries.first['message']).to include('type_synonyms.json').and include(says)
+        expect(log).to match(/Error\] \S*type_synonyms\.json/), log
+        expect(log).to include('Build finished with 1 stage(s) incomplete — see above'), log
+        expect(log).not_to include('build completed!')
       end
     end
 
@@ -254,12 +293,14 @@ RSpec.describe 'sjui build: a stage that printed an error is in the ledger' do
       expect_incomplete(log, exit_code, entries, 'styles', 'broken.json', 'drawn without it')
     end
 
-    it 'a style that is not there is still said to be not found (the other side of the line above)' do
+    # Ruled after counting the faces: 2167 style references, 0 to no file —
+    # so a missing one is a stage that did not complete, not a warning only.
+    it 'a style that is not there: said, and in the ledger once' do
       dir = project('swiftui')
       layout(dir, 'home', 'style' => 'absent')
       log, exit_code, entries = build(dir)
       expect(log).to include("Style file 'absent' not found")
-      expect([exit_code, entries]).to eq([0, []])
+      expect_incomplete(log, exit_code, entries, 'styles', 'absent.json', 'was not found', 'drawn without it')
     end
 
     it 'no layouts yet: not a failure, but what an earlier stage could not do still reaches the ledger' do

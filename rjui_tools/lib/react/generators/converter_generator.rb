@@ -139,6 +139,7 @@ module RjuiTools
           template << ''
           template << "require_relative '../base_converter'"
           template << "require_relative '../../../core/attribute_types'"
+          template << "require_relative '../../../core/logger'"
           template << ''
           template << 'module RjuiTools'
           template << '  module React'
@@ -260,7 +261,10 @@ module RjuiTools
             lines << "              if literal"
             lines << "                props << \"#{key}={\#{literal}}\""
             lines << "              else"
-            lines << "                warn JsonUIShared::AttributeTypes.unwritten_warning('rjui', '#{@name}', '#{key}', " \
+            # Through rjui's warning logger ("[WARN] …", as every other rjui
+            # warning): a bare `warn` carried no marker a warning count could
+            # find.
+            lines << "                RjuiTools::Core::Logger.warn JsonUIShared::AttributeTypes.unwritten_warning('rjui', '#{@name}', '#{key}', " \
                      "#{key}_value, '#{type}')"
             lines << "              end"
             lines.concat(null_literal_branch(key, type))
@@ -309,7 +313,7 @@ module RjuiTools
 
           [
             "            elsif json.key?('#{key}') && #{key}_value.nil?",
-            "              warn JsonUIShared::AttributeTypes.unwritten_warning('rjui', '#{@name}', '#{key}', nil, '#{type}')"
+            "              RjuiTools::Core::Logger.warn JsonUIShared::AttributeTypes.unwritten_warning('rjui', '#{@name}', '#{key}', nil, '#{type}')"
           ]
         end
       end

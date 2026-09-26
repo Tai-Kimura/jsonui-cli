@@ -157,6 +157,28 @@ RSpec.describe RjuiTools::React::Converters::SelectBoxConverter do
       end
     end
 
+    # selectedItem is the same two-way selection, and wins over selectedValue as on the
+    # other paths. It was not read at all: a bound selectedItem reached the page as
+    # nothing (ticket selectbox-selected-item-binding-is-read-once, measured in Chromium).
+    context 'with selectedItem' do
+      it 'binds a bound selectedItem both ways' do
+        result = create_converter({ 'class' => 'SelectBox', 'items' => %w[pp qq], 'selectedItem' => '@{choice}' }).convert
+        expect(result).to include('value={data.choice}')
+        expect(result).to include('data.onChoiceChange?.(')
+      end
+
+      it 'starts at a static selectedItem' do
+        result = create_converter({ 'class' => 'SelectBox', 'items' => %w[pp qq], 'selectedItem' => 'qq' }).convert
+        expect(result).to include('defaultValue="qq"')
+      end
+
+      it 'prefers selectedItem to selectedValue' do
+        result = create_converter({ 'class' => 'SelectBox', 'items' => %w[pp qq], 'selectedItem' => '@{a}', 'selectedValue' => '@{b}' }).convert
+        expect(result).to include('value={data.a}')
+        expect(result).not_to include('data.b')
+      end
+    end
+
     # Regression: rjui-selectbox-selectedindex-binding-not-emitted —
     # selectedIndex is a two-way binding, so the <select> must be controlled:
     # the bound index resolves to the same value string the <option> rows emit.

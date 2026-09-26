@@ -13,9 +13,10 @@ module SjuiTools
           iconPosition = @component['iconPosition'] || 'left'
           # An empty or blank handler is no action (TapAccessibility.handler?),
           # and `canTap: false` none either: canTap gates the handler's call
-          # (gated_handler_call).
+          # (gated_handler_call). Nor `userInteractionEnabled: false` on it or
+          # on a node around it (tap_shut?): it is no button, as with canTap.
           onClick = @component['onClick'] if JsonUIShared::TapAccessibility.handler?(@component['onClick']) &&
-                                             @component['canTap'] != false
+                                             !tap_shut?
 
           # IconLabelViewまたはIconLabelButtonを使用
           if onClick

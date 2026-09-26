@@ -145,7 +145,7 @@ RSpec.describe SjuiTools::SwiftUI::Views::SegmentConverter do
       SjuiTools::SwiftUI::Views::ColorHelper.data_definitions = {}
     end
 
-    it 'generates onValueChange handler with onChange modifier' do
+    it 'calls onValueChange from the choice, after the selection is written' do
       component = {
         'type' => 'Segment',
         'id' => 'tabSegment',
@@ -157,7 +157,11 @@ RSpec.describe SjuiTools::SwiftUI::Views::SegmentConverter do
       converter = described_class.new(component)
       code = converter.convert
 
-      expect(code).to include('.onChange(of: data.selectedTab)')
+      # From the control's own write, after the value — not an `.onChange(of:)`,
+      # which ran after the click and for the view model's writes too.
+      expect(code).to include('set: { newValue in let changed = newValue != $data.selectedTab.wrappedValue; '\
+                              '$data.selectedTab.wrappedValue = newValue; if changed {')
+      expect(code).not_to include('.onChange(of:')
       expect(code).to include('data.onTabChange?()')
     end
 
@@ -196,12 +200,18 @@ RSpec.describe SjuiTools::SwiftUI::Views::SegmentConverter do
       converter = described_class.new(component)
       code = converter.convert
 
-      expect(code).to include('.onChange(of: data.selectedTab)')
+      # From the control's own write, after the value — not an `.onChange(of:)`,
+      # which ran after the click and for the view model's writes too.
+      expect(code).to include('set: { newValue in let changed = newValue != $data.selectedTab.wrappedValue; '\
+                              '$data.selectedTab.wrappedValue = newValue; if changed {')
+      expect(code).not_to include('.onChange(of:')
       expect(code).to include('data.onTabChange?()')
       expect(code).not_to include('onTabChange?("tabSegment"')
     end
 
-    it 'uses default segment id when no id specified' do
+    # No id: the drawn type and the position — on its own, the root `0`; it
+    # was `segment` for every id-less Segment (4f's ruling, 1.9.0).
+    it 'hands an id-less segment its position as the viewId' do
       SjuiTools::SwiftUI::Views::ColorHelper.data_definitions = {
         'onTabChange' => { 'name' => 'onTabChange', 'class' => '((Event) -> Void)?' }
       }
@@ -216,7 +226,7 @@ RSpec.describe SjuiTools::SwiftUI::Views::SegmentConverter do
       converter = described_class.new(component)
       code = converter.convert
 
-      expect(code).to include('data.onTabChange?("segment", newValue)')
+      expect(code).to include('data.onTabChange?("segment_0", newValue)')
     end
 
     # SwiftUI's segmented Picker has no per-state colour modifier, so both the

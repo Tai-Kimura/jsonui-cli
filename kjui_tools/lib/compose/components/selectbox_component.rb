@@ -124,22 +124,7 @@ module KjuiTools
               )
               if binding_variable
                 code += "\n" + indent("onValueChange = { newValue ->", depth + 1)
-                if is_index_binding
-                  # selectedIndex: convert String value back to Int index
-                  items = json_data['items']
-                  if items.is_a?(String) && items.match(/@\{([^}]+)\}/)
-                    items_var = $1
-                    code += "\n" + indent("val index = data.#{items_var}.indexOf(newValue)", depth + 2)
-                  elsif items.is_a?(Array)
-                    items_literal = items.map { |i| JsonUIShared::StringLiterals.kotlin(i) }.join(", ")
-                    code += "\n" + indent("val index = listOf(#{items_literal}).indexOf(newValue)", depth + 2)
-                  else
-                    code += "\n" + indent("val index = 0", depth + 2)
-                  end
-                  code += "\n" + indent("viewModel.updateData(mapOf(\"#{Helpers::BindingExpression.path_only(binding_variable)}\" to index))", depth + 2)
-                else
-                  code += "\n" + indent("viewModel.updateData(mapOf(\"#{Helpers::BindingExpression.path_only(binding_variable)}\" to newValue))", depth + 2)
-                end
+                code += write_back_lines(json_data, binding_variable, is_index_binding, depth + 2)
                 code += "\n" + indent("#{handler_call}", depth + 2)
                 code += "\n" + indent(click, depth + 2) if click
                 code += "\n" + indent("},", depth + 1)
@@ -151,7 +136,7 @@ module KjuiTools
             end
           elsif binding_variable
             code += "\n" + indent("onValueChange = { newValue ->", depth + 1)
-            code += "\n" + indent("viewModel.updateData(mapOf(\"#{Helpers::BindingExpression.path_only(binding_variable)}\" to newValue))", depth + 2)
+            code += write_back_lines(json_data, binding_variable, is_index_binding, depth + 2)
             code += "\n" + indent(click, depth + 2) if click
             code += "\n" + indent("},", depth + 1)
           else
@@ -265,7 +250,10 @@ module KjuiTools
           end
           
           if json_data['cornerRadius']
-            code += "\n" + indent("cornerRadius = #{json_data['cornerRadius']},", depth + 1)
+            # SelectBox takes its radius as an Int; a bound one is an
+            # expression (BoundValue.int) — `@{r}` was written into the
+            # Kotlin as `cornerRadius = @{r}` (B8).
+            code += "\n" + indent("cornerRadius = #{Helpers::BoundValue.int(json_data['cornerRadius'])},", depth + 1)
           end
 
           # Font styling
@@ -370,6 +358,27 @@ module KjuiTools
         # `src` resolves as a drawable name exactly as Image's `src` does.
         # Numbers land as dp Ints on the library surface (cornerRadius is the
         # precedent); a key of the wrong type is left out, not emitted as 0.
+        # The pick written back to the bound variable: the item for a bound
+        # selectedItem / selectedValue / selectedDate, its INDEX for a bound
+        # selectedIndex. Only the handler path converted; without a handler the
+        # item String went into the Int, the generated updateData read it back
+        # `as? Number` and dropped it, and the box stayed where it was (ticket
+        # selectbox-selected-item-binding-is-read-once, measured on an emulator).
+        def self.write_back_lines(json_data, binding_variable, is_index_binding, depth)
+          key = Helpers::BindingExpression.path_only(binding_variable)
+          return "\n" + indent("viewModel.updateData(mapOf(\"#{key}\" to newValue))", depth) unless is_index_binding
+
+          items = json_data['items']
+          index_line = if items.is_a?(String) && items.match(/@\{([^}]+)\}/)
+                         "val index = data.#{$1}.indexOf(newValue)"
+                       elsif items.is_a?(Array)
+                         "val index = listOf(#{items.map { |i| JsonUIShared::StringLiterals.kotlin(i) }.join(', ')}).indexOf(newValue)"
+                       else
+                         'val index = 0'
+                       end
+          "\n" + indent(index_line, depth) + "\n" + indent("viewModel.updateData(mapOf(\"#{key}\" to index))", depth)
+        end
+
         def self.caret_expression(caret, required_imports)
           return nil unless caret.is_a?(Hash)
 

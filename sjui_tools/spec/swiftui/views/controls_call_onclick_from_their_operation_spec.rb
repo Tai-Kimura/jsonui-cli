@@ -39,7 +39,7 @@ RSpec.describe 'sjui: a control calls its declared onClick from its own operatio
 
   # Each control, as a node, where its call sits (the text around it), and
   # how many places call it: a Radio over two items has two selections.
-  flip = ->(binding) { /Toggle\(isOn: SwiftUI\.Binding\(get: \{ #{binding}\.wrappedValue \}, set: \{ #{binding}\.wrappedValue = \$0; CALL \}\)\)/ }
+  flip = ->(binding) { /Toggle\(isOn: SwiftUI\.Binding\(get: \{ #{binding}\.wrappedValue \}, set: \{ newValue in #{binding}\.wrappedValue = newValue; CALL \}\)\)/ }
   variants = {
     'Switch' => [{ 'type' => 'Switch', 'isOn' => false }, flip.call('\$\w+IsOn'), 1],
     'Switch, bound' => [{ 'type' => 'Switch', 'isOn' => '@{on}' }, flip.call('\$data\.on'), 1],
@@ -51,9 +51,9 @@ RSpec.describe 'sjui: a control calls its declared onClick from its own operatio
     'Radio over items' => [{ 'type' => 'Radio', 'items' => %w[a b] }, /selected\w+ = "b"\n\s*CALL\n/, 2],
     'Radio in a group' => [{ 'type' => 'Radio', 'group' => 'g', 'text' => 'A' }, /selectedG = "n"\n\s*CALL\n/, 1],
     'Segment' => [{ 'type' => 'Segment', 'items' => %w[a b] },
-                  /Picker\("", selection: SwiftUI\.Binding\(get: \{ \$selected\w+\.wrappedValue \}, set: \{ \$selected\w+\.wrappedValue = \$0; CALL \}\)\)/, 1],
+                  /Picker\("", selection: SwiftUI\.Binding\(get: \{ \$selected\w+\.wrappedValue \}, set: \{ newValue in \$selected\w+\.wrappedValue = newValue; CALL \}\)\)/, 1],
     'Slider' => [{ 'type' => 'Slider' }, /Slider\(value: \$\w+, in: 0\.\.\.1, onEditingChanged: \{ editing in if !editing \{ CALL \} \}\)/, 1],
-    'SelectBox' => [{ 'type' => 'SelectBox', 'items' => %w[a b] }, /onValueChange: \{ _ in CALL \}\n\s*\)/, 1],
+    'SelectBox' => [{ 'type' => 'SelectBox', 'items' => %w[a b] }, /onValueChange: \{ newValue in CALL \}\n\s*\)/, 1],
     'SelectBox, date' => [{ 'type' => 'SelectBox', 'selectItemType' => 'Date' }, /onValueChange: \{ newValue in\n\s*CALL\n\s*\}/, 1]
   }
 
@@ -124,6 +124,52 @@ RSpec.describe 'sjui: a control calls its declared onClick from its own operatio
                          'onValueChange' => '@{changed}' })
       expect(code).to match(/data\.day = newValue\n\s*data\.changed\?\([^\n]*\n\s*#{Regexp.escape(call)}\n/), code
     end
+
+    # The flip, the choice and the drag write the value, then report it when
+    # it changed, then call onClick — in the control's own binding. The
+    # unbound form observed `data.<state>`, which the Data struct does not
+    # have (it did not compile); the bound one observed the value, after the
+    # click and for the view model's writes too.
+    written = lambda do |binding|
+      b = Regexp.escape(binding)
+      "set: \\{ newValue in let changed = newValue != #{b}\\.wrappedValue; #{b}\\.wrappedValue = newValue; " \
+        "if changed \\{ data\\.changed\\?\\(\\) \\}"
+    end
+    {
+      'Switch' => [{ 'type' => 'Switch', 'isOn' => false }, '$nIsOn', true],
+      'Switch, bound' => [{ 'type' => 'Switch', 'isOn' => '@{on}' }, '$data.on', true],
+      'Segment' => [{ 'type' => 'Segment', 'items' => %w[a b] }, '$selectedN', true],
+      'Segment, bound' => [{ 'type' => 'Segment', 'items' => %w[a b], 'selectedIndex' => '@{index}' }, '$data.index', true],
+      'Slider' => [{ 'type' => 'Slider' }, '$sliderValuen', false],
+      'Slider, bound' => [{ 'type' => 'Slider', 'value' => '@{level}' }, '$data.level', false]
+    }.each do |name, (base, binding, clicks_in_the_write)|
+      it "#{name}: the write, onValueChange if it changed, then onClick#{clicks_in_the_write ? '' : ' at the drag\'s end'}" do
+        code = emit.call(base.merge('onValueChange' => '@{changed}'))
+        tail = clicks_in_the_write ? "; #{Regexp.escape(call)} \\}\\)" : ' \\}\\)'
+        expect(code).to match(Regexp.new(written.call(binding) + tail)), code
+        expect(code).to include("onEditingChanged: { editing in if !editing { #{call} } }") unless clicks_in_the_write
+        expect(code).not_to include('.onChange(of:'), code
+        expect(code.scan('data.changed?(').size).to eq(1), code
+      end
+    end
+
+    {
+      'SelectBox' => [{ 'type' => 'SelectBox', 'items' => %w[a b] }, 'data.changed?()'],
+      'SelectBox, bound by index' => [{ 'type' => 'SelectBox', 'items' => %w[a b], 'selectedIndex' => '@{idx}' }, 'data.changed?()']
+    }.each do |name, (base, value_call)|
+      it "#{name}: the pick reports onValueChange, then onClick, and nothing observes the value" do
+        code = emit.call(base.merge('onValueChange' => '@{changed}'))
+        expect(code).to include("onValueChange: { newValue in #{value_call}; #{call} }"), code
+        expect(code).not_to include('.onChange(of:'), code
+      end
+    end
+
+    it 'SelectBox date: nothing observes the date — the pick reported onValueChange twice' do
+      code = emit.call({ 'type' => 'SelectBox', 'selectItemType' => 'Date', 'selectedDate' => '@{day}',
+                         'onValueChange' => '@{changed}' })
+      expect(code).not_to include('.onChange(of:'), code
+      expect(code.scan('data.changed?(').size).to eq(1), code
+    end
   end
 
   # A text field's tap focuses it; its onClick is not called (the shared
@@ -135,19 +181,80 @@ RSpec.describe 'sjui: a control calls its declared onClick from its own operatio
     end
   end
 
-  # The Swift the flip, the segment and the slider now carry, type-checked
-  # over a view model the way a generated view holds one (`@Binding var
-  # data`), with every gate bound. CheckBoxView and SelectBoxView are
-  # SwiftJsonUI's and not on this machine's search path; their closures are
-  # the ones they always took (and the ConformanceHost probe compiles all of
-  # it against the library).
-  it 'compiles, bound and gated' do
-    fragments = [
-      emit.call({ 'type' => 'Switch', 'isOn' => '@{on}' }, 'canTap' => '@{c}'),
-      emit.call({ 'type' => 'Segment', 'items' => %w[a b], 'selectedIndex' => '@{index}' }, 'canTap' => '@{c}'),
-      emit.call({ 'type' => 'Slider', 'value' => '@{level}' }, 'canTap' => '@{c}')
+  # Segment.valueChange — the selector spelling, its own attribute — is
+  # reported by the same rule (4f's ruling): from the user's choice, after the
+  # write and before onClick, where no onValueChange is declared, as kjui and
+  # rjui call it. It was an `.onChange(of:)` on a bound selectedIndex only.
+  describe 'Segment valueChange' do
+    after { Thread.current[:sjui_data_definitions] = nil }
+
+    [{}, { 'selectedIndex' => '@{index}' }].each do |more|
+      it "is called from the choice#{more.empty? ? '' : ', bound'} — nothing observes the value" do
+        code = emit.call({ 'type' => 'Segment', 'items' => %w[a b], 'valueChange' => 'seg_changed' }.merge(more))
+        expect(code).to include("if changed { data.segChanged?() }; #{call} })"), code
+        expect(code).not_to include('.onChange(of:'), code
+      end
+    end
+
+    it 'carries the value the data declares it takes' do
+      Thread.current[:sjui_data_definitions] = { 'segChanged' => { 'class' => '((Int) -> Void)?' } }
+      code = emit.call({ 'type' => 'Segment', 'items' => %w[a b], 'valueChange' => 'seg_changed' })
+      expect(code).to include('if changed { data.segChanged?(newValue) }'), code
+    end
+
+    it 'stands down for a declared onValueChange' do
+      code = emit.call({ 'type' => 'Segment', 'items' => %w[a b], 'valueChange' => 'seg_changed', 'onValueChange' => '@{changed}' })
+      expect(code).to include('if changed { data.changed?() }'), code
+      expect(code).not_to include('segChanged'), code
+    end
+  end
+
+  describe 'onValueChange carries the value' do
+    after { Thread.current[:sjui_data_definitions] = nil }
+
+    it 'the index for a SelectBox bound by selectedIndex, the picked item otherwise' do
+      Thread.current[:sjui_data_definitions] = { 'changed' => { 'class' => '((Int) -> Void)?' } }
+      code = emit.call({ 'type' => 'SelectBox', 'items' => %w[a b], 'selectedIndex' => '@{idx}', 'onValueChange' => '@{changed}' })
+      expect(code).to include("onValueChange: { newValue in data.changed?(data.idx); #{call} }"), code
+      Thread.current[:sjui_data_definitions] = { 'changed' => { 'class' => '((String, String) -> Void)?' } }
+      code = emit.call({ 'type' => 'SelectBox', 'items' => %w[a b], 'onValueChange' => '@{changed}' })
+      expect(code).to include(%(onValueChange: { newValue in data.changed?("n", newValue); #{call} })), code
+    end
+
+    it 'the new value for a Switch' do
+      Thread.current[:sjui_data_definitions] = { 'changed' => { 'class' => '((Bool) -> Void)?' } }
+      code = emit.call({ 'type' => 'Switch', 'isOn' => '@{on}', 'onValueChange' => '@{changed}' })
+      expect(code).to include('if changed { data.changed?(newValue) }'), code
+    end
+  end
+
+  # The Swift the flip, the segment and the slider now carry — bound and over
+  # a value of their own, with an onValueChange and every gate bound —
+  # type-checked over a view model the way a generated view holds one
+  # (`@Binding var data`) and the view's own state as the converter declares
+  # it. CheckBoxView and SelectBoxView are SwiftJsonUI's and not on this
+  # machine's search path; their closures are the ones they always took (and
+  # the ConformanceHost probe compiles all of it against the library).
+  it 'compiles, bound and unbound, reported and gated' do
+    nodes = [
+      { 'type' => 'Switch', 'id' => 'a', 'isOn' => '@{on}' },
+      { 'type' => 'Switch', 'id' => 'b', 'isOn' => false },
+      { 'type' => 'Segment', 'id' => 'c', 'items' => %w[a b], 'selectedIndex' => '@{index}' },
+      { 'type' => 'Segment', 'id' => 'd', 'items' => %w[a b] },
+      { 'type' => 'Slider', 'id' => 'e', 'value' => '@{level}' },
+      { 'type' => 'Slider', 'id' => 'f', 'value' => 0.2 }
     ]
-    body = fragments.join("\n").lines.map { |l| "            #{l}" }.join
+    states = []
+    body = nodes.map do |n|
+      comp = JSON.parse(JSON.generate(n.merge('onClick' => '@{onTap}', 'canTap' => '@{c}', 'onValueChange' => '@{changed}')))
+      JsonUIShared::ImageAccessibility.annotate!(comp, source_path: 'probe.json')
+      JsonUIShared::TapAccessibility.annotate!(comp)
+      converter = SjuiTools::SwiftUI::ConverterFactory.new.create_converter(comp)
+      code = converter.convert.to_s
+      states.concat(Array(converter.state_variables))
+      code
+    end.join("\n").lines.map { |l| "            #{l}" }.join
+    expect(states.size).to eq(3), states.inspect
     swift = <<~SWIFT
       #{EmittedSwift::LIBRARY_STUBS}
       struct TestData {
@@ -156,9 +263,11 @@ RSpec.describe 'sjui: a control calls its declared onClick from its own operatio
           var level: Double = 0
           var c: Bool? = nil
           var onTap: (() -> Void)? = nil
+          var changed: (() -> Void)? = nil
       }
       struct EmittedHost: View {
           @Binding var data: TestData
+      #{states.map { |d| "    #{d}" }.join("\n")}
           var body: some View {
               VStack {
       #{body}

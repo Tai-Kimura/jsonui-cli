@@ -33,7 +33,9 @@ module SjuiTools
             # A literal `text` seeds the editor's initial content (TextField's
             # literal-seed precedent) — an empty seed dropped the declared
             # text and the editor rendered placeholder-gray (32 parity).
-            state_var = "#{id}Text"
+            # No id: its position (position_name) — `textEditor` was every
+            # id-less TextView's name.
+            state_var = "#{@component['id'] || position_name('textEditor')}Text"
             seed = text_binding.is_a?(String) && !text_binding.empty? ? swift_string_literal(text_binding) : '""'
             add_state_variable(state_var, "String", seed)
             binding_path = state_var
@@ -247,7 +249,7 @@ module SjuiTools
           # onTextChange handler - called when text changes
           # onTextChange (camelCase) -> binding format only (@{functionName})
           if @component['onTextChange'] && is_binding?(@component['onTextChange'])
-            handler_call = get_event_handler_invocation(@component['onTextChange'], id, 'newValue')
+            handler_call = get_event_handler_invocation(@component['onTextChange'], view_id, 'newValue')
             indent_str = "    " * (@indent_level + 1)
             # Guard: only call callback when value actually changed (prevent feedback loop)
             @modifier_bag.append(:on_text_change, ".onChange(of: #{binding_path}) { oldValue, newValue in\n#{indent_str}guard oldValue != newValue else { return }\n#{indent_str}#{handler_call}\n#{indent_str[0...-4]}}")

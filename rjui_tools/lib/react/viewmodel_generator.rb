@@ -4,6 +4,7 @@ require 'json'
 require 'fileutils'
 require 'set'
 require_relative '../core/tap_accessibility'
+require_relative '../core/binding_validator_core'
 require_relative '../core/type_synonyms'
 require_relative '../core/config_manager'
 require_relative '../core/generated_marker'
@@ -376,6 +377,15 @@ module RjuiTools
           elsif component_type == 'TextView'
             handler_key = json_data['onTextChange'] ? 'onTextChange' : 'onChange'
             extract_handler_binding(json_data, handler_key, 'string', handlers) if json_data[handler_key]
+          # Embed - each event calls the handler it names with the event's
+          # payload (EmbedConverter#build_event_bridge_attr); a value that
+          # names no handler is not called, and is not declared.
+          elsif component_type == 'Embed' && json_data['events'].is_a?(Hash)
+            json_data['events'].each_value do |handler|
+              next if JsonUIShared::BindingValidatorCore.embed_event_handler_problem(handler)
+
+              handlers[handler] ||= { type: 'Record<string, unknown>' }
+            end
           end
 
           # Process children

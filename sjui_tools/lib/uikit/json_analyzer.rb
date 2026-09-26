@@ -94,10 +94,18 @@ module SjuiTools
                 'styles', "#{file_path} could not be parsed (#{e.message}); the layouts using it were drawn without it"
               )
             end
-          elsif File.exist?(file_path)
-            Core::Logger.warn "Style path is not a file: #{file_path}"
           else
-            Core::Logger.warn "Style file not found: #{file_path}"
+            # A style a layout names that is not there: the layouts using it are drawn
+            # without it — a stage that did not complete, named once at the end of the
+            # build. Ruled so on 2026-09-26 after counting the faces' references: 2167
+            # `style` references in the config-declared layout dirs of the four
+            # consumer layout trees, 0 to no file (ticket
+            # uikit-build-reports-success-after-a-binding-error).
+            Core::Logger.warn(File.exist?(file_path) ? "Style path is not a file: #{file_path}" : "Style file not found: #{file_path}")
+            require_relative '../core/stage_failures'
+            JsonUI::StageFailures.record_once(
+              'styles', "#{file_path} was not found; the layouts using it were drawn without it"
+            )
           end
         end
 

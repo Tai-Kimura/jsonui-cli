@@ -149,6 +149,7 @@ module KjuiTools
 
             require_relative '../../helpers/modifier_builder'
             require_relative '../../../core/attribute_types'
+            require_relative '../../../core/logger'
 
             module KjuiTools
               module Compose
@@ -302,7 +303,10 @@ module KjuiTools
             lines << "                if formatted_value"
             lines << "                  params << \"#{actual_key} = \#{formatted_value}\""
             lines << "                else"
-            lines << "                  warn JsonUIShared::AttributeTypes.unwritten_warning('kjui', '#{@component_pascal_case}', " \
+            # Through kjui's warning logger ("⚠️  …", as every other kjui
+            # warning): a bare `warn` carried no marker a warning count could
+            # find.
+            lines << "                  KjuiTools::Core::Logger.warn JsonUIShared::AttributeTypes.unwritten_warning('kjui', '#{@component_pascal_case}', " \
                      "'#{actual_key}', value, '#{type}')"
             lines << "                end"
             lines << "              end"

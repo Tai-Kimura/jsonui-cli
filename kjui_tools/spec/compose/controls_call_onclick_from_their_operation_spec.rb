@@ -115,6 +115,60 @@ RSpec.describe 'kjui controls call onClick from their own operation' do
     expect(segment).to match(/viewModel\.updateData\(mapOf\("idx" to 0\)\)\n\s*#{Regexp.escape(call)}\n/)
   end
 
+  # A control written with a static value holds its own state seeded from it
+  # (46b7d599, Helpers::StaticSeed), and with an onClick it must still move:
+  # it starts at the static value, its operation writes the state, and the
+  # call comes once, after that write. The rel merge could freeze it again —
+  # 62e15706's tree emitted `Switch(checked = true, onCheckedChange =
+  # { data.onTapped?.invoke() })` (the pack lane's check).
+  tapped = 'data.onTapped?.invoke()'
+  static_controls = {
+    'Switch' => [{ 'type' => 'Switch', 'isOn' => true }, 'true', ['onCheckedChange = { seeded = it; data.onTapped?.invoke() }']],
+    'Toggle' => [{ 'type' => 'Toggle', 'isOn' => true }, 'true', ['onCheckedChange = { seeded = it; data.onTapped?.invoke() }']],
+    'CheckBox' => [{ 'type' => 'CheckBox', 'isOn' => true }, 'true', ['onCheckedChange = { seeded = it; data.onTapped?.invoke() }']],
+    'CheckBox with a label' => [{ 'type' => 'CheckBox', 'checked' => true, 'label' => 'L' }, 'true',
+                                ['onCheckedChange = { seeded = it; data.onTapped?.invoke() }']],
+    'Slider' => [{ 'type' => 'Slider', 'value' => 0.3, 'minimumValue' => 0, 'maximumValue' => 1 }, '0.3f',
+                 ['onValueChange = { seeded = it },', 'onValueChangeFinished = { data.onTapped?.invoke() },']],
+    'SelectBox' => [{ 'type' => 'SelectBox', 'items' => %w[a b], 'selectedItem' => 'b' }, '"b"',
+                    ['onValueChange = { seeded = it; data.onTapped?.invoke() },']],
+    'Radio items' => [{ 'type' => 'Radio', 'items' => %w[a b], 'selectedValue' => 'a' }, '"a"',
+                      [/seeded = "b"\n\s*data\.onTapped\?\.invoke\(\)\n/]],
+    'Segment' => [{ 'type' => 'Segment', 'items' => %w[x y], 'selectedIndex' => 1 }, '1',
+                  [/seeded = 0\n\s*data\.onTapped\?\.invoke\(\)\n/]]
+  }
+
+  static_controls.each do |label, (node, seed, operation)|
+    it "#{label} with a static value and an onClick starts there, moves on its operation and then calls, once per place" do
+      code = emit.call(node.merge('onClick' => '@{onTapped}'))
+      expect(code).to include("var seeded by remember { mutableStateOf(#{seed}) }"), code
+      expect(code).to match(/(?:checked|value|selectedTabIndex) = seeded|selected = seeded == /), code
+      operation.each { |shape| expect(code).to match(shape.is_a?(Regexp) ? shape : /#{Regexp.escape(shape)}/), code }
+      # every write of the state is followed by the call before the next write
+      writes = code.scan(/seeded = /).size
+      expect(code.scan(tapped).size).to eq(label == 'Slider' ? 1 : writes), code
+      expect(code).not_to match(/\.clickable\b[^{]*\{ #{Regexp.escape(tapped)} \}/)
+    end
+  end
+
+  it 'an unbound Radio item with a static checked writes the view\'s map, then calls' do
+    code = emit.call('type' => 'Radio', 'text' => 'r', 'checked' => true, 'onClick' => '@{onTapped}')
+    expect(code).to include('selected = radioGroups["default"] == "radio_0" || radioGroups["default"] == null,',
+                            %(onClick = { radioGroups["default"] = "radio_0"; #{tapped} }))
+  end
+
+  it 'compiles the static-valued controls with their onClick' do
+    emitted = static_controls.each_with_index.map do |(label, (node, _, _)), i|
+      "// #{label}\nfun seededControl#{i}(data: Data, viewModel: ViewModel) {\n#{emit.call(node.merge('onClick' => '@{onTapped}'))}\n}"
+    end.join("\n\n")
+    expect(<<~KOTLIN).to compile_as_kotlin
+      #{ComposeStubUniverse.common_stages(emitted)}
+      class Data(val onTapped: (() -> Unit)? = null)
+      class ViewModel { fun updateData(values: Map<String, Any?>) {} }
+      #{emitted}
+    KOTLIN
+  end
+
   # A text field's own tap focuses it. iOS codegen calls no onClick there; an
   # outer clickable took the focus action from TalkBack. So: no call, no
   # clickable — the gestures and the blocker stay.
