@@ -937,56 +937,6 @@ module KjuiTools
           Helpers::VisibilityHelper.wrap_with_visibility(json_data, code, depth, required_imports)
         end
 
-        # Build a TextStyle(...) literal for callers (e.g. the partial-attributes Text) that
-        # need a TextStyle expression rather than separate Text(...) args.
-        # Routes font fields through Configuration.Font.resolve(FontSpec(...)).
-        def self.build_text_style(json_data, depth, required_imports)
-          style_parts = []
-
-          if json_data['fontColor']
-            color_value = Helpers::ResourceResolver.process_color(json_data['fontColor'], required_imports)
-            style_parts << "color = #{color_value}" if color_value
-          end
-
-          if json_data['fontSize'] || json_data['font'] || json_data['fontWeight'] || json_data['fontFamily']
-            font_args = Helpers::FontSpecHelper.build_font_spec_args(json_data, required_imports)
-            var_name = next_resolved_var
-            # Inline the resolve into the caller code by emitting a `.also { ... }`-style
-            # expression isn't possible in TextStyle args; instead, callers that consume
-            # this method should emit the resolve block themselves. To keep
-            # backward-compat we emit a flat TextStyle(...) without resolved font here.
-            # Concrete callers (PartialAttributesText, partial-attributes Text) construct their
-            # own resolve block.
-            style_parts << "fontSize = #{json_data['fontSize']}.sp" if json_data['fontSize']
-            if json_data['fontFamily']
-              required_imports&.add(:font_family)
-              style_parts << "fontFamily = FontFamily(Font(R.font.#{json_data['fontFamily'].to_s.gsub('-', '_').gsub(' ', '_').downcase}))"
-            end
-            font_value = json_data['font'] || json_data['fontWeight']
-            if font_value && Helpers::FontSpecHelper.weight_name?(font_value)
-              required_imports&.add(:font_weight)
-              style_parts << "fontWeight = #{Helpers::FontSpecHelper.weight_literal_for(font_value)}"
-            elsif font_value && !json_data['fontFamily']
-              # `font` holds a custom family name when not a weight.
-              required_imports&.add(:font_family)
-              style_parts << "fontFamily = FontFamily(Font(R.font.#{font_value.to_s.gsub('-', '_').downcase}))"
-            end
-          end
-
-          if json_data['textAlign']
-            required_imports&.add(:text_align)
-            align = compose_text_align(json_data['textAlign'])
-            style_parts << "textAlign = #{align}" if align
-          end
-
-          if style_parts.any?
-            required_imports&.add(:text_style)
-            return ",\n" + indent("style = TextStyle(#{style_parts.join(', ')})", depth)
-          end
-
-          nil
-        end
-
         # The inside of a Kotlin string literal — the one escaper (`$`
         # included).
         def self.escape_string(text)
