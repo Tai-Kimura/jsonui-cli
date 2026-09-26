@@ -226,26 +226,19 @@ module RjuiTools
             # Flow is checked before horizontal, like sjui/kjui route to
             # their flow generators first — the declared layout wins over
             # the horizontalScroll boolean.
-            classes << 'flex flex-row flex-wrap content-start'
+            # One wrap, or — with two or more sections (flow_per_section?) —
+            # a column of them, one per section, the blocks spaced as the
+            # lines. The gaps: grid_gap_classes.
+            classes << (flow_per_section? ? 'flex flex-col' : 'flex flex-row flex-wrap content-start')
             if is_lazy && attributes['scrollEnabled'] != false
               classes << 'overflow-y-auto'
               dynamic_styles['overflowY'] = "#{lazy_expr} === 'none' ? 'visible' : 'auto'" if lazy_expr
             end
-            # lineSpacing = gap between wrapped lines, itemSpacing = gap
-            # within a line (the grid branch's row/column mapping).
-            # `columnSpacing` is the SSoT's own name for the column gap and
-            # was read only in the horizontal branch — a flow or grid
-            # Collection ignored it, which is every Collection that declares
-            # `columns` (plan 34: pixel-identical to its control on web while
-            # both mobile platforms honoured it).
-            row_gap = attributes['lineSpacing']
-            col_gap = attributes['columnSpacing'] || attributes['itemSpacing'] || attributes['spacing']
-            if row_gap && col_gap
-              classes << "gap-x-[#{col_gap}px] gap-y-[#{row_gap}px]"
-            elsif row_gap
-              classes << "gap-y-[#{row_gap}px]"
-            elsif col_gap
-              classes << "gap-[#{col_gap}px]"
+            if flow_per_section?
+              row_gap = grid_row_gap
+              classes << "gap-y-[#{row_gap}px]" if row_gap
+            else
+              classes.concat(grid_gap_classes)
             end
           elsif is_horizontal
             # Horizontal scroll collection
@@ -294,16 +287,7 @@ module RjuiTools
             else
               classes << "grid-cols-#{columns}"
             end
-            # lineSpacing for row gap, columnSpacing/itemSpacing for column gap
-            row_gap = attributes['lineSpacing']
-            col_gap = attributes['columnSpacing'] || attributes['itemSpacing'] || attributes['spacing']
-            if row_gap && col_gap
-              classes << "gap-x-[#{col_gap}px] gap-y-[#{row_gap}px]"
-            elsif row_gap
-              classes << "gap-y-[#{row_gap}px]"
-            elsif col_gap
-              classes << "gap-[#{col_gap}px]"
-            end
+            classes.concat(grid_gap_classes)
           end
 
           # lazy vs eager, the rendering half. The scroll-container half above
@@ -371,6 +355,41 @@ module RjuiTools
 
 
           finalize_classes(classes)
+        end
+
+        # A grid's or a flow's gaps (attribute_semantics.json ->
+        # collectionSpacing): between rows lineSpacing, else itemSpacing;
+        # between columns columnSpacing, else itemSpacing; each else none (0).
+        # `columnSpacing` spaces only the columns. Until jsonui-cli 1.9.0 a
+        # columnSpacing with no lineSpacing wrote `gap-[x]`, which spaced the
+        # rows by it too, and itemSpacing did not reach the rows when a
+        # columnSpacing was declared. (`spacing` is the undeclared legacy
+        # spelling of itemSpacing this path has always read.)
+        def grid_gap_classes
+          line = attributes['lineSpacing']
+          column = attributes['columnSpacing']
+          both = attributes['itemSpacing'] || attributes['spacing']
+          return both ? ["gap-[#{both}px]"] : [] if line.nil? && column.nil?
+
+          row = line || both
+          col = column || both
+          [[col && "gap-x-[#{col}px]", row && "gap-y-[#{row}px]"].compact.join(' ')]
+        end
+
+        def grid_row_gap
+          attributes['lineSpacing'] || attributes['itemSpacing'] || attributes['spacing']
+        end
+
+        # A flow per section (4f ruling, 2026-09-26): with two or more
+        # sections that draw cells, each section wraps in a block of its own,
+        # one under the other — sjui's FlowLayout per section in a VStack,
+        # kjui's FlowRow per section in a Column (the same count decides it
+        # there). Until jsonui-cli 1.9.0 every section went into the one
+        # wrap, so section 2 continued section 1's last line.
+        def flow_per_section?
+          return false unless flow_collection? && extract_collection_binding(attributes['items'])
+
+          (attributes['sections'] || []).count { |section| section.is_a?(Hash) && section['cell'] } > 1
         end
 
         #: listStyle -> the chrome that draws it. Enumerated from the SSoT
@@ -464,7 +483,14 @@ module RjuiTools
             # header and footer reading `?.sections` off nothing
             # (`data={?.sections?.[0]?.header || {}}`, which is not JSX) and
             # one cell with no data.
-            if items_binding
+            if items_binding && flow_per_section?
+              wrap = (['flex flex-row flex-wrap content-start'] + grid_gap_classes).join(' ')
+              sections.each_with_index do |section, section_index|
+                content_lines << "#{indent_str(indent)}<div className=\"#{wrap}\">"
+                content_lines << generate_section_content(section, section_index, items_binding, indent + 2)
+                content_lines << "#{indent_str(indent)}</div>"
+              end
+            elsif items_binding
               sections.each_with_index do |section, section_index|
                 content_lines << generate_section_content(section, section_index, items_binding, indent)
               end
