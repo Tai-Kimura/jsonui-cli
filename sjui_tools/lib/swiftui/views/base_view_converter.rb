@@ -61,6 +61,29 @@ module SjuiTools
           @@layout_normalized
         end
 
+        # Per-file: this layout is drawn in a view of its own where a
+        # `userInteractionEnabled` stop can reach it from another layout
+        # (InteractionStopIndex) — a Collection's cell, an Embed's screen, a
+        # TabView tab's view. Its view reads the stop from the environment
+        # (INTERACTION_ENVIRONMENT_DECLARATION), and every tap in it is gated
+        # on it as on a bound flag (tap_gate_condition). Off for every other
+        # layout, which is emitted as it was.
+        @@reads_interaction_environment = false
+
+        def self.reads_interaction_environment=(value)
+          @@reads_interaction_environment = value ? true : false
+        end
+
+        def self.reads_interaction_environment?
+          @@reads_interaction_environment
+        end
+
+        # The property a view that reads the stop declares, and the name its
+        # taps' gates use (SwiftJsonUI's EnvironmentValues.jsonuiInteractionStopped).
+        INTERACTION_ENVIRONMENT_NAME = 'jsonuiInteractionStopped'
+        INTERACTION_ENVIRONMENT_DECLARATION =
+          "@Environment(\\.jsonuiInteractionStopped) private var #{INTERACTION_ENVIRONMENT_NAME}"
+
         attr_reader :state_variables, :modifier_bag
 
         # Injected onto every node under a scrolling container by
@@ -857,7 +880,24 @@ module SjuiTools
           return if gates.empty?
 
           condition = gates.include?('false') ? 'false' : gates.join(' && ')
-          @modifier_bag.register(:allows_hit_testing, ".allowsHitTesting(#{condition})")
+          lines = [".allowsHitTesting(#{condition})"]
+          hand_down = interaction_stop_line
+          lines << hand_down if hand_down
+          @modifier_bag.register(:allows_hit_testing, lines.size == 1 ? lines.first : lines)
+        end
+
+        # A node whose `userInteractionEnabled` is false or bound, holding a
+        # layout drawn in a view of its own (TapAccessibility.hands_stop_down?),
+        # hands the stop down through the environment: `true` for `false`, and
+        # for a binding the stop around it or the binding's `false`. The drawn
+        # view's taps read it (reads_interaction_environment). nil otherwise.
+        def interaction_stop_line
+          return nil unless JsonUIShared::TapAccessibility.hands_stop_down?(@component)
+
+          value = @component['userInteractionEnabled']
+          return '.environment(\.jsonuiInteractionStopped, true)' if value == false
+
+          ".transformEnvironment(\\.jsonuiInteractionStopped) { $0 = $0 || !#{tap_gate_expr(value)} }"
         end
 
         # `.disabled` for an `enabled` value: the literal false, or the binding
@@ -948,9 +988,13 @@ module SjuiTools
           gates = []
           gates << @component['canTap'] if is_binding?(@component['canTap'])
           gates.concat(JsonUIShared::TapAccessibility.interaction_gates(@component))
-          return nil if gates.empty?
+          conditions = gates.uniq.map { |gate| tap_gate_expr(gate) }
+          # A stop handed down from another layout (a Collection's cell, an
+          # Embed's screen): the environment says so.
+          conditions << "!#{INTERACTION_ENVIRONMENT_NAME}" if self.class.reads_interaction_environment?
+          return nil if conditions.empty?
 
-          gates.uniq.map { |gate| tap_gate_expr(gate) }.join(' && ')
+          conditions.join(' && ')
         end
 
         # Types whose declared onClick is not a tap on the view (ticket

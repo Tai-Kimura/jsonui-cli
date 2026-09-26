@@ -975,9 +975,32 @@ module KjuiTools
         # container that emits the blocker early (TabView, Embed,
         # SafeAreaView) takes this piece and the disabled semantics, so no
         # gate is emitted twice. Controls take operation_click_call instead.
+        # Per-file: this layout is drawn in a composable of its own where a
+        # `userInteractionEnabled` stop in another layout can reach it
+        # (InteractionStopIndex) — a Collection's cell, an Embed's screen, a
+        # TabView tab's view. Its clicks are attached while no stop is handed
+        # down (LocalInteractionStopped), as under a bound flag. Only the
+        # click reads it: it is a modifier, built in the composable's scope; a
+        # control's operation call and a Button's onClick are lambdas, where a
+        # CompositionLocal cannot be read.
+        @reads_interaction_local = false
+
+        class << self
+          attr_reader :reads_interaction_local
+
+          def reads_interaction_local=(value)
+            @reads_interaction_local = value ? true : false
+          end
+        end
+
         def self.build_click(json_data, required_imports = nil)
           modifiers = []
           call, can_tap = click_call(json_data)
+          if call && reads_interaction_local
+            required_imports&.add(:local_interaction_stopped)
+            handed_down = '!LocalInteractionStopped.current'
+            can_tap = can_tap ? "#{conjunct(can_tap)} && #{handed_down}" : handed_down
+          end
           handler = call
           enabled = enabled_expression(json_data)
           # `canTap` (attribute_definitions.json common.canTap, the Compose tap
@@ -1147,12 +1170,34 @@ module KjuiTools
         # userInteractionEnabled and `enabled`, joined — either false stops
         # every handler of the node (the tap rule reads the same: a disabled
         # long press does not operate). nil: no gate; 'false': shut.
+        #
+        # And the userInteractionEnabled of every node around it (the tap
+        # rule's `_tapStopped` / `_tapGates`, which annotate! writes on each
+        # node with a handler): the detectors take their first down with
+        # `requireUnconsumed = false` in the Initial pass, so the blocker of a
+        # node around them — which consumes in that same pass — did not stop
+        # them (read, not measured on a device).
         def self.gesture_gate(json_data)
-          gates = [boolean_expression(json_data['userInteractionEnabled']), enabled_expression(json_data)].compact
+          return 'false' if around_stopped?(json_data)
+
+          gates = around_gates(json_data).map { |g| boolean_expression(g) }
+          gates += [boolean_expression(json_data['userInteractionEnabled']), enabled_expression(json_data)]
+          gates = gates.compact.uniq
           return nil if gates.empty?
           return 'false' if gates.include?('false')
 
           gates.join(' && ')
+        end
+
+        # A node around this one has `userInteractionEnabled: false`.
+        def self.around_stopped?(json_data)
+          json_data[JsonUIShared::TapAccessibility::STOPPED_KEY] == true
+        end
+
+        # The bound userInteractionEnabled of the nodes around this one.
+        def self.around_gates(json_data)
+          gates = json_data[JsonUIShared::TapAccessibility::GATES_KEY]
+          gates.is_a?(Array) ? gates : []
         end
 
         def self.build_long_pressable(json_data, required_imports = nil)
