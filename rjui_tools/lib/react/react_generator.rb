@@ -51,21 +51,13 @@ module RjuiTools
         'CircleImage' => Converters::ImageConverter,
         'NetworkImage' => Converters::ImageConverter,
         'TextField' => Converters::TextFieldConverter,
-        # EditText / Input are aliases for TextField (attribute_definitions
-        # `_alias_of: TextField`; kept for Android / HTML naming compatibility)
-        'EditText' => Converters::TextFieldConverter,
-        'Input' => Converters::TextFieldConverter,
         'TextView' => Converters::TextViewConverter,
         'ScrollView' => Converters::ScrollViewConverter,
         'Collection' => Converters::CollectionConverter,
         # Switch is the primary component name, uses SwitchConverter for iOS-style toggle
         'Switch' => Converters::SwitchConverter,
-        # Toggle is an alias for Switch (backward compatibility), also uses SwitchConverter
-        'Toggle' => Converters::SwitchConverter,
         # CheckBox is the primary component name, uses ToggleConverter for simple checkbox
         'CheckBox' => Converters::ToggleConverter,
-        # Check is an alias for CheckBox (backward compatibility), also uses ToggleConverter
-        'Check' => Converters::ToggleConverter,
         'Slider' => Converters::SliderConverter,
         'Segment' => Converters::SegmentConverter,
         'Radio' => Converters::RadioConverter,
@@ -219,11 +211,12 @@ module RjuiTools
         # First check extension converters (with the spelling as written),
         # then built-in converters. A type-synonym spelling (HStack,
         # WebView, …) is drawn as its type, from
-        # shared/core/type_synonyms.json; the map below holds declared types
-        # (and the `_alias_of` sections EditText / Input / Check / Toggle).
+        # shared/core/type_synonyms.json, and a declared alias section
+        # (EditText, Check, Toggle, …: `_alias_of`) as its canonical one; the
+        # map below holds canonical declared sections.
         converter_class = @extension_converters[type]
         unless converter_class
-          json = JsonUIShared::TypeSynonyms.canonicalize(json)
+          json = JsonUIShared::ComponentAliases.resolve(JsonUIShared::TypeSynonyms.canonicalize(json))
           type = json['type'] || 'View'
           converter_class = CONVERTERS[type]
         end

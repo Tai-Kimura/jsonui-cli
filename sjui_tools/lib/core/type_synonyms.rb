@@ -89,4 +89,52 @@ module JsonUIShared
       end
     end
   end
+
+  # The declared component aliases — attribute_definitions.json sections that
+  # are `_alias_of` pointers (EditText -> TextField, Check -> CheckBox, …) —
+  # for the converter factories, which draw an alias as its canonical
+  # section. Read from the definitions beside this file, with the rule the
+  # validator follows (attribute_validator_core.rb resolve_component_alias):
+  # one hop, and a pointer to a missing or alias-shaped section is ignored.
+  module ComponentAliases
+    DEFAULT_DEFINITIONS = File.join(__dir__, 'attribute_definitions.json')
+
+    class << self
+      # alias spelling -> canonical section, read once per path.
+      def table(path = DEFAULT_DEFINITIONS)
+        @tables ||= {}
+        @tables[path] ||= read(path)
+      end
+
+      # The canonical section `type` is an alias of, or `type` itself.
+      def canonical(type, path = DEFAULT_DEFINITIONS)
+        table(path)[type] || type
+      end
+
+      # `node` with its type resolved to the canonical section when it is an
+      # alias (a copy); anything else is `node` itself.
+      def resolve(node, path = DEFAULT_DEFINITIONS)
+        return node unless node.is_a?(Hash) && node['type'].is_a?(String)
+
+        target = table(path)[node['type']]
+        target ? node.merge('type' => target) : node
+      end
+
+      private
+
+      def read(path)
+        raise "attribute_definitions.json not found at #{path}" unless File.exist?(path)
+
+        definitions = JSON.parse(File.read(path))
+        definitions.each_with_object({}) do |(name, section), aliases|
+          next unless section.is_a?(Hash) && section['_alias_of'].is_a?(String)
+
+          target = definitions[section['_alias_of']]
+          next unless target.is_a?(Hash) && !target['_alias_of'].is_a?(String)
+
+          aliases[name] = section['_alias_of']
+        end
+      end
+    end
+  end
 end

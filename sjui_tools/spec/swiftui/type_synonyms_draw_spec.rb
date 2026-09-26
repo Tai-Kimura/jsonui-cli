@@ -61,7 +61,9 @@ RSpec.describe 'type synonyms in the sjui SwiftUI converters' do
     'Collection' => { 'items' => [] },
     'GradientView' => { 'gradient' => ['#FF0000', '#0000FF'] },
     'Blur' => {},
-    'Web' => { 'url' => 'https://example.invalid/' }
+    'Web' => { 'url' => 'https://example.invalid/' },
+    'TextField' => { 'text' => 't' },
+    'Switch' => {}
   }.freeze
 
   # The table, read as data here — the factory reads it through
@@ -91,6 +93,24 @@ RSpec.describe 'type synonyms in the sjui SwiftUI converters' do
       expected = emit(as_target)
       expect(emit(as_target)).to eq(expected), "#{target} emits differently each time"
       expect(emit({ 'type' => spelling, 'id' => 'n' }.merge(extra))).to eq(expected)
+    end
+  end
+
+  # The declared alias sections (`_alias_of`), read from the definitions as
+  # data here — the factory reads them through JsonUIShared::ComponentAliases.
+  TYPE_ALIAS_SECTIONS = JSON.parse(File.read(JsonUIShared::ComponentAliases::DEFAULT_DEFINITIONS))
+                            .select { |_, section| section.is_a?(Hash) && section['_alias_of'].is_a?(String) }
+                            .transform_values { |section| section['_alias_of'] }
+
+  it 'reads the declared alias sections' do
+    expect(TYPE_ALIAS_SECTIONS.size).to be >= 4
+  end
+
+  TYPE_ALIAS_SECTIONS.each do |alias_name, canonical|
+    it "emits the alias section #{alias_name} as #{canonical}" do
+      extra = TYPE_SYNONYM_EXTRA.fetch(canonical)
+      expected = emit({ 'type' => canonical, 'id' => 'n' }.merge(extra))
+      expect(emit({ 'type' => alias_name, 'id' => 'n' }.merge(extra))).to eq(expected)
     end
   end
 

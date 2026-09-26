@@ -53,7 +53,44 @@ def emit(model: AttrModel) -> dict[str, str]:
     files["CommonAttributes.swift"] = _component_file(model.common, model, mapper)
     for comp in model.components:
         files[f"{comp.name}Attributes.swift"] = _component_file(comp, model, mapper)
+    files["ComponentAliases.swift"] = _aliases_file(model)
     return dict(sorted(files.items()))
+
+
+def _aliases_file(model: AttrModel) -> str:
+    """The declared component aliases (`_alias_of` sections), for the
+    runtime's dispatch: it draws an alias as its canonical section."""
+    rows = [
+        f"        {_swift_str(c.name)}: {_swift_str(c.alias_of)},"
+        for c in sorted(model.components, key=lambda c: c.name)
+        if c.alias_of
+    ]
+    return "\n".join([
+        HEADER.rstrip("\n"),
+        "",
+        "import Foundation",
+        "",
+        "/// The declared component aliases: a section of attribute_definitions.json",
+        "/// that points at another with `_alias_of` (EditText -> TextField, …). A",
+        "/// renderer draws an alias as its canonical section; the alias keeps its",
+        "/// own attribute table (a full clone) for parsing by the raw spelling.",
+        "public enum JsonUIComponentAliases {",
+        "    /// Alias spelling -> canonical section, as declared.",
+        "    public static let canonical: [String: String] = [",
+        *rows,
+        "    ]",
+        "",
+        "    /// The canonical section `type` is an alias of (matched",
+        "    /// case-insensitively, as the dispatch matches types), or nil.",
+        "    public static func canonical(for type: String) -> String? {",
+        "        lowercased[type.lowercased()]",
+        "    }",
+        "",
+        "    private static let lowercased: [String: String] = Dictionary(",
+        "        uniqueKeysWithValues: canonical.map { ($0.key.lowercased(), $0.value) })",
+        "}",
+        "",
+    ])
 
 
 # ---------------------------------------------------------------------------

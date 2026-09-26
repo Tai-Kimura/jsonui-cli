@@ -1416,7 +1416,7 @@ module RjuiTools
           extension = (config['_extension_converters'] || {})[resolved_child['type']]
           return extension.new(resolved_child, config) if extension
 
-          drawn = JsonUIShared::TypeSynonyms.canonicalize(resolved_child)
+          drawn = JsonUIShared::ComponentAliases.resolve(JsonUIShared::TypeSynonyms.canonicalize(resolved_child))
           converter_class = get_converter_class(drawn['type'])
           converter_class.new(drawn, config)
         end
@@ -1486,17 +1486,11 @@ module RjuiTools
             'CircleImage' => ImageConverter,
             'NetworkImage' => NetworkImageConverter,
             'TextField' => TextFieldConverter,
-            # EditText / Input are aliases for TextField (attribute_definitions
-            # `_alias_of: TextField`)
-            'EditText' => TextFieldConverter,
-            'Input' => TextFieldConverter,
             'TextView' => TextViewConverter,
             'ScrollView' => ScrollViewConverter,
             'Collection' => CollectionConverter,
             'Switch' => SwitchConverter,
-            'Toggle' => ToggleConverter,
             'CheckBox' => ToggleConverter,
-            'Check' => ToggleConverter,
             'Slider' => SliderConverter,
             'Segment' => SegmentConverter,
             'Radio' => RadioConverter,

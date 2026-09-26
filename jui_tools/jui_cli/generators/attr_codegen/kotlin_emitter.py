@@ -59,7 +59,42 @@ def emit(model: AttrModel) -> dict[str, str]:
     files["CommonAttributes.kt"] = _component_file(model.common, model, mapper)
     for comp in model.components:
         files[f"{comp.name}Attributes.kt"] = _component_file(comp, model, mapper)
+    files["ComponentAliases.kt"] = _aliases_file(model)
     return dict(sorted(files.items()))
+
+
+def _aliases_file(model: AttrModel) -> str:
+    """The declared component aliases (`_alias_of` sections), for the
+    runtime's dispatch: it draws an alias as its canonical section."""
+    rows = [
+        f"        {_kotlin_str(c.name)} to {_kotlin_str(c.alias_of)},"
+        for c in sorted(model.components, key=lambda c: c.name)
+        if c.alias_of
+    ]
+    return "\n".join([
+        HEADER.rstrip("\n"),
+        "",
+        f"package {PACKAGE}",
+        "",
+        "/**",
+        " * The declared component aliases: a section of attribute_definitions.json",
+        " * that points at another with `_alias_of` (EditText -> TextField, …). A",
+        " * renderer draws an alias as its canonical section; the alias keeps its",
+        " * own attribute table (a full clone) for parsing by the raw spelling.",
+        " */",
+        "object JsonUIComponentAliases {",
+        "    /** Alias spelling -> canonical section, as declared. */",
+        "    val canonical: Map<String, String> = mapOf(",
+        *rows,
+        "    )",
+        "",
+        "    private val lowercased: Map<String, String> = canonical.mapKeys { it.key.lowercase() }",
+        "",
+        "    /** The canonical section [type] is an alias of (matched case-insensitively, as the dispatch matches types), or null. */",
+        "    fun canonicalFor(type: String): String? = lowercased[type.lowercase()]",
+        "}",
+        "",
+    ])
 
 
 # ---------------------------------------------------------------------------

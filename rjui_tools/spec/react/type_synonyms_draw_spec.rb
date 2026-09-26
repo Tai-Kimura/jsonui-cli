@@ -46,7 +46,9 @@ RSpec.describe 'type synonyms in the rjui converters' do
     'Collection' => { 'items' => [] },
     'GradientView' => { 'gradient' => ['#FF0000', '#0000FF'] },
     'Blur' => {},
-    'Web' => { 'url' => 'https://example.invalid/' }
+    'Web' => { 'url' => 'https://example.invalid/' },
+    'TextField' => { 'text' => 't' },
+    'Switch' => {}
   }.freeze
 
   # The table, read as data here — the converters read it through
@@ -89,6 +91,26 @@ RSpec.describe 'type synonyms in the rjui converters' do
       expect(emit(as_spelling)).to eq(emit(as_target))
       expect(emit_as_child(as_spelling)).to eq(emit_as_child(as_target))
       expect(RjuiTools::Core::Logger).not_to have_received(:warn).with(/Unknown component type/)
+    end
+  end
+
+  # The declared alias sections (`_alias_of`), read from the definitions as
+  # data here — the converters read them through JsonUIShared::ComponentAliases.
+  RJUI_ALIAS_SECTIONS = JSON.parse(File.read(JsonUIShared::ComponentAliases::DEFAULT_DEFINITIONS))
+                            .select { |_, section| section.is_a?(Hash) && section['_alias_of'].is_a?(String) }
+                            .transform_values { |section| section['_alias_of'] }
+
+  it 'reads the declared alias sections' do
+    expect(RJUI_ALIAS_SECTIONS.size).to be >= 4
+  end
+
+  RJUI_ALIAS_SECTIONS.each do |alias_name, canonical|
+    it "emits the alias section #{alias_name} as #{canonical}, at the root and as a child" do
+      extra = RJUI_SYNONYM_EXTRA.fetch(canonical)
+      as_canonical = { 'type' => canonical, 'id' => 'n' }.merge(extra)
+      as_alias = { 'type' => alias_name, 'id' => 'n' }.merge(extra)
+      expect(emit(as_alias)).to eq(emit(as_canonical))
+      expect(emit_as_child(as_alias)).to eq(emit_as_child(as_canonical))
     end
   end
 

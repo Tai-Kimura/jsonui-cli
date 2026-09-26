@@ -146,11 +146,14 @@ module SjuiTools
         # A type-synonym spelling (HStack, ProgressBar, WebView, …) is drawn
         # as its type, from shared/core/type_synonyms.json — after the app's
         # converters were asked, above, with the spelling as written. The
-        # cases below are declared types (and the `_alias_of` sections
-        # EditText / Input / Check / Toggle); a spelling in neither draws the
-        # default. The node's converter gets the node as drawn, so what reads
+        # cases below are canonical declared sections; a spelling that is
+        # neither draws the default. The node's converter gets the node as drawn, so what reads
         # its type afterwards (the binding handlers) reads the drawn one.
         component = JsonUIShared::TypeSynonyms.canonicalize(component)
+        # A declared alias section (EditText / Input -> TextField, Check ->
+        # CheckBox, Toggle -> Switch: `_alias_of` in attribute_definitions.json)
+        # is drawn as its canonical section.
+        component = JsonUIShared::ComponentAliases.resolve(component)
         component_type = component['type']
 
         case component_type
@@ -166,9 +169,7 @@ module SjuiTools
           Views::GradientViewConverter.new(component, indent_level, action_manager, self, registry, @binding_registry)
         when 'Blur'
           Views::BlurConverter.new(component, indent_level, action_manager, self, registry, @binding_registry)
-        # EditText / Input are aliases for TextField (attribute_definitions
-        # `_alias_of: TextField`; kept for Android / HTML naming compatibility)
-        when 'TextField', 'EditText', 'Input'
+        when 'TextField'
           Views::TextFieldConverter.new(component, indent_level, action_manager, @binding_registry)
         # CircleImage / CircleImageView: Image synonyms drawn as CircleImage
         # (`render_as`), which ImageConverter clips to a circle
@@ -180,12 +181,9 @@ module SjuiTools
           Views::ScrollViewConverter.new(component, indent_level, action_manager, self, registry, @binding_registry)
         when 'TextView'
           Views::TextViewConverter.new(component, indent_level, action_manager, @binding_registry)
-        # Switch/Toggle: Both component types supported for backward compatibility
-        # "Switch" is primary name, "Toggle" is alias (see attribute_definitions.json)
-        when 'Switch', 'Toggle'
+        when 'Switch'
           Views::ToggleConverter.new(component, indent_level, action_manager, @binding_registry)
-        # CheckBox is primary name, Check is alias (see attribute_definitions.json)
-        when 'CheckBox', 'Check'
+        when 'CheckBox'
           Views::CheckboxConverter.new(component, indent_level, action_manager, @binding_registry)
         when 'Radio'
           Views::RadioConverter.new(component, indent_level, action_manager, @binding_registry)
