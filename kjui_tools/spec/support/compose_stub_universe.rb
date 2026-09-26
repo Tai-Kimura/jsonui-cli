@@ -85,7 +85,7 @@ module ComposeStubUniverse
     screens = emitted.scan(/^\s*(\w+View)\(\s*$/).flatten.uniq
     <<~KOTLIN
       interface Modifier { companion object : Modifier }
-      class Dp(val value: Float)
+      class Dp(val value: Float) { companion object { val Infinity = Dp(Float.POSITIVE_INFINITY) } }
       val Int.dp: Dp get() = Dp(toFloat())
       val Double.dp: Dp get() = Dp(toFloat())
       val Float.dp: Dp get() = Dp(this)
@@ -99,12 +99,17 @@ module ComposeStubUniverse
       object android { object graphics { object Color { fun parseColor(hex: String): Int = 0 } } }
       class TextUnit { companion object { val Unspecified = TextUnit() } }
       val Int.sp: TextUnit get() = TextUnit()
+      val Float.sp: TextUnit get() = TextUnit()
+      val Double.sp: TextUnit get() = TextUnit()
       class FontFamily
       class FontWeight
       class FontStyle { companion object { val Normal = FontStyle() } }
       class FontSpec(val family: String?, val weight: String?, val size: Int?, val italic: Boolean)
       class ResolvedFont(val family: FontFamily?, val weight: FontWeight?, val size: TextUnit?, val style: FontStyle?)
-      class TextStyle(val color: Color = Color(), val fontSize: TextUnit = TextUnit())
+      class TextStyle(val color: Color = Color(), val fontSize: TextUnit = TextUnit()) {
+          fun copy(lineHeight: TextUnit = TextUnit()): TextStyle = this
+      }
+      object LocalTextStyle { val current = TextStyle() }
       interface Shape
       class RoundedCornerShape(val radius: Dp) : Shape
       object RectangleShape : Shape
@@ -182,6 +187,9 @@ module ComposeStubUniverse
       fun PaddingValues(all: Dp): PaddingValues = object : PaddingValues { override fun calculateBottomPadding() = all }
       fun PaddingValues(start: Dp = 0.dp, top: Dp = 0.dp, end: Dp = 0.dp, bottom: Dp = 0.dp): PaddingValues =
           object : PaddingValues { override fun calculateBottomPadding() = bottom }
+      fun PaddingValues(horizontal: Dp, vertical: Dp): PaddingValues =
+          object : PaddingValues { override fun calculateBottomPadding() = vertical }
+      fun Modifier.heightIn(min: Dp = 0.dp, max: Dp = Dp.Infinity): Modifier = this
       class BorderStroke(val width: Dp, val color: Color)
       class ButtonColors
       object ButtonDefaults {
@@ -192,14 +200,15 @@ module ComposeStubUniverse
           object Button {
               val defaultTextColor = Color(); val defaultBackgroundColor = Color(); val defaultCornerRadius: Int = 8
           }
-          object TextField { val defaultTextColor = Color(); val defaultFontSize: Int = 16; val defaultCornerRadius: Int = 8 }
+          object TextField { val defaultTextColor = Color(); val defaultFontSize: Int = 16; val defaultCornerRadius: Int = 8; val defaultPlaceholderColor = Color() }
           object Font { fun resolve(spec: FontSpec) = ResolvedFont(null, null, null, null) }
       }
       fun Button(onClick: () -> Unit, modifier: Modifier = Modifier, enabled: Boolean = true,
                  shape: Shape = RectangleShape, colors: ButtonColors = ButtonColors(), border: BorderStroke? = null,
                  contentPadding: PaddingValues = PaddingValues(0.dp), content: RowScope.() -> Unit) {}
       fun Text(text: String, color: Color = Color(), fontFamily: FontFamily? = null, fontWeight: FontWeight? = null,
-               fontSize: TextUnit = TextUnit(), fontStyle: FontStyle? = null, modifier: Modifier = Modifier) {}
+               fontSize: TextUnit = TextUnit(), fontStyle: FontStyle? = null, modifier: Modifier = Modifier,
+               style: TextStyle? = null) {}
       fun Spacer(modifier: Modifier = Modifier) {}
       fun RadioButton(selected: Boolean, onClick: (() -> Unit)?, modifier: Modifier = Modifier, enabled: Boolean = true) {}
       fun IconToggleButton(checked: Boolean, onCheckedChange: (Boolean) -> Unit, modifier: Modifier = Modifier,
@@ -226,17 +235,24 @@ module ComposeStubUniverse
       fun Switch(checked: Boolean, onCheckedChange: ((Boolean) -> Unit)?, modifier: Modifier = Modifier, enabled: Boolean = true) {}
       fun Checkbox(checked: Boolean, onCheckedChange: ((Boolean) -> Unit)?, modifier: Modifier = Modifier, enabled: Boolean = true) {}
       fun Slider(value: Float, onValueChange: (Float) -> Unit, modifier: Modifier = Modifier, enabled: Boolean = true,
-                 valueRange: ClosedFloatingPointRange<Float> = 0f..1f, onValueChangeFinished: (() -> Unit)? = null) {}
-      fun LinearProgressIndicator(modifier: Modifier = Modifier) {}
-      fun CircularProgressIndicator(modifier: Modifier = Modifier) {}
+                 valueRange: ClosedFloatingPointRange<Float> = 0f..1f, onValueChangeFinished: (() -> Unit)? = null,
+                 steps: Int = 0) {}
+      fun LinearProgressIndicator(modifier: Modifier = Modifier, color: Color = Color(), trackColor: Color = Color()) {}
+      fun CircularProgressIndicator(modifier: Modifier = Modifier, color: Color = Color(), trackColor: Color = Color(),
+                                    strokeWidth: Dp = 0.dp) {}
       fun SelectBox(value: String, onValueChange: (String) -> Unit, options: List<String>, modifier: Modifier = Modifier,
                     enabled: Boolean = true, backgroundColor: Color? = null, borderColor: Color? = null,
-                    cornerRadius: Int? = null, contentPadding: PaddingValues? = null) {}
+                    cornerRadius: Int? = null, contentPadding: PaddingValues? = null, fontSize: Int = 16) {}
+      fun DateSelectBox(value: String, onValueChange: (String) -> Unit, modifier: Modifier = Modifier,
+                        datePickerMode: String = "date", minuteInterval: Int = 1, enabled: Boolean = true,
+                        cornerRadius: Int? = null, fontSize: Int = 16) {}
       fun Segment(selectedTabIndex: Int, modifier: Modifier = Modifier, enabled: Boolean = true,
                   containerColor: Color = Color(), content: () -> Unit) {}
       fun Tab(selected: Boolean, onClick: () -> Unit, enabled: Boolean = true, text: (() -> Unit)? = null) {}
       class GridCells { companion object { fun Fixed(count: Int) = GridCells() } }
-      fun LazyVerticalGrid(columns: GridCells, modifier: Modifier = Modifier, content: LazyGridScope.() -> Unit) {}
+      fun LazyVerticalGrid(columns: GridCells, modifier: Modifier = Modifier, contentPadding: PaddingValues? = null,
+                           verticalArrangement: Arrangement = Arrangement(), horizontalArrangement: Arrangement = Arrangement(),
+                           content: LazyGridScope.() -> Unit) {}
       class Context
       class WebSettings { var javaScriptEnabled: Boolean = false }
       open class WebViewClient
@@ -288,8 +304,8 @@ module ComposeStubUniverse
       object LocalRadioGroupSelections { val current: MutableMap<String, String> = mutableMapOf() }
       enum class EmbedNavigationMode { Delegate, Isolated }
       class EmbedScope { val viewModelStoreOwner = Any() }
-      fun EmbedContainer(modifier: Modifier = Modifier, embedId: String, navigationMode: EmbedNavigationMode,
-                         content: (EmbedScope) -> Unit) {}
+      fun EmbedContainer(modifier: Modifier = Modifier, embedId: String, params: Map<String, Any> = emptyMap(),
+                         navigationMode: EmbedNavigationMode, content: (EmbedScope) -> Unit) {}
       object androidx { object hilt { object lifecycle { object viewmodel { object compose {
           fun hiltViewModel(viewModelStoreOwner: Any, key: String? = null): Any = Any()
       } } } } }
@@ -301,10 +317,12 @@ module ComposeStubUniverse
       class SoftwareKeyboardController { fun show() {} }
       object LocalSoftwareKeyboardController { val current: SoftwareKeyboardController? = null }
       fun CustomTextField(state: TextFieldState, modifier: Modifier = Modifier, shape: Shape = RectangleShape,
+                          placeholder: (() -> Unit)? = null,
                           contentPadding: PaddingValues? = null, backgroundColor: Color? = null,
                           borderColor: Color? = null, isOutlined: Boolean = false, textStyle: TextStyle? = null,
                           maxLines: Int = 1, singleLine: Boolean = true, enabled: Boolean = true) {}
       fun CustomTextFieldWithMargins(state: TextFieldState, boxModifier: Modifier = Modifier,
+                          placeholder: (() -> Unit)? = null,
                                      textFieldModifier: Modifier = Modifier, shape: Shape = RectangleShape,
                                      contentPadding: PaddingValues? = null, backgroundColor: Color? = null,
                                      borderColor: Color? = null, isOutlined: Boolean = false,

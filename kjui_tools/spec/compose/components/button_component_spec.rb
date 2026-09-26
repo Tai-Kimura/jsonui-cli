@@ -198,7 +198,7 @@ RSpec.describe KjuiTools::Compose::Components::ButtonComponent do
     it 'generates Button with enabled data binding' do
       json_data = { 'type' => 'Button', 'text' => 'Test', 'enabled' => '@{isActive}' }
       result = described_class.generate(json_data, 0, required_imports)
-      expect(result).to include('enabled = data.isActive')
+      expect(result).to include('enabled = (data.isActive ?: false)')
     end
 
     it 'generates Button with fontSize routed through Configuration.Font.resolve(FontSpec(...))' do

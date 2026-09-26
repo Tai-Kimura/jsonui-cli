@@ -128,7 +128,7 @@ RSpec.describe KjuiTools::Compose::Components::SegmentComponent do
         'items' => ['A', 'B']
       }
       result = described_class.generate(json_data, 0, required_imports)
-      expect(result).to include('enabled = data.isEnabled')
+      expect(result).to include('enabled = (data.isEnabled ?: false)')
     end
 
     it 'generates Segment with backgroundColor' do

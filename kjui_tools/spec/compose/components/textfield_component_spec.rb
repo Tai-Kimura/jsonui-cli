@@ -1005,7 +1005,7 @@ RSpec.describe KjuiTools::Compose::Components::TextFieldComponent, 'nextFocus' d
   # state the input didn't have (typing stayed possible).
   describe 'enabled' do
     it 'forwards a bound enabled to the composable' do
-      expect(field('enabled' => '@{isInputEnabled}')).to include('enabled = data.isInputEnabled')
+      expect(field('enabled' => '@{isInputEnabled}')).to include('enabled = (data.isInputEnabled ?: false)')
     end
 
     it 'forwards a literal enabled' do

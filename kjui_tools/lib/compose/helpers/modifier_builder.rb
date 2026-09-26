@@ -940,6 +940,51 @@ module KjuiTools
         # no call, and for an `// ERROR` lambda (its comment runs to the end of
         # the line). An empty lambda takes the call on `it`, so no unused
         # parameter is named.
+        # Text for a comment the emit writes: one line, and no `*/` that would
+        # close a block comment early. The layout's own spelling goes in here
+        # (a handler name that is not a binding), so a newline in it would
+        # end a `//` comment and put the rest in code position.
+        def self.comment_text(text)
+          text.to_s.gsub(/[\r\n]+/, ' ').gsub('*/', '* /')
+        end
+
+        # A handler lambda that calls nothing and says why — in a BLOCK
+        # comment. The line comment it was (`{ // ERROR: … }`) ran to the end
+        # of the line and swallowed the lambda's closing brace and the
+        # argument's comma, so the file did not compile at all.
+        def self.error_lambda(message)
+          "{ /* #{comment_text(message)} */ }"
+        end
+
+        # A two-state control's value and its binding: `[checked, variable]`.
+        # Its state attributes are read in their order (Switch: isOn, value,
+        # checked; CheckBox: isOn, checked, value). The control's own state
+        # attribute is the value — bound, or static (the seed of its own
+        # state) — and `bind` is the value only when there is none: SSoT
+        # common.bind, "an alternative spelling to each component's own value
+        # attribute, which takes precedence when both are set". The shown
+        # value and the written one come from the same attribute. It showed a
+        # static isOn (seeded, never written) while the operation wrote `bind`,
+        # so the control never moved; and a CheckBox bound through `value`
+        # showed the binding and wrote nothing.
+        #
+        # `states` are the state attributes' VALUES, in order, read by the
+        # caller with literal keys — the attribute coverage scan counts
+        # literal reads (`json_data['isOn']`), not keys passed by name.
+        def self.control_state(json_data, states)
+          bound = ->(v) { v.is_a?(String) && v =~ /@\{([^}]+)\}/ ? Regexp.last_match(1) : nil }
+          state = states.compact.first
+          if (var = bound.call(state))
+            ["data.#{var}", var]
+          elsif !state.nil?
+            [state.to_s, nil]
+          elsif (var = bound.call(json_data['bind']))
+            ["data.#{var}", var]
+          else
+            ['false', nil]
+          end
+        end
+
         def self.with_operation_click(lambda_text, json_data)
           call = operation_click_call(json_data)
           return lambda_text if call.nil? || lambda_text.include?('ERROR')
@@ -1700,11 +1745,11 @@ module KjuiTools
             # `??` and nullability. BoundValue is the canonical Dp emitter.
             BoundValue.dp(value)
           elsif value.is_a?(Numeric) && value > 0
-            "#{value}.dp"
+            "#{BoundValue.dp(value)}"
           elsif value.is_a?(String)
             # Try to parse as number
             num = value.to_i
-            num > 0 ? "#{num}.dp" : nil
+            num > 0 ? "#{BoundValue.dp(num)}" : nil
           else
             nil
           end

@@ -67,7 +67,7 @@ module KjuiTools
           # Real blur modifier (Compose 1.3+), after the scrim like the
           # dynamic chain
           required_imports&.add(:blur)
-          modifiers << ".blur(#{blur_radius}.dp)"
+          modifiers << ".blur(#{Helpers::BoundValue.dp(blur_radius)})"
           
           modifiers.concat(Helpers::ModifierBuilder.build_alignment(json_data, required_imports, parent_type))
           modifiers.concat(Helpers::ModifierBuilder.build_weight(json_data, parent_type))

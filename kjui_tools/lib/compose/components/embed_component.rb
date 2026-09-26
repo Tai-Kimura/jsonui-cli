@@ -48,7 +48,7 @@ module KjuiTools
           required_imports&.add(:embedded_event) unless events.empty?
           required_imports&.add(:embed_isolated_navigation) if isolated
 
-          code  = indent("// Embed: #{screen}", depth)
+          code  = indent("// Embed: #{Helpers::ModifierBuilder.comment_text(screen)}", depth)
           if isolated
             # Version-skew guard: the isolated call site references
             # EmbedIsolatedNavigation (new in 2.12.0), so building against an
@@ -72,7 +72,17 @@ module KjuiTools
           end
 
           code += "\n" + indent("embedId = \"#{embed_id}\",", depth + 1)
-          unless params.empty?
+          if params.is_a?(String)
+            # `params` is declared ["object", "binding"]: a bound map is passed
+            # as the data holds it. `each_with_index` on the layout's `@{p}`
+            # raised NoMethodError and took the build down.
+            inner = Helpers::BindingExpression.extract_inner(params)
+            if inner
+              path = Helpers::BindingExpression.path_only(inner)
+              access = Helpers::BindingExpression.property_nullable?(path) ? "(data.#{path} ?: emptyMap())" : "data.#{path}"
+              code += "\n" + indent("params = #{access},", depth + 1)
+            end
+          elsif !params.empty?
             code += "\n" + indent('params = mapOf(', depth + 1)
             params.each_with_index do |(key, value), idx|
               expr = render_param_value(value)

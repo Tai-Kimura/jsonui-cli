@@ -117,6 +117,23 @@ module KjuiTools
           "(#{base}?.toFloat() ?: #{default.to_f}f)"
         end
 
+        # An `Int` argument as written, or its binding: a static value stays
+        # byte-identical (`value` as the layout spells it), a bound one is
+        # `int`'s expression — the layout's `@{v}` was written into the
+        # argument as it stood.
+        def int_arg(value, fallback: 0)
+          bound?(value) ? int(value, fallback: fallback) : value
+        end
+
+        # A positive length, or a bound one (which is decided at run time):
+        # whether a padding / spacing argument is emitted at all. `> 0` on the
+        # layout's `@{v}` raised ArgumentError and took the build down.
+        def positive_or_bound?(value)
+          return true if bound?(value)
+
+          value.to_f > 0
+        end
+
         # Kotlin `Int` expression, or nil when the value is absent.
         def int(value, fallback: 0)
           return nil if value.nil? || value == ''

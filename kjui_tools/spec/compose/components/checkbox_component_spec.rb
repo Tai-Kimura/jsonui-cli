@@ -76,7 +76,9 @@ RSpec.describe KjuiTools::Compose::Components::CheckboxComponent do
 
       result = described_class.generate(json_data, 0, required_imports)
 
-      expect(result).to include('data.onCheck?.invoke("myCheckbox", it)')
+      # bound: the lambda names its parameter `newValue` (`it` there was
+      # unresolved)
+      expect(result).to include('data.onCheck?.invoke("myCheckbox", newValue)')
     end
 
     it 'generates invoke(viewId, value) when handler type is (String, Boolean) -> Unit' do
@@ -110,7 +112,7 @@ RSpec.describe KjuiTools::Compose::Components::CheckboxComponent do
       result = described_class.generate(json_data, 0, required_imports)
 
       expect(result).to include('viewModel.updateData')
-      expect(result).to include('data.onCheck?.invoke("myCheckbox", it)')
+      expect(result).to include('data.onCheck?.invoke("myCheckbox", newValue)')
     end
 
     it 'uses default checkbox id when no id specified' do

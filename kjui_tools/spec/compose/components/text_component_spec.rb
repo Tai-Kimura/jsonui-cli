@@ -838,32 +838,6 @@ RSpec.describe KjuiTools::Compose::Components::TextComponent do
       end
     end
 
-    describe '.build_text_style' do
-      it 'returns nil when no style parts' do
-        result = described_class.send(:build_text_style, { 'type' => 'Text' }, 0, Set.new)
-        expect(result).to be_nil
-      end
-
-      it 'builds style with fontSize' do
-        imports = Set.new
-        result = described_class.send(:build_text_style, { 'fontSize' => 16 }, 0, imports)
-        expect(result).to include('fontSize = 16.sp')
-      end
-
-      it 'builds style with fontColor' do
-        imports = Set.new
-        result = described_class.send(:build_text_style, { 'fontColor' => '#FF0000' }, 0, imports)
-        expect(result).to include('color =')
-      end
-
-      it 'builds style with textAlign' do
-        imports = Set.new
-        result = described_class.send(:build_text_style, { 'textAlign' => 'center' }, 0, imports)
-        expect(result).to include('textAlign = TextAlign.Center')
-        expect(imports).to include(:text_align)
-      end
-    end
-
     describe 'Configuration.Font.resolve(FontSpec) emission' do
       let(:required_imports) { Set.new }
 

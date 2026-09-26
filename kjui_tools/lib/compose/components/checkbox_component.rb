@@ -14,26 +14,18 @@ module KjuiTools
       # CheckBox is the primary component name. Check is supported as an alias for backward compatibility.
       # Both "CheckBox" and "Check" JSON types map to this component.
       class CheckboxComponent
+        # The state attributes' values, in their order (ModifierBuilder.control_state).
+        def self.state_values(json_data)
+          [json_data['isOn'], json_data['checked'], json_data['value']]
+        end
+
         def self.generate(json_data, depth, required_imports = nil, parent_type = nil)
-          # CheckBox uses 'isOn', 'checked', or 'bind' for binding
-          # Priority: isOn > checked > bind
           # `value` is declared as a state alias of isOn/checked and was read
           # by nobody on Compose (plan 49 lane C, handed over from D). It sits
           # last so the more specific spellings keep winning.
-          state_attr = json_data['isOn'] || json_data['checked'] || json_data['value']
-          checked = if state_attr
-            if state_attr.is_a?(String) && state_attr.match(/@\{([^}]+)\}/)
-              variable = $1
-              "data.#{variable}"
-            else
-              state_attr.to_s
-            end
-          elsif json_data['bind'] && json_data['bind'].match(/@\{([^}]+)\}/)
-            variable = $1
-            "data.#{variable}"
-          else
-            'false'
-          end
+          # A bound state wins, then a bound `bind`, then a static value
+          # (ModifierBuilder.control_state).
+          checked, = Helpers::ModifierBuilder.control_state(json_data, state_values(json_data))
 
           # A static value (or none) is the seed of the checkbox's own state
           # (Helpers::StaticSeed); a bound one is the view model's.
@@ -86,15 +78,9 @@ module KjuiTools
             code += "\n" + indent("checked = #{checked},", depth + 2)
 
             # onCheckedChange handler
-            binding_variable = nil
-            state_attr_val = json_data['isOn'] || json_data['checked']
-            if state_attr_val.is_a?(String) && state_attr_val.match(/@\{([^}]+)\}/)
-              binding_variable = $1
-            elsif json_data['bind'] && json_data['bind'].match(/@\{([^}]+)\}/)
-              binding_variable = $1
-            end
+            _, binding_variable = Helpers::ModifierBuilder.control_state(json_data, state_values(json_data))
 
-            code += "\n" + indent("onCheckedChange = #{checked_change_lambda(json_data, binding_variable, block_comment: false, seeded: seeded)}", depth + 2)
+            code += "\n" + indent("onCheckedChange = #{checked_change_lambda(json_data, binding_variable, seeded: seeded)}", depth + 2)
 
             # iconSize on the labeled default checkbox sizes the box itself —
             # the dynamic labeled path does the same (it was only emitted on
@@ -156,15 +142,9 @@ module KjuiTools
             code += "\n" + indent("checked = #{checked},", depth + 1)
 
             # onCheckedChange handler
-            binding_variable = nil
-            state_attr_val = json_data['isOn'] || json_data['checked']
-            if state_attr_val.is_a?(String) && state_attr_val.match(/@\{([^}]+)\}/)
-              binding_variable = $1
-            elsif json_data['bind'] && json_data['bind'].match(/@\{([^}]+)\}/)
-              binding_variable = $1
-            end
+            _, binding_variable = Helpers::ModifierBuilder.control_state(json_data, state_values(json_data))
 
-            code += "\n" + indent("onCheckedChange = #{checked_change_lambda(json_data, binding_variable, block_comment: false, seeded: seeded)},", depth + 1)
+            code += "\n" + indent("onCheckedChange = #{checked_change_lambda(json_data, binding_variable, seeded: seeded)},", depth + 1)
 
             # Build modifiers
             modifiers = []
@@ -284,15 +264,9 @@ module KjuiTools
           code += "\n" + indent("checked = #{checked},", depth + 1)
 
           # onCheckedChange handler
-          binding_variable = nil
-          state_attr_val = json_data['isOn'] || json_data['checked']
-          if state_attr_val.is_a?(String) && state_attr_val.match(/@\{([^}]+)\}/)
-            binding_variable = $1
-          elsif json_data['bind'] && json_data['bind'].match(/@\{([^}]+)\}/)
-            binding_variable = $1
-          end
+          _, binding_variable = Helpers::ModifierBuilder.control_state(json_data, state_values(json_data))
 
-          code += "\n" + indent("onCheckedChange = #{checked_change_lambda(json_data, binding_variable, block_comment: true, seeded: seeded)},", depth + 1)
+          code += "\n" + indent("onCheckedChange = #{checked_change_lambda(json_data, binding_variable, seeded: seeded)},", depth + 1)
 
           # Build modifiers — declared width/height must reach the control
           # (the dynamic renderer's buildModifier applies size in the same
@@ -359,19 +333,24 @@ module KjuiTools
         # The checkbox's own operation, in order: its own update — the bound
         # write, or the seeded state's (Helpers::StaticSeed, `seeded`) — then
         # onValueChange, then the declared onClick (with_operation_click).
-        def self.checked_change_lambda(json_data, binding_variable, block_comment: false, seeded: nil)
+        def self.checked_change_lambda(json_data, binding_variable, seeded: nil)
           view_id = json_data['id'] || 'checkbox'
           on_change = json_data['onValueChange']
           lambda = if on_change && !Helpers::ModifierBuilder.is_binding?(on_change)
-                     error = "ERROR: #{on_change} - camelCase events require binding format @{functionName}"
-                     block_comment ? "{ /* #{error} */ }" : "{ // #{error} }"
+                     Helpers::ModifierBuilder.error_lambda("ERROR: #{on_change} - camelCase events require binding format @{functionName}")
                    else
-                     handler_call = Helpers::ModifierBuilder.get_event_handler_invocation(on_change, view_id, 'it') if on_change
+                     # The handler takes the new value by the lambda's own name for it:
+                     # `newValue` where the lambda names its parameter, `it` where it
+                     # does not. It was `it` in both, so a bound CheckBox with a
+                     # handler passed `it` inside `{ newValue -> … }` — unresolved.
+                     handler_for = lambda do |arg|
+                       Helpers::ModifierBuilder.get_event_handler_invocation(on_change, view_id, arg) if on_change
+                     end
                      update = "viewModel.updateData(mapOf(\"#{binding_variable}\" to newValue))" if binding_variable
-                     if update && handler_call then "{ newValue -> #{update}; #{handler_call} }"
+                     if update && on_change then "{ newValue -> #{update}; #{handler_for.call('newValue')} }"
                      elsif update then "{ newValue -> #{update} }"
                      else
-                       body = [("#{seeded} = it" if seeded), handler_call].compact
+                       body = [("#{seeded} = it" if seeded), handler_for.call('it')].compact
                        body.empty? ? '{ }' : "{ #{body.join('; ')} }"
                      end
                    end

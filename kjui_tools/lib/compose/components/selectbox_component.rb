@@ -147,7 +147,7 @@ module KjuiTools
                 code += "\n" + indent("onValueChange = #{Helpers::ModifierBuilder.with_operation_click("{ newValue -> #{seeded ? "#{seeded} = newValue; " : ''}#{handler_call} }", json_data)},", depth + 1)
               end
             else
-              code += "\n" + indent("onValueChange = { // ERROR: #{json_data['onValueChange']} - camelCase events require binding format @{functionName} },", depth + 1)
+              code += "\n" + indent("onValueChange = #{Helpers::ModifierBuilder.error_lambda("ERROR: #{json_data['onValueChange']} - camelCase events require binding format @{functionName}")},", depth + 1)
             end
           elsif binding_variable
             code += "\n" + indent("onValueChange = { newValue ->", depth + 1)
@@ -178,7 +178,7 @@ module KjuiTools
             
             # Minute interval for time pickers
             if json_data['minuteInterval']
-              code += "\n" + indent("minuteInterval = #{json_data['minuteInterval']},", depth + 1)
+              code += "\n" + indent("minuteInterval = #{Helpers::BoundValue.int_arg(json_data['minuteInterval'], fallback: 1)},", depth + 1)
             end
             
             # Minimum date
@@ -274,7 +274,7 @@ module KjuiTools
           # Font styling
           label_font_size = label_attrs['fontSize'] || json_data['fontSize']
           if label_font_size
-            code += "\n" + indent("fontSize = #{label_font_size},", depth + 1)
+            code += "\n" + indent("fontSize = #{Helpers::BoundValue.int_arg(label_font_size, fallback: 16)},", depth + 1)
           end
 
           if json_data['font']
@@ -353,13 +353,13 @@ module KjuiTools
             if paddings.is_a?(Array) && paddings.length == 4
               # JSON 4-element order is [top, right, bottom, left] (same as
               # ModifierBuilder padding): right -> end, left -> start.
-              code += ",\n" + indent("contentPadding = PaddingValues(top = #{paddings[0]}.dp, end = #{paddings[1]}.dp, bottom = #{paddings[2]}.dp, start = #{paddings[3]}.dp)", depth + 1)
+              code += ",\n" + indent("contentPadding = PaddingValues(top = #{Helpers::BoundValue.dp(paddings[0])}, end = #{Helpers::BoundValue.dp(paddings[1])}, bottom = #{Helpers::BoundValue.dp(paddings[2])}, start = #{Helpers::BoundValue.dp(paddings[3])})", depth + 1)
             elsif paddings.is_a?(Array) && paddings.length == 2
-              code += ",\n" + indent("contentPadding = PaddingValues(horizontal = #{paddings[1]}.dp, vertical = #{paddings[0]}.dp)", depth + 1)
+              code += ",\n" + indent("contentPadding = PaddingValues(horizontal = #{Helpers::BoundValue.dp(paddings[1])}, vertical = #{Helpers::BoundValue.dp(paddings[0])})", depth + 1)
             elsif paddings.is_a?(Array) && paddings.length == 1
-              code += ",\n" + indent("contentPadding = PaddingValues(#{paddings[0]}.dp)", depth + 1)
+              code += ",\n" + indent("contentPadding = PaddingValues(#{Helpers::BoundValue.dp(paddings[0])})", depth + 1)
             elsif paddings.is_a?(Numeric)
-              code += ",\n" + indent("contentPadding = PaddingValues(#{paddings}.dp)", depth + 1)
+              code += ",\n" + indent("contentPadding = PaddingValues(#{Helpers::BoundValue.dp(paddings)})", depth + 1)
             end
           end
 

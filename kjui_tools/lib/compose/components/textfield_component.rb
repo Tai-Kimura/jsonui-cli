@@ -439,7 +439,7 @@ module KjuiTools
             end
 
             if json_data['hintFontSize']
-              placeholder_code += ",\n" + indent("fontSize = #{json_data['hintFontSize']}.sp", depth + 2)
+              placeholder_code += ",\n" + indent("fontSize = #{Helpers::BoundValue.sp(json_data['hintFontSize'])}", depth + 2)
             end
 
             if json_data['hintFont'] == 'bold'
@@ -455,9 +455,16 @@ module KjuiTools
             if (hint_multiple = json_data['hintLineHeightMultiple'])
               required_imports&.add(:local_text_style)
               hint_base = json_data['hintFontSize'] || json_data['fontSize'] || 16
-              line_height = (hint_base.to_f * hint_multiple.to_f)
-              formatted = line_height == line_height.to_i ? line_height.to_i : line_height
-              placeholder_code += ",\n" + indent("style = LocalTextStyle.current.copy(lineHeight = #{formatted}.sp)", depth + 2)
+              line_height_sp = if Helpers::BoundValue.bound?(hint_base) || Helpers::BoundValue.bound?(hint_multiple)
+                                 # `"@{v}".to_f` is 0.0: a bound size or multiple froze the
+                                 # line height at 0.sp. Lifted into the emit instead.
+                                 "(#{Helpers::BoundValue.float(hint_base, fallback: 16)} * " \
+                                   "#{Helpers::BoundValue.float(hint_multiple, fallback: 1)}).sp"
+                               else
+                                 line_height = (hint_base.to_f * hint_multiple.to_f)
+                                 "#{line_height == line_height.to_i ? line_height.to_i : line_height}.sp"
+                               end
+              placeholder_code += ",\n" + indent("style = LocalTextStyle.current.copy(lineHeight = #{line_height_sp})", depth + 2)
             end
 
             placeholder_code += "\n" + indent(") }", depth + 1)
@@ -484,20 +491,20 @@ module KjuiTools
             if paddings.is_a?(Array)
               case paddings.length
               when 1
-                code += "\n" + indent("contentPadding = PaddingValues(#{paddings[0]}.dp),", depth + 1)
+                code += "\n" + indent("contentPadding = PaddingValues(#{Helpers::BoundValue.dp(paddings[0])}),", depth + 1)
               when 2
                 # [vertical, horizontal]
-                code += "\n" + indent("contentPadding = PaddingValues(horizontal = #{paddings[1]}.dp, vertical = #{paddings[0]}.dp),", depth + 1)
+                code += "\n" + indent("contentPadding = PaddingValues(horizontal = #{Helpers::BoundValue.dp(paddings[1])}, vertical = #{Helpers::BoundValue.dp(paddings[0])}),", depth + 1)
               when 4
                 # [top, right, bottom, left]
-                code += "\n" + indent("contentPadding = PaddingValues(start = #{paddings[3]}.dp, top = #{paddings[0]}.dp, end = #{paddings[1]}.dp, bottom = #{paddings[2]}.dp),", depth + 1)
+                code += "\n" + indent("contentPadding = PaddingValues(start = #{Helpers::BoundValue.dp(paddings[3])}, top = #{Helpers::BoundValue.dp(paddings[0])}, end = #{Helpers::BoundValue.dp(paddings[1])}, bottom = #{Helpers::BoundValue.dp(paddings[2])}),", depth + 1)
               end
             else
-              code += "\n" + indent("contentPadding = PaddingValues(#{paddings}.dp),", depth + 1)
+              code += "\n" + indent("contentPadding = PaddingValues(#{Helpers::BoundValue.dp(paddings)}),", depth + 1)
             end
           elsif !is_secure && json_data['fieldPadding']
             required_imports&.add(:padding_values)
-            code += "\n" + indent("contentPadding = PaddingValues(#{json_data['fieldPadding']}.dp),", depth + 1)
+            code += "\n" + indent("contentPadding = PaddingValues(#{Helpers::BoundValue.dp(json_data['fieldPadding'])}),", depth + 1)
           end
 
           # Text padding left - start padding for text content.
@@ -508,7 +515,7 @@ module KjuiTools
           # contentPadding argument only).
           if !is_secure && json_data['textPaddingLeft'] && !json_data['fieldPadding']
             required_imports&.add(:padding_values)
-            code += "\n" + indent("contentPadding = PaddingValues(start = #{json_data['textPaddingLeft']}.dp),", depth + 1)
+            code += "\n" + indent("contentPadding = PaddingValues(start = #{Helpers::BoundValue.dp(json_data['textPaddingLeft'])}),", depth + 1)
           end
           
           # `tintColor` — the caret accent (UIKit vocabulary), forwarded to
@@ -792,12 +799,11 @@ module KjuiTools
           # functionally gated — matching the a11y `disabled()` the common
           # modifier path already emits. TextView had this; TextField didn't.
           if json_data.key?('enabled')
-            if json_data['enabled'].is_a?(String) && json_data['enabled'].start_with?('@{')
-              inner_expr = json_data['enabled'][2..-2]
-              code += ",\n" + indent("enabled = #{Helpers::BindingExpression.value_access(inner_expr, negatable: true)}", depth + 1)
-            else
-              code += ",\n" + indent("enabled = #{json_data['enabled']}", depth + 1)
-            end
+            # `enabled` as every other stage reads it (enabled_expression): a
+            # nullable binding is `(data.on ?: false)` — the bare `data.on` it
+            # was did not type-check against the Boolean parameter.
+            enabled = Helpers::ModifierBuilder.enabled_expression(json_data) || 'true'
+            code += ",\n" + indent("enabled = #{enabled}", depth + 1)
           end
 
           # Remove trailing comma and close

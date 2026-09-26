@@ -11,24 +11,15 @@ module KjuiTools
       # SwitchComponent handles both Switch (primary) and Toggle (alias) component types
       # Switch is the primary component name. Toggle is supported as an alias for backward compatibility.
       class SwitchComponent
+        # The state attributes' values, in their order (ModifierBuilder.control_state).
+        def self.state_values(json_data)
+          [json_data['isOn'], json_data['value'], json_data['checked']]
+        end
+
         def self.generate(json_data, depth, required_imports = nil, parent_type = nil)
-          # Switch/Toggle uses 'isOn', 'value', 'checked', or 'bind' for binding
-          # Priority: isOn > value > checked > bind
-          state_attr = json_data['isOn'] || json_data['value'] || json_data['checked']
-          checked = if state_attr
-            if state_attr.is_a?(String) && state_attr.match(/@\{([^}]+)\}/)
-              variable = $1
-              "data.#{variable}"
-            else
-              # Direct boolean value
-              state_attr.to_s
-            end
-          elsif json_data['bind'] && json_data['bind'].match(/@\{([^}]+)\}/)
-            variable = $1
-            "data.#{variable}"
-          else
-            'false'
-          end
+          # A bound state wins, then a bound `bind`, then a static value
+          # (ModifierBuilder.control_state).
+          checked, = Helpers::ModifierBuilder.control_state(json_data, state_values(json_data))
 
           # A Switch draws a label when it declares one, and `labelAttributes`
           # is not the only way to declare it: `label` is the canonical row
@@ -61,13 +52,7 @@ module KjuiTools
           code += "\n" + indent("checked = #{checked},", depth + 1)
 
           # onCheckedChange handler
-          binding_variable = nil
-          state_attr_val = json_data['isOn'] || json_data['value'] || json_data['checked']
-          if state_attr_val.is_a?(String) && state_attr_val.match(/@\{([^}]+)\}/)
-            binding_variable = $1
-          elsif json_data['bind'] && json_data['bind'].match(/@\{([^}]+)\}/)
-            binding_variable = $1
-          end
+          _, binding_variable = Helpers::ModifierBuilder.control_state(json_data, state_values(json_data))
 
           code += "\n" + indent("onCheckedChange = #{checked_change_lambda(json_data, binding_variable, seeded: seeded)},", depth + 1)
 
@@ -128,12 +113,11 @@ module KjuiTools
 
           # Handle enabled attribute
           if json_data.key?('enabled')
-            if json_data['enabled'].is_a?(String) && json_data['enabled'].start_with?('@{')
-              inner_expr = json_data['enabled'].match(/@\{([^}]+)\}/)[1]
-              code = Helpers::ModifierBuilder.join_argument(code, ",\n" + indent("enabled = #{Helpers::BindingExpression.value_access(inner_expr, negatable: true)}", depth + 1))
-            else
-              code = Helpers::ModifierBuilder.join_argument(code, ",\n" + indent("enabled = #{json_data['enabled']}", depth + 1))
-            end
+            # `enabled` as every other stage reads it (enabled_expression): a
+            # nullable binding is `(data.on ?: false)` — the bare `data.on` it
+            # was did not type-check against the Boolean parameter.
+            enabled = Helpers::ModifierBuilder.enabled_expression(json_data) || 'true'
+            code = Helpers::ModifierBuilder.join_argument(code, ",\n" + indent("enabled = #{enabled}", depth + 1))
           end
 
           code += "\n" + indent(")", depth)
@@ -178,13 +162,7 @@ module KjuiTools
           code += "\n" + indent("checked = #{checked},", depth + 2)
 
           # onCheckedChange handler
-          binding_variable = nil
-          state_attr_val = json_data['isOn'] || json_data['value'] || json_data['checked']
-          if state_attr_val.is_a?(String) && state_attr_val.match(/@\{([^}]+)\}/)
-            binding_variable = $1
-          elsif json_data['bind'] && json_data['bind'].match(/@\{([^}]+)\}/)
-            binding_variable = $1
-          end
+          _, binding_variable = Helpers::ModifierBuilder.control_state(json_data, state_values(json_data))
 
           code += "\n" + indent("onCheckedChange = #{checked_change_lambda(json_data, binding_variable, seeded: seeded)}", depth + 2)
 
@@ -222,12 +200,11 @@ module KjuiTools
 
           # Handle enabled attribute
           if json_data.key?('enabled')
-            if json_data['enabled'].is_a?(String) && json_data['enabled'].start_with?('@{')
-              inner_expr = json_data['enabled'].match(/@\{([^}]+)\}/)[1]
-              code = Helpers::ModifierBuilder.join_argument(code, ",\n" + indent("enabled = #{Helpers::BindingExpression.value_access(inner_expr, negatable: true)}", depth + 2))
-            else
-              code = Helpers::ModifierBuilder.join_argument(code, ",\n" + indent("enabled = #{json_data['enabled']}", depth + 2))
-            end
+            # `enabled` as every other stage reads it (enabled_expression): a
+            # nullable binding is `(data.on ?: false)` — the bare `data.on` it
+            # was did not type-check against the Boolean parameter.
+            enabled = Helpers::ModifierBuilder.enabled_expression(json_data) || 'true'
+            code = Helpers::ModifierBuilder.join_argument(code, ",\n" + indent("enabled = #{enabled}", depth + 2))
           end
 
           code += "\n" + indent(")", depth + 1)
@@ -281,7 +258,7 @@ module KjuiTools
                      "#{seeded} = newValue"
                    end
           lambda = if handler && !Helpers::ModifierBuilder.is_binding?(handler)
-                     "{ // ERROR: #{handler} - camelCase events require binding format @{functionName} }"
+                     Helpers::ModifierBuilder.error_lambda("ERROR: #{handler} - camelCase events require binding format @{functionName}")
                    else
                      handler_call = Helpers::ModifierBuilder.get_event_handler_invocation(handler, view_id, 'newValue') if handler
                      body = [update, handler_call].compact

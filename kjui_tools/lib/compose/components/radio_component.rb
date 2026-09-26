@@ -77,7 +77,7 @@ module KjuiTools
                     handler_call = Helpers::ModifierBuilder.get_event_handler_invocation(json_data['onValueChange'], view_id, value_literal)
                     code += "\n" + indent("        #{handler_call}", depth + 2)
                   else
-                    code += "\n" + indent("        // ERROR: #{json_data['onValueChange']} - camelCase events require binding format @{functionName}", depth + 2)
+                    code += "\n" + indent("        // ERROR: #{Helpers::ModifierBuilder.comment_text(json_data['onValueChange'])} - camelCase events require binding format @{functionName}", depth + 2)
                   end
                 end
                 
@@ -109,7 +109,7 @@ module KjuiTools
                     handler_call = Helpers::ModifierBuilder.get_event_handler_invocation(json_data['onValueChange'], view_id, value_literal)
                     code += "\n" + indent("#{handler_call}", depth + 4)
                   else
-                    code += "\n" + indent("// ERROR: #{json_data['onValueChange']} - camelCase events require binding format @{functionName}", depth + 4)
+                    code += "\n" + indent("// ERROR: #{Helpers::ModifierBuilder.comment_text(json_data['onValueChange'])} - camelCase events require binding format @{functionName}", depth + 4)
                   end
                 end
 
