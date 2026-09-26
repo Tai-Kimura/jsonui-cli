@@ -16,6 +16,7 @@ require_relative 'helpers/string_manager_helper'
 require_relative 'include_expander'
 require_relative '../core/attribute_validator'
 require_relative '../core/type_synonyms'
+require_relative '../core/data_item_platform'
 require_relative '../core/layout_validator'
 require_relative '../core/image_accessibility'
 require_relative '../core/tap_accessibility'
@@ -303,7 +304,7 @@ module SjuiTools
             json_data['data'].each do |data_item|
               if data_item.is_a?(Hash)
                 # Platform/mode filter: skip if not matching
-                next if data_item['platform'] && data_item['platform'] != 'swift'
+                next unless JsonUIShared::DataItemPlatform.applies?(data_item, 'swift')
                 next if data_item['mode'] && data_item['mode'] != 'swiftui'
                 properties << data_item
               end

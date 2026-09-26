@@ -5,6 +5,7 @@ require 'fileutils'
 require 'set'
 require_relative '../core/tap_accessibility'
 require_relative '../core/binding_validator_core'
+require_relative '../core/data_item_platform'
 require_relative '../core/type_synonyms'
 require_relative '../core/config_manager'
 require_relative '../core/generated_marker'
@@ -424,6 +425,7 @@ module RjuiTools
           if json_data['data'].is_a?(Array)
             json_data['data'].each do |prop|
               next unless prop.is_a?(Hash)
+              next unless JsonUIShared::DataItemPlatform.applies?(prop, 'react')
 
               # Check for event handler type definitions
               prop_class = prop['class']

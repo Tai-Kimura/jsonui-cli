@@ -93,7 +93,7 @@ module SjuiTools
       end
 
       def data_item_applies?(data_item)
-        return false if data_item['platform'] && data_item['platform'] != 'swift'
+        return false unless super # the platform, read as `jui build` reads it
         return false if data_item['mode'] && data_item['mode'] != 'swiftui'
         true
       end
