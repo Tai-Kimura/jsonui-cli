@@ -242,6 +242,17 @@ class AliasTable:
         self._deprecated_cache[key] = merged
         return merged
 
+    def enum_for(self, component_type: str | None, attr: str) -> list[str]:
+        """The declared ``enum`` of *attr* on *component_type*'s section
+        (falling back to ``common``), or ``[]`` when it declares none."""
+        key = self.definition_key_for(component_type)
+        for section in ([key] if key and key != "common" else []) + ["common"]:
+            spec = self._section(section).get(attr)
+            if isinstance(spec, dict):
+                values = spec.get("enum")
+                return [v for v in values if isinstance(v, str)] if isinstance(values, list) else []
+        return []
+
     # ------------------------------------------------------------------
     # Internals
 

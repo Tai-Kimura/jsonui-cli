@@ -2,7 +2,7 @@
 
 require 'set'
 require 'compose/components/button_component'
-require 'compose/components/toggle_component'
+require 'compose/components/switch_component'
 require 'compose/components/text_component'
 require 'compose/helpers/modifier_builder'
 require 'compose/helpers/resource_resolver'
@@ -39,10 +39,13 @@ RSpec.describe 'kjui empty and blank tap handlers' do
         expect(result).not_to match(EMPTY_TAP_CALL)
       end
 
-      it 'gives a Toggle its empty onCheckedChange' do
-        result = KjuiTools::Compose::Components::ToggleComponent
+      # A Toggle is drawn by SwitchComponent (ComposeBuilder routes Toggle
+      # with Switch); ToggleComponent, which no build reached, is gone. A
+      # blank handler adds no call to its own operation.
+      it 'gives a Toggle no call from its operation' do
+        result = KjuiTools::Compose::Components::SwitchComponent
                  .generate({ 'type' => 'Toggle' }.merge(handler), 0, Set.new)
-        expect(result).to include('onCheckedChange = { },')
+        expect(result).to include('onCheckedChange = { seeded = it },')
         expect(result).not_to match(EMPTY_TAP_CALL)
       end
 
@@ -76,37 +79,48 @@ RSpec.describe 'kjui empty and blank tap handlers' do
     emitted = variants.flat_map do |handler|
       [
         KjuiTools::Compose::Components::ButtonComponent.generate({ 'type' => 'Button', 'text' => 'Go' }.merge(handler), 0, Set.new),
-        KjuiTools::Compose::Components::ToggleComponent.generate({ 'type' => 'Toggle' }.merge(handler), 0, Set.new),
         KjuiTools::Compose::Components::TextComponent.generate(
           { 'type' => 'Label', 'text' => 'Open terms', 'partialAttributes' => [{ 'range' => [0, 4] }.merge(handler)] }, 0, Set.new
         )
       ]
     end.join("\n")
-    lambdas = emitted.scan(/^\s*(?:onClick|onCheckedChange) = (\{.*\}),?$/).flatten
-    # A blank range gets `onClick = null`, not a lambda: 2 per blank variant,
-    # 3 per control, and one null per blank variant.
-    expect(lambdas.size).to eq((EMPTY_TAP_HANDLERS.size * 2) + 6)
+    toggles = variants.map do |handler|
+      KjuiTools::Compose::Components::SwitchComponent.generate({ 'type' => 'Toggle' }.merge(handler), 0, Set.new)
+    end.join("\n")
+    lambdas = emitted.scan(/^\s*onClick = (\{.*\}),?$/).flatten
+    toggle_lambdas = toggles.scan(/^\s*onCheckedChange = (\{.*\}),?$/).flatten
+    # A blank range gets `onClick = null`, not a lambda: 1 per blank variant
+    # and 2 per control on the tap paths, one null per blank variant; one
+    # checked-change per variant on the Toggle.
+    expect(lambdas.size).to eq(EMPTY_TAP_HANDLERS.size + 4)
+    expect(toggle_lambdas.size).to eq(variants.size)
     expect(emitted.scan(/^\s*onClick = null,?$/).size).to eq(EMPTY_TAP_HANDLERS.size)
-    names = lambdas.join.scan(/data\.(\w+)\?\.invoke\(\)/).flatten.uniq
+    names = (lambdas + toggle_lambdas).join.scan(/data\.(\w+)\?\.invoke\(\)/).flatten.uniq
     expect(names).to eq(['onGo'])
     expect(<<~KOTLIN).to compile_as_kotlin
       class Data(#{names.map { |n| "val #{n}: (() -> Unit)? = null" }.join(', ')})
       fun handlers(data: Data): List<() -> Unit> = listOf(
       #{lambdas.map { |l| "    #{l}" }.join(",\n")}
       )
+      fun toggleOperations(data: Data): List<(Boolean) -> Unit> {
+          var seeded = false
+          return listOf(
+      #{toggle_lambdas.map { |l| "        #{l}" }.join(",\n")}
+          )
+      }
     KOTLIN
   end
 
   it 'still wires a real handler on each path' do
     button = KjuiTools::Compose::Components::ButtonComponent
              .generate({ 'type' => 'Button', 'text' => 'Go', 'onClick' => '@{onGo}' }, 0, Set.new)
-    toggle = KjuiTools::Compose::Components::ToggleComponent
+    toggle = KjuiTools::Compose::Components::SwitchComponent
              .generate({ 'type' => 'Toggle', 'onclick' => 'onFlip' }, 0, Set.new)
     label = KjuiTools::Compose::Components::TextComponent
             .generate({ 'type' => 'Label', 'text' => 'Open terms',
                         'partialAttributes' => [{ 'range' => [0, 4], 'onclick' => 'onTerms' }] }, 0, Set.new)
     expect(button).to include('onClick = { data.onGo?.invoke() }')
-    expect(toggle).to include('onCheckedChange = { data.onFlip?.invoke() },')
+    expect(toggle).to include('onCheckedChange = { seeded = it; data.onFlip?.invoke() },')
     expect(label).to include('onClick = { data.onTerms?.invoke() }')
   end
 end

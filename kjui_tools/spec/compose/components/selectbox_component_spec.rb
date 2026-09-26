@@ -568,6 +568,17 @@ RSpec.describe KjuiTools::Compose::Components::SelectBoxComponent do
       end
     end
 
+    # Without a handler the pick of a bound selectedIndex is written back as the INDEX
+    # too — the item String went into the Int and the generated updateData dropped it
+    # (ticket selectbox-selected-item-binding-is-read-once, measured on an emulator).
+    it 'writes the index back for a bound selectedIndex with no handler' do
+      json_data = { 'type' => 'SelectBox', 'items' => %w[pp qq], 'selectedIndex' => '@{idx}' }
+      result = described_class.generate(json_data, 0, required_imports)
+      expect(result).to include('val index = listOf("pp", "qq").indexOf(newValue)')
+      expect(result).to include('viewModel.updateData(mapOf("idx" to index))')
+      expect(result).not_to include('mapOf("idx" to newValue)')
+    end
+
     it 'still passes the item String when selectedItem is bound' do
       KjuiTools::Compose::Helpers::ResourceResolver.data_definitions = {
         'onSelectionChange' => { 'name' => 'onSelectionChange', 'class' => '((String, String) -> Unit)?' }

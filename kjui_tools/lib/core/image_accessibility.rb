@@ -67,9 +67,11 @@ module JsonUIShared
     # an image with an empty onClick, `enabled: false` or `canTap: false`
     # was a control (an INFO, and its id read out) while the tap rule said
     # it taps nothing. A bound `canTap` / `enabled` still operates: the gate
-    # opens at run time.
-    def tappable?(node)
-      TapAccessibility.tappable?(node) || TapAccessibility.long_press?(node)
+    # opens at run time. `stopped`: a node around it has
+    # `userInteractionEnabled: false`, so its tap is none (the tap rule's
+    # `shape`), as the node's own `false` makes it none.
+    def tappable?(node, stopped = false)
+      (!stopped && TapAccessibility.tappable?(node)) || TapAccessibility.long_press?(node)
     end
 
     def children(node)
@@ -96,11 +98,12 @@ module JsonUIShared
       children(node).any? { |c| names_something?(c) }
     end
 
-    # The role of one image, given the tappables above it (nearest last).
-    def role(node, tappable_ancestors = [])
+    # The role of one image, given the tappables above it (nearest last), and
+    # whether a node around it has `userInteractionEnabled: false`.
+    def role(node, tappable_ancestors = [], stopped = false)
       value = alt(node)
       return(value.to_s.empty? ? 'decorative' : 'label') unless value.nil?
-      return 'control' if tappable?(node)
+      return 'control' if tappable?(node, stopped)
 
       nearest = tappable_ancestors.last
       return 'control' if nearest && !names_something?(nearest)
@@ -112,8 +115,8 @@ module JsonUIShared
     # one INFO per control image, in the LayoutValidator warning shape.
     def annotate!(root, source_path:)
       infos = []
-      walk(root, []) do |node, tappables|
-        node[ROLE_KEY] = role(node, tappables)
+      walk(root, []) do |node, tappables, stopped|
+        node[ROLE_KEY] = role(node, tappables, stopped)
         next unless node[ROLE_KEY] == 'control'
 
         name = node['id'] || node['srcName'] || node['src'] || node['url'] || node['type']
@@ -128,12 +131,15 @@ module JsonUIShared
       infos
     end
 
-    def walk(node, tappables, &block)
+    # A node inside one with `userInteractionEnabled: false` is no tappable
+    # for the images in it; a tappable around that node still is.
+    def walk(node, tappables, stopped = false, &block)
       return unless node.is_a?(Hash)
 
-      yield node, tappables if image?(node)
-      inner = tappable?(node) ? tappables + [node] : tappables
-      children(node).each { |c| walk(c, inner, &block) }
+      yield node, tappables, stopped if image?(node)
+      inner = tappable?(node, stopped) ? tappables + [node] : tappables
+      inner_stopped = stopped || TapAccessibility.stops?(node)
+      children(node).each { |c| walk(c, inner, inner_stopped, &block) }
     end
   end
 end

@@ -1,0 +1,35 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/Indicator/indicatorStyle__small.layout.json"
+  },
+  "metadata": {
+    "name": "conformance Indicator.indicatorStyle (small)",
+    "description": "Conformance fixture for 'indicatorStyle' on Indicator (section: Indicator, class: visual). Value under test: \"small\".",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "Indicator"
+    ]
+  },
+  "platform": [
+    "ios",
+    "android"
+  ],
+  "cases": [
+    {
+      "name": "indicatorStyle__small",
+      "description": "Conformance fixture for 'indicatorStyle' on Indicator (section: Indicator, class: visual). Value under test: \"small\".",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "Indicator_indicatorStyle__small"
+        }
+      ]
+    }
+  ]
+}

@@ -153,9 +153,9 @@ module SjuiTools
               indent do
                 add_line "#{state_var} = #{swift_string_literal(radio_value)}"
                 # onClick handler - called when radio is clicked
-                # canTap gates the call, not the selection
-                # (operation_click_call — every handler, the legacy `onclick`
-                # too).
+                # canTap and userInteractionEnabled gate the call, not the
+                # selection (operation_click_call — every handler, the legacy
+                # `onclick` too).
                 add_line click if click
               end
               add_line "}"

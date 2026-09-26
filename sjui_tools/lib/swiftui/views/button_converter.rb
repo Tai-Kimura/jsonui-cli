@@ -143,14 +143,13 @@ module SjuiTools
             # type's tap — not `.disabled`: a button that cannot be tapped is
             # not disabled to a screen reader. In the action rather than as a
             # hit-testing gate, because VoiceOver activates a Button through
-            # its action, not a touch.
-            can_tap = @component['canTap']
-            if action && is_binding?(action) && can_tap != false
+            # its action, not a touch — which is also why
+            # `userInteractionEnabled`, whose stop is `.allowsHitTesting`, gates
+            # it here as canTap does, on the button and from a node around it
+            # (tap_shut?, gated_handler_call).
+            if action && is_binding?(action) && !tap_shut?
               id = @component['id'] || 'button'
-              handler_call = get_event_handler_invocation(action, id, nil)
-              if is_binding?(can_tap)
-                handler_call = "if #{tap_gate_expr(can_tap)} { #{handler_call} }"
-              end
+              handler_call = gated_handler_call(get_event_handler_invocation(action, id, nil))
               add_line "action: { #{handler_call} },"
             else
               add_line "action: { },"
