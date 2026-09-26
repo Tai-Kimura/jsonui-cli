@@ -701,6 +701,10 @@ module KjuiTools
           linkable_state = Helpers::BoundValue.bool(json_data['linkable'])
           linkable_expr = linkable_state == :on ? 'true' : (linkable_state == :off ? 'false' : linkable_state)
           code += "\n" + indent("linkable = #{linkable_expr},", depth + 1)
+          # userInteractionEnabled stops the links too (links_enabled_expression).
+          if (links = Helpers::ModifierBuilder.links_enabled_expression(json_data))
+            code += "\n" + indent("linksEnabled = #{links},", depth + 1)
+          end
 
           # Build style
           style_parts = []
@@ -742,6 +746,10 @@ module KjuiTools
           modifiers.concat(Helpers::ModifierBuilder.build_alpha(json_data, required_imports))
           modifiers.concat(Helpers::ModifierBuilder.build_shadow(json_data, required_imports))
           modifiers.concat(Helpers::ModifierBuilder.build_background(json_data, required_imports))
+          # userInteractionEnabled on the Label: the pointer blocker every other
+          # Label branch takes (build_clickable). This branch took none, so a
+          # touch on a detected link went through `false`.
+          modifiers.concat(Helpers::ModifierBuilder.build_interaction_blocker(json_data, required_imports))
 
           # Handle edgeInset for text-specific padding
           if json_data['edgeInset']
@@ -882,6 +890,10 @@ module KjuiTools
           end
 
           code += "\n" + indent("),", depth + 1)
+          # userInteractionEnabled stops the ranges' taps too (links_enabled_expression).
+          if (links = Helpers::ModifierBuilder.links_enabled_expression(json_data))
+            code += "\n" + indent("linksEnabled = #{links},", depth + 1)
+          end
 
           # Build modifiers
           modifiers = []

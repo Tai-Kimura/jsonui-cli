@@ -1095,6 +1095,29 @@ module KjuiTools
           gates.map { |g| conjunct(g) }.join(' && ')
         end
 
+        # Whether a Label's links — its tappable ranges and the links
+        # `linkable` detects — are operable, as a Kotlin Boolean for
+        # PartialAttributesText's `linksEnabled`: nil (always; the argument is
+        # left out), 'false', or the bound userInteractionEnabled values of
+        # the nodes around it and its own, joined. `userInteractionEnabled`
+        # stops a node and everything in it, links included, and a binding
+        # gates them as it gates a tap (the tap rule; 4f ruling, jsonui-cli
+        # 1.9.0). The pointer blocker stopped a touch on a link, but each link
+        # is a semantics node of its own whose action TalkBack's double tap
+        # still called (measured, API 35 emulator). canTap and enabled are the
+        # node's own tap and state, not its links'; they are not read here.
+        def self.links_enabled_expression(json_data)
+          tap = JsonUIShared::TapAccessibility
+          return 'false' if tap.stopped?(json_data)
+
+          gates = tap.interaction_gates(json_data).map { |g| boolean_expression(g) }.compact.uniq
+          return nil if gates.empty?
+          return 'false' if gates.include?('false')
+          return gates.first if gates.size == 1
+
+          gates.map { |g| conjunct(g) }.join(' && ')
+        end
+
         # A condition as one operand of `&&`: as it is when it is one already
         # (a parenthesised whole, or a member access), else parenthesised.
         def self.conjunct(expr)

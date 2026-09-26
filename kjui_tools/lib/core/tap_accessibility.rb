@@ -192,10 +192,13 @@ module JsonUIShared
 
     # A node a user can operate on its own, inside a tappable. `stopped`: a
     # node around it has `userInteractionEnabled: false`, so its own tap and
-    # long press are none (its type still says whether it is a control).
+    # long press are none (its type still says whether it is a control) — and so are its
+    # links: a Label's links stop with it (the emitters make them no links,
+    # jsonui-cli 1.9.0), so they do not count. `stopped` counts the node's
+    # own flag where holds_a_control? passes it.
     def operable?(node, stopped = false)
       interactive_type?(node['type']) || (!stopped && tappable?(node)) || long_press?(node, stopped) ||
-        linked_text?(node)
+        (!stopped && linked_text?(node))
     end
 
     # Something inside `node` (not itself) a user can operate on its own.
@@ -223,12 +226,16 @@ module JsonUIShared
 
     # Writes SHAPE_KEY on every tappable of an include-expanded tree, and on
     # every node with a tap or a gesture inside a node that stops or gates
-    # interaction, STOPPED_KEY / GATES_KEY.
+    # interaction, STOPPED_KEY /
+    # GATES_KEY — on a Label with links of its own too (linked_text?): its
+    # links are taps the flag stops, a range's handler and a link `linkable`
+    # detects alike, and the Label may have no onClick for the keys to ride
+    # on (4f ruling, jsonui-cli 1.9.0).
     def annotate!(root)
       walk(root) do |node, stopped, gates|
         value = shape(node, stopped)
         node[SHAPE_KEY] = value if value
-        next unless (TAP_KEYS + GESTURE_KEYS).any? { |key| handler?(node[key]) }
+        next unless (TAP_KEYS + GESTURE_KEYS).any? { |key| handler?(node[key]) } || linked_text?(node)
 
         node[STOPPED_KEY] = true if stopped
         node[GATES_KEY] = gates unless gates.empty?

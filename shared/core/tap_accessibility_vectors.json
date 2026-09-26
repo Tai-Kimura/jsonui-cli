@@ -951,6 +951,36 @@
       }
     },
     {
+      "name": "a Label with links inside a node with userInteractionEnabled: false does not count: its links stop with it",
+      "layout": {
+        "type": "View",
+        "id": "t",
+        "onClick": "@{onOpen}",
+        "child": [
+          {
+            "type": "Label",
+            "id": "l",
+            "text": "x"
+          },
+          {
+            "type": "View",
+            "userInteractionEnabled": false,
+            "child": [
+              {
+                "type": "Label",
+                "id": "k",
+                "text": "see https://example.com",
+                "linkable": true
+              }
+            ]
+          }
+        ]
+      },
+      "shapes": {
+        "t": "combine"
+      }
+    },
+    {
       "name": "a bound userInteractionEnabled keeps the shape: the emitters gate the tap and its trait on the binding",
       "layout": {
         "type": "View",
