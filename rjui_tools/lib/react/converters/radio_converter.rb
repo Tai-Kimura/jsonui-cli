@@ -261,9 +261,17 @@ module RjuiTools
               # changes it (ticket static-valued-controls-do-not-change-on-a-
               # users-tap): an uncontrolled `defaultChecked` on the item it
               # names — `checked` + readOnly held the group still.
-              chosen = static_selected == (value.is_a?(String) ? JsonUIShared::StringLiterals.ts_body(value) : value)
-              seed = chosen ? ' defaultChecked' : ''
-              return on_change ? "#{seed} onChange={() => #{on_change}?.(#{value_literal})}" : seed
+              # A bound list's option is a runtime value, so its seed compares
+              # at run time — there is no literal to answer with here, and
+              # leaving it out started the group with nothing chosen.
+              seed =
+                if expr
+                  " defaultChecked={#{selected_binding} === #{expr}}"
+                else
+                  chosen = static_selected == (value.is_a?(String) ? JsonUIShared::StringLiterals.ts_body(value) : value)
+                  chosen ? ' defaultChecked' : ''
+                end
+              return "#{seed}#{operation_attr('onChange', '()', on_change && "#{on_change}?.(#{value_literal})")}"
             end
             checked =
               if static_selected && expr.nil?
@@ -274,15 +282,14 @@ module RjuiTools
               else
                 " checked={#{selected_binding} === #{value_literal}}"
               end
-            if on_change
-              "#{checked} onChange={() => #{on_change}?.(#{value_literal})}"
+            if on_change || operation_click_call
+              "#{checked}#{operation_attr('onChange', '()', on_change && "#{on_change}?.(#{value_literal})")}"
             else
               "#{checked} readOnly"
             end
-          elsif on_change
-            " onChange={() => #{on_change}?.(#{value_literal})}"
           else
-            ''
+            # The selection is the operation a declared onClick follows.
+            operation_attr('onChange', '()', on_change && "#{on_change}?.(#{value_literal})")
           end
         end
 

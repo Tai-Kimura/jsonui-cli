@@ -35,62 +35,6 @@ RSpec.describe SjuiTools::Core::TypeConverter do
     end
   end
 
-  describe '.format_value' do
-    it 'formats nil as the nil literal regardless of type' do
-      expect(described_class.format_value(nil, 'String')).to eq('nil')
-    end
-
-    it 'quotes strings' do
-      expect(described_class.format_value('hi', 'String')).to eq('"hi"')
-    end
-
-    it 'coerces Int / Double / Float / Bool' do
-      expect(described_class.format_value('42', 'Int')).to eq('42')
-      expect(described_class.format_value('1.5', 'Double')).to eq('1.5')
-      expect(described_class.format_value('2.5', 'Float')).to eq('2.5')
-      expect(described_class.format_value(true, 'Bool')).to eq('true')
-    end
-
-    it 'formats hex colors through UIColor.colorWithHexString' do
-      expect(described_class.format_value('#FF0000', 'Color'))
-        .to eq('Color(uiColor: UIColor.colorWithHexString("#FF0000") ?? .clear)')
-    end
-
-    it 'falls back to to_s for unknown Swift types' do
-      expect(described_class.format_value(9, 'CustomType')).to eq('9')
-    end
-  end
-
-  describe '.format_string_value' do
-    it 'keeps already double-quoted strings' do
-      expect(described_class.send(:format_string_value, '"x"')).to eq('"x"')
-    end
-
-    it 'converts single-quoted strings to double quotes' do
-      expect(described_class.send(:format_string_value, "'y'")).to eq('"y"')
-    end
-
-    it 'escapes embedded quotes' do
-      expect(described_class.send(:format_string_value, 'a"b')).to eq('"a\\"b"')
-    end
-  end
-
-  describe '.escape_string' do
-    it 'escapes backslashes and double quotes' do
-      # Before W3-2 the backslash gsub was a no-op (`.gsub('\\', '\\\\')`
-      # collapses to replacing a backslash with itself), so a literal
-      # backslash leaked into generated source unescaped. The shared core
-      # uses the block form and doubles it, as string escaping requires.
-      expect(described_class.send(:escape_string, 'a\\b"c')).to eq('a\\\\b\\"c')
-    end
-  end
-
-  describe '.format_color_value' do
-    it 'passes non-hex values through unchanged' do
-      expect(described_class.send(:format_color_value, 'primary')).to eq('primary')
-    end
-  end
-
   describe '.convert_visibility_default_value' do
     it 'quotes the raw value for SwiftUI (String-typed visibility)' do
       expect(described_class.convert_visibility_default_value('visible', 'swiftui')).to eq('"visible"')

@@ -212,29 +212,6 @@ module RjuiTools
           end.join(', ')
         end
 
-        # Format a value for TypeScript code based on type
-        # @param value [Object] the value to format
-        # @param ts_type [String] the TypeScript type
-        # @return [String] the formatted value as TypeScript code
-        def format_value(value, ts_type)
-          return 'undefined' if value.nil?
-
-          case ts_type
-          when 'string'
-            format_string_value(value)
-          when 'number'
-            value.to_f.to_s
-          when 'boolean'
-            value.to_s.downcase
-          when 'any[]'
-            value.is_a?(Array) ? value.to_json : '[]'
-          when 'Record<string, any>'
-            value.is_a?(Hash) ? value.to_json : '{}'
-          else
-            value.to_s
-          end
-        end
-
         # A build warning from the shared core (a data default with no
         # value for this platform) goes where the tool's others go.
         def report_warning(message)
