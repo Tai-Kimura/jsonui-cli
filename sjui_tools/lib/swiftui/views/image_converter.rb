@@ -181,10 +181,10 @@ module SjuiTools
         private
 
         def map_content_mode(mode)
-          case mode
-          when 'AspectFill', 'aspectFill'
+          case JsonUIShared::EnumSpelling.lowered(mode, 'Image', 'contentMode')
+          when 'aspectfill'
             '.fill'
-          when 'AspectFit', 'aspectFit'
+          when 'aspectfit'
             '.fit'
           when 'center'
             '.fit'  # SwiftUIには直接的なcenterモードがないため

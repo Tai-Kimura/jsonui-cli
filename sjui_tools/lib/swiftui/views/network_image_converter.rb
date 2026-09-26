@@ -106,34 +106,37 @@ module SjuiTools
 
         private
 
+        # A value is its declared spelling, case and all (1.9.0): NetworkImage
+        # declares fit / fill / center / top / bottom / left / right and
+        # AspectFill / AspectFit / Center.
         def map_content_mode_enum(mode)
-          case mode
-          when 'AspectFill', 'aspectFill'
+          case (key = JsonUIShared::EnumSpelling.lowered(mode, 'NetworkImage', 'contentMode'))
+          when 'aspectfill'
             '.fill'
-          when 'AspectFit', 'aspectFit'
+          when 'aspectfit'
             '.fit'
-          when 'center', 'Center'
+          when 'center'
             '.center'
-          when 'fill', 'Fill', 'scaleToFill', 'ScaleToFill'
+          when 'fill'
             # fill = stretch (canonical image.fill,
             # shared/core/attribute_semantics.json) — NetworkImage gained the
             # .stretch case for it.
             '.stretch'
-          when 'top', 'Top', 'bottom', 'Bottom', 'left', 'Left', 'right', 'Right'
+          when 'top', 'bottom', 'left', 'right'
             # Positional modes draw unscaled and aligned — NetworkImage has
             # carried the cases since the contentMode wave; the map dropped
             # them to .fit (32 parity, d=50-79).
-            ".#{mode.downcase}"
+            ".#{key}"
           else
             '.fit'
           end
         end
 
         def map_rendering_mode(mode)
-          case mode
-          when 'template', 'Template'
+          case JsonUIShared::EnumSpelling.lowered(mode, 'NetworkImage', 'renderingMode')
+          when 'template'
             '.template'
-          when 'original', 'Original'
+          when 'original'
             '.original'
           else
             'nil'
