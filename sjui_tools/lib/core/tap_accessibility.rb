@@ -125,6 +125,22 @@ module JsonUIShared
         !stops?(node) && TAP_KEYS.any? { |key| handler?(node[key]) }
     end
 
+    # A control: a declared interactive type that is operated where it is —
+    # its value, its selection, its text, its action — not a container
+    # (STOP_CONTAINER_TYPES). A stop takes its operation without a tap on it:
+    # a hit-test stop keeps a touch out, and a screen reader's activation, a
+    # keyboard, an accessibility service's click still reach it (measured:
+    # VoiceOver switched a Switch inside `userInteractionEnabled: false`,
+    # jsonui-cli 1.9.0). So annotate! marks it as it marks a tap, and the
+    # codegen stops its operation and its reading as a control.
+    def control?(node)
+      node.is_a?(Hash) && INTERACTIVE_TYPES.include?(node['type']) && !STOP_CONTAINER_TYPES.include?(node['type'])
+    end
+
+    # The interactive types that hold the operated things rather than being
+    # one: a stop on them reaches what they hold.
+    STOP_CONTAINER_TYPES = %w[TabView ScrollView Collection Table TableView RecyclerView Web Embed].freeze
+
     # `userInteractionEnabled: false`: the node and everything in it take no
     # interaction.
     def stops?(node)
@@ -224,13 +240,13 @@ module JsonUIShared
     GESTURE_KEYS = %w[onLongPress onPan onPinch].freeze
 
     # Writes SHAPE_KEY on every tappable of an include-expanded tree, and on
-    # every node with a tap or a gesture inside a node that stops or gates
-    # interaction, STOPPED_KEY / GATES_KEY.
+    # every node with a tap or a gesture, and every control, inside a node
+    # that stops or gates interaction, STOPPED_KEY / GATES_KEY.
     def annotate!(root)
       walk(root) do |node, stopped, gates|
         value = shape(node, stopped)
         node[SHAPE_KEY] = value if value
-        next unless (TAP_KEYS + GESTURE_KEYS).any? { |key| handler?(node[key]) }
+        next unless (TAP_KEYS + GESTURE_KEYS).any? { |key| handler?(node[key]) } || control?(node)
 
         node[STOPPED_KEY] = true if stopped
         node[GATES_KEY] = gates unless gates.empty?

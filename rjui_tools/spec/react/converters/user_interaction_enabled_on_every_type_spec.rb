@@ -135,10 +135,17 @@ RSpec.describe 'rjui userInteractionEnabled on every type' do
     end
   end
 
+  # The first element of the page — past the `display: contents` box a
+  # stopped component is wrapped in for its inert (apply_interaction_inert),
+  # to the component that carries the class.
   def element_tag(jsx)
     probe = RjuiTools::React::Converters::ViewConverter.new({ 'type' => 'View' }, config)
     range = probe.send(:element_root_range, jsx)
-    range ? jsx[range] : ''
+    return '' unless range
+
+    return element_tag(jsx[(range.last + 1)..]) if jsx[range].start_with?('<div className="contents" {...jsonuiInert(')
+
+    jsx[range]
   end
 
   def capture_stdout
@@ -158,6 +165,7 @@ RSpec.describe 'rjui userInteractionEnabled on every type' do
     ambient = TypeScriptCompiler::AMBIENT + <<~TS
       declare const data: { u?: boolean; h?: boolean; on?: boolean; selectedTabIndex?: number; setSelectedTabIndex?: (i: number) => void };
       declare const Circle: (props: { className?: string }) => JSX.Element;
+      declare function jsonuiInert(stop: boolean): Record<string, unknown>;
       declare const JsonUISeeded: <T,>({ seed, children }: { seed: T; children: (value: T, set: (value: T) => void) => React.ReactNode }) => JSX.Element;
     TS
     expect(TypeScriptCompiler.component(*elements)).to compile_as_typescript.with_ambient(ambient)
@@ -177,6 +185,7 @@ RSpec.describe 'rjui userInteractionEnabled on every type' do
     ambient = TypeScriptCompiler::AMBIENT + <<~TS
       declare const data: { u?: boolean; h?: boolean; hi?: boolean };
       declare const EmbedContainer: (props: any) => JSX.Element;
+      declare function jsonuiInert(stop: boolean): Record<string, unknown>;
       declare const S: any;
     TS
     expect(TypeScriptCompiler.component(*elements)).to compile_as_typescript.with_ambient(ambient)

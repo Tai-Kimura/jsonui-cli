@@ -1877,7 +1877,50 @@ module RjuiTools
         # - onClick (camelCase) -> binding format only (@{functionName})
         # - onclick (lowercase) -> selector format only (string)
         # - { "action": "link", "url": "..." } -> opens URL in new tab
+        # The element's onClick, and — when the rule makes the tap a button
+        # (keyboard_tap_attrs) — its role, tab stop and keys.
         def build_onclick_attr
+          attr = click_attr
+          return attr if attr.empty? || attr.include?('ERROR')
+
+          attr + keyboard_tap_attrs
+        end
+
+        # A tap on an element that is not a control — the tap rule's `button`
+        # or `combine` shape (shared/core/tap_accessibility.rb; react_generator
+        # runs annotate!) — is a button to the keyboard and to a screen reader,
+        # as on iOS (the button trait) and Android (Role.Button): role="button",
+        # a stop in the tab order, and Enter / Space make the element's own
+        # click (`e.currentTarget.click()`, so canTap's gate and a link action
+        # hold). Before, a Label or a View with onClick was reached by neither
+        # Tab nor a screen reader's list of buttons (measured in Chromium,
+        # jsonui-cli 1.9.0). `none` — a control, an app component, a tap
+        # holding a control — is left as it is, as iOS and Android leave it; a
+        # tap inside a stop has no shape (annotate!), and inert takes it away.
+        # A bound canTap or enabled gates the role, the tab stop and the keys.
+        def keyboard_tap_attrs
+          return '' unless KEYBOARD_TAP_SHAPES.include?(json[JsonUIShared::TapAccessibility::SHAPE_KEY])
+
+          gate = keyboard_tap_gates.join(' && ')
+          keys = "e.key === 'Enter' || e.key === ' '"
+          press = "if (#{gate.empty? ? keys : "#{gate} && (#{keys})"}) { e.preventDefault(); e.currentTarget.click(); }"
+          on_key = " onKeyDown={(e) => { #{press} }}"
+          return %( role="button" tabIndex={0}#{on_key}) if gate.empty?
+
+          %( role={#{gate} ? 'button' : undefined} tabIndex={#{gate} ? 0 : undefined}#{on_key})
+        end
+
+        KEYBOARD_TAP_SHAPES = %w[button combine].freeze
+
+        # The bound gates of a tap the keyboard makes too: canTap (the tap's
+        # gate) and enabled (a bound `false` takes the pointer away with
+        # classes, apply_enabled_class — a key press would still click).
+        def keyboard_tap_gates
+          [attributes['canTap'], attributes['enabled']].select { |value| value.is_a?(String) && has_binding?(value) }
+                                                         .map { |value| "(#{extract_binding_property(value)})" }
+        end
+
+        def click_attr
           # Check onClick (camelCase) first - binding format only. A handler
           # names a method (TapAccessibility.handler?): `""`, `"   "`, `"@{}"`
           # are no handler and fall through — `"@{}"` emitted `onClick={data.}`.
@@ -2222,6 +2265,7 @@ module RjuiTools
           jsx = apply_interaction_class(jsx)
           jsx = apply_enabled_class(jsx)
           jsx = apply_hidden_binding(jsx)
+          jsx = apply_interaction_inert(jsx)
 
           vis_info = build_visibility_info
           return jsx unless vis_info
@@ -2277,6 +2321,60 @@ module RjuiTools
           append_class_to_element(jsx, class_expr, 'userInteractionEnabled')
         end
 
+        # userInteractionEnabled false, or a binding while it is false: the
+        # element and everything in it are inert — no pointer, no keyboard
+        # focus, and out of the accessibility tree, so a screen reader neither
+        # reads it as something to operate nor presses it. `pointer-events:
+        # none` (apply_interaction_class) stopped the pointer alone: measured
+        # in Chromium, a stopped button, checkbox, text field and link were
+        # reached by Tab and operated by Enter / Space / typing, and pressed
+        # from the accessibility tree (jsonui-cli 1.9.0). Nothing drawn
+        # changes.
+        #
+        # Written as a spread of the generated interactionStop helper
+        # (`{...jsonuiInert(stop)}`), which reads React's version at run time:
+        # React 19 takes `inert` as a boolean and treats "" as false, React 18
+        # writes only a string for an attribute it does not know and drops
+        # `true` — the spread stops all three ways under both (measured, 18.3.1
+        # and 19.2.7). Not a ref: the text fields carry a ref of their own, and
+        # a component takes no ref in React 18.
+        #
+        # On the first element of the page when it is an HTML element. A
+        # component (LinkifyText, NetworkImage, EmbedContainer, an app's own)
+        # declares no `inert`, so its markup is wrapped in a `display:
+        # contents` div that carries it: the div draws no box, and inert
+        # reaches everything under it (measured, both React versions).
+        def apply_interaction_inert(jsx)
+          value = attributes['userInteractionEnabled']
+          stop = if value == false
+                   'true'
+                 elsif value.is_a?(String) && has_binding?(value)
+                   "!(#{extract_binding_property(value)})"
+                 end
+          return jsx unless stop
+
+          # A markup with no element was named by apply_interaction_class.
+          open_tag = element_root_range(jsx)
+          return jsx unless open_tag
+
+          spread = "{...#{INERT_HELPER}(#{stop})}"
+          return jsx if jsx.include?(spread)
+
+          head = jsx[open_tag]
+          if head.match?(/\A<[a-z]/)
+            patched = head.sub(/\A<([a-z][\w-]*)/) { "<#{$1} #{spread}" }
+            return jsx[0...open_tag.first] + patched + jsx[(open_tag.last + 1)..]
+          end
+
+          pad = jsx[/\A[ \t]*/]
+          body = jsx.rstrip.lines.map { |line| line.strip.empty? ? line : "  #{line}" }.join
+          "#{pad}<div className=\"contents\" #{spread}>\n#{body}\n#{pad}</div>"
+        end
+
+        # The generated helper apply_interaction_inert spreads (build_command
+        # emit_interaction_stop_helper; react_generator imports it).
+        INERT_HELPER = 'jsonuiInert'
+
         # `enabled` bound: the classes a literal `false` gives this converter's
         # className (`opacity-50 pointer-events-none`, build_class_name), behind
         # the binding — the tap does not happen while it is false. Only View
@@ -2284,8 +2382,9 @@ module RjuiTools
         # whose className passes through build_class_name dropped it and kept
         # its tap (measured: Label, Image, NetworkImage, IconLabel, Blur,
         # CircleView, GradientView — a control's own `disabled={…}` stopped its
-        # operation). A converter whose className does not pass through there
-        # (TabView) gets nothing for `false` either, and so nothing here.
+        # operation). TabView's className does not pass through there: its tab
+        # buttons take `disabled` for `false` and for a binding
+        # (tab_disabled_attr), which stops it without the classes.
         #
         # A control that is stopped already — its operated element carries
         # `disabled={…}` on the same binding (Button, a text field, a

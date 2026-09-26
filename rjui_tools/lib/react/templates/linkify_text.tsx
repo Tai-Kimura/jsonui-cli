@@ -16,6 +16,11 @@ interface LinkifyTextProps {
   // kept in lockstep with the built-in props contract spec.
   style?: React.CSSProperties;
   onClick?: () => void;
+  // A tap the tap rule makes a button (BaseConverter#keyboard_tap_attrs):
+  // its role, its tab stop and the keys that click it.
+  role?: string;
+  tabIndex?: number;
+  onKeyDown?: (e: React.KeyboardEvent<HTMLElement>) => void;
   'data-testid'?: string;
   'data-tag'?: string;
 }
@@ -89,6 +94,9 @@ export const LinkifyText = React.forwardRef<HTMLSpanElement, LinkifyTextProps>((
   className = '',
   style,
   onClick,
+  role,
+  tabIndex,
+  onKeyDown,
   'data-testid': dataTestid,
   'data-tag': dataTag,
 }, ref) => (
@@ -100,6 +108,9 @@ export const LinkifyText = React.forwardRef<HTMLSpanElement, LinkifyTextProps>((
     className={`${className} whitespace-pre-line`}
     style={style}
     onClick={onClick}
+    role={role}
+    tabIndex={tabIndex}
+    onKeyDown={onKeyDown}
     data-testid={dataTestid}
     data-tag={dataTag}
     data-linkable="true"

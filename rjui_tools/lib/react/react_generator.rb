@@ -5,6 +5,8 @@ require_relative '../core/type_converter'
 require_relative '../core/generated_marker'
 require_relative '../core/frameworks'
 require_relative '../core/normalization'
+require_relative '../core/tap_accessibility'
+require 'json'
 require_relative '../core/string_manager_core'
 require_relative 'component_name'
 require_relative 'converters/base_converter'
@@ -202,6 +204,11 @@ module RjuiTools
         # attribute lookup path for L1-normalized layouts.
         @config['_layout_normalized'] = Core::Normalization.canonicalized?(json)
 
+        # The tap rule's shape of every tap (shared/core/tap_accessibility.rb),
+        # which the converters read for the keyboard's button
+        # (BaseConverter#keyboard_tap_attrs) — on a copy, after validation.
+        json = JsonUIShared::TapAccessibility.annotate!(JSON.parse(JSON.generate(json)))
+
         jsx_content = convert_component(json)
 
         generate_component_file(component_name, jsx_content, json,
@@ -325,6 +332,11 @@ module RjuiTools
         auto_shrink_import = needs_auto_shrink ?
           "\nimport { applyAutoShrink } from '@/generated/autoShrink';" : ''
         screen_marker_import = screen_id ? "\nimport { screenMarker } from '@/generated/screenMarker';" : ''
+        # userInteractionEnabled false or bound: the stopped element's inert
+        # (BaseConverter#apply_interaction_inert, build_command
+        # emit_interaction_stop_helper).
+        interaction_stop_import = jsx_content.include?("#{Converters::BaseConverter::INERT_HELPER}(") ?
+          "\nimport { #{Converters::BaseConverter::INERT_HELPER} } from '@/generated/interactionStop';" : ''
 
         # partialAttributes are applied at runtime against the resolved
         # string (a pattern range or a localized text cannot be resolved
@@ -581,7 +593,7 @@ module RjuiTools
 
         <<~JSX
           #{use_client}#{marker_header}
-          #{react_import}#{media_query_import}#{link_import}#{string_manager_import}#{cell_id_import}#{collection_scroll_import}#{relative_position_import}#{auto_shrink_import}#{date_format_import}#{screen_marker_import}#{partial_text_import}#{include_id_import}#{configuration_import}#{color_manager_import}#{lucide_import}#{data_import}#{extension_imports}#{component_imports}#{variant_component_imports}
+          #{react_import}#{media_query_import}#{link_import}#{string_manager_import}#{cell_id_import}#{collection_scroll_import}#{relative_position_import}#{auto_shrink_import}#{date_format_import}#{screen_marker_import}#{interaction_stop_import}#{partial_text_import}#{include_id_import}#{configuration_import}#{color_manager_import}#{lucide_import}#{data_import}#{extension_imports}#{component_imports}#{variant_component_imports}
 
           #{props_interface if @config['typescript']}#{seeded_helper(@config['typescript']) if uses_seeded}
           export const #{name} = (#{props_sig}) => {#{data_merge_declaration}#{state_declarations}#{focus_declarations}#{collection_scroll_declarations}#{relative_position_declarations}#{auto_shrink_declarations}#{landscape_declaration}#{string_manager_declaration}#{variant_dispatch_declaration}

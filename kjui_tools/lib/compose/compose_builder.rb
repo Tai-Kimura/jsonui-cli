@@ -507,7 +507,56 @@ module KjuiTools
           code = Helpers::VisibilityHelper.wrap_with_visibility(json_data, Helpers::TintHelper.wrap_with_tint(json_data, code, depth, @required_imports), depth, @required_imports, parent_type) if code.is_a?(String) && !code.empty?
         end
 
-        provide_interaction_stop(json_data, capture_interaction_stop(json_data, code, depth), depth)
+        provide_interaction_stop(json_data, capture_interaction_stop(json_data, stop_held_control(json_data, code), depth), depth)
+      end
+
+      # A control a stop holds (TapAccessibility.control?, which annotate!
+      # marks): the pointer blocker kept a touch out and nothing else —
+      # TalkBack's click is not a touch, and it called the control's own
+      # operation (measured probe: A11yActivationInsideAStopProbe). Two
+      # changes, nothing drawn:
+      # - its root node reads `disabled()` while it is stopped: Compose's
+      #   accessibility delegate performs no action on a disabled node (click,
+      #   set text, set progress — performActionHelper, read in compose-ui
+      #   1.12.0), and TalkBack says so. `enabled = false` would grey it.
+      # - what it writes (`viewModel.updateData(…)`) is gated on the same stop
+      #   (ModifierBuilder.lambda_gate — in a layout a stop can reach, the stop
+      #   handed down too): a key press on a focused control, and the inner
+      #   node of a wrapped one (a Radio's item, a Segment's tab), write
+      #   nothing.
+      # `false` on it or around it shuts both; a binding gates both.
+      def stop_held_control(json_data, code)
+        return code unless code.is_a?(String) && JsonUIShared::TapAccessibility.control?(json_data)
+
+        gate = control_stop_gate(json_data)
+        return code unless gate
+
+        code = code.gsub('viewModel.updateData(', "if (#{gate}) viewModel.updateData(")
+        semantics = '.semantics { testTagsAsResourceId = true }'
+        at = code.index(semantics)
+        return code unless at
+
+        line_start = code.rindex("\n", at) || -1
+        pad = code[(line_start + 1)...at]
+        disabled = gate == 'false' ? '.semantics { disabled() }' : ".then(if (!(#{gate})) Modifier.semantics { disabled() } else Modifier)"
+        @required_imports&.add(:semantics_disabled)
+        code[0...(at + semantics.length)] + "\n#{pad}#{disabled}" + code[(at + semantics.length)..]
+      end
+
+      # The stop's gate for what a control operates, as one Kotlin condition:
+      # 'false' for `userInteractionEnabled: false` on it or around it, the
+      # bound flags joined, with the stop handed down in a layout one can
+      # reach (lambda_gate), or nil when nothing stops it. canTap is not in
+      # it: it gates the tap, not the control's value.
+      def control_stop_gate(json_data)
+        return 'false' if JsonUIShared::TapAccessibility.stopped?(json_data)
+
+        gates = JsonUIShared::TapAccessibility.interaction_gates(json_data)
+                                             .map { |g| Helpers::ModifierBuilder.boolean_expression(g) }.compact.uniq
+        return 'false' if gates.include?('false')
+
+        gate = gates.empty? ? nil : gates.map { |g| Helpers::ModifierBuilder.conjunct(g) }.join(' && ')
+        Helpers::ModifierBuilder.lambda_gate(gate)
       end
 
       # A leaf whose lambdas read the stop handed down (a control's operation
@@ -766,7 +815,7 @@ module KjuiTools
           return generate_component(json_data, depth, parent_type, is_root: is_root)
         end
 
-        provide_interaction_stop(json_data, capture_interaction_stop(json_data, code, depth), depth)
+        provide_interaction_stop(json_data, capture_interaction_stop(json_data, stop_held_control(json_data, code), depth), depth)
       end
 
       def has_component_children?(json_data)

@@ -875,13 +875,40 @@ module SjuiTools
           elsif is_binding?(value)
             gates << tap_gate_expr(value)
           end
-          return if gates.empty?
+          lines = []
+          unless gates.empty?
+            condition = gates.include?('false') ? 'false' : gates.join(' && ')
+            lines << ".allowsHitTesting(#{condition})"
+            hand_down = interaction_stop_line
+            lines << hand_down if hand_down
+          end
+          stopped_control = stopped_control_line
+          lines << stopped_control if stopped_control
+          return if lines.empty?
 
-          condition = gates.include?('false') ? 'false' : gates.join(' && ')
-          lines = [".allowsHitTesting(#{condition})"]
-          hand_down = interaction_stop_line
-          lines << hand_down if hand_down
           @modifier_bag.register(:allows_hit_testing, lines.size == 1 ? lines.first : lines)
+        end
+
+        # A control a stop holds (TapAccessibility.control?): the hit-test stop
+        # keeps a touch out, and VoiceOver's activation still called its
+        # default action — a Switch inside `userInteractionEnabled: false`
+        # switched (measured, SwiftJsonUI ConformanceHost
+        # -a11yActivationProbe, jsonui-cli 1.9.0). SwiftJsonUI's
+        # `.jsonuiStoppedControl(stopped)` replaces that action by nothing and
+        # reads the control as nothing to operate while it is stopped, and
+        # draws it as it is: `true` for the flag on it or around it, the
+        # bound flags' `false` for a binding, and — in a layout a stop can
+        # reach — the stop handed down, which the modifier reads from the
+        # environment itself. nil for a control no stop can reach.
+        def stopped_control_line
+          return nil unless JsonUIShared::TapAccessibility.control?(@component)
+          return '.jsonuiStoppedControl(true)' if JsonUIShared::TapAccessibility.stopped?(@component)
+
+          gates = JsonUIShared::TapAccessibility.interaction_gates(@component).map { |gate| tap_gate_expr(gate) }
+          return ".jsonuiStoppedControl(!(#{gates.join(' && ')}))" unless gates.empty?
+          return '.jsonuiStoppedControl()' if self.class.reads_interaction_environment?
+
+          nil
         end
 
         # A node whose `userInteractionEnabled` is false or bound, holding a
