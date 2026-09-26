@@ -28,20 +28,9 @@ RSpec.describe 'sjui build: a stage that printed an error is in the ledger' do
   # The tool is linked, not copied (lib/core/attribute_definitions.json is a
   # relative link into shared/core) — except where the arm is that file
   # missing, where the copy without -L is the input.
-  def project(mode, dangling_definitions: false, plain_copy: false, source_group: true)
+  def project(mode, dangling_definitions: false, source_group: true)
     dir = Dir.mktmpdir('sjui_stage')
     if dangling_definitions
-      # The tool copied with its links followed, then attribute_definitions.json
-      # put back as the link a plain copy leaves dangling — that one file
-      # missing and nothing else. A plain `cp -R` now leaves
-      # type_synonyms.json dangling too, and the build stops on that first
-      # (the example after the definitions one).
-      FileUtils.mkdir_p(File.join(dir, 'sjui_tools'))
-      %w[bin lib].each { |d| system('cp', '-RL', File.join(REPO_STAGES, 'sjui_tools', d), File.join(dir, 'sjui_tools')) || raise(d) }
-      definitions = File.join(dir, 'sjui_tools', 'lib', 'core', 'attribute_definitions.json')
-      File.delete(definitions)
-      File.symlink('../../../shared/core/attribute_definitions.json', definitions)
-    elsif plain_copy
       FileUtils.mkdir_p(File.join(dir, 'sjui_tools'))
       %w[bin lib].each { |d| system('cp', '-R', File.join(REPO_STAGES, 'sjui_tools', d), File.join(dir, 'sjui_tools')) || raise(d) }
     else
@@ -147,14 +136,30 @@ RSpec.describe 'sjui build: a stage that printed an error is in the ledger' do
       JsonUI::StageFailures.clear!
     end
 
-    # The UIKit build loads the definitions twice (measured: two "not found"
-    # lines) — the arm where "once" is a claim. kjui and rjui meet it once.
-    it 'attribute_definitions.json missing (a copy that left its link dangling): in the ledger once' do
+    # A plain `cp -R` of the tool leaves every link into shared/core dangling:
+    # attribute_definitions.json and, since 753acb06, type_synonyms.json. Each
+    # is a validation stage that did not complete — named where it is met, in
+    # the ledger once however often it is met, and the build carries on without
+    # it (the exit is `jui build`'s, from the ledger). Two layouts, so "once"
+    # is a claim.
+    it 'a copy that left its links dangling: attribute_definitions.json and type_synonyms.json in the ledger, each once' do
       dir = project('uikit', dangling_definitions: true)
       layout(dir, 'home')
+      layout(dir, 'other')
       log, exit_code, entries = build(dir)
-      expect(log.scan('attribute_definitions.json not found').size).to be >= 2 # the control: met more than once
-      expect_incomplete(log, exit_code, entries, 'validation', 'attribute_definitions.json')
+      expect(log).to include('attribute_definitions.json not found').and include('type_synonyms.json not found')
+      # The controls: the UIKit build meets each file more than once
+      # (measured: definitions 3 lines, synonyms 2) — the arm where "once" is
+      # a claim. kjui and rjui meet each once.
+      expect(log.scan('attribute_definitions.json not found').size).to be >= 2
+      expect(log.scan('type_synonyms.json not found').size).to be >= 2
+      expect(exit_code).to eq(0), log
+      expect(entries.map { |e| e['stage'] }).to eq(%w[validation validation]), "#{entries.inspect}\n#{log}"
+      messages = entries.map { |e| e['message'] }
+      expect(messages.count { |m| m.include?('attribute_definitions.json') }).to eq(1), messages.inspect
+      expect(messages.count { |m| m.include?('type_synonyms.json') }).to eq(1), messages.inspect
+      expect(log).to include('Build finished with 2 stage(s) incomplete — see above'), log
+      expect(log).not_to include('completed successfully!')
     end
 
     it 'a style that does not parse: named, drawn without it, in the ledger — not a crash with no file named' do
@@ -177,18 +182,6 @@ RSpec.describe 'sjui build: a stage that printed an error is in the ledger' do
         expect(Dir.exist?(File.join(dir, NAME, 'Layouts'))).to be(false), mode
         expect(log).not_to match(/completed successfully!|SwiftUI build completed!/)
       end
-    end
-
-    # A plain copy leaves type_synonyms.json dangling as well (753acb06 reads
-    # it; the validator raises, naming the file). Whatever the build then does,
-    # it names the file and does not end in its success line.
-    it 'a copy that left every link dangling: names type_synonyms.json, and does not claim success' do
-      dir = project('uikit', plain_copy: true)
-      layout(dir, 'home')
-      log, exit_code, entries = build(dir)
-      expect(log).to include('type_synonyms.json')
-      expect(exit_code != 0 || entries.any?).to be(true), log
-      expect(log).not_to match(/completed successfully!|SwiftUI build completed!/)
     end
 
     it 'under --mode all, one failure is one entry in the ledger (the UIKit and the SwiftUI stages each report)' do

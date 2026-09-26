@@ -23,20 +23,9 @@ RSpec.describe 'kjui build: a stage that printed an error is in the ledger' do
   KJUI_ROOT = File.expand_path('../..', __dir__)
   SRC = 'app/src/main'
 
-  def project(dangling_definitions: false, plain_copy: false)
+  def project(dangling_definitions: false)
     dir = Dir.mktmpdir('kjui_stage')
     if dangling_definitions
-      # The tool copied with its links followed, then attribute_definitions.json
-      # put back as the link a plain copy leaves dangling — that one file
-      # missing and nothing else. A plain `cp -R` now leaves
-      # type_synonyms.json dangling too, and the build stops on that first
-      # (the example after the definitions one).
-      FileUtils.mkdir_p(File.join(dir, 'kjui_tools'))
-      %w[bin lib].each { |d| system('cp', '-RL', File.join(KJUI_ROOT, d), File.join(dir, 'kjui_tools')) || raise(d) }
-      definitions = File.join(dir, 'kjui_tools', 'lib', 'core', 'attribute_definitions.json')
-      File.delete(definitions)
-      File.symlink('../../../shared/core/attribute_definitions.json', definitions)
-    elsif plain_copy
       FileUtils.mkdir_p(File.join(dir, 'kjui_tools'))
       %w[bin lib].each { |d| system('cp', '-R', File.join(KJUI_ROOT, d), File.join(dir, 'kjui_tools')) || raise(d) }
     else
@@ -178,26 +167,26 @@ RSpec.describe 'kjui build: a stage that printed an error is in the ledger' do
     expect([exit_code, entries]).to eq([0, []])
   end
 
-  it 'attribute_definitions.json missing (a copy that left its link dangling): in the ledger once' do
+  # A plain `cp -R` of the tool leaves every link into shared/core dangling:
+  # attribute_definitions.json and, since 753acb06, type_synonyms.json. Each
+  # is a validation stage that did not complete — named where it is met, in
+  # the ledger once however often it is met, and the build carries on without
+  # it (the exit is `jui build`'s, from the ledger). This build meets each
+  # file once even over two layouts (measured), so "once" is not what this
+  # arm tests; sjui's UIKit arm, which meets each more than once, is.
+  it 'a copy that left its links dangling: attribute_definitions.json and type_synonyms.json in the ledger, each once' do
     dir = project(dangling_definitions: true)
     layout(dir, 'home')
+    layout(dir, 'other')
     log, exit_code, entries = build(dir)
-    expect(log).to include('attribute_definitions.json not found')
-    expect(exit_code).to eq(0)
-    expect(entries.map { |e| e['stage'] }).to eq(['validation']), "#{entries.inspect}\n#{log}"
+    expect(log).to include('attribute_definitions.json not found').and include('type_synonyms.json not found')
+    expect(exit_code).to eq(0), log
+    expect(entries.map { |e| e['stage'] }).to eq(%w[validation validation]), "#{entries.inspect}\n#{log}"
+    messages = entries.map { |e| e['message'] }
+    expect(messages.count { |m| m.include?('attribute_definitions.json') }).to eq(1), messages.inspect
+    expect(messages.count { |m| m.include?('type_synonyms.json') }).to eq(1), messages.inspect
+    expect(log).to include('Build finished with 2 stage(s) incomplete — see above'), log
     expect(log).not_to include('Compose build completed!')
-  end
-
-  # A plain copy leaves type_synonyms.json dangling as well (753acb06 reads
-  # it; the validator raises, naming the file). Whatever the build then does,
-  # it names the file and does not end in its success line.
-  it 'a copy that left every link dangling: names type_synonyms.json, and does not claim success' do
-    dir = project(plain_copy: true)
-    layout(dir, 'home')
-    log, exit_code, entries = build(dir)
-    expect(log).to include('type_synonyms.json')
-    expect(exit_code != 0 || entries.any?).to be(true), log
-    expect(log).not_to match(/Compose build completed!/)
   end
 
   describe 'stages no real input reached here' do
