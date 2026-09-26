@@ -242,16 +242,39 @@ class AliasTable:
         self._deprecated_cache[key] = merged
         return merged
 
-    def bind_value_attributes(self, component_type: str | None) -> list[str]:
+    def bind_value_attributes(self, component_type: str | None, node: dict | None = None) -> list[str]:
         """The attributes `bind` is an alternative spelling of on
         *component_type*'s section (``common.bind.primaryValue``): the one a
         lone `bind` is rewritten to first, then the other spellings of the
-        same value. ``[]`` for a section `bind` names no value of."""
+        same value. ``[]`` for a section `bind` names no value of.
+
+        A section whose value depends on another attribute of the node gives
+        an object — ``by`` (that attribute), ``lists`` (a list per value),
+        ``whenAbsent`` (the value when *node* does not set it, or sets one
+        ``lists`` does not name): a SelectBox's by ``selectItemType``, so a
+        Date SelectBox's value is ``selectedDate``."""
         key = self.definition_key_for(component_type)
         spec = self._section("common").get("bind")
         table = spec.get("primaryValue") if isinstance(spec, dict) else None
         values = table.get(key) if isinstance(table, dict) and key else None
+        if isinstance(values, dict):
+            values = self.primary_value_list(values, node)
         return [v for v in values if isinstance(v, str)] if isinstance(values, list) else []
+
+    @staticmethod
+    def primary_value_list(entry: dict, node: dict | None) -> list | None:
+        """The list a ``primaryValue`` object gives for *node*: ``lists[node[by]]``,
+        else ``lists[whenAbsent]``. The value is matched as written, as the
+        codegens compare ``selectItemType``."""
+        lists = entry.get("lists")
+        by = entry.get("by")
+        if not isinstance(lists, dict) or not isinstance(by, str):
+            return None
+        picked = node.get(by) if isinstance(node, dict) else None
+        if not isinstance(picked, str) or picked not in lists:
+            picked = entry.get("whenAbsent")
+        values = lists.get(picked)
+        return values if isinstance(values, list) else None
 
     def enum_for(self, component_type: str | None, attr: str) -> list[str]:
         """The declared ``enum`` of *attr* on *component_type*'s section

@@ -215,6 +215,9 @@ module JsonUIShared
       # `bind` beside the component's own value attribute
       check_bind_beside_own_value(merged_component, type)
 
+      # A value attribute of the other kind (a Date SelectBox's selectedValue)
+      check_value_attribute_of_another_kind(merged_component, type)
+
       # Check for conflicting attributes
       check_spacing_gravity_conflict(merged_component, type)
 
@@ -816,8 +819,7 @@ module JsonUIShared
       return unless component.key?('bind')
 
       section = map_type_to_definition(type)
-      table = @definitions.dig('common', 'bind', 'primaryValue')
-      values = table.is_a?(Hash) ? table[section] : nil
+      values = bind_value_attributes(section, component)
       return unless values.is_a?(Array)
 
       own = values.find { |key| component.key?(key) }
@@ -826,6 +828,45 @@ module JsonUIShared
       value = component[own]
       shown = value.is_a?(String) ? value : JSON.generate(value)
       add_warning("'bind: #{component['bind']}' is ignored: '#{own}: #{shown}' is the #{section}'s value")
+    end
+
+    # A section whose value depends on another attribute (a `primaryValue`
+    # object — SelectBox by selectItemType): the attributes of the
+    # `whenAbsent` kind that are not this node's value are read by no path. A
+    # Date SelectBox's value is selectedDate (4f's ruling, jsonui-cli 1.9.0);
+    # sjui read it alone, while the kjui codegen, rjui and KotlinJsonUI
+    # Dynamic fell back to selectedItem / selectedValue / selectedIndex, each
+    # to a different few.
+    def check_value_attribute_of_another_kind(component, type)
+      section = map_type_to_definition(type)
+      entry = @definitions.dig('common', 'bind', 'primaryValue', section)
+      return unless entry.is_a?(Hash) && entry['lists'].is_a?(Hash)
+
+      own = bind_value_attributes(section, component) || []
+      kind = component[entry['by']]
+      return unless kind.is_a?(String) && entry['lists'].key?(kind) && kind != entry['whenAbsent']
+
+      Array(entry['lists'][entry['whenAbsent']]).each do |attr|
+        next if own.include?(attr) || !component.key?(attr)
+
+        add_warning("'#{attr}' has no effect on a #{kind} #{section} — its value is #{own.first}")
+      end
+    end
+
+    # The attributes `bind` stands for on a section (common.bind
+    # primaryValue): a list, or — for a section whose value depends on
+    # another attribute — the object's list for the node's value of it
+    # (`lists[node[by]]`, else `lists[whenAbsent]`). nil for a section the
+    # table does not map.
+    def bind_value_attributes(section, component)
+      entry = @definitions.dig('common', 'bind', 'primaryValue', section)
+      return entry if entry.is_a?(Array)
+      return nil unless entry.is_a?(Hash) && entry['lists'].is_a?(Hash)
+
+      kind = component[entry['by']]
+      kind = entry['whenAbsent'] unless kind.is_a?(String) && entry['lists'].key?(kind)
+      list = entry['lists'][kind]
+      list.is_a?(Array) ? list : nil
     end
 
     # A flow Collection: `layout` (or `orientation`) flow or one of its alias

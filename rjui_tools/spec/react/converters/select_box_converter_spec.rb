@@ -614,6 +614,21 @@ RSpec.describe RjuiTools::React::Converters::SelectBoxConverter do
         expect(result).to include("value={data.day || ''}")
         expect(result).to include('data.onDayChange?.(e.target.value)')
       end
+
+      # A Date SelectBox's value is its selectedDate alone (4f's ruling,
+      # jsonui-cli 1.9.0): selectedValue and the undeclared `value` were read
+      # after it, and not by sjui.
+      it 'reads its value from selectedDate alone' do
+        %w[selectedValue value].each do |other|
+          bound = picker(other => '@{other}')
+          expect(bound).not_to include('data.other'), other
+          expect(bound).not_to include('onOtherChange'), other
+          expect(picker(other => '2026-01-01')).not_to include('2026-01-01'), other
+        end
+        both = picker('selectedDate' => '@{day}', 'selectedValue' => '@{other}')
+        expect(both).to include("value={data.day || ''}")
+        expect(both).not_to include('data.other')
+      end
     end
   end
 end

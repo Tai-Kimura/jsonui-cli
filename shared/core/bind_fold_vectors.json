@@ -1,5 +1,5 @@
 {
-  "_description": "`bind` beside a component's own value attribute (attribute_definitions.json common.bind: 'an alternative spelling to each component's own value attribute, which takes precedence when both are set'; `primaryValue` lists, per section, the attribute `bind` stands for first, then the other spellings of that value). Each case is a node as written and the node every reader must act on: a lone `bind` becomes the first attribute; beside any of them `bind` is dropped. `warning` is the sentence the layout's author is told (null: none): the normalizer says the 'is ignored' ones where it folds; the validator says each of them on a layout the normalizer did not fold; none is said twice. The jui layout normalizer runs this table; a runtime that reads layouts the normalizer did not fold must answer the same.",
+  "_description": "`bind` beside a component's own value attribute (attribute_definitions.json common.bind: 'an alternative spelling to each component's own value attribute, which takes precedence when both are set'; `primaryValue` lists, per section, the attribute `bind` stands for first, then the other spellings of that value; a SelectBox's list is by its selectItemType — a Date SelectBox's value is selectedDate). Each case is a node as written and the node every reader must act on: a lone `bind` becomes the first attribute; beside any of them `bind` is dropped. `warning` is the sentence the layout's author is told (null: none): the normalizer says the 'is ignored' ones where it folds; the validator says each of them on a layout the normalizer did not fold; none is said twice. The jui layout normalizer runs this table; a runtime that reads layouts the normalizer did not fold must answer the same.",
   "cases": [
     { "name": "a lone bind is the Switch's isOn",
       "node": {"type": "Switch", "bind": "@{on}"},
@@ -48,6 +48,42 @@
     { "name": "bind on a section it names no value of stays",
       "node": {"type": "TextField", "bind": "@{t}"},
       "expect": {"type": "TextField", "bind": "@{t}"},
-      "warning": null }
+      "warning": null },
+    { "name": "a lone bind is a Date SelectBox's selectedDate",
+      "node": {"type": "SelectBox", "selectItemType": "Date", "bind": "@{day}"},
+      "expect": {"type": "SelectBox", "selectItemType": "Date", "selectedDate": "@{day}"},
+      "warning": null },
+    { "name": "a Date SelectBox's selectedDate beside bind",
+      "node": {"type": "SelectBox", "selectItemType": "Date", "selectedDate": "2026-01-01", "bind": "@{day}"},
+      "expect": {"type": "SelectBox", "selectItemType": "Date", "selectedDate": "2026-01-01"},
+      "warning": "'bind: @{day}' is ignored: 'selectedDate: 2026-01-01' is the SelectBox's value" },
+    { "name": "selectedValue is not a Date SelectBox's value: bind is still its selectedDate, and the validator names selectedValue",
+      "node": {"type": "SelectBox", "selectItemType": "Date", "selectedValue": "x", "bind": "@{day}"},
+      "expect": {"type": "SelectBox", "selectItemType": "Date", "selectedValue": "x", "selectedDate": "@{day}"},
+      "warning": "'selectedValue' has no effect on a Date SelectBox — its value is selectedDate" }
+  ],
+  "_attributes_for_description": "The one function every reader of common.bind.primaryValue answers the same (the generated JsonUIBindPrimaryValue.attributesFor on Kotlin, attributes(for:node:) on Swift; the jui normalizer's AliasTable.bind_value_attributes; the shared validator's bind_value_attributes): the attributes `bind` stands for on a node of `type`, the first being where a lone `bind` goes. The type is looked up as a key of the table, else as the section its `_alias_of` names; a type_synonyms.json synonym is the caller's to resolve first. A list entry is the answer. An object entry {by, whenAbsent, lists} answers lists[node[by]] when node[by] is a string lists names, else lists[whenAbsent] (absent, an unknown value, a binding). No entry: [] (bind is not folded).",
+  "attributes_for_cases": [
+    { "name": "a SelectBox with no selectItemType is the whenAbsent kind",
+      "type": "SelectBox", "node": {"type": "SelectBox"},
+      "expect": ["selectedValue", "selectedItem", "selectedIndex"] },
+    { "name": "a Normal SelectBox",
+      "type": "SelectBox", "node": {"type": "SelectBox", "selectItemType": "Normal"},
+      "expect": ["selectedValue", "selectedItem", "selectedIndex"] },
+    { "name": "a Date SelectBox's value is selectedDate",
+      "type": "SelectBox", "node": {"type": "SelectBox", "selectItemType": "Date"},
+      "expect": ["selectedDate"] },
+    { "name": "a selectItemType the lists do not name is the whenAbsent kind (matched as written)",
+      "type": "SelectBox", "node": {"type": "SelectBox", "selectItemType": "date"},
+      "expect": ["selectedValue", "selectedItem", "selectedIndex"] },
+    { "name": "a bound selectItemType is the whenAbsent kind",
+      "type": "SelectBox", "node": {"type": "SelectBox", "selectItemType": "@{kind}"},
+      "expect": ["selectedValue", "selectedItem", "selectedIndex"] },
+    { "name": "a section that is an alias answers as the section it names",
+      "type": "Toggle", "node": {"type": "Toggle"},
+      "expect": ["isOn", "value", "checked"] },
+    { "name": "a section the table does not name: nothing, and bind is not folded",
+      "type": "TextField", "node": {"type": "TextField"},
+      "expect": [] }
   ]
 }

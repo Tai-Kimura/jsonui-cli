@@ -209,7 +209,7 @@ class Canonicalizer:
         """
         if "bind" not in node:
             return
-        values = self._table.bind_value_attributes(node_type)
+        values = self._table.bind_value_attributes(node_type, node)
         if not values:
             return
         own = next((key for key in values if key in node), None)

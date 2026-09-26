@@ -340,6 +340,31 @@ RSpec.describe KjuiTools::Compose::Components::SelectBoxComponent do
     end
 
     context 'DateSelectBox' do
+      # A Date SelectBox's value is its selectedDate alone (4f's ruling,
+      # jsonui-cli 1.9.0; SSoT common.bind primaryValue, by selectItemType):
+      # it fell back to selectedItem / selectedValue / selectedIndex / bind,
+      # which sjui never read.
+      it 'reads and writes its value from selectedDate alone' do
+        %w[selectedItem selectedValue selectedIndex bind].each do |other|
+          result = described_class.generate({ 'type' => 'SelectBox', 'selectItemType' => 'Date', other => '@{other}' }, 0, required_imports)
+          expect(result).not_to include('data.other'), other
+          expect(result).not_to include('"other" to'), other
+          expect(result).to include('value = '), other
+        end
+        %w[selectedItem selectedValue].each do |other|
+          result = described_class.generate({ 'type' => 'SelectBox', 'selectItemType' => 'Date', other => '2026-01-01' }, 0, required_imports)
+          expect(result).not_to include('"2026-01-01"'), other
+        end
+        both = described_class.generate(
+          { 'type' => 'SelectBox', 'selectItemType' => 'Date', 'selectedDate' => '@{day}', 'selectedItem' => '@{other}' }, 0, required_imports
+        )
+        expect(both).to include('value = data.day,')
+        expect(both).to include('viewModel.updateData(mapOf("day" to newValue))')
+        expect(both).not_to include('data.other')
+        static = described_class.generate({ 'type' => 'SelectBox', 'selectItemType' => 'Date', 'selectedDate' => '2026-01-01' }, 0, required_imports)
+        expect(static).to include('"2026-01-01"')
+      end
+
       it 'generates DateSelectBox for date type' do
         json_data = {
           'type' => 'SelectBox',

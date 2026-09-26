@@ -625,8 +625,12 @@ module RjuiTools
                        else 'date'
                        end
 
-          # Value binding (selectedDate or selectedValue)
-          date_value = attributes['selectedDate'] || attributes['selectedValue'] || attributes['value']
+          # A Date SelectBox's value is its selectedDate alone (4f's ruling,
+          # jsonui-cli 1.9.0; SSoT common.bind primaryValue, by
+          # selectItemType). selectedValue and the undeclared `value` were
+          # read after it here and not by sjui; the shared validator names a
+          # Date box's selectedValue / selectedItem / selectedIndex.
+          date_value = attributes['selectedDate']
           # dateStringFormat is the shape the ViewModel holds; the input only
           # ever speaks ISO (yyyy-MM-dd / HH:mm / yyyy-MM-ddTHH:mm), so the value
           # is converted in both directions rather than silently handing the VM a
