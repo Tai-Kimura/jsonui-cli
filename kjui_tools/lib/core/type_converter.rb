@@ -3,6 +3,7 @@
 require 'json'
 require_relative 'config_manager'
 require_relative 'type_converter_core'
+require_relative 'logger'
 
 module KjuiTools
   module Core
@@ -128,7 +129,10 @@ module KjuiTools
             begin
               @project_type_map = JSON.parse(File.read(path))
             rescue JSON::ParserError => e
-              warn "[TypeConverter] Failed to parse .jsonui-type-map.json: #{e.message}"
+              # Through the warning logger ("⚠️  "): every custom type then
+              # falls back to its bare name, which a build's warning count
+              # has to see — a bare `warn` went to stderr unspelled.
+              KjuiTools::Core::Logger.warn "[TypeConverter] Failed to parse .jsonui-type-map.json: #{e.message}"
               @project_type_map = { 'types' => {} }
             end
           else
