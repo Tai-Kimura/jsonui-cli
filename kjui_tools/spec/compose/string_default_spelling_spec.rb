@@ -120,6 +120,51 @@ RSpec.describe 'a String defaultValue reads the same on every kjui path' do
     expect(updater.send(:format_default_value, 'Hello World', 'String')).to eq('"Hello World"')
   end
 
+  # A String? default reads as a String's, and none stays null
+  # (vectors['optionalStrings']). Until 1.8.121 a String? default was written
+  # as it stood, as code: `var probe: String? = Hello`.
+  it 'the Data class field of a String?: every row reads back as its text, or null (kotlinc + JVM)' do
+    if (reason = KotlinCompiler.unavailable_reason)
+      raise reason if ENV['CI']
+
+      skip "#{reason}: the round trip is UNMEASURED here"
+    end
+    writer = KjuiTools::Compose::DataModelUpdater.allocate
+    writer.instance_variable_set(:@package_name, 'com.example')
+    writer.instance_variable_set(:@config, {})
+    writer.instance_variable_set(:@source_path, Dir.pwd)
+    optional_rows = vectors['optionalStrings']
+    emitted = optional_rows.map do |row|
+      prop = { 'name' => 'probe', 'class' => 'String?' }
+      prop['defaultValue'] = row['spelling'] unless row['spelling'].nil?
+      normalized = KjuiTools::Core::TypeConverter.normalize_data_property(prop, 'compose')
+      writer.send(:generate_data_content, 'Probe', [normalized])[/^ *var probe: String\? = (.*?),?$/, 1]
+    end
+    expect(emitted).to all(be_a(String))
+    k = KotlinCompiler
+    stdlib = k.newest('org.jetbrains.kotlin', 'kotlin-stdlib')
+    compiler = [k.compiler_jar, stdlib, k.newest('org.jetbrains.kotlin', 'kotlin-reflect'),
+                k.newest('org.jetbrains.kotlinx', 'kotlinx-coroutines-core-jvm'), k.newest('org.jetbrains', 'annotations'),
+                k.newest('org.jetbrains.intellij.deps', 'trove4j')].compact.join(':')
+    program = "fun main() {\n" + emitted.each_with_index.map do |e, i|
+      "  val v#{i}: String? = #{e}\n  println(v#{i}?.codePoints()?.toArray()?.joinToString(\",\", \"[\", \"]\") ?: \"nil\")"
+    end.join("\n") + "\n}\n"
+    got = Dir.mktmpdir do |dir|
+      File.write(File.join(dir, 'Main.kt'), program)
+      out, err, status = Open3.capture3(k.java_bin, '-cp', compiler, 'org.jetbrains.kotlin.cli.jvm.K2JVMCompiler',
+                                        '-no-stdlib', '-cp', stdlib, '-d', File.join(dir, 'out'), File.join(dir, 'Main.kt'))
+      raise "does not compile:\n#{(out + err)[-2000..]}\n#{program}" unless status.success?
+
+      Open3.capture3(k.java_bin, '-cp', "#{File.join(dir, 'out')}:#{stdlib}", 'MainKt').first.lines.map(&:strip)
+    end
+    aggregate_failures do
+      optional_rows.each_with_index do |row, i|
+        want = row['text'].nil? ? 'nil' : row['text'].codepoints.to_s.delete(' ')
+        expect(got[i]).to eq(want), "#{row['name']}: #{row['spelling'].inspect} was written #{emitted[i]}"
+      end
+    end
+  end
+
   # A value written per platform ({ "swift": …, "kotlin": … }): the one
   # this platform gets, or — when the layout gives it none — the class's
   # vocabulary value and a WARNING naming the layout, the property and the

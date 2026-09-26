@@ -174,7 +174,7 @@ module KjuiTools
         # raw literal as the pre-initialize fallback.
         @resolved_string_defaults = {}
         data_properties.each do |prop|
-          next unless prop['class'] == 'String'
+          next unless %w[String String?].include?(prop['class'])
           inner = string_default_inner(prop['defaultValue'])
           next if inner.nil? || inner.empty?
           full_key = Helpers::ResourceResolver.resolve_data_default_key(
@@ -433,7 +433,7 @@ module KjuiTools
 
       def format_default_value(value, json_class)
         case json_class
-        when 'String'
+        when 'String', 'String?'
           # The text the layout's spelling means ('' / "…" / '…' / bare,
           # StringLiterals.default_text), written as a Kotlin literal. A
           # `"…"` default was passed through as written until 1.8.121, so a

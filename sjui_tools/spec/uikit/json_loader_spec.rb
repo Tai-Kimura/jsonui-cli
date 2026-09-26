@@ -298,4 +298,34 @@ RSpec.describe SjuiTools::UIKit::JsonLoader do
       end
     end
   end
+
+  # The Binding's data variables are Swift the app compiles: one declaration
+  # per data entry, with its default. The rest of the Binding needs UIKit,
+  # which this suite's swiftc (macOS SDK) does not have.
+  describe 'the data variables it writes' do
+    it 'compile' do
+      loader = described_class.allocate
+      data_sets = [
+        { 'name' => 'title', 'class' => 'String', 'defaultValue' => 'Hello' },
+        { 'name' => 'quoted', 'class' => 'String', 'defaultValue' => '"say \\"hi\\" \\u00e9"' },
+        { 'name' => 'single', 'class' => 'String', 'defaultValue' => "'it''s'" },
+        { 'name' => 'empty', 'class' => 'String', 'defaultValue' => "''" },
+        { 'name' => 'count', 'class' => 'Int', 'defaultValue' => 3 },
+        { 'name' => 'flag', 'class' => 'Bool', 'defaultValue' => true },
+        { 'name' => 'ratio', 'class' => 'Double', 'defaultValue' => 0.5 },
+        { 'name' => 'note', 'class' => 'String' },
+        'plain'
+      ]
+      loader.instance_variable_set(:@json_analyzer, Struct.new(:data_sets, :partial_bindings).new(data_sets, []))
+      string_manager = Object.new
+      string_manager.define_singleton_method(:string_registered?) { |_| false }
+      loader.instance_variable_set(:@string_manager, string_manager)
+      loader.define_singleton_method(:check_data_passed_to_partials) { |_| false }
+      loader.define_singleton_method(:check_data_bound_to_collection) { |_| false }
+
+      declarations = loader.send(:generate_data_variables, { super_binding: 'Binding' })
+      expect(declarations.lines.grep(/^ *var /).size).to eq(data_sets.size)
+      expect(compilable_data(declarations)).to compile_as_swift
+    end
+  end
 end
