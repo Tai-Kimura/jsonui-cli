@@ -53,6 +53,7 @@ RSpec.describe 'Converter consumed-attribute coverage' do
       lineSpacing
       listStyle
       onItemAppear
+      onValueChange
       orientation
       paging
       scrollDirection

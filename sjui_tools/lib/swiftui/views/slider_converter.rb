@@ -36,7 +36,7 @@ module SjuiTools
           # (operation_binding); the click follows at the drag's end.
           # onValueChanged is the legacy spelling.
           handler = attr_with_alias('onValueChange', 'onValueChanged')
-          value_call = (get_event_handler_invocation(handler, @component['id'] || 'slider', 'newValue') if handler && is_binding?(handler))
+          value_call = (get_event_handler_invocation(handler, view_id, 'newValue') if handler && is_binding?(handler))
 
           # Check if value is a binding
           if @component['value'] && @component['value'].to_s.start_with?('@{') && @component['value'].to_s.end_with?('}')

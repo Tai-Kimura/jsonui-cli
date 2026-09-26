@@ -97,7 +97,8 @@ module SjuiTools
             styles_dir = fallback_dirs.find { |dir| Dir.exist?(dir) }
             
             unless styles_dir
-              puts "Warning: Styles directory not found. Tried: #{styles_dir}, #{fallback_dirs.join(', ')}"
+              puts "Warning: Styles directory not found. Tried: #{File.join(source_path, styles_directory)}, #{fallback_dirs.join(', ')}"
+              missing_style("style '#{style_name}' (no styles directory: #{File.join(source_path, styles_directory)}, #{fallback_dirs.join(', ')})")
               return nil
             end
           end
@@ -108,6 +109,7 @@ module SjuiTools
         
         # ファイルが存在しない場合
         unless File.exist?(style_file)
+          missing_style(style_file)
           return nil
         end
         
@@ -126,6 +128,17 @@ module SjuiTools
         end
       end
       
+      # A style a layout names that is not there: the layouts using it are drawn
+      # without it — a stage that did not complete, named once at the end of the
+      # build. Ruled so on 2026-09-26 after counting the faces' references: 2167
+      # `style` references in the config-declared layout dirs of the four
+      # consumer layout trees, 0 to no file (ticket
+      # uikit-build-reports-success-after-a-binding-error).
+      def self.missing_style(where)
+        require_relative '../core/stage_failures'
+        JsonUI::StageFailures.record_once('styles', "#{where} was not found; the layouts using it were drawn without it")
+      end
+
       def self.deep_merge(hash1, hash2)
         return hash2 if hash1.nil?
         return hash1 if hash2.nil?

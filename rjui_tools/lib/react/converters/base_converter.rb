@@ -1434,7 +1434,11 @@ module RjuiTools
           styles_dir = config['styles_directory'] || 'src/Styles'
           style_path = File.join(styles_dir, "#{style_name}.json")
 
-          return nil unless File.exist?(style_path)
+          unless File.exist?(style_path)
+            require_relative '../style_loader'
+            StyleLoader.missing_style(File.expand_path(style_path))
+            return nil
+          end
 
           JSON.parse(File.read(style_path))
         rescue JSON::ParserError => e
