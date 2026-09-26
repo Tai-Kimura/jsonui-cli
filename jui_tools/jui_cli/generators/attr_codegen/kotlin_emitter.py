@@ -60,6 +60,7 @@ def emit(model: AttrModel) -> dict[str, str]:
     for comp in model.components:
         files[f"{comp.name}Attributes.kt"] = _component_file(comp, model, mapper)
     files["ComponentAliases.kt"] = _aliases_file(model)
+    files["BindPrimaryValue.kt"] = _bind_primary_value_file(model)
     return dict(sorted(files.items()))
 
 
@@ -93,6 +94,42 @@ def _aliases_file(model: AttrModel) -> str:
         "}",
         "",
     ])
+
+
+def _kotlin_string_list(values: tuple[str, ...]) -> str:
+    return "listOf(" + ", ".join(f'"{v}"' for v in values) + ")"
+
+
+def _bind_primary_value_file(model: AttrModel) -> str:
+    """``JsonUIBindPrimaryValue`` — ``common.bind.primaryValue`` for
+    KotlinJsonUI Dynamic's bind fold (model.bind_value_cases). The node is a
+    plain map, as every generated parser takes (no JSON library)."""
+    lines = [HEADER.rstrip("\n"), "", f"package {PACKAGE}", "",
+             "/**",
+             " * `common.bind.primaryValue`: the attributes `bind` stands for, per section —",
+             " * the table KotlinJsonUI Dynamic folds `bind` by, the one jsonui-cli's codegen",
+             " * and validator read (shared/core/bind_fold.rb).",
+             " */",
+             "object JsonUIBindPrimaryValue {",
+             "    /**",
+             "     * The attributes `bind` stands for on a node of [type], the first being where",
+             "     * a lone `bind` goes. [type] is matched as written: a section the table names,",
+             "     * or one whose `_alias_of` names it; a type-synonym is the caller's to resolve",
+             "     * first. An empty list: no entry, and `bind` is not folded.",
+             "     */",
+             "    fun attributesFor(type: String, node: Map<String, Any?>): List<String> = when (type) {"]
+    for case in model.bind_value_cases:
+        labels = ", ".join(f'"{label}"' for label in case.labels)
+        if case.by is None:
+            lines.append(f"        {labels} -> {_kotlin_string_list(case.values)}")
+            continue
+        lines.append(f'        {labels} -> when (node["{case.by}"] as? String) {{')
+        for value, attrs in case.lists:
+            lines.append(f'            "{value}" -> {_kotlin_string_list(attrs)}')
+        lines.append(f"            else -> {_kotlin_string_list(case.when_absent)}")
+        lines.append("        }")
+    lines += ["        else -> emptyList()", "    }", "}", ""]
+    return "\n".join(lines)
 
 
 # ---------------------------------------------------------------------------

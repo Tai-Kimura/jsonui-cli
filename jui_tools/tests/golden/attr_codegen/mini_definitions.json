@@ -65,6 +65,28 @@
         "binding"
       ],
       "description": "Hide view"
+    },
+    "bind": {
+      "type": "binding",
+      "description": "Two-way binding for the component's primary value (mini fixture of common.bind.primaryValue).",
+      "primaryValue": {
+        "Label": {
+          "by": "textTransform",
+          "whenAbsent": "none",
+          "lists": {
+            "none": [
+              "text",
+              "value"
+            ],
+            "uppercase": [
+              "value"
+            ]
+          }
+        },
+        "Meter": [
+          "level"
+        ]
+      }
     }
   },
   "Label": {

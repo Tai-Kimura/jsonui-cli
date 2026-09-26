@@ -14,6 +14,7 @@ public struct CommonAttributes {
 
     /// Canonical attribute names declared for this component (public metadata contract).
     public static let declaredAttributes: Set<String> = [
+        "bind",
         "hidden",
         "id",
         "onClick",
@@ -34,6 +35,9 @@ public struct CommonAttributes {
     public static func isDeclared(_ key: String) -> Bool {
         return declaredAttributes.contains(key) || aliasMap[key] != nil
     }
+
+    /// Two-way binding for the component's primary value (mini fixture of common.bind.primaryValue).
+    public let bind: AttrValue<Any>?
 
     /// Hide view
     public let hidden: AttrValue<Bool>?
@@ -59,6 +63,7 @@ public struct CommonAttributes {
     /// Pass `canonicalOnly: true` for L1-normalized input —
     /// alias fallback is then disabled.
     public init(json: [String: Any], canonicalOnly: Bool = false) {
+        self.bind = AttrCoerce.bindingValue(AttrCoerce.lookup(json, "bind"))
         self.hidden = AttrCoerce.attrValue(AttrCoerce.lookup(json, "hidden"), AttrCoerce.boolean)
         self.id = AttrCoerce.string(AttrCoerce.lookup(json, "id"))
         self.onClick = AttrCoerce.bindingValue(AttrCoerce.lookup(json, "onClick"))

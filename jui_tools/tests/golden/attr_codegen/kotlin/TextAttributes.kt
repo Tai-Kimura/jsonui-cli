@@ -7,7 +7,7 @@ package com.kotlinjsonui.dynamic.generated
 /** Typed attribute extraction for the `Text` component.
  * Component alias of `Label` — full clone of the canonical table (the runtime selects tables by raw spelling).
  * Shared attributes are available via [common].
- * Overrides the common definition of: `shadow` (use the property on this class).
+ * Overrides the common definition of: `bind`, `shadow` (use the property on this class).
  */
 data class TextAttributes(
     /** Attributes shared across all components. */
