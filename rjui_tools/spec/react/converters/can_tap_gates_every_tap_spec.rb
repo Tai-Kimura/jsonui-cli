@@ -75,12 +75,20 @@ RSpec.describe 'rjui: canTap gates every spelling of the tap' do
       .to include('onClick={() => { if (data.gate) data.go?.("hero"); }}')
   end
 
+  # A call that hands the event on — the sender mark `name:`, a declared
+  # `(Event)` — hands nothing where the element hands none: NetworkImage's
+  # onClick is `() => void` (click_takes_event?).
+  it "hands NetworkImage's click no event, the sender mark's included" do
+    expect(convert('NetworkImage', 'onclick' => 'go:', 'canTap' => '@{gate}')).to include('onClick={() => { if (data.gate) data.go?.(); }}')
+    expect(convert('Image', 'onclick' => 'go:', 'canTap' => '@{gate}')).to include('onClick={(e) => { if (data.gate) data.go?.(e); }}')
+  end
+
   # The gated shapes, as a component returns them, under --strict, against
   # NetworkImage's own props (its template's NetworkImageProps, whose onClick
   # takes no event — the gated binding there did not compile before): each
   # call a statement under the gate, with the arguments its declaration asks.
   it 'writes TSX that compiles', :typescript_compile do
-    elements = TAP_TYPES.keys.product(SPELLINGS.values).map do |type, spelling|
+    elements = TAP_TYPES.keys.product(SPELLINGS.values + [{ 'onclick' => 'go:' }]).map do |type, spelling|
       convert(type, spelling.merge('canTap' => '@{gate}'))
     end
     expect(TypeScriptCompiler.component(*elements)).to compile_as_typescript.with_ambient(<<~TS)
