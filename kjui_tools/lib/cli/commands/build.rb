@@ -41,6 +41,14 @@ module KjuiTools
           end
 
           if mode == 'compose' || mode == 'all'
+            # What Debug (KotlinJsonUI Dynamic) draws for the app's own
+            # components, against what this build draws: named, not changed.
+            require_relative '../../compose/app_component_dynamic_check'
+            Compose::AppComponentDynamicCheck.warnings(
+              Core::ConfigManager.load_config,
+              mappings: Compose::ComposeBuilder.custom_component_types,
+              converter_class: ->(type) { Compose::ComposeBuilder.custom_component_class(type) }
+            ).each { |line| Core::Logger.warn line }
             build_compose(options)
           end
 

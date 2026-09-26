@@ -230,7 +230,11 @@ module KjuiTools
                     val context = LocalContext.current
 
             #{parsing}
-                    // Build modifier
+                    // Build modifier: the node's common stages, its tap, long press
+                    // and alpha included. If this component applies one of those
+                    // itself (passes onClick to its composable, say), name it in
+                    // `handles = setOf("onClick")` so it is not applied twice, and
+                    // do the same in its converter (kjui build names a difference).
                     val modifier = ModifierBuilder.buildModifier(json, data, context = context)
 
                     #{if is_container
