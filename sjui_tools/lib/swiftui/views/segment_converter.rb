@@ -49,10 +49,15 @@ module SjuiTools
                                "$#{state_var}"
                              end
           
-          # Picker（SwiftUIのSegmented Control）. The declared onClick is called
-          # from the user's choice of a segment, after the selection is
-          # written (operation_binding); no tap around it.
-          add_line "Picker(\"\", selection: #{operation_binding(selection_binding, operation_click_call)}) {"
+          # onValueChange handler - called when the user chooses a segment
+          # onValueChange (camelCase) -> binding format only (@{functionName})
+          on_value_change = @component['onValueChange']
+          value_call = (get_event_handler_invocation(on_value_change, id, 'newValue') if on_value_change && is_binding?(on_value_change))
+
+          # Picker（SwiftUIのSegmented Control）. The user's choice writes the
+          # selection, then calls onValueChange, then the declared onClick
+          # (operation_binding); no tap around it.
+          add_line "Picker(\"\", selection: #{operation_binding(selection_binding, operation_click_call, value_call)}) {"
           indent do
             items.each_with_index do |item, index|
               # Unescaped: the helper escapes what it writes back
@@ -66,24 +71,6 @@ module SjuiTools
           apply_value_change
 
           # (appearance emitted above; see apply_segment_appearance)
-
-          # onValueChange handler - called when selection changes
-          # onValueChange (camelCase) -> binding format only (@{functionName})
-          if @component['onValueChange'] && is_binding?(@component['onValueChange'])
-            binding_prop = if @component['selectedIndex'] && is_binding?(@component['selectedIndex'])
-                            extract_binding_property(@component['selectedIndex'])
-                          elsif @component['selectedTabIndex'] && is_binding?(@component['selectedTabIndex'])
-                            extract_binding_property(@component['selectedTabIndex'])
-                          else
-                            "selected#{id.split('_').map(&:capitalize).join}"
-                          end
-            handler_call = get_event_handler_invocation(@component['onValueChange'], id, 'newValue')
-            add_modifier_line ".onChange(of: data.#{binding_prop}) { _, newValue in"
-            indent do
-              add_line handler_call
-            end
-            add_line "}"
-          end
 
           # 共通のモディファイアを適用
           apply_modifiers

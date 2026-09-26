@@ -40,11 +40,17 @@ module SjuiTools
                            "$#{state_var}"
                          end
 
-          # Toggle. The declared onClick is called from the flip, after the
-          # value is written (operation_binding); no tap around the switch —
-          # its label is not the switch, and a tap there called it without a
-          # flip (register_click_lines, operation_click_type?).
-          add_line "Toggle(isOn: #{operation_binding(state_binding, operation_click_call)}) {"
+          # onValueChange handler - called when the user flips the switch
+          # onValueChange (camelCase) -> binding format only (@{functionName})
+          # onToggle is an alias of onValueChange (parity with kjui_tools).
+          handler_attr = @component['onValueChange'] || @component['onToggle']
+          value_call = (get_event_handler_invocation(handler_attr, id, 'newValue') if handler_attr && is_binding?(handler_attr))
+
+          # Toggle. The flip writes the value, then calls onValueChange, then
+          # the declared onClick (operation_binding); no tap around the
+          # switch — its label is not the switch, and a tap there called it
+          # without a flip (register_click_lines, operation_click_type?).
+          add_line "Toggle(isOn: #{operation_binding(state_binding, operation_click_call, value_call)}) {"
           indent do
             # A bound label used to be escaped into the literal, which
             # compiles and then prints the characters `@{name}` on screen.
@@ -131,26 +137,6 @@ module SjuiTools
           end
 
           apply_thumb_tint_color
-
-          # onValueChange handler - called when toggle state changes
-          # onValueChange (camelCase) -> binding format only (@{functionName})
-          # onToggle is an alias of onValueChange (parity with kjui_tools).
-          handler_attr = @component['onValueChange'] || @component['onToggle']
-          if handler_attr && is_binding?(handler_attr)
-            binding_prop = if @component['isOn'] && is_binding?(@component['isOn'])
-                            extract_binding_property(@component['isOn'])
-                          elsif @component['checked'] && is_binding?(@component['checked'])
-                            extract_binding_property(@component['checked'])
-                          else
-                            "#{id}IsOn"
-                          end
-            handler_call = get_event_handler_invocation(handler_attr, id, 'newValue')
-            add_modifier_line ".onChange(of: data.#{binding_prop}) { _, newValue in"
-            indent do
-              add_line handler_call
-            end
-            add_line "}"
-          end
 
           # 共通のモディファイアを適用
           apply_modifiers
