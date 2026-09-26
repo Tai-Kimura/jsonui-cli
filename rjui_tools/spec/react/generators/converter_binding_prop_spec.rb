@@ -47,17 +47,21 @@ RSpec.describe 'rjui g converter: a binding attribute' do
         eval(code, TOPLEVEL_BINDING, "#{name}_converter.rb") # rubocop:disable Security/Eval
         node = { 'type' => name }
         node['v'] = value unless kase == :absent
+        # Printed through rjui's warning logger ("[WARN] ", stdout; the
+        # logger is not stubbed in before(:all)) — from 1.8.121 the line goes
+        # there, not to stderr through a bare `warn`.
         said = StringIO.new
-        saved = $stderr
+        saved = $stdout
         call = begin
-          $stderr = said
+          $stdout = said
           RjuiTools::React::Converters::Extensions.const_get("#{name}Converter").new(node, {}).convert(0)
         ensure
-          $stderr = saved
+          $stdout = saved
         end
         component = RjuiTools::React::Generators::ReactComponentGenerator
                     .new(name, { is_container: false, attributes: { '@v' => type } }, {}).send(:component_template)
-        [type, kase, call, said.string.lines.grep(/\A\[rjui\] /).join, component, i]
+        [type, kase, call, said.string.lines.grep(/\[rjui\] /).map { |l| l.sub(/\A.*?(?=\[rjui\] )/, '') }.join,
+         component, i]
       end
     end
   end

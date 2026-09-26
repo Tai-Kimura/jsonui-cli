@@ -151,6 +151,21 @@ module KjuiTools
           end
         end
 
+        # Spacing on every horizontal Collection, one lane or many (4f ruling,
+        # 2026-09-26, the rule SwiftJsonUI Dynamic dde0628 and sjui codegen
+        # draw): along the scroll axis lineSpacing (its alias sectionSpacing),
+        # else itemSpacing, else 0; between lanes columnSpacing, else
+        # itemSpacing, else 0. Pages sit along the scroll axis. `spacing` is
+        # kjui's extra spelling of itemSpacing and keeps its place after it.
+        # nil where nothing is declared (Compose's own 0).
+        def self.horizontal_scroll_spacing(json_data)
+          json_data['lineSpacing'] || json_data['sectionSpacing'] || json_data['itemSpacing'] || json_data['spacing']
+        end
+
+        def self.horizontal_lane_spacing(json_data)
+          json_data['columnSpacing'] || json_data['itemSpacing'] || json_data['spacing']
+        end
+
         def self.default_scroll_anchor?(json_data)
           return false unless %w[center bottom].include?(json_data['defaultScrollAnchor'].to_s)
 
@@ -383,23 +398,31 @@ module KjuiTools
           line_spacing = json_data['lineSpacing'] || json_data['sectionSpacing'] || json_data['itemSpacing'] || json_data['spacing']
           column_spacing = json_data['columnSpacing'] || json_data['itemSpacing'] || json_data['spacing']
 
-          if line_spacing || column_spacing
+          if is_horizontal
+            # The horizontal rule (horizontal_scroll_spacing): the scroll axis
+            # (horizontalArrangement) by lineSpacing, else itemSpacing; the
+            # lanes (verticalArrangement) by columnSpacing, else itemSpacing.
+            # The scroll axis fell back to columnSpacing and the lanes were
+            # never spaced until jsonui-cli 1.9.0.
+            if (along = horizontal_scroll_spacing(json_data))
+              required_imports&.add(:arrangement)
+              code += "\n" + indent("horizontalArrangement = Arrangement.spacedBy(#{along}.dp),", depth + 1)
+            end
+            # Lanes only where there are several (a bound count is the
+            # sentinel 2 here): one row has nothing between it.
+            if columns > 1 && (between = horizontal_lane_spacing(json_data))
+              required_imports&.add(:arrangement)
+              code += "\n" + indent("verticalArrangement = Arrangement.spacedBy(#{between}.dp),", depth + 1)
+            end
+          elsif line_spacing || column_spacing
             required_imports&.add(:arrangement)
-            if is_horizontal
-              # Horizontal scroll: both lineSpacing and columnSpacing map to
-              # horizontalArrangement (item spacing along scroll direction).
-              # For single-row horizontal grids, verticalArrangement is not needed.
-              h_spacing = line_spacing || column_spacing
-              code += "\n" + indent("horizontalArrangement = Arrangement.spacedBy(#{h_spacing}.dp),", depth + 1)
-            else
-              # Vertical scroll: lineSpacing = vertical spacing between rows,
-              # columnSpacing = horizontal spacing between columns
-              if line_spacing
-                code += "\n" + indent("verticalArrangement = Arrangement.spacedBy(#{line_spacing}.dp),", depth + 1)
-              end
-              if column_spacing
-                code += "\n" + indent("horizontalArrangement = Arrangement.spacedBy(#{column_spacing}.dp),", depth + 1)
-              end
+            # Vertical scroll: lineSpacing = vertical spacing between rows,
+            # columnSpacing = horizontal spacing between columns
+            if line_spacing
+              code += "\n" + indent("verticalArrangement = Arrangement.spacedBy(#{line_spacing}.dp),", depth + 1)
+            end
+            if column_spacing
+              code += "\n" + indent("horizontalArrangement = Arrangement.spacedBy(#{column_spacing}.dp),", depth + 1)
             end
           end
 
@@ -1007,7 +1030,9 @@ module KjuiTools
 
           items_property = json_data['items']
           item_binding = items_property&.match(/@\{([^}]+)\}/)&.captures&.first
-          page_spacing = json_data['itemSpacing'] || json_data['columnSpacing'] || json_data['spacing']
+          # Pages sit along the scroll axis (horizontal_scroll_spacing); this
+          # read itemSpacing, then columnSpacing, until jsonui-cli 1.9.0.
+          page_spacing = horizontal_scroll_spacing(json_data)
 
           # currentPage binding
           current_page_raw = json_data['currentPage']
@@ -1269,6 +1294,19 @@ module KjuiTools
           modifiers.concat(padding_modifiers) unless flow_scrolls_if_parent_bounded?(json_data)
           modifiers.concat(Helpers::ModifierBuilder.build_weight(json_data, parent_type))
 
+          # A flow per section: with two or more sections that draw cells,
+          # each section's cells wrap in a FlowRow of their own, one under the
+          # other, spaced by the line spacing (its alias sectionSpacing) — as
+          # sjui draws a FlowLayout per section in a VStack. One FlowRow held
+          # every section, so section 2 continued section 1's last row
+          # (measured on 6bdb6aba, 2026-09-26). The node's own modifiers stay
+          # on the outer container, a Column then.
+          items_bound = json_data['items'].is_a?(String) && json_data['items'].match?(/@\{([^}]+)\}/)
+          per_section = items_bound && sections.count { |section| section['cell'] } > 1
+          container = per_section ? 'Column' : 'FlowRow'
+          flow_arrangements = "horizontalArrangement = Arrangement.spacedBy(#{h_spacing}.dp), " \
+                              "verticalArrangement = Arrangement.spacedBy(#{v_spacing}.dp)"
+
           outer_depth = depth
           if flow_scrolls_if_parent_bounded?(json_data)
             # matchParent: the node's own modifiers (address, size, background,
@@ -1282,17 +1320,19 @@ module KjuiTools
             code += Helpers::ModifierBuilder.format(modifiers, depth)
             code += "\n" + indent(") {", depth)
             depth += 1
-            code += "\n" + indent("FlowRow(", depth)
+            code += "\n" + indent("#{container}(", depth)
             code += "\n" + indent("modifier = (if (constraints.hasBoundedHeight) Modifier.fillMaxSize().verticalScroll(rememberScrollState()) else Modifier.fillMaxWidth())", depth + 1)
             padding_modifiers.each { |mod| code += "\n" + indent(indent(mod, 1), depth + 1) }
             code += "\n" + indent(indent(FLOW_OVERFLOW_MODIFIER, 1), depth + 1)
           else
             modifiers << FLOW_OVERFLOW_MODIFIER
-            code = indent("FlowRow(", depth)
+            code = indent("#{container}(", depth)
             code += Helpers::ModifierBuilder.format(modifiers, depth)
           end
-          code += ",\n" + indent("horizontalArrangement = Arrangement.spacedBy(#{h_spacing}.dp),", depth + 1)
-          code += "\n" + indent("verticalArrangement = Arrangement.spacedBy(#{v_spacing}.dp)", depth + 1)
+          unless per_section
+            code += ",\n" + indent("horizontalArrangement = Arrangement.spacedBy(#{h_spacing}.dp),", depth + 1)
+          end
+          code += (per_section ? ",\n" : "\n") + indent("verticalArrangement = Arrangement.spacedBy(#{v_spacing}.dp)", depth + 1)
           code += "\n" + indent(") {", depth)
 
           items_property = json_data['items']
@@ -1317,6 +1357,8 @@ module KjuiTools
               section_var = use_val_if ? "section#{index}" : 'section'
               cell_data_var = use_val_if ? "cellData#{index}" : 'cellData'
 
+              # The loop's depth: one deeper inside the section's own FlowRow.
+              ld = per_section ? depth + 4 : depth + 3
               if use_val_if
                 code += "\n" + indent("val #{section_var} = #{sections_access(property_name)}.getOrNull(#{index})", depth + 1)
                 code += "\n" + indent("if (#{section_var} != null) {", depth + 1)
@@ -1324,19 +1366,21 @@ module KjuiTools
                 code += "\n" + indent("if (#{cell_data_var} != null) {", depth + 2)
                 required_imports&.add(:remember_state)
                 code += "\n" + indent("val enrichedData#{index} = remember(#{cell_data_var}.data) { com.kotlinjsonui.utils.CellIdGenerator.enrichCellIds(#{cell_data_var}.data, \"#{cell_id_property}\") }", depth + 3)
-                code += "\n" + indent("enrichedData#{index}.forEachIndexed { cellIndex, item ->", depth + 3)
+                code += "\n" + indent("FlowRow(modifier = Modifier.fillMaxWidth(), #{flow_arrangements}) {", depth + 3) if per_section
+                code += "\n" + indent("enrichedData#{index}.forEachIndexed { cellIndex, item ->", ld)
               else
                 code += "\n" + indent("#{sections_access(property_name)}.getOrNull(#{index})?.let { #{section_var} ->", depth + 1)
                 code += "\n" + indent("#{section_var}.cells?.let { #{cell_data_var} ->", depth + 2)
-                code += "\n" + indent("#{cell_data_var}.data.forEachIndexed { cellIndex, item ->", depth + 3)
+                code += "\n" + indent("FlowRow(modifier = Modifier.fillMaxWidth(), #{flow_arrangements}) {", depth + 3) if per_section
+                code += "\n" + indent("#{cell_data_var}.data.forEachIndexed { cellIndex, item ->", ld)
               end
 
               if cell_id_property
-                code += "\n" + indent("val cellId = (item[\"cellId\"] as? String) ?: (item[\"#{cell_id_property}\"] as? String) ?: cellIndex.toString()", depth + 4)
-                code += "\n" + indent("key(cellId) {", depth + 4)
-                inner_depth = depth + 5
+                code += "\n" + indent("val cellId = (item[\"cellId\"] as? String) ?: (item[\"#{cell_id_property}\"] as? String) ?: cellIndex.toString()", ld + 1)
+                code += "\n" + indent("key(cellId) {", ld + 1)
+                inner_depth = ld + 2
               else
-                inner_depth = depth + 4
+                inner_depth = ld + 1
               end
 
               cell_class = cell_class_name(cell_view_name)
@@ -1355,10 +1399,11 @@ module KjuiTools
               code += "\n" + indent(")", inner_depth)
 
               if cell_id_property
-                code += "\n" + indent("}", depth + 4)
+                code += "\n" + indent("}", ld + 1)
               end
 
-              code += "\n" + indent("}", depth + 3)
+              code += "\n" + indent("}", ld)
+              code += "\n" + indent("}", depth + 3) if per_section
               code += "\n" + indent("}", depth + 2)
               code += "\n" + indent("}", depth + 1)
             end
@@ -1552,7 +1597,9 @@ module KjuiTools
           modifiers.concat(Helpers::ModifierBuilder.build_padding(json_data))
           modifiers.concat(Helpers::ModifierBuilder.build_weight(json_data, parent_type))
 
-          column_spacing = json_data['columnSpacing'] || json_data['itemSpacing']
+          # Along the scroll axis (horizontal_scroll_spacing); this read
+          # columnSpacing, then itemSpacing, until jsonui-cli 1.9.0.
+          column_spacing = horizontal_scroll_spacing(json_data)
 
           code = indent("Row(", depth)
           code += Helpers::ModifierBuilder.format(modifiers, depth)
@@ -1672,7 +1719,9 @@ module KjuiTools
           # LazyHorizontalGrid path (line ~150) already accepts `lineSpacing`
           # as the horizontal-spacing source; CollectionStack must match.
           spacing_value = if is_horizontal
-                           json_data['itemSpacing'] || json_data['columnSpacing'] || json_data['lineSpacing'] || json_data['sectionSpacing'] || json_data['spacing']
+                           # The horizontal rule; this read itemSpacing, then
+                           # columnSpacing, then lineSpacing until jsonui-cli 1.9.0.
+                           horizontal_scroll_spacing(json_data)
                          else
                            json_data['lineSpacing'] || json_data['sectionSpacing'] || json_data['itemSpacing'] || json_data['spacing']
                          end

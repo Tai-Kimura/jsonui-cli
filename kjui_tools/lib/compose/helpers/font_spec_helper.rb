@@ -4,6 +4,7 @@ require 'json'
 require_relative 'bound_value'
 require_relative 'resource_resolver'
 require_relative '../../core/string_literals'
+require_relative '../../core/logger'
 
 module KjuiTools
   module Compose
@@ -159,7 +160,9 @@ module KjuiTools
             return "FontWeight(#{key.to_i})" if (1..1000).cover?(key.to_i)
           end
 
-          warn "[kjui] Unknown font weight '#{weight_string}', defaulting to FontWeight.Normal"
+          # Through the warning logger ("⚠️  "), so a build's warning count
+          # finds it — a bare `warn` went to stderr with no warning spelling.
+          KjuiTools::Core::Logger.warn "[kjui] Unknown font weight '#{weight_string}', defaulting to FontWeight.Normal"
           'FontWeight.Normal'
         end
 
@@ -358,7 +361,7 @@ module KjuiTools
             if path
               JSON.parse(File.read(path))['weights'] || {}
             else
-              warn '[kjui] font_weight_mapping.json not found on any candidate path; using built-in fallback.'
+              KjuiTools::Core::Logger.warn '[kjui] font_weight_mapping.json not found on any candidate path; using built-in fallback.'
               {}
             end
           rescue JSON::ParserError

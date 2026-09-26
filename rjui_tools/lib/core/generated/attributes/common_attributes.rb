@@ -215,11 +215,11 @@ module JsonUI
         { name: 'offsetX', kind: :number, bindable: true }.freeze,
         # Vertical offset applied after layout, in pt / dp / px. Measurement and sibling placement are unchanged — the layout is computed first and the offset moves only this view. Its INTERACTIVE region moves with it: an offset control is tappable where it is drawn, which is what rules out a draw-only translation. Absolute, not RTL-mirroring, like leftMargin/rightMargin rather than startMargin/endMargin. Pairs with offsetX; either one alone implies 0 for the other. Full ruling (including the android primitive) in attribute_semantics.json -> offset.
         { name: 'offsetY', kind: :number, bindable: true }.freeze,
-        # Lifecycle callback when view appears (SwiftUI/Compose only)
+        # Lifecycle callback when view appears (SwiftUI/Compose only). The handler's name (e.g. "screenAppeared"); written as a binding (`@{screenAppeared}`) or with UIKit's sender mark (`screenAppeared:`, which means nothing in SwiftUI or Compose) it is read as the same name, as the other event handlers are. Called as its declared closure type asks: `()` with nothing, `(String)` with the viewId.
         { name: 'onAppear', kind: :string }.freeze,
         # Click handler (camelCase) - binding only (@{functionName})
         { name: 'onClick', kind: :binding }.freeze,
-        # Lifecycle callback when view disappears (SwiftUI/Compose only)
+        # Lifecycle callback when view disappears (SwiftUI/Compose only). The handler's name (e.g. "screenDisappeared"); written as a binding (`@{screenDisappeared}`) or with UIKit's sender mark (`screenDisappeared:`, which means nothing in SwiftUI or Compose) it is read as the same name, as the other event handlers are. Called as its declared closure type asks: `()` with nothing, `(String)` with the viewId.
         { name: 'onDisappear', kind: :string }.freeze,
         # Long press gesture handler (camelCase) - binding only (@{functionName}) [binding: one-way]
         { name: 'onLongPress', kind: :binding }.freeze,
