@@ -911,7 +911,7 @@ module RjuiTools
         if (target = collection[:scroll_to]) && binding_expression?(target)
           prop = binding_data_path(target)
           anchor_expr = scroll_anchor_expr(collection[:scroll_anchor] || 'bottom')
-          animated = collection[:scroll_animated] == false ? 'false' : 'true'
+          animated = scroll_animated_arg(collection[:scroll_animated])
           lines << "  useEffect(() => { scrollCollectionToItem(#{ref}.current, #{prop}, " \
                    "#{anchor_expr}, #{animated}, #{horizontal}); }, [#{prop}]);"
         end
@@ -938,6 +938,19 @@ module RjuiTools
 
       def scroll_anchor_expr(anchor)
         %w[top center bottom].include?(anchor.to_s) ? "'#{anchor}'" : "'bottom'"
+      end
+
+      # `scrollAnimated` as scrollCollectionToItem's `animated`: a literal
+      # false jumps, absent or true animates (the declared default), and a
+      # binding decides at run time — true only when the bound value is true,
+      # the reading sjui (`(data.x ?? false)`) and kjui (`(data.x ?: false)`)
+      # give an unset bound value. Until 1.8.121 a binding was read as `true`
+      # (measured on 46a54fc3, 2026-09-26; ticket
+      # collection-attributes-declared-but-not-drawn-on-some-paths).
+      def scroll_animated_arg(value)
+        return "(#{binding_data_path(value)}) === true" if binding_expression?(value)
+
+        value == false ? 'false' : 'true'
       end
 
       def binding_expression?(value)
