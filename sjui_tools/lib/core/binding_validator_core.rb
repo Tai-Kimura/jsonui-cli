@@ -497,7 +497,7 @@ module JsonUIShared
         next if key == 'bindingScript' # arbitrary platform code, not a binding
         # An Embed's events are handler names, not bindings; validate_embed_component
         # names any that is not one.
-        next if key == 'events' && component_type == 'Embed'
+        next if key == 'events' && resolve_component_alias(component_type) == 'Embed'
         next if incompatible_attr?(component_type, key)
 
         check_value_for_bindings(value, key, component_type)
@@ -672,7 +672,7 @@ module JsonUIShared
     end
 
     def embed_params_attr?(component_type, attribute_name)
-      component_type == 'Embed' && attribute_name.to_s.split(/[.\[]/).first == 'params'
+      resolve_component_alias(component_type) == 'Embed' && attribute_name.to_s.split(/[.\[]/).first == 'params'
     end
 
     def add_error(rule_id, message)
